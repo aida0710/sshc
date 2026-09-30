@@ -76,16 +76,3 @@ func TestValidatePortRejectsValuesOutsideTheTCPRange(t *testing.T) {
 		}
 	}
 }
-
-func TestEnginePortRefusesPrivilegedAndOutOfRangeNumbers(t *testing.T) {
-	for _, port := range []int{1024, 43123, 65535} {
-		if err := validate.EnginePort(port); err != nil {
-			t.Errorf("EnginePort(%d) = %v, want nil", port, err)
-		}
-	}
-	for _, port := range []int{0, 22, 1023, 65536} {
-		if err := validate.EnginePort(port); !errors.Is(err, validate.ErrEnginePort) {
-			t.Errorf("EnginePort(%d) = %v, want ErrEnginePort", port, err)
-		}
-	}
-}

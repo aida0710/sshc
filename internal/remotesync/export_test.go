@@ -37,12 +37,27 @@ func SnapshotKeyForTest(config Config, createdAt string) (string, error) {
 // 接続先へ向ける。製品では CompleteSetup が、接続先を確かめて設定を保存してから
 // 同じ切り替えを行う。
 func (s *Service) ConfigureForTest(config Config, credentials objectstore.Credentials, client *objectstore.Client) error {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
 	config = normalizeConfig(config)
 	if err := s.validateRecoveryTarget(config); err != nil {
 		return err
 	}
 	s.configure(config, credentials, client)
 	return nil
+}
+
+// PushTimerForTest は、Run が送信の期限を待つ timer の形である。
+type PushTimerForTest = pushTimer
+
+// SetClockForTest は、backoff と送信の期限を決める時計を clock に替える。
+func (a *Auto) SetClockForTest(clock func() time.Time) {
+	a.clock = clock
+}
+
+// SetPushTimerForTest は、Run が送信の期限を待つ timer を start の作るものに替える。
+// テストは SetClockForTest の時計を進めてから自分で発火させ、期限の前後を実時間に
+// 頼らずに確かめる。
+func (a *Auto) SetPushTimerForTest(start func(delay time.Duration) PushTimerForTest) {
+	a.newPushTimer = start
 }

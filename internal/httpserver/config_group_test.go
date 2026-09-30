@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"sshc/internal/application"
+	"sshc/internal/configresolver"
 	"sshc/internal/keys"
 	"sshc/internal/storage"
 )
@@ -26,7 +27,7 @@ func newGroupHarness(t *testing.T, groups ...string) *testHarness {
 	keyService := keys.NewService(keys.ServiceOptions{
 		Workspace:    harness.workspace,
 		Transactions: storage.NewManager(harness.workspace, nil, rand.Reader),
-		Resolver:     storage.NewResolver(harness.workspace),
+		Resolver:     configresolver.ForWorkspace(harness.workspace),
 	})
 	engine := echo.New()
 	registerConfigRoutes(engine, ConfigHandlers{Service: harness.service, Keys: keyService})

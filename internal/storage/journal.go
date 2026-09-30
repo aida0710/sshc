@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"path/filepath"
 	"regexp"
@@ -15,44 +16,130 @@ import (
 	"sshc/internal/platform/nativepath"
 )
 
-var (
-	ErrUnknownTransaction = errors.New("no pending transaction with that identifier")
-	ErrCannotComplete     = errors.New("staged contents are missing or altered")
-	ErrCannotRollback     = errors.New("the transaction has crossed its durable commit point")
-	// ErrRecoveryStateUnknown は、中断されたトランザクションの対象が、記録された
-	// 変更前でも変更後でもない状態にあることを述べる。復旧はそこから先を推測しない。
-	ErrRecoveryStateUnknown = errors.New("an interrupted transaction target no longer matches its recorded before or after state")
-	ErrInvalidJournal       = errors.New("invalid transaction journal")
+const (
+	journalVersion       = 2
+	journalDirectoryName = "journal"
+	historyDirectoryName = "history"
+
+	statusStaging    = "staging"
+	statusStaged     = "staged"
+	statusApplied    = "applied"
+	statusCompleted  = "completed"
+	statusRolledBack = "rolled_back"
 )
+
+const (
+	actionWrite     = "write"
+	actionMove      = "move"
+	actionRemove    = "remove"
+	actionMakeDir   = "mkdir"
+	actionRemoveDir = "rmdir"
+	actionNote      = "note"
+)
+
+var ErrInvalidJournal = errors.New("invalid transaction journal")
+
+// journalVersionRelease は、journalVersion の記録を書き始めた sshc の版。
+// JournalVersionError に載せ、利用者が手元の版と照らせるようにする。
+const journalVersionRelease = "v0.24.0"
+
+// JournalVersionError は、中断した変更の記録が journalVersion と違う版で書かれて
+// いて、この版では完了も巻き戻しもできないことを報告する。起動時の自動ロック解除も
+// この記録で止まるので、利用者が手で扱えるように記録の ID とファイルのパスを持つ。
+// errors.Is(err, ErrInvalidJournal) は true になる。
+type JournalVersionError struct {
+	ID      string
+	Path    string
+	Version int
+}
+
+func (e *JournalVersionError) Error() string {
+	recordedBy := fmt.Sprintf("an sshc release before %s", journalVersionRelease)
+	if e.Version > journalVersion {
+		recordedBy = "a newer sshc release"
+	}
+	return fmt.Sprintf("%s: interrupted change %s (%s) was recorded by %s (journal version %d); this release cannot complete or roll it back",
+		ErrInvalidJournal, e.ID, e.Path, recordedBy, e.Version)
+}
+
+func (e *JournalVersionError) Unwrap() error { return ErrInvalidJournal }
 
 var journalIdentifierPattern = regexp.MustCompile(`^[0-9]{8}T[0-9]{6}\.[0-9]{3}-[0-9a-f]{8}$`)
 
-// PendingEntry は、中断されたトランザクションに含まれるファイルひとつ。
-type PendingEntry struct {
-	Path      string
-	Target    string
-	Action    string
-	Committed bool
-	HasBackup bool
-	HasStaged bool
+// journalIdentifierTimeLayout は、記録の ID の先頭にある、変更を始めた時刻（UTC）の書式。
+// ID の辞書順はこの時刻の順になる。
+const journalIdentifierTimeLayout = "20060102T150405.000"
+
+type journalEntry struct {
+	Action      string `json:"action,omitempty"`
+	Path        string `json:"path"`
+	Target      string `json:"target,omitempty"`
+	Temp        string `json:"temp,omitempty"`
+	Backup      string `json:"backup,omitempty"`
+	NoBackup    bool   `json:"noBackup,omitempty"`
+	HadPrevious bool   `json:"hadPrevious"`
+	// Mode is the state after a write. PreviousMode is the state before it.
+	// Other actions keep their single existing mode in Mode.
+	Mode           uint32 `json:"mode"`
+	PreviousMode   uint32 `json:"previousMode,omitempty"`
+	Digest         string `json:"digest"`
+	PreviousDigest string `json:"previousDigest,omitempty"`
 }
 
-// Pending は、起動時に見つかった中断済みトランザクション。部分的な状態はそのまま
-// 報告される。健全な結果として提示されることは決してない。
+// noOpWrite は、書いても中身が変わらない置き換えを言う。
 //
-// CanComplete と CanRollback が両方 false になるのは、巻き戻せない変更を含む
-// ときと、対象が記録のどちらの状態とも一致せず何が起きたか判別できないときで
-// ある。後者は、中断されたトランザクションが触れるはずだったファイルを、外から
-// 書き換えたときに起きる。
-type Pending struct {
-	ID          string
-	Operation   string
-	Status      string
-	StartedAt   time.Time
-	Committed   int
-	Entries     []PendingEntry
-	CanComplete bool
-	CanRollback bool
+// application 層は metadata の書き込みを毎回、変わっていなくても最後に足すので、
+// これは例外ではなく日常の記録である。巻き戻せない変更ではない。戻したあとの
+// 対象は同じバイト列であり、控えを残さなかったとしても失うものが無い。
+func (e journalEntry) noOpWrite() bool {
+	return e.sameContentsWrite() && e.Mode == e.PreviousMode
+}
+
+func (e journalEntry) sameContentsWrite() bool {
+	return e.Action == actionWrite && e.HadPrevious && e.Digest == e.PreviousDigest
+}
+
+// checkReversible は、適用済みのこのエントリを巻き戻せるかを確かめる。
+//
+// バックアップを残した削除は、置き換えと同じくらい可逆である。バイト列は
+// 世代ディレクトリにあり、モードはエントリにある。巻き戻せないのは、意図して
+// 何も残さなかったものだけである。
+func (e journalEntry) checkReversible() error {
+	if e.Action == actionRemove && e.NoBackup {
+		return ErrIrreversibleRemoval
+	}
+	if e.Action == actionWrite && e.HadPrevious && e.NoBackup && !e.sameContentsWrite() {
+		return ErrIrreversibleChange
+	}
+	return nil
+}
+
+type journalRecord struct {
+	ID         string     `json:"id"`
+	Version    int        `json:"version"`
+	Operation  string     `json:"operation"`
+	Status     string     `json:"status"`
+	StartedAt  time.Time  `json:"startedAt"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	Committed  int        `json:"committed"`
+	Atomic     bool       `json:"atomic,omitempty"`
+	// DiscardBackups marks an atomic replacement whose previous bytes exist only
+	// to recover an interrupted commit. They bypass the normal backup sealer and
+	// are removed once either the old or the new generation is authoritative.
+	DiscardBackups bool           `json:"discardBackups,omitempty"`
+	Entries        []journalEntry `json:"entries"`
+}
+
+// touchedPaths は、この記録が書く・消す・動かす対象のパスを返す。
+func (record *journalRecord) touchedPaths() []string {
+	paths := make([]string, 0, len(record.Entries))
+	for _, entry := range record.Entries {
+		paths = append(paths, entry.Path)
+		if entry.Target != "" {
+			paths = append(paths, entry.Target)
+		}
+	}
+	return paths
 }
 
 func (m *Manager) journalDirectory() string {
@@ -63,508 +150,38 @@ func (m *Manager) historyDirectory() string {
 	return filepath.Join(m.workspace.StateDir(), historyDirectoryName)
 }
 
-// Pending は、中断されたトランザクションを古いものから順に列挙する。
-func (m *Manager) Pending() ([]Pending, error) {
-	records, err := m.readRecords(m.journalDirectory())
-	if err != nil {
-		return nil, err
-	}
-	pending := make([]Pending, 0, len(records))
-	for _, record := range records {
-		_, reconcileErr := m.reconcileRecord(&record)
-		// 判別できないのは、その記録ひとつである。一覧そのものを失敗させると、
-		// 無関係な記録も、履歴も、そしてこの記録を片付ける手段までもが同時に
-		// 見えなくなる。呼び出し側はこの一覧で設定画面全体を組み立てている。
-		// 判別できない記録は、どちらの操作も提示しないまま並べる。Complete と
-		// Rollback は、その記録に対しては引き続き同じ理由で拒否する。
-		unresolved := errors.Is(reconcileErr, ErrRecoveryStateUnknown)
-		if reconcileErr != nil && !unresolved {
-			return nil, reconcileErr
-		}
-		// 一覧は何も書き換えない。ここは呼び出し側が変更用の錠を持たずに
-		// 呼ぶ経路であり、走っている最中のトランザクションの記録もそのまま読む。
-		// 数え直した結果は報告に使うだけで、永続化するのは Complete と Rollback が
-		// 通る loadPending だけである。
-		item := Pending{
-			ID:          record.ID,
-			Operation:   record.Operation,
-			Status:      record.Status,
-			StartedAt:   record.StartedAt,
-			Committed:   record.Committed,
-			CanComplete: !unresolved && ((record.Status == statusStaged && !record.Atomic) || (record.Status == statusApplied && record.DiscardBackups)),
-			CanRollback: !unresolved && !record.appliedLegacyWriteModeUnknown() && record.Status != statusApplied,
-		}
-		for index, entry := range record.Entries {
-			pendingEntry := PendingEntry{
-				Path:      entry.Path,
-				Target:    entry.Target,
-				Action:    entry.Action,
-				Committed: index < record.Committed,
-				HasBackup: entry.Backup != "",
-			}
-			switch {
-			case pendingEntry.Committed && pendingEntry.Action == actionRemove && entry.NoBackup:
-				item.CanRollback = false
-			case pendingEntry.Committed && pendingEntry.Action == actionWrite && entry.HadPrevious && entry.NoBackup && !entry.sameContentsWrite():
-				item.CanRollback = false
-			case !pendingEntry.Committed && pendingEntry.Action == actionWrite:
-				pendingEntry.HasStaged = m.stagedMatches(entry)
-				if !pendingEntry.HasStaged {
-					item.CanComplete = false
-				}
-			}
-			item.Entries = append(item.Entries, pendingEntry)
-		}
-		pending = append(pending, item)
-	}
-	return pending, nil
-}
-
-// Complete は、中断されたトランザクションを完了させる。検証すべきステージ済みの
-// 内容を持つのは置き換えだけである。移動と削除は、その意図の全体をジャーナルの
-// エントリに持っている。
-func (m *Manager) Complete(identifier string) error {
-	unlock, err := m.workspace.lockMutation()
+func (m *Manager) writeRecord(path string, record journalRecord) error {
+	contents, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
 		return err
 	}
-	defer unlock()
-
-	record, journalPath, err := m.loadPending(identifier)
-	if err != nil {
-		return err
+	contents = append(contents, '\n')
+	if len(contents) > maxRecordBytes {
+		return ErrTransactionTooLarge
 	}
-	// Atomic 記録は永続化文書とプロセス内状態（開いたパスワード Vault）を対応付ける。
-	// callback 失敗後にディスク側だけを完了するとプロセス内状態が古くなるため、
-	// 復旧時はロールバックする。新しい要求でディスクとメモリをまとめて更新できる。
-	if record.Status == statusApplied && record.DiscardBackups {
-		return m.finishApplied(record, journalPath)
-	}
-	if record.Atomic || record.Status != statusStaged {
-		return ErrCannotComplete
-	}
-	for index := record.Committed; index < len(record.Entries); index++ {
-		if record.Entries[index].Action != actionWrite {
-			continue
-		}
-		if !m.stagedMatches(record.Entries[index]) {
-			return ErrCannotComplete
-		}
-	}
-	if err := m.commitStaged(record, journalPath); err != nil {
-		return err
-	}
-	return m.finish(record, journalPath, statusCompleted)
+	return m.writeFile(path, contents, FilePermission)
 }
 
-// Rollback は、中断されたトランザクションがすでに変更したすべてのファイルを復元
-// し、ステージ済みの内容を捨てる。すでにファイルを削除した、あるいは意図して
-// バックアップを残さずに置き換えたトランザクションは、巻き戻せない。Rollback は、
-// 実際には行っていない復旧を報告するのではなく、
-// 拒否する。
-func (m *Manager) Rollback(identifier string) error {
-	unlock, err := m.workspace.lockMutation()
-	if err != nil {
-		return err
+func (m *Manager) newIdentifier() (string, error) {
+	suffix := make([]byte, 4)
+	if _, err := io.ReadFull(m.random, suffix); err != nil {
+		return "", err
 	}
-	defer unlock()
-
-	record, journalPath, err := m.loadPending(identifier)
-	if err != nil {
-		return err
-	}
-	if record.appliedLegacyWriteModeUnknown() || record.Status == statusApplied {
-		return ErrCannotRollback
-	}
-	return m.rollbackRecord(record, journalPath)
+	return m.now().UTC().Format(journalIdentifierTimeLayout) + "-" + hex.EncodeToString(suffix), nil
 }
 
-// rollbackRecord は CommitAtomic でも使用する。この経路では、対象の rename 後に
-// SyncDir または journal の再書き込みが失敗し、メモリ上の記録が最新の永続記録より
-// 先へ進む場合がある。そのため実行中プロセスが適用した操作はこの記録を基準にする。
-func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) error {
-	for index := 0; index < record.Committed; index++ {
-		entry := record.Entries[index]
-		// バックアップを残した削除は、置き換えと同じくらい可逆である。バイト列は
-		// 世代ディレクトリにあり、モードはエントリにある。巻き戻せないのは、意図して
-		// 何も残さなかったものだけである。
-		if entry.Action == actionRemove && entry.NoBackup {
-			return ErrIrreversibleRemoval
-		}
-		if entry.Action == actionWrite && entry.HadPrevious && entry.NoBackup && !entry.sameContentsWrite() {
-			return ErrIrreversibleChange
-		}
-	}
-
-	fileSystem := m.workspace.FileSystem()
-	for index := record.Committed - 1; index >= 0; index-- {
-		entry := record.Entries[index]
-		if entry.Action == actionMove {
-			if err := m.moveFile(entry.Target, entry.Path); err != nil {
-				return err
-			}
-			if err := fileSystem.SyncDir(filepath.Dir(entry.Target)); err != nil {
-				return err
-			}
-			if err := fileSystem.SyncDir(filepath.Dir(entry.Path)); err != nil {
-				return err
-			}
-			continue
-		}
-		if entry.Action == actionMakeDir {
-			// もとからあったディレクトリは、このトランザクションが取り除いてよいもの
-			// ではない。取り消すのはこれが作ったものだけであり、しかもまだ空である
-			// 場合に限る。その後に何かが書き込まれているかもしれず、それを巻き戻しと
-			// 一緒に持っていけば、誰も触れてくれと頼んでいないものを削除することに
-			// なる。
-			if entry.HadPrevious {
-				continue
-			}
-			contents, readErr := fileSystem.ReadDir(entry.Path)
-			if errors.Is(readErr, fs.ErrNotExist) {
-				continue
-			}
-			if readErr != nil {
-				return readErr
-			}
-			if len(contents) > 0 {
-				continue
-			}
-			if err := fileSystem.Remove(entry.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return err
-			}
-			if err := fileSystem.SyncDir(filepath.Dir(entry.Path)); err != nil {
-				return err
-			}
-			continue
-		}
-		if entry.Action == actionRemoveDir {
-			// 取り除かれた時点で空だったので、空のまま作り直せば失われたものが
-			// そのまま復元される。
-			if err := m.workspace.EnsureDirectory(entry.Path); err != nil {
-				return err
-			}
-			if err := fileSystem.SyncDir(filepath.Dir(entry.Path)); err != nil {
-				return err
-			}
-			continue
-		}
-		if entry.HadPrevious {
-			if entry.noOpWrite() && entry.Backup == "" {
-				// 変わっていないものを、作られなかった控えから戻す必要はない。
-				continue
-			}
-			if entry.sameContentsWrite() && entry.Backup == "" {
-				contents, readErr := m.workspace.ReadTransactionFile(entry.Path)
-				if readErr != nil {
-					return readErr
-				}
-				writeErr := m.writeFile(entry.Path, contents, fs.FileMode(entry.beforeMode()))
-				zeroBytes(contents)
-				if writeErr != nil {
-					return writeErr
-				}
-				continue
-			}
-			var contents []byte
-			var readErr error
-			if record.DiscardBackups {
-				contents, readErr = m.workspace.ReadTransactionFile(entry.Backup)
-			} else {
-				contents, readErr = m.ReadBackup(entry.Backup)
-			}
-			if readErr != nil {
-				return readErr
-			}
-			restoreMode := entry.Mode
-			if entry.Action == actionWrite {
-				restoreMode = entry.beforeMode()
-			}
-			writeErr := m.writeFile(entry.Path, contents, fs.FileMode(restoreMode))
-			// 復元したのは秘密鍵かもしれない。書き終えた控えは残さない。
-			zeroBytes(contents)
-			if writeErr != nil {
-				return writeErr
-			}
-			continue
-		}
-		if err := fileSystem.Remove(entry.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		if err := fileSystem.SyncDir(filepath.Dir(entry.Path)); err != nil {
-			return err
-		}
-	}
-	record.Committed = 0
-	return m.finish(record, journalPath, statusRolledBack)
-}
-
-func (m *Manager) stagedMatches(entry journalEntry) bool {
-	if entry.Temp == "" {
-		return false
-	}
-	info, err := m.workspace.FileSystem().Lstat(entry.Temp)
-	if err != nil || uint32(info.Mode().Perm()&0o700) != entry.Mode {
-		return false
-	}
-	contents, err := ReadFileLimited(m.workspace.FileSystem(), entry.Temp, m.workspace.TransactionFileLimit(entry.Path))
-	if err != nil {
-		return false
-	}
-	digest := Digest(contents)
-	zeroBytes(contents)
-	return digest == entry.Digest
-}
-
-func (m *Manager) loadPending(identifier string) (*journalRecord, string, error) {
-	if !validJournalIdentifier(identifier) {
-		return nil, "", ErrUnknownTransaction
-	}
-	journalPath := filepath.Join(m.journalDirectory(), identifier+".json")
-	contents, err := m.workspace.FileSystem().ReadFile(journalPath)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, "", ErrUnknownTransaction
-	}
-	if err != nil {
-		return nil, "", err
-	}
-	var record journalRecord
-	if err := json.Unmarshal(contents, &record); err != nil {
-		zeroBytes(contents)
-		return nil, "", err
-	}
-	zeroBytes(contents)
-	wasLegacy := record.Version == 1
-	if err := migrateLoadedJournalRecord(&record); err != nil {
-		return nil, "", err
-	}
-	if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
-		return nil, "", err
-	}
-	if changed, err := m.reconcileRecord(&record); err != nil {
-		return nil, "", err
-	} else if changed || wasLegacy {
-		if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
-			return nil, "", err
-		}
-		if err := m.writeRecord(journalPath, record); err != nil {
-			return nil, "", err
-		}
-	}
-	return &record, journalPath, nil
-}
-
-// reconcileRecord は各対象の現在状態から、中断されたトランザクションの適用済み範囲を求める。
-//
-// 対象の変更は、それを記録する journal の再書き込みより先に行われる。そのため永続化した
-// Committed はファイルシステムより遅れることがあり、途中で失敗したロールバックでは逆に
-// 先へ進むことがある。カウンターだけを信頼すると未処理の操作を処理済みと誤認するため、
-// Pending、Complete、Rollback で記録を使う前に対象を観測して再計算する。
-//
-// 非 atomic の staging 記録は対象外とする。commitStaged に達しておらず、対象は未変更である。
-// 進捗はディレクトリ作成だけで、これは永続文書に記録しない。
-func (m *Manager) reconcileRecord(record *journalRecord) (bool, error) {
-	if record.Status == statusCompleted || record.Status == statusRolledBack {
-		return false, nil
-	}
-	statusChanged := false
-	if record.Status == statusApplied {
-		allApplied := true
-		for _, entry := range record.Entries {
-			evidence, err := m.entryEvidence(entry)
-			if err != nil {
-				return false, err
-			}
-			if evidence == evidenceUnapplied {
-				allApplied = false
-			}
-		}
-		if allApplied {
-			return false, nil
-		}
-		// A failed durability write can leave an applied marker visible while the
-		// same process has already begun rollback. Never finalize that mixed state
-		// forward: return it to the rollback-capable staged state and reconstruct
-		// its real prefix below.
-		record.Status = statusStaged
-		statusChanged = true
-	}
-	if !record.Atomic && record.Status != statusStaged {
-		return false, nil
-	}
-	// 証拠を持つエントリだけが、本当の境界を両側から挟み込む。commitStaged は
-	// 先頭から順に適用するので、適用済みの証拠は境界がその先にあることを言い、
-	// 未適用の証拠は境界がその手前にあることを言う。
-	lowest := 0
-	highest := len(record.Entries)
-	for index, entry := range record.Entries {
-		evidence, err := m.entryEvidence(entry)
-		if err != nil {
-			return false, err
-		}
-		switch evidence {
-		case evidenceApplied:
-			if index+1 > lowest {
-				lowest = index + 1
-			}
-		case evidenceUnapplied:
-			if index < highest {
-				highest = index
-			}
-		}
-	}
-	if lowest > highest {
-		// 適用済みの証拠が未適用の証拠より後ろにある。順に進む書き手も、逆順に
-		// 戻す巻き戻しも、この形は作らない。
-		return false, ErrRecoveryStateUnknown
-	}
-	// 証拠を持たないエントリは境界の内側に数える。対象の姿はどちらに数えても
-	// 変わらないが、外側に置くと、実際には適用済みで一時ファイルを使い切った
-	// 書き込みが「未コミットなのにステージが無い」形になり、完了させられなくなる。
-	committed := highest
-
-	// 数え直すのは進捗だけである。ステージ済みファイルを手放すのは finish の
-	// 仕事にしてある。ここで消すと、変更用の錠を持たない一覧の呼び出しが、
-	// 走っている最中のトランザクションの一時ファイルを消せてしまう。
-	changed := statusChanged || record.Committed != committed
-	record.Committed = committed
-	return changed, nil
-}
-
-// entryEvidence は、ひとつのエントリについて対象から読み取れる証拠。
-type entryEvidence uint8
+// otherJournalVersionPolicy は、journalVersion と違う版の記録を読んだときの扱い。
+// 旧版の記録を今の版へ直して読むことはしない。
+type otherJournalVersionPolicy int
 
 const (
-	// evidenceUnapplied と evidenceApplied は、対象が記録された変更前・変更後の
-	// どちらであるかを実際に見分けられた場合である。
-	evidenceUnapplied entryEvidence = iota
-	evidenceApplied
-	// evidenceNone は、変更前と変更後が同じ姿をしていて、対象が何も語らない場合。
-	// 内容の変わらない書き込みと、既にあったディレクトリの作成がこれにあたる。
-	// ここを「適用済み」と読んではならない。直前が未適用のとき、ありもしない
-	// 矛盾を作り出し、その記録は Pending も Complete も Rollback も永久に
-	// 受け付けなくなる。
-	evidenceNone
+	// refuseOtherJournalVersions は、中断した変更の記録に使う。読めない記録を飛ばすと、
+	// 中断した変更を片付けないまま次の変更を書いてしまうので、JournalVersionError で断る。
+	refuseOtherJournalVersions otherJournalVersionPolicy = iota
+	// skipOtherJournalVersions は、完了した変更の履歴に使う。履歴は表示と復元の候補に
+	// 使うだけなので、版の違う記録は一覧から外し、ほかの記録を見せ続ける。
+	skipOtherJournalVersions
 )
-
-// entryApplied はエントリの対象変更が適用済みかを返す。記録された変更前・変更後の
-// どちらでもない状態は推測せず拒否する。復旧の両方向がこの判定に依存するためである。
-func (m *Manager) entryEvidence(entry journalEntry) (entryEvidence, error) {
-	switch entry.Action {
-	case actionMakeDir:
-		if entry.HadPrevious {
-			// もとからあったディレクトリは、作る前も作った後も同じように在る。
-			return evidenceNone, nil
-		}
-		present, err := m.directoryPresent(entry.Path)
-		if err != nil {
-			return evidenceNone, err
-		}
-		return appliedWhen(present), nil
-	case actionRemoveDir:
-		present, err := m.directoryPresent(entry.Path)
-		if err != nil {
-			return evidenceNone, err
-		}
-		return appliedWhen(!present), nil
-	case actionWrite:
-		if entry.noOpWrite() {
-			// 対象は書く前も書いた後も同じ姿である。何も語らない。
-			return evidenceNone, nil
-		}
-		digest, mode, exists, err := m.targetFileState(entry.Path)
-		if err != nil {
-			return evidenceNone, err
-		}
-		switch {
-		case !exists && !entry.HadPrevious:
-			return evidenceUnapplied, nil
-		case exists && digest == entry.Digest && uint32(mode) == entry.Mode:
-			return evidenceApplied, nil
-		case exists && entry.HadPrevious && digest == entry.PreviousDigest && uint32(mode) == entry.beforeMode():
-			return evidenceUnapplied, nil
-		}
-		return evidenceNone, ErrRecoveryStateUnknown
-	case actionMove:
-		// 移動はバイト列をひとつしか持たない。したがって、どちらの側にそれがあるかが
-		// 適用済みかどうかそのものである。
-		source, sourceExists, err := m.targetDigest(entry.Path)
-		if err != nil {
-			return evidenceNone, err
-		}
-		target, targetExists, err := m.targetDigest(entry.Target)
-		if err != nil {
-			return evidenceNone, err
-		}
-		switch {
-		case !sourceExists && targetExists && target == entry.Digest:
-			return evidenceApplied, nil
-		case sourceExists && !targetExists && source == entry.Digest:
-			return evidenceUnapplied, nil
-		}
-		return evidenceNone, ErrRecoveryStateUnknown
-	case actionRemove:
-		digest, exists, err := m.targetDigest(entry.Path)
-		if err != nil {
-			return evidenceNone, err
-		}
-		switch {
-		case !exists:
-			return evidenceApplied, nil
-		case digest == entry.Digest:
-			return evidenceUnapplied, nil
-		}
-		return evidenceNone, ErrRecoveryStateUnknown
-	}
-	return evidenceNone, invalidJournal("entry action cannot be recovered")
-}
-
-func appliedWhen(applied bool) entryEvidence {
-	if applied {
-		return evidenceApplied
-	}
-	return evidenceUnapplied
-}
-
-func (m *Manager) directoryPresent(path string) (bool, error) {
-	info, err := m.workspace.FileSystem().Lstat(path)
-	switch {
-	case err == nil && info.IsDir():
-		return true, nil
-	case errors.Is(err, fs.ErrNotExist):
-		return false, nil
-	case err != nil:
-		return false, err
-	}
-	return false, ErrRecoveryStateUnknown
-}
-
-// targetDigest はハッシュを取り終えたバイト列をゼロで埋める。復旧が読むのは、
-// 秘密鍵かもしれないファイルそのものだからである。
-func (m *Manager) targetDigest(path string) (string, bool, error) {
-	digest, _, exists, err := m.targetFileState(path)
-	return digest, exists, err
-}
-
-func (m *Manager) targetFileState(path string) (string, fs.FileMode, bool, error) {
-	info, err := m.workspace.FileSystem().Lstat(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return "", 0, false, nil
-	}
-	if err != nil {
-		return "", 0, false, err
-	}
-	contents, err := m.workspace.ReadTransactionFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return "", 0, false, nil
-	}
-	if err != nil {
-		return "", 0, false, err
-	}
-	digest := Digest(contents)
-	zeroBytes(contents)
-	return digest, info.Mode().Perm() & 0o700, true, nil
-}
 
 // readRecords は、ディレクトリ内のすべてのジャーナル文書を古い順に読み込む。
 //
@@ -575,7 +192,7 @@ func (m *Manager) targetFileState(path string) (string, fs.FileMode, bool, error
 //
 // 読み込み自体は名前順で行う。ここが時系列である必要はないが、壊れた文書に当たった
 // ときに返るエラーが実行ごとに変わらないほうが調べやすい。
-func (m *Manager) readRecords(directory string) ([]journalRecord, error) {
+func (m *Manager) readRecords(directory string, otherVersions otherJournalVersionPolicy) ([]journalRecord, error) {
 	entries, err := m.workspace.FileSystem().ReadDir(directory)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -596,18 +213,18 @@ func (m *Manager) readRecords(directory string) ([]journalRecord, error) {
 
 	records := make([]journalRecord, 0, len(names))
 	for _, name := range names {
-		contents, readErr := m.workspace.FileSystem().ReadFile(filepath.Join(directory, name))
+		contents, readErr := ReadFileLimited(m.workspace.FileSystem(), filepath.Join(directory, name), maxRecordBytes)
 		if readErr != nil {
 			return nil, readErr
 		}
 		var record journalRecord
 		if unmarshalErr := json.Unmarshal(contents, &record); unmarshalErr != nil {
-			zeroBytes(contents)
+			clear(contents)
 			return nil, unmarshalErr
 		}
-		zeroBytes(contents)
-		if migrationErr := migrateLoadedJournalRecord(&record); migrationErr != nil {
-			return nil, migrationErr
+		clear(contents)
+		if record.Version != journalVersion && otherVersions == skipOtherJournalVersions {
+			continue
 		}
 		if validationErr := m.validateLoadedJournalRecord(record, name, directory); validationErr != nil {
 			return nil, validationErr
@@ -642,38 +259,16 @@ func invalidJournal(reason string) error {
 	return fmt.Errorf("%w: %s", ErrInvalidJournal, reason)
 }
 
-// migrateLoadedJournalRecord upgrades the released v1 contract in memory.
-// v1 stored only the mode after a write. Existing-file writes therefore cannot
-// promise a rollback to the exact previous state; v2 keeps that uncertainty as
-// a durable marker while still allowing the recorded transaction to complete.
-func migrateLoadedJournalRecord(record *journalRecord) error {
-	if record.Version == journalVersion {
-		return nil
-	}
-	if record.Version != 1 {
-		return invalidJournal("identity or version mismatch")
-	}
-	for index := range record.Entries {
-		entry := &record.Entries[index]
-		if entry.PreviousMode != 0 {
-			return invalidJournal("v1 entry contains a v2 mode")
-		}
-		if entry.Action == actionWrite && entry.HadPrevious {
-			entry.PreviousMode = entry.Mode
-			record.LegacyWriteModesUnknown = true
-		}
-	}
-	record.Version = journalVersion
-	return nil
-}
-
 func (m *Manager) validateLoadedJournalRecord(record journalRecord, name, directory string) error {
 	identifier, err := journalIdentifierFromName(name)
 	if err != nil {
 		return err
 	}
-	if record.ID != identifier || record.Version != journalVersion {
-		return invalidJournal("identity or version mismatch")
+	if record.ID != identifier {
+		return invalidJournal("identity mismatch")
+	}
+	if record.Version != journalVersion {
+		return &JournalVersionError{ID: identifier, Path: filepath.Join(directory, name), Version: record.Version}
 	}
 	if record.Operation == "" || record.StartedAt.IsZero() || len(record.Entries) == 0 {
 		return invalidJournal("missing required record fields")
@@ -719,20 +314,16 @@ func (m *Manager) validateLoadedJournalRecord(record journalRecord, name, direct
 	}
 
 	noteEntries := 0
-	claimed := make([]string, 0, len(record.Entries)*2)
+	claimed := newClaimedPaths(len(record.Entries) * 2)
 	for index, entry := range record.Entries {
 		if err := m.validateLoadedJournalEntry(record, entry, index, pending); err != nil {
 			return err
 		}
-		if journalPathAlreadyClaimed(claimed, entry.Path) {
+		if !claimed.claim(entry.Path) {
 			return invalidJournal("duplicate entry path")
 		}
-		claimed = append(claimed, entry.Path)
-		if entry.Target != "" {
-			if journalPathAlreadyClaimed(claimed, entry.Target) {
-				return invalidJournal("duplicate entry target")
-			}
-			claimed = append(claimed, entry.Target)
+		if entry.Target != "" && !claimed.claim(entry.Target) {
+			return invalidJournal("duplicate entry target")
 		}
 		if entry.Action == actionNote {
 			noteEntries++
@@ -892,13 +483,4 @@ func validJournalDigest(digest string) bool {
 
 func sameJournalPath(first, second string) bool {
 	return privateStateContains(first, second) && privateStateContains(second, first)
-}
-
-func journalPathAlreadyClaimed(claimed []string, candidate string) bool {
-	for _, path := range claimed {
-		if sameJournalPath(path, candidate) {
-			return true
-		}
-	}
-	return false
 }

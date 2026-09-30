@@ -2,8 +2,6 @@ package keys
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"io"
 	"path"
@@ -19,17 +17,16 @@ import (
 )
 
 var (
-	ErrUnknownKey = errors.New("no key with that identifier is in the inventory")
-	// ErrNoPublicKey は、隣に公開鍵の片割れがない秘密鍵を報告する。エージェントから
-	// の取り消しは公開鍵で行うので、それがなければ ssh-add に渡すものが
-	// 何もない。
-	ErrNoPublicKey                 = errors.New("this key has no public half, which is what removing it from the agent needs")
+	ErrUnknownKey                  = errors.New("no key with that identifier is in the inventory")
 	ErrInvalidFileName             = errors.New("file name is not a safe single path segment")
 	ErrInvalidComment              = errors.New("comment contains characters this application will not put in a command line")
 	ErrConflictingPassphraseChoice = errors.New("a passphrase was supplied together with the unencrypted flag")
 	ErrUnknownGroup                = errors.New("no declared group of that name")
 	ErrKeyNotEncrypted             = errors.New("this private key is not encrypted")
-	ErrKeyChanged                  = errors.New("the private key changed after its passphrase was verified")
+	// ErrKeyChanged は、確かめたあとで鍵のファイルが置き換わった、編集された、または
+	// 消えたことを報告する。パスフレーズの検証と保存のあいだ、走査と agent への登録の
+	// あいだに起きる。
+	ErrKeyChanged = errors.New("the key file changed after it was checked")
 )
 
 // KeysDirectoryName は、グループごとにサブディレクトリをひとつ持つディレクトリ。
@@ -166,14 +163,10 @@ type PassphraseVerification struct {
 // パスフレーズでその内容を復号できることを検証する。呼び出し側の入力と一時ファイルの
 // バッファは消去する。
 func (service *Service) VerifyPassphrase(keyID string, passphrase []byte) (PassphraseVerification, error) {
-	defer Wipe(passphrase)
-	inventory, err := service.Inventory()
+	defer clear(passphrase)
+	_, item, err := service.privateKey(keyID)
 	if err != nil {
 		return PassphraseVerification{}, err
-	}
-	item, ok := inventory.Find(keyID)
-	if !ok || item.Kind != KindPrivateKey {
-		return PassphraseVerification{}, ErrUnknownKey
 	}
 	if !item.Encrypted {
 		return PassphraseVerification{}, ErrKeyNotEncrypted
@@ -182,7 +175,7 @@ func (service *Service) VerifyPassphrase(keyID string, passphrase []byte) (Passp
 	if err != nil {
 		return PassphraseVerification{}, err
 	}
-	defer Wipe(contents)
+	defer clear(contents)
 	digest := storage.Digest(contents)
 	if _, err := DecodePrivateKey(contents, passphrase); err != nil {
 		return PassphraseVerification{}, err
@@ -199,7 +192,7 @@ func (service *Service) RevalidatePassphrase(verification PassphraseVerification
 	if err != nil {
 		return ErrKeyChanged
 	}
-	defer Wipe(contents)
+	defer clear(contents)
 	if storage.Digest(contents) != verification.Digest {
 		return ErrKeyChanged
 	}
@@ -208,7 +201,7 @@ func (service *Service) RevalidatePassphrase(verification PassphraseVerification
 
 // entryPath は、Include グラフの起点となるユーザー設定ファイル。
 func (service *Service) entryPath() string {
-	return filepath.Join(service.workspace.Root(), "config")
+	return service.absolutePath("config")
 }
 
 func (service *Service) absolutePath(relativePath string) string {
@@ -227,6 +220,22 @@ func (service *Service) Inventory() (*Inventory, error) {
 	}
 	inventory.AttachReferences(BuildReferenceIndex(graph, service.workspace))
 	return inventory, nil
+}
+
+// privateKey は、いま走査した inventory から keyID の秘密鍵を引く。見つからないか、
+// 秘密鍵でなければ ErrUnknownKey を返す。秘密鍵を対象にする操作は、どれもこれで対象を
+// 決めるので、対象にする鍵の条件を変えるときはここだけを直す。inventory も返すのは、
+// 公開鍵の片割れやコメントを同じ走査の結果から探す呼び出し側のため。
+func (service *Service) privateKey(keyID string) (*Inventory, *Item, error) {
+	inventory, err := service.Inventory()
+	if err != nil {
+		return nil, nil, err
+	}
+	item, ok := inventory.Find(keyID)
+	if !ok || item.Kind != KindPrivateKey {
+		return nil, nil, ErrUnknownKey
+	}
+	return inventory, item, nil
 }
 
 // Algorithms は、インストールされている OpenSSH が対応する variant を報告する。
@@ -295,7 +304,7 @@ type GenerateResult struct {
 // ひとつのジャーナル付きトランザクションでコミットする。パスフレーズが argv、環境、
 // 別プロセスに届くことは決してなく、Generate が返る前に上書きされる。
 func (service *Service) Generate(request GenerateRequest) (GenerateResult, error) {
-	defer Wipe(request.Passphrase)
+	defer clear(request.Passphrase)
 
 	if err := ValidateFileName(request.FileName); err != nil {
 		return GenerateResult{}, err
@@ -322,7 +331,7 @@ func (service *Service) Generate(request GenerateRequest) (GenerateResult, error
 	if err != nil {
 		return GenerateResult{}, err
 	}
-	defer Wipe(privateContents)
+	defer clear(privateContents)
 	publicContents, err := EncodePublicKey(privateKey, request.Comment)
 	if err != nil {
 		return GenerateResult{}, err
@@ -332,16 +341,15 @@ func (service *Service) Generate(request GenerateRequest) (GenerateResult, error
 		return GenerateResult{}, err
 	}
 
-	if err := service.workspace.EnsureDirectory(service.absolutePath(directory)); err != nil {
-		return GenerateResult{}, err
-	}
 	privateName := path.Join(directory, request.FileName)
 	publicName := privateName + ".pub"
+	privatePath, publicPath := service.absolutePath(privateName), service.absolutePath(publicName)
 	result, err := service.transactions.Commit(storage.Request{
-		Operation: "key.generate",
+		Operation:   "key.generate",
+		Directories: storage.ParentDirectoryCreates(service.workspace.Root(), []string{privatePath, publicPath}),
 		Changes: []storage.Change{
-			{Path: service.absolutePath(privateName), Contents: privateContents},
-			{Path: service.absolutePath(publicName), Contents: publicContents},
+			{Path: privatePath, Contents: privateContents},
+			{Path: publicPath, Contents: publicContents},
 		},
 	})
 	if err != nil {
@@ -379,19 +387,19 @@ type PassphraseResult struct {
 // して書き戻す。読み取ったファイルのダイジェストで守られた、ひとつのジャーナル付き
 // トランザクションで行う。
 //
-// このトランザクションは世代バックアップを取らない。置き換える内容がユーザーの
-// 秘密鍵であり、この設計は鍵素材の二つ目のコピーを ~/.ssh/sshc/backups/ に残すこと
-// を拒むからだ。新しい鍵を設置する rename は原子的なので、中断されても古い鍵か
-// 新しい鍵のどちらかが残る。中断された変更は完了させられるが、巻き戻すことは
-// できない。
+// 置き換える前の秘密鍵は、ほかの変更と同じく世代バックアップに残す。控えはVaultの鍵で
+// 封じるので、~/.ssh/sshc/backups/に平文の鍵は残らない。ただしパスワードなしのVaultでは、
+// 封じる鍵を導く値（~/.ssh/sshc/local-vault-key）も同じマシンにある。新しい鍵を設置する
+// renameは原子的なので、中断されても古い鍵か新しい鍵のどちらかが残り、中断された変更は
+// 完了させることも巻き戻すこともできる。
 //
 // x/crypto のパーサは OpenSSH の秘密鍵の中に保存されたコメントを公開しないので、
 // コメントは、フィンガープリントが一致する公開鍵ファイルから取る。そうしたファイル
 // が存在しなければ、新しい鍵はコメントを持たず、結果は NoteCommentNotPreserved で
 // その旨を伝える。エンジンがコメントをでっちあげることは決してない。
 func (service *Service) ChangePassphrase(change PassphraseChange) (PassphraseResult, error) {
-	defer Wipe(change.Current)
-	defer Wipe(change.New)
+	defer clear(change.Current)
+	defer clear(change.New)
 
 	if len(change.New) == 0 && !change.Unencrypted {
 		return PassphraseResult{}, ErrPassphraseRequired
@@ -400,13 +408,9 @@ func (service *Service) ChangePassphrase(change PassphraseChange) (PassphraseRes
 		return PassphraseResult{}, ErrConflictingPassphraseChoice
 	}
 
-	inventory, err := service.Inventory()
+	inventory, item, err := service.privateKey(change.KeyID)
 	if err != nil {
 		return PassphraseResult{}, err
-	}
-	item, ok := inventory.Find(change.KeyID)
-	if !ok || item.Kind != KindPrivateKey {
-		return PassphraseResult{}, ErrUnknownKey
 	}
 
 	absolute := service.absolutePath(item.RelativePath)
@@ -414,7 +418,7 @@ func (service *Service) ChangePassphrase(change PassphraseChange) (PassphraseRes
 	if err != nil {
 		return PassphraseResult{}, err
 	}
-	defer Wipe(contents)
+	defer clear(contents)
 	precondition := storage.Precondition{Exists: true, Digest: storage.Digest(contents)}
 
 	privateKey, err := DecodePrivateKey(contents, change.Current)
@@ -426,7 +430,7 @@ func (service *Service) ChangePassphrase(change PassphraseChange) (PassphraseRes
 	if err != nil {
 		return PassphraseResult{}, err
 	}
-	defer Wipe(encoded)
+	defer clear(encoded)
 
 	result, err := service.transactions.Commit(storage.Request{
 		Operation: "key.passphrase",
@@ -465,13 +469,9 @@ type RevealResult struct {
 // 呼び出し側が存在しないのは意図的である。通常の詳細 API が秘密鍵のバイト列を
 // 返すことはない。
 func (service *Service) Reveal(keyID string) (RevealResult, error) {
-	inventory, err := service.Inventory()
+	_, item, err := service.privateKey(keyID)
 	if err != nil {
 		return RevealResult{}, err
-	}
-	item, ok := inventory.Find(keyID)
-	if !ok || item.Kind != KindPrivateKey {
-		return RevealResult{}, ErrUnknownKey
 	}
 
 	absolute := service.absolutePath(item.RelativePath)
@@ -481,7 +481,7 @@ func (service *Service) Reveal(keyID string) (RevealResult, error) {
 	}
 	result, err := service.transactions.Note("key.reveal", []string{absolute})
 	if err != nil {
-		Wipe(contents)
+		clear(contents)
 		return RevealResult{}, err
 	}
 	return RevealResult{
@@ -533,233 +533,6 @@ func (service *Service) PublicKey(keyID string) (PublicKeyResult, error) {
 		Fingerprint:  item.Fingerprint,
 		Comment:      item.Comment,
 	}, nil
-}
-
-// ConfirmationSubject は、ワンタイムの確認が対象とする操作の種類を表す。これは
-// このパッケージ自身の用語であり、HTTP 層が session パッケージのアクション種別を
-// これに対応付ける。そのためユースケース層は、セッションがどう認証されるかに依存
-// しなくてよい。
-type ConfirmationSubject string
-
-const (
-	ConfirmRevealKey  ConfirmationSubject = "reveal_key"
-	ConfirmPurgeEntry ConfirmationSubject = "purge_entry"
-)
-
-// ErrUnknownConfirmation は、このアプリケーションがトークンを発行しない確認対象を
-// 報告する。
-var ErrUnknownConfirmation = errors.New("unknown confirmation subject")
-
-// ConfirmationEvidence は、ある操作について確認ダイアログが表示するであろう内容を
-// そのままダイジェストにする。トークンをそれに結び付けられるようにするためである。
-//
-// ダイジェストはトークンが使われるときに再計算される。その間に鍵やごみ箱のエントリ
-// が変わっていればダイジェストは食い違い、確認は拒否される。ユーザーが同意したのは
-// 見せられたものであって、それを置き換えた何かではないからだ。生成されるのは
-// ダイジェストだけである。鍵素材も、パスも、この関数から出ていくことは
-// 決してない。
-func (service *Service) ConfirmationEvidence(subject ConfirmationSubject, target string) (string, error) {
-	switch subject {
-	case ConfirmRevealKey:
-		return service.revealEvidence(target)
-	case ConfirmPurgeEntry:
-		return service.purgeEvidence(target)
-	default:
-		return "", ErrUnknownConfirmation
-	}
-}
-
-func (service *Service) revealEvidence(keyID string) (string, error) {
-	inventory, err := service.Inventory()
-	if err != nil {
-		return "", err
-	}
-	item, ok := inventory.Find(keyID)
-	if !ok || item.Kind != KindPrivateKey {
-		return "", ErrUnknownKey
-	}
-	contents, err := service.workspace.FileSystem().ReadFile(service.absolutePath(item.RelativePath))
-	if err != nil {
-		return "", err
-	}
-	// ファイルのダイジェストを取り、バッファは直ちに消去する。evidence が
-	// バイト列そのものを保持することは決してない。
-	contentsDigest := storage.Digest(contents)
-	Wipe(contents)
-
-	return digestFields(string(ConfirmRevealKey), item.RelativePath, item.Fingerprint, item.Permission, contentsDigest), nil
-}
-
-func (service *Service) purgeEvidence(entryID string) (string, error) {
-	manifest, err := service.readManifest(entryID)
-	if err != nil {
-		return "", err
-	}
-	fields := []string{string(ConfirmPurgeEntry), manifest.EntryID, manifest.DeletedAt}
-	for _, file := range manifest.Files {
-		fields = append(fields, file.OriginalPath, file.TrashPath, file.Kind, file.Fingerprint, file.Permission)
-		// その後に消えたファイルは、ダイアログが列挙する内容を変える。したがって
-		// その存在も、ユーザーが確認している内容の一部である。
-		if _, statErr := service.workspace.FileSystem().Lstat(filepath.Join(service.workspace.Root(), file.TrashPath)); statErr == nil {
-			fields = append(fields, "present")
-			continue
-		}
-		fields = append(fields, "missing")
-	}
-	return digestFields(fields...), nil
-}
-
-// digestFields は、曖昧さのない区切りでフィールドの並びをハッシュする。異なる
-// 二つのフィールド並びが、連結によって同じダイジェストになることはありえない。
-func digestFields(fields ...string) string {
-	hash := sha256.New()
-	for _, field := range fields {
-		hash.Write([]byte(field))
-		hash.Write([]byte("\x00"))
-	}
-	return hex.EncodeToString(hash.Sum(nil))
-}
-
-// RegisterRequest は、鍵をひとつ読み込むようユーザーの ssh-agent に求める。
-type RegisterRequest struct {
-	KeyID           string
-	Passphrase      []byte
-	LifetimeSeconds int
-}
-
-type RegisterResult struct {
-	ID              string
-	RelativePath    string
-	Fingerprint     string
-	LifetimeSeconds int
-	Identities      []platform.AgentIdentity
-}
-
-// Register は秘密鍵をユーザーの ssh-agent へ読み込ませる。
-//
-// 登録できるのは、いまインベントリに含まれる鍵だけである。したがって、ごみ箱に
-// ある鍵と ~/.ssh/sshc 配下のものは、構造上到達できない。パスフレーズは Register
-// が返る前に上書きされ、登録はそれを含まずに履歴へ記録される。監査の記録が書かれる
-// のはエージェントが鍵を受け付けたあとだけなので、拒否された登録が、それが起きたと
-// 主張する記録を残すことは
-// ない。
-func (service *Service) Register(ctx context.Context, request RegisterRequest) (RegisterResult, error) {
-	defer Wipe(request.Passphrase)
-
-	if service.agent == nil {
-		return RegisterResult{}, platform.ErrAgentUnavailable
-	}
-	inventory, err := service.Inventory()
-	if err != nil {
-		return RegisterResult{}, err
-	}
-	item, ok := inventory.Find(request.KeyID)
-	if !ok || item.Kind != KindPrivateKey {
-		return RegisterResult{}, ErrUnknownKey
-	}
-
-	// 呼び出し側が何も渡さなかったときには、保存されているパスフレーズを使う。それが、
-	// エージェントへの鍵の追加を二段階ではなく一度の操作にしている。ただし、打ち込まれた
-	// ものより優先されることは決してない。キーボードの前にいるユーザーの方が、ファイルよりも
-	// 新しいからである。
-	passphrase := request.Passphrase
-	if len(passphrase) == 0 && service.storedPassphrase != nil {
-		if stored, ok := service.storedPassphrase(item.RelativePath); ok {
-			passphrase = []byte(stored)
-			defer Wipe(passphrase)
-		}
-	}
-
-	absolute := service.absolutePath(item.RelativePath)
-	if err := service.agent.Add(ctx, platform.AgentAddRequest{
-		PrivateKeyPath:  absolute,
-		Passphrase:      passphrase,
-		LifetimeSeconds: request.LifetimeSeconds,
-	}); err != nil {
-		return RegisterResult{}, err
-	}
-	if _, err := service.transactions.Note("key.agent_add", []string{absolute}); err != nil {
-		return RegisterResult{}, err
-	}
-
-	identities, listErr := service.agent.List(ctx)
-	if listErr != nil {
-		identities = nil
-	}
-	return RegisterResult{
-		ID:              item.ID,
-		RelativePath:    item.RelativePath,
-		Fingerprint:     item.Fingerprint,
-		LifetimeSeconds: request.LifetimeSeconds,
-		Identities:      identities,
-	}, nil
-}
-
-// Deregister は、鍵ひとつをエージェントから取り戻す。
-//
-// 鍵をエージェントに渡したまま取り戻せないことがありえた。そのため鍵を完全削除
-// しても、ユーザーがたったいま破棄した素材をエージェントが持ち続け、エージェントの
-// 保持内容を並べる画面は、それを並べることしかできなかった。
-//
-// `ssh-add -d` は *公開* 鍵を読むので、これには公開鍵の片割れが存在する必要がある。
-// 公開鍵が失われた identity の削除は、エージェントのプロトコルだけが直接できること
-// であり、このアプリケーションは意図的に ssh-add 経由でエージェントと通信する。公開鍵が
-// 見つからないときは、行われていない削除を主張するのではなく、エージェントには手を
-// 触れずに呼び出し側へその旨を
-// 伝える。
-func (service *Service) Deregister(ctx context.Context, keyID string) error {
-	if service.agent == nil {
-		return platform.ErrAgentUnavailable
-	}
-	inventory, err := service.Inventory()
-	if err != nil {
-		return err
-	}
-	item, ok := inventory.Find(keyID)
-	if !ok || item.Kind != KindPrivateKey {
-		return ErrUnknownKey
-	}
-	public, ok := publicKeyFor(inventory, item)
-	if !ok {
-		return ErrNoPublicKey
-	}
-	if err := service.agent.Remove(ctx, service.absolutePath(public.RelativePath)); err != nil {
-		return err
-	}
-	_, err = service.transactions.Note("key.agent_remove", []string{service.absolutePath(item.RelativePath)})
-	return err
-}
-
-// publicKeyFor は、秘密鍵の公開鍵の片割れをフィンガープリントで探し、見つから
-// なければ、隣にある慣例的な ".pub" という名前へフォールバックする。
-func publicKeyFor(inventory *Inventory, item *Item) (*Item, bool) {
-	for index := range inventory.Items {
-		candidate := &inventory.Items[index]
-		if candidate.Kind != KindPublicKey {
-			continue
-		}
-		if item.Fingerprint != "" && candidate.Fingerprint == item.Fingerprint {
-			return candidate, true
-		}
-		if candidate.RelativePath == item.RelativePath+".pub" {
-			return candidate, true
-		}
-	}
-	return nil, false
-}
-
-// AgentIdentities は、エージェントがいま保持しているものを報告する。二つ目の
-// 戻り値は、到達できるエージェントがないときに false になる。UI が、動いている
-// エージェントに見える空リストではなく、その旨を言えるようにするためだ。
-func (service *Service) AgentIdentities(ctx context.Context) ([]platform.AgentIdentity, bool) {
-	if service.agent == nil || !service.agent.Available(ctx) {
-		return nil, false
-	}
-	identities, err := service.agent.List(ctx)
-	if err != nil {
-		return nil, false
-	}
-	return identities, true
 }
 
 // commentForKey は、同じフィンガープリントを持つ公開鍵ファイルから秘密鍵の

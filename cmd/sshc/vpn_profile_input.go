@@ -94,7 +94,7 @@ func (p vpnProfilePrompter) secret(label string, keeps bool) ([]byte, error) {
 	}
 	value, err := promptMaskedPassword(p.ctx, p.stdin, p.prompt, p.terminal, label+": ")
 	if err != nil {
-		zeroBytes(value)
+		clear(value)
 		return nil, err
 	}
 	return value, nil
@@ -110,7 +110,7 @@ type vpnProfileInput struct {
 // forget は、読み取ったシークレットを消す。
 func (input vpnProfileInput) forget() {
 	for _, field := range input.secrets {
-		zeroBytes(field.value)
+		clear(field.value)
 	}
 }
 
@@ -213,7 +213,7 @@ func readL2TPProfile(
 	}
 	psk, err := p.secret("IPsec pre-shared key", keeps)
 	if err != nil {
-		zeroBytes(password)
+		clear(password)
 		return nil, nil, err
 	}
 	secrets := sentSecrets(
@@ -294,7 +294,7 @@ func readOpenConnectProfile(
 	if settings.SecondFactor == vpn.SecondFactorTOTP {
 		seed, err := p.secret("Second factor TOTP secret", keepsSeed)
 		if err != nil {
-			zeroBytes(password)
+			clear(password)
 			return nil, nil, err
 		}
 		fields = append(fields, vpnSecretField{name: vpn.SecretKeyOpenConnectTOTPSecret, value: seed})

@@ -14,6 +14,7 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/secret"
+	"sshc/internal/secret/secrettest"
 	"sshc/internal/storage"
 )
 
@@ -105,7 +106,9 @@ Host proxyjump-integration-destination
 		if err != nil {
 			t.Fatalf("binding %s: %v", alias, err)
 		}
-		if err := vault.SetBound(alias, password, binding); err != nil {
+		if err := secrettest.StoreDedicatedPassword(vault, transactions, secrettest.DedicatedPassword{
+			Alias: alias, Password: password, Binding: binding,
+		}); err != nil {
 			t.Fatalf("password %s: %v", alias, err)
 		}
 	}

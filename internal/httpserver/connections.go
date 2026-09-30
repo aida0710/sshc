@@ -54,7 +54,7 @@ func (h ConnectionHandlers) Create(c *echo.Context) error {
 	if err := decodeJSONWithin(c, maxKeyRequestBody, &wire); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	defer wipeBuffer(wire.Authentication)
+	defer clear(wire.Authentication)
 	request, err := connectionRequestFromAPI(wire)
 	if err != nil {
 		return connectionProblem(c, err)
@@ -82,12 +82,12 @@ func (h ConnectionHandlers) Update(c *echo.Context) error {
 	if err := decodeJSONWithin(c, maxKeyRequestBody, &wire); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	defer wipeBuffer(wire.Password)
-	defer wipeBuffer(wire.KeyPassphrase)
+	defer clear(wire.Password)
+	defer clear(wire.KeyPassphrase)
 	defer func() {
 		for _, value := range []*json.RawMessage{wire.HostName, wire.User, wire.Port, wire.IdentityFile} {
 			if value != nil {
-				wipeBuffer(*value)
+				clear(*value)
 			}
 		}
 	}()

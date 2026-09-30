@@ -10,9 +10,10 @@ import (
 // 現在の Graph だけでは不変な設定へ展開できないことを表す。
 var ErrSnapshotIncomplete = errors.New("configuration cannot be reduced to one immutable snapshot")
 
-// MaxSnapshotSize はローカルサーバーから CLI へ渡す単一設定ファイルの上限である。
-// 個々のソースファイルに加え、広い Include グラフをまとめた loopback 応答と
-// 一時ファイルの割り当ても制限する。
+// MaxSnapshotSize は、Snapshot が Include をまとめて作る単一設定の上限である。
+// 公開鍵のリモート登録は、確認の画面と実行する登録が同じ設定を見ているかを、
+// このまとめた設定のダイジェストで比べる（diagnostics.ConnectionSnapshot）。
+// 広い Include グラフをまとめても、この大きさを超えてメモリを使わない。
 const MaxSnapshotSize = 4 << 20
 
 // Snapshot は解決済み Include を読み込まれたバイト列へ置き換え、OpenSSH が

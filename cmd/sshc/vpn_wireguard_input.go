@@ -51,7 +51,7 @@ func readWireGuardProfile(p vpnProfilePrompter, previous application.VPNProfile,
 	}
 	config, err := vpn.ParseWireGuardConfig(text)
 	if err != nil {
-		zeroBytes(text)
+		clear(text)
 		return wireGuardInput{}, vpnConfigInputError(err)
 	}
 	config.Forget()

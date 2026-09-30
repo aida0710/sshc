@@ -636,6 +636,8 @@ func vaultProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "password_empty")
 	case errors.Is(err, secret.ErrUnsafeName):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
+	case errors.Is(err, secret.ErrTooManyBackups):
+		return problemDetail(c, http.StatusConflict, VaultBackupsTooManyCode, "the local backups are too many to re-encrypt in one change")
 	case errors.Is(err, fs.ErrPermission), errors.Is(err, syscall.EACCES), errors.Is(err, syscall.EPERM):
 		return unexpectedReply(c, problemReply{
 			status: http.StatusInternalServerError, code: "vault_storage_permission_denied",

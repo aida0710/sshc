@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -226,147 +227,75 @@ func TestRecoveryCompletesAfterAModeOnlyWriteWithStaleProgress(t *testing.T) {
 	assertFileContents(t, second, "after\n")
 }
 
-func TestReleasedV1PendingJournalCompletesButDoesNotClaimAnExactRollback(t *testing.T) {
+func TestPendingAndCompleteRefuseAnOlderJournalRecordNamingItsFileAndRelease(t *testing.T) {
 	workspace := newTestWorkspace(t)
-	first := writeWorkspaceFile(t, workspace, "first.conf", "before\n", FilePermission)
-	second := writeWorkspaceFile(t, workspace, "second.conf", "before\n", FilePermission)
+	target := writeWorkspaceFile(t, workspace, "config", "before\n", FilePermission)
 	id := commitWithStaleJournal(t, workspace, 0x83, Request{
 		Operation: "config.save",
-		Changes: []Change{
-			{Path: first, Contents: []byte("after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission}},
-			{Path: second, Contents: []byte("after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission}},
-		},
-	})
-	journalPath := filepath.Join(workspace.StateDir(), journalDirectoryName, id+".json")
-	downgradeJournalRecordToV1(t, journalPath)
-
-	restarted := restartedManager(t, workspace)
-	pending := reconciledPending(t, restarted, id, 1)
-	if pending.CanRollback || !pending.CanComplete {
-		t.Fatalf("v1 pending recovery choices = %#v", pending)
-	}
-	if err := restarted.Rollback(id); !errors.Is(err, ErrCannotRollback) {
-		t.Fatalf("Rollback = %v, want ErrCannotRollback", err)
-	}
-	assertFileContents(t, first, "after\n")
-	assertFileContents(t, second, "before\n")
-	if err := restarted.Complete(id); err != nil {
-		t.Fatal(err)
-	}
-	assertFileContents(t, first, "after\n")
-	assertFileContents(t, second, "after\n")
-}
-
-func TestReleasedV1ModeChangeCannotMisreportRollback(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows does not expose Unix executable permission bits")
-	}
-	workspace := newTestWorkspace(t)
-	modeOnly := writeWorkspaceFile(t, workspace, "mode-only", "same bytes\n", FilePermission)
-	second := writeWorkspaceFile(t, workspace, "second.conf", "before\n", FilePermission)
-	id := commitWithStaleJournal(t, workspace, 0x84, Request{
-		Operation: "sync.pull",
-		Changes: []Change{
-			{Path: modeOnly, Contents: []byte("same bytes\n"), Mode: DirectoryPermission, Precondition: Precondition{Exists: true, Digest: Digest([]byte("same bytes\n")), Mode: FilePermission}},
-			{Path: second, Contents: []byte("after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission}},
-		},
-	})
-	downgradeJournalRecordToV1(t, filepath.Join(workspace.StateDir(), journalDirectoryName, id+".json"))
-
-	restarted := restartedManager(t, workspace)
-	pending := reconciledPending(t, restarted, id, 1)
-	if pending.CanRollback || !pending.CanComplete {
-		t.Fatalf("v1 mode recovery choices = %#v", pending)
-	}
-	if err := restarted.Rollback(id); !errors.Is(err, ErrCannotRollback) {
-		t.Fatalf("Rollback = %v, want ErrCannotRollback", err)
-	}
-	if info, err := os.Lstat(modeOnly); err != nil || info.Mode().Perm() != DirectoryPermission {
-		t.Fatalf("mode after refused rollback = %v, %v; want 0700", info, err)
-	}
-	if err := restarted.Complete(id); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestReleasedV1ModeUncertaintyPersistsWithoutBlockingAnUnappliedRollback(t *testing.T) {
-	workspace := newTestWorkspace(t)
-	target := writeWorkspaceFile(t, workspace, "config", "before\n", FilePermission)
-	failure := errors.New("injected first rename failure")
-	workspace.fileSystem = faultyFileSystem{
-		FileSystem: OSFileSystem{},
-		failOn: func(operation, path string) error {
-			if operation == "rename" && path == target {
-				return failure
-			}
-			return nil
-		},
-	}
-	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x85}, 4096)))
-	result, err := manager.Commit(Request{
-		Operation: "config.save",
 		Changes: []Change{{
 			Path: target, Contents: []byte("after\n"),
 			Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission},
 		}},
 	})
-	if !errors.Is(err, failure) || result.ID == "" {
-		t.Fatalf("Commit = %#v, %v; want the injected rename failure", result, err)
-	}
-	workspace.fileSystem = OSFileSystem{}
-	journalPath := filepath.Join(workspace.StateDir(), journalDirectoryName, result.ID+".json")
-	downgradeJournalRecordToV1(t, journalPath)
+	recordPath := filepath.Join(workspace.StateDir(), journalDirectoryName, id+".json")
+	rewriteJournalRecordVersion(t, recordPath, journalVersion-1)
 
 	restarted := restartedManager(t, workspace)
-	record, _, err := restarted.loadPending(result.ID)
-	if err != nil {
-		t.Fatal(err)
+	_, pendingErr := restarted.Pending()
+	for name, err := range map[string]error{"Pending": pendingErr, "Complete": restarted.Complete(id)} {
+		var versionErr *JournalVersionError
+		if !errors.Is(err, ErrInvalidJournal) || !errors.As(err, &versionErr) {
+			t.Fatalf("%s = %v, want a JournalVersionError", name, err)
+		}
+		if versionErr.ID != id || versionErr.Path != recordPath || versionErr.Version != journalVersion-1 {
+			t.Fatalf("%s error = %#v, want the record %s at %s", name, versionErr, id, recordPath)
+		}
+		if message := err.Error(); !strings.Contains(message, recordPath) || !strings.Contains(message, "before "+journalVersionRelease) {
+			t.Fatalf("%s message = %q, want the record path and the release that wrote it", name, message)
+		}
 	}
-	if !record.LegacyWriteModesUnknown || record.appliedLegacyWriteModeUnknown() {
-		t.Fatalf("loaded v1 uncertainty = %#v", record)
-	}
-	body, err := os.ReadFile(journalPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var migrated journalRecord
-	if err := json.Unmarshal(body, &migrated); err != nil {
-		t.Fatal(err)
-	}
-	if migrated.Version != journalVersion || !migrated.LegacyWriteModesUnknown {
-		t.Fatalf("persisted migration = %#v", migrated)
-	}
-	restarted = restartedManager(t, workspace)
-	pending := reconciledPending(t, restarted, result.ID, 0)
-	if !pending.CanRollback {
-		t.Fatalf("unapplied v1 write cannot roll back: %#v", pending)
-	}
-	if err := restarted.Rollback(result.ID); err != nil {
-		t.Fatalf("Rollback after restart = %v", err)
-	}
-	assertFileContents(t, target, "before\n")
 }
 
-func TestReleasedV1HistoryRemainsReadable(t *testing.T) {
+func TestJournalVersionErrorNamesANewerReleaseForARecordOfALaterVersion(t *testing.T) {
+	err := &JournalVersionError{ID: validJournalTestID, Path: "journal/" + validJournalTestID + ".json", Version: journalVersion + 1}
+
+	if message := err.Error(); !strings.Contains(message, "a newer sshc release") || strings.Contains(message, journalVersionRelease) {
+		t.Fatalf("message = %q, want it to name a newer release", message)
+	}
+}
+
+func TestHistoryLeavesOutCompletedRecordsOfAnotherJournalVersion(t *testing.T) {
 	manager, workspace := newTestManager(t)
 	target := writeWorkspaceFile(t, workspace, "config", "before\n", FilePermission)
-	result, err := manager.Commit(Request{
+	older, err := manager.Commit(Request{
 		Operation: "config.save",
 		Changes: []Change{{
-			Path: target, Contents: []byte("after\n"),
+			Path: target, Contents: []byte("middle\n"),
 			Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission},
 		}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	downgradeJournalRecordToV1(t, filepath.Join(workspace.StateDir(), historyDirectoryName, result.ID+".json"))
-	history, err := manager.History()
+	rewriteJournalRecordVersion(t, filepath.Join(workspace.StateDir(), historyDirectoryName, older.ID+".json"), journalVersion-1)
+
+	current := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x5b}, 4096)))
+	latest, err := current.Commit(Request{
+		Operation: "config.save",
+		Changes: []Change{{
+			Path: target, Contents: []byte("after\n"),
+			Precondition: Precondition{Exists: true, Digest: Digest([]byte("middle\n")), Mode: FilePermission},
+		}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(history) != 1 || history[0].ID != result.ID || history[0].Status != statusCompleted {
-		t.Fatalf("v1 history = %#v", history)
+	history, err := current.History()
+	if err != nil {
+		t.Fatalf("History = %v", err)
+	}
+	if len(history) != 1 || history[0].ID != latest.ID {
+		t.Fatalf("history = %#v, want only %s", history, latest.ID)
 	}
 }
 
@@ -657,16 +586,27 @@ func TestCommitAtomicRollsBackAppliedWritesForLateFailures(t *testing.T) {
 			},
 		},
 		{
-			name: "journal progress update",
-			failOn: func(root, _, _ string) func(string, string) error {
+			// 失敗経路は巻き戻す前に進捗を書き残す。その書き込みが失敗しても、
+			// このプロセスが知っている進捗で巻き戻す。
+			name: "second target rename and progress record",
+			failOn: func(root, _, second string) func(string, string) error {
 				journalRenames := 0
+				secondFailed := false
 				journalDirectory := filepath.Join(root, "sshc", journalDirectoryName)
 				return func(operation, path string) error {
-					if operation == "rename" && filepath.Dir(path) == journalDirectory {
+					if operation != "rename" {
+						return nil
+					}
+					if filepath.Dir(path) == journalDirectory {
 						journalRenames++
+						// 1 回目は staging、2 回目は staged の記録。3 回目が失敗経路の進捗である。
 						if journalRenames == 3 {
-							return errors.New("journal progress update failed")
+							return errors.New("progress record failed")
 						}
+					}
+					if !secondFailed && path == second {
+						secondFailed = true
+						return errors.New("second rename failed")
 					}
 					return nil
 				}
@@ -785,6 +725,7 @@ func TestCommitAtomicRecoveryReconstructsProgressAfterRollbackAlsoFails(t *testi
 	first := writeWorkspaceFile(t, workspace, "first.conf", "first before\n", 0o600)
 	second := writeWorkspaceFile(t, workspace, "second.conf", "second before\n", 0o600)
 	journalRenames := 0
+	secondFailed := false
 	firstTargetRenames := 0
 	failure := errors.New("injected nested recovery failure")
 	workspace.fileSystem = faultyFileSystem{
@@ -795,11 +736,16 @@ func TestCommitAtomicRecoveryReconstructsProgressAfterRollbackAlsoFails(t *testi
 			}
 			if filepath.Dir(path) == filepath.Join(workspace.Root(), "sshc", journalDirectoryName) {
 				journalRenames++
-				// 3 回目の journal 置換は最初に適用した対象を記録し、4 回目は
-				// CommitAtomic がロールバック前に進捗を永続化する処理である。
-				if journalRenames == 3 || journalRenames == 4 {
+				// 1 回目は staging、2 回目は staged の記録。3 回目は、CommitAtomic が
+				// ロールバックの前に進捗を永続化する処理である。
+				if journalRenames == 3 {
 					return failure
 				}
+			}
+			// 2 つ目の対象の適用を落とす。最初の対象だけが新しい内容になる。
+			if !secondFailed && path == second {
+				secondFailed = true
+				return failure
 			}
 			if path == first {
 				firstTargetRenames++
@@ -1005,25 +951,32 @@ func TestAtomicRollbackRenameBeforeSyncCrashStateReconcilesWithoutStagedTemp(t *
 	}
 }
 
-// commitWithStaleJournal は、最初のエントリの適用には成功し、それを記録しようと
-// するジャーナル書き込みがすべて失敗するコミットを走らせる。残る永続記録は、
-// ファイルシステムが実際に保持しているより少ない進捗を名乗ることになる。
+// commitWithStaleJournal は、最初のエントリを適用した直後に失敗し、失敗経路が進捗を
+// 書き残す journal の書き込みも失敗するコミットを走らせる。残る永続記録は、ステージ
+// したときの進捗 0 のままで、ファイルシステムが実際に保持しているより少ない進捗を
+// 名乗ることになる。復旧は対象の状態から数え直すほかない。
 func commitWithStaleJournal(t *testing.T, workspace *Workspace, filler byte, request Request) string {
 	t.Helper()
 	journalDirectory := filepath.Join(workspace.StateDir(), journalDirectoryName)
 	journalRenames := 0
-	failure := errors.New("injected journal progress failure")
+	targetSyncFailed := false
+	failure := errors.New("injected failure after the first entry")
 	workspace.fileSystem = faultyFileSystem{
 		FileSystem: OSFileSystem{},
 		failOn: func(operation, path string) error {
-			// 3 番目は最初のエントリを適用したあとの進捗更新、4 番目は失敗経路が
-			// その進捗を残そうとする再試行である。両方を落とすことでのみ、復旧は
-			// 対象の状態から数え直すほかなくなる。
-			if operation == "rename" && filepath.Dir(path) == journalDirectory {
+			switch {
+			case operation == "rename" && filepath.Dir(path) == journalDirectory:
 				journalRenames++
-				if journalRenames == 3 || journalRenames == 4 {
+				// 1 番目は staging、2 番目は staged の記録。3 番目が、失敗経路が
+				// 進捗を残そうとする書き込みである。
+				if journalRenames == 3 {
 					return failure
 				}
+			case operation == "syncDir" && journalRenames == 2 && path != journalDirectory && !targetSyncFailed:
+				// staged の記録を書いたあとの最初の対象ディレクトリの同期。最初の
+				// エントリはもう適用されている。
+				targetSyncFailed = true
+				return failure
 			}
 			return nil
 		},
@@ -1048,7 +1001,9 @@ func commitWithStaleJournal(t *testing.T, workspace *Workspace, filler byte, req
 	return result.ID
 }
 
-func downgradeJournalRecordToV1(t *testing.T, path string) {
+// rewriteJournalRecordVersion は、記録の版だけを書き換えて、別の版のプログラムが
+// 残した記録を作る。
+func rewriteJournalRecordVersion(t *testing.T, path string, version int) {
 	t.Helper()
 	body, err := os.ReadFile(path)
 	if err != nil {
@@ -1058,10 +1013,7 @@ func downgradeJournalRecordToV1(t *testing.T, path string) {
 	if err := json.Unmarshal(body, &record); err != nil {
 		t.Fatal(err)
 	}
-	record.Version = 1
-	for index := range record.Entries {
-		record.Entries[index].PreviousMode = 0
-	}
+	record.Version = version
 	body, err = json.Marshal(record)
 	if err != nil {
 		t.Fatal(err)
@@ -1307,6 +1259,7 @@ func TestReconcileCountsEvidenceFreeEntriesInsideTheAppliedPrefix(t *testing.T) 
 		Temp:           filepath.Join(workspace.Root(), temporaryPrefix+validJournalTestID+"-staged"),
 		HadPrevious:    true,
 		Mode:           0o600,
+		PreviousMode:   0o600,
 		Digest:         Digest([]byte("after\n")),
 		PreviousDigest: Digest([]byte("before\n")),
 	}
@@ -1329,6 +1282,7 @@ func TestReconcileCountsEvidenceFreeEntriesInsideTheAppliedPrefix(t *testing.T) 
 			Path:           unchanged,
 			HadPrevious:    true,
 			Mode:           0o600,
+			PreviousMode:   0o600,
 			Digest:         Digest([]byte("{}\n")),
 			PreviousDigest: Digest([]byte("{}\n")),
 		},
@@ -1433,6 +1387,102 @@ func TestRecoveryReleasesAnEvidenceFreeStagedFileOnlyWhenTheTransactionEnds(t *t
 
 // 判別できない記録がひとつあることは、他の記録も履歴も見えなくなる理由にならない。
 // 呼び出し側はこの一覧で設定画面全体を組み立てている。
+// 保留記録の対象が dotfiles 管理ツールなどで置き換わっても、一覧は失敗しない。
+// 一覧が失敗すると、engine の起動時の自動ロック解除と設定画面全体が止まり、
+// 記録を片付ける手段もなくなる。
+func TestPendingListsARecordWhoseTargetWasReplacedWithoutFailing(t *testing.T) {
+	cases := map[string]func(t *testing.T, target string){
+		"symbolic link": func(t *testing.T, target string) {
+			replacement := target + ".real"
+			if err := os.WriteFile(replacement, []byte("managed elsewhere\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Remove(target); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(replacement, target); err != nil {
+				t.Skipf("symbolic links are not available: %v", err)
+			}
+		},
+		"directory": func(t *testing.T, target string) {
+			if err := os.Remove(target); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(target, 0o700); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"file over the size limit": func(t *testing.T, target string) {
+			if err := os.WriteFile(target, bytes.Repeat([]byte("x"), MaxFileSize+1), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for name, replace := range cases {
+		t.Run(name, func(t *testing.T) {
+			workspace := newTestWorkspace(t)
+			target := writeWorkspaceFile(t, workspace, "config", "before\n", 0o600)
+			other := writeWorkspaceFile(t, workspace, "other.conf", "other before\n", 0o600)
+			identifier := commitWithStaleJournal(t, workspace, 0x7c, Request{
+				Operation: "config.save",
+				Changes: []Change{
+					{Path: target, Contents: []byte("after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n"))}},
+					{Path: other, Contents: []byte("other after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("other before\n"))}},
+				},
+			})
+			replace(t, target)
+
+			restarted := restartedManager(t, workspace)
+			pending, err := restarted.Pending()
+			if err != nil {
+				t.Fatalf("Pending = %v, want the listing to survive a replaced target", err)
+			}
+			if len(pending) != 1 || pending[0].ID != identifier {
+				t.Fatalf("Pending = %#v, want the interrupted transaction", pending)
+			}
+			if pending[0].CanComplete || pending[0].CanRollback {
+				t.Fatalf("a transaction whose target was replaced was offered as actionable: %#v", pending[0])
+			}
+			if err := restarted.Rollback(identifier); err == nil {
+				t.Fatal("Rollback of a transaction whose target was replaced succeeded")
+			}
+		})
+	}
+}
+
+// 保留記録を片付けたら、その記録が触れたパスを知らせる。解錠中の Vault のように
+// ディスクの内容をメモリに持つ側が、読み直すための通知である。
+func TestCompleteAndRollbackReportThePathsTheRecordTouched(t *testing.T) {
+	cases := map[string]func(manager *Manager, identifier string) error{
+		"complete": func(manager *Manager, identifier string) error { return manager.Complete(identifier) },
+		"rollback": func(manager *Manager, identifier string) error { return manager.Rollback(identifier) },
+	}
+	for name, settle := range cases {
+		t.Run(name, func(t *testing.T) {
+			workspace := newTestWorkspace(t)
+			first := writeWorkspaceFile(t, workspace, "first.conf", "first before\n", 0o600)
+			second := writeWorkspaceFile(t, workspace, "second.conf", "second before\n", 0o600)
+			identifier := commitWithStaleJournal(t, workspace, 0x7d, Request{
+				Operation: "connection.update",
+				Changes: []Change{
+					{Path: first, Contents: []byte("first after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("first before\n"))}},
+					{Path: second, Contents: []byte("second after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("second before\n"))}},
+				},
+			})
+
+			restarted := restartedManager(t, workspace)
+			var reported [][]string
+			restarted.AfterRecovery = func(paths []string) { reported = append(reported, paths) }
+			if err := settle(restarted, identifier); err != nil {
+				t.Fatalf("%s = %v", name, err)
+			}
+			if len(reported) != 1 || !slices.Equal(reported[0], []string{first, second}) {
+				t.Fatalf("reported paths = %v, want [%s %s]", reported, first, second)
+			}
+		})
+	}
+}
+
 func TestPendingReportsAnUnreadableRecordWithoutFailingTheWholeListing(t *testing.T) {
 	workspace := newTestWorkspace(t)
 	tampered := writeWorkspaceFile(t, workspace, "first.conf", "first before\n", 0o600)

@@ -50,7 +50,7 @@ const (
 	// その下にあるもの（バックアップ、ごみ箱、ジャーナル、履歴）はすべてエンジンの
 	// 状態なので、インベントリに現れることはなく、エージェントに登録されることもなく、
 	// IdentityFile として提案されることもない。
-	StateDirectoryName = "sshc"
+	StateDirectoryName = storage.StateDirectoryName
 
 	maxScanDepth   = 8
 	maxScanEntries = 4096
@@ -248,7 +248,8 @@ func (scanner *Scanner) walk(inventory *Inventory, directory string, depth int, 
 //
 // これはパスではなく識別子である。ItemID はこの文字列のハッシュであり、
 // vault の鍵も参照インデックスの鍵も filepath.ToSlash された同じ表記である
-// (`internal/app/ssh.go` の storedPassphrase、`references.go` の relativeKey)。
+// (`internal/app/ssh.go` の storedPassphrase、`references.go` の record と
+// ResolveWorkspaceKeyPath)。
 // ここだけがこのファイルシステムの区切り文字を返すと、Windows では `keys/work/id`
 // と `keys\work\id` という別々の鍵ができ、保存したパスフレーズも、その鍵を名指す
 // IdentityFile も、グループ名変更の書き換えも、どれも一致しなくなる。

@@ -143,27 +143,27 @@ func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
 	if h.Vault == nil {
 		return problem(c, http.StatusConflict, "vault_locked")
 	}
-	key := strings.TrimSpace(request.Key)
+	syncKey := strings.TrimSpace(request.Key)
 	generated := false
 	if request.ReuseKey {
-		if key != "" || request.ExpectedState != api.Existing {
+		if syncKey != "" || request.ExpectedState != api.Existing {
 			return problem(c, http.StatusBadRequest, "invalid_request")
 		}
-		key, err = h.currentSyncKey()
+		syncKey, err = h.currentSyncKey()
 		if err != nil {
 			return syncKeyProblem(c, err)
 		}
-	} else if key == "" {
+	} else if syncKey == "" {
 		if request.ExpectedState != api.Empty {
 			return problem(c, http.StatusBadRequest, "sync_key_missing")
 		}
-		key, err = remotesync.NewKey()
+		syncKey, err = remotesync.NewKey()
 		if err != nil {
 			return unexpectedProblem(c, "key_generation_failed", err)
 		}
 		generated = true
 	}
-	if len(key) > remotesync.MaxKeyLength {
+	if len(syncKey) > remotesync.MaxKeyLength {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	expected := remotesync.SetupInspection{
@@ -173,11 +173,11 @@ func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
 		expected.ETag = *request.ExpectedETag
 	}
 	client := h.objectStoreClient(config, credentials)
-	err = h.Service.CompleteSetup(c.Request().Context(), config, credentials, client, expected, key, func() error {
+	err = h.Service.CompleteSetup(c.Request().Context(), config, credentials, client, expected, syncKey, func() error {
 		return h.Vault.SetSyncSettings(secret.SyncSettings{
 			Endpoint: config.Endpoint, Bucket: config.Bucket, Path: config.Path, Region: config.Region,
 			AccessKeyID: credentials.AccessKeyID, SecretAccessKey: credentials.SecretAccessKey,
-			Direction: string(direction), Key: key,
+			Direction: string(direction), Key: syncKey,
 		})
 	})
 	if err != nil {
@@ -191,7 +191,7 @@ func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
 	}
 	response := api.SyncSetupResponse{Status: h.statusResponse()}
 	if generated {
-		response.GeneratedKey = &key
+		response.GeneratedKey = &syncKey
 	}
 	return c.JSON(http.StatusOK, response)
 }

@@ -273,6 +273,18 @@ describe("SettingsPanel", () => {
     expect(screen.getByLabelText("Confirm new master password")).toHaveValue("");
   });
 
+  it("says how to reduce the local backups when there are too many to re-encrypt", async () => {
+    const user = userEvent.setup();
+    render(<SettingsPanel api={buildApi({
+      changeMasterPassword: vi.fn().mockRejectedValue(new ApiError("vault_backups_too_many", 409, null)),
+    })} />);
+    await screen.findByRole("region", { name: "Master password" });
+    await fillMasterPassword(user);
+    await user.click(screen.getByRole("button", { name: "Change the master password" }));
+
+    expect(await screen.findByText(/too many local backups.*Delete old folders from ~\/\.ssh\/sshc\/backups/)).toBeInTheDocument();
+  });
+
   it("reports a generic master-password failure and clears every secret", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi({

@@ -1110,7 +1110,7 @@ paths:
       operationId: lockPasswordVault
       responses:
         "200":
-          description: Derived key and every pending askpass token forgotten
+          description: Derived key forgotten and the vault locked
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PasswordVaultStatus" }
@@ -1581,6 +1581,7 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
     delete:
       # identity の削除に確認トークンは要らない。何も破壊しないし、最悪の場合でも
@@ -4921,8 +4922,8 @@ components:
         batchId: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
         batchName: { type: string, minLength: 1, maxLength: 1024 }
         batchKind: { type: string, enum: [file, folder] }
-        alias: { type: string, minLength: 1, maxLength: 255 }
-        sourceAlias: { type: string, maxLength: 255 }
+        alias: { type: string, minLength: 1, maxLength: 64 }
+        sourceAlias: { type: string, maxLength: 64 }
         sourcePath: { type: string }
         operation: { type: string, enum: ["", copy, move, delete, get, put] }
         direction: { type: string, enum: [upload, download, remote] }
@@ -5028,8 +5029,8 @@ components:
         batchId: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
         batchName: { type: string, minLength: 1, maxLength: 1024 }
         batchKind: { type: string, enum: [file, folder] }
-        alias: { type: string, minLength: 1, maxLength: 255 }
-        sourceAlias: { type: string, maxLength: 255 }
+        alias: { type: string, minLength: 1, maxLength: 64 }
+        sourceAlias: { type: string, maxLength: 64 }
         sourcePath: { type: string }
         operation: { type: string, enum: ["", copy, move, delete, get, put] }
         overwrite: { type: boolean }

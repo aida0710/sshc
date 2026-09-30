@@ -9,11 +9,11 @@ import (
 
 // ConfigureIfUnconfigured restores a persisted binding without overwriting a
 // binding explicitly configured while the persisted settings were being read.
-// The check and publication share operationMu with CompleteSetup.
+// The check and publication share operationMutex with CompleteSetup.
 func (s *Service) ConfigureIfUnconfigured(config Config, credentials objectstore.Credentials, client *objectstore.Client) (bool, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	if s.configured() {
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
+	if s.Configured() {
 		return false, nil
 	}
 	config = normalizeConfig(config)
@@ -24,18 +24,34 @@ func (s *Service) ConfigureIfUnconfigured(config Config, credentials objectstore
 	return true, nil
 }
 
-// configure applies one complete remote binding while operationMu is held.
+// configure applies one complete remote binding while operationMutex is held.
 // Configure must be wholly before or wholly after every stateful operation so
 // a successful settings response never leaves an older operation running.
 func (s *Service) configure(config Config, credentials objectstore.Credentials, client *objectstore.Client) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// 末尾のスラッシュがリクエストへ届いたことはない、クライアントはパス全体を
-	// 置き換えるが、スナップショットの行き先を表示するすべての画面には
-	// "https://host//bucket" として届いていた。設定を保存する場所だけでなくここで
-	// 切り詰めることで、これができる前に保存されたものもきれいになる。
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	// endpoint の末尾のスラッシュはリクエストには影響しない（クライアントがパス全体を
+	// 置き換える）が、スナップショットの行き先を表示する画面では "https://host//bucket"
+	// になる。設定を保存する場所だけでなくここでも切り詰めるので、どこから来た設定も
+	// 同じ形で保持する。
 	config = normalizeConfig(config)
-	s.binding = remoteBinding{config: config, creds: credentials, client: client}
+	s.binding = remoteBinding{config: config, credentials: credentials, client: client}
+	s.bindingVersion++
+}
+
+// Forget は、同期先の接続一式（アクセスキーとシークレットを含む）を手放す。
+//
+// 同期の設定は Vault の中にあり、Vault が閉じているあいだは読めない。Vault が
+// ロックされたらここを呼び、その平文をメモリに残さない。解錠したあとは、自動同期の
+// 準備と同期の画面が、未設定と見て Vault から組み直す。
+//
+// operationMutex は待たない。走っている操作は開始時に接続一式を写し取っており、世代を
+// 進めれば、古い世代で読んだ結果を返す操作は止まる。リモートは変わっていないので、
+// 止まった操作は ErrRemoteMoved ではなく ErrNotConfigured を返す（bindingChangedLocked）。
+func (s *Service) Forget() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.binding = remoteBinding{}
 	s.bindingVersion++
 }
 
@@ -65,38 +81,43 @@ func (s *Service) configuredBinding() (remoteBinding, error) {
 }
 
 func (s *Service) configuredBindingVersion() (remoteBinding, uint64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	binding := s.binding
-	if _, ok := ParseDirection(string(binding.config.Direction)); !ok || binding.client == nil ||
-		binding.config.Bucket == "" || binding.creds.AccessKeyID == "" {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if !s.configuredLocked() {
 		return remoteBinding{}, 0, ErrNotConfigured
 	}
-	return binding, s.bindingVersion, nil
+	return s.binding, s.bindingVersion, nil
 }
 
 // Configured は、バケットと資格情報が設定されているかを報告する。
 func (s *Service) Configured() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	return s.configuredLocked()
 }
 
-func (s *Service) configured() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.configuredLocked()
+// bindingChangedLocked は、captured の世代で読んだ結果を返してよいかを確かめる。s.mutex を
+// 持って呼ぶ。Forget で接続一式を手放したあとなら ErrNotConfigured、設定が変わった
+// あとなら ErrRemoteMoved を返す。
+func (s *Service) bindingChangedLocked(captured uint64) error {
+	if !s.configuredLocked() {
+		return ErrNotConfigured
+	}
+	if s.bindingVersion != captured {
+		return ErrRemoteMoved
+	}
+	return nil
 }
 
 func (s *Service) configuredLocked() bool {
 	_, validDirection := ParseDirection(string(s.binding.config.Direction))
-	return validDirection && s.binding.client != nil && s.binding.config.Bucket != "" && s.binding.creds.AccessKeyID != ""
+	return validDirection && s.binding.client != nil && s.binding.config.Bucket != "" && s.binding.credentials.AccessKeyID != ""
 }
 
 // Direction は、このマシンがどちら向きにデータを動かしてよいかを報告する。
 func (s *Service) Direction() Direction {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	// 未設定のserviceには保存済み契約がない。status formの初期選択だけは通常の双方向を返す。
 	if s.binding.config.Direction == "" {
 		return DirectionBoth
@@ -107,8 +128,8 @@ func (s *Service) Direction() Direction {
 // Target は、この実行が指しているエンドポイントとバケットを、表示のために返す。
 // アクセスキーと秘密が何かによって返されることは決してない。
 func (s *Service) Target() (endpoint, bucket, path, region string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	return s.binding.config.Endpoint, s.binding.config.Bucket, s.binding.config.Path, s.binding.config.Region
 }
 
@@ -116,9 +137,9 @@ func (s *Service) Target() (endpoint, bucket, path, region string) {
 // the configured account in setup and status output. The complete identifier
 // and secret access key never leave the engine.
 func (s *Service) AccessKeySuffix() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	characters := []rune(s.binding.creds.AccessKeyID)
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	characters := []rune(s.binding.credentials.AccessKeyID)
 	if len(characters) > 5 {
 		characters = characters[len(characters)-5:]
 	}

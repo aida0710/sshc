@@ -19,7 +19,7 @@ func TestFailedAliasRenameRestoresConfigSecretsAndStartup(t *testing.T) {
 	for _, failedPath := range []string{secret.WorkspacePath, "sshc/snippets.json"} {
 		t.Run(failedPath, func(t *testing.T) {
 			harness := newConnectionUpdateHarness(t, before)
-			setPasswordForCurrentTarget(t, harness.service, harness.secrets, "edge", "original-password")
+			setPasswordForCurrentTarget(t, harness, "edge", "original-password")
 			fileSystem := &failRenameOnceFileSystem{FileSystem: storage.OSFileSystem{}}
 			workspace, err := storage.NewWorkspace(fileSystem, harness.workspace.Home())
 			if err != nil {
@@ -97,7 +97,7 @@ func TestFailedAliasRenameRestoresConfigSecretsAndStartup(t *testing.T) {
 func TestUnlockedAliasRenameWithoutAStartupRenamerIsRefusedWithoutWriting(t *testing.T) {
 	const before = "Host edge\n\tHostName edge.example\n\tPort 22\n"
 	harness := newConnectionUpdateHarness(t, before)
-	setPasswordForCurrentTarget(t, harness.service, harness.secrets, "edge", "original-password")
+	setPasswordForCurrentTarget(t, harness, "edge", "original-password")
 
 	_, err := harness.service.SaveWithSecrets(EditRequest{
 		Kind: EditRename, Path: "config", Base: before, Alias: "edge", NewAlias: "renamed",

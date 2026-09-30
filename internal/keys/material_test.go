@@ -151,16 +151,6 @@ func TestInspectPublicKeyReadsCertificateDetail(t *testing.T) {
 	}
 }
 
-func TestWipeOverwritesTheBufferItWasGiven(t *testing.T) {
-	secret := []byte("correct horse battery staple")
-	Wipe(secret)
-	for index, value := range secret {
-		if value != 0 {
-			t.Fatalf("secret[%d] = %d, want 0", index, value)
-		}
-	}
-}
-
 func firstLine(contents []byte) string {
 	if index := bytes.IndexByte(contents, '\n'); index >= 0 {
 		return string(contents[:index])

@@ -73,12 +73,12 @@ func (s *Service) bucketStatus(ctx context.Context, captured historyReadSnapshot
 	if (latestErr == nil) != liveExists || (latestErr == nil && latest.ETag != liveETag) {
 		return BucketView{}, ErrRemoteMoved
 	}
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.bindingVersion != captured.bindingVersion {
-		return BucketView{}, ErrRemoteMoved
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if err := s.bindingChangedLocked(captured.bindingVersion); err != nil {
+		return BucketView{}, err
 	}
 	current, err := s.readState()
 	if err != nil {

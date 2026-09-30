@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"sshc/internal/validate"
+	"sshc/internal/handoff"
 )
 
 type invocationKind uint8
@@ -269,8 +269,8 @@ var engineCommandOptions = commandOptions{command: "engine", options: []commandO
 }}
 
 // enginePortBounds は、`sshc engine --port` が受ける範囲である。範囲は engine の設定の
-// 検査（validate.EnginePort）と同じ出どころから取る。
-var enginePortBounds = integerBounds{minimum: validate.MinEnginePort, maximum: validate.MaxEnginePort, kind: "a number"}
+// 検査（handoff.EnginePort）と同じ出どころから取る。
+var enginePortBounds = integerBounds{minimum: handoff.MinEnginePort, maximum: handoff.MaxEnginePort, kind: "a number"}
 
 // parseEngineFlags は `sshc engine` のオプションを解析する。
 func parseEngineFlags(args []string) (invocation, error) {

@@ -22,8 +22,8 @@ import (
 // ないし、万一起きたなら、ここで失敗するのが正しい結果である。もう一方の選択肢は、
 // 秘密鍵の平文コピーだからだ。
 func (s *Service) SealBackup(plaintext []byte) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	if s.backupVault != nil {
 		return s.backupVault.SealBytes(plaintext)
 	}
@@ -35,8 +35,8 @@ func (s *Service) SealBackup(plaintext []byte) ([]byte, error) {
 }
 
 func (s *Service) OpenBackup(sealed []byte) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return nil, ErrLocked
@@ -66,8 +66,8 @@ func (s *Service) OpenBackup(sealed []byte) ([]byte, error) {
 // ctx は錠を待つあいだの取り消しだけを見る。ほかの Vault の変更が終わるのを待って
 // いるうちに呼び手が諦めていたら、再封印を始めない。始めた再封印は途中で止めない。
 func (s *Service) ChangeMasterPassword(ctx context.Context, current, next string) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	s.mutationMutex.Lock()
+	defer s.mutationMutex.Unlock()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -94,60 +94,68 @@ func (s *Service) ChangeMasterPassword(ctx context.Context, current, next string
 	}
 	defer clear(localChange.Contents)
 
-	s.mu.Lock()
+	s.mutex.Lock()
 	vault := s.use()
 	if vault == nil {
-		s.mu.Unlock()
+		s.mutex.Unlock()
 		return ErrLocked
 	}
 	candidate := vault.clone()
 	previous, err := candidate.Rekey(effective)
+	s.mutex.Unlock()
 	if err != nil {
 		candidate.Destroy()
-		s.mu.Unlock()
 		return err
 	}
-	// 稼働中の vault は commit point まで古い鍵のまま保つ。候補だけが新しい鍵で
-	// 暗号化し、失敗経路でプロセス内状態を戻す必要そのものをなくす。
-	changes, buildErr := s.reSealKeyBoundArtifacts(candidate, previous, current, false, true)
-	if buildErr != nil {
-		previous.Destroy()
+	defer previous.Destroy()
+	// 封じ直す処理は今の形しか読まない。ロックを解除したときの移行が終わっていなければ
+	// （保留中の変更があった、Vault を作ったあとまだロックを解除していない）、ここで
+	// 終える。
+	if err := s.migrateKeyBoundArtifacts(keyBoundMigration{Key: previous, Passphrase: current}); err != nil {
 		candidate.Destroy()
-		s.mu.Unlock()
-		return buildErr
-	}
-	sealed, sealErr := candidate.Seal()
-	previous.Destroy()
-	s.mu.Unlock()
-	if sealErr != nil {
-		candidate.Destroy()
-		return sealErr
+		return err
 	}
 
-	previousVault, readErr := s.workspace.FileSystem().ReadFile(s.path())
-	if readErr != nil {
-		candidate.Destroy()
-		return readErr
+	// 稼働中の vault は commit point まで古い鍵のまま保つ。候補だけが新しい鍵で
+	// 暗号化し、失敗経路でプロセス内状態を戻す必要そのものをなくす。
+	// バックアップの一覧と再暗号化は workspace の変更のロックの内側で行う。ロックの
+	// 外で一覧を作ると、そのあとに通常の commit が旧鍵で封じたバックアップが
+	// トランザクションに入らず、新しい鍵では開けないまま残る。
+	var sealed []byte
+	build := func() (storage.Request, error) {
+		s.mutex.Lock()
+		defer s.mutex.Unlock()
+		changes, err := s.reSealKeyBoundArtifacts(keyBoundReSeal{
+			Vault: candidate, Previous: previous, Passphrase: current, IncludeSettings: true,
+		})
+		if err != nil {
+			return storage.Request{}, err
+		}
+		if sealed, err = candidate.Seal(); err != nil {
+			return storage.Request{}, err
+		}
+		previousVault, err := s.workspace.FileSystem().ReadFile(s.path())
+		if err != nil {
+			return storage.Request{}, err
+		}
+		changes = append(changes, storage.Change{
+			Path: s.path(), Contents: sealed,
+			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(previousVault)},
+		}, localChange)
+		return storage.Request{Operation: operationRekey, Changes: changes}, nil
 	}
-	changes = append(changes, storage.Change{
-		Path: s.path(), Contents: sealed,
-		Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(previousVault)},
-	})
-	if _, err := s.transactions.CommitAtomicDiscardBackupsAndPublish(storage.Request{
-		Operation: "secret.rekey",
-		Changes:   append(changes, localChange),
-	}, func() {
+	if _, err := s.transactions.CommitAtomicDiscardBackupsAndPublish(build, func() {
 		// Publish while the workspace mutation barrier still excludes a normal
 		// commit. Its SealBackup callback can therefore observe only the new key
 		// after the rekeyed backup set is durable.
-		s.mu.Lock()
+		s.mutex.Lock()
 		if s.vault != nil && s.vault != candidate {
 			s.vault.Destroy()
 		}
 		s.passwordless = next == ""
 		s.vault = candidate
 		s.baseline = slices.Clone(sealed)
-		s.mu.Unlock()
+		s.mutex.Unlock()
 	}); err != nil {
 		candidate.Destroy()
 		return err
@@ -155,32 +163,51 @@ func (s *Service) ChangeMasterPassword(ctx context.Context, current, next string
 	return nil
 }
 
-// reSealed は、古い鍵が暗号化したすべてのファイルを読み、新しい鍵で暗号化し直す。
+// keyBoundReSealは、古い鍵で封じたファイルを新しい鍵で封じ直すときの鍵と範囲。
+type keyBoundReSeal struct {
+	// Vaultは、封じ直す新しい鍵を持つ候補のvault。
+	Vault *Vault
+	// Previousは、今のファイルを封じている鍵。
+	Previous envelope.Key
+	// Passphraseは、Previousで開けない前の世代のファイルを開くマスターパスワード。
+	Passphrase string
+	// SkipBackupは、封じ直す前の暗号文を世代バックアップに残さない。復旧とresetでは
+	// 前の暗号文を封じた鍵が新しい鍵と違い、控えに残しても開けない入れ子になるので使う。
+	SkipBackup bool
+	// IncludeSettingsは、同期設定も封じ直す。同期設定を消すresetでは含めない。
+	IncludeSettings bool
+}
+
+// reSealKeyBoundArtifactsは、古い鍵が暗号化したすべてのファイルを読み、新しい鍵で暗号化し直す。
+// 同期状態に古い鍵で鍵付きにして残した vault 文書の digest も、新しい鍵の値へ移す。
+//
+// 読むのは今の形（封じた保護文書と、入れ子の控え）だけである。旧バージョンが残した形は、
+// 呼び出し側が先に migrateKeyBoundArtifacts で移しておく。
 //
 // バックアップはマネージャ経由ではなく直接読む。マネージャは現在の新しい鍵を
 // 使用するため、古い鍵で暗号化されたバックアップを開けない。
-func (s *Service) reSealKeyBoundArtifacts(vault *Vault, previous envelope.Key, passphrase string, skipBackup, includeSettings bool) ([]storage.Change, error) {
-	changes, err := s.reSealProtectedDocuments(vault, previous, passphrase, skipBackup)
+func (s *Service) reSealKeyBoundArtifacts(reSeal keyBoundReSeal) ([]storage.Change, error) {
+	changes, err := s.reSealProtectedDocuments(reSeal)
 	if err != nil {
 		return nil, fmt.Errorf("re-seal protected documents: %w", err)
 	}
 
 	settings, err := s.workspace.FileSystem().ReadFile(s.settingsPath())
 	switch {
-	case err == nil && includeSettings:
-		plaintext, openErr := openWithKnownGeneration(settings, previous, passphrase)
+	case err == nil && reSeal.IncludeSettings:
+		plaintext, openErr := openWithKnownGeneration(settings, reSeal.Previous, reSeal.Passphrase)
 		if openErr != nil {
 			return nil, fmt.Errorf("open synchronization settings: %w", openErr)
 		}
 		defer clear(plaintext)
-		resealed, sealErr := vault.SealBytes(plaintext)
+		resealed, sealErr := reSeal.Vault.SealBytes(plaintext)
 		if sealErr != nil {
 			return nil, sealErr
 		}
 		changes = append(changes, storage.Change{
 			Path: s.settingsPath(), Contents: resealed,
 			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(settings)},
-			SkipBackup:   skipBackup,
+			SkipBackup:   reSeal.SkipBackup,
 		})
 	case err == nil, errors.Is(err, fs.ErrNotExist):
 	default:
@@ -195,14 +222,16 @@ func (s *Service) reSealKeyBoundArtifacts(vault *Vault, previous envelope.Key, p
 			}
 			return err
 		}
-		if entry.IsDir() {
+		// クラッシュで残った一時ファイルはバックアップではない。どの鍵でも開けない
+		// ことがあり、封じ直そうとすると以後のマスターパスワード変更が毎回失敗する。
+		if entry.IsDir() || storage.IsTemporaryName(entry.Name()) {
 			return nil
 		}
 		body, readErr := s.workspace.ReadTransactionFile(path)
 		if readErr != nil {
 			return readErr
 		}
-		resealed, sealErr := s.reSealBackup(path, body, vault, previous, passphrase)
+		resealed, sealErr := s.reSealBackup(path, body, reSeal)
 		if sealErr != nil {
 			relative, relativeErr := filepath.Rel(backups, path)
 			if relativeErr != nil {
@@ -213,14 +242,23 @@ func (s *Service) reSealKeyBoundArtifacts(vault *Vault, previous envelope.Key, p
 		changes = append(changes, storage.Change{
 			Path: path, Contents: resealed,
 			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(body)},
-			SkipBackup:   skipBackup,
+			SkipBackup:   reSeal.SkipBackup,
 		})
 		return nil
 	})
 	if walkErr != nil && !errors.Is(walkErr, fs.ErrNotExist) {
 		return nil, walkErr
 	}
-	return changes, nil
+	travel, err := s.travelDigestRekeyChanges(reSeal.Previous, reSeal.Vault)
+	if err != nil {
+		return nil, fmt.Errorf("rekey the synchronization state: %w", err)
+	}
+	// 控えを残すかは、ほかのファイルと同じくこの変更の扱いに揃える。マスターパスワードの
+	// 変更は巻き戻せるよう控えを取る（CommitAtomic は控えの無い書き込みを受け付けない）。
+	for index := range travel {
+		travel[index].SkipBackup = reSeal.SkipBackup
+	}
+	return append(changes, travel...), nil
 }
 
 func openWithKnownGeneration(sealed []byte, previous envelope.Key, passphrase string) ([]byte, error) {
@@ -236,8 +274,8 @@ func openWithKnownGeneration(sealed []byte, previous envelope.Key, passphrase st
 	return plaintext, nil
 }
 
-func (s *Service) reSealBackup(path string, body []byte, vault *Vault, previous envelope.Key, passphrase string) ([]byte, error) {
-	plaintext, err := openWithKnownGeneration(body, previous, passphrase)
+func (s *Service) reSealBackup(path string, body []byte, reSeal keyBoundReSeal) ([]byte, error) {
+	plaintext, err := openWithKnownGeneration(body, reSeal.Previous, reSeal.Passphrase)
 	if err != nil {
 		// A single unreadable backup blocks a key-generation change. Ignoring it
 		// would make that generation permanently inaccessible after publication.
@@ -246,15 +284,7 @@ func (s *Service) reSealBackup(path string, body []byte, vault *Vault, previous 
 	defer clear(plaintext)
 	keyBound, validate := s.backupKeyBoundDocument(path)
 	if keyBound {
-		inner, openErr := openWithKnownGeneration(plaintext, previous, passphrase)
-		if errors.Is(openErr, envelope.ErrNotAnEnvelope) {
-			// Older test fixtures and pre-backup-encryption generations may contain
-			// the key-bound document itself rather than outer-envelope(inner-envelope).
-			// The first successful open authenticated those bytes; normalize them to
-			// the current nested backup form before publishing the new generation.
-			inner = slices.Clone(plaintext)
-			openErr = nil
-		}
+		inner, openErr := openWithKnownGeneration(plaintext, reSeal.Previous, reSeal.Passphrase)
 		if openErr != nil {
 			return nil, fmt.Errorf("open inner envelope: %w", openErr)
 		}
@@ -264,13 +294,13 @@ func (s *Service) reSealBackup(path string, body []byte, vault *Vault, previous 
 				return nil, validateErr
 			}
 		}
-		plaintext, err = vault.SealBytes(inner)
+		plaintext, err = reSeal.Vault.SealBytes(inner)
 		if err != nil {
 			return nil, err
 		}
 		defer clear(plaintext)
 	}
-	return vault.SealBytes(plaintext)
+	return reSeal.Vault.SealBytes(plaintext)
 }
 
 func (s *Service) backupKeyBoundDocument(path string) (bool, func([]byte) error) {
@@ -295,32 +325,27 @@ func (s *Service) backupKeyBoundDocument(path string) (bool, func([]byte) error)
 	return false, nil
 }
 
-func (s *Service) reSealProtectedDocuments(vault *Vault, previous envelope.Key, passphrase string, skipBackup bool) ([]storage.Change, error) {
+func (s *Service) reSealProtectedDocuments(reSeal keyBoundReSeal) ([]storage.Change, error) {
 	changes := make([]storage.Change, 0, len(s.protectedDocuments))
 	for _, document := range s.protectedDocuments {
 		body, err := s.workspace.FileSystem().ReadFile(document.Path)
 		switch {
 		case err == nil:
-			plaintext, openErr := openWithKnownGeneration(body, previous, passphrase)
-			if errors.Is(openErr, envelope.ErrNotAnEnvelope) {
-				// A valid legacy plaintext document may not have been opened since
-				// the encryption feature was installed. Rotate it directly into the
-				// candidate generation rather than publishing a new key first.
-				plaintext = body
-			} else if openErr != nil {
-				return nil, openErr
+			plaintext, openErr := openWithKnownGeneration(body, reSeal.Previous, reSeal.Passphrase)
+			if openErr != nil {
+				return nil, fmt.Errorf("open %s: %w", filepath.Base(document.Path), openErr)
 			}
 			if validateErr := document.Validate(plaintext); validateErr != nil {
 				return nil, validateErr
 			}
-			resealed, sealErr := vault.SealBytes(plaintext)
+			resealed, sealErr := reSeal.Vault.SealBytes(plaintext)
 			if sealErr != nil {
 				return nil, sealErr
 			}
 			changes = append(changes, storage.Change{
 				Path: document.Path, Contents: resealed,
 				Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(body)},
-				SkipBackup:   skipBackup,
+				SkipBackup:   reSeal.SkipBackup,
 			})
 		case errors.Is(err, fs.ErrNotExist):
 		default:
@@ -334,8 +359,8 @@ func (s *Service) reSealProtectedDocuments(vault *Vault, previous envelope.Key, 
 // ディスク上の vault は端末固有のマスターパスワードで暗号化されているため、
 // その暗号文自体は同期しない。
 func (s *Service) TravelDocument() ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return nil, ErrLocked
@@ -354,8 +379,8 @@ func (s *Service) TravelDocument() ([]byte, error) {
 // remote deletion; AdoptTravelDocument then seals the same document with the
 // receiving installation's current key.
 func (s *Service) EmptyTravelDocument() ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return nil, ErrLocked
@@ -373,8 +398,8 @@ func (s *Service) EmptyTravelDocument() ([]byte, error) {
 // AdoptTravelDocument は、受信した vault 文書をこの端末の鍵で暗号化する。
 // 書き込みは呼び出し側がトランザクションとして行う。
 func (s *Service) AdoptTravelDocument(plain []byte) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	if len(plain) > storage.MaxFileSize {
 		return nil, storage.ErrFileTooLarge
 	}

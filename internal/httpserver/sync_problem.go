@@ -26,6 +26,12 @@ func syncProblem(c *echo.Context, err error) error {
 	if syncFailureStatus(failure.Kind) == http.StatusInternalServerError {
 		logUnexpectedFailure(c, failure.Code, err)
 	}
+	// 送る対象のファイル名が原因なら、利用者が名前を変えるか除外できるように、
+	// どのファイルかを ~/.ssh からの相対パスで添える。
+	var unportable *remotesync.UnportablePathError
+	if errors.As(err, &unportable) {
+		return problemWith(c, syncFailureStatus(failure.Kind), problemPayload{Code: failure.Code, Path: unportable.Path})
+	}
 	return syncFailureProblem(c, failure)
 }
 

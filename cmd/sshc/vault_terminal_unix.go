@@ -67,7 +67,7 @@ func readUnixPasswordWithFeedback(
 	}
 	defer func() {
 		if err := operations.restore(fd, saved); err != nil {
-			zeroBytes(password)
+			clear(password)
 			password = nil
 			restoreErr := fmt.Errorf("restore password terminal mode: %w", err)
 			if resultErr != nil {
@@ -94,7 +94,7 @@ func readUnixPasswordWithFeedback(
 	}
 	password, err = readUnixPasswordBytesWithFeedback(ctx, fd, wake.fd(), operations, feedback)
 	if err != nil {
-		zeroBytes(password)
+		clear(password)
 		return nil, err
 	}
 	return password, nil
@@ -112,7 +112,7 @@ func readUnixPasswordBytesWithFeedback(
 	reportedRunes := 0
 	for {
 		if err := waitUnixReadable(ctx, terminalFD, wakeFD, operations.poll); err != nil {
-			zeroBytes(password)
+			clear(password)
 			return nil, err
 		}
 		var input [1]byte
@@ -120,11 +120,11 @@ func readUnixPasswordBytesWithFeedback(
 		if count > 0 {
 			finished, editErr := consumeUnixPasswordByte(&password, input[0])
 			if editErr != nil {
-				zeroBytes(password)
+				clear(password)
 				return nil, editErr
 			}
 			if feedbackErr := reportPasswordRunes(password, &reportedRunes, feedback); feedbackErr != nil {
-				zeroBytes(password)
+				clear(password)
 				return nil, feedbackErr
 			}
 			if finished {
@@ -132,11 +132,11 @@ func readUnixPasswordBytesWithFeedback(
 			}
 		}
 		if readErr != nil {
-			zeroBytes(password)
+			clear(password)
 			return nil, readErr
 		}
 		if count == 0 {
-			zeroBytes(password)
+			clear(password)
 			return nil, io.EOF
 		}
 	}
@@ -163,11 +163,11 @@ func reportPasswordRunes(password []byte, reported *int, feedback func(int) erro
 // なければ、入力を消してから断る。
 func finishUnixPassword(ctx context.Context, password []byte) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
-		zeroBytes(password)
+		clear(password)
 		return nil, err
 	}
 	if !utf8.Valid(password) {
-		zeroBytes(password)
+		clear(password)
 		return nil, errInvalidPasswordText
 	}
 	return password, nil
@@ -188,7 +188,7 @@ func consumeUnixPasswordByte(password *[]byte, value byte) (bool, error) {
 		*password = eraseLastPasswordRune(*password)
 		return false, nil
 	case 0x15:
-		zeroBytes(*password)
+		clear(*password)
 		*password = (*password)[:0]
 		return false, nil
 	default:
@@ -214,6 +214,6 @@ func eraseLastPasswordRune(password []byte) []byte {
 	if !utf8.Valid(password[start:]) {
 		start = len(password) - 1
 	}
-	zeroBytes(password[start:])
+	clear(password[start:])
 	return password[:start]
 }

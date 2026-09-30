@@ -59,8 +59,8 @@ func runSyncSetup(
 	}
 	input, err := readSyncSetupInput(ctx, stdin, prompt, terminal, current)
 	if input != nil {
-		defer zeroBytes(input.accessKey)
-		defer zeroBytes(input.secretKey)
+		defer clear(input.accessKey)
+		defer clear(input.secretKey)
 	}
 	if err != nil {
 		return err
@@ -92,7 +92,7 @@ func runSyncSetup(
 			label = "Sync key [configured; Enter to keep]: "
 		}
 		syncKey, err = promptMaskedPassword(ctx, stdin, prompt, terminal, label)
-		defer zeroBytes(syncKey)
+		defer clear(syncKey)
 		if err != nil {
 			return err
 		}
@@ -195,21 +195,21 @@ func readSyncSetupInput(
 	}
 	accessKey, err := promptMaskedPassword(ctx, stdin, prompt, terminal, accessLabel)
 	if err != nil {
-		zeroBytes(accessKey)
+		clear(accessKey)
 		return nil, err
 	}
 	secretKey, err := promptMaskedPassword(ctx, stdin, prompt, terminal, secretLabel)
 	if err != nil {
-		zeroBytes(accessKey)
-		zeroBytes(secretKey)
+		clear(accessKey)
+		clear(secretKey)
 		return nil, err
 	}
 	reuseCredentials := credentialConfigured && len(accessKey) == 0 && len(secretKey) == 0
 	if (!reuseCredentials && (len(accessKey) == 0 || len(secretKey) == 0)) ||
 		len(accessKey) > remotesync.MaxAccessKeyIDLength || !utf8.Valid(accessKey) ||
 		len(secretKey) > remotesync.MaxSecretAccessKeyLength || !utf8.Valid(secretKey) {
-		zeroBytes(accessKey)
-		zeroBytes(secretKey)
+		clear(accessKey)
+		clear(secretKey)
 		return nil, errSyncSetupInput
 	}
 	return &syncSetupInput{
@@ -241,7 +241,7 @@ func promptVisibleSetup(
 		return "", err
 	}
 	line, err := readBoundedVisibleLine(ctx, input)
-	defer zeroBytes(line)
+	defer clear(line)
 	if err != nil {
 		return "", err
 	}
@@ -352,7 +352,7 @@ func buildZeroJSON(fields []zeroJSONField) ([]byte, error) {
 		var err error
 		payload, err = appendVaultJSONString(payload, []byte(field.name))
 		if err != nil {
-			zeroBytes(payload)
+			clear(payload)
 			return nil, err
 		}
 		payload = append(payload, ':')
@@ -366,13 +366,13 @@ func buildZeroJSON(fields []zeroJSONField) ([]byte, error) {
 		}
 		payload, err = appendVaultJSONString(payload, field.value)
 		if err != nil {
-			zeroBytes(payload)
+			clear(payload)
 			return nil, err
 		}
 	}
 	payload = append(payload, '}')
 	if len(payload) != cap(payload) {
-		zeroBytes(payload)
+		clear(payload)
 		return nil, errSyncSetupInput
 	}
 	return payload, nil

@@ -92,7 +92,7 @@ func readWindowsPasswordWithFeedback(
 	}
 	defer func() {
 		if err := operations.setMode(input, saved); err != nil {
-			zeroBytes(password)
+			clear(password)
 			password = nil
 			restoreErr := fmt.Errorf("restore password console mode: %w", err)
 			if resultErr != nil {
@@ -132,7 +132,7 @@ func readWindowsPasswordWithFeedback(
 		}
 	}
 	units := make([]uint16, 0, maxVaultPasswordBytes)
-	defer zeroUint16s(units)
+	defer clear(units)
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -172,7 +172,7 @@ func readWindowsPasswordWithFeedback(
 		}
 		password, err = encodeWindowsPassword(units)
 		if err != nil {
-			zeroBytes(password)
+			clear(password)
 			return nil, err
 		}
 		return password, nil
@@ -213,7 +213,7 @@ func consumeWindowsPasswordKey(units *[]uint16, key windowsKeyInput) (bool, erro
 		}
 		return false, nil
 	case key.unicodeChar == 0x15 || (control && (key.virtualKey == 'U' || key.virtualKey == 'u')):
-		zeroUint16s(*units)
+		clear(*units)
 		*units = (*units)[:0]
 		return false, nil
 	case key.unicodeChar < 0x20:
@@ -245,7 +245,7 @@ func eraseLastWindowsPasswordRune(units []uint16) []uint16 {
 	if start > 0 && utf16.IsSurrogate(rune(units[start])) && units[start] >= 0xdc00 && units[start-1] >= 0xd800 && units[start-1] <= 0xdbff {
 		start--
 	}
-	zeroUint16s(units[start:])
+	clear(units[start:])
 	return units[:start]
 }
 
@@ -255,34 +255,28 @@ func encodeWindowsPassword(units []uint16) ([]byte, error) {
 		value := rune(units[index])
 		if value >= 0xd800 && value <= 0xdbff {
 			if index+1 >= len(units) {
-				zeroBytes(password)
+				clear(password)
 				return nil, errInvalidPasswordText
 			}
 			next := rune(units[index+1])
 			if next < 0xdc00 || next > 0xdfff {
-				zeroBytes(password)
+				clear(password)
 				return nil, errInvalidPasswordText
 			}
 			value = utf16.DecodeRune(value, next)
 			index++
 		} else if value >= 0xdc00 && value <= 0xdfff {
-			zeroBytes(password)
+			clear(password)
 			return nil, errInvalidPasswordText
 		}
 		size := utf8.RuneLen(value)
 		if size < 0 || len(password)+size > maxVaultPasswordBytes {
-			zeroBytes(password)
+			clear(password)
 			return nil, errVaultPasswordTooLong
 		}
 		password = utf8.AppendRune(password, value)
 	}
 	return password, nil
-}
-
-func zeroUint16s(values []uint16) {
-	for index := range values {
-		values[index] = 0
-	}
 }
 
 type windowsInputRecord struct {

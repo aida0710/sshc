@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"sshc/internal/configresolver"
 	"sshc/internal/platform"
 	"sshc/internal/storage"
 )
@@ -47,7 +48,7 @@ func newServiceWithAgent(t *testing.T, agent platform.KeyAgent) (*Service, *stor
 	service := NewService(ServiceOptions{
 		Workspace:    workspace,
 		Transactions: manager,
-		Resolver:     storage.NewResolver(workspace),
+		Resolver:     configresolver.ForWorkspace(workspace),
 		Catalogue:    CatalogueReader{Toolchain: fakeToolchain{}},
 		Agent:        agent,
 		Now:          clock,
@@ -62,7 +63,7 @@ func serviceForSharedWorkspace(workspace *storage.Workspace, manager *storage.Ma
 	return NewService(ServiceOptions{
 		Workspace:    workspace,
 		Transactions: manager,
-		Resolver:     storage.NewResolver(workspace),
+		Resolver:     configresolver.ForWorkspace(workspace),
 		Catalogue:    CatalogueReader{Toolchain: fakeToolchain{}},
 		Now:          clock,
 		Random:       rand.Reader,
@@ -373,10 +374,8 @@ func TestChangePassphraseRewritesTheKeyAndKeepsItsComment(t *testing.T) {
 	}
 }
 
-// パスフレーズの変更は秘密鍵を置き換えるものであり、トランザクションマネージャは
-// 置き換えるすべてについて世代バックアップを保持する。そのバックアップはユーザーの
-// 秘密鍵の二つ目のコピーになり、設計はそれを禁じている。鍵素材が複製される場所は
-// ごみ箱だけである。
+// パスフレーズの変更も置き換える前の秘密鍵を世代バックアップに残すが、控えは
+// Vaultの鍵で封じる。平文の鍵がbackupsに残ってはならない。
 func TestChangePassphraseKeepsKeyMaterialOutOfTheBackupDirectory(t *testing.T) {
 	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
@@ -575,7 +574,7 @@ type fakeAgent struct {
 	passphrases [][]byte
 	identities  []platform.AgentIdentity
 	addError    error
-	removed     []string
+	removed     [][]byte
 	removeError error
 }
 
@@ -592,16 +591,18 @@ func (fake *fakeAgent) Add(_ context.Context, request platform.AgentAddRequest) 
 	if !fake.available {
 		return platform.ErrAgentUnavailable
 	}
+	// 鍵の中身もパスフレーズと同じく到着時にコピーする。Register は返る前に消去する。
+	request.PrivateKey = append([]byte(nil), request.PrivateKey...)
 	fake.requests = append(fake.requests, request)
 	fake.passphrases = append(fake.passphrases, append([]byte(nil), request.Passphrase...))
 	return fake.addError
 }
 
-func (fake *fakeAgent) Remove(_ context.Context, publicKeyPath string) error {
+func (fake *fakeAgent) Remove(_ context.Context, publicKey []byte) error {
 	if !fake.available {
 		return platform.ErrAgentUnavailable
 	}
-	fake.removed = append(fake.removed, publicKeyPath)
+	fake.removed = append(fake.removed, append([]byte(nil), publicKey...))
 	return fake.removeError
 }
 
@@ -617,7 +618,7 @@ func generateWorkKey(t *testing.T, service *Service) {
 	}
 }
 
-func TestRegisterSendsTheKeyPathAndPassphraseToTheAgentOnly(t *testing.T) {
+func TestRegisterSendsTheKeyContentsNamedByItsPathAndThePassphraseToTheAgentOnly(t *testing.T) {
 	agent := &fakeAgent{
 		available:  true,
 		identities: []platform.AgentIdentity{{Bits: 256, Fingerprint: "SHA256:abcdef", Comment: "aida@laptop", Algorithm: "ED25519"}},
@@ -638,8 +639,15 @@ func TestRegisterSendsTheKeyPathAndPassphraseToTheAgentOnly(t *testing.T) {
 		t.Fatalf("requests = %#v, want one", agent.requests)
 	}
 	request := agent.requests[0]
-	if request.PrivateKeyPath != filepath.Join(workspace.Root(), "id_work") {
-		t.Errorf("PrivateKeyPath = %q", request.PrivateKeyPath)
+	if request.Comment != filepath.Join(workspace.Root(), "id_work") {
+		t.Errorf("Comment = %q, want the key's path", request.Comment)
+	}
+	onDisk, err := os.ReadFile(filepath.Join(workspace.Root(), "id_work"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(request.PrivateKey, onDisk) {
+		t.Error("the agent did not receive the private key file's contents")
 	}
 	if request.LifetimeSeconds != 3600 {
 		t.Errorf("request = %#v", request)
@@ -892,7 +900,7 @@ func newGroupKeyService(t *testing.T, groups ...string) (*Service, *storage.Work
 	service := NewService(ServiceOptions{
 		Workspace:     workspace,
 		Transactions:  storage.NewManager(workspace, clock, rand.Reader),
-		Resolver:      storage.NewResolver(workspace),
+		Resolver:      configresolver.ForWorkspace(workspace),
 		Catalogue:     CatalogueReader{Toolchain: fakeToolchain{}},
 		Now:           clock,
 		Random:        rand.Reader,
@@ -1018,7 +1026,7 @@ func TestHardwareCommentKeepsTheShellSafeRule(t *testing.T) {
 // こと以外にできることがなかった。
 func TestDeregisterTakesTheKeyBackOutOfTheAgent(t *testing.T) {
 	agent := &fakeAgent{available: true}
-	service, _ := newServiceWithAgent(t, agent)
+	service, workspace := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
 
 	inventory, err := service.Inventory()
@@ -1033,8 +1041,12 @@ func TestDeregisterTakesTheKeyBackOutOfTheAgent(t *testing.T) {
 	if err := service.Deregister(context.Background(), item.ID); err != nil {
 		t.Fatalf("Deregister error = %v", err)
 	}
-	if len(agent.removed) != 1 || !strings.HasSuffix(agent.removed[0], "id_work.pub") {
-		t.Errorf("removed = %#v, want the public key path ssh-add -d needs", agent.removed)
+	public, err := os.ReadFile(filepath.Join(workspace.Root(), "id_work.pub"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(agent.removed) != 1 || !bytes.Equal(agent.removed[0], public) {
+		t.Errorf("removed = %q, want the public key the agent removal request is built from", agent.removed)
 	}
 }
 
@@ -1246,7 +1258,7 @@ func TestChangingAPassphraseKeepsASealedBackup(t *testing.T) {
 	service := NewService(ServiceOptions{
 		Workspace:    workspace,
 		Transactions: manager,
-		Resolver:     storage.NewResolver(workspace),
+		Resolver:     configresolver.ForWorkspace(workspace),
 		Catalogue:    CatalogueReader{Toolchain: fakeToolchain{}},
 		Now:          clock,
 		Random:       rand.Reader,

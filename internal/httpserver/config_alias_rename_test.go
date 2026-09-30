@@ -15,25 +15,32 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/secret"
+	"sshc/internal/secret/secrettest"
 	"sshc/internal/snippets"
 	"sshc/internal/storage"
 )
 
 func TestFailedCredentialRenameDoesNotCommitTheConfig(t *testing.T) {
 	harness := newConfigHarness(t)
-	secrets := secret.NewService(harness.workspace, storage.NewManager(harness.workspace, time.Now, rand.Reader), time.Now)
+	transactions := storage.NewManager(harness.workspace, time.Now, rand.Reader)
+	secrets := secret.NewService(harness.workspace, transactions, time.Now)
 	if err := secrets.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := secrets.SetBound("bastion", "synthetic-password", testPasswordBinding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(secrets, transactions, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "synthetic-password", Binding: testPasswordBinding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	// Another service publishes a valid new generation after the first one has opened it.
-	other := secret.NewService(harness.workspace, storage.NewManager(harness.workspace, time.Now, rand.Reader), time.Now)
+	otherTransactions := storage.NewManager(harness.workspace, time.Now, rand.Reader)
+	other := secret.NewService(harness.workspace, otherTransactions, time.Now)
 	if err := other.Unlock(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := other.SetBound("other", "synthetic-other-password", testPasswordBinding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(other, otherTransactions, secrettest.DedicatedPassword{
+		Alias: "other", Password: "synthetic-other-password", Binding: testPasswordBinding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	harness.service.SetVault(secrets)

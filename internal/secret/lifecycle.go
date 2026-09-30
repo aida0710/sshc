@@ -14,8 +14,8 @@ import (
 // IdleTimeout は、いま設定されている時計を返す。配線が効いていることを、
 // 呼び出し側の外から確かめられるようにするためにある。
 func (s *Service) IdleTimeout() time.Duration {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	return s.idle
 }
 
@@ -25,11 +25,11 @@ func (s *Service) SetIdleTimeout(timeout time.Duration) {
 	if timeout < 0 {
 		panic("secret: negative idle timeout")
 	}
-	s.mu.Lock()
+	s.mutex.Lock()
 	s.idle = timeout
 	// すでに新しい期限を超えていれば、次のrequestを待たずに破棄する。
 	s.open()
-	s.mu.Unlock()
+	s.mutex.Unlock()
 }
 
 // open は vault を返す。IdleTimeout より長く触れられていなければ、先にそれを
@@ -43,13 +43,56 @@ func (s *Service) open() *Vault {
 		return nil
 	}
 	if !s.passwordless && s.idle > 0 && s.now().Sub(s.used) >= s.idle {
-		s.vault.Destroy()
-		s.vault = nil
-		s.baseline = nil
-		s.lastMigration = Migration{}
+		s.closeLocked()
 		return nil
 	}
 	return s.vault
+}
+
+// closeLocked は、導出した鍵と開いていた vault を忘れる。s.mutex を持って呼ぶ。
+//
+// 開いていた vault を閉じたときは afterLock へ知らせる。手動のロックでも、アイドル
+// による自動ロックでも、ここを通る。
+func (s *Service) closeLocked() {
+	wasOpen := s.vault != nil
+	s.vault.Destroy()
+	s.vault = nil
+	s.baseline = nil
+	s.lastMigration = Migration{}
+	if wasOpen && s.afterLock != nil {
+		s.afterLock()
+	}
+}
+
+// SetAfterUnlock は、Unlock が vault を開いた直後に呼ぶ関数を取り付ける。vault の
+// 鍵が無いとできない移行（同期状態の digest を鍵付きにする）を、開いたときに一度
+// 行うためにある。
+func (s *Service) SetAfterUnlock(afterUnlock func()) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.afterUnlock = afterUnlock
+}
+
+// SetReportKeyBoundMigrationFailure は、ロックを解除したときの古い形の移行
+// （migrateKeyBoundArtifacts）が失敗したことを知らせる先を取り付ける。
+//
+// 移行に失敗してもロックの解除は止めない。検証に通らない平文のスニペットのように何度
+// やっても移せないものは、知らせないとマスターパスワードを変えようとするまで分からない。
+func (s *Service) SetReportKeyBoundMigrationFailure(report func(error)) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.keyBoundMigrationFailureReport = report
+}
+
+// SetAfterLock は、vault が閉じた直後に呼ぶ関数を取り付ける。vault の中の設定から
+// 組んだもの（同期先のアクセスキーとシークレット）を、閉じた vault の外に残さない
+// ためにある。
+//
+// afterLock は s.mutex を持ったまま呼ぶ。この Service を呼び返してはならない。
+func (s *Service) SetAfterLock(afterLock func()) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.afterLock = afterLock
 }
 
 // use は vault を返し、アイドルの時計をゼロに戻す。これは、秘密があるかどうかを
@@ -66,13 +109,13 @@ func (s *Service) use() *Vault {
 // Unattended は、自動処理による参照を vault の利用時刻に数えないようにする。
 // 期限を過ぎている場合は open が通常どおりロックする。
 func (s *Service) Unattended(run func()) {
-	s.mu.Lock()
+	s.mutex.Lock()
 	s.unattended++
-	s.mu.Unlock()
+	s.mutex.Unlock()
 	defer func() {
-		s.mu.Lock()
+		s.mutex.Lock()
 		s.unattended--
-		s.mu.Unlock()
+		s.mutex.Unlock()
 	}()
 	run()
 }
@@ -85,16 +128,15 @@ func (s *Service) path() string {
 // いるかという問いとは別のものである。
 //
 // 中身は読まない。有るか無いかを尋ねているだけであり、結果はファイルの
-// 存在そのものにある。ここが `ReadFile` だったころは、メニューバーを開くたびに
-// vault 全体（暗号文とはいえ、保存された結果の全部）が読み込まれてプロセスの
-// メモリを通っていた。
+// 存在そのものにある。メニューバーを開くたびに呼ばれるので、読めば vault 全体
+// （暗号文とはいえ、保存された値の全部）がそのたびにプロセスのメモリを通る。
 func (s *Service) Exists() (bool, error) {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	s.mutationMutex.Lock()
+	defer s.mutationMutex.Unlock()
 	return s.exists()
 }
 
-// exists は mutationMu をすでに保持する operation が存在だけを読む。
+// exists は mutationMutex をすでに保持する operation が存在だけを読む。
 func (s *Service) exists() (bool, error) {
 	_, err := s.workspace.FileSystem().Lstat(s.path())
 	if err == nil {
@@ -109,8 +151,8 @@ func (s *Service) exists() (bool, error) {
 // State は disk 上の存在と memory 上のロック解除状態を同じ mutation 境界で読む。
 // status polling は秘密を使わないため、idle deadline は更新しない。
 func (s *Service) State() (State, error) {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	s.mutationMutex.Lock()
+	defer s.mutationMutex.Unlock()
 
 	exists, err := s.exists()
 	if err != nil {
@@ -120,24 +162,21 @@ func (s *Service) State() (State, error) {
 	if err != nil {
 		return State{}, err
 	}
-	s.mu.Lock()
+	s.mutex.Lock()
 	if !exists {
 		// disk 上の vault を失ったあとも導出済み key だけを使い続けない。
-		s.vault.Destroy()
-		s.vault = nil
-		s.baseline = nil
-		s.lastMigration = Migration{}
+		s.closeLocked()
 	}
 	unlocked := s.open() != nil
 	migration := s.lastMigration
-	s.mu.Unlock()
+	s.mutex.Unlock()
 	return State{Exists: exists, Unlocked: unlocked, LastMigration: migration, Passwordless: passwordless}, nil
 }
 
 // Unlocked は、このセッションでパスフレーズが与えられたかを報告する。
 func (s *Service) Unlocked() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	return s.open() != nil
 }
 
@@ -147,8 +186,8 @@ func (s *Service) Unlocked() bool {
 // パスワードがすべて破壊されるし、鍵が失われた暗号化ファイルに復旧の道は
 // ない。
 func (s *Service) Initialise(passphrase string) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	s.mutationMutex.Lock()
+	defer s.mutationMutex.Unlock()
 	exists, err := s.exists()
 	if err != nil {
 		return err
@@ -174,7 +213,7 @@ func (s *Service) Initialise(passphrase string) error {
 		return err
 	}
 	_, err = s.transactions.CommitAtomicDiscardBackups(storage.Request{
-		Operation: "secret.vault",
+		Operation: operationInitialise,
 		Changes: []storage.Change{{
 			Path: s.path(), Contents: sealed,
 			// A zero precondition means the path must still be absent. Another
@@ -189,27 +228,27 @@ func (s *Service) Initialise(passphrase string) error {
 
 	// Publish only the exact candidate which is now durable. Readers continue
 	// to observe a locked service while encryption and storage are in flight.
-	s.mu.Lock()
+	s.mutex.Lock()
 	s.vault.Destroy()
 	s.vault = vault
 	s.passwordless = passphrase == ""
 	s.baseline = slices.Clone(sealed)
 	s.used = s.now()
 	s.lastMigration = Migration{}
-	s.mu.Unlock()
+	s.mutex.Unlock()
 	return nil
 }
 
 // Verify は、passphrase がこのワークスペースのマスターパスワードかを報告する。
 //
-// ファイルから判定し、何も変えない。したがって閉じた vault にも尋ねられるし、画面は、
-// ユーザーが打ち込んだものをマスターパスワードとして使う前に、それがマスター
-// パスワードかどうかを知ることができる。スナップショットを二つ目のパスワードでは
-// なくマスターパスワードで暗号化されるのはこれのおかげだ。打ち間違いは、誰にも開け
-// ないアーカイブではなく、ここでの拒否になる。
+// ファイルから判定し、ロックの状態を含めて何も変えない。したがってロック中の vault
+// にも尋ねられる。CLI の change-password は、現在のパスワードを打ち込んだ直後に
+// /cli/vault/verify からこれを呼び、誤りなら新しいパスワードを尋ねない。
+// ChangeMasterPassword も、書き換える前にこれで現在のパスワードを確かめる。
 //
-// コストは導出 1 回分で、ロック解除と同じである。しかもここに到達するのは、ユーザーが
-// 求めた操作からだけだ。
+// 誤りには Unlock と同じく refuse で待つ。/cli/vault/verify には handoff の
+// シークレットを持つどのプロセスからでも届くので、ここで待たないと、Unlock の待ちを
+// 避けてパスワードを次々に試す道になる。
 func (s *Service) Verify(passphrase string) (bool, error) {
 	passphrase, err := s.resolvePassphrase(passphrase)
 	if err != nil {
@@ -225,11 +264,16 @@ func (s *Service) Verify(passphrase string) (bool, error) {
 	vault, err := Open(sealed, passphrase)
 	if err != nil {
 		if errors.Is(err, ErrWrongPassphrase) {
+			s.refuse()
 			return false, nil
 		}
 		return false, err
 	}
 	vault.Destroy()
+	s.mutex.Lock()
+	// Unlock と同じく、通ったパスワードは誤りが積み上げた待ちを消す。
+	s.refusals = 0
+	s.mutex.Unlock()
 	return true, nil
 }
 
@@ -241,21 +285,22 @@ func (s *Service) Verify(passphrase string) (bool, error) {
 // 試すローカルのプロセスである。
 const MaxUnlockDelay = 4 * time.Second
 
+// unlockDelayStepは、この実行で拒否が1回続くごとに増やす待ち。1回目の打ち間違いは
+// ほとんど待たせず、16回続けて拒否したところでMaxUnlockDelayに達する。
+const unlockDelayStep = 250 * time.Millisecond
+
 // SetSleep は、拒否がどう待つかを取り付ける。バックオフを消費せずに観測するテスト
 // のためのものである。
 func (s *Service) SetSleep(sleep func(time.Duration)) { s.sleep = sleep }
 
 // refuse は、この実行での連続した拒否が招いた分だけ待つ。
 func (s *Service) refuse() {
-	s.mu.Lock()
+	s.mutex.Lock()
 	s.refusals++
 	count := s.refusals
-	s.mu.Unlock()
+	s.mutex.Unlock()
 
-	delay := time.Duration(count) * 250 * time.Millisecond
-	if delay > MaxUnlockDelay {
-		delay = MaxUnlockDelay
-	}
+	delay := min(time.Duration(count)*unlockDelayStep, MaxUnlockDelay)
 	sleep := s.sleep
 	if sleep == nil {
 		sleep = time.Sleep
@@ -263,14 +308,33 @@ func (s *Service) refuse() {
 	sleep(delay)
 }
 
-// Unlock は passphrase で vault を開く。
+// Unlock は passphrase で vault を開き、開けたら afterUnlock へ知らせる。
+//
+// afterUnlock は変更のロックを放してから呼ぶ。知らされた側は、vault の鍵を使う
+// 書き込み（同期状態の移行など）をこの Service を通して行ってよい。
 func (s *Service) Unlock(passphrase string) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-	return s.unlockHeld(passphrase)
+	s.mutationMutex.Lock()
+	err := s.unlockHeld(passphrase)
+	s.mutationMutex.Unlock()
+	if err != nil {
+		return err
+	}
+	s.notifyUnlocked()
+	return nil
 }
 
-// unlockHeld は Unlock の本体である。呼び手が mutationMu を持っている。
+// notifyUnlocked は、SetAfterUnlock で取り付けた先へ、vault を開いたことを知らせる。
+// 呼び手は mutationMutex を持っていてはならない。
+func (s *Service) notifyUnlocked() {
+	s.mutex.Lock()
+	afterUnlock := s.afterUnlock
+	s.mutex.Unlock()
+	if afterUnlock != nil {
+		afterUnlock()
+	}
+}
+
+// unlockHeld は Unlock の本体である。呼び手が mutationMutex を持っている。
 func (s *Service) unlockHeld(passphrase string) error {
 	passwordless := passphrase == ""
 	passphrase, err := s.resolvePassphrase(passphrase)
@@ -291,38 +355,65 @@ func (s *Service) unlockHeld(passphrase string) error {
 		}
 		return err
 	}
-	s.mu.Lock()
+	// 公開した vault は、この関数の外でアイドルのロックが閉じうる。下の移行に使う鍵は
+	// 写しを持つ。
+	key := vault.key.Clone()
+	defer key.Destroy()
+	s.mutex.Lock()
 	s.passwordless = passwordless
-	s.mu.Unlock()
+	s.mutex.Unlock()
 	if migration.Applied() {
 		migrated, sealErr := vault.Seal()
 		if sealErr != nil {
 			vault.Destroy()
 			return &MigrationError{From: migration.From, To: migration.To, Cause: sealErr}
 		}
-		return s.replaceVault(sealed, migrated, vault, nil, nil, "secret.migrate-vault", migration)
+		if err := s.replaceVault(sealed, migrated, vault, nil, nil, "secret.migrate-vault", migration); err != nil {
+			return err
+		}
+	} else {
+		s.mutex.Lock()
+		if s.vault != nil && s.vault != vault {
+			s.vault.Destroy()
+		}
+		s.vault = vault
+		s.baseline = slices.Clone(sealed)
+		s.used = s.now()
+		s.lastMigration = Migration{}
+		// 通ったパスワードは、誤ったものが積み上げたものを消し去る。
+		s.refusals = 0
+		s.mutex.Unlock()
 	}
-
-	s.mu.Lock()
-	if s.vault != nil && s.vault != vault {
-		s.vault.Destroy()
+	// 旧バージョンが残した保護文書と控えは、ロックを解除したこの機会に今の形へ移す。
+	// 移せなくても（保留中の変更がある、など）ロックの解除は止めない。鍵を変える変更が
+	// 封じ直す前にもう一度移す。
+	if err := s.migrateKeyBoundArtifacts(keyBoundMigration{Key: key, Passphrase: passphrase}); err != nil {
+		s.reportKeyBoundMigrationFailure(err)
 	}
-	s.vault = vault
-	s.baseline = slices.Clone(sealed)
-	s.used = s.now()
-	s.lastMigration = Migration{}
-	// 通ったパスワードは、誤ったものが積み上げたものを消し去る。
-	s.refusals = 0
-	s.mu.Unlock()
 	return nil
+}
+
+// reportKeyBoundMigrationFailure は、ロックを解除したときの移行の失敗を、
+// SetReportKeyBoundMigrationFailure で取り付けた先へ渡す。保留中の変更があって移せ
+// なかったときは、それが片付いたあとの機会に移すので渡さない。
+func (s *Service) reportKeyBoundMigrationFailure(err error) {
+	if errors.Is(err, storage.ErrPendingTransaction) {
+		return
+	}
+	s.mutex.Lock()
+	report := s.keyBoundMigrationFailureReport
+	s.mutex.Unlock()
+	if report != nil {
+		report(err)
+	}
 }
 
 // RecoverCompatibleBackup は、現在のvaultが復号後のschema不一致だった場合に限り、
 // 同じmaster passwordで開ける直近の現行schema世代へ戻す。世代backupはvault鍵で
 // 二重に封じられているが、envelope headerがsaltを運ぶためpassphraseから直接開ける。
 func (s *Service) RecoverCompatibleBackup(passphrase string) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	s.mutationMutex.Lock()
+	defer s.mutationMutex.Unlock()
 
 	passphrase, err := s.resolvePassphrase(passphrase)
 	if err != nil {
@@ -374,7 +465,15 @@ func (s *Service) RecoverCompatibleBackup(passphrase string) error {
 			candidate.Destroy()
 			return keyErr
 		}
-		documents, reSealErr := s.reSealKeyBoundArtifacts(candidate, previous, passphrase, true, true)
+		if migrateErr := s.migrateKeyBoundArtifacts(keyBoundMigration{Key: previous, Passphrase: passphrase}); migrateErr != nil {
+			previous.Destroy()
+			candidate.Destroy()
+			return migrateErr
+		}
+		documents, reSealErr := s.reSealKeyBoundArtifacts(keyBoundReSeal{
+			Vault: candidate, Previous: previous, Passphrase: passphrase,
+			SkipBackup: true, IncludeSettings: true,
+		})
 		previous.Destroy()
 		if reSealErr != nil {
 			candidate.Destroy()
@@ -390,8 +489,8 @@ func (s *Service) RecoverCompatibleBackup(passphrase string) error {
 // 鍵へ結び付いているため同じtransactionで外す。同期設定は明示的なreset契約に従い、
 // 開けない旧世代の内側暗号文をbackupにも残さない。
 func (s *Service) ResetUnsupported(passphrase string) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	s.mutationMutex.Lock()
+	defer s.mutationMutex.Unlock()
 
 	passphrase, err := s.resolvePassphrase(passphrase)
 	if err != nil {
@@ -434,7 +533,14 @@ func (s *Service) ResetUnsupported(passphrase string) error {
 		candidate.Destroy()
 		return err
 	}
-	documents, err := s.reSealKeyBoundArtifacts(candidate, previous, passphrase, true, false)
+	if err := s.migrateKeyBoundArtifacts(keyBoundMigration{Key: previous, Passphrase: passphrase}); err != nil {
+		previous.Destroy()
+		candidate.Destroy()
+		return err
+	}
+	documents, err := s.reSealKeyBoundArtifacts(keyBoundReSeal{
+		Vault: candidate, Previous: previous, Passphrase: passphrase, SkipBackup: true,
+	})
 	previous.Destroy()
 	if err != nil {
 		candidate.Destroy()
@@ -483,9 +589,9 @@ func (s *Service) replaceVault(
 	passwordless := len(localKey) > 0
 	clear(localKey)
 
-	s.mu.Lock()
+	s.mutex.Lock()
 	s.backupVault = candidate
-	s.mu.Unlock()
+	s.mutex.Unlock()
 
 	changes = append(changes, storage.Change{
 		Path: s.path(), Contents: sealed,
@@ -496,15 +602,13 @@ func (s *Service) replaceVault(
 		Changes:   changes,
 		Removals:  removals,
 	})
-	s.mu.Lock()
+	s.mutex.Lock()
 	s.backupVault = nil
 	if err != nil {
 		candidate.Destroy()
-		s.vault.Destroy()
-		s.vault = nil
-		s.baseline = nil
+		s.closeLocked()
 		s.used = time.Time{}
-		s.mu.Unlock()
+		s.mutex.Unlock()
 		return err
 	}
 
@@ -517,19 +621,17 @@ func (s *Service) replaceVault(
 	s.used = s.now()
 	s.refusals = 0
 	s.lastMigration = migration
-	s.mu.Unlock()
+	s.mutex.Unlock()
 	return nil
 }
 
-// Lock は、導出された鍵と未使用のトークンをすべて忘れる。
-//
-// ロック前に発行したトークンで資格情報を取得できないよう、トークンも削除する。
+// Lock は、導出された鍵と、開いていた vault と backup の復号済みの内容を忘れる。
 //
 // パスワードなしの Vault でも鍵を破棄する。engine の終了処理が使う。利用者の操作に
 // よるロックは LockManually を使う。
 func (s *Service) Lock() {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	s.mutationMutex.Lock()
+	defer s.mutationMutex.Unlock()
 	s.lockHeld()
 }
 
@@ -537,11 +639,11 @@ func (s *Service) Lock() {
 //
 // パスワードなしの Vault は手動のロックを受け付けない。ロックしても、解錠に要る
 // 鍵がこのマシンにあるので守るものが無いからである。そのときは解錠したままにし、
-// 施錠中なら解錠する。判定と遷移を同じ mutationMu の中で行い、あいだに別の変更を
+// 施錠中なら解錠する。判定と遷移を同じ mutationMutex の中で行い、あいだに別の変更を
 // 挟ませない。
 func (s *Service) LockManually() error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	s.mutationMutex.Lock()
+	defer s.mutationMutex.Unlock()
 	passwordless, err := s.hasLocalKey()
 	if err != nil {
 		return err
@@ -553,18 +655,26 @@ func (s *Service) LockManually() error {
 	return s.unlockPasswordlessHeld()
 }
 
-// lockHeld は Lock の本体である。呼び手が mutationMu を持っている。
+// lockHeld は Lock の本体である。呼び手が mutationMutex を持っている。
 func (s *Service) lockHeld() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	if s.backupVault != nil && s.backupVault != s.vault {
 		s.backupVault.Destroy()
 	}
-	s.vault.Destroy()
-	s.vault = nil
 	s.backupVault = nil
-	s.baseline = nil
-	s.lastMigration = Migration{}
+	s.closeLocked()
+}
+
+// ReloadAfterRecovery は、履歴の画面などで片付けた保留記録が vault のファイルに
+// 触れていれば、ディスク上の保管庫を読み直す。読み直さないと、ディスクは新しい
+// vault、メモリは古い vault のままになり、消したはずのパスワードを配り続け、次の
+// 書き込みは baseline の食い違いで失敗し続ける。
+func (s *Service) ReloadAfterRecovery(paths []string) error {
+	if !slices.Contains(paths, s.path()) {
+		return nil
+	}
+	return s.Reload()
 }
 
 // Reload は、ディスク上の保管庫を読み直す。
@@ -572,8 +682,8 @@ func (s *Service) lockHeld() {
 // 同期が中身を差し替えたあと、走っているこの実行は古い秘密を配り続けてはならない。
 // マスターパスワードはもう持っていないので、いま手にしている鍵で開く。
 func (s *Service) Reload() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.open()
 	if vault == nil {
 		// 閉じているなら、次のロック解除がディスクから読む。何もしないのが正しい。

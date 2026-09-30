@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"sshc/internal/configresolver"
 	"sshc/internal/platform/windowsacl"
 	"sshc/internal/storage"
 )
@@ -156,7 +157,7 @@ func newWindowsTrashService(t *testing.T, fileSystem storage.FileSystem) (*Servi
 	service := NewService(ServiceOptions{
 		Workspace:    workspace,
 		Transactions: manager,
-		Resolver:     storage.NewResolver(workspace),
+		Resolver:     configresolver.ForWorkspace(workspace),
 		Catalogue:    CatalogueReader{Toolchain: fakeToolchain{}},
 		Now:          clock,
 		Random:       rand.Reader,

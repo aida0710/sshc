@@ -476,3 +476,82 @@ func TestChoosingThisMachineKeepsAFileTheOtherSideRemoved(t *testing.T) {
 		t.Fatalf("removals = %+v, conflicts = %+v", request.Removals, conflicts)
 	}
 }
+
+// 「他のマシンを取る」は、こちらだけの編集もリモートの内容へ戻す。選ばなければ、
+// こちらだけの編集は次の push で運ぶものなので書かない。
+func TestChoosingTheRemoteSideRevertsAnEditMadeOnlyHere(t *testing.T) {
+	base := manifestOf(file("config", "synchronized"))
+	remote := manifestOf(file("config", "synchronized"))
+	local := map[string]string{"config": digestOf("edited here")}
+	contents := map[string][]byte{"config": []byte("synchronized")}
+
+	request, conflicts, err := remotesync.PlanForTest(root, &base, local, remote, contents, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(conflicts) != 0 || len(request.Changes) != 1 {
+		t.Fatalf("changes = %+v, conflicts = %+v", request.Changes, conflicts)
+	}
+	change := request.Changes[0]
+	if change.Path != filepath.Join(root, "config") || string(change.Contents) != "synchronized" {
+		t.Fatalf("change = %+v, want the remote contents written over config", change)
+	}
+	if !change.Precondition.Exists || change.Precondition.Digest != digestOf("edited here") {
+		t.Fatalf("precondition = %+v, want the edited digest on disk", change.Precondition)
+	}
+
+	_, _, err = remotesync.PlanForTest(root, &base, local, remote, contents, remotesync.ResolveNone)
+	if !errors.Is(err, remotesync.ErrNothingToApply) {
+		t.Fatalf("Plan without a choice = %v, want ErrNothingToApply", err)
+	}
+}
+
+// 「他のマシンを取る」は、こちらで消しただけのファイルをリモートの内容で作り直す。
+func TestChoosingTheRemoteSideRestoresAFileDeletedOnlyHere(t *testing.T) {
+	base := manifestOf(file("config", "c"), file("keys/id_ed25519", "private"))
+	remote := manifestOf(file("config", "c"), file("keys/id_ed25519", "private"))
+	local := map[string]string{"config": digestOf("c")}
+
+	request, conflicts, err := remotesync.PlanForTest(root, &base, local, remote,
+		map[string][]byte{"keys/id_ed25519": []byte("private")}, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(conflicts) != 0 || len(request.Changes) != 1 || len(request.Removals) != 0 {
+		t.Fatalf("request = %+v, conflicts = %+v", request, conflicts)
+	}
+	change := request.Changes[0]
+	if change.Path != filepath.Join(root, "keys/id_ed25519") || string(change.Contents) != "private" {
+		t.Fatalf("change = %+v, want the deleted key written back", change)
+	}
+	if change.Precondition.Exists {
+		t.Fatalf("precondition = %+v, want that the file is still absent", change.Precondition)
+	}
+}
+
+// あちらで消え、こちらで編集された。「他のマシンを取る」なら競合にせず消し、
+// 消す前の内容を History から戻せるように残す。
+func TestChoosingTheRemoteSideRemovesAFileEditedHereButDeletedThere(t *testing.T) {
+	base := manifestOf(file("config", "base"), file("connections/x.conf", "base"))
+	remote := manifestOf(file("config", "base"))
+	local := map[string]string{"config": digestOf("base"), "connections/x.conf": digestOf("mine")}
+
+	request, conflicts, err := remotesync.PlanForTest(root, &base, local, remote,
+		map[string][]byte{}, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(conflicts) != 0 || len(request.Removals) != 1 {
+		t.Fatalf("removals = %+v, conflicts = %+v", request.Removals, conflicts)
+	}
+	removal := request.Removals[0]
+	if removal.Path != filepath.Join(root, "connections/x.conf") {
+		t.Fatalf("removal path = %q", removal.Path)
+	}
+	if !removal.Backup {
+		t.Fatal("the removal keeps no copy; History would have nothing to restore")
+	}
+	if !removal.Precondition.Exists || removal.Precondition.Digest != digestOf("mine") {
+		t.Fatalf("precondition = %+v, want the edited digest on disk", removal.Precondition)
+	}
+}

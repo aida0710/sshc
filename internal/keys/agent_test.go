@@ -53,30 +53,23 @@ func runAgent(t *testing.T) (string, agent.Agent) {
 	return socket, keyring
 }
 
-// writeAgentKey は、鍵ひとつを書いてそのパスを返す。
-func writeAgentKey(t *testing.T, directory string, passphrase []byte) (string, string) {
+// agentKey は、鍵ひとつの秘密鍵と公開鍵のファイルの中身を返す。agent の adapter は
+// ファイルに触れないので、ディスクには書かない。
+func agentKey(t *testing.T, passphrase []byte) (private, public []byte) {
 	t.Helper()
-	private, err := keys.GeneratePrivateKey(keys.AlgorithmEd25519, 0, rand.Reader)
+	key, err := keys.GeneratePrivateKey(keys.AlgorithmEd25519, 0, rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := keys.EncodePrivateKey(private, "fixture@sshc", passphrase)
+	private, err = keys.EncodePrivateKey(key, "fixture@sshc", passphrase)
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(directory, "id_ed25519")
-	if err := os.WriteFile(path, encoded, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	public, err := keys.EncodePublicKey(private, "fixture@sshc")
+	public, err = keys.EncodePublicKey(key, "fixture@sshc")
 	if err != nil {
 		t.Fatal(err)
 	}
-	publicPath := path + ".pub"
-	if err := os.WriteFile(publicPath, public, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	return path, publicPath
+	return private, public
 }
 
 // agentFor は、このテスト用 agent へ接続する adapter を組み立てる。
@@ -97,20 +90,24 @@ func agentFor(socket string) keys.Agent {
 
 func TestAgentAddsListsAndRemovesThroughTheRealProtocol(t *testing.T) {
 	socket, keyring := runAgent(t)
-	directory := t.TempDir()
-	path, publicPath := writeAgentKey(t, directory, nil)
+	private, public := agentKey(t, nil)
 	adapter := agentFor(socket)
 
 	if !adapter.Available(context.Background()) {
 		t.Fatal("a reachable agent reported itself unavailable")
 	}
-	if err := adapter.Add(context.Background(), platform.AgentAddRequest{PrivateKeyPath: path}); err != nil {
+	if err := adapter.Add(context.Background(), platform.AgentAddRequest{
+		PrivateKey: private, Comment: "/home/fixture/.ssh/id_ed25519",
+	}); err != nil {
 		t.Fatalf("Add = %v", err)
 	}
 
 	loaded, err := keyring.List()
 	if err != nil || len(loaded) != 1 {
 		t.Fatalf("the agent holds %d key(s): %v", len(loaded), err)
+	}
+	if loaded[0].Comment != "/home/fixture/.ssh/id_ed25519" {
+		t.Errorf("the agent names the key %q, want the requested comment", loaded[0].Comment)
 	}
 
 	identities, err := adapter.List(context.Background())
@@ -124,7 +121,7 @@ func TestAgentAddsListsAndRemovesThroughTheRealProtocol(t *testing.T) {
 		t.Errorf("identity = %#v", identities[0])
 	}
 
-	if err := adapter.Remove(context.Background(), publicPath); err != nil {
+	if err := adapter.Remove(context.Background(), public); err != nil {
 		t.Fatalf("Remove = %v", err)
 	}
 	if loaded, err := keyring.List(); err != nil || len(loaded) != 0 {
@@ -135,12 +132,11 @@ func TestAgentAddsListsAndRemovesThroughTheRealProtocol(t *testing.T) {
 // 鍵の復号はこのプロセスで行う。パスフレーズが agent へ渡ることはない。
 func TestAgentDecryptsTheKeyBeforeHandingItOver(t *testing.T) {
 	socket, keyring := runAgent(t)
-	directory := t.TempDir()
-	path, _ := writeAgentKey(t, directory, []byte("correct horse"))
+	private, _ := agentKey(t, []byte("correct horse"))
 	adapter := agentFor(socket)
 
 	if err := adapter.Add(context.Background(), platform.AgentAddRequest{
-		PrivateKeyPath: path, Passphrase: []byte("wrong"),
+		PrivateKey: private, Passphrase: []byte("wrong"),
 	}); !errors.Is(err, keys.ErrWrongPassphrase) {
 		t.Fatalf("Add with a wrong passphrase = %v, want ErrWrongPassphrase", err)
 	}
@@ -149,7 +145,7 @@ func TestAgentDecryptsTheKeyBeforeHandingItOver(t *testing.T) {
 	}
 
 	if err := adapter.Add(context.Background(), platform.AgentAddRequest{
-		PrivateKeyPath: path, Passphrase: []byte("correct horse"),
+		PrivateKey: private, Passphrase: []byte("correct horse"),
 	}); err != nil {
 		t.Fatalf("Add = %v", err)
 	}
@@ -237,24 +233,25 @@ func TestTheKeysScreenBoundsEachAgentRoundTripWithADeadline(t *testing.T) {
 
 func TestAgentWithoutASocketIsUnavailable(t *testing.T) {
 	adapter := agentFor("")
+	private, _ := agentKey(t, nil)
 
 	if adapter.Available(context.Background()) {
 		t.Fatal("an agent with no socket reported itself available")
 	}
 	if err := adapter.Add(context.Background(), platform.AgentAddRequest{
-		PrivateKeyPath: filepath.Join(t.TempDir(), "absent"),
-	}); err == nil {
-		t.Fatal("Add without a socket succeeded")
+		PrivateKey: private,
+	}); !errors.Is(err, platform.ErrAgentUnavailable) {
+		t.Fatalf("Add without a socket = %v, want ErrAgentUnavailable", err)
 	}
 }
 
 // 寿命つきの登録は agent が受け取る。
 func TestAgentPassesTheRequestedLifetime(t *testing.T) {
 	socket, keyring := runAgent(t)
-	path, _ := writeAgentKey(t, t.TempDir(), nil)
+	private, _ := agentKey(t, nil)
 
 	if err := agentFor(socket).Add(context.Background(), platform.AgentAddRequest{
-		PrivateKeyPath: path, LifetimeSeconds: 60,
+		PrivateKey: private, LifetimeSeconds: 60,
 	}); err != nil {
 		t.Fatalf("Add = %v", err)
 	}

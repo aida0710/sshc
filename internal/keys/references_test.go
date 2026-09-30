@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"sshc/internal/configresolver"
 	"sshc/internal/storage"
 )
 
@@ -29,7 +30,7 @@ func TestBuildReferenceIndexFindsHostsThatNameAKey(t *testing.T) {
 		"Host external\n"+
 		"  IdentityFile "+filepath.ToSlash(testOutsideKey)+"\n"), 0o600)
 
-	graph, err := storage.NewResolver(workspace).Resolve(filepath.Join(workspace.Root(), "config"))
+	graph, err := configresolver.ForWorkspace(workspace).Resolve(filepath.Join(workspace.Root(), "config"))
 	if err != nil {
 		t.Fatalf("Resolve error = %v", err)
 	}
@@ -84,7 +85,7 @@ func TestAttachReferencesNeverPointsAtEngineState(t *testing.T) {
 		"Host stale\n"+
 		"  IdentityFile ~/.ssh/sshc/trash/20260805T090000.000-aabbccdd/work\n"), 0o600)
 
-	graph, err := storage.NewResolver(workspace).Resolve(filepath.Join(workspace.Root(), "config"))
+	graph, err := configresolver.ForWorkspace(workspace).Resolve(filepath.Join(workspace.Root(), "config"))
 	if err != nil {
 		t.Fatalf("Resolve error = %v", err)
 	}
@@ -149,7 +150,7 @@ func TestBuildReferenceIndexResolvesAKeyUnderASymlinkedHome(t *testing.T) {
 	writeFixture(t, workspace, "config", []byte(
 		"Host build\n  IdentityFile ~/.ssh/work\n  CertificateFile %d/.ssh/work.pub\n"), 0o600)
 
-	graph, err := storage.NewResolver(workspace).Resolve(filepath.Join(workspace.Root(), "config"))
+	graph, err := configresolver.ForWorkspace(workspace).Resolve(filepath.Join(workspace.Root(), "config"))
 	if err != nil {
 		t.Fatalf("Resolve error = %v", err)
 	}

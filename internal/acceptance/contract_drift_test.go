@@ -1,14 +1,10 @@
 package acceptance_test
 
 import (
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 
 	"sshc/internal/application"
 )
@@ -117,14 +113,7 @@ func schemaProperties(t *testing.T, spec map[string]any, name string) []string {
 }
 
 func TestTheTypesWeSerialiseMatchTheContract(t *testing.T) {
-	body, err := os.ReadFile(filepath.Join("..", "..", "api", "openapi.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var spec map[string]any
-	if err := yaml.Unmarshal(body, &spec); err != nil {
-		t.Fatal(err)
-	}
+	spec := openAPISpec(t)
 
 	for _, served := range servedTypes {
 		promised := schemaProperties(t, spec, served.schema)

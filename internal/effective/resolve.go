@@ -284,7 +284,7 @@ func proxyDirectiveIgnored(keyword string, values Values) (bool, string) {
 	return false, ""
 }
 
-// applyDefaults は、この解決器が既定値を持つ 5 つだけを埋める。
+// applyDefaults は、この解決器が既定値を持つ 3 つ（hostname、user、port）だけを埋める。
 //
 // 書かれていない他のキーワードには触れない。OpenSSH の既定値表を丸ごと持つのは、
 // バージョンごとに変わるものを追い続ける保守であり、利用者に何も返さない。

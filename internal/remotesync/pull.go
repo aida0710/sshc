@@ -63,10 +63,10 @@ func (s *Service) pullPaths(request storage.Request) (written, added, removed []
 //
 // 何も書かない。Apply を別の呼び出しにしてあるのは、書き込みの前に必ず見せる
 // プレビューを、このアプリケーションの他の部分と同じくユーザーに見せるためである。
-func (s *Service) Pull(ctx context.Context, passphrase string, resolve Resolution) (PullResult, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	return s.pull(ctx, passphrase, resolve, "")
+func (s *Service) Pull(ctx context.Context, syncKey string, resolve Resolution) (PullResult, error) {
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
+	return s.pull(ctx, syncKey, resolve, "")
 }
 
 // PullRemoteHead previews the current live head after the user explicitly chose
@@ -74,29 +74,29 @@ func (s *Service) Pull(ctx context.Context, passphrase string, resolve Resolutio
 // cannot be proven to descend from this installation's acknowledged revision.
 // The snapshot is still authenticated and the later apply is bound to its exact
 // ETag and revision. Send-only installations cannot apply any remote bytes.
-func (s *Service) PullRemoteHead(ctx context.Context, passphrase string) (PullResult, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	return s.pullWithRemoteAcceptance(ctx, passphrase, ResolveRemote, "", true)
+func (s *Service) PullRemoteHead(ctx context.Context, syncKey string) (PullResult, error) {
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
+	return s.pullWithRemoteAcceptance(ctx, syncKey, ResolveRemote, "", true)
 }
 
 // PullHistory previews one immutable dated snapshot. Applying it writes local
 // files and records the current live ETag, but keeps the selected manifest as
 // Base. The next push therefore creates a new head whose parent is the restored
 // revision without unconditionally rewinding the remote object.
-func (s *Service) PullHistory(ctx context.Context, passphrase, historyKey string, resolve Resolution) (PullResult, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	return s.pull(ctx, passphrase, resolve, historyKey)
+func (s *Service) PullHistory(ctx context.Context, syncKey, historyKey string, resolve Resolution) (PullResult, error) {
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
+	return s.pull(ctx, syncKey, resolve, historyKey)
 }
 
-func (s *Service) pull(ctx context.Context, passphrase string, resolve Resolution, historyKey string) (PullResult, error) {
-	return s.pullWithRemoteAcceptance(ctx, passphrase, resolve, historyKey, false)
+func (s *Service) pull(ctx context.Context, syncKey string, resolve Resolution, historyKey string) (PullResult, error) {
+	return s.pullWithRemoteAcceptance(ctx, syncKey, resolve, historyKey, false)
 }
 
 func (s *Service) pullWithRemoteAcceptance(
 	ctx context.Context,
-	passphrase string,
+	syncKey string,
 	resolve Resolution,
 	historyKey string,
 	acceptRemoteHead bool,
@@ -149,7 +149,7 @@ func (s *Service) pullWithRemoteAcceptance(
 	// このインストールではない。別のユーザーのスナップショットが、パスフレーズの誤りが判明
 	// する前にこのマシンへ 1 ギガバイトと 16 スレッドを費やさせられるようであっては
 	// ならない。
-	manifest, contents, err := openSnapshotObject(object, passphrase)
+	manifest, contents, err := openSnapshotObject(object, syncKey)
 	if err != nil {
 		return PullResult{}, err
 	}
@@ -167,7 +167,7 @@ func (s *Service) pullWithRemoteAcceptance(
 	// from the locally acknowledged revision before treating it as an ordinary
 	// pull. PullHistory remains the explicit rollback path.
 	if historyKey == "" && !acceptRemoteHead {
-		follows, lineageErr := s.liveSnapshotFollows(ctx, binding, passphrase, base, manifest, Digest(object.Body))
+		follows, lineageErr := s.liveSnapshotFollows(ctx, binding, syncKey, base, manifest, Digest(object.Body))
 		if lineageErr != nil {
 			return PullResult{}, lineageErr
 		}
@@ -181,11 +181,12 @@ func (s *Service) pullWithRemoteAcceptance(
 		local, readErr = s.localDigests(manifest, base, ignoreRules)
 		return readErr
 	}
-	if s.integrations.StableSnapshot != nil {
-		err = s.integrations.StableSnapshot(readLocal)
-	} else {
-		err = readLocal()
+	if err := s.integrations.StableSnapshot(readLocal); err != nil {
+		return PullResult{}, err
 	}
+	// state の base は vault 文書の digest を鍵付きで持つ。三方比較の前に、この
+	// マシンの vault 文書かリモートの vault 文書のうち一致する方の digest に戻す。
+	base, err = s.comparableBase(base, local[TravelPath].SHA256, travelDigest(&manifest))
 	if err != nil {
 		return PullResult{}, err
 	}
@@ -208,14 +209,14 @@ func (s *Service) pullWithRemoteAcceptance(
 	}, err
 }
 
-func (s *Service) PullAndApplyUsing(ctx context.Context, key KeyProvider, resolve Resolution, historyKey, expectedETag, expectedRevision string) (PullResult, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	passphrase, err := currentOperationKey(key)
+func (s *Service) PullAndApplyUsing(ctx context.Context, syncKeyProvider KeyProvider, resolve Resolution, historyKey, expectedETag, expectedRevision string) (PullResult, error) {
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
+	syncKey, err := currentOperationKey(syncKeyProvider)
 	if err != nil {
 		return PullResult{}, err
 	}
-	return s.pullAndApply(ctx, passphrase, resolve, historyKey, expectedETag, expectedRevision, false)
+	return s.pullAndApply(ctx, syncKey, resolve, historyKey, expectedETag, expectedRevision, false)
 }
 
 // PullAndApplyRemoteHeadUsing applies only the exact live head returned by an
@@ -223,21 +224,21 @@ func (s *Service) PullAndApplyUsing(ctx context.Context, key KeyProvider, resolv
 // operation; ordinary pulls retain ancestry protection.
 func (s *Service) PullAndApplyRemoteHeadUsing(
 	ctx context.Context,
-	key KeyProvider,
+	syncKeyProvider KeyProvider,
 	expectedETag string,
 	expectedRevision string,
 ) (PullResult, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	passphrase, err := currentOperationKey(key)
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
+	syncKey, err := currentOperationKey(syncKeyProvider)
 	if err != nil {
 		return PullResult{}, err
 	}
-	return s.pullAndApply(ctx, passphrase, ResolveRemote, "", expectedETag, expectedRevision, true)
+	return s.pullAndApply(ctx, syncKey, ResolveRemote, "", expectedETag, expectedRevision, true)
 }
 
-func (s *Service) pullAndApply(ctx context.Context, passphrase string, resolve Resolution, historyKey, expectedETag, expectedRevision string, acceptRemoteHead bool) (PullResult, error) {
-	result, err := s.pullWithRemoteAcceptance(ctx, passphrase, resolve, historyKey, acceptRemoteHead)
+func (s *Service) pullAndApply(ctx context.Context, syncKey string, resolve Resolution, historyKey, expectedETag, expectedRevision string, acceptRemoteHead bool) (PullResult, error) {
+	result, err := s.pullWithRemoteAcceptance(ctx, syncKey, resolve, historyKey, acceptRemoteHead)
 	if err != nil && !errors.Is(err, ErrNothingToApply) {
 		return PullResult{}, err
 	}
@@ -304,10 +305,7 @@ func (s *Service) validatePullForApply(ctx context.Context, result PullResult) e
 }
 
 func (s *Service) apply(result PullResult) error {
-	if s.integrations.SecretMutation != nil {
-		return s.integrations.SecretMutation(func() error { return s.applyWithSecretGeneration(result) })
-	}
-	return s.applyWithSecretGeneration(result)
+	return s.integrations.SecretMutation(func() error { return s.applyWithSecretGeneration(result) })
 }
 
 func (s *Service) applyWithSecretGeneration(result PullResult) error {
@@ -375,7 +373,7 @@ func (s *Service) applyWithSecretGeneration(result PullResult) error {
 		return err
 	}
 	// 保管庫を置き換えたなら、それを配っている側に読み直させる。
-	if s.integrations.VaultAdopted != nil && replacesVault(s.workspace.Root(), result.request) {
+	if replacesVault(s.workspace.Root(), result.request) {
 		if err := s.integrations.VaultAdopted(); err != nil {
 			return err
 		}
@@ -384,17 +382,15 @@ func (s *Service) applyWithSecretGeneration(result PullResult) error {
 }
 
 // exchangeSnippets maps the logical plaintext snapshot entry onto the same
-// local path using this installation's master key. Previous ciphertext is not
-// retained as a generation backup: snippets had no history before encryption,
-// and keeping a nested old-key envelope would make password rotation unsafe.
+// local path using this installation's master key.
+// 置き換える前の暗号文も今のvaultの鍵で封じてあるので、exchangeVaultと同じく世代
+// バックアップに残す。マスターパスワードを変えるときは、secretがこの入れ子の控えも
+// 新しい鍵で封じ直す。
 func (s *Service) exchangeSnippets(request *storage.Request) error {
 	local := filepath.Join(s.workspace.Root(), filepath.FromSlash(SnippetsPath))
 	for index := range request.Changes {
 		if request.Changes[index].Path != local {
 			continue
-		}
-		if s.integrations.SealSnippets == nil {
-			return ErrVaultCodec
 		}
 		if err := s.requireSnippetPrecondition(local, request.Changes[index].Precondition); err != nil {
 			return err
@@ -410,7 +406,7 @@ func (s *Service) exchangeSnippets(request *storage.Request) error {
 			return err
 		}
 		request.Changes[index] = storage.Change{
-			Path: local, Contents: sealed, Precondition: precondition, SkipBackup: true,
+			Path: local, Contents: sealed, Precondition: precondition,
 		}
 	}
 	for index := range request.Removals {
@@ -435,9 +431,6 @@ func (s *Service) exchangeSnippets(request *storage.Request) error {
 }
 
 func (s *Service) requireSnippetPrecondition(path string, expected storage.Precondition) error {
-	if s.integrations.OpenSnippets == nil {
-		return ErrVaultCodec
-	}
 	document, err := s.integrations.OpenSnippets()
 	if err != nil {
 		return err
@@ -478,9 +471,6 @@ func (s *Service) stageVault(request *storage.Request) error {
 // exchangeVault validates the logical preview against the current unlocked
 // vault, then seals it with the exact master-key generation held by apply.
 func (s *Service) exchangeVault(request *storage.Request) error {
-	if s.integrations.SealVault == nil {
-		return ErrVaultCodec
-	}
 	local := filepath.Join(s.workspace.Root(), filepath.FromSlash(VaultPath))
 	for index := range request.Changes {
 		if request.Changes[index].Path != local {
@@ -492,9 +482,6 @@ func (s *Service) exchangeVault(request *storage.Request) error {
 		var sealed []byte
 		var err error
 		if len(request.Changes[index].Contents) == 0 {
-			if s.integrations.EmptyVaultDocument == nil {
-				return ErrVaultCodec
-			}
 			var empty []byte
 			empty, err = s.integrations.EmptyVaultDocument()
 			if err == nil {
@@ -520,9 +507,6 @@ func (s *Service) exchangeVault(request *storage.Request) error {
 }
 
 func (s *Service) requireVaultPrecondition(path string, expected storage.Precondition) error {
-	if s.integrations.OpenVault == nil {
-		return ErrVaultCodec
-	}
 	document, err := s.integrations.OpenVault()
 	if err != nil {
 		return err
@@ -546,10 +530,10 @@ func replacesVault(root string, request storage.Request) bool {
 }
 
 // diverged は、このディスクが最後に同期したものと違うかを返す。
-// 自動巡回がoperationMuを保持したまま「押し出すものがあるか」を判断する内部操作
-// であり、この判断にHTTPは1本も要らない。
+// 自動巡回がoperationMutexを保持したまま「押し出すものがあるか」を判断する内部操作
+// であり、この判断にHTTPは1本も要らない。ファイルの中身は持たず、digest だけで比べる。
 func (s *Service) diverged() (bool, error) {
-	manifest, _, err := s.Collect()
+	manifest, err := s.collectManifest()
 	if err != nil {
 		return false, err
 	}
@@ -568,7 +552,11 @@ func (s *Service) diverged() (bool, error) {
 	if !stateMatchesTarget(current, binding.config) {
 		return len(manifest.Files) > 0, nil
 	}
-	return manifestChanged(current.Base, manifest), nil
+	base, err := s.comparableBase(current.Base, travelDigest(&manifest))
+	if err != nil {
+		return false, err
+	}
+	return manifestChanged(base, manifest), nil
 }
 
 type remoteGeneration struct {
@@ -580,7 +568,7 @@ type remoteGeneration struct {
 
 // inspectRemoteGeneration はHEADでETagだけを確認し、ライブオブジェクトが最後に同期した
 // 世代から変わったかを返す。一度確認済みのliveが消えた場合も変更として扱い、空の
-// bucketと区別する。呼び出し側はoperationMuを保持する。
+// bucketと区別する。呼び出し側はoperationMutexを保持する。
 func (s *Service) inspectRemoteGeneration(ctx context.Context) (remoteGeneration, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {

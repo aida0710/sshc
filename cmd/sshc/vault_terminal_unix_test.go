@@ -71,7 +71,7 @@ func TestMaskedCLIPromptEchoesStarsAndBackspaceBeforeEnter(t *testing.T) {
 
 	select {
 	case got := <-completed:
-		defer zeroBytes(got.password)
+		defer clear(got.password)
 		if got.err != nil || !bytes.Equal(got.password, []byte("abd")) {
 			t.Fatalf("password=%q error=%v", got.password, got.err)
 		}
@@ -174,7 +174,7 @@ func TestUnixPasswordPromptRunsAfterNoEchoSetupAndBeforeRead(t *testing.T) {
 		events = append(events, "prompt")
 		return nil
 	}, nil)
-	defer zeroBytes(password)
+	defer clear(password)
 	if err != nil || len(password) != 0 {
 		t.Fatalf("password=%q error=%v", password, err)
 	}
@@ -222,7 +222,7 @@ func TestUnixPasswordReaderEditsAndBoundsBytesWithoutControlCharacters(t *testin
 		t.Run(test.name, func(t *testing.T) {
 			operations, restored := scriptedUnixPasswordOperations(test.input, io.EOF)
 			password, err := readUnixPasswordWithFeedback(context.Background(), vaultTestInput(t), operations, nil, nil)
-			defer zeroBytes(password)
+			defer clear(password)
 			if !errors.Is(err, test.wantError) {
 				t.Fatalf("error = %v, want %v", err, test.wantError)
 			}
@@ -354,7 +354,7 @@ func TestUnixPasswordReaderCancellationDuringReadRestoresExactMode(t *testing.T)
 	waitForTerminalModeChange(t, slave, prior)
 	cancel()
 	answer := receiveUnixPasswordResult(t, result)
-	defer zeroBytes(answer.password)
+	defer clear(answer.password)
 	if answer.password != nil || !errors.Is(answer.err, context.Canceled) {
 		t.Fatalf("canceled read = %v, %v", answer.password, answer.err)
 	}
@@ -388,7 +388,7 @@ func TestUnixPasswordReaderSuccessRestoresExactMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	answer := receiveUnixPasswordResult(t, result)
-	defer zeroBytes(answer.password)
+	defer clear(answer.password)
 	if answer.err != nil || !bytes.Equal(answer.password, []byte("ok")) {
 		t.Fatalf("successful read = %q, %v", answer.password, answer.err)
 	}
@@ -429,7 +429,7 @@ func TestUnixPasswordReaderReadCancelRaceAlwaysRestoresModeAndReturns(t *testing
 		if answer.err == nil && !bytes.Equal(answer.password, []byte("ok")) {
 			t.Fatalf("iteration %d: password = %q", iteration, answer.password)
 		}
-		zeroBytes(answer.password)
+		clear(answer.password)
 		after, stateErr := term.GetState(int(slave.Fd()))
 		if stateErr != nil || !reflect.DeepEqual(prior, after) {
 			t.Fatalf("iteration %d: terminal mode not restored: %v", iteration, stateErr)

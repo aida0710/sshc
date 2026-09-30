@@ -41,7 +41,7 @@ type stubKeyService struct {
 func (stub *stubKeyService) Inventory() (*keys.Inventory, error) { return stub.inventory, nil }
 
 func (stub *stubKeyService) VerifyPassphrase(keyID string, passphrase []byte) (keys.PassphraseVerification, error) {
-	defer keys.Wipe(passphrase)
+	defer clear(passphrase)
 	if stub.verifyErr != nil {
 		return keys.PassphraseVerification{}, stub.verifyErr
 	}
@@ -498,6 +498,25 @@ func TestAgentRejectionIsReportedWithASanitisedDetail(t *testing.T) {
 	}
 	if bytes.Contains(response.Body.Bytes(), []byte("wrong")) {
 		t.Fatalf("the response echoed the passphrase")
+	}
+}
+
+// 走査のあとで鍵が変わって登録を断ったときは、ほかの外部の変更と同じく 409 で返す。
+func TestRegisteringAKeyThatChangedAfterTheScanIsAConflict(t *testing.T) {
+	service := &stubKeyService{inventory: &keys.Inventory{}, registerErr: keys.ErrKeyChanged}
+	engine, _, credentials := newKeyServer(t, service)
+
+	body := []byte(`{"lifetimeSeconds":0}`)
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/keys/key-one/agent", body, "")
+	if response.Code != http.StatusConflict {
+		t.Fatalf("register = %d, want 409: %s", response.Code, response.Body.String())
+	}
+	var problemBody api.Problem
+	if err := json.Unmarshal(response.Body.Bytes(), &problemBody); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if problemBody.Code != "external_change" {
+		t.Fatalf("problem = %#v, want external_change", problemBody)
 	}
 }
 

@@ -16,7 +16,6 @@ import (
 	"sshc/internal/filelock"
 	"sshc/internal/randomid"
 	"sshc/internal/storage"
-	validator "sshc/internal/validate"
 )
 
 // FileName は、アプリケーションの状態ディレクトリ内のハンドオフファイル。
@@ -28,10 +27,10 @@ const FileName = "cli"
 // 検証する側が同じ値を使う。
 const EngineHost = "127.0.0.1"
 
-// mutationLockName は、公開ファイルと別 inode に固定して保持する。cli 自体を lock
+// MutationLockName は、公開ファイルと別 inode に固定して保持する。cli 自体を lock
 // すると Rename のたびに lock の対象 inode が替わり、Write と Remove を直列化
 // できなくなる。
-const mutationLockName = ".cli.mutation.lock"
+const MutationLockName = ".cli.mutation.lock"
 
 // mutationLockWait は、別プロセスの Write や Remove が終わるのを待つ上限である。
 // どちらも小さいファイルを 1 つ書くか消すだけで、数ミリ秒で終わる。遅いディスクでも
@@ -131,7 +130,7 @@ func write(directory string, document Handoff, operations writeOperations) error
 		marshal = json.Marshal
 	}
 	body, err := marshal(document)
-	defer zeroBytes(body)
+	defer clear(body)
 	if err != nil {
 		return err
 	}
@@ -190,7 +189,7 @@ func readValidatedHandleWith(path string, operations handoffFileOperations) (Han
 		read = readHandoffBody
 	}
 	body, err := read(file)
-	defer zeroBytes(body)
+	defer clear(body)
 	if err != nil {
 		_ = file.Close()
 		return Handoff{}, nil, err
@@ -216,12 +215,6 @@ func readHandoffBody(reader io.Reader) ([]byte, error) {
 		return body, ErrDocumentTooLarge
 	}
 	return body, nil
-}
-
-func zeroBytes(contents []byte) {
-	for index := range contents {
-		contents[index] = 0
-	}
 }
 
 // Remove は、そこに残っているのがこの実行の秘密を持つ文書だけを取り除く。
@@ -265,7 +258,7 @@ func removeWith(directory, secret string, operations handoffFileOperations) erro
 // lockMutation は Write 全体と Remove の比較・削除を一つの臨界区間にする。
 // 別プロセスの Write と Remove も同じロックで待ち合わせる。
 func lockMutation(directory string) (func() error, error) {
-	return filelock.AcquireWithin(filepath.Join(directory, mutationLockName), mutationLockWait)
+	return filelock.AcquireWithin(filepath.Join(directory, MutationLockName), mutationLockWait)
 }
 
 func validate(document Handoff) error {
@@ -294,16 +287,16 @@ func validate(document Handoff) error {
 }
 
 // validateEngineURL は、engine が書く形 `http://127.0.0.1:<port>` だけを受け付ける。
-// port は engine が待ち受けられる validate.EnginePort の範囲に限る。
+// port は engine が待ち受けられる EnginePort の範囲に限る。
 // engine は Host が違う要求を 403 で断り、::1 では待ち受けていない。localhost や
 // ほかの loopback、ポートなしの URL を通すと、CLI は文書の誤りではなく「engine を
 // 確かめられない」「動いていない」と取り違えて報告する。
 func validateEngineURL(raw string) error {
 	portText, found := strings.CutPrefix(raw, "http://"+EngineHost+":")
 	port, err := strconv.ParseUint(portText, 10, 16)
-	if !found || err != nil || strconv.FormatUint(port, 10) != portText || validator.EnginePort(int(port)) != nil {
+	if !found || err != nil || strconv.FormatUint(port, 10) != portText || EnginePort(int(port)) != nil {
 		return fmt.Errorf("%w: URL must be http://%s:<port> with a port from %d to %d",
-			ErrInvalid, EngineHost, validator.MinEnginePort, validator.MaxEnginePort)
+			ErrInvalid, EngineHost, MinEnginePort, MaxEnginePort)
 	}
 	return nil
 }

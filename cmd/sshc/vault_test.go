@@ -94,7 +94,7 @@ func TestVaultPromptIsWrittenAfterNoEchoAndNewlineAfterRestore(t *testing.T) {
 	events := make([]string, 0, 4)
 	password, err := promptVaultPassword(context.Background(), vaultTestInput(t),
 		orderedVaultPromptWriter{events: &events}, orderedVaultPromptTerminal{events: &events}, "Master password: ")
-	defer zeroBytes(password)
+	defer clear(password)
 	if err != nil || !bytes.Equal(password, []byte("master")) {
 		t.Fatalf("password=%q error=%v", password, err)
 	}
@@ -655,7 +655,7 @@ func TestVaultPayloadEncoderEnforcesTheServerFourKiBBoundary(t *testing.T) {
 	if cap(payload) != len(payload) {
 		t.Fatalf("payload capacity=%d length=%d; exact allocation is required for zeroing", cap(payload), len(payload))
 	}
-	zeroBytes(payload)
+	clear(payload)
 
 	over := append(bytes.Clone(exact), 'a')
 	payload, err = vaultPassphrasePayload(over)
@@ -1114,6 +1114,44 @@ func TestRunVaultVerifiesCurrentPasswordBeforeAskingForNewPassword(t *testing.T)
 				}
 			} else if code != 1 || terminal.reads != 1 || len(paths) != 2 || strings.Contains(diagnostic.String(), "New master password:") {
 				t.Fatalf("code=%d reads=%d paths=%v: %s", code, terminal.reads, paths, diagnostic.String())
+			}
+		})
+	}
+}
+
+// 世代バックアップが多すぎて変えられなかったことは、ロック中などほかの 409 と
+// 分けて、理由と対処を示す。
+func TestRunVaultChangePasswordExplainsTooManyBackups(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		body       string
+		wantPhrase string
+	}{
+		{name: "too many backups", body: `{"code":"` + httpserver.VaultBackupsTooManyCode + `","message":"request rejected"}`, wantPhrase: "Delete old folders from ~/.ssh/sshc/backups"},
+		{name: "other conflict", body: "", wantPhrase: "the vault state changed"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			terminal := &fakePasswordTerminal{terminal: true, answers: [][]byte{[]byte("current"), []byte("1234"), []byte("1234")}}
+			server := engineTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case httpserver.VaultStatusPath:
+					io.WriteString(w, vaultStatusBody(handoff.OwnerEngine, true, true))
+				case httpserver.VaultVerifyPath:
+					w.WriteHeader(http.StatusNoContent)
+				case httpserver.VaultChangePath:
+					w.WriteHeader(http.StatusConflict)
+					io.WriteString(w, test.body)
+				default:
+					t.Errorf("unexpected path %s", r.URL.Path)
+				}
+			}))
+			defer server.Close()
+			dir := t.TempDir()
+			writeVaultTestHandoff(t, dir, server.URL, handoff.OwnerEngine)
+			var out, diagnostic strings.Builder
+			code := runVault(context.Background(), "change-password", commandEnvironment{stateDir: dir, client: server.Client(), stdin: vaultTestInput(t), stdout: &out, stderr: &diagnostic, terminal: terminal})
+			if code != 1 || !strings.Contains(diagnostic.String(), test.wantPhrase) {
+				t.Fatalf("code=%d stderr=%q, want phrase %q", code, diagnostic.String(), test.wantPhrase)
 			}
 		})
 	}

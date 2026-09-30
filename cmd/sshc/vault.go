@@ -152,7 +152,7 @@ func runVaultCreate(ctx context.Context, found handoff.Handoff, environment comm
 	stdin, stderr, terminal := environment.stdin, environment.stderr, environment.terminal
 	fmt.Fprintln(stderr, newVaultPasswordGuidance)
 	next, err := promptVaultPassword(ctx, stdin, stderr, terminal, "New master password: ")
-	defer zeroBytes(next)
+	defer clear(next)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
 	}
@@ -160,7 +160,7 @@ func runVaultCreate(ctx context.Context, found handoff.Handoff, environment comm
 		return exitInterrupted
 	}
 	confirmation, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Confirm new master password: ")
-	defer zeroBytes(confirmation)
+	defer clear(confirmation)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
 	}
@@ -176,15 +176,15 @@ func runVaultCreate(ctx context.Context, found handoff.Handoff, environment comm
 		fmt.Fprintln(stderr, "sshc: the password could not be encoded safely")
 		return exitFailure
 	}
-	zeroBytes(next)
-	zeroBytes(confirmation)
+	clear(next)
+	clear(confirmation)
 	return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultCreatePath, payload: payload, success: "vault created and unlocked"})
 }
 
 func runVaultUnlock(ctx context.Context, found handoff.Handoff, environment commandEnvironment) int {
 	stdin, stderr, terminal := environment.stdin, environment.stderr, environment.terminal
 	password, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Master password: ")
-	defer zeroBytes(password)
+	defer clear(password)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
 	}
@@ -196,7 +196,7 @@ func runVaultUnlock(ctx context.Context, found handoff.Handoff, environment comm
 		fmt.Fprintln(stderr, "sshc: the password could not be encoded safely")
 		return exitFailure
 	}
-	zeroBytes(password)
+	clear(password)
 	return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultUnlockPath, payload: payload, success: "vault unlocked"})
 }
 
@@ -211,7 +211,7 @@ func runVaultChange(ctx context.Context, found handoff.Handoff, environment comm
 	if !passwordless {
 		current, err = promptVaultPassword(ctx, stdin, stderr, terminal, "Current master password: ")
 	}
-	defer zeroBytes(current)
+	defer clear(current)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
 	}
@@ -228,7 +228,7 @@ func runVaultChange(ctx context.Context, found handoff.Handoff, environment comm
 	}
 	fmt.Fprintln(stderr, newVaultPasswordGuidance)
 	next, err := promptVaultPassword(ctx, stdin, stderr, terminal, "New master password: ")
-	defer zeroBytes(next)
+	defer clear(next)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
 	}
@@ -236,7 +236,7 @@ func runVaultChange(ctx context.Context, found handoff.Handoff, environment comm
 		return exitInterrupted
 	}
 	confirmation, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Confirm new master password: ")
-	defer zeroBytes(confirmation)
+	defer clear(confirmation)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
 	}
@@ -252,9 +252,9 @@ func runVaultChange(ctx context.Context, found handoff.Handoff, environment comm
 		fmt.Fprintln(stderr, "sshc: a password could not be encoded safely")
 		return exitFailure
 	}
-	zeroBytes(current)
-	zeroBytes(next)
-	zeroBytes(confirmation)
+	clear(current)
+	clear(next)
+	clear(confirmation)
 	return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultChangePath, payload: payload, success: "vault password changed"})
 }
 
@@ -338,7 +338,7 @@ func finishVaultMutation(ctx context.Context, environment commandEnvironment, mu
 	client, stdout, stderr := environment.client, environment.stdout, environment.stderr
 	found, path, payload, success := mutation.found, mutation.path, mutation.payload, mutation.success
 	if err := ctx.Err(); err != nil {
-		zeroBytes(payload)
+		clear(payload)
 		return exitInterrupted
 	}
 	response, err := sendVaultPOST(ctx, client, found, path, payload)
@@ -350,7 +350,7 @@ func finishVaultMutation(ctx context.Context, environment commandEnvironment, mu
 		return exitFailure
 	}
 	body, err := readAndCloseVaultResponse(response)
-	defer zeroBytes(body)
+	defer clear(body)
 	if err != nil {
 		fmt.Fprintln(stderr, "sshc: the running engine returned an invalid vault response")
 		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
@@ -378,7 +378,12 @@ func finishVaultMutation(ctx context.Context, environment commandEnvironment, mu
 			fmt.Fprintln(stderr, "sshc: engine authentication was refused")
 		}
 	case http.StatusConflict:
-		fmt.Fprintln(stderr, "sshc: the vault state changed; run sshc vault status and try again")
+		if problem, ok := parseProblemBody(body); ok && problem.Code == httpserver.VaultBackupsTooManyCode {
+			fmt.Fprintln(stderr, "sshc: there are too many local backups to re-encrypt in one change. Nothing was changed. "+
+				"Delete old folders from ~/.ssh/sshc/backups and try again. Deleted backups can no longer be restored.")
+		} else {
+			fmt.Fprintln(stderr, "sshc: the vault state changed; run sshc vault status and try again")
+		}
 	case http.StatusBadRequest:
 		fmt.Fprintln(stderr, "sshc: the vault password or request was not accepted")
 	case http.StatusRequestEntityTooLarge:
@@ -416,7 +421,7 @@ func sendVaultPOST(
 	path string,
 	payload []byte,
 ) (*http.Response, error) {
-	defer zeroBytes(payload)
+	defer clear(payload)
 	return newHandoffEndpoint(found, client).send(ctx,
 		handoffCall{method: http.MethodPost, path: path, body: &oneShotSecretPayload{body: payload}})
 }
@@ -455,7 +460,7 @@ func vaultPassphrasePayload(password []byte) ([]byte, error) {
 	payload = append(payload, `{"passphrase":`...)
 	payload, err = appendVaultJSONString(payload, password)
 	if err != nil {
-		zeroBytes(payload)
+		clear(payload)
 		return nil, err
 	}
 	payload = append(payload, '}')
@@ -483,7 +488,7 @@ func vaultChangePayload(current, next []byte) ([]byte, error) {
 		payload, err = appendVaultJSONString(payload, next)
 	}
 	if err != nil {
-		zeroBytes(payload)
+		clear(payload)
 		return nil, err
 	}
 	payload = append(payload, '}')
@@ -568,10 +573,4 @@ func appendVaultJSONString(destination, password []byte) ([]byte, error) {
 	}
 	destination = append(destination, '"')
 	return destination, nil
-}
-
-func zeroBytes(value []byte) {
-	for index := range value {
-		value[index] = 0
-	}
 }

@@ -39,6 +39,9 @@ const (
 	testCLISecret       = "the secret for this run"
 )
 
+// newCLIVaultService は、本番の配線（internal/app/services.go）と同じく、世代
+// バックアップを vault の鍵で封じる Service を組む。封じないマネージャの控えは本番に
+// 無い形（vault の控えが入れ子でない）になり、マスターパスワードの変更がそれを断る。
 func newCLIVaultService(t *testing.T) *secret.Service {
 	t.Helper()
 	home := t.TempDir()
@@ -49,7 +52,11 @@ func newCLIVaultService(t *testing.T) *secret.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	service := secret.NewService(workspace, manager, time.Now)
+	manager.Seal = service.SealBackup
+	manager.Unseal = service.OpenBackup
+	return service
 }
 
 func cliHeaders(secret string) map[string]string {
@@ -321,7 +328,10 @@ func newUnconfiguredSyncVaultServer(
 	if err := passwords.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	syncService := remotesync.NewService(workspace, manager, nil, nil)
+	syncService, err := remotesync.NewIntegratedService(workspace, manager, nil, nil, testSyncIntegrations(passwords))
+	if err != nil {
+		t.Fatal(err)
+	}
 	sessions, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x68}, 96)))
 	if err != nil {
 		t.Fatal(err)
@@ -679,5 +689,27 @@ func TestPasswordlessVaultLockKeepsCredentialsAvailable(t *testing.T) {
 	response = send(t, engine, http.MethodPost, VaultLockPath, `{}`, cliHeaders(testCLISecret))
 	if response.Code != http.StatusNoContent || service.Unlocked() {
 		t.Fatal("password-protected vault did not lock")
+	}
+}
+
+// 409 だけでは、ロック中や vault なしと見分けられない。世代バックアップが多すぎる
+// 失敗は本文に code を載せ、CLI が理由と対処を示せるようにする。
+func TestCLIVaultProblemNamesTooManyBackupsInTheConflictBody(t *testing.T) {
+	engine := echo.New()
+	engine.POST("/", func(c *echo.Context) error {
+		return vaultCLIProblem(c, fmt.Errorf("commit rekey: %w", secret.ErrTooManyBackups))
+	})
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/", nil))
+
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409: %s", recorder.Code, recorder.Body.String())
+	}
+	var answer api.Problem
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatalf("body %q: %v", recorder.Body.String(), err)
+	}
+	if answer.Code != VaultBackupsTooManyCode {
+		t.Fatalf("code = %q, want %q", answer.Code, VaultBackupsTooManyCode)
 	}
 }

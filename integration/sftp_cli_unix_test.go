@@ -15,6 +15,7 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/secret"
+	"sshc/internal/secret/secrettest"
 	"sshc/internal/storage"
 )
 
@@ -75,7 +76,9 @@ func TestSFTPCLIRoundTripsAgainstRealOpenSSH(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := vault.SetBound(alias, password, binding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(vault, transactions, secrettest.DedicatedPassword{
+		Alias: alias, Password: password, Binding: binding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 

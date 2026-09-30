@@ -109,12 +109,12 @@ func ListLocal(value string) (LocalListing, error) {
 	if !info.IsDir() {
 		return LocalListing{}, ErrNotDirectory
 	}
-	dir, err := root.Open(relative)
+	directory, err := root.Open(relative)
 	if err != nil {
 		return LocalListing{}, err
 	}
-	defer dir.Close()
-	infos, err := dir.Readdir(0)
+	defer directory.Close()
+	infos, err := directory.Readdir(0)
 	if err != nil {
 		return LocalListing{}, err
 	}
@@ -213,12 +213,12 @@ func localTreeBytes(ctx context.Context, root *os.Root, relative string, info fs
 	if !info.IsDir() {
 		return 0, ErrUnsupportedEntry
 	}
-	dir, err := root.Open(relative)
+	directory, err := root.Open(relative)
 	if err != nil {
 		return 0, err
 	}
-	defer dir.Close()
-	infos, err := dir.Readdir(0)
+	defer directory.Close()
+	infos, err := directory.Readdir(0)
 	if err != nil {
 		return 0, err
 	}
@@ -299,12 +299,12 @@ func (s Service) putLocal(ctx context.Context, root *os.Root, remote Remote, sou
 		} else {
 			return err
 		}
-		dir, err := root.Open(source)
+		directory, err := root.Open(source)
 		if err != nil {
 			return err
 		}
-		defer dir.Close()
-		children, err := dir.Readdir(0)
+		defer directory.Close()
+		children, err := directory.Readdir(0)
 		if err != nil {
 			return err
 		}
