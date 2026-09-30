@@ -2,19 +2,19 @@
 
 `sshc engine` はフォアグラウンドで動作し、起動したターミナルまたはプロセス管理ツールが終了すると停止します。sshc 自身はデーモン化しません。
 
-マスターパスワードを unit ファイル、環境変数、コマンドライン引数へ保存しないでください。エンジンの起動後、別のターミナルから vault のロックを解除します。
+マスターパスワードをunitファイル、環境変数、コマンドライン引数へ保存しないでください。エンジンの起動後、別のターミナルからVaultのロックを解除します。パスワードなしのVaultは、エンジンの起動時に自動でロックを解除するため、この操作は不要です。
 
 ```sh
 sshc engine                       # Ctrl+C で終了コード 130、SIGTERM で 0
 sshc vault unlock                 # 別のターミナルから実行
-sshc ssh <接続先>                 # 保存済みの資格情報を利用して接続
+sshc ssh <接続先>                 # 保存済みの認証情報を利用して接続
 sshc ssh <接続先> --non-interactive -- <コマンド...>
                                   # ターミナルを開かずにコマンドを実行
 ```
 
 ## 画面なし環境で同期する
 
-同期の owner は常駐中の engine です。先に engine を起動し、別の対話端末で vault を解錠します。`sshc sync` を含むすべての同期コマンドは、engine 停止中、vault 未作成、vault ロック中をそれぞれ拒否して復旧コマンドを表示します。
+同期の owner は常駐中の engine です。先に engine を起動し、別の対話型のターミナルで vault のロックを解除します。`sshc sync` を含むすべての同期コマンドは、engine 停止中、vault 未作成、vault ロック中をそれぞれ拒否して復旧コマンドを表示します。
 
 ```sh
 sshc vault unlock
@@ -26,7 +26,7 @@ sshc sync now
 sshc sync auto on
 ```
 
-`sshc sync setup` は stdin と prompt 出力の両方に対話端末を要求します。object storage の access key ID、secret access key、既存の sync key は no-echo で読み取り、argv、環境変数、設定ファイルから渡す option はありません。空の同期先で生成された sync key は同じ端末へ一度だけ表示されるため、別端末の復元に備えて安全に保管してください。systemd の unit や `tmux send-keys` に資格情報を書かないでください。
+`sshc sync setup` は stdin と prompt 出力の両方に対話型のターミナルを要求します。object storage の access key ID、secret access key、既存の sync key は no-echo で読み取り、argv、環境変数、設定ファイルから渡す option はありません。空の同期先で生成された sync key は同じターミナルへ一度だけ表示されるため、別のマシンでの復元に備えて安全に保管してください。systemd の unit や `tmux send-keys` に認証情報を書かないでください。
 
 通常の `push` は engine が作った draft を条件付きで保存し、remote が変われば失敗します。`push --force` も確認時の exact remote ETag だけを対象とし、競合時に自動再試行しません。通常の `pull` は conflict または removal が一件でもあれば preview だけで止まり、`pull --force` はその exact preview を remote authoritative として適用します。preview 後に ETag／revision が変われば force でも拒否されます。
 
@@ -34,7 +34,7 @@ sshc sync auto on
 
 mutation の送信後に通信が切れたり、成功応答を最後まで読めなかったりした場合、CLI は `outcome_unknown` を返します。この failure は再試行不可です。同じ操作を直ちに繰り返さず、`sshc sync` と object storage の状態を確認してから復旧してください。
 
-自動処理で結果を読む場合は、対応する操作へ `--json` を付けます。stdout には一つの JSON object だけが出ます。`setup` は秘密入力を伴うため JSON mode を持ちません。
+自動処理で結果を読む場合は、対応する操作へ `--json` を付けます。stdout には一つの JSON object だけが出ます。`setup` はシークレットの入力を伴うため JSON mode を持ちません。
 
 ```sh
 sshc sync --json
@@ -44,7 +44,7 @@ sshc sync now --json
 sshc sync auto off --json
 ```
 
-接続設定だけを調べる `sshc info <alias> [--json]` は engine を必要としません。実接続と同じ `Include`／`Match`／`ProxyJump` 解決を使いますが、保存済み資格情報、`SetEnv` の値、`ProxyCommand` の本文は表示しません。
+接続設定だけを調べる `sshc info <alias> [--json]` は engine を必要としません。実接続と同じ `Include`／`Match`／`ProxyJump` 解決を使いますが、保存済みの認証情報、`SetEnv` の値、`ProxyCommand` の本文は表示しません。
 
 ## VPN 経路
 
@@ -60,13 +60,13 @@ sshc vpn logs tohoku --json
 sshc vpn down tohoku
 ```
 
-`add` と `edit` は対話端末を要求する。`edit` は保存済みの値を初期値にし、空欄のシークレットは保存済みの値のまま残す。秘密鍵、VPN のパスワード、IPsec の事前共有鍵、OpenConnect のパスワードと二段目の TOTP の種は no-echo で読み、argv、環境変数、設定ファイルから渡す option を持たない。engine が Vault へ保存し、応答にも `--json` にも秘密は現れない。
+`add` と `edit` は対話型のターミナルを要求する。`edit` は保存済みの値を初期値にし、空欄のシークレットは保存済みの値のまま残す。秘密鍵、VPN のパスワード、IPsec の事前共有鍵、OpenConnect のパスワードと二要素認証の TOTP のシークレットは no-echo で読み、argv、環境変数、設定ファイルから渡す option を持たない。engine が Vault へ保存し、応答にも `--json` にもシークレットは現れない。
 
-`vpn --json` は、経路ごとに `running`、`relaySocket`、`connections` に加えて、用意している最中は `phase`（`image`／`container`／`tunnel`／`approval`）、経路があるときは `tunnel`（インターフェース・アドレス・開始時刻）を返す。使えないマシンでは `available` が false になり、`unavailable`（`vpn_docker_missing`／`vpn_docker_not_running`）と docker の生の文の `detail` を返す。`vpn logs <名前> --json` は、engine が経路を用意した記録とコンテナの直近の出力を `lines` として返す。保存済みの秘密は `[REDACTED]` に置き換わる。
+`vpn --json` は、経路ごとに `running`、`relaySocket`、`connections` に加えて、用意している最中は `phase`（`image`／`container`／`tunnel`／`approval`）、経路があるときは `tunnel`（インターフェース・アドレス・開始時刻）を返す。使えないマシンでは `available` が false になり、`unavailable`（`vpn_docker_missing`／`vpn_docker_not_running`）と docker の生の文の `detail` を返す。`vpn logs <名前> --json` は、engine が経路を用意した記録とコンテナの直近の出力を `lines` として返す。保存済みのシークレットは `[REDACTED]` に置き換わる。
 
-プロファイルを付けた接続は Terminal、SFTP、`sshc <接続先>` のいずれからでも同じ経路を通る。経路を作れないマシンでは、素の回線へ落とさずに拒否する。ホストの `ssh`・`scp`・`git` から使う場合は、プロファイルを付けずに `ProxyCommand sshc vpn proxy tohoku %h %p` を書く（`%h %p` は必須）。
+プロファイルを付けた接続は Terminal、SFTP、`sshc ssh <接続先>` のいずれからでも同じ経路を通る。経路を作れないマシンでは、素の回線へ落とさずに拒否する。ホストの `ssh`・`scp`・`git` から使う場合は、プロファイルを付けずに `ProxyCommand sshc vpn proxy tohoku %h %p` を書く（`%h %p` は必須）。
 
-`relaySocket` へ繋ぐクライアントは、1行目に接続先（`host:port\n`）を送り、engine が返す1行の JSON（`{}` なら繋がった、`{"code":…,"reason":…}` なら理由）を読んでから、バイト列を送る。
+`relaySocket` へ接続するクライアントは、1行目に接続先（`host:port\n`）を送り、engine が返す1行の JSON（`{}` なら接続できた、`{"code":…,"reason":…}` なら理由）を読んでから、バイト列を送る。
 
 ## systemd（ユーザーサービス）
 
@@ -93,9 +93,9 @@ systemctl --user daemon-reload
 sshc service install
 ```
 
-`sshc service disable`はsshc管理下のunitだけを停止、無効化、削除します。unit変更はuser単位のlockで直列化し、停止後にも内容が変わっていないことを確認してから削除します。`sshc update`は管理unitの実行パスが更新対象と完全に一致し、activeの場合だけ`try-restart`します。再起動によりvaultはロックされるため、別の対話端末から`sshc vault unlock`を再実行してください。停止中のunitをupdateが起動することはありません。binary更新後の再起動だけに失敗した場合は、`sshc service install`を再実行して復旧できます。管理unitが以前のsshcの書いた内容のままなら、updateは再起動せずに`sshc service install`の再実行を案内します。
+`sshc service disable`はsshc管理下のunitだけを停止、無効化、削除します。unit変更はuser単位のlockで直列化し、停止後にも内容が変わっていないことを確認してから削除します。`sshc update`は管理unitの実行パスが更新対象と完全に一致し、activeの場合だけ`try-restart`します。パスワードを設定したVaultは再起動でロックされるため、別の対話型のターミナルから`sshc vault unlock`を再実行してください。パスワードなしのVaultは、エンジンの起動時に自動でロックを解除します。停止中のunitをupdateが起動することはありません。binary更新後の再起動だけに失敗した場合は、`sshc service install`を再実行して復旧できます。管理unitが以前のsshcの書いた内容のままなら、updateは再起動せずに`sshc service install`の再実行を案内します。
 
-`disable`も削除対象を表示して確認を求めます。対話端末のない自動化では`sshc service disable --yes`を使用してください。
+`disable`も削除対象を表示して確認を求めます。対話型のターミナルのない自動化では`sshc service disable --yes`を使用してください。
 
 SSH loginを切断した後もuser managerを動作させる必要がある場合は、管理者にlingerの有効化を依頼するか、権限があれば次を実行します。
 
@@ -124,7 +124,7 @@ tmux new-session -d -s sshc 'sshc engine'
 tmux new-window -t sshc 'sshc vault unlock; exec $SHELL'
 ```
 
-`sshc vault unlock` は対話端末を必要とします。`tmux send-keys` でパスワードを送信すると履歴やログに残る可能性があるため、使用しないでください。
+`sshc vault unlock` は対話型のターミナルを必要とします。`tmux send-keys` でパスワードを送信すると履歴やログに残る可能性があるため、使用しないでください。
 
 ## Docker
 
@@ -143,7 +143,7 @@ docker exec -it sshc sshc vault unlock
 docker exec -it sshc sshc ssh <接続先>
 ```
 
-vault のロック解除には対話端末が必要なので、`docker exec` に `-it` を指定します。マスターパスワードを `docker run -e` で渡す機能はありません。
+vault のロック解除には対話型のターミナルが必要なので、`docker exec` に `-it` を指定します。マスターパスワードを `docker run -e` で渡す機能はありません。
 
 エンジンはコンテナ内のループバックアドレスで待ち受けます。ホスト側の `sshc` からこのエンジンへ接続することはできないため、UI を使わない運用では接続コマンドも `docker exec` で実行します。
 
@@ -161,7 +161,7 @@ sshc vault unlock
 
 タスクスケジューラへ登録する場合は、対話的なログオン時に通常のユーザー権限で実行してください。エンジンは実行ユーザーの `~/.ssh` を使用するため、別のユーザーや SYSTEM として起動すると異なる SSH 設定を参照します。
 
-sshc は Windows サービスをインストールしません。Windows サービスには対話端末がなく、vault をターミナルから解除する運用と一致しないためです。
+sshc は Windows サービスをインストールしません。Windows サービスには対話型のターミナルがなく、vault をターミナルから解除する運用と一致しないためです。
 
 ## 終了コード
 
@@ -175,6 +175,6 @@ Ctrl+C の終了コード 130 を正常終了として扱うよう、プロセ�
 
 SIGINT と SIGTERM の終了動作は `integration/signals_unix_test.go`、Windows の Ctrl+Break は `integration/signals_windows_test.go` で実プロセスに対して検証しています。
 
-## vault の自動ロック
+## Vaultの自動ロック
 
-常駐モードでは、vault は既定では 12 時間操作がない場合に自動的にロックされます。Settingsで1〜999分／時間、または自動ロックなしへ変更できます。自動ロックを無効にすると、手動でロックするかengineを再起動するまで導出済みの鍵がメモリに残ります。ロック後もエンジンは動作を続けますが、保存済みのパスワードや鍵パスフレーズを必要とする操作は、`sshc vault unlock` を実行するまで利用できません。
+常駐モードでは、パスワードを設定したVaultは既定で、Vault内のシークレットを最後に読み書きしてから12時間後に自動でロックされます。Settingsで1〜999分／時間に変更するか、自動ロックを無効にできます。自動ロックを無効にすると、手動でロックするかエンジンを再起動するまで導出済みの鍵がメモリに残ります。パスワードなしのVaultは自動ではロックされず、エンジンの起動時に自動でロックを解除します。ロック後もエンジンは動作を続けますが、保存済みのパスワードや鍵パスフレーズを必要とする操作は、`sshc vault unlock` を実行するまで利用できません。

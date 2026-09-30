@@ -187,7 +187,8 @@ func TestStateChangingDiagnosticsRequireCSRFAndAOneTimeActionToken(t *testing.T)
 	}
 }
 
-// VPN の紐付けを読めないことは、接続先が安全でないという理由では返さない。
+// VPN の紐付けを読めないことは、接続先が安全でないという理由では返さない。紐付けは
+// metadata にあるので、設定を読めないときと同じ config_unreadable で返す。
 func TestReachabilityDoesNotBlameTheDestinationWhenTheVPNBindingCannotBeRead(t *testing.T) {
 	engine, credentials, _, service := newDiagnosticsServer(t)
 	service.VPNBinding = func(string) (string, error) { return "", errors.New("metadata is unreadable") }
@@ -196,8 +197,8 @@ func TestReachabilityDoesNotBlameTheDestinationWhenTheVPNBindingCannotBeRead(t *
 	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/diagnostics/reachability",
 		mustMarshal(t, api.AliasRequest{Alias: "bastion"}), token)
 
-	if response.Code != http.StatusInternalServerError || problemCode(t, response.Body.Bytes()) != "internal_error" {
-		t.Fatalf("reachability = %d: %s, want 500 internal_error", response.Code, response.Body.String())
+	if response.Code != http.StatusInternalServerError || problemCode(t, response.Body.Bytes()) != "config_unreadable" {
+		t.Fatalf("reachability = %d: %s, want 500 config_unreadable", response.Code, response.Body.String())
 	}
 }
 

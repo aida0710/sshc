@@ -19,11 +19,7 @@ import (
 // ここは brew を持たない機械でも走る。読むのは formula に書いてある文字列で
 // あり、それを同じ引数で実行してみるだけである。
 func TestTheFormulaBuildsSomethingThatExists(t *testing.T) {
-	body, err := os.ReadFile(filepath.Join("..", "..", "packaging", "homebrew", "sshc.rb"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	formula := string(body)
+	formula := readFormula(t)
 
 	// `system "go", "build", *std_go_args(...), "./cmd/sshc"` の最後の引数。
 	build := regexp.MustCompile(`system "go", "build",[^\n]*`).FindString(formula)
@@ -56,13 +52,40 @@ func TestTheFormulaBuildsSomethingThatExists(t *testing.T) {
 }
 
 func TestTheFormulaInstallsShellCompletions(t *testing.T) {
+	if !strings.Contains(readFormula(t), `generate_completions_from_executable(bin/"sshc", "completion")`) {
+		t.Error("formula が sshc completion から bash/zsh/fish の補完を生成していない")
+	}
+}
+
+// Homebrew 版も、リリースの成果物や make build と同じくタグの名前（v0.41.0）を名乗る。
+//
+// Homebrew の version はタグから v を除いた値（0.41.0）である。それをそのまま埋めていた
+// あいだは、同じリリースでも Homebrew 版だけが `sshc 0.40.0` と名乗った。install.sh は
+// 動いている engine のバージョンを文字列のまま比べるので、同じバージョンを入れても
+// 「一致しない」と警告し、sshc update は「from 0.40.0 to v0.41.0」と表示した。
+//
+// brew の無いマシンでも走るよう、formula の文字列を確かめる。
+func TestTheFormulaStampsTheTagNameLikeTheReleaseBuilds(t *testing.T) {
+	formula := readFormula(t)
+	for _, required := range []struct{ text, why string }{
+		{`-X main.version=#{release_version}`, "go build が release_version を埋め込んでいない"},
+		{`version.head? ? version.to_s : "v#{version}"`, "release_version がタグの v を付け直していない"},
+		{`assert_match "sshc #{release_version}"`, "brew test が埋め込んだバージョンを確かめていない"},
+	} {
+		if !strings.Contains(formula, required.text) {
+			t.Errorf("%s: formula に %q が無い", required.why, required.text)
+		}
+	}
+}
+
+// readFormula は、tap へ同期する formula の正本を読む。
+func readFormula(t *testing.T) string {
+	t.Helper()
 	body, err := os.ReadFile(filepath.Join("..", "..", "packaging", "homebrew", "sshc.rb"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), `generate_completions_from_executable(bin/"sshc", "completion")`) {
-		t.Error("formula が sshc completion から bash/zsh/fish の補完を生成していない")
-	}
+	return string(body)
 }
 
 // 利用者に打たせる行は、打てば通る行でなければならない。

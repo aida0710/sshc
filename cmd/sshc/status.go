@@ -157,7 +157,7 @@ func readHandoff(stateDir string) (handoff.Handoff, error) {
 	found, err := handoff.Read(stateDir)
 	if errors.Is(err, handoff.ErrSchemaVersion) || errors.Is(err, handoff.ErrProtocolVersion) {
 		return handoff.Handoff{}, fmt.Errorf(
-			"the running app and this sshc (%s) are not the same version; update whichever is older: %w",
+			"the running engine and this sshc (%s) are not the same version; update whichever is older: %w",
 			runningExecutable(), err)
 	}
 	// handoff が無い場合は内部パスではなく engine の起動方法を案内する。

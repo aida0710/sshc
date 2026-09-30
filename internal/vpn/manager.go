@@ -353,7 +353,7 @@ func (manager *Manager) startLocked(ctx context.Context, profileName string, sou
 		manager.stopContainer(ctx, name)
 	}
 	defer state.enterPhase("")
-	connectionlog.Say(ctx, connectionlog.Brief, "VPN経路「%s」を起動します（%s）。", profile.Name, profile.Backend)
+	connectionlog.Say(ctx, connectionlog.Brief, "VPNプロファイル「%s」の経路を起動します（%s）。", profile.Name, profile.Backend)
 	started := time.Now()
 	if err := manager.start(ctx, profile, secrets, state.enterPhase); err != nil {
 		elapsed := connectionlog.Elapsed(time.Since(started))

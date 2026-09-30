@@ -295,3 +295,22 @@ it("reopens a manually locked passwordless vault without an input field", async 
   await userEvent.click(screen.getByRole("button", { name: "Open" }));
   await waitFor(() => expect(api.unlockVault).toHaveBeenCalledWith(""));
 });
+
+// scripts/android/vault-lifecycle-test.mjs は、文言ではなく、パスワード欄の数と、
+// その欄と同じformのsubmitボタンで作成とロックの解除を操作する。
+it.each([
+  { exists: false, passwordInputs: 2 },
+  { exists: true, passwordInputs: 1 },
+])("keeps a single submit button in the password form when exists is $exists", ({ exists, passwordInputs }) => {
+  render(
+    <LanguageProvider initial="ja">
+      <LockScreen exists={exists} api={buildApi()} onOpen={vi.fn()} />
+    </LanguageProvider>,
+  );
+  const inputs = [...document.querySelectorAll("input")].filter((input) => input.type === "password");
+  expect(inputs).toHaveLength(passwordInputs);
+  const form = inputs[0]?.form;
+  expect(form).toBeInstanceOf(HTMLFormElement);
+  expect(inputs.every((input) => input.form === form)).toBe(true);
+  expect(form?.querySelectorAll('button[type="submit"]')).toHaveLength(1);
+});

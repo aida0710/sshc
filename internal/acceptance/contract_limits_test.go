@@ -63,13 +63,19 @@ func openAPIProperty(t *testing.T, spec map[string]any, schema, path string) map
 // openAPILimit は、スキーマの上限や下限（maxLength、maxItems、minimum、maximum）の値を返す。
 func openAPILimit(t *testing.T, spec map[string]any, schema, path, keyword string) int64 {
 	t.Helper()
-	switch value := openAPIProperty(t, spec, schema, path)[keyword].(type) {
+	return schemaLimit(t, openAPIProperty(t, spec, schema, path), schema+"."+path, keyword)
+}
+
+// schemaLimit は、ひとつのスキーマの上限や下限の値を返す。location はエラーの文に出す場所である。
+func schemaLimit(t *testing.T, node map[string]any, location, keyword string) int64 {
+	t.Helper()
+	switch value := node[keyword].(type) {
 	case int:
 		return int64(value)
 	case int64:
 		return value
 	default:
-		t.Fatalf("openapi.yaml の %s.%s に整数の %s が無い（%#v）", schema, path, keyword, value)
+		t.Fatalf("openapi.yaml の %s に整数の %s が無い（%#v）", location, keyword, value)
 		return 0
 	}
 }
@@ -168,8 +174,14 @@ func TestAPIVPNProfileLimitsMatchTheSharedCases(t *testing.T) {
 			continue
 		}
 		checked++
-		if got := openAPILimit(t, spec, "VPNProfile", testCase.Field, keyword); got != testCase.Limit {
-			t.Errorf("%s: openapi.yaml の VPNProfile.%s の %s = %d、共有の表の上限は %d", testCase.Name, testCase.Field, keyword, got, testCase.Limit)
+		property := openAPIProperty(t, spec, "VPNProfile", testCase.Field)
+		location := "VPNProfile." + testCase.Field
+		// 配列の field の too_long（wireguard.servers など）は、配列ではなく要素ひとつの長さの上限である。
+		if items, isArray := property["items"].(map[string]any); isArray && keyword == "maxLength" {
+			property, location = items, location+"[]"
+		}
+		if got := schemaLimit(t, property, location, keyword); got != testCase.Limit {
+			t.Errorf("%s: openapi.yaml の %s の %s = %d、共有の表の上限は %d", testCase.Name, location, keyword, got, testCase.Limit)
 		}
 	}
 	if checked == 0 {

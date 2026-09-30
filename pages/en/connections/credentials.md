@@ -12,7 +12,7 @@ description: Understand account passwords, key passphrases, and the vault master
 | Key passphrase | Decrypts a private key | Bound to a key |
 | One-time password (TOTP) | Answers a keyboard-interactive verification challenge | Bound to a connection target |
 
-Sync uses a separate sync key.
+Sync uses a separate encryption key.
 
 Create labelled account passwords under **Menu → Vault → Account passwords** and assign them to connections. Editing decrypts the saved value back into the form; leaving the page, locking the vault, or saving discards plaintext UI state.
 

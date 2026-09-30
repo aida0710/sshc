@@ -115,4 +115,42 @@ A plist registered by an older sshc keeps the previous definition, which restart
 - Windows: run the PowerShell installer again
 - Android: install the newer APK from GitHub Releases
 
-When an active service was created by `sshc service install` and its executable matches the installation being updated, `sshc update` restarts it automatically. The restart locks the vault, so run `sshc vault unlock` again. If the update succeeds but only the restart fails, follow the message and run `sshc service install` again. Restart engines outside service management with `sshc engine --replace`.
+When an active service was created by `sshc service install` and its executable matches the installation being updated, `sshc update` restarts it automatically. The restart locks a password-protected vault, so run `sshc vault unlock` again; a passwordless vault unlocks itself when the engine starts. If the update succeeds but only the restart fails, follow the message and run `sshc service install` again. Running `install.sh` directly does not restart the service, so run `sshc service install` afterwards. Restart engines outside service management with `sshc engine --replace`.
+
+## Uninstall
+
+Stop the engine and remove its service registration before deleting the executable. If only the executable is deleted while the service is still registered, launchd on macOS keeps trying to start the engine every five seconds, and systemd on Linux fails to start it at every login.
+
+1. If you registered a service with `sshc service install`, run `sshc service disable`. It stops, disables, and removes only the service definition that sshc created. Stop an engine running in the foreground or under tmux yourself.
+2. Delete the executable for the way you installed it.
+   - Homebrew: `brew uninstall aida0710/tap/sshc`
+   - `install.sh`: delete `sshc` and the receipt `.sshc-install-receipt.json` in the same directory. The directory is normally `~/.local/bin`, `/usr/local/bin` when the script ran as root, or the directory given in `SSHC_INSTALL_DIR`.
+   - `make install`: `make uninstall` deletes `~/.local/bin/sshc`.
+   - Windows: stop the running engine, then run the commands below to delete `sshc.exe` and remove its directory from the user `PATH`.
+   - Android: uninstall it like any other app.
+3. If you used per-connection VPN, the container image `sshc-vpn` built by sshc remains. VPN containers are removed when the engine stops. To delete the image, check it with `docker image ls sshc-vpn` and remove it with `docker image rm`.
+
+On Windows, run the following in PowerShell. If you changed the directory with `SSHC_INSTALL_DIR`, set `$dir` to that directory.
+
+```powershell
+$dir = Join-Path $env:LOCALAPPDATA 'Programs\sshc'
+Remove-Item -LiteralPath (Join-Path $dir 'sshc.exe')
+$entries = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';' |
+  Where-Object { $_ -and [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ine $dir }
+[Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
+```
+
+If the executable was deleted before running `sshc service disable`, remove the service definition with these commands.
+
+```sh
+# Linux
+systemctl --user disable --now sshc
+rm ~/.config/systemd/user/sshc.service
+systemctl --user daemon-reload
+
+# macOS
+launchctl bootout gui/$(id -u)/io.github.aida0710.sshc
+rm ~/Library/LaunchAgents/io.github.aida0710.sshc.plist
+```
+
+sshc's data stays in `~/.ssh/sshc` (`%USERPROFILE%\.ssh\sshc` on Windows) after uninstalling. It holds the vault, sshc's per-connection settings, VPN profile settings, backups taken before SSH configuration changes, and deleted keys. Delete that directory only when you will not use sshc again and have confirmed you no longer need its contents; a deleted vault and its backups cannot be recovered. `~/.ssh/config`, its `Include` files, and your keys are shared with OpenSSH, so uninstalling sshc leaves them unchanged. Snapshots saved to S3-compatible storage by encrypted sync also remain; delete them on the storage side if you no longer need them.

@@ -1,7 +1,12 @@
 # すべての push と pull request に対する検証ワークフロー。
-# ジョブは失敗した検査を識別できる単位に分割する。検査内容はローカルの
-# `make test`、`make verify-generated` と一致させる。時間のかかる E2E は
-# `make e2e` でローカル実行する。
+# ジョブは失敗した検査を識別できる単位に分割する。
+#
+# go、web、deadcode、generated の各ジョブの検査は、ローカルの `make test` と
+# `make verify-generated` にそろえる。ただし Windows だけの段と、web の axe 検査は
+# ローカルのこの 2 つに含まれない。E2E は時間がかかるので、CI では主要画面の axe
+# 検査だけを走らせ、全体は `make e2e` でローカル実行する。統合テストは
+# `make integration` でも走らせられる。Android の APK、VPN のコンテナイメージ、
+# 文書サイトのビルド、依存の脆弱性は CI だけで確かめる。
 name: CI
 
 on:
@@ -30,13 +35,10 @@ jobs:
         include:
           - os: ubuntu-24.04
             name: Linux
-            race: true
           - os: macos-15
             name: macOS
-            race: true
           - os: windows-2025
             name: Windows
-            race: true
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -130,28 +132,21 @@ jobs:
       - name: go test -race (Unix)
         if: ${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}
         shell: bash
-        # internal/remotesync は、macOS の -race で 440〜600 秒かかり、既定の 10 分で
-        # 時間切れになることがある。Windows と同じく 20 分にする。
+        # macOS の -race では、internal/httpserver が 357〜406 秒、internal/secret が
+        # 338〜374 秒かかる（2026-09-29〜30 の main の 5 回）。既定の 10 分に対して
+        # 余裕が 1.5 倍しかなく、遅い runner では時間切れになり得るので 20 分にする。
+        # この 2 つが 5 分を大きく下回るようになれば、既定に戻してよい。
         run: go test -count=1 -race -timeout 20m ./...
 
-      # windows-2025 x64 は通常 race 対応である。もし toolchain 自身がこの
-      # platform を unsupported と明言した場合だけ neutral にし、test failure、
-      # compile failure、race report は元の終了 code で失敗させる。
+      # windows/amd64 は Go の race detector の対応先なので、例外を設けず、
+      # go test の終了コードをそのまま返す。
       - name: go test -race (Windows)
         if: ${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
-          $raceLines = @(& go test -v -count=1 -race -timeout 20m ./... 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/go-test-race-windows.log")
+          & go test -v -count=1 -race -timeout 20m ./... 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/go-test-race-windows.log"
           $raceExit = $LASTEXITCODE
-          if ($raceExit -eq 0) {
-            exit 0
-          }
-          $raceOutput = (($raceLines | ForEach-Object { "$_" }) -join "`n").Trim()
-          if ($raceOutput -ceq '-race is not supported on windows/amd64') {
-            Write-Output 'Race unavailable on this runner/toolchain'
-            exit 0
-          }
           exit $raceExit
 
       # Console出力が切り詰められても、ConPTY停止時の直前のtest名と出力を

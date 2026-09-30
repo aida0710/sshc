@@ -45,19 +45,19 @@ function evaluate(socket, expression) {
   });
 }
 
+// Vaultの作成とロックの解除は、パスワード欄の数で見分ける（作成は確認欄を含めて2つ）。
 const wantedInputs = mode === "create" ? 2 : 1;
-const buttonLabels = mode === "create"
-  ? ["Create the vault", "Vaultを作成"]
-  : ["Open", "開く"];
+// 送信ボタンは、文言ではなくパスワード欄と同じformのsubmitボタンとして探す。
+// 文言は画面の言語と文言の変更で変わり、古い文言で探すと画面が正しくてもテストが落ちる。
 const expression = `
   (async () => {
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const findSubmit = (inputs) => inputs[0]?.form?.querySelector('button[type="submit"]') ?? undefined;
     let inputs = [];
     let button;
     for (let attempt = 0; attempt < 160; attempt += 1) {
       inputs = [...document.querySelectorAll('input[type="password"]')];
-      button = [...document.querySelectorAll('button')].find((candidate) =>
-        ${JSON.stringify(buttonLabels)}.includes(candidate.textContent.trim()));
+      button = findSubmit(inputs);
       if (inputs.length === ${wantedInputs} && button) break;
       await sleep(250);
     }
@@ -70,8 +70,7 @@ const expression = `
       input.dispatchEvent(new Event('input', { bubbles: true }));
     }
     await sleep(100);
-    button = [...document.querySelectorAll('button')].find((candidate) =>
-      ${JSON.stringify(buttonLabels)}.includes(candidate.textContent.trim()));
+    button = findSubmit(inputs);
     if (!button || button.disabled) throw new Error('vault submit remained disabled');
     button.click();
     for (let attempt = 0; attempt < 160; attempt += 1) {

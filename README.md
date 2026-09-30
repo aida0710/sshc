@@ -1,6 +1,6 @@
 # sshc
 
-OpenSSHの設定ファイルをそのまま使う、ローカルファーストのSSHクライアントです。接続管理、Terminal、SFTP、Workspace、スニペット、暗号化同期を1つのUIとCLIから扱えます。
+OpenSSHの設定ファイルをそのまま使う、ローカルファーストのSSHクライアントです。接続管理、Terminal、SFTP、Workspace、スニペット、接続ごとのVPN、暗号化同期を1つのUIとCLIから扱えます。
 
 [日本語ドキュメント](https://aida0710.github.io/sshc/) · [English documentation](https://aida0710.github.io/sshc/en/) · [Releases](https://github.com/aida0710/sshc/releases)
 
@@ -38,7 +38,7 @@ sshc engine
 sshc
 ```
 
-`sshc engine`はフォアグラウンドで動作し、デーモン化しません。引数なしの`sshc`はエンジンを起動しません。自動起動はOSのプロセス管理機能で設定します。Linuxでは`sshc service install`でsystemdユーザーサービス、macOSではlaunchdユーザーエージェントへ登録できます。その他の環境ではtmuxなどを利用できます。
+`sshc engine`はフォアグラウンドで動作し、デーモン化しません。引数なしの`sshc`はsshcエンジンを起動しません。自動起動はOSのプロセス管理機能で設定します。Linuxでは`sshc service install`でsystemdユーザーサービス、macOSではlaunchdユーザーエージェントへ登録できます。その他の環境ではtmuxなどを利用できます。
 
 初回はWeb UIまたはCLIでVaultを作成し、ロックを解除します。
 
@@ -49,15 +49,15 @@ sshc vault unlock
 
 マスターパスワードはWeb UIまたは`sshc vault`で入力します。CLIでは対話ターミナルからの入力だけを受け付け、引数や環境変数からは受け取りません。
 
-Vaultは既定で、Vault内のシークレットを最後に読み書きしてから12時間後に自動でロックされます。Settingsで1〜999分／時間に変更するか、自動ロックを無効にできます。
+パスワードを設定したVaultは既定で、Vault内のシークレットを最後に読み書きしてから12時間後に自動でロックされます。Settingsで1〜999分／時間に変更するか、自動ロックを無効にできます。パスワードなしのVaultは自動ではロックされず、sshcエンジンの起動時に自動でロックを解除します。
 
 ## CLIコマンド
 ```sh
 sshc ssh                     # 接続先を選択
 sshc ssh <接続先>            # 対話SSH
 sshc ssh <接続先> --non-interactive -- <コマンド>
-sshc info <接続先> --json    # エンジンなしで実際に使われる設定を表示
-sshc status --json           # エンジンの状態
+sshc info <接続先> --json    # sshcエンジンなしで実際に使われる設定を表示
+sshc status --json           # sshcエンジンの状態
 sshc sync                    # 同期状態
 sshc sftp get <接続先> /remote/file ./local-file
 sshc sftp put <接続先> ./local-file /remote/file
@@ -67,12 +67,14 @@ sshc help                    # すべてのコマンド
 ## 主な機能
 
 - OpenSSHのコメント、順序、空白、`Include`を保った設定管理
-- 接続状態、検索、出力を引き継ぐ再接続、貼り付け前の確認、文字コード、Quick Commandsを備えたTerminal
+- 接続状態、検索、出力を引き継ぐ再接続、貼り付け前の確認、文字コード、クイックコマンドを備えたTerminal
 - フォルダ転送、中断からの再開、バックグラウンドの転送キュー、エディタを備えたSFTP
 - SSHとローカルシェルを最大4ペインに並べるWorkspace
-- ホスト、ファイル、スニペット、設定を横断検索するCommand Palette
+- パスワード、鍵のパスフレーズ、TOTPのセットアップキーをVaultに保存し、Terminal、SFTP、CLIで再利用する認証情報の管理
+- 選んだSSH接続だけを専用のVPN経由で接続する、接続ごとのVPN（WireGuard、L2TP/IPsec、OpenConnect、OpenVPN、IKEv2/IPsec。Dockerを使用）
+- セッション、ホスト、ファイル、スニペット、設定を横断するコマンド検索（Search）
 - S3互換ストレージを使った暗号化スナップショット同期
-- SSH、SFTP、Serial、Telnet、同期、Terminal操作のCLI
+- SSH、SFTP、Serial、Telnet、同期、VPN、OTP、Terminal操作のCLI
 
 機能とセキュリティ上の制限は[利用者向けドキュメント](https://aida0710.github.io/sshc/)にまとめています。内部設計は[docs/design.md](docs/design.md)を参照してください。
 
@@ -83,11 +85,14 @@ Go 1.26とNode.js 22が必要です。
 ```sh
 make build
 make test
+make verify-generated
 make e2e
 make integration-up
 make integration
 make integration-down
 ```
+
+`make test`は、gofmt、go vet、Goのテスト（raceを含む）、Android向けのビルド、使われていない関数の検査、ESLint、Webの単体テストと型検査を実行します。`make verify-generated`は、生成物と埋め込みUIがコミット済みの内容と一致するかを確かめます。CIはこの2つの検査に加えて、Android APK、VPNのコンテナイメージ、統合テスト、利用者向けサイトのビルド、依存の脆弱性、主要画面のアクセシビリティを確かめます。E2Eの全体はCIでは実行しないため、画面を変えたときは`make e2e`も実行してください。
 
 Web UIを変更したときは`internal/ui/dist`も更新してください。利用者向けサイトは`pages/`にあり、`npm run build`で検証できます。
 

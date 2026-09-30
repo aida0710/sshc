@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -23,14 +24,48 @@ func KillGroupOnCancel(command *exec.Cmd, waitDelay time.Duration) {
 		if command.Process == nil {
 			return os.ErrProcessDone
 		}
-		err := syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
-		if errors.Is(err, syscall.ESRCH) {
-			// グループはもう無い。Wait には、止める前に終わったことを伝える。
-			return os.ErrProcessDone
-		}
-		return err
+		return signalGroup(command.Process.Pid, syscall.SIGKILL)
 	}
 	command.WaitDelay = waitDelay
+}
+
+// TerminateGroupOnCancel は、KillGroupOnCancel と同じく command が起動した子プロセスも
+// グループごと止めるが、ctx が終わったときに先に SIGTERM を送り、後始末をさせる。SIGKILL は
+// trap で受けられないので、最初から送るとシェルスクリプトが置いた一時ファイルが残る。grace を
+// 過ぎても command が終わらなければ、exec が command を SIGKILL で止める。
+//
+// 戻り値は Wait が戻った後に呼ぶ。取り消されていたときだけ、SIGTERM を無視してグループに
+// 残ったものを SIGKILL で止め、command だけが終わって子プロセスが残ることのないようにする。
+func TerminateGroupOnCancel(command *exec.Cmd, grace time.Duration) (killLeftovers func()) {
+	var canceled atomic.Bool
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	command.Cancel = func() error {
+		if command.Process == nil {
+			return os.ErrProcessDone
+		}
+		canceled.Store(true)
+		return signalGroup(command.Process.Pid, syscall.SIGTERM)
+	}
+	command.WaitDelay = grace
+	return func() {
+		if !canceled.Load() || command.Process == nil {
+			return
+		}
+		// グループに誰かが残っている間、その ID はほかのプロセスに再利用されない。グループが
+		// 空なら ESRCH で何もしない。Wait が先頭を回収した直後に呼ぶので、空のグループの ID が
+		// 既に別のプロセスへ割り当てられている余地はほぼない。
+		_ = signalGroup(command.Process.Pid, syscall.SIGKILL)
+	}
+}
+
+// signalGroup は、leader が先頭のプロセスグループ全体へ signal を送る。グループがもう
+// 無ければ、Wait に止める前に終わったことを伝えるため os.ErrProcessDone を返す。
+func signalGroup(leader int, signal syscall.Signal) error {
+	err := syscall.Kill(-leader, signal)
+	if errors.Is(err, syscall.ESRCH) {
+		return os.ErrProcessDone
+	}
+	return err
 }
 
 // KillSessionOnCancel は、KillGroupOnCancel と同じく ctx が終わったときに子プロセスごと

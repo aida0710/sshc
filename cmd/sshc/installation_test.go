@@ -34,7 +34,10 @@ func TestShellReceiptBindsTheExecutableDigest(t *testing.T) {
 	if err := os.WriteFile(executable, []byte("manually replaced"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := detectInstallation(executable); err == nil || !strings.Contains(err.Error(), "does not match") {
+	// 一致しないreceiptは自動更新の根拠にしない。直し方も合わせて伝える。
+	_, err = detectInstallation(executable)
+	if err == nil || !strings.Contains(err.Error(), "does not match") ||
+		!strings.Contains(err.Error(), "install sshc again with install.sh") {
 		t.Fatalf("modified receipt error = %v", err)
 	}
 }

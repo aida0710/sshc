@@ -1,8 +1,10 @@
 package httpserver
 
 import (
+	"path/filepath"
 	"testing"
 
+	"sshc/internal/api/contracttest"
 	"sshc/internal/vpn"
 )
 
@@ -10,7 +12,7 @@ import (
 // 変えると、API の検査が先に断るか、engine が API の約束より早く断る。
 func TestTheAPILimitsOfVPNFilesAreTheEngineLimits(t *testing.T) {
 	t.Parallel()
-	document := readOpenAPIDocument(t)
+	document := contracttest.ReadDocument(t, filepath.Join("..", ".."))
 	for _, test := range []struct {
 		schema, property string
 		limit            int

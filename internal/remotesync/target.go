@@ -28,6 +28,10 @@ var (
 	errTargetRegionRequired = errors.New("invalid_request")
 )
 
+// TargetRefusals は、接続先の入力の拒否のうち、HTTP で自分の code を返すものである。
+// 長さと region の不足は、ほかの不正な要求と同じ invalid_request で返す。
+var TargetRefusals = []error{ErrEndpointNotHTTPS, ErrEndpointHasPath, ErrUnsafeBucketName, ErrUnsafeObjectPath}
+
 // TargetInput は、利用者が打った接続先。Path は前後の "/" を含んでよい。
 type TargetInput struct {
 	Endpoint string

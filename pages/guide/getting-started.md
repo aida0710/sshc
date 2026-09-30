@@ -5,7 +5,7 @@ description: SSHとローカルシェルを扱うターミナルアプリ。Open
 
 # sshcとは
 
-sshcは、SSHとローカルシェルを扱うターミナルアプリです。デスクトップ版は、ブラウザで操作するWeb UIと、SSH接続を処理するバックグラウンドプロセス（エンジン）で構成されています。今あるOpenSSH設定を使って複数のペインで接続を開き、SFTPやポート転送にも同じ接続設定を使えます。`~/.ssh/config`、`Include`、秘密鍵、`known_hosts`は独自形式へ変換しません。
+sshcは、SSHとローカルシェルを扱うターミナルアプリです。デスクトップ版は、ブラウザで操作するWeb UIと、SSH接続を処理するバックグラウンドプロセス（sshcエンジン）で構成されています。今あるOpenSSH設定を使って複数のペインで接続を開き、SFTPやポート転送にも同じ接続設定を使えます。`~/.ssh/config`、`Include`、秘密鍵、`known_hosts`は独自形式へ変換しません。
 
 ![SSH接続を開いたTerminal画面](/images/terminal-desktop.png)
 

@@ -30,13 +30,15 @@ type systemInstallationCommands struct{}
 
 func (systemInstallationCommands) Output(ctx context.Context, name string, args ...string) ([]byte, error) {
 	command := exec.CommandContext(ctx, name, args...)
-	configureUpdateCommand(command)
+	killLeftovers := configureUpdateCommand(command)
+	defer killLeftovers()
 	return command.Output()
 }
 
 func (systemInstallationCommands) Run(ctx context.Context, process installationProcess) error {
 	command := exec.CommandContext(ctx, process.name, process.args...)
-	configureUpdateCommand(command)
+	killLeftovers := configureUpdateCommand(command)
+	defer killLeftovers()
 	if process.environment != nil {
 		command.Env = process.environment
 	}

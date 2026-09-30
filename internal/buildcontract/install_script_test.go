@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -203,33 +204,42 @@ func TestTheInstallScriptReadsTheRunningEngineVersionFromJSON(t *testing.T) {
 	}
 }
 
-func TestTheDocumentedInstallerPinsScriptAndArtifactsToOneRelease(t *testing.T) {
-	// 利用者向けの pages も同じ固定バージョンを示す。README だけ更新して pages が古いバージョンを
-	// 案内し続けたことがある。
-	for _, path := range []string{
-		"README.md", filepath.Join("docs", "release-install.md"), "install.sh",
-		filepath.Join("pages", "guide", "install.md"), filepath.Join("pages", "en", "guide", "install.md"),
-	} {
-		body, err := os.ReadFile(filepath.Join("..", "..", path))
-		if err != nil {
-			t.Fatal(err)
-		}
-		text := string(body)
-		if strings.Contains(text, "raw.githubusercontent.com/aida0710/sshc/main/install.sh") {
-			t.Errorf("%s still executes the mutable main installer", path)
-		}
-		for _, required := range []string{"SSHC_VERSION=v0.41.0", "/sshc/v0.41.0/install.sh"} {
-			if !strings.Contains(text, required) {
-				t.Errorf("%s lacks version-pinned installer fragment %q", path, required)
-			}
-		}
-	}
-
+// 利用者が渡すSSHC_VERSIONは、URLに使う前にSemVerとして検査する。
+func TestTheInstallScriptRejectsAVersionThatIsNotSemVer(t *testing.T) {
 	script := readInstallScript(t)
 	for _, required := range []string{"SSHC_VERSION is not a semantic version", "grep -Eq '^v(0|[1-9][0-9]*)"} {
 		if !strings.Contains(script, required) {
 			t.Errorf("install.sh does not reject an unsafe version input: lacks %q", required)
 		}
+	}
+}
+
+// pinnedInstallerCheck は、導入例の固定バージョンを照合するscriptのリポジトリ内のパスである。
+const pinnedInstallerCheck = "scripts/release/check-pinned-installers.sh"
+
+// 導入例の固定バージョンを公開前に照合する箇所は、どれも同じscriptを呼ぶ。
+// 文書の一覧を箇所ごとに持つと、導入例を置く文書を足したときに一覧どうしがずれる。
+func TestReleaseChecksThePinnedInstallersWithOneScript(t *testing.T) {
+	for _, path := range [][]string{
+		{"scripts", "release", "publish.sh"},
+		{".github", "workflows", "release.yml"},
+	} {
+		body := readContractFile(t, path...)
+		if !strings.Contains(body, pinnedInstallerCheck+` "$`) {
+			t.Errorf("%s does not check the pinned installers with %s", filepath.Join(path...), pinnedInstallerCheck)
+		}
+		if strings.Contains(body, "for installer_doc in") {
+			t.Errorf("%s keeps its own list of installer documents", filepath.Join(path...))
+		}
+	}
+}
+
+// Release workflowはタグのcommitにある照合scriptを実行する。mainから手動で復旧するタグは
+// このscriptより古いcommitを指し得るので、No such fileで落ちる前に理由を示して止める。
+func TestReleaseWorkflowStopsATagThatPredatesThePinnedInstallerCheck(t *testing.T) {
+	workflow := readContractFile(t, ".github", "workflows", "release.yml")
+	if !strings.Contains(workflow, "[ ! -x "+pinnedInstallerCheck+" ]") {
+		t.Errorf("release.yml runs %s without first stopping a tag whose commit predates it", pinnedInstallerCheck)
 	}
 }
 
@@ -245,6 +255,31 @@ func TestStartupScriptStartsTheForegroundEngineWithoutUpdatingSource(t *testing.
 	for _, forbidden := range []string{"\ngit pull", "\nmake update", "exec ./bin/sshc\n"} {
 		if strings.Contains(script, forbidden) {
 			t.Errorf("startup.sh mixes startup with %q", forbidden)
+		}
+	}
+}
+
+// installScriptReceiptPattern は、install.shが配置先に置くreceiptの名前を決める行である。
+var installScriptReceiptPattern = regexp.MustCompile(`(?m)^receipt="\$dir/([^"/]+)"$`)
+
+// アンインストールの手順は、install.shが配置先に残すreceiptの名前と、サービスの登録を先に消すコマンドを書く。
+// receiptの名前を変えて手順を直し忘れると、利用者は古い名前を探し、新しいreceiptを残したままにする。
+func TestTheUninstallInstructionsNameWhatTheInstallersLeave(t *testing.T) {
+	match := installScriptReceiptPattern.FindStringSubmatch(readInstallScript(t))
+	if match == nil {
+		t.Fatal(`install.sh does not name its receipt as receipt="$dir/<name>"`)
+	}
+	receiptName := match[1]
+	for _, path := range [][]string{
+		{"docs", "release-install.md"},
+		{"pages", "guide", "install.md"},
+		{"pages", "en", "guide", "install.md"},
+	} {
+		documentation := readContractFile(t, path...)
+		for _, required := range []string{receiptName, "sshc service disable", "brew uninstall aida0710/tap/sshc"} {
+			if !strings.Contains(documentation, required) {
+				t.Errorf("%s does not tell how to uninstall with %q", strings.Join(path, "/"), required)
+			}
 		}
 	}
 }

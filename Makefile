@@ -25,18 +25,26 @@ generate:
 	@# Go の検証規則と適合コーパスを web 用に生成する。規則の定義は Go 側に置く。
 	go run ./internal/validate/cmd/rulegen .
 
+# push の前に走らせる検査。CI の Go native（Linux）のジョブ全体と、Web のジョブの
+# ESLint・単体テスト・型検査と、Dead code のジョブに当たる。Web のビルドと埋め込み UI
+# の検査は make verify-generated、主要画面の axe 検査は make e2e に含まれる。
 test:
+	scripts/ci/check-gofmt.sh
+	go vet ./...
 	go test -count=1 ./...
+	@# -race の上限は CI と同じにする。理由は .github/workflows/ci.yml の
+	@# 「go test -race (Unix)」の注記にある。
 	go test -count=1 -race -timeout 20m ./...
 	@# Android 向けのビルドタグを検証する。実機向けビルドは CI の Android
 	@# ジョブで gomobile と NDK を使って検証する。
 	GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
 	$(MAKE) deadcode
+	npm run lint --prefix web
 	npm test --prefix web
 	npm run typecheck --prefix web
 
-# Linux、macOS、Windows のすべてで到達不能な関数を検出する。
-# 実装は scripts/ci/deadcode.sh を参照。
+# Linux、macOS、Windows のすべてで、参照ゼロの関数と、テストからしか届かない
+# 製品の関数を検出する。実装は scripts/ci/deadcode.sh を参照。
 deadcode:
 	scripts/ci/deadcode.sh
 
@@ -75,7 +83,9 @@ build:
 # gomobile と NDK を介して cgo を有効にしてビルドする。
 #
 # gomobile は go.mod の tool として固定してある。gobind は gomobile が PATH から
-# 探すので、`go install golang.org/x/mobile/cmd/gobind@latest` を先に一度。
+# 探すので、リポジトリの中で `go install golang.org/x/mobile/cmd/gobind` を先に一度。
+# バージョンを付けないと go.mod の golang.org/x/mobile と同じバージョンが入り、CI・Release と
+# 揃う。@latest の gobind は go.mod で固定した gomobile や bind/seq と組み合わさり、AAR が変わりうる。
 ANDROID_NDK_HOME ?= $(HOME)/Library/Android/sdk/ndk/28.2.13676358
 
 # AAR 内の engine バージョンは gomobile の ldflags で設定する。

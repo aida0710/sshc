@@ -75,9 +75,7 @@ func setupCredentialsProblem(c *echo.Context, err error) error {
 }
 
 func setupInputProblem(c *echo.Context, err error) error {
-	for _, refusal := range []error{
-		remotesync.ErrEndpointNotHTTPS, remotesync.ErrEndpointHasPath, remotesync.ErrUnsafeBucketName, remotesync.ErrUnsafeObjectPath,
-	} {
+	for _, refusal := range remotesync.TargetRefusals {
 		if errors.Is(err, refusal) {
 			return problem(c, http.StatusBadRequest, refusal.Error())
 		}
