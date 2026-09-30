@@ -1,31 +1,64 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { TerminalSession } from "../../api/terminalSessions";
-import { failureCode } from "../../api/client";
 import { useTranslate } from "../../i18n/context";
-import { Icon } from "../../ui/icons";
-import { MAX_WORKSPACE_PANES, paneIDs, paneSessionIDs, reduceLayout, storeLayout, type DockEdge, type LayoutAction, type LayoutState, type RuntimeNode, type RuntimePane } from "./layout";
+import {
+  MAX_WORKSPACE_PANES,
+  paneIds,
+  paneSessionIds,
+  reduceLayout,
+  storeLayout,
+  type LayoutAction,
+  type LayoutState,
+  type RuntimeNode,
+  type RuntimePane,
+} from "./layout";
 import { workspaceApi, type SavedWorkspace } from "./api";
 import { WorkspaceCommandCenter } from "./WorkspaceCommandCenter";
-import { consoleDragMimeType, type LiveWorkspaceSummary } from "./live";
-import { browserSessionStorage, loadLiveWorkspace, saveLiveWorkspace } from "./livePersistence";
-import { InputDialog } from "../../ui/InputDialog";
-import { ConfirmDialog } from "../../ui/ConfirmDialog";
-import { useMediaQuery } from "../../ui/useMediaQuery";
+import type { LiveWorkspaceSummary } from "./live";
+import { mobileViewportQuery, useMediaQuery } from "../../ui/useMediaQuery";
 import { SplitResizeHandle } from "../../ui/SplitResizeHandle";
-import { automaticWorkspaceName, findPane, findPaneBySession, paneForSession, paneID, restoreLiveNode, singlePaneLayout } from "./panes";
+import {
+  automaticWorkspaceName,
+  dockedPairLayout,
+  findPane,
+  findPaneBySession,
+  paneForSession,
+  singlePaneLayout,
+  withoutClosedSessions,
+} from "./panes";
+import { newIdentifier } from "../../ui/randomIdentifier";
 import { commandTargetsFor } from "./commandTargets";
-import { DockPreview, dockEdge } from "./DockPreview";
+import { DockPreview } from "./DockPreview";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
 import { WorkspaceMenu } from "./WorkspaceMenu";
+import { DeleteWorkspaceDialog, SaveWorkspaceDialog } from "./SavedWorkspaceDialogs";
+import { WorkspacePaneSwitcher } from "./WorkspacePaneSwitcher";
+import { WorkspacePaneToolbar } from "./WorkspacePaneToolbar";
+import { useSavedWorkspaces } from "./useSavedWorkspaces";
+import { usePaneDrag, type DockRequest } from "./usePaneDrag";
+import { useLiveWorkspacePersistence, type RestoredLiveWorkspace } from "./useLiveWorkspacePersistence";
 import { useWorkspaceRestore, type WorkspaceRestoreRequest } from "./useWorkspaceRestore";
+import { describeWorkspaceFailure } from "./workspaceProblem";
 import { Notice } from "../../ui/surface";
 
 export type { WorkspaceRestoreRequest } from "./useWorkspaceRestore";
 export type WorkspaceRenameRequest = { name: string; sequence: number };
 
 export function TerminalWorkspace({
-  sessions, activeSessionId, onActive, onOpenAlias, onOpenShell, onClose, renderTerminal, restoreRequest = null, onRestoreConsumed = () => undefined,
-  renameRequest = null, onRenameConsumed = () => undefined, onLiveWorkspaceChange = () => undefined, sessionsLoaded = true,
+  sessions,
+  activeSessionId,
+  onActive,
+  onOpenAlias,
+  onOpenShell,
+  onClose,
+  renderTerminal,
+  restoreRequest = null,
+  onRestoreConsumed = () => undefined,
+  onRestoringChange = () => undefined,
+  renameRequest = null,
+  onRenameConsumed = () => undefined,
+  onLiveWorkspaceChange = () => undefined,
+  sessionsLoaded = true,
 }: {
   sessions: TerminalSession[];
   activeSessionId: string | null;
@@ -36,6 +69,7 @@ export function TerminalWorkspace({
   renderTerminal: (session: TerminalSession) => ReactNode;
   restoreRequest?: WorkspaceRestoreRequest | null;
   onRestoreConsumed?: (sequence: number) => void;
+  onRestoringChange?: (restoring: boolean) => void;
   renameRequest?: WorkspaceRenameRequest | null;
   onRenameConsumed?: (sequence: number) => void;
   onLiveWorkspaceChange?: (workspace: LiveWorkspaceSummary | null) => void;
@@ -43,173 +77,123 @@ export function TerminalWorkspace({
 }) {
   const t = useTranslate();
   const [layout, setLayout] = useState<LayoutState | null>(null);
-  const [saved, setSaved] = useState<SavedWorkspace[]>([]);
+  const { saved, loadFailed: savedLoadFailed, reload: loadSaved } = useSavedWorkspaces();
   const [selectedWorkspace, setSelectedWorkspace] = useState("");
   const [commandCenter, setCommandCenter] = useState(false);
   const [focusModePaneId, setFocusModePaneId] = useState<string | null>(null);
-  const [movingPaneId, setMovingPaneId] = useState<string | null>(null);
-  const [dockTarget, setDockTarget] = useState<{ paneId: string; edge: DockEdge } | null>(null);
-  const compactViewport = useMediaQuery("(max-width: 767px)");
+  const compactViewport = useMediaQuery(mobileViewportQuery);
   const [problem, setProblem] = useState("");
-  const [liveRestoreReady, setLiveRestoreReady] = useState(false);
   const [liveWorkspaceName, setLiveWorkspaceName] = useState("");
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [deletingWorkspace, setDeletingWorkspace] = useState<SavedWorkspace | null>(null);
   const consumedRename = useRef(0);
-  const liveWorkspaceID = useRef(paneID());
-  const liveStorage = useMemo(() => browserSessionStorage(), []);
+  const liveWorkspaceId = useRef(newIdentifier());
   const beginRestore = useCallback((id: string) => {
     setSelectedWorkspace(id);
     setLiveWorkspaceName("");
     setFocusModePaneId(null);
   }, []);
   const restoreWorkspace = useWorkspaceRestore({
-    restoreRequest, onRestoreConsumed, onOpenAlias, onOpenShell, onClose, onActive,
+    restoreRequest, onRestoreConsumed, onRestoringChange, onOpenAlias, onOpenShell, onClose, onActive,
     onBegin: beginRestore, setLayout, report: setProblem,
   });
   const active = sessions.find((session) => session.id === activeSessionId) ?? null;
-  const sessionByID = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
-  const layoutSessionIDs = useMemo(() => layout === null ? [] : paneSessionIDs(layout.root), [layout]);
-  const showingWorkspace = layout !== null && (activeSessionId === null || layoutSessionIDs.includes(activeSessionId));
+  const sessionById = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
+  const layoutSessionIds = useMemo(() => layout === null ? [] : paneSessionIds(layout.root), [layout]);
+  const showingWorkspace = layout !== null && (activeSessionId === null || layoutSessionIds.includes(activeSessionId));
   const visibleLayout = showingWorkspace ? layout : null;
-  const commandTargets = useMemo(() => commandTargetsFor(visibleLayout, active, sessionByID), [active, sessionByID, visibleLayout]);
+  const commandTargets = useMemo(() => commandTargetsFor(visibleLayout, active, sessionById), [active, sessionById, visibleLayout]);
   const connectedCommandTargets = commandTargets.filter((target) => target.connected).length;
-  const workspacePaneCount = visibleLayout === null ? (active === null ? 0 : 1) : paneIDs(visibleLayout.root).length;
-  const workspaceDisplayName = useMemo(() => {
-    if (visibleLayout === null) return active?.title ?? t("workspace.live");
-    const liveName = liveWorkspaceName.trim();
-    if (liveName !== "") return liveName;
-    const selectedName = saved.find((item) => item.id === selectedWorkspace)?.name.trim() ?? "";
-    if (selectedName !== "") return selectedName;
-    return automaticWorkspaceName(visibleLayout) || t("workspace.live");
-  }, [active?.title, liveWorkspaceName, saved, selectedWorkspace, t, visibleLayout]);
+  const workspacePaneCount = visibleLayout === null ? (active === null ? 0 : 1) : paneIds(visibleLayout.root).length;
+  const selectedWorkspaceName = saved.find((item) => item.id === selectedWorkspace)?.name ?? "";
+  // A split is called by the name given to it, else by the saved layout it
+  // came from, else by its panes.
+  const nameLayout = useCallback(
+    (target: LayoutState) =>
+      liveWorkspaceName.trim() || selectedWorkspaceName.trim() || automaticWorkspaceName(target) || t("workspace.live"),
+    [liveWorkspaceName, selectedWorkspaceName, t],
+  );
+  const workspaceDisplayName = visibleLayout === null ? active?.title ?? t("workspace.live") : nameLayout(visibleLayout);
 
-  useEffect(() => { void workspaceApi.list().then(setSaved).catch(() => undefined); }, []);
   useEffect(() => {
     document.title = active === null ? "sshc" : `${active.presentation?.displayTitle ?? active.title} · sshc`;
     return () => { document.title = "sshc"; };
   }, [active]);
-  useEffect(() => {
-    if (!sessionsLoaded || liveRestoreReady) return;
-    if (restoreRequest !== null) {
-      setLiveRestoreReady(true);
-      return;
-    }
-    const restored = loadLiveWorkspace(liveStorage, new Set(sessionByID.keys()));
-    if (restored !== null) {
-      const root = restoreLiveNode(restored.root, sessionByID);
-      if (root !== null && paneIDs(root).length > 1) {
-        const focusedPaneId = paneIDs(root).includes(restored.focusedPaneId)
-          ? restored.focusedPaneId
-          : paneIDs(root)[0] ?? "";
-        const next = { root, focusedPaneId };
-        setLayout(next);
-        setFocusModePaneId(restored.focusModePaneId);
-        setLiveWorkspaceName(restored.name);
-        const focusedSessionId = findPane(root, focusedPaneId)?.sessionId;
-        if (focusedSessionId !== undefined) onActive(focusedSessionId);
-      }
-    }
-    setLiveRestoreReady(true);
-  }, [liveRestoreReady, liveStorage, onActive, restoreRequest, sessionByID, sessionsLoaded]);
-  useEffect(() => {
-    if (!sessionsLoaded || !liveRestoreReady) return;
-    saveLiveWorkspace(liveStorage, layout, focusModePaneId, liveWorkspaceName);
-  }, [focusModePaneId, layout, liveRestoreReady, liveStorage, liveWorkspaceName, sessionsLoaded]);
+  const restoreLive = useCallback((restored: RestoredLiveWorkspace) => {
+    setLayout(restored.layout);
+    setFocusModePaneId(restored.focusModePaneId);
+    setLiveWorkspaceName(restored.name);
+    if (restored.focusedSessionId !== undefined) onActive(restored.focusedSessionId);
+  }, [onActive]);
+  const liveRestoreReady = useLiveWorkspacePersistence({
+    sessionsLoaded,
+    restoreRequest,
+    sessionById,
+    layout,
+    focusModePaneId,
+    name: liveWorkspaceName,
+    onRestored: restoreLive,
+  });
   useEffect(() => {
     if (layout === null && liveRestoreReady) setLiveWorkspaceName("");
   }, [layout, liveRestoreReady]);
   useEffect(() => {
-    if (movingPaneId === null) return;
-    if (layout === null || !paneIDs(layout.root).includes(movingPaneId)) {
-      setMovingPaneId(null);
-    }
-  }, [layout, movingPaneId]);
-  useEffect(() => {
     if (focusModePaneId === null) return;
-    if (layout === null || !paneIDs(layout.root).includes(focusModePaneId)) setFocusModePaneId(null);
+    if (layout === null || !paneIds(layout.root).includes(focusModePaneId)) setFocusModePaneId(null);
   }, [focusModePaneId, layout]);
   useEffect(() => {
     if (layout === null) {
       onLiveWorkspaceChange(null);
       return;
     }
-    const memberSessionIds = paneSessionIDs(layout.root);
+    const memberSessionIds = paneSessionIds(layout.root);
     if (memberSessionIds.length < 2) {
       onLiveWorkspaceChange(null);
       return;
     }
-    const selectedName = saved.find((item) => item.id === selectedWorkspace)?.name.trim() ?? "";
-    const automaticName = automaticWorkspaceName(layout);
     const focusedSessionId = findPane(layout.root, layout.focusedPaneId)?.sessionId ?? memberSessionIds[0] ?? "";
     onLiveWorkspaceChange({
-      id: liveWorkspaceID.current,
-      name: liveWorkspaceName.trim() || selectedName || automaticName || t("workspace.live"),
+      id: liveWorkspaceId.current,
+      name: nameLayout(layout),
       memberSessionIds,
       focusedSessionId,
     });
-  }, [layout, liveWorkspaceName, onLiveWorkspaceChange, saved, selectedWorkspace, t]);
+  }, [layout, nameLayout, onLiveWorkspaceChange]);
   useEffect(() => {
-    if (layout === null) return;
-    // Opening several saved panes causes independent session refreshes. A short
-    // response can therefore omit a session that another response has just
-    // created. Reconcile only after the session list has stayed missing long
-    // enough to distinguish a real close from that transient view.
-    const timer = window.setTimeout(() => {
-      const available = new Set(sessions.map((session) => session.id));
-      setLayout((current) => {
-        if (current === null) return null;
-        let next = current;
-        for (const paneId of paneIDs(current.root)) {
-          const pane = findPane(next.root, paneId);
-          if (pane?.sessionId !== undefined && !available.has(pane.sessionId)) {
-            next = reduceLayout(next, { type: "close", paneId });
-          }
-        }
-        return paneIDs(next.root).length < 2 ? null : next;
-      });
-    }, 500);
-    return () => window.clearTimeout(timer);
-  }, [layout, sessions]);
+    // The session list keeps every session from the moment its open returns
+    // until it is closed (useTerminalSessions), so a pane of this render whose
+    // session this render does not list belongs to a closed session. Only
+    // those are closed: by the time this runs, the layout may already hold a
+    // pane for a session opened later, whose listing has not rendered yet.
+    const listed = new Set(sessions.map((session) => session.id));
+    const closed = new Set(layoutSessionIds.filter((id) => !listed.has(id)));
+    if (closed.size === 0) return;
+    setLayout((current) => current === null ? null : withoutClosedSessions(current, closed));
+  }, [layoutSessionIds, sessions]);
   useEffect(() => {
     const exit = (event: KeyboardEvent) => { if (event.key === "Escape") setFocusModePaneId(null); };
     window.addEventListener("keydown", exit);
     return () => window.removeEventListener("keydown", exit);
   }, []);
   useEffect(() => {
-    if (layout === null || activeSessionId === null || !layoutSessionIDs.includes(activeSessionId)) return;
+    if (layout === null || activeSessionId === null || !layoutSessionIds.includes(activeSessionId)) return;
     const pane = findPaneBySession(layout.root, activeSessionId);
     if (pane !== null && pane.id !== layout.focusedPaneId) {
       setLayout((current) => current === null ? current : reduceLayout(current, { type: "focus", paneId: pane.id }));
     }
-  }, [activeSessionId, layout, layoutSessionIDs]);
+  }, [activeSessionId, layout, layoutSessionIds]);
 
   function update(action: LayoutAction) { setLayout((current) => current === null ? current : reduceLayout(current, action)); }
 
-  function finishPaneMove(sourcePaneId: string, targetPaneId: string) {
-    if (sourcePaneId !== targetPaneId) update({ type: "swap-panes", sourcePaneId, targetPaneId });
-    setMovingPaneId(null);
-  }
+  const paneDrag = usePaneDrag({
+    layout,
+    onSwap: (sourcePaneId, targetPaneId) => update({ type: "swap-panes", sourcePaneId, targetPaneId }),
+    onDock: dockSession,
+  });
+  const { movingPaneId, dockTarget } = paneDrag;
 
-  function choosePaneMove(paneId: string) {
-    if (movingPaneId === null) {
-      setMovingPaneId(paneId);
-      return;
-    }
-    finishPaneMove(movingPaneId, paneId);
-  }
-
-  function beginPaneDrag(event: DragEvent<HTMLButtonElement>, paneId: string) {
-    event.stopPropagation();
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", paneId);
-    const sessionId = layout === null ? undefined : findPane(layout.root, paneId)?.sessionId;
-    if (sessionId !== undefined) event.dataTransfer.setData(consoleDragMimeType, sessionId);
-    setMovingPaneId(paneId);
-  }
-
-  function dockSession(sourceSessionId: string, targetPaneId: string, edge: DockEdge, targetSession?: TerminalSession) {
-    const source = sessionByID.get(sourceSessionId);
+  function dockSession({ sourceSessionId, targetPaneId, edge, targetSession }: DockRequest) {
+    const source = sessionById.get(sourceSessionId);
     if (source === undefined) return;
     if (targetSession !== undefined) {
       if (targetSession.id === source.id) return;
@@ -217,23 +201,16 @@ export function TerminalWorkspace({
         setProblem(t("workspace.oneLiveOnly"));
         return;
       }
-      const targetPaneId = paneID();
-      const next = reduceLayout(singlePaneLayout(targetSession, targetPaneId), {
-        type: "dock-pane",
-        targetPaneId,
-        edge,
-        pane: paneForSession(source),
-      });
       setSelectedWorkspace("");
       setLiveWorkspaceName("");
-      setLayout(next);
+      setLayout(dockedPairLayout(targetSession, source, edge));
       setProblem("");
       onActive(source.id);
       return;
     }
     if (layout === null || !showingWorkspace) return;
     const existing = findPaneBySession(layout.root, source.id);
-    if (existing === null && paneIDs(layout.root).length >= MAX_WORKSPACE_PANES) {
+    if (existing === null && paneIds(layout.root).length >= MAX_WORKSPACE_PANES) {
       setProblem(t("workspace.maxPanes", { count: MAX_WORKSPACE_PANES }));
       return;
     }
@@ -243,37 +220,9 @@ export function TerminalWorkspace({
     onActive(source.id);
   }
 
-  function dragOverPane(event: DragEvent<HTMLDivElement>, targetPaneId: string) {
-    const acceptsConsole = event.dataTransfer.types?.includes(consoleDragMimeType) === true || movingPaneId !== null;
-    if (!acceptsConsole) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "move";
-    setDockTarget({ paneId: targetPaneId, edge: dockEdge(event) });
-  }
-
-  function dropPane(event: DragEvent<HTMLDivElement>, targetPaneId: string) {
-    event.preventDefault();
-    event.stopPropagation();
-    const sourceSessionId = event.dataTransfer.getData(consoleDragMimeType) ||
-      (movingPaneId === null || layout === null ? "" : findPane(layout.root, movingPaneId)?.sessionId ?? "");
-    const edge = dockTarget?.paneId === targetPaneId ? dockTarget.edge : dockEdge(event);
-    if (sourceSessionId !== "") dockSession(sourceSessionId, targetPaneId, edge);
-    setMovingPaneId(null);
-    setDockTarget(null);
-  }
-
-  function dropOnSingle(event: DragEvent<HTMLDivElement>, target: TerminalSession) {
-    event.preventDefault();
-    event.stopPropagation();
-    const sourceSessionId = event.dataTransfer.getData(consoleDragMimeType);
-    if (sourceSessionId !== "") dockSession(sourceSessionId, target.id, dockEdge(event), target);
-    setDockTarget(null);
-  }
-
   function detachPane(paneId: string) {
     if (layout === null) return;
-    if (paneIDs(layout.root).length <= 2) {
+    if (paneIds(layout.root).length <= 2) {
       setLayout(null);
       setFocusModePaneId(null);
       setSelectedWorkspace("");
@@ -288,16 +237,29 @@ export function TerminalWorkspace({
     if (effective === null) return;
     try {
       const stored = storeLayout(effective);
-      const value = selectedWorkspace === "" ? await workspaceApi.create({ name, ...stored }) : await workspaceApi.update(selectedWorkspace, { name, ...stored });
-      setSelectedWorkspace(value.id); setLiveWorkspaceName(value.name); setSaved(await workspaceApi.list()); setProblem("");
-    } catch (error) { setProblem(failureCode(error) || "workspace_failed"); }
+      const value = selectedWorkspace === ""
+        ? await workspaceApi.create({ name, ...stored })
+        : await workspaceApi.update(selectedWorkspace, { name, ...stored });
+      setSelectedWorkspace(value.id);
+      setLiveWorkspaceName(value.name);
+      setProblem("");
+    } catch (error) {
+      setProblem(describeWorkspaceFailure(t, error));
+      return;
+    }
+    await loadSaved();
   }
 
   async function deleteWorkspace(id: string) {
     try {
       await workspaceApi.remove(id);
-      setSelectedWorkspace(""); setSaved(await workspaceApi.list()); setProblem("");
-    } catch (error) { setProblem(failureCode(error) || "workspace_failed"); }
+      setSelectedWorkspace("");
+      setProblem("");
+    } catch (error) {
+      setProblem(describeWorkspaceFailure(t, error));
+      return;
+    }
+    await loadSaved();
   }
 
   useEffect(() => {
@@ -308,64 +270,99 @@ export function TerminalWorkspace({
     if (layout !== null && name !== "") setLiveWorkspaceName(name);
   }, [layout, onRenameConsumed, renameRequest]);
 
-  function terminal(session: TerminalSession) { return renderTerminal(session); }
+  // A shell pane is named by its session's title; an SSH pane by its alias,
+  // which it keeps while its session is being reopened.
+  function paneLabel(pane: RuntimePane): string {
+    if (pane.kind !== "shell" || pane.sessionId === undefined) return pane.alias;
+    return sessionById.get(pane.sessionId)?.title ?? pane.alias;
+  }
+
+  function switchToPane(pane: RuntimePane) {
+    update({ type: "focus", paneId: pane.id });
+    if (pane.sessionId !== undefined) onActive(pane.sessionId);
+  }
 
   function singleTerminal(session: TerminalSession) {
     const docking = dockTarget?.paneId === session.id;
-    return <div
-      data-single-terminal-drop-target={session.id}
-      className={`relative flex h-full min-h-0 flex-col ${docking ? "ring-2 ring-inset ring-live" : ""}`}
-      onDragEnter={(event) => {
-        if (event.dataTransfer.types?.includes(consoleDragMimeType) !== true) return;
-        event.preventDefault();
-        setDockTarget({ paneId: session.id, edge: dockEdge(event) });
-      }}
-      onDragOver={(event) => {
-        if (event.dataTransfer.types?.includes(consoleDragMimeType) !== true) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-        setDockTarget({ paneId: session.id, edge: dockEdge(event) });
-      }}
-      onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDockTarget(null); }}
-      onDrop={(event) => dropOnSingle(event, session)}
-    >
-      {terminal(session)}
-      {docking ? <DockPreview edge={dockTarget.edge} /> : null}
-    </div>;
+    return (
+      <div
+        data-single-terminal-drop-target={session.id}
+        className={`relative flex h-full min-h-0 flex-col ${docking ? "ring-2 ring-inset ring-live" : ""}`}
+        onDragEnter={(event) => paneDrag.dragOverSingle(event, session)}
+        onDragOver={(event) => paneDrag.dragOverSingle(event, session)}
+        onDragLeave={paneDrag.leaveSingle}
+        onDrop={(event) => paneDrag.dropOnSingle(event, session)}
+      >
+        {renderTerminal(session)}
+        {docking ? <DockPreview edge={dockTarget.edge} /> : null}
+      </div>
+    );
   }
 
   function renderNode(node: RuntimeNode, path: ("first" | "second")[] = []): ReactNode {
     if (node.pane !== undefined) {
-      const session = node.pane.sessionId === undefined ? undefined : sessionByID.get(node.pane.sessionId);
-      const paneLabel = node.pane.kind === "shell" ? session?.title ?? node.pane.alias : node.pane.alias;
-      const multiple = layout !== null && paneIDs(layout.root).length > 1;
-      const moving = movingPaneId === node.pane.id;
-      const docking = dockTarget?.paneId === node.pane.id && !moving;
+      const pane = node.pane;
+      const session = pane.sessionId === undefined ? undefined : sessionById.get(pane.sessionId);
+      const multiple = layout !== null && paneIds(layout.root).length > 1;
+      const moving = movingPaneId === pane.id;
+      const docking = dockTarget?.paneId === pane.id && !moving;
+      const border = layout?.focusedPaneId === pane.id ? "border-accent" : "border-line";
+      const ring = moving ? "ring-2 ring-accent" : docking ? "ring-2 ring-live" : "";
       return (
         <div
-          key={node.pane.id}
-          data-workspace-pane={node.pane.id}
-          data-pane-alias={node.pane.alias}
-          className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border ${layout?.focusedPaneId === node.pane.id ? "border-accent" : "border-line"} ${moving ? "ring-2 ring-accent" : docking ? "ring-2 ring-live" : ""}`}
-          onPointerDown={() => { update({ type: "focus", paneId: node.pane.id }); if (session !== undefined) onActive(session.id); }}
-          onDragEnter={(event) => dragOverPane(event, node.pane.id)}
-          onDragOver={(event) => dragOverPane(event, node.pane.id)}
-          onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDockTarget((current) => current?.paneId === node.pane.id ? null : current); }}
-          onDrop={(event) => dropPane(event, node.pane.id)}
+          key={pane.id}
+          data-workspace-pane={pane.id}
+          data-pane-alias={pane.alias}
+          className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border ${border} ${ring}`}
+          onPointerDown={() => {
+            update({ type: "focus", paneId: pane.id });
+            if (session !== undefined) onActive(session.id);
+          }}
+          onDragEnter={(event) => paneDrag.dragOverPane(event, pane.id)}
+          onDragOver={(event) => paneDrag.dragOverPane(event, pane.id)}
+          onDragLeave={(event) => paneDrag.leavePane(event, pane.id)}
+          onDrop={(event) => paneDrag.dropOnPane(event, pane.id)}
         >
-          {multiple && !compactViewport ? <div data-pane-toolbar className="flex h-7 shrink-0 items-center gap-1 border-b border-line bg-toolbar px-1">
-            <button type="button" draggable aria-pressed={moving} aria-label={t(moving ? "workspace.movePanePicked" : "workspace.movePane", { alias: paneLabel })} title={t("workspace.movePane", { alias: paneLabel })} className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-xs text-ink-muted hover:bg-select-fill active:cursor-grabbing" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); choosePaneMove(node.pane.id); }} onDragStart={(event) => beginPaneDrag(event, node.pane.id)} onDragEnd={() => setMovingPaneId(null)} onKeyDown={(event) => { if (event.key === "Escape") setMovingPaneId(null); }}><Icon name="movePane" className="size-3.5" /></button>
-            <span className="min-w-0 grow truncate text-xs font-medium text-ink-muted">{paneLabel}</span>
-            <button type="button" aria-pressed={focusModePaneId === node.pane.id} aria-label={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: paneLabel })} title={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: paneLabel })} className="flex size-6 shrink-0 items-center justify-center rounded text-xs text-ink-muted hover:bg-select-fill" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setFocusModePaneId((current) => current === node.pane.id ? null : node.pane.id); }}><Icon name="focus" className="size-3.5" /></button>
-            <button type="button" aria-label={t("workspace.detachPane")} title={t("workspace.detachPane")} className="flex size-6 shrink-0 items-center justify-center rounded text-sm text-ink-muted hover:bg-select-fill" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); detachPane(node.pane.id); }}><Icon name="close" className="size-3.5" /></button>
-          </div> : null}
-          <div className="flex min-h-0 flex-1 flex-col">{session === undefined ? <div className="grid h-full min-h-40 place-items-center text-sm text-ink-muted">{node.pane.state === "failed" ? t("terminal.openFailed") : t("workspace.reconnecting")}</div> : terminal(session)}</div>
+          {multiple && !compactViewport ? (
+            <WorkspacePaneToolbar
+              paneLabel={paneLabel(pane)}
+              moving={moving}
+              inFocusMode={focusModePaneId === pane.id}
+              onPickToMove={() => paneDrag.pickToMove(pane.id)}
+              onMoveDragStart={(event) => paneDrag.beginMoveDrag(event, pane.id)}
+              onCancelMove={paneDrag.cancelMove}
+              onToggleFocusMode={() => setFocusModePaneId((current) => current === pane.id ? null : pane.id)}
+              onDetach={() => detachPane(pane.id)}
+            />
+          ) : null}
+          <div className="flex min-h-0 flex-1 flex-col">
+            {session === undefined ? (
+              <div className="grid h-full min-h-40 place-items-center text-sm text-ink-muted">
+                {pane.state === "failed" ? t("terminal.openFailed") : t("workspace.reconnecting")}
+              </div>
+            ) : renderTerminal(session)}
+          </div>
           {docking ? <DockPreview edge={dockTarget.edge} /> : null}
         </div>
       );
     }
-    const row = node.split.direction === "horizontal";
-    return <div className={`flex h-full min-h-0 min-w-0 flex-1 ${row ? "flex-row" : "flex-col"}`}><div style={{ flexBasis: `${node.split.ratio}%` }} className="flex min-h-0 min-w-0">{renderNode(node.split.first, [...path, "first"])}</div><SplitResizeHandle direction={node.split.direction} ratio={node.split.ratio} label={t("workspace.resizeSplit")} onRatioChange={(ratio) => update({ type: "resize-split", path, ratio })} /><div style={{ flexBasis: `${100 - node.split.ratio}%` }} className="flex min-h-0 min-w-0">{renderNode(node.split.second, [...path, "second"])}</div></div>;
+    const { split } = node;
+    return (
+      <div className={`flex h-full min-h-0 min-w-0 flex-1 ${split.direction === "horizontal" ? "flex-row" : "flex-col"}`}>
+        <div style={{ flexBasis: `${split.ratio}%` }} className="flex min-h-0 min-w-0">
+          {renderNode(split.first, [...path, "first"])}
+        </div>
+        <SplitResizeHandle
+          direction={split.direction}
+          ratio={split.ratio}
+          label={t("workspace.resizeSplit")}
+          onRatioChange={(ratio) => update({ type: "resize-split", path, ratio })}
+        />
+        <div style={{ flexBasis: `${100 - split.ratio}%` }} className="flex min-h-0 min-w-0">
+          {renderNode(split.second, [...path, "second"])}
+        </div>
+      </div>
+    );
   }
 
   const empty = active === null && visibleLayout === null;
@@ -374,10 +371,15 @@ export function TerminalWorkspace({
   const displayedNode = compactViewport && compactPane !== null
     ? { pane: compactPane } as RuntimeNode
     : focusNode === null ? visibleLayout?.root ?? null : { pane: focusNode } as RuntimeNode;
-  const compactPanes = visibleLayout === null ? [] : paneIDs(visibleLayout.root).map((id) => findPane(visibleLayout.root, id)).filter((pane): pane is RuntimePane => pane !== null);
+  const compactPanes = visibleLayout === null
+    ? []
+    : paneIds(visibleLayout.root)
+      .map((id) => findPane(visibleLayout.root, id))
+      .filter((pane): pane is RuntimePane => pane !== null);
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {workspacePaneCount !== 1 ? (
+      {/* 管理操作はdesktop向け。1つのターミナルのときとスマホでは出さない。 */}
+      {workspacePaneCount !== 1 && !compactViewport ? (
         <WorkspaceMenu
           displayName={workspaceDisplayName}
           paneCount={workspacePaneCount}
@@ -386,6 +388,8 @@ export function TerminalWorkspace({
           inFocusMode={focusModePaneId !== null}
           onExitFocusMode={() => setFocusModePaneId(null)}
           saved={saved}
+          savedLoadFailed={savedLoadFailed}
+          onReloadSaved={() => void loadSaved()}
           selected={selectedWorkspace}
           onSelect={setSelectedWorkspace}
           canSave={visibleLayout !== null || active !== null}
@@ -394,32 +398,24 @@ export function TerminalWorkspace({
           onDelete={(id) => setDeletingWorkspace(saved.find((item) => item.id === id) ?? null)}
         />
       ) : null}
-      {commandCenter && commandTargets.length > 0 ? <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} /> : null}
+      {commandCenter && commandTargets.length > 0 ? (
+        <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} />
+      ) : null}
       {saveDialogOpen ? (
-        <InputDialog
-          id="workspace-save-heading"
-          heading={t("workspace.save")}
-          label={t("workspace.namePrompt")}
-          initialValue={liveWorkspaceName.trim() || (saved.find((item) => item.id === selectedWorkspace)?.name ?? "")}
-          submitLabel={t("workspace.saveConfirm")}
-          cancelLabel={t("workspace.cancel")}
-          validate={(value) => value === "" ? t("workspace.nameRequired") : ""}
-          onSubmit={(value) => {
+        <SaveWorkspaceDialog
+          initialName={liveWorkspaceName.trim() || selectedWorkspaceName}
+          onSave={(name) => {
             setSaveDialogOpen(false);
-            void saveWorkspace(value);
+            void saveWorkspace(name);
           }}
           onCancel={() => setSaveDialogOpen(false)}
         />
       ) : null}
       {deletingWorkspace === null ? null : (
-        <ConfirmDialog
-          id="workspace-delete-heading"
-          heading={t("workspace.deleteHeading", { name: deletingWorkspace.name })}
-          body={<p className="text-sm text-ink-muted">{t("workspace.deleteBody")}</p>}
-          confirmLabel={t("workspace.confirmDelete")}
-          cancelLabel={t("workspace.cancel")}
+        <DeleteWorkspaceDialog
+          workspace={deletingWorkspace}
           onCancel={() => setDeletingWorkspace(null)}
-          onConfirm={() => {
+          onDelete={() => {
             setDeletingWorkspace(null);
             void deleteWorkspace(deletingWorkspace.id);
           }}
@@ -427,16 +423,19 @@ export function TerminalWorkspace({
       )}
       {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
       {compactViewport && compactPanes.length > 1 ? (
-        <nav aria-label={t("workspace.mobilePaneSwitcher")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-toolbar px-2 py-1">
-          {compactPanes.map((pane) => (
-            <button key={pane.id} type="button" aria-current={pane.id === visibleLayout?.focusedPaneId ? "page" : undefined} className={`max-w-40 shrink-0 truncate rounded px-3 py-1.5 text-xs ${pane.id === visibleLayout?.focusedPaneId ? "bg-select-fill text-ink" : "text-ink-muted"}`} onClick={() => { update({ type: "focus", paneId: pane.id }); if (pane.sessionId !== undefined) onActive(pane.sessionId); }}>{pane.kind === "shell" && pane.sessionId !== undefined ? sessionByID.get(pane.sessionId)?.title ?? pane.alias : pane.alias}</button>
-          ))}
-        </nav>
+        <WorkspacePaneSwitcher
+          panes={compactPanes}
+          focusedPaneId={visibleLayout?.focusedPaneId}
+          paneLabel={paneLabel}
+          onFocus={switchToPane}
+        />
       ) : null}
       <div className="flex min-h-0 flex-1 flex-col">
         {empty ? (
           <WorkspaceEmptyState />
-        ) : visibleLayout === null ? (active === null ? null : singleTerminal(active)) : displayedNode === null ? null : renderNode(displayedNode)}
+        ) : visibleLayout === null ? (
+          active === null ? null : singleTerminal(active)
+        ) : displayedNode === null ? null : renderNode(displayedNode)}
       </div>
     </div>
   );

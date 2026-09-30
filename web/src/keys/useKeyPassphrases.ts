@@ -1,18 +1,17 @@
 import { useCallback } from "react";
 import type { Credential, CredentialList } from "../api/credentials";
-import type { MessageKey } from "../i18n/messages";
 import type { KeyItem } from "./api";
 import { useStoredPhrases } from "./forms";
 import type { KeySecretsApi } from "./secretsApi";
+import { KeyOperationRefused } from "./useKeyOperation";
 
 function keyPassphrasesIn(listed: CredentialList): Credential[] {
   return listed.credentials.filter((credential) => credential.kind === "key_passphrase");
 }
 
 // useKeyPassphrases keeps the stored passphrases the key list can assign and
-// runs the vault calls that change them. Every call answers with the message
-// key to show on failure, or null when it went through; the screen owns the
-// notice.
+// runs the vault calls that change them. A call that fails throws; the screen
+// runs each call as a key operation and owns the notice and its wording.
 export function useKeyPassphrases(secrets: KeySecretsApi) {
   const stored = useStoredPhrases();
   const { setPhrases, setDedicatedPhrasePaths, setChosenPhrase } = stored;
@@ -35,33 +34,20 @@ export function useKeyPassphrases(secrets: KeySecretsApi) {
     }
   }, [secrets, setDedicatedPhrasePaths, setPhrases]);
 
-  async function assign(item: KeyItem, name: string): Promise<MessageKey | null> {
-    try {
-      applyAssignment(await secrets.assignCredential("key_passphrase", item.relativePath, name), item);
-      return null;
-    } catch {
-      return "keys.assignPassphraseFailed";
-    }
+  async function assign(item: KeyItem, name: string): Promise<void> {
+    applyAssignment(await secrets.assignCredential("key_passphrase", item.relativePath, name), item);
   }
 
-  async function storeAndAssign(item: KeyItem, name: string, secret: string): Promise<MessageKey | null> {
-    if (stored.phrases.some((credential) => credential.name === name)) return "keys.storedPassphraseExists";
-    try {
-      await secrets.storeCredential("key_passphrase", name, secret);
-      applyAssignment(await secrets.assignCredential("key_passphrase", item.relativePath, name), item);
-      return null;
-    } catch {
-      return "keys.storePassphraseFailed";
+  async function storeAndAssign(item: KeyItem, name: string, secret: string): Promise<void> {
+    if (stored.phrases.some((credential) => credential.name === name)) {
+      throw new KeyOperationRefused("keys.storedPassphraseExists");
     }
+    await secrets.storeCredential("key_passphrase", name, secret);
+    applyAssignment(await secrets.assignCredential("key_passphrase", item.relativePath, name), item);
   }
 
-  async function unassign(item: KeyItem): Promise<MessageKey | null> {
-    try {
-      applyAssignment(await secrets.unassignCredential("key_passphrase", item.relativePath), item);
-      return null;
-    } catch {
-      return "keys.unassignPassphraseFailed";
-    }
+  async function unassign(item: KeyItem): Promise<void> {
+    applyAssignment(await secrets.unassignCredential("key_passphrase", item.relativePath), item);
   }
 
   return { ...stored, load, assign, storeAndAssign, unassign };

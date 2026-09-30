@@ -51,7 +51,7 @@ func TestALineWithoutADirectiveIsStillNamed(t *testing.T) {
 		Code: CodeSecretsMissing, Field: "secrets.openvpnConfig", Reason: string(vpn.ReasonTooLong), Limit: 254, Line: 7,
 	})
 
-	if sentence != "secrets.openvpnConfig: 7行目：長すぎます（254文字まで）。" {
+	if sentence != "secrets.openvpnConfig：7行目：長すぎます（254文字まで）。" {
 		t.Fatalf("sentence = %q", sentence)
 	}
 }

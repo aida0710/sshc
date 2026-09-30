@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { useDismissibleLayer } from "./useDismissibleLayer";
+import { escapeOwnerProps, useDismissibleLayer } from "./useDismissibleLayer";
 
 function Layer({ name, close }: { name: string; close: () => void }) {
   const panel = useRef<HTMLDivElement>(null);
@@ -96,4 +96,49 @@ it("keeps a parent modal open while a nested menu handles Android back", async (
   expect(screen.getByRole("dialog", { name: "Parent" })).toBeInTheDocument();
   act(() => { window.dispatchEvent(new Event("sshc-android-back", { cancelable: true })); });
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+describe("Escape inside a region that uses Escape itself", () => {
+  function EditorDialog({ close, editorUsesEscape }: { close: () => void; editorUsesEscape: boolean }) {
+    const panel = useRef<HTMLDivElement>(null);
+    const editor = useRef<HTMLTextAreaElement>(null);
+    useDismissibleLayer({ open: true, containerRefs: [panel], trapFocus: true, onDismiss: close });
+    // Monaco と xterm は、自分で使った Escape を DOM の listener で止める。
+    useEffect(() => {
+      const input = editor.current;
+      if (input === null || !editorUsesEscape) return;
+      const closeFindWidget = (event: KeyboardEvent) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+      };
+      input.addEventListener("keydown", closeFindWidget);
+      return () => input.removeEventListener("keydown", closeFindWidget);
+    }, [editorUsesEscape]);
+    return <div ref={panel} role="dialog" aria-label="Editor">
+      <div {...escapeOwnerProps}><textarea ref={editor} aria-label="Contents" /></div>
+    </div>;
+  }
+
+  it("keeps the dialog open when the editor uses Escape", async () => {
+    const close = vi.fn();
+    const user = userEvent.setup();
+    render(<EditorDialog close={close} editorUsesEscape />);
+
+    await user.click(screen.getByRole("textbox", { name: "Contents" }));
+    await user.keyboard("{Escape}");
+
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("closes the dialog when the editor leaves Escape unused", async () => {
+    const close = vi.fn();
+    const user = userEvent.setup();
+    render(<EditorDialog close={close} editorUsesEscape={false} />);
+
+    await user.click(screen.getByRole("textbox", { name: "Contents" }));
+    await user.keyboard("{Escape}");
+
+    expect(close).toHaveBeenCalledWith("escape");
+  });
 });

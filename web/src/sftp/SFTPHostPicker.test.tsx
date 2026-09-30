@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { HostEntry } from "../api/config";
+import { LanguageProvider } from "../i18n/context";
+import { formatDateTime } from "../ui/format";
 import { SFTPHostPicker } from "./SFTPHostPicker";
 import { localHostAlias } from "./localHost";
 
@@ -55,6 +57,20 @@ describe("SFTPHostPicker", () => {
     expect(groups).toHaveAttribute("aria-selected", "true");
     expect(recent).toHaveAttribute("tabindex", "-1");
   });
+  it("shows the last connection as the same short date and time in the display language as Home", async () => {
+    render(<LanguageProvider initial="ja"><SFTPHostPicker
+      aliases={["edge", "miyabi"]}
+      hosts={hosts}
+      value=""
+      loadRecent={async () => ({ connections: [{ alias: "miyabi", hostName: "192.0.2.10", user: "aida", port: "22", lastConnectedAt: "2026-09-01T07:00:00Z" }] })}
+      onChange={() => undefined}
+    /></LanguageProvider>);
+
+    await userEvent.click(screen.getByRole("button", { name: "ホスト" }));
+    await screen.findByRole("tab", { name: "最近接続した順" });
+    expect(screen.getByRole("button", { name: /miyabi/ })).toHaveTextContent(`最終接続：${formatDateTime("2026-09-01T07:00:00Z", "ja")}`);
+  });
+
   it("opens compact host choices without focusing the keyboard input", async () => {
     const onChange = vi.fn();
     render(<SFTPHostPicker aliases={["edge", "miyabi"]} hosts={hosts} value="" compact loadRecent={async () => ({ connections: [] })} onChange={onChange} />);

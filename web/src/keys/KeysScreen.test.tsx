@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useCallback, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { vaultStatus } from "../testing/vaultStatus";
+import type { InspectorContent } from "../ui/Inspector";
 import { KeysScreen } from "./KeysScreen";
 import type { KeyInventoryResponse, KeysApi } from "./api";
 import type { KeySecretsApi } from "./KeysScreen";
@@ -13,13 +16,7 @@ function buildSecrets(overrides: Partial<KeySecretsApi> = {}): KeySecretsApi {
     ],
   };
   return {
-    passwordVault: vi.fn().mockResolvedValue({
-      exists: true,
-      unlocked: true,
-      aliases: [],
-      dedicatedKeyPassphrases: [],
-      minPassphraseLength: 12,
-    }),
+    passwordVault: vi.fn().mockResolvedValue(vaultStatus()),
     credentials: vi.fn().mockResolvedValue(listed),
     storeCredential: vi.fn().mockResolvedValue(listed),
     assignCredential: vi.fn().mockResolvedValue(listed),
@@ -306,6 +303,37 @@ describe("KeysScreen", () => {
     expect(onInspector).toHaveBeenLastCalledWith(null);
   });
 
+  it("hands the chosen key to an inspector held in the parent's state only once", async () => {
+    const user = userEvent.setup();
+    const handed = vi.fn();
+    // Stops a hand-over loop so a regression fails instead of hanging the run.
+    const handOverLimit = 20;
+    const api = buildApi();
+    // Like App, the parent keeps the inspector in its own state behind a stable
+    // setter, so every hand-over renders the parent and KeysScreen again.
+    function InspectorHolder() {
+      const [inspector, setInspector] = useState<InspectorContent>(null);
+      const showInspector = useCallback((content: InspectorContent) => {
+        handed(content);
+        if (handed.mock.calls.length <= handOverLimit) setInspector(content);
+      }, []);
+      return (
+        <>
+          <KeysScreen api={api} onInspector={showInspector} />
+          <output>{inspector?.label ?? ""}</output>
+        </>
+      );
+    }
+    render(<InspectorHolder />);
+
+    await user.click(await screen.findByRole("button", { name: "id_work" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Key details"));
+    // A hand-over loop re-renders the parent and runs the effect again inside the
+    // click's act, so the count is final once the details show; no wait is needed.
+    const handedKeys = handed.mock.calls.filter(([content]) => content !== null);
+    expect(handedKeys).toHaveLength(1);
+  });
+
   it("marks the inspector when the chosen key has open permissions", async () => {
     const user = userEvent.setup();
     const onInspector = vi.fn();
@@ -420,6 +448,34 @@ describe("KeysScreen", () => {
     await waitFor(() => expect(api.purge).toHaveBeenCalledWith("20260805T090000.000-aabbccdd"));
   });
 
+  it("keeps the permanent delete confirmation open and says why when the delete fails", async () => {
+    const api = buildApi({ purge: vi.fn().mockRejectedValue(new Error("api_mutation_failed")) });
+    render(<KeysScreen api={api} />);
+
+    const trashRow = await screen.findByRole("row", { name: /id_old/ });
+    await userEvent.click(within(trashRow).getByRole("button", { name: "Delete permanently" }));
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Confirm permanent deletion" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("The entry could not be deleted permanently.");
+    expect(screen.getByRole("dialog")).toBe(dialog);
+  });
+
+  it("does not show the previous failure when the permanent delete confirmation is opened again after a cancel", async () => {
+    const api = buildApi({ purge: vi.fn().mockRejectedValue(new Error("api_mutation_failed")) });
+    render(<KeysScreen api={api} />);
+
+    const trashRow = await screen.findByRole("row", { name: /id_old/ });
+    await userEvent.click(within(trashRow).getByRole("button", { name: "Delete permanently" }));
+    const failed = screen.getByRole("dialog");
+    await userEvent.click(within(failed).getByRole("button", { name: "Confirm permanent deletion" }));
+    await within(failed).findByRole("alert");
+    await userEvent.click(within(failed).getByRole("button", { name: "Cancel" }));
+
+    await userEvent.click(within(trashRow).getByRole("button", { name: "Delete permanently" }));
+    expect(within(screen.getByRole("dialog")).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("leaves the trash entry intact when the second confirmation is cancelled", async () => {
     const api = buildApi();
     render(<KeysScreen api={api} />);
@@ -447,8 +503,27 @@ describe("KeysScreen", () => {
     const trashRow = await screen.findByRole("row", { name: /id_old/ });
     await userEvent.click(within(trashRow).getByRole("button", { name: "Restore" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("restore_path_occupied:id_old");
+    expect(await screen.findByRole("alert")).toHaveTextContent("The entry cannot be restored: id_old already exists");
+    expect(screen.queryByText(/restore_path_occupied/)).not.toBeInTheDocument();
     expect(screen.getByRole("row", { name: /id_old/ })).toBeInTheDocument();
+  });
+
+  it("says why a trash entry cannot be restored in words instead of its code", async () => {
+    const base = buildApi();
+    const listed = await base.listTrash();
+    const blocked = {
+      ...listed,
+      entries: listed.entries.map((entry) => ({
+        ...entry,
+        restorable: false,
+        blockers: ["restore_fingerprint_present:id_new", "restore_entry_incomplete:id_old"],
+      })),
+    };
+    render(<KeysScreen api={buildApi({ listTrash: vi.fn().mockResolvedValue(blocked) })} />);
+
+    const trashRow = await screen.findByRole("row", { name: /id_old/ });
+    expect(trashRow).toHaveTextContent("the same key already exists as id_new, id_old is missing from the trash");
+    expect(trashRow).not.toHaveTextContent("restore_");
   });
 
   it("marks a trash entry older than the retention window without deleting it", async () => {
@@ -464,6 +539,33 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be read");
+  });
+
+  it("reads the ssh directory again when asked after the first read fails", async () => {
+    const inventory = vi.fn()
+      .mockRejectedValueOnce(new Error("api_read_failed"))
+      .mockResolvedValue(buildInventory());
+    render(<KeysScreen api={buildApi({ inventory })} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByRole("row", { name: /id_old/ })).toBeInTheDocument();
+  });
+
+  it("keeps the list and says the list may be stale when the read after a successful operation fails", async () => {
+    const inventory = vi.fn()
+      .mockResolvedValueOnce(buildInventory())
+      .mockRejectedValue(new Error("api_read_failed"));
+    const api = buildApi({ inventory });
+    render(<KeysScreen api={api} />);
+
+    const trashRow = await screen.findByRole("row", { name: /id_old/ });
+    await userEvent.click(within(trashRow).getByRole("button", { name: "Delete permanently" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Confirm permanent deletion" }));
+
+    expect(await screen.findByText(/The key list could not be read again/)).toBeInTheDocument();
+    expect(api.purge).toHaveBeenCalled();
+    expect(screen.getByRole("row", { name: /id_old/ })).toBeInTheDocument();
   });
 
   it("names the files it could not classify instead of leaving them out", async () => {
@@ -921,13 +1023,7 @@ describe("KeysScreen", () => {
 
   it("reports a dedicated passphrase as saved only for this key", async () => {
     const secrets = buildSecrets({
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true,
-        unlocked: true,
-        aliases: [],
-        dedicatedKeyPassphrases: ["id_work"],
-        minPassphraseLength: 12,
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ dedicatedKeyPassphrases: ["id_work"] })),
     });
     render(<KeysScreen api={buildApi()} secrets={secrets} />);
 
@@ -941,13 +1037,7 @@ describe("KeysScreen", () => {
 
   it("detaches a dedicated passphrase through the same key-owned removal", async () => {
     const secrets = buildSecrets({
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true,
-        unlocked: true,
-        aliases: [],
-        dedicatedKeyPassphrases: ["id_work"],
-        minPassphraseLength: 12,
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ dedicatedKeyPassphrases: ["id_work"] })),
     });
     render(<KeysScreen api={buildApi()} secrets={secrets} />);
 
@@ -963,13 +1053,7 @@ describe("KeysScreen", () => {
 
   it("replaces only this key's dedicated value when a named passphrase is selected", async () => {
     const secrets = buildSecrets({
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true,
-        unlocked: true,
-        aliases: [],
-        dedicatedKeyPassphrases: ["id_work"],
-        minPassphraseLength: 12,
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ dedicatedKeyPassphrases: ["id_work"] })),
       assignCredential: vi.fn().mockResolvedValue({
         credentials: [{ kind: "key_passphrase", name: "build-key", uses: ["id_work"] }],
       }),
@@ -1015,6 +1099,21 @@ describe("taking a key back out of the agent", () => {
     await userEvent.click(within(actions).getByRole("button", { name: "Remove from ssh-agent" }));
 
     await waitFor(() => expect(api.deregisterFromAgent).toHaveBeenCalledWith("key-one"));
+  });
+
+  it("takes down the earlier failure once removing the key from the agent succeeds", async () => {
+    const api = buildApi({ inventory: vi.fn().mockResolvedValue(inventoryWithLoadedKey()) });
+    vi.mocked(api.deregisterFromAgent).mockRejectedValueOnce(new Error("api_mutation_failed"));
+    render(<KeysScreen api={api} />);
+
+    const workRow = await screen.findByRole("row", { name: /id_work/ });
+    const actions = await openKeyDetails(workRow);
+    await userEvent.click(within(actions).getByRole("button", { name: "Remove from ssh-agent" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("could not be removed from ssh-agent");
+
+    await userEvent.click(within(actions).getByRole("button", { name: "Remove from ssh-agent" }));
+    await waitFor(() => expect(api.deregisterFromAgent).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
 
   it("offers nothing to remove when the agent is not holding this key", async () => {
@@ -1075,13 +1174,7 @@ describe("taking a key back out of the agent", () => {
   it("uses a key-dedicated saved passphrase for agent registration without exposing it", async () => {
     const api = buildApi({ inventory: vi.fn().mockResolvedValue(inventoryWithAgent()) });
     const secrets = buildSecrets({
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true,
-        unlocked: true,
-        aliases: [],
-        dedicatedKeyPassphrases: ["id_work"],
-        minPassphraseLength: 12,
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ dedicatedKeyPassphrases: ["id_work"] })),
     });
     render(<KeysScreen api={api} secrets={secrets} />);
 
@@ -1207,13 +1300,7 @@ describe("dragging a key onto a folder", () => {
 
   it("opening one form from a row closes the one that was open", async () => {
     const secrets = buildSecrets({
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true,
-        unlocked: true,
-        aliases: [],
-        dedicatedKeyPassphrases: [],
-        minPassphraseLength: 12,
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus()),
     });
     render(<KeysScreen api={buildApi()} secrets={secrets} />);
 

@@ -60,82 +60,46 @@ describe("apiClient", () => {
     },
   );
 
-  it("renews a stale CSRF token and retries the rejected request once", async () => {
-    const oldToken = "c".repeat(43);
-    const freshToken = "d".repeat(43);
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(new Response(
-        JSON.stringify({ code: "invalid_csrf", message: "request rejected" }),
-        { status: 403, headers: { "Content-Type": "application/problem+json" } },
-      ))
-      .mockResolvedValueOnce(new Response(
-        JSON.stringify({ csrfToken: freshToken }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ))
-      .mockResolvedValueOnce(new Response(
-        JSON.stringify({ value: "recovered" }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ));
+  it("ends the session on a rejected CSRF token without asking the engine to renew it", async () => {
+    const ended = vi.fn();
+    whenSessionEnded(ended);
+    const fetcher = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: "invalid_csrf", message: "request rejected" }),
+      { status: 403, headers: { "Content-Type": "application/problem+json" } },
+    ));
     vi.stubGlobal("fetch", fetcher);
-    apiClient.setCSRF(oldToken);
+    apiClient.setCSRF("c".repeat(43));
 
-    await expect(apiClient.mutate<{ value: string }>("/api/v1/example", {
+    await expect(apiClient.mutate("/api/v1/example", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ value: "kept" }),
-    })).resolves.toEqual({ value: "recovered" });
+    })).rejects.toMatchObject({ code: "invalid_csrf" });
 
-    expect(fetcher).toHaveBeenCalledTimes(3);
-    expect(fetcher.mock.calls[1]?.[0]).toBe("/api/v1/session/renew");
-    const renewal = fetcher.mock.calls[1]?.[1] as RequestInit;
-    expect(new Headers(renewal.headers).get("X-SSHC-CSRF")).toBe(oldToken);
-    const retry = fetcher.mock.calls[2]?.[1] as RequestInit;
-    expect(new Headers(retry.headers).get("X-SSHC-CSRF")).toBe(freshToken);
-    expect(retry.method).toBe("POST");
-    expect(retry.body).toBe(JSON.stringify({ value: "kept" }));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls.map(([path]) => path)).not.toContain("/api/v1/session/renew");
+    expect(ended).toHaveBeenCalledTimes(1);
+    await expect(apiClient.read("/api/v1/example")).rejects.toThrow("csrf_unavailable");
   });
 
-  it("shares one renewal between concurrently rejected requests", async () => {
-    const oldToken = "c".repeat(43);
-    const freshToken = "d".repeat(43);
-    let releaseRenewal: ((response: Response) => void) | undefined;
-    const renewalResponse = new Promise<Response>((resolve) => {
-      releaseRenewal = resolve;
-    });
-    let renewals = 0;
-    const fetcher = vi.fn((path: string, init?: RequestInit) => {
-      if (path === "/api/v1/session/renew") {
-        renewals += 1;
-        return renewalResponse;
-      }
-      const token = new Headers(init?.headers).get("X-SSHC-CSRF");
-      if (token === oldToken) {
-        return Promise.resolve(new Response(
-          JSON.stringify({ code: "invalid_csrf", message: "request rejected" }),
-          { status: 403, headers: { "Content-Type": "application/problem+json" } },
-        ));
-      }
-      return Promise.resolve(new Response(
-        JSON.stringify({ path }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ));
-    });
+  it("announces the end of the session once when concurrent requests are rejected for CSRF", async () => {
+    const ended = vi.fn();
+    whenSessionEnded(ended);
+    const fetcher = vi.fn(() => Promise.resolve(new Response(
+      JSON.stringify({ code: "invalid_csrf", message: "request rejected" }),
+      { status: 403, headers: { "Content-Type": "application/problem+json" } },
+    )));
     vi.stubGlobal("fetch", fetcher);
-    apiClient.setCSRF(oldToken);
+    apiClient.setCSRF("c".repeat(43));
 
-    const first = apiClient.read("/api/v1/one");
-    const second = apiClient.read("/api/v1/two");
-    await vi.waitFor(() => expect(renewals).toBe(1));
-    releaseRenewal?.(new Response(
-      JSON.stringify({ csrfToken: freshToken }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
-
-    await expect(Promise.all([first, second])).resolves.toEqual([
-      { path: "/api/v1/one" },
-      { path: "/api/v1/two" },
+    const results = await Promise.allSettled([
+      apiClient.read("/api/v1/one"),
+      apiClient.read("/api/v1/two"),
     ]);
-    expect(renewals).toBe(1);
+
+    expect(results.map((result) => result.status)).toEqual(["rejected", "rejected"]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(ended).toHaveBeenCalledTimes(1);
   });
 
   it("announces an invalid session and clears its token", async () => {
@@ -151,26 +115,6 @@ describe("apiClient", () => {
 
     expect(ended).toHaveBeenCalledTimes(1);
     await expect(apiClient.read("/api/v1/example")).rejects.toThrow("csrf_unavailable");
-  });
-
-  it("announces the end of the session when CSRF renewal is rejected", async () => {
-    const ended = vi.fn();
-    whenSessionEnded(ended);
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(new Response(
-        JSON.stringify({ code: "invalid_csrf", message: "request rejected" }),
-        { status: 403, headers: { "Content-Type": "application/problem+json" } },
-      ))
-      .mockResolvedValueOnce(new Response(
-        JSON.stringify({ code: "invalid_session", message: "request rejected" }),
-        { status: 401, headers: { "Content-Type": "application/problem+json" } },
-      ));
-    vi.stubGlobal("fetch", fetcher);
-    apiClient.setCSRF("c".repeat(43));
-
-    await expect(apiClient.read("/api/v1/example")).rejects.toMatchObject({ code: "invalid_csrf" });
-
-    expect(ended).toHaveBeenCalledTimes(1);
   });
 
   it("reports the final API failure without exposing query parameters", async () => {

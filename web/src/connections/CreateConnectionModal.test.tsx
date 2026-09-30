@@ -1,8 +1,10 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { vaultStatus } from "../testing/vaultStatus";
 import type { CreateConnectionRequest, CreateConnectionResponse, Overview } from "../api/config";
 import type { KeyInventoryResponse, KeysApi } from "../keys/api";
+import { maxAliasLength } from "../rules/generated";
 import {
   CreateConnectionModal,
   type CreateConnectionDraft,
@@ -74,21 +76,15 @@ type ModalOverrides = {
 function renderModal(overrides: ModalOverrides = {}) {
   const createConnection = overrides.createConnection ?? vi.fn().mockResolvedValue(created);
   const keyInventory = overrides.inventory ?? vi.fn().mockResolvedValue(inventory);
-  const passwordVault = overrides.passwordVault ?? vi.fn().mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
-  });
+  const passwordVault = overrides.passwordVault ?? vi.fn().mockResolvedValue(vaultStatus());
   const credentials = overrides.credentials ?? vi.fn().mockResolvedValue({
     credentials: [
       { kind: "password", name: "office", uses: ["bastion"] },
       { kind: "key_passphrase", name: "id_work", uses: ["id_work"] },
     ],
   });
-  const initialiseVault = overrides.initialiseVault ?? vi.fn().mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
-  });
-  const unlockVault = overrides.unlockVault ?? vi.fn().mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
-  });
+  const initialiseVault = overrides.initialiseVault ?? vi.fn().mockResolvedValue(vaultStatus());
+  const unlockVault = overrides.unlockVault ?? vi.fn().mockResolvedValue(vaultStatus());
   const onClose = overrides.onClose ?? vi.fn();
   const onCreated = overrides.onCreated ?? vi.fn();
   const onOpenPrerequisite = vi.fn(overrides.onOpenPrerequisite ?? (() => undefined));
@@ -184,7 +180,7 @@ describe("CreateConnectionModal", () => {
   it("can initialise or unlock the vault before creation", async () => {
     const user = userEvent.setup();
     const missing = renderModal({
-      passwordVault: vi.fn().mockResolvedValue({ exists: false, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ exists: false, unlocked: false })),
     });
     await user.click(await screen.findByRole("radio", { name: "Encrypted password for this connection" }));
     await user.type(await screen.findByLabelText("Master password"), "a long master password");
@@ -194,7 +190,7 @@ describe("CreateConnectionModal", () => {
 
     missing.unmount();
     const locked = renderModal({
-      passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ unlocked: false })),
     });
     await user.click(await screen.findByRole("radio", { name: "Encrypted password for this connection" }));
     await user.type(await screen.findByLabelText("Master password"), "the master password");
@@ -205,7 +201,7 @@ describe("CreateConnectionModal", () => {
   it("allows private-key creation while the password vault is locked", async () => {
     const user = userEvent.setup();
     const harness = renderModal({
-      passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ unlocked: false })),
     });
     await fillConnection(user);
     await user.click(await screen.findByRole("radio", { name: "SSH private key" }));
@@ -217,7 +213,7 @@ describe("CreateConnectionModal", () => {
     expect(harness.unlockVault).not.toHaveBeenCalled();
   });
 
-  it("shows inline validation and a server problem without retaining the submitted secret", async () => {
+  it("shows inline validation and a server problem and keeps the typed password for the retry", async () => {
     const user = userEvent.setup();
     const createConnection = vi.fn().mockRejectedValue(new Error("rejected"));
     renderModal({ createConnection });
@@ -229,11 +225,38 @@ describe("CreateConnectionModal", () => {
     await user.clear(screen.getByLabelText("Connection name"));
     await user.type(screen.getByLabelText("Connection name"), "good-name");
     await user.type(screen.getByLabelText("Host name or IP address"), "host.example");
-    await user.type(screen.getByLabelText("Connection password"), "must-clear");
+    await user.type(screen.getByLabelText("Connection password"), "kept-for-retry");
     await user.click(screen.getByRole("button", { name: "Create connection" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The connection could not be created");
-    expect(screen.getByLabelText("Connection password")).toHaveValue("");
+    expect(screen.getByLabelText("Connection password")).toHaveValue("kept-for-retry");
+  });
+
+  it("refuses a connection name longer than the alias limit the engine enforces", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    const aliasAtLimit = "a".repeat(maxAliasLength);
+    await user.type(await screen.findByLabelText("Connection name"), aliasAtLimit);
+    await user.tab();
+    expect(screen.queryByText("Use letters, numbers, dot, dash, or underscore; start with a letter or number.")).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Connection name"), "a");
+    expect(screen.getByText("Use letters, numbers, dot, dash, or underscore; start with a letter or number.")).toBeInTheDocument();
+  });
+
+  it("keeps the master password after a refused unlock so it can be corrected in place", async () => {
+    const user = userEvent.setup();
+    const harness = renderModal({
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ unlocked: false })),
+      unlockVault: vi.fn().mockRejectedValue(new Error("wrong passphrase")),
+    });
+    await user.click(await screen.findByRole("radio", { name: "Encrypted password for this connection" }));
+    await user.type(await screen.findByLabelText("Master password"), "a mistyped master");
+    await user.click(screen.getByRole("button", { name: "Unlock vault" }));
+
+    await waitFor(() => expect(harness.unlockVault).toHaveBeenCalledWith("a mistyped master"));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByLabelText("Master password")).toHaveValue("a mistyped master");
   });
 
   it("clears secrets on Cancel and Escape", async () => {
@@ -286,7 +309,7 @@ describe("CreateConnectionModal", () => {
         authentication: "dedicated_password",
         savedCredential: "office",
         newCredential: "",
-        keyID: "",
+        keyId: "",
       },
     });
 

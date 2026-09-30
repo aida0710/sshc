@@ -5,7 +5,9 @@ import { TransferLedger, type ManagedTransferJob, type TransferNotice } from "./
 import type { TransferManagerAPI, TransferPlaneContext } from "./transferPlane";
 import { TransferSpeedometer } from "./transferProgress";
 import { fingerprintFile } from "./uploadFingerprint";
+import { sftpProblemCode } from "./sftpProblemText";
 import { UploadPlane } from "./uploadPlane";
+import { newIdentifier } from "../ui/randomIdentifier";
 
 export type { ManagedTransferJob, TransferNotice } from "./transferLedger";
 
@@ -40,10 +42,6 @@ export type UploadAdmission = {
   readonly count: number;
   release(): void;
 };
-
-function identifier(prefix: string): string {
-  return globalThis.crypto?.randomUUID?.() ?? `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-}
 
 function baseName(remotePath: string): string {
   const components = remotePath.split("/").filter(Boolean);
@@ -118,8 +116,8 @@ export class SFTPTransferManager {
   async reconcile(): Promise<void> {
     const requestedAt = this.ledger.generation();
     const listed = await this.api.listTransfers();
-    const serverIDs = new Set(listed.jobs.map((job) => job.id));
-    if (listed.jobs.length > maxTransferJobs || serverIDs.size !== listed.jobs.length) {
+    const serverIds = new Set(listed.jobs.map((job) => job.id));
+    if (listed.jobs.length > maxTransferJobs || serverIds.size !== listed.jobs.length) {
       throw new Error("sftp_transfer_limit");
     }
     if (!this.adoptQueue(listed, requestedAt)) {
@@ -170,7 +168,7 @@ export class SFTPTransferManager {
     }
     if (this.jobs.length + otherReserved + newSelections.length > maxTransferJobs) throw new Error("sftp_transfer_limit");
     admission?.release();
-    const batchId = batch?.id ?? identifier("batch");
+    const batchId = batch?.id ?? newIdentifier();
     const batchName = batch?.name ?? selections[0]?.localName ?? "upload";
     const batchKind = batch?.kind ?? (selections.length > 1 ? "folder" : "file");
     for (const selection of selections) {
@@ -179,7 +177,7 @@ export class SFTPTransferManager {
         await this.reattachUpload(existing, selection.file);
         continue;
       }
-      const id = identifier("transfer");
+      const id = newIdentifier();
       const job = await this.api.createTransfer({
         id, batchId, batchName, batchKind, alias: selection.alias, direction: "upload", kind: "file",
         name: selection.localName, remotePath: selection.remotePath, totalBytes: selection.file.size,
@@ -197,10 +195,10 @@ export class SFTPTransferManager {
 
   async addDownload(alias: string, remotePath: string, kind: TransferKind, totalBytes: number): Promise<string> {
     if (this.jobs.length + this.reservedUploads() >= maxTransferJobs) throw new Error("sftp_transfer_limit");
-    const id = identifier("transfer");
+    const id = newIdentifier();
     const name = baseName(remotePath);
     const job = await this.api.createTransfer({
-      id, batchId: identifier("batch"),
+      id, batchId: newIdentifier(),
       batchName: name, batchKind: kind, alias,
       direction: "download", kind, name, remotePath, totalBytes, lastModified: 0,
     });
@@ -213,12 +211,12 @@ export class SFTPTransferManager {
   async addRemoteTransfers(selections: RemoteTransferSelection[], operation: "copy" | "move" | "delete" | "get" | "put"): Promise<string[]> {
     if (selections.length === 0) return [];
     if (this.jobs.length + this.reservedUploads() + selections.length > maxTransferJobs) throw new Error("sftp_transfer_limit");
-    const batchId = identifier("remote_batch");
+    const batchId = newIdentifier();
     const batchName = selections.length === 1 ? selections[0]!.name : `${selections.length} items`;
     const batchKind: TransferKind = selections.length === 1 ? selections[0]!.kind : "folder";
     const ids: string[] = [];
     for (const selection of selections) {
-      const id = identifier("remote");
+      const id = newIdentifier();
       const job = await this.api.createTransfer({
         id, batchId, batchName, batchKind,
         alias: selection.targetAlias,
@@ -490,7 +488,7 @@ export class SFTPTransferManager {
     const job = this.ledger.find(id);
     if (job === undefined || job.status === "paused" || job.status === "cancelled" ||
         (error instanceof DOMException && error.name === "AbortError")) return;
-    const code = failureCode(error) || (error instanceof Error ? error.message : "sftp_failed");
+    const code = sftpProblemCode(error) || "sftp_failed";
     if (code === "sftp_transfer_limit" || code === "sftp_transfer_state") {
       this.retryAfter.set(id, this.now() + retryDelayMs);
       await this.reconcile().catch(() => undefined);

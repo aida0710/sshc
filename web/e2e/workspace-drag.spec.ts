@@ -161,7 +161,7 @@ test("keeps terminal rows inside vertically split panes", async ({ page, install
   for (const overflow of overflows) expect(overflow).toBeLessThanOrEqual(0.5);
 });
 
-test("selects the whole local console row and docks local shells", async ({ page, installation }) => {
+test("selects the whole local session row and docks local shells", async ({ page, installation }) => {
   const localSessions = [
     {
       id: "local-zsh",
@@ -205,8 +205,8 @@ test("selects the whole local console row and docks local shells", async ({ page
 
   await openApplication(page, installation);
   const navigation = page.getByRole("navigation", { name: "Primary" });
-  const consoleList = navigation.getByRole("list", { name: "Open sessions" });
-  const zshRow = consoleList.getByRole("listitem").filter({ hasText: "zsh" });
+  const sessionList = navigation.getByRole("list", { name: "Open sessions" });
+  const zshRow = sessionList.getByRole("listitem").filter({ hasText: "zsh" });
   await zshRow.getByText("connected · localhost").click();
 
   const target = page.locator("[data-single-terminal-drop-target='local-zsh']");
@@ -214,7 +214,7 @@ test("selects the whole local console row and docks local shells", async ({ page
   await expect(page.locator("[data-desktop-workspace-controls]")).toHaveCount(0);
   await expect(page.getByText("1 terminal", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Saved layouts", { exact: true })).toHaveCount(0);
-  const bashRow = consoleList.getByRole("listitem").filter({ hasText: "bash" });
+  const bashRow = sessionList.getByRole("listitem").filter({ hasText: "bash" });
   const targetBox = await target.boundingBox();
   expect(targetBox).not.toBeNull();
   await bashRow.dragTo(target, {
@@ -260,8 +260,8 @@ test("broadcasts one command to two live local shells", async ({ page, installat
   }
   await openLocalShell(page);
 
-  const consoleList = navigation.getByRole("list", { name: "Open sessions" });
-  const rows = consoleList.getByRole("listitem");
+  const sessionList = navigation.getByRole("list", { name: "Open sessions" });
+  const rows = sessionList.getByRole("listitem");
   await expect(rows).toHaveCount(2);
   const target = page.locator("[data-single-terminal-drop-target]");
   await expect(target).toBeVisible();

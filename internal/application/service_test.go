@@ -390,7 +390,7 @@ func TestSaveGroupsWritesConfigurationAndMetadataInOneTransaction(t *testing.T) 
 		Settings: []Setting{{Keyword: "Port", Values: []string{"2222"}}},
 	}}
 
-	preview, err := service.Preview(EditRequest{Kind: EditGroups, Metadata: &metadata})
+	preview, err := service.Preview(EditRequest{Kind: EditGroups, Groups: metadata.Groups})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +408,7 @@ func TestSaveGroupsWritesConfigurationAndMetadataInOneTransaction(t *testing.T) 
 		t.Fatalf("effective changes = %#v", preview.Effective[0].Changes)
 	}
 
-	if _, err := service.Save(EditRequest{Kind: EditGroups, Metadata: &metadata}); err != nil {
+	if _, err := service.Save(EditRequest{Kind: EditGroups, Groups: metadata.Groups}); err != nil {
 		t.Fatal(err)
 	}
 	groups := readFile(t, workspace, DefaultGroupsFile)
@@ -457,8 +457,7 @@ func TestSavingGroupsRefusesAProxyCommandWithAQuoteThatIsNotClosed(t *testing.T)
 		t.Fatal(err)
 	}
 	writeGroupFile(t, workspace, "home", "nas.conf", "Host nas\n\tUser aida\n")
-	metadata := NewMetadata()
-	metadata.Groups = []GroupMetadata{{
+	groups := []GroupMetadata{{
 		Name: "home",
 		Settings: []Setting{
 			{Keyword: "ServerAliveInterval", Values: []string{"30"}},
@@ -466,10 +465,10 @@ func TestSavingGroupsRefusesAProxyCommandWithAQuoteThatIsNotClosed(t *testing.T)
 		},
 	}}
 
-	if _, err := service.Preview(EditRequest{Kind: EditGroups, Metadata: &metadata}); !errors.Is(err, ErrUnquotableValue) {
+	if _, err := service.Preview(EditRequest{Kind: EditGroups, Groups: groups}); !errors.Is(err, ErrUnquotableValue) {
 		t.Fatalf("Preview = %v, want ErrUnquotableValue", err)
 	}
-	if _, err := service.Save(EditRequest{Kind: EditGroups, Metadata: &metadata}); !errors.Is(err, ErrUnquotableValue) {
+	if _, err := service.Save(EditRequest{Kind: EditGroups, Groups: groups}); !errors.Is(err, ErrUnquotableValue) {
 		t.Fatalf("Save = %v, want ErrUnquotableValue", err)
 	}
 	if _, err := os.Stat(filepath.Join(workspace.Root(), DefaultGroupsFile)); !errors.Is(err, fs.ErrNotExist) {
@@ -484,9 +483,7 @@ func TestSaveRenameUpdatesTheHostLineAndMetadataTogether(t *testing.T) {
 	service, workspace := newTestService(t)
 	metadata := NewMetadata()
 	metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: "config", Alias: "bastion"}, Note: "keep me"}}
-	if _, err := service.Save(EditRequest{Kind: EditMetadata, Metadata: &metadata}); err != nil {
-		t.Fatal(err)
-	}
+	seedMetadata(t, service, metadata)
 
 	if _, err := service.Save(EditRequest{
 		Kind:     EditRename,
@@ -579,9 +576,7 @@ func TestSaveMoveCommitsBothFilesAndMetadataInOneTransaction(t *testing.T) {
 	}
 	metadata := NewMetadata()
 	metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: "config", Alias: "bastion"}, Note: "keep me"}}
-	if _, err := service.Save(EditRequest{Kind: EditMetadata, Metadata: &metadata}); err != nil {
-		t.Fatal(err)
-	}
+	seedMetadata(t, service, metadata)
 
 	before := snapshotConfigFiles(t, workspace)
 
@@ -833,7 +828,8 @@ func declareGroup(t *testing.T, service *Service, names ...string) {
 	for _, name := range names {
 		metadata.Groups = append(metadata.Groups, GroupMetadata{Name: name})
 	}
-	if _, err := service.Save(EditRequest{Kind: EditGroups, Metadata: &metadata}); err != nil {
+	base := loadMetadata(t, service).Groups
+	if _, err := service.Save(EditRequest{Kind: EditGroups, GroupsBase: base, Groups: metadata.Groups}); err != nil {
 		t.Fatalf("declare %v: %v", names, err)
 	}
 }
@@ -927,9 +923,7 @@ func TestMoveHostIntoAGroupUpdatesTheMetadataIdentityInTheSameTransaction(t *tes
 		Colour:   "#22d3ee",
 		Order:    3,
 	}}
-	if _, err := service.Save(EditRequest{Kind: EditMetadata, Metadata: &metadata}); err != nil {
-		t.Fatal(err)
-	}
+	seedMetadata(t, service, metadata)
 
 	if _, err := service.Save(EditRequest{
 		Kind:             EditMove,

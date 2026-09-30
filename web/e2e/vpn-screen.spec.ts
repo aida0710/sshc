@@ -1,5 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 import { expect, openApplication, test } from "./support/environment";
+import { vpnOverviewPath } from "./support/vpn";
 
 // VPN画面を開いたときと、「切断」。
 //
@@ -10,10 +11,6 @@ import { expect, openApplication, test } from "./support/environment";
 // 本物の経路には Docker と VPN サーバーが要るので、VPN の API は固定の値で答える。
 
 type RouteState = { running: boolean; openConnections: number; checking?: boolean };
-
-// overviewPath は、一覧の API（GET /api/v1/vpn）である。画面は開いたときに
-// waitForRoutes=false を付けて読むので、クエリの有無を問わない。
-const overviewPath = /\/api\/v1\/vpn(\?.*)?$/;
 
 const labProfile = {
   name: "lab",
@@ -43,7 +40,7 @@ async function answerVPN(page: Page, state: RouteState): Promise<{ disconnects: 
   const received = { disconnects: 0 };
   const reply = (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(overviewOf(state)) });
-  await page.route(overviewPath, reply);
+  await page.route(vpnOverviewPath, reply);
   await page.route("**/api/v1/vpn/profiles/lab/route", (route) => {
     if (route.request().method() === "DELETE") {
       received.disconnects += 1;
@@ -121,7 +118,7 @@ test("the VPN screen lists the profiles before the route states are checked", as
   const routesChecked = new Promise<void>((resolve) => {
     answerRoutes = resolve;
   });
-  await page.route(overviewPath, async (route) => {
+  await page.route(vpnOverviewPath, async (route) => {
     const waitForRoutes = new URL(route.request().url()).searchParams.get("waitForRoutes") !== "false";
     // 経路の状態を確かめる読み取りは、検査が許すまで答えない（mac の遅い docker の代わり）。
     if (waitForRoutes) await routesChecked;

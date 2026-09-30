@@ -10,10 +10,13 @@ import { autoControl, CheckboxField } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
 import { ErrorDiagnosticNotice } from "../shell/ErrorDiagnosticNotice";
+import { isAcceptedButShort, meetsMasterPasswordMinimum } from "./masterPasswordLength";
 
 type LockScreenProps = {
   exists: boolean;
   passwordless?: boolean;
+  // PasswordVaultStatus.minPassphraseLength, needed only to create a vault.
+  minPassphraseLength?: number | undefined;
   onOpen: (status?: PasswordVaultStatus) => void;
   onExists?: () => void;
   version?: string;
@@ -29,6 +32,7 @@ const themeLabels: Record<Theme, MessageKey> = {
 export function LockScreen({
   exists,
   passwordless = false,
+  minPassphraseLength,
   onOpen,
   onExists = () => undefined,
   version = "",
@@ -49,8 +53,7 @@ export function LockScreen({
   const [busy, setBusy] = useState(false);
   const [withoutPassword, setWithoutPassword] = useState(false);
   const noPassword = exists ? passwordless : withoutPassword;
-  const minimum = 4;
-  const tooShort = !noPassword && [...password].length < (exists ? 1 : minimum);
+  const tooShort = !noPassword && (exists ? password === "" : !meetsMasterPasswordMinimum(password, minPassphraseLength));
   const mismatched = !exists && !noPassword && confirmation !== password;
 
   async function submit() {
@@ -71,6 +74,7 @@ export function LockScreen({
       const code = caught instanceof ApiError ? caught.code : "network_request_failed";
       const method = "POST";
       const path = exists ? "/api/v1/passwords/unlock" : "/api/v1/passwords/initialise";
+      const failureMessage = t(exists ? "lock.unlockFailed" : "lock.createFailed");
       setDiagnostic({
         code,
         status: caught instanceof ApiError ? caught.status : 0,
@@ -99,7 +103,7 @@ export function LockScreen({
           setError(t("lock.wrong"));
           break;
         case "passphrase_too_short":
-          setError(t("lock.tooShort", { count: minimum }));
+          setError(minPassphraseLength === undefined ? failureMessage : t("lock.tooShort", { count: minPassphraseLength }));
           break;
         case "vault_storage_permission_denied":
           setError(t("lock.storagePermission"));
@@ -146,7 +150,7 @@ export function LockScreen({
           setError(t("lock.envelopeUnsupported"));
           break;
         default:
-          setError(t("lock.failed"));
+          setError(failureMessage);
       }
     } finally {
       setBusy(false);
@@ -275,7 +279,7 @@ export function LockScreen({
               <PasswordField label={t("lock.confirm")} value={confirmation} onChange={setConfirmation} />
             )}
             </>}
-            {!exists && !noPassword && [...password].length >= 4 && [...password].length < 12 ? <p className="text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
+            {!exists && !noPassword && isAcceptedButShort(password, minPassphraseLength) ? <p className="text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
             <Button kind="primary" className="self-start" type="submit" disabled={busy || tooShort || mismatched}>
               {exists ? t("lock.open") : t("lock.create")}
             </Button>

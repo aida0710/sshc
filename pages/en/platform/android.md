@@ -45,4 +45,4 @@ The local shell runs in the app's private directory with Android sandbox permiss
 
 ## Startup failure
 
-The failure screen lists six items: Version, Code, Detail, Android SDK, device, and ABI. **Copy diagnostics** copies them together and **Try again** restarts the launch. The workspace path or the local port result appears inside Code and Detail when it is relevant. Reports exclude private keys, passwords, tokens, and bucket secrets.
+The failure screen lists six items: Version, Code, Detail, Android SDK, device, and ABI. **Copy diagnostics** copies them together and **Try again** restarts the launch. The path of the folder that holds the SSH settings, or the local port result, appears inside Code and Detail when it is relevant. Reports exclude private keys, passwords, tokens, and bucket secrets.

@@ -1,4 +1,4 @@
-import { ApiError, apiClient } from "../api/client";
+import { apiClient } from "../api/client";
 import { issueAction, patchJSON, postJSON, putJSON } from "../api/guards";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
@@ -181,13 +181,7 @@ export const sftpApi = {
     }));
   },
   async previewFile(alias: string, remotePath: string): Promise<RemotePreview> {
-    const endpoint = pathFor(alias, "preview", remotePath);
-    const response = await apiClient.send(endpoint, { method: "GET" }, { locallyHandledCodes: previewProblems });
-    if (!response.ok) {
-      const problem = await response.json().catch(() => null) as { code?: unknown } | null;
-      const code = typeof problem?.code === "string" ? problem.code : "sftp_failed";
-      throw new ApiError(code, response.status, null);
-    }
+    const response = await apiClient.readResponse(pathFor(alias, "preview", remotePath), { locallyHandledCodes: previewProblems });
     return {
       contentType: (response.headers.get("Content-Type") ?? "").split(";")[0]?.trim() ?? "",
       revision: response.headers.get("ETag") ?? "",

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { IsCurrentRequest } from "./useRequestGeneration";
 
 export type PollingOptions = {
   intervalMs: number;
@@ -13,14 +14,19 @@ export type PollingOptions = {
 
 // usePolling calls `tick` on a fixed interval. A tick still in flight is not
 // overlapped by the next one, and the latest `tick` is always the one called,
-// so callers pass a plain closure without memoising it.
-export function usePolling(tick: () => unknown, options: PollingOptions): void {
+// so callers pass a plain closure without memoising it. Clearing the interval
+// cannot recall a tick already waiting for its answer, so each tick gets a
+// check that turns false once polling stops, restarts or unmounts; a tick that
+// replaces state asks it before applying the answer.
+export function usePolling(tick: (isCurrent: IsCurrentRequest) => unknown, options: PollingOptions): void {
   const { intervalMs, enabled = true, whileHidden = false, immediately = false } = options;
   const latestTick = useRef(tick);
   latestTick.current = tick;
 
   useEffect(() => {
     if (!enabled) return;
+    let stopped = false;
+    const isCurrent = () => !stopped;
     let inFlight = false;
     const run = () => {
       if (inFlight) return;
@@ -28,7 +34,7 @@ export function usePolling(tick: () => unknown, options: PollingOptions): void {
       inFlight = true;
       let outcome: unknown;
       try {
-        outcome = latestTick.current();
+        outcome = latestTick.current(isCurrent);
       } catch {
         inFlight = false;
         return;
@@ -41,6 +47,9 @@ export function usePolling(tick: () => unknown, options: PollingOptions): void {
     };
     if (immediately) run();
     const timer = window.setInterval(run, intervalMs);
-    return () => window.clearInterval(timer);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
   }, [enabled, immediately, intervalMs, whileHidden]);
 }

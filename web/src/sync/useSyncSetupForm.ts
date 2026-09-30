@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { SyncDirection, SyncSetupCheckResponse, SyncStatus } from "../api/sync";
+import type { SyncDirection, SyncSetupCheckResponse, SyncSetupRequest, SyncStatus } from "../api/sync";
 
 type SetupFormState = {
   endpoint: string;
@@ -82,10 +82,48 @@ export function useSyncSetupForm() {
     reuseCredentials: false,
   };
 
+  // A checked bucket starts the key choice over: the check says whether the
+  // bucket already has a key to type in or needs a new one.
+  function acceptSetupCheck(check: SyncSetupCheckResponse) {
+    setState((form) => ({ ...form, setupCheck: check, ownKey: "", chooseOwn: false }));
+  }
+
+  // setupRequest は、確かめたバケットの状態を添えて、設定を保存する要求を作る。
+  // 確かめる前は null である。既存のバケットか、自分で鍵を選んだときだけ入力した鍵を送る。
+  function setupRequest(): SyncSetupRequest | null {
+    const { setupCheck, chooseOwn, ownKey } = state;
+    if (setupCheck === null) return null;
+    return {
+      ...setupInput,
+      direction: state.direction,
+      expectedState: setupCheck.state,
+      ...(setupCheck.etag === undefined ? {} : { expectedETag: setupCheck.etag }),
+      historyPresent: setupCheck.historyPresent,
+      reuseKey: false,
+      key: setupCheck.state === "existing" || chooseOwn ? ownKey : "",
+    };
+  }
+
+  // 保存できたら、入力した鍵と認証情報を消して設定を閉じる。
+  function finishSetup() {
+    setState((form) => ({
+      ...form,
+      ownKey: "",
+      accessKeyId: "",
+      secretAccessKey: "",
+      setupCheck: null,
+      editingSettings: false,
+      settingsOpen: false,
+    }));
+  }
+
   return {
     ...state,
     setupInput,
     editSettings,
+    acceptSetupCheck,
+    setupRequest,
+    finishSetup,
     setEndpoint: (value: string) => set("endpoint", value),
     setBucket: (value: string) => set("bucket", value),
     setPath: (value: string) => set("path", value),

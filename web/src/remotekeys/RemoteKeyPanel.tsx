@@ -14,6 +14,7 @@ import { CopyButton } from "../ui/CopyButton";
 import { Button, Card, Notice } from "../ui/surface";
 import { CheckboxField, Field, control } from "../ui/form";
 import { PageHeader } from "../ui/page";
+import { useRequestGeneration } from "../ui/useRequestGeneration";
 
 type RemoteKeyPanelProps = {
   api?: RemoteKeysApi;
@@ -64,9 +65,11 @@ export function RemoteKeyPanel({
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState("");
   const [candidates, setCandidates] = useState<KeyItem[]>([]);
+  // 読めなかったのか公開鍵が無いのかを見分けられるように、失敗は別に持つ。
+  const [candidatesFailed, setCandidatesFailed] = useState(false);
   const [chosen, setChosen] = useState("");
-  const keyLoadGeneration = useRef(0);
-  const planGeneration = useRef(0);
+  const keyLoadGeneration = useRequestGeneration();
+  const planGeneration = useRequestGeneration();
   const preferredHandled = useRef(false);
 
   const hostOptions = useMemo(
@@ -86,21 +89,31 @@ export function RemoteKeyPanel({
     onPreferredPublicKeyHandled?.();
   }, [preferredPublicKeyPath, onPreferredPublicKeyHandled]);
 
+  const withdraw = useCallback(() => {
+    planGeneration.retire();
+    setPlanning(false);
+    setPlannedTargets([]);
+    setAcknowledged(false);
+    setUnsupportedAliases(new Set());
+    setResults([]);
+  }, [planGeneration]);
+
   useEffect(() => {
     let active = true;
     if (preferredPublicKeyPath !== null) preferredHandled.current = false;
-    const preferredRequest = preferredPublicKeyPath === null ? null : ++keyLoadGeneration.current;
+    const isPreferredCurrent = preferredPublicKeyPath === null ? () => false : keyLoadGeneration.begin();
     void keys
       .inventory()
       .then(async (inventory) => {
         const publicKeys = inventory.items.filter((item) => item.kind === "public_key");
         if (!active) return;
         setCandidates(publicKeys);
+        setCandidatesFailed(false);
         if (preferredPublicKeyPath === null) return;
         const preferred = publicKeys.find((item) => item.relativePath === preferredPublicKeyPath);
         if (preferred === undefined) return;
         const key = await keys.publicKey(preferred.id);
-        if (!active || preferredRequest !== keyLoadGeneration.current) return;
+        if (!active || !isPreferredCurrent()) return;
         withdraw();
         setChosen(preferred.id);
         setKeyPath(key.relativePath);
@@ -108,20 +121,13 @@ export function RemoteKeyPanel({
         setError("");
         handlePreferredPublicKey();
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (active) setCandidatesFailed(true);
+      });
     return () => {
       active = false;
     };
-  }, [keys, onPreferredPublicKeyHandled, preferredPublicKeyPath, handlePreferredPublicKey]);
-
-  function withdraw() {
-    planGeneration.current += 1;
-    setPlanning(false);
-    setPlannedTargets([]);
-    setAcknowledged(false);
-    setUnsupportedAliases(new Set());
-    setResults([]);
-  }
+  }, [keys, keyLoadGeneration, onPreferredPublicKeyHandled, preferredPublicKeyPath, handlePreferredPublicKey, withdraw]);
 
   function edit(apply: (value: string) => void) {
     return (value: string) => {
@@ -132,7 +138,7 @@ export function RemoteKeyPanel({
 
   function editKey(apply: (value: string) => void) {
     return (value: string) => {
-      keyLoadGeneration.current += 1;
+      keyLoadGeneration.retire();
       handlePreferredPublicKey();
       setChosen("");
       edit(apply)(value);
@@ -140,20 +146,20 @@ export function RemoteKeyPanel({
   }
 
   async function choose(keyId: string) {
-    const request = ++keyLoadGeneration.current;
+    const isCurrent = keyLoadGeneration.begin();
     handlePreferredPublicKey();
     withdraw();
     setChosen(keyId);
     if (keyId === "") return;
     try {
       const key = await keys.publicKey(keyId);
-      if (request !== keyLoadGeneration.current) return;
+      if (!isCurrent()) return;
       withdraw();
       setKeyPath(key.relativePath);
       setPublicKey(key.publicKey.trimEnd());
       setError("");
     } catch {
-      if (request !== keyLoadGeneration.current) return;
+      if (!isCurrent()) return;
       setError(t("rk.publicKeyUnreadable"));
     }
   }
@@ -180,7 +186,7 @@ export function RemoteKeyPanel({
   async function describe() {
     setError("");
     withdraw();
-    const request = planGeneration.current;
+    const isCurrent = planGeneration.observe();
     const typedAlias = hostQuery.trim();
     const aliases = selectedAliases.length > 0
       ? selectedAliases
@@ -192,7 +198,7 @@ export function RemoteKeyPanel({
     setPlanning(true);
     const inputs = aliases.map((alias) => ({ alias, keyPath, publicKey }));
     const settled = await settleWithLimit(inputs, 4, (input) => api.plan(input));
-    if (request !== planGeneration.current) return;
+    if (!isCurrent()) return;
     const planned = settled.flatMap((outcome, index) => outcome.status === "fulfilled"
       ? [{ input: inputs[index]!, plan: outcome.value }]
       : []);
@@ -278,6 +284,7 @@ export function RemoteKeyPanel({
                   ))}
                 </select>
               </Field>
+              {candidatesFailed ? <Notice compact>{t("rk.candidatesLoadFailed")}</Notice> : null}
               <Field label={t("rk.publicKeyFile")}>
                 <input
                   value={keyPath}

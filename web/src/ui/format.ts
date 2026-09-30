@@ -58,3 +58,9 @@ export function formatDuration(seconds: number, t: Translate): string {
     minutes: totalMinutes % minutesPerHour,
   });
 }
+
+// A moment the engine may not have recorded yet. A dash keeps the sentence
+// around it readable instead of leaving a gap where the time would go.
+export function formatOptionalDateTime(value: string | undefined, locale?: string): string {
+  return value === undefined ? "—" : formatDateTime(value, locale);
+}

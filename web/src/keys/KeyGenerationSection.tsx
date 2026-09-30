@@ -7,18 +7,20 @@ import { CheckboxField, control, hintText, sectionCard, sectionHeading } from ".
 import { PasswordInput } from "../ui/PasswordField";
 import { Button, Card, Row } from "../ui/surface";
 import { useGenerationForm } from "./forms";
+import type { RunKeyOperation } from "./useKeyOperation";
 
 // Creating a key: in the engine for software algorithms, or as a terminal
 // command to run by hand for hardware-backed ones. A generated key is offered
 // to the connection form and to the server installer right away.
 export function KeyGenerationSection({
-  api = keysApi, variants, groups, onGenerated, onFailure, onAssignGeneratedKey, onInstallGeneratedKey,
+  api = keysApi, variants, groups, onGenerated, runOperation, onAssignGeneratedKey, onInstallGeneratedKey,
 }: {
   api?: Pick<KeysApi, "generate" | "hardwareCommand">;
   variants: KeyVariant[];
   groups: string[];
   onGenerated: () => Promise<void>;
-  onFailure: (message: string) => void;
+  // The Keys screen runs the generation so that its failure shows in the screen's one notice.
+  runOperation: RunKeyOperation;
   onAssignGeneratedKey?: ((key: GeneratedPrivateKeyHandoff) => void) | undefined;
   onInstallGeneratedKey?: ((key: GeneratedPublicKeyHandoff) => void) | undefined;
 }) {
@@ -36,10 +38,9 @@ export function KeyGenerationSection({
   const inProcess = selected === undefined || selected.inProcess;
 
   async function submitGeneration() {
-    onFailure("");
     setTerminalCommand(null);
     setGenerated(null);
-    try {
+    const created = await runOperation(async () => {
       if (selected !== undefined && !selected.inProcess) {
         const response = await api.hardwareCommand({
           algorithm,
@@ -69,10 +70,8 @@ export function KeyGenerationSection({
       setPassphrase("");
       setFileName("");
       await onGenerated();
-    } catch {
-      setPassphrase("");
-      onFailure(t("keys.createFailed"));
-    }
+    }, "keys.createFailed");
+    if (!created) setPassphrase("");
   }
 
   return (

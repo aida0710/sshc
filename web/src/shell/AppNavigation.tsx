@@ -5,7 +5,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { ConsoleList } from "../terminal/ConsoleList";
+import { SessionList } from "../terminal/SessionList";
 import { UpdateBadge } from "./UpdateBadge";
 import { Icon, type IconName } from "../ui/icons";
 import { BrandMark } from "../ui/BrandMark";
@@ -36,15 +36,15 @@ export function AppNavigation({
   sectionIcons,
   sectionLabels,
   onNavigate,
-  consoles,
-  orderedConsoles,
-  activeConsole,
+  terminalSessions,
+  orderedSessions,
+  activeSessionId,
   liveWorkspace,
   onRenameWorkspace,
   unreadBySession,
-  onShowConsole,
-  onDuplicateConsole,
-  onReorderConsoles,
+  onShowSession,
+  onDuplicateSession,
+  onReorderSessions,
   localShellProfiles = [],
   onOpenShell,
   aliases = [],
@@ -65,15 +65,15 @@ export function AppNavigation({
   sectionIcons: Record<Section, IconName>;
   sectionLabels: Record<Section, MessageKey>;
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, name: Section) => void;
-  consoles: TerminalSessionsState;
-  orderedConsoles: TerminalSession[];
-  activeConsole: string | null;
+  terminalSessions: TerminalSessionsState;
+  orderedSessions: TerminalSession[];
+  activeSessionId: string | null;
   liveWorkspace: LiveWorkspaceSummary | null;
   onRenameWorkspace: (name: string) => void;
   unreadBySession: UnreadSessions;
-  onShowConsole: (id: string) => void;
-  onDuplicateConsole: (id: string) => void;
-  onReorderConsoles: (order: string[]) => void;
+  onShowSession: (id: string) => void;
+  onDuplicateSession: (id: string) => void;
+  onReorderSessions: (order: string[]) => void;
   localShellProfiles?: LocalShellProfile[];
   onOpenShell: (profileId?: string) => void;
   aliases?: string[];
@@ -150,21 +150,21 @@ export function AppNavigation({
         >
           {t("shell.sessions")}
         </span>
-        <ConsoleList
-          sessions={orderedConsoles}
-          selected={section === "Terminal" ? activeConsole : null}
+        <SessionList
+          sessions={orderedSessions}
+          selected={section === "Terminal" ? activeSessionId : null}
           workspace={liveWorkspace}
           onRenameWorkspace={onRenameWorkspace}
           unreadBySession={unreadBySession}
-          maxSessions={consoles.maxSessions}
-          busy={consoles.busy}
-          problem={consoles.problem}
-          onSelect={onShowConsole}
-          onClose={(id) => void consoles.close(id)}
-          onRename={(id, title) => consoles.rename(id, title)}
-          onUnpinTitle={(id) => consoles.unpinTitle?.(id) ?? Promise.resolve(false)}
-          onDuplicate={onDuplicateConsole}
-          onReorder={onReorderConsoles}
+          maxSessions={terminalSessions.maxSessions}
+          busy={terminalSessions.busy}
+          problem={terminalSessions.problem}
+          onSelect={onShowSession}
+          onClose={(id) => void terminalSessions.close(id)}
+          onRename={(id, title) => terminalSessions.rename(id, title)}
+          onUnpinTitle={(id) => terminalSessions.unpinTitle?.(id) ?? Promise.resolve(false)}
+          onDuplicate={onDuplicateSession}
+          onReorder={onReorderSessions}
           localShellProfiles={localShellProfiles}
           onOpenShell={onOpenShell}
           aliases={aliases}

@@ -6,10 +6,11 @@ import { nearestDeclaredParent } from "./connectionBrowser";
 import { hostMatchesQuery, normalizeHostQuery } from "./hostSearch";
 import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import { useStoredColumnWidth, type StoredColumnWidth } from "../ui/useStoredColumnWidth";
+import { localStorageKeys } from "../ui/browserStorageKeys";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
-import { duplicateAliasesOf, identityKey } from "./connectionBrowser";
+import { duplicateAliasesOf, hostMetadataByIdentity, identityKey } from "./connectionBrowser";
 import { canDrop, dragMimeType, type DragPayload } from "./dragdrop";
 
 export type HostSelection = { path: string; alias: string };
@@ -90,7 +91,7 @@ function hostBlockIdentity(host: HostEntry): string {
 }
 
 // Fits the longest common group name without stealing the list's room.
-const connectionGroupsWidth: StoredColumnWidth = { key: "sshc.connections.groups-width.v1", fallback: 144, minimum: 112, maximum: 400 };
+const connectionGroupsWidth: StoredColumnWidth = { key: localStorageKeys.connectionGroupsWidth, fallback: 144, minimum: 112, maximum: 400 };
 
 export function ConnectionTree({
   overview,
@@ -110,9 +111,7 @@ export function ConnectionTree({
 
   const groupNames = useMemo(() => overview.groups.map((group) => group.name), [overview.groups]);
   const decorated = useMemo<DecoratedHost[]>(() => {
-    const metadata = new Map(
-      (overview.metadata.hosts ?? []).map((entry) => [identityKey(entry.identity), entry]),
-    );
+    const metadata = hostMetadataByIdentity(overview.metadata.hosts);
     const duplicates = duplicateAliasesOf(overview.hosts);
     const projectionOccurrences = new Map<string, number>();
     return overview.hosts.flatMap((host, sourceOrder) => {

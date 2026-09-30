@@ -20,6 +20,7 @@ var english = phrasebook{
 		line:            "Line %d: %s",
 		peerMissing:     "The [Peer] on line %d has no \"%s\".",
 		fileMissing:     "The configuration file has no \"%s\".",
+		fieldSeparator:  ": ",
 	},
 }
 

@@ -1,10 +1,13 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentType, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { vaultStatus } from "../testing/vaultStatus";
 import type { HostDetail, UpdateConnectionRequest } from "../api/config";
 import type { Problem } from "../api/client";
 import type { KeyInventoryResponse, KeysApi } from "../keys/api";
 import { ConnectionBasicForm } from "./ConnectionBasicForm";
+import { LanguageProvider, useLanguage } from "../i18n/context";
 import type { ConnectionSavedState } from "./connectionSavedState";
 import type { ConnectionSecretsApi } from "./secretsApi";
 
@@ -100,13 +103,12 @@ type HarnessOverrides = {
   onDirtyChange?: (dirty: boolean) => void;
   onDiscardReady?: (discard: (() => void) | null) => void;
   disabled?: boolean;
+  wrapper?: ComponentType<{ children: ReactNode }>;
 };
 
 function renderForm(overrides: HarnessOverrides = {}) {
   const onSave = overrides.onSave ?? vi.fn().mockResolvedValue(undefined);
-  const passwordVault = overrides.passwordVault ?? vi.fn().mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
-  });
+  const passwordVault = overrides.passwordVault ?? vi.fn().mockResolvedValue(vaultStatus());
   const credentials = overrides.credentials ?? vi.fn().mockResolvedValue({
     credentials: [
       { kind: "password", name: "office", uses: ["bastion"] },
@@ -116,12 +118,8 @@ function renderForm(overrides: HarnessOverrides = {}) {
   const passwordEligibility = overrides.passwordEligibility ?? vi.fn().mockResolvedValue({
     alias: "edge", storable: true, blockers: [], warnings: [],
   });
-  const initialiseVault = overrides.initialiseVault ?? vi.fn().mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
-  });
-  const unlockVault = overrides.unlockVault ?? vi.fn().mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
-  });
+  const initialiseVault = overrides.initialiseVault ?? vi.fn().mockResolvedValue(vaultStatus());
+  const unlockVault = overrides.unlockVault ?? vi.fn().mockResolvedValue(vaultStatus());
   const keyInventory = overrides.inventory ?? vi.fn().mockResolvedValue(inventory);
 
   const rendered = render(
@@ -143,6 +141,7 @@ function renderForm(overrides: HarnessOverrides = {}) {
       onDiscardReady={overrides.onDiscardReady}
       disabled={overrides.disabled}
     />,
+    overrides.wrapper === undefined ? {} : { wrapper: overrides.wrapper },
   );
   return {
     ...rendered,
@@ -167,6 +166,29 @@ describe("ConnectionBasicForm", () => {
     expect(screen.getByLabelText("User")).toBeDisabled();
     expect(screen.getByLabelText("Port")).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Save Basic settings" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the draft when the display language changes", async () => {
+    const user = userEvent.setup();
+    function SwitchToJapanese() {
+      const { setLocale } = useLanguage();
+      return <button type="button" onClick={() => setLocale("ja")}>日本語</button>;
+    }
+    renderForm({
+      wrapper: ({ children }) => (
+        <LanguageProvider initial="en">
+          <SwitchToJapanese />
+          {children}
+        </LanguageProvider>
+      ),
+    });
+    const port = await screen.findByLabelText("Port");
+    await user.clear(port);
+    await user.type(port, "2222");
+
+    await user.click(screen.getByRole("button", { name: "日本語" }));
+
+    expect(await screen.findByLabelText("ポート")).toHaveValue(2222);
   });
 
   it("stages a freshly generated key from a fresh inventory and applies it only on Save", async () => {
@@ -346,9 +368,7 @@ describe("ConnectionBasicForm", () => {
     ]);
     const harness = renderForm({
       detail,
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true, unlocked: true, aliases: ["edge"], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ aliases: ["edge"] })),
       credentials: vi.fn().mockResolvedValue({
         credentials: [{ kind: "password", name: "office", uses: ["edge", "bastion"] }],
       }),
@@ -386,9 +406,7 @@ describe("ConnectionBasicForm", () => {
   it("requires unlock before any save while preserving non-secret drafts", async () => {
     const user = userEvent.setup();
     const harness = renderForm({
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [],
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ unlocked: false })),
     });
 
     await user.clear(screen.getByLabelText("Host name or IP address"));
@@ -414,13 +432,7 @@ describe("ConnectionBasicForm", () => {
       keys: { status: "ready", value: [privateKey, secondKey, unencryptedKey] },
       vault: {
         status: "ready",
-        value: {
-          exists: true,
-          unlocked: true,
-          aliases: [],
-          dedicatedKeyPassphrases: [],
-          minPassphraseLength: 12,
-        },
+        value: vaultStatus(),
       },
       credentials: { status: "failed" },
       eligibility: {
@@ -498,9 +510,7 @@ describe("ConnectionBasicForm", () => {
     const detail = buildDetail();
     const harness = renderForm({
       detail,
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true, unlocked: true, aliases: ["edge"], dedicatedKeyPassphrases: [],
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ aliases: ["edge"] })),
       credentials: vi.fn().mockResolvedValue({
         credentials: [{ kind: "password", name: "office", uses: ["edge", "bastion"] }],
       }),
@@ -528,9 +538,7 @@ describe("ConnectionBasicForm", () => {
     const detail = buildDetail();
     const harness = renderForm({
       detail,
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true, unlocked: true, aliases: ["edge"], dedicatedKeyPassphrases: [],
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ aliases: ["edge"] })),
       credentials: vi.fn().mockResolvedValue({
         credentials: [
           { kind: "password", name: "office", uses: ["edge"] },
@@ -568,9 +576,7 @@ describe("ConnectionBasicForm", () => {
     const detail = buildDetail();
     const harness = renderForm({
       detail,
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true, unlocked: true, aliases: ["edge"], dedicatedKeyPassphrases: [],
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ aliases: ["edge"] })),
       credentials: vi.fn().mockResolvedValue({
         credentials: [{ kind: "password", name: "office", uses: ["edge"] }],
       }),
@@ -632,12 +638,8 @@ describe("ConnectionBasicForm", () => {
   it("refreshes a password-only success even when the SSH file bytes do not change", async () => {
     const user = userEvent.setup();
     const passwordVault = vi.fn()
-      .mockResolvedValueOnce({
-        exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
-      })
-      .mockResolvedValueOnce({
-        exists: true, unlocked: true, aliases: ["edge"], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
-      });
+      .mockResolvedValueOnce(vaultStatus())
+      .mockResolvedValueOnce(vaultStatus({ aliases: ["edge"] }));
     renderForm({ passwordVault });
     await waitFor(() => expect(screen.queryByText("Loading authentication options…")).not.toBeInTheDocument());
 
@@ -711,9 +713,7 @@ describe("ConnectionBasicForm", () => {
 
     renderForm({
       detail,
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: ["id_work"], minPassphraseLength: 12,
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ dedicatedKeyPassphrases: ["id_work"] })),
     });
     expect(await screen.findByText("A passphrase is saved only for this key.")).toBeInTheDocument();
   });
@@ -746,9 +746,7 @@ describe("ConnectionBasicForm", () => {
     renderForm({
       detail,
       credentials: vi.fn().mockResolvedValue({ credentials: [] }),
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: ["id_work"], minPassphraseLength: 12,
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ dedicatedKeyPassphrases: ["id_work"] })),
     });
     await screen.findByText("A passphrase is saved only for this key.");
     expect(screen.getByText("Save or change key passphrase").closest("details")).not.toHaveAttribute("open");

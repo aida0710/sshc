@@ -1,10 +1,51 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { SnippetsPanel } from "./SnippetsPanel";
 import { snippetsApi } from "./api";
 
-vi.mock("./api", () => ({ snippetsApi: { library: vi.fn() } }));
+vi.mock("./api", () => ({
+  snippetsApi: { library: vi.fn(), setStartup: vi.fn() },
+}));
+
+const library = {
+  snippets: [{ id: "alpha", name: "Alpha", command: "uptime", variables: [] }],
+  startup: [],
+} as never;
+
+beforeEach(() => {
+  vi.mocked(snippetsApi.library).mockReset().mockResolvedValue(library);
+  vi.mocked(snippetsApi.setStartup).mockReset().mockResolvedValue(undefined as never);
+});
+
+async function chooseAlpha(user: ReturnType<typeof userEvent.setup>) {
+  const chooser = await screen.findByRole("combobox", { name: "Snippets" });
+  await screen.findByRole("option", { name: "Alpha" });
+  await user.selectOptions(chooser, "alpha");
+}
+
+it("sets the startup snippet on the first host when the host list arrives after the panel", async () => {
+  const user = userEvent.setup();
+  const { rerender } = render(<SnippetsPanel aliases={[]} />);
+  await chooseAlpha(user);
+
+  rerender(<SnippetsPanel aliases={["web", "db"]} />);
+  await user.click(screen.getByRole("button", { name: "Set startup snippet" }));
+
+  expect(snippetsApi.setStartup).toHaveBeenCalledWith("web", "alpha", {});
+});
+
+it("falls back to the first host when the chosen host disappears from the list", async () => {
+  const user = userEvent.setup();
+  const { rerender } = render(<SnippetsPanel aliases={["web", "db"]} />);
+  await chooseAlpha(user);
+  await user.selectOptions(screen.getByRole("combobox", { name: "Host for the startup snippet" }), "db");
+
+  rerender(<SnippetsPanel aliases={["web"]} />);
+  await user.click(screen.getByRole("button", { name: "Set startup snippet" }));
+
+  expect(snippetsApi.setStartup).toHaveBeenCalledWith("web", "alpha", {});
+});
 
 const snippets = [
   { id: "one", name: "Check disk", command: "df -h", variables: [] },

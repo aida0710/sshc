@@ -9,7 +9,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"sshc/internal/application"
 	"sshc/internal/remotesync"
 	"sshc/internal/sftp"
 	"sshc/internal/validate"
@@ -98,9 +97,9 @@ func TestAPILimitsMatchTheGoLimits(t *testing.T) {
 		{"SyncPushDraft", "removed", "maximum", remotesync.MaxEntries},
 		{"SyncHistoryRevision", "fileCount", "maximum", remotesync.MaxEntries},
 
-		{"Metadata", "shortcutPresets", "maxItems", application.MaxShortcutPresets},
-		{"ShortcutPreset", "name", "maxLength", application.MaxShortcutPresetNameRunes},
-		{"ShortcutPreset", "bindings.palette", "maxItems", application.MaxShortcutKeysPerAction},
+		{"Metadata", "shortcutPresets", "maxItems", validate.MaxShortcutPresets},
+		{"ShortcutPreset", "name", "maxLength", validate.MaxShortcutPresetNameLength},
+		{"ShortcutPreset", "bindings.palette", "maxItems", validate.MaxShortcutKeysPerAction},
 
 		{"WorkspaceDefinition", "name", "maxLength", workspace.MaxNameRunes},
 		{"TerminalWorkspace", "name", "maxLength", workspace.MaxNameRunes},

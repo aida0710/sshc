@@ -3,6 +3,7 @@ import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 import { Icon, type IconName } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { Notice } from "../ui/surface";
@@ -10,11 +11,12 @@ import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { readStoredJSON, writeStoredJSON } from "../ui/browserStorage";
+import { localStorageKeys } from "../ui/browserStorageKeys";
 import { formatBytes, formatDuration } from "../ui/format";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
 import type { TransferSettings } from "./api";
+import { sftpTransferProblemText } from "./sftpProblemText";
 
-const viewStorageKey = "sshc.sftp.queueView";
 const minQueueHeight = 96;
 const maxQueueHeight = 560;
 const defaultQueueHeight = 224;
@@ -85,7 +87,7 @@ function clampHeight(value: number): number {
 // Desktop size and folded state persist across directories. On mobile, the
 // dock always remains compact and its details open in a separate sheet.
 function restoreView(): QueueView {
-  const raw = readStoredJSON(viewStorageKey, {});
+  const raw = readStoredJSON(localStorageKeys.sftpQueueView, {});
   const stored = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
   return {
     collapsed: stored.collapsed === undefined ? true : stored.collapsed === true,
@@ -94,10 +96,22 @@ function restoreView(): QueueView {
 }
 
 function rememberView(view: QueueView): void {
-  writeStoredJSON(viewStorageKey, view);
+  writeStoredJSON(localStorageKeys.sftpQueueView, view);
 }
 
 type DisplayedStatus = ManagedTransferJob["status"] | "reconcile";
+
+const statusLabelKeys: Record<DisplayedStatus, MessageKey> = {
+  queued: "sftp.manager.status.queued",
+  running: "sftp.manager.status.running",
+  paused: "sftp.manager.status.paused",
+  reattach: "sftp.manager.status.reattach",
+  needs_overwrite: "sftp.manager.status.needs_overwrite",
+  reconcile: "sftp.manager.status.reconcile",
+  completed: "sftp.manager.status.completed",
+  failed: "sftp.manager.status.failed",
+  cancelled: "sftp.manager.status.cancelled",
+};
 
 // operationIcon は、まとまりの見出しに出す操作の種類の印である。削除、アップロード、
 // ダウンロードのどれでもないものは、リモートからリモートへのコピーと移動である。
@@ -416,13 +430,9 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
                       <span className="tabular-nums text-ink-muted">{item.remainingSeconds >= 0 && item.status === "running" ? t("sftp.manager.remaining", { duration: formatDuration(item.remainingSeconds, t) }) : "—"}</span>
                       <span className="col-span-2 flex flex-wrap items-center justify-end gap-2 whitespace-nowrap">
                         <span className={statusClass(displayedStatus)}>
-                          {displayedStatus === "failed"
-                            ? item.problem === ""
-                              ? t("sftp.manager.status.failed")
-                              : `${t("sftp.manager.status.failed")} · ${item.problem}`
-                            : processingStopped && displayedStatus === "queued"
+                          {processingStopped && displayedStatus === "queued"
                               ? t("sftp.manager.status.held")
-                              : t(`sftp.manager.status.${displayedStatus}`)}
+                              : t(statusLabelKeys[displayedStatus])}
                         </span>
                         {item.status === "queued" && waiting.length > 1 ? (
                           <>
@@ -437,6 +447,9 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
                         {item.allowedActions.includes("cancel") ? <button type="button" className="text-danger" onClick={() => runControl(() => sftpTransferManager.cancel(item.id))}>{t("sftp.cancel")}</button> : null}
                         {item.allowedActions.includes("remove") ? <button type="button" className="text-ink-muted hover:text-ink" onClick={() => runControl(() => sftpTransferManager.remove(item.id))}>{t("sftp.manager.remove")}</button> : null}
                       </span>
+                      {displayedStatus === "failed" && item.problem !== "" ? (
+                        <span className="col-span-2 text-right text-danger">{sftpTransferProblemText(t, item.problem)}</span>
+                      ) : null}
                     </li>
                   );
                 })}

@@ -1,20 +1,31 @@
 import { useEffect, useState } from "react";
 import { useTranslate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 import {
-  browserNotificationPermission,
   loadNotificationSoundPreferences,
   notificationSoundPresets,
   playNotificationSound,
-  requestBrowserNotificationPermission,
   saveNotificationSoundPreferences,
+  type NotificationSoundPreferences,
+  type NotificationSoundPreset,
+} from "../terminal/notificationSound";
+import {
+  browserNotificationPermission,
+  requestBrowserNotificationPermission,
   showBrowserNotification,
   type BrowserNotificationPermission,
-  type NotificationSoundPreferences,
-} from "../terminal/terminalNotifications";
+} from "../ui/browserNotifications";
 import { Field, control } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea, SettingsSection } from "./SettingsSection";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
+
+const soundLabelKeys: Record<NotificationSoundPreset, MessageKey> = {
+  none: "terminal.notificationSound.none",
+  gentle: "terminal.notificationSound.gentle",
+  bell: "terminal.notificationSound.bell",
+  pulse: "terminal.notificationSound.pulse",
+};
 
 // Browser notifications for finished commands: the permission the browser
 // granted, and the sound this browser plays. Neither reaches the engine.
@@ -109,7 +120,7 @@ export function NotificationSettingsSection({ showHeading }: { showHeading: bool
                 })}
               >
                 {notificationSoundPresets.map((preset) => (
-                  <option key={preset} value={preset}>{t(`terminal.notificationSound.${preset}`)}</option>
+                  <option key={preset} value={preset}>{t(soundLabelKeys[preset])}</option>
                 ))}
               </select>
               <Button

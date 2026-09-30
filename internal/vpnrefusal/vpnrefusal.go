@@ -254,6 +254,7 @@ var japanese = phrasebook{
 		line:            "%d行目：%s",
 		peerMissing:     "%d行目の[Peer]に「%s」がありません。",
 		fileMissing:     "設定ファイルに「%s」がありません。",
+		fieldSeparator:  "：",
 	},
 }
 

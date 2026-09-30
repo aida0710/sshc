@@ -32,13 +32,26 @@ func (s *Service) SetStartupRenamer(renamer StartupRenamer) {
 	s.startupRenamer = renamer
 }
 
-// SaveWithSecrets owns the whole alias transition. A locked vault retains the
-// existing contract: config and public metadata can still be renamed alone.
+// SaveWithSecrets owns the whole alias transition. A rename moves the vault
+// assignments and the startup snippet to the new alias; a raw edit that removes
+// a Host declaration drops that alias's startup snippet. A locked vault retains
+// the existing contract: config and public metadata can still be saved alone.
 func (s *Service) SaveWithSecrets(request EditRequest) (SaveResult, error) {
 	vault := s.vault
-	if request.Kind != EditRename || vault == nil || !vault.Unlocked() {
+	if vault == nil || !vault.Unlocked() {
 		return s.Save(request)
 	}
+	switch request.Kind {
+	case EditRename:
+		return s.saveAliasRename(vault, request)
+	case EditFileRaw, EditBlockRaw:
+		return s.saveAliasRemoval(vault, request)
+	default:
+		return s.Save(request)
+	}
+}
+
+func (s *Service) saveAliasRename(vault *secret.Service, request EditRequest) (SaveResult, error) {
 	renamer := s.startupRenamer
 	if renamer == nil {
 		return SaveResult{}, ErrStartupRenamerMissing
@@ -48,7 +61,7 @@ func (s *Service) SaveWithSecrets(request EditRequest) (SaveResult, error) {
 		Rename: &secret.AliasRename{From: request.Alias, To: request.NewAlias},
 	}, func(vaultChange *storage.Change) (storage.Result, error) {
 		commit := func(startupChange *storage.Change) (storage.Result, error) {
-			updated, committed, err := s.commitAliasRename(request, []*storage.Change{vaultChange, startupChange})
+			updated, committed, err := s.commitWithSealedChanges(request, []*storage.Change{vaultChange, startupChange})
 			saved = updated
 			return committed, err
 		}
@@ -57,7 +70,9 @@ func (s *Service) SaveWithSecrets(request EditRequest) (SaveResult, error) {
 	return saved, err
 }
 
-func (s *Service) commitAliasRename(request EditRequest, changes []*storage.Change) (SaveResult, storage.Result, error) {
+// commitWithSealedChanges plans request and commits it atomically together
+// with the already sealed vault and startup documents; nil changes are skipped.
+func (s *Service) commitWithSealedChanges(request EditRequest, changes []*storage.Change) (SaveResult, storage.Result, error) {
 	s.saveMutex.Lock()
 	defer s.saveMutex.Unlock()
 	prepared, err := s.plan(request)

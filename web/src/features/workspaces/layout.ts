@@ -58,7 +58,7 @@ export type LayoutAction =
 
 export function restoreLayout(root: StoredNode, focusedPaneId: string): LayoutState {
   const hydrated = hydrateNode(root);
-  const panes = paneIDs(hydrated);
+  const panes = paneIds(hydrated);
   return { root: hydrated, focusedPaneId: panes.includes(focusedPaneId) ? focusedPaneId : (panes[0] ?? "") };
 }
 
@@ -72,9 +72,9 @@ export function storeLayout(state: LayoutState): { layout: StoredNode; focusedPa
 export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
   switch (action.type) {
     case "focus":
-      return paneIDs(state.root).includes(action.paneId) ? { ...state, focusedPaneId: action.paneId } : state;
+      return paneIds(state.root).includes(action.paneId) ? { ...state, focusedPaneId: action.paneId } : state;
     case "split": {
-      if (paneIDs(state.root).length >= MAX_WORKSPACE_PANES || paneIDs(state.root).includes(action.pane.id) || !validPane(action.pane)) return state;
+      if (paneIds(state.root).length >= MAX_WORKSPACE_PANES || paneIds(state.root).includes(action.pane.id) || !validPane(action.pane)) return state;
       const root = replacePane(state.root, action.paneId, (current) => ({
         split: {
           direction: action.direction,
@@ -89,13 +89,13 @@ export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutSt
     case "dock-pane": {
       if (!validPane(action.pane) || action.pane.id === action.targetPaneId) return state;
       const existing = runtimePane(state.root, action.pane.id);
-      if (existing === undefined && paneIDs(state.root).length >= MAX_WORKSPACE_PANES) return state;
+      if (existing === undefined && paneIds(state.root).length >= MAX_WORKSPACE_PANES) return state;
       const withoutSource = existing === undefined ? state.root : removePane(state.root, action.pane.id);
       if (withoutSource === null || runtimePane(withoutSource, action.targetPaneId) === undefined) return state;
       const direction: SplitDirection = action.edge === "left" || action.edge === "right" ? "horizontal" : "vertical";
       const before = action.edge === "left" || action.edge === "top";
       const pane = existing ?? action.pane;
-      const ratio = existing !== undefined && paneIDs(state.root).length === 2 && state.root.split?.direction === direction
+      const ratio = existing !== undefined && paneIds(state.root).length === 2 && state.root.split?.direction === direction
         ? state.root.split.ratio
         : 50;
       const root = replacePane(withoutSource, action.targetPaneId, (target) => ({
@@ -116,7 +116,7 @@ export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutSt
     case "close": {
       const root = removePane(state.root, action.paneId);
       if (root === null || root === state.root) return state;
-      const panes = paneIDs(root);
+      const panes = paneIds(root);
       return {
         root,
         focusedPaneId: state.focusedPaneId === action.paneId ? (panes[0] ?? "") : state.focusedPaneId,
@@ -163,13 +163,13 @@ export function reduceLayout(state: LayoutState, action: LayoutAction): LayoutSt
   }
 }
 
-export function paneIDs(root: RuntimeNode): string[] {
+export function paneIds(root: RuntimeNode): string[] {
   const ids: string[] = [];
   visitPanes(root, (pane) => ids.push(pane.id));
   return ids;
 }
 
-export function paneSessionIDs(root: RuntimeNode): string[] {
+export function paneSessionIds(root: RuntimeNode): string[] {
   const ids: string[] = [];
   visitPanes(root, (pane) => { if (pane.sessionId !== undefined) ids.push(pane.sessionId); });
   return ids;

@@ -225,16 +225,20 @@ func TestEngineSettingsRejectAPortOutsideTheUnprivilegedRange(t *testing.T) {
 	}
 }
 
-// metadata.json をまるごと保存する経路でも、engine の設定の範囲外は要求の誤りとして断る。
-func TestSavingMetadataWithAnEnginePortOutOfRangeIsABadRequest(t *testing.T) {
+// config/save は metadata.json 全体を受け付けない。engine の設定（範囲外のポートを含む）を
+// 書けるのは /metadata/engine だけで、ここへ送られた metadata は要求の誤りとして断る。
+func TestSavingWholeMetadataThroughConfigSaveIsABadRequest(t *testing.T) {
 	harness := newConfigHarness(t)
 	metadata := application.NewMetadata()
 	metadata.Engine = &application.EngineSettings{Port: 80}
-	response := harness.call(t, http.MethodPost, "/api/v1/config/save", application.EditRequest{
-		Kind: application.EditMetadata, Metadata: &metadata,
+	response := harness.call(t, http.MethodPost, "/api/v1/config/save", map[string]any{
+		"kind": application.EditMetadata, "path": "config", "alias": "nas", "metadata": metadata,
 	}, true, true)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_request") {
 		t.Fatalf("response = %d, body %s", response.Code, response.Body.String())
+	}
+	if settings := harness.service.EngineSettings(); settings != (application.EngineSettings{}) {
+		t.Fatalf("a refused save wrote engine settings: %#v", settings)
 	}
 }
 
@@ -592,9 +596,13 @@ func TestEveryEditKindTheApplicationAcceptsPassesValidation(t *testing.T) {
 			request.Alias = "nas"
 		case application.EditFileRename:
 			request.DestinationPath = "conf.d/20-home.conf"
-		case application.EditGroups, application.EditMetadata:
-			metadata := application.NewMetadata()
-			request.Metadata, request.Path = &metadata, ""
+		case application.EditGroups:
+			request.Groups, request.Path = []application.GroupMetadata{{Name: "work"}}, ""
+		case application.EditMetadata:
+			request.Alias = "nas"
+			request.HostMetadata = &application.HostMetadata{
+				Identity: application.HostIdentity{Path: request.Path, Alias: "nas"}, Note: "rack 3",
+			}
 		}
 		if err := validateEditRequest(request); err != nil {
 			t.Errorf("validateEditRequest(%q) = %v, so no request of that kind can reach the application", kind, err)
@@ -616,6 +624,30 @@ func TestDuplicateAliasConflictHasAStableProblemCode(t *testing.T) {
 		t.Fatal(err)
 	}
 	if payload.Code != "alias_already_declared" {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestGroupsSavedFromAStaleCopyAreRefusedWithAStableProblemCode(t *testing.T) {
+	harness := newConfigHarness(t)
+	declared := harness.call(t, http.MethodPost, "/api/v1/config/save", application.EditRequest{
+		Kind: application.EditGroups, Groups: []application.GroupMetadata{{Name: "work"}},
+	}, true, true)
+	if declared.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", declared.Code, declared.Body.String())
+	}
+	// 2 つ目の画面は、グループが無いときに読み込んだままである。
+	response := harness.call(t, http.MethodPost, "/api/v1/config/save", application.EditRequest{
+		Kind: application.EditGroups, Groups: []application.GroupMetadata{{Name: "home"}},
+	}, true, true)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("status = %d, body %s", response.Code, response.Body.String())
+	}
+	var payload problemPayload
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Code != "metadata_changed" {
 		t.Fatalf("payload = %#v", payload)
 	}
 }

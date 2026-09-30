@@ -2,7 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { RemoteEntry } from "./api";
-import { SFTPEntryList, useSFTPEntryList } from "./SFTPEntryList";
+import { SFTPEntryList } from "./SFTPEntryList";
+import { useSFTPEntryList } from "./useSFTPEntryList";
 
 const entries: RemoteEntry[] = [
   { name: "project", path: "/home/edge/project", type: "directory", size: 0, mode: "0755", modifiedAt: "2026-09-01T07:00:00Z", revision: "project" },

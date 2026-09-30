@@ -20,13 +20,13 @@ export function resolveOSC52(
   return policy === undefined ? fallback : policy === "allow";
 }
 
-// The terminal pane: every live console, with the appearance and clipboard
+// The terminal pane: every live session, with the appearance and clipboard
 // policy each host asks for. It stays mounted while other sections show, so
 // that output keeps flowing and nothing is re-rendered on return.
 export function TerminalScreen({
   visible,
-  consoles,
-  activeConsole,
+  terminalSessions,
+  activeSessionId,
   settings,
   hostAppearance,
   hostOSC52,
@@ -37,14 +37,15 @@ export function TerminalScreen({
   onOpenShell,
   restoreRequest,
   onRestoreConsumed,
+  onRestoringChange,
   renameRequest,
   onRenameConsumed,
   onOpenRemotePath,
   onOSC52Change,
 }: {
   visible: boolean;
-  consoles: TerminalSessionsState;
-  activeConsole: string | null;
+  terminalSessions: TerminalSessionsState;
+  activeSessionId: string | null;
   settings: TerminalSettings;
   hostAppearance: Map<string, TerminalAppearance>;
   hostOSC52: Map<string, "allow" | "deny">;
@@ -60,6 +61,7 @@ export function TerminalScreen({
   >;
   restoreRequest: WorkspaceRestoreRequest | null;
   onRestoreConsumed: (sequence: number) => void;
+  onRestoringChange: (restoring: boolean) => void;
   renameRequest: WorkspaceRenameRequest | null;
   onRenameConsumed: (sequence: number) => void;
   onOpenRemotePath: (
@@ -74,15 +76,16 @@ export function TerminalScreen({
 }) {
   return (
     <TerminalWorkspace
-      sessions={consoles.sessions}
-      sessionsLoaded={consoles.loaded}
-      activeSessionId={activeConsole}
+      sessions={terminalSessions.sessions}
+      sessionsLoaded={terminalSessions.loaded}
+      activeSessionId={activeSessionId}
       onActive={onActive}
       onOpenAlias={onOpenAlias}
       onOpenShell={onOpenShell}
-      onClose={consoles.close}
+      onClose={terminalSessions.close}
       restoreRequest={restoreRequest}
       onRestoreConsumed={onRestoreConsumed}
+      onRestoringChange={onRestoringChange}
       renameRequest={renameRequest}
       onRenameConsumed={onRenameConsumed}
       onLiveWorkspaceChange={onLiveWorkspaceChange}
@@ -104,7 +107,7 @@ export function TerminalScreen({
             <TerminalView
               key={session.id}
               session={session}
-              searchShortcutActive={visible && activeConsole === session.id}
+              searchShortcutActive={visible && activeSessionId === session.id}
               {...(settings.fontSize === undefined
                 ? {}
                 : { fontSize: settings.fontSize })}
@@ -115,7 +118,7 @@ export function TerminalScreen({
               vpnProfile={vpnProfile}
               jisYenBackslash={settings.jisYenBackslash ?? false}
               onOsc52Change={(enabled) => onOSC52Change(session, enabled)}
-              onForwardsChanged={consoles.refresh}
+              onForwardsChanged={terminalSessions.refresh}
               {...(appearance.palette === ""
                 ? {}
                 : { palette: appearance.palette })}
@@ -129,9 +132,9 @@ export function TerminalScreen({
               copyOnSelect={settings.copyOnSelect ?? true}
               rightClickPaste={settings.rightClickPaste ?? true}
               webgl={settings.webgl ?? true}
-              onExit={() => consoles.markExited(session.id)}
-              onReconnect={() => consoles.reconnect(session.id)}
-              onStopReconnect={() => consoles.stopReconnect(session.id)}
+              onExit={() => terminalSessions.markExited(session.id)}
+              onReconnect={() => terminalSessions.reconnect(session.id)}
+              onStopReconnect={() => terminalSessions.stopReconnect(session.id)}
               onOpenRemotePath={onOpenRemotePath}
             />
           </Suspense>

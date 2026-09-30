@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { SyncApi, SyncBucketStatus, SyncHistory, SyncPushDraft } from "../api/sync";
 import type { Translate } from "../i18n/context";
+import { useRequestGeneration } from "../ui/useRequestGeneration";
 
 export type BucketStatusState =
   | { phase: "idle" }
@@ -29,14 +30,19 @@ export function useSyncRemoteState(api: Pick<SyncApi, "syncPushDraft" | "syncBuc
   const [pushMessage, setPushMessage] = useState("");
   const pushMessageDirty = useRef(false);
 
+  // The bucket is read by the polling and again after a push. Only the latest
+  // read is shown, so a slow poll cannot put back the state before the push.
+  const bucketGeneration = useRequestGeneration();
   const refreshBucket = useCallback(async () => {
+    const isCurrent = bucketGeneration.begin();
     setBucketState({ phase: "loading" });
     try {
-      setBucketState({ phase: "ready", value: await api.syncBucketStatus() });
+      const value = await api.syncBucketStatus();
+      if (isCurrent()) setBucketState({ phase: "ready", value });
     } catch {
-      setBucketState({ phase: "error", message: t("sync.bucketStatusFailed") });
+      if (isCurrent()) setBucketState({ phase: "error", message: t("sync.bucketStatusFailed") });
     }
-  }, [api, t]);
+  }, [api, bucketGeneration, t]);
 
   const refreshHistory = useCallback(async () => {
     setHistoryState({ phase: "loading" });
@@ -64,7 +70,10 @@ export function useSyncRemoteState(api: Pick<SyncApi, "syncPushDraft" | "syncBuc
     }
   }, [api]);
 
-  const resetBucket = useCallback(() => setBucketState({ phase: "idle" }), []);
+  const resetBucket = useCallback(() => {
+    bucketGeneration.retire();
+    setBucketState({ phase: "idle" });
+  }, [bucketGeneration]);
   const resetHistory = useCallback(
     () => setHistoryState({ phase: "idle" }),
     [],

@@ -1,4 +1,4 @@
-import type { HostEntry, HostIdentity, Overview } from "../api/config";
+import type { HostEntry, HostIdentity, HostMetadata, Overview } from "../api/config";
 
 export type BrowserServer = {
   host: HostEntry;
@@ -33,6 +33,18 @@ export function identityKey(identity: HostIdentity): string {
   return `${identity.path}\u0000${identity.alias}`;
 }
 
+// hostMetadataByIdentity は、接続ごとの metadata を識別子で引ける表にする。同じ識別子の
+// entry が 2 つ以上あれば先頭を使う。サーバーも先頭を画面へ返し、保存のときにその
+// entry と比べる（hostMetadataIndex）。別の entry を写しにすると保存が断られ続ける。
+export function hostMetadataByIdentity(entries: readonly HostMetadata[] | undefined): ReadonlyMap<string, HostMetadata> {
+  const byIdentity = new Map<string, HostMetadata>();
+  for (const entry of entries ?? []) {
+    const key = identityKey(entry.identity);
+    if (!byIdentity.has(key)) byIdentity.set(key, entry);
+  }
+  return byIdentity;
+}
+
 // The closest ancestor group that is declared, so an undeclared "a/b/c" hangs
 // under "a" when only "a" exists.
 export function nearestDeclaredParent(name: string, declared: ReadonlySet<string>): string {
@@ -59,9 +71,7 @@ export function duplicateAliasesOf(hosts: readonly HostEntry[]): ReadonlySet<str
 }
 
 export function buildConnectionBrowserIndex(overview: Overview): ConnectionBrowserIndex {
-  const hostMetadata = new Map(
-    (overview.metadata.hosts ?? []).map((entry) => [identityKey(entry.identity), entry]),
-  );
+  const hostMetadata = hostMetadataByIdentity(overview.metadata.hosts);
   const duplicateAliases = duplicateAliasesOf(overview.hosts);
   const servers = overview.hosts
     .map((host, sourceOrder) => ({ host, sourceOrder }))

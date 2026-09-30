@@ -263,7 +263,7 @@ func (s *Service) planMoveHost(graph *config.Graph, request EditRequest) (planne
 	if err != nil {
 		return planned{}, err
 	}
-	for _, alias := range movedAliases(moved) {
+	for _, alias := range declaredAliases(moved) {
 		if len(prepared.preview.Effective) >= maxEffectivePreviews {
 			break
 		}
@@ -276,11 +276,16 @@ func (s *Service) planMoveHost(graph *config.Graph, request EditRequest) (planne
 }
 
 func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (planned, error) {
-	if request.Metadata == nil {
-		return planned{}, ErrUnknownEditKind
+	stored, metadataPrecondition, err := s.metadata.Load()
+	if err != nil {
+		return planned{}, err
+	}
+	edited, err := applyMetadataEdit(stored, request)
+	if err != nil {
+		return planned{}, err
 	}
 	if request.Kind == EditGroups {
-		if err := checkGroupSettingsWritable(*request.Metadata); err != nil {
+		if err := checkGroupSettingsWritable(edited); err != nil {
 			return planned{}, err
 		}
 	}
@@ -292,12 +297,8 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 			identities = append(identities, host.Identity)
 		}
 	}
-	reconciled, notices := ReconcileMetadata(*request.Metadata, identities)
+	reconciled, notices := ReconcileMetadata(edited, identities)
 
-	_, metadataPrecondition, err := s.metadata.Load()
-	if err != nil {
-		return planned{}, err
-	}
 	metadataChange, err := s.metadata.Change(reconciled, metadataPrecondition)
 	if err != nil {
 		return planned{}, err

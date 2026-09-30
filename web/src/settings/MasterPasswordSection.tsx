@@ -7,6 +7,7 @@ import { CheckboxField } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea, SettingsSection } from "./SettingsSection";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { isAcceptedButShort, meetsMasterPasswordMinimum } from "../secrets/masterPasswordLength";
 
 export type MasterPasswordApi = Pick<VaultApi, "passwordVault" | "changeMasterPassword">;
 
@@ -22,6 +23,7 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
   const t = useTranslate();
   // null until the vault has said whether it has a password at all.
   const [passwordless, setPasswordless] = useState<boolean | null>(null);
+  const [minPassphraseLength, setMinPassphraseLength] = useState<number | undefined>(undefined);
   const [draft, setDraft] = useState<MasterDraft>(emptyDraft);
   const save = useAsyncOperation();
 
@@ -32,7 +34,9 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
     let active = true;
     setPasswordless(null);
     void api.passwordVault().then((status) => {
-      if (active) setPasswordless(status.passwordless ?? false);
+      if (!active) return;
+      setPasswordless(status.passwordless ?? false);
+      setMinPassphraseLength(status.minPassphraseLength);
     }).catch(() => { if (active) reportFailure(t("secrets.failed")); });
     return () => { active = false; };
   }, [api, t, reportFailure]);
@@ -52,17 +56,20 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
     }
   }
 
+  // Only a change that landed empties the fields. A refused one keeps all three
+  // so that a mistyped current password is fixed without retyping the new one
+  // twice, as the lock screen and the VPN profile form do.
   async function submit() {
     const { current, next, withoutPassword } = draft;
-    await save.run(async () => {
+    const changed = await save.run(async () => {
       const result = await api.changeMasterPassword(passwordless ? "" : current, withoutPassword ? "" : next);
       setPasswordless(result.vault.passwordless ?? false);
       onVaultChanged?.(result.vault);
     }, { describe: (error) => describeChangeFailure(failureCode(error)) });
-    setDraft((state) => ({ ...emptyDraft, withoutPassword: state.withoutPassword }));
+    if (changed) setDraft((state) => ({ ...emptyDraft, withoutPassword: state.withoutPassword }));
   }
 
-  const strong = [...draft.next].length >= 4 && draft.next === draft.confirm;
+  const strong = meetsMasterPasswordMinimum(draft.next, minPassphraseLength) && draft.next === draft.confirm;
   const canChange = passwordless !== null && !save.busy && (draft.withoutPassword || strong);
   return (
     <SettingsSection id="settings-password" label={t("secrets.changeHeading")} icon="secrets" showHeading={showHeading}>
@@ -94,7 +101,7 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
           />
           </>}
         </div>
-        {!draft.withoutPassword && [...draft.next].length >= 4 && [...draft.next].length < 12 ? <p className="mt-3 text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
+        {!draft.withoutPassword && isAcceptedButShort(draft.next, minPassphraseLength) ? <p className="mt-3 text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
         <ActionArea status={save.error === ""
           ? (save.saved ? <p role="status" className="text-sm text-live">{t("secrets.changedMasterLocally")}</p> : undefined)
           : <Notice tone="danger">{save.error}</Notice>}

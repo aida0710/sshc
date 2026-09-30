@@ -1,4 +1,5 @@
-import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from "react";
+import { useId, type ReactNode } from "react";
+import { describeControl } from "./describeControl";
 
 // 入力欄の幅。Tailwind はクラス名を字面で拾うので、幅ごとのクラスをここに書き切る。
 const controlWidthClasses = {
@@ -63,15 +64,13 @@ export function Field({
   children,
   interactiveChildren = false,
 }: FieldProps) {
+  const hintId = useId();
   const errorId = useId();
-  let describedChild = children;
-  if (error !== undefined && error !== "" && isValidElement(children)) {
-    const child = children as ReactElement<{ "aria-describedby"?: string; "aria-invalid"?: boolean }>;
-    describedChild = cloneElement(child, {
-      "aria-describedby": [child.props["aria-describedby"], errorId].filter(Boolean).join(" "),
-      "aria-invalid": true,
-    });
-  }
+  const hasError = error !== undefined && error !== "";
+  const describedChild = describeControl(children, {
+    descriptionIds: [hint === undefined ? undefined : hintId, hasError ? errorId : undefined],
+    invalid: hasError,
+  });
   const contents = (
     <>
       <span className={fieldLabel}>{label}</span>
@@ -85,8 +84,8 @@ export function Field({
       ) : (
         <label className="flex flex-col gap-1">{contents}</label>
       )}
-      {hint === undefined ? null : <span className={hintText}>{hint}</span>}
-      {error === undefined || error === "" ? null : (
+      {hint === undefined ? null : <span id={hintId} className={hintText}>{hint}</span>}
+      {!hasError ? null : (
         <span id={errorId} role="alert" className="text-xs text-danger">{error}</span>
       )}
     </div>

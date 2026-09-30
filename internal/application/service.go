@@ -28,6 +28,7 @@ type Service struct {
 	saveMutex      sync.Mutex
 	keyPassphrases KeyPassphraseVerifier
 	startupRenamer StartupRenamer
+	startupRemover StartupRemover
 	vault          *secret.Service
 	// factsFor は、トークン展開と既定の GlobalKnownHostsFile に要るこのマシンの事実を読む。
 	// テストは本物の /etc/ssh の known_hosts へ届かないように差し替える。
@@ -60,7 +61,8 @@ func NewService(workspace *storage.Workspace, manager *storage.Manager) *Service
 //
 // 生成時ではなく setter で受けるのは、Vault の側がこの service の engine 設定
 // （アイドルでロックするまでの時間）を読んでから作られるからである。鍵の検証
-// （SetKeyPassphraseVerifier）とスニペットの改名（SetStartupRenamer）も同じ理由で
+// （SetKeyPassphraseVerifier）と起動スニペットの改名・削除（SetStartupRenamer・
+// SetStartupRemover）も同じ理由で
 // setter で受ける。鍵の一覧（keys.Inventory）は、要求のたびにディスクから読む
 // スナップショットなので、呼び出しごとの引数で受ける。
 func (s *Service) SetVault(vault *secret.Service) {

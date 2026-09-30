@@ -4,12 +4,16 @@ import { CheckboxField, hintText, sectionHeading } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
+import { SyncErrorNotice } from "./SyncErrorNotice";
 
+// 適用の失敗は、このダイアログの中に出す。背面の画面に出すとダイアログに隠れる。
 type SyncPullPreviewDialogProps = {
   preview: PullResponse;
   acceptRemoteHead: boolean;
   acceptedRemovals: boolean;
   busy: boolean;
+  error: string;
+  errorCode: string;
   direction: SyncDirection;
   t: Translate;
   onAcceptRemovals: (accepted: boolean) => void;
@@ -23,6 +27,8 @@ export function SyncPullPreviewDialog({
   acceptRemoteHead,
   acceptedRemovals,
   busy,
+  error,
+  errorCode,
   direction,
   t,
   onAcceptRemovals,
@@ -57,6 +63,7 @@ export function SyncPullPreviewDialog({
           </Button>
         </header>
         <div className="flex flex-col gap-3 px-4 py-4">
+          <SyncErrorNotice message={error} code={errorCode} />
           {acceptRemoteHead ? (
             <Notice tone="notice">
               {t("sync.remoteHeadPreview", {

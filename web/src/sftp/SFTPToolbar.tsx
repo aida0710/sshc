@@ -94,21 +94,73 @@ export function SFTPToolbar({
       <div className="flex min-h-11 shrink-0 items-center gap-1 border-b border-line/50 pb-1">
         <SFTPHostPicker aliases={aliases} {...(hosts === undefined ? {} : { hosts })} value={alias} disabled={locked} onChange={onHostChange} compact includeLocal />
         <VPNProfileChip name={vpnProfile} />
-        <button type="button" aria-label={t("sftp.back")} disabled={busy || locked || !browser.canBack} onClick={() => void browser.back()} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint"><Icon name="arrowLeft" className="size-4" /></button>
+        <button
+          type="button"
+          aria-label={t("sftp.back")}
+          disabled={busy || locked || !browser.canBack}
+          onClick={() => void browser.back()}
+          className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint"
+        >
+          <Icon name="arrowLeft" className="size-4" />
+        </button>
         {pathEditing ? (
-          <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); submitPath(); }}>
-            <input ref={pathInput} aria-label={labels.input} value={pathDraft} onChange={(event) => setPathDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") cancelEdit(); }} className="h-11 min-w-0 w-full rounded border border-control-line bg-control px-2 font-mono text-base" />
+          <form
+            className="flex min-w-0 flex-1 items-center gap-1"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitPath();
+            }}
+          >
+            <input
+              ref={pathInput}
+              aria-label={labels.input}
+              value={pathDraft}
+              onChange={(event) => setPathDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") cancelEdit();
+              }}
+              className="h-11 min-w-0 w-full rounded border border-control-line bg-control px-2 font-mono text-base"
+            />
             <Button type="submit" disabled={navigationDisabled}>{t("sftp.go")}</Button>
           </form>
         ) : (
-          <button type="button" data-testid="sftp-current-path" data-path={path} aria-label={labels.editPath} title={path} disabled={navigationDisabled} onClick={() => setPathEditing(true)} className="flex h-11 min-w-0 flex-1 items-center gap-1 rounded px-2 text-left active:bg-select-fill disabled:text-ink-faint">
-            <span className="truncate font-mono text-sm font-medium">{current?.label ?? "/"}</span><Icon name="chevronRight" className="size-3 shrink-0 rotate-90 text-ink-muted" />
+          <button
+            type="button"
+            data-testid="sftp-current-path"
+            data-path={path}
+            aria-label={labels.editPath}
+            title={path}
+            disabled={navigationDisabled}
+            onClick={() => setPathEditing(true)}
+            className="flex h-11 min-w-0 flex-1 items-center gap-1 rounded px-2 text-left active:bg-select-fill disabled:text-ink-faint"
+          >
+            <span className="truncate font-mono text-sm font-medium">{current?.label ?? "/"}</span>
+            <Icon name="chevronRight" className="size-3 shrink-0 rotate-90 text-ink-muted" />
           </button>
         )}
-        {pathEditing ? <button type="button" aria-label={t("sftp.cancel")} onClick={cancelEdit} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted"><Icon name="close" className="size-4" /></button> : <>
-          <button type="button" aria-label={t("sftp.refreshDirectory")} disabled={navigationDisabled} onClick={refresh} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint"><Icon name="sync" className="size-4" /></button>
-          {mobileActions}
-        </>}
+        {pathEditing ? (
+          <button
+            type="button"
+            aria-label={t("sftp.cancel")}
+            onClick={cancelEdit}
+            className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted"
+          >
+            <Icon name="close" className="size-4" />
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              aria-label={t("sftp.refreshDirectory")}
+              disabled={navigationDisabled}
+              onClick={refresh}
+              className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint"
+            >
+              <Icon name="sync" className="size-4" />
+            </button>
+            {mobileActions}
+          </>
+        )}
       </div>
     );
   }
@@ -122,7 +174,16 @@ export function SFTPToolbar({
         canHome={connected} canRoot={connected && !browser.atRoot}
         onBack={() => void browser.back()} onForward={() => void browser.forward()}
         onHome={() => void browser.goHome()} onRoot={() => void browser.goRoot()} />
-      <button type="button" aria-label={t("sftp.refreshDirectory")} title={t("sftp.refreshDirectory")} disabled={navigationDisabled} onClick={refresh} className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:size-8"><Icon name="sync" className="size-4" /></button>
+      <button
+        type="button"
+        aria-label={t("sftp.refreshDirectory")}
+        title={t("sftp.refreshDirectory")}
+        disabled={navigationDisabled}
+        onClick={refresh}
+        className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:size-8"
+      >
+        <Icon name="sync" className="size-4" />
+      </button>
       {pathEditing ? (
         <>
           <input
@@ -151,9 +212,23 @@ export function SFTPToolbar({
               <span key={crumb.path} className="flex min-w-0 items-center">
                 {index > 0 ? <Icon name="chevronRight" className="size-3 text-ink-faint" /> : null}
                 {index === crumbs.length - 1 ? (
-                  <span className="max-w-48 truncate px-1.5 py-1.5 font-medium text-ink md:py-1" title={crumb.path} aria-current="location">{crumb.label}</span>
+                  <span
+                    className="max-w-48 truncate px-1.5 py-1.5 font-medium text-ink md:py-1"
+                    title={crumb.path}
+                    aria-current="location"
+                  >
+                    {crumb.label}
+                  </span>
                 ) : (
-                  <button type="button" disabled={navigationDisabled} onClick={() => void browser.load(crumb.path)} className="max-w-40 truncate rounded px-1.5 py-1.5 text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:py-1" title={crumb.path}>{crumb.label}</button>
+                  <button
+                    type="button"
+                    disabled={navigationDisabled}
+                    onClick={() => void browser.load(crumb.path)}
+                    className="max-w-40 truncate rounded px-1.5 py-1.5 text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:py-1"
+                    title={crumb.path}
+                  >
+                    {crumb.label}
+                  </button>
                 )}
               </span>
             ))}
@@ -163,7 +238,14 @@ export function SFTPToolbar({
             className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">
             <Icon name="copy" className="size-3.5" />
           </button>
-          <button type="button" aria-label={labels.editPath} title={labels.editPath} disabled={navigationDisabled} onClick={() => setPathEditing(true)} className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">
+          <button
+            type="button"
+            aria-label={labels.editPath}
+            title={labels.editPath}
+            disabled={navigationDisabled}
+            onClick={() => setPathEditing(true)}
+            className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint"
+          >
             <Icon name="edit" className="size-3.5" />
           </button>
         </div>

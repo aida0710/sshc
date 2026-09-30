@@ -56,4 +56,32 @@ describe("usePolling", () => {
     vi.advanceTimersByTime(500);
     expect(second).toHaveBeenCalledTimes(1);
   });
+
+  it("tells a tick still waiting for its answer that polling has stopped", async () => {
+    let answer = () => undefined as void;
+    const applied = vi.fn();
+    const tick = vi.fn(async (isCurrent: () => boolean) => {
+      await new Promise<void>((resolve) => { answer = resolve; });
+      if (isCurrent()) applied();
+    });
+    const { rerender } = renderHook(({ enabled }) => usePolling(tick, { intervalMs: 100, enabled }), {
+      initialProps: { enabled: true },
+    });
+    vi.advanceTimersByTime(100);
+    expect(tick).toHaveBeenCalledTimes(1);
+    rerender({ enabled: false });
+    answer();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(applied).not.toHaveBeenCalled();
+  });
+
+  it("lets a tick apply its answer while polling continues", async () => {
+    const applied = vi.fn();
+    renderHook(() => usePolling(async (isCurrent) => {
+      await Promise.resolve();
+      if (isCurrent()) applied();
+    }, { intervalMs: 100 }));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(applied).toHaveBeenCalledTimes(1);
+  });
 });

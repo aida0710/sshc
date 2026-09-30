@@ -37,7 +37,7 @@ export function ConnectionSummary({
   );
   const showPassphrase = explicitKey && summary.keyPassphrase.state !== "not_needed";
   const showAccountPassword = !explicitKey && summary.accountPassword.state !== "none";
-  const reasonID = `connection-actions-${encodeURIComponent(summary.alias)}`;
+  const reasonId = `connection-actions-${encodeURIComponent(summary.alias)}`;
 
   // blockedReason は、接続のボタンを止めている理由である。読み直しに失敗したときは、
   // 上に出る失敗の文と再読み込みのボタンに合わせ、読み直し中とは書かない。
@@ -92,7 +92,7 @@ export function ConnectionSummary({
           {summary.group === "" ? null : <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-muted"><Icon name="groups" className="size-3.5" /><span className="sr-only">{t("conn.summaryGroup")}: </span>{summary.group}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button kind="primary" disabled={blocked || connecting || !connectAvailable} aria-describedby={blocked ? reasonID : undefined} onClick={onConnect} className="inline-flex items-center gap-2">
+          <Button kind="primary" disabled={blocked || connecting || !connectAvailable} aria-describedby={blocked ? reasonId : undefined} onClick={onConnect} className="inline-flex items-center gap-2">
             <Icon name="terminal" className="size-4" />
             {connecting ? t("conn.opening") : t("conn.connect")}
           </Button>
@@ -122,7 +122,7 @@ export function ConnectionSummary({
         </div> : null}
       </dl>
       {passwordConflict ? <p role="status" className="mt-3 rounded border border-notice-line bg-notice px-3 py-2 text-sm text-notice-ink">{t("conn.summaryPasswordCleanup")}</p> : null}
-      {blocked ? <p id={reasonID} className="mt-3 text-xs text-notice-ink">{blockedReason()}</p> : null}
+      {blocked ? <p id={reasonId} className="mt-3 text-xs text-notice-ink">{blockedReason()}</p> : null}
     </section>
   );
 }

@@ -47,6 +47,15 @@ function loaded<T>(result: PromiseSettledResult<T>): Loadable<T> {
     : { status: "failed" };
 }
 
+// savedResourcesConfirmed は、鍵・Vault・認証情報・パスワードの適否をどれも読めたかを返す。
+// 1つでも読めなければ、画面に出す保存済みの値を確かめられていない。
+export function savedResourcesConfirmed(saved: ConnectionSavedState): boolean {
+  return saved.keys.status !== "failed" &&
+    saved.vault.status !== "failed" &&
+    saved.credentials.status !== "failed" &&
+    saved.eligibility.status !== "failed";
+}
+
 export async function loadConnectionSavedState(
   detail: HostDetail,
   keys: Pick<KeysApi, "inventory">,

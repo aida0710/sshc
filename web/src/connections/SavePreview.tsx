@@ -2,6 +2,7 @@ import type { ConflictReport, DiffLine, FileDiff, Notice, SavePreview } from "..
 import type { Problem } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
+import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { Notice as Band } from "../ui/surface";
 
 const noticeKeys: Record<string, MessageKey> = {
@@ -68,15 +69,6 @@ function FileDiffView({ diff }: { diff: FileDiff }) {
   );
 }
 
-const refusalKeys: Record<string, MessageKey> = {
-  alias_already_declared: "refusal.alias_already_declared",
-  directory_not_empty: "refusal.directory_not_empty",
-  not_a_directory: "refusal.not_a_directory",
-  group_is_declared: "refusal.group_is_declared",
-  destination_exists: "refusal.destination_exists",
-  region_damaged: "refusal.region_damaged",
-};
-
 export function NoticeList({ notices }: { notices: Notice[] }) {
   const t = useTranslate();
   if (notices.length === 0) return null;
@@ -114,21 +106,7 @@ export function SavePreviewPanel({
       </div>
 
       {problem === null ? null : (
-        <Band tone="danger">
-          {problem.code === "config_syntax_error"
-            ? t("preview.syntaxError", {
-                path: problem.path ?? t("preview.theFile"),
-                line: problem.line ?? 0,
-                column: problem.column ?? 0,
-              })
-            : problem.code === "config_graph_error"
-              ? t("preview.graphError")
-              : problem.code === "config_conflict"
-                ? t("preview.conflictError")
-                : problem.code in refusalKeys
-                  ? t(refusalKeys[problem.code]!, { detail: problem.detail ?? "" })
-                  : t("preview.rejected", { code: problem.code })}
-        </Band>
+        <Band tone="danger">{saveProblemMessage(problem, t)}</Band>
       )}
 
       {problem?.diagnostics === undefined ? null : (

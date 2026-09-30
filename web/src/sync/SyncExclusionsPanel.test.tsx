@@ -44,6 +44,7 @@ describe("SyncExclusionsPanel", () => {
     expect(api.syncExclusions).not.toHaveBeenCalled();
     await userEvent.click(screen.getByText("同期するファイル"));
     expect(await screen.findByText("config")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "ファイル名・パスを検索" })).toBeInTheDocument();
     for (const name of ["authorized_keys", "known_hosts", "known_hosts.old"]) {
       expect(screen.getByRole("checkbox", { name })).not.toBeChecked();
     }

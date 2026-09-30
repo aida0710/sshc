@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { vaultStatus } from "../testing/vaultStatus";
 import type { ConnectionSavedState } from "./connectionSavedState";
 import { ConnectionSummary } from "./ConnectionSummary";
 
@@ -57,13 +58,7 @@ const state: ConnectionSavedState = {
   },
   vault: {
     status: "ready",
-    value: {
-      exists: true,
-      unlocked: true,
-      aliases: ["bastion"],
-      dedicatedKeyPassphrases: ["id_work"],
-      minPassphraseLength: 12,
-    },
+    value: vaultStatus({ aliases: ["bastion"], dedicatedKeyPassphrases: ["id_work"] }),
   },
   credentials: {
     status: "ready",
@@ -144,13 +139,7 @@ describe("ConnectionSummary", () => {
           credentials: { status: "ready", value: [] },
           vault: {
             status: "ready",
-            value: {
-              exists: true,
-              unlocked: true,
-              aliases: [],
-              dedicatedKeyPassphrases: ["id_work"],
-              minPassphraseLength: 12,
-            },
+            value: vaultStatus({ dedicatedKeyPassphrases: ["id_work"] }),
           },
         }}
         dirty={false}
@@ -186,13 +175,7 @@ describe("ConnectionSummary", () => {
           credentials: { status: "ready", value: [] },
           vault: {
             status: "ready",
-            value: {
-              exists: true,
-              unlocked: true,
-              aliases: [],
-              dedicatedKeyPassphrases: [],
-              minPassphraseLength: 4,
-            },
+            value: vaultStatus(),
           },
         }}
         dirty={false}

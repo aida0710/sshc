@@ -4,7 +4,7 @@ import { useTranslate } from "../i18n/context";
 import { control, hintText, sectionHeading } from "../ui/form";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Button, Card } from "../ui/surface";
-import { identityKey } from "./connectionBrowser";
+import { draftResetKey } from "./draftResetKey";
 
 type ManageConnectionProps = {
   detail: HostDetail;
@@ -35,7 +35,7 @@ export function ManageConnection({
   const identity = detail.form.entry.identity;
   const currentGroup = detail.form.entry.group ?? "";
   const initialComment = detail.form.comment || detail.metadata.note || "";
-  const resetKey = `${identityKey(identity)}\u0000${detail.file.contents}`;
+  const resetKey = draftResetKey(identity, detail.file.contents);
   const [renameTo, setRenameTo] = useState(identity.alias);
   const [group, setGroup] = useState(currentGroup);
   const [comment, setComment] = useState(initialComment);
@@ -48,8 +48,9 @@ export function ManageConnection({
     setComment(initialComment);
     setFile("");
     setConfirmingDelete(false);
-    // The form restarts only for another host (resetKey); the identity, group
-    // and comment it copies are snapshots of that host, not live inputs.
+    // ConnectionsPage remounts this form for another connection, so this starts
+    // it over when the file revision changes (resetKey). The identity, group
+    // and comment it copies are snapshots of that revision, not live inputs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 

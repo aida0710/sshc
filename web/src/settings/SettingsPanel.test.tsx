@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
+import { vaultStatus } from "../testing/vaultStatus";
 import { SettingsPanel } from "./SettingsPanel";
 import type { SettingsPanelApi } from "./SettingsPanel";
 
@@ -12,7 +13,7 @@ afterEach(() => {
 
 function buildApi(overrides: Partial<SettingsPanelApi> = {}): SettingsPanelApi {
   return {
-    passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, passwordless: false, aliases: [], dedicatedKeyPassphrases: [] }),
+    passwordVault: vi.fn().mockResolvedValue(vaultStatus()),
     terminalSettings: vi.fn().mockResolvedValue({}),
     localShellProfiles: vi.fn().mockResolvedValue({
       profiles: [
@@ -23,15 +24,7 @@ function buildApi(overrides: Partial<SettingsPanelApi> = {}): SettingsPanelApi {
     engineSettings: vi.fn().mockResolvedValue({}),
     setEngineSettings: vi.fn(),
     setTerminalSettings: vi.fn().mockResolvedValue(undefined),
-    changeMasterPassword: vi.fn().mockResolvedValue({
-      vault: {
-        exists: true,
-        unlocked: true,
-        aliases: [],
-        dedicatedKeyPassphrases: [],
-        minPassphraseLength: 12,
-      },
-    }),
+    changeMasterPassword: vi.fn().mockResolvedValue({ vault: vaultStatus() }),
     ...overrides,
   } as unknown as SettingsPanelApi;
 }
@@ -116,6 +109,42 @@ describe("SettingsPanel", () => {
     expect(within(region).getByText(/whole number from 1 to 999/i)).toBeVisible();
   });
 
+  it("locks the auto-lock fields of a passwordless Vault, says why, and keeps the saved choice", async () => {
+    const user = userEvent.setup();
+    const setEngineSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel passwordless api={buildApi({
+      engineSettings: vi.fn().mockResolvedValue({ port: 43123, vaultAutoLock: { mode: "idle", value: 30, unit: "minutes" } }),
+      setEngineSettings,
+    })} />);
+
+    const region = screen.getByRole("region", { name: "Engine" });
+    const port = within(region).getByLabelText("Port");
+    await waitFor(() => expect(port).toBeEnabled());
+    expect(within(region).getByLabelText("Vault auto-lock")).toBeDisabled();
+    expect(within(region).getByLabelText("Time")).toBeDisabled();
+    expect(within(region).getByLabelText("Unit")).toBeDisabled();
+    expect(within(region).getByText(/without a master password never locks automatically/i)).toBeVisible();
+
+    await user.clear(port);
+    await user.type(port, "43124");
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+    expect(setEngineSettings).toHaveBeenCalledWith({
+      port: 43124,
+      vaultAutoLock: { mode: "idle", value: 30, unit: "minutes" },
+    });
+  });
+
+  it("tells a passwordless Vault that auto-lock does not apply instead of warning about restart-only locking", async () => {
+    render(<SettingsPanel passwordless api={buildApi({
+      engineSettings: vi.fn().mockResolvedValue({ vaultAutoLock: { mode: "restart" } }),
+    })} />);
+
+    const region = screen.getByRole("region", { name: "Engine" });
+    await waitFor(() => expect(within(region).getByLabelText("Vault auto-lock")).toHaveValue("restart"));
+    expect(within(region).getByText(/without a master password never locks automatically/i)).toBeVisible();
+    expect(within(region).queryByText(/remains unlocked until sshc is restarted/i)).toBeNull();
+  });
+
   it("requests browser notification permission from an explicit click and confirms delivery", async () => {
     const delivered: Array<{ title: string; options: NotificationOptions | undefined }> = [];
     class FakeNotification {
@@ -190,6 +219,40 @@ describe("SettingsPanel", () => {
     expect(sessions).toHaveValue(2);
   });
 
+  it("does not save terminal defaults over settings it failed to load, and loads them on retry", async () => {
+    const user = userEvent.setup();
+    const terminalSettings = vi.fn()
+      .mockRejectedValueOnce(new Error("engine restarting"))
+      .mockResolvedValue({ maxSessions: 3 });
+    const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({ terminalSettings, setTerminalSettings })} page="Terminal" />);
+
+    const region = screen.getByRole("region", { name: "Terminal" });
+    expect(await within(region).findByRole("alert")).toHaveTextContent("Terminal settings could not be loaded");
+    expect(within(region).getByLabelText("Sessions open at once")).toBeDisabled();
+    expect(within(region).getByRole("button", { name: "Save" })).toBeDisabled();
+
+    await user.click(within(region).getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(within(region).getByLabelText("Sessions open at once")).toHaveValue(3));
+    expect(within(region).queryByRole("alert")).not.toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "Save" })).toBeEnabled();
+    expect(setTerminalSettings).not.toHaveBeenCalled();
+  });
+
+  it("does not save engine defaults over settings it failed to load", async () => {
+    const setEngineSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({
+      engineSettings: vi.fn().mockRejectedValue(new Error("engine restarting")),
+      setEngineSettings,
+    })} page="Engine" />);
+
+    const region = screen.getByRole("region", { name: "Engine" });
+    expect(await within(region).findByRole("alert")).toHaveTextContent("Engine settings could not be loaded");
+    expect(within(region).getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(within(region).getByRole("button", { name: "Try again" })).toBeEnabled();
+  });
+
   it("waits for the application to refresh terminal state before reporting a save", async () => {
     const user = userEvent.setup();
     let finishRefresh: () => void = () => undefined;
@@ -258,7 +321,7 @@ describe("SettingsPanel", () => {
     expect(screen.getByLabelText("Confirm new master password")).toHaveValue("");
   });
 
-  it("reports a wrong current password and clears every secret after failure", async () => {
+  it("reports a wrong current password and keeps every field so it can be fixed without retyping", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi({
       changeMasterPassword: vi.fn().mockRejectedValue(new ApiError("wrong_passphrase", 403, null)),
@@ -268,9 +331,9 @@ describe("SettingsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Change the master password" }));
 
     expect(await screen.findByText("The current master password is incorrect. Nothing was changed.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Current master password")).toHaveValue("");
-    expect(screen.getByLabelText("New master password")).toHaveValue("");
-    expect(screen.getByLabelText("Confirm new master password")).toHaveValue("");
+    expect(screen.getByLabelText("Current master password")).toHaveValue("the old one is long");
+    expect(screen.getByLabelText("New master password")).toHaveValue("the new one is long");
+    expect(screen.getByLabelText("Confirm new master password")).toHaveValue("the new one is long");
   });
 
   it("says how to reduce the local backups when there are too many to re-encrypt", async () => {
@@ -285,7 +348,7 @@ describe("SettingsPanel", () => {
     expect(await screen.findByText(/too many local backups.*Delete old folders from ~\/\.ssh\/sshc\/backups/)).toBeInTheDocument();
   });
 
-  it("reports a generic master-password failure and clears every secret", async () => {
+  it("reports a generic master-password failure and keeps every field", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi({
       changeMasterPassword: vi.fn().mockRejectedValue(new Error("write failed")),
@@ -295,9 +358,10 @@ describe("SettingsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Change the master password" }));
 
     expect(await screen.findByText("The master password could not be changed.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Current master password")).toHaveValue("");
-    expect(screen.getByLabelText("New master password")).toHaveValue("");
-    expect(screen.getByLabelText("Confirm new master password")).toHaveValue("");
+    expect(screen.getByLabelText("Current master password")).toHaveValue("the old one is long");
+    expect(screen.getByLabelText("New master password")).toHaveValue("the new one is long");
+    expect(screen.getByLabelText("Confirm new master password")).toHaveValue("the new one is long");
+    expect(screen.getByRole("button", { name: "Change the master password" })).toBeEnabled();
   });
 
   it("can reveal the new master password only on request", async () => {
@@ -357,11 +421,11 @@ describe("SettingsPanel", () => {
     });
   });
 
-  it("distinguishes workspace settings from browser-only preferences", async () => {
+  it("distinguishes settings kept under ~/.ssh/sshc from browser-only preferences", async () => {
     render(<SettingsPanel api={buildApi()} />);
 
     const terminal = await screen.findByRole("region", { name: "Terminal" });
-    expect(within(terminal).getByText(/stored in workspace metadata/i)).toHaveTextContent(
+    expect(within(terminal).getByText(/stored in the sshc metadata under ~\/\.ssh\/sshc/i)).toHaveTextContent(
       /Theme, language and notification sounds are stored only in this browser/,
     );
     expect(within(terminal).getByLabelText("Engine replay buffer (bytes)"))
@@ -493,7 +557,7 @@ describe("SettingsPanel", () => {
     render(
       <SettingsPanel
         api={buildApi()}
-        consoles={{
+        terminalSessions={{
           sessions: [
             { id: "a", title: "one", kind: "shell", forwards: [] },
             { id: "b", title: "two", kind: "shell", forwards: [] },
@@ -518,7 +582,7 @@ describe("SettingsPanel", () => {
     render(
       <SettingsPanel
         api={buildApi()}
-        consoles={{
+        terminalSessions={{
           sessions: [{ id: "a", title: "one", kind: "shell", forwards: [] }] as never,
           busy: false,
           closeAll,
@@ -539,7 +603,7 @@ describe("SettingsPanel", () => {
     render(
       <SettingsPanel
         api={buildApi()}
-        consoles={{
+        terminalSessions={{
           sessions: [
             { id: "a", title: "one", kind: "shell", forwards: [], exited: { code: 0, signal: "", at: "x" } },
           ] as never,
@@ -560,7 +624,7 @@ describe("SettingsPanel", () => {
     render(
       <SettingsPanel
         api={buildApi()}
-        consoles={{ sessions: [], busy: false, closeAll: vi.fn() }}
+        terminalSessions={{ sessions: [], busy: false, closeAll: vi.fn() }}
       />,
     );
 
@@ -581,7 +645,7 @@ it("removes password protection after verifying the current password", async () 
 });
 
 it("adds a four-character password to a passwordless vault", async () => {
-  const api = buildApi({ passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, passwordless: true, aliases: [], dedicatedKeyPassphrases: [] }) });
+  const api = buildApi({ passwordVault: vi.fn().mockResolvedValue(vaultStatus({ passwordless: true })) });
   render(<SettingsPanel api={api} page="Password" />);
   await waitFor(() => expect(api.passwordVault).toHaveBeenCalled());
   expect(screen.queryByLabelText("Current master password")).not.toBeInTheDocument();
@@ -593,7 +657,7 @@ it("adds a four-character password to a passwordless vault", async () => {
 });
 
 it("hides the current password immediately after removing protection", async () => {
-  const status = { exists: true, unlocked: true, passwordless: true, aliases: [], dedicatedKeyPassphrases: [] };
+  const status = vaultStatus({ passwordless: true });
   const api = buildApi({ changeMasterPassword: vi.fn().mockResolvedValue({ vault: status }) });
   const onVaultChanged = vi.fn();
   render(<SettingsPanel api={api} page="Password" onVaultChanged={onVaultChanged} />);

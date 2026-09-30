@@ -4,16 +4,16 @@ import { matchesShortcut, shortcutKey, shortcutsBlocked, type Bindings } from ".
 import type { Section } from "../routing/sectionRoute";
 
 // Application-wide keyboard shortcuts: the command palette, jumping to a
-// section, and cycling consoles. Listened for in the capture phase so that
+// section, and cycling terminal sessions. Listened for in the capture phase so that
 // xterm never turns one of them into SSH input.
-export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedConsoles, activeConsole, navigate, showConsole, openPalette }: {
+export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessions, activeSessionId, navigate, showSession, openPalette }: {
   enabled: boolean;
   shortcuts: Bindings;
   terminalFace: boolean;
-  orderedConsoles: TerminalSession[];
-  activeConsole: string | null;
+  orderedSessions: TerminalSession[];
+  activeSessionId: string | null;
   navigate: (section: Section) => void;
-  showConsole: (id: string) => void;
+  showSession: (id: string) => void;
   openPalette: () => void;
 }) {
   useEffect(() => {
@@ -34,13 +34,13 @@ export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedConso
         action = openPalette;
       } else if (matchesShortcut(event, "home", shortcuts)) action = () => navigate("Home");
       else if (matchesShortcut(event, "sftp", shortcuts)) action = () => navigate("Files");
-      else if (orderedConsoles.length > 0) {
+      else if (orderedSessions.length > 0) {
         const delta = matchesShortcut(event, "nextSession", shortcuts) ? 1 : matchesShortcut(event, "previousSession", shortcuts) ? -1 : 0;
         if (delta !== 0) action = () => {
-          const current = orderedConsoles.findIndex((session) => session.id === activeConsole);
-          const index = current < 0 ? (delta > 0 ? 0 : orderedConsoles.length - 1) : (current + delta + orderedConsoles.length) % orderedConsoles.length;
-          const selected = orderedConsoles[index];
-          if (selected !== undefined) showConsole(selected.id);
+          const current = orderedSessions.findIndex((session) => session.id === activeSessionId);
+          const index = current < 0 ? (delta > 0 ? 0 : orderedSessions.length - 1) : (current + delta + orderedSessions.length) % orderedSessions.length;
+          const selected = orderedSessions[index];
+          if (selected !== undefined) showSession(selected.id);
         };
       }
       if (action === undefined && !browserFind) return;
@@ -51,5 +51,5 @@ export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedConso
     // Capture before xterm translates an application shortcut into SSH input.
     document.addEventListener("keydown", handleShortcut, true);
     return () => document.removeEventListener("keydown", handleShortcut, true);
-  }, [enabled, shortcuts, navigate, orderedConsoles, activeConsole, showConsole, terminalFace, openPalette]);
+  }, [enabled, shortcuts, navigate, orderedSessions, activeSessionId, showSession, terminalFace, openPalette]);
 }

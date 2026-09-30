@@ -46,7 +46,7 @@ export function SortableTableHeader<Key extends string>({
 }) {
   const t = useTranslate();
   const active = column === activeColumn;
-  const nextDirection = active && direction === "ascending" ? "descending" : "ascending";
+  const nextDirection = nextSort(activeColumn, direction, column).direction;
   return (
     <th scope="col" aria-sort={active ? direction : "none"} className={className}>
       <button

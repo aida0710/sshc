@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Terminal } from "@xterm/xterm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,7 @@ import type { StreamHandlers, TerminalStream } from "./stream";
 import { ApiError } from "../api/client";
 import type { TerminalSession } from "../api/terminalSessions";
 import { reducedMotionQuery } from "../ui/reducedMotion";
+import { mobileViewportQuery } from "../ui/useMediaQuery";
 
 const streams: { handlers: StreamHandlers; stream: TerminalStream }[] = [];
 vi.mock("./stream", () => ({
@@ -99,6 +100,36 @@ describe("TerminalView", () => {
     try {
       renderView();
       expect(cursorBlink).toBe(false);
+    } finally {
+      open.mockRestore();
+    }
+  });
+
+  it("uses the phone font size on a phone viewport and follows the viewport when it changes", () => {
+    let phone = true;
+    const listeners: (() => void)[] = [];
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      get matches() { return query === mobileViewportQuery && phone; },
+      media: query,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: (_type: string, listener: () => void) => { listeners.push(listener); },
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    let view: Terminal | undefined;
+    const originalOpen = Terminal.prototype.open;
+    const open = vi.spyOn(Terminal.prototype, "open").mockImplementation(function (this: Terminal, parent: HTMLElement) {
+      view = this;
+      return originalOpen.call(this, parent);
+    });
+
+    try {
+      renderView();
+      expect(view?.options.fontSize).toBe(15);
+
+      phone = false;
+      act(() => listeners.forEach((listener) => listener()));
+      expect(view?.options.fontSize).toBe(13);
     } finally {
       open.mockRestore();
     }
@@ -224,7 +255,7 @@ describe("TerminalView", () => {
       clipboardData: { getData: () => "printf one\nprintf two\n" },
     });
 
-    expect(await screen.findByRole("dialog", { name: "Review paste to zsh" })).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "Review paste to localhost" })).toBeVisible();
     expect(streams[0]!.stream.send).not.toHaveBeenCalled();
     await userEvent.click(screen.getByText("Paste preview with control characters made visible"));
     expect(screen.getByLabelText("Paste preview with control characters made visible")).toHaveTextContent(
@@ -236,7 +267,20 @@ describe("TerminalView", () => {
 
     expect(streams[0]!.stream.send).toHaveBeenCalledOnce();
     expect(streams[0]!.stream.send).toHaveBeenCalledWith("printf one\rprintf two");
-    expect(screen.queryByRole("dialog", { name: "Review paste to zsh" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Review paste to localhost" })).toBeNull();
+  });
+
+  it("names the paste destination as the header does, the alias and not the title the terminal set", async () => {
+    render(<TerminalView session={{
+      ...session, kind: "ssh", alias: "osaka", title: "vim notes.md",
+      presentation: { displayTitle: "vim notes.md", titleSource: "terminal", titlePinned: false },
+    }} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    await waitFor(() => expect(streams).toHaveLength(1));
+    const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
+
+    fireEvent.paste(host, { clipboardData: { getData: () => "echo one\necho two" } });
+
+    expect(await screen.findByRole("dialog", { name: "Review paste to osaka" })).toBeVisible();
   });
 
   it("cancels a risky paste without sending any bytes", async () => {
@@ -248,7 +292,7 @@ describe("TerminalView", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
 
     expect(streams[0]!.stream.send).not.toHaveBeenCalled();
-    expect(screen.queryByRole("dialog", { name: "Review paste to zsh" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Review paste to localhost" })).toBeNull();
   });
 
   it("never carries a pending paste into a different terminal session", async () => {
@@ -257,7 +301,7 @@ describe("TerminalView", () => {
     await waitFor(() => expect(streams).toHaveLength(1));
     const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
     fireEvent.paste(host, { clipboardData: { getData: () => "echo one\necho two" } });
-    expect(await screen.findByRole("dialog", { name: "Review paste to zsh" })).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "Review paste to localhost" })).toBeVisible();
 
     rendered.rerender(
       <TerminalView
@@ -275,11 +319,11 @@ describe("TerminalView", () => {
     await waitFor(() => expect(streams).toHaveLength(1));
     const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
     fireEvent.paste(host, { clipboardData: { getData: () => "echo one\necho two" } });
-    expect(await screen.findByRole("dialog", { name: "Review paste to zsh" })).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "Review paste to localhost" })).toBeVisible();
 
     streams[0]!.handlers.onOutput(new TextEncoder().encode("[sshc] reconnected to a new shell\r\n"));
 
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Review paste to zsh" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Review paste to localhost" })).toBeNull());
     expect(streams[0]!.stream.send).not.toHaveBeenCalled();
   });
 

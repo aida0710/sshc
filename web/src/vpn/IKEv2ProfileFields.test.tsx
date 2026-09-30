@@ -79,6 +79,6 @@ describe("IKEv2ProfileFields", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(onSave).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("CA certificate (PEM)")).toHaveAccessibleDescription("This is not written in a form this field accepts.");
+    expect(screen.getByLabelText("CA certificate (PEM)")).toHaveAccessibleDescription(expect.stringContaining("This is not written in a form this field accepts."));
   });
 });

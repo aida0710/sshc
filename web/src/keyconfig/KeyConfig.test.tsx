@@ -3,7 +3,8 @@ import { refreshPresets, type Preset } from "./presets";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeyConfig } from "./KeyConfig";
-import { defaultBindings, loadBindings, matchesShortcut, parseBindings, shortcutKey, shortcutsBlocked, storageKey } from "./bindings";
+import { defaultBindings, loadBindings, matchesShortcut, parseBindings, shortcutKey, shortcutsBlocked } from "./bindings";
+import { localStorageKeys } from "../ui/browserStorageKeys";
 
 beforeEach(async () => {
   let presets: Preset[] = [];
@@ -46,6 +47,24 @@ describe("application shortcuts", () => {
     await waitFor(() => expect(loadBindings()).toEqual(defaultBindings));
   });
 
+  it("records a function key with Shift and one past F12, and saves what it recorded", async () => {
+    render(<KeyConfig />);
+    const assign = () => screen.getByRole("button", { name: "Assign shortcut: Open Home" });
+    fireEvent.click(assign());
+    fireEvent.keyDown(assign(), { key: "F2", shiftKey: true });
+    await waitFor(() => expect(loadBindings().home).toEqual(["Shift+F2"]));
+    fireEvent.click(assign());
+    fireEvent.keyDown(assign(), { key: "F13" });
+    await waitFor(() => expect(loadBindings().home).toEqual(["F13"]));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not record Shift with an ordinary key, which is typing rather than a chord", () => {
+    expect(shortcutKey(new KeyboardEvent("keydown", { key: "A", shiftKey: true }))).toBeNull();
+    expect(shortcutKey(new KeyboardEvent("keydown", { key: "+", ctrlKey: true, shiftKey: true }))).toBeNull();
+    expect(shortcutKey(new KeyboardEvent("keydown", { key: "F1", shiftKey: true }))).toBe("Shift+F1");
+  });
+
   it("reports failed storage writes and leaves current bindings intact", async () => {
     render(<KeyConfig />);
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("denied"); });
@@ -57,8 +76,8 @@ describe("application shortcuts", () => {
   it("reflects settings changed in another tab", () => {
     render(<KeyConfig />);
     act(() => {
-      localStorage.setItem(storageKey, JSON.stringify({ palette: ["Alt+K"] }));
-      window.dispatchEvent(new StorageEvent("storage", { key: storageKey }));
+      localStorage.setItem(localStorageKeys.shortcutBindings, JSON.stringify({ palette: ["Alt+K"] }));
+      window.dispatchEvent(new StorageEvent("storage", { key: localStorageKeys.shortcutBindings }));
     });
     expect(screen.getByRole("button", { name: "Assign shortcut: Command search" })).toHaveTextContent("Alt+K");
   });

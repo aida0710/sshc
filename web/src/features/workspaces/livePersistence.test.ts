@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { reduceLayout, restoreLayout } from "./layout";
-import { liveWorkspaceStorageKey, loadLiveWorkspace, saveLiveWorkspace } from "./livePersistence";
+import { sessionStorageKeys } from "../../ui/browserStorageKeys";
+import { loadLiveWorkspace, saveLiveWorkspace } from "./livePersistence";
 
-beforeEach(() => window.sessionStorage.removeItem(liveWorkspaceStorageKey));
+beforeEach(() => window.sessionStorage.removeItem(sessionStorageKeys.liveWorkspace));
 
 describe("live workspace session persistence", () => {
   it("stores only the live pane binding and transient presentation state", () => {
@@ -19,7 +20,7 @@ describe("live workspace session persistence", () => {
 
     saveLiveWorkspace(window.sessionStorage, layout, "db", "Operations");
 
-    const raw = window.sessionStorage.getItem(liveWorkspaceStorageKey) ?? "";
+    const raw = window.sessionStorage.getItem(sessionStorageKeys.liveWorkspace) ?? "";
     expect(raw).not.toContain("private-web-alias");
     expect(raw).not.toContain("private-db-alias");
     expect(JSON.parse(raw)).toEqual({
@@ -39,7 +40,7 @@ describe("live workspace session persistence", () => {
   });
 
   it("removes stale sessions, collapses their split, and repairs focus", () => {
-    window.sessionStorage.setItem(liveWorkspaceStorageKey, JSON.stringify({
+    window.sessionStorage.setItem(sessionStorageKeys.liveWorkspace, JSON.stringify({
       version: 1,
       root: {
         split: {
@@ -77,7 +78,7 @@ describe("live workspace session persistence", () => {
   });
 
   it("discards a snapshot when fewer than two bound sessions remain", () => {
-    window.sessionStorage.setItem(liveWorkspaceStorageKey, JSON.stringify({
+    window.sessionStorage.setItem(sessionStorageKeys.liveWorkspace, JSON.stringify({
       version: 1,
       root: {
         split: {
@@ -92,11 +93,11 @@ describe("live workspace session persistence", () => {
     }));
 
     expect(loadLiveWorkspace(window.sessionStorage, new Set(["session-web"]))).toBeNull();
-    expect(window.sessionStorage.getItem(liveWorkspaceStorageKey)).toBeNull();
+    expect(window.sessionStorage.getItem(sessionStorageKeys.liveWorkspace)).toBeNull();
   });
 
   it("rejects malformed or duplicated pane bindings", () => {
-    window.sessionStorage.setItem(liveWorkspaceStorageKey, JSON.stringify({
+    window.sessionStorage.setItem(sessionStorageKeys.liveWorkspace, JSON.stringify({
       version: 1,
       root: {
         split: {
@@ -111,6 +112,6 @@ describe("live workspace session persistence", () => {
     }));
 
     expect(loadLiveWorkspace(window.sessionStorage, new Set(["same-session"]))).toBeNull();
-    expect(window.sessionStorage.getItem(liveWorkspaceStorageKey)).toBeNull();
+    expect(window.sessionStorage.getItem(sessionStorageKeys.liveWorkspace)).toBeNull();
   });
 });

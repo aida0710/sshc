@@ -155,6 +155,19 @@ describe("a reload", () => {
     expect(replaceState).not.toHaveBeenCalled();
   });
 
+  it("forgets the stored token when a renewal answers with something that is not a session", async () => {
+    window.sessionStorage.setItem("sshc.session.csrf", "c".repeat(43));
+    const fetcher = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ csrfToken: "short" }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    await expect(
+      bootstrapSession({ hash: "", pathname: "/", search: "" }, { replaceState: vi.fn() }, fetcher),
+    ).rejects.toThrow("invalid_bootstrap_response");
+    expect(window.sessionStorage).toHaveLength(0);
+  });
+
   it("does not try cookie-only renewal when this port-origin has no token", async () => {
     const fetcher = vi.fn();
 

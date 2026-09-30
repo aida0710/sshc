@@ -1,6 +1,5 @@
-import { MAX_WORKSPACE_PANES, paneIDs, type LayoutState, type RuntimeNode } from "./layout";
-
-export const liveWorkspaceStorageKey = "sshc.terminal.live-workspace.v1";
+import { sessionStorageKeys } from "../../ui/browserStorageKeys";
+import { MAX_WORKSPACE_PANES, paneIds, type LayoutState, type RuntimeNode } from "./layout";
 
 type StorageAccess = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -42,8 +41,8 @@ export function saveLiveWorkspace(
   if (storage === null) return;
   try {
     const root = layout === null ? null : snapshotNode(layout.root);
-    if (layout === null || root === null || paneIDs(layout.root).length < 2) {
-      storage.removeItem(liveWorkspaceStorageKey);
+    if (layout === null || root === null || paneIds(layout.root).length < 2) {
+      storage.removeItem(sessionStorageKeys.liveWorkspace);
       return;
     }
     const value: PersistedLiveWorkspace = {
@@ -53,7 +52,7 @@ export function saveLiveWorkspace(
       focusModePaneId,
       ...(validWorkspaceName(name) && name.trim() !== "" ? { name: name.trim() } : {}),
     };
-    storage.setItem(liveWorkspaceStorageKey, JSON.stringify(value));
+    storage.setItem(sessionStorageKeys.liveWorkspace, JSON.stringify(value));
   } catch {
     // Terminal operation must not depend on browser storage being available.
   }
@@ -65,7 +64,7 @@ export function loadLiveWorkspace(
 ): LiveWorkspaceSnapshot | null {
   if (storage === null) return null;
   try {
-    const raw = storage.getItem(liveWorkspaceStorageKey);
+    const raw = storage.getItem(sessionStorageKeys.liveWorkspace);
     if (raw === null || raw.length > 32_768) return discard(storage);
     const value = parseSnapshot(JSON.parse(raw));
     if (value === null) return discard(storage);
@@ -169,6 +168,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function discard(storage: StorageAccess): null {
-  try { storage.removeItem(liveWorkspaceStorageKey); } catch { /* ignore unavailable storage */ }
+  try { storage.removeItem(sessionStorageKeys.liveWorkspace); } catch { /* ignore unavailable storage */ }
   return null;
 }
