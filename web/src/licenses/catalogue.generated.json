@@ -436,7 +436,7 @@
   },
   {
     "name": "dompurify",
-    "version": "3.4.14",
+    "version": "3.4.16",
     "category": "Web",
     "url": "https://www.npmjs.com/package/dompurify",
     "license": "(MPL-2.0 OR Apache-2.0)",
