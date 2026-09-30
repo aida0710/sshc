@@ -20,10 +20,10 @@ type StartupSnippet struct {
 	Notice string
 }
 
-// startupDestinationChangedNotice は、割り当てた時から接続先が変わったので起動スニペットを
-// 送らなかったことを知らせる。割り当てたホストは Snippets 画面でしか分からないので、
-// 直す場所もここで示す。
-const startupDestinationChangedNotice = "割り当てた後で接続先または認証の設定が変わったため、起動スニペットを送りませんでした。［Snippets］画面で接続先を確認して、もう一度割り当ててください。"
+// startupDestinationChangedNotice は、割り当てた時から接続先（VPNプロファイルを含む）が
+// 変わったので起動スニペットを送らなかったことを知らせる。割り当てたホストは Snippets
+// 画面でしか分からないので、直す場所もここで示す。
+const startupDestinationChangedNotice = "割り当てた後で接続先、認証の設定、またはVPNプロファイルが変わったため、起動スニペットを送りませんでした。［Snippets］画面で接続先を確認して、もう一度割り当ててください。"
 
 // prepareStartupSnippet は、alias に割り当てた起動スニペットをこの接続で送るかを決める。
 //

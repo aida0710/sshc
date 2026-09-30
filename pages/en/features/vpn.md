@@ -198,9 +198,11 @@ A connection with a profile takes the same route from the terminal, from SFTP an
 
 Which connection takes which route is visible before and after connecting. The terminal and SFTP headers show **VPN: \<name\>**, and `sshc info <alias>` prints the same name on its `vpn` line.
 
-Removing a profile also removes its secrets and detaches it from every connection that used it, and stops its route if it is running. Removal needs an unlocked vault; while the vault is locked it is refused and nothing changes. Removing the settings but leaving the secrets behind would let a profile recreated under the same name pick up the old secrets.
+Attaching a profile to a connection, detaching it, or replacing it with another profile stops the saved password, one-time password and startup snippet assigned to that connection, because the same `HostName` can be a different machine on the network of another VPN. Save the Basic settings of the connection again in Connections for the password and one-time password ([Credentials and vault](/en/connections/credentials)), and assign the startup snippet again on the Snippets screen ([Quick Commands and Snippets](/en/terminal/commands)).
 
-To change a name, do not delete and recreate: use **Rename** on the VPN screen or `sshc vpn rename <old name> <new name>`, which moves the settings, the secrets and the connections that use it together. Renaming also needs an unlocked vault. The new name, whether it is taken and the vault are all checked before the route is stopped, so a refused rename leaves a route in use running.
+Removing a profile also removes its secrets and detaches it from every connection that used it, and stops its route if it is running. The saved passwords, one-time passwords and startup snippets assigned to those connections stop, and attaching a profile recreated under the same name does not bring them back until they are assigned again. Removal needs an unlocked vault; while the vault is locked it is refused and nothing changes. Removing the settings but leaving the secrets behind would let a profile recreated under the same name pick up the old secrets.
+
+To change a name, do not delete and recreate: use **Rename** on the VPN screen or `sshc vpn rename <old name> <new name>`, which moves the settings, the secrets and the connections that use it together. The route does not change, so the saved passwords, one-time passwords and startup snippets assigned to those connections keep working without being assigned again. Renaming also needs an unlocked vault. The new name, whether it is taken and the vault are all checked before the route is stopped, so a refused rename leaves a route in use running.
 
 ## While a route comes up
 

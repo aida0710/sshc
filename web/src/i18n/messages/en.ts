@@ -470,9 +470,9 @@ export const en = {
   "snippets.cancel": "Cancel",
   "snippets.startup": "Connection startup",
   "snippets.startupHint":
-    "Run this snippet after the selected host's shell is ready. It is sent on every connection and automatic reconnection, so secret variable values are stored encrypted with the binding and may remain in the remote shell history or on screen. It is not sent once the destination or authentication settings (host name, user, port, jump hosts, ProxyCommand, ForwardAgent, and so on) change after the assignment.",
+    "Run this snippet after the selected host's shell is ready. It is sent on every connection and automatic reconnection, so secret variable values are stored encrypted with the binding and may remain in the remote shell history or on screen. It is not sent once the destination or authentication settings (host name, user, port, jump hosts, ProxyCommand, ForwardAgent, VPN profile, and so on) change after the assignment.",
   "snippets.startupStale":
-    "Stopped. The destination or authentication settings changed after this snippet was assigned, so it is not sent to this host. Check the destination and assign it again.",
+    "Stopped. The destination, the authentication settings, or the VPN profile changed after this snippet was assigned, so it is not sent to this host. Check the destination and assign it again.",
   "snippets.startupStaleCount":
     "Stopped assignments: {count}. Select a host, check its destination, and assign it again.",
   "snippets.startupStaleHosts": "Hosts with a stopped assignment",
@@ -887,6 +887,7 @@ export const en = {
   "connection.vpnNone": "No VPN",
   "connection.vpnMissing": "{name} (profile is gone)",
   "connection.vpnNeedsDNS": "This HostName is a host name, so {name} needs a DNS server inside the VPN. Edit {name} on the VPN screen to add one, or set HostName to an IPv4 address.",
+  "connection.vpnChangeStopsAssignments": "If a saved password, one-time password, or startup snippet is assigned to this connection, it stops being used once you save. Save the Basic settings again to use the password and one-time password, and assign the startup snippet again under Snippets.",
   "terminal.fontSizeHint":
     "Enter a font size in pixels. Leave this blank to use 15 on narrow screens or 13 on other screens.",
   "terminal.copyOnSelectLabel": "Copy selected text automatically",
@@ -1224,7 +1225,7 @@ export const en = {
   "vpn.disconnectTitle": "Disconnect {name}?",
   "vpn.disconnectBody": "The connections using this VPN route ({count}) are disconnected too, and do not reconnect automatically.",
   "vpn.removeTitle": "Remove {name}?",
-  "vpn.removeBody": "This removes the profile and its stored secrets, and detaches it from the connections it is attached to. A running route is disconnected.",
+  "vpn.removeBody": "This removes the profile and its stored secrets, and detaches it from the connections it is attached to. Saved passwords, one-time passwords, and startup snippets assigned to those connections stop being used. A running route is disconnected.",
   "vpn.connections": "Connections using this profile",
   "vpn.connectionsHint": "To attach or detach this profile, choose the connection in Connections and change \"VPN profile\" on its sshc tab.",
   "vpn.noConnections": "None yet.",
@@ -2380,7 +2381,7 @@ export const en = {
   "conn.basicAssignedTOTP": "Assigned: {name}",
   "conn.basicRouteConfirmHeading": "Use saved credentials with the changed settings?",
   "conn.basicRouteConfirmBody":
-    "Connection settings such as HostName, User, Port, or ProxyJump have changed since the credentials were assigned. Saving allows the assigned password or one-time password to be used with the changed settings. A startup snippet assignment is not moved to the changed settings and stops; check the destination on the Snippets screen and assign it again.",
+    "Connection settings such as HostName, User, Port, ProxyJump, or the VPN profile have changed since the credentials were assigned. Saving allows the assigned password or one-time password to be used with the changed settings. A startup snippet assignment is not moved to the changed settings and stops; check the destination on the Snippets screen and assign it again.",
   "conn.basicRouteConfirmSave": "Save and confirm",
   "conn.basicRouteConfirmCancel": "Cancel",
   "conn.basicTOTPAction": "One-time password action",
