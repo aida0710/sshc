@@ -225,6 +225,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 			return nil
 		},
 		ConnectAliases:        services.ssh.aliases,
+		ConnectBindings:       services.ssh.routeBindings,
 		Sessions:              sessions,
 		BrowserAuth:           services.browserAuth,
 		UI:                    dependencies.UI,

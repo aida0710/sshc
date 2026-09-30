@@ -296,10 +296,7 @@ func applyIncludeEdits(file *config.File, lines []int, to string) ([]byte, error
 
 func (s *Service) appendRewrites(prepared *planned, rewrites []rewrite) error {
 	for _, item := range rewrites {
-		precondition := storage.Precondition{}
-		if !item.created {
-			precondition = storage.Precondition{Exists: true, Digest: storage.Digest(item.previous)}
-		}
+		precondition := preconditionFor(item.previous, !item.created)
 		change := storage.Change{
 			Path:         item.absolute,
 			Contents:     item.updated,

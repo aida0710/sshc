@@ -15,6 +15,7 @@ func serviceWithVPNMetadata(t *testing.T, metadata Metadata) *Service {
 
 func labProfile() VPNProfile {
 	return VPNProfile{
+		ID:        "0123456789abcdef0123456789abcdef",
 		Name:      "lab",
 		Backend:   vpn.WireGuard,
 		WireGuard: &WireGuardProfile{Servers: []string{"vpn.example.jp"}},
@@ -125,6 +126,7 @@ func TestProfilesAreListedByName(t *testing.T) {
 	metadata := NewMetadata()
 	second, first := labProfile(), labProfile()
 	second.Name, first.Name = "zeta", "alpha"
+	second.ID, first.ID = "2e7a0000000000000000000000000000", "a1fa0000000000000000000000000000"
 	metadata.VPNProfiles = []VPNProfile{second, first}
 	service := serviceWithVPNMetadata(t, metadata)
 

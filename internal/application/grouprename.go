@@ -347,10 +347,7 @@ func (g *groupLayout) stageEntryRegion() error {
 		return err
 	}
 	g.entryUpdated = g.entryFile.Render()
-	entryPrecondition := storage.Precondition{}
-	if entryExists {
-		entryPrecondition = storage.Precondition{Exists: true, Digest: storage.Digest(entryContents)}
-	}
+	entryPrecondition := preconditionFor(entryContents, entryExists)
 	g.prepared.changes = append(g.prepared.changes, storage.Change{
 		Path: g.service.entryPath, Contents: g.entryUpdated, Precondition: entryPrecondition,
 	})

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import { matchesShortcut, shortcutKey, shortcutsBlocked, type Bindings } from "../keyconfig/bindings";
 import type { Section } from "../routing/sectionRoute";
@@ -16,7 +16,11 @@ export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessi
   showSession: (id: string) => void;
   openPalette: () => void;
 }) {
-  useEffect(() => {
+  // The listener closes over `enabled` and the bindings, so it is replaced in a layout
+  // effect, in the same task that puts the new screen on the page. A passive effect
+  // runs after paint: a key pressed on the freshly shown ready screen would still reach
+  // the listener from the previous render (enabled=false) and be dropped.
+  useLayoutEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
       if (!enabled || shortcutKey(event) === null) return;
       const browserFind = terminalFace && !event.altKey && !event.shiftKey &&

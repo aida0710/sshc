@@ -201,7 +201,7 @@ func TestReachUnlockedEngineExplainsInsteadOfStartingOne(t *testing.T) {
 			wantErr: "sshc vault unlock",
 		},
 		{
-			// Vault 未作成と解錠済みを区別する。
+			// Vault 未作成とロック中を区別する。
 			name:    "no vault says how to create one",
 			running: true,
 			answers: []statusAnswer{{Owner: handoff.OwnerEngine, ProtocolVersion: handoff.ProtocolVersion}},

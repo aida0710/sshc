@@ -33,8 +33,8 @@ func (probe httpProbe) Connection(ctx context.Context, alias string) (connectAns
 	return requestConnection(ctx, probe.found, alias, probe.client)
 }
 
-// reachUnlockedEngine は稼働中で解錠済みの engine を返す。
-// engine は起動せず、届かない場合と施錠中の場合は、理由ごとの復旧手順を返す。
+// reachUnlockedEngine は稼働中で Vault のロックを解除した engine を返す。
+// engine は起動せず、届かない場合とロック中の場合は、理由ごとの復旧手順を返す。
 func reachUnlockedEngine(
 	ctx context.Context, stateDir string, client *http.Client,
 	newProbe func(handoff.Handoff) engineProbe,
@@ -52,7 +52,7 @@ func reachUnlockedEngine(
 	if status.Vault && status.Unlocked {
 		return probe, nil
 	}
-	// Vault 未作成と解錠済みを区別する。
+	// Vault 未作成とロック中を区別する。
 	if !status.Vault {
 		return nil, errors.New(vaultMissingAdvice)
 	}

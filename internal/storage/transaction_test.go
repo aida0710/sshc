@@ -1450,7 +1450,7 @@ func TestPendingListsARecordWhoseTargetWasReplacedWithoutFailing(t *testing.T) {
 	}
 }
 
-// 保留記録を片付けたら、その記録が触れたパスを知らせる。解錠中の Vault のように
+// 保留記録を片付けたら、その記録が触れたパスを知らせる。ロックを解除した Vault のように
 // ディスクの内容をメモリに持つ側が、読み直すための通知である。
 func TestCompleteAndRollbackReportThePathsTheRecordTouched(t *testing.T) {
 	cases := map[string]func(manager *Manager, identifier string) error{

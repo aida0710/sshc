@@ -1938,9 +1938,21 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
   /api/v1/metadata/engine:
+    # このマシンの sshc エンジンの設定。同期する metadata.json には無く、同期しない。
+    get:
+      operationId: getEngineSettings
+      responses:
+        "200":
+          description: This machine's engine settings; an omitted item is unset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EngineSettings" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
     put:
       operationId: setEngineSettings
-      # セクション全体を置き換える。省略した項目は未設定へ戻す。
+      # このマシンの sshc エンジンの設定全体を置き換える。省略した項目は未設定へ戻す。
       requestBody:
         required: true
         content:
@@ -4500,9 +4512,8 @@ components:
         shortcutPresets: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/ShortcutPreset" } }
         groupsFile: { type: string }
         embeddedTerminal: { $ref: "#/components/schemas/EmbeddedTerminal" }
-        engine: { $ref: "#/components/schemas/EngineSettings" }
-        # 転送キューの設定は engine のものだが、engine 節とは別に置く。Settings
-        # 画面の engine 保存は節ごと置き換えるため、同居させると消える。
+        # sshc エンジンの設定（ポートと Vault の自動ロック）は、このマシンだけの設定なので
+        # ここには無い。/api/v1/metadata/engine で読み書きする。
         fileTransfers: { $ref: "#/components/schemas/FileTransferSettings" }
         backgrounds: { $ref: "#/components/schemas/BackgroundSettings" }
         groups: { type: array, items: { $ref: "#/components/schemas/GroupMetadata" } }
@@ -4615,6 +4626,10 @@ components:
       additionalProperties: false
       required: [name, backend]
       properties:
+        # sshc エンジンがプロファイルを作るときに決める識別子。名前を変更しても、編集しても
+        # 変わらない。削除して同じ名前で作り直すと別の値になる。保存済みのパスワードなどの
+        # 割り当ては、接続に付けたプロファイルをこれで区別する。保存の要求に書いた値は使わない。
+        id: { type: string, pattern: "^[0-9a-f]{32}$" }
         name: { type: string, minLength: 1, maxLength: 48 }
         backend:
           type: string
@@ -4799,7 +4814,7 @@ components:
         jisYenBackslash: { type: boolean }
         localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
-    # engine の設定。
+    # このマシンの sshc エンジンの設定。同期しない。
     #
     # 受け口の番号は engine が起動時に読むので、変えても次に起動するまで効かない。
     # 画面はそう言う。

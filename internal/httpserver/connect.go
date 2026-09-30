@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"crypto/subtle"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -44,9 +45,12 @@ type CLIHandlers struct {
 	// Aliases は、この接続に現れる alias を、ProxyJump の手前も含めて返す。
 	// nil なら行き先ひとつだけを見る。
 	Aliases func(alias string) []string
-	// PasswordBinding resolves the authentication destination digest for each
-	// alias in the connection chain.
-	PasswordBinding func(alias string) (string, error)
+	// RouteBindings は、alias への接続に現れる alias ごとの認証先の digest
+	// （sshclient.Target.AuthenticationBinding）を、その接続が組み立てるとおりに返す。
+	// ProxyJump の踏み台はホップとしての値で、単独で繋ぐときの値とは違いうる（ホップは
+	// VPN を通らない）。埋め込みターミナルが照合するのも同じ値である。nil なら保存済みの
+	// パスワードと TOTP を返さない。
+	RouteBindings func(alias string) (map[string]string, error)
 	// Bootstrap はブラウザ用 URL を生成し、BaseURL はその接続先を返す。
 	// 両方が nil であれば、このアプリケーションはコマンドラインから開けない。
 	// これは session manager を持たないビルドの状態である。
@@ -106,21 +110,19 @@ type connectResponse struct {
 	Warnings     []string          `json:"warnings"`
 }
 
-// authenticationBindings は、この接続に現れる alias ごとの認証先の digest を返す。
+// authenticationBindings は、alias への接続に現れる alias ごとの認証先の digest を返す。
 //
-// パスワードと TOTP は同じ map を使うので、alias ごとに一度だけ解く。種類ごとに
+// パスワードと TOTP は同じ map を使うので、接続ごとに一度だけ解く。種類ごとに
 // 解き直すと、そのあいだに設定が変わったとき、2 つが別の経路に結び付いた値として
-// 返る。解けない alias は含めない。その alias の秘密は返らず、CLI が入力を求める。
-// 保管庫が無ければ返す秘密も無いので、設定を解かない。
-func (h CLIHandlers) authenticationBindings(aliases []string) map[string]string {
-	if h.Vault == nil || h.PasswordBinding == nil {
+// 返る。接続を組み立てられなければ空で、秘密は返らず、CLI が入力を求める（接続
+// そのものも同じ理由で失敗する）。保管庫が無ければ返す秘密も無いので、設定を解かない。
+func (h CLIHandlers) authenticationBindings(alias string) map[string]string {
+	if h.Vault == nil || h.RouteBindings == nil {
 		return nil
 	}
-	bindings := make(map[string]string, len(aliases))
-	for _, alias := range aliases {
-		if binding, err := h.PasswordBinding(alias); err == nil {
-			bindings[alias] = binding
-		}
+	bindings, err := h.RouteBindings(alias)
+	if err != nil {
+		return nil
 	}
 	return bindings
 }
@@ -339,7 +341,7 @@ func (h CLIHandlers) Stop(c *echo.Context) error {
 func (h CLIHandlers) Status(c *echo.Context) error {
 	answer, err := h.cliStatus()
 	if err != nil {
-		return unexpectedNoContent(c, err)
+		return unexpectedProblem(c, "vault_unreadable", err)
 	}
 	return c.JSON(http.StatusOK, answer)
 }
@@ -367,11 +369,11 @@ func (h CLIHandlers) cliStatus() (CLIStatus, error) {
 // Open は、セッションを確立する URL で応答する。
 func (h CLIHandlers) Open(c *echo.Context) error {
 	if h.Bootstrap == nil || h.BaseURL == "" {
-		return c.NoContent(http.StatusServiceUnavailable)
+		return problem(c, http.StatusServiceUnavailable, "bootstrap_unavailable")
 	}
 	bootstrap, err := h.Bootstrap.Reissue()
 	if err != nil {
-		return unexpectedNoContent(c, err)
+		return unexpectedProblem(c, "bootstrap_failed", err)
 	}
 	return c.JSON(http.StatusOK, openResponse{URL: h.BaseURL + "/#bootstrap=" + bootstrap})
 }
@@ -389,21 +391,25 @@ func (h CLIHandlers) Challenge(c *echo.Context) error {
 
 // Connect は、1 個の接続が必要とするものだけを返し、それより長生きするものは何も返さない。
 //
-// あらゆる拒否は外から見て同じ形をしているので、このエンドポイントを
+// secret を持たない呼び出し側は何も知ることができない（requireHandoffSecret）。
+// secret を示した呼び出し側への断りは、要求の形の誤りだけを理由の code で伝える。
+// 未知の alias も、パスワードの無い alias も断らないので、このエンドポイントを
 // 使ってどの alias が存在するか、どれにパスワードがあるかを知ることはできない。
-// secret を持たない呼び出し側は何も知ることができない。
 func (h CLIHandlers) Connect(c *echo.Context) error {
 	request := c.Request()
 	if request.Header.Get(echo.HeaderContentType) != "application/json" {
-		return c.NoContent(http.StatusUnsupportedMediaType)
+		return problem(c, http.StatusUnsupportedMediaType, "unsupported_media_type")
 	}
 
 	var decoded connectRequest
 	if err := decodeJSONWithin(c, maxConnectBody, &decoded); err != nil {
-		return c.NoContent(http.StatusBadRequest)
+		if errors.Is(err, errBodyTooLarge) {
+			return problem(c, http.StatusRequestEntityTooLarge, "request_body_too_large")
+		}
+		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	if err := validate.Alias(decoded.Alias); err != nil {
-		return c.NoContent(http.StatusBadRequest)
+		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
 
 	answer := connectResponse{Alias: decoded.Alias, Warnings: []string{}}
@@ -418,7 +424,7 @@ func (h CLIHandlers) Connect(c *echo.Context) error {
 	// 鍵もパスワードも、同じ連鎖を見る。
 	aliases := h.connectionAliases(decoded.Alias)
 	answer.Passphrases = savedPassphrases(h.Vault, aliases, h.WorkspaceKeys)
-	bindings := h.authenticationBindings(aliases)
+	bindings := h.authenticationBindings(decoded.Alias)
 	answer.Passwords, answer.PasswordBindings, answer.StalePasswords =
 		h.savedBoundSecrets(secret.KindPassword, aliases, bindings)
 	answer.TOTPs, answer.TOTPBindings, answer.StaleTOTPs =

@@ -60,8 +60,8 @@ func (s *Service) OpenBackup(sealed []byte) ([]byte, error) {
 // の変更とは無関係である。この関数はローカルの vault、同期設定、世代バックアップだけを
 // 再暗号化する。
 //
-// パスワードなしの Vault が施錠中なら、先に解錠してから変更する。パスワードのある
-// Vault が施錠中なら ErrLocked で断る。
+// パスワードなしの Vault がロック中なら、先にロックを解除してから変更する。パスワードのある
+// Vault がロック中なら ErrLocked で断る。
 //
 // ctx は錠を待つあいだの取り消しだけを見る。ほかの Vault の変更が終わるのを待って
 // いるうちに呼び手が諦めていたら、再封印を始めない。始めた再封印は途中で止めない。
@@ -74,7 +74,7 @@ func (s *Service) ChangeMasterPassword(ctx context.Context, current, next string
 	if err := s.unlockPasswordlessHeld(); err != nil {
 		return err
 	}
-	// 施錠中に current を確かめると、ロックを越えてパスワードを試せてしまう。
+	// ロック中に current を確かめると、ロックを越えてパスワードを試せてしまう。
 	if !s.Unlocked() {
 		return ErrLocked
 	}

@@ -10,28 +10,58 @@ import (
 
 // 接続とVPNプロファイルの紐付けを読む。書き込みは metadata の保存と同じ経路を通る。
 
+// AttachedVPNProfile は、接続に付けたVPNプロファイルである。Name は経路の起動に、ID は
+// 保存済みのパスワードなどの結び付けの値（sshclient.Target.VPNProfileID）に使う。
+//
+// Name が空なら、この接続はVPNを通らない。付けた名前のプロファイルが無ければ ID が空に
+// なる。その接続は経路を起動できない。
+type AttachedVPNProfile struct {
+	Name string
+	ID   string
+}
+
 // ConnectionVPN は、この alias へ届くために通るVPNプロファイルの名前を返す。
 //
 // 空なら、この接続はVPNを通らない。
 func (s *Service) ConnectionVPN(alias string) (string, error) {
+	attached, err := s.ConnectionVPNProfile(alias)
+	return attached.Name, err
+}
+
+// ConnectionVPNProfile は、この alias へ届くために通るVPNプロファイルの名前と識別子を返す。
+func (s *Service) ConnectionVPNProfile(alias string) (AttachedVPNProfile, error) {
 	graph, err := s.resolve()
 	if err != nil {
-		return "", err
+		return AttachedVPNProfile{}, err
 	}
 	identity := s.connectionIdentity(graph, alias)
 	// 外部ファイルやワイルドカードだけの規則は編集できる identity を持たない。
 	// 同じ名前の内部ホストの設定を借りない。
 	if identity.IsZero() {
-		return "", nil
+		return AttachedVPNProfile{}, nil
 	}
 	stored, _, err := s.metadata.Load()
 	if err != nil {
-		return "", err
+		return AttachedVPNProfile{}, err
 	}
-	if index := hostMetadataIndex(stored.Hosts, identity); index >= 0 {
-		return stored.Hosts[index].VPN, nil
+	return attachedVPNProfile(stored, identity), nil
+}
+
+// attachedVPNProfile は、identity のブロックに付けたVPNプロファイルを metadata から返す。
+// 付けていなければ空である。
+func attachedVPNProfile(stored Metadata, identity HostIdentity) AttachedVPNProfile {
+	if identity.IsZero() {
+		return AttachedVPNProfile{}
 	}
-	return "", nil
+	index := hostMetadataIndex(stored.Hosts, identity)
+	if index < 0 || stored.Hosts[index].VPN == "" {
+		return AttachedVPNProfile{}
+	}
+	attached := AttachedVPNProfile{Name: stored.Hosts[index].VPN}
+	if profile := vpnProfileIndex(stored.VPNProfiles, attached.Name); profile >= 0 {
+		attached.ID = stored.VPNProfiles[profile].ID
+	}
+	return attached
 }
 
 // VPNProfile は、名前で保存済みのVPNプロファイルを返す。

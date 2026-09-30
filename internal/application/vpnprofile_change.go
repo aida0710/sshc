@@ -25,6 +25,8 @@ type VPNProfileChange struct {
 
 // PlanVPNProfileCreate は、新しいプロファイルを加える変更を作る。同じ名前が
 // あれば ErrVPNProfileExists を返す。
+//
+// 識別子は新しく決める。削除したプロファイルと同じ名前でも、前の識別子は引き継がない。
 func (s *Service) PlanVPNProfileCreate(profile VPNProfile) (VPNProfileChange, error) {
 	profile = profile.withoutWireGuardFields()
 	if _, err := profile.Profile(); err != nil {
@@ -37,6 +39,9 @@ func (s *Service) PlanVPNProfileCreate(profile VPNProfile) (VPNProfileChange, er
 	if vpnProfileIndex(stored.VPNProfiles, profile.Name) >= 0 {
 		return VPNProfileChange{}, fmt.Errorf("%w: %s", ErrVPNProfileExists, profile.Name)
 	}
+	if profile.ID, err = newVPNProfileID(); err != nil {
+		return VPNProfileChange{}, err
+	}
 	stored.VPNProfiles = append(stored.VPNProfiles, profile)
 	return VPNProfileChange{planned: metadataCommit{
 		operation: "vpn.profile.create", metadata: stored, precondition: precondition,
@@ -47,7 +52,8 @@ func (s *Service) PlanVPNProfileCreate(profile VPNProfile) (VPNProfileChange, er
 // 無ければ ErrUnknownVPNProfile を返す。
 //
 // 作るときも置き換えるときも、WireGuard の v0.40.0 までの項目は書かない。設定ファイルは、
-// 呼び手が同じ書き込みで Vault に置く。
+// 呼び手が同じ書き込みで Vault に置く。識別子は保存済みのものを保つので、編集しても
+// 割り当ては停止中にならない。
 func (s *Service) PlanVPNProfileUpdate(profile VPNProfile) (VPNProfileChange, error) {
 	profile = profile.withoutWireGuardFields()
 	if _, err := profile.Profile(); err != nil {
@@ -61,6 +67,7 @@ func (s *Service) PlanVPNProfileUpdate(profile VPNProfile) (VPNProfileChange, er
 	if index < 0 {
 		return VPNProfileChange{}, fmt.Errorf("%w: %s", ErrUnknownVPNProfile, profile.Name)
 	}
+	profile.ID = stored.VPNProfiles[index].ID
 	stored.VPNProfiles[index] = profile
 	return VPNProfileChange{planned: metadataCommit{
 		operation: "vpn.profile.update", metadata: stored, precondition: precondition,
@@ -71,7 +78,8 @@ func (s *Service) PlanVPNProfileUpdate(profile VPNProfile) (VPNProfileChange, er
 // 紐付けも追従させる変更を作る。
 //
 // 別々に直すと、古い名前を指したままの接続が残る。その接続は繋ぐたびに断られ、
-// 利用者は設定のどこを直せばよいかを探すことになる。
+// 利用者は設定のどこを直せばよいかを探すことになる。識別子は変えないので、割り当ての
+// 結び付けの値は変わらず、保存済みのパスワードなどは割り当て直さずに使える。
 func (s *Service) PlanVPNProfileRename(from, to string) (VPNProfileChange, error) {
 	if err := vpn.ValidateName(to); err != nil {
 		return VPNProfileChange{}, fmt.Errorf("%w: %w", ErrMetadataVPN, err)

@@ -1,4 +1,4 @@
-// Package secrettest は、ほかのパッケージのテストが解錠中の vault へ前準備の値を
+// Package secrettest は、ほかのパッケージのテストがロックを解除した vault へ前準備の値を
 // 書くための関数を置く。
 //
 // どれも本番の書き込みと同じ変更（secret.PasswordMutation など）と同じ書き方

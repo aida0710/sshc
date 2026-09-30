@@ -15,9 +15,7 @@ var ErrMetadataChanged = errors.New("metadata changed since it was loaded; reloa
 // 画面が送るのはその 1 件と、読み込んだときのその 1 件（base）だけである。ほかの
 // 接続、グループ、VPN プロファイル、ターミナル設定などは、いまのディスクの値を保つ。
 // HostMetadata の識別子が違えば、その entry を別の接続へ付け直す（orphan の関連付け
-// 直し）。HostMetadata が nil なら entry を消す。同じ識別子の entry が 2 つ以上ある
-// ときは、画面が見ている 1 件（hostMetadataIndex）と比べ、保存ではすべて除いてから
-// 新しい 1 件を足す。
+// 直し）。HostMetadata が nil なら entry を消す。
 func applyHostMetadataEdit(stored Metadata, request EditRequest) (Metadata, error) {
 	identity := HostIdentity{Path: request.Path, Alias: request.Alias}
 	index := hostMetadataIndex(stored.Hosts, identity)

@@ -178,6 +178,8 @@ The target is passed as `%h %p` and is required. When the target cannot be reach
 
 A connection with a profile attached takes the same route from the terminal, from SFTP and from `sshc ssh <alias>`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
 
+Attaching, detaching or replacing a profile with `bind` and `unbind` stops the saved password, one-time password and startup snippet assigned to that connection. Save the connection's Basic settings again under Connections in the Web UI, and assign the startup snippet again under Snippets. Renaming a profile with `sshc vpn rename` or editing it with `sshc vpn edit` keeps the assignments working.
+
 ## SFTP transfers
 
 Transfers use the running engine and the same OpenSSH configuration, host-key checks, and Vault credentials as the Web UI. Specify remote paths as absolute POSIX paths such as `/var/log/app.log`.

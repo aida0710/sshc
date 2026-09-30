@@ -363,7 +363,7 @@ func serviceProblem(c *echo.Context, err error) error {
 		errors.Is(err, application.ErrMetadataSecret), errors.Is(err, application.ErrMetadataPath),
 		errors.Is(err, application.ErrMetadataGroup), errors.Is(err, application.ErrMetadataVersion),
 		errors.Is(err, application.ErrMetadataTerminal), errors.Is(err, application.ErrMetadataEncoding),
-		errors.Is(err, application.ErrMetadataEngine),
+		errors.Is(err, application.ErrEngineSettings), errors.Is(err, application.ErrMetadataDuplicateHost),
 		errors.Is(err, application.ErrSameFileMove), errors.Is(err, application.ErrAmbiguousDestination),
 		errors.Is(err, application.ErrInvalidGroupName), errors.Is(err, application.ErrGroupSelfNesting),
 		errors.Is(err, application.ErrKeyRelocateUnchanged),

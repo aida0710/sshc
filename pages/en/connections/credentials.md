@@ -34,11 +34,26 @@ The Vault is split into **Account passwords**, **Key passphrases**, and **OTP** 
 
 sshc generates a current code only for a keyboard-interactive question that explicitly says `OTP`, `TOTP`, `Verification code`, or an equivalent phrase. For example, `Verification code:` is recognised. Some servers mark this input as visible; sshc supports that flag without printing the automatically supplied code in the Terminal. It does not send the seed or a code to an ambiguous `Code` prompt or an ordinary password prompt.
 
-The assignment applies to Terminal, SFTP, `sshc ssh` (interactive or `--non-interactive`), and each ProxyJump hop. If the resolved host, user, port, or jump route changes, sshc stops releasing the token so that it cannot be sent to an unintended peer. Select the TOTP again under Basic settings to confirm the new authentication destination.
+The assignment applies to Terminal, SFTP, `sshc ssh` (interactive or `--non-interactive`), and each ProxyJump hop. The next section describes what happens when the destination or the route changes.
 
 ::: warning Factor separation
 Keeping an account password and a TOTP seed in the same device vault is convenient, but a compromised device may expose both factors. Use this only when your organisation's security policy allows it.
 :::
+
+## When the destination changes
+
+An account password or TOTP assignment is bound to the destination and the route it resolved to when it was assigned. If any of the following changes, sshc stops using the assignment so that the secret does not reach an unintended peer:
+
+- `HostName`, `User`, `Port`
+- ProxyJump hops and `ProxyCommand`
+- `StrictHostKeyChecking`, `HostKeyAlias`, `HostKeyAlgorithms`, the authentication methods, `ForwardAgent`
+- The VPN profile attached to the connection: attaching one, detaching it, replacing it with another profile, or deleting the attached profile
+
+The VPN profile is included because the same `HostName` can be a different machine on the network of another VPN. Attaching a profile recreated under the name of a deleted one does not bring the assignment back, even when the profile was detached from the connection before it was deleted. Renaming or editing a VPN profile keeps its assignments working. To move a connection to a VPN on another network, create a new profile and attach it instead ([Per-connection VPN](/en/features/vpn)).
+
+Connections shows **Saved password paused** in the summary for an account password that stopped. Pressing **Save Basic settings** under **Basic** asks for confirmation, and **Save and confirm** makes the assigned password and one-time password work with the changed destination.
+
+## Lock and change the master password
 
 ```sh
 sshc vault status
