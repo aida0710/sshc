@@ -1,6 +1,7 @@
 package sshclient
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -28,6 +29,20 @@ const maxPassphraseAttempts = 3
 // maxPasswordAttempts は、OpenSSH の NumberOfPasswordPrompts と同じ再試行回数。
 const maxPasswordAttempts = 3
 
+// AgentConnector は、ssh-agent の宛先と開き方である。
+//
+// 宛先の決め方は OS ごとに違う。Unix は SSH_AUTH_SOCK の unix socket、Windows は
+// OpenSSH の固定の named pipe である。ここでは決めず、Keys 画面の agent と同じ
+// keys.Agent を受け取る。接続の公開鍵認証、agent 転送、Keys 画面の登録が同じ
+// agent を指すようにするためである。
+type AgentConnector interface {
+	// Address は接続ログに出す宛先である。空なら agent は設定されていない。
+	Address() string
+	// Connect は agent への接続を開く。署名の要求は認証や転送のあいだのいつ来るか
+	// 分からないので、開いた後の読み書きに期限を付けない実装を渡す。
+	Connect(ctx context.Context) (net.Conn, error)
+}
+
 // Auth は、認証に使えるものの全体である。
 type Auth struct {
 	// Stored は、その鍵について保存されているパスフレーズを返す。
@@ -44,8 +59,8 @@ type Auth struct {
 	// TOTP は、明示的なワンタイムコード質問にだけ現在のコードを返す。
 	// provisioning secretの判定と時刻依存の生成はprovider側に閉じ込める。
 	TOTP func(target Target, question string) (string, bool)
-	// AgentSocket は SSH_AUTH_SOCK。空なら agent は使わない。
-	AgentSocket string
+	// Agent は ssh-agent の宛先と開き方である。nil か宛先が空なら agent は使わない。
+	Agent AgentConnector
 	// ReadFile は鍵ファイルを読む。テストがフィクスチャを渡すためにある。
 	// nil なら os.ReadFile。
 	ReadFile func(path string) ([]byte, error)
@@ -370,7 +385,7 @@ func isPasswordQuestion(question string) bool {
 // 始める前にすべての鍵を復号すると、公開鍵認証を提示すらしないサーバーに対して
 // パスフレーズを尋ねることになる。
 func (a Auth) publicKey(target Target, prompt Prompter) (ssh.AuthMethod, bool) {
-	if len(target.Identities) == 0 && (target.IdentitiesOnly || a.AgentSocket == "") {
+	if len(target.Identities) == 0 && (target.IdentitiesOnly || !a.agentConfigured()) {
 		// 鍵がひとつも無い。OpenSSH の既定の探索順（~/.ssh/id_ed25519 など）は
 		// 持たない。B1 が既定値表を持たないと決めた理由がそのまま当てはまる。
 		return nil, false
@@ -403,14 +418,14 @@ func (a Auth) Signers(target Target, prompt Prompter) ([]ssh.Signer, error) {
 	}
 
 	// IdentitiesOnly yes は、設定に書かれた鍵だけを使うという指定である。
-	if !target.IdentitiesOnly && a.AgentSocket != "" {
+	if !target.IdentitiesOnly && a.agentConfigured() {
 		agentSigners, err := a.agentSigners()
 		if err != nil {
 			a.trace.say(connectionlog.Detailed, "ssh-agentの鍵は使えません：%v", err)
 			failures = append(failures, "agent: "+err.Error())
 		}
 		signers = append(signers, agentSigners...)
-	} else if target.IdentitiesOnly && a.AgentSocket != "" {
+	} else if target.IdentitiesOnly && a.agentConfigured() {
 		a.trace.say(connectionlog.Detailed, "IdentitiesOnly yesのためssh-agentの鍵は使いません。")
 	}
 
@@ -483,8 +498,14 @@ func (a Auth) signerFor(path string, prompt Prompter) (ssh.Signer, string, error
 	return nil, "", keys.ErrWrongPassphrase
 }
 
+// agentConfigured は、agent の宛先があるかを報告する。届くかどうかは開くまで分からず、
+// 開けなければ公開鍵認証の失敗として扱って次の方式へ進む。
+func (a Auth) agentConfigured() bool {
+	return a.Agent != nil && a.Agent.Address() != ""
+}
+
 func (a Auth) agentSigners() ([]ssh.Signer, error) {
-	conn, err := net.Dial("unix", a.AgentSocket)
+	conn, err := a.Agent.Connect(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -497,7 +518,7 @@ func (a Auth) agentSigners() ([]ssh.Signer, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.trace.say(connectionlog.Detailed, "ssh-agentの鍵：%d件（%s）", len(signers), a.AgentSocket)
+	a.trace.say(connectionlog.Detailed, "ssh-agentの鍵：%d件（%s）", len(signers), a.Agent.Address())
 	for _, signer := range signers {
 		a.trace.say(connectionlog.Full, "ssh-agentの鍵：%s", describeKey(signer.PublicKey()))
 	}

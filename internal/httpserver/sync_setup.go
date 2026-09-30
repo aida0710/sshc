@@ -17,8 +17,8 @@ import (
 // anything is stored.
 
 func syncSetupInput(request api.SyncSetupCheckRequest, credentials remotesync.Credentials) (remotesync.Config, remotesync.Credentials, error) {
-	if len(credentials.AccessKeyID) == 0 || len(credentials.AccessKeyID) > 512 ||
-		len(credentials.SecretAccessKey) == 0 || len(credentials.SecretAccessKey) > 512 {
+	if len(credentials.AccessKeyID) == 0 || len(credentials.AccessKeyID) > remotesync.MaxAccessKeyIDLength ||
+		len(credentials.SecretAccessKey) == 0 || len(credentials.SecretAccessKey) > remotesync.MaxSecretAccessKeyLength {
 		return remotesync.Config{}, remotesync.Credentials{}, remotesync.ErrTargetTooLong
 	}
 	input := remotesync.TargetInput{Endpoint: request.Endpoint, Bucket: request.Bucket, Region: "auto"}
@@ -42,10 +42,10 @@ func (h SyncHandlers) setupCredentials(
 	reuse bool, accessKeyID, secretAccessKey *string,
 ) (remotesync.Credentials, error) {
 	if reuse {
-		if accessKeyID != nil || secretAccessKey != nil || h.Secrets == nil {
+		if accessKeyID != nil || secretAccessKey != nil || h.Vault == nil {
 			return remotesync.Credentials{}, errSyncSetupInvalidRequest
 		}
-		settings, err := h.Secrets.SyncSettings()
+		settings, err := h.Vault.SyncSettings()
 		if err != nil {
 			return remotesync.Credentials{}, err
 		}
@@ -71,7 +71,7 @@ func setupCredentialsProblem(c *echo.Context, err error) error {
 	if errors.Is(err, errSyncSetupInvalidRequest) {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	return problem(c, http.StatusInternalServerError, "vault_unreadable")
+	return unexpectedProblem(c, "vault_unreadable", err)
 }
 
 func setupInputProblem(c *echo.Context, err error) error {
@@ -140,7 +140,7 @@ func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	config.Direction = direction
-	if h.Secrets == nil {
+	if h.Vault == nil {
 		return problem(c, http.StatusConflict, "vault_locked")
 	}
 	key := strings.TrimSpace(request.Key)
@@ -159,11 +159,11 @@ func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
 		}
 		key, err = remotesync.NewKey()
 		if err != nil {
-			return problem(c, http.StatusInternalServerError, "key_generation_failed")
+			return unexpectedProblem(c, "key_generation_failed", err)
 		}
 		generated = true
 	}
-	if len(key) > 1024 {
+	if len(key) > remotesync.MaxKeyLength {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	expected := remotesync.SetupInspection{
@@ -174,7 +174,7 @@ func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
 	}
 	client := h.objectStoreClient(config, credentials)
 	err = h.Service.CompleteSetup(c.Request().Context(), config, credentials, client, expected, key, func() error {
-		return h.Secrets.SetSyncSettings(secret.SyncSettings{
+		return h.Vault.SetSyncSettings(secret.SyncSettings{
 			Endpoint: config.Endpoint, Bucket: config.Bucket, Path: config.Path, Region: config.Region,
 			AccessKeyID: credentials.AccessKeyID, SecretAccessKey: credentials.SecretAccessKey,
 			Direction: string(direction), Key: key,

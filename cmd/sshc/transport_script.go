@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -14,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"sshc/internal/streamrun"
+	"sshc/internal/strictjson"
 )
 
 const maxScriptBytes = 1 << 20
@@ -86,14 +86,11 @@ func buildTransportScript(called transportInvocation, stdin io.Reader) (builtTra
 	if len(payload) > maxScriptBytes {
 		return builtTransportScript{}, fmt.Errorf("script exceeds %d bytes", maxScriptBytes)
 	}
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
 	var document transportScriptDocument
-	if err := decoder.Decode(&document); err != nil {
-		return builtTransportScript{}, errors.New("script is not valid JSON")
-	}
-	if decoder.Decode(&struct{}{}) != io.EOF {
+	if err := strictjson.Decode(payload, &document); errors.Is(err, strictjson.ErrTrailingData) {
 		return builtTransportScript{}, errors.New("script must contain one JSON document")
+	} else if err != nil {
+		return builtTransportScript{}, errors.New("script is not valid JSON")
 	}
 	if document.Version != 1 {
 		return builtTransportScript{}, errors.New("script version must be 1")

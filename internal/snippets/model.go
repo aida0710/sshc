@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	SchemaVersion         = 1
+	SchemaVersion         = 2
 	PathRelative          = "sshc/snippets.json"
 	MaxSnippets           = 256
 	MaxVariables          = 32
@@ -22,6 +22,11 @@ const (
 	MaxResultBytes        = 256 << 10
 	MaxRetainedJobs       = 128
 )
+
+// MaxStartupBindings は、起動スニペットを割り当てられるホストの数の上限である。
+// 文書は丸ごと復号して読むので、割り当てに保存する入力で際限なく大きくしない。
+// 値は、同期で文書を受け取る今までの sshc が受け付ける 64 に据え置く。
+const MaxStartupBindings = 64
 
 var (
 	ErrInvalidSnippet     = errors.New("snippet is invalid")
@@ -38,6 +43,7 @@ var (
 	ErrNoRunner           = errors.New("no snippet command runner is available")
 	ErrNoRepository       = errors.New("no snippet repository is available")
 	ErrInvalidDocument    = errors.New("snippets document is invalid")
+	ErrTooManySnippets    = errors.New("the snippet library is full")
 	ErrUnsupportedVersion = errors.New("snippets were written by a newer version of sshc")
 	ErrNoProtection       = errors.New("snippet encryption is not configured")
 	ErrNotEncrypted       = errors.New("snippet document is not encrypted")
@@ -45,6 +51,12 @@ var (
 	ErrJobFinished        = errors.New("snippet execution job has already finished")
 	ErrTooManyJobs        = errors.New("too many snippet execution jobs are active")
 	ErrNoStartup          = errors.New("host has no startup snippet")
+	// ErrStartupDestinationChanged は、割り当てた時から接続先が変わったので、起動
+	// スニペットを送らないことを表す。
+	ErrStartupDestinationChanged = errors.New("the host's destination changed after the startup snippet was assigned")
+	// ErrTooManyStartupBindings は、起動スニペットを割り当てたホストが上限に
+	// 達しているので、新しいホストへは割り当てられないことを表す。
+	ErrTooManyStartupBindings = errors.New("too many hosts have a startup snippet")
 )
 
 type VariableType string
@@ -91,6 +103,20 @@ type Startup struct {
 	Alias     string            `json:"alias"`
 	SnippetID string            `json:"snippetId"`
 	Inputs    map[string]string `json:"inputs,omitempty"`
+	// Binding は、割り当てたときに解決した接続先の digest（Resolution.Binding）である。
+	// Inputs にはシークレットの値が入るので、接続先が変わったら送らない。保存済み
+	// パスワードと同じ規則である。alias を含まないので、改名しても変わらない。
+	Binding string `json:"binding,omitempty"`
+}
+
+// StartupAssignment は、画面に出す起動スニペットの割り当てである。入力値は
+// シークレットを含むので載せない。
+type StartupAssignment struct {
+	Alias     string `json:"alias"`
+	SnippetID string `json:"snippetId"`
+	// Stale は、割り当てた時から接続先が変わったため、接続時に送るのを止めて
+	// いることを示す。割り当て直すまで送らない。
+	Stale bool `json:"stale"`
 }
 
 type Library struct {
@@ -137,6 +163,9 @@ type RunFunc func(ctx context.Context, command string) (CommandOutput, error)
 type Resolution struct {
 	Target Target
 	Run    RunFunc
+	// Binding は、解決した接続先と経路の digest（sshclient.Target の
+	// AuthenticationBinding）である。起動スニペットの割り当てをこの値に結び付ける。
+	Binding string
 }
 
 type ResolveFunc func(alias string) (Resolution, error)

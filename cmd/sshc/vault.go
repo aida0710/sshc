@@ -422,8 +422,11 @@ func sendVaultPOST(
 }
 
 // vaultCommandClient は対話的な Vault 操作を短い接続確認タイムアウトから分離する。
-// パスワード変更では最長 1 分のリモートスナップショット書き込みを 2 回待つ可能性が
-// あるが、キャンセルは引き続きリクエストコンテキストで伝播する。
+// パスワード変更の engine 側は、ほかの sshc が workspace を持っていれば最長 30 秒
+// 待ち、そのあと Vault、同期設定、すべての世代バックアップを再封印する。バックアップは
+// 履歴とともに増え、遅いマシンでは数十秒かかりうるので、余裕を持たせる。リモートの
+// スナップショットには書かない。キャンセルは引き続きリクエストコンテキストで伝播し、
+// engine は錠を待つあいだに諦められた変更を始めない。
 func vaultCommandClient(client *http.Client) *http.Client {
 	if client == nil {
 		client = http.DefaultClient

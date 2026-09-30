@@ -56,6 +56,30 @@ func expectLines(t *testing.T, seen string, wanted ...string) {
 	}
 }
 
+// 接続の後の案内（送らなかった起動スニペットなど）は、接続ログを出さない設定でも
+// [sshc] の行としてターミナルへ出る。
+func TestAnAnnouncementAfterReadyIsShownEvenWhenTheConnectionLogIsQuiet(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell: func(channel ssh.Channel) {
+			_, _ = io.Copy(io.Discard, channel)
+		},
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	process := openWithLog(t, dialerFor(t, server, auth), targetWith(server, path), connectionlog.Notice)
+	readier := process.(terminal.Readier)
+	<-readier.Ready()
+	if err := readier.ReadyErr(); err != nil {
+		t.Fatalf("Ready = %v", err)
+	}
+
+	// ターミナルへの出力は読み手が読むまで進まないので、書くのは別の goroutine で行う。
+	go process.(terminal.Announcer).Announce("起動スニペットを送りませんでした。")
+
+	readUntil(t, process, "[sshc] 起動スニペットを送りませんでした。\r\n")
+}
+
 // 鍵が複数あるとき、読めない鍵は他の鍵で通れば誰にも報告されない。深さ 2 は
 // 鍵ごとに指紋と復号の仕方を言い、使えなかった鍵も言う。パスフレーズは言わない。
 func TestTheDetailedLogNamesEachKeyByFingerprintAndHowItWasUnlocked(t *testing.T) {
@@ -185,7 +209,7 @@ func TestTheFullLogListsAgentKeysByFingerprint(t *testing.T) {
 		AcceptKeys: []ssh.PublicKey{agentKey.PublicKey()},
 		OnShell:    func(channel ssh.Channel) { _, _ = io.WriteString(channel, "ready\r\n") },
 	})
-	dialer := dialerFor(t, server, sshclient.Auth{AgentSocket: socket})
+	dialer := dialerFor(t, server, sshclient.Auth{Agent: unixSocketAgent(socket)})
 
 	process := openWithLog(t, dialer, targetWith(server), connectionlog.Full)
 	expectLines(t, readUntil(t, process, "ready"),

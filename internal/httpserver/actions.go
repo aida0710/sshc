@@ -62,7 +62,7 @@ func (h ActionHandlers) sessionID(c *echo.Context) string {
 // と、ユーザーが見ていないものにトークンを結び付けられてしまうからだ。
 func (h ActionHandlers) IssueAction(c *echo.Context) error {
 	var body api.IssueActionRequest
-	if err := decodeBody(c, &body); err != nil {
+	if err := decodeJSONWithin(c, maxKeyRequestBody, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	kind, known := h.Kinds[body.Kind]
@@ -81,9 +81,9 @@ func (h ActionHandlers) IssueAction(c *echo.Context) error {
 		return kind.fail(c, err)
 	}
 
-	issued, err := h.issueEvidence(c, body.Kind, body.Target, evidence)
-	if err != nil {
-		return err
+	issued, allowed, response := h.issueEvidence(c, body.Kind, body.Target, evidence)
+	if !allowed {
+		return response
 	}
 	return c.JSON(http.StatusCreated, issued)
 }
@@ -91,13 +91,17 @@ func (h ActionHandlers) IssueAction(c *echo.Context) error {
 // issueEvidence は、別のレスポンスに確認トークンを同梱するサブシステム向けに、
 // サーバーが導出した計画全体へトークンを結び付ける。evidence を HTTP 入力から
 // 受け取る経路は公開しない。
-func (h ActionHandlers) issueEvidence(c *echo.Context, kind, target, evidence string) (api.IssueActionResponse, error) {
+//
+// consume と同じく、真偽値が false のときは拒否のレスポンスを書き込み済みである。
+// problem() は書き込みに成功すると nil を返すので、error だけで判定すると
+// 呼び出し側が成功のレスポンスを書き足してしまう。
+func (h ActionHandlers) issueEvidence(c *echo.Context, kind, target, evidence string) (api.IssueActionResponse, bool, error) {
 	if h.Sessions == nil {
-		return api.IssueActionResponse{}, problem(c, http.StatusForbidden, "action_token_refused")
+		return api.IssueActionResponse{}, false, problem(c, http.StatusForbidden, "action_token_refused")
 	}
 	sessionID := h.sessionID(c)
 	if sessionID == "" {
-		return api.IssueActionResponse{}, problem(c, http.StatusUnauthorized, "session_required")
+		return api.IssueActionResponse{}, false, problem(c, http.StatusUnauthorized, "session_required")
 	}
 	value, err := h.Sessions.IssueAction(sessionID, session.ActionRequest{
 		Kind: kind, Target: target, Evidence: evidence,
@@ -105,16 +109,16 @@ func (h ActionHandlers) issueEvidence(c *echo.Context, kind, target, evidence st
 	switch {
 	case err == nil:
 	case errors.Is(err, session.ErrTooManyActions):
-		return api.IssueActionResponse{}, problem(c, http.StatusTooManyRequests, "too_many_confirmations")
+		return api.IssueActionResponse{}, false, problem(c, http.StatusTooManyRequests, "too_many_confirmations")
 	case errors.Is(err, session.ErrUnknownSession):
-		return api.IssueActionResponse{}, problem(c, http.StatusUnauthorized, "session_required")
+		return api.IssueActionResponse{}, false, problem(c, http.StatusUnauthorized, "session_required")
 	default:
-		return api.IssueActionResponse{}, problem(c, http.StatusForbidden, "action_token_refused")
+		return api.IssueActionResponse{}, false, problem(c, http.StatusForbidden, "action_token_refused")
 	}
 	return api.IssueActionResponse{
 		Token:     value,
 		ExpiresAt: time.Now().UTC().Add(session.ActionTokenTTL).Format(time.RFC3339),
-	}, nil
+	}, true, nil
 }
 
 // consume は、この操作が必要とする一度限りのトークンを消費する。

@@ -281,6 +281,22 @@ func TestRedactDoesNotCorruptOrdinaryOutputThatStartsLikeASecret(t *testing.T) {
 	}
 }
 
+func TestRedactHidesALongerSecretThatStartsWithAnotherInEitherSendOrder(t *testing.T) {
+	transcript := []byte("login: hunter2\nlater: hunter2-admin-9f\n")
+	short := Secret{Value: []byte("hunter2"), TranscriptStart: 0}
+	long := Secret{Value: []byte("hunter2-admin-9f"), TranscriptStart: 0}
+	for name, secrets := range map[string][]Secret{
+		"short sent first": {short, long},
+		"long sent first":  {long, short},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := string(Redact(transcript, secrets)); got != "login: [REDACTED]\nlater: [REDACTED]\n" {
+				t.Fatalf("redacted = %q", got)
+			}
+		})
+	}
+}
+
 func TestRedactDoesNotMaskOneBytePrefixInNormalResponse(t *testing.T) {
 	redacted := Redact([]byte("shell ready\n"), []Secret{{Value: []byte("show-secret")}})
 	if got := string(redacted); got != "shell ready\n" {

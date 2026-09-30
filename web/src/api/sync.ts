@@ -193,6 +193,7 @@ export const syncApi: SyncApi = {
         ...locallyExplainedSyncFailures,
         "sync_local_changed",
         "sync_workspace_busy",
+        "sync_pending_transaction",
       ]),
     );
   },

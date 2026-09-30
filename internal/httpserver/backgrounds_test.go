@@ -133,6 +133,38 @@ func TestTheListSaysHowMuchRoomIsLeft(t *testing.T) {
 	}
 }
 
+// 1 枚の大きさを決めるのは背景の容量で、/api/ 共通の本文の上限ではない。
+// 写真や高解像度の壁紙は 2 MiB を超えることが多い。
+func TestABackgroundLargerThanTheCommonBodyLimitIsStoredWithinTheCapacity(t *testing.T) {
+	harness := newConfigHarness(t)
+	image := pngBytes(strings.Repeat("x", 3<<20))
+	if int64(len(image)) <= MaxRequestBodyCeiling {
+		t.Fatal("the image does not exceed the common body limit")
+	}
+
+	created := harness.raw(t, http.MethodPost, "/api/v1/terminal/backgrounds?name=photo", image)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("POST = %d, body %s", created.Code, created.Body.String())
+	}
+}
+
+// 容量を超える画像は、容量の不足として断られる。入口の上限を広げても、
+// 利用者が決めた容量は越えられない。
+func TestABackgroundBeyondTheCapacityIsRefusedAsFull(t *testing.T) {
+	harness := newConfigHarness(t)
+	if response := harness.raw(t, http.MethodPut, "/api/v1/terminal/backgrounds/capacity", []byte(`{"capacityMiB":1}`)); response.Code != http.StatusOK {
+		t.Fatalf("PUT capacity = %d", response.Code)
+	}
+
+	refused := harness.raw(t, http.MethodPost, "/api/v1/terminal/backgrounds?name=photo", pngBytes(strings.Repeat("x", 2<<20)))
+	if refused.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("POST = %d, body %s", refused.Code, refused.Body.String())
+	}
+	if code := problemCode(t, refused.Body.Bytes()); code != "backgrounds_full" {
+		t.Errorf("code = %q", code)
+	}
+}
+
 func TestBackgroundCapacityCanBeChanged(t *testing.T) {
 	harness := newConfigHarness(t)
 	response := harness.raw(t, http.MethodPut, "/api/v1/terminal/backgrounds/capacity", []byte(`{"capacityMiB":64}`))

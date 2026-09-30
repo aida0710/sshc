@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"sshc/internal/knownhosts"
 	"sshc/internal/storage"
 )
 
@@ -172,5 +173,62 @@ func TestStateOnlyWritesDoNotNeedAResolvableGraph(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("writing application state with no config present = %v", err)
+	}
+}
+
+// known_hosts は設定のグラフに入らない。同じ storage.Manager を通る書き込みを、
+// 設定にすでにある誤りを理由に断らない。断ると、~/.ssh/config の無いマシンで
+// 初めて繋いだホストの鍵を保存できず、接続そのものが失敗する。
+func TestKnownHostsWritesIgnoreErrorsAlreadyInTheConfiguration(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		config string
+	}{
+		{name: "no config"},
+		{name: "include cycle", config: "Include config\n"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			workspace := newTestWorkspace(t)
+			if testCase.config != "" {
+				if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(testCase.config), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			manager := storage.NewManager(workspace, time.Now, rand.Reader)
+			_ = NewService(workspace, manager)
+			hosts := knownhosts.NewService(workspace, manager, knownhosts.Scanner{})
+
+			candidate := knownhosts.Candidate{
+				Host: "bastion.example.com", Port: 22, KeyType: "ssh-ed25519",
+				Key: "AAAAC3NzaC1lZDI1NTE5AAAAIPr0nHGmQb99GXmUofxJM4BXGwGzO0jGsQFBspODbkvS",
+			}
+			if _, err := hosts.Add(candidate, "", true); err != nil {
+				t.Fatalf("adding a host key = %v", err)
+			}
+		})
+	}
+}
+
+// 計画を通らない書き込みも、ディスクにすでにある誤りだけを見逃す。新しく
+// 持ち込んだ誤りは断る。
+func TestUnplannedWritesStillRefuseErrorsTheyIntroduce(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	entry := filepath.Join(workspace.Root(), "config")
+	if err := os.WriteFile(entry, []byte("Host nas\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	_ = NewService(workspace, manager)
+
+	_, err := manager.Commit(storage.Request{
+		Operation: "config.file_raw",
+		Changes: []storage.Change{{
+			Path: entry, Contents: []byte("Include config\nHost nas\n"),
+			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest([]byte("Host nas\n"))},
+		}},
+	})
+	var graphError *GraphError
+	if !errors.As(err, &graphError) {
+		t.Fatalf("writing an include cycle = %v, want a GraphError", err)
 	}
 }

@@ -71,6 +71,49 @@ func TestReadRejectsInvalidHandoffFields(t *testing.T) {
 	}
 }
 
+// engine は 127.0.0.1 の決まったポートだけで待ち受け、ほかの Host を断る。それ以外の
+// URL を通すと、CLI は文書の誤りを「engine を確かめられない」と取り違える。
+func TestHandoffURLMustBeTheEngineLoopbackAddressWithAPort(t *testing.T) {
+	for _, target := range []string{
+		"http://localhost:52865",
+		"http://[::1]:52865",
+		"http://127.5.5.5:52865",
+		"http://127.0.0.1",
+		"http://127.0.0.1:",
+		"http://127.0.0.1:0",
+		"http://127.0.0.1:1023",
+		"http://127.0.0.1:65536",
+		"http://127.0.0.1:052865",
+		"http://127.0.0.1:52865/",
+		"https://127.0.0.1:52865",
+		"http://user@127.0.0.1:52865",
+	} {
+		t.Run(target, func(t *testing.T) {
+			document := validDocument()
+			document.URL = target
+			if err := handoff.Write(t.TempDir(), document); !errors.Is(err, handoff.ErrInvalid) {
+				t.Errorf("Write = %v, want ErrInvalid", err)
+			}
+			body, err := json.Marshal(document)
+			if err != nil {
+				t.Fatal(err)
+			}
+			directory := filepath.Join(t.TempDir(), "state")
+			acltest.WritePrivateFile(t, filepath.Join(directory, handoff.FileName), body)
+			if _, err := handoff.Read(directory); !errors.Is(err, handoff.ErrInvalid) {
+				t.Errorf("Read = %v, want ErrInvalid", err)
+			}
+		})
+	}
+	for _, target := range []string{"http://127.0.0.1:1024", "http://127.0.0.1:65535"} {
+		document := validDocument()
+		document.URL = target
+		if err := handoff.Write(t.TempDir(), document); err != nil {
+			t.Errorf("Write(%q) = %v, want the engine address accepted", target, err)
+		}
+	}
+}
+
 func TestWriteAtomicallyPublishesOnePrivateValidatedDocument(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "state", "sshc")
 	document := validDocument()

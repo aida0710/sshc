@@ -160,11 +160,11 @@ func (s *Service) ConfigCheck() (ConfigReport, error) {
 	return report, nil
 }
 
-// Inspect は alias ひとつを説明し、許されている場合はそれを評価する。
+// Inspect は alias ひとつについて、エンジン自身の射影、ProxyJump の経路、
+// 実行されうるディレクティブの一覧を返す。
 //
-// 拒否された評価も、失敗した ssh も、どちらもデータとして返る。画面には、エンジン
-// 自身の射影と、先に確認しなければならないコマンドそのものが引き続き表示
-// される。
+// 設定を読むだけで ssh もディレクティブのコマンドも実行しないので、呼び出し側の
+// 確認は要らない。
 func (s *Service) Inspect(alias string) (Inspection, error) {
 	if err := validate.Alias(alias); err != nil {
 		return Inspection{}, err

@@ -191,6 +191,30 @@ func TestTheLimitsAreRefusedOutsideTheirRange(t *testing.T) {
 	}
 }
 
+func TestEngineSettingsOutsideTheirRangeAreRefusedWithTheirKind(t *testing.T) {
+	service, _ := newTerminalService(t)
+
+	for name, test := range map[string]struct {
+		settings EngineSettings
+		want     error
+	}{
+		"privileged port": {EngineSettings{Port: 80}, ErrMetadataEnginePort},
+		"port too large":  {EngineSettings{Port: 65536}, ErrMetadataEnginePort},
+		"idle without a duration": {
+			EngineSettings{VaultAutoLock: &VaultAutoLock{Mode: VaultAutoLockIdle}}, ErrMetadataVaultAutoLock,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := service.SetEngineSettings(test.settings); !errors.Is(err, test.want) {
+				t.Fatalf("error = %v, want %v", err, test.want)
+			}
+			if got := service.EngineSettings(); got != (EngineSettings{}) {
+				t.Fatalf("the refusal wrote %#v", got)
+			}
+		})
+	}
+}
+
 func TestAStartDirectoryThatDisappearedFallsBackToTheHome(t *testing.T) {
 	service, workspace := newTerminalService(t)
 	work := filepath.Join(workspace.Home(), "work")

@@ -3,6 +3,7 @@ package httpserver
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -92,6 +93,7 @@ func newConnectionHTTPHarness(t *testing.T, initialise bool) *connectionHTTPHarn
 	passwords := secret.NewService(workspace, manager, time.Now)
 	manager.Seal = passwords.SealBackup
 	manager.Unseal = passwords.OpenBackup
+	service.SetVault(passwords)
 	if initialise {
 		if err := passwords.Initialise("correct horse battery staple"); err != nil {
 			t.Fatal(err)
@@ -127,9 +129,9 @@ func newConnectionHTTPHarness(t *testing.T, initialise bool) *connectionHTTPHarn
 		return recent.Target{Alias: alias, HostName: "current.example", User: "deploy", Port: "2202"}, nil
 	})
 	registerConnectionRoutes(engine, ConnectionHandlers{
-		Service: service, Secrets: passwords, Keys: keyStub, Recent: recentService,
+		Service: service, Keys: keyStub, Recent: recentService,
 	})
-	registerPasswordRoutes(engine, PasswordHandlers{
+	registerVaultRoutes(engine, VaultHandlers{
 		Service: passwords, Binding: service.PasswordBinding,
 	})
 
@@ -303,6 +305,35 @@ func connectionUpdateBody(password map[string]any) map[string]any {
 		"password":      password,
 		"keyPassphrase": map[string]any{"kind": "unchanged"},
 		"totp":          map[string]any{"kind": "unchanged"},
+	}
+}
+
+// 接続エディタの保存も、設定の API と同じ相対パスの上限で断る。経路ごとに上限が
+// 違うと、同じ設定ファイルを片方の経路でだけ指せる。
+func TestConnectionUpdateAcceptsTheSamePathLengthAsTheConfigAPI(t *testing.T) {
+	requestFor := func(path string) api.UpdateConnectionRequest {
+		t.Helper()
+		body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+		body["identity"] = map[string]any{"path": path, "alias": "existing"}
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wire api.UpdateConnectionRequest
+		if err := json.Unmarshal(encoded, &wire); err != nil {
+			t.Fatal(err)
+		}
+		return wire
+	}
+
+	if _, _, err := updateConnectionRequestFromAPI(requestFor(strings.Repeat("a", maxPathLength))); err != nil {
+		t.Fatalf("path at the config API limit = %v, want accepted", err)
+	}
+	if _, _, err := updateConnectionRequestFromAPI(requestFor(strings.Repeat("a", maxPathLength+1))); !errors.Is(err, errInvalidEdit) {
+		t.Fatalf("path over the config API limit = %v, want errInvalidEdit", err)
+	}
+	if err := validatePathParameter(strings.Repeat("a", maxPathLength+1)); !errors.Is(err, errInvalidPath) {
+		t.Fatalf("config API path over the limit = %v, want errInvalidPath", err)
 	}
 }
 

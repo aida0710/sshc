@@ -25,8 +25,8 @@ type snippetDraft struct {
 }
 
 type snippetLibrary struct {
-	Snippets []snippets.Snippet `json:"snippets"`
-	Startup  []snippets.Startup `json:"startup"`
+	Snippets []snippets.Snippet           `json:"snippets"`
+	Startup  []snippets.StartupAssignment `json:"startup"`
 }
 
 type startupSnippetRequest struct {
@@ -64,12 +64,16 @@ func snippetProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusTooManyRequests, "snippet_jobs_full")
 	case errors.Is(err, snippets.ErrJobFinished):
 		return problem(c, http.StatusConflict, "snippet_job_finished")
+	case errors.Is(err, snippets.ErrTooManySnippets):
+		return problem(c, http.StatusConflict, "snippet_limit")
+	case errors.Is(err, snippets.ErrTooManyStartupBindings):
+		return problem(c, http.StatusConflict, "startup_snippet_limit")
 	case errors.Is(err, snippets.ErrInvalidSnippet), errors.Is(err, snippets.ErrInvalidVariable), errors.Is(err, snippets.ErrUnknownVariable),
 		errors.Is(err, snippets.ErrMissingVariable), errors.Is(err, snippets.ErrMalformedTemplate), errors.Is(err, snippets.ErrInvalidTarget),
 		errors.Is(err, snippets.ErrDuplicateTarget):
 		return problem(c, http.StatusBadRequest, "invalid_snippet")
 	default:
-		return problem(c, http.StatusInternalServerError, "snippet_failed")
+		return unexpectedProblem(c, "snippet_failed", err)
 	}
 }
 
@@ -149,9 +153,9 @@ func (h SnippetHandlers) Preview(c *echo.Context) error {
 	if err != nil {
 		return snippetProblem(c, err)
 	}
-	issued, err := h.Actions.issueEvidence(c, session.ActionSnippetExecute, preview.ActionTarget(), preview.ActionEvidence)
-	if err != nil {
-		return err
+	issued, allowed, response := h.Actions.issueEvidence(c, session.ActionSnippetExecute, preview.ActionTarget(), preview.ActionEvidence)
+	if !allowed {
+		return response
 	}
 	return c.JSON(http.StatusOK, snippetPreviewResponse{
 		SnippetID: preview.SnippetID, Evidence: preview.Evidence, Targets: preview.Targets,

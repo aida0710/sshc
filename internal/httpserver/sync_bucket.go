@@ -112,7 +112,7 @@ func (h SyncHandlers) HistoryDiff(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if len(request.Key) == 0 || len(request.Key) > 1024 {
+	if len(request.Key) == 0 || len(request.Key) > remotesync.MaxHistoryKeyLength {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	key, ok, err := h.sealingKey(c)

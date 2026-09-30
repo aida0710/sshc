@@ -3411,7 +3411,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 		t.Fatalf("a machine that has saved nothing conflicted: %+v", result.Conflicts)
 	}
 	const receiverMaster = "the receiver's rotated master password"
-	if err := receiver.ChangeMasterPassword("the second machine's own master", receiverMaster); err != nil {
+	if err := receiver.ChangeMasterPassword(context.Background(), "the second machine's own master", receiverMaster); err != nil {
 		t.Fatalf("ChangeMasterPassword between Pull and Apply = %v", err)
 	}
 	if err := applyPreview(second.service, remotesync.ResolveNone, "", result); err != nil {

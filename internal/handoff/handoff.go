@@ -7,21 +7,37 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
-	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"sshc/internal/filelock"
 	"sshc/internal/randomid"
 	"sshc/internal/storage"
+	validator "sshc/internal/validate"
 )
 
 // FileName は、アプリケーションの状態ディレクトリ内のハンドオフファイル。
 const FileName = "cli"
 
+// EngineHost は、engine が待ち受ける唯一のアドレスである。engine は IPv4 の
+// loopback にだけ listen し、HTTP の Security middleware は Host をこの値と
+// ポートの組に固定する。listen する側、Host を確かめる側、handoff の URL を
+// 検証する側が同じ値を使う。
+const EngineHost = "127.0.0.1"
+
 // mutationLockName は、公開ファイルと別 inode に固定して保持する。cli 自体を lock
 // すると Rename のたびに lock の対象 inode が替わり、Write と Remove を直列化
 // できなくなる。
 const mutationLockName = ".cli.mutation.lock"
+
+// mutationLockWait は、別プロセスの Write や Remove が終わるのを待つ上限である。
+// どちらも小さいファイルを 1 つ書くか消すだけで、数ミリ秒で終わる。遅いディスクでも
+// 待ちきれる長さにし、止まったプロセスが握り続けても engine の起動と停止を
+// 止めたままにしない。
+const mutationLockWait = 5 * time.Second
 
 // handoffDocumentMaxSize は一般のストレージ上限と分ける。handoff は loopback endpoint
 // 1 件と短い bearer secret だけを含むため、4 KiB で将来の schema field にも対応できる。
@@ -85,13 +101,19 @@ func Write(directory string, document Handoff) error {
 }
 
 type writeOperations struct {
-	marshal         func(any) ([]byte, error)
+	marshal func(any) ([]byte, error)
+	// ensureDirectory の OS の実装は、handoffFileOperations と同じく symlink を
+	// たどらない。
 	ensureDirectory func(string) error
 	// fileSystem は原子的な置き換えを担う。nil なら OS の実装で、親ディレクトリを
 	// symlink をたどらずに開き、Windows では ACL を絞る。
 	fileSystem storage.FileSystem
 }
 
+// handoffFileOperations の OS の実装（と lockMutation）は、どれもパスの途中も
+// 最後も symlink をたどらない。Windows はさらに所有者と DACL を確かめる。
+// handoff の secret を別の場所から読まされたり、symlink の先に lock file を
+// 作らされたりしないためで、ワークスペースのほかの非公開ファイルと同じ扱いである。
 type handoffFileOperations struct {
 	open   func(string) (*os.File, error)
 	read   func(io.Reader) ([]byte, error)
@@ -211,10 +233,12 @@ func Remove(directory, secret string) error {
 }
 
 func removeWith(directory, secret string, operations handoffFileOperations) error {
-	release, err := lockMutation(directory)
-	if errors.Is(err, os.ErrNotExist) {
+	// 一度も書かれていない state directory には、消すものも無い。ロックを取ると
+	// ディレクトリを作ってしまうので、先に確かめる。
+	if _, err := os.Lstat(directory); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
+	release, err := lockMutation(directory)
 	if err != nil {
 		return err
 	}
@@ -238,6 +262,12 @@ func removeWith(directory, secret string, operations handoffFileOperations) erro
 	return err
 }
 
+// lockMutation は Write 全体と Remove の比較・削除を一つの臨界区間にする。
+// 別プロセスの Write と Remove も同じロックで待ち合わせる。
+func lockMutation(directory string) (func() error, error) {
+	return filelock.AcquireWithin(filepath.Join(directory, mutationLockName), mutationLockWait)
+}
+
 func validate(document Handoff) error {
 	if document.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("%w: got %d, want %d", ErrSchemaVersion, document.SchemaVersion, SchemaVersion)
@@ -257,27 +287,23 @@ func validate(document Handoff) error {
 	if document.Version == "" {
 		return fmt.Errorf("%w: empty version", ErrInvalid)
 	}
-	if err := validateLoopbackURL(document.URL); err != nil {
+	if err := validateEngineURL(document.URL); err != nil {
 		return err
 	}
 	return nil
 }
 
-func validateLoopbackURL(raw string) error {
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return fmt.Errorf("%w: cannot parse URL", ErrInvalid)
-	}
-	if parsed.Scheme != "http" || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return fmt.Errorf("%w: URL must be a bare HTTP loopback URL", ErrInvalid)
-	}
-	host := parsed.Hostname()
-	if host == "localhost" {
-		return nil
-	}
-	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLoopback() {
-		return fmt.Errorf("%w: URL host is not loopback", ErrInvalid)
+// validateEngineURL は、engine が書く形 `http://127.0.0.1:<port>` だけを受け付ける。
+// port は engine が待ち受けられる validate.EnginePort の範囲に限る。
+// engine は Host が違う要求を 403 で断り、::1 では待ち受けていない。localhost や
+// ほかの loopback、ポートなしの URL を通すと、CLI は文書の誤りではなく「engine を
+// 確かめられない」「動いていない」と取り違えて報告する。
+func validateEngineURL(raw string) error {
+	portText, found := strings.CutPrefix(raw, "http://"+EngineHost+":")
+	port, err := strconv.ParseUint(portText, 10, 16)
+	if !found || err != nil || strconv.FormatUint(port, 10) != portText || validator.EnginePort(int(port)) != nil {
+		return fmt.Errorf("%w: URL must be http://%s:<port> with a port from %d to %d",
+			ErrInvalid, EngineHost, validator.MinEnginePort, validator.MaxEnginePort)
 	}
 	return nil
 }

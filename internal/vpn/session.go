@@ -370,7 +370,7 @@ func (manager *Manager) containerLogs(ctx context.Context, name string, secrets 
 	if err != nil {
 		return ""
 	}
-	return lastBytes(redact(strings.TrimSpace(output), secrets), maxLogBytes)
+	return lastBytes(redactLogs(strings.TrimSpace(output), secrets), maxLogBytes)
 }
 
 // lastBytes は、text の末尾の limit バイト以内を、文字の途中で切らずに返す。

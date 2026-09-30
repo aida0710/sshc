@@ -17,7 +17,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"sshc/internal/selfupdate"
+	"sshc/internal/releasecheck"
 )
 
 func TestRunUpdateRefusesAnUnmanagedExecutableBeforeNetworkAccess(t *testing.T) {
@@ -28,9 +28,9 @@ func TestRunUpdateRefusesAnUnmanagedExecutableBeforeNetworkAccess(t *testing.T) 
 		detect: func(string) (installation, error) {
 			return installation{manager: managerUnknown}, nil
 		},
-		latest: func(context.Context) (selfupdate.Release, error) {
+		latest: func(context.Context) (releasecheck.Release, error) {
 			latestCalled = true
-			return selfupdate.Release{}, nil
+			return releasecheck.Release{}, nil
 		},
 	}})
 	if code != 1 || latestCalled || !strings.Contains(stderr.String(), "cannot be updated automatically") {
@@ -46,10 +46,10 @@ func TestRunUpdateSkipsTheInstallerWhenAlreadyCurrent(t *testing.T) {
 		detect: func(string) (installation, error) {
 			return installation{manager: managerHomebrew}, nil
 		},
-		latest: func(context.Context) (selfupdate.Release, error) {
-			return selfupdate.Release{Version: "v0.14.0"}, nil
+		latest: func(context.Context) (releasecheck.Release, error) {
+			return releasecheck.Release{Version: "v0.14.0"}, nil
 		},
-		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error {
+		install: func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error {
 			installed = true
 			return nil
 		},
@@ -60,17 +60,17 @@ func TestRunUpdateSkipsTheInstallerWhenAlreadyCurrent(t *testing.T) {
 }
 
 func TestRunUpdateDelegatesANewerStableRelease(t *testing.T) {
-	var got selfupdate.Release
+	var got releasecheck.Release
 	var stdout bytes.Buffer
 	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
 		},
-		latest: func(context.Context) (selfupdate.Release, error) {
-			return selfupdate.Release{Version: "0.14.0"}, nil
+		latest: func(context.Context) (releasecheck.Release, error) {
+			return releasecheck.Release{Version: "0.14.0"}, nil
 		},
-		install: func(_ context.Context, _ installation, release selfupdate.Release, _, _ io.Writer) error {
+		install: func(_ context.Context, _ installation, release releasecheck.Release, _, _ io.Writer) error {
 			got = release
 			return nil
 		},
@@ -88,10 +88,10 @@ func TestRunUpdateRestartsAnActiveManagedService(t *testing.T) {
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
 		},
-		latest: func(context.Context) (selfupdate.Release, error) {
-			return selfupdate.Release{Version: "v0.14.0"}, nil
+		latest: func(context.Context) (releasecheck.Release, error) {
+			return releasecheck.Release{Version: "v0.14.0"}, nil
 		},
-		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error {
+		install: func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error {
 			return nil
 		},
 		serviceExecutable: func(context.Context, installation) (string, error) {
@@ -120,10 +120,10 @@ func TestRunUpdateReportsAPartialSuccessWhenManagedServiceRestartFails(t *testin
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
 		},
-		latest: func(context.Context) (selfupdate.Release, error) {
-			return selfupdate.Release{Version: "v0.14.0"}, nil
+		latest: func(context.Context) (releasecheck.Release, error) {
+			return releasecheck.Release{Version: "v0.14.0"}, nil
 		},
-		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error {
+		install: func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error {
 			return nil
 		},
 		serviceExecutable: func(context.Context, installation) (string, error) {
@@ -145,10 +145,10 @@ func TestRunUpdateTellsToReinstallAServiceDefinitionFromAnOlderVersion(t *testin
 	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect:     func(string) (installation, error) { return installation{manager: managerShell}, nil },
-		latest: func(context.Context) (selfupdate.Release, error) {
-			return selfupdate.Release{Version: "v0.14.0"}, nil
+		latest: func(context.Context) (releasecheck.Release, error) {
+			return releasecheck.Release{Version: "v0.14.0"}, nil
 		},
-		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error { return nil },
+		install: func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error { return nil },
 		serviceExecutable: func(context.Context, installation) (string, error) {
 			return "/managed/sshc", nil
 		},
@@ -167,10 +167,10 @@ func TestRunUpdateTellsHomebrewUsersToRefreshTheTapWhenTheOldVersionStays(t *tes
 		detect: func(string) (installation, error) {
 			return installation{manager: managerHomebrew}, nil
 		},
-		latest: func(context.Context) (selfupdate.Release, error) {
-			return selfupdate.Release{Version: "v0.14.0"}, nil
+		latest: func(context.Context) (releasecheck.Release, error) {
+			return releasecheck.Release{Version: "v0.14.0"}, nil
 		},
-		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error {
+		install: func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error {
 			return fmt.Errorf("verify the upgraded Homebrew executable: %w", errHomebrewTapNotRefreshed)
 		},
 	}})
@@ -186,8 +186,8 @@ func TestRunUpdateRejectsAnInvalidRemoteTag(t *testing.T) {
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
 		},
-		latest: func(context.Context) (selfupdate.Release, error) {
-			return selfupdate.Release{Version: "../../main"}, nil
+		latest: func(context.Context) (releasecheck.Release, error) {
+			return releasecheck.Release{Version: "../../main"}, nil
 		},
 	}})
 	if code != 1 || !strings.Contains(stderr.String(), "invalid version") {
@@ -204,10 +204,10 @@ func TestRunUpdateConfirmsBeforeInstallingANewerRelease(t *testing.T) {
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell, executable: "/managed/sshc"}, nil
 		},
-		latest: func(context.Context) (selfupdate.Release, error) {
-			return selfupdate.Release{Version: "v0.14.0"}, nil
+		latest: func(context.Context) (releasecheck.Release, error) {
+			return releasecheck.Release{Version: "v0.14.0"}, nil
 		},
-		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error {
+		install: func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error {
 			installed = true
 			return nil
 		},
@@ -430,10 +430,10 @@ func TestUpdateDoesNotAskToUnlockAPasswordlessVaultAfterRestartingTheService(t *
 	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, home: "/home/test", stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect:     func(string) (installation, error) { return installation{manager: managerShell}, nil },
-		latest: func(context.Context) (selfupdate.Release, error) {
-			return selfupdate.Release{Version: "v0.14.0"}, nil
+		latest: func(context.Context) (releasecheck.Release, error) {
+			return releasecheck.Release{Version: "v0.14.0"}, nil
 		},
-		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error { return nil },
+		install: func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error { return nil },
 		serviceExecutable: func(context.Context, installation) (string, error) {
 			return "/managed/sshc", nil
 		},

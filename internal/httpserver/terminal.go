@@ -65,10 +65,10 @@ type TerminalHandlers struct {
 	// Connected は、SSH接続とstream ticketの作成が成功したあとに呼ぶ。
 	// 履歴の失敗で接続を失わせないため、エラーは呼び出し側が処理する。
 	Connected func(alias string)
-	// Startup returns the explicitly configured startup command with its
-	// variables expanded, secret ones included. It is sent only after
-	// authentication and remote shell startup have completed.
-	Startup func(alias string) (string, bool)
+	// Startup は、alias に割り当てた起動スニペットを、この接続で送るかを決める。
+	// コマンドは変数（シークレットを含む）を展開したもので、認証とリモートシェルの
+	// 起動が済んでから送る。送らない理由の案内も、同じ時点でターミナルへ書く。
+	Startup func(alias string) StartupSnippet
 }
 
 func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
@@ -92,6 +92,18 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 
 // maxSessionIdentifier は、パスから受け取る識別子の長さを制限する。
 const maxSessionIdentifier = 64
+
+// sessionIDParam は、パスの :id を、登録簿に尋ねてよいセッションの識別子として返す。
+// 空か長すぎれば false を返す。そういう識別子のセッションは無いので、呼び出し側は 404 にする。
+func sessionIDParam(c *echo.Context) (string, bool) {
+	return identifierParam(c, "id")
+}
+
+// identifierParam は、パスの name の値を、長さを確かめた識別子として返す。
+func identifierParam(c *echo.Context, name string) (string, bool) {
+	id := c.Param(name)
+	return id, id != "" && len(id) <= maxSessionIdentifier
+}
 
 func describeSession(view terminal.View) api.TerminalSession {
 	described := api.TerminalSession{
@@ -157,8 +169,8 @@ func describeSession(view terminal.View) api.TerminalSession {
 
 // StartForward opens a loopback-only temporary forward on a connected SSH session.
 func (h TerminalHandlers) StartForward(c *echo.Context) error {
-	id := c.Param("id")
-	if id == "" || len(id) > maxSessionIdentifier {
+	id, ok := sessionIDParam(c)
+	if !ok {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
 	var request api.StartTerminalForwardRequest
@@ -183,8 +195,9 @@ func (h TerminalHandlers) StartForward(c *echo.Context) error {
 
 // StopForward closes one listener without ending the owning terminal session.
 func (h TerminalHandlers) StopForward(c *echo.Context) error {
-	id, forwardID := c.Param("id"), c.Param("forwardId")
-	if id == "" || len(id) > maxSessionIdentifier || forwardID == "" || len(forwardID) > maxSessionIdentifier {
+	id, sessionOK := sessionIDParam(c)
+	forwardID, forwardOK := identifierParam(c, "forwardId")
+	if !sessionOK || !forwardOK {
 		return problem(c, http.StatusNotFound, "terminal_forward_not_found")
 	}
 	if err := h.Registry.StopForward(id, forwardID); err != nil {
@@ -227,9 +240,10 @@ func (h TerminalHandlers) List(c *echo.Context) error {
 
 // Open はセッションを開き、そのストリームのための使い捨てチケットを返す。
 //
-// action token は要求しない。vault ゲート（マスターパスワード）だけを条件と
-// する。これは新しいゲートを作らなかったのではなく、以前の Terminal 起動に
-// あったゲートを埋め込み版では外すという選択である。README にそう書いてある。
+// action token は要求しない。Vault のロックが解除されていることだけを条件とする。
+// ターミナルを開くたびに確認を求めない操作性を取り、ロックを解除したページを
+// 操れる者は確認なしで shell を開けるという危険を受け入れた。この判断は
+// docs/design.md に書いてある。
 func (h TerminalHandlers) Open(c *echo.Context) error {
 	var request api.OpenTerminalSessionRequest
 	if err := decodeJSON(c, &request); err != nil {
@@ -268,7 +282,7 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 	if err != nil {
 		// チケットを出せなければ誰も繋げない。開いたものは閉じる。
 		_ = h.Registry.Close(session.ID())
-		return problem(c, http.StatusInternalServerError, "terminal_start_failed")
+		return unexpectedProblem(c, "terminal_start_failed", err)
 	}
 	if kind == terminal.KindSSH && h.Connected != nil {
 		alias := *request.Alias
@@ -288,8 +302,8 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 //
 // 名前は metadata へ保存しない。セッションは現在のプロセス内でだけ有効である。
 func (h TerminalHandlers) SetTitle(c *echo.Context) error {
-	id := c.Param("id")
-	if id == "" || len(id) > maxSessionIdentifier {
+	id, ok := sessionIDParam(c)
+	if !ok {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
 	var rawRequest struct {
@@ -321,7 +335,7 @@ func (h TerminalHandlers) SetTitle(c *echo.Context) error {
 	case errors.Is(err, terminal.ErrInvalidTitle):
 		return problem(c, http.StatusBadRequest, "invalid_terminal_title")
 	case err != nil:
-		return problem(c, http.StatusInternalServerError, "terminal_rename_failed")
+		return unexpectedProblem(c, "terminal_rename_failed", err)
 	}
 	return c.JSON(http.StatusOK, h.list())
 }
@@ -368,19 +382,21 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias, cwd *string, size term
 			// 持つ（sshclient.Session は自分で派生させた context をそこで取り消す）。
 			return h.Connect(context.WithoutCancel(ctx), target, size)
 		},
-		// 起動時のコマンドは、terminal.Session が Ready の後に世代ごとに送る。
-		// 再接続のたびに解決し直すので、割り当ての変更と停止がすぐ効く。
-		Startup: func() []string {
+		// 起動時のコマンドと送らなかったことの知らせは、terminal.Session が Ready の
+		// 後に世代ごとに送る。再接続のたびに解決し直すので、割り当ての変更と停止がすぐ効く。
+		Startup: func() terminal.Startup {
 			commands := make([]string, 0, 2)
 			if initialDirectory != "" {
 				commands = append(commands, "cd -- "+quotePOSIXShell(initialDirectory))
 			}
+			var startup StartupSnippet
 			if h.Startup != nil {
-				if command, ok := h.Startup(target); ok && command != "" {
-					commands = append(commands, command)
-				}
+				startup = h.Startup(target)
 			}
-			return commands
+			if startup.Command != "" {
+				commands = append(commands, startup.Command)
+			}
+			return terminal.Startup{Notice: startup.Notice, Commands: commands}
 		},
 		ReconnectError: func(err error) (bool, string) {
 			if code, requiresAction := connectProblem(err); requiresAction {
@@ -527,7 +543,7 @@ func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 	if code, named := connectProblem(err); named {
 		return problem(c, http.StatusUnprocessableEntity, code)
 	}
-	return problem(c, http.StatusInternalServerError, "terminal_start_failed")
+	return unexpectedProblem(c, "terminal_start_failed", err)
 }
 
 // Ticket は、すでに開いているセッションへ繋ぎ直すためのチケットを出す。
@@ -537,8 +553,8 @@ func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 //
 // 終了済みセッションにも発行し、残っている出力を再表示できるようにする。
 func (h TerminalHandlers) Ticket(c *echo.Context) error {
-	id := c.Param("id")
-	if id == "" || len(id) > maxSessionIdentifier {
+	id, ok := sessionIDParam(c)
+	if !ok {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
 	session, ok := h.Registry.Lookup(id)
@@ -554,7 +570,7 @@ func (h TerminalHandlers) Ticket(c *echo.Context) error {
 	}
 	ticket, err := h.Tickets.Issue(session.ID(), cursor)
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "terminal_start_failed")
+		return unexpectedProblem(c, "terminal_start_failed", err)
 	}
 	return c.JSON(http.StatusCreated, api.TerminalStreamTicket{StreamTicket: ticket})
 }
@@ -571,8 +587,8 @@ func terminalStreamCursor(c *echo.Context) (uint64, bool) {
 // Reconnect は終了済みSSHセッションを、同じID、pane、scrollbackを保って
 // 新しいshellとして開き直す。host keyと認証は保存済みのOpen経路で再検査する。
 func (h TerminalHandlers) Reconnect(c *echo.Context) error {
-	id := c.Param("id")
-	if id == "" || len(id) > maxSessionIdentifier {
+	id, ok := sessionIDParam(c)
+	if !ok {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
 	_, err := h.Registry.Reconnect(c.Request().Context(), id)
@@ -594,8 +610,8 @@ func (h TerminalHandlers) Reconnect(c *echo.Context) error {
 // StopReconnecting は自動再接続の待機を止める。プロセスは既に無いので、
 // セッションは終了として一覧に残り、手動の再接続と閉じる操作だけが残る。
 func (h TerminalHandlers) StopReconnecting(c *echo.Context) error {
-	id := c.Param("id")
-	if id == "" || len(id) > maxSessionIdentifier {
+	id, ok := sessionIDParam(c)
+	if !ok {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
 	err := h.Registry.StopReconnecting(c.Request().Context(), id)
@@ -605,7 +621,7 @@ func (h TerminalHandlers) StopReconnecting(c *echo.Context) error {
 	case errors.Is(err, terminal.ErrNotReconnecting):
 		return problem(c, http.StatusConflict, "terminal_not_reconnecting")
 	case err != nil:
-		return problem(c, http.StatusInternalServerError, "terminal_reconnect_stop_failed")
+		return unexpectedProblem(c, "terminal_reconnect_stop_failed", err)
 	}
 	return c.JSON(http.StatusOK, h.list())
 }
@@ -613,15 +629,15 @@ func (h TerminalHandlers) StopReconnecting(c *echo.Context) error {
 // Close は、利用者が閉じたセッションを一覧から消す。生きていれば、終わるのを
 // 待たずに強制停止する。止められなければ一覧に残して terminal_close_failed を返す。
 func (h TerminalHandlers) Close(c *echo.Context) error {
-	id := c.Param("id")
-	if id == "" || len(id) > maxSessionIdentifier {
+	id, ok := sessionIDParam(c)
+	if !ok {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
 	if err := h.Registry.Close(id); err != nil {
 		if errors.Is(err, terminal.ErrNotFound) {
 			return problem(c, http.StatusNotFound, "terminal_session_not_found")
 		}
-		return problem(c, http.StatusInternalServerError, "terminal_close_failed")
+		return unexpectedProblem(c, "terminal_close_failed", err)
 	}
 	// 使われなかったチケットを、もう閉じたセッションに向けたまま残さない。
 	h.Tickets.Forget(id)

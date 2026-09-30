@@ -34,7 +34,7 @@ type vpnServices struct {
 	config   *application.Service
 	secrets  *secret.Service
 	profiles *vpnprofile.Service
-	sessions *vpn.Manager
+	vpn      *vpn.Manager
 }
 
 func newVPNServices(t *testing.T) vpnServices {
@@ -57,9 +57,9 @@ func newVPNServices(t *testing.T) vpnServices {
 	if err := secrets.Initialise(vaultPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	sessions := vpn.New(filepath.Join(root, "sshc", "vpn"), os.Getuid(), nil)
-	profiles := vpnprofile.New(vpnprofile.Dependencies{Configuration: config, Vault: secrets, Routes: sessions})
-	return vpnServices{config: config, secrets: secrets, profiles: profiles, sessions: sessions}
+	vpnManager := vpn.New(filepath.Join(root, "sshc", "vpn"), os.Getuid(), nil)
+	profiles := vpnprofile.New(vpnprofile.Dependencies{Configuration: config, Vault: secrets, Routes: vpnManager})
+	return vpnServices{config: config, secrets: secrets, profiles: profiles, vpn: vpnManager}
 }
 
 // vpnEngine は、VPN の経路を扱う engine を一台組む。
@@ -68,7 +68,7 @@ func vpnEngine(t *testing.T) (*echo.Echo, *secret.Service, *application.Service)
 	services := newVPNServices(t)
 	engine := echo.New()
 	registerVPNRoutes(engine, VPNHandlers{
-		Config: services.config, Profiles: services.profiles, Sessions: services.sessions,
+		Config: services.config, Profiles: services.profiles, VPN: services.vpn,
 	})
 	return engine, services.secrets, services.config
 }
@@ -94,7 +94,7 @@ func vpnRevealEngine(t *testing.T) (*echo.Echo, *secret.Service, session.Credent
 	actions := ActionHandlers{Sessions: manager, Kinds: registry}
 	registerActionRoutes(engine, actions)
 	registerVPNRoutes(engine, VPNHandlers{
-		Config: services.config, Profiles: services.profiles, Sessions: services.sessions, Actions: actions,
+		Config: services.config, Profiles: services.profiles, VPN: services.vpn, Actions: actions,
 	})
 	return engine, services.secrets, credentials
 }

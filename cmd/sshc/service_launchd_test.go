@@ -13,7 +13,6 @@ import (
 	"strings"
 	"testing"
 
-	"sshc/internal/app"
 	"sshc/internal/handoff"
 	"sshc/internal/storage"
 )
@@ -259,7 +258,7 @@ func TestLaunchdReadinessRequiresTheLaunchdPIDAndStatusAPI(t *testing.T) {
 	defer server.Close()
 	runner := &fakeLaunchdCommandRunner{results: []serviceCommandResult{{Output: []byte("state = running\n\tpid = 4242\n")}}}
 	manager := testLaunchdServiceManager(t, runner)
-	writeTestHandoff(t, app.HandoffDir(manager.home), server.URL)
+	writeTestHandoff(t, mustStateDir(t, manager.home), server.URL)
 	if err := waitForLaunchdServiceReady(context.Background(), manager); err != nil {
 		t.Fatal(err)
 	}

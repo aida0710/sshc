@@ -72,6 +72,10 @@ func (s *Service) read() ([]byte, error) {
 	return contents, err
 }
 
+// Contents は、known_hosts をコメント・空行・解析できない行も含めて原文のまま返す。
+// ファイルが無ければ空である。行番号はこの原文の物理行で数える。
+func (s *Service) Contents() ([]byte, error) { return s.read() }
+
 // Listing は query に一致するエントリを返す。
 func (s *Service) Listing(query string) (Listing, error) {
 	contents, err := s.read()

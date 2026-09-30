@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"sshc/internal/platform/windowsacl/acltest"
+	"sshc/internal/secret"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 )
@@ -44,7 +45,10 @@ func newTestService(t *testing.T) (*Service, *storage.Workspace) {
 		}
 	}
 	manager := storage.NewManager(workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x5a}, 4096)))
-	return NewService(workspace, manager), workspace
+	service := NewService(workspace, manager)
+	// 本番と同じく Vault を渡す。Vault のファイルはまだ作らない。
+	service.SetVault(secret.NewService(workspace, manager, time.Now))
+	return service, workspace
 }
 
 func writeGroupFile(t *testing.T, workspace *storage.Workspace, group, name, contents string) string {

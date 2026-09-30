@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"sshc/internal/platform/nativepath"
 	"sshc/internal/platform/windowsacl"
 )
 
@@ -272,8 +273,8 @@ func openNoReparseDirectoryWithAccess(directory string, finalAccess uint32) (win
 		return 0, os.ErrInvalid
 	}
 	root := volume + string(os.PathSeparator)
-	relativeParent, err := filepath.Rel(root, directory)
-	if err != nil || filepath.IsAbs(relativeParent) || relativeParent == ".." || strings.HasPrefix(relativeParent, ".."+string(os.PathSeparator)) {
+	relativeParent, ok := nativepath.Relative(root, directory)
+	if !ok {
 		return 0, os.ErrInvalid
 	}
 

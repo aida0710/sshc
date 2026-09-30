@@ -47,6 +47,7 @@ func newConnectionUpdateHarness(t *testing.T, contents string) connectionUpdateH
 		Workspace: workspace, Transactions: manager, Resolver: storage.NewResolver(workspace),
 	})
 	service.SetKeyPassphraseVerifier(keyService)
+	service.SetVault(secrets)
 	return connectionUpdateHarness{
 		service: service, secrets: secrets, keyService: keyService, inventory: keyInventory(t, workspace),
 		workspace: workspace, manager: manager,
@@ -93,7 +94,7 @@ func TestUpdateConnectionAddsCommonFieldsToASparseBlock(t *testing.T) {
 		Password: unchangedPassword(),
 	}
 
-	result, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, request)
+	result, err := harness.service.UpdateConnection(harness.inventory, request)
 	if err != nil {
 		t.Fatalf("UpdateConnection = %v", err)
 	}
@@ -125,7 +126,7 @@ func TestUpdateConnectionReturnsDirectFieldsToInheritance(t *testing.T) {
 		Password:     unchangedPassword(),
 	}
 
-	if _, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, request); err != nil {
+	if _, err := harness.service.UpdateConnection(harness.inventory, request); err != nil {
 		t.Fatalf("UpdateConnection = %v", err)
 	}
 	want := "Host edge\r\n\tServerAliveInterval 30\r\n"
@@ -137,7 +138,7 @@ func TestUpdateConnectionReturnsDirectFieldsToInheritance(t *testing.T) {
 func TestUpdateConnectionRefusesDuplicateDirectFields(t *testing.T) {
 	const before = "Host edge\n\tUser first\n\tUser second\n"
 	harness := newConnectionUpdateHarness(t, before)
-	_, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		User:     &ConnectionStringChange{Action: ConnectionChangeSet, Value: "deploy"},
 		Password: unchangedPassword(),
@@ -179,7 +180,7 @@ func TestUpdateConnectionRejectsInvalidOrEmptyChanges(t *testing.T) {
 				Password: unchangedPassword(),
 			}
 			test.mutate(t, harness, &request)
-			_, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, request)
+			_, err := harness.service.UpdateConnection(harness.inventory, request)
 			if !errors.Is(err, test.wantErr) {
 				t.Fatalf("UpdateConnection = %v, want %v", err, test.wantErr)
 			}
@@ -193,7 +194,7 @@ func TestUpdateConnectionRejectsInvalidOrEmptyChanges(t *testing.T) {
 func TestUpdateConnectionRejectsDirectSetToTheExistingValues(t *testing.T) {
 	const before = "Host edge\n\tHostName edge.example\n\tUser deploy\n\tPort 22\n"
 	harness := newConnectionUpdateHarness(t, before)
-	_, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		HostName: &ConnectionStringChange{Action: ConnectionChangeSet, Value: "edge.example"},
 		User:     &ConnectionStringChange{Action: ConnectionChangeSet, Value: "deploy"},
@@ -212,7 +213,7 @@ func TestUpdateConnectionRejectsAFileOutsideTheResolvedGraph(t *testing.T) {
 	if err := os.WriteFile(outside, []byte(before), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "outside.conf", Alias: "edge"}, Base: before,
 		Port:     &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222},
 		Password: unchangedPassword(),
@@ -282,7 +283,8 @@ func TestUpdateConnectionRollsBackWhenTheSecondFileCommitFails(t *testing.T) {
 	fileSystem.path = vaultPath
 	fileSystem.err = errors.New("injected second rename failure")
 
-	_, err = service.UpdateConnection(secrets, inventory, UpdateConnectionRequest{
+	service.SetVault(secrets)
+	_, err = service.UpdateConnection(inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		Port: &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222},
 		IdentityFile: &ConnectionIdentityFileChange{
@@ -325,7 +327,7 @@ func TestUpdateConnectionRollsBackWhenTheSecondFileCommitFails(t *testing.T) {
 func TestUpdateConnectionReportsAStaleBaseAsAConflict(t *testing.T) {
 	const disk = "Host edge\n\tHostName disk.example\n"
 	harness := newConnectionUpdateHarness(t, disk)
-	_, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"},
 		Base:     "Host edge\n\tHostName stale.example\n",
 		Port:     &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222},
@@ -382,7 +384,7 @@ func TestUpdateConnectionCommitsEveryPasswordModeWithTheConfig(t *testing.T) {
 			if test.prepare != nil {
 				test.prepare(t, harness.secrets)
 			}
-			result, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+			result, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 				Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 				Port:     &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222},
 				Password: test.password,
@@ -430,7 +432,7 @@ func TestUpdateConnectionCommitsEveryPasswordModeWithTheConfig(t *testing.T) {
 func TestUpdateConnectionCanChangeOnlyTheStoredPassword(t *testing.T) {
 	const before = "Host edge\n\tHostName edge.example\n"
 	harness := newConnectionUpdateHarness(t, before)
-	result, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	result, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		Password: UpdateConnectionPassword{Kind: UpdatePasswordDedicated, Password: "connection-only"},
 	})
@@ -455,7 +457,7 @@ func TestUpdateConnectionAssignsSavedTOTPToTheResolvedAuthenticationDestination(
 		t.Fatal(err)
 	}
 
-	_, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		HostName: &ConnectionStringChange{Action: ConnectionChangeSet, Value: "new.example"},
 		Password: unchangedPassword(),
@@ -496,7 +498,7 @@ func TestUpdateConnectionRemovesTOTPAssignmentWithoutChangingTheCredential(t *te
 		t.Fatal(err)
 	}
 
-	_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err = harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		Password: unchangedPassword(),
 		TOTP:     UpdateConnectionTOTP{Kind: UpdateTOTPRemove},
@@ -534,11 +536,11 @@ func TestUpdateConnectionSkipsASemanticallyUnchangedPasswordAssignment(t *testin
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		Password: UpdateConnectionPassword{Kind: UpdatePasswordSaved, Credential: "office"},
 	}
-	if _, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, request); !errors.Is(err, ErrNoConnectionUpdate) {
+	if _, err := harness.service.UpdateConnection(harness.inventory, request); !errors.Is(err, ErrNoConnectionUpdate) {
 		t.Fatalf("same assignment = %v, want ErrNoConnectionUpdate", err)
 	}
 	request.Port = &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222}
-	if _, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, request); err != nil {
+	if _, err := harness.service.UpdateConnection(harness.inventory, request); err != nil {
 		t.Fatalf("config change with same assignment = %v", err)
 	}
 	if got := readFile(t, harness.workspace, "config"); !strings.Contains(got, "Port 2222") {
@@ -571,7 +573,7 @@ func TestChangingAuthenticationDestinationStopsAutomaticPasswordRelease(t *testi
 		t.Fatal(err)
 	}
 
-	_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err = harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		HostName: &ConnectionStringChange{Action: ConnectionChangeSet, Value: "retargeted.example"},
 		Password: UpdateConnectionPassword{Kind: UpdatePasswordUnchanged},
@@ -611,7 +613,7 @@ func TestWebConfirmationRebindsSavedAuthenticationValuesToTheUpdatedRoute(t *tes
 		t.Fatal(err)
 	}
 
-	_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err = harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		HostName: &ConnectionStringChange{Action: ConnectionChangeSet, Value: "retargeted.example"},
 		Password: UpdateConnectionPassword{Kind: UpdatePasswordRebind},
@@ -646,7 +648,7 @@ func TestUpdateConnectionNewSharedCollisionChangesNeitherConfigNorVault(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err = harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		Port:     &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222},
 		Password: UpdateConnectionPassword{Kind: UpdatePasswordNewShared, Credential: "office", Password: "replacement"},
@@ -716,7 +718,7 @@ func TestUpdateConnectionRemovesDedicatedOrUnassignsReusablePassword(t *testing.
 		t.Run(test.name, func(t *testing.T) {
 			harness := newConnectionUpdateHarness(t, before)
 			test.prepare(t, harness.secrets)
-			result, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+			result, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 				Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 				Password: UpdateConnectionPassword{Kind: UpdatePasswordRemove},
 			})
@@ -734,7 +736,8 @@ func TestUpdateConnectionRemovesDedicatedOrUnassignsReusablePassword(t *testing.
 func TestUpdateConnectionConfigOnlyDoesNotDispatchAPasswordMutation(t *testing.T) {
 	const before = "Host edge\n\tHostName edge.example\n"
 	harness := newConnectionUpdateHarness(t, before)
-	if _, err := harness.service.UpdateConnection(nil, harness.inventory, UpdateConnectionRequest{
+	harness.service.SetVault(nil)
+	if _, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		Port:     &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222},
 		Password: unchangedPassword(),
@@ -743,8 +746,9 @@ func TestUpdateConnectionConfigOnlyDoesNotDispatchAPasswordMutation(t *testing.T
 	}
 
 	changed := readFile(t, harness.workspace, "config")
+	harness.service.SetVault(harness.secrets)
 	harness.secrets.Lock()
-	_, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: changed,
 		Password: UpdateConnectionPassword{Kind: UpdatePasswordDedicated, Password: "blocked"},
 	})
@@ -756,7 +760,7 @@ func TestUpdateConnectionConfigOnlyDoesNotDispatchAPasswordMutation(t *testing.T
 func TestUpdateConnectionRejectsAnIneligiblePassword(t *testing.T) {
 	const before = "Host edge\n\tHostName edge.example\n\tPasswordAuthentication no\n"
 	harness := newConnectionUpdateHarness(t, before)
-	_, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		Password: UpdateConnectionPassword{Kind: UpdatePasswordDedicated, Password: "blocked"},
 	})
@@ -776,7 +780,7 @@ func TestUpdateConnectionPasswordConflictPublishesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err = harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"},
 		Base:     "Host edge\n\tHostName stale.example\n",
 		Port:     &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222},
@@ -814,7 +818,7 @@ func TestUpdateConnectionCommitFailureLeavesConfigAndVaultUnchanged(t *testing.T
 		t.Fatal(err)
 	}
 
-	_, err = failingService.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err = failingService.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		Port: &ConnectionPortChange{Action: ConnectionChangeSet, Value: 2222},
 		IdentityFile: &ConnectionIdentityFileChange{
@@ -846,7 +850,7 @@ func TestUpdateConnectionSavesPassphraseForTheSelectedEncryptedKeyOnly(t *testin
 	const before = "Host edge\n\tIdentityFile ~/.ssh/id_update\n"
 	harness := newConnectionUpdateHarness(t, before)
 	encryptUpdateKey(t, &harness, "correct key phrase")
-	result, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	result, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		Password: unchangedPassword(),
 		KeyPassphrase: UpdateConnectionKeyPassphrase{
@@ -876,7 +880,7 @@ func TestUpdateConnectionRejectsIdentityPasswordAndKeyPassphraseTogether(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err = harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		IdentityFile: &ConnectionIdentityFileChange{
 			Action: ConnectionChangeSet, KeyID: updatePrivateKeyID(t, harness.inventory),
@@ -952,7 +956,7 @@ func TestUpdateConnectionDirectKeyCleansDedicatedOrReusablePassword(t *testing.T
 		t.Run(test.name, func(t *testing.T) {
 			harness := newConnectionUpdateHarness(t, before)
 			test.prepare(t, harness.secrets)
-			result, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+			result, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 				Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 				Password: unchangedPassword(),
 			})
@@ -970,7 +974,7 @@ func TestUpdateConnectionDirectKeyCleansDedicatedOrReusablePassword(t *testing.T
 func TestUpdateConnectionCanInheritDirectKeyAndAssignPasswordTogether(t *testing.T) {
 	const before = "Host edge\n\tIdentityFile ~/.ssh/id_update\n\nHost *\n\tIdentityFile ~/.ssh/inherited\n"
 	harness := newConnectionUpdateHarness(t, before)
-	result, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	result, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity:     HostIdentity{Path: "config", Alias: "edge"},
 		Base:         before,
 		IdentityFile: &ConnectionIdentityFileChange{Action: ConnectionChangeInherit},
@@ -1008,7 +1012,7 @@ func TestUpdateConnectionPassphraseDetachesOnlyTheSelectedKeyFromSharedCredentia
 			t.Fatal(err)
 		}
 	}
-	_, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		Password: unchangedPassword(),
 		KeyPassphrase: UpdateConnectionKeyPassphrase{
@@ -1090,7 +1094,7 @@ func TestUpdateConnectionPassphraseRejectsWrongUnencryptedUnrelatedCustomAndComp
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+			_, err = harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 				Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: test.before,
 				Password: unchangedPassword(),
 				KeyPassphrase: UpdateConnectionKeyPassphrase{
@@ -1150,7 +1154,7 @@ func TestUpdateConnectionPassphraseRejectsKeyBytesChangedBeforeCommit(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+	_, err = harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 		Password: unchangedPassword(),
 		KeyPassphrase: UpdateConnectionKeyPassphrase{

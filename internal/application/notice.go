@@ -29,7 +29,8 @@ const (
 	NoticeMatchFinalRefused   = "match_final_refused"
 	NoticeCanonicaliseRefused = "canonicalise_refused"
 	NoticeUnknownTokenRefused = "unknown_token_refused"
-	// NoticeDestinationNotIncluded は、どの Include も届かない destination
+	// NoticeDestinationNotIncluded は、移動先のファイルにどの Include も届かないことを
+	// 知らせる。そこへ移したブロックは OpenSSH に読まれなくなる。
 	NoticeDestinationNotIncluded = "destination_not_included"
 )
 

@@ -15,12 +15,7 @@ import (
 	"sshc/internal/remotesync"
 )
 
-const (
-	maxSyncSetupLine       = 4 << 10
-	maxSyncAccessKeyBytes  = 512
-	maxSyncSecretKeyBytes  = 512
-	maxSyncSnapshotKeySize = 1024
-)
+const maxSyncSetupLine = 4 << 10
 
 var (
 	errSyncSetupTTY        = errors.New("sync setup requires an interactive terminal")
@@ -103,7 +98,7 @@ func runSyncSetup(
 		}
 		syncKey = bytes.TrimSpace(syncKey)
 		reuseKey = len(syncKey) == 0 && current.KeyConfigured
-		if (!reuseKey && len(syncKey) == 0) || len(syncKey) > maxSyncSnapshotKeySize || !utf8.Valid(syncKey) {
+		if (!reuseKey && len(syncKey) == 0) || len(syncKey) > remotesync.MaxKeyLength || !utf8.Valid(syncKey) {
 			return errSyncSetupInput
 		}
 	}
@@ -211,8 +206,8 @@ func readSyncSetupInput(
 	}
 	reuseCredentials := credentialConfigured && len(accessKey) == 0 && len(secretKey) == 0
 	if (!reuseCredentials && (len(accessKey) == 0 || len(secretKey) == 0)) ||
-		len(accessKey) > maxSyncAccessKeyBytes || !utf8.Valid(accessKey) ||
-		len(secretKey) > maxSyncSecretKeyBytes || !utf8.Valid(secretKey) {
+		len(accessKey) > remotesync.MaxAccessKeyIDLength || !utf8.Valid(accessKey) ||
+		len(secretKey) > remotesync.MaxSecretAccessKeyLength || !utf8.Valid(secretKey) {
 		zeroBytes(accessKey)
 		zeroBytes(secretKey)
 		return nil, errSyncSetupInput
@@ -263,7 +258,7 @@ func validSyncSetupTarget(endpoint, bucket, path, region string) bool {
 }
 
 func safeGeneratedSyncKey(key string) bool {
-	if len(key) == 0 || len(key) > maxSyncSnapshotKeySize || !utf8.ValidString(key) {
+	if len(key) == 0 || len(key) > remotesync.MaxKeyLength || !utf8.ValidString(key) {
 		return false
 	}
 	for _, character := range key {

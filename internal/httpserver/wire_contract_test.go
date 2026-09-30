@@ -73,7 +73,7 @@ func TestHandwrittenHTTPWireTypesMatchOpenAPIRecursively(t *testing.T) {
 		"SnippetVariable":                 snippets.Variable{},
 		"SnippetDraft":                    snippetDraft{},
 		"Snippet":                         snippets.Snippet{},
-		"StartupSnippet":                  snippets.Startup{},
+		"StartupSnippet":                  snippets.StartupAssignment{},
 		"StartupSnippetRequest":           startupSnippetRequest{},
 		"SnippetLibrary":                  snippetLibrary{},
 		"SnippetPreviewRequest":           snippets.PreviewRequest{},

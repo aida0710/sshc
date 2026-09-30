@@ -4,8 +4,15 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sshc/internal/app"
 )
+
+// userPaths は、1 回の呼び出しが使う利用者の home と、そこから解決した sshc の
+// state directory である。state directory は app.StateDir で一度だけ解決し、
+// engine lock・handoff の読み書きがどれも同じ答えを使うようにする。
+type userPaths struct {
+	home     string
+	stateDir string
+}
 
 // commandEnvironment は、engine と話す短命な command が共有する周辺である:
 // handoff の置き場、engine への HTTP client、標準入出力、password を画面に出さずに
@@ -23,9 +30,9 @@ type commandEnvironment struct {
 	confirm actionConfirmer
 }
 
-func systemCommandEnvironment(home string, client *http.Client) commandEnvironment {
+func systemCommandEnvironment(paths userPaths, client *http.Client) commandEnvironment {
 	return commandEnvironment{
-		home: home, stateDir: app.HandoffDir(home), client: client,
+		home: paths.home, stateDir: paths.stateDir, client: client,
 		stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr, terminal: systemPasswordTerminal{},
 		confirm: systemActionConfirmer,
 	}

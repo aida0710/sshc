@@ -155,6 +155,11 @@ type Request struct {
 	// such as sync-state belong here so they can never acknowledge a partially
 	// applied workspace.
 	FinalChanges []Change
+	// Validation は、この要求に固有の検査の文脈で、Manager.Validate へそのまま渡す。
+	// storage は中身を見ない。Manager は複数のサービスが共有するので、文脈を
+	// 要求の外（サービスのフィールドなど）に置くと、別の goroutine の要求の
+	// 検査がそれを読んでしまう。
+	Validation any
 }
 
 // Result は、完了したトランザクションを記述する。
@@ -206,8 +211,8 @@ func (m *Manager) validBackupReadPath(path string) bool {
 		return false
 	}
 	backupRoot := filepath.Join(m.workspace.StateDir(), backupDirectoryName)
-	relative, err := filepath.Rel(backupRoot, path)
-	if err != nil || filepath.IsAbs(relative) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+	relative, ok := nativepath.RelativeBelow(backupRoot, path)
+	if !ok {
 		return false
 	}
 	parts := strings.Split(relative, string(filepath.Separator))
@@ -344,20 +349,26 @@ func (m *Manager) Commit(request Request) (Result, error) {
 	return result, err
 }
 
-// CommitAtomic は Commit より厳しい失敗時規則で書き込みトランザクションを適用する。
+// CommitAtomic は Commit より厳しい失敗時規則でトランザクションを適用する。
 // ステージ済みのファイル操作が失敗した場合、このプロセスで適用した操作をすべて
-// ロールバックしてからエラーを返す。SSH 接続と暗号化されたパスワード割り当てのように、
-// 2 つの永続化文書が 1 つの論理値を表す場合に使用する。
+// ロールバックしてからエラーを返す。SSH 接続と暗号化されたパスワード割り当て、
+// 鍵ファイルの移動とそのパスフレーズの割り当てのように、複数の永続化文書が 1 つの
+// 論理値を表す場合に使用する。
+//
+// 受け付けるのは巻き戻せる操作だけである。移動・空のディレクトリの削除・控えを
+// 残す削除は Rollback が元に戻せるが、控えを残さない書き込みと削除は戻せない。
 func (m *Manager) CommitAtomic(request Request) (Result, error) {
 	if request.Operation == "" {
 		return Result{}, ErrInvalidOperation
 	}
-	if len(request.Moves) > 0 || len(request.Removals) > 0 || len(request.RemoveDirectories) > 0 {
-		return Result{}, ErrAtomicWriteOnly
+	for _, removal := range request.Removals {
+		if !removal.Backup {
+			return Result{}, ErrIrreversibleRemoval
+		}
 	}
 	for _, change := range append(append([]Change(nil), request.Changes...), request.FinalChanges...) {
 		if change.SkipBackup {
-			return Result{}, ErrAtomicWriteOnly
+			return Result{}, ErrIrreversibleChange
 		}
 	}
 	result, err := m.commit(request, true, false, nil)

@@ -27,7 +27,7 @@ type VPNHandlers struct {
 	// Config は、一覧と接続の紐付けを読み書きする。
 	Config   *application.Service
 	Profiles *vpnprofile.Service
-	Sessions *vpn.Manager
+	VPN      *vpn.Manager
 	// Actions は、秘密を取り出す確認のトークンを消費する。
 	Actions ActionHandlers
 }
@@ -154,7 +154,7 @@ func (h VPNHandlers) Logs(c *echo.Context) error {
 	if err != nil {
 		return vpnProblem(c, err)
 	}
-	lines, err := h.Sessions.Logs(c.Request().Context(), name, secrets)
+	lines, err := h.VPN.Logs(c.Request().Context(), name, secrets)
 	if err != nil {
 		return vpnProblem(c, err)
 	}
@@ -167,7 +167,7 @@ func (h VPNHandlers) StartSession(c *echo.Context) error {
 	if err != nil {
 		return vpnProblem(c, err)
 	}
-	if err := h.Sessions.Start(c.Request().Context(), profile, secrets); err != nil {
+	if err := h.VPN.Start(c.Request().Context(), profile, secrets); err != nil {
 		return vpnProblem(c, err)
 	}
 	return h.respond(c)
@@ -176,7 +176,7 @@ func (h VPNHandlers) StartSession(c *echo.Context) error {
 // StopSession は、利用者の求めで経路を切断する。切断で切れた接続は、自動再接続では
 // 経路を起動し直さない。
 func (h VPNHandlers) StopSession(c *echo.Context) error {
-	if err := h.Sessions.Disconnect(c.Request().Context(), c.Param("name")); err != nil {
+	if err := h.VPN.Disconnect(c.Request().Context(), c.Param("name")); err != nil {
 		return vpnProblem(c, err)
 	}
 	return h.respond(c)
@@ -215,10 +215,10 @@ func (h VPNHandlers) overview(c *echo.Context, waitForRoutes bool) error {
 	var statuses map[string]vpn.Status
 	if waitForRoutes {
 		// docker が見つからない、daemon が応えない、のどちらもここで分かる。
-		statuses, err = h.Sessions.Statuses(c.Request().Context())
+		statuses, err = h.VPN.Statuses(c.Request().Context())
 	} else {
 		var known bool
-		statuses, known, err = h.Sessions.KnownStatuses()
+		statuses, known, err = h.VPN.KnownStatuses()
 		response.Checking = !known
 	}
 	if err != nil {

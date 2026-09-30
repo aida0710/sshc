@@ -34,7 +34,7 @@ func newCLISessionEngine(t *testing.T) (*echo.Echo, *session.Manager, string) {
 		Sessions:       manager,
 		Unlocked:       func() bool { return true },
 	}).Middleware)
-	registerConnectRoutes(engine, ConnectHandlers{
+	registerCLIRoutes(engine, CLIHandlers{
 		Secret:    cliSessionTestSecret,
 		Bootstrap: manager,
 	})
@@ -82,7 +82,11 @@ func issuedCLISession(t *testing.T, engine *echo.Echo) (*http.Cookie, string) {
 }
 
 func protectedCLIRequest(engine *echo.Echo, cookie *http.Cookie, csrf string) *httptest.ResponseRecorder {
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/protected-test", nil)
+	return cliAPIRequest(engine, "/api/v1/protected-test", cookie, csrf)
+}
+
+func cliAPIRequest(engine *echo.Echo, target string, cookie *http.Cookie, csrf string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodGet, target, nil)
 	request.Host = cliSessionTestHost
 	request.Header.Set("Sec-Fetch-Site", "same-origin")
 	request.Header.Set(CSRFHeader, csrf)
@@ -97,7 +101,7 @@ func TestCLISessionRequiresHandoffAndUsesNormalAPISecurity(t *testing.T) {
 
 	missing := requestCLISession(t, engine, "")
 	wrong := requestCLISession(t, engine, "wrong-secret")
-	if missing.Code != http.StatusForbidden || wrong.Code != missing.Code ||
+	if missing.Code != http.StatusUnauthorized || wrong.Code != missing.Code ||
 		wrong.Body.String() != missing.Body.String() {
 		t.Fatalf("handoff refusals differ: missing=%d %q wrong=%d %q",
 			missing.Code, missing.Body.String(), wrong.Code, wrong.Body.String())
@@ -115,7 +119,7 @@ func TestCLISessionRequiresHandoffAndUsesNormalAPISecurity(t *testing.T) {
 	}
 }
 
-func TestCLISessionRevokeAndHardExpiry(t *testing.T) {
+func TestCLISessionEndsWhenRevokedOrLeftUnused(t *testing.T) {
 	engine, manager, _ := newCLISessionEngine(t)
 	now := time.Unix(1_800_000_000, 0).UTC()
 	manager.Now = func() time.Time { return now }
@@ -135,9 +139,46 @@ func TestCLISessionRevokeAndHardExpiry(t *testing.T) {
 	}
 
 	expiringCookie, expiringCSRF := issuedCLISession(t, engine)
-	now = now.Add(CLISessionTTL)
+	now = now.Add(CLISessionIdleTimeout)
 	if response := protectedCLIRequest(engine, expiringCookie, expiringCSRF); response.Code != http.StatusUnauthorized {
 		t.Fatalf("expired CLI session API response = %d, want %d", response.Code, http.StatusUnauthorized)
+	}
+}
+
+// sftp get は 1 本の長い GET でファイルを受け、そのあとで完了を知らせる。GET の
+// あいだに無操作の期限が来ても、続く完了の通知は断られない。
+func TestCLISessionSurvivesARequestLongerThanItsIdleTimeout(t *testing.T) {
+	engine, manager, _ := newCLISessionEngine(t)
+	now := time.Unix(1_800_000_000, 0).UTC()
+	manager.Now = func() time.Time { return now }
+	engine.GET("/api/v1/long-download-test", func(c *echo.Context) error {
+		now = now.Add(3 * CLISessionIdleTimeout)
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	cookie, csrf := issuedCLISession(t, engine)
+	if response := cliAPIRequest(engine, "/api/v1/long-download-test", cookie, csrf); response.Code != http.StatusNoContent {
+		t.Fatalf("long request = %d: %s", response.Code, response.Body.String())
+	}
+	now = now.Add(time.Minute)
+	if response := protectedCLIRequest(engine, cookie, csrf); response.Code != http.StatusNoContent {
+		t.Fatalf("request after the long one = %d: %s", response.Code, response.Body.String())
+	}
+}
+
+// 長い sftp 転送や terminal wait は同じ CLI のセッションを使い続ける。使っている
+// あいだは、無操作の期限を過ぎても切れない。
+func TestCLISessionInUseOutlivesItsIdleTimeout(t *testing.T) {
+	engine, manager, _ := newCLISessionEngine(t)
+	now := time.Unix(1_800_000_000, 0).UTC()
+	manager.Now = func() time.Time { return now }
+
+	cookie, csrf := issuedCLISession(t, engine)
+	for elapsed := time.Minute; elapsed <= 3*CLISessionIdleTimeout; elapsed += time.Minute {
+		now = now.Add(time.Minute)
+		if response := protectedCLIRequest(engine, cookie, csrf); response.Code != http.StatusNoContent {
+			t.Fatalf("CLI session used every minute, after %s = %d: %s", elapsed, response.Code, response.Body.String())
+		}
 	}
 }
 
@@ -149,7 +190,9 @@ func TestCLISessionDoesNotConsumeBrowserBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("browser Bootstrap after CLI session = %v", err)
 	}
-	if !manager.Authenticate(credentials.SessionID) {
+	endRequest, ok := manager.BeginRequest(credentials.SessionID)
+	if !ok {
 		t.Fatal("browser bootstrap did not create a session")
 	}
+	endRequest()
 }

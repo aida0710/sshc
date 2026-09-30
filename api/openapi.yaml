@@ -4047,7 +4047,7 @@ components:
       additionalProperties: false
       required: [path, alias]
       properties:
-        path: { type: string }
+        path: { type: string, maxLength: 512 }
         alias: { type: string }
     RecentConnection:
       type: object
@@ -5199,11 +5199,13 @@ components:
     StartupSnippet:
       type: object
       additionalProperties: false
-      required: [alias, snippetId]
+      required: [alias, snippetId, stale]
       properties:
         alias: { type: string }
         snippetId: { type: string }
-        inputs: { type: object, additionalProperties: { type: string } }
+        stale:
+          type: boolean
+          description: The host's destination changed after the assignment, so the snippet is not sent until it is assigned again.
     StartupSnippetRequest:
       type: object
       additionalProperties: false

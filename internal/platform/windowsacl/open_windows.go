@@ -10,6 +10,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"sshc/internal/platform/nativepath"
 )
 
 // openFileNoReparse は開いた親を基準に、OBJ_DONT_REPARSE を指定して各子要素を解決する。
@@ -33,8 +35,8 @@ func openPathNoReparse(path string, access uint32, finalDirectory bool) (*os.Fil
 		return nil, os.ErrInvalid
 	}
 	root := volume + string(os.PathSeparator)
-	relative, err := filepath.Rel(root, cleaned)
-	if err != nil || filepath.IsAbs(relative) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+	relative, ok := nativepath.RelativeBelow(root, cleaned)
+	if !ok {
 		return nil, os.ErrInvalid
 	}
 

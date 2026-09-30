@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"sshc/internal/selfupdate"
+	"sshc/internal/releasecheck"
 )
 
 const (
@@ -43,8 +43,8 @@ var errHomebrewTapNotRefreshed = errors.New("Homebrew may not have refreshed " +
 type updateDependencies struct {
 	executable        func() (string, error)
 	detect            func(string) (installation, error)
-	latest            func(context.Context) (selfupdate.Release, error)
-	install           func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error
+	latest            func(context.Context) (releasecheck.Release, error)
+	install           func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error
 	serviceExecutable func(context.Context, installation) (string, error)
 	restartService    func(context.Context, string) (bool, error)
 	// engineStatus は、再起動した engine の Vault の状態を読み、次にすることを選ぶために使う。
@@ -53,7 +53,7 @@ type updateDependencies struct {
 }
 
 func defaultUpdateDependencies() updateDependencies {
-	checker := &selfupdate.Checker{
+	checker := &releasecheck.Checker{
 		API:  latestReleaseAPI,
 		HTTP: &http.Client{Timeout: updateReleaseCheckTimeout},
 	}
@@ -63,7 +63,7 @@ func defaultUpdateDependencies() updateDependencies {
 		executable: os.Executable,
 		detect:     detectInstallation,
 		latest:     checker.Latest,
-		install: func(ctx context.Context, found installation, release selfupdate.Release, stdout, stderr io.Writer) error {
+		install: func(ctx context.Context, found installation, release releasecheck.Release, stdout, stderr io.Writer) error {
 			installer := updateInstaller{client: installerClient, commands: commands, stdout: stdout, stderr: stderr}
 			return installer.install(ctx, found, release)
 		},
@@ -93,7 +93,7 @@ type updateRun struct {
 type updatePlan struct {
 	found installation
 	// latest の Version は、安定版の tag にそろえてある。
-	latest selfupdate.Release
+	latest releasecheck.Release
 	// serviceExecutable は、管理された service に登録する実行ファイルである。
 	// service を再起動しないときは空である。
 	serviceExecutable string
@@ -110,7 +110,7 @@ func runUpdate(ctx context.Context, run updateRun) int {
 	if code != 0 {
 		return code
 	}
-	if !selfupdate.Newer(run.current, latest.Version) {
+	if !releasecheck.Newer(run.current, latest.Version) {
 		fmt.Fprintf(run.stdout, "sshc: %s is already the latest release\n", run.current)
 		return 0
 	}
@@ -149,23 +149,23 @@ func (run updateRun) findInstallation() (installation, int) {
 }
 
 // latestRelease は、最新のリリースを尋ね、その版を安定版の tag にそろえて返す。
-func (run updateRun) latestRelease(ctx context.Context) (selfupdate.Release, int) {
+func (run updateRun) latestRelease(ctx context.Context) (releasecheck.Release, int) {
 	latest, err := run.dependencies.latest(ctx)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return selfupdate.Release{}, exitInterrupted
+			return releasecheck.Release{}, exitInterrupted
 		}
-		if errors.Is(err, selfupdate.ErrNoRelease) {
+		if errors.Is(err, releasecheck.ErrNoRelease) {
 			fmt.Fprintln(run.stderr, "sshc: no release is available")
 		} else {
 			fmt.Fprintf(run.stderr, "sshc: check the latest release: %v\n", err)
 		}
-		return selfupdate.Release{}, exitFailure
+		return releasecheck.Release{}, exitFailure
 	}
-	tag, ok := selfupdate.StableTag(latest.Version)
+	tag, ok := releasecheck.StableTag(latest.Version)
 	if !ok {
 		fmt.Fprintf(run.stderr, "sshc: the latest release has an invalid version %q\n", latest.Version)
-		return selfupdate.Release{}, exitFailure
+		return releasecheck.Release{}, exitFailure
 	}
 	latest.Version = tag
 	return latest, 0
@@ -262,7 +262,7 @@ type updateInstaller struct {
 	stderr   io.Writer
 }
 
-func (installer updateInstaller) install(ctx context.Context, found installation, release selfupdate.Release) error {
+func (installer updateInstaller) install(ctx context.Context, found installation, release releasecheck.Release) error {
 	switch found.manager {
 	case managerHomebrew:
 		return installer.upgradeHomebrew(ctx, found, release.Version)
@@ -299,7 +299,7 @@ func (installer updateInstaller) runTaggedInstaller(ctx context.Context, found i
 	if runtime.GOOS == "windows" {
 		return errors.New("install.sh updates are not supported on Windows")
 	}
-	if stable, ok := selfupdate.StableTag(tag); !ok || stable != tag {
+	if stable, ok := releasecheck.StableTag(tag); !ok || stable != tag {
 		return fmt.Errorf("refuse installer tag %q", tag)
 	}
 	script, err := installer.downloadTaggedInstaller(ctx, tag)
@@ -433,7 +433,7 @@ func reportsVersion(line []byte, tag string) bool {
 	if len(fields) != 3 || string(fields[0]) != "sshc" {
 		return false
 	}
-	reported, ok := selfupdate.StableTag(string(fields[1]))
+	reported, ok := releasecheck.StableTag(string(fields[1]))
 	return ok && reported == tag
 }
 

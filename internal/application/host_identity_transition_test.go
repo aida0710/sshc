@@ -85,7 +85,7 @@ func TestCreatingAndDeletingAHostUpdatesItsGroupsHostList(t *testing.T) {
 	if _, err := harness.service.Save(EditRequest{Kind: EditGroups, Metadata: &metadata}); err != nil {
 		t.Fatal(err)
 	}
-	created, err := harness.service.CreateConnection(harness.secrets, harness.inventory, keyCreateRequest(t, harness))
+	created, err := harness.service.CreateConnection(harness.inventory, keyCreateRequest(t, harness))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"sshc/internal/platform/nativepath"
 )
 
 var (
@@ -862,8 +864,8 @@ func (m *Manager) validateLoadedBackup(record journalRecord, entry journalEntry,
 		}
 		return invalidJournal("required backup path is missing")
 	}
-	relative, err := filepath.Rel(m.workspace.Root(), entry.Path)
-	if err != nil || relative == "." || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+	relative, ok := nativepath.RelativeBelow(m.workspace.Root(), entry.Path)
+	if !ok {
 		return invalidJournal("backup target is invalid")
 	}
 	expected := filepath.Join(m.workspace.StateDir(), backupDirectoryName, record.ID, relative)

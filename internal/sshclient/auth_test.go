@@ -511,7 +511,7 @@ func TestIdentitiesOnlySkipsTheAgent(t *testing.T) {
 	target := targetWith(server)
 	target.IdentitiesOnly = true
 	// 鍵がひとつも無く agent も使えないので、公開鍵認証は提示されない。
-	auth := sshclient.Auth{AgentSocket: socket}
+	auth := sshclient.Auth{Agent: unixSocketAgent(socket)}
 	if err := connect(t, server, target, auth, &scriptedPrompter{}); err == nil {
 		t.Fatal("IdentitiesOnly still used the agent's key")
 	}
@@ -576,18 +576,7 @@ func TestNoIdentityIsItsOwnError(t *testing.T) {
 // runTestAgent は、プロセス内の ssh-agent を unix ソケットで待ち受けさせる。
 func runTestAgent(t *testing.T, _ string) (string, ssh.Signer) {
 	t.Helper()
-	_, private, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	signer, err := ssh.NewSignerFromKey(private)
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyring := agent.NewKeyring()
-	if err := keyring.Add(agent.AddedKey{PrivateKey: private}); err != nil {
-		t.Fatal(err)
-	}
+	keyring, signer := agentKeyring(t)
 
 	// t.TempDir() は使わない。unix ソケットのパスには 100 バイト程度の
 	// 上限があり、テスト名を含むあの長いパスは macOS でそれを超える。超えると
@@ -614,6 +603,92 @@ func runTestAgent(t *testing.T, _ string) (string, ssh.Signer) {
 		}
 	}()
 	return socket, signer
+}
+
+// agentKeyring は、鍵をひとつ持つ agent の中身を作る。
+func agentKeyring(t *testing.T) (agent.Agent, ssh.Signer) {
+	t.Helper()
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := ssh.NewSignerFromKey(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyring := agent.NewKeyring()
+	if err := keyring.Add(agent.AddedKey{PrivateKey: private}); err != nil {
+		t.Fatal(err)
+	}
+	return keyring, signer
+}
+
+// unixSocketAgent は、テストの agent が待つ unix socket を開く。どの OS でも unix
+// socket として開くので、keys.NewAgent（Windows では固定の named pipe）は使わない。
+func unixSocketAgent(socket string) sshclient.AgentConnector {
+	return keys.Agent{
+		Socket: func() string { return socket },
+		Dial: func(ctx context.Context, address string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", address)
+		},
+	}
+}
+
+// windowsAgentPipe は、Windows の OpenSSH agent が待つ named pipe の名前である。
+// unix socket として開けば必ず失敗する宛先なので、sshclient が宛先を自分で
+// 開かず、渡された開き方に従うことを確かめられる。
+const windowsAgentPipe = `\\.\pipe\openssh-ssh-agent`
+
+// pipeAgent は、named pipe の agent の代わりに、プロセス内の接続で鍵を貸す。
+type pipeAgent struct {
+	keyring agent.Agent
+}
+
+func (pipeAgent) Address() string { return windowsAgentPipe }
+
+func (a pipeAgent) Connect(context.Context) (net.Conn, error) {
+	client, server := net.Pipe()
+	go func() {
+		_ = agent.ServeAgent(a.keyring, server)
+		_ = server.Close()
+	}()
+	return client, nil
+}
+
+// unreachableAgent は、宛先はあるが開けない agent である。Windows で ssh-agent
+// サービスが止まっているときと同じ形になる。
+type unreachableAgent struct{}
+
+func (unreachableAgent) Address() string { return windowsAgentPipe }
+
+func (unreachableAgent) Connect(context.Context) (net.Conn, error) {
+	return nil, errors.New("the agent pipe is not there")
+}
+
+// Windows の OpenSSH agent は SSH_AUTH_SOCK を設定せず named pipe で待つ。
+// IdentityFile の無い接続でも、渡された agent の鍵で公開鍵認証が通る。
+func TestAnAgentReachedThroughItsOwnTransportAuthenticatesWithoutAnIdentityFile(t *testing.T) {
+	keyring, agentKey := agentKeyring(t)
+	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{agentKey.PublicKey()}})
+
+	auth := sshclient.Auth{Agent: pipeAgent{keyring: keyring}}
+	if err := connect(t, server, targetWith(server), auth, &scriptedPrompter{}); err != nil {
+		t.Fatalf("the agent's key did not connect: %v", err)
+	}
+}
+
+// agent に届かなくても、ほかの認証方式は妨げない。Windows の ssh-agent サービスは
+// 既定で無効なので、宛先があっても開けないことは普通に起きる。
+func TestAnUnreachableAgentLetsPasswordAuthenticationProceed(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+
+	auth := sshclient.Auth{
+		Agent:    unreachableAgent{},
+		Password: func(sshclient.Target) (string, bool) { return "hunter2", true },
+	}
+	if err := connect(t, server, targetWith(server), auth, &scriptedPrompter{}); err != nil {
+		t.Fatalf("password authentication did not follow the unreachable agent: %v", err)
+	}
 }
 
 // 保管庫に置いてあるのに毎回尋ねるなら、置く意味が無い。

@@ -5,7 +5,40 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"sshc/internal/app"
 )
+
+func mustStateDir(t *testing.T, home string) string {
+	t.Helper()
+	stateDir, err := app.StateDir(home)
+	if err != nil {
+		t.Fatalf("StateDir(%q) = %v", home, err)
+	}
+	return stateDir
+}
+
+// GNU stow などで ~/.ssh が symlink になっていても、解決した state directory の
+// engine.lock は取れる。symlink を拒む no-follow の歩き方で未解決のパスを開くと、
+// engine が起動できなかった。
+func TestLockEngineStartWorksWhenTheSSHDirectoryIsASymlink(t *testing.T) {
+	home := t.TempDir()
+	linkedSSH := filepath.Join(home, "dotfiles", "ssh")
+	if err := os.MkdirAll(linkedSSH, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(linkedSSH, filepath.Join(home, ".ssh")); err != nil {
+		t.Skipf("this platform cannot create the symlink: %v", err)
+	}
+
+	release, err := lockEngineStart(mustStateDir(t, home))
+	if err != nil {
+		t.Fatalf("take the engine lock under a symlinked ~/.ssh = %v", err)
+	}
+	if err := release(); err != nil {
+		t.Fatalf("release = %v", err)
+	}
+}
 
 // CLI が状態ディレクトリ内の同じ engine.lock を使用することを検証する。
 func TestLockEngineStartRefusesASecondEngine(t *testing.T) {

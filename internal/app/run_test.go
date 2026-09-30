@@ -43,11 +43,12 @@ func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 			gotNetwork, gotAddress = network, address
 			return net.Listen(network, address)
 		},
-		UI:     fstest.MapFS{"index.html": {Data: []byte("ok")}},
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Home:   t.TempDir(),
-		Owner:  handoff.OwnerEngine,
-		PID:    4242,
+		UI:                fstest.MapFS{"index.html": {Data: []byte("ok")}},
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Home:              t.TempDir(),
+		Owner:             handoff.OwnerEngine,
+		PID:               4242,
+		DockerEnvironment: environmentWithoutDocker,
 	}
 
 	done := make(chan error, 1)
@@ -122,6 +123,7 @@ func TestDesktopOccupiedBrowserOriginFallsBackRevokesRegistrationAndPersistsNewP
 		},
 		UI: fstest.MapFS{"index.html": {Data: []byte("ok")}}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Home: home, Owner: handoff.OwnerEngine, PID: 4242,
+		DockerEnvironment: environmentWithoutDocker,
 	}
 	if err := Run(ctx, dependencies, "test"); err != nil {
 		t.Fatal(err)
@@ -133,8 +135,8 @@ func TestDesktopOccupiedBrowserOriginFallsBackRevokesRegistrationAndPersistsNewP
 	if !registrationRequired {
 		t.Fatal("fallback did not require foreground browser registration")
 	}
-	if _, accepted, err := registrations.Recover(oldToken); err != nil || accepted {
-		t.Fatalf("default-port registration remained valid on the fallback port: accepted=%t err=%v", accepted, err)
+	if recovery, err := registrations.Recover(oldToken); err != nil || recovery.Accepted() {
+		t.Fatalf("default-port registration remained valid on the fallback port: accepted=%t err=%v", recovery.Accepted(), err)
 	}
 }
 
@@ -150,7 +152,7 @@ func TestRunLeavesAReplacementHandoffOwnedByAnotherSecret(t *testing.T) {
 			if !found {
 				return errors.New("missing bootstrap target")
 			}
-			err := handoff.Write(HandoffDir(home), handoff.Handoff{
+			err := handoff.Write(stateDirOf(t, home), handoff.Handoff{
 				SchemaVersion:   handoff.SchemaVersion,
 				URL:             base,
 				Secret:          replacementSecret,
@@ -162,18 +164,19 @@ func TestRunLeavesAReplacementHandoffOwnedByAnotherSecret(t *testing.T) {
 			cancel()
 			return err
 		},
-		Listen: net.Listen,
-		UI:     fstest.MapFS{"index.html": {Data: []byte("ok")}},
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Home:   home,
-		Owner:  handoff.OwnerEngine,
-		PID:    4242,
+		Listen:            net.Listen,
+		UI:                fstest.MapFS{"index.html": {Data: []byte("ok")}},
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Home:              home,
+		Owner:             handoff.OwnerEngine,
+		PID:               4242,
+		DockerEnvironment: environmentWithoutDocker,
 	}
 
 	if err := Run(ctx, dependencies, "test"); err != nil {
 		t.Fatalf("Run = %v", err)
 	}
-	document, err := handoff.Read(HandoffDir(home))
+	document, err := handoff.Read(stateDirOf(t, home))
 	if err != nil {
 		t.Fatalf("Read replacement handoff = %v", err)
 	}
@@ -200,14 +203,15 @@ func (*failingListener) Addr() net.Addr {
 func TestRunReturnsServerFailureWithoutWaitingForCancellation(t *testing.T) {
 	listener := &failingListener{failed: make(chan struct{}, 1)}
 	dependencies := Dependencies{
-		Random:   bytes.NewReader(bytes.Repeat([]byte{0x91}, 96)),
-		Announce: func(Readiness) error { return nil },
-		Listen:   func(string, string) (net.Listener, error) { return listener, nil },
-		UI:       fstest.MapFS{"index.html": {Data: []byte("ok")}},
-		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Home:     t.TempDir(),
-		Owner:    handoff.OwnerEngine,
-		PID:      4242,
+		Random:            bytes.NewReader(bytes.Repeat([]byte{0x91}, 96)),
+		Announce:          func(Readiness) error { return nil },
+		Listen:            func(string, string) (net.Listener, error) { return listener, nil },
+		UI:                fstest.MapFS{"index.html": {Data: []byte("ok")}},
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Home:              t.TempDir(),
+		Owner:             handoff.OwnerEngine,
+		PID:               4242,
+		DockerEnvironment: environmentWithoutDocker,
 	}
 
 	done := make(chan error, 1)
@@ -225,14 +229,15 @@ func TestRunShutsServerDownWhenTheEntranceCannotBeAnnounced(t *testing.T) {
 	announceErr := errors.New("browser unavailable")
 	listener := &trackingListener{Listener: mustListen(t)}
 	dependencies := Dependencies{
-		Random:   bytes.NewReader(bytes.Repeat([]byte{0x72}, 96)),
-		Announce: func(Readiness) error { return announceErr },
-		Listen:   func(string, string) (net.Listener, error) { return listener, nil },
-		UI:       fstest.MapFS{"index.html": {Data: []byte("ok")}},
-		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Home:     t.TempDir(),
-		Owner:    handoff.OwnerEngine,
-		PID:      4242,
+		Random:            bytes.NewReader(bytes.Repeat([]byte{0x72}, 96)),
+		Announce:          func(Readiness) error { return announceErr },
+		Listen:            func(string, string) (net.Listener, error) { return listener, nil },
+		UI:                fstest.MapFS{"index.html": {Data: []byte("ok")}},
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Home:              t.TempDir(),
+		Owner:             handoff.OwnerEngine,
+		PID:               4242,
+		DockerEnvironment: environmentWithoutDocker,
 	}
 
 	err := Run(context.Background(), dependencies, "test")
@@ -302,14 +307,15 @@ func TestRunExposesTheKeyVaultAndItsTrashThroughTheWiredProcess(t *testing.T) {
 			opened <- readiness.Entrance
 			return nil
 		},
-		Listen:    net.Listen,
-		UI:        fstest.MapFS{"index.html": {Data: []byte("ok")}},
-		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Home:      home,
-		Owner:     handoff.OwnerEngine,
-		PID:       4242,
-		Toolchain: stubToolchain{},
-		KeyAgent:  stubKeyAgent{},
+		Listen:            net.Listen,
+		UI:                fstest.MapFS{"index.html": {Data: []byte("ok")}},
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Home:              home,
+		Owner:             handoff.OwnerEngine,
+		PID:               4242,
+		Toolchain:         stubToolchain{},
+		KeyAgent:          stubKeyAgent{},
+		DockerEnvironment: environmentWithoutDocker,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -465,7 +471,7 @@ func TestBuildWritesAVersionedOwnedHandoff(t *testing.T) {
 		t.Fatalf("Build() = %v", err)
 	}
 
-	document, err := handoff.Read(HandoffDir(home))
+	document, err := handoff.Read(stateDirOf(t, home))
 	if err != nil {
 		t.Fatalf("Read handoff = %v", err)
 	}
@@ -545,5 +551,53 @@ func TestConnectionAliasesCarryTheJumpChainBeforeTheDestination(t *testing.T) {
 		if listed[index] != want[index] {
 			t.Fatalf("aliases = %#v, want %#v", listed, want)
 		}
+	}
+}
+
+func stateDirOf(t *testing.T, home string) string {
+	t.Helper()
+	stateDir, err := StateDir(home)
+	if err != nil {
+		t.Fatalf("StateDir(%q) = %v", home, err)
+	}
+	return stateDir
+}
+
+// GNU stow などで ~/.ssh が symlink になっていても、engine は解決した先に
+// handoff を書いて起動し、終了時に消せる。CLI も同じ StateDir から読む。
+func TestTheEngineStartsAndStopsWhenTheSSHDirectoryIsASymlink(t *testing.T) {
+	dependencies := testDependencies(t)
+	linkedSSH := filepath.Join(dependencies.Home, "dotfiles", "ssh")
+	if err := os.MkdirAll(linkedSSH, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(linkedSSH, filepath.Join(dependencies.Home, ".ssh")); err != nil {
+		t.Skipf("this platform cannot create the symlink: %v", err)
+	}
+	resolvedSSH, err := filepath.EvalSymlinks(linkedSSH)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateDir := stateDirOf(t, dependencies.Home)
+	if want := filepath.Join(resolvedSSH, "sshc"); stateDir != want {
+		t.Fatalf("StateDir = %q, want the resolved %q", stateDir, want)
+	}
+
+	built, err := build(dependencies, "test")
+	if err != nil {
+		t.Fatalf("build with a symlinked ~/.ssh = %v", err)
+	}
+	served := make(chan error, 1)
+	go func() { served <- built.server.Serve() }()
+
+	document, readErr := handoff.Read(stateDir)
+	if unwindErr := built.unwind(dependencies); unwindErr != nil {
+		t.Fatalf("unwind = %v", unwindErr)
+	}
+	if err := <-served; err != nil {
+		t.Fatalf("Serve = %v", err)
+	}
+	if readErr != nil || document.Secret != built.document.Secret {
+		t.Fatalf("the CLI could not read the published handoff: %#v, %v", document, readErr)
 	}
 }

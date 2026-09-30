@@ -56,7 +56,7 @@ func TestTheHandoffLetsTheCommandLineAskForOneConnection(t *testing.T) {
 	// secret がなければ、何も語らない。
 	refused := f.doAnonymous(http.MethodPost, httpserver.ConnectPath, []byte(`{"alias":"bastion"}`))
 	defer func() { _ = refused.Body.Close() }()
-	if refused.StatusCode != http.StatusForbidden {
-		t.Errorf("connect without the secret = %d, want 403", refused.StatusCode)
+	if refused.StatusCode != http.StatusUnauthorized {
+		t.Errorf("connect without the secret = %d, want 401", refused.StatusCode)
 	}
 }

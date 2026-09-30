@@ -7,29 +7,34 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
+	"sshc/internal/session"
 )
 
 const (
 	// CLISessionPath exchanges the user-private handoff secret for a short-lived
 	// normal API session. Sync commands can therefore reuse the browser API.
 	CLISessionPath = "/cli/session"
-	// CLISessionTTL bounds a credential left behind when a command is killed
-	// before it can revoke the session.
-	CLISessionTTL = 10 * time.Minute
+	// CLISessionIdleTimeout bounds a credential left behind when a command is
+	// killed before it can revoke the session. Every request, and every request
+	// still being served, keeps a running command's session alive.
+	CLISessionIdleTimeout = 10 * time.Minute
+	// CLISessionLifetime ends even a session that is used without pause. It
+	// matches the browser session so that a long SFTP transfer is not cut
+	// sooner than the same transfer started from the browser.
+	CLISessionLifetime = session.BrowserSessionLifetime
 )
+
+var cliSessionExpiry = session.Expiry{Lifetime: CLISessionLifetime, IdleTimeout: CLISessionIdleTimeout}
 
 // CLISession issues a short-lived normal API cookie and its origin-scoped CSRF
 // token without consuming or replacing the browser bootstrap token.
-func (h ConnectHandlers) CLISession(c *echo.Context) error {
-	if !cliAuthorised(c.Request(), h.Secret) {
-		return c.NoContent(http.StatusForbidden)
-	}
+func (h CLIHandlers) CLISession(c *echo.Context) error {
 	if h.Bootstrap == nil {
 		return c.NoContent(http.StatusServiceUnavailable)
 	}
-	credentials, err := h.Bootstrap.IssueExpiring(CLISessionTTL)
+	credentials, err := h.Bootstrap.IssueExpiring(cliSessionExpiry)
 	if err != nil {
-		return c.NoContent(http.StatusInternalServerError)
+		return unexpectedNoContent(c, err)
 	}
 	setSessionCookie(c, credentials.SessionID)
 	return c.JSON(http.StatusOK, api.BootstrapResponse{CsrfToken: credentials.CSRFToken})
@@ -37,10 +42,7 @@ func (h ConnectHandlers) CLISession(c *echo.Context) error {
 
 // RevokeCLISession revokes only the session named by the request cookie. A
 // missing cookie is already the desired state, so revocation is idempotent.
-func (h ConnectHandlers) RevokeCLISession(c *echo.Context) error {
-	if !cliAuthorised(c.Request(), h.Secret) {
-		return c.NoContent(http.StatusForbidden)
-	}
+func (h CLIHandlers) RevokeCLISession(c *echo.Context) error {
 	if h.Bootstrap == nil {
 		return c.NoContent(http.StatusServiceUnavailable)
 	}

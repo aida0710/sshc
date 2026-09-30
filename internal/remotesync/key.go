@@ -13,6 +13,11 @@ import (
 // 打つ文字列に、意味を持たない記号を混ぜない。
 const KeyBytes = 15
 
+// MaxKeyLength は、同期鍵として受け付ける長さの上限。生成した鍵だけでなく利用者が
+// 決めた鍵も受け付けるので、生成する 29 文字より広く取る。CLI の対話入力と HTTP が
+// 同じ値で断る。
+const MaxKeyLength = 1024
+
 // keyGroup は、区切りを入れる間隔。
 const keyGroup = 4
 

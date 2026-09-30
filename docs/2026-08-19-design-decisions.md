@@ -112,6 +112,24 @@ remote reseal を一連の処理として扱う箇所は、`internal/httpserver`
 
 この分担は意図した設計であるため、統合せず `doc.go` に記載しました。
 
+2026-09-30の更新: 上の分担は現状に合わなくなったので改めました。remote resealは
+2026-08-25に`vaultOperations`から外れ、マスターパスワードの変更はローカルの
+Vault、同期設定、世代バックアップの再封印だけになりました。そのうえで次のように決めます。
+
+- 設定・Vaultをまたぐユースケース（aliasの改名、接続の作成・更新、鍵の改名・移動、
+  グループの改名・削除）は`internal/application`に置き、設定とVaultを1つの
+  storageトランザクションで確定します。VPNプロファイルは`internal/vpnprofile`が
+  同じ形で持ちます。handlerは入力の検証、1回の呼び出し、応答への変換だけを行います。
+- Vaultの状態遷移（パスワードなしのVaultは手動のロックを受け付けずロックを解除した
+  ままにする、ロック中なら変更の前にロックを解除する、中断した再封印を復旧する）は
+  `secret.Service`が`mutationMu`の中で持ちます。`vaultOperations`は消し、HTTPと
+  CLIのhandlerは`secret.Service`を直接呼びます。transportごとに別の錠を持たないので、
+  入口を足しても順序が崩れません。
+- applicationは`secret.Service`を`SetVault`で受けます。Vaultがapplicationの
+  engine設定を読んでから作られるためです。
+
+範囲は`internal/application/doc.go`に書きました。
+
 ## 7. `Run` と `Stream` の差は意図である
 
 決定: 統一せず、理由を package documentation に記載します。

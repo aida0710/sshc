@@ -23,6 +23,9 @@ func vaultUnavailable(err error) bool {
 
 func syncProblem(c *echo.Context, err error) error {
 	failure := remotesync.Classify(err)
+	if syncFailureStatus(failure.Kind) == http.StatusInternalServerError {
+		logUnexpectedFailure(c, failure.Code, err)
+	}
 	return syncFailureProblem(c, failure)
 }
 

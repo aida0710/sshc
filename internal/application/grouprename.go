@@ -23,17 +23,17 @@ var (
 // NoticeGroupDirectoryLeftover は、名前変更後に削除できなかったディレクトリを報告する。
 const NoticeGroupDirectoryLeftover = "group_directory_leftover"
 
+// RenameGroup は、グループのディレクトリと、それを指すすべてのものを改名する。
+// グループの鍵に割り当てたパスフレーズも、同じトランザクションで新しいパスへ移す。
 func (s *Service) RenameGroup(inventory *keys.Inventory, from, to string) (SaveResult, error) {
-	s.saveMutex.Lock()
-	defer s.saveMutex.Unlock()
 	return s.commitGroupPlan(func(graph *config.Graph) (planned, error) {
 		return s.planGroupRename(graph, inventory, from, to)
 	})
 }
 
+// DeleteGroup は、グループを消し、その接続と鍵を destination へ移す。
+// 鍵に割り当てたパスフレーズも、同じトランザクションで移す。
 func (s *Service) DeleteGroup(inventory *keys.Inventory, name, destination string) (SaveResult, error) {
-	s.saveMutex.Lock()
-	defer s.saveMutex.Unlock()
 	return s.commitGroupPlan(func(graph *config.Graph) (planned, error) {
 		return s.planGroupDelete(graph, inventory, name, destination)
 	})
@@ -41,18 +41,16 @@ func (s *Service) DeleteGroup(inventory *keys.Inventory, name, destination strin
 
 // commitGroupPlan は、1 つのグループプランを保存と同じコミット経路に通す。
 func (s *Service) commitGroupPlan(plan func(*config.Graph) (planned, error)) (SaveResult, error) {
-	graph, err := s.resolve()
-	if err != nil {
-		return SaveResult{}, err
-	}
-	prepared, err := plan(graph)
-	if err != nil {
-		return SaveResult{}, err
-	}
 	if err := s.metadata.EnsureDirectory(); err != nil {
 		return SaveResult{}, err
 	}
-	result, err := s.commitPlannedRequest(prepared, s.requestFor(prepared))
+	prepared, result, err := s.commitRelocatingKeyPassphrases(func() (planned, error) {
+		graph, err := s.resolve()
+		if err != nil {
+			return planned{}, err
+		}
+		return plan(graph)
+	})
 	if err != nil {
 		return SaveResult{}, err
 	}
@@ -61,10 +59,9 @@ func (s *Service) commitGroupPlan(plan func(*config.Graph) (planned, error)) (Sa
 		written = append(written, s.displayPath(path))
 	}
 	return SaveResult{
-		TransactionID:  result.ID,
-		Written:        written,
-		Preview:        prepared.preview,
-		KeyRelocations: prepared.keyRelocations,
+		TransactionID: result.ID,
+		Written:       written,
+		Preview:       prepared.preview,
 	}, nil
 }
 
@@ -299,12 +296,40 @@ func (g *groupLayout) rewriteMovedKeyReferences() error {
 		if readErr != nil {
 			return readErr
 		}
+		if g.rewriteAtMoveDestination(change, previous) {
+			continue
+		}
 		g.prepared.changes = append(g.prepared.changes, change)
 		g.prepared.base[filepath.Clean(change.Path)] = previous
 		g.prepared.preview.Diffs = append(g.prepared.preview.Diffs,
 			BuildFileDiff(g.service.displayPath(change.Path), previous, change.Contents))
 	}
 	return nil
+}
+
+// rewriteAtMoveDestination は、書き換える設定ファイルがこの操作で移動するファイルなら、
+// その Move を「移動先への書き換え後の新規作成」と「移動元の削除」に置き換えて true を返す。
+// グループ内の接続がそのグループの鍵を指すと、同じパスに Change と Move が重なる。storage の
+// トランザクションは 1 つのパスを 1 回しか扱えないので、移動と書き換えを 1 つにまとめる。
+// 移動元の削除は、書き換えの元にした内容に Precondition で結び付け、History から戻せるように
+// バックアップを取る（接続の設定ファイルであり鍵素材ではない）。
+func (g *groupLayout) rewriteAtMoveDestination(change storage.Change, previous []byte) bool {
+	source := filepath.Clean(change.Path)
+	for index, move := range g.prepared.moves {
+		if filepath.Clean(move.From) != source {
+			continue
+		}
+		g.prepared.moves = append(g.prepared.moves[:index], g.prepared.moves[index+1:]...)
+		g.prepared.changes = append(g.prepared.changes, storage.Change{Path: move.To, Contents: change.Contents})
+		g.prepared.removals = append(g.prepared.removals, storage.Removal{
+			Path: move.From, Precondition: change.Precondition, Backup: true,
+		})
+		g.prepared.base[filepath.Clean(move.To)] = previous
+		g.prepared.preview.Diffs = append(g.prepared.preview.Diffs,
+			BuildFileDiff(g.service.displayPath(move.To), previous, change.Contents))
+		return true
+	}
+	return false
 }
 
 // stageEntryRegion は、エントリファイルの生成領域を、これから宣言されるグループで書き直す。

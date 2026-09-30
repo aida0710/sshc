@@ -180,7 +180,7 @@ func TestStoreDoesNotOverwriteAnInvalidOrNewerDocument(t *testing.T) {
 		want error
 	}{
 		{"invalid", `{"schemaVersion":1,"snippets":[{"id":"bad"}]}`, ErrInvalidDocument},
-		{"newer", `{"schemaVersion":2,"snippets":[]}`, ErrUnsupportedVersion},
+		{"newer", `{"schemaVersion":3,"snippets":[]}`, ErrUnsupportedVersion},
 		{"trailing document", `{"schemaVersion":1,"snippets":[]} {}`, ErrInvalidDocument},
 		{"unknown field", `{"schemaVersion":1,"snippets":[],"secret":"unexpected"}`, ErrInvalidDocument},
 	} {
@@ -222,5 +222,28 @@ func TestCloneSnippetKeepsRequiredEmptyVariablesAsAnArray(t *testing.T) {
 	cloned := cloneSnippet(Snippet{Variables: nil})
 	if cloned.Variables == nil {
 		t.Fatal("cloneSnippet returned nil variables; the API contract requires an array")
+	}
+}
+
+// 形式 1 の割り当ては接続先の binding を持たない。割り当てた時の接続先は分からない
+// ので結び付けずに読み、接続時には送らない。
+func TestAVersionOneStartupIsReadWithoutADestinationBinding(t *testing.T) {
+	store, _ := newFileStore(t)
+	current, err := encodeDocument(validLibrary())
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := bytes.Replace(current, []byte(`"schemaVersion": 2`), []byte(`"schemaVersion": 1`), 1)
+	if bytes.Equal(legacy, current) {
+		t.Fatalf("the fixture is not a version 1 document: %q", current)
+	}
+	acltest.WritePrivateFile(t, store.Path(), legacy)
+
+	library, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load = %v", err)
+	}
+	if len(library.Startup) != 1 || library.Startup[0].Binding != "" {
+		t.Fatalf("startup = %#v, want one assignment without a binding", library.Startup)
 	}
 }

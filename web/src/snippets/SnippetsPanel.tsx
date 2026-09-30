@@ -13,6 +13,7 @@ import {
   type Snippet,
   type SnippetDraft,
   type SnippetVariable,
+  type Startup,
 } from "./api";
 
 // A command's per-host output should feel live without hammering the engine.
@@ -103,6 +104,7 @@ export function SnippetsPanel({
 }) {
   const t = useTranslate();
   const [snippets, setSnippets] = useState<Snippet[]>([]);
+  const [startupAssignments, setStartupAssignments] = useState<Startup[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState<SnippetDraft>(blank);
   const [targets, setTargets] = useState<string[]>([]);
@@ -117,10 +119,15 @@ export function SnippetsPanel({
     () => snippets.find((snippet) => snippet.id === selected) ?? null,
     [snippets, selected],
   );
+  const staleStartupAliases = startupAssignments
+    .filter((assignment) => assignment.stale)
+    .map((assignment) => assignment.alias);
+  const startupStale = staleStartupAliases.includes(startupAlias);
 
   async function reload() {
     const library = await snippetsApi.library();
     setSnippets(library.snippets);
+    setStartupAssignments(library.startup);
   }
 
   useEffect(() => {
@@ -523,6 +530,28 @@ export function SnippetsPanel({
           <p className="mt-1 text-xs text-ink-muted">
             {t("snippets.startupHint")}
           </p>
+          {staleStartupAliases.length > 0 ? (
+            <div className="mt-2 space-y-1">
+              <Notice compact>
+                {t("snippets.startupStaleCount", {
+                  count: staleStartupAliases.length,
+                })}
+              </Notice>
+              <ul
+                aria-label={t("snippets.startupStaleHosts")}
+                className="flex flex-wrap gap-1"
+              >
+                {staleStartupAliases.map((alias) => (
+                  <li
+                    key={alias}
+                    className="rounded border border-line px-1.5 py-0.5 font-mono text-xs text-ink-muted"
+                  >
+                    {alias}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <select
             value={startupAlias}
             onChange={(event) => setStartupAlias(event.target.value)}
@@ -532,6 +561,11 @@ export function SnippetsPanel({
               <option key={alias}>{alias}</option>
             ))}
           </select>
+          {startupStale ? (
+            <div className="mt-2">
+              <Notice compact>{t("snippets.startupStale")}</Notice>
+            </div>
+          ) : null}
           <Button
             className="mt-2"
             disabled={busy || selected === null || startupAlias === ""}

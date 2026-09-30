@@ -180,11 +180,15 @@ func TestSecurityBoundsABodyAHandlerReadsWithoutItsOwnLimit(t *testing.T) {
 	}
 }
 
-func TestSecurityAllowsLargeBodiesOnlyForSFTPUploadRanges(t *testing.T) {
+func TestSecurityAllowsLargeBodiesOnlyForSFTPUploadRangesAndBackgroundUploads(t *testing.T) {
 	const largerThanDefault = int64(MaxRequestBodyCeiling + 1)
 	rangeRequest := httptest.NewRequest(http.MethodPatch, "/api/v1/sftp/edge/uploads/job?range=true", nil)
 	if got := requestBodyCeiling(rangeRequest); got != MaxSFTPUploadRangeBodyCeiling {
 		t.Fatalf("upload range ceiling = %d", got)
+	}
+	backgroundRequest := httptest.NewRequest(http.MethodPost, "/api/v1/terminal/backgrounds?name=wall", nil)
+	if got := requestBodyCeiling(backgroundRequest); got != MaxBackgroundUploadBodyCeiling {
+		t.Fatalf("background upload ceiling = %d", got)
 	}
 	for _, candidate := range []struct {
 		method string
@@ -195,6 +199,8 @@ func TestSecurityAllowsLargeBodiesOnlyForSFTPUploadRanges(t *testing.T) {
 		{http.MethodPatch, "/api/v1/sftp/edge/uploads/job?range=false"},
 		{http.MethodPatch, "/api/v1/sftp/edge/downloads/job"},
 		{http.MethodPatch, "/api/v1/other/uploads/job"},
+		{http.MethodPut, "/api/v1/terminal/backgrounds/capacity"},
+		{http.MethodPatch, "/api/v1/terminal/backgrounds/wall.png"},
 	} {
 		request := httptest.NewRequest(candidate.method, candidate.path, nil)
 		if got := requestBodyCeiling(request); got != MaxRequestBodyCeiling {
@@ -387,6 +393,8 @@ func TestEveryRouteButTheGateRefusesWhileTheVaultIsShut(t *testing.T) {
 		{http.MethodGet, "/api/v1/passwords"},
 		{http.MethodPost, "/api/v1/passwords/initialise"},
 		{http.MethodPost, "/api/v1/passwords/unlock"},
+		{http.MethodPost, "/api/v1/passwords/recover-compatible-backup"},
+		{http.MethodPost, "/api/v1/passwords/reset-unsupported"},
 		{http.MethodPost, "/api/v1/session/renew"},
 	}
 	for _, route := range open {

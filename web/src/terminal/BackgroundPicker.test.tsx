@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { BackgroundPicker } from "./BackgroundPicker";
+import { ApiError } from "../api/client";
 import type { SettingsApi } from "../api/settings";
 
 vi.mock("./backgroundImage", () => ({ useBackgroundImage: () => "" }));
@@ -47,5 +48,28 @@ describe("BackgroundPicker", () => {
 
     expect(api.renameTerminalBackground).toHaveBeenCalledWith("wall.png", "Night Sky.jpg");
     expect(onChange).toHaveBeenCalledWith("night-sky.png");
+  });
+
+  it("says the image is too large when the engine refuses the body at its entrance", async () => {
+    const user = userEvent.setup();
+    const api = {
+      terminalBackgrounds: vi.fn().mockResolvedValue({
+        backgrounds: [], usedBytes: 0, capacityBytes: 16 * 1024 * 1024, remainingBytes: 16 * 1024 * 1024,
+      }),
+      addTerminalBackground: vi.fn().mockRejectedValue(new ApiError("request_body_too_large", 413, null)),
+      setTerminalBackgroundCapacity: vi.fn(),
+      renameTerminalBackground: vi.fn(),
+      deleteTerminalBackground: vi.fn(),
+    } satisfies Pick<SettingsApi, "terminalBackgrounds" | "addTerminalBackground" | "setTerminalBackgroundCapacity" | "renameTerminalBackground" | "deleteTerminalBackground">;
+
+    const { container } = render(
+      <BackgroundPicker value="" onChange={vi.fn()} tint={55} onTintChange={vi.fn()} unchosen="No image" api={api} />,
+    );
+    await user.click(await screen.findByRole("button", { name: "Change" }));
+    const chooser = container.ownerDocument.querySelector<HTMLInputElement>('input[type="file"]');
+    if (chooser === null) throw new Error("no file chooser");
+    await user.upload(chooser, new File(["\x89PNG"], "photo.png", { type: "image/png" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The image exceeds the maximum file size.");
   });
 });

@@ -58,7 +58,7 @@ func diagnosticsProblem(c *echo.Context, err error) error {
 	if errors.Is(err, validate.ErrUnsafeAlias) {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
-	return problem(c, http.StatusInternalServerError, "config_unreadable")
+	return unexpectedProblem(c, "config_unreadable", err)
 }
 
 // CheckConfig は構文チェックと Include チェックを実行する。プロセスを
@@ -66,7 +66,7 @@ func diagnosticsProblem(c *echo.Context, err error) error {
 func (h DiagnosticsHandlers) CheckConfig(c *echo.Context) error {
 	report, err := h.Service.ConfigCheck()
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "config_unreadable")
+		return unexpectedProblem(c, "config_unreadable", err)
 	}
 
 	response := api.ConfigCheckResponse{
@@ -92,10 +92,11 @@ func (h DiagnosticsHandlers) CheckConfig(c *echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
-// Effective は 1 個の alias を説明し、許されている場合はそれを評価する。
+// Effective は alias ひとつについて、エンジン自身の射影（値とその出所）、経路、
+// 実行されうるディレクティブの一覧を返す。
 //
-// action トークンが必要になるのは、評価がコマンドを実行する場合だけである。
-// それはまさに設定が Match exec を持つ場合に一致する。
+// 設定を読むだけで何も実行しないので、action トークンによる確認は要らない。
+// Match ブロックの値は評価せず、complexity として理由を返す。
 func (h DiagnosticsHandlers) Effective(c *echo.Context) error {
 	var request api.AliasRequest
 	if err := decodeJSON(c, &request); err != nil {
@@ -107,7 +108,7 @@ func (h DiagnosticsHandlers) Effective(c *echo.Context) error {
 
 	inspection, err := h.Service.Inspect(request.Alias)
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "inspection_failed")
+		return unexpectedProblem(c, "inspection_failed", err)
 	}
 
 	response := api.EffectiveResponse{
@@ -153,8 +154,13 @@ func (h DiagnosticsHandlers) Reachability(c *echo.Context) error {
 	}
 
 	result, err := h.Service.Reach(c.Request().Context(), request.Alias)
-	if err != nil {
+	switch {
+	case errors.Is(err, diagnostics.ErrUnresolvedDestination), errors.Is(err, validate.ErrUnsafeHostname):
 		return problem(c, http.StatusBadRequest, "unsafe_destination")
+	case err != nil:
+		// 設定を読めなかったのは接続先の問題ではない。確認 token を発行するときの読み込みの
+		// 失敗と同じく config_unreadable で返す。
+		return diagnosticsProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, api.ReachabilityResponse{
 		Address:   result.Address,
@@ -184,7 +190,7 @@ func (h DiagnosticsHandlers) Authentication(c *echo.Context) error {
 	case errors.As(err, &directiveError):
 		return problem(c, http.StatusConflict, "executable_directive_not_acknowledged")
 	case err != nil:
-		return problem(c, http.StatusInternalServerError, "authentication_test_failed")
+		return unexpectedProblem(c, "authentication_test_failed", err)
 	}
 	return c.JSON(http.StatusOK, api.AuthenticationResponse{
 		Outcome:       result.Outcome,
@@ -195,11 +201,6 @@ func (h DiagnosticsHandlers) Authentication(c *echo.Context) error {
 		ElapsedMs:     int(result.Elapsed.Milliseconds()),
 	})
 }
-
-// TerminalCommand は、alias に対するコマンドテキストを返す。
-//
-// 埋め込みターミナルができたあともこれが残っているのは、自分の端末で開きたいユーザーが
-// いるからである。何も起動しないので確認も要らない。
 
 func describeDirectives(directives []effective.Executable) []api.ExecutableDirective {
 	described := make([]api.ExecutableDirective, 0, len(directives))
