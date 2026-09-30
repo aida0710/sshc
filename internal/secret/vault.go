@@ -205,6 +205,32 @@ func (v *Vault) Bind(kind Kind, alias, binding string) error {
 	return nil
 }
 
+// rebindAssignments は、パスワードと TOTP の割り当てが持つ結び付けの値を rebind で
+// 書き換え、変えたかを返す。rebind の約束は VPNSecretsMutation.RebindAssignments の
+// とおりで、空の値を返した割り当ては結び付けを捨てる。割り当てそのものは残るので、
+// 利用者が経路を確認し直せば、また使える。
+func (v *Vault) rebindAssignments(rebind func(alias, binding string) (string, bool)) (bool, error) {
+	changed := false
+	for _, bindings := range []map[string]string{v.passwordBindings, v.totpBindings} {
+		for alias, binding := range bindings {
+			rebound, ok := rebind(alias, binding)
+			if !ok || rebound == binding {
+				continue
+			}
+			switch {
+			case rebound == "":
+				delete(bindings, alias)
+			case validAuthenticationBinding(rebound):
+				bindings[alias] = rebound
+			default:
+				return false, ErrUnsafeName
+			}
+			changed = true
+		}
+	}
+	return changed, nil
+}
+
 // bindingsOf は、経路に束縛される種類（パスワードと TOTP）の束縛表を返す。
 // 他の種類は経路に束縛されないので nil。
 func (v *Vault) bindingsOf(kind Kind) map[string]string {

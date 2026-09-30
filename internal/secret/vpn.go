@@ -44,6 +44,14 @@ type VPNSecretsMutation struct {
 	// Rewrite は、VPNSecretsRewrite のときに、いまの記録から新しい記録の本文を作る。
 	// 記録が無ければ exists が false で、current は空である。
 	Rewrite func(current string, exists bool) (string, error)
+	// RebindAssignments は、改名と削除で、そのプロファイルを通る接続のパスワードと
+	// TOTP の割り当てが持つ結び付けの値を書き換える。結び付けの値はプロファイルの
+	// 名前を含むからである。nil なら書き換えない。
+	//
+	// alias の割り当てがいま binding に結び付いていれば、書き換えたあとの値と true を
+	// 返す。空の値は結び付けを捨て、利用者が経路を確認し直すまで割り当てを使わない。
+	// false なら、その割り当てに触れない。
+	RebindAssignments func(alias, binding string) (string, bool)
 }
 
 // VPNSecrets は、プロファイルひとつぶんの秘密を返す。
@@ -90,6 +98,16 @@ func movesOrRemovesOnly(kind VPNSecretsMutationKind) bool {
 }
 
 func applyVPNSecretsMutation(vault, clone *Vault, mutation VPNSecretsMutation) (bool, error) {
+	changed, err := applyVPNRecordMutation(vault, clone, mutation)
+	if err != nil || mutation.RebindAssignments == nil {
+		return changed, err
+	}
+	rebound, err := clone.rebindAssignments(mutation.RebindAssignments)
+	return changed || rebound, err
+}
+
+// applyVPNRecordMutation は、プロファイルの秘密の記録を変える。
+func applyVPNRecordMutation(vault, clone *Vault, mutation VPNSecretsMutation) (bool, error) {
 	current, exists := vault.Secret(KindVPN, mutation.Profile)
 	switch mutation.Kind {
 	case VPNSecretsSet:

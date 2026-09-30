@@ -124,7 +124,7 @@ func (s *Service) hostIdentity(alias string) (HostIdentity, error) {
 
 // commitMetadata は、metadata だけを書く。
 func (s *Service) commitMetadata(stored Metadata, precondition storage.Precondition, operation string) (SaveResult, error) {
-	return s.commitMetadataWith(metadataCommit{operation: operation, metadata: stored, precondition: precondition}, nil)
+	return s.commitMetadataWith(metadataCommit{operation: operation, metadata: stored, precondition: precondition})
 }
 
 // metadataCommit は、書く前の metadata と、読んだときの前提である。
@@ -135,12 +135,12 @@ type metadataCommit struct {
 }
 
 // commitMetadataWith は、metadata と、あれば別の変更（vault など）を、ひとつの
-// storage.Request で書く。どちらかだけが書かれることはない。
+// storage.Request で書く。どれかだけが書かれることはない。nil の変更は書かない。
 //
 // 別の変更があれば、接続の作成と同じく CommitAtomic で書き、書き込みの途中で失敗
-// したときに両方をその場で巻き戻す。metadata だけを書いて vault が古いまま残ると、
+// したときに全部をその場で巻き戻す。metadata だけを書いて vault が古いまま残ると、
 // 改名したプロファイルのシークレットが見つからず、保留の記録がほかの保存も止める。
-func (s *Service) commitMetadataWith(planned metadataCommit, alongside *storage.Change) (SaveResult, error) {
+func (s *Service) commitMetadataWith(planned metadataCommit, alongside ...*storage.Change) (SaveResult, error) {
 	if err := s.metadata.EnsureDirectory(); err != nil {
 		return SaveResult{}, err
 	}
@@ -150,9 +150,11 @@ func (s *Service) commitMetadataWith(planned metadataCommit, alongside *storage.
 	}
 	request := storage.Request{Operation: planned.operation, Changes: []storage.Change{change}}
 	commit := s.manager.Commit
-	if alongside != nil {
-		request.Changes = append(request.Changes, *alongside)
-		commit = s.manager.CommitAtomic
+	for _, other := range alongside {
+		if other != nil {
+			request.Changes = append(request.Changes, *other)
+			commit = s.manager.CommitAtomic
+		}
 	}
 	result, err := commit(request)
 	if err != nil {

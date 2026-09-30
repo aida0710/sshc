@@ -35,6 +35,21 @@ func (s *Store) WithStartupRemoval(aliases []string, commit func(*storage.Change
 	}, commit)
 }
 
+// WithStartupRebind joins a VPN profile rename or removal exactly like
+// WithStartupRename. An assignment's binding includes the name of the VPN
+// profile its host goes through, so renaming the profile moves the binding and
+// removing it stops the assignment. rebind returns the binding an assignment
+// should hold afterwards and true, an empty binding to stop the assignment, or
+// false to leave it alone.
+func (s *Store) WithStartupRebind(
+	rebind func(alias, binding string) (string, bool),
+	commit func(*storage.Change) (storage.Result, error),
+) (storage.Result, error) {
+	return s.withStartupTransition(func(library *Library) bool {
+		return rebindStartup(library, rebind)
+	}, commit)
+}
+
 // withStartupTransition hands commit the sealed document with transition
 // applied, or nil when transition changed nothing. The store stays locked until
 // commit returns so no other startup change interleaves.
@@ -80,6 +95,19 @@ func renameStartup(library *Library, from, to string) bool {
 		}
 	}
 	library.Startup = kept
+	return changed
+}
+
+func rebindStartup(library *Library, rebind func(alias, binding string) (string, bool)) bool {
+	changed := false
+	for index, startup := range library.Startup {
+		rebound, ok := rebind(startup.Alias, startup.Binding)
+		if !ok || rebound == startup.Binding {
+			continue
+		}
+		library.Startup[index].Binding = rebound
+		changed = true
+	}
 	return changed
 }
 
