@@ -21,6 +21,11 @@ import (
 
 const terminalCommandActionTarget = "live-terminal-sessions"
 
+// terminalCommandWriteTimeout は、Command Center が1つのセッションへ入力を書き終えるのを
+// 待つ上限。入力を受け取らないセッションが1つあっても、残りの宛先へ送って結果を返せる
+// ようにする。書き込みは普段ミリ秒で終わるので、遅い回線でも書き終えられる長さにしてある。
+const terminalCommandWriteTimeout = 5 * time.Second
+
 type terminalCommandTargetRequest = api.TerminalCommandTargetRequest
 type terminalCommandPreviewRequest = api.TerminalCommandPreviewRequest
 type terminalCommandDispatchRequest = api.TerminalCommandDispatchRequest
@@ -77,13 +82,8 @@ func (h TerminalHandlers) commandPlan(request terminalCommandPreviewRequest) (te
 		submit = *request.Submit
 	}
 	plan := terminalCommandPlan{command: command, targets: make([]plannedTerminalCommand, 0, len(request.Targets)), submit: submit}
-	if !submit {
-		for index := 0; index < len(command.Command); index++ {
-			if command.Command[index] < 0x20 || command.Command[index] == 0x7f {
-				plan.unsafeInsert = true
-				break
-			}
-		}
+	if !submit && containsControlCharacter(command.Command) {
+		plan.unsafeInsert = true
 	}
 	for _, requested := range request.Targets {
 		if requested.TargetId == "" || len(requested.TargetId) > 255 || strings.TrimSpace(requested.TargetId) != requested.TargetId || strings.IndexByte(requested.TargetId, 0) >= 0 ||
@@ -234,7 +234,7 @@ func (h TerminalHandlers) DispatchCommand(c *echo.Context) error {
 			TargetId: planned.request.TargetId, SessionId: planned.target.ID,
 			Alias: planned.target.Alias, Title: planned.target.Title, Status: terminalCommandDelivered,
 		}
-		writeContext, cancel := context.WithTimeout(c.Request().Context(), 5*time.Second)
+		writeContext, cancel := context.WithTimeout(c.Request().Context(), terminalCommandWriteTimeout)
 		err := h.Registry.WriteCommandInput(writeContext, planned.target, plan.command.Command, plan.submit)
 		cancel()
 		if err != nil {

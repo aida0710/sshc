@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { en, ja } from "../i18n/messages";
 import {
   placeholders,
+  snippetProblemLabelKey,
   snippetStatusLabelKey,
   snippetVariableTypeLabelKey,
   variablesFor,
@@ -32,5 +33,15 @@ describe("snippet variables", () => {
     expect(ja[snippetStatusLabelKey("succeeded")]).toBe("成功");
     expect(en[snippetStatusLabelKey("internal_future_code")]).toBe("Status unavailable");
     expect(ja[snippetStatusLabelKey("internal_future_code")]).toBe("状態を確認できません");
+  });
+
+  it("explains a host stopped by a time limit separately from a cancellation", () => {
+    const timedOut = snippetProblemLabelKey("timed_out");
+    const cancelled = snippetProblemLabelKey("cancelled");
+    expect(timedOut && ja[timedOut]).toBe("タイムアウトしました");
+    expect(timedOut && en[timedOut]).toBe("Timed out");
+    expect(cancelled).not.toBe(timedOut);
+    expect(snippetProblemLabelKey("internal_future_code")).toBeUndefined();
+    expect(snippetProblemLabelKey(undefined)).toBeUndefined();
   });
 });

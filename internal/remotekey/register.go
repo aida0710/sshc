@@ -14,7 +14,6 @@ import (
 	"errors"
 	"regexp"
 	"strings"
-	"time"
 
 	"sshc/internal/effective"
 	"sshc/internal/knownhosts"
@@ -30,6 +29,12 @@ const (
 	ProbeCommand = `printf '%s\n' sshc-posix-shell`
 	// RemotePath は、このパッケージが追記するファイル。
 	RemotePath = "~/.ssh/authorized_keys"
+	// RegistrationLimit は、登録全体（probe と登録の 2 回の接続、認証、2 本の
+	// コマンド）が終わるまでの上限である。ConnectTimeout は認証の段階に掛からず、
+	// 登録の画面には止める操作が無い。認証の返事をしない相手でも画面を待たせ続け
+	// ないよう、ここで打ち切る。既定の ConnectTimeout（sshclient.DefaultTimeout）で
+	// 2 回つなぎ、ssh-agent の確認（Touch ID）を待っても収まるよう、その 4 倍にする。
+	RegistrationLimit = 4 * sshclient.DefaultTimeout
 
 	// 登録の結果。
 	RegistrationAdded    = "added"
@@ -147,8 +152,7 @@ type Service struct {
 	// Resolve は probe と登録処理で同じ接続先を使うため、登録ごとに一度だけ呼ぶ。
 	Resolve func(alias string) (sshclient.Target, error)
 	// Run は、決まった接続でコマンドを 1 本走らせる。nil なら登録はできない。
-	Run     func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error)
-	Timeout time.Duration
+	Run func(ctx context.Context, target sshclient.Target, command sshclient.Command) (sshclient.Output, error)
 }
 
 // ErrNoRunner は、リモートで走らせる手段が配線されていないことを報告する。
@@ -193,7 +197,10 @@ func (s Service) Register(ctx context.Context, report effective.Report, configSn
 		return Result{}, err
 	}
 
-	probe, err := s.Run(ctx, target, ProbeCommand, nil)
+	ctx, stop := context.WithTimeout(ctx, RegistrationLimit)
+	defer stop()
+
+	probe, err := s.Run(ctx, target, sshclient.Command{Line: ProbeCommand})
 	if err != nil {
 		return Result{}, err
 	}
@@ -202,7 +209,7 @@ func (s Service) Register(ctx context.Context, report effective.Report, configSn
 	}
 
 	// 公開鍵はコマンド引数ではなく標準入力で渡す。
-	output, err := s.Run(ctx, target, Routine, []byte(key.Line+"\n"))
+	output, err := s.Run(ctx, target, sshclient.Command{Line: Routine, Stdin: []byte(key.Line + "\n")})
 	if err != nil {
 		return Result{}, err
 	}

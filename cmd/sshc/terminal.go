@@ -105,8 +105,8 @@ func executeTerminal(ctx context.Context, engine *engineAPI, called terminalInvo
 		return readTerminalControl(ctx, engine, session.Id, called.Cursor, called.Limit)
 	case terminalRename:
 		var updated api.TerminalSessionList
-		if err := engine.sendJSON(ctx, http.MethodPatch, path,
-			api.RenameTerminalSessionRequest{Title: called.Title}, &updated); err != nil {
+		if err := engine.sendJSON(ctx, http.MethodPut, path+"/title",
+			api.SetTerminalSessionTitleRequest{Title: &called.Title}, &updated); err != nil {
 			return nil, err
 		}
 		return resolveExactTerminalSession(updated.Sessions, session.Id)

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"sshc/internal/randomid"
 	"sshc/internal/validate"
 )
 
@@ -406,7 +407,7 @@ func normaliseTargets(request PreviewRequest) ([]RequestedTarget, error) {
 	}
 	seen := make(map[string]bool, len(requested))
 	for _, target := range requested {
-		if target.TargetID == "" || len(target.TargetID) > 255 || strings.TrimSpace(target.TargetID) != target.TargetID || strings.IndexByte(target.TargetID, 0) >= 0 {
+		if target.TargetID == "" || len(target.TargetID) > MaxTargetIDBytes || strings.TrimSpace(target.TargetID) != target.TargetID || strings.IndexByte(target.TargetID, 0) >= 0 {
 			return nil, ErrInvalidTarget
 		}
 		if seen[target.TargetID] {
@@ -474,27 +475,16 @@ func snippetIndex(library Library, id string) int {
 	return -1
 }
 
-func (s *Service) newID() (string, error) {
+// newUnusedID は、inUse が使用中と答えない識別子を作る。スニペットとジョブの
+// 識別子を並行に作っても、同じ乱数源を同時に読まない。
+func (s *Service) newUnusedID(inUse func(id string) (bool, error)) (string, error) {
 	s.ids.Lock()
 	defer s.ids.Unlock()
-	raw := make([]byte, 16)
-	if _, err := io.ReadFull(s.random, raw); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(raw), nil
+	return randomid.UnusedID(s.random, inUse)
 }
 
 func (s *Service) newUniqueSnippetID(library Library) (string, error) {
-	for range 8 {
-		id, err := s.newID()
-		if err != nil {
-			return "", err
-		}
-		if snippetIndex(library, id) < 0 {
-			return id, nil
-		}
-	}
-	return "", ErrDuplicateSnippet
+	return s.newUnusedID(func(id string) (bool, error) { return snippetIndex(library, id) >= 0, nil })
 }
 
 func (s *Service) load() (Library, error) {
@@ -512,10 +502,15 @@ func (s *Service) mutate(mutation func(*Library) error) error {
 }
 
 func fixedProblem(err error) string {
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	switch {
+	case errors.Is(err, context.Canceled):
 		return "cancelled"
+	case errors.Is(err, context.DeadlineExceeded):
+		// 利用者が取り消していないのに、時間の上限で止まった。取り消しとは分ける。
+		return "timed_out"
+	default:
+		return "run_failed"
 	}
-	return "run_failed"
 }
 
 func redact(value string, secrets []string) string {

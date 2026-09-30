@@ -14,10 +14,10 @@ import (
 // 既定は無言である。毎回この量が流れると、シェルの最初の一画面が押し流される。
 func TestATracerSaysNothingUntilItIsAsked(t *testing.T) {
 	var out bytes.Buffer
-	trace := newTracer(Quiet, &out)
-	trace.say(Brief, "繋ぎます")
-	trace.say(Detailed, "鍵を試します")
-	trace.say(Full, "算法は %s", "x")
+	trace := newTracer(connectionlog.Notice, &out)
+	trace.say(connectionlog.Brief, "繋ぎます")
+	trace.say(connectionlog.Detailed, "鍵を試します")
+	trace.say(connectionlog.Full, "算法は %s", "x")
 	if out.Len() != 0 {
 		t.Errorf("quiet の tracer が書いた: %q", out.String())
 	}
@@ -26,17 +26,17 @@ func TestATracerSaysNothingUntilItIsAsked(t *testing.T) {
 // 求められた深さまでを言い、それより深い話はしない。
 func TestATracerStopsAtTheDepthItWasGiven(t *testing.T) {
 	for _, probe := range []struct {
-		level Verbosity
-		want  []Verbosity
-		skip  []Verbosity
+		level connectionlog.Level
+		want  []connectionlog.Level
+		skip  []connectionlog.Level
 	}{
-		{level: Brief, want: []Verbosity{Brief}, skip: []Verbosity{Detailed, Full}},
-		{level: Detailed, want: []Verbosity{Brief, Detailed}, skip: []Verbosity{Full}},
-		{level: Full, want: []Verbosity{Brief, Detailed, Full}},
+		{level: connectionlog.Brief, want: []connectionlog.Level{connectionlog.Brief}, skip: []connectionlog.Level{connectionlog.Detailed, connectionlog.Full}},
+		{level: connectionlog.Detailed, want: []connectionlog.Level{connectionlog.Brief, connectionlog.Detailed}, skip: []connectionlog.Level{connectionlog.Full}},
+		{level: connectionlog.Full, want: []connectionlog.Level{connectionlog.Brief, connectionlog.Detailed, connectionlog.Full}},
 	} {
 		var out bytes.Buffer
 		trace := newTracer(probe.level, &out)
-		for _, level := range []Verbosity{Brief, Detailed, Full} {
+		for _, level := range []connectionlog.Level{connectionlog.Brief, connectionlog.Detailed, connectionlog.Full} {
 			trace.say(level, "level-%d", int(level))
 		}
 		for _, level := range probe.want {
@@ -56,9 +56,9 @@ func TestATracerStopsAtTheDepthItWasGiven(t *testing.T) {
 // PTYはここを通っていないので、必要な改行を出力側が一つだけ置く。
 func TestEveryTracedLineEndsTheWayATerminalNeeds(t *testing.T) {
 	var out bytes.Buffer
-	trace := newTracer(Brief, &out)
-	trace.say(Brief, "繋ぎます")
-	trace.say(Brief, "接続完了")
+	trace := newTracer(connectionlog.Brief, &out)
+	trace.say(connectionlog.Brief, "繋ぎます")
+	trace.say(connectionlog.Brief, "接続完了")
 	written := out.String()
 	want := "[sshc][debug1] 繋ぎます\r\n[sshc][debug1] 接続完了\r\n"
 	if written != want {
@@ -73,8 +73,8 @@ func TestEveryTracedLineEndsTheWayATerminalNeeds(t *testing.T) {
 // tracer を持たないまま同じ関数を通る。
 func TestANilTracerIsSafeToUse(t *testing.T) {
 	var trace *tracer
-	trace.say(Brief, "落ちない")
-	if trace.enabled(Brief) {
+	trace.say(connectionlog.Brief, "落ちない")
+	if trace.enabled(connectionlog.Brief) {
 		t.Error("nil tracer reported itself as writable")
 	}
 	if trace.now().IsZero() {
@@ -90,10 +90,10 @@ func TestANilTracerIsSafeToUse(t *testing.T) {
 // 出る行（ProxyCommand の実行）には深さの印が無い。
 func TestEachTracedLineCarriesTheDepthThatProducedIt(t *testing.T) {
 	var out bytes.Buffer
-	trace := newTracer(Full, &out)
-	trace.say(Brief, "繋ぎます")
-	trace.say(Detailed, "鍵を試します")
-	trace.say(Full, "算法は x")
+	trace := newTracer(connectionlog.Full, &out)
+	trace.say(connectionlog.Brief, "繋ぎます")
+	trace.say(connectionlog.Detailed, "鍵を試します")
+	trace.say(connectionlog.Full, "算法は x")
 	trace.announce("ProxyCommandを実行します")
 	want := "[sshc][debug1] 繋ぎます\r\n" +
 		"[sshc][debug2] 鍵を試します\r\n" +
@@ -107,7 +107,7 @@ func TestEachTracedLineCarriesTheDepthThatProducedIt(t *testing.T) {
 // debug2 では、ホップで使う設定と経路の種類を言う。
 func TestTheHopSettingsAreDescribedAtDetailed(t *testing.T) {
 	var out strings.Builder
-	trace := newTracer(Detailed, &out)
+	trace := newTracer(connectionlog.Detailed, &out)
 
 	describeHop(trace, Target{HostName: "10.0.0.5", Port: "22", User: "aida", Identities: []string{"/home/a/.ssh/id_ed25519"}, VPN: "lab"})
 
@@ -121,7 +121,7 @@ func TestTheHopSettingsAreDescribedAtDetailed(t *testing.T) {
 // 利用者向けの文に置き換えた失敗も、詳細と元の失敗を debug2 に残す。
 func TestAnExplainedFailureKeepsItsDetailsAtDetailed(t *testing.T) {
 	var out strings.Builder
-	trace := newTracer(Detailed, &out)
+	trace := newTracer(connectionlog.Detailed, &out)
 
 	explainFailure(trace, &ExplainedError{Sentence: "作れませんでした。", Details: []string{"ERROR: failed"}, Err: errors.New("exit status 1")})
 
@@ -136,7 +136,7 @@ func TestAnExplainedFailureKeepsItsDetailsAtDetailed(t *testing.T) {
 // 深さの印は付けない。
 func TestAConnectionNoticeIsShownEvenWhenQuiet(t *testing.T) {
 	var out bytes.Buffer
-	trace := newTracer(Quiet, &out)
+	trace := newTracer(connectionlog.Notice, &out)
 	ctx := trace.withLog(context.Background())
 
 	connectionlog.Say(ctx, connectionlog.Notice, "VPNのコンテナイメージを作成しています。")
@@ -151,9 +151,9 @@ func TestAConnectionNoticeIsShownEvenWhenQuiet(t *testing.T) {
 // ままだと端末で行頭へ戻らず、階段状に崩れる。
 func TestAMultiLineMessageIsWrittenLineByLine(t *testing.T) {
 	var out bytes.Buffer
-	trace := newTracer(Detailed, &out)
+	trace := newTracer(connectionlog.Detailed, &out)
 
-	trace.say(Detailed, "失敗の詳細：%s", "一行目\n二行目\r\n")
+	trace.say(connectionlog.Detailed, "失敗の詳細：%s", "一行目\n二行目\r\n")
 
 	if got := out.String(); got != "[sshc][debug2] 失敗の詳細：一行目\r\n[sshc][debug2] 二行目\r\n" {
 		t.Fatalf("out = %q", got)

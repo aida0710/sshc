@@ -9,6 +9,8 @@ import (
 	"io"
 	"regexp"
 	"time"
+
+	"sshc/internal/iowrite"
 )
 
 const (
@@ -214,182 +216,244 @@ func Run(ctx context.Context, stream io.ReadWriter, script Script, options Optio
 	runCtx, cancelRun := context.WithTimeout(ctx, options.Timeout)
 	defer cancelRun()
 
-	pending := make([]byte, 0, 32<<10)
-	appendRead := func(data []byte) (overflow bool) {
-		if len(result.Transcript)+len(data) > options.MaxBytes {
-			remaining := options.MaxBytes - len(result.Transcript)
-			if remaining > 0 {
-				result.Transcript = append(result.Transcript, data[:remaining]...)
-				pending = append(pending, data[:remaining]...)
-			}
-			return true
-		}
-		result.Transcript = append(result.Transcript, data...)
-		pending = append(pending, data...)
-		return false
+	run := &scriptRun{
+		caller: ctx, stream: stream, options: options, result: &result,
+		pending: make([]byte, 0, readChunkBytes),
 	}
-
 	for index, compiled := range steps {
-		step := compiled.step
-		stepCtx := runCtx
-		cancelStep := func() {}
-		if step.Timeout > 0 {
-			stepCtx, cancelStep = context.WithTimeout(runCtx, step.Timeout)
+		if err := run.runStep(runCtx, index, compiled); err != nil {
+			return result, err
 		}
-		defer cancelStep()
-		if step.Send != nil || step.SendEnv != "" {
-			value := ""
-			if step.Send != nil {
-				value = *step.Send
-			} else {
-				if options.LookupEnv == nil {
-					return result, &Error{Kind: FailureEnvironment, Step: index, Err: errors.New("environment lookup is unavailable")}
-				}
-				var ok bool
-				value, ok = options.LookupEnv(step.SendEnv)
-				if !ok {
-					return result, &Error{Kind: FailureEnvironment, Step: index, Err: fmt.Errorf("environment variable %q is not set", step.SendEnv)}
-				}
-				if value != "" {
-					result.Secrets = append(result.Secrets, Secret{
-						Value: []byte(value), TranscriptStart: len(result.Transcript),
-					})
-				}
-			}
-			ending, _ := step.LineEnding.bytes()
-			payload := make([]byte, 0, len(value)+len(ending))
-			payload = append(payload, value...)
-			payload = append(payload, ending...)
-			if len(payload) > MaxSendBytes+2 {
-				return result, &Error{Kind: FailureInvalid, Step: index, Err: fmt.Errorf("send exceeds %d bytes", MaxSendBytes)}
-			}
-			if discarder, ok := stream.(interface{ DiscardPending(context.Context) error }); ok {
-				if err := discarder.DiscardPending(stepCtx); err != nil {
-					cancelStep()
-					if stepCtx.Err() != nil {
-						return result, timeoutOrCancellation(ctx, index, "stale input drain did not complete before timeout")
-					}
-					return result, &Error{Kind: FailureRead, Step: index, Err: errors.New("could not discard stale stream input")}
-				}
-			}
-			if err := writeWithin(stepCtx, stream, payload); err != nil {
-				cancelStep()
-				if stepCtx.Err() != nil {
-					return result, timeoutOrCancellation(ctx, index, "stream write did not complete before timeout")
-				}
-				return result, &Error{Kind: FailureWrite, Step: index, Err: errors.New("could not write to the stream")}
-			}
-			cancelStep()
-			// Bytes observed before this send cannot prove that the command
-			// completed. A later expect must see a new response.
-			pending = pending[:0]
-			result.StepsCompleted = index + 1
-			continue
-		}
-
-		if step.ReadFor != 0 {
-			timer := time.NewTimer(step.ReadFor)
-		readLoop:
-			for {
-				read := readOnce(stream)
-				select {
-				case <-stepCtx.Done():
-					timer.Stop()
-					cancelStep()
-					return result, timeoutOrCancellation(ctx, index, "read interval did not complete before timeout")
-				case <-timer.C:
-					break readLoop
-				case item := <-read:
-					if len(item.data) == 0 && item.err == nil {
-						timer.Stop()
-						cancelStep()
-						return result, &Error{Kind: FailureRead, Step: index, Err: errors.New("stream made no read progress")}
-					}
-					if len(item.data) > 0 {
-						if appendRead(item.data) {
-							timer.Stop()
-							cancelStep()
-							return result, outputLimitError(index)
-						}
-					}
-					if item.err != nil {
-						timer.Stop()
-						cancelStep()
-						if stepCtx.Err() != nil {
-							return result, timeoutOrCancellation(ctx, index, "read interval did not complete before timeout")
-						}
-						return result, &Error{Kind: FailureRead, Step: index, Err: errors.New("could not read from the stream")}
-					}
-				}
-			}
-			cancelStep()
-			result.StepsCompleted = index + 1
-			continue
-		}
-
-		limitReached := false
-		for {
-			if location := compiled.expect.FindIndex(pending); location != nil {
-				if !limitReached && options.Settle > 0 {
-					item, supported, settleErr := readUntilQuiet(stepCtx, stream, options.Settle)
-					if settleErr != nil {
-						cancelStep()
-						if stepCtx.Err() != nil {
-							return result, timeoutOrCancellation(ctx, index, "expected output did not settle before timeout")
-						}
-						return result, &Error{Kind: FailureRead, Step: index, Err: errors.New("could not verify that expected output settled")}
-					}
-					if supported && len(item.data) > 0 {
-						limitReached = appendRead(item.data)
-						if item.err != nil {
-							cancelStep()
-							return result, &Error{Kind: FailureRead, Step: index, Err: errors.New("could not read from the stream")}
-						}
-						continue
-					}
-					if supported && item.err != nil {
-						cancelStep()
-						return result, &Error{Kind: FailureRead, Step: index, Err: errors.New("could not read from the stream")}
-					}
-				}
-				pending = append(pending[:0], pending[location[1]:]...)
-				result.Matched = true
-				result.LastExpectation = step.Expect
-				result.StepsCompleted = index + 1
-				cancelStep()
-				break
-			}
-			if limitReached {
-				cancelStep()
-				return result, outputLimitError(index)
-			}
-			read := readOnce(stream)
-			select {
-			case <-stepCtx.Done():
-				cancelStep()
-				return result, timeoutOrCancellation(ctx, index, "expected output was not received before timeout")
-			case item := <-read:
-				if len(item.data) == 0 && item.err == nil {
-					cancelStep()
-					return result, &Error{Kind: FailureRead, Step: index, Err: errors.New("stream made no read progress")}
-				}
-				if len(item.data) > 0 {
-					limitReached = appendRead(item.data)
-				}
-				if item.err != nil {
-					cancelStep()
-					if stepCtx.Err() != nil {
-						return result, timeoutOrCancellation(ctx, index, "expected output was not received before timeout")
-					}
-					if errors.Is(item.err, io.EOF) {
-						return result, &Error{Kind: FailureRead, Step: index, Err: errors.New("stream closed before expected output")}
-					}
-					return result, &Error{Kind: FailureRead, Step: index, Err: errors.New("could not read from the stream")}
-				}
-			}
-		}
+		result.StepsCompleted = index + 1
 	}
 	return result, nil
+}
+
+// readChunkBytes は、1回の Read で受け取る大きさ。io.Copy の既定と同じ 32 KiB にする。
+// pending もこの大きさから始め、最初の読み取りで伸ばさずに済むようにする。
+const readChunkBytes = 32 << 10
+
+// staleInputQuiet は、送信の前に古い入力を読み捨てるとき、入力が止んだとみなす無音の長さ。
+// 9600bps でも約19文字を送れる長さなので、バナーを送っている途中の文字の間とは区別できる。
+// 送信のたびに足される待ちでもあるので、短く保つ。
+const staleInputQuiet = 20 * time.Millisecond
+
+// staleInputDiscarder は、送信の前に古いバナーやプロンプトを読み捨てられる stream。
+// 読み捨てないと、送信前から届いていたプロンプトをコマンドの応答と取り違える。
+type staleInputDiscarder interface {
+	DiscardPending(ctx context.Context, quiet time.Duration) error
+}
+
+const (
+	readForTimeoutMessage = "read interval did not complete before timeout"
+	expectTimeoutMessage  = "expected output was not received before timeout"
+)
+
+// scriptRun は、1回の Run のあいだ段をまたいで持ち越す状態をまとめる。
+type scriptRun struct {
+	// caller は Run の呼び出し元の context。期限切れと呼び出し元による停止を分けるのに使う。
+	caller  context.Context
+	stream  io.ReadWriter
+	options Options
+	result  *Result
+	// pending は、直前の send より後に届き、まだどの expect の一致にも使っていない出力。
+	pending []byte
+}
+
+// runStep は1つの段を実行する。段の期限はこの関数の中だけで生きるので、失敗の分類は
+// どれも期限を解放する前に終わる。
+func (run *scriptRun) runStep(runCtx context.Context, index int, compiled compiledStep) error {
+	stepCtx := runCtx
+	if compiled.step.Timeout > 0 {
+		var cancelStep context.CancelFunc
+		stepCtx, cancelStep = context.WithTimeout(runCtx, compiled.step.Timeout)
+		defer cancelStep()
+	}
+	switch {
+	case compiled.step.Send != nil || compiled.step.SendEnv != "":
+		return run.send(stepCtx, index, compiled.step)
+	case compiled.step.ReadFor != 0:
+		return run.readFor(stepCtx, index, compiled.step.ReadFor)
+	default:
+		return run.expect(stepCtx, index, compiled)
+	}
+}
+
+func (run *scriptRun) send(stepCtx context.Context, index int, step Step) error {
+	value, err := sendValue(index, step, run.options.LookupEnv)
+	if err != nil {
+		return err
+	}
+	if step.SendEnv != "" && value != "" {
+		run.result.Secrets = append(run.result.Secrets, Secret{
+			Value: []byte(value), TranscriptStart: len(run.result.Transcript),
+		})
+	}
+	if len(value) > MaxSendBytes {
+		return &Error{Kind: FailureInvalid, Step: index, Err: fmt.Errorf("send exceeds %d bytes", MaxSendBytes)}
+	}
+	ending, _ := step.LineEnding.bytes()
+	payload := append([]byte(value), ending...)
+	if discarder, ok := run.stream.(staleInputDiscarder); ok {
+		if err := discarder.DiscardPending(stepCtx, staleInputQuiet); err != nil {
+			failure := &Error{Kind: FailureRead, Step: index, Err: errors.New("could not discard stale stream input")}
+			return run.stepFailure(stepCtx, failure, "stale input drain did not complete before timeout")
+		}
+	}
+	if err := writeWithin(stepCtx, run.stream, payload); err != nil {
+		failure := &Error{Kind: FailureWrite, Step: index, Err: errors.New("could not write to the stream")}
+		return run.stepFailure(stepCtx, failure, "stream write did not complete before timeout")
+	}
+	// Bytes observed before this send cannot prove that the command
+	// completed. A later expect must see a new response.
+	run.pending = run.pending[:0]
+	return nil
+}
+
+// sendValue は、段が送る文字列を返す。sendEnv なら環境変数から引く。
+func sendValue(index int, step Step, lookupEnv func(string) (string, bool)) (string, error) {
+	if step.Send != nil {
+		return *step.Send, nil
+	}
+	if lookupEnv == nil {
+		return "", &Error{Kind: FailureEnvironment, Step: index, Err: errors.New("environment lookup is unavailable")}
+	}
+	value, ok := lookupEnv(step.SendEnv)
+	if !ok {
+		return "", &Error{Kind: FailureEnvironment, Step: index, Err: fmt.Errorf("environment variable %q is not set", step.SendEnv)}
+	}
+	return value, nil
+}
+
+func (run *scriptRun) readFor(stepCtx context.Context, index int, interval time.Duration) error {
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+	for {
+		read := readOnce(run.stream)
+		select {
+		case <-stepCtx.Done():
+			return timeoutOrCancellation(run.caller, index, readForTimeoutMessage)
+		case <-timer.C:
+			return nil
+		case item := <-read:
+			if err := run.keepIntervalOutput(stepCtx, index, item); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// keepIntervalOutput は、readFor の読み取り1回分を transcript に足す。readFor は時間で
+// 終わる段なので、上限を超えた出力も、時間より前の EOF も失敗にする。
+func (run *scriptRun) keepIntervalOutput(stepCtx context.Context, index int, item readResult) error {
+	if len(item.data) == 0 && item.err == nil {
+		return noReadProgressError(index)
+	}
+	if len(item.data) > 0 && run.appendRead(item.data) {
+		return outputLimitError(index)
+	}
+	if item.err != nil {
+		return run.stepFailure(stepCtx, readFailedError(index), readForTimeoutMessage)
+	}
+	return nil
+}
+
+func (run *scriptRun) expect(stepCtx context.Context, index int, compiled compiledStep) error {
+	limitReached := false
+	for {
+		location := compiled.expect.FindIndex(run.pending)
+		if location == nil {
+			if limitReached {
+				return outputLimitError(index)
+			}
+			overflow, err := run.readExpected(stepCtx, index)
+			if err != nil {
+				return err
+			}
+			limitReached = overflow
+			continue
+		}
+		if !limitReached && run.options.Settle > 0 {
+			arrived, overflow, err := run.readWhileSettling(stepCtx, index)
+			if err != nil {
+				return err
+			}
+			if arrived {
+				limitReached = overflow
+				continue
+			}
+		}
+		run.pending = append(run.pending[:0], run.pending[location[1]:]...)
+		run.result.Matched = true
+		run.result.LastExpectation = compiled.step.Expect
+		return nil
+	}
+}
+
+// readExpected は、expect の一致を探すために1回読み、出力が上限を超えたかを返す。
+func (run *scriptRun) readExpected(stepCtx context.Context, index int) (overflow bool, err error) {
+	read := readOnce(run.stream)
+	select {
+	case <-stepCtx.Done():
+		return false, timeoutOrCancellation(run.caller, index, expectTimeoutMessage)
+	case item := <-read:
+		if len(item.data) == 0 && item.err == nil {
+			return false, noReadProgressError(index)
+		}
+		if len(item.data) > 0 {
+			overflow = run.appendRead(item.data)
+		}
+		if item.err == nil {
+			return overflow, nil
+		}
+		failure := readFailedError(index)
+		if errors.Is(item.err, io.EOF) {
+			failure.Err = errors.New("stream closed before expected output")
+		}
+		return false, run.stepFailure(stepCtx, failure, expectTimeoutMessage)
+	}
+}
+
+// readWhileSettling は、一致した出力のあとに続きが届かないかを Settle のあいだ待つ。
+// 続きが届いたら arrived を返し、呼び出し側は続きを含めて一致を探し直す。
+func (run *scriptRun) readWhileSettling(stepCtx context.Context, index int) (arrived, overflow bool, err error) {
+	item, supported, settleErr := readUntilQuiet(stepCtx, run.stream, run.options.Settle)
+	if settleErr != nil {
+		failure := &Error{Kind: FailureRead, Step: index, Err: errors.New("could not verify that expected output settled")}
+		return false, false, run.stepFailure(stepCtx, failure, "expected output did not settle before timeout")
+	}
+	if !supported {
+		return false, false, nil
+	}
+	if len(item.data) > 0 {
+		overflow = run.appendRead(item.data)
+	}
+	if item.err != nil {
+		return false, false, readFailedError(index)
+	}
+	return len(item.data) > 0, overflow, nil
+}
+
+// appendRead は読んだ出力を transcript と pending に足す。MaxBytes を超える分は捨てて true を返す。
+func (run *scriptRun) appendRead(data []byte) (overflow bool) {
+	remaining := run.options.MaxBytes - len(run.result.Transcript)
+	if len(data) > remaining {
+		data = data[:max(remaining, 0)]
+		overflow = true
+	}
+	run.result.Transcript = append(run.result.Transcript, data...)
+	run.pending = append(run.pending, data...)
+	return overflow
+}
+
+// stepFailure は、段の入出力の失敗を返す。段の期限か Run 全体の期限が先に切れていたら、
+// 入出力が失敗した原因はそちらなので timeout（呼び出し元が止めたならその err）を返す。
+// 段の context を解放すると Err が必ず Canceled になるので、解放より前に呼ぶ。
+func (run *scriptRun) stepFailure(stepCtx context.Context, failure *Error, timeoutMessage string) error {
+	if stepCtx.Err() != nil {
+		return timeoutOrCancellation(run.caller, failure.Step, timeoutMessage)
+	}
+	return failure
 }
 
 type streamReadTimeoutSetter interface {
@@ -433,7 +497,7 @@ func readUntilQuiet(ctx context.Context, reader io.Reader, quiet time.Duration) 
 func readOnce(reader io.Reader) <-chan readResult {
 	completed := make(chan readResult, 1)
 	go func() {
-		buffer := make([]byte, 32<<10)
+		buffer := make([]byte, readChunkBytes)
 		count, err := reader.Read(buffer)
 		item := readResult{err: err}
 		if count > 0 {
@@ -455,22 +519,19 @@ func outputLimitError(step int) error {
 	return &Error{Kind: FailureOutputLimit, Step: step, Err: errors.New("stream output exceeded the configured limit")}
 }
 
-// WriteAll は payload を残らず書き、書き手が Flush を持てば最後に flush する。
-// 短い書き込みを進捗として受け取り、0 バイトの書き込みは失敗として扱う。
-// 対話 transport の attach も同じ規則で端末へ書く。
+func readFailedError(step int) *Error {
+	return &Error{Kind: FailureRead, Step: step, Err: errors.New("could not read from the stream")}
+}
+
+func noReadProgressError(step int) *Error {
+	return &Error{Kind: FailureRead, Step: step, Err: errors.New("stream made no read progress")}
+}
+
+// WriteAll は payload を iowrite.WriteAll で残らず書き、書き手が Flush を持てば最後に
+// flush する。対話 transport の attach も同じ規則で書く。
 func WriteAll(writer io.Writer, payload []byte) error {
-	for len(payload) > 0 {
-		count, err := writer.Write(payload)
-		if count < 0 || count > len(payload) {
-			return io.ErrShortWrite
-		}
-		payload = payload[count:]
-		if err != nil {
-			return err
-		}
-		if count == 0 {
-			return io.ErrShortWrite
-		}
+	if err := iowrite.WriteAll(writer, payload); err != nil {
+		return err
 	}
 	if flusher, ok := writer.(interface{ Flush() error }); ok {
 		return flusher.Flush()

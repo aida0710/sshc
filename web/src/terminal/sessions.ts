@@ -12,7 +12,7 @@ const sessionListPollIntervalMs = 2_000;
 
 export type TerminalSessionsApi = Pick<
   SessionsApi,
-  "terminalSessions" | "openTerminalSession" | "reconnectTerminalSession" | "closeTerminalSession" | "renameTerminalSession"
+  "terminalSessions" | "openTerminalSession" | "reconnectTerminalSession" | "closeTerminalSession" | "setTerminalSessionTitle"
   | "stopTerminalReconnect"
 >;
 
@@ -217,13 +217,13 @@ export function useTerminalSessions(
 
   const rename = useCallback(
     (id: string, title: string): Promise<boolean> =>
-      applyMutation(() => api.renameTerminalSession(id, title), () => setProblem(translate("terminal.renameFailed"))),
+      applyMutation(() => api.setTerminalSessionTitle(id, title), () => setProblem(translate("terminal.renameFailed"))),
     [api, applyMutation, translate],
   );
 
   const unpinTitle = useCallback(
     (id: string): Promise<boolean> =>
-      applyMutation(() => api.renameTerminalSession(id, null), () => setProblem(translate("terminal.renameFailed"))),
+      applyMutation(() => api.setTerminalSessionTitle(id, null), () => setProblem(translate("terminal.renameFailed"))),
     [api, applyMutation, translate],
   );
 
@@ -248,6 +248,8 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.limitRefused";
     case "alias_unresolvable":
       return "terminal.unresolvable";
+    case "remote_working_directory_unsupported":
+      return "terminal.remoteWorkingDirectoryUnsupported";
     case "jump_depth_exceeded":
       return "terminal.jumpDepthExceeded";
     case "host_key_unknown":
@@ -264,12 +266,18 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.proxyAuthenticationRequired";
     case "authentication_cancelled":
       return "terminal.authenticationCancelled";
+    case "authentication_rejected":
+      return "terminal.authenticationRejected";
+    case "route_misconfigured":
+      return "terminal.routeMisconfigured";
     case "key_passphrase_required":
       return "terminal.keyPassphraseRequired";
     case "vpn_route_refused":
       return "terminal.vpnRouteRefused";
     case "vpn_route_disconnected":
       return "terminal.vpnRouteDisconnected";
+    case "connect_failed":
+      return "terminal.connectFailed";
     case "reconnect_failed":
       return "terminal.reconnectFailed";
     case "reconnect_exhausted":

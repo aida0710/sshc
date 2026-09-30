@@ -107,6 +107,40 @@ func TestTerminalSendUsesPreviewEvidenceAndOneTimeAction(t *testing.T) {
 	}
 }
 
+// CLI の改名も画面と同じ PUT /title を通る。入口が2つあると、直すときに両方を
+// 見ることになり、エラーの分類もずれる。
+func TestTerminalRenamePinsTheTitleThroughTheTitleRoute(t *testing.T) {
+	var pinned atomic.Int32
+	engine := testTerminalEngine(t, http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/api/v1/terminal/sessions":
+			_ = json.NewEncoder(response).Encode(api.TerminalSessionList{Sessions: []api.TerminalSession{terminalTestSession("connected")}})
+		case "/api/v1/terminal/sessions/" + terminalTestID + "/title":
+			var body api.SetTerminalSessionTitleRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil || request.Method != http.MethodPut || body.Title == nil || *body.Title != "deploy" {
+				t.Errorf("%s title body = %#v, %v", request.Method, body, err)
+			}
+			pinned.Add(1)
+			renamed := terminalTestSession("connected")
+			renamed.Title = "deploy"
+			_ = json.NewEncoder(response).Encode(api.TerminalSessionList{Sessions: []api.TerminalSession{renamed}})
+		default:
+			t.Errorf("unexpected %s %s", request.Method, request.URL.Path)
+			http.NotFound(response, request)
+		}
+	}))
+	result, err := executeTerminal(context.Background(), engine, terminalInvocation{
+		Action: terminalRename, Selector: terminalTestID[:8], Title: "deploy",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session := result.(api.TerminalSession); session.Title != "deploy" || pinned.Load() != 1 {
+		t.Fatalf("result = %#v, title requests = %d", result, pinned.Load())
+	}
+}
+
 func TestTerminalWaitPollsOnlyExplicitLifecycleState(t *testing.T) {
 	var reads atomic.Int32
 	engine := testTerminalEngine(t, http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {

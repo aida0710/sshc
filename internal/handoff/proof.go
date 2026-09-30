@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"io"
+	"sshc/internal/randomid"
 )
 
 // CLI は最初の要求で handoff の秘密を送る前に、相手が本当にその秘密を持つ engine か
@@ -24,13 +25,12 @@ const (
 
 // MintChallenge は、1 回の確認に使う乱数を返す。
 func MintChallenge(random io.Reader) (string, error) {
-	return mint(random, base64.RawURLEncoding.EncodeToString)
+	return randomid.Token(random)
 }
 
 // ValidChallenge は、challenge がこのパッケージの作った形かを返す。
 func ValidChallenge(challenge string) bool {
-	decoded, err := base64.RawURLEncoding.DecodeString(challenge)
-	return err == nil && len(decoded) == secretLength
+	return randomid.IsToken(challenge)
 }
 
 // Prove は、secret を持つことを challenge に対して示す値を返す。

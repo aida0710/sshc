@@ -48,6 +48,8 @@ func (p *fakeProcess) Resize(size terminal.Size) error {
 
 func (p *fakeProcess) Hangup() error { return p.Close() }
 
+func (p *fakeProcess) ForceClose() error { return p.Close() }
+
 func (p *fakeProcess) Wait() terminal.ExitInfo {
 	<-p.done
 	return p.exit
@@ -169,5 +171,40 @@ func TestAttachReturnsWhenTheSessionEnds(t *testing.T) {
 	case <-done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("Attach kept waiting after the session ended")
+	}
+}
+
+// 終わり方の文（輸送が落ちた理由など）は Process の出力に含まれないので、
+// リモートの出力のあとに Attach が書く。
+func TestAttachWritesHowTheSessionEndedAfterTheRemoteOutput(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+	defer func() { _ = writer.Close() }()
+
+	const reason = "\r\nssh: connection lost\r\n"
+	process := newFakeProcess(terminal.ExitInfo{Code: terminal.ExitCodeUnknown, TransportLost: true, Notice: reason})
+	var output strings.Builder
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, err := sshclient.Attach(context.Background(), process, reader, &output); err != nil {
+			t.Errorf("Attach = %v", err)
+		}
+	}()
+
+	if _, err := process.sink.Write([]byte("from the remote\n")); err != nil {
+		t.Fatal(err)
+	}
+	process.finish()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Attach kept waiting after the session ended")
+	}
+	if got := output.String(); got != "from the remote\n"+reason {
+		t.Fatalf("output = %q, want the remote output and then the reason", got)
 	}
 }

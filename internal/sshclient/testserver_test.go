@@ -40,20 +40,27 @@ type testServer struct {
 	options    serverOptions
 	listener   net.Listener
 
-	mutex     sync.Mutex
-	ptyTerm   string
-	ptySize   [2]uint32
-	ptyModes  ssh.TerminalModes
-	sizes     [][2]uint32
-	env       []string
-	command   string
-	shellRan  bool
-	usedKey   ssh.PublicKey
-	dialed    []string
-	connected int
+	mutex    sync.Mutex
+	ptyTerm  string
+	ptySize  [2]uint32
+	ptyModes ssh.TerminalModes
+	sizes    [][2]uint32
+	// ptyEffective は、OpenSSH の sshd と同じ規則で決まる PTY の寸法である。
+	// PTY が無い間の window-change は、後から来る pty-req の寸法で上書きされる。
+	ptyEffective [2]uint32
+	ptyRequested bool
+	env          []string
+	command      string
+	shellRan     bool
+	usedKey      ssh.PublicKey
+	dialed       []string
+	connected    int
 	// attempts は、認証がこのサーバーへ届いた回数である。鍵を集めるだけの
 	// 操作が資格情報を差し出していないことを、これで言う。
 	attempts int
+	// keyboardAnswers は、keyboard-interactive の質問へクライアントが返した答えの
+	// 並びである。質問に答えずに打ち切った回は入らない。
+	keyboardAnswers [][]string
 	// keepAlives は、接続そのものへ届いた keepalive の回数である。
 	keepAlives int
 	// disconnected は、届いた要求を読み終えて終わった接続の数である。
@@ -63,6 +70,9 @@ type testServer struct {
 type serverOptions struct {
 	// AcceptKeys は公開鍵認証で通す鍵。空なら公開鍵認証を拒む。
 	AcceptKeys []ssh.PublicKey
+	// MaxAuthTries は、この回数の認証失敗で接続を切る sshd の MaxAuthTries である。
+	// 0 なら x/crypto/ssh の既定。
+	MaxAuthTries int
 	// Password は password 認証で通す文字列。空なら拒む。
 	Password string
 	// Keyboard は keyboard-interactive の質問と正解。
@@ -77,8 +87,15 @@ type serverOptions struct {
 	// IgnoreKeepAlives は、keepalive に返事をしない相手を再現する。NAT が状態を
 	// 捨てた接続では書き込みは成功し、応答だけが永久に来ない。
 	IgnoreKeepAlives bool
-	// OmitExitStatus は、transport が終了状態を残さず切れた場合を再現する。
+	// OmitExitStatus は、exit-status も exit-signal も送らずにチャンネルだけを
+	// 閉じるサーバーを再現する。輸送（TCP と SSH の接続）は生きたままである。
 	OmitExitStatus bool
+	// BeforeEnvReply は、env 要求に答える前に呼ばれる。SetEnv の往復が
+	// 遅い相手を再現する。
+	BeforeEnvReply func()
+	// BeforePasswordReply は、password 認証に答える前に呼ばれる。失敗時に
+	// 遅延を入れる PAM や、プッシュ承認を待つサーバーを再現する。
+	BeforePasswordReply func()
 	// AllowDirectTCPIP は direct-tcpip チャンネルを通すか。ProxyJump の手前側で要る。
 	AllowDirectTCPIP bool
 	// Reached は、direct-tcpip の行き先ごとに返す接続である。
@@ -120,7 +137,7 @@ func newTestServer(t *testing.T, options serverOptions) *testServer {
 		keyboard: options.Keyboard, OnShell: options.OnShell,
 		listener: listener,
 	}
-	config := &ssh.ServerConfig{}
+	config := &ssh.ServerConfig{MaxAuthTries: options.MaxAuthTries}
 	config.AddHostKey(signer)
 	if options.ECDSAHostKey {
 		private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -150,6 +167,9 @@ func newTestServer(t *testing.T, options serverOptions) *testServer {
 	if options.Password != "" {
 		config.PasswordCallback = func(_ ssh.ConnMetadata, offered []byte) (*ssh.Permissions, error) {
 			server.noteAttempt()
+			if options.BeforePasswordReply != nil {
+				options.BeforePasswordReply()
+			}
 			if string(offered) == server.password {
 				return &ssh.Permissions{}, nil
 			}
@@ -173,6 +193,7 @@ func newTestServer(t *testing.T, options serverOptions) *testServer {
 			if err != nil {
 				return nil, err
 			}
+			server.noteKeyboardAnswers(answers)
 			for index, question := range questions {
 				if index >= len(answers) || answers[index] != server.keyboard[question] {
 					return nil, errors.New("wrong answer")
@@ -370,18 +391,25 @@ func (s *testServer) session(connection ssh.Conn, channel ssh.Channel, requests 
 			s.mutex.Lock()
 			s.ptyTerm, s.ptySize = term, [2]uint32{width, height}
 			s.ptyModes = modes
+			s.ptyEffective, s.ptyRequested = [2]uint32{width, height}, true
 			s.mutex.Unlock()
 			s.reply(request, true)
 		case "window-change":
 			width, height := parseWindowChange(request.Payload)
 			s.mutex.Lock()
 			s.sizes = append(s.sizes, [2]uint32{width, height})
+			if s.ptyRequested {
+				s.ptyEffective = [2]uint32{width, height}
+			}
 			s.mutex.Unlock()
 		case "env":
 			name, value := parseEnv(request.Payload)
 			s.mutex.Lock()
 			s.env = append(s.env, name+"="+value)
 			s.mutex.Unlock()
+			if s.options.BeforeEnvReply != nil {
+				s.options.BeforeEnvReply()
+			}
 			s.reply(request, true)
 		case "auth-agent-req@openssh.com":
 			s.reply(request, true)
@@ -456,6 +484,13 @@ func (s *testServer) PTYModes() ssh.TerminalModes {
 	return modes
 }
 
+// EffectivePTYSize は、リモートの PTY が最後に持った寸法（列, 行）である。
+func (s *testServer) EffectivePTYSize() [2]uint32 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.ptyEffective
+}
+
 func (s *testServer) Sizes() [][2]uint32 {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -484,6 +519,19 @@ func (s *testServer) noteAttempt() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.attempts++
+}
+
+func (s *testServer) noteKeyboardAnswers(answers []string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.keyboardAnswers = append(s.keyboardAnswers, append([]string(nil), answers...))
+}
+
+// KeyboardAnswers は、keyboard-interactive の質問へ届いた答えを、届いた順に返す。
+func (s *testServer) KeyboardAnswers() [][]string {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return append([][]string(nil), s.keyboardAnswers...)
 }
 
 // KeepAlives は、接続そのものへ届いた keepalive の回数である。

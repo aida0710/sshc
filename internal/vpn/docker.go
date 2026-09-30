@@ -15,6 +15,7 @@ import (
 
 	"sshc/internal/commandconn"
 	"sshc/internal/connectionlog"
+	"sshc/internal/platform"
 )
 
 var (
@@ -65,7 +66,8 @@ func findDocker(ctx context.Context, variables []string) (dockerCommand, error) 
 	if variables == nil {
 		variables = os.Environ()
 	}
-	path, err := lookPathIn("docker", pathVariable(variables))
+	searched, _ := platform.LookupEnvironment(variables, "PATH")
+	path, err := lookPathIn("docker", searched)
 	if err != nil {
 		return dockerCommand{}, fmt.Errorf("%w: %w", ErrDockerMissing, err)
 	}
@@ -77,16 +79,6 @@ func findDocker(ctx context.Context, variables []string) (dockerCommand, error) 
 	}
 	command.summary = strings.TrimSpace(summary)
 	return command, nil
-}
-
-// pathVariable は、環境のうち PATH の値を返す。後に書かれたものが勝つ。
-func pathVariable(variables []string) string {
-	for index := len(variables) - 1; index >= 0; index-- {
-		if value, found := strings.CutPrefix(variables[index], "PATH="); found {
-			return value
-		}
-	}
-	return ""
 }
 
 // lookPathIn は、path に並ぶディレクトリから name の実行ファイルを探す。

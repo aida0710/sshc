@@ -50,7 +50,7 @@ func TestDialPreservesIPv6ZoneAddress(t *testing.T) {
 	}
 }
 
-func TestNormalizeAddress(t *testing.T) {
+func TestATelnetAddressKeepsItsPortOrUsesPort23(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		input string

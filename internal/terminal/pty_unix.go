@@ -90,7 +90,7 @@ func (p *unixProcess) Wait() ExitInfo {
 	}
 	var exitError *exec.ExitError
 	if !errors.As(err, &exitError) {
-		info.Code = -1
+		info.Code = ExitCodeUnknown
 		return info
 	}
 	info.Code = exitError.ExitCode()

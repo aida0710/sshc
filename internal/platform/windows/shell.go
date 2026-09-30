@@ -9,6 +9,9 @@ import (
 // ErrNoLoginShell は、信頼できる場所にシェルが一本も無いことを報告する。
 var ErrNoLoginShell = errors.New("no trusted login shell was found")
 
+// ErrNoCommandProcessor は、信頼できる場所に cmd.exe が無いことを報告する。
+var ErrNoCommandProcessor = errors.New("no trusted cmd.exe was found")
+
 // LoginShell は、埋め込みターミナルが開くシェルの絶対パスを返す。
 //
 // SHELL は見ない。Windows でそれを置くのは MSYS や Cygwin であり、値は
@@ -25,13 +28,8 @@ var ErrNoLoginShell = errors.New("no trusted login shell was found")
 // 利用者のシェルではなくなる。呼び出し側が Windows 自身に尋ねて渡す。
 // stat が nil なら、実在する通常ファイルであることを確かめる。
 func LoginShell(lookup func(string) (string, bool), stat func(string) error) (string, error) {
-	if stat == nil {
-		stat = existingProgram
-	}
-	for _, candidate := range candidates(lookup) {
-		if stat(candidate) == nil {
-			return candidate, nil
-		}
+	if shell, ok := firstExisting(loginShellCandidates(lookup), stat); ok {
+		return shell, nil
 	}
 	return "", ErrNoLoginShell
 }
@@ -49,26 +47,88 @@ func LoginArguments(shell string) []string {
 	return nil
 }
 
-func candidates(lookup func(string) (string, bool)) []string {
-	if lookup == nil {
-		lookup = func(string) (string, bool) { return "", false }
+// CommandProcessor は、cmd.exe の絶対パスを返す。
+//
+// cmd.exe の文法で書かれたもの（ProxyCommand の行、Command Prompt のプロファイル）
+// を渡す先なので、名前が cmd.exe であることまで求める。%ComSpec% が信頼できる
+// 表記で cmd.exe を指していればそれを、そうでなければ Windows ディレクトリの
+// System32\cmd.exe を返す。lookup と stat の約束は LoginShell と同じである。
+func CommandProcessor(lookup func(string) (string, bool), stat func(string) error) (string, error) {
+	if processor, ok := firstExisting(commandProcessorCandidates(lookup), stat); ok {
+		return processor, nil
 	}
+	return "", ErrNoCommandProcessor
+}
+
+// PowerShell7Path は、%ProgramFiles% の下で PowerShell 7 が置かれる場所を返す。
+func PowerShell7Path(programFiles string) string {
+	return filepath.Join(programFiles, "PowerShell", "7", "pwsh.exe")
+}
+
+// WindowsPowerShellPath は、Windows に同梱された Windows PowerShell の場所を返す。
+func WindowsPowerShellPath(windowsDirectory string) string {
+	return filepath.Join(windowsDirectory, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+}
+
+func loginShellCandidates(lookup func(string) (string, bool)) []string {
+	lookup = lookupOrNothing(lookup)
 	var found []string
 	if programFiles, ok := lookup("ProgramFiles"); ok && programFiles != "" {
-		found = append(found, filepath.Join(programFiles, "PowerShell", "7", "pwsh.exe"))
+		found = append(found, PowerShell7Path(programFiles))
 	}
 	if windowsDirectory, ok := lookup("WINDIR"); ok && windowsDirectory != "" {
-		found = append(found, filepath.Join(
-			windowsDirectory, "System32", "WindowsPowerShell", "v1.0", "powershell.exe",
-		))
+		found = append(found, WindowsPowerShellPath(windowsDirectory))
 	}
-	// %ComSpec% だけが利用者の環境から来る。上の二つと違い、これは表記その
-	// ものを疑う。実在するかどうかを尋ねるのは、プログラムの形をしていると
-	// 分かってからである。
-	if comSpec, ok := lookup("ComSpec"); ok && trustedProgramPath(comSpec) {
+	if comSpec, ok := trustedComSpec(lookup); ok {
 		found = append(found, comSpec)
 	}
 	return found
+}
+
+func commandProcessorCandidates(lookup func(string) (string, bool)) []string {
+	lookup = lookupOrNothing(lookup)
+	var found []string
+	if comSpec, ok := trustedComSpec(lookup); ok && strings.EqualFold(programName(comSpec), "cmd.exe") {
+		found = append(found, comSpec)
+	}
+	if windowsDirectory, ok := lookup("WINDIR"); ok && windowsDirectory != "" {
+		found = append(found, filepath.Join(windowsDirectory, "System32", "cmd.exe"))
+	}
+	return found
+}
+
+// firstExisting は、候補のうち最初に実在するものを返す。stat が nil なら、
+// 実在する通常ファイルであることを確かめる。
+func firstExisting(candidates []string, stat func(string) error) (string, bool) {
+	if stat == nil {
+		stat = existingProgram
+	}
+	for _, candidate := range candidates {
+		if stat(candidate) == nil {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
+func lookupOrNothing(lookup func(string) (string, bool)) func(string) (string, bool) {
+	if lookup == nil {
+		return func(string) (string, bool) { return "", false }
+	}
+	return lookup
+}
+
+// trustedComSpec は、%ComSpec% の表記を起動してよいなら、その値を返す。
+//
+// %ComSpec% だけが利用者の環境から来る。ProgramFiles や WINDIR と違い、これは
+// 表記そのものを疑う。実在するかどうかを尋ねるのは、プログラムの形をしていると
+// 分かってからである。
+func trustedComSpec(lookup func(string) (string, bool)) (string, bool) {
+	comSpec, ok := lookup("ComSpec")
+	if !ok || !trustedProgramPath(comSpec) {
+		return "", false
+	}
+	return comSpec, true
 }
 
 // trustedProgramPath は、環境から来た表記をそのまま起動してよいかを決める。

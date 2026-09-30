@@ -227,11 +227,7 @@ func TestWindowsClosingRemovesADescendantWithItsOwnConsole(t *testing.T) {
 
 func TestWindowsForceCloseRemovesADescendantWithItsOwnConsole(t *testing.T) {
 	assertDescendantIsRemoved(t, func(process terminal.Process) {
-		forcer, ok := process.(interface{ ForceClose() error })
-		if !ok {
-			t.Fatal("the console process has no force hook")
-		}
-		if err := forcer.ForceClose(); err != nil {
+		if err := process.ForceClose(); err != nil {
 			t.Fatalf("ForceClose = %v", err)
 		}
 	})
@@ -281,19 +277,15 @@ func TestWindowsForceThenCloseThenWaitStillReportsTheForcedExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start = %v", err)
 	}
-	forcer, ok := process.(interface{ ForceClose() error })
-	if !ok {
-		t.Fatal("the console process has no force hook")
-	}
-	if err := forcer.ForceClose(); err != nil {
+	if err := process.ForceClose(); err != nil {
 		t.Fatalf("ForceClose = %v", err)
 	}
 	if err := process.Close(); err != nil {
 		t.Fatalf("Close = %v", err)
 	}
 	info := process.Wait()
-	if info.Signal != "killed" || info.Code != -1 {
-		t.Fatalf("forced exit = %#v, want code -1 and signal killed", info)
+	if info.Signal != "killed" || info.Code != terminal.ExitCodeUnknown || info.TransportLost {
+		t.Fatalf("forced exit = %#v, want an unknown code, signal killed and no transport loss", info)
 	}
 }
 
@@ -369,11 +361,7 @@ func TestWindowsResizeAfterTheConsoleIsGoneDoesNotTouchIt(t *testing.T) {
 	if err := process.Resize(terminal.Size{Cols: 120, Rows: 50}); err != nil {
 		t.Fatalf("Resize after Close = %v, want it to be a quiet no-op", err)
 	}
-	forcer, ok := process.(interface{ ForceClose() error })
-	if !ok {
-		t.Fatal("the console process has no force hook")
-	}
-	if err := forcer.ForceClose(); err != nil {
+	if err := process.ForceClose(); err != nil {
 		t.Fatalf("ForceClose after Close = %v, want it to be a quiet no-op", err)
 	}
 	process.Wait()

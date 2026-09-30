@@ -116,7 +116,7 @@ func classify(err error) string {
 		return OutcomeHostKeyChanged
 	case errors.Is(err, sshclient.ErrHostKeyUnknown), errors.Is(err, sshclient.ErrHostKeyRevoked):
 		return OutcomeHostKeyUnknown
-	case errors.Is(err, sshclient.ErrNoAuthMethod):
+	case errors.Is(err, sshclient.ErrNoAuthMethod), errors.Is(err, sshclient.ErrAuthenticationRejected):
 		return OutcomeDenied
 	case errors.As(err, &dns):
 		return OutcomeDNSFailure
@@ -124,8 +124,6 @@ func classify(err error) string {
 		return OutcomeTimeout
 	case isConnectionRefused(err):
 		return OutcomeRefused
-	case strings.Contains(err.Error(), "unable to authenticate"):
-		return OutcomeDenied
 	default:
 		return OutcomeFailed
 	}

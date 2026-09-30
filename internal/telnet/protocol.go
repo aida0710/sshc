@@ -1,7 +1,5 @@
 package telnet
 
-import "fmt"
-
 const (
 	commandEOF  byte = 236
 	commandSE   byte = 240
@@ -130,46 +128,6 @@ func (c *Conn) windowSize() (uint16, uint16) {
 	c.stateMu.Lock()
 	defer c.stateMu.Unlock()
 	return c.windowWidth, c.windowHeight
-}
-
-func (c *Conn) readSubnegotiation() error {
-	option, err := c.reader.ReadByte()
-	if err != nil {
-		return err
-	}
-	payload := make([]byte, 0, min(c.maxSubnegotiation, 256))
-	wireBytes := 0
-	for {
-		value, readErr := c.reader.ReadByte()
-		if readErr != nil {
-			return readErr
-		}
-		wireBytes++
-		if wireBytes > c.maxSubnegotiation {
-			return ErrSubnegotiationTooLarge
-		}
-		if value != commandIAC {
-			payload = append(payload, value)
-			continue
-		}
-
-		next, nextErr := c.reader.ReadByte()
-		if nextErr != nil {
-			return nextErr
-		}
-		wireBytes++
-		if wireBytes > c.maxSubnegotiation {
-			return ErrSubnegotiationTooLarge
-		}
-		switch next {
-		case commandIAC:
-			payload = append(payload, commandIAC)
-		case commandSE:
-			return c.handleSubnegotiation(option, payload)
-		default:
-			return fmt.Errorf("%w: command %d inside subnegotiation", ErrMalformedNegotiation, next)
-		}
-	}
 }
 
 func (c *Conn) handleSubnegotiation(option byte, payload []byte) error {

@@ -20,8 +20,7 @@ func TestAClosedSessionRejectsLateAttachmentAndClosesItsTransports(t *testing.T)
 		t.Fatal(err)
 	}
 	closed := make(chan struct{})
-	_, attached := session.attach(nil, []io.Closer{observedCloser{closed: closed}})
-	if attached {
+	if session.attach(nil, []io.Closer{observedCloser{closed: closed}}) {
 		t.Fatal("a closed Session accepted a late transport")
 	}
 	select {
@@ -34,7 +33,7 @@ func TestAClosedSessionRejectsLateAttachmentAndClosesItsTransports(t *testing.T)
 func TestSessionCloseReleasesATransportAttachedBeforeItsChannel(t *testing.T) {
 	session := newSession(terminal.Size{Cols: 80, Rows: 24}, nil)
 	closed := make(chan struct{})
-	if _, attached := session.attach(nil, []io.Closer{observedCloser{closed: closed}}); !attached {
+	if !session.attach(nil, []io.Closer{observedCloser{closed: closed}}) {
 		t.Fatal("an open Session rejected its transport")
 	}
 	if err := session.Close(); err != nil {

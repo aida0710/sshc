@@ -3,6 +3,7 @@ package snippets
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -535,6 +536,26 @@ func TestCancelStopsDispatchAndMarksEveryTarget(t *testing.T) {
 	}
 	if count := len(started); count != 0 {
 		t.Fatalf("%d additional targets started after cancellation", count)
+	}
+}
+
+func TestATargetStoppedByATimeLimitIsReportedAsTimedOutRatherThanCancelled(t *testing.T) {
+	service := testService(&memoryRepository{}, func(ctx context.Context, alias, command string) (CommandOutput, error) {
+		return CommandOutput{ExitCode: 255}, fmt.Errorf("connect: %w", context.DeadlineExceeded)
+	})
+	snippet := createSnippet(t, service, Draft{Name: "Slow", Command: "apt-get update"})
+	request := PreviewRequest{SnippetID: snippet.ID, Aliases: []string{"bastion"}}
+	preview, err := service.Preview(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err := service.Start(context.Background(), ExecuteRequest{PreviewRequest: request, Evidence: preview.Evidence, Concurrency: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := waitForJob(t, service, job.ID).Results[0]
+	if result.Status != TargetFailed || result.Problem != "timed_out" {
+		t.Fatalf("result = %#v, want failed with timed_out", result)
 	}
 }
 

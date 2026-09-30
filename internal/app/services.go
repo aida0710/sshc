@@ -176,7 +176,9 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 					Route: snippetRoute(target),
 				},
 				Run: func(ctx context.Context, command string) (snippets.CommandOutput, error) {
-					output, err := remoteRun(ctx, target, command, nil)
+					// Snippet のコマンドは長く走ることがある（apt-get update、バックアップ）。
+					// 上限は置かず、job の取り消しと engine の停止だけで止める。
+					output, err := remoteRun(ctx, target, sshclient.Command{Line: command})
 					return snippets.CommandOutput{
 						ExitCode: output.ExitCode, Stdout: output.Stdout, Stderr: output.Stderr, Truncated: output.Truncated,
 					}, err
@@ -322,10 +324,10 @@ func buildTerminals(configService *application.Service, dependencies Dependencie
 		starter = terminal.NewStarter()
 	}
 	terminals := &terminal.Registry{
-		Start:      starter,
-		Limits:     configService.TerminalLimits,
-		Reconnects: configService.TerminalReconnects,
-		Random:     dependencies.Random,
+		Start:          starter,
+		Limits:         configService.TerminalLimits,
+		ReconnectLimit: configService.TerminalReconnects,
+		Random:         dependencies.Random,
 	}
 
 	return terminals

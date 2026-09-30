@@ -3,7 +3,6 @@
 package platform
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"sshc/internal/iowrite"
 )
 
 // シェル設定の入力待ちや大量出力で接続が止まらないための上限。
@@ -35,14 +36,7 @@ func WithLoginShellPath(ctx context.Context, environment []string) ([]string, er
 	if environment == nil {
 		return nil, nil
 	}
-	lookup := func(name string) (string, bool) {
-		for i := len(environment) - 1; i >= 0; i-- {
-			if value, found := strings.CutPrefix(environment[i], name+"="); found {
-				return value, true
-			}
-		}
-		return "", false
-	}
+	lookup := func(name string) (string, bool) { return LookupEnvironment(environment, name) }
 	shell, err := LoginShell(lookup)
 	if err != nil {
 		return environment, err
@@ -70,7 +64,7 @@ func WithLoginShellPath(ctx context.Context, environment []string) ([]string, er
 		return err
 	}
 	process.WaitDelay = loginShellPathWaitDelay
-	output := &loginShellPathOutput{}
+	output := iowrite.NewCappedBuffer(loginShellPathOutputLimit)
 	process.Stdout = output
 	// stdinは/dev/null、stderrは破棄する。起動設定の出力や秘密をSSHへ流さない。
 	if err := process.Run(); err != nil {
@@ -79,7 +73,7 @@ func WithLoginShellPath(ctx context.Context, environment []string) ([]string, er
 		}
 		return environment, fmt.Errorf("read login shell PATH: %w", err)
 	}
-	path, err := output.path()
+	path, err := loginShellPathFrom(output)
 	if err != nil {
 		return environment, err
 	}
@@ -92,27 +86,12 @@ func WithLoginShellPath(ctx context.Context, environment []string) ([]string, er
 	return append(updated, "PATH="+path), nil
 }
 
-type loginShellPathOutput struct {
-	buffer    bytes.Buffer
-	truncated bool
-}
-
-func (output *loginShellPathOutput) Write(contents []byte) (int, error) {
-	length := len(contents)
-	remaining := loginShellPathOutputLimit - output.buffer.Len()
-	if length > remaining {
-		contents = contents[:remaining]
-		output.truncated = true
-	}
-	_, _ = output.buffer.Write(contents)
-	return length, nil
-}
-
-func (output *loginShellPathOutput) path() (string, error) {
-	if output.truncated {
+// loginShellPathFrom は、ログインシェルの出力から印で囲んだ PATH を取り出す。
+func loginShellPathFrom(output *iowrite.CappedBuffer) (string, error) {
+	if output.Truncated() {
 		return "", errors.New("login shell PATH output exceeded the limit")
 	}
-	_, framed, found := strings.Cut(output.buffer.String(), loginShellPathMarker)
+	_, framed, found := strings.Cut(output.String(), loginShellPathMarker)
 	path, _, terminated := strings.Cut(framed, "\x00")
 	if !found || !terminated || path == "" {
 		return "", errors.New("login shell did not return a PATH")

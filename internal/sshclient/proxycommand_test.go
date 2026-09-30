@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"sshc/internal/connectionlog"
 	"sshc/internal/knownhosts"
 	"sshc/internal/sshclient"
 	"sshc/internal/terminal"
@@ -140,7 +141,7 @@ func TestTheProxyCommandIsAnnouncedEvenWhenQuiet(t *testing.T) {
 		Auth:     sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }},
 		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
 		// 無言を選んでいる。それでもこの一行は出る。
-		Verbosity: func() sshclient.Verbosity { return sshclient.Quiet },
+		Verbosity: func() connectionlog.Level { return connectionlog.Notice },
 	}
 
 	process, err := dialer.Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})

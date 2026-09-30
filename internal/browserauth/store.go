@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"sshc/internal/randomid"
 	"sshc/internal/storage"
 )
 
@@ -117,7 +118,7 @@ func (s *Store) Port() (int, error) {
 // origin, so every capability issued for the previous port is revoked in the
 // same atomic state update. Reusing the same port preserves restart recovery.
 func (s *Store) SetPort(port int) error {
-	if port < 1024 || port > 65535 {
+	if !validPort(port) {
 		return ErrInvalidDocument
 	}
 	s.mutex.Lock()
@@ -141,7 +142,7 @@ func (s *Store) SetPort(port int) error {
 // 差し替え前の token は猶予のあいだだけ同じ新 token を返す。猶予の後に提示された
 // 退役 token は盗まれたものとみなし、その登録を消して拒否する。
 func (s *Store) Recover(presented string) (string, bool, error) {
-	if !validToken(presented) {
+	if !randomid.IsToken(presented) {
 		return "", false, nil
 	}
 	s.mutex.Lock()
@@ -155,7 +156,7 @@ func (s *Store) Recover(presented string) (string, bool, error) {
 	live := s.live(stored.Registrations)
 	s.pruneRotations(live)
 	if index := indexOf(live, presentedHash, currentHash); index >= 0 {
-		token, err := mint(s.random)
+		token, err := randomid.Token(s.random)
 		if err != nil {
 			return "", false, err
 		}
@@ -188,7 +189,7 @@ func (s *Store) Recover(presented string) (string, bool, error) {
 // 再起動後にこの token で入り直せなくなる。差し替え猶予中の旧 token も同じ登録を
 // 指すので受け付ける。知らない token は何もせず false を返す。
 func (s *Store) Forget(presented string) (bool, error) {
-	if !validToken(presented) {
+	if !randomid.IsToken(presented) {
 		return false, nil
 	}
 	s.mutex.Lock()
@@ -231,10 +232,10 @@ func (s *Store) Register(presented string) (string, bool, error) {
 	}
 	live := s.live(stored.Registrations)
 	s.pruneRotations(live)
-	if validToken(presented) && indexOf(live, hashToken(presented), currentHash) >= 0 {
+	if randomid.IsToken(presented) && indexOf(live, hashToken(presented), currentHash) >= 0 {
 		return "", false, nil
 	}
-	token, err := mint(s.random)
+	token, err := randomid.Token(s.random)
 	if err != nil {
 		return "", false, err
 	}
@@ -277,25 +278,22 @@ func indexOf(registrations []registration, hash string, field func(registration)
 	return found
 }
 
-func mint(random io.Reader) (string, error) {
-	raw := make([]byte, 32)
-	if _, err := io.ReadFull(random, raw); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(raw), nil
+const (
+	// lowestPort は、ブラウザの origin に使える番号の下端。engine の port の設定
+	// （application.ValidateMetadata）と同じく、特権ポート（1024 未満）は使わない。
+	lowestPort = 1024
+	// highestPort は、TCP のポート番号の上端。
+	highestPort = 65535
+)
+
+// validPort は、port がブラウザの origin として保存できる番号かを返す。
+func validPort(port int) bool {
+	return port >= lowestPort && port <= highestPort
 }
 
 func hashToken(token string) string {
 	digest := sha256.Sum256([]byte(token))
 	return base64.RawURLEncoding.EncodeToString(digest[:])
-}
-
-func validToken(value string) bool {
-	if len(value) != 43 {
-		return false
-	}
-	decoded, err := base64.RawURLEncoding.DecodeString(value)
-	return err == nil && len(decoded) == 32
 }
 
 func (s *Store) load() (document, error) {
@@ -322,7 +320,7 @@ func (s *Store) load() (document, error) {
 	}
 	if decoder.Decode(&struct{}{}) != io.EOF || stored.SchemaVersion != SchemaVersion ||
 		len(stored.Registrations) > MaxRegistrations ||
-		(stored.Port != 0 && (stored.Port < 1024 || stored.Port > 65535)) {
+		(stored.Port != 0 && !validPort(stored.Port)) {
 		return document{}, ErrInvalidDocument
 	}
 	seen := make(map[string]bool, len(stored.Registrations))

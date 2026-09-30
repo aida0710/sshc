@@ -84,7 +84,7 @@ func reconnectWindow(attempts int) time.Duration {
 	attempts = terminal.NormaliseReconnects(attempts)
 	var total time.Duration
 	for attempt := range attempts {
-		total += terminal.ReconnectBackoff[min(attempt, len(terminal.ReconnectBackoff)-1)]
+		total += terminal.ReconnectBase(attempt)
 	}
 	maximum := total * terminal.ReconnectJitterMaxPercent / 100
 	return ((maximum + time.Second - 1) / time.Second) * time.Second

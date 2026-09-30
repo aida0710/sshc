@@ -135,53 +135,6 @@ func TestWriteClearsMarshaledBodyOnFailure(t *testing.T) {
 	}
 }
 
-func TestMintClearsRawRandomBytesOnSuccessAndFailure(t *testing.T) {
-	for _, test := range []struct {
-		name   string
-		reader io.Reader
-		fail   bool
-	}{
-		{name: "success", reader: bytes.NewReader(bytes.Repeat([]byte{0x5a}, secretLength))},
-		{name: "partial read failure", reader: io.MultiReader(bytes.NewReader([]byte{1, 2, 3}), errorOnlyReader{err: io.ErrUnexpectedEOF}), fail: true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			var rawAlias []byte
-			_, err := mint(test.reader, func(raw []byte) string {
-				rawAlias = raw
-				return "encoded"
-			})
-			if test.fail && !errors.Is(err, io.ErrUnexpectedEOF) {
-				t.Fatalf("mint = %v, want read error", err)
-			}
-			if !test.fail && err != nil {
-				t.Fatalf("mint = %v", err)
-			}
-			if test.fail {
-				// 乱数源が失敗すると encoder は呼ばれないため、下の reader 差し替えで確保済みの
-				// 出力先を保持する。
-				return
-			}
-			for index, value := range rawAlias {
-				if value != 0 {
-					t.Fatalf("raw[%d] = %d after return, want zero", index, value)
-				}
-			}
-		})
-	}
-}
-
-func TestMintClearsPartiallyFilledRawBuffer(t *testing.T) {
-	reader := &capturingErrorReader{err: io.ErrUnexpectedEOF}
-	if _, err := mint(reader, func([]byte) string { return "unreachable" }); !errors.Is(err, io.ErrUnexpectedEOF) {
-		t.Fatalf("mint = %v, want read error", err)
-	}
-	for index, value := range reader.destination {
-		if value != 0 {
-			t.Fatalf("partial raw[%d] = %d after return, want zero", index, value)
-		}
-	}
-}
-
 func mustMarshalHandoff(t *testing.T, document Handoff) []byte {
 	t.Helper()
 	body, err := json.Marshal(document)
@@ -189,19 +142,4 @@ func mustMarshalHandoff(t *testing.T, document Handoff) []byte {
 		t.Fatal(err)
 	}
 	return body
-}
-
-type errorOnlyReader struct{ err error }
-
-func (reader errorOnlyReader) Read([]byte) (int, error) { return 0, reader.err }
-
-type capturingErrorReader struct {
-	destination []byte
-	err         error
-}
-
-func (reader *capturingErrorReader) Read(destination []byte) (int, error) {
-	reader.destination = destination
-	copy(destination, []byte{1, 2, 3})
-	return 3, reader.err
 }

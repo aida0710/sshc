@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -138,7 +139,7 @@ func FuzzOSCObserverChunkingIsInvariant(f *testing.F) {
 		if len(whole.payload) > MaxOSCPayload || len(split.payload) > MaxOSCPayload {
 			t.Fatalf("payload grew past the bound: %d / %d", len(whole.payload), len(split.payload))
 		}
-		if pending := pendingKittyBytes(whole); pending > 2*maxKittyChunkBytes {
+		if pending := pendingKittyBytes(whole); pending > maxKittyPendingIdentifiers*2*maxKittyChunkBytes {
 			t.Fatalf("pending kitty chunks grew past the bound: %d", pending)
 		}
 		if strings.Join(wholeSeen.titles, "\x00") != strings.Join(splitSeen.titles, "\x00") {
@@ -179,5 +180,25 @@ func TestKittyNotificationChunksStopAccumulatingAtTheDeliveredLimit(t *testing.T
 	observer.Observe([]byte("\x1b]99;i=1:p=body;end\a"))
 	if len(seen.notifications) != 1 || len([]rune(seen.notifications[0][1])) != MaxNotificationBodyRunes {
 		t.Fatalf("delivered notification = %q", seen.notifications)
+	}
+}
+
+func TestKittyNotificationsPendingPastTheIdentifierLimitAreDroppedTogether(t *testing.T) {
+	observer, seen := newTestObserver()
+	fullField := strings.Repeat("x", maxKittyChunkBytes)
+	for identifier := range maxKittyPendingIdentifiers {
+		for _, part := range []string{"title", "body"} {
+			observer.Observe([]byte(fmt.Sprintf("\x1b]99;i=%d:d=0:p=%s;%s\a", identifier, part, fullField)))
+		}
+	}
+	if pending, bound := pendingKittyBytes(observer), maxKittyPendingIdentifiers*2*maxKittyChunkBytes; pending != bound {
+		t.Fatalf("pending kitty bytes = %d, want the full bound %d", pending, bound)
+	}
+	observer.Observe([]byte("\x1b]99;i=next:d=0:p=body;x\a"))
+	if len(observer.chunks) != 1 || observer.chunks["next"] == nil {
+		t.Fatalf("pending identifiers after one more = %d, want only the new one", len(observer.chunks))
+	}
+	if len(seen.notifications) != 0 {
+		t.Fatalf("dropped chunks were delivered: %q", seen.notifications)
 	}
 }

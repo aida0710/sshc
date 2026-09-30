@@ -52,12 +52,19 @@ func connectProblem(err error) (string, bool) {
 		return "identity_unavailable", true
 	case errors.Is(err, sshclient.ErrNoAuthMethod):
 		return "authentication_unavailable", true
+	case errors.Is(err, sshclient.ErrAuthenticationRejected):
+		return "authentication_rejected", true
 	case errors.Is(err, sshclient.ErrProxyAuthenticationRequired):
 		return "proxy_authentication_required", true
 	case errors.Is(err, sshclient.ErrPromptAborted):
 		return "authentication_cancelled", true
 	case errors.Is(err, keys.ErrPassphraseRequired), errors.Is(err, keys.ErrWrongPassphrase):
 		return "key_passphrase_required", true
+	case errors.Is(err, sshclient.ErrVPNWithProxyCommand),
+		errors.Is(err, sshclient.ErrVPNThroughJump),
+		errors.Is(err, sshclient.ErrProxyCommandThroughJump):
+		// 経路の組み合わせが矛盾している。設定を直さない限り毎回同じ理由で断る。
+		return "route_misconfigured", true
 	}
 	// 利用者が切断した VPN 経路は、自動再接続では起動し直さない。
 	if errors.Is(err, vpn.ErrRouteDisconnected) {

@@ -11,6 +11,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
+	"sshc/internal/connectionlog"
 	"sshc/internal/keys"
 	"sshc/internal/terminal"
 	"sshc/internal/totp"
@@ -76,36 +77,10 @@ const (
 	CredentialTOTPUnavailable CredentialEvent = "totp_unavailable"
 )
 
-// passwordOffer makes a saved account password single-use across password and
-// keyboard-interactive while retaining whether a secret was actually offered.
-// A second callback means the server rejected that offer.
-type passwordOffer struct {
-	target   Target
-	provider func(target Target) (string, bool)
-	checked  bool
-	offered  bool
-}
-
-func (offer *passwordOffer) take() (string, bool) {
-	if offer == nil || offer.checked || offer.provider == nil || offer.target.Alias == "" {
-		return "", false
-	}
-	offer.checked = true
-	password, found := offer.provider(offer.target)
-	offer.offered = found
-	return password, found
-}
-
-func (offer *passwordOffer) wasOffered() bool { return offer != nil && offer.offered }
-
 func (a Auth) methodsWithCleanup(target Target, prompt Prompter) ([]ssh.AuthMethod, func()) {
 	var closers []io.Closer
 	a.registerAgent = func(closer io.Closer) { closers = append(closers, closer) }
-	return a.Methods(target, prompt), func() {
-		for index := len(closers) - 1; index >= 0; index-- {
-			_ = closers[index].Close()
-		}
-	}
+	return a.Methods(target, prompt), func() { closeAll(closers) }
 }
 
 func (a Auth) observe(method string) {
@@ -129,8 +104,8 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 	// 保存された結果は、この接続を通して一度しか出さない。方式をまたいで
 	// ひとつなのは、password と keyboard-interactive の両方を提示する
 	// サーバーへ、同じ間違った結果を二度送らないためである。
-	stored := a.storedPassword(target)
-	if _, nonInteractive := prompt.(nonInteractivePrompter); nonInteractive {
+	stored := a.newStoredCredentials(target)
+	if isNonInteractive(prompt) {
 		// provider が無いなら password 系を組み立てない。provider がある場合も、
 		// ここでは vault を読まず、サーバーが実際に方式を提示した callback 内で
 		// 初めて stored を呼ぶ。publickey で通る接続が password を取り出しては
@@ -140,18 +115,18 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 		}
 	}
 	order := target.Methods.Order()
-	a.trace.say(Detailed, "認証方式の候補（試す順）：%s", strings.Join(order, ", "))
+	a.trace.say(connectionlog.Detailed, "認証方式の候補（試す順）：%s", strings.Join(order, ", "))
 	for _, kind := range order {
 		switch kind {
 		case "publickey":
 			if method, ok := a.publicKey(target, prompt); ok {
 				methods = append(methods, method)
 			} else {
-				a.trace.say(Detailed, "publickeyは試しません：IdentityFileが無く、agentも使いません。")
+				a.trace.say(connectionlog.Detailed, "publickeyは試しません：IdentityFileが無く、ssh-agentも使いません。")
 			}
 		case "keyboard-interactive", "password":
 			if prompt == nil {
-				a.trace.say(Detailed, "%sは試しません：非対話で、保存済みパスワードもTOTPもありません。", kind)
+				a.trace.say(connectionlog.Detailed, "%sは試しません：非対話で、保存済みパスワードもTOTPもありません。", kind)
 				continue
 			}
 			method := ssh.KeyboardInteractive(a.keyboard(target, prompt, stored))
@@ -164,30 +139,27 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 	return methods
 }
 
-// storedPassword は保存済みパスワードを最初の 1 回だけ返し、以後は対話入力へ切り替える。
-func (a Auth) storedPassword(target Target) *passwordOffer {
-	return &passwordOffer{target: target, provider: a.Password}
-}
-
 // password は、パスワード方式の結果を作る。
 //
 // 保存されているなら、それを出す。保管庫に置いてあるのに毎回尋ねるなら、
 // 置く意味が無い。
-func (a Auth) password(target Target, prompt Prompter, stored *passwordOffer) func() (string, error) {
+func (a Auth) password(target Target, prompt Prompter, stored storedCredentials) func() (string, error) {
 	return func() (string, error) {
 		a.observe("password")
-		if password, found := stored.take(); found {
-			a.trace.say(Detailed, "保存済みパスワードを送ります。")
+		rejected := stored.password.noteAsked()
+		if password, found := stored.password.take(); found {
+			a.trace.say(connectionlog.Detailed, "保存済みパスワードを送ります。")
 			return password, nil
 		}
 		prefix := ""
-		if stored.wasOffered() {
+		if rejected {
 			prefix = "Saved password was rejected. "
-			a.trace.say(Detailed, "保存済みパスワードが拒否されました。パスワードの入力を求めます。")
+			a.trace.say(connectionlog.Detailed, "保存済みパスワードが拒否されました。パスワードの入力を求めます。")
 		} else {
-			a.trace.say(Detailed, "パスワードの入力を求めます。")
+			a.trace.say(connectionlog.Detailed, "パスワードの入力を求めます。")
 		}
-		return prompt.Secret(prefix + "Password for " + authenticationTarget(target) + ": ")
+		answer, err := prompt.Secret(prefix + "Password for " + authenticationTarget(target) + ": ")
+		return answer, stored.explainUnanswered(err)
 	}
 }
 
@@ -197,66 +169,146 @@ func (a Auth) password(target Target, prompt Prompter, stored *passwordOffer) fu
 // である。それがパスワードを聞かれている形であり、普通の Linux はパスワードを
 // この方式で聞いてくる。問いが複数あるもの（2FA）や、結果を画面に出す問いに
 // パスワードを差し出す意味は無く、差し出せばそれは間違った結果になる。
-func (a Auth) keyboard(target Target, prompt Prompter, stored *passwordOffer) ssh.KeyboardInteractiveChallenge {
+func (a Auth) keyboard(target Target, prompt Prompter, stored storedCredentials) ssh.KeyboardInteractiveChallenge {
 	return func(name, instruction string, questions []string, echos []bool) ([]string, error) {
 		a.observe("keyboard-interactive")
 		a.traceChallenge(name, questions, echos)
-		answers := make([]string, len(questions))
-		answered := make([]bool, len(questions))
+		round := newKeyboardRound(questions, echos)
+		passwordRejected := round.asksPassword() && stored.password.noteAsked()
+		totpRejected := round.asksAnyTOTP() && stored.totp.noteAsked()
 		for index, question := range questions {
-			if !totp.MatchesPrompt(question) {
+			if !round.asksTOTP[index] || stored.totp.wasOffered() {
 				continue
 			}
-			echoed := index < len(echos) && echos[index]
-			if a.TOTP != nil {
-				if code, found := a.TOTP(target, question); found {
-					answers[index] = code
-					answered[index] = true
-					a.observeCredential(target, CredentialTOTPUsed, echoed)
-					continue
-				}
+			if code, found := stored.totp.take(question); found {
+				round.answer(index, code)
+				a.observeCredential(target, CredentialTOTPUsed, round.echoed(index))
+				continue
 			}
-			a.observeCredential(target, CredentialTOTPUnavailable, echoed)
+			a.observeCredential(target, CredentialTOTPUnavailable, round.echoed(index))
 		}
-		// A combined password+OTP challenge is common. Only after an explicit OTP
-		// question has been recognised do we release a saved password to the one
-		// remaining, strictly named Password question. This keeps the previous
-		// multi-question refusal for arbitrary challenges.
-		if anyAnswered(answered) {
-			passwordIndex := -1
-			for index, question := range questions {
-				if !answered[index] && index < len(echos) && !echos[index] && isPasswordQuestion(question) {
-					if passwordIndex != -1 {
-						passwordIndex = -1
-						break
-					}
-					passwordIndex = index
-				}
-			}
-			if passwordIndex >= 0 {
-				if password, found := stored.take(); found {
-					answers[passwordIndex] = password
-					answered[passwordIndex] = true
-				}
+		if totpRejected && isNonInteractive(prompt) {
+			a.trace.say(connectionlog.Detailed, "保存済みTOTPが拒否されました。")
+		} else if totpRejected {
+			a.trace.say(connectionlog.Detailed, "保存済みTOTPが拒否されました。認証コードの入力を求めます。")
+		}
+		if index := round.storedPasswordQuestion(); index >= 0 {
+			if password, found := stored.password.take(); found {
+				round.answer(index, password)
 			}
 		}
-		if len(questions) == 1 && len(echos) == 1 && !echos[0] && !answered[0] {
-			if password, found := stored.take(); found {
-				answers[0] = password
-				answered[0] = true
-			}
-		}
-		a.trace.say(Detailed, "keyboard-interactive：保存済みの認証情報で%d件、入力で%d件に答えます。",
-			countAnswered(answered), len(answered)-countAnswered(answered))
-		if allAnswered(answered) {
-			return answers, nil
+		a.trace.say(connectionlog.Detailed, "keyboard-interactive：保存済みの認証情報で%d件、入力で%d件に答えます。",
+			countAnswered(round.answered), len(round.answered)-countAnswered(round.answered))
+		if allAnswered(round.answered) {
+			return round.answers, nil
 		}
 		context := "Authentication for " + authenticationTarget(target)
-		if stored.wasOffered() {
+		if totpRejected {
+			context = "Saved verification code was rejected.\r\n" + context
+		}
+		if passwordRejected {
 			context = "Saved password was rejected.\r\n" + context
 		}
-		return answerKeyboardChallenge(prompt, context, name, instruction, questions, echos, answers, answered)
+		answers, err := answerKeyboardChallenge(prompt, context, name, instruction, questions, echos, round.answers, round.answered)
+		return answers, stored.explainUnanswered(err)
 	}
+}
+
+// keyboardRound は、keyboard-interactive の1回の問いと、保存済みの値で答えた結果である。
+type keyboardRound struct {
+	questions []string
+	echos     []bool
+	answers   []string
+	answered  []bool
+	// asksTOTP は、質問がTOTPを尋ねているか。保存済みTOTPで答えたかとは別に持つ。
+	// 拒否されたあとや保存が無いときも、TOTPの質問であることは変わらない。
+	asksTOTP []bool
+}
+
+func newKeyboardRound(questions []string, echos []bool) keyboardRound {
+	round := keyboardRound{
+		questions: questions,
+		echos:     echos,
+		answers:   make([]string, len(questions)),
+		answered:  make([]bool, len(questions)),
+		asksTOTP:  make([]bool, len(questions)),
+	}
+	for index, question := range questions {
+		round.asksTOTP[index] = totp.MatchesPrompt(question)
+	}
+	return round
+}
+
+func (round keyboardRound) answer(index int, value string) {
+	round.answers[index] = value
+	round.answered[index] = true
+}
+
+// asksPassword は、この問いがアカウントのパスワードを尋ねているか。
+// 保存済みパスワードを送ったあとなら、送ったものは拒否されている。
+func (round keyboardRound) asksPassword() bool {
+	if round.hasOneHiddenNonTOTPQuestion() {
+		return true
+	}
+	for index, question := range round.questions {
+		if round.hidden(index) && isPasswordQuestion(question) {
+			return true
+		}
+	}
+	return false
+}
+
+func (round keyboardRound) asksAnyTOTP() bool {
+	for _, asks := range round.asksTOTP {
+		if asks {
+			return true
+		}
+	}
+	return false
+}
+
+func (round keyboardRound) echoed(index int) bool {
+	return index < len(round.echos) && round.echos[index]
+}
+
+func (round keyboardRound) hidden(index int) bool {
+	return index < len(round.echos) && !round.echos[index]
+}
+
+// storedPasswordQuestion は、保存済みのアカウントパスワードで答えてよい質問の
+// 位置を返す。無ければ -1 を返す。
+//
+// TOTPの質問には、保存済みTOTPが拒否されたあとでも、無かったときでも、
+// パスワードを答えない。答えればアカウントのパスワードが別の用途の欄へ送られ、
+// 正しい保存値まで拒否されたように見える。
+func (round keyboardRound) storedPasswordQuestion() int {
+	// A combined password+OTP challenge is common. Only after an explicit OTP
+	// question has been recognised do we release a saved password to the one
+	// remaining, strictly named Password question. This keeps the previous
+	// multi-question refusal for arbitrary challenges.
+	if anyAnswered(round.answered) {
+		passwordIndex := -1
+		for index, question := range round.questions {
+			if round.answered[index] || !round.hidden(index) || !isPasswordQuestion(question) {
+				continue
+			}
+			if passwordIndex != -1 {
+				return -1
+			}
+			passwordIndex = index
+		}
+		return passwordIndex
+	}
+	if round.hasOneHiddenNonTOTPQuestion() {
+		return 0
+	}
+	return -1
+}
+
+// hasOneHiddenNonTOTPQuestion は、問いがひとつで、画面に出さず、TOTPでもないかを返す。
+// 普通の Linux が keyboard-interactive でパスワードを聞く形である。
+func (round keyboardRound) hasOneHiddenNonTOTPQuestion() bool {
+	return len(round.questions) == 1 && len(round.echos) == 1 && round.hidden(0) && !round.asksTOTP[0]
 }
 
 // traceChallenge は、サーバーが出した keyboard-interactive の問いを接続ログに書く。
@@ -265,15 +317,15 @@ func (a Auth) keyboard(target Target, prompt Prompter, stored *passwordOffer) ss
 // 保存済みの資格情報で答えた問いはユーザーの画面に出ないため、何を聞かれて
 // いたかを知る手段はこの行だけである。
 func (a Auth) traceChallenge(name string, questions []string, echos []bool) {
-	if !a.trace.enabled(Full) {
+	if !a.trace.enabled(connectionlog.Full) {
 		return
 	}
 	if name != "" {
-		a.trace.say(Full, "keyboard-interactiveの名前：%s", terminal.DisplayText(name, maxChallengeTextRunes))
+		a.trace.say(connectionlog.Full, "keyboard-interactiveの名前：%s", terminal.DisplayText(name, maxChallengeTextRunes))
 	}
 	for index, question := range questions {
 		echoed := index < len(echos) && echos[index]
-		a.trace.say(Full, "keyboard-interactiveの質問%d/%d：%s（入力表示：%s）",
+		a.trace.say(connectionlog.Full, "keyboard-interactiveのプロンプト%d/%d：%s（入力表示：%s）",
 			index+1, len(questions), terminal.DisplayText(question, maxChallengeTextRunes),
 			map[bool]string{true: "あり", false: "なし"}[echoed])
 	}
@@ -342,11 +394,11 @@ func (a Auth) Signers(target Target, prompt Prompter) ([]ssh.Signer, error) {
 		if err != nil {
 			// 他の鍵で通れば、この失敗は誰にも報告されない。書けない鍵が
 			// 混ざっていることに気づけるのは接続ログだけである。
-			a.trace.say(Detailed, "鍵%sは使えません：%v", path, err)
+			a.trace.say(connectionlog.Detailed, "鍵%sは使えません：%v", path, err)
 			failures = append(failures, path+": "+err.Error())
 			continue
 		}
-		a.trace.say(Detailed, "鍵%s：%s（%s）", path, describeKey(signer.PublicKey()), unlockedBy)
+		a.trace.say(connectionlog.Detailed, "鍵%s：%s（%s）", path, describeKey(signer.PublicKey()), unlockedBy)
 		signers = append(signers, signer)
 	}
 
@@ -354,12 +406,12 @@ func (a Auth) Signers(target Target, prompt Prompter) ([]ssh.Signer, error) {
 	if !target.IdentitiesOnly && a.AgentSocket != "" {
 		agentSigners, err := a.agentSigners()
 		if err != nil {
-			a.trace.say(Detailed, "agentの鍵は使えません：%v", err)
+			a.trace.say(connectionlog.Detailed, "ssh-agentの鍵は使えません：%v", err)
 			failures = append(failures, "agent: "+err.Error())
 		}
 		signers = append(signers, agentSigners...)
 	} else if target.IdentitiesOnly && a.AgentSocket != "" {
-		a.trace.say(Detailed, "IdentitiesOnly yesのためagentの鍵は使いません。")
+		a.trace.say(connectionlog.Detailed, "IdentitiesOnly yesのためssh-agentの鍵は使いません。")
 	}
 
 	if len(signers) == 0 {
@@ -368,7 +420,7 @@ func (a Auth) Signers(target Target, prompt Prompter) ([]ssh.Signer, error) {
 		}
 		return nil, fmt.Errorf("%w (%s)", ErrNoIdentity, strings.Join(failures, "; "))
 	}
-	a.trace.say(Detailed, "公開鍵認証で試す鍵：%d件", len(signers))
+	a.trace.say(connectionlog.Detailed, "公開鍵認証で試す鍵：%d件", len(signers))
 	return signers, nil
 }
 
@@ -407,7 +459,7 @@ func (a Auth) signerFor(path string, prompt Prompter) (ssh.Signer, string, error
 			if !errors.Is(err, keys.ErrWrongPassphrase) {
 				return nil, "", err
 			}
-			a.trace.say(Detailed, "鍵%s：保存済みパスフレーズが合いません。", path)
+			a.trace.say(connectionlog.Detailed, "鍵%s：保存済みパスフレーズが合いません。", path)
 		}
 	}
 	if prompt == nil {
@@ -445,9 +497,9 @@ func (a Auth) agentSigners() ([]ssh.Signer, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.trace.say(Detailed, "agentの鍵：%d件（%s）", len(signers), a.AgentSocket)
+	a.trace.say(connectionlog.Detailed, "ssh-agentの鍵：%d件（%s）", len(signers), a.AgentSocket)
 	for _, signer := range signers {
-		a.trace.say(Full, "agentの鍵：%s", describeKey(signer.PublicKey()))
+		a.trace.say(connectionlog.Full, "ssh-agentの鍵：%s", describeKey(signer.PublicKey()))
 	}
 	return signers, nil
 }

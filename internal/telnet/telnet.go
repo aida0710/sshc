@@ -12,7 +12,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"io"
 	"net"
 	"net/netip"
 	"strconv"
@@ -20,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"sshc/internal/iowrite"
 	"sshc/internal/terminal"
 )
 
@@ -292,6 +292,7 @@ type Conn struct {
 	remoteEnabled  [256]bool
 	localRejected  [256]bool
 	remoteRejected [256]bool
+	inbound        inboundDecoder
 	pendingReadErr error
 	afterNVTCR     bool
 	readTimeout    bool
@@ -303,6 +304,8 @@ type Conn struct {
 }
 
 // Read returns application data after consuming Telnet negotiation commands.
+// A command that a read deadline splits is finished by the next Read, so an
+// expired deadline never closes the stream or leaks command bytes as data.
 func (c *Conn) Read(destination []byte) (int, error) {
 	if len(destination) == 0 {
 		return 0, nil
@@ -324,42 +327,11 @@ func (c *Conn) Read(destination []byte) (int, error) {
 		if err != nil {
 			return c.readResult(written, err)
 		}
-		if value != commandIAC {
-			c.appendApplicationByte(destination, &written, value)
-			if c.reader.Buffered() == 0 {
-				if written > 0 {
-					return written, nil
-				}
+		if err := c.decodeInboundByte(value, destination, &written); err != nil {
+			if breaksFraming(err) {
+				_ = c.Close()
 			}
-			continue
-		}
-		command, err := c.reader.ReadByte()
-		if err != nil {
 			return c.readResult(written, err)
-		}
-		switch command {
-		case commandIAC:
-			c.appendApplicationByte(destination, &written, commandIAC)
-		case commandWILL, commandWONT, commandDO, commandDONT:
-			option, optionErr := c.reader.ReadByte()
-			if optionErr != nil {
-				return c.readResult(written, optionErr)
-			}
-			if negotiationErr := c.handleNegotiation(command, option); negotiationErr != nil {
-				return c.readResult(written, negotiationErr)
-			}
-		case commandSB:
-			if subErr := c.readSubnegotiation(); subErr != nil {
-				_ = c.Close()
-				return c.readResult(written, subErr)
-			}
-		default:
-			if command < commandEOF {
-				_ = c.Close()
-				return c.readResult(written, ErrMalformedNegotiation)
-			}
-			// EOF through GA are commands without option payloads. They do
-			// not belong in application output.
 		}
 		if written > 0 && c.reader.Buffered() == 0 {
 			return written, nil
@@ -501,7 +473,7 @@ func (c *Conn) writeApplicationLocked(application []byte) error {
 			escaped = append(escaped, commandIAC)
 		}
 	}
-	return writeAll(c.raw, escaped)
+	return iowrite.WriteAll(c.raw, escaped)
 }
 
 // Flush resolves a trailing application CR as an NVT newline. CLI callers use
@@ -556,17 +528,22 @@ func (c *Conn) SetReadTimeout(timeout time.Duration) error {
 	return c.raw.SetReadDeadline(deadline)
 }
 
+// pendingReadBytes is the chunk DiscardPending reads per call. The bytes are
+// thrown away, so the size only sets how many reads an old banner takes.
+const pendingReadBytes = 4096
+
 // DiscardPending consumes an old banner or prompt before a scripted send so it
-// cannot be mistaken for the command's response.
-func (c *Conn) DiscardPending(ctx context.Context) error {
+// cannot be mistaken for the command's response. It stops once no input arrives
+// for quiet.
+func (c *Conn) DiscardPending(ctx context.Context, quiet time.Duration) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := c.SetReadTimeout(20 * time.Millisecond); err != nil {
+	if err := c.SetReadTimeout(quiet); err != nil {
 		return err
 	}
 	defer func() { _ = c.SetReadTimeout(0) }()
-	buffer := make([]byte, 4096)
+	buffer := make([]byte, pendingReadBytes)
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -609,21 +586,5 @@ func (c *Conn) sendControl(payload ...byte) error {
 	if err := c.flushPendingLocked(); err != nil {
 		return err
 	}
-	return writeAll(c.raw, payload)
-}
-
-func writeAll(writer io.Writer, payload []byte) error {
-	for len(payload) > 0 {
-		written, err := writer.Write(payload)
-		if written > 0 {
-			payload = payload[written:]
-		}
-		if err != nil {
-			return err
-		}
-		if written == 0 {
-			return io.ErrShortWrite
-		}
-	}
-	return nil
+	return iowrite.WriteAll(c.raw, payload)
 }

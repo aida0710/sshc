@@ -1,36 +1,31 @@
 package api
 
-import (
-	"encoding/json"
-	"testing"
+import "encoding/json"
+
+// このファイルは、生成された models.gen.go が、ハンドラと画面の頼るフィールドを
+// 持ち続けていることをコンパイルで確かめる。OpenAPI の変更でフィールドの名前や型が
+// 変わると、このファイルがコンパイルできなくなり、go test ./internal/api が失敗する。
+// 代入した値を実行時に読み返す比較は必ず成り立つだけなので置かない。
+
+// 基盤の応答。
+var (
+	_ = HealthResponse{Status: "ok", Version: "dev"}
+	_ = BootstrapResponse{CsrfToken: "csrf"}
 )
 
-func TestGeneratedFoundationModels(t *testing.T) {
-	health := HealthResponse{Status: "ok", Version: "dev"}
-	if health.Status != "ok" || health.Version != "dev" {
-		t.Fatalf("unexpected health response: %#v", health)
-	}
-	bootstrap := BootstrapResponse{CsrfToken: "csrf"}
-	if bootstrap.CsrfToken != "csrf" {
-		t.Fatalf("unexpected bootstrap response: %#v", bootstrap)
-	}
-}
-
-func TestGeneratedConnectionUpdateModels(t *testing.T) {
-	hostName := json.RawMessage(`{"action":"set","value":"edge.example"}`)
-	request := UpdateConnectionRequest{
+// 接続の編集。変えない項目を送らずに済むよう、HostName は省略できる。
+var (
+	_ = UpdateConnectionRequest{
 		Identity: HostIdentity{Path: "config", Alias: "edge"},
 		Base:     "Host edge\n",
-		HostName: &hostName,
 		Password: json.RawMessage(`{"kind":"unchanged"}`),
 	}
-	if request.Identity.Alias != "edge" || request.HostName == nil || len(request.Password) == 0 {
-		t.Fatalf("unexpected connection update contract: %#v", request)
-	}
-}
+	_ *json.RawMessage = UpdateConnectionRequest{}.HostName
+)
 
-func TestGeneratedKeyVaultModels(t *testing.T) {
-	item := KeyItem{
+// 鍵の一覧と、鍵の操作の応答。証明書は無い鍵が普通なので省略できる。
+var (
+	_ = KeyItem{
 		Id:             "0123456789abcdef0123456789abcdef",
 		RelativePath:   "id_work",
 		Kind:           "private_key",
@@ -54,26 +49,8 @@ func TestGeneratedKeyVaultModels(t *testing.T) {
 		}},
 		Notes: []string{},
 	}
-	if item.Bits != 256 || item.References[0].Directive != "IdentityFile" {
-		t.Fatalf("unexpected key item: %#v", item)
-	}
-	if item.Certificate != nil {
-		t.Fatalf("certificate must be optional and absent by default")
-	}
-
-	inventory := KeyInventoryResponse{
-		Items:                []KeyItem{item},
-		Unreadable:           []UnreadableFile{{RelativePath: "huge_known_hosts", Reason: "file_too_large"}},
-		AgentDelegations:     []KeyReference{},
-		UnresolvedReferences: []UnresolvedReference{},
-		AgentAvailable:       true,
-		AgentIdentities:      []AgentIdentity{{Bits: 256, Fingerprint: "SHA256:abcdef", Comment: "aida@laptop", Algorithm: "ED25519"}},
-	}
-	if len(inventory.Items) != 1 || !inventory.AgentAvailable {
-		t.Fatalf("unexpected inventory: %#v", inventory)
-	}
-
-	certificate := KeyCertificate{
+	_ *KeyCertificate = KeyItem{}.Certificate
+	_                 = KeyCertificate{
 		KeyId:                "probe-id",
 		Principals:           []string{"alice"},
 		ValidBefore:          0,
@@ -81,32 +58,57 @@ func TestGeneratedKeyVaultModels(t *testing.T) {
 		SignedKeyType:        "ssh-ed25519",
 		SignedKeyFingerprint: "SHA256:abcdef",
 	}
-	if !certificate.NeverExpires || certificate.ValidBefore != 0 {
-		t.Fatalf("unexpected certificate: %#v", certificate)
+	_ = KeyInventoryResponse{
+		Items:                []KeyItem{},
+		Unreadable:           []UnreadableFile{{RelativePath: "huge_known_hosts", Reason: "file_too_large"}},
+		AgentDelegations:     []KeyReference{},
+		UnresolvedReferences: []UnresolvedReference{},
+		AgentAvailable:       true,
+		AgentIdentities:      []AgentIdentity{{Bits: 256, Fingerprint: "SHA256:abcdef", Comment: "aida@laptop", Algorithm: "ED25519"}},
 	}
-
-	reveal := RevealPrivateKeyResponse{
-		Id:            item.Id,
+	_ = RevealPrivateKeyResponse{
+		Id:            "0123456789abcdef0123456789abcdef",
 		RelativePath:  "id_work",
 		PrivateKey:    "-----BEGIN OPENSSH PRIVATE KEY-----\n",
 		Encrypted:     true,
 		Fingerprint:   "SHA256:abcdef",
 		TransactionId: "20260805T090000.000-aabbccdd",
 	}
-	if reveal.TransactionId == "" {
-		t.Fatalf("unexpected reveal response: %#v", reveal)
+	_ = KeyAlgorithmsResponse{
+		Variants: []KeyVariant{{Algorithm: "ed25519-sk", Bits: 0, Label: "Ed25519 security key", InProcess: false, Reason: "hardware_token_required"}},
+		Source:   "ssh -Q key",
 	}
-
-	// リクエストはコミット済みのセッション用語である kind と target を指定する。
-	// evidence は呼び出し側からは決して渡されない。サーバーが、確認ダイアログに
-	// 表示されていた内容から導出する。
-	request := IssueActionRequest{Kind: "private_key.reveal", Target: item.Id}
-	action := IssueActionResponse{Token: "t", ExpiresAt: "2026-08-05T09:02:00Z"}
-	if request.Kind != "private_key.reveal" || action.ExpiresAt == "" {
-		t.Fatalf("unexpected action contract: %#v %#v", request, action)
+	_ = GenerateKeyResponse{
+		Id: "0123456789abcdef0123456789abcdef", RelativePath: "id_work", PublicRelativePath: "id_work.pub",
+		Fingerprint: "SHA256:abcdef", KeyType: "ssh-ed25519", Bits: 256,
+		Encrypted: true, TransactionId: "20260805T090000.000-aabbccdd",
 	}
+	_ = HardwareCommandResponse{
+		Algorithm: "ed25519-sk",
+		Command:   []string{"ssh-keygen", "-t", "ed25519-sk"},
+		Note:      "run this in Terminal",
+	}
+	_ = ChangePassphraseResponse{
+		Id: "0123456789abcdef0123456789abcdef", RelativePath: "id_work", Encrypted: true,
+		Notes: []string{}, TransactionId: "20260805T090000.000-aabbccdd",
+	}
+	_ = RegisterKeyResponse{
+		Id: "0123456789abcdef0123456789abcdef", RelativePath: "id_work", Fingerprint: "SHA256:abcdef",
+		LifetimeSeconds: 3600, Identities: []AgentIdentity{},
+	}
+)
 
-	trash := TrashListResponse{
+// 確認付きの操作。リクエストはコミット済みのセッション用語である kind と target を
+// 指定する。evidence は呼び出し側からは決して渡されない。サーバーが、確認ダイアログに
+// 表示されていた内容から導出する。
+var (
+	_ = IssueActionRequest{Kind: "private_key.reveal", Target: "0123456789abcdef0123456789abcdef"}
+	_ = IssueActionResponse{Token: "t", ExpiresAt: "2026-08-05T09:02:00Z"}
+)
+
+// ゴミ箱。
+var (
+	_ = TrashListResponse{
 		Entries: []TrashEntrySummary{{
 			Id:         "20260805T090000.000-aabbccdd",
 			DeletedAt:  "2026-08-05T09:00:00Z",
@@ -118,48 +120,13 @@ func TestGeneratedKeyVaultModels(t *testing.T) {
 		}},
 		RetentionDays: 30,
 	}
-	if trash.RetentionDays != 30 || !trash.Entries[0].Stale {
-		t.Fatalf("unexpected trash response: %#v", trash)
-	}
+	_ = TrashKeyResponse{EntryId: "e", Files: []TrashFileSummary{}, Skipped: []string{}, TransactionId: "t"}
+	_ = RestoreTrashResponse{EntryId: "e", Restored: []string{"id_work"}, Blockers: []string{}, TransactionId: "t"}
+	_ = PurgeTrashResponse{EntryId: "e", Removed: []string{"id_work"}, TransactionId: "t"}
+)
 
-	algorithms := KeyAlgorithmsResponse{
-		Variants: []KeyVariant{{Algorithm: "ed25519-sk", Bits: 0, Label: "Ed25519 security key", InProcess: false, Reason: "hardware_token_required"}},
-		Source:   "ssh -Q key",
-	}
-	generate := GenerateKeyResponse{
-		Id: item.Id, RelativePath: "id_work", PublicRelativePath: "id_work.pub",
-		Fingerprint: "SHA256:abcdef", KeyType: "ssh-ed25519", Bits: 256,
-		Encrypted: true, TransactionId: "20260805T090000.000-aabbccdd",
-	}
-	hardware := HardwareCommandResponse{
-		Algorithm: "ed25519-sk",
-		Command:   []string{"ssh-keygen", "-t", "ed25519-sk"},
-		Note:      "run this in Terminal",
-	}
-	if algorithms.Variants[0].InProcess || generate.PublicRelativePath == "" || len(hardware.Command) != 3 {
-		t.Fatalf("unexpected generation contract: %#v %#v %#v", algorithms, generate, hardware)
-	}
-
-	passphrase := ChangePassphraseResponse{
-		Id: item.Id, RelativePath: "id_work", Encrypted: true,
-		Notes: []string{}, TransactionId: "20260805T090000.000-aabbccdd",
-	}
-	register := RegisterKeyResponse{
-		Id: item.Id, RelativePath: "id_work", Fingerprint: "SHA256:abcdef",
-		LifetimeSeconds: 3600, Identities: []AgentIdentity{},
-	}
-	trashed := TrashKeyResponse{EntryId: "e", Files: []TrashFileSummary{}, Skipped: []string{}, TransactionId: "t"}
-	restored := RestoreTrashResponse{EntryId: "e", Restored: []string{"id_work"}, Blockers: []string{}, TransactionId: "t"}
-	purged := PurgeTrashResponse{EntryId: "e", Removed: []string{"id_work"}, TransactionId: "t"}
-	if !passphrase.Encrypted || register.LifetimeSeconds != 3600 || trashed.EntryId == "" ||
-		len(restored.Restored) != 1 || len(purged.Removed) != 1 {
-		t.Fatalf("unexpected key vault responses")
-	}
-
-	problem := Problem{Code: "agent_rejected", Message: "request rejected", Detail: stringPointer("Bad passphrase for ~/.ssh/id_work")}
-	if problem.Detail == nil || *problem.Detail == "" {
-		t.Fatalf("Problem carries no detail field")
-	}
-}
-
-func stringPointer(value string) *string { return &value }
+// 失敗の応答。detail は無いこともあるので省略できる。
+var (
+	_         = Problem{Code: "agent_rejected", Message: "request rejected"}
+	_ *string = Problem{}.Detail
+)

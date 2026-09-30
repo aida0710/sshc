@@ -12,7 +12,8 @@ import (
 	"time"
 )
 
-// Level は、その行を出す深さである。sshclient.Verbosity と同じ値を使う。
+// Level は、その行を出す深さである。接続ログの設定（どの深さまで書くか）も
+// この型で表し、設定の深さ以下の行を書く。設定が Notice なら `[sshc]` の行だけを書く。
 type Level int
 
 const (
@@ -21,9 +22,13 @@ const (
 	Notice Level = 0
 	// Brief は `-v` に相当する。何が起き、どこへ繋いだか。
 	Brief Level = 1
-	// Detailed は `-vv` に相当する。使った設定、掛かった時間、失敗の詳細。
+	// Detailed は `-vv` に相当する。使った設定、掛かった時間、失敗の詳細。SSH では、
+	// 試した鍵とそのフィンガープリント、通った方式、ホスト鍵の照合結果、経由ホスト、
+	// PTY と環境変数の要求。
 	Detailed Level = 2
-	// Full は `-vvv` に相当する。実行したコマンド、途中の出力のすべて。
+	// Full は `-vvv` に相当する。実行したコマンド、途中の出力のすべて。SSH では、
+	// 提示したアルゴリズム、ssh-agent の鍵の一覧、keyboard-interactive のプロンプトごとの扱い、
+	// 通った経路のアドレス。
 	Full Level = 3
 )
 
