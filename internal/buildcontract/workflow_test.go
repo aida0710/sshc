@@ -178,16 +178,7 @@ func TestNativeGofmtScriptReportsOnlyExactTrackedUnformattedPaths(t *testing.T) 
 		t.Fatalf("git NUL path fixture = %q, want %q", rawPaths, wantRawPaths)
 	}
 
-	var command string
-	var args []string
-	if runtime.GOOS == "windows" {
-		command = "pwsh"
-		args = []string{"-NoProfile", "-File", filepath.Join(repository, "scripts", "ci", "check-gofmt.ps1")}
-	} else {
-		command = "sh"
-		args = []string{filepath.Join(repository, "scripts", "ci", "check-gofmt.sh")}
-	}
-
+	command, args := gofmtScriptCommand(repository)
 	cmd := exec.Command(command, args...)
 	cmd.Dir = fixture
 	output, err := cmd.CombinedOutput()
@@ -219,6 +210,59 @@ func TestNativeGofmtScriptReportsOnlyExactTrackedUnformattedPaths(t *testing.T) 
 	}
 }
 
+func TestNativeGofmtScriptChecksMorePathsThanOneWindowsCommandLineHolds(t *testing.T) {
+	repository, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repository root: %v", err)
+	}
+	fixture := t.TempDir()
+	runCommand(t, fixture, "git", "init", "--quiet")
+
+	// CreateProcessが受け付けるコマンドラインの最大文字数。
+	const windowsCommandLineCharacters = 32767
+	// この上限を超える長さのパスを作る。名前の長さは、一時ディレクトリと合わせても
+	// WindowsのMAX_PATH（260文字）に収まるように抑える。
+	const pathCount = 450
+	namePrefix := strings.Repeat("p", 80)
+	names := make([]string, pathCount)
+	totalCharacters := 0
+	for index := range names {
+		names[index] = fmt.Sprintf("%s%03d.go", namePrefix, index)
+		totalCharacters += len(names[index]) + 1
+		writeFixture(t, fixture, names[index], "package fixture\n")
+	}
+	if totalCharacters <= windowsCommandLineCharacters {
+		t.Fatalf("fixture paths use %d characters, which fit on one Windows command line", totalCharacters)
+	}
+	// 最初と最後のファイルだけ崩し、分けて渡したどの回の結果も報告されることを確かめる。
+	unformattedNames := []string{names[0], names[pathCount-1]}
+	for _, name := range unformattedNames {
+		writeFixture(t, fixture, name, "package fixture\nfunc Unformatted( ) {}\n")
+	}
+	runCommand(t, fixture, "git", "add", "--all")
+
+	command, args := gofmtScriptCommand(repository)
+	cmd := exec.Command(command, args...)
+	cmd.Dir = fixture
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("formatter script succeeded with unformatted tracked files; output:\n%s", output)
+	}
+	normalized := strings.ReplaceAll(string(output), "\r\n", "\n")
+	want := "These files are not gofmt-formatted. Run: gofmt -w <path>.\n" + strings.Join(unformattedNames, "\n") + "\n"
+	if normalized != want {
+		t.Fatalf("formatter diagnostics = %q, want exact %q", normalized, want)
+	}
+}
+
+// gofmtScriptCommand は、このOSのCIが使うgofmtの確認スクリプトを起動するコマンドを返す。
+func gofmtScriptCommand(repository string) (string, []string) {
+	if runtime.GOOS == "windows" {
+		return "pwsh", []string{"-NoProfile", "-File", filepath.Join(repository, "scripts", "ci", "check-gofmt.ps1")}
+	}
+	return "sh", []string{filepath.Join(repository, "scripts", "ci", "check-gofmt.sh")}
+}
+
 func TestWindowsGofmtScriptUsesRawNULTerminatedGitOutput(t *testing.T) {
 	path := filepath.Join("..", "..", "scripts", "ci", "check-gofmt.ps1")
 	source, err := os.ReadFile(path)
@@ -239,7 +283,7 @@ func TestWindowsGofmtScriptUsesRawNULTerminatedGitOutput(t *testing.T) {
 		"$gitProcess.ExitCode",
 		"[Text.UTF8Encoding]::new($false, $true)",
 		"Split([char]0, [StringSplitOptions]::RemoveEmptyEntries)",
-		"gofmt -l -- @goFiles",
+		"gofmt -l -- @batchPaths",
 	} {
 		if !strings.Contains(script, required) {
 			t.Errorf("Windows formatter lacks raw NUL path transport fragment %q", required)
