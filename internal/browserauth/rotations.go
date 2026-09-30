@@ -14,8 +14,8 @@ func (s *Store) rotateCachedTokens(previousHash, token string, until time.Time) 
 	s.rotations[previousHash] = rotation{token: token, until: until}
 }
 
-// A cached capability cannot outlive the registration on disk, whether it was
-// signed out, expired, evicted, or changed by another store instance.
+// A cached capability or identifier cannot outlive the registration on disk,
+// whether it was signed out, expired, evicted, or changed by another store instance.
 func (s *Store) pruneRotations(registrations []registration) {
 	now := s.now()
 	for hash, recent := range s.rotations {
@@ -23,4 +23,5 @@ func (s *Store) pruneRotations(registrations []registration) {
 			delete(s.rotations, hash)
 		}
 	}
+	s.identifiers.keepOnly(registrations)
 }

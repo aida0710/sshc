@@ -97,6 +97,8 @@ var failureRules = []failureRule{
 	{is(io.ErrUnexpectedEOF), Failure{"snapshot_download_incomplete", FailureGateway}},
 	{isNetworkError, Failure{"bucket_unreachable", FailureGateway}},
 	{IsLocalChange, Failure{"sync_local_changed", FailureConflict}},
+	// ErrPendingTransaction は ErrWorkspaceBusy を包む。待っても解消しないので、先に分ける。
+	{is(ErrPendingTransaction), Failure{"sync_pending_transaction", FailureConflict}},
 	{is(ErrWorkspaceBusy), Failure{"sync_workspace_busy", FailureConflict}},
 }
 

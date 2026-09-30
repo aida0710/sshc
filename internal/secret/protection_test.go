@@ -2,6 +2,7 @@ package secret_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"errors"
 	"os"
@@ -37,10 +38,10 @@ func TestProtectionModeRoundTripPreservesSecretsAndSettings(t *testing.T) {
 	if _, err := manager.Commit(storage.Request{Operation: "test.document", Changes: []storage.Change{{Path: docPath, Contents: sealed}}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ChangeMasterPassword("wrong", ""); !errors.Is(err, secret.ErrWrongPassphrase) {
+	if err := s.ChangeMasterPassword(context.Background(), "wrong", ""); !errors.Is(err, secret.ErrWrongPassphrase) {
 		t.Fatalf("wrong password: %v", err)
 	}
-	if err := s.ChangeMasterPassword("1234", ""); err != nil {
+	if err := s.ChangeMasterPassword(context.Background(), "1234", ""); err != nil {
 		t.Fatal(err)
 	}
 	keyPath := filepath.Join(workspace.Root(), secret.LocalKeyPath)
@@ -75,7 +76,7 @@ func TestProtectionModeRoundTripPreservesSecretsAndSettings(t *testing.T) {
 	if err := s.Unlock(""); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ChangeMasterPassword("", "5678"); err != nil {
+	if err := s.ChangeMasterPassword(context.Background(), "", "5678"); err != nil {
 		t.Fatal(err)
 	}
 	marker, err := os.ReadFile(keyPath)
@@ -143,7 +144,7 @@ func TestPasswordlessCreationSkipsIdleLockButExplicitLockDestroysKey(t *testing.
 func TestRemovingPasswordRollsBackProtectionAndDocumentsOnFailure(t *testing.T) {
 	service, _, faults, _, before := newRekeyFaultHarness(t)
 	faults.failRenames = map[int]bool{2: true}
-	if err := service.ChangeMasterPassword(passphrase, ""); !errors.Is(err, faults.failure) {
+	if err := service.ChangeMasterPassword(context.Background(), passphrase, ""); !errors.Is(err, faults.failure) {
 		t.Fatalf("ChangeMasterPassword = %v", err)
 	}
 	assertRekeyGeneration(t, service, before, passphrase, "")
@@ -158,7 +159,7 @@ func TestStartupRecoversProtectionSwitchAtEitherSideOfCommitPoint(t *testing.T) 
 			} else {
 				faults.failRenames = map[int]bool{2: true, 3: true}
 			}
-			err := service.ChangeMasterPassword(passphrase, "")
+			err := service.ChangeMasterPassword(context.Background(), passphrase, "")
 			if committed && err != nil {
 				t.Fatal(err)
 			}
@@ -215,5 +216,99 @@ func TestPasswordlessSchemaResetPreservesAutomaticOpeningMode(t *testing.T) {
 	restarted.SetIdleTimeout(time.Nanosecond)
 	if !restarted.Unlocked() {
 		t.Fatal("reset passwordless vault incorrectly idle-locked")
+	}
+}
+
+func TestManualLockKeepsAPasswordlessVaultOpenAndOpensItWhenLocked(t *testing.T) {
+	s, _ := newService(t)
+	if err := s.Initialise(""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.LockManually(); err != nil || !s.Unlocked() {
+		t.Fatalf("manual lock of an open passwordless vault = %v, unlocked %v", err, s.Unlocked())
+	}
+	s.Lock()
+	if err := s.LockManually(); err != nil || !s.Unlocked() {
+		t.Fatalf("manual lock of a locked passwordless vault = %v, unlocked %v", err, s.Unlocked())
+	}
+}
+
+func TestManualLockLocksAVaultWithAPassword(t *testing.T) {
+	s, _ := newService(t)
+	if err := s.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.LockManually(); err != nil || s.Unlocked() {
+		t.Fatalf("manual lock = %v, unlocked %v", err, s.Unlocked())
+	}
+}
+
+func TestChangingThePasswordOfALockedPasswordlessVaultOpensItFirst(t *testing.T) {
+	s, _ := newService(t)
+	if err := s.Initialise(""); err != nil {
+		t.Fatal(err)
+	}
+	s.Lock()
+	if err := s.ChangeMasterPassword(context.Background(), "", passphrase); err != nil {
+		t.Fatalf("ChangeMasterPassword on a locked passwordless vault = %v", err)
+	}
+	s.Lock()
+	if err := s.Unlock(passphrase); err != nil {
+		t.Fatalf("the new password does not open the vault: %v", err)
+	}
+}
+
+func TestChangingThePasswordOfALockedVaultWithAPasswordIsRefused(t *testing.T) {
+	s, _ := newService(t)
+	if err := s.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	s.Lock()
+	if err := s.ChangeMasterPassword(context.Background(), passphrase, "another valid password"); !errors.Is(err, secret.ErrLocked) {
+		t.Fatalf("ChangeMasterPassword on a locked vault = %v, want ErrLocked", err)
+	}
+}
+
+func TestChangingThePasswordAfterTheCallerGaveUpChangesNothing(t *testing.T) {
+	s, _ := newService(t)
+	if err := s.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := s.ChangeMasterPassword(ctx, passphrase, "another valid password"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ChangeMasterPassword with a cancelled request = %v, want context.Canceled", err)
+	}
+	s.Lock()
+	if err := s.Unlock(passphrase); err != nil {
+		t.Fatalf("the old password no longer opens the vault: %v", err)
+	}
+}
+
+// autoUnlockOvertakeWindow は、ほかの書き手が Vault を持っているあいだに AutoUnlock が
+// 終わってしまわないかを見る時間である。錠を待たずに走れば、これより十分早く終わる。
+const autoUnlockOvertakeWindow = 50 * time.Millisecond
+
+// AutoUnlock は中断した secret.rekey を復旧するので、走っている Vault の書き手を
+// 追い越してはならない。
+func TestAutoUnlockWaitsForTheVaultWriterInProgress(t *testing.T) {
+	s, _ := newService(t)
+	finished := make(chan error, 1)
+	_, err := s.WithKeyPassphraseRelocation(map[string]string{"keys/a": "keys/b"},
+		func(*storage.Change) (storage.Result, error) {
+			go func() { finished <- s.AutoUnlock() }()
+			select {
+			case result := <-finished:
+				t.Error("AutoUnlock ran while another vault writer was in progress")
+				finished <- result
+			case <-time.After(autoUnlockOvertakeWindow):
+			}
+			return storage.Result{}, nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := <-finished; err != nil {
+		t.Fatalf("AutoUnlock after the writer finished = %v", err)
 	}
 }

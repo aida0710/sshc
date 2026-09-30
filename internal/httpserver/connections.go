@@ -1,10 +1,8 @@
 package httpserver
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/labstack/echo/v5"
@@ -14,6 +12,7 @@ import (
 	"sshc/internal/keys"
 	"sshc/internal/recent"
 	"sshc/internal/secret"
+	"sshc/internal/strictjson"
 	"sshc/internal/validate"
 )
 
@@ -22,7 +21,6 @@ import (
 // request can only select a private key the server has just inventoried.
 type ConnectionHandlers struct {
 	Service *application.Service
-	Secrets *secret.Service
 	Keys    KeyService
 	Recent  *recent.Service
 }
@@ -39,7 +37,7 @@ func (h ConnectionHandlers) ListRecent(c *echo.Context) error {
 	}
 	connections, err := h.Recent.List()
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "recent_connections_failed")
+		return unexpectedProblem(c, "recent_connections_failed", err)
 	}
 	listed := make([]api.RecentConnection, 0, len(connections))
 	for _, connection := range connections {
@@ -53,7 +51,7 @@ func (h ConnectionHandlers) ListRecent(c *echo.Context) error {
 
 func (h ConnectionHandlers) Create(c *echo.Context) error {
 	var wire api.CreateConnectionRequest
-	if err := decodeBody(c, &wire); err != nil {
+	if err := decodeJSONWithin(c, maxKeyRequestBody, &wire); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	defer wipeBuffer(wire.Authentication)
@@ -65,14 +63,14 @@ func (h ConnectionHandlers) Create(c *echo.Context) error {
 	var inventory *keys.Inventory
 	if request.Authentication.Kind == application.CreateAuthenticationIdentityFile {
 		if h.Keys == nil {
-			return problem(c, http.StatusInternalServerError, "inventory_failed")
+			return unexpectedProblem(c, "inventory_failed", nil)
 		}
 		inventory, err = h.Keys.Inventory()
 		if err != nil {
-			return problem(c, http.StatusInternalServerError, "inventory_failed")
+			return unexpectedProblem(c, "inventory_failed", err)
 		}
 	}
-	result, err := h.Service.CreateConnection(h.Secrets, inventory, request)
+	result, err := h.Service.CreateConnection(inventory, request)
 	if err != nil {
 		return connectionProblem(c, err)
 	}
@@ -81,7 +79,7 @@ func (h ConnectionHandlers) Create(c *echo.Context) error {
 
 func (h ConnectionHandlers) Update(c *echo.Context) error {
 	var wire api.UpdateConnectionRequest
-	if err := decodeBody(c, &wire); err != nil {
+	if err := decodeJSONWithin(c, maxKeyRequestBody, &wire); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	defer wipeBuffer(wire.Password)
@@ -100,14 +98,14 @@ func (h ConnectionHandlers) Update(c *echo.Context) error {
 	var inventory *keys.Inventory
 	if needsInventory {
 		if h.Keys == nil {
-			return problem(c, http.StatusInternalServerError, "inventory_failed")
+			return unexpectedProblem(c, "inventory_failed", nil)
 		}
 		inventory, err = h.Keys.Inventory()
 		if err != nil {
-			return problem(c, http.StatusInternalServerError, "inventory_failed")
+			return unexpectedProblem(c, "inventory_failed", err)
 		}
 	}
-	result, err := h.Service.UpdateConnection(h.Secrets, inventory, request)
+	result, err := h.Service.UpdateConnection(inventory, request)
 	if err != nil {
 		return connectionProblem(c, err)
 	}
@@ -115,8 +113,8 @@ func (h ConnectionHandlers) Update(c *echo.Context) error {
 }
 
 func updateConnectionRequestFromAPI(wire api.UpdateConnectionRequest) (application.UpdateConnectionRequest, bool, error) {
-	if wire.Identity.Path == "" || len(wire.Identity.Path) > 1024 ||
-		wire.Identity.Alias == "" || len(wire.Identity.Alias) > validate.MaxAliasLength || len(wire.Base) > 1<<20 {
+	if wire.Identity.Path == "" || len(wire.Identity.Path) > maxPathLength ||
+		wire.Identity.Alias == "" || len(wire.Identity.Alias) > validate.MaxAliasLength || len(wire.Base) > maxRawLength {
 		return application.UpdateConnectionRequest{}, false, errInvalidEdit
 	}
 	request := application.UpdateConnectionRequest{
@@ -241,7 +239,7 @@ func decodeIdentityFileConnectionChange(value api.ConnectionIdentityFileChange) 
 	switch application.ConnectionChangeAction(action) {
 	case application.ConnectionChangeSet:
 		var set api.ConnectionIdentityFileSet
-		if err := decodeConnectionAuthentication(value, &set); err != nil || len(set.KeyId) != 32 {
+		if err := decodeConnectionAuthentication(value, &set); err != nil || len(set.KeyId) != keys.ItemIDLength {
 			return application.ConnectionIdentityFileChange{}, errInvalidEdit
 		}
 		return application.ConnectionIdentityFileChange{
@@ -273,7 +271,7 @@ func decodeUpdateConnectionPassword(value api.UpdateConnectionPassword) (applica
 	case application.UpdatePasswordDedicated:
 		var password api.CreateDedicatedPasswordAuthentication
 		if err := decodeConnectionAuthentication(value, &password); err != nil ||
-			password.Password == "" || len(password.Password) > 1024 {
+			password.Password == "" || len(password.Password) > secret.MaxPasswordLength {
 			return application.UpdateConnectionPassword{}, errInvalidEdit
 		}
 		return application.UpdateConnectionPassword{
@@ -282,7 +280,7 @@ func decodeUpdateConnectionPassword(value api.UpdateConnectionPassword) (applica
 	case application.UpdatePasswordSaved:
 		var password api.CreateSavedPasswordAuthentication
 		if err := decodeConnectionAuthentication(value, &password); err != nil ||
-			password.Credential == "" || len(password.Credential) > 128 {
+			password.Credential == "" || len(password.Credential) > secret.MaxCredentialNameLength {
 			return application.UpdateConnectionPassword{}, errInvalidEdit
 		}
 		return application.UpdateConnectionPassword{
@@ -291,8 +289,8 @@ func decodeUpdateConnectionPassword(value api.UpdateConnectionPassword) (applica
 	case application.UpdatePasswordNewShared:
 		var password api.CreateNewSharedPasswordAuthentication
 		if err := decodeConnectionAuthentication(value, &password); err != nil ||
-			password.Credential == "" || len(password.Credential) > 128 ||
-			password.Password == "" || len(password.Password) > 1024 {
+			password.Credential == "" || len(password.Credential) > secret.MaxCredentialNameLength ||
+			password.Password == "" || len(password.Password) > secret.MaxPasswordLength {
 			return application.UpdateConnectionPassword{}, errInvalidEdit
 		}
 		return application.UpdateConnectionPassword{
@@ -331,7 +329,7 @@ func decodeUpdateConnectionKeyPassphrase(value api.UpdateConnectionKeyPassphrase
 	case application.UpdateKeyPassphraseSetDedicated:
 		var dedicated api.ConnectionKeyPassphraseSetDedicated
 		if err := decodeConnectionAuthentication(value, &dedicated); err != nil ||
-			len(dedicated.KeyId) != 32 || dedicated.Passphrase == "" || len(dedicated.Passphrase) > 1024 {
+			len(dedicated.KeyId) != keys.ItemIDLength || dedicated.Passphrase == "" || len(dedicated.Passphrase) > secret.MaxPasswordLength {
 			return application.UpdateConnectionKeyPassphrase{}, errInvalidEdit
 		}
 		return application.UpdateConnectionKeyPassphrase{
@@ -359,7 +357,7 @@ func decodeUpdateConnectionTOTP(value api.UpdateConnectionTOTP) (application.Upd
 	case application.UpdateTOTPSaved:
 		var saved api.UpdateTOTPSaved
 		if err := decodeConnectionAuthentication(value, &saved); err != nil ||
-			saved.Credential == "" || len(saved.Credential) > 128 {
+			saved.Credential == "" || len(saved.Credential) > secret.MaxCredentialNameLength {
 			return application.UpdateConnectionTOTP{}, errInvalidEdit
 		}
 		return application.UpdateConnectionTOTP{
@@ -410,7 +408,7 @@ func connectionRequestFromAPI(wire api.CreateConnectionRequest) (application.Cre
 	case string(application.CreateAuthenticationDedicatedPassword):
 		var authentication api.CreateDedicatedPasswordAuthentication
 		if err := decodeConnectionAuthentication(wire.Authentication, &authentication); err != nil ||
-			authentication.Password == "" || len(authentication.Password) > 1024 {
+			authentication.Password == "" || len(authentication.Password) > secret.MaxPasswordLength {
 			return application.CreateConnectionRequest{}, errInvalidEdit
 		}
 		request.Authentication = application.CreateAuthentication{
@@ -419,7 +417,7 @@ func connectionRequestFromAPI(wire api.CreateConnectionRequest) (application.Cre
 	case string(application.CreateAuthenticationSavedPassword):
 		var authentication api.CreateSavedPasswordAuthentication
 		if err := decodeConnectionAuthentication(wire.Authentication, &authentication); err != nil ||
-			authentication.Credential == "" || len(authentication.Credential) > 128 {
+			authentication.Credential == "" || len(authentication.Credential) > secret.MaxCredentialNameLength {
 			return application.CreateConnectionRequest{}, errInvalidEdit
 		}
 		request.Authentication = application.CreateAuthentication{
@@ -428,8 +426,8 @@ func connectionRequestFromAPI(wire api.CreateConnectionRequest) (application.Cre
 	case string(application.CreateAuthenticationNewSharedPassword):
 		var authentication api.CreateNewSharedPasswordAuthentication
 		if err := decodeConnectionAuthentication(wire.Authentication, &authentication); err != nil ||
-			authentication.Credential == "" || len(authentication.Credential) > 128 ||
-			authentication.Password == "" || len(authentication.Password) > 1024 {
+			authentication.Credential == "" || len(authentication.Credential) > secret.MaxCredentialNameLength ||
+			authentication.Password == "" || len(authentication.Password) > secret.MaxPasswordLength {
 			return application.CreateConnectionRequest{}, errInvalidEdit
 		}
 		request.Authentication = application.CreateAuthentication{
@@ -439,7 +437,7 @@ func connectionRequestFromAPI(wire api.CreateConnectionRequest) (application.Cre
 	case string(application.CreateAuthenticationIdentityFile):
 		var authentication api.CreateIdentityFileAuthentication
 		if err := decodeConnectionAuthentication(wire.Authentication, &authentication); err != nil ||
-			len(authentication.KeyId) != 32 {
+			len(authentication.KeyId) != keys.ItemIDLength {
 			return application.CreateConnectionRequest{}, errInvalidEdit
 		}
 		request.Authentication = application.CreateAuthentication{
@@ -456,15 +454,7 @@ func connectionRequestFromAPI(wire api.CreateConnectionRequest) (application.Cre
 // forbidden; otherwise a misspelled password/key field would be silently
 // discarded by encoding/json inside the generated union helper.
 func decodeConnectionAuthentication(value api.CreateConnectionAuthentication, target any) error {
-	decoder := json.NewDecoder(bytes.NewReader(value))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return errInvalidEdit
-	}
-	return nil
+	return strictjson.Decode(value, target)
 }
 
 func connectionProblem(c *echo.Context, err error) error {
@@ -508,7 +498,7 @@ func connectionProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusNotFound, "password_missing")
 	case errors.Is(err, secret.ErrLocked), errors.Is(err, secret.ErrNoVault),
 		errors.Is(err, secret.ErrEmptySecret), errors.Is(err, secret.ErrUnsafeName):
-		return passwordProblem(c, err)
+		return vaultProblem(c, err)
 	case application.IsExternalChange(err):
 		return problem(c, http.StatusConflict, "vault_conflict")
 	default:

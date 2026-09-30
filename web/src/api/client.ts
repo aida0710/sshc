@@ -1,6 +1,7 @@
 import type { components } from "./schema";
 import { clearSessionCSRF, storeSessionCSRF } from "../session/bootstrap";
 import { validateAPIRequest, validateAPIResponse, validateOpenAPISchema } from "./validators.generated";
+import { isWorkspaceRefusal } from "./workspaceRefusals";
 
 export type HealthResponse = components["schemas"]["HealthResponse"];
 export type Problem = components["schemas"]["Problem"];
@@ -72,8 +73,9 @@ function diagnosticPath(path: string): string {
 function notifyFailure(diagnostic: RequestFailureDiagnostic) {
   if (["vault_locked", "session_required", "invalid_session", "invalid_csrf"].includes(diagnostic.code)) return;
   // 4xxは各操作画面が入力不備や競合を具体的に説明する。共通通知まで重ねると
-  // alertが二重になり、画面readerにも同じ失敗を二度伝えてしまう。
-  if (diagnostic.status >= 400 && diagnostic.status < 500) return;
+  // alertが二重になり、画面readerにも同じ失敗を二度伝えてしまう。workspaceを使えない
+  // 拒否だけは、どの画面も説明しないので共通通知に出す。
+  if (diagnostic.status >= 400 && diagnostic.status < 500 && !isWorkspaceRefusal(diagnostic.code)) return;
   // 更新確認は任意のbackground taskであり、製品操作の失敗ではない。
   if (diagnostic.code === "update_check_failed") return;
   onRequestFailed?.(diagnostic);

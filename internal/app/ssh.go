@@ -10,7 +10,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"strings"
 	"time"
 
 	pkgsftp "github.com/pkg/sftp"
@@ -19,6 +18,7 @@ import (
 	"sshc/internal/connectionlog"
 	"sshc/internal/effective"
 	"sshc/internal/httpserver"
+	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
 	"sshc/internal/platform/nativepath"
 	"sshc/internal/secret"
@@ -76,10 +76,14 @@ func newSSHParts(dependencies sshDependencies) sshParts {
 				return connectionlog.Level(config.TerminalSettings().Verbosity)
 			},
 			Auth: sshclient.Auth{
-				AgentSocket: os.Getenv("SSH_AUTH_SOCK"),
-				Stored:      passphrase,
-				Password:    password,
-				TOTP:        oneTimeCode,
+				// Keys 画面と同じ keys.NewAgent で、このプロセスから見た agent の宛先を
+				// 決める。Windows は SSH_AUTH_SOCK ではなく OpenSSH の固定の named pipe
+				// である。Keys 画面の値そのものは受け取らない。`sshc ssh` はこの部品を
+				// CLI のプロセスで組み、CLI を起動したシェルの agent を使うからである。
+				Agent:    keys.NewAgent(os.LookupEnv),
+				Stored:   passphrase,
+				Password: password,
+				TOTP:     oneTimeCode,
 			},
 			HostKeys: sshclient.HostKeys{
 				Read: readKnownHosts(hosts),
@@ -128,7 +132,8 @@ func (p sshParts) target(alias string) (sshclient.Target, error) {
 	return target, nil
 }
 
-// connector は、埋め込みターミナルが開く対話セッションである。
+// aliases は、接続に現れる alias を ProxyJump の手前から順に返す。
+// 接続を組み立てられない alias は、それ自身だけを返す。
 func (p sshParts) aliases(alias string) []string {
 	target, err := p.target(alias)
 	if err != nil {
@@ -147,6 +152,7 @@ func appendAliases(listed []string, target sshclient.Target) []string {
 	return append(listed, target.Alias)
 }
 
+// connector は、埋め込みターミナルが開く対話セッションである。
 func (p sshParts) connector() httpserver.Connector {
 	return func(ctx context.Context, alias string, size terminal.Size) (terminal.Process, error) {
 		target, err := p.target(alias)
@@ -213,19 +219,39 @@ func (p sshParts) openSFTP(ctx context.Context, target sshclient.Target) (sshcSF
 		_ = connection.Close()
 		return nil, err
 	}
-	remote := &sftpRemote{Remote: sshcSFTP.NewClient(client), transport: connection, dead: make(chan struct{})}
-	// The transport reports its end through Wait; the pool asks before it
-	// hands the connection to the next operation.
+	return newSFTPRemote(client, connection), nil
+}
+
+// sftpTransport is the SSH transport an SFTP session runs on. Wait reports its
+// end; Close releases it together with every ProxyJump hop.
+type sftpTransport interface {
+	Wait() error
+	Close() error
+}
+
+// newSFTPRemote wraps one SFTP session so that the pool can ask whether it is
+// still usable before lending it to the next operation.
+func newSFTPRemote(session *pkgsftp.Client, transport sftpTransport) *sftpRemote {
+	remote := &sftpRemote{Remote: sshcSFTP.NewClient(session), transport: transport, dead: make(chan struct{})}
+	// A server can end the SFTP subsystem while the transport stays up: the
+	// sftp-server exits, sshd's ChannelTimeout closes the channel, or a reply
+	// cannot be parsed. Every later request then fails as a lost connection,
+	// so the transport has nothing left to carry and is closed as well.
 	go func() {
-		_ = connection.Client().Wait()
+		_ = session.Wait()
+		_ = transport.Close()
+	}()
+	// The transport reports its end through Wait, whoever ended it.
+	go func() {
+		_ = transport.Wait()
 		close(remote.dead)
 	}()
-	return remote, nil
+	return remote
 }
 
 type sftpRemote struct {
 	sshcSFTP.Remote
-	transport *sshclient.Connection
+	transport sftpTransport
 	dead      chan struct{}
 }
 
@@ -251,8 +277,8 @@ func (remote *sftpRemote) Close() error {
 }
 
 // storedPassphrase は、鍵の絶対パスを vault の保存値へ対応づける。
-func storedPassphrase(passwords *secret.Service, root string) func(string) (string, bool) {
-	if passwords == nil || root == "" {
+func storedPassphrase(vault *secret.Service, root string) func(string) (string, bool) {
+	if vault == nil || root == "" {
 		return nil
 	}
 	return func(absolute string) (string, bool) {
@@ -260,17 +286,17 @@ func storedPassphrase(passwords *secret.Service, root string) func(string) (stri
 		if !inside {
 			return "", false
 		}
-		return passwords.KeyPassphraseFor(relative)
+		return vault.KeyPassphraseFor(relative)
 	}
 }
 
 // storedPassword は、alias について保存されたアカウントパスワードを返す。
-func storedPassword(passwords *secret.Service) func(sshclient.Target) (string, bool) {
-	if passwords == nil {
+func storedPassword(vault *secret.Service) func(sshclient.Target) (string, bool) {
+	if vault == nil {
 		return nil
 	}
 	return func(target sshclient.Target) (string, bool) {
-		password := passwords.BoundFor(secret.KindPassword, target.Alias, target.AuthenticationBinding())
+		password := vault.BoundFor(secret.KindPassword, target.Alias, target.AuthenticationBinding())
 		return password, password != ""
 	}
 }
@@ -280,9 +306,9 @@ func storedPassword(passwords *secret.Service) func(sshclient.Target) (string, b
 // one-time code allows one: every connection opened in the same window would
 // present the same code, and PAM's TOTP module refuses a code it has already
 // accepted, so a ranged download would fail on its second connection.
-func sftpConnectionLimit(passwords *secret.Service, target func(string) (sshclient.Target, error)) func(alias string) int {
+func sftpConnectionLimit(vault *secret.Service, target func(string) (sshclient.Target, error)) func(alias string) int {
 	return func(alias string) int {
-		if passwords == nil {
+		if vault == nil {
 			return 0
 		}
 		resolved, err := target(alias)
@@ -290,7 +316,7 @@ func sftpConnectionLimit(passwords *secret.Service, target func(string) (sshclie
 			return 0
 		}
 		for _, hop := range append(resolved.JumpRoute(), resolved) {
-			if passwords.BoundFor(secret.KindTOTP, hop.Alias, hop.AuthenticationBinding()) != "" {
+			if vault.BoundFor(secret.KindTOTP, hop.Alias, hop.AuthenticationBinding()) != "" {
 				return 1
 			}
 		}
@@ -300,15 +326,15 @@ func sftpConnectionLimit(passwords *secret.Service, target func(string) (sshclie
 
 // storedTOTP generates a code only for an explicit one-time-password prompt.
 // The seed remains inside the unlocked vault for embedded sessions.
-func storedTOTP(passwords *secret.Service) func(sshclient.Target, string) (string, bool) {
-	if passwords == nil {
+func storedTOTP(vault *secret.Service) func(sshclient.Target, string) (string, bool) {
+	if vault == nil {
 		return nil
 	}
 	return func(target sshclient.Target, question string) (string, bool) {
 		if !totp.MatchesPrompt(question) {
 			return "", false
 		}
-		provisioning := passwords.BoundFor(secret.KindTOTP, target.Alias, target.AuthenticationBinding())
+		provisioning := vault.BoundFor(secret.KindTOTP, target.Alias, target.AuthenticationBinding())
 		if provisioning == "" {
 			return "", false
 		}
@@ -325,18 +351,9 @@ func readKnownHosts(hosts *knownhosts.Service) func() ([]byte, error) {
 	if hosts == nil {
 		return nil
 	}
-	return func() ([]byte, error) {
-		listing, err := hosts.Listing("")
-		if err != nil {
-			return nil, err
-		}
-		var contents strings.Builder
-		for _, line := range listing.Lines {
-			contents.WriteString(line.Raw)
-			contents.WriteString("\n")
-		}
-		return []byte(contents.String()), nil
-	}
+	// 接続ログは一致した行を「known_hostsの何行目」と書く。known_hosts画面と同じ物理行で
+	// 数えるため、エントリだけに詰め直さず原文を渡す。
+	return hosts.Contents
 }
 
 // addKnownHost は、受け入れた鍵を known_hosts へ書く。
@@ -351,7 +368,7 @@ func addKnownHost(hosts *knownhosts.Service) func(knownhosts.Candidate) error {
 	}
 }
 
-// CLIConnection は、`sshc <接続先>` が使うプロセス内 SSH である。
+// CLIConnection は、`sshc ssh <alias>` が使うプロセス内 SSH である。
 type CLIConnection struct{ parts sshParts }
 
 // CLIConnectionOptions は、コマンドライン用の接続が要るものである。

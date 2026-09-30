@@ -17,7 +17,7 @@ import (
 // 変更操作については Security.Middleware が強制する CSRF ヘッダーの背後にある。
 type ConfigHandlers struct {
 	Service *application.Service
-	Secrets *secret.Service
+	Vault   *secret.Service
 	// Keys は group 操作が必要とするインベントリを供給する。group の rename は
 	// その鍵を移動させることを意味し、それらを指す IdentityFile をすべて書き換える。
 	Keys KeyService
@@ -64,7 +64,7 @@ func (h ConfigHandlers) Host(c *echo.Context) error {
 	if err := validatePathParameter(path); err != nil {
 		return serviceProblem(c, err)
 	}
-	if err := validateAliasParameter(alias); err != nil {
+	if err := validateHostBlockAlias(alias); err != nil {
 		return serviceProblem(c, err)
 	}
 	detail, err := h.Service.HostDetail(path, alias)
@@ -103,7 +103,7 @@ func (h ConfigHandlers) Save(c *echo.Context) error {
 	if err != nil {
 		return serviceProblem(c, err)
 	}
-	result, err := h.Service.SaveWithSecrets(h.Secrets, request)
+	result, err := h.Service.SaveWithSecrets(request)
 	if err != nil {
 		return serviceProblem(c, err)
 	}
@@ -111,6 +111,7 @@ func (h ConfigHandlers) Save(c *echo.Context) error {
 }
 
 // RenameGroup は、group ディレクトリと、それを指すすべてのものをリネームする。
+// 鍵のパスフレーズの割り当ても、application が同じトランザクションで移す。
 func (h ConfigHandlers) RenameGroup(c *echo.Context) error {
 	var request api.GroupRenameRequest
 	if err := decodeJSON(c, &request); err != nil {
@@ -118,16 +119,11 @@ func (h ConfigHandlers) RenameGroup(c *echo.Context) error {
 	}
 	inventory, err := h.Keys.Inventory()
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "inventory_failed")
+		return unexpectedProblem(c, "inventory_failed", err)
 	}
 	result, err := h.Service.RenameGroup(inventory, request.From, request.To)
 	if err != nil {
 		return serviceProblem(c, err)
-	}
-	if h.Secrets != nil {
-		if err := h.Secrets.RelocateKeyPassphrases(keyRelocationMap(result.KeyRelocations)); err != nil {
-			return serviceProblem(c, err)
-		}
 	}
 	return c.JSON(http.StatusOK, result)
 }
@@ -140,7 +136,7 @@ func (h ConfigHandlers) DeleteGroup(c *echo.Context) error {
 	}
 	inventory, err := h.Keys.Inventory()
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "inventory_failed")
+		return unexpectedProblem(c, "inventory_failed", err)
 	}
 	// Destination の空と未指定を分けない。契約では省略可能だが、どちらも
 	// 「connections ディレクトリ自体へ移す」という同じ意味である。設定ファイルが
@@ -152,11 +148,6 @@ func (h ConfigHandlers) DeleteGroup(c *echo.Context) error {
 	result, err := h.Service.DeleteGroup(inventory, request.Name, destination)
 	if err != nil {
 		return serviceProblem(c, err)
-	}
-	if h.Secrets != nil {
-		if err := h.Secrets.RelocateKeyPassphrases(keyRelocationMap(result.KeyRelocations)); err != nil {
-			return serviceProblem(c, err)
-		}
 	}
 	return c.JSON(http.StatusOK, result)
 }
@@ -315,45 +306,44 @@ func (h ConfigHandlers) SetEngine(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	settings := application.EngineSettings{}
-	if request.Port != nil {
-		// 範囲はここで断る。通せば、断るのは次の起動の bind であり、
-		// そのとき画面はもう閉じている。
-		if *request.Port < 1024 || *request.Port > 65535 {
-			return problem(c, http.StatusBadRequest, "port_out_of_range")
-		}
-		settings.Port = *request.Port
-	}
-	if request.VaultAutoLock != nil {
-		chosen := request.VaultAutoLock
-		settings.VaultAutoLock = &application.VaultAutoLock{Mode: string(chosen.Mode)}
-		switch chosen.Mode {
-		case api.Restart:
-			if chosen.Value != nil || chosen.Unit != nil {
-				return problem(c, http.StatusBadRequest, "invalid_vault_auto_lock")
-			}
-		case api.Idle:
-			if chosen.Value == nil || *chosen.Value < 1 || *chosen.Value > 999 || chosen.Unit == nil ||
-				(*chosen.Unit != api.Minutes && *chosen.Unit != api.Hours) {
-				return problem(c, http.StatusBadRequest, "invalid_vault_auto_lock")
-			}
-			settings.VaultAutoLock.Value = *chosen.Value
-			settings.VaultAutoLock.Unit = string(*chosen.Unit)
-		default:
-			return problem(c, http.StatusBadRequest, "invalid_vault_auto_lock")
-		}
-	}
+	settings := engineSettingsFromRequest(request)
 	result, err := h.Service.SetEngineSettings(settings)
-	if err != nil {
+	switch {
+	// 範囲の外は保存で断る。通せば、断るのは次の起動の bind であり、
+	// そのとき画面はもう閉じている。
+	case errors.Is(err, application.ErrMetadataEnginePort):
+		return problem(c, http.StatusBadRequest, "port_out_of_range")
+	case errors.Is(err, application.ErrMetadataVaultAutoLock):
+		return problem(c, http.StatusBadRequest, "invalid_vault_auto_lock")
+	case err != nil:
 		return serviceProblem(c, err)
 	}
-	if h.Secrets != nil {
-		h.Secrets.SetIdleTimeout(settings.VaultIdleTimeout(secret.IdleTimeout))
+	if h.Vault != nil {
+		h.Vault.SetIdleTimeout(settings.VaultIdleTimeout(secret.IdleTimeout))
 	}
 	return c.JSON(http.StatusOK, api.SettingsSaveResult{
 		TransactionId: result.TransactionID,
 		Written:       result.Written,
 	})
+}
+
+// engineSettingsFromRequest は、通信の形を application の形へ移すだけで、範囲は
+// 検査しない。省いた値は 0 と空になり、application が未設定として扱う。
+func engineSettingsFromRequest(request api.EngineSettings) application.EngineSettings {
+	var settings application.EngineSettings
+	if request.Port != nil {
+		settings.Port = *request.Port
+	}
+	if chosen := request.VaultAutoLock; chosen != nil {
+		settings.VaultAutoLock = &application.VaultAutoLock{Mode: string(chosen.Mode)}
+		if chosen.Value != nil {
+			settings.VaultAutoLock.Value = *chosen.Value
+		}
+		if chosen.Unit != nil {
+			settings.VaultAutoLock.Unit = string(*chosen.Unit)
+		}
+	}
+	return settings
 }
 
 func (h ConfigHandlers) SetShortcuts(c *echo.Context) error {

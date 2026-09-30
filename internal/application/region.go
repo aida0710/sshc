@@ -16,7 +16,8 @@ const (
 var (
 	// ErrRegionDamaged は、2 個のマーカーのうち片方しか持たない生成領域を報告する。
 	ErrRegionDamaged = errors.New("the generated group region has only one of its markers")
-	// ErrRegionIncludeAlreadyPresent は、connections tree または generated
+	// ErrRegionIncludeAlreadyPresent は、connections tree か生成したグループのファイルに
+	// 既に届く、利用者が書いた Include を報告する。
 	ErrRegionIncludeAlreadyPresent = errors.New("an existing Include already reaches the generated group files")
 )
 
@@ -114,7 +115,10 @@ func PlanRegion(file *config.File, groups []string, groupsFile string) (RegionPl
 		if file.Condition(file.BlockAt(start)) == "" {
 			return RegionPlan{ReplaceFrom: start, ReplaceTo: end + 1, Replacing: true, Lines: lines}, nil
 		}
-		// 生成領域は Host または Match ブロックの内側に座っていて、その Include
+		// 生成領域が Host または Match ブロックの内側にあると、その Include は、そのブロックが
+		// match する接続でしか読まれない。同じ場所で置き換えても内側に残るので、取り除いて、
+		// 無条件に読まれる位置へ入れ直す。ApplyRegion は取り除いてから挿入するので、位置は
+		// 生成領域を除いたファイルで計算する。
 		without := withoutLines(file, start, end+1)
 		insertAt, positionErr := regionPosition(without, groups, groupsFile)
 		if positionErr != nil {
@@ -148,7 +152,12 @@ func groupPatterns(groups []string) []string {
 	return patterns
 }
 
-// regionPosition は、生成領域がどこに属するかを計算する。最初の Host
+// regionPosition は、生成領域を置く位置を計算する。最初の Host または Match 行の上で、
+// どちらも無ければファイルの末尾である。
+//
+// Include もほかのディレクティブと同じく、書かれたブロックに属する。OpenSSH は、ブロックが
+// match するときにしかそのブロックの Include を読まない。無条件に読まれるのは最初の
+// ブロックの見出しより上の行だけなので、生成領域はそこに置く。
 func regionPosition(file *config.File, groups []string, groupsFile string) (int, error) {
 	if err := checkExistingIncludes(file, groups, groupsFile); err != nil {
 		return 0, err

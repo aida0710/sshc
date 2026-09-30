@@ -21,9 +21,9 @@ import (
 	"sshc/internal/httpserver"
 	"sshc/internal/keys"
 	"sshc/internal/platform"
+	"sshc/internal/releasecheck"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
-	"sshc/internal/selfupdate"
 	"sshc/internal/session"
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/sshclient"
@@ -64,7 +64,7 @@ type Dependencies struct {
 	ScanHostKeys func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error)
 	Probe        func(ctx context.Context, alias string) (sshclient.Probe, error)
 	RemoteRun    func(ctx context.Context, target sshclient.Target, command sshclient.Command) (sshclient.Output, error)
-	Updates      *selfupdate.Checker
+	Updates      *releasecheck.Checker
 	// Lookup は親の環境を読み、利用者のログインシェルを見つけるために使う。
 	Lookup func(string) (string, bool)
 	// TerminalStarter は PTY を確保する。nil の場合は既定実装を使用する。
@@ -106,7 +106,7 @@ type Readiness struct {
 	BrowserRegistrationRequired bool
 }
 
-func buildKeyService(workspace *storage.Workspace, dependencies Dependencies, configuration *application.Service) (*keys.Service, *storage.Manager) {
+func buildKeyService(workspace *storage.Workspace, dependencies Dependencies, configService *application.Service) (*keys.Service, *storage.Manager) {
 	transactions := storage.NewManager(workspace, time.Now, dependencies.Random)
 	return keys.NewService(keys.ServiceOptions{
 		Workspace:     workspace,
@@ -116,7 +116,7 @@ func buildKeyService(workspace *storage.Workspace, dependencies Dependencies, co
 		Agent:         dependencies.KeyAgent,
 		Now:           time.Now,
 		Random:        dependencies.Random,
-		ValidateGroup: configuration.ValidateDeclaredGroup,
+		ValidateGroup: configService.ValidateDeclaredGroup,
 	}), transactions
 }
 
@@ -135,8 +135,9 @@ type runtime struct {
 	server      *httpserver.Server
 	bootstrap   string
 	document    handoff.Handoff
+	stateDir    string
 	terminals   *terminal.Registry
-	passwords   *secret.Service
+	vault       *secret.Service
 	autoSync    *remotesync.Auto
 	autoCancel  context.CancelFunc
 	autoDone    chan struct{}
@@ -202,16 +203,6 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		sessions.Now = dependencies.SessionNow
 	}
 
-	configService := services.config
-	keyService := services.keys
-	diagnosticsService := services.diagnostics
-	knownHostsService := services.knownHosts
-	passwordService := services.passwords
-	remoteKeyService := services.remoteKeys
-	syncService := services.sync
-	autoSync := services.autoSync
-	terminals := services.terminals
-	ssh := services.ssh
 	cliSecret, err := handoff.Mint(dependencies.Random)
 	if err != nil {
 		listener.Close()
@@ -228,7 +219,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 			}
 			return nil
 		},
-		ConnectAliases:        ssh.aliases,
+		ConnectAliases:        services.ssh.aliases,
 		Sessions:              sessions,
 		BrowserAuth:           services.browserAuth,
 		UI:                    dependencies.UI,
@@ -237,33 +228,32 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		StopEngine:            dependencies.StopEngine,
 		ProtocolVersion:       handoff.ProtocolVersion,
 		Logger:                dependencies.Logger,
-		Config:                configService,
-		Keys:                  keyService,
-		Diagnostics:           diagnosticsService,
-		KnownHosts:            knownHostsService,
-		RemoteKeys:            remoteKeyService,
+		Config:                services.config,
+		Keys:                  services.keys,
+		Diagnostics:           services.diagnostics,
+		KnownHosts:            services.knownHosts,
+		RemoteKeys:            services.remoteKeys,
 		Recent:                services.recent,
 		SFTP:                  services.sftp,
-		SFTPTransferStatePath: filepath.Join(HandoffDir(dependencies.Home), "transfers.json"),
+		SFTPTransferStatePath: filepath.Join(services.workspace.StateDir(), "transfers.json"),
 		Workspaces:            services.workspaces,
 		Snippets:              services.snippets,
-		Passwords:             passwordService,
-		Connect:               ssh.connector(),
+		Vault:                 services.vault,
+		Connect:               services.ssh.connector(),
 		ConnectionOpened: func(alias string) {
 			if err := services.recentStore.Record(alias); err != nil && dependencies.Logger != nil {
 				dependencies.Logger.Warn("record recent SSH connection", "alias", alias, "error", err)
 			}
 		},
-		Sync:        syncService,
-		AutoSync:    autoSync,
-		Terminals:   terminals,
-		VPN:         services.vpn,
-		VPNProfiles: services.vpnProfiles,
-		// SSH のプログラムはもう要らない。接続はこのプロセスの中で通信する。
-		TerminalStartDirectory:    configService.TerminalStartDirectory,
+		Sync:                      services.sync,
+		AutoSync:                  services.autoSync,
+		Terminals:                 services.terminals,
+		VPN:                       services.vpn,
+		VPNProfiles:               services.vpnProfiles,
+		TerminalStartDirectory:    services.config.TerminalStartDirectory,
 		LoginShell:                func() (string, error) { return platform.LoginShell(dependencies.Lookup) },
 		LocalShellProfiles:        func() []platform.ShellProfile { return platform.ShellProfiles(dependencies.Lookup) },
-		TerminalLocalShellProfile: configService.TerminalLocalShellProfile,
+		TerminalLocalShellProfile: services.config.TerminalLocalShellProfile,
 		TerminalEnvironment: func() []string {
 			var environment []string
 			if dependencies.Environ != nil {
@@ -291,8 +281,9 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 	// 書き込みは rename のあとのディレクトリの同期で失敗しうるので、公開されたかは
 	// 不定である。どの失敗のあとでも自分の秘密で Remove を試みる。置き換わって
 	// いなければ、または別の秘密の handoff があれば、Remove は何も消さない。
-	if err := handoff.Write(HandoffDir(dependencies.Home), document); err != nil {
-		if removeErr := handoff.Remove(HandoffDir(dependencies.Home), document.Secret); removeErr != nil {
+	stateDir := services.workspace.StateDir()
+	if err := handoff.Write(stateDir, document); err != nil {
+		if removeErr := handoff.Remove(stateDir, document.Secret); removeErr != nil {
 			err = errors.Join(err, fmt.Errorf("remove the possibly published handoff: %w", removeErr))
 		}
 		listener.Close()
@@ -302,17 +293,26 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		server:      server,
 		bootstrap:   bootstrap,
 		document:    document,
-		terminals:   terminals,
-		passwords:   passwordService,
-		autoSync:    autoSync,
+		stateDir:    stateDir,
+		terminals:   services.terminals,
+		vault:       services.vault,
+		autoSync:    services.autoSync,
 		browserAuth: services.browserAuth,
 		sftpPool:    services.sftpPool,
 		vpn:         services.vpn,
 	}, nil
 }
 
-func HandoffDir(home string) string {
-	return filepath.Join(home, ".ssh", "sshc")
+// StateDir は、engine lock、handoff、SFTP の転送キューを置く sshc の state
+// directory を返す。設定を書く Workspace と同じく、解決した ~/.ssh の下にする。
+// ~/.ssh や $HOME が symlink でも、lock や handoff をたどる側と設定を書く側で
+// 答えが分かれず、symlink を拒む no-follow の歩き方でも開ける。
+func StateDir(home string) (string, error) {
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		return "", err
+	}
+	return workspace.StateDir(), nil
 }
 
 func Run(ctx context.Context, dependencies Dependencies, version string) error {
@@ -342,8 +342,8 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 
 	if dependencies.Announce != nil {
 		var vault secret.State
-		if built.passwords != nil {
-			if vault, err = built.passwords.State(); err != nil {
+		if built.vault != nil {
+			if vault, err = built.vault.State(); err != nil {
 				return stop(fmt.Errorf("read the vault state: %w", err))
 			}
 		}
@@ -379,11 +379,9 @@ func (r runtime) unwind(dependencies Dependencies) error {
 	if timeout <= 0 {
 		timeout = DefaultShutdownTimeout
 	}
-	forced := make(chan struct{})
 	deadline := time.AfterFunc(timeout, func() {
 		go r.terminals.ForceClose()
 		go r.server.ForceClose()
-		close(forced)
 	})
 	defer deadline.Stop()
 
@@ -398,7 +396,7 @@ func (r runtime) unwind(dependencies Dependencies) error {
 	r.server.BeginStopping()
 
 	var joined []error
-	if err := handoff.Remove(HandoffDir(dependencies.Home), r.document.Secret); err != nil {
+	if err := handoff.Remove(r.stateDir, r.document.Secret); err != nil {
 		joined = append(joined, fmt.Errorf("remove the command-line handoff: %w", err))
 	}
 
@@ -449,8 +447,8 @@ func (r runtime) unwind(dependencies Dependencies) error {
 		r.vpn.StopAll(stopping)
 		cancel()
 	}
-	if r.passwords != nil {
-		r.passwords.Lock()
+	if r.vault != nil {
+		r.vault.Lock()
 	}
 	return errors.Join(joined...)
 }

@@ -137,7 +137,7 @@ func TestShownLogsHideEveryIKEv2Secret(t *testing.T) {
 		logs = append(logs, "charon: "+value, "swanctl: 0x"+encoded, "swanctl: 0x"+strings.ToUpper(encoded))
 	}
 
-	shown := redact(strings.Join(logs, "\n"), secrets)
+	shown := redactLogs(strings.Join(logs, "\n"), secrets)
 
 	for _, value := range []string{secrets.IKEv2.Password, secrets.IKEv2.PreSharedKey} {
 		encoded := hex.EncodeToString([]byte(value))
@@ -146,6 +146,18 @@ func TestShownLogsHideEveryIKEv2Secret(t *testing.T) {
 				t.Fatalf("ログに %q が残った: %s", forbidden, shown)
 			}
 		}
+	}
+}
+
+// パスワードが事前共有鍵の頭と同じでも、16進の形を含めて事前共有鍵の残りをログに出さない。
+func TestShownLogsHideTheHexOfAPreSharedKeyThatStartsWithThePassword(t *testing.T) {
+	secrets := Secrets{IKEv2: &IKEv2Secrets{Password: "hunter2", PreSharedKey: "hunter2-psk-value"}}
+	logs := "swanctl: 0x" + hex.EncodeToString([]byte("hunter2-psk-value"))
+
+	shown := redactLogs(logs, secrets)
+
+	if shown != "swanctl: 0x[REDACTED]" {
+		t.Fatalf("ログ: %q", shown)
 	}
 }
 

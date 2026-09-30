@@ -1,6 +1,7 @@
 package secret
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -58,9 +59,25 @@ func (s *Service) OpenBackup(sealed []byte) ([]byte, error) {
 // リモートのスナップショットは独立した同期鍵で暗号化されているため、マスターパスワード
 // の変更とは無関係である。この関数はローカルの vault、同期設定、世代バックアップだけを
 // 再暗号化する。
-func (s *Service) ChangeMasterPassword(current, next string) error {
+//
+// パスワードなしの Vault が施錠中なら、先に解錠してから変更する。パスワードのある
+// Vault が施錠中なら ErrLocked で断る。
+//
+// ctx は錠を待つあいだの取り消しだけを見る。ほかの Vault の変更が終わるのを待って
+// いるうちに呼び手が諦めていたら、再封印を始めない。始めた再封印は途中で止めない。
+func (s *Service) ChangeMasterPassword(ctx context.Context, current, next string) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.unlockPasswordlessHeld(); err != nil {
+		return err
+	}
+	// 施錠中に current を確かめると、ロックを越えてパスワードを試せてしまう。
+	if !s.Unlocked() {
+		return ErrLocked
+	}
 	if ok, err := s.Verify(current); err != nil {
 		return err
 	} else if !ok {

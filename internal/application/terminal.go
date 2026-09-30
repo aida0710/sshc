@@ -226,8 +226,13 @@ func (s *Service) EngineSettings() EngineSettings {
 	return *stored.Engine
 }
 
-// SetEngineSettings は、節をまるごと置き換える。
+// SetEngineSettings は、節をまるごと置き換える。範囲の外は
+// ErrMetadataEnginePort か ErrMetadataVaultAutoLock で、何も書かずに断る。
 func (s *Service) SetEngineSettings(settings EngineSettings) (SaveResult, error) {
+	// metadata.json の保存でも同じ検査を通るが、ディレクトリを作る前に断る。
+	if err := validateEngineSettings(settings); err != nil {
+		return SaveResult{}, err
+	}
 	stored, precondition, err := s.metadata.Load()
 	if err != nil {
 		return SaveResult{}, err
@@ -262,4 +267,13 @@ func (s *Service) TerminalReconnects() int {
 		return terminal.MaxReconnects
 	}
 	return terminal.NormaliseReconnects(*settings.Reconnect)
+}
+
+// TerminalLimits は、埋め込みターミナルが開くたびに読む上限を返す。
+func (s *Service) TerminalLimits() terminal.Limits {
+	metadata, _, err := s.metadata.Load()
+	if err != nil {
+		return terminal.DefaultLimits()
+	}
+	return metadata.TerminalLimits()
 }

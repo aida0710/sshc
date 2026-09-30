@@ -41,7 +41,7 @@ func workspaceProblem(c *echo.Context, err error) error {
 	case errors.Is(err, workspace.ErrUnsupportedSchema):
 		return problem(c, http.StatusConflict, "workspace_newer_schema")
 	default:
-		return problem(c, http.StatusInternalServerError, "workspace_failed")
+		return unexpectedProblem(c, "workspace_failed", err)
 	}
 }
 

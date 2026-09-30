@@ -165,7 +165,7 @@ func terminalCommandProblem(c *echo.Context, err error) error {
 		errors.Is(err, terminal.ErrExactInputUnavailable):
 		return problem(c, http.StatusConflict, "terminal_command_target_unavailable")
 	default:
-		return problem(c, http.StatusInternalServerError, "terminal_command_failed")
+		return unexpectedProblem(c, "terminal_command_failed", err)
 	}
 }
 
@@ -187,10 +187,11 @@ func (h TerminalHandlers) PreviewCommand(c *echo.Context) error {
 	}
 	var issued api.IssueActionResponse
 	if request.IssueAction == nil || *request.IssueAction {
-		issued, err = h.Actions.issueEvidence(c, session.ActionTerminalCommand, terminalCommandActionTarget, plan.actionEvidence)
-		if err != nil {
-			return err
+		token, allowed, response := h.Actions.issueEvidence(c, session.ActionTerminalCommand, terminalCommandActionTarget, plan.actionEvidence)
+		if !allowed {
+			return response
 		}
+		issued = token
 	}
 	targets := make([]terminalCommandPreviewTarget, 0, len(plan.targets))
 	for _, target := range plan.targets {

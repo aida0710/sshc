@@ -2,6 +2,7 @@ package secret_test
 
 import (
 	"bytes"
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -29,7 +30,7 @@ func TestLargeBackgroundBackupSurvivesMasterPasswordChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	const nextPassphrase = "new background backup master password"
-	if err := service.ChangeMasterPassword(passphrase, nextPassphrase); err != nil {
+	if err := service.ChangeMasterPassword(context.Background(), passphrase, nextPassphrase); err != nil {
 		t.Fatalf("rekey large backup: %v", err)
 	}
 	service.Lock()

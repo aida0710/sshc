@@ -47,15 +47,23 @@ func (p *stuckProcess) ForceClose() error {
 func testDependencies(t *testing.T) Dependencies {
 	t.Helper()
 	return Dependencies{
-		Home:            t.TempDir(),
-		Random:          bytes.NewReader(bytes.Repeat([]byte{0x31}, 512)),
-		Listen:          net.Listen,
-		UI:              fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
-		Logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Owner:           handoff.OwnerEngine,
-		PID:             4242,
-		ShutdownTimeout: 40 * time.Millisecond,
+		Home:              t.TempDir(),
+		Random:            bytes.NewReader(bytes.Repeat([]byte{0x31}, 512)),
+		Listen:            net.Listen,
+		UI:                fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Owner:             handoff.OwnerEngine,
+		PID:               4242,
+		ShutdownTimeout:   40 * time.Millisecond,
+		DockerEnvironment: environmentWithoutDocker,
 	}
+}
+
+// environmentWithoutDocker は、VPN の docker を探す PATH を空にする。Run は起動時に
+// 前の engine が残した VPN のコンテナを片付けようとして docker を呼ぶ。テストを動かす
+// マシンの docker に問い合わせず、結果と所要時間をそのマシンの Docker に左右させない。
+func environmentWithoutDocker(context.Context) ([]string, error) {
+	return []string{"PATH="}, nil
 }
 
 func TestUnwindForcesABlockedTerminalAtTheDeadline(t *testing.T) {
@@ -107,7 +115,7 @@ func TestUnwindContinuesAfterAFailedHandoffRemoval(t *testing.T) {
 	served := make(chan error, 1)
 	go func() { served <- built.server.Serve() }()
 
-	if err := handoff.Remove(HandoffDir(dependencies.Home), built.document.Secret); err != nil {
+	if err := handoff.Remove(stateDirOf(t, dependencies.Home), built.document.Secret); err != nil {
 		t.Fatal(err)
 	}
 

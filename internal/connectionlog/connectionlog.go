@@ -32,6 +32,15 @@ const (
 	Full Level = 3
 )
 
+// Mark は、接続ログの行頭に付ける深さの印である。設定に関係なく出す行（Notice）は
+// [sshc]、それ以外は [debugN] とする。接続ログと VPN の記録が同じ印を使うようにここに置く。
+func Mark(level Level) string {
+	if level == Notice {
+		return "[sshc]"
+	}
+	return fmt.Sprintf("[debug%d]", int(level))
+}
+
 // Writer は、接続ログの書き先である。
 type Writer interface {
 	// Enabled は、その深さの行を書くかを返す。重い処理（ログの取り寄せなど）を

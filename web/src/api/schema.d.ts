@@ -3894,9 +3894,8 @@ export interface components {
         StartupSnippet: {
             alias: string;
             snippetId: string;
-            inputs?: {
-                [key: string]: string;
-            };
+            /** @description The host's destination changed after the assignment, so the snippet is not sent until it is assigned again. */
+            stale: boolean;
         };
         StartupSnippetRequest: {
             snippetId: string;

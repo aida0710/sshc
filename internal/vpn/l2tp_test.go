@@ -128,7 +128,7 @@ func TestShownLogsHideEveryL2TPSecret(t *testing.T) {
 		"charon: PSK " + strings.ToUpper(hex.EncodeToString([]byte(secrets.L2TP.PreSharedKey))),
 	}, "\n")
 
-	shown := redact(logs, secrets)
+	shown := redactLogs(logs, secrets)
 
 	for _, forbidden := range []string{
 		secrets.L2TP.Password,
@@ -138,6 +138,18 @@ func TestShownLogsHideEveryL2TPSecret(t *testing.T) {
 		if strings.Contains(shown, forbidden) {
 			t.Fatalf("ログに %q が残った: %s", forbidden, shown)
 		}
+	}
+}
+
+// パスワードが事前共有鍵の頭と同じでも、事前共有鍵の残りをログに出さない。
+func TestShownLogsHideAPreSharedKeyThatStartsWithThePassword(t *testing.T) {
+	secrets := Secrets{L2TP: &L2TPSecrets{Password: "hunter2", PreSharedKey: "hunter2-psk-value"}}
+	logs := "charon: psk hunter2-psk-value\ncharon: hex " + hex.EncodeToString([]byte("hunter2-psk-value"))
+
+	shown := redactLogs(logs, secrets)
+
+	if shown != "charon: psk [REDACTED]\ncharon: hex [REDACTED]" {
+		t.Fatalf("ログ: %q", shown)
 	}
 }
 

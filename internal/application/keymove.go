@@ -88,26 +88,19 @@ type keyRelocation struct {
 	to   string
 }
 
+// RelocateKey は、鍵ファイルを改名・移動し、それを指す IdentityFile を書き換える。
+// 鍵に割り当てたパスフレーズも、同じトランザクションで新しいパスへ移す。
 func (s *Service) RelocateKey(inventory *keys.Inventory, request KeyRelocateRequest) (KeyRelocateResult, error) {
-	s.saveMutex.Lock()
-	defer s.saveMutex.Unlock()
-
-	prepared, result, err := s.planKeyRelocation(inventory, request)
-	if err != nil {
-		return result, err
-	}
-	for _, directory := range prepared.directories {
-		if err := s.workspace.EnsureDirectory(directory); err != nil {
-			return KeyRelocateResult{}, err
-		}
-	}
-
-	committed, err := s.commitPlannedRequest(prepared, storage.Request{
-		Operation: prepared.operation,
-		Changes:   prepared.changes,
-		Moves:     prepared.moves,
+	var result KeyRelocateResult
+	_, committed, err := s.commitRelocatingKeyPassphrases(func() (planned, error) {
+		prepared, planResult, err := s.planKeyRelocation(inventory, request)
+		result = planResult
+		return prepared, err
 	})
 	if err != nil {
+		if errors.Is(err, ErrKeyRelocateBlocked) {
+			return result, err
+		}
 		return KeyRelocateResult{}, err
 	}
 	result.TransactionID = committed.ID
@@ -204,6 +197,7 @@ func (s *Service) planKeyRelocation(inventory *keys.Inventory, request KeyReloca
 		})
 		result.Files = append(result.Files, RelocatedKeyFile{From: relocation.from, To: relocation.to})
 	}
+	prepared.keyRelocations = result.Files
 	if directory != "." {
 		absolute, dirErr := AbsolutePath(root, directory)
 		if dirErr != nil {

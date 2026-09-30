@@ -23,14 +23,10 @@ func TestTheWindowsAgentReadsNoEnvironmentToFindItsPipe(t *testing.T) {
 	consulted := make([]string, 0, 4)
 	dialled := make(chan string, 1)
 
-	adapter := keys.NewAgent(func(name string) (string, bool) {
+	agent := keys.NewAgent(func(name string) (string, bool) {
 		consulted = append(consulted, name)
 		return `\\.\pipe\an-attacker-would-love-this`, true
 	})
-	agent, ok := adapter.(keys.Agent)
-	if !ok {
-		t.Fatalf("NewAgent returned %T, want keys.Agent", adapter)
-	}
 	agent.Dial = func(_ context.Context, address string) (net.Conn, error) {
 		dialled <- address
 		return nil, errAgentTestRefused

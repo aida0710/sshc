@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,6 +23,9 @@ type readyProcess struct {
 	ready    chan struct{}
 	readyErr error
 	prompt   atomic.Bool
+
+	announcedMutex sync.Mutex
+	announced      []string
 }
 
 func newReadyProcess() *readyProcess {
@@ -31,6 +35,19 @@ func newReadyProcess() *readyProcess {
 func (p *readyProcess) Ready() <-chan struct{} { return p.ready }
 func (p *readyProcess) ReadyErr() error        { return p.readyErr }
 func (p *readyProcess) AwaitingPrompt() bool   { return p.prompt.Load() }
+
+// Announce は、SSH のセッションが接続ログの行をターミナルへ書くのと同じ口である。
+func (p *readyProcess) Announce(message string) {
+	p.announcedMutex.Lock()
+	defer p.announcedMutex.Unlock()
+	p.announced = append(p.announced, message)
+}
+
+func (p *readyProcess) announcements() []string {
+	p.announcedMutex.Lock()
+	defer p.announcedMutex.Unlock()
+	return slices.Clone(p.announced)
+}
 
 func (p *readyProcess) finishOpen(err error) {
 	p.readyErr = err
@@ -509,7 +526,7 @@ func TestStartupCommandsAreSentOnceEveryConnectionBecomesReady(t *testing.T) {
 	registry, _ := newFastRegistry()
 	session, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
-		Startup: func() []string { return []string{"cd /srv/app"} },
+		Startup: func() terminal.Startup { return terminal.Startup{Commands: []string{"cd /srv/app"}} },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -531,6 +548,47 @@ func TestStartupCommandsAreSentOnceEveryConnectionBecomesReady(t *testing.T) {
 	testwait.Until(t, func() bool { return second.keystrokes() == "cd /srv/app\r" })
 	if got := first.keystrokes(); got != "cd /srv/app\r" {
 		t.Fatalf("the first shell received the startup again: %q", got)
+	}
+	second.exit(terminal.ExitInfo{Code: 0})
+	testwait.Until(t, func() bool { return !session.Live() })
+}
+
+// 起動スニペットを送らなかったことの知らせも、コマンドと同じく Ready の後に世代ごとに
+// 書く。認証の問いに紛れず、自動再接続した新しいシェルでも利用者に届く。
+func TestAStartupNoticeIsAnnouncedOnceEveryConnectionBecomesReady(t *testing.T) {
+	const notice = "起動スニペットを送りませんでした。"
+	spy := &readyOpenSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+		Startup: func() terminal.Startup { return terminal.Startup{Notice: notice} },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := spy.at(0)
+	if got := first.announcements(); len(got) != 0 {
+		t.Fatalf("the notice was written before Ready: %q", got)
+	}
+	first.finishOpen(nil)
+	testwait.Until(t, func() bool { return len(first.announcements()) == 1 })
+	first.exit(transportLost)
+
+	testwait.Until(t, func() bool { return spy.count() >= 2 })
+	second := spy.at(1)
+	if got := second.announcements(); len(got) != 0 {
+		t.Fatalf("the notice reached the reconnected shell before Ready: %q", got)
+	}
+	second.finishOpen(nil)
+	testwait.Until(t, func() bool { return len(second.announcements()) == 1 })
+	if got := second.announcements(); got[0] != notice {
+		t.Fatalf("announcements = %q", got)
+	}
+	if got := first.announcements(); len(got) != 1 {
+		t.Fatalf("the first shell was told again: %q", got)
+	}
+	if got := second.keystrokes(); got != "" {
+		t.Fatalf("a notice without commands typed %q", got)
 	}
 	second.exit(terminal.ExitInfo{Code: 0})
 	testwait.Until(t, func() bool { return !session.Live() })

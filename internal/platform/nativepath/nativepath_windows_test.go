@@ -112,3 +112,19 @@ func TestWindowsIdentitySeparatesDistinctFiles(t *testing.T) {
 		t.Fatal("distinct names share an identity")
 	}
 }
+
+// Windows の filepath.Rel は、要素に `C:` を含むパスに対して `C:\x` のような絶対
+// パスを返す。それを root の下と読むと、層によって内と外の答えが分かれる。
+func TestWindowsAComponentThatLooksLikeADriveIsOutsideTheRoot(t *testing.T) {
+	root := `C:\Users\A\.ssh`
+	candidate := root + `\C:\x`
+	if relative, inside := Relative(root, candidate); inside {
+		t.Errorf("Relative(%q, %q) = (%q, true), want outside", root, candidate, relative)
+	}
+	if relative, inside := RelativeBelow(root, candidate); inside {
+		t.Errorf("RelativeBelow(%q, %q) = (%q, true), want outside", root, candidate, relative)
+	}
+	if relative, inside := RelativeSlash(root, candidate); inside {
+		t.Errorf("RelativeSlash(%q, %q) = (%q, true), want outside", root, candidate, relative)
+	}
+}

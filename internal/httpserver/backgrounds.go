@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -22,9 +21,20 @@ import (
 // 画像本体は暗号化スナップショットに含める（remotesync.Collect）。Android は
 // サンドボックス外を参照できないため、同期で画像を受け取る。
 
+const backgroundsRoute = "/api/v1/terminal/backgrounds"
+
+// MaxBackgroundUploadBodyCeiling は、背景画像を追加する本文の入口の上限である。
+// 1 枚の絶対上限と同じにする。/api/ 共通の上限のままだと、利用者が容量を
+// 増やしても 2 MiB を超える画像を置けない。設定された容量は AddBackground が押さえる。
+const MaxBackgroundUploadBodyCeiling = int64(application.MaxBackgroundBytes)
+
+// maxBackgroundRenameBody は、背景の改名のボディの上限である。名前ひとつ
+// （application.MaxBackgroundNameLength）を JSON の文字列にしても十分に収まる。
+const maxBackgroundRenameBody = 1 << 10
+
 func registerBackgroundRoutes(engine *echo.Echo, handlers ConfigHandlers) {
-	engine.GET("/api/v1/terminal/backgrounds", handlers.Backgrounds)
-	engine.POST("/api/v1/terminal/backgrounds", handlers.AddBackground)
+	engine.GET(backgroundsRoute, handlers.Backgrounds)
+	engine.POST(backgroundsRoute, handlers.AddBackground)
 	engine.PUT("/api/v1/terminal/backgrounds/capacity", handlers.SetBackgroundCapacity)
 	engine.GET("/api/v1/terminal/backgrounds/:name", handlers.Background)
 	engine.PATCH("/api/v1/terminal/backgrounds/:name", handlers.RenameBackground)
@@ -49,7 +59,7 @@ func terminalBackground(background application.Background) api.TerminalBackgroun
 func (h ConfigHandlers) Backgrounds(c *echo.Context) error {
 	backgrounds, err := h.Service.Backgrounds()
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "backgrounds_unreadable")
+		return unexpectedProblem(c, "backgrounds_unreadable", err)
 	}
 	used := 0
 	for _, background := range backgrounds {
@@ -75,10 +85,17 @@ func (h ConfigHandlers) AddBackground(c *echo.Context) error {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	// 1 バイト余分に読む。ちょうど上限で切ると、超えていることと
-	// ちょうど収まっていることが見分けられない。
+	// ちょうど収まっていることが見分けられない。容量までメモリに載せるのは、
+	// 容量を大きくした利用者がその分だけ負う費用として許す。
 	limit := int64(h.Service.BackgroundCapacityMiB()) << 20
 	contents, err := io.ReadAll(io.LimitReader(body, limit+1))
-	if err != nil {
+	var overCeiling *http.MaxBytesError
+	switch {
+	case errors.As(err, &overCeiling):
+		// 長さを宣言しない本文が 1 枚の絶対上限を超えた。宣言した本文なら
+		// middleware が先に断っている。
+		return problem(c, http.StatusRequestEntityTooLarge, "background_too_large")
+	case err != nil:
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	background, err := h.Service.AddBackground(c.QueryParam("name"), contents)
@@ -90,7 +107,7 @@ func (h ConfigHandlers) AddBackground(c *echo.Context) error {
 	case errors.Is(err, application.ErrNotAnImage):
 		return problem(c, http.StatusBadRequest, "not_an_image")
 	case err != nil:
-		return problem(c, http.StatusInternalServerError, "background_not_stored")
+		return unexpectedProblem(c, "background_not_stored", err)
 	}
 	return c.JSON(http.StatusCreated, terminalBackground(background))
 }
@@ -122,19 +139,15 @@ func (h ConfigHandlers) Background(c *echo.Context) error {
 		return problem(c, http.StatusNotFound, "unknown_background")
 	}
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "backgrounds_unreadable")
+		return unexpectedProblem(c, "backgrounds_unreadable", err)
 	}
 	return c.Blob(http.StatusOK, mediaType, contents)
 }
 
 func (h ConfigHandlers) RenameBackground(c *echo.Context) error {
 	var request api.RenameTerminalBackgroundRequest
-	decoder := json.NewDecoder(io.LimitReader(c.Request().Body, 1025))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil || strings.TrimSpace(request.Name) == "" || len(request.Name) > 128 {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+	if err := decodeJSONWithin(c, maxBackgroundRenameBody, &request); err != nil ||
+		strings.TrimSpace(request.Name) == "" || len(request.Name) > application.MaxBackgroundNameLength {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	background, err := h.Service.RenameBackground(c.Param("name"), request.Name)
@@ -146,7 +159,7 @@ func (h ConfigHandlers) RenameBackground(c *echo.Context) error {
 	case errors.Is(err, application.ErrNotAnImage):
 		return problem(c, http.StatusBadRequest, "not_an_image")
 	case err != nil:
-		return problem(c, http.StatusInternalServerError, "background_not_renamed")
+		return unexpectedProblem(c, "background_not_renamed", err)
 	}
 	return c.JSON(http.StatusOK, terminalBackground(background))
 }
@@ -157,7 +170,7 @@ func (h ConfigHandlers) DeleteBackground(c *echo.Context) error {
 		return problem(c, http.StatusNotFound, "unknown_background")
 	}
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "background_not_removed")
+		return unexpectedProblem(c, "background_not_removed", err)
 	}
 	return c.NoContent(http.StatusNoContent)
 }

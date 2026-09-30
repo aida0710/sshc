@@ -2,6 +2,7 @@ import { useTranslate } from "../i18n/context";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { CopyButton } from "../ui/CopyButton";
 import type { RequestFailureDiagnostic } from "../api/client";
+import { workspaceRefusalMessages } from "../api/workspaceRefusals";
 
 export function diagnosticReport(version: string, diagnostic: RequestFailureDiagnostic): string {
   const lines = [
@@ -38,7 +39,7 @@ export function ErrorDiagnosticNotice({
               {t("diagnostic.requestFailed")}
             </h2>
             <p className="mt-1 text-xs leading-5 text-ink-muted">
-              {t("diagnostic.requestFailedHint", { code: diagnostic.code })}
+              {t(workspaceRefusalMessages[diagnostic.code] ?? "diagnostic.requestFailedHint", { code: diagnostic.code })}
             </p>
           </div>
           <button

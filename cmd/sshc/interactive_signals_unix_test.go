@@ -20,7 +20,6 @@ import (
 	"github.com/creack/pty"
 	"golang.org/x/term"
 
-	"sshc/internal/app"
 	"sshc/internal/handoff"
 )
 
@@ -123,7 +122,7 @@ func TestVaultPromptRestoresEchoOnSIGTERM(t *testing.T) {
 	}))
 	defer server.Close()
 	home := t.TempDir()
-	stateDir := app.HandoffDir(home)
+	stateDir := mustStateDir(t, home)
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +179,8 @@ func TestInteractiveSignalHelperProcess(t *testing.T) {
 	if command == "vault-create" {
 		called = invocation{Kind: invocationVault, Args: []string{"create"}}
 	}
-	code := dispatchInvocation(called, os.Getenv(interactiveSignalHomeEnvironment), &http.Client{Timeout: connectTimeout})
+	home := os.Getenv(interactiveSignalHomeEnvironment)
+	code := dispatchInvocation(called, userPaths{home: home, stateDir: mustStateDir(t, home)}, &http.Client{Timeout: connectTimeout})
 	fmt.Printf("%s%d\n", interactiveSignalHelperReturned, code)
 	// 選択画面の読み取りの goroutine は os.Stdin の Read に残っている。ここで
 	// 行を読むとそれと取り合うので、親がエコーを確かめて止めるまで待つだけにする。

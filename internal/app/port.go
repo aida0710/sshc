@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+
+	"sshc/internal/handoff"
 )
 
 // listen port を決定する。
@@ -28,7 +30,7 @@ var ErrNoFreePort = errors.New("no free port was found for the engine")
 // listenLoopback は指定ポートで loopback listener を開く。
 func listenLoopback(listen ListenFunc, wanted int, random func(int) (int, error)) (net.Listener, error) {
 	if wanted != 0 {
-		listener, err := listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(wanted)))
+		listener, err := listen("tcp4", net.JoinHostPort(handoff.EngineHost, strconv.Itoa(wanted)))
 		if err != nil {
 			return nil, fmt.Errorf("listen on port %d: %w", wanted, err)
 		}
@@ -39,7 +41,7 @@ func listenLoopback(listen ListenFunc, wanted int, random func(int) (int, error)
 		if err != nil {
 			return nil, err
 		}
-		listener, err := listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(LowestPort+port)))
+		listener, err := listen("tcp4", net.JoinHostPort(handoff.EngineHost, strconv.Itoa(LowestPort+port)))
 		if err == nil {
 			return listener, nil
 		}

@@ -10,14 +10,14 @@ import (
 	"runtime"
 	"testing"
 
-	"sshc/internal/selfupdate"
+	"sshc/internal/releasecheck"
 )
 
-func updateCheckerServer(t *testing.T, handler http.HandlerFunc) *selfupdate.Checker {
+func updateCheckerServer(t *testing.T, handler http.HandlerFunc) *releasecheck.Checker {
 	t.Helper()
 	server := engineTestServer(handler)
 	t.Cleanup(server.Close)
-	return &selfupdate.Checker{API: server.URL, HTTP: server.Client()}
+	return &releasecheck.Checker{API: server.URL, HTTP: server.Client()}
 }
 
 func TestEngineStartupReportsOnlyANewerRelease(t *testing.T) {

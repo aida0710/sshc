@@ -91,7 +91,8 @@ type HostEntry struct {
 	Port      string       `json:"port,omitempty"`
 }
 
-// HostForm は、detail editor のために射影された 1 個の Host
+// HostForm は、detail editor に見せる 1 個の Host ブロックである。Raw はそのブロックの
+// 見出しから本文までの元のテキストで、変えずに書き戻せば同じバイト列になる。
 type HostForm struct {
 	Entry        HostEntry   `json:"entry"`
 	Fields       []FormField `json:"fields"`

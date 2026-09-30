@@ -110,8 +110,11 @@ export function LockScreen({
         case "vault_storage_read_only":
           setError(t("lock.storageReadOnly"));
           break;
-        case "vault_storage_busy":
+        case "workspace_busy":
           setError(t("lock.storageBusy"));
+          break;
+        case "workspace_pending_transaction":
+          setError(t("lock.pendingTransaction"));
           break;
         case "vault_storage_io_failed":
           setError(t("lock.storageIO"));

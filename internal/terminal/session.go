@@ -45,7 +45,7 @@ type Session struct {
 	reopen         func(ctx context.Context, size Size) (Process, error)
 	reconnectError func(error) (retry bool, problem string)
 	stopNotice     func(problem string) string
-	startup        func() []string
+	startup        func() Startup
 	size           Size
 	// reconnectAttempts は、今の切断から試した自動再接続の回数である。
 	// ReconnectSettled のあいだ安定して繋がったら 0 に戻す。
@@ -434,15 +434,20 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 	}()
 }
 
-// sendStartup は、Spec.Startup のコマンドを、使える状態になった Process へ送る。
+// sendStartup は、Spec.Startup の知らせとコマンドを、使える状態になった Process へ送る。
 //
-// 世代ごとに呼ぶので、再接続した新しいシェルにも同じコマンドが届く。SSH の
-// Process では Ready を待ってから送るので、認証の問いへ答えとして流れない。
+// 世代ごとに呼ぶので、再接続した新しいシェルにも同じものが届く。SSH の Process では
+// Ready を待ってから送るので、コマンドは認証の問いへ答えとして流れず、知らせも
+// 認証の問いに紛れない。
 func (s *Session) sendStartup(process Process) {
 	if s.startup == nil {
 		return
 	}
-	for _, command := range s.startup() {
+	startup := s.startup()
+	if announcer, ok := process.(Announcer); ok && startup.Notice != "" {
+		announcer.Announce(startup.Notice)
+	}
+	for _, command := range startup.Commands {
 		_, _ = process.Write([]byte(command + "\r"))
 	}
 }

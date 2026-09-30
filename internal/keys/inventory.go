@@ -149,8 +149,15 @@ func (inventory *Inventory) Group(item *Item) []Item {
 // ない。
 func ItemID(relativePath string) string {
 	sum := sha256.Sum256([]byte(relativePath))
-	return hex.EncodeToString(sum[:16])
+	return hex.EncodeToString(sum[:itemIDBytes])
 }
+
+// itemIDBytes は、ItemID に使う SHA-256 の先頭のバイト数。
+const itemIDBytes = 16
+
+// ItemIDLength は、ItemID の文字数（16 進で 1 バイトが 2 文字）。HTTP の入口は、
+// これと長さの違う鍵の識別子を断る。
+const ItemIDLength = 2 * itemIDBytes
 
 // Scanner は、ストレージのファイルシステムのインターフェースを通してワークスペースを走査する。
 type Scanner struct {
@@ -276,6 +283,14 @@ func (scanner *Scanner) classifyFile(inventory *Inventory, absolute, relative st
 		item.PermissionRisk = true
 	}
 	return item
+}
+
+// ClassifyContents は、ファイルの中身だけから、インベントリと同じ規則で種類を決める。
+// 空のファイルや何とも判定できない中身は KindOther である。
+func ClassifyContents(contents []byte) Kind {
+	item := Item{Kind: KindOther}
+	classify(&item, contents)
+	return item.Kind
 }
 
 // classify は、ファイルが何であるかをそのバイト列から決める。順序が重要である。

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"sshc/internal/randomid"
+	"sshc/internal/redact"
 	"sshc/internal/validate"
 )
 
@@ -72,7 +73,7 @@ func (s *Service) Create(draft Draft) (Snippet, error) {
 	var snippet Snippet
 	err := s.mutate(func(library *Library) error {
 		if len(library.Snippets) >= MaxSnippets {
-			return ErrInvalidDocument
+			return ErrTooManySnippets
 		}
 		id, err := s.newUniqueSnippetID(*library)
 		if err != nil {
@@ -150,21 +151,42 @@ func (s *Service) Delete(id string) error {
 	})
 }
 
-func (s *Service) Startup() ([]Startup, error) {
+// Startup は、割り当ての一覧と、それぞれを接続時に送れるかを返す。
+func (s *Service) Startup() ([]StartupAssignment, error) {
 	s.mutation.Lock()
-	defer s.mutation.Unlock()
 	library, err := s.load()
+	s.mutation.Unlock()
 	if err != nil {
 		return nil, err
 	}
-	startup := make([]Startup, len(library.Startup))
-	for index, binding := range library.Startup {
-		// Inputs may now contain secret values. The HTTP library response needs
-		// only the assignment identity; execution reads the encrypted repository
-		// directly through PreviewStartup.
-		startup[index] = Startup{Alias: binding.Alias, SnippetID: binding.SnippetID}
+	assignments := make([]StartupAssignment, len(library.Startup))
+	for index, startup := range library.Startup {
+		assignments[index] = StartupAssignment{
+			Alias:     startup.Alias,
+			SnippetID: startup.SnippetID,
+			Stale:     s.verifyStartupDestination(startup) != nil,
+		}
 	}
-	return startup, nil
+	return assignments, nil
+}
+
+// verifyStartupDestination は、割り当てた時の接続先と今の接続先が同じかを確かめる。
+// 解決できない alias と、binding を持たない割り当ては、同じと言えないので送らない。
+func (s *Service) verifyStartupDestination(startup Startup) error {
+	if startup.Binding == "" {
+		return ErrStartupDestinationChanged
+	}
+	if s.resolve == nil {
+		return ErrNoResolver
+	}
+	resolution, err := s.resolve(startup.Alias)
+	if err != nil {
+		return err
+	}
+	if resolution.Binding != startup.Binding {
+		return ErrStartupDestinationChanged
+	}
+	return nil
 }
 
 // SetStartup assigns a snippet to an alias. An empty snippet ID removes the
@@ -174,13 +196,16 @@ func (s *Service) SetStartup(alias, snippetID string, inputs map[string]string) 
 	if err := validate.Alias(alias); err != nil {
 		return ErrInvalidTarget
 	}
+	binding := ""
 	if snippetID != "" {
 		if s.resolve == nil {
 			return ErrNoResolver
 		}
-		if _, err := s.resolve(alias); err != nil {
+		resolution, err := s.resolve(alias)
+		if err != nil {
 			return err
 		}
+		binding = resolution.Binding
 	}
 	s.mutation.Lock()
 	defer s.mutation.Unlock()
@@ -202,8 +227,11 @@ func (s *Service) SetStartup(alias, snippetID string, inputs map[string]string) 
 		if err := validateStartup(library.Snippets[index], inputs); err != nil {
 			return err
 		}
+		if len(library.Startup) >= MaxStartupBindings {
+			return ErrTooManyStartupBindings
+		}
 		library.Startup = append(library.Startup, Startup{
-			Alias: alias, SnippetID: snippetID, Inputs: cloneInputs(inputs),
+			Alias: alias, SnippetID: snippetID, Inputs: cloneInputs(inputs), Binding: binding,
 		})
 		return nil
 	})
@@ -266,27 +294,37 @@ func terminalEvidence(source planSource, command string) (string, error) {
 // PrepareStartupCommand returns the executable command for the terminal
 // injector. Public startup previews stay redacted; this internal path is the
 // only one that may hand the expanded value to the PTY writer.
+//
+// 接続のたびに alias を解決し直し、割り当てた時の接続先と違えば送らない。入力値には
+// シークレットが入るので、別の接続先のシェルへ打ち込まないためである。
 func (s *Service) PrepareStartupCommand(alias string) (PreparedCommand, error) {
-	source, expanded, _, err := s.startupSource(alias)
+	startup, library, err := s.startupFor(alias)
+	if err != nil {
+		return PreparedCommand{}, err
+	}
+	if err := s.verifyStartupDestination(startup); err != nil {
+		return PreparedCommand{}, err
+	}
+	source, expanded, _, err := planSourceFromLibrary(library, startup.SnippetID, startup.Inputs)
 	if err != nil {
 		return PreparedCommand{}, err
 	}
 	return prepareTerminalCommand(source, expanded)
 }
 
-func (s *Service) startupSource(alias string) (planSource, expansion, []string, error) {
+func (s *Service) startupFor(alias string) (Startup, Library, error) {
 	s.mutation.Lock()
 	defer s.mutation.Unlock()
 	library, err := s.load()
 	if err != nil {
-		return planSource{}, expansion{}, nil, err
+		return Startup{}, Library{}, err
 	}
 	for _, startup := range library.Startup {
 		if startup.Alias == alias {
-			return planSourceFromLibrary(library, startup.SnippetID, startup.Inputs)
+			return startup, library, nil
 		}
 	}
-	return planSource{}, expansion{}, nil, ErrNoStartup
+	return Startup{}, Library{}, ErrNoStartup
 }
 
 type plannedTarget struct {
@@ -432,7 +470,7 @@ func planEvidence(source planSource, planned []plannedTarget, actual bool) (stri
 		Targets   []evidenceTarget `json:"targets"`
 	}{Kind: source.kind, SnippetID: source.snippetID, UpdatedAt: source.updatedAt, Command: source.command}
 	for _, target := range planned {
-		command := redact(target.command, target.secrets)
+		command := redact.Values(target.command, target.secrets, secretRedaction)
 		if actual {
 			command = target.command
 		}
@@ -511,13 +549,4 @@ func fixedProblem(err error) string {
 	default:
 		return "run_failed"
 	}
-}
-
-func redact(value string, secrets []string) string {
-	for _, secret := range secrets {
-		if secret != "" {
-			value = strings.ReplaceAll(value, secret, secretRedaction)
-		}
-	}
-	return value
 }

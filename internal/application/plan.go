@@ -18,6 +18,10 @@ func (s *Service) planFileEdit(graph *config.Graph, request EditRequest) (planne
 	if _, err := s.workspace.ResolveForWrite(absolute); err != nil {
 		return planned{}, err
 	}
+	disk, exists, err := s.readConfigurationFile(absolute)
+	if err != nil {
+		return planned{}, err
+	}
 	base := []byte(request.Base)
 	file := config.Parse(base)
 
@@ -44,10 +48,6 @@ func (s *Service) planFileEdit(graph *config.Graph, request EditRequest) (planne
 	}
 	updated := file.Render()
 
-	disk, exists, err := s.readFile(absolute)
-	if err != nil {
-		return planned{}, err
-	}
 	if !bytes.Equal(base, disk) {
 		return planned{}, &ConflictError{Report: BuildConflictReport(request.Path, base, disk, updated)}
 	}

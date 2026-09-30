@@ -15,7 +15,7 @@ import (
 	"unicode"
 
 	"sshc/internal/app"
-	"sshc/internal/enginelock"
+	"sshc/internal/filelock"
 )
 
 // systemd（Linux）と launchd（macOS）の service 管理が共有する骨格。ツールの探索、
@@ -126,8 +126,8 @@ func restartServiceIfActive(ctx context.Context, service restartableService, exe
 func serviceOperationLock(home string) func() (func() error, error) {
 	path := filepath.Join(home, ".config", "sshc", "service.mutation.lock")
 	return func() (func() error, error) {
-		release, err := enginelock.Acquire(path)
-		if errors.Is(err, enginelock.ErrRunning) {
+		release, err := filelock.TryAcquire(path)
+		if errors.Is(err, filelock.ErrHeld) {
 			return nil, errors.New("another sshc service operation is in progress")
 		}
 		return release, err
@@ -209,10 +209,14 @@ func waitForEngineReady(ctx context.Context, home string, readiness engineReadin
 	ticker := time.NewTicker(serviceReadyPollInterval)
 	defer ticker.Stop()
 	client := &http.Client{Timeout: serviceReadyProbeTimeout}
+	stateDir, err := app.StateDir(home)
+	if err != nil {
+		return err
+	}
 
 	for {
 		if pid := readiness.mainPID(readyCtx); pid > 0 {
-			document, readErr := verifiedHandoff(readyCtx, app.HandoffDir(home), client)
+			document, readErr := verifiedHandoff(readyCtx, stateDir, client)
 			if readErr == nil && document.PID == pid {
 				if _, statusErr := requestStatus(readyCtx, document, client); statusErr == nil {
 					return nil

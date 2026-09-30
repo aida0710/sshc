@@ -22,10 +22,7 @@ func (s *Service) commitPlannedRequestWith(
 	request storage.Request,
 	commit func(storage.Request) (storage.Result, error),
 ) (storage.Result, error) {
-	s.pendingBase = prepared.base
-	s.pendingBaseline = prepared.baseline
-	defer func() { s.pendingBase, s.pendingBaseline = nil, nil }()
-
+	request.Validation = configurationEdit{base: prepared.base, baseline: prepared.baseline}
 	result, err := commit(request)
 	var conflict *storage.ConflictError
 	if errors.As(err, &conflict) {

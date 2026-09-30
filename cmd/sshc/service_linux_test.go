@@ -13,7 +13,6 @@ import (
 	"strings"
 	"testing"
 
-	"sshc/internal/app"
 	"sshc/internal/handoff"
 	"sshc/internal/storage"
 )
@@ -259,7 +258,7 @@ func TestServiceReadinessRequiresTheSystemdPIDAndStatusAPI(t *testing.T) {
 	}))
 	defer server.Close()
 	home := t.TempDir()
-	writeTestHandoff(t, app.HandoffDir(home), server.URL)
+	writeTestHandoff(t, mustStateDir(t, home), server.URL)
 	runner := &fakeServiceCommandRunner{results: []serviceCommandResult{{ExitCode: 0, Output: []byte("4242\n")}}}
 	if err := waitForServiceReady(context.Background(), home, runner); err != nil {
 		t.Fatal(err)

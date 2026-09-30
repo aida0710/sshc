@@ -266,7 +266,7 @@ type transferJobNaming struct {
 // jobsMutex is taken.
 func normalizeCreateTransferJob(input CreateTransferJob) (transferJobNaming, error) {
 	if !transferIDPattern.MatchString(input.ID) || !transferIDPattern.MatchString(input.BatchID) ||
-		strings.TrimSpace(input.Alias) == "" || len(input.Alias) > 255 || input.TotalBytes < -1 ||
+		strings.TrimSpace(input.Alias) == "" || input.TotalBytes < -1 ||
 		(input.Direction != TransferUpload && input.Direction != TransferDownload && input.Direction != TransferRemote) ||
 		(input.Kind != TransferFile && input.Kind != TransferFolder) || input.LastModified < 0 {
 		return transferJobNaming{}, ErrInvalidTransfer

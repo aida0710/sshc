@@ -32,6 +32,20 @@ describe("ErrorDiagnosticNotice", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
+  it("tells the user to recover the interrupted change in History instead of retrying", () => {
+    render(
+      <LanguageProvider>
+        <ErrorDiagnosticNotice
+          version="0.13.5"
+          diagnostic={{ code: "workspace_pending_transaction", status: 409, method: "POST", path: "/api/v1/config/save" }}
+          onClose={() => {}}
+        />
+      </LanguageProvider>,
+    );
+
+    expect(screen.getByText(/Complete or roll it back in History/)).toBeInTheDocument();
+  });
+
   it("labels a failed network request without exposing an exception", () => {
     expect(diagnosticReport("", {
       code: "network_request_failed",

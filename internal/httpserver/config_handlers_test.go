@@ -46,6 +46,8 @@ func newConfigHarness(t *testing.T) *testHarness {
 	}
 	manager := storage.NewManager(workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x5a}, 4096)))
 	service := application.NewService(workspace, manager)
+	// 本番と同じく Vault を渡す。Vault のファイルはまだ作らない。
+	service.SetVault(secret.NewService(workspace, manager, time.Now))
 
 	sessions, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0xa1}, 96)))
 	if err != nil {
@@ -207,12 +209,40 @@ func TestEngineSettingsRejectInvalidVaultAutoLockChoices(t *testing.T) {
 	}
 }
 
+func TestEngineSettingsRejectAPortOutsideTheUnprivilegedRange(t *testing.T) {
+	harness := newConfigHarness(t)
+	for _, port := range []int{80, 65536} {
+		response := harness.call(t, http.MethodPut, "/api/v1/metadata/engine", map[string]any{
+			"port": port,
+		}, true, true)
+		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "port_out_of_range") {
+			t.Fatalf("port %d: response = %d, body %s", port, response.Code, response.Body.String())
+		}
+	}
+	if settings := harness.service.EngineSettings(); settings != (application.EngineSettings{}) {
+		t.Fatalf("a refused port was written: %#v", settings)
+	}
+}
+
+// metadata.json をまるごと保存する経路でも、engine の設定の範囲外は要求の誤りとして断る。
+func TestSavingMetadataWithAnEnginePortOutOfRangeIsABadRequest(t *testing.T) {
+	harness := newConfigHarness(t)
+	metadata := application.NewMetadata()
+	metadata.Engine = &application.EngineSettings{Port: 80}
+	response := harness.call(t, http.MethodPost, "/api/v1/config/save", application.EditRequest{
+		Kind: application.EditMetadata, Metadata: &metadata,
+	}, true, true)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_request") {
+		t.Fatalf("response = %d, body %s", response.Code, response.Body.String())
+	}
+}
+
 func TestSavingEngineSettingsAppliesTheVaultClockImmediately(t *testing.T) {
 	harness := newConfigHarness(t)
 	secrets := secret.NewService(harness.workspace,
 		storage.NewManager(harness.workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x33}, 4096))),
 		time.Now)
-	handler := ConfigHandlers{Service: harness.service, Secrets: secrets}
+	handler := ConfigHandlers{Service: harness.service, Vault: secrets}
 
 	call := func(body string) *httptest.ResponseRecorder {
 		t.Helper()
@@ -630,7 +660,9 @@ func TestRenamingAHostCarriesItsSavedPasswordToTheNewAlias(t *testing.T) {
 	if err := secrets.SetBound("bastion", "hunter2", testPasswordBinding); err != nil {
 		t.Fatal(err)
 	}
-	handler := ConfigHandlers{Service: harness.service, Secrets: secrets}
+	harness.service.SetVault(secrets)
+	harness.service.SetStartupRenamer(application.NoStartupRenamer{})
+	handler := ConfigHandlers{Service: harness.service}
 
 	body, err := json.Marshal(map[string]any{
 		"kind": "rename", "path": "config", "base": handlerConfig, "alias": "bastion", "newAlias": "edge",

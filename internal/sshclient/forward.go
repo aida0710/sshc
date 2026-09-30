@@ -389,20 +389,22 @@ func closeWrite(conn net.Conn) {
 //
 // 鍵そのものは渡らない。渡るのは鍵を使う権利である。リモートのプロセスが
 // 署名を求めると、その要求はこのチャンネルを通ってこちらの agent へ届く。
-// agent への unix socket は接続が閉じるまで生かし、forwards.close で閉じる。
+// agent への接続は SSH 接続が閉じるまで生かし、forwards.close で閉じる。
 // x/crypto の ForwardToAgent は自分では閉じないので、ここで持たないと漏れる。
-func (f *forwards) forwardAgent(client *ssh.Client, session *ssh.Session, socket string, report io.Writer) {
+func (f *forwards) forwardAgent(client *ssh.Client, session *ssh.Session, connector AgentConnector, report io.Writer) {
 	entry := terminal.Forward{Kind: terminal.ForwardAgent}
-	if socket == "" {
+	if connector == nil || connector.Address() == "" {
 		entry.Problem = "no agent is reachable from this process"
 		_, _ = io.WriteString(report, "sshc: agent forwarding was asked for but no agent is reachable\r\n")
 		f.note(entry)
 		return
 	}
-	conn, err := (&net.Dialer{}).DialContext(context.Background(), "unix", socket)
+	conn, err := connector.Connect(context.Background())
 	if err != nil {
 		entry.Problem = err.Error()
-		_, _ = io.WriteString(report, "sshc: agent forwarding: "+err.Error()+"\r\n")
+		// 理由は agent の実装が書いた文で、改行を含みうる。LF のままではターミナルの
+		// 次の行が行頭へ戻らない。
+		_, _ = io.WriteString(report, "sshc: agent forwarding: "+terminalNewlines(err.Error())+"\r\n")
 		f.note(entry)
 		return
 	}

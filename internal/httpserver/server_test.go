@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -191,6 +192,77 @@ func TestServerServesStaticFilesAndShutsDownAfterCancellation(t *testing.T) {
 	if err == nil {
 		connection.Close()
 		t.Fatal("listener still accepts connections after Serve returns")
+	}
+}
+
+// リクエストを1つ送ったあと黙った接続は、相手が閉じるまで残らない。
+// ReadHeaderTimeoutだけでは、1つ目のリクエストのあとに読み取り期限が外れる。
+func TestServerClosesAKeepAliveConnectionLeftIdleAfterARequest(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, _, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x75}, 96)))
+	if err != nil {
+		listener.Close()
+		t.Fatal(err)
+	}
+	server, err := New(Options{
+		Listener: listener,
+		Sessions: manager,
+		UI:       fstest.MapFS{"asset.txt": &fstest.MapFile{Data: []byte("static asset")}},
+		Version:  "test-version",
+	})
+	if err != nil {
+		listener.Close()
+		t.Fatal(err)
+	}
+	if server.http.IdleTimeout != idleConnectionTimeout {
+		t.Fatalf("IdleTimeout = %v, want %v", server.http.IdleTimeout, idleConnectionTimeout)
+	}
+	// 本番の長さを待つ代わりに縮める。確かめたいのは、期限があれば1要求後の接続も閉じることである。
+	const shortenedIdleTimeout = 200 * time.Millisecond
+	server.http.IdleTimeout = shortenedIdleTimeout
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- server.Serve() }()
+	t.Cleanup(func() {
+		server.BeginStopping()
+		server.BeginShutdown()
+		if err := server.Wait(); err != nil {
+			t.Errorf("Wait = %v", err)
+		}
+		if err := <-serveDone; err != nil {
+			t.Errorf("Serve error = %v", err)
+		}
+	})
+
+	connection, err := net.Dial("tcp4", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	host := listener.Addr().String()
+	if _, err := io.WriteString(connection, "GET /asset.txt HTTP/1.1\r\nHost: "+host+"\r\n\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReader(connection)
+	response, err := http.ReadResponse(reader, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.Copy(io.Discard, response.Body); err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK || response.Close {
+		t.Fatalf("status = %d, close = %t; want a kept-alive 200", response.StatusCode, response.Close)
+	}
+
+	if err := connection.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reader.ReadByte(); !errors.Is(err, io.EOF) {
+		t.Fatalf("read after the idle timeout = %v, want EOF from the server closing the connection", err)
 	}
 }
 

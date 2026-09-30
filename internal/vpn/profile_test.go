@@ -133,7 +133,7 @@ func TestAnInvalidProfileNeverReachesTheContainer(t *testing.T) {
 func TestShownLogsHideThePrivateKey(t *testing.T) {
 	logs := "wireguard-go: failed with key " + testPrivateKey + " again"
 
-	shown := redact(logs, validSecrets())
+	shown := redactLogs(logs, validSecrets())
 
 	if strings.Contains(shown, testPrivateKey) {
 		t.Fatalf("redact kept the key: %q", shown)

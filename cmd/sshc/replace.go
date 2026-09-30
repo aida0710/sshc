@@ -144,11 +144,10 @@ func stopRunningEngine(
 // 止めてよいと決まったときだけ止める。決まらなければ、居ることとアクセス URLの
 // 取り方を言って断る。
 func replaceRunningEngine(
-	ctx context.Context, home string, options engineOptions,
+	ctx context.Context, stateDir string, options engineOptions,
 	stdin io.Reader, stdout, stderr io.Writer,
 	acquire func(string) (func() error, error),
 ) (func() error, error) {
-	stateDir := app.HandoffDir(home)
 	// 確かめる、状態を尋ねる、止まるよう頼む、のどれも engine へ送る短い要求なので、
 	// ほかのコマンドと同じ上限にする。止まり終えるのを待つのは engineReleaseTimeout。
 	client := &http.Client{Timeout: connectTimeout}

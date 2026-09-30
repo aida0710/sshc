@@ -16,6 +16,7 @@ import (
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/textencoding"
+	"sshc/internal/validate"
 	"sshc/internal/vpn"
 )
 
@@ -35,6 +36,11 @@ var (
 	ErrMetadataEngine   = errors.New("metadata engine settings are invalid")
 	ErrMetadataEncoding = errors.New("metadata terminal encoding is invalid")
 	ErrMetadataOSC52    = errors.New("metadata OSC 52 policy is invalid")
+
+	// ErrMetadataEnginePort と ErrMetadataVaultAutoLock は ErrMetadataEngine の種類。
+	// 画面に、どちらの入力を直せばよいかを返すために分ける。
+	ErrMetadataEnginePort    = fmt.Errorf("%w: port out of range", ErrMetadataEngine)
+	ErrMetadataVaultAutoLock = fmt.Errorf("%w: vault auto lock", ErrMetadataEngine)
 )
 
 var secretMarkers = []string{"-----BEGIN", "PRIVATE KEY", "ssh-rsa ", "ssh-ed25519 ", "ecdsa-sha2-"}
@@ -97,6 +103,39 @@ const (
 	VaultAutoLockHours   = "hours"
 )
 
+// VaultAutoLock の Value（分または時間）の範囲。設定画面は 3 桁までの数で入力させる。
+// engine のポートの範囲は、ブラウザの登録も使うので validate にある。
+const (
+	MinVaultAutoLockValue = 1
+	MaxVaultAutoLockValue = 999
+)
+
+// validateEngineSettings は、EngineSettings の範囲を 1 か所で検査する。
+// 設定画面の保存と metadata.json の検証が使う。
+func validateEngineSettings(settings EngineSettings) error {
+	if settings.Port != 0 && validate.EnginePort(settings.Port) != nil {
+		return fmt.Errorf("%w %d", ErrMetadataEnginePort, settings.Port)
+	}
+	chosen := settings.VaultAutoLock
+	if chosen == nil {
+		return nil
+	}
+	switch chosen.Mode {
+	case VaultAutoLockRestart:
+		if chosen.Value != 0 || chosen.Unit != "" {
+			return fmt.Errorf("%w: restart-only auto lock has a duration", ErrMetadataVaultAutoLock)
+		}
+	case VaultAutoLockIdle:
+		if chosen.Value < MinVaultAutoLockValue || chosen.Value > MaxVaultAutoLockValue ||
+			(chosen.Unit != VaultAutoLockMinutes && chosen.Unit != VaultAutoLockHours) {
+			return fmt.Errorf("%w: idle auto lock duration", ErrMetadataVaultAutoLock)
+		}
+	default:
+		return fmt.Errorf("%w: mode %q", ErrMetadataVaultAutoLock, chosen.Mode)
+	}
+	return nil
+}
+
 // VaultIdleTimeout は保存済みの選択を実行時の時間へ変換する。
 // 未設定はfallbackを使い、restartは自動ロックなしを表す0を返す。
 func (settings EngineSettings) VaultIdleTimeout(fallback time.Duration) time.Duration {
@@ -131,9 +170,8 @@ func (appearance TerminalAppearance) Empty() bool { return appearance == Termina
 // 応答にも掛かるので、範囲外を書き込ませると GET /api/v1/metadata が契約違反になる。
 const (
 	maxAppearanceNameLength = 64
-	maxBackgroundNameLength = 128
+	MaxBackgroundNameLength = 128
 	maxBackgroundTint       = 100
-	maxTerminalVerbosity    = 3
 	maxStartDirectoryLength = 4096
 )
 
@@ -144,7 +182,7 @@ func validateAppearance(appearance *TerminalAppearance) error {
 	if len(appearance.Palette) > maxAppearanceNameLength || len(appearance.Font) > maxAppearanceNameLength {
 		return fmt.Errorf("%w: appearance name", ErrMetadataTerminal)
 	}
-	if len(appearance.Background) > maxBackgroundNameLength {
+	if len(appearance.Background) > MaxBackgroundNameLength {
 		return fmt.Errorf("%w: appearance background", ErrMetadataTerminal)
 	}
 	if tint := appearance.BackgroundTint; tint != nil && (*tint < 0 || *tint > maxBackgroundTint) {
@@ -340,23 +378,8 @@ func ValidateMetadata(metadata Metadata) error {
 		return err
 	}
 	if settings := metadata.Engine; settings != nil {
-		if settings.Port != 0 && (settings.Port < 1024 || settings.Port > 65535) {
-			return fmt.Errorf("%w: port %d", ErrMetadataEngine, settings.Port)
-		}
-		if chosen := settings.VaultAutoLock; chosen != nil {
-			switch chosen.Mode {
-			case VaultAutoLockRestart:
-				if chosen.Value != 0 || chosen.Unit != "" {
-					return fmt.Errorf("%w: restart-only auto lock has a duration", ErrMetadataEngine)
-				}
-			case VaultAutoLockIdle:
-				if chosen.Value < 1 || chosen.Value > 999 ||
-					(chosen.Unit != VaultAutoLockMinutes && chosen.Unit != VaultAutoLockHours) {
-					return fmt.Errorf("%w: idle auto lock duration", ErrMetadataEngine)
-				}
-			default:
-				return fmt.Errorf("%w: auto lock mode", ErrMetadataEngine)
-			}
+		if err := validateEngineSettings(*settings); err != nil {
+			return err
 		}
 	}
 	if settings := metadata.EmbeddedTerminal; settings != nil {
@@ -380,6 +403,8 @@ func ValidateMetadata(metadata Metadata) error {
 		if settings.LocalShellProfile != "" && !validShellProfileID(settings.LocalShellProfile) {
 			return fmt.Errorf("%w: localShellProfile", ErrMetadataTerminal)
 		}
+		// 上限は接続ログの段の数で決まるので、sshclient.MaxVerbosity を見る。api/openapi.yaml の
+		// EmbeddedTerminal・TerminalSettings の verbosity の maximum もこの値にそろえる。
 		if settings.Verbosity < 0 || settings.Verbosity > sshclient.MaxVerbosity {
 			return fmt.Errorf("%w: verbosity %d", ErrMetadataTerminal, settings.Verbosity)
 		}
