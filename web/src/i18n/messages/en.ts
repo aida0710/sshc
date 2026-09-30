@@ -1675,6 +1675,22 @@ export const en = {
     "~/.ssh/{path} has a name other machines cannot use as the same name (a Windows reserved name, a name containing a character Windows does not allow in file names such as : or ?, a name ending in a period or space, or a name that differs from another only in letter case), so nothing was sent. Rename it or exclude it in Files to sync.",
   "sync.endpointPath":
     "The endpoint is the account address only — no bucket name and no path. Put the bucket name in the field below.",
+  "sync.endpointNotHTTPS":
+    "The endpoint must be a URL that starts with https://. sshc does not connect to an unencrypted http:// endpoint.",
+  "sync.bucketNameInvalid":
+    "The bucket name contains characters that cannot be used. Use only letters, digits, hyphens (-), periods (.) and underscores (_).",
+  "sync.objectPathInvalid":
+    "The path in the bucket contains a value that cannot be used. In each part between slashes (/), use only letters, digits, hyphens (-), periods (.) and underscores (_).",
+  "sync.pullConflicts":
+    "Some files changed on both this machine and another machine, so nothing was applied. Use Check for changes to choose which version to keep for each file.",
+  "sync.pushRefused":
+    "This machine is set to Receive only, so it cannot send. To send from it, change the direction.",
+  "sync.applyRefused":
+    "This machine is set to Send only, so it cannot apply remote changes. To apply them, change the direction.",
+  "sync.forcePushTargetInvalid":
+    "The replacement confirmation is not valid. Nothing was changed. Refresh bucket status, then replace the snapshot again.",
+  "sync.historyTargetInvalid":
+    "The selected revision cannot be read from this bucket's history. Refresh revision history, then select it again.",
   "sync.autoHint.both":
     "While the Vault is unlocked, sshc checks the remote once a minute. After a local setting changes, it waits until five seconds pass without another change and pushes once. Conflicts and changes that remove files are not applied automatically; automatic sync stops and reports them.",
   "sync.autoHint.pull":
@@ -2294,9 +2310,9 @@ export const en = {
   "conn.basicNoPassword": "No stored password is assigned.",
   "conn.basicNoTOTP": "No one-time password is assigned.",
   "conn.basicAssignedTOTP": "Assigned: {name}",
-  "conn.basicRouteConfirmHeading": "Use saved credentials on this route?",
+  "conn.basicRouteConfirmHeading": "Use saved credentials with the changed settings?",
   "conn.basicRouteConfirmBody":
-    "The authentication route changed. Saving allows the assigned password or one-time password to be used on the current route. A startup snippet assignment is not moved to the new route and stops; check the destination on the Snippets screen and assign it again.",
+    "Connection settings such as HostName, User, Port, or ProxyJump have changed since the credentials were assigned. Saving allows the assigned password or one-time password to be used with the changed settings. A startup snippet assignment is not moved to the changed settings and stops; check the destination on the Snippets screen and assign it again.",
   "conn.basicRouteConfirmSave": "Save and confirm",
   "conn.basicRouteConfirmCancel": "Cancel",
   "conn.basicTOTPAction": "One-time password action",

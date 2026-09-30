@@ -23,9 +23,10 @@ type OpenConnectSettings struct {
 	Username string
 	// Protocol は、その装置が話す方式である。空なら anyconnect。
 	Protocol string
-	// ServerCertificate は、相手の証明書を固定する指紋である（`sha256:...`）。
-	// 公的な認証局の証明書を使う装置では空でよい。自己署名の装置では、これが
-	// 無いと openconnect は繋がない。
+	// ServerCertificate は、サーバーの証明書を固定するフィンガープリントである
+	// （openConnectFingerprintPrefixes の `sha256:...` または `pin-sha256:...`）。
+	// 公的な認証局の証明書を使うサーバーでは空でよい。自己署名証明書のサーバーでは、
+	// これが無いと openconnect は接続しない。
 	ServerCertificate string
 	// SecondFactor は、パスワードのあとへの備えである。空なら何もしない。
 	SecondFactor string

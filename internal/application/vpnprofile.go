@@ -49,12 +49,14 @@ type OpenConnectProfile struct {
 	Username string `json:"username"`
 	// Protocol は、その装置が話す方式である。空なら anyconnect。
 	Protocol string `json:"protocol,omitempty"`
-	// ServerCertificate は、相手の証明書を固定する指紋である（`sha256:...`）。
+	// ServerCertificate は、サーバーの証明書を固定するフィンガープリントである
+	// （`sha256:...` または `pin-sha256:...`）。
 	ServerCertificate string `json:"serverCertificate,omitempty"`
 	// SecondFactor は、二段目の質問への答え方である（`approve` または `totp`）。
 	// 空なら答えない。
 	SecondFactor string `json:"secondFactor,omitempty"`
-	// ApprovalWord は、SecondFactor が approve のときに送る語である。空なら push。
+	// ApprovalWord は、SecondFactor が approve のときに、サーバーが追加の入力を
+	// 求めたら送る文字列である（Duo なら push）。空なら何も送らない。
 	ApprovalWord string `json:"approvalWord,omitempty"`
 }
 

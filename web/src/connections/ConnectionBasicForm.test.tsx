@@ -549,7 +549,7 @@ describe("ConnectionBasicForm", () => {
     expect(screen.queryByText(/confirms the assigned password for the new authentication route/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/confirms the assigned TOTP for the new authentication route/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
-    expect(screen.getByRole("heading", { name: "Use saved credentials on this route?" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Use saved credentials with the changed settings?" })).toBeInTheDocument();
     expect(harness.onSave).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Save and confirm" }));
 

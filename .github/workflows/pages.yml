@@ -9,10 +9,10 @@ on:
       - .github/workflows/pages.yml
   workflow_dispatch:
 
+# 書き込み権限はdeploy jobだけに渡す。build jobはnpmの依存を実行するため、
+# Pagesへの書き込みとOIDC tokenの発行を持たせない。
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: github-pages
@@ -23,8 +23,14 @@ jobs:
     name: Build documentation
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      # configure-pagesが公開先のURLを読むために使う。
+      pages: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
@@ -51,6 +57,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: build
+    permissions:
+      pages: write
+      id-token: write
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

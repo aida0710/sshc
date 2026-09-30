@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { usePolling } from "../ui/usePolling";
 import { apiClient } from "../api/client";
 import type { Metadata } from "../api/config";
+import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
 import { defaultBindings, loadBindings, saveBindings, selectionKey, type Bindings } from "./bindings";
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
@@ -10,7 +11,7 @@ import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
 // seconds keeps the two in step without a request per keystroke.
 const presetPollIntervalMs = 5_000;
 
-export type Preset = { id: string; name: string; bindings: Bindings };
+export type Preset = components["schemas"]["ShortcutPreset"];
 export { selectionKey };
 type State = { presets: Preset[]; selected: string; loading: boolean; busy: boolean; error: boolean };
 let state: State = { presets: [], selected: "default", loading: true, busy: false, error: false };

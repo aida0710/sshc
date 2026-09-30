@@ -10,7 +10,7 @@ import "sshc/internal/vpn"
 // backend に固有のものは、その backend の file の init が足す。
 var directiveReasons = map[vpn.Reason]string{
 	vpn.ReasonRunsCommand:   "「%s」は、コマンドやプログラムを実行する指示のため使用できません。",
-	vpn.ReasonChangesRoutes: "「%s」は、経路やDNSを変更する指示のため使用できません。経路はsshcが接続先ごとに追加します。",
+	vpn.ReasonChangesRoutes: "「%s」は、ルートやDNSを変更する指示のため使用できません。ルートはsshcが接続先ごとに追加します。",
 	vpn.ReasonDecidedBySshc: "「%s」は、sshcが決める設定のため使用できません。",
 	vpn.ReasonFormat:        "「%s」の形式が正しくありません。",
 }
@@ -18,7 +18,7 @@ var directiveReasons = map[vpn.Reason]string{
 // configFieldReasons は、どの backend の設定ファイルでも使う理由の言い方である。
 var configFieldReasons = map[vpn.Reason]string{
 	vpn.ReasonRunsCommand:    "コマンドやプログラムを実行する指示は使用できません。",
-	vpn.ReasonChangesRoutes:  "経路やDNSを変更する指示は使用できません。",
+	vpn.ReasonChangesRoutes:  "ルートやDNSを変更する指示は使用できません。",
 	vpn.ReasonDecidedBySshc:  "sshcが決める設定は使用できません。",
 	vpn.ReasonConfigMismatch: "設定ファイルの内容と一致しません。設定ファイルを読み込み直してください。",
 }

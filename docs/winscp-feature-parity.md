@@ -17,7 +17,7 @@ WinSCPに存在する機能を漏れなく分類し、sshcで同じ利用目的�
 
 ## 結論
 
-sshcのSFTPは、安全なアップロード／ダウンロード、フォルダー転送、複数選択、リモート編集、競合検出、バックグラウンドキューという中核を既に持つ。一方、日常のファイルマネージャーとして使う際の不足は大きく、特に次がWinSCPとの差になっている。
+sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ転送、複数選択、リモート編集、競合検出、バックグラウンドキューという中核を既に持つ。一方、日常のファイルマネージャーとして使う際の不足は大きく、特に次がWinSCPとの差になっている。
 
 1. ディレクトリツリー、local／remoteの同期・比較
 2. 空ファイル／リンク作成、複製、任意の移動先選択、プロパティの一括変更
@@ -44,7 +44,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | synchronized browsing | 未対応 | local panelはあるが連動操作は未実装 | 2 panel導入後 |
 | pathをclipboardへcopy | 対応 | 現在directoryと選択項目のfull pathをcopy可能 | 維持 |
 | opposite panelのpathへ移動 | 未対応 | local panelはあるが連動操作は未実装 | 2 panel導入後 |
-| directory stateのsession別記憶 | 部分 | URLへalias/pathを反映し、左右の全tabのalias/pathとsort、ペインの分割を端末に保存する | selectionとhistoryの再読み込み後復元は未対応 |
+| directory stateのsession別記憶 | 部分 | URLへalias/pathを反映し、左右の全tabのalias/pathとsort、ペインの分割をこのブラウザに保存する | selectionとhistoryの再読み込み後復元は未対応 |
 | 複数SFTP tab | 対応 | 左右それぞれ最大8tab。幅を超えたtab列は横scrollし、固定した追加操作と選択tabの自動追従を持つ。各tabが自分のhost、履歴、選択を持ち、開いていた場所を再読み込み後も復元する | 維持 |
 | panel内の名前filter | 対応 | 現在directoryを名前の部分一致で絞り込み | mask式は後続 |
 | remote配下の再帰file検索 | 対応 | symlinkを辿らないserver側上限付き検索を実装済み | 更新日時やサイズ条件は未対応 |
@@ -67,7 +67,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | clickによる単一選択 | 対応 | あり | 維持 |
 | checkboxによる複数選択 | 対応 | desktop／mobileとも対応 | 維持 |
 | Select All | 対応 | header checkbox、`Ctrl/Cmd+A` | 維持 |
-| keyboardで行移動／Enterで開く | 対応 | ↑↓／Home／Endで行移動、Spaceで選択、Enterでフォルダーを開くかプレビュー | 維持 |
+| keyboardで行移動／Enterで開く | 対応 | ↑↓／Home／Endで行移動、Spaceで選択、Enterでフォルダを開くかプレビュー | 維持 |
 | Shiftによるrange選択 | 対応 | 表示中の並びを基準にrange選択 | 維持 |
 | Ctrl/Cmdによる追加選択 | 対応 | clickで追加／解除 | 維持 |
 | 選択反転 | 対応 | 表示中のentryだけ反転 | 維持 |
@@ -140,7 +140,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | prompt／errorの保留表示 | 部分 | overwriteは開始前確認、errorはjob表示 | queue内で再確認待ちを扱えるようにする |
 | 完了時action（disconnect/sleep/shutdown） | 未対応 | なし | browser製品では通知／engine停止までを候補とする |
 | 再読み込み後のqueue復元 | 部分 | engine authoritative queueを2秒ごとに再取得する。engineが処理するremote↔engine-local jobはブラウザを閉じても継続する。ブラウザから選択した従来のuploadは再選択が必要 | ブラウザ選択ファイルの再接続は別途検討 |
-| process再起動後のqueue復元 | 対応 | `~/.ssh/sshc/transfers.json`へ0600・atomic保存し、待機・一時停止・再開可能jobを復元する。端末固有stateとして同期しない | 永続形式のmigrationが必要になった時点でschema versionを更新 |
+| process再起動後のqueue復元 | 対応 | `~/.ssh/sshc/transfers.json`へ0600・atomic保存し、待機・一時停止・再開可能jobを復元する。マシン固有のstateとして同期しない | 永続形式のmigrationが必要になった時点でschema versionを更新 |
 | transfer中の自動再接続 | 部分 | chunk通信は最大3回の短いbackoffで自動再試行し、file downloadはrevision固定のoffset resumeにも対応。job全体の失敗後はmanual retry | job全体のbounded retryを追加 |
 | browser通知 | 対応 | tabがbackgroundの時、許可済みのWeb通知で完了／失敗を知らせる。Androidはnative通知を使う | 維持 |
 

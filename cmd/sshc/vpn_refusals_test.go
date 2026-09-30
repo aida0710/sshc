@@ -78,7 +78,7 @@ func TestAnExistingProfileNameSuggestsEditingOrRenaming(t *testing.T) {
 	}
 }
 
-// `sshc <接続先>` が経路を用意できなかったときも、`sshc vpn up` と同じ言い方で
+// `sshc ssh <接続先>` が経路を用意できなかったときも、`sshc vpn up` と同じ言い方で
 // 理由を出し、ログの読み方を添える。
 func TestAFailedRouteForAConnectionSaysWhyAndWhereTheLogsAre(t *testing.T) {
 	err := describedVPNRouteError("lab", engineProblem{

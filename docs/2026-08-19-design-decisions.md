@@ -56,6 +56,10 @@ API 契約の検査は維持しています。生成物との比較は `openapi.
 「返る本文に知らない項目が無い」検査を、生成型ではなく実際に `c.JSON` へ渡している型へ
 向けました。2 つの検査により「応答本文 ⊆ application の型 = API 契約」を確認します。
 
+### 追記: 照合を1つの検査にまとめた（2026-09-30）
+
+`contract_drift_test.go`はJSONの項目名だけを比べていたため、requiredや入れ子の食い違いを見逃していました。手書きの型の照合は`internal/api/contracttest`にまとめ、項目名、required、型、enum、入れ子まで再帰的に比べます。`application`の型は`internal/acceptance/contract_drift_test.go`、`httpserver`が自分で持つ型は`internal/httpserver/wire_contract_test.go`で照合します。`httpserver`のJSONのstructは、照合するか、OpenAPIの外のプロトコル（CLI、WebSocket）と明示するかのどちらかでなければテストが失敗します。項目名だけを比べていた`problem_contract_test.go`は、この2つに含まれるので削除しました。
+
 ## 3. Electron ラッパーを維持する
 
 当時の決定: 維持します。ただし Electron と Android の実装は共通化しません。

@@ -148,7 +148,7 @@ func TestRemoteSyncDoesNotExposeStorageTransactions(t *testing.T) {
 // 一箇所しかない。internal/app の sshParts の doc は「組み立てる場所はここ
 // ひとつである……二箇所で組み立てると、片方だけが vault を見る日が来る」と書いて
 // いるが、長いあいだ同じファイルの中に 2 つ目があった。engine 用と
-// `sshc <接続先>` 用で、`Stored` と `Password` の差し方だけが違っていた。散文は
+// `sshc ssh <接続先>` 用で、`Stored` と `Password` の差し方だけが違っていた。散文は
 // それを止められない。
 var buildsTheSSHDialer = []string{"internal/app/ssh.go"}
 
@@ -168,7 +168,7 @@ func TestOnlyOnePlaceAssemblesTheSSHDialer(t *testing.T) {
 // TestOnlyTheCompositionRootOpensTheWorkspace は、~/.ssh を開く場所を internal/app に
 // 閉じる。
 //
-// engine と `sshc <接続先>` は別のプロセスなので、根そのものは 2 つある。片方が
+// engine と `sshc ssh <接続先>` は別のプロセスなので、根そのものは 2 つある。片方が
 // もう片方のオブジェクトを借りることはできない。縛れるのは「どのパッケージが
 // 開いてよいか」の方である。cmd/sshc が自分で開いていた頃、一覧と TUI は engine とは
 // 別の解決器を通っており、Match ブロックの下に書かれた HostName は画面に出なかった
