@@ -13,8 +13,8 @@ Homebrewのformulaはソースからビルドするため、GoもHomebrewによ�
 ## インストールスクリプト（macOS / Linux）
 
 ```sh
-SSHC_VERSION=v0.41.0 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.41.0/install.sh | sh'
+SSHC_VERSION=v0.42.0 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.42.0/install.sh | sh'
 ```
 
 URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`上のスクリプトは次の変更で内容が変わるため、パイプで直接実行しません。新しいバージョンへ更新するときは、[GitHub Releases](https://github.com/aida0710/sshc/releases)でタグを確認して両方を置き換えます。
@@ -38,7 +38,7 @@ URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`
 
 `SSHC_VERSION`を指定しない場合は、タグを固定せずにReleaseワークフローの署名を確かめます。通常は`~/.local/bin`にインストールし、rootで実行した場合は`/usr/local/bin`を使用します。
 
-手動でダウンロードしたCLIやAPKは、GitHub CLIで次のように検証できます。`<downloaded-file>`にはCLIまたはAPKの実ファイルを、`<tag>`には導入するタグ（例: `v0.41.0`）を指定します。
+手動でダウンロードしたCLIやAPKは、GitHub CLIで次のように検証できます。`<downloaded-file>`にはCLIまたはAPKの実ファイルを、`<tag>`には導入するタグ（例: `v0.42.0`）を指定します。
 
 ```sh
 gh attestation verify <downloaded-file> --repo aida0710/sshc \
@@ -101,8 +101,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/a
 再現可能な導入では、スクリプトと成果物を同じタグへ固定します。
 
 ```powershell
-$env:SSHC_VERSION = 'v0.41.0'
-irm https://github.com/aida0710/sshc/releases/download/v0.41.0/install.ps1 | iex
+$env:SSHC_VERSION = 'v0.42.0'
+irm https://github.com/aida0710/sshc/releases/download/v0.42.0/install.ps1 | iex
 ```
 
 手動で配置する場合は、[GitHub Releases](https://github.com/aida0710/sshc/releases)からx64では`sshc-windows-amd64.exe`、Arm64では`sshc-windows-arm64.exe`を取得し、`checksums.txt`と照合してから`sshc.exe`へ名前を変更します。
