@@ -121,7 +121,7 @@ DESKTOP-VJBBNNS / Windows 11 / 2026-08-18。すべて `sshc run` 経由で実行
 | `go test ./...` | 34 パッケージ通過 |
 | `go test -race ./...` | 34 パッケージ通過、競合なし |
 | `npm run e2e --prefix web` | 92 通過 / 2 skip |
-| `npm run dist:win` | x64 と arm64 のインストーラを生成 |
+| `npm run dist:win` | x64 と arm64 のインストーラーを生成 |
 | `scripts/windows/package-smoke.ps1 -Architecture x64` | passed |
 | パッケージ内 CLI のアーキテクチャ | x64 = `0x8664`、arm64 = `0xAA64` |
 
@@ -149,7 +149,7 @@ Windows arm64 実機での動作は未検証のため、対応表には含めま
 macOS 15 以降では機能しません）。パッケージには ad-hoc 署名を付け、パッケージ内容の変更を検出します。Gatekeeper の通過を目的とした署名ではありません。
  Smart App Control が有効な Windows 11 では、署名の無い
 実行ファイルは警告ではなく拒否されます。実機で確認しました（`go run` の
-中間物まで拒まれ、ビルド自体ができない）。この機械は所有者の判断で SAC を
+中間物まで拒まれ、ビルド自体ができない）。このマシンは所有者の判断で SAC を
 無効にして開発機として使用しました。
 
 署名だけで実行許可が保証されるわけではありません。SAC は署名の有無だけでなく reputation も使用します。

@@ -67,15 +67,6 @@ type HostKeys struct {
 	Add func(path string, candidate knownhosts.Candidate) error
 }
 
-// Callback は、この接続のためのホスト鍵検証を返す。
-//
-// 問いを出す先を引数で受け取るのは、それが接続ごとに違うからである。尋ねる
-// のは、その接続を開いた端末でなければならない。別の端末に出た問いは、
-// 誰も判定できないまま接続を止める。
-func (h HostKeys) Callback(target Target, prompt Prompter) ssh.HostKeyCallback {
-	return h.lookup(target).callback(prompt, nil)
-}
-
 // hostKeyLookup は、ひとつの接続（ホップ）の known_hosts の照合である。
 //
 // 名乗るホスト鍵アルゴリズムの選択（algorithms）と鍵の照合（callback）は、同じ
@@ -111,7 +102,11 @@ func (lookup *hostKeyLookup) hostEntries() ([]hostEntry, error) {
 	return lookup.entries, lookup.err
 }
 
-// callback は、検証の経過を接続ログにも書く Callback である。
+// callback は、この接続のためのホスト鍵検証を返し、検証の経過を接続ログにも書く。
+//
+// 問いを出す先を引数で受け取るのは、それが接続ごとに違うからである。尋ねる
+// のは、その接続を開いたターミナルでなければならない。別のターミナルに出た問いは、
+// 誰も判定できないまま接続を止める。
 //
 // 鍵の指紋と照合の結果を言うのは、「一致しない鍵」と断られたユーザーが、
 // どの鍵が来て known_hosts のどれと比べたのかを知る手段が他に無いからである。
@@ -202,7 +197,7 @@ var defaultHostKeyAlgorithms = []string{
 	ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256,
 }
 
-// Algorithms は、この接続で名乗るホスト鍵アルゴリズムを優先順に返す。
+// algorithms は、この接続で名乗るホスト鍵アルゴリズムを優先順に返す。
 //
 // known_hosts に持っている種類を先に置く。これが無いと順番を決めるのは
 // x/crypto の既定表になり、そこでは RSA と ECDSA が Ed25519 より前にある。
@@ -218,10 +213,6 @@ var defaultHostKeyAlgorithms = []string{
 //
 // 知らないホストでは既定の順を返す。持っていない鍵について主張することは無いが、
 // 何も渡さなければ x/crypto の順になり、それは `ssh` の順ではない。
-func (h HostKeys) Algorithms(target Target) []string {
-	return h.lookup(target).algorithms()
-}
-
 func (lookup *hostKeyLookup) algorithms() []string {
 	if len(lookup.target.HostKeyAlgorithms) > 0 {
 		return lookup.target.HostKeyAlgorithms

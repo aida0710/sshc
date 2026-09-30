@@ -27,6 +27,15 @@ die() {
   exit 1
 }
 
+# release_tmp は、公開後の検証でReleaseの成果物一式を落とす一時ディレクトリである。
+# 検証はdieやset -eで関数の途中から終わるので、後始末は関数の中ではなくスクリプトの
+# 終了時に行い、成功しても失敗しても消す。
+release_tmp=
+remove_release_download() {
+  [ -z "$release_tmp" ] || rm -rf -- "$release_tmp"
+}
+trap remove_release_download EXIT
+
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "required command is missing: $1"
 }
@@ -75,10 +84,24 @@ verify_checksum_file() {
   fi
 }
 
+# regex_literal は、tagやrepository名の`.`と`+`を、正規表現の記号ではなくその文字そのものとして照合させる。
+regex_literal() {
+  printf '%s' "$1" | sed 's/[.+]/\\&/g'
+}
+
+# release_signer_pattern は、attestationを署名してよいworkflowを表す証明書のSANである。
+# --repoだけでは、同じrepositoryの任意のbranchやworkflowが署名したattestationも通る。
+# 署名者は、このtagのpushで動いたRelease workflowか、mainから同じtagを手動復旧した
+# Release workflow（workflow_dispatch）に限る。
+release_signer_pattern() {
+  printf '^https://github\\.com/%s/\\.github/workflows/release\\.yml@refs/(tags/%s|heads/main)$' \
+    "$(regex_literal "$repository")" "$(regex_literal "$tag")"
+}
+
 verify_public_release() {
-  local release expected_prerelease release_tmp formula source_archive
+  local release expected_prerelease formula source_archive
   local expected_assets actual_assets host_asset host_os host_arch version_output
-  local formula_tag formula_sha actual_sha release_notes release_body
+  local formula_tag formula_sha actual_sha release_notes release_body signer_pattern
 
   printf 'release: verifying published %s\n' "$tag"
   release=$(gh api "repos/$repository/releases/tags/$tag") || die "published release not found: $tag"
@@ -110,14 +133,15 @@ verify_public_release() {
   [ "$actual_assets" = "$expected_assets" ] || die 'release asset set differs from the publication contract'
 
   release_tmp=$(mktemp -d "${TMPDIR:-/tmp}/sshc-release-verify.XXXXXX")
-  trap 'rm -rf -- "$release_tmp"' RETURN
   gh release download "$tag" --repo "$repository" --dir "$release_tmp"
   (
     cd "$release_tmp"
     verify_checksum_file
   )
+  signer_pattern=$(release_signer_pattern)
   for artifact in "$release_tmp"/*; do
-    gh attestation verify "$artifact" --repo "$repository" >/dev/null
+    gh attestation verify "$artifact" --repo "$repository" \
+      --cert-identity-regex "$signer_pattern" --deny-self-hosted-runners >/dev/null
     printf 'release: attestation OK: %s\n' "$(basename "$artifact")"
   done
 
@@ -159,8 +183,6 @@ verify_public_release() {
     printf 'release: Homebrew source SHA-256 OK: %s\n' "$actual_sha"
   fi
 
-  trap - RETURN
-  rm -rf -- "$release_tmp"
   printf 'release: verified https://github.com/%s/releases/tag/%s\n' "$repository" "$tag"
 }
 
@@ -207,12 +229,7 @@ warn_stale_vpn_snapshot
 [ -f "docs/releases/$tag.md" ] || die "release notes are missing: docs/releases/$tag.md"
 case "$tag" in
   *-*|*+*) ;;
-  *)
-    for installer_doc in README.md docs/release-install.md install.sh; do
-      grep -F "SSHC_VERSION=$tag" "$installer_doc" >/dev/null || die "$installer_doc does not pin SSHC_VERSION=$tag"
-      grep -F "/sshc/$tag/install.sh" "$installer_doc" >/dev/null || die "$installer_doc does not pin the installer URL to $tag"
-    done
-    ;;
+  *) scripts/release/check-pinned-installers.sh "$tag" ;;
 esac
 
 git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
@@ -241,7 +258,7 @@ while :; do
   fi
   case "$state" in
     completed:success) break ;;
-    completed:*) die "main CI failed: https://github.com/$repository/actions/runs/$ci_run" ;;
+    completed:*) die "main CI failed: https://github.com/$repository/actions/runs/$ci_run; no tag was created, so fix main and run this again with $tag" ;;
   esac
   sleep "$poll_seconds"
 done
@@ -267,7 +284,8 @@ for _ in $(seq 1 20); do
   [ -z "$release_run" ] || break
   sleep 3
 done
-[ -n "$release_run" ] || die 'release workflow did not start after the tag push'
+[ -n "$release_run" ] ||
+  die "release workflow did not start after the tag push; $tag is already pushed, so find a late run or start the workflow from main as docs/releasing.md describes instead of running this again"
 printf 'release: monitoring workflow https://github.com/%s/actions/runs/%s\n' "$repository" "$release_run"
 
 last_state=
@@ -303,7 +321,7 @@ while :; do
     completed:success) break ;;
     completed:*)
       gh run view "$release_run" --repo "$repository" --log-failed || true
-      die "release workflow failed: https://github.com/$repository/actions/runs/$release_run"
+      die "release workflow failed: https://github.com/$repository/actions/runs/$release_run; if the tagged commit is sound, rebuild $tag as docs/releasing.md describes instead of making a new version"
       ;;
   esac
   sleep "$poll_seconds"

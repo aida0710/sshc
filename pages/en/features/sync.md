@@ -13,12 +13,12 @@ sshc does not provide hosted sync storage or retain your sync data. You choose a
 
 1. Enter the bucket, endpoint and access key.
 2. Pass the connection check.
-3. Generate a sync key when the target is empty.
+3. Create an encryption key when the target is empty.
 4. Store the key shown once in a safe place.
 
 ## Additional devices
 
-Enter the same bucket path and sync key. When a remote snapshot already exists, sshc saves the configuration only after the key can decrypt it. Use another path if you intend to create a separate dataset.
+Enter the same bucket path and encryption key. When a remote snapshot already exists, sshc saves the configuration only after the key can decrypt it. Use another path if you intend to create a separate dataset.
 
 Choose bidirectional, send-only, or receive-only sync.
 
@@ -85,8 +85,8 @@ The `.sshcignore` control file and the encrypted transfer documents for Vault an
 
 The Sync screen keeps routine operations separate from configuration. Bucket credentials and the encryption key live under Manage sync settings. Snapshot differences and S3 history are under Details and history. History initially shows the latest five entries; expand it or reveal S3 object names only when needed.
 
-::: warning Sync key
-Each device may have a different master password. Devices sharing one target must use the same sync key. Losing it makes remote snapshots impossible to decrypt.
+::: warning Sync encryption key
+Each device may have a different master password. Devices sharing one target must use the same encryption key. Losing it makes remote snapshots impossible to decrypt.
 :::
 
 See [Push, pull, and history](/en/sync/workflow) for conflicts, force operations, and automatic sync.

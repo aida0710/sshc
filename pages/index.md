@@ -1,7 +1,7 @@
 ---
 layout: home
 title: sshc
-description: SSHとローカルシェルを扱うターミナルアプリ。OpenSSH設定をそのまま使い、SFTP、認証情報の再利用、AIエージェント向けCLI、暗号化同期に対応。
+description: SSHとローカルシェルを扱うターミナルアプリ。OpenSSH設定をそのまま使い、SFTP、認証情報の再利用、AIエージェント向けCLI、接続ごとのVPN、暗号化同期に対応。
 sidebar: false
 outline: false
 ---
@@ -10,7 +10,7 @@ outline: false
   <section class="sshc-hero">
     <div>
       <h1 class="sshc-title">sshc</h1>
-      <p class="sshc-lead">sshcは、SSHとローカルシェルを扱うターミナルアプリです。<br>今あるOpenSSH設定をそのまま使えます。SFTP、認証情報の再利用、AIエージェント向けCLIに加え、利用者が用意したS3互換ストレージを介した暗号化同期にも対応しています。</p>
+      <p class="sshc-lead">sshcは、SSHとローカルシェルを扱うターミナルアプリです。<br>今あるOpenSSH設定をそのまま使えます。SFTP、認証情報の再利用、AIエージェント向けCLI、接続ごとのVPNに加え、利用者が用意したS3互換ストレージを介した暗号化同期にも対応しています。</p>
       <p class="sshc-platforms"><span>対応OS</span>macOS / Windows / Linux / Android</p>
       <div class="sshc-actions">
         <a class="sshc-action primary" href="./guide/install">インストール</a>
@@ -26,7 +26,7 @@ outline: false
   <section class="sshc-home-section">
     <div class="sshc-section-heading">
       <h2>主な機能</h2>
-      <p>SSHとローカルシェルを複数のペインで開けます。SFTPやポート転送にも同じ接続設定を使い、OpenSSH形式のまま管理できます。</p>
+      <p>SSHとローカルシェルを複数のペインで開けます。SFTPやポート転送にも同じ接続設定を使い、OpenSSH形式のまま管理できます。選んだ接続だけを<a href="./features/vpn">専用のVPN</a>経由で接続することもできます。</p>
     </div>
     <div class="sshc-feature-grid">
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/workspace-desktop.png" alt="複数のSSH接続を開いたワークスペース" width="1280" height="720"><div class="sshc-feature-body"><span class="index">01</span><h3>SSHとローカルシェル</h3><p>1つのTerminalを最大4ペインに分割できます。再接続、検索、ポート転送にも対応しています。</p></div></article>

@@ -57,7 +57,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_REPOSITORY: ${{ github.repository }}
         run: |
-          set -eu
+          # gh apiが何も出力せずに失敗すると、jqは空の入力から[]を作る。pipefailがないと
+          # これを「公開済みreleaseなし」と読み、旧stableの復旧でlatestを後退させる。
+          set -euo pipefail
           RELEASE_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
           releases=$(gh api --paginate \
             -H 'Accept: application/vnd.github+json' \
@@ -203,9 +205,9 @@ jobs:
 
       # Makefile の recipe は POSIX シェルを前提とするため、Windows では
       # nativebuild を直接実行する。成果物一覧との一致は契約テストで検証する。
-      # Windows runner には race detector に必要な C ツールチェーンがないため、
-      # このジョブでは -race を実行しない。PowerShell では native command の
-      # 非ゼロ終了を確実に検出するよう、次の2変数を設定する。
+      # Windows の race は main への push の CI が走らせるので、このジョブでは
+      # 重ねない。PowerShell では native command の非ゼロ終了を確実に検出する
+      # よう、次の2変数を設定する。
       - name: Verify Windows behaviour
         run: |
           $ErrorActionPreference = 'Stop'
@@ -411,23 +413,21 @@ jobs:
           RELEASE_CHANNEL: ${{ needs.verify-source.outputs.release-channel }}
           PROMOTE_LATEST: ${{ needs.verify-source.outputs.promote-latest }}
         run: |
-          set -eu
+          # matching_releasesのgh apiの失敗を「同じtagのreleaseなし」と読まないようにする。
+          set -euo pipefail
           notes_file="docs/releases/$RELEASE_TAG.md"
           if [ ! -f "$notes_file" ]; then
             echo "release notes file is missing: $notes_file" >&2
             exit 1
           fi
           if [ "$RELEASE_CHANNEL" = stable ] && [ "$PROMOTE_LATEST" = true ]; then
-            for installer_doc in README.md docs/release-install.md install.sh; do
-              grep -F "SSHC_VERSION=$RELEASE_TAG" "$installer_doc" >/dev/null || {
-                echo "$installer_doc does not pin the promoted installer to $RELEASE_TAG" >&2
-                exit 1
-              }
-              grep -F "/sshc/$RELEASE_TAG/install.sh" "$installer_doc" >/dev/null || {
-                echo "$installer_doc does not fetch the promoted installer from $RELEASE_TAG" >&2
-                exit 1
-              }
-            done
+            # 手動復旧ではscriptを持たない古いcommitのtagもcheckoutされ得る。照合できない
+            # tagをlatestにしないよう、No such fileではなく理由を示して止める。
+            if [ ! -x scripts/release/check-pinned-installers.sh ]; then
+              echo "$RELEASE_TAG predates scripts/release/check-pinned-installers.sh, so its pinned installers cannot be checked before it becomes latest" >&2
+              exit 1
+            fi
+            scripts/release/check-pinned-installers.sh "$RELEASE_TAG"
           fi
           # 直前のrunがasset upload中に停止しても、公開済みreleaseには触れず、
           # 同じtagの未公開draftだけを捨てて再構築できるようにする。

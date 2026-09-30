@@ -1307,7 +1307,7 @@ export const ja = {
   "vpn.field.unsupported": "使用できない値です。",
   "vpn.field.unexpected": "選択した方式では使用しない設定項目です。",
   "vpn.field.runs_command": "コマンドやプログラムを実行する指示は使用できません。",
-  "vpn.field.changes_routes": "経路やDNSを変更する指示は使用できません。",
+  "vpn.field.changes_routes": "ルートやDNSを変更する指示は使用できません。",
   "vpn.field.decided_by_sshc": "sshcが決める設定は使用できません。",
   "vpn.field.file_reference": "ファイルを指定する指示は使用できません。中身を設定ファイルに埋め込んでください。",
   "vpn.field.server_mode": "VPNサーバー用の設定は使用できません。",
@@ -1319,7 +1319,7 @@ export const ja = {
   "vpn.field.required_by_config": "設定ファイルがユーザー名とパスワードを要求しています（auth-user-pass）。ユーザー名を入力してください。",
   "vpn.configLine": "{line}行目：{reason}",
   "vpn.configLine.runs_command": "{line}行目の「{directive}」は、コマンドやプログラムを実行する指示のため使用できません。",
-  "vpn.configLine.changes_routes": "{line}行目の「{directive}」は、経路やDNSを変更する指示のため使用できません。経路はsshcが接続先ごとに追加します。",
+  "vpn.configLine.changes_routes": "{line}行目の「{directive}」は、ルートやDNSを変更する指示のため使用できません。ルートはsshcが接続先ごとに追加します。",
   "vpn.configLine.decided_by_sshc": "{line}行目の「{directive}」は、sshcが決める設定のため使用できません。",
   "vpn.configLine.file_reference": "{line}行目の「{directive}」はファイルを指定しています。コンテナからはファイルを読めないため、中身を<{directive}>〜</{directive}>の形で設定ファイルに埋め込んでください。",
   "vpn.configLine.server_mode": "{line}行目の「{directive}」は、VPNサーバー用の設定のため使用できません。",
@@ -1680,6 +1680,22 @@ export const ja = {
     "~/.ssh/{path}は、ほかのマシンで同じ名前として扱えないため送信できません（Windowsの予約名、「:」や「?」などWindowsのファイル名に使えない文字を含む名前、末尾がピリオドか空白の名前、大文字と小文字だけが違う名前など）。名前を変更するか、「同期するファイル」で除外してください。",
   "sync.endpointPath":
     "エンドポイントにはアカウントのURLだけを指定し、バケット名やパスは含めないでください。バケット名は下の欄に入力してください。",
+  "sync.endpointNotHTTPS":
+    "エンドポイントには、https://で始まるURLを指定してください。暗号化されていないhttp://のエンドポイントには接続しません。",
+  "sync.bucketNameInvalid":
+    "バケット名に使用できない文字があります。英数字、ハイフン（-）、ピリオド（.）、アンダースコア（_）だけで入力してください。",
+  "sync.objectPathInvalid":
+    "バケット内のパスに使用できない値があります。スラッシュ（/）で区切った各部分を、英数字、ハイフン（-）、ピリオド（.）、アンダースコア（_）だけで入力してください。",
+  "sync.pullConflicts":
+    "このマシンと他のマシンの両方で変更されたファイルがあるため、何も適用していません。「変更を確認」で、ファイルごとに残す内容を選んでください。",
+  "sync.pushRefused":
+    "このマシンは同期の方向が「受信のみ」のため、送信できません。送信するには、同期の方向を変更してください。",
+  "sync.applyRefused":
+    "このマシンは同期の方向が「送信のみ」のため、リモートの変更を適用できません。適用するには、同期の方向を変更してください。",
+  "sync.forcePushTargetInvalid":
+    "置き換えの確認が有効ではありません。何も変更していません。「バケットの状態を更新」を押してから、もう一度置き換えてください。",
+  "sync.historyTargetInvalid":
+    "選択した世代は、このバケットの世代履歴として読み込めません。「世代履歴を更新」を押してから、選び直してください。",
   "sync.autoHint.both":
     "Vaultのロックが解除されている間、1分ごとにリモートの更新を確認します。このマシンの設定を変更した場合は、最後の変更から5秒後に一度だけ送信します。競合は自動では解消せず、ファイルを削除する変更も自動適用しません。どちらの場合も自動同期を停止して通知します。",
   "sync.autoHint.pull":
@@ -2300,9 +2316,9 @@ export const ja = {
   "conn.basicNoPassword": "保存済みパスワードは割り当てられていません。",
   "conn.basicNoTOTP": "ワンタイムパスワードは割り当てられていません。",
   "conn.basicAssignedTOTP": "割り当て済み：{name}",
-  "conn.basicRouteConfirmHeading": "保存済みの認証情報をこの経路で使いますか？",
+  "conn.basicRouteConfirmHeading": "保存済みの認証情報を変更後の設定で使いますか？",
   "conn.basicRouteConfirmBody":
-    "認証経路が変更されています。保存すると、割り当て済みのパスワードまたはワンタイムパスワードを現在の経路で使用できるようにします。起動スニペットの割り当ては結び直さないため、停止中になります。［Snippets］画面で接続先を確認して、もう一度割り当ててください。",
+    "HostName、User、Port、ProxyJumpなどの接続の設定が、認証情報を割り当てたときと変わっています。保存すると、割り当て済みのパスワードまたはワンタイムパスワードを変更後の設定で使用できるようにします。起動スニペットの割り当ては結び直さないため、停止中になります。［Snippets］画面で接続先を確認して、もう一度割り当ててください。",
   "conn.basicRouteConfirmSave": "保存して再確認",
   "conn.basicRouteConfirmCancel": "キャンセル",
   "conn.basicTOTPAction": "ワンタイムパスワードの操作",

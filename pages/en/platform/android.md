@@ -11,8 +11,6 @@ Install the signed APK from GitHub Releases. Android 13+ back navigation closes 
 
 ## Mobile controls
 
-The screen changes below are available in release v0.33.3 and later.
-
 - Use **Home / Connections / SFTP / Terminal / Menu** in the bottom navigation to switch screens. The navigation and header hide while the keyboard is open, leaving more room for input.
 - Connections switches between the list and editor. Rotating a phone keeps this single-pane layout.
 - Terminal scrolling continues with deceleration after a swipe. Touching again stops it; selection and leaving the screen also stop momentum. The system's reduced-motion preference is respected.
@@ -34,9 +32,6 @@ SFTP uses Android's system file picker and Storage Access Framework. Transfer co
 ## Development APK
 
 The development build installs as **sshc Dev** (`com.github.aida0710.sshc.dev`) alongside the release app. Its Vault and settings use separate app storage; data from the release app is not imported automatically.
-
-Device testing with real keyboards and gestures is still required for these changes. The repository's `docs/mobile-ux-review.md` records the verification checklist and development build commands.
-
 
 ## Engine service and backups
 

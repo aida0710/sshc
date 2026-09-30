@@ -1,12 +1,15 @@
 package acceptance_test
 
 import (
+	"path/filepath"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
 
+	"sshc/internal/api/contracttest"
 	"sshc/internal/application"
+	"sshc/internal/secret"
+	"sshc/internal/vpn"
 )
 
 // servedTypes は、その形のまま c.JSON へ渡される Go の型と、それが名乗っている
@@ -22,9 +25,10 @@ import (
 // 双子が消えたぶん、突き合わせる相手は openapi.yaml そのものになった。契約の
 // 写しではなく契約と比べるので、こちらの方が本来正しい。
 //
-// `make verify-generated` は「生成物が仕様と一致するか」しか見ない。実際に返る
-// application 型はここで、handler 固有 DTO の再帰的な形は httpserver の契約テストで
-// OpenAPI と突き合わせる。
+// `make verify-generated` は「生成物が仕様と一致するか」しか見ない。手書きの型は、
+// どれも internal/api/contracttest の同じ検査で、項目の名前・required・型・enum・入れ子まで
+// openapi.yaml と突き合わせる。application の型はここに足し、httpserver が自分で持つ型は
+// httpserver の wire_contract_test.go に足す。
 var servedTypes = []struct {
 	schema string
 	value  any
@@ -65,63 +69,75 @@ var servedTypes = []struct {
 	{"TerminalAppearance", application.TerminalAppearance{}},
 }
 
-// jsonFieldNames は、その型が JSON へ出す名前を集める。
-//
-// `-` は出ないので数えない。omitempty は名前を変えないので落とす。見たいのは
-// 「どの名前が出るか」であって、空のときに省かれるかどうかではない。
-func jsonFieldNames(value any) []string {
-	structure := reflect.TypeOf(value)
-	names := make([]string, 0, structure.NumField())
-	for index := range structure.NumField() {
-		field := structure.Field(index)
-		if !field.IsExported() {
-			continue
-		}
-		tag := field.Tag.Get("json")
-		name, _, _ := strings.Cut(tag, ",")
-		switch name {
-		case "-":
-			continue
-		case "":
-			name = field.Name
-		}
-		names = append(names, name)
+// servedEnums は、application の型が OpenAPI の enum を名前付きの型で持つものの値である。
+// 方式の名前は engine の backends の表から取る。httpserver の wire_contract_test.go の
+// wireEnumValues も同じ表を使う。
+var servedEnums = map[reflect.Type][]string{
+	reflect.TypeFor[vpn.BackendName](): vpnBackendNames(),
+}
+
+// vpnBackendNames は、engine の backends の表にある方式の名前である。
+func vpnBackendNames() []string {
+	var names []string
+	for _, backend := range vpn.Backends() {
+		names = append(names, string(backend))
 	}
-	slices.Sort(names)
 	return names
 }
 
-// schemaProperties は、openapi.yaml のスキーマひとつが約束している名前を返す。
-func schemaProperties(t *testing.T, spec map[string]any, name string) []string {
-	t.Helper()
-	components, _ := spec["components"].(map[string]any)
-	schemas, _ := components["schemas"].(map[string]any)
-	schema, found := schemas[name].(map[string]any)
-	if !found {
-		t.Fatalf("openapi.yaml に %s というスキーマが無い", name)
+// servedStringEnums は、application の型が OpenAPI の enum を名前の無い string で持つ場所と、
+// その値をドメインが受け付けるかの確かめ方である。
+var servedStringEnums = map[string]func(string) bool{
+	"HostMetadata.os":                     acceptedAsHostMetadata(func(host *application.HostMetadata, value string) { host.OS = value }),
+	"HostMetadata.detectedOS":             acceptedAsHostMetadata(func(host *application.HostMetadata, value string) { host.DetectedOS = value }),
+	"HostMetadata.encoding":               acceptedAsHostMetadata(func(host *application.HostMetadata, value string) { host.Encoding = value }),
+	"HostMetadata.osc52":                  acceptedAsHostMetadata(func(host *application.HostMetadata, value string) { host.OSC52 = value }),
+	"VaultAutoLockSettings.mode":          oneOf(application.VaultAutoLockIdle, application.VaultAutoLockRestart),
+	"VaultAutoLockSettings.unit":          oneOf(application.VaultAutoLockMinutes, application.VaultAutoLockHours),
+	"PasswordEligibility.passwordBinding": oneOf(authenticationBindingStates...),
+	"PasswordEligibility.totpBinding":     oneOf(authenticationBindingStates...),
+}
+
+// authenticationBindingStates は、Vault が返す、保存した認証情報と接続先の紐付けの状態である。
+var authenticationBindingStates = []string{
+	string(secret.AuthenticationBindingUnavailable), string(secret.AuthenticationBindingNone),
+	string(secret.AuthenticationBindingCurrent), string(secret.AuthenticationBindingStale),
+}
+
+// acceptedAsHostMetadata は、1 つの接続の metadata の 1 項目に値を入れて、application が
+// 保存できる metadata として受け付けるかを返す確かめ方を作る。
+func acceptedAsHostMetadata(set func(host *application.HostMetadata, value string)) func(string) bool {
+	return func(value string) bool {
+		host := application.HostMetadata{Identity: application.HostIdentity{Path: "config", Alias: "example"}}
+		set(&host, value)
+		metadata := application.NewMetadata()
+		metadata.Hosts = []application.HostMetadata{host}
+		return application.ValidateMetadata(metadata) == nil
 	}
-	properties, found := schema["properties"].(map[string]any)
-	if !found {
-		t.Fatalf("%s が properties を持っていない", name)
-	}
-	names := make([]string, 0, len(properties))
-	for property := range properties {
-		names = append(names, property)
-	}
-	slices.Sort(names)
-	return names
+}
+
+// oneOf は、ドメインが定数で持つ値のどれかかを返す確かめ方を作る。
+func oneOf(values ...string) func(string) bool {
+	return func(value string) bool { return slices.Contains(values, value) }
 }
 
 func TestTheTypesWeSerialiseMatchTheContract(t *testing.T) {
-	spec := openAPISpec(t)
-
+	contract := contracttest.Contract{
+		Document:    contracttest.ReadDocument(t, filepath.Join("..", "..")),
+		Enums:       servedEnums,
+		StringEnums: servedStringEnums,
+		// 画面が送るキーの組は、application のショートカットの検査が確かめる。
+		MapObjects: []string{"ShortcutPreset.bindings"},
+	}
 	for _, served := range servedTypes {
-		promised := schemaProperties(t, spec, served.schema)
-		actual := jsonFieldNames(served.value)
-		if slices.Equal(promised, actual) {
-			continue
+		t.Run(served.schema, func(t *testing.T) {
+			contract.Verify(t, served.schema, served.value)
+		})
+	}
+	// 確かめ方が何でも受け付けると、enum の検査は何も言わずに通る。
+	for location, accepts := range servedStringEnums {
+		if accepts("not-a-promised-value") {
+			t.Errorf("%s: the domain check accepts a value that no enum promises", location)
 		}
-		t.Errorf("%s: openapi.yaml が約束している形と、実際に返している形が違う\n  契約: %v\n  応答: %v",
-			served.schema, promised, actual)
 	}
 }

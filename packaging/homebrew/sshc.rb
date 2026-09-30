@@ -15,13 +15,20 @@ class Sshc < Formula
   def install
     # ./cmd/sshc をビルドし、実際のリリースバージョンを埋め込む。
     # -s -w は std_go_args が追加するため重ねて指定しない。
-    system "go", "build", *std_go_args(ldflags: "-X main.version=#{version}"), "./cmd/sshc"
+    system "go", "build", *std_go_args(ldflags: "-X main.version=#{release_version}"), "./cmd/sshc"
     generate_completions_from_executable(bin/"sshc", "completion")
+  end
+
+  # リリースの成果物と make build が埋め込むのと同じ、タグの名前（v0.41.0）を返す。
+  # Homebrew の version はタグから v を除いた値（0.41.0）なので付け直す。
+  # HEAD のビルドにはタグが無いので、Homebrew の version（HEAD-<commit>）のままにする。
+  def release_version
+    version.head? ? version.to_s : "v#{version}"
   end
 
   test do
     # インストール済みバイナリのバージョンを検証する。
-    assert_match "sshc #{version}", shell_output("#{bin}/sshc version")
+    assert_match "sshc #{release_version}", shell_output("#{bin}/sshc version")
 
     # engine が動作していない場合の終了コードとメッセージを検証する。
     output = shell_output("#{bin}/sshc status 2>&1", 1)

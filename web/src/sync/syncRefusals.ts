@@ -1,6 +1,8 @@
 import type { MessageKey } from "../i18n/messages";
 
 // Engine failure codes that have their own wording in the sync screen.
+// Every code that internal/remotesync can return (its failure table and
+// TargetRefusals) must be here; a Go test there reads this file to check it.
 export const syncRefusals: Record<string, MessageKey> = {
   sync_not_configured: "sync.notConfigured",
   wrong_passphrase: "sync.wrongKey",
@@ -22,7 +24,15 @@ export const syncRefusals: Record<string, MessageKey> = {
   snapshot_rejected: "sync.snapshotRejected",
   snapshot_too_large: "sync.snapshotTooLarge",
   sync_no_snapshot: "sync.noSnapshot",
+  sync_conflicts: "sync.pullConflicts",
+  sync_push_refused: "sync.pushRefused",
+  sync_apply_refused: "sync.applyRefused",
+  sync_force_target_invalid: "sync.forcePushTargetInvalid",
+  sync_history_target_invalid: "sync.historyTargetInvalid",
+  endpoint_must_be_https: "sync.endpointNotHTTPS",
   endpoint_must_have_no_path: "sync.endpointPath",
+  unsafe_bucket_name: "sync.bucketNameInvalid",
+  unsafe_object_path: "sync.objectPathInvalid",
   sync_remote_moved: "sync.remoteMoved",
   sync_remote_deleted: "sync.remoteDeleted",
   sync_key_recovery_required: "sync.keyRecoveryRequired",

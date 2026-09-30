@@ -1,11 +1,11 @@
 ---
 title: 機能
-description: SSHとローカルシェル、SFTP、OpenSSH接続管理、認証情報、AIエージェント向けCLI、暗号化同期。
+description: SSHとローカルシェル、SFTP、OpenSSH接続管理、認証情報、接続ごとのVPN、AIエージェント向けCLI、暗号化同期。
 ---
 
 # 機能
 
-sshcは、SSHとローカルシェルを扱うターミナルアプリです。SFTP、ポート転送、複数ペインに加え、OpenSSH接続管理、認証情報の再利用、CLI、暗号化同期を備えています。
+sshcは、SSHとローカルシェルを扱うターミナルアプリです。SFTP、ポート転送、複数ペインに加え、OpenSSH接続管理、認証情報の再利用、接続ごとのVPN、CLI、暗号化同期を備えています。
 
 ## Terminal
 
@@ -25,15 +25,19 @@ sshcは、SSHとローカルシェルを扱うターミナルアプリです。S
 
 ## 認証情報
 
-パスワードと鍵のパスフレーズはVaultに暗号化して保存し、接続先や鍵に割り当てます。Vaultへ一度登録すれば、Terminal、SFTP、ProxyJump、CLIから再利用できます。
+パスワード、鍵のパスフレーズ、TOTPのセットアップキーはVaultに暗号化して保存し、接続先や鍵に割り当てます。Vaultへ一度登録すれば、Terminal、SFTP、ProxyJump、CLIから再利用できます。サーバーがワンタイムパスワードの入力を明示的に求めたときは、接続先に割り当てたTOTPのコードを自動入力します。
+
+## VPN
+
+[接続ごとのVPN](./vpn)では、選んだSSH接続だけを、その接続専用のVPN経由で接続します。このマシンのルーティングとDNSは変更しません。WireGuard、L2TP/IPsec、OpenConnect、OpenVPN、IKEv2/IPsecに対応し、Dockerが動いているマシンで使用できます。VPNのシークレットはVaultに保存します。
 
 ## SFTP
 
-[SFTP](./sftp)では、リモートファイルを閲覧・編集できます。デスクトップでは2つの接続先を並べ、ディレクトリの差分確認とRemote→Remoteのコピー／移動を行えます。転送キューはエンジンが管理・保存するため、別画面への移動やエンジン再起動後も状態を復元できます。
+[SFTP](./sftp)では、リモートファイルを閲覧・編集できます。デスクトップでは2つの接続先を並べ、ディレクトリの差分確認とRemote→Remoteのコピー／移動を行えます。転送キューはsshcエンジンが管理・保存するため、別画面への移動やsshcエンジン再起動後も状態を復元できます。
 
 ## CLI
 
-Web UIとCLIは、共通のエンジン、OpenSSH設定、Vaultを使っています。CodexなどのAIエージェントは`sshc ssh <alias> --non-interactive -- <command...>`を直接実行できます。Vaultのロックが解除されていれば、sshcが保存済みのパスワードや鍵のパスフレーズを使って認証します。
+Web UIとCLIは、共通のsshcエンジン、OpenSSH設定、Vaultを使っています。CodexなどのAIエージェントは`sshc ssh <alias> --non-interactive -- <command...>`を直接実行できます。Vaultのロックが解除されていれば、sshcが保存済みのパスワードや鍵のパスフレーズを使って認証します。
 
 ## 暗号化同期
 
