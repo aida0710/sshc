@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"sshc/internal/objectstore"
+	"sshc/internal/secret"
+	"sshc/internal/snippets"
 	"sshc/internal/storage"
 )
 
@@ -25,8 +27,8 @@ const archiveSuffix = "tar.gz.enc"
 // 内容が暗号化された tar.gz であることを接尾辞で示す。
 const ObjectName = "workspace." + archiveSuffix
 
-// VaultPath は、保管庫がディスク上で置かれている場所。
-const VaultPath = "sshc/secrets"
+// VaultPath は、保管庫がディスク上で置かれている場所。持ち主は secret である。
+const VaultPath = secret.WorkspacePath
 
 // TravelPath は、復号済みの vault 文書をスナップショット内で識別する名前。
 // VaultPath と分けることで、受信時にローカルの鍵による再暗号化を必須にする。
@@ -35,7 +37,8 @@ const TravelPath = "sshc/secrets.json"
 // SnippetsPath is both the legacy plaintext path and the logical path inside a
 // sync snapshot. On local disk its bytes are sealed with the device's master
 // key; only the outer sync envelope carries the validated plaintext document.
-const SnippetsPath = "sshc/snippets.json"
+// The owner of the path is the snippets package.
+const SnippetsPath = snippets.PathRelative
 
 // SnapshotPrefix は、ライブのオブジェクトの隣に、push ごとの日付付きコピーを保持する。
 //
@@ -117,8 +120,6 @@ var (
 	// ErrForcePushTarget reports a force-push confirmation for anything other
 	// than the single live workspace object.
 	ErrForcePushTarget = errors.New("the force-push target is not valid")
-	// ErrVaultCodec は、現行のvault交換形式を扱う関数が接続されていない構成を報告する。
-	ErrVaultCodec = errors.New("the sync vault codec is not configured")
 )
 
 // Direction は、このマシンがどちら向きにデータを動かしてよいかを表す。
@@ -218,13 +219,13 @@ type SyncStateView struct {
 	LastOperation *SyncOperation
 }
 
-// KeyProvider returns the current synchronization key while operationMu is
+// KeyProvider returns the current synchronization key while operationMutex is
 // held. Callers must not snapshot a key before waiting for another stateful
 // operation, because a completed rotation changes both the key and live ETag.
 type KeyProvider func() (string, error)
 
 // KeyReplacementProvider reads the old key and prepares its exact local CAS
-// while operationMu is held. This keeps a concurrent CompleteSetup's persisted
+// while operationMutex is held. This keeps a concurrent CompleteSetup's persisted
 // settings and in-memory remote binding in one generation.
 type KeyReplacementProvider func() (oldKey string, commit func() error, err error)
 
@@ -234,9 +235,9 @@ type KeyReplacementProvider func() (oldKey string, commit func() error, err erro
 // client と config を別々に読むと、再設定と同期が重なったときに、古いバケットへ
 // 新しいパスで書くような、どの保存設定にも存在しなかった組合せを作れてしまう。
 type remoteBinding struct {
-	config Config
-	creds  objectstore.Credentials
-	client *objectstore.Client
+	config      Config
+	credentials objectstore.Credentials
+	client      *objectstore.Client
 }
 
 func targetID(config Config) string {
@@ -259,15 +260,15 @@ type Service struct {
 
 	integrations IntegrationHooks
 
-	// operationMu serializes every stateful sync operation, including a complete
+	// operationMutex serializes every stateful sync operation, including a complete
 	// automatic receive/send cycle. binding has a separate, short-lived lock so
 	// status reads and configuration do not wait for network I/O.
-	operationMu sync.Mutex
-	// historyMu prevents several callers from multiplying the bounded but
+	operationMutex sync.Mutex
+	// historyMutex prevents several callers from multiplying the bounded but
 	// expensive history downloads and Argon2 work. History never holds
-	// operationMu while doing remote I/O or decryption.
-	historyMu      sync.Mutex
-	mu             sync.Mutex
+	// operationMutex while doing remote I/O or decryption.
+	historyMutex   sync.Mutex
+	mutex          sync.Mutex
 	binding        remoteBinding
 	bindingVersion uint64
 }
@@ -275,6 +276,8 @@ type Service struct {
 // IntegrationHooks binds remote synchronization to the encrypted local
 // documents and mutation barriers owned by other packages. It is supplied once
 // at construction and is immutable after the Service is published.
+// NewIntegratedServiceが組み立て時にすべてのhookがあることを検査するので、Serviceの
+// 中ではhookをnilと比べずに呼ぶ。
 type IntegrationHooks struct {
 	OpenVault          func() ([]byte, error)
 	SealVault          func(document []byte) ([]byte, error)
@@ -284,6 +287,9 @@ type IntegrationHooks struct {
 	SealSnippets       func(document []byte) ([]byte, error)
 	SecretMutation     func(func() error) error
 	StableSnapshot     func(func() error) error
+	// KeyedTravelDigest は、sync-state.json に残す vault 文書の digest を、この
+	// マシンの vault の鍵で鍵付きにする。
+	KeyedTravelDigest func(digest string) (string, error)
 }
 
 func (hooks IntegrationHooks) validate() error {
@@ -295,6 +301,7 @@ func (hooks IntegrationHooks) validate() error {
 		{"SealVault", hooks.SealVault != nil},
 		{"EmptyVaultDocument", hooks.EmptyVaultDocument != nil},
 		{"VaultAdopted", hooks.VaultAdopted != nil},
+		{"KeyedTravelDigest", hooks.KeyedTravelDigest != nil},
 		{"OpenSnippets", hooks.OpenSnippets != nil},
 		{"SealSnippets", hooks.SealSnippets != nil},
 		{"SecretMutation", hooks.SecretMutation != nil},
@@ -308,23 +315,15 @@ func (hooks IntegrationHooks) validate() error {
 	return nil
 }
 
-// NewService は、未設定のサービスを返す。
-func NewService(workspace *storage.Workspace, transactions *storage.Manager,
-	now func() string, newOrigin func() (string, error)) *Service {
-	return &Service{
-		workspace: workspace, transactions: transactions, now: now, newOrigin: newOrigin,
-	}
-}
-
-// NewIntegratedService constructs the production service. Unlike NewService,
-// which is the standalone core used by focused package tests, this constructor
-// rejects incomplete cross-package wiring before the engine starts.
+// NewIntegratedServiceは、未設定のサービスを返す。ほかのパッケージとのつなぎ込みが
+// 欠けていれば、engineが起動する前に断る。
 func NewIntegratedService(workspace *storage.Workspace, transactions *storage.Manager,
 	now func() string, newOrigin func() (string, error), integrations IntegrationHooks) (*Service, error) {
 	if err := integrations.validate(); err != nil {
 		return nil, err
 	}
-	service := NewService(workspace, transactions, now, newOrigin)
-	service.integrations = integrations
-	return service, nil
+	return &Service{
+		workspace: workspace, transactions: transactions, now: now, newOrigin: newOrigin,
+		integrations: integrations,
+	}, nil
 }

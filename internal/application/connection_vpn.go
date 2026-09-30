@@ -153,11 +153,16 @@ func (s *Service) commitMetadataWith(planned metadataCommit, alongside *storage.
 	if err != nil {
 		return SaveResult{}, err
 	}
-	changes := []storage.Change{change}
+	request := storage.Request{Operation: planned.operation, Changes: []storage.Change{change}}
+	commit := s.manager.Commit
 	if alongside != nil {
-		changes = append(changes, *alongside)
+		// vault を一緒に書くときは、接続の作成と同じく CommitAtomic で書く。失敗が
+		// その場で巻き戻るので、ディスクの vault だけが先に進み、メモリ上の vault が
+		// 古いまま残る保留記録を作らない。
+		request.Changes = append(request.Changes, *alongside)
+		commit = s.manager.CommitAtomic
 	}
-	result, err := s.manager.Commit(storage.Request{Operation: planned.operation, Changes: changes})
+	result, err := commit(request)
 	if err != nil {
 		return SaveResult{}, err
 	}

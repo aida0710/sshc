@@ -164,6 +164,36 @@ describe("LockScreen", () => {
     expect(onOpen).toHaveBeenCalled();
   });
 
+  it("says how to reduce the local backups when restoring or replacing needs to re-encrypt too many", async () => {
+    const tooMany = new ApiError("vault_backups_too_many", 409, { code: "vault_backups_too_many", message: "request rejected" });
+    const api = buildApi({
+      unlockVault: vi.fn().mockRejectedValue(new ApiError("vault_schema_newer", 409, {
+        code: "vault_schema_newer",
+        message: "request rejected",
+        currentVersion: 5,
+        requiredVersion: 4,
+      })),
+      recoverCompatibleVault: vi.fn().mockRejectedValue(tooMany),
+      resetUnsupportedVault: vi.fn().mockRejectedValue(tooMany),
+    });
+    render(
+      <LanguageProvider initial="ja">
+        <LockScreen exists onOpen={vi.fn()} api={api} />
+      </LanguageProvider>,
+    );
+
+    await userEvent.type(screen.getByLabelText("マスターパスワード"), "a long enough password");
+    await userEvent.click(screen.getByRole("button", { name: "ロックを解除" }));
+    await userEvent.click(await screen.findByRole("button", { name: "互換性のあるVaultを復元" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("~/.ssh/sshc/backupsから古いフォルダを削除してから");
+
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: "空のVaultを作成" }));
+    await waitFor(() => expect(api.resetUnsupportedVault).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("ローカルのバックアップが多すぎるため"));
+    expect(screen.getByRole("alert")).not.toHaveTextContent("安全に置き換えられませんでした");
+  });
+
   it("explains a failed migration and says that the original vault remains", async () => {
     const api = buildApi({
       unlockVault: vi.fn().mockRejectedValue(new ApiError("vault_migration_failed", 409, {

@@ -3,89 +3,17 @@ package secret
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"slices"
 	"time"
 
-	"sshc/internal/storage"
 	"sshc/internal/totp"
 )
 
-// mutateVault prepares a private candidate and publishes it only after the
-// encrypted replacement is durable. The baseline belongs to the vault which
-// was cloned; using it as the precondition also prevents another process from
-// being overwritten after this service unlocked the document.
+// mutateVault は、vault の写しへ mutate を加え、vault のファイルだけを書く。
+// 手順（写しを封じて書き、成功したときだけメモリ上の vault を差し替える）は
+// commitVaultTransaction に 1 か所だけ置く。
 func (s *Service) mutateVault(mutate func(*Vault) error) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	clone := vault.clone()
-	baseline := slices.Clone(s.baseline)
-	s.mu.Unlock()
-
-	published := false
-	defer func() {
-		if !published {
-			clone.Destroy()
-		}
-	}()
-	if err := mutate(clone); err != nil {
-		return err
-	}
-	if len(baseline) == 0 {
-		return ErrNoVault
-	}
-	sealed, err := clone.Seal()
-	if err != nil {
-		return err
-	}
-	_, err = s.transactions.Commit(storage.Request{
-		Operation: "secret.vault",
-		Changes: []storage.Change{{
-			Path: s.path(), Contents: sealed,
-			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(baseline)},
-		}},
-	})
-	if err != nil {
-		return err
-	}
-
-	s.mu.Lock()
-	s.vault.Destroy()
-	s.vault = clone
-	published = true
-	s.baseline = slices.Clone(sealed)
-	s.mu.Unlock()
-	return nil
-}
-
-// SetBound stores a dedicated password and records the resolved authentication
-// destination that may receive it.
-func (s *Service) SetBound(alias, password, binding string) error {
-	if !validAuthenticationBinding(binding) {
-		return ErrPasswordBindingRequired
-	}
-	return s.mutateVault(func(vault *Vault) error {
-		if err := vault.SetDedicatedPassword(alias, password); err != nil {
-			return err
-		}
-		return vault.Bind(KindPassword, alias, binding)
-	})
-}
-
-// Rename は、保存済みのパスワードを新しい alias へ引き継ぐ。ホストの名前変更が
-// それを置き去りにすれば、二度と誰も尋ねない名前の下にパスワードが残る。
-func (s *Service) Rename(from, to string) error {
-	return s.mutateVault(func(vault *Vault) error {
-		if err := vault.Rename(KindPassword, from, to); err != nil {
-			return err
-		}
-		return vault.Rename(KindTOTP, from, to)
+	return s.commitVaultOnlyTransaction(operationVault, func(clone *Vault) (bool, error) {
+		return true, mutate(clone)
 	})
 }
 
@@ -95,8 +23,8 @@ func (s *Service) Rename(from, to string) error {
 // 読める画面があれば、それは侵害されたブラウザがそこから秘密を読める画面だという
 // ことになる。
 func (s *Service) Credentials() (map[Kind]map[string][]string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.open()
 	if vault == nil {
 		return nil, ErrLocked
@@ -126,8 +54,8 @@ func (s *Service) SetCredential(kind Kind, name, value string) error {
 // Credential は、明示的な表示・編集操作に限って名前付き資格情報の値を返す。
 // 一覧や割り当て確認は Credentials を使い、この境界を通らない。
 func (s *Service) Credential(kind Kind, name string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return "", ErrLocked
@@ -197,55 +125,12 @@ func (s *Service) TOTPCodes(name string, at time.Time) (TOTPCodeSet, error) {
 // UpdateCredential は、名前と値を一つの vault 置換として更新する。
 // 名前を参照している host / key は同じ commit 内で新しい名前へ追従する。
 func (s *Service) UpdateCredential(kind Kind, currentName, nextName, value string) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	clone := vault.clone()
-	published := false
-	defer func() {
-		if !published {
-			clone.Destroy()
+	return s.commitVaultOnlyTransaction(operationCredentialUpdate, func(clone *Vault) (bool, error) {
+		if err := clone.RenameCredential(kind, currentName, nextName); err != nil {
+			return false, err
 		}
-	}()
-	baseline := slices.Clone(s.baseline)
-	s.mu.Unlock()
-
-	if err := clone.RenameCredential(kind, currentName, nextName); err != nil {
-		return err
-	}
-	if err := clone.Set(kind, nextName, value); err != nil {
-		return err
-	}
-	if len(baseline) == 0 {
-		return ErrNoVault
-	}
-	sealed, err := clone.Seal()
-	if err != nil {
-		return err
-	}
-	_, err = s.transactions.Commit(storage.Request{
-		Operation: "secret.credential.update",
-		Changes: []storage.Change{{
-			Path: s.path(), Contents: sealed,
-			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(baseline)},
-		}},
+		return true, clone.Set(kind, nextName, value)
 	})
-	if err != nil {
-		return err
-	}
-	s.mu.Lock()
-	s.vault.Destroy()
-	s.vault = clone
-	published = true
-	s.baseline = slices.Clone(sealed)
-	s.mu.Unlock()
-	return nil
 }
 
 // DeleteCredential は資格情報を忘れる。何かがそれを指しているあいだは拒否する。
@@ -296,8 +181,8 @@ func (s *Service) UnassignCredential(kind Kind, subject string) error {
 // DedicatedKeyPassphrases returns only key paths with a non-reusable value.
 // Locked vaults reveal no subjects.
 func (s *Service) DedicatedKeyPassphrases() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.open()
 	if vault == nil {
 		return nil
@@ -307,8 +192,8 @@ func (s *Service) DedicatedKeyPassphrases() []string {
 
 // Aliases は、パスワードが保存されているホストを返す。ロック中は何も返さない。
 func (s *Service) Aliases() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.open()
 	if vault == nil {
 		return nil

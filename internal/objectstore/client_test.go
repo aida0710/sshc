@@ -35,11 +35,11 @@ func newClient(t *testing.T, handler http.HandlerFunc) (objectstore.Client, *htt
 	server := httptest.NewTLSServer(handler)
 	t.Cleanup(server.Close)
 	return objectstore.Client{
-		HTTP:     server.Client(),
-		Endpoint: server.URL,
-		Bucket:   "sshc",
-		Region:   "auto",
-		Creds:    suiteCredentials(),
+		HTTP:        server.Client(),
+		Endpoint:    server.URL,
+		Bucket:      "sshc",
+		Region:      "auto",
+		Credentials: suiteCredentials(),
 	}, server
 }
 
@@ -248,10 +248,10 @@ func TestEveryRequestIsSignedAndCarriesNoCredentialInTheURL(t *testing.T) {
 func TestAPlaintextEndpointIsRefused(t *testing.T) {
 	// 本文はここへ届く前に暗号化されているが、資格情報はそうではない。
 	client := objectstore.Client{
-		Endpoint: "http://example.com",
-		Bucket:   "sshc",
-		Region:   "auto",
-		Creds:    suiteCredentials(),
+		Endpoint:    "http://example.com",
+		Bucket:      "sshc",
+		Region:      "auto",
+		Credentials: suiteCredentials(),
 	}
 	if _, err := client.Get(context.Background(), "k"); !errors.Is(err, objectstore.ErrInsecureEndpoint) {
 		t.Fatalf("Get = %v, want ErrInsecureEndpoint", err)
@@ -286,10 +286,10 @@ func TestAnOversizedAdvertisedDownloadIsRefusedWithoutReadingItsBody(t *testing.
 				Request:       request,
 			}, nil
 		})},
-		Endpoint: "http://127.0.0.1",
-		Bucket:   "sshc",
-		Region:   "auto",
-		Creds:    suiteCredentials(),
+		Endpoint:    "http://127.0.0.1",
+		Bucket:      "sshc",
+		Region:      "auto",
+		Credentials: suiteCredentials(),
 	}
 
 	if _, err := client.Get(context.Background(), "k"); !errors.Is(err, objectstore.ErrObjectTooLarge) {
@@ -307,7 +307,7 @@ func TestAnyOtherRejectionCarriesNoResponseBody(t *testing.T) {
 	// S3 のエラードキュメントにはバケット名とリクエスト ID が含まれる。どちらも
 	// このアプリケーションが表示するメッセージに入れてよいものではない。
 	client, _ := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
+		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte("<Error><BucketName>private-bucket</BucketName></Error>"))
 	})
 
@@ -342,8 +342,8 @@ func TestHTTPRejectionsKeepSpecificSafeCauses(t *testing.T) {
 			if !errors.Is(err, test.want) {
 				t.Fatalf("Get = %v, want %v", err, test.want)
 			}
-			if !errors.Is(err, objectstore.ErrRefused) {
-				t.Fatalf("Get = %v, want compatibility with ErrRefused", err)
+			if errors.Is(err, objectstore.ErrRefused) {
+				t.Fatalf("Get = %v, want a cause that does not also match ErrRefused", err)
 			}
 			if strings.Contains(err.Error(), "private-bucket") {
 				t.Error("the error carries the response body")
@@ -362,14 +362,14 @@ func TestAnErrorBodyIsDiscardedBeforeTheSDKReadsIt(t *testing.T) {
 				Body:       body,
 			}, nil
 		})},
-		Endpoint: "http://127.0.0.1",
-		Bucket:   "sshc",
-		Region:   "auto",
-		Creds:    suiteCredentials(),
+		Endpoint:    "http://127.0.0.1",
+		Bucket:      "sshc",
+		Region:      "auto",
+		Credentials: suiteCredentials(),
 	}
 
-	if _, err := client.Get(context.Background(), "k"); !errors.Is(err, objectstore.ErrRefused) {
-		t.Fatalf("Get = %v, want ErrRefused", err)
+	if _, err := client.Get(context.Background(), "k"); !errors.Is(err, objectstore.ErrAccessDenied) {
+		t.Fatalf("Get = %v, want ErrAccessDenied", err)
 	}
 	if got := body.reads.Load(); got != 0 {
 		t.Errorf("error body was read %d times", got)

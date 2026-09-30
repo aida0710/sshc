@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"slices"
 
 	"sshc/internal/storage"
 	"sshc/internal/strictjson"
@@ -58,18 +59,20 @@ func (s *Service) readState() (state, error) {
 	}
 	var parsed state
 	if err := strictjson.Decode(body, &parsed); err != nil || parsed.SchemaVersion != stateSchemaVersion ||
-		parsed.ETag == "" || parsed.Key == "" || parsed.Base == nil || parsed.LastOperation == nil {
-		// 壊れた state ファイルは回復可能である。次の pull はこのマシンを、一度も
-		// 同期していないマシンとして扱う。それは保守的な扱いだ、何も削除せず、
-		// 推測する代わりに衝突として報告する。
+		parsed.ETag == "" || parsed.Key == "" || parsed.Base == nil || parsed.LastOperation == nil ||
+		parsed.Base.SchemaVersion != SchemaVersion || !hasOnlySafeModes(*parsed.Base) {
+		// 壊れた state ファイルや、別の版のマニフェスト、checkModeを通らないModeを基準に
+		// 持つ state は回復可能である。次の pull はこのマシンを、一度も同期していない
+		// マシンとして扱う。それは保守的な扱いだ、何も削除せず、推測する代わりに衝突として
+		// 報告する。
 		return state{}, nil
 	}
-	migratedBase, err := migrateSnapshotManifest(*parsed.Base)
-	if err != nil {
-		return state{}, nil
-	}
-	parsed.Base = &migratedBase
 	return parsed, nil
+}
+
+// hasOnlySafeModesは、manifestのすべてのentryのModeがcheckModeを通るかを返す。
+func hasOnlySafeModes(manifest Manifest) bool {
+	return !slices.ContainsFunc(manifest.Files, func(entry Entry) bool { return checkMode(entry.Mode) != nil })
 }
 
 func (s *Service) writeState(next state) error {
@@ -87,6 +90,11 @@ func (s *Service) writeState(next state) error {
 
 func (s *Service) stateChange(next state) (storage.Change, error) {
 	next.SchemaVersion = stateSchemaVersion
+	base, err := s.withKeyedTravelDigest(next.Base)
+	if err != nil {
+		return storage.Change{}, err
+	}
+	next.Base = base
 	body, err := json.MarshalIndent(next, "", "  ")
 	if err != nil {
 		return storage.Change{}, err
@@ -102,9 +110,9 @@ func (s *Service) stateChange(next state) (storage.Change, error) {
 		Path:         s.statePath(),
 		Contents:     body,
 		Precondition: precondition,
-		// state は秘密を何も指定しないが、このアプリケーション自身のファイルで
-		// あり、同期のたびにその世代が増えるのは、バックアップディレクトリの中の
-		// 雑音でしかない。
+		// state は vault 文書の digest を鍵付きでしか持たず、秘密を照合できる値を
+		// 含まない。このアプリケーション自身のファイルであり、同期のたびにその
+		// 世代が増えるのは、バックアップディレクトリの中の雑音でしかない。
 		SkipBackup: true,
 	}, nil
 }

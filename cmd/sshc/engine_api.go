@@ -207,7 +207,7 @@ func (engine *engineAPI) sendJSONWithAction(
 			return errEngineInvalidResponse
 		}
 	}
-	defer zeroBytes(payload)
+	defer clear(payload)
 	var body io.Reader
 	if payload != nil {
 		body = &oneShotSecretPayload{body: payload}
@@ -220,7 +220,7 @@ func (engine *engineAPI) sendJSONWithAction(
 func (engine *engineAPI) sendSecretJSON(
 	ctx context.Context, method, path string, payload []byte, target any,
 ) error {
-	defer zeroBytes(payload)
+	defer clear(payload)
 	var body io.Reader
 	if payload != nil {
 		body = &oneShotSecretPayload{body: payload}
@@ -385,7 +385,7 @@ func decodeEngineJSONResponse(response *http.Response, target any) error {
 // 読んだ bytes は、成功しても失敗しても消す。
 func decodeBoundedJSONResponse(response *http.Response, target any, limit int) error {
 	body, err := readAndCloseBounded(response, limit, errEngineInvalidResponse, errEngineResponseTooLarge)
-	defer zeroBytes(body)
+	defer clear(body)
 	if err != nil {
 		return err
 	}
@@ -405,7 +405,7 @@ func consumeEngineResponse(response *http.Response, mutation bool) error {
 // readEmptyResponse は本文を limit まで読んで閉じ、空白のほかに何も無いことを確かめる。
 func readEmptyResponse(response *http.Response, limit int) error {
 	body, err := readAndCloseBounded(response, limit, errEngineInvalidResponse, errEngineResponseTooLarge)
-	defer zeroBytes(body)
+	defer clear(body)
 	if err != nil {
 		return err
 	}
@@ -428,11 +428,11 @@ func readAndCloseBounded(response *http.Response, limit int, invalid, tooLarge e
 	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, int64(limit)+1))
 	if err != nil {
-		zeroBytes(body)
+		clear(body)
 		return nil, invalid
 	}
 	if len(body) > limit {
-		zeroBytes(body)
+		clear(body)
 		return nil, tooLarge
 	}
 	return body, nil
@@ -440,7 +440,7 @@ func readAndCloseBounded(response *http.Response, limit int, invalid, tooLarge e
 
 func discardEngineResponse(response *http.Response) {
 	body, _ := readAndCloseEngineResponse(response)
-	zeroBytes(body)
+	clear(body)
 }
 
 func decodeEngineProblem(response *http.Response) error {
@@ -449,11 +449,10 @@ func decodeEngineProblem(response *http.Response) error {
 		status = response.StatusCode
 	}
 	body, err := readAndCloseEngineResponse(response)
-	defer zeroBytes(body)
+	defer clear(body)
 	decoded := engineProblem{Status: status, Code: "http_error", Retryable: retryableStatus(status)}
 	if err == nil {
-		var problem api.Problem
-		if decodeErr := strictjson.Decode(body, &problem); decodeErr == nil && problem.Code != "" {
+		if problem, ok := parseProblemBody(body); ok {
 			decoded.Code = problem.Code
 			decoded.Field = valueOrZero(problem.Field)
 			decoded.Reason = valueOrZero(problem.Reason)
@@ -465,6 +464,16 @@ func decodeEngineProblem(response *http.Response) error {
 		decoded.Code = "response_too_large"
 	}
 	return decoded
+}
+
+// parseProblemBody は、engine の拒否の本文を、code を持つ api.Problem ちょうど 1 つと
+// して読む。知らない項目や後ろに続く値があれば、読めなかったものとする。
+func parseProblemBody(body []byte) (api.Problem, bool) {
+	var problem api.Problem
+	if err := strictjson.Decode(body, &problem); err != nil || problem.Code == "" {
+		return api.Problem{}, false
+	}
+	return problem, true
 }
 
 func responseProblem(err error, status int, mutation bool) error {

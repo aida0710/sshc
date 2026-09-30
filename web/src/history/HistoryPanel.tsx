@@ -185,7 +185,7 @@ export function HistoryPanel() {
             ))}
           </ol>
         )}
-        <p className="border-t border-line bg-toolbar px-4 py-3 text-xs text-ink-faint">{t("history.backupsKept")}</p>
+        <p className="border-t border-line bg-toolbar px-4 py-3 text-xs text-ink-faint">{t("history.backupRetention")}</p>
       </Card>
     </div>
   );

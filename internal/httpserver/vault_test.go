@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,7 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/application"
 	"sshc/internal/secret"
+	"sshc/internal/secret/secrettest"
 	"sshc/internal/session"
 	"sshc/internal/storage"
 )
@@ -29,13 +31,21 @@ import (
 const testPassphrase = "correct horse battery staple"
 
 func passwordEngine(t *testing.T) (*echo.Echo, *secret.Service) {
-	engine, service, _ := passwordEngineIn(t)
-	return engine, service
+	fixture := newPasswordFixture(t)
+	return fixture.engine, fixture.service
 }
 
-// passwordEngineIn は home も返す。API の返答ではなく実際に書かれた
-// ものを読むテストのためである。
-func passwordEngineIn(t *testing.T) (*echo.Echo, *secret.Service, string) {
+// passwordFixture は、パスワードのルートを載せた engine と、その後ろの vault である。
+type passwordFixture struct {
+	engine  *echo.Echo
+	service *secret.Service
+	// transactions は service が vault を書く Manager で、前準備の書き込みにも使う。
+	transactions *storage.Manager
+	// home は、API の返答ではなく実際に書かれたものを読むテストのためにある。
+	home string
+}
+
+func newPasswordFixture(t *testing.T) passwordFixture {
 	t.Helper()
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
@@ -45,13 +55,14 @@ func passwordEngineIn(t *testing.T) (*echo.Echo, *secret.Service, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	transactions := storage.NewManager(workspace, time.Now, rand.Reader)
+	service := secret.NewService(workspace, transactions, time.Now)
 
 	engine := echo.New()
 	registerVaultRoutes(engine, VaultHandlers{
 		Service: service, Binding: fixedPasswordBinding,
 	})
-	return engine, service, home
+	return passwordFixture{engine: engine, service: service, transactions: transactions, home: home}
 }
 
 func passwordEngineWithKeyHosts(
@@ -111,11 +122,14 @@ func TestNoPasswordRouteEverReturnsAPassword(t *testing.T) {
 	// 腐らせてはならないアサーションである。このファイルの全ルートが
 	// 走査対象であり、書き込みを行うものも含め、どの body にも
 	// 保存された値が含まれてはならない。
-	engine, service := passwordEngine(t)
+	fixture := newPasswordFixture(t)
+	engine, service := fixture.engine, fixture.service
 	if err := service.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.SetBound("bastion", "hunter2", testPasswordBinding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(service, fixture.transactions, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "hunter2", Binding: testPasswordBinding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -135,11 +149,14 @@ func TestNoPasswordRouteEverReturnsAPassword(t *testing.T) {
 }
 
 func TestStatusReportsWhichHostsHaveAPasswordAndNothingElse(t *testing.T) {
-	engine, service := passwordEngine(t)
+	fixture := newPasswordFixture(t)
+	engine, service := fixture.engine, fixture.service
 	if err := service.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.SetBound("bastion", "hunter2", testPasswordBinding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(service, fixture.transactions, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "hunter2", Binding: testPasswordBinding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -352,11 +369,14 @@ func TestInvalidTOTPCredentialIsRejectedWithoutPersistence(t *testing.T) {
 }
 
 func TestEligibilityIsReadableAndCarriesTheWarnings(t *testing.T) {
-	engine, service := passwordEngine(t)
+	fixture := newPasswordFixture(t)
+	engine, service := fixture.engine, fixture.service
 	if err := service.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.SetBound("bastion", "held-back", strings.Repeat("cd", 32)); err != nil {
+	if err := secrettest.StoreDedicatedPassword(service, fixture.transactions, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "held-back", Binding: strings.Repeat("cd", 32),
+	}); err != nil {
 		t.Fatal(err)
 	}
 	registerVaultRoutes(engine, VaultHandlers{
@@ -742,7 +762,8 @@ func TestEveryCredentialRouteRefusesALockedVault(t *testing.T) {
 // secret に名前を付けて得たものだ。以前は 2 台の同じパスワードは
 // 2 つのコピーであり、変更は 2 箇所の編集で、同じものと分かる術がなかった。
 func TestOneNamedSecretServesTwoHostsAndTheFileNamesNeither(t *testing.T) {
-	engine, _, home := passwordEngineIn(t)
+	fixture := newPasswordFixture(t)
+	engine, home := fixture.engine, fixture.home
 
 	if code := send(t, engine, http.MethodPost, "/api/v1/passwords/initialise",
 		`{"passphrase":"`+testPassphrase+`"}`, nil).Code; code != http.StatusOK {
@@ -801,7 +822,8 @@ func TestOneNamedSecretServesTwoHostsAndTheFileNamesNeither(t *testing.T) {
 // マスターパスワード変更はローカル暗号化だけを変更し、remote同期状態を応答へ
 // 混ぜない。remote snapshotは専用の同期鍵で暗号化されている。
 func TestChangingTheMasterPasswordReturnsTheLocalVaultState(t *testing.T) {
-	engine, service, _ := passwordEngineIn(t)
+	fixture := newPasswordFixture(t)
+	engine, service := fixture.engine, fixture.service
 	if code := send(t, engine, http.MethodPost, "/api/v1/passwords/initialise",
 		`{"passphrase":"`+testPassphrase+`"}`, nil).Code; code != http.StatusOK {
 		t.Fatal("initialise")
@@ -843,6 +865,7 @@ func TestVaultProblemClassifiesStorageFailuresWithoutExposingPaths(t *testing.T)
 		{name: "full", err: &os.PathError{Op: "write", Path: "/data/user/0/private", Err: syscall.ENOSPC}, status: http.StatusInsufficientStorage, code: "vault_storage_full"},
 		{name: "read-only", err: &os.PathError{Op: "rename", Path: "/data/user/0/private", Err: syscall.EROFS}, status: http.StatusInternalServerError, code: "vault_storage_read_only"},
 		{name: "busy", err: secret.ErrStorageBusy, status: http.StatusConflict, code: "workspace_busy"},
+		{name: "too many backups", err: fmt.Errorf("commit rekey: %w", secret.ErrTooManyBackups), status: http.StatusConflict, code: "vault_backups_too_many"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

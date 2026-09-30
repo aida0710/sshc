@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"sshc/internal/app"
-	"sshc/internal/config"
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/sshclient"
@@ -165,9 +164,11 @@ func requestConnection(ctx context.Context, found handoff.Handoff, alias string,
 	return answer, nil
 }
 
-// maxConnectAnswer は接続情報の応答の上限である。応答に載る保存済みの値は Vault の
-// snapshot に収まるので、その上限に JSON の枠の分を足す。
-const maxConnectAnswer = config.MaxSnapshotSize + 64<<10
+// maxConnectAnswer は接続情報の応答を読む上限である。応答が運ぶのは、接続経路で使う
+// 保存済みの鍵パスフレーズ・パスワード・ワンタイムパスワードと短い警告だけで、保存済みの
+// 値はどれも 1 MiB までの Vault から取り出す。JSON のエスケープで膨らんでも収まるよう、
+// Vault の上限の4倍を取る。
+const maxConnectAnswer = 4 << 20
 
 // connectTimeout は、CLI が engine へ送る短い要求（challenge、status、接続情報、
 // UI URL の発行）のそれぞれに上限を設ける。ネットワーク越しに何かをするのではなく、

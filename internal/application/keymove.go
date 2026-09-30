@@ -189,7 +189,7 @@ func (s *Service) planKeyRelocation(inventory *keys.Inventory, request KeyReloca
 			return planned{}, KeyRelocateResult{}, readErr
 		}
 		digest := storage.Digest(contents)
-		keys.Wipe(contents)
+		clear(contents)
 		prepared.moves = append(prepared.moves, storage.Move{
 			From:         absoluteFrom,
 			To:           filepath.Join(root, filepath.FromSlash(relocation.to)),

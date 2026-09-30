@@ -16,13 +16,13 @@ var sourceFingerprintPattern = regexp.MustCompile(`^tree-sha256:[0-9a-f]{64}$`)
 var uploadPartNamePattern = regexp.MustCompile(`^\..+\.sshc-upload-[A-Za-z0-9_-]{8,128}\.part$`)
 var editorTemporaryNamePattern = regexp.MustCompile(`^\..+\.sshc-[0-9a-f]{24}\.tmp$`)
 
-// TransferManager serializes requests that operate on the same resumable part file.
-// Different files remain independent so a large queue can make bounded parallel progress.
 // TransferManager は、engine が抱える転送の全体である。3 つの関心ごとに 1 つずつ
 // lock を持ち、field はその lock の下に並べる。
 //
 //   - データプレーン（mutex）: 対象ごとの operation lock、開いた remote、
 //     prepared download の spool。upload_plane.go／download_plane.go／spool.go。
+//     同じ再開用の part file への操作は operation lock で直列にし、別のファイルへの
+//     操作は並行に進める。
 //   - job 台帳（jobsMutex）: queue の記録・順序・設定・永続化。jobs.go／
 //     jobs_settings.go／queue_store.go。
 //   - remote worker（remoteJobsMutex）: engine 内で走る copy／move／delete／

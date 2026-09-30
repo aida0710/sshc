@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"slices"
 
 	"sshc/internal/storage"
 )
@@ -38,7 +39,10 @@ func (s *Service) localKey() ([]byte, error) {
 }
 
 // unlockPasswordlessHeld は、施錠中のパスワードなしの Vault を解錠する。呼び手が
-// mutationMu を持っている。パスワードのある Vault と解錠中の Vault には何もしない。
+// mutationMutex を持っている。パスワードのある Vault と解錠中の Vault には何もしない。
+//
+// 呼び手が錠を持っているので afterUnlock へは知らせない。鍵を付ける前の同期状態の
+// digest は、次の Unlock か engine の起動のときに移す。
 func (s *Service) unlockPasswordlessHeld() error {
 	if s.Unlocked() {
 		return nil
@@ -47,7 +51,8 @@ func (s *Service) unlockPasswordlessHeld() error {
 	if err != nil || !passwordless {
 		return err
 	}
-	return s.autoUnlockHeld()
+	_, err = s.autoUnlockHeld()
+	return err
 }
 
 // hasLocalKey は、このマシンに解錠用の鍵がある（パスワードなしの Vault）かを返す。
@@ -101,26 +106,56 @@ func (s *Service) prepareProtection(passphrase string) (storage.Change, string, 
 
 // AutoUnlock is called once by the engine after all protected documents have
 // been registered. Explicit Lock still destroys the in-memory key.
+//
+// 中断した vault の変更の保留記録も、ここで片付ける。vault の鍵が要らない記録は
+// 鍵を読む前に、要る記録は自動で解錠できたあとに片付ける。マスターパスワードの
+// vault で鍵が要る記録は残し、利用者が解錠してから履歴の画面で片付ける。起動時に
+// 鍵の無いまま巻き戻そうとすると ErrLocked で engine が起動できない。
 func (s *Service) AutoUnlock() error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-	return s.autoUnlockHeld()
+	s.mutationMutex.Lock()
+	unlocked, err := s.autoUnlockHeld()
+	s.mutationMutex.Unlock()
+	if unlocked {
+		s.notifyUnlocked()
+	}
+	return err
 }
 
-// autoUnlockHeld は AutoUnlock の本体である。呼び手が mutationMu を持っている。
+// autoUnlockHeld は AutoUnlock の本体である。呼び手が mutationMutex を持っている。
+// パスワードなしの Vault を解錠できたかを返す。afterUnlock へは知らせないので、
+// 呼び手が mutationMutex を放してから notifyUnlocked で知らせる。
 //
-// 中断した secret.vault と secret.rekey を完了・巻き戻しするので、mutationMu の外で
+// 中断した secret.vault と secret.rekey を完了・巻き戻しするので、mutationMutex の外で
 // 走らせてはならない。storage の Pending は実行中のトランザクションの記録も読むので、
 // 走っている ChangeMasterPassword の rekey を、中断したものとして扱ってしまう。
-func (s *Service) autoUnlockHeld() error {
-	// Restore one complete generation before consulting the device key. These
-	// atomic transactions keep raw rollback material and need no unlocked vault.
+func (s *Service) autoUnlockHeld() (bool, error) {
+	if err := s.recoverPending(func(item storage.Pending) bool {
+		return slices.Contains(recoveredBeforeUnlock, item.Operation) ||
+			slices.Contains(vaultOnlyOperations, item.Operation) && !rollbackOpensSealedBackup(item)
+	}); err != nil {
+		return false, err
+	}
+
+	passwordless, err := s.hasLocalKey()
+	if err != nil || !passwordless {
+		return false, err
+	}
+	if err := s.unlockHeld(""); err != nil {
+		return false, err
+	}
+	return true, s.recoverPending(func(item storage.Pending) bool {
+		return slices.Contains(vaultOnlyOperations, item.Operation)
+	})
+}
+
+// recoverPending は、recoverable が選んだ保留記録を、完了か巻き戻しで片付ける。
+func (s *Service) recoverPending(recoverable func(storage.Pending) bool) error {
 	pending, err := s.transactions.Pending()
 	if err != nil {
 		return err
 	}
 	for _, item := range pending {
-		if item.Operation != "secret.vault" && item.Operation != "secret.rekey" {
+		if !recoverable(item) {
 			continue
 		}
 		switch {
@@ -135,10 +170,17 @@ func (s *Service) autoUnlockHeld() error {
 			return err
 		}
 	}
+	return nil
+}
 
-	passwordless, err := s.hasLocalKey()
-	if err != nil || !passwordless {
-		return err
+// rollbackOpensSealedBackup は、vault だけを書く変更の保留記録を巻き戻すときに、
+// vault の鍵で封じた控えを開く必要があるかを返す。巻き戻しが控えを読むのは、適用
+// 済みで控えを持つエントリだけである。
+func rollbackOpensSealedBackup(item storage.Pending) bool {
+	for _, entry := range item.Entries {
+		if entry.Committed && entry.HasBackup {
+			return true
+		}
 	}
-	return s.unlockHeld("")
+	return false
 }

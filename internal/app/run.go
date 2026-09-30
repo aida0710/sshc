@@ -17,6 +17,7 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/browserauth"
+	"sshc/internal/configresolver"
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/keys"
@@ -111,7 +112,7 @@ func buildKeyService(workspace *storage.Workspace, dependencies Dependencies, co
 	return keys.NewService(keys.ServiceOptions{
 		Workspace:     workspace,
 		Transactions:  transactions,
-		Resolver:      storage.NewResolver(workspace),
+		Resolver:      configresolver.ForWorkspace(workspace),
 		Catalogue:     keys.CatalogueReader{Toolchain: dependencies.Toolchain},
 		Agent:         dependencies.KeyAgent,
 		Now:           time.Now,
@@ -235,7 +236,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		RemoteKeys:            services.remoteKeys,
 		Recent:                services.recent,
 		SFTP:                  services.sftp,
-		SFTPTransferStatePath: filepath.Join(services.workspace.StateDir(), "transfers.json"),
+		SFTPTransferStatePath: filepath.Join(services.workspace.StateDir(), sftpTransferStateName),
 		Workspaces:            services.workspaces,
 		Snippets:              services.snippets,
 		Vault:                 services.vault,
@@ -302,6 +303,10 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		vpn:         services.vpn,
 	}, nil
 }
+
+// sftpTransferStateName は、転送の一覧と再開の位置を置く、状態ディレクトリの中の
+// ファイル名。このマシンの engine だけのものなので、同期では運ばない。
+const sftpTransferStateName = "transfers.json"
 
 // StateDir は、engine lock、handoff、SFTP の転送キューを置く sshc の state
 // directory を返す。設定を書く Workspace と同じく、解決した ~/.ssh の下にする。

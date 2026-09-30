@@ -408,7 +408,8 @@ func (m *TransferManager) AppendOwned(ctx context.Context, alias, id, remotePath
 }
 
 // CompleteOwned publishes the part and commits the completed job before the
-// request returns. This removes the former rename-then-client-update window.
+// request returns, so the remote file is never renamed into place while the
+// job record still describes an unfinished upload.
 func (m *TransferManager) CompleteOwned(ctx context.Context, alias, id, remotePath string, total int64, expectedRevision, sourceFingerprint string) (Transfer, error) {
 	unlock := m.lock("", "\x00job-owner:"+id)
 	defer unlock()

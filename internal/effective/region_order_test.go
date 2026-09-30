@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"sshc/internal/configresolver"
 	"sshc/internal/effective"
 	"sshc/internal/storage"
 )
@@ -42,7 +43,7 @@ func TestGeneratedRegionFixtureOrdersChildBeforeParent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	graph, err := storage.NewResolver(workspace).Resolve(filepath.Join(root, "config"))
+	graph, err := configresolver.ForWorkspace(workspace).Resolve(filepath.Join(root, "config"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +85,7 @@ func TestAnIncludeAboveABlockIsReadBeforeIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	graph, err := storage.NewResolver(workspace).Resolve(filepath.Join(root, "config"))
+	graph, err := configresolver.ForWorkspace(workspace).Resolve(filepath.Join(root, "config"))
 	if err != nil {
 		t.Fatal(err)
 	}

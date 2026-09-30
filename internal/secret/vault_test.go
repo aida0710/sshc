@@ -246,6 +246,25 @@ func TestRenameCarriesThePasswordAndLeavesNothingBehind(t *testing.T) {
 	}
 }
 
+func TestRenameRefusesKeyPassphrasesWhichMoveWithTheirKeyPath(t *testing.T) {
+	// 鍵のパスフレーズの subject は鍵のパスであり、鍵の移動は RelocateSubjects が
+	// まとめて移す。Rename が鍵の種類を受け付けると、同じ移動に検査の違う入口が
+	// 2つできる。
+	vault, err := secret.Create(passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.SetDedicatedKeyPassphrase("keys/id_ed25519", "unlock"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Rename(secret.KindKeyPassphrase, "keys/id_ed25519", "keys/moved"); !errors.Is(err, secret.ErrUnknownKind) {
+		t.Fatalf("Rename(key passphrase) = %v, want ErrUnknownKind", err)
+	}
+	if got, ok := vault.SecretFor(secret.KindKeyPassphrase, "keys/id_ed25519"); !ok || got != "unlock" {
+		t.Errorf("the refused rename moved the passphrase: %q, %v", got, ok)
+	}
+}
+
 func TestPackageImportsNoLogger(t *testing.T) {
 	// このアプリケーションのすべてのパスワードはこのパッケージを通る。ここにある
 	// ログ出力は、どれほど善意でも、パスワードをファイルに残しうる唯一のものであり、

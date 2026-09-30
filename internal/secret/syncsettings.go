@@ -1,12 +1,68 @@
 package secret
 
 import (
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"path/filepath"
 
 	"sshc/internal/storage"
 )
+
+// SettingsPath は、マスターパスワードで暗号化したオブジェクトストア設定の保存先。
+// 同期先への資格情報がスナップショットに含まれないよう、vault とは別に保存する。
+const SettingsPath = "sshc/sync-settings"
+
+// SyncSettings は、オブジェクトストアが必要とするもの。
+//
+// vault と同じマスターパスワードで暗号化し、同期対象外の専用ファイルに保存する。
+type SyncSettings struct {
+	Endpoint string `json:"endpoint,omitempty"`
+	Bucket   string `json:"bucket,omitempty"`
+	// Path は、すべてのオブジェクトが置かれる接頭辞。空ならバケットのルート。
+	Path            string `json:"path,omitempty"`
+	Region          string `json:"region,omitempty"`
+	AccessKeyID     string `json:"accessKeyId,omitempty"`
+	SecretAccessKey string `json:"secretAccessKey,omitempty"`
+	Direction       string `json:"direction,omitempty"`
+	// Auto は、この設置で自動同期を入れてあるか。
+	//
+	// 他の同期の設定と同じ場所に住む。巡回に必要なものは、鍵も資格情報も
+	// この入切も、すべて保管庫が開いてから読める。閉じている間は何も読めず、
+	// 何も起きない。それがこの機能の唯一の条件である。
+	Auto bool `json:"auto,omitempty"`
+	// Key は、リモートのスナップショットを暗号化する値である。
+	//
+	// 同期鍵はマスターパスワードとは別の値にする。マスターパスワードで暗号化すると、
+	// それがマシンをまたいだ共有の秘密になる。1 台で変えればほかのマシンが復号できなく
+	// なり、入力する利用者の居ない自動同期では復号できない。同期鍵を別に持つので、
+	// マスターパスワードはマシンごとのローカルな秘密のままでいられる。
+	Key string `json:"key,omitempty"`
+}
+
+// SealSettings は、オブジェクトストアの設定を vault 自身の鍵で暗号化する。隣に置く
+// ファイルのためである。同じマスターパスワードで、違うファイル。こちらは移動
+// しない。
+func (v *Vault) SealSettings(settings SyncSettings) ([]byte, error) {
+	plaintext, err := json.Marshal(settings)
+	if err != nil {
+		return nil, err
+	}
+	return v.key.Seal(plaintext)
+}
+
+// OpenSettings は、SealSettings が書いたファイルを復号する。
+func (v *Vault) OpenSettings(sealed []byte) (SyncSettings, error) {
+	plaintext, err := v.key.Open(sealed)
+	if err != nil {
+		return SyncSettings{}, err
+	}
+	var settings SyncSettings
+	if err := json.Unmarshal(plaintext, &settings); err != nil {
+		return SyncSettings{}, ErrWrongPassphrase
+	}
+	return settings, nil
+}
 
 // settingsPath は、vault の隣にある、暗号化されたオブジェクトストアの設定。
 func (s *Service) settingsPath() string {
@@ -20,8 +76,8 @@ func (s *Service) settingsPath() string {
 // エラーにはしない。「まだ設定されていない」は状態であって、失敗では
 // ないからだ。
 func (s *Service) SyncSettings() (SyncSettings, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return SyncSettings{}, ErrLocked
@@ -80,15 +136,15 @@ func (s *Service) SetSyncKeyIfSettingsMatch(expected SyncSettings, key string) e
 }
 
 // writeSyncSettings は、いま保存されているものを読み、mutate に渡し、返ってきた
-// ものを暗号化して書く。読みと書きは同じ mutationMu の下で起きるので、二つの呼び出しが
+// ものを暗号化して書く。読みと書きは同じ mutationMutex の下で起きるので、二つの呼び出しが
 // 互いの結果を踏まない。
 func (s *Service) writeSyncSettings(mutate func(SyncSettings) (SyncSettings, error)) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-	s.mu.Lock()
+	s.mutationMutex.Lock()
+	defer s.mutationMutex.Unlock()
+	s.mutex.Lock()
 	vault := s.use()
 	if vault == nil {
-		s.mu.Unlock()
+		s.mutex.Unlock()
 		return ErrLocked
 	}
 	stored := SyncSettings{}
@@ -97,21 +153,21 @@ func (s *Service) writeSyncSettings(mutate func(SyncSettings) (SyncSettings, err
 	case readErr == nil:
 		opened, err := vault.OpenSettings(existing)
 		if err != nil {
-			s.mu.Unlock()
+			s.mutex.Unlock()
 			return err
 		}
 		stored = opened
 	case !errors.Is(readErr, fs.ErrNotExist):
-		s.mu.Unlock()
+		s.mutex.Unlock()
 		return readErr
 	}
 	next, err := mutate(stored)
 	if err != nil {
-		s.mu.Unlock()
+		s.mutex.Unlock()
 		return err
 	}
 	sealed, err := vault.SealSettings(next)
-	s.mu.Unlock()
+	s.mutex.Unlock()
 	if err != nil {
 		return err
 	}

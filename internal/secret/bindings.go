@@ -80,8 +80,8 @@ type ConnectionSecretsMutation struct {
 // BoundFor は、alias の解決済み接続先が割り当てを確認したときと同じ場合だけ
 // 秘密（パスワードか TOTP の provisioning data）を返す。
 func (s *Service) BoundFor(kind Kind, alias, binding string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return ""
@@ -93,8 +93,8 @@ func (s *Service) BoundFor(kind Kind, alias, binding string) string {
 // HasAssignmentFor は、解錠中の vault に alias の割り当てがあるかを、秘密を
 // 解放せずに返す。呼び手はこれで「割り当てなし」と「束縛が古い」を区別する。
 func (s *Service) HasAssignmentFor(kind Kind, alias string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	// 報告だけなので、アイドルの時計は進めない（use ではなく open）。
 	vault := s.open()
 	if vault == nil {
@@ -108,8 +108,8 @@ func (s *Service) HasAssignmentFor(kind Kind, alias string) bool {
 // one resolved destination without releasing either saved value. Reading this
 // metadata does not extend the vault idle deadline.
 func (s *Service) AuthenticationBindingStates(alias, binding string) (AuthenticationBindingState, AuthenticationBindingState) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.open()
 	if vault == nil {
 		return AuthenticationBindingUnavailable, AuthenticationBindingUnavailable
@@ -130,8 +130,8 @@ func (s *Service) AuthenticationBindingStates(alias, binding string) (Authentica
 // 解決する。鍵を二段階ではなく一度の操作でエージェントへ追加できるのはこれの
 // おかげであり、鍵 vault が import するのではなく、そこへ注入される。
 func (s *Service) KeyPassphraseFor(relativePath string) (string, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return "", false
@@ -162,8 +162,8 @@ func (s *Service) WithKeyPassphraseRelocation(
 
 // WithPasswordMutation prepares a password-vault replacement and lets the
 // application commit it beside the SSH configuration change. The live vault
-// remains unchanged until that callback succeeds. mutationMu stays held so a
-// second writer cannot overtake the transaction; mu is deliberately released
+// remains unchanged until that callback succeeds. mutationMutex stays held so a
+// second writer cannot overtake the transaction; mutex is deliberately released
 // while storage runs because storage seals generational backups through this
 // same service.
 func (s *Service) WithPasswordMutation(
@@ -257,11 +257,11 @@ func applyConnectionSecretsMutation(vault, clone *Vault, mutation ConnectionSecr
 
 // WithStableSnapshot prevents vault/settings writers and master-key rotation
 // from crossing a remote snapshot. The callback may then take the workspace
-// mutation lock; this is the same mutationMu -> workspace order used by secret
+// mutation lock; this is the same mutationMutex -> workspace order used by secret
 // transactions and rekey.
 func (s *Service) WithStableSnapshot(snapshot func() error) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	s.mutationMutex.Lock()
+	defer s.mutationMutex.Unlock()
 	if snapshot == nil {
 		return nil
 	}

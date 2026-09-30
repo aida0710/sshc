@@ -37,4 +37,12 @@ export const syncRefusals: Record<string, MessageKey> = {
   sync_local_changed: "sync.localChanged",
   sync_workspace_busy: "sync.workspaceBusy",
   sync_pending_transaction: "sync.pendingTransaction",
+  sync_local_path_unportable: "sync.localPathUnportable",
+};
+
+// Failures whose problem names the local file at fault. The path is relative
+// to ~/.ssh and fills {path}. Without a path (the automatic sync status keeps
+// only the code) the wording in syncRefusals is used.
+export const syncPathRefusals: Record<string, MessageKey> = {
+  sync_local_path_unportable: "sync.localPathUnportableAt",
 };

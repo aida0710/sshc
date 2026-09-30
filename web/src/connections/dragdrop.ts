@@ -1,11 +1,10 @@
+import { maxGroupSegments } from "../rules/generated";
 
 export type DragPayload =
   | { kind: "connection"; path: string; alias: string; group: string }
   | { kind: "group"; name: string };
 
 export const dragMimeType = "application/x-sshc-drag";
-
-const maxGroupSegments = 6;
 
 const noGroup = "";
 

@@ -43,9 +43,14 @@ const (
 
 // Routine はリモートで走るプログラムの全体。呼び出し側の入力を一切含まない。
 //
-// 鍵は標準入力で届き "$key" に読み込まれる。grep -x -F は行全体をリテラルとして
-// 比較するので、すでに存在する鍵が重複することはない。権限は何かを書く前に
-// 締められる。
+// 鍵は標準入力で届き "$key" に読み込まれる。すでに登録済みかどうかは、行全体では
+// なく「鍵の種類 + base64 本体」の並びで判定する。コメントや options だけが違う
+// 既存行も同じ鍵として扱い、制限付きの行の後ろに制限のない行を足さない。
+// 空白とタブのあとの # で始まる行は sshd が読まないので判定から外す。無効にする
+// ためにコメントアウトした同じ鍵があっても、登録済みとは答えずに追記する。
+// 古い mawk は [[:space:]] を解さないので、sshd と同じ空白とタブを並べて書く。
+// 末尾に改行のないファイルへそのまま追記すると最終行に連結されて旧鍵まで壊れる
+// ので、ssh-copy-id と同じく先に改行を補う。権限は何かを書く前に締められる。
 const Routine = `set -e
 umask 077
 key=$(cat)
@@ -53,15 +58,25 @@ case "$key" in
   ssh-*|ecdsa-*|sk-*) ;;
   *) echo "sshc: unsupported key" >&2; exit 3 ;;
 esac
+key_type=${key%% *}
+key_rest=${key#* }
+key_blob=${key_rest%% *}
+file="$HOME/.ssh/authorized_keys"
 mkdir -p "$HOME/.ssh"
 chmod 700 "$HOME/.ssh"
-touch "$HOME/.ssh/authorized_keys"
-chmod 600 "$HOME/.ssh/authorized_keys"
-if grep -qxF "$key" "$HOME/.ssh/authorized_keys"; then
+touch "$file"
+chmod 600 "$file"
+if SSHC_KEY_TYPE=$key_type SSHC_KEY_BLOB=$key_blob awk '
+  /^[ \t]*#/ { next }
+  { for (i = 1; i < NF; i++) if ($i == ENVIRON["SSHC_KEY_TYPE"] && $(i + 1) == ENVIRON["SSHC_KEY_BLOB"]) found = 1 }
+  END { exit !found }' "$file"; then
   echo "sshc: already-present"
   exit 0
 fi
-printf '%s\n' "$key" >> "$HOME/.ssh/authorized_keys"
+if [ -s "$file" ] && [ -n "$(tail -c 1 "$file")" ]; then
+  printf '\n' >> "$file"
+fi
+printf '%s\n' "$key" >> "$file"
 echo "sshc: added"
 `
 

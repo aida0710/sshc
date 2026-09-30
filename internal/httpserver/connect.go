@@ -125,11 +125,13 @@ func (h CLIHandlers) authenticationBindings(aliases []string) map[string]string 
 	return bindings
 }
 
-// savedBoundSecrets は、この接続に現れる alias ごとに、kind の保存済みの秘密と、
-// それを結び付けた認証先を返す。bindings は authenticationBindings が解いたもの。
+// savedBoundSecrets は、この接続に現れる alias ごとに、その kind（アカウントパスワード
+// か TOTP）の保存済みの値を返す。2つ目の戻り値は値を結び付けた認証先、3つ目は
+// 割り当てはあるが今の認証先には渡せなかった alias である。bindings は
+// authenticationBindings が解いたもの。
 //
-// CLI は値を受け取って自分のプロセスの中で SSH 接続をするので、埋め込み
-// ターミナルと同じ値を返す。
+// 要求元の `sshc` は受け取った値をプロセス内の SSH 接続で使い、別のプログラムへは
+// 渡さない。渡す先が増えないので、埋め込みターミナルと違う結果を返す理由も無い。
 //
 // この経路を読めるのは `~/.ssh/sshc/cli`（0600）を読める者だけであり、その者は
 // すでに、どの alias についても保存済みパスフレーズを引き出せる。秘密が一種類

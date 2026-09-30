@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"sshc/internal/envelope"
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
 )
@@ -172,8 +173,7 @@ func TestStartupRecoversProtectionSwitchAtEitherSideOfCommitPoint(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			manager := storage.NewManager(workspace, time.Now, rand.Reader)
-			restarted := secret.NewService(workspace, manager, time.Now)
+			restarted, manager := newSealedService(workspace, time.Now)
 			if err := restarted.AutoUnlock(); err != nil {
 				t.Fatal(err)
 			}
@@ -310,5 +310,20 @@ func TestAutoUnlockWaitsForTheVaultWriterInProgress(t *testing.T) {
 	}
 	if err := <-finished; err != nil {
 		t.Fatalf("AutoUnlock after the writer finished = %v", err)
+	}
+}
+
+func TestStartupNamesTheFileOfAnInterruptedChangeRecordedByAnOlderRelease(t *testing.T) {
+	service, workspace, _ := recoveryService(t)
+	const identifier = "20260801T120000.000-0123abcd"
+	recordPath := filepath.Join(workspace.StateDir(), "journal", identifier+".json")
+	// 古いバージョンの sshc も、この記録を非公開状態として書いた。Windows の読み口は
+	// ACL を先に確かめるので、素の os.WriteFile で置くとバージョンの検査まで届かない。
+	acltest.WritePrivateFile(t, recordPath, []byte(`{"id":"`+identifier+`","version":1,"operation":"config.save"}`))
+
+	err := service.AutoUnlock()
+	var versionErr *storage.JournalVersionError
+	if !errors.As(err, &versionErr) || versionErr.Path != recordPath {
+		t.Fatalf("AutoUnlock = %v, want a JournalVersionError naming %s", err, recordPath)
 	}
 }

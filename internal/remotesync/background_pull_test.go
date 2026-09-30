@@ -9,11 +9,12 @@ import (
 
 	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/remotesync"
+	"sshc/internal/storage"
 )
 
 func TestExistingLargeBackgroundCanBePulled(t *testing.T) {
 	bucket := &fakeBucket{}
-	asset := "sshc/backgrounds/large.png"
+	asset := storage.BackgroundsDirectory + "/large.png"
 	writer := newInstallation(t, bucket, map[string]string{asset: strings.Repeat("x", 2<<20)})
 	if _, err := writer.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatalf("push: %v", err)
@@ -26,7 +27,7 @@ func TestExistingLargeBackgroundCanBePulled(t *testing.T) {
 
 func TestLargeBackgroundCanBeAppliedAndReplacedBySync(t *testing.T) {
 	bucket := &fakeBucket{}
-	const asset = "sshc/backgrounds/large.png"
+	const asset = storage.BackgroundsDirectory + "/large.png"
 	writer := newInstallation(t, bucket, nil)
 	receiver := newInstallation(t, bucket, nil)
 	for _, contents := range []string{strings.Repeat("x", 2<<20), strings.Repeat("y", 2<<20)} {

@@ -253,7 +253,7 @@ func (g *groupLayout) stageMoves() error {
 			return readErr
 		}
 		digest := storage.Digest(contents)
-		keys.Wipe(contents)
+		clear(contents)
 		g.prepared.moves = append(g.prepared.moves, storage.Move{
 			From:         absoluteFrom,
 			To:           absoluteTo,

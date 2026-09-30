@@ -55,7 +55,7 @@ func sameSetupInspection(left, right SetupInspection) bool {
 	return left.State == right.State && left.ETag == right.ETag && left.HistoryPresent == right.HistoryPresent
 }
 
-func verifySetupKey(ctx context.Context, client *objectstore.Client, config Config, expectedETag, key string) error {
+func verifySetupKey(ctx context.Context, client *objectstore.Client, config Config, expectedETag, syncKey string) error {
 	object, err := client.Get(ctx, ObjectKeyFor(config))
 	if err != nil {
 		return err
@@ -63,11 +63,11 @@ func verifySetupKey(ctx context.Context, client *objectstore.Client, config Conf
 	if object.ETag != expectedETag {
 		return ErrSetupTargetChanged
 	}
-	archive, openedKey, err := envelope.OpenWithin(object.Body, key, envelope.AcceptedFromRemote)
+	archive, derivedKey, err := envelope.OpenRemote(object.Body, syncKey)
 	if err != nil {
 		return err
 	}
-	openedKey.Destroy()
+	derivedKey.Destroy()
 	_, _, err = Read(archive)
 	return err
 }
@@ -75,9 +75,9 @@ func verifySetupKey(ctx context.Context, client *objectstore.Client, config Conf
 // CompleteSetup rechecks the target, validates an existing snapshot key, then
 // persists settings and publishes the binding under one operation boundary.
 func (s *Service) CompleteSetup(ctx context.Context, config Config, credentials objectstore.Credentials,
-	client *objectstore.Client, expected SetupInspection, key string, persist func() error) error {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
+	client *objectstore.Client, expected SetupInspection, syncKey string, persist func() error) error {
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
 	config = normalizeConfig(config)
 	if persist == nil {
 		return errors.New("remote sync settings persistence is not configured")
@@ -95,11 +95,11 @@ func (s *Service) CompleteSetup(ctx context.Context, config Config, credentials 
 	if actual.State == SetupTargetIncomplete {
 		return ErrSetupTargetIncomplete
 	}
-	if err := ValidateKey(key); err != nil {
+	if err := ValidateKey(syncKey); err != nil {
 		return err
 	}
 	if actual.State == SetupTargetExisting {
-		if err := verifySetupKey(ctx, client, config, actual.ETag, key); err != nil {
+		if err := verifySetupKey(ctx, client, config, actual.ETag, syncKey); err != nil {
 			return err
 		}
 	}

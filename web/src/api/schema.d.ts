@@ -5662,7 +5662,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Derived key and every pending askpass token forgotten */
+            /** @description Derived key forgotten and the vault locked */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6302,6 +6302,7 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
         };
     };

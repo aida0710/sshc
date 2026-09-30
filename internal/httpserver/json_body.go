@@ -36,7 +36,7 @@ func decodeJSONWithin(c *echo.Context, limit int64, target any) error {
 		return errInvalidBody
 	}
 	raw, err := io.ReadAll(io.LimitReader(body, limit+1))
-	defer wipeBuffer(raw)
+	defer clear(raw)
 	var tooLarge *http.MaxBytesError
 	switch {
 	case errors.As(err, &tooLarge):

@@ -77,11 +77,11 @@ func (h SyncHandlers) Bucket(c *echo.Context) error {
 
 func (h SyncHandlers) History(c *echo.Context) error {
 	h.restore()
-	key, ok, err := h.sealingKey(c)
+	syncKey, ok, err := h.requireSyncKey(c)
 	if !ok {
 		return err
 	}
-	view, err := h.Service.History(c.Request().Context(), key)
+	view, err := h.Service.History(c.Request().Context(), syncKey)
 	if err != nil {
 		return syncProblem(c, err)
 	}
@@ -115,11 +115,11 @@ func (h SyncHandlers) HistoryDiff(c *echo.Context) error {
 	if len(request.Key) == 0 || len(request.Key) > remotesync.MaxHistoryKeyLength {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	key, ok, err := h.sealingKey(c)
+	syncKey, ok, err := h.requireSyncKey(c)
 	if !ok {
 		return err
 	}
-	diff, err := h.Service.DiffHistory(c.Request().Context(), key, request.Key)
+	diff, err := h.Service.DiffHistory(c.Request().Context(), syncKey, request.Key)
 	if err != nil {
 		return syncProblem(c, err)
 	}

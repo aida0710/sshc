@@ -15,10 +15,10 @@ import (
 // The shared key that seals snapshots: reading it from the vault for a
 // request, and creating or replacing it.
 
-// sealingKey は、vault に保存した同期専用の暗号鍵を返す。
+// requireSyncKeyは、vaultに保存した同期鍵を返す。
 // 取得できない場合は HTTP 応答を書き込み、ok=false を返す。
-func (h SyncHandlers) sealingKey(c *echo.Context) (string, bool, error) {
-	key, err := h.currentSyncKey()
+func (h SyncHandlers) requireSyncKey(c *echo.Context) (string, bool, error) {
+	syncKey, err := h.currentSyncKey()
 	switch {
 	case vaultUnavailable(err):
 		return "", false, problem(c, http.StatusConflict, "vault_locked")
@@ -27,7 +27,7 @@ func (h SyncHandlers) sealingKey(c *echo.Context) (string, bool, error) {
 	case err != nil:
 		return "", false, unexpectedProblem(c, "vault_unreadable", err)
 	}
-	return key, true, nil
+	return syncKey, true, nil
 }
 
 func (h SyncHandlers) currentSyncKey() (string, error) {
@@ -44,7 +44,7 @@ func (h SyncHandlers) currentSyncKey() (string, error) {
 	return settings.Key, nil
 }
 
-func (h SyncHandlers) keyProvider() remotesync.KeyProvider {
+func (h SyncHandlers) syncKeyProvider() remotesync.KeyProvider {
 	return h.currentSyncKey
 }
 
@@ -75,35 +75,35 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 	if h.Vault == nil {
 		return problem(c, http.StatusConflict, "vault_locked")
 	}
-	key := ""
+	syncKey := ""
 	if request.Key != nil {
 		if len(*request.Key) == 0 || len(*request.Key) > remotesync.MaxKeyLength {
 			return problem(c, http.StatusBadRequest, "invalid_request")
 		}
-		key = strings.TrimSpace(*request.Key)
+		syncKey = strings.TrimSpace(*request.Key)
 	}
-	if key == "" {
+	if syncKey == "" {
 		generated, err := remotesync.NewKey()
 		if err != nil {
 			return unexpectedProblem(c, "key_generation_failed", err)
 		}
-		key = generated
+		syncKey = generated
 	}
 	// 弱い鍵は、暗号化する段になって初めて分かるのでは遅い。ここで断る。
-	if err := remotesync.ValidateKey(key); err != nil {
+	if err := remotesync.ValidateKey(syncKey); err != nil {
 		if errors.Is(err, remotesync.ErrWeakPassphrase) {
 			return problem(c, http.StatusBadRequest, "passphrase_too_short")
 		}
 		return unexpectedProblem(c, "vault_unreadable", err)
 	}
 	confirmHistoryLoss := request.ConfirmHistoryLoss != nil && *request.ConfirmHistoryLoss
-	if err := h.Service.ReplaceKeyUsing(c.Request().Context(), key, confirmHistoryLoss, func() (string, func() error, error) {
+	if err := h.Service.ReplaceKeyUsing(c.Request().Context(), syncKey, confirmHistoryLoss, func() (string, func() error, error) {
 		settings, err := h.Vault.SyncSettings()
 		if err != nil {
 			return "", nil, err
 		}
 		commit := func() error {
-			if err := h.Vault.SetSyncKeyIfSettingsMatch(settings, key); errors.Is(err, secret.ErrSyncSettingsChanged) {
+			if err := h.Vault.SetSyncKeyIfSettingsMatch(settings, syncKey); errors.Is(err, secret.ErrSyncSettingsChanged) {
 				return remotesync.ErrRemoteMoved
 			} else {
 				return err
@@ -122,7 +122,7 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 		}
 		return unexpectedProblem(c, "vault_failed", err)
 	}
-	return c.JSON(http.StatusOK, api.SyncKeyResponse{Key: key})
+	return c.JSON(http.StatusOK, api.SyncKeyResponse{Key: syncKey})
 }
 
 // keyConfigured は、vault から値を公開せず、同期鍵の設定有無だけを返す。

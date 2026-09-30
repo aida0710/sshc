@@ -9,8 +9,17 @@ import (
 // MaxFileSize; only transaction payloads and explicit asset readers use this.
 const MaxAssetFileSize = 1024 << 20
 
-func payloadLimit(relative string) int64 {
-	if strings.HasPrefix(relative, "sshc/backgrounds/") {
+// BackgroundsDirectory は、ターミナルの背景画像を置くディレクトリ。ワークスペース
+// からのスラッシュ区切りの相対パス。ここのファイルだけが MaxAssetFileSize まで
+// 大きくてよいので、画像を置く application も、上限を決める PayloadLimit も、
+// この定数からパスを組み立てる。
+const BackgroundsDirectory = StateDirectoryName + "/backgrounds"
+
+// PayloadLimit は、ワークスペースからのスラッシュ区切りの相対パス relative に置く
+// ファイルの大きさの上限を返す。背景画像は MaxAssetFileSize、ほかは MaxFileSize。
+// トランザクションの書き込みと、同期の収集・受信が同じ上限を使う。
+func PayloadLimit(relative string) int64 {
+	if strings.HasPrefix(relative, BackgroundsDirectory+"/") {
 		return MaxAssetFileSize
 	}
 	return MaxFileSize
@@ -28,10 +37,10 @@ func (w *Workspace) TransactionFileLimit(path string) int64 {
 	if found {
 		identifier, original, valid := strings.Cut(backup, "/")
 		if valid && validJournalIdentifier(identifier) {
-			return 2 * payloadLimit(original)
+			return 2 * PayloadLimit(original)
 		}
 	}
-	return payloadLimit(relative)
+	return PayloadLimit(relative)
 }
 
 func (w *Workspace) ReadTransactionFile(path string) ([]byte, error) {

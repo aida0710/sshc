@@ -16,8 +16,9 @@ import (
 
 // 端末の背景画像。
 
-// BackgroundsDirectory は、画像を置く場所である。ワークスペース相対。
-const BackgroundsDirectory = "sshc/backgrounds"
+// BackgroundsDirectory は、画像を置く場所である。ワークスペース相対。容量の上限を
+// 決める storage と同じ場所を指すよう、storage の定数を使う。
+const BackgroundsDirectory = storage.BackgroundsDirectory
 
 const (
 	MinBackgroundCapacityMiB     = 1

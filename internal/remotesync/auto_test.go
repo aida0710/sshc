@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,6 +35,114 @@ func once(t *testing.T, auto *remotesync.Auto) remotesync.AutoView {
 		return view
 	}
 	return auto.SendScheduled(context.Background())
+}
+
+// runStepTimeout は、Run の goroutine が 1 歩進むのを待つ上限。期限の判定には
+// 使わない。超えたら Run が止まっているので、テストを止める。
+const runStepTimeout = 5 * time.Second
+
+// manualClock は、テストが進めるまで止まっている時計である。Run の goroutine からも
+// 読むので、錠で守る。
+type manualClock struct {
+	mutex sync.Mutex
+	now   time.Time
+}
+
+func newManualClock() *manualClock {
+	return &manualClock{now: time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)}
+}
+
+func (c *manualClock) Now() time.Time {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.now
+}
+
+func (c *manualClock) Advance(elapsed time.Duration) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.now = c.now.Add(elapsed)
+}
+
+// manualPushTimer は、Run が送信の期限を掛けるたびにその待ちをテストへ渡し、
+// テストが発火させるまで発火しない timer である。
+type manualPushTimer struct {
+	fired chan time.Time
+	armed chan time.Duration
+}
+
+func newManualPushTimer() *manualPushTimer {
+	return &manualPushTimer{fired: make(chan time.Time), armed: make(chan time.Duration, 8)}
+}
+
+func (m *manualPushTimer) start(delay time.Duration) remotesync.PushTimerForTest {
+	m.armed <- delay
+	return m
+}
+
+func (m *manualPushTimer) Fired() <-chan time.Time { return m.fired }
+
+func (m *manualPushTimer) Reset(delay time.Duration) { m.armed <- delay }
+
+func (m *manualPushTimer) Stop() {}
+
+// nextArmed は、Run が次に掛けた期限までの待ちを返す。
+func (m *manualPushTimer) nextArmed(t *testing.T) time.Duration {
+	t.Helper()
+	select {
+	case delay := <-m.armed:
+		return delay
+	case <-time.After(runStepTimeout):
+		t.Fatal("Run did not arm the push deadline")
+		return 0
+	}
+}
+
+// armedAgain は、テストが受け取っていない期限が残っているかを返す。
+func (m *manualPushTimer) armedAgain() bool {
+	select {
+	case <-m.armed:
+		return true
+	default:
+		return false
+	}
+}
+
+// fire は、期限が来たことを Run へ届ける。Run が受け取ってから戻る。
+func (m *manualPushTimer) fire(t *testing.T, now time.Time) {
+	t.Helper()
+	select {
+	case m.fired <- now:
+	case <-time.After(runStepTimeout):
+		t.Fatal("Run was not waiting for the push deadline")
+	}
+}
+
+// waitForLiveObject は、Run の送信が live object を置くまで待つ。Run を止めるのは
+// そのあとにする。止めると ctx が切れ、途中の送信も打ち切られる。
+func waitForLiveObject(t *testing.T, bucket *fakeBucket) {
+	t.Helper()
+	deadline := time.Now().Add(runStepTimeout)
+	for len(bucket.object(remotesync.ObjectName)) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the scheduled push never wrote the live object")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// runAuto は auto.Run を別の goroutine で走らせ、止めて終わりを待つ関数を返す。
+func runAuto(auto *remotesync.Auto) (stop func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		auto.Run(ctx)
+	}()
+	return sync.OnceFunc(func() {
+		cancel()
+		<-done
+	})
 }
 
 // UI は engine 起動直後、一巡目のtickerより先にstatusを読む。ゼロ値の空文字は
@@ -108,7 +217,8 @@ func TestAutomaticPollQueuesLocalChangesWithoutUploadingImmediately(t *testing.T
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
 	auto := autoFor(t, machine, true)
-	auto.PushDelay = 20 * time.Millisecond
+	clock := newManualClock()
+	auto.SetClockForTest(clock.Now)
 
 	view := auto.Poll(context.Background())
 	if view.Phase != remotesync.AutoIdle {
@@ -116,7 +226,7 @@ func TestAutomaticPollQueuesLocalChangesWithoutUploadingImmediately(t *testing.T
 	}
 	// Poll is the once-per-minute receive path. Even after the debounce deadline,
 	// it must not upload by itself; Run owns the separate push scheduler.
-	time.Sleep(40 * time.Millisecond)
+	clock.Advance(remotesync.AutoPushDelay)
 	if keys := bucket.keys(); len(keys) != 0 {
 		t.Fatalf("receive-only poll uploaded %v", keys)
 	}
@@ -126,43 +236,41 @@ func TestAutomaticPushWaitsForFiveSecondsOfQuietAndCoalescesChanges(t *testing.T
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
 	auto := autoFor(t, machine, true)
-	auto.PushDelay = 200 * time.Millisecond
+	clock := newManualClock()
+	auto.SetClockForTest(clock.Now)
+	timer := newManualPushTimer()
+	auto.SetPushTimerForTest(timer.start)
+	stop := runAuto(auto)
+	t.Cleanup(stop)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		auto.Run(ctx)
-	}()
-	t.Cleanup(func() {
-		cancel()
-		<-done
-	})
-
-	auto.NotifyLocalChange()
-	time.Sleep(80 * time.Millisecond)
-	auto.NotifyLocalChange()
-	time.Sleep(80 * time.Millisecond)
-	auto.NotifyLocalChange()
-	time.Sleep(120 * time.Millisecond)
+	// 変更のたびに、期限はその変更から AutoPushDelay 後へ動く。
+	for range 3 {
+		auto.NotifyLocalChange()
+		if delay := timer.nextArmed(t); delay != remotesync.AutoPushDelay {
+			t.Fatalf("a change armed the push after %v, want %v", delay, remotesync.AutoPushDelay)
+		}
+		clock.Advance(2 * time.Second)
+	}
+	// 最初の変更から AutoPushDelay を過ぎても、最後の変更からはまだ 1 秒残っている。
+	// 早く起きた Run は送らず、残りを待ち直す。
+	clock.Advance(2 * time.Second)
+	timer.fire(t, clock.Now())
+	if delay := timer.nextArmed(t); delay != time.Second {
+		t.Fatalf("Run waits %v after waking early, want the 1s left from the last change", delay)
+	}
 	if keys := bucket.keys(); len(keys) != 0 {
 		t.Fatalf("push happened before the latest quiet deadline: %v", keys)
 	}
 
-	deadline := time.Now().Add(3 * time.Second)
-	for len(bucket.object(remotesync.ObjectName)) == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if len(bucket.object(remotesync.ObjectName)) == 0 {
-		t.Fatal("debounced push never wrote the live object")
-	}
-	objects, _ := bucket.uploads()
-	if objects != 2 {
+	clock.Advance(time.Second)
+	timer.fire(t, clock.Now())
+	waitForLiveObject(t, bucket)
+	stop()
+	if objects, _ := bucket.uploads(); objects != 2 {
 		t.Fatalf("one push stored %d objects, want one live and one history object", objects)
 	}
-	time.Sleep(250 * time.Millisecond)
-	if after, _ := bucket.uploads(); after != objects {
-		t.Fatalf("coalesced notifications created another snapshot: %d objects became %d", objects, after)
+	if timer.armedAgain() {
+		t.Fatal("coalesced notifications scheduled another push")
 	}
 }
 
@@ -170,7 +278,10 @@ func TestDebouncedPushReadsSyncSecretsInsideTheUnattendedFrame(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
 	auto := autoFor(t, machine, true)
-	auto.PushDelay = 20 * time.Millisecond
+	clock := newManualClock()
+	auto.SetClockForTest(clock.Now)
+	timer := newManualPushTimer()
+	auto.SetPushTimerForTest(timer.start)
 	var inside atomic.Bool
 	var readOutside atomic.Bool
 	auto.Unattended = func(run func()) {
@@ -185,22 +296,14 @@ func TestDebouncedPushReadsSyncSecretsInsideTheUnattendedFrame(t *testing.T) {
 		return true
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		auto.Run(ctx)
-	}()
+	stop := runAuto(auto)
+	t.Cleanup(stop)
 	auto.NotifyLocalChange()
-	deadline := time.Now().Add(3 * time.Second)
-	for len(bucket.object(remotesync.ObjectName)) == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	cancel()
-	<-done
-	if len(bucket.object(remotesync.ObjectName)) == 0 {
-		t.Fatal("debounced push did not complete")
-	}
+	timer.nextArmed(t)
+	clock.Advance(remotesync.AutoPushDelay)
+	timer.fire(t, clock.Now())
+	waitForLiveObject(t, bucket)
+	stop()
 	if readOutside.Load() {
 		t.Fatal("debounced push read automatic sync settings outside the unattended frame")
 	}
@@ -412,7 +515,7 @@ func TestAutoUsesAuthenticatedAncestorsBeyondLegacyCiphertextBudget(t *testing.T
 			t.Fatal(err)
 		}
 	}
-	archive, key, err := envelope.OpenWithin(firstCiphertext, syncPassphrase, envelope.AcceptedFromRemote)
+	archive, key, err := envelope.OpenRemote(firstCiphertext, syncPassphrase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -603,7 +706,7 @@ func TestAutoRetriesATransientFailureAfterBoundedBackoff(t *testing.T) {
 	consumer := newInstallation(t, bucket, map[string]string{})
 	auto := remotesync.NewAuto(consumer.service, 10*time.Millisecond, func() string { return "2026-08-18T00:00:00Z" })
 	current := time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)
-	auto.Clock = func() time.Time { return current }
+	auto.SetClockForTest(func() time.Time { return current })
 	auto.Enabled = func() bool { return true }
 	auto.Key = func() (string, bool) { return syncPassphrase, true }
 	bucket.refuseObjectGets(3)
