@@ -137,11 +137,7 @@ func (s *Service) UpdateConnection(
 	if err != nil {
 		return SaveResult{}, err
 	}
-	if prepared.explicitIdentityFile && !passwordUnchanged && request.Password.Kind != UpdatePasswordRemove {
-		return SaveResult{}, ErrPasswordIneligible
-	}
-	if !prepared.explicitIdentityFile && !passwordUnchanged && request.Password.Kind != UpdatePasswordRemove &&
-		prepared.passwordAuthenticationOff {
+	if setsIneligiblePassword(prepared, request) {
 		return SaveResult{}, ErrPasswordIneligible
 	}
 
@@ -222,11 +218,7 @@ func (s *Service) UpdateConnection(
 			prepared.authenticationBinding != mutation.TOTP.Binding {
 			return storage.Result{}, ErrConnectionChanged
 		}
-		if prepared.explicitIdentityFile && !passwordUnchanged && request.Password.Kind != UpdatePasswordRemove {
-			return storage.Result{}, ErrPasswordIneligible
-		}
-		if !prepared.explicitIdentityFile && !passwordUnchanged && request.Password.Kind != UpdatePasswordRemove &&
-			prepared.passwordAuthenticationOff {
+		if setsIneligiblePassword(prepared, request) {
 			return storage.Result{}, ErrPasswordIneligible
 		}
 		if validationErr := s.validateConnectionKeyPassphrase(prepared, request, verification); validationErr != nil {
@@ -335,6 +327,17 @@ func (s *Service) connectionUpdateResult(result storage.Result, prepared planned
 		written = append(written, s.displayPath(path))
 	}
 	return SaveResult{TransactionID: result.ID, Written: written, Preview: prepared.preview}
+}
+
+// setsIneligiblePassword は、パスワードを使えない接続にパスワードを設定しようとして
+// いるかを返す。IdentityFile を直接書いた接続と、PasswordAuthentication を切った接続は
+// パスワードを使えない。保存済みのパスワードを消すことは、どの接続でもできる。
+func setsIneligiblePassword(prepared planned, request UpdateConnectionRequest) bool {
+	switch request.Password.Kind {
+	case "", UpdatePasswordUnchanged, UpdatePasswordRemove:
+		return false
+	}
+	return prepared.explicitIdentityFile || prepared.passwordAuthenticationOff
 }
 
 func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request UpdateConnectionRequest) (planned, bool, error) {

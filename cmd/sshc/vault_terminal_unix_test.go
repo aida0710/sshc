@@ -170,10 +170,10 @@ func TestUnixPasswordPromptRunsAfterNoEchoSetupAndBeforeRead(t *testing.T) {
 		return restore(fd, state)
 	}
 
-	password, err := readUnixPasswordWithPrompt(context.Background(), vaultTestInput(t), operations, func() error {
+	password, err := readUnixPasswordWithFeedback(context.Background(), vaultTestInput(t), operations, func() error {
 		events = append(events, "prompt")
 		return nil
-	})
+	}, nil)
 	defer zeroBytes(password)
 	if err != nil || len(password) != 0 {
 		t.Fatalf("password=%q error=%v", password, err)
@@ -192,9 +192,9 @@ func TestUnixPasswordPromptFailureRestoresNoEchoModeBeforeReturning(t *testing.T
 		t.Fatal("password input was read after the prompt failed")
 		return read(fd, destination)
 	}
-	password, err := readUnixPasswordWithPrompt(context.Background(), vaultTestInput(t), operations, func() error {
+	password, err := readUnixPasswordWithFeedback(context.Background(), vaultTestInput(t), operations, func() error {
 		return promptFailure
-	})
+	}, nil)
 	if password != nil || !errors.Is(err, promptFailure) || *restored != 1 {
 		t.Fatalf("prompt failure=%v, %v restore calls=%d", password, err, *restored)
 	}
@@ -221,7 +221,7 @@ func TestUnixPasswordReaderEditsAndBoundsBytesWithoutControlCharacters(t *testin
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			operations, restored := scriptedUnixPasswordOperations(test.input, io.EOF)
-			password, err := readUnixPassword(context.Background(), vaultTestInput(t), operations)
+			password, err := readUnixPasswordWithFeedback(context.Background(), vaultTestInput(t), operations, nil, nil)
 			defer zeroBytes(password)
 			if !errors.Is(err, test.wantError) {
 				t.Fatalf("error = %v, want %v", err, test.wantError)
@@ -251,7 +251,7 @@ func TestUnixPasswordReaderRestoresSavedModeOnSetupAndReadFailures(t *testing.T)
 		},
 		pipe: func() (*os.File, *os.File, error) { return nil, nil, setupFailure },
 	}
-	if password, err := readUnixPassword(context.Background(), vaultTestInput(t), operations); password != nil || !errors.Is(err, setupFailure) {
+	if password, err := readUnixPasswordWithFeedback(context.Background(), vaultTestInput(t), operations, nil, nil); password != nil || !errors.Is(err, setupFailure) {
 		t.Fatalf("pipe failure = %v, %v", password, err)
 	}
 	if restored != 1 {
@@ -260,7 +260,7 @@ func TestUnixPasswordReaderRestoresSavedModeOnSetupAndReadFailures(t *testing.T)
 
 	readFailure := errors.New("read failed")
 	operations, restoredPointer := scriptedUnixPasswordOperations([]byte("partial"), readFailure)
-	password, err := readUnixPassword(context.Background(), vaultTestInput(t), operations)
+	password, err := readUnixPasswordWithFeedback(context.Background(), vaultTestInput(t), operations, nil, nil)
 	if password != nil || !errors.Is(err, readFailure) {
 		t.Fatalf("read failure = %v, %v", password, err)
 	}
@@ -271,7 +271,7 @@ func TestUnixPasswordReaderRestoresSavedModeOnSetupAndReadFailures(t *testing.T)
 	pollFailure := errors.New("poll failed")
 	operations, restoredPointer = scriptedUnixPasswordOperations(nil, io.EOF)
 	operations.poll = func([]unix.PollFd, int) (int, error) { return 0, pollFailure }
-	password, err = readUnixPassword(context.Background(), vaultTestInput(t), operations)
+	password, err = readUnixPasswordWithFeedback(context.Background(), vaultTestInput(t), operations, nil, nil)
 	if password != nil || !errors.Is(err, pollFailure) {
 		t.Fatalf("poll failure = %v, %v", password, err)
 	}
@@ -284,7 +284,7 @@ func TestUnixPasswordReaderRestoreFailurePreservesCancellationAndZeroesResult(t 
 	restoreFailure := errors.New("restore failed")
 	operations, _ := scriptedUnixPasswordOperations([]byte{0x03}, io.EOF)
 	operations.restore = func(int, *term.State) error { return restoreFailure }
-	password, err := readUnixPassword(context.Background(), vaultTestInput(t), operations)
+	password, err := readUnixPasswordWithFeedback(context.Background(), vaultTestInput(t), operations, nil, nil)
 	if password != nil || !errors.Is(err, context.Canceled) || !errors.Is(err, restoreFailure) {
 		t.Fatalf("restore plus cancel = %v, %v", password, err)
 	}
@@ -317,7 +317,7 @@ func TestUnixPasswordReaderDoesNotChangeModeWhenAlreadyCanceledOrMakeRawFails(t 
 	operations := unixPasswordOperations{
 		makeRaw: func(int) (*term.State, error) { calls++; return nil, errors.New("must not be called") },
 	}
-	password, err := readUnixPassword(ctx, vaultTestInput(t), operations)
+	password, err := readUnixPasswordWithFeedback(ctx, vaultTestInput(t), operations, nil, nil)
 	if password != nil || !errors.Is(err, context.Canceled) || calls != 0 {
 		t.Fatalf("pre-cancel = %v, %v, makeRaw calls %d", password, err, calls)
 	}
@@ -328,7 +328,7 @@ func TestUnixPasswordReaderDoesNotChangeModeWhenAlreadyCanceledOrMakeRawFails(t 
 		makeRaw: func(int) (*term.State, error) { return nil, makeRawFailure },
 		restore: func(int, *term.State) error { restoreCalls++; return nil },
 	}
-	password, err = readUnixPassword(context.Background(), vaultTestInput(t), operations)
+	password, err = readUnixPasswordWithFeedback(context.Background(), vaultTestInput(t), operations, nil, nil)
 	if password != nil || !errors.Is(err, makeRawFailure) || restoreCalls != 0 {
 		t.Fatalf("makeRaw failure = %v, %v, restore calls %d", password, err, restoreCalls)
 	}
@@ -519,16 +519,37 @@ func TestReadPTYThroughRetriesInterruptedPoll(t *testing.T) {
 		})
 }
 
-func readPTYThrough(t *testing.T, terminal *os.File, marker []byte, timeout time.Duration) {
+func TestReadPTYThroughReturnsTheBytesThatArrivedWithTheMarker(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+	defer func() { _ = writer.Close() }()
+	if _, err := writer.Write([]byte("first-second")); err != nil {
+		t.Fatal(err)
+	}
+
+	received := readPTYThrough(t, reader, []byte("first"), 2*time.Second)
+	if string(received) != "first-second" {
+		t.Fatalf("readPTYThrough = %q, want the bytes after the marker as well", received)
+	}
+}
+
+// readPTYThrough は marker が届くまで terminal を読み、読んだバイトをすべて返す。
+// marker と同じ読み取りで届いた後続のバイトも返り値に入り、次の呼び出しには
+// 残らない。相手が続けて 2 つを書くときは、後の方まで読み、前の方は返り値で
+// 確かめる。
+func readPTYThrough(t *testing.T, terminal *os.File, marker []byte, timeout time.Duration) []byte {
 	t.Helper()
-	readPTYThroughWithPoll(t, terminal, marker, timeout, unix.Poll)
+	return readPTYThroughWithPoll(t, terminal, marker, timeout, unix.Poll)
 }
 
 type vaultPTYPoll func([]unix.PollFd, int) (int, error)
 
 func readPTYThroughWithPoll(
 	t *testing.T, terminal *os.File, marker []byte, timeout time.Duration, poll vaultPTYPoll,
-) {
+) []byte {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	var received []byte
@@ -561,4 +582,5 @@ func readPTYThroughWithPoll(
 			t.Fatalf("read PTY through %q: %v; received %q", marker, err, received)
 		}
 	}
+	return received
 }

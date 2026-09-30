@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"sync"
@@ -155,7 +156,7 @@ func TestRunTransportAutomationValidatesBeforeOpening(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 	code := runTransportAutomation(context.Background(), called, nil, strings.NewReader(""), &stdout, &stderr, dependencies)
-	if code != transportUsageExit || opened {
+	if code != exitUsage || opened {
 		t.Fatalf("code = %d, opened = %v", code, opened)
 	}
 	var report transportRunReport
@@ -219,7 +220,7 @@ func TestRunTransportAutomationSendsExplicitFailureCleanup(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if code != transportTimeoutExit || stderr.Len() != 0 || report.Success || report.FailureCleanup == nil || !report.FailureCleanup.Attempted || !report.FailureCleanup.Success {
+	if code != exitTimeout || stderr.Len() != 0 || report.Success || report.FailureCleanup == nil || !report.FailureCleanup.Attempted || !report.FailureCleanup.Success {
 		t.Fatalf("code = %d, stderr = %q, report = %#v", code, stderr.String(), report)
 	}
 	if got := stream.written(); got != "show version\r\x03" {
@@ -311,8 +312,47 @@ func TestRunTransportAutomationReturnsTimeoutCodeForReadFor(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 	code := runTransportAutomation(context.Background(), called, nil, strings.NewReader(""), &stdout, &stderr, dependencies)
-	if code != transportTimeoutExit || !strings.Contains(stderr.String(), "timeout") {
+	if code != exitTimeout || !strings.Contains(stderr.String(), "timeout") {
 		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
+	}
+}
+
+// 接続を待っている間に SIGTERM で止められても、接続の失敗（1）ではなく、止められた
+// ものとして 130 と kind=interrupted を返す。
+func TestRunTransportAutomationStoppedWhileConnectingReportsAnInterruption(t *testing.T) {
+	called := defaultTransportInvocation(transportTelnet, true)
+	called.Target = "console.example"
+	called.Command = []string{"show"}
+	called.Expect = `router# `
+	called.JSON = true
+	ctx, stop := context.WithCancelCause(context.Background())
+	defer stop(nil)
+	dialing := make(chan struct{})
+	dependencies := transportDependencies{
+		dialTelnet: func(ctx context.Context, _ telnet.Config) (duplexStream, error) {
+			close(dialing)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	}
+	go func() {
+		<-dialing
+		stop(errTerminated)
+	}()
+
+	var stdout, stderr bytes.Buffer
+	code := runTransportAutomation(ctx, called, nil, strings.NewReader(""), &stdout, &stderr, dependencies)
+
+	if exit := transportExitCode(invocationRunTransport, code, context.Cause(ctx)); exit != exitInterrupted {
+		t.Fatalf("exit = %d, want %d; stderr = %q", exit, exitInterrupted, stderr.String())
+	}
+	var report transportRunReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Success || report.Failure == nil || report.Failure.Kind != "interrupted" ||
+		report.Failure.Message != "operation was interrupted" {
+		t.Fatalf("report = %#v, failure = %#v", report, report.Failure)
 	}
 }
 
@@ -342,7 +382,7 @@ func TestRequireOutputRejectsSilentReadFor(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if code != transportFailureExit || stderr.Len() != 0 || report.Success || report.BytesReceived != 0 || report.Failure == nil || report.Failure.Kind != "no_output" {
+	if code != exitFailure || stderr.Len() != 0 || report.Success || report.BytesReceived != 0 || report.Failure == nil || report.Failure.Kind != "no_output" {
 		t.Fatalf("code = %d, stderr = %q, report = %#v", code, stderr.String(), report)
 	}
 }
@@ -391,8 +431,24 @@ func TestRunSerialListJSONIsStable(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 	code := runSerialList(context.Background(), true, &stdout, &stderr, dependencies)
-	if code != 0 || stderr.Len() != 0 || stdout.String() != "{\"schemaVersion\":1,\"devices\":[{\"name\":\"COM3\",\"isUsb\":false},{\"name\":\"COM8\",\"isUsb\":false}]}\n" {
+	if code != 0 || stderr.Len() != 0 || stdout.String() != "{\"schemaVersion\":1,\"success\":true,\"result\":{\"devices\":[{\"name\":\"COM3\",\"isUsb\":false},{\"name\":\"COM8\",\"isUsb\":false}]}}\n" {
 		t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestRunSerialListJSONReportsEnumerationFailureAsAFailureEnvelope(t *testing.T) {
+	dependencies := transportDependencies{
+		listSerial: func(context.Context) ([]serialtransport.Device, error) {
+			return nil, errors.New("enumeration failed")
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	code := runSerialList(context.Background(), true, &stdout, &stderr, dependencies)
+	if code != exitFailure || stderr.Len() != 0 {
+		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
+	}
+	if failure := decodeCommandFailure(t, stdout.String()); failure.Kind != "serial_enumeration_failed" {
+		t.Fatalf("failure = %+v", failure)
 	}
 }
 
@@ -425,10 +481,32 @@ func TestRunSerialListReportsOutputFailure(t *testing.T) {
 		},
 	}
 	var stderr bytes.Buffer
-	if code := runSerialList(context.Background(), false, failingOutput{}, &stderr, dependencies); code != transportFailureExit {
+	if code := runSerialList(context.Background(), false, failingOutput{}, &stderr, dependencies); code != exitFailure {
 		t.Fatalf("code = %d", code)
 	}
 	if !strings.Contains(stderr.String(), "could not write") {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+// SIGTERM と SIGHUP で 0 になるのは対話接続だけで、自動処理は成功と読ませない。
+func TestOnlyAnInteractiveSessionStoppedBySIGTERMEndsWithZero(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		kind  invocationKind
+		code  int
+		cause error
+		want  int
+	}{
+		{name: "interactive session stopped by a supervisor", kind: invocationTransport, code: exitInterrupted, cause: errTerminated, want: 0},
+		{name: "automated run stopped by a supervisor", kind: invocationRunTransport, code: exitInterrupted, cause: errTerminated, want: exitInterrupted},
+		{name: "interactive session stopped with Ctrl-C", kind: invocationTransport, code: exitInterrupted, cause: errInterrupted, want: exitInterrupted},
+		{name: "interactive session that failed before the signal", kind: invocationTransport, code: exitFailure, cause: errTerminated, want: exitFailure},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := transportExitCode(test.kind, test.code, test.cause); got != test.want {
+				t.Fatalf("transportExitCode = %d, want %d", got, test.want)
+			}
+		})
 	}
 }

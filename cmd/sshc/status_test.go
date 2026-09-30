@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -105,13 +107,65 @@ func testHandoff(target string) handoff.Handoff {
 // 半端な表を残さず、非 0 の終了コードで応える必要がある。
 func TestRunStatusFailsWhenTheEngineIsNotThere(t *testing.T) {
 	var out, errOut strings.Builder
-	status := runStatus(context.Background(), t.TempDir(),
-		&http.Client{Timeout: 5 * time.Second}, false, &out, &errOut)
+	status := runStatus(context.Background(), commandEnvironment{
+		stateDir: t.TempDir(), client: &http.Client{Timeout: 5 * time.Second}, stdout: &out, stderr: &errOut,
+	}, false)
 	if status != 1 {
 		t.Fatalf("status = %d, want 1", status)
 	}
 	if out.String() != "" {
 		t.Errorf("stdout = %q, want nothing", out.String())
+	}
+}
+
+func TestRunStatusJSONReportsAMissingEngineAsAFailureEnvelope(t *testing.T) {
+	var out, errOut strings.Builder
+	status := runStatus(context.Background(), commandEnvironment{
+		stateDir: t.TempDir(), client: &http.Client{Timeout: 5 * time.Second}, stdout: &out, stderr: &errOut,
+	}, true)
+	if status != 1 {
+		t.Fatalf("status = %d, want 1", status)
+	}
+	if failure := decodeCommandFailure(t, out.String()); failure.Kind != "engine_not_running" {
+		t.Errorf("failure = %+v, want engine_not_running", failure)
+	}
+}
+
+// silentEngineClientTimeout は、応答しない engine の試験で CLI に渡す上限。
+// silentEngineDeadline は、それを守ったとみなす時間。起動の遅い CI でも足りる幅をとる。
+const (
+	silentEngineClientTimeout = 200 * time.Millisecond
+	silentEngineDeadline      = 2 * time.Second
+)
+
+// Ctrl-Z で止めた engine のように、接続は受け付けるが応答しない process が
+// handoff の port にいても、呼び出し側の上限で諦める。長いコマンド用の上限まで待たない。
+func TestStatusAndOpenGiveUpOnASilentEngineWithinTheCallersTimeout(t *testing.T) {
+	silent, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = silent.Close() }()
+	stateDir := t.TempDir()
+	writeTestHandoff(t, stateDir, "http://"+silent.Addr().String())
+	client := &http.Client{Timeout: silentEngineClientTimeout}
+	environment := commandEnvironment{stateDir: stateDir, client: client, stdout: io.Discard, stderr: io.Discard}
+	commands := map[string]func() int{
+		"status": func() int { return runStatus(context.Background(), environment, false) },
+		"open":   func() int { return runOpen(context.Background(), environment, false) },
+	}
+
+	for name, run := range commands {
+		finished := make(chan int, 1)
+		go func() { finished <- run() }()
+		select {
+		case code := <-finished:
+			if code != 1 {
+				t.Errorf("%s exit = %d, want 1", name, code)
+			}
+		case <-time.After(silentEngineDeadline):
+			t.Fatalf("%s still waiting after %s with a %s client", name, silentEngineDeadline, silentEngineClientTimeout)
+		}
 	}
 }
 
@@ -166,11 +220,13 @@ func TestStatusPrintsATableAndStillSpeaksJSON(t *testing.T) {
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	var table, errOut strings.Builder
-	if code := runStatus(context.Background(), stateDir, client, false, &table, &errOut); code != 0 {
+	if code := runStatus(context.Background(), commandEnvironment{
+		stateDir: stateDir, client: client, stdout: &table, stderr: &errOut,
+	}, false); code != 0 {
 		t.Fatalf("status = %d\n%s", code, errOut.String())
 	}
 	printed := table.String()
-	for _, want := range []string{"engine", "address", "version", "v9-test", "vault", "locked", "consoles"} {
+	for _, want := range []string{"engine", "address", "version", "v9-test", "vault", "locked", "terminals  2 open"} {
 		if !strings.Contains(printed, want) {
 			t.Errorf("the table does not mention %q:\n%s", want, printed)
 		}
@@ -181,13 +237,13 @@ func TestStatusPrintsATableAndStillSpeaksJSON(t *testing.T) {
 	}
 
 	var machine strings.Builder
-	if code := runStatus(context.Background(), stateDir, client, true, &machine, &errOut); code != 0 {
+	if code := runStatus(context.Background(), commandEnvironment{
+		stateDir: stateDir, client: client, stdout: &machine, stderr: &errOut,
+	}, true); code != 0 {
 		t.Fatalf("status --json = %d\n%s", code, errOut.String())
 	}
 	var decoded statusAnswer
-	if err := json.Unmarshal([]byte(machine.String()), &decoded); err != nil {
-		t.Fatalf("--json did not print JSON: %v\n%s", err, machine.String())
-	}
+	decodeCommandSuccess(t, machine.String(), &decoded)
 	if decoded.Sessions != 2 || decoded.Version != "v9-test" {
 		t.Errorf("--json lost fields: %+v", decoded)
 	}

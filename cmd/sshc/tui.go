@@ -1,16 +1,19 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"sort"
-	"sshc/internal/app"
 	"strings"
 	"unicode/utf8"
 
 	"golang.org/x/term"
+
+	"sshc/internal/app"
+	"sshc/internal/terminal"
 )
 
 var errTUIClosed = errors.New("connection picker closed")
@@ -23,8 +26,10 @@ type tuiHost struct {
 	Tags     []string
 }
 
-func loadTUIHosts(home string) ([]tuiHost, error) {
-	connections, err := app.ReadConnections(home)
+// loadTUIHosts は、選択画面に並べる接続を読む。選んでも runConnect が断る alias は
+// `sshc list` と同じく一覧に出さず、落とした理由を stderr に出す。
+func loadTUIHosts(home string, stderr io.Writer) ([]tuiHost, error) {
+	connections, err := readConnectableConnections(home, stderr)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +231,7 @@ func truncate(line string, width int) string {
 func renderTUI(output io.Writer, model *tuiModel, width, height int) {
 	var screen strings.Builder
 	if width <= 0 {
-		width = 80
+		width = int(terminal.DefaultSize().Cols)
 	}
 	all := model.visible()
 	visible := all
@@ -248,10 +253,12 @@ func renderTUI(output io.Writer, model *tuiModel, width, height int) {
 		fmt.Fprintln(&screen, truncate("  No matching hosts", width))
 	}
 	for index, host := range visible {
-		line := fmt.Sprintf("  %-26s", host.Alias)
-		line += " " + host.destination()
+		// 値は ssh_config と metadata.json から来るので、制御文字を見える形に
+		// してから書く。そのまま書くと、画面やウィンドウタイトルを書き換えられる。
+		line := fmt.Sprintf("  %-26s", safeTerminalCell(host.Alias))
+		line += " " + safeTerminalCell(host.destination())
 		if len(host.Tags) != 0 {
-			line += " [" + strings.Join(host.Tags, " ") + "]"
+			line += " [" + safeTerminalCell(strings.Join(host.Tags, " ")) + "]"
 		}
 		line = truncate(line, width)
 		if start+index == model.selected {
@@ -269,11 +276,23 @@ func renderTUI(output io.Writer, model *tuiModel, width, height int) {
 	_, _ = io.WriteString(output, strings.ReplaceAll(screen.String(), "\n", "\r\n"))
 }
 
-func chooseTUIHost(home, initialQuery string, input, output *os.File, stderr io.Writer) (string, error) {
+// tuiPicker は、選択画面を開くターミナルと、並べる接続の読み込み元である。
+type tuiPicker struct {
+	home         string
+	initialQuery string
+	input        *os.File
+	output       *os.File
+	stderr       io.Writer
+}
+
+// chooseTUIHost は選択画面を開き、選ばれた alias を返す。ctx が止まったら、
+// ターミナルを戻してから context.Cause(ctx) を返す。
+func chooseTUIHost(ctx context.Context, picker tuiPicker) (string, error) {
+	input, output := picker.input, picker.output
 	if !term.IsTerminal(int(input.Fd())) || !term.IsTerminal(int(output.Fd())) {
 		return "", errors.New("sshc ssh requires an interactive terminal")
 	}
-	hosts, err := loadTUIHosts(home)
+	hosts, err := loadTUIHosts(picker.home, picker.stderr)
 	if err != nil {
 		return "", err
 	}
@@ -296,18 +315,21 @@ func chooseTUIHost(home, initialQuery string, input, output *os.File, stderr io.
 	}
 	defer restore()
 
-	model := &tuiModel{hosts: hosts, query: initialQuery}
+	model := &tuiModel{hosts: hosts, query: picker.initialQuery}
 	// 端末はまとめて届ける。矢印キーは 3 バイトで、貼り付けはそれより遥かに長い。
 	buffer := make([]byte, 1024)
 	for {
 		width, height, sizeErr := term.GetSize(int(output.Fd()))
 		if sizeErr != nil {
-			width, height = 80, 24
+			width, height = int(terminal.DefaultSize().Cols), int(terminal.DefaultSize().Rows)
 		}
 		renderTUI(output, model, width, height)
-		read, err := input.Read(buffer[:])
+		read, err := readTerminalUnlessStopped(ctx, input, buffer)
 		if err != nil {
-			fmt.Fprintf(stderr, "sshc: read terminal: %v\n", err)
+			if ctx.Err() != nil {
+				return "", err
+			}
+			fmt.Fprintf(picker.stderr, "sshc: read terminal: %v\n", err)
 			return "", err
 		}
 		alias, done := model.feed(buffer[:read])
@@ -319,5 +341,32 @@ func chooseTUIHost(home, initialQuery string, input, output *os.File, stderr io.
 			return "", errTUIClosed
 		}
 		return alias, nil
+	}
+}
+
+// tuiRead は、選択画面がターミナルから 1 回読んだ結果である。
+type tuiRead struct {
+	count int
+	err   error
+}
+
+// readTerminalUnlessStopped は input から 1 回読む。ctx が先に止まったら、読み終わりを
+// 待たずに context.Cause(ctx) を返す。
+//
+// os.Stdin の Read は ctx では戻らないので、読み取りは別の goroutine で行う。止まった
+// ときはその goroutine が Read に残るが、sshc はそのまま終わるので、後の入力を奪う
+// ことはない。goroutine を読み取りのたびに起こすのは、選び終えた後に読みかけの
+// Read を残さないためである。残すと、続く SSH の接続が受け取るはずの打鍵を奪う。
+func readTerminalUnlessStopped(ctx context.Context, input io.Reader, buffer []byte) (int, error) {
+	reads := make(chan tuiRead, 1)
+	go func() {
+		count, err := input.Read(buffer)
+		reads <- tuiRead{count: count, err: err}
+	}()
+	select {
+	case read := <-reads:
+		return read.count, read.err
+	case <-ctx.Done():
+		return 0, context.Cause(ctx)
 	}
 }

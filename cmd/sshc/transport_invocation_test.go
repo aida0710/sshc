@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +28,19 @@ func TestParseInteractiveSerialOptions(t *testing.T) {
 	got := called.Transport
 	if called.Kind != invocationTransport || got == nil || got.Target != "/dev/ttyUSB0" || got.Baud != 9600 || got.DataBits != 7 || got.Parity != "mark" || got.StopBits != "1.5" || got.DTR == nil || *got.DTR || got.RTS == nil || !*got.RTS || got.Break != 250*time.Millisecond {
 		t.Fatalf("transport = %#v", got)
+	}
+}
+
+// --break の上限と、断るときの文は同じ定数から作る。上限を変えても文が古い値の
+// まま残らない。
+func TestParseSerialBreakAcceptsUpToItsLimitAndNamesItWhenRefusing(t *testing.T) {
+	called, err := parseInvocation([]string{"sshc", "serial", "/dev/ttyUSB0", "--break", maxSerialBreak.String()})
+	if err != nil || called.Transport == nil || called.Transport.Break != maxSerialBreak {
+		t.Fatalf("--break at the limit = %#v, %v", called.Transport, err)
+	}
+	_, err = parseInvocation([]string{"sshc", "serial", "/dev/ttyUSB0", "--break", (maxSerialBreak + time.Nanosecond).String()})
+	if err == nil || !strings.Contains(err.Error(), "and "+maxSerialBreak.String()) {
+		t.Fatalf("--break over the limit = %v, want the limit in the refusal", err)
 	}
 }
 
@@ -105,7 +119,6 @@ func TestParseExplicitSSHAllowsTransportNamesAsAliases(t *testing.T) {
 func TestTransportParserRejectsAmbiguousOrUnsafeShapes(t *testing.T) {
 	cases := [][]string{
 		{"sshc", "telnet"},
-		{"sshc", "serial", "list"},
 		{"sshc", "serial", "COM3", "--expect", "#", "--", "show"},
 		{"sshc", "serial", "COM3", "--non-interactive", "--", "show"},
 		{"sshc", "telnet", "router", "--non-interactive", "--expect", "#", "--read-for", "1s", "--", "show"},

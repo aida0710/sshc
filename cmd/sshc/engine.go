@@ -10,7 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
+	"runtime"
 	"time"
 
 	"golang.org/x/term"
@@ -21,14 +21,6 @@ import (
 	"sshc/internal/ui"
 )
 
-// engineMode は、エンジンの寿命を誰が引き受けるかである。
-//
-// 終了の理由。context.WithCancelCause でこれを運び、終了コードを決める。
-var (
-	errEngineInterrupted = errors.New("engine interrupted")
-	errEngineTerminated  = errors.New("engine terminated")
-)
-
 // engineDependencies は、この runner のインターフェースである。
 //
 // 可変のパッケージ変数にしない。差し替え可能なグローバルを置くと、
@@ -36,7 +28,7 @@ var (
 type engineDependencies struct {
 	acquire         func(string) (func() error, error)
 	runApp          func(context.Context, app.Dependencies, string) error
-	openBrowser     func(context.Context, string) bool
+	openBrowser     func(string) bool
 	shutdownTimeout time.Duration
 }
 
@@ -84,31 +76,31 @@ func runEngineWithDependencies(
 	// 席を占める。
 	release, err := dependencies.acquire(app.HandoffDir(home))
 	if errors.Is(err, errEngineRunning) {
-		// 2 台目は立てない。ただし、走っているものを止める道は要る
-		//どこで起動したか分からない engine を、探して回らずに畳めるように。
+		// 2 台目は立てない。ただし、どこで起動したか分からない engine を探して
+		// 回らずに畳めるよう、走っているものを止める道は用意する。
 		taken, takeErr := replaceRunningEngine(signalCtx, home, options, stdin, stdout, stderr, dependencies.acquire)
 		if takeErr != nil {
 			if signalCtx.Err() != nil {
-				return exitForCause(context.Cause(signalCtx), logger)
+				return exitForCause(context.Cause(signalCtx))
 			}
 			// 断ったことは、もう綴ってある。ここで重ねると同じ話が二度出る。
 			if !errors.Is(takeErr, errAlreadyRunning) {
 				fmt.Fprintf(stderr, "sshc: %v\n", takeErr)
 			}
-			return 1
+			return exitFailure
 		}
 		release, err = taken, nil
 	}
 	if err != nil {
 		logger.Error("take the engine lock", "error", err)
-		return 1
+		return exitFailure
 	}
 	if signalCtx.Err() != nil {
 		if releaseErr := release(); releaseErr != nil {
 			logger.Error("release the engine lock", "error", releaseErr)
-			return 1
+			return exitFailure
 		}
-		return exitForCause(context.Cause(signalCtx), logger)
+		return exitForCause(context.Cause(signalCtx))
 	}
 
 	code := runEngineApp(signalCtx, home, options, stdout, logger, dependencies)
@@ -116,7 +108,7 @@ func runEngineWithDependencies(
 	// ロックを手放すのは最後である。これより後に状態を変えるものは何も無い。
 	if err := release(); err != nil {
 		logger.Error("release the engine lock", "error", err)
-		return 1
+		return exitFailure
 	}
 	return code
 }
@@ -133,7 +125,7 @@ func runEngineApp(
 	assets, err := ui.FS()
 	if err != nil {
 		logger.Error("load embedded UI", "error", err)
-		return 1
+		return exitFailure
 	}
 
 	runCtx, cancel := context.WithCancelCause(ctx)
@@ -149,7 +141,7 @@ func runEngineApp(
 	parts := newPlatformParts()
 	updates := &selfupdate.Checker{
 		API:  latestReleaseAPI,
-		HTTP: &http.Client{Timeout: 3 * time.Second},
+		HTTP: &http.Client{Timeout: releaseCheckTimeout},
 	}
 	announce := announceReadiness(stdout)
 	dependencyValues := app.Dependencies{
@@ -163,7 +155,7 @@ func runEngineApp(
 				return err
 			}
 			if readiness.BrowserRegistrationRequired && terminalOutput(stdout) && dependencies.openBrowser != nil {
-				if !dependencies.openBrowser(runCtx, readiness.Entrance) {
+				if !dependencies.openBrowser(readiness.Entrance) {
 					if _, err := fmt.Fprintln(stdout, "sshc: open the UI with `sshc`"); err != nil {
 						return err
 					}
@@ -191,9 +183,9 @@ func runEngineApp(
 	cause := context.Cause(runCtx)
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
 		logger.Error("sshc stopped", "error", runErr)
-		return 1
+		return exitFailure
 	}
-	return exitForCause(cause, logger)
+	return exitForCause(cause)
 }
 
 func terminalOutput(output io.Writer) bool {
@@ -201,10 +193,21 @@ func terminalOutput(output io.Writer) bool {
 	return ok && term.IsTerminal(int(file.Fd()))
 }
 
+const (
+	// releaseCheckTimeout は、engine が最新リリースを GitHub に 1 回尋ねる HTTP の
+	// 上限である。Web UI の手動確認も同じ Checker を使うので、応答しない GitHub の
+	// 前で画面の利用者を長く待たせない長さにする。
+	releaseCheckTimeout = 3 * time.Second
+	// startupUpdateCheckTimeout は、起動時の確認の上限である。確認は受付開始の通知
+	// （Announce）の中で行い、その間 app.Run は停止の要求や Serve の失敗を待つところ
+	// へ進めない。releaseCheckTimeout より長くしても、先に HTTP の上限で切れるので効かない。
+	startupUpdateCheckTimeout = releaseCheckTimeout
+)
+
 // reportAvailableUpdate はengineが受付を始めた直後に一度だけ確認し、新しいバージョンがある
 // 場合だけ通知する。ネットワーク障害や出力失敗はengineの成否へ影響させない。
 func reportAvailableUpdate(ctx context.Context, checker *selfupdate.Checker, current string, out io.Writer, logger *slog.Logger) {
-	checkCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	checkCtx, cancel := context.WithTimeout(ctx, startupUpdateCheckTimeout)
 	defer cancel()
 	latest, err := checker.Latest(checkCtx)
 	if err != nil {
@@ -216,18 +219,17 @@ func reportAvailableUpdate(ctx context.Context, checker *selfupdate.Checker, cur
 	if !selfupdate.Newer(current, latest.Version) || checkCtx.Err() != nil {
 		return
 	}
-	if _, err := fmt.Fprintf(out, "sshc: %s is available; run `sshc update`\n", latest.Version); err != nil && logger != nil {
+	if _, err := fmt.Fprint(out, availableUpdateNotice(latest.Version, runtime.GOOS)); err != nil && logger != nil {
 		logger.Debug("announce an sshc update", "error", err)
 	}
 }
 
-// exitForCause は、走行が終わった理由ひとつを終了コードへ写す。
-func exitForCause(cause error, logger *slog.Logger) int {
-	switch {
-	case errors.Is(cause, errEngineInterrupted):
-		return 130
+// exitForCause は、走行が終わった理由ひとつを終了コードへ写す。Ctrl-C だけを
+// exitInterrupted にし、正常終了、SIGTERM、呼び出し側の取り消しは 0 にする。
+func exitForCause(cause error) int {
+	if errors.Is(cause, errInterrupted) {
+		return exitInterrupted
 	}
-	// 正常終了、SIGTERM、呼び出し側の取り消し。
 	return 0
 }
 
@@ -237,32 +239,20 @@ func exitForCause(cause error, logger *slog.Logger) int {
 // 残る。アクセス URLは `sshc` が求めたときに 1 つずつ発行される。
 func announceReadiness(stdout io.Writer) func(app.Readiness) error {
 	return func(readiness app.Readiness) error {
-		message := "sshc: create the password vault with `sshc vault create`"
-		if readiness.VaultExists {
-			message = "sshc: unlock the password vault with `sshc vault unlock`"
-		}
-		_, err := fmt.Fprintln(stdout, message)
+		_, err := fmt.Fprintln(stdout, readinessMessage(readiness))
 		return err
 	}
 }
 
-// watchSignals は、OS 別のシグナル集合をひとつの理由付き context に変える。
-func watchSignals(ctx context.Context, signals chan os.Signal, stop func()) (context.Context, func()) {
-	signalCtx, cancel := context.WithCancelCause(ctx)
-	go func() {
-		select {
-		case received := <-signals:
-			if received == os.Interrupt {
-				cancel(errEngineInterrupted)
-				return
-			}
-			cancel(errEngineTerminated)
-		case <-signalCtx.Done():
-		}
-	}()
-	return signalCtx, func() {
-		stop()
-		cancel(nil)
-		signal.Stop(signals)
+// readinessMessage は、受付を始めた engine の Vault について、利用者が次にすることを返す。
+// パスワードなしの Vault は起動時にロックが解除されているので、解除を求めない。
+func readinessMessage(readiness app.Readiness) string {
+	switch {
+	case !readiness.VaultExists:
+		return "sshc: create the password vault with `sshc vault create`"
+	case !readiness.VaultUnlocked:
+		return "sshc: unlock the password vault with `sshc vault unlock`"
+	default:
+		return "sshc: engine ready; vault is unlocked"
 	}
 }

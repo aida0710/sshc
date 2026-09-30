@@ -44,21 +44,12 @@ func (systemPasswordTerminal) ReadPasswordMasked(
 	return readUnixPasswordWithFeedback(ctx, input, systemUnixPasswordOperations(), prompt, feedback)
 }
 
-// readUnixPassword は端末とキャンセルパイプを同じ poll で待つ。補助 goroutine は
-// 1 バイトを書くだけで、保存済み端末モードを復元する前に終了を待つ。呼び出し側の
-// stdin を所有せず、閉じることもない。
-func readUnixPassword(
-	ctx context.Context, input *os.File, operations unixPasswordOperations,
-) (password []byte, resultErr error) {
-	return readUnixPasswordWithFeedback(ctx, input, operations, nil, nil)
-}
-
-func readUnixPasswordWithPrompt(
-	ctx context.Context, input *os.File, operations unixPasswordOperations, prompt func() error,
-) (password []byte, resultErr error) {
-	return readUnixPasswordWithFeedback(ctx, input, operations, prompt, nil)
-}
-
+// readUnixPasswordWithFeedback は、エコーを止めたターミナルからパスワードを 1 行読む。
+//
+// ターミナルとキャンセルパイプを同じ poll で待つ（waitUnixReadable）ので、ctx が
+// 止まれば入力の途中でも戻る。ターミナルのモードは defer で必ず戻す。呼び出し側の
+// stdin を所有せず、閉じることもない。prompt はエコーを止めた後、読む前に呼ぶ。
+// feedback は、入力した文字数が変わるたびにその数を受け取る。どちらも nil でよい。
 func readUnixPasswordWithFeedback(
 	ctx context.Context,
 	input *os.File,
@@ -87,26 +78,11 @@ func readUnixPasswordWithFeedback(
 		}
 	}()
 
-	wakeRead, wakeWrite, err := operations.pipe()
+	wake, err := startUnixCancelWake(ctx, operations.pipe)
 	if err != nil {
 		return nil, err
 	}
-	stopWatcher := make(chan struct{})
-	watcherDone := make(chan struct{})
-	go func() {
-		defer close(watcherDone)
-		select {
-		case <-ctx.Done():
-			_, _ = wakeWrite.Write([]byte{1})
-		case <-stopWatcher:
-		}
-	}()
-	defer func() {
-		close(stopWatcher)
-		<-watcherDone
-		_ = wakeRead.Close()
-		_ = wakeWrite.Close()
-	}()
+	defer wake.close()
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -116,7 +92,7 @@ func readUnixPasswordWithFeedback(
 			return nil, err
 		}
 	}
-	password, err = readUnixPasswordBytesWithFeedback(ctx, fd, int(wakeRead.Fd()), operations, feedback)
+	password, err = readUnixPasswordBytesWithFeedback(ctx, fd, wake.fd(), operations, feedback)
 	if err != nil {
 		zeroBytes(password)
 		return nil, err
@@ -135,32 +111,9 @@ func readUnixPasswordBytesWithFeedback(
 	password := make([]byte, 0, maxVaultPasswordBytes)
 	reportedRunes := 0
 	for {
-		if err := ctx.Err(); err != nil {
+		if err := waitUnixReadable(ctx, terminalFD, wakeFD, operations.poll); err != nil {
 			zeroBytes(password)
 			return nil, err
-		}
-		ready := []unix.PollFd{
-			{Fd: int32(wakeFD), Events: unix.POLLIN},
-			{Fd: int32(terminalFD), Events: unix.POLLIN},
-		}
-		_, err := operations.poll(ready, -1)
-		if errors.Is(err, unix.EINTR) {
-			continue
-		}
-		if err != nil {
-			zeroBytes(password)
-			return nil, err
-		}
-		if ready[0].Revents != 0 || ctx.Err() != nil {
-			zeroBytes(password)
-			return nil, context.Canceled
-		}
-		if ready[1].Revents&unix.POLLNVAL != 0 {
-			zeroBytes(password)
-			return nil, unix.EBADF
-		}
-		if ready[1].Revents&(unix.POLLIN|unix.POLLHUP|unix.POLLERR) == 0 {
-			continue
 		}
 		var input [1]byte
 		count, readErr := operations.read(terminalFD, input[:])
@@ -170,26 +123,12 @@ func readUnixPasswordBytesWithFeedback(
 				zeroBytes(password)
 				return nil, editErr
 			}
-			if feedback != nil && utf8.Valid(password) {
-				after := utf8.RuneCount(password)
-				if after != reportedRunes {
-					if feedbackErr := feedback(after); feedbackErr != nil {
-						zeroBytes(password)
-						return nil, feedbackErr
-					}
-					reportedRunes = after
-				}
+			if feedbackErr := reportPasswordRunes(password, &reportedRunes, feedback); feedbackErr != nil {
+				zeroBytes(password)
+				return nil, feedbackErr
 			}
 			if finished {
-				if err := ctx.Err(); err != nil {
-					zeroBytes(password)
-					return nil, err
-				}
-				if !utf8.Valid(password) {
-					zeroBytes(password)
-					return nil, errInvalidPasswordText
-				}
-				return password, nil
+				return finishUnixPassword(ctx, password)
 			}
 		}
 		if readErr != nil {
@@ -201,6 +140,37 @@ func readUnixPasswordBytesWithFeedback(
 			return nil, io.EOF
 		}
 	}
+}
+
+// reportPasswordRunes は、入力が正しい UTF-8 で、文字数が前に知らせた数から変わった
+// ときだけ、feedback に文字数を知らせる。
+func reportPasswordRunes(password []byte, reported *int, feedback func(int) error) error {
+	if feedback == nil || !utf8.Valid(password) {
+		return nil
+	}
+	count := utf8.RuneCount(password)
+	if count == *reported {
+		return nil
+	}
+	if err := feedback(count); err != nil {
+		return err
+	}
+	*reported = count
+	return nil
+}
+
+// finishUnixPassword は、確定した入力を返す。取り消されていたか、正しい UTF-8 で
+// なければ、入力を消してから断る。
+func finishUnixPassword(ctx context.Context, password []byte) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		zeroBytes(password)
+		return nil, err
+	}
+	if !utf8.Valid(password) {
+		zeroBytes(password)
+		return nil, errInvalidPasswordText
+	}
+	return password, nil
 }
 
 func consumeUnixPasswordByte(password *[]byte, value byte) (bool, error) {

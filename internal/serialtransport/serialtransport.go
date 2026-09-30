@@ -190,14 +190,6 @@ type Transport struct {
 // New は、このOSのserial backendを使うTransportを返す。
 func New() *Transport { return &Transport{backend: systemBackend{}} }
 
-// NewWithBackend はtestまたは別platform integration用のbackendを注入する。
-func NewWithBackend(backend Backend) (*Transport, error) {
-	if backend == nil || typedNil(backend) {
-		return nil, invalid("serial backend is required")
-	}
-	return &Transport{backend: backend}, nil
-}
-
 func typedNil(value any) bool {
 	reflected := reflect.ValueOf(value)
 	switch reflected.Kind() {

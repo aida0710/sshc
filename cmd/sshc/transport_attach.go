@@ -86,17 +86,8 @@ func copyTransportInput(destination io.Writer, source io.Reader) error {
 	for {
 		count, err := source.Read(buffer)
 		if count > 0 {
-			payload := buffer[:count]
-			if escapeAt := bytesIndex(payload, transportEscapeByte); escapeAt >= 0 {
-				if escapeAt > 0 {
-					if writeErr := streamrun.WriteAll(destination, payload[:escapeAt]); writeErr != nil {
-						return writeErr
-					}
-				}
-				return errLocalEscape
-			}
-			if writeErr := streamrun.WriteAll(destination, payload); writeErr != nil {
-				return writeErr
+			if forwardErr := forwardTransportInput(destination, buffer[:count]); forwardErr != nil {
+				return forwardErr
 			}
 		}
 		if err != nil {
@@ -106,6 +97,21 @@ func copyTransportInput(destination io.Writer, source io.Reader) error {
 			return io.ErrNoProgress
 		}
 	}
+}
+
+// forwardTransportInput は、読んだ入力を相手へ送る。transportEscapeByte があれば、
+// その手前までを送って errLocalEscape を返す。
+func forwardTransportInput(destination io.Writer, payload []byte) error {
+	escapeAt := bytesIndex(payload, transportEscapeByte)
+	if escapeAt < 0 {
+		return streamrun.WriteAll(destination, payload)
+	}
+	if escapeAt > 0 {
+		if err := streamrun.WriteAll(destination, payload[:escapeAt]); err != nil {
+			return err
+		}
+	}
+	return errLocalEscape
 }
 
 func bytesIndex(payload []byte, wanted byte) int {

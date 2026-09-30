@@ -2,32 +2,16 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 	"strings"
 
 	"sshc/internal/api"
-	"sshc/internal/handoff"
 	"sshc/internal/remotesync"
 	"sshc/internal/session"
 )
-
-type commandFailure struct {
-	Kind      string `json:"kind"`
-	Retryable bool   `json:"retryable"`
-}
-
-type commandEnvelope struct {
-	SchemaVersion int             `json:"schemaVersion"`
-	Success       bool            `json:"success"`
-	Status        *api.SyncStatus `json:"status,omitempty"`
-	Result        any             `json:"result,omitempty"`
-	Failure       *commandFailure `json:"failure,omitempty"`
-}
 
 var errSyncPullRequiresForce = errors.New("sync pull requires --force")
 
@@ -71,10 +55,8 @@ func runSync(ctx context.Context, called syncInvocation, environment commandEnvi
 			return finishSyncFailure(called.JSON, err, stdout, stderr)
 		}
 		if called.JSON {
-			if err := writeCommandEnvelope(stdout, commandEnvelope{
-				SchemaVersion: 1, Success: true, Result: result,
-			}); err != nil {
-				return 1
+			if err := writeCommandSuccess(stdout, result); err != nil {
+				return exitFailure
 			}
 		} else {
 			writeSyncPushResult(stdout, result)
@@ -90,10 +72,8 @@ func runSync(ctx context.Context, called syncInvocation, environment commandEnvi
 			return finishSyncFailure(called.JSON, err, stdout, stderr)
 		}
 		if called.JSON {
-			if err := writeCommandEnvelope(stdout, commandEnvelope{
-				SchemaVersion: 1, Success: true, Result: result,
-			}); err != nil {
-				return 1
+			if err := writeCommandSuccess(stdout, result); err != nil {
+				return exitFailure
 			}
 		} else {
 			writeSyncPullResult(stdout, result)
@@ -112,10 +92,8 @@ func runSync(ctx context.Context, called syncInvocation, environment commandEnvi
 			return finishSyncFailure(called.JSON, err, stdout, stderr)
 		}
 		if called.JSON {
-			if err := writeCommandEnvelope(stdout, commandEnvelope{
-				SchemaVersion: 1, Success: true, Result: status,
-			}); err != nil {
-				return 1
+			if err := writeCommandSuccess(stdout, status); err != nil {
+				return exitFailure
 			}
 		} else {
 			writeSyncStatus(stdout, status)
@@ -127,10 +105,8 @@ func runSync(ctx context.Context, called syncInvocation, environment commandEnvi
 			return finishSyncFailure(called.JSON, err, stdout, stderr)
 		}
 		if called.JSON {
-			if err := writeCommandEnvelope(stdout, commandEnvelope{
-				SchemaVersion: 1, Success: true, Status: &status,
-			}); err != nil {
-				return 1
+			if err := writeCommandSuccess(stdout, status); err != nil {
+				return exitFailure
 			}
 			return 0
 		}
@@ -218,64 +194,9 @@ func runSyncPush(ctx context.Context, engine *engineAPI, force bool) (api.PushRe
 	return response, nil
 }
 
-func writeCommandEnvelope(out io.Writer, envelope commandEnvelope) error {
-	return json.NewEncoder(out).Encode(envelope)
-}
-
 func finishSyncFailure(asJSON bool, err error, stdout, stderr io.Writer) int {
-	failure := classifyCommandFailure(err)
-	exit := 1
-	if errors.Is(err, context.Canceled) {
-		exit = 130
-	}
-	if asJSON {
-		_ = writeCommandEnvelope(stdout, commandEnvelope{
-			SchemaVersion: 1, Success: false, Failure: &failure,
-		})
-		return exit
-	}
-	writeHumanSyncFailure(stderr, failure)
-	return exit
-}
-
-func classifyCommandFailure(err error) commandFailure {
-	var problem engineProblem
-	if errors.As(err, &problem) && problem.OutcomeUnknown {
-		return commandFailure{Kind: "outcome_unknown", Retryable: false}
-	}
-	switch {
-	case errors.Is(err, context.Canceled):
-		return commandFailure{Kind: "canceled", Retryable: true}
-	case errors.Is(err, fs.ErrNotExist):
-		return commandFailure{Kind: "engine_not_running", Retryable: true}
-	case errors.Is(err, handoff.ErrSchemaVersion), errors.Is(err, handoff.ErrProtocolVersion):
-		return commandFailure{Kind: "engine_incompatible", Retryable: false}
-	case errors.Is(err, errEngineIdentityMismatch):
-		return commandFailure{Kind: "engine_mismatch", Retryable: false}
-	case errors.Is(err, errEngineVaultMissing):
-		return commandFailure{Kind: "vault_missing", Retryable: false}
-	case errors.Is(err, errEngineVaultLocked):
-		return commandFailure{Kind: "vault_locked", Retryable: false}
-	case errors.Is(err, errSyncSetupTTY):
-		return commandFailure{Kind: "interactive_terminal_required", Retryable: false}
-	case errors.Is(err, errSyncSetupInput):
-		return commandFailure{Kind: "invalid_setup_input", Retryable: false}
-	case errors.Is(err, errSyncSetupIncomplete):
-		return commandFailure{Kind: "sync_setup_target_incomplete", Retryable: false}
-	case errors.Is(err, errSyncPullRequiresForce):
-		return commandFailure{Kind: "sync_pull_requires_force", Retryable: false}
-	case errors.Is(err, errEngineInvalidResponse), errors.Is(err, errEngineResponseTooLarge):
-		return commandFailure{Kind: "invalid_engine_response", Retryable: false}
-	}
-	if errors.As(err, &problem) {
-		retryable := problem.Retryable
-		switch problem.Code {
-		case "sync_remote_moved", "sync_remote_deleted", "preview_stale", "sync_setup_target_changed":
-			retryable = true
-		case "bucket_authentication_failed", "bucket_access_denied":
-			retryable = false
-		}
-		return commandFailure{Kind: problem.Code, Retryable: retryable}
-	}
-	return commandFailure{Kind: "engine_unavailable", Retryable: true}
+	return finishCommandFailure(commandFailureReport{
+		cause: err, failure: classifyCommandFailure(err),
+		asJSON: asJSON, stdout: stdout, stderr: stderr, writeHuman: writeHumanSyncFailure,
+	})
 }

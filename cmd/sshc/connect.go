@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"os/signal"
+	"strings"
 	"time"
 
 	"sshc/internal/app"
@@ -17,6 +15,7 @@ import (
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/sshclient"
+	"sshc/internal/terminal"
 	"sshc/internal/validate"
 )
 
@@ -38,47 +37,34 @@ type connectAnswer struct {
 
 // runOpen は engine から一度限りの UI URL を取得して出力する。
 // open が true の場合だけ URL をブラウザへ渡す。
-func runOpen(
-	ctx context.Context, stateDir string, client *http.Client, stdout, stderr io.Writer, open bool,
-) int {
+func runOpen(ctx context.Context, environment commandEnvironment, open bool) int {
+	stateDir, client, stdout, stderr := environment.stateDir, environment.client, environment.stdout, environment.stderr
 	found, err := verifiedHandoff(ctx, stateDir, client)
 	if err != nil {
-		if errors.Is(err, handoff.ErrSchemaVersion) || errors.Is(err, handoff.ErrProtocolVersion) || errors.Is(err, errEngineUnproven) {
-			fmt.Fprintf(stderr, "sshc: %v\n", err)
-			return 1
-		}
-		fmt.Fprintln(stderr, "sshc: not running")
-		fmt.Fprintln(stderr, "sshc: start one with `sshc engine`, and keep that terminal open")
-		return 1
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, found.URL+httpserver.OpenPath, bytes.NewReader([]byte("{}")))
-	if err != nil {
-		fmt.Fprintf(stderr, "sshc: %v\n", err)
-		return 1
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set(handoff.HeaderName, found.Secret)
-	response, err := client.Do(request)
-	if err != nil {
-		fmt.Fprintln(stderr, "sshc: the running engine did not respond")
-		return 1
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode != http.StatusOK {
-		fmt.Fprintln(stderr, "sshc: refused")
-		return 1
+		return reportEngineUnreachable(ctx, err, stderr)
 	}
 	var answer struct {
 		URL string `json:"url"`
 	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&answer); err != nil || answer.URL == "" {
+	err = newHandoffEndpoint(found, client).exchange(ctx,
+		handoffCall{method: http.MethodPost, path: httpserver.OpenPath, body: strings.NewReader("{}")},
+		handoffAnswer{status: http.StatusOK, into: &answer})
+	refusal, refused := engineRefusal(err)
+	switch {
+	case isTransportProblem(err):
+		fmt.Fprintln(stderr, "sshc: the running engine did not respond")
+		return exitFailure
+	case refused:
+		fmt.Fprintf(stderr, "sshc: %v\n", refusedRequestError(refusal))
+		return exitFailure
+	case err != nil || answer.URL == "":
 		fmt.Fprintln(stderr, "sshc: the engine response did not include a UI URL")
-		return 1
+		return exitFailure
 	}
 	fmt.Fprintln(stdout, answer.URL)
 	if open {
 		// URL は既に出力済みなので、ブラウザ起動の失敗は終了コードに反映しない。
-		openInBrowser(ctx, answer.URL)
+		openInBrowser(answer.URL)
 	}
 	return 0
 }
@@ -90,28 +76,31 @@ func runConnect(ctx context.Context, alias string, environment commandEnvironmen
 		environment.home, environment.stateDir, environment.client, environment.stdin, environment.stdout, environment.stderr
 	if err := validate.Alias(alias); err != nil {
 		fmt.Fprintf(stderr, "sshc: %q is not an alias this will connect to\n", alias)
-		return 2
+		return exitUsage
 	}
 
-	// 接続待機中だけ Ctrl-C を処理する。SSH 開始後は raw 端末へそのまま渡す。
-	waitCtx, stopWaiting := signal.NotifyContext(ctx, os.Interrupt)
-	session, err := reachUnlockedEngine(waitCtx, stateDir, client, func(found handoff.Handoff) engineProbe {
+	// ctx は呼び出し側が notifySignals で作る。シグナルで止まったら、どの段階でも
+	// interactiveStopExitCode の終了コードで終える。SSH 開始後の Ctrl-C は、raw の
+	// ターミナルからそのままリモートへ届くのでシグナルにならない。
+	session, err := reachUnlockedEngine(ctx, stateDir, client, func(found handoff.Handoff) engineProbe {
 		return httpProbe{found: found, client: client}
-	}, stderr)
-	stopWaiting()
+	})
 	if err != nil {
-		if errors.Is(err, errInterrupted) {
-			return 130
+		if code, stopped := interactiveStopExitCode(ctx); stopped {
+			return code
 		}
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
-		return 1
+		return exitFailure
 	}
 
 	// 解錠確認後、指定された alias の接続情報を一度だけ要求する。
 	answer, err := session.Connection(ctx, alias)
 	if err != nil {
+		if code, stopped := interactiveStopExitCode(ctx); stopped {
+			return code
+		}
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
-		return 1
+		return exitFailure
 	}
 
 	writeConnectionNotices(stderr, answer)
@@ -125,17 +114,21 @@ func runConnect(ctx context.Context, alias string, environment commandEnvironmen
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
-		return 1
+		return exitFailure
 	}
-	process, err := connection.Open(ctx, alias, sshclient.DefaultLocalSize)
+	process, err := connection.Open(ctx, alias, terminal.DefaultSize())
 	if err != nil {
-		fmt.Fprintf(stderr, "sshc: %v\n", err)
-		return 1
+		fmt.Fprintf(stderr, "sshc: %v\n", describeConnectionFailure(err))
+		return exitFailure
 	}
+	// Attach は ctx が止まると接続を閉じ、ターミナルを戻してから戻る。
 	code, err := sshclient.Attach(ctx, process, stdin, stdout)
+	if stoppedCode, stopped := interactiveStopExitCode(ctx); stopped {
+		return stoppedCode
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
-		return 1
+		return exitFailure
 	}
 	return code
 }
@@ -159,29 +152,24 @@ func requestConnection(ctx context.Context, found handoff.Handoff, alias string,
 	if err != nil {
 		return connectAnswer{}, err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		found.URL+httpserver.ConnectPath, bytes.NewReader(body))
-	if err != nil {
-		return connectAnswer{}, err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set(handoff.HeaderName, found.Secret)
-
-	response, err := client.Do(request)
-	if err != nil {
-		return connectAnswer{}, fmt.Errorf("sshc is not answering")
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode != http.StatusOK {
-		return connectAnswer{}, fmt.Errorf("sshc refused the request")
-	}
 	var answer connectAnswer
-	if err := json.NewDecoder(io.LimitReader(response.Body, config.MaxSnapshotSize+(64<<10))).Decode(&answer); err != nil {
-		return connectAnswer{}, err
+	err = newHandoffEndpoint(found, client).exchange(ctx,
+		handoffCall{method: http.MethodPost, path: httpserver.ConnectPath, body: bytes.NewReader(body)},
+		handoffAnswer{status: http.StatusOK, into: &answer, limit: maxConnectAnswer})
+	switch {
+	case isTransportProblem(err):
+		return connectAnswer{}, fmt.Errorf("sshc is not answering")
+	case err != nil:
+		return connectAnswer{}, explainRefusedRequest(err)
 	}
 	return answer, nil
 }
 
-// connectTimeout は、これが行う唯一のリクエストに上限を設ける。ネットワーク越しに何か
-// をするのではなく、このマシン上のプロセスにトークンを尋ねているだけだ。
+// maxConnectAnswer は接続情報の応答の上限である。応答に載る保存済みの値は Vault の
+// snapshot に収まるので、その上限に JSON の枠の分を足す。
+const maxConnectAnswer = config.MaxSnapshotSize + 64<<10
+
+// connectTimeout は、CLI が engine へ送る短い要求（challenge、status、接続情報、
+// UI URL の発行）のそれぞれに上限を設ける。ネットワーク越しに何かをするのではなく、
+// このマシン上のプロセスに尋ねているだけだ。
 const connectTimeout = 5 * time.Second

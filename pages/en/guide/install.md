@@ -105,6 +105,10 @@ sshc vault unlock
 
 `service install` creates `~/Library/LaunchAgents/io.github.aida0710.sshc.plist`, registers it in the current GUI user domain, and starts it. It reports success only after matching launchd's PID to sshc and reaching the status API. sshc does not overwrite a hand-written plist with the same name. `sshc service disable` removes only the plist created by sshc.
 
+launchd restarts the engine only after it fails. When the engine exits normally, for example after `sshc engine --replace`, launchd leaves it stopped. Run `sshc service install` again to return to the service.
+
+A plist registered by an older sshc keeps the previous definition, which restarts the engine even after a normal exit, until you run `sshc service install` again. `sshc service status` and `sshc update` tell you to run it when this applies.
+
 ## Update
 
 - Homebrew or `install.sh`: `sshc update`

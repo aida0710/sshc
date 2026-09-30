@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"time"
 
 	sftpcore "sshc/internal/sftp"
 )
@@ -26,6 +27,16 @@ const (
 	sftpCLIMaxRecursiveDepth       = 256
 	sftpCLIMaxRecursiveEntries     = 1_000_000
 	sftpCLIMaxRecursiveMiB         = int64(8 * 1024 * 1024)
+
+	// CLI は分割転送の大きさを MiB で受け取る。範囲の正本は engine の sftpcore の定数で、
+	// ここでは単位を MiB に直すだけにする。engine の範囲を変えたときに、CLI が正当な
+	// 値や engine の応答を断らないようにするためである。
+	sftpCLIMinSplitSizeMiB = int(sftpcore.MinLargeFileThreshold >> 20)
+	sftpCLIMaxSplitSizeMiB = int(sftpcore.MaxLargeFileThreshold >> 20)
+	sftpCLIMinChunkSizeMiB = int(sftpcore.MinLargeFileChunkBytes >> 20)
+	sftpCLIMaxChunkSizeMiB = int(sftpcore.MaxLargeFileChunkBytes >> 20)
+	// sftpCLIMaxClearCompletedAfterSeconds は、engine が返す完了項目の自動消去時間の上限を秒で表す。
+	sftpCLIMaxClearCompletedAfterSeconds = int(sftpcore.MaxClearCompletedAfter / time.Second)
 )
 
 var (
@@ -119,15 +130,9 @@ type sftpCLISettingsResult struct {
 	ChunkSizeMiB int64 `json:"chunkSizeMiB"`
 }
 
-func runSFTP(
-	ctx context.Context,
-	called sftpInvocation,
-	stateDir string,
-	client *http.Client,
-	stdout, stderr io.Writer,
-	confirm actionConfirmer,
-) int {
-	engine, err := openEngineAPI(ctx, stateDir, client)
+func runSFTP(ctx context.Context, called sftpInvocation, environment commandEnvironment) int {
+	stdout, stderr := environment.stdout, environment.stderr
+	engine, err := openEngineAPI(ctx, environment.stateDir, environment.client)
 	if err != nil {
 		return finishSFTPFailure(called.JSON, err, stdout, stderr)
 	}
@@ -156,14 +161,14 @@ func runSFTP(
 	}
 	if called.Overwrite && conflicts > 0 && !called.DryRun {
 		fmt.Fprintf(stderr, "sshc: %d existing destination file(s) will be replaced\n", conflicts)
-		confirmed, code := confirmAction(ctx, called.Yes, "Continue? [y/N] ", confirm, stderr)
+		confirmed, code := confirmAction(ctx, called.Yes, "Continue? [y/N] ", environment.confirm, stderr)
 		if code != 0 {
 			if called.JSON {
 				failure := commandFailure{Kind: "confirmation_required", Retryable: false}
 				if errors.Is(ctx.Err(), context.Canceled) {
 					failure = commandFailure{Kind: "canceled", Retryable: true}
 				}
-				_ = writeCommandEnvelope(stdout, commandEnvelope{SchemaVersion: 1, Success: false, Failure: &failure})
+				_ = writeCommandFailure(stdout, failure)
 			}
 			return code
 		}
@@ -171,7 +176,7 @@ func runSFTP(
 			fmt.Fprintln(stderr, "sshc: canceled")
 			if called.JSON {
 				failure := commandFailure{Kind: "confirmation_declined", Retryable: false}
-				_ = writeCommandEnvelope(stdout, commandEnvelope{SchemaVersion: 1, Success: false, Failure: &failure})
+				_ = writeCommandFailure(stdout, failure)
 			}
 			return 0
 		}
@@ -243,8 +248,8 @@ func runSFTPSettings(ctx context.Context, engine *engineAPI, called sftpInvocati
 		ChunkSizeMiB: settings.LargeFileChunkBytes >> 20,
 	}
 	if called.JSON {
-		if err := writeCommandEnvelope(stdout, commandEnvelope{SchemaVersion: 1, Success: true, Result: result}); err != nil {
-			return 1
+		if err := writeCommandSuccess(stdout, result); err != nil {
+			return exitFailure
 		}
 		return 0
 	}
@@ -253,11 +258,11 @@ func runSFTPSettings(ctx context.Context, engine *engineAPI, called sftpInvocati
 }
 
 func validSFTPCLITransferSettings(settings sftpCLITransferQueue) bool {
-	return settings.MaxConcurrent >= 1 && settings.MaxConcurrent <= 8 &&
-		settings.ClearCompletedAfterSeconds >= 0 && settings.ClearCompletedAfterSeconds <= 86400 &&
-		settings.LargeFileThresholdBytes >= 16<<20 && settings.LargeFileThresholdBytes <= 1024<<20 &&
+	return settings.MaxConcurrent >= 1 && settings.MaxConcurrent <= sftpcore.MaxTransferConcurrency &&
+		settings.ClearCompletedAfterSeconds >= 0 && settings.ClearCompletedAfterSeconds <= sftpCLIMaxClearCompletedAfterSeconds &&
+		settings.LargeFileThresholdBytes >= sftpcore.MinLargeFileThreshold && settings.LargeFileThresholdBytes <= sftpcore.MaxLargeFileThreshold &&
 		settings.LargeFileParallelism >= 1 && settings.LargeFileParallelism <= sftpcore.MaxLargeFileParallelism &&
-		settings.LargeFileChunkBytes >= 8<<20 && settings.LargeFileChunkBytes <= int64(4096)<<20
+		settings.LargeFileChunkBytes >= sftpcore.MinLargeFileChunkBytes && settings.LargeFileChunkBytes <= sftpcore.MaxLargeFileChunkBytes
 }
 
 func sftpIsNotFound(err error) bool {
@@ -272,8 +277,8 @@ func sftpIsTransferLimit(err error) bool {
 
 func finishSFTPSuccess(asJSON bool, result sftpCLIResult, stdout io.Writer) int {
 	if asJSON {
-		if err := writeCommandEnvelope(stdout, commandEnvelope{SchemaVersion: 1, Success: true, Result: result}); err != nil {
-			return 1
+		if err := writeCommandSuccess(stdout, result); err != nil {
+			return exitFailure
 		}
 		return 0
 	}
@@ -293,40 +298,42 @@ func finishSFTPSuccess(asJSON bool, result sftpCLIResult, stdout io.Writer) int 
 }
 
 func finishSFTPFailure(asJSON bool, err error, stdout, stderr io.Writer) int {
-	failure := classifyCommandFailure(err)
+	return finishCommandFailure(commandFailureReport{
+		cause: err, failure: classifySFTPFailure(err), asJSON: asJSON, stdout: stdout, stderr: stderr,
+		writeHuman: func(stderr io.Writer, failure commandFailure) { writeHumanSFTPFailure(stderr, failure, err) },
+	})
+}
+
+// classifySFTPFailure は、SFTP の転送に固有の失敗を種別に分け、ほかは共通の分け方に任せる。
+func classifySFTPFailure(err error) commandFailure {
 	switch {
 	case errors.Is(err, errSFTPRecursiveRequired):
-		failure = commandFailure{Kind: "recursive_required", Retryable: false}
+		return commandFailure{Kind: "recursive_required", Retryable: false}
 	case errors.Is(err, errSFTPExisting):
-		failure = commandFailure{Kind: "destination_exists", Retryable: false}
+		return commandFailure{Kind: "destination_exists", Retryable: false}
 	case errors.Is(err, errSFTPTypeMismatch):
-		failure = commandFailure{Kind: "type_mismatch", Retryable: false}
+		return commandFailure{Kind: "type_mismatch", Retryable: false}
 	case errors.Is(err, errSFTPUnsupportedLocal):
-		failure = commandFailure{Kind: "unsupported_file_type", Retryable: false}
+		return commandFailure{Kind: "unsupported_file_type", Retryable: false}
 	case errors.Is(err, errSFTPRemoteDirectoryMissing):
-		failure = commandFailure{Kind: "remote_directory_missing", Retryable: false}
+		return commandFailure{Kind: "remote_directory_missing", Retryable: false}
 	case errors.Is(err, errSFTPRemotePath):
-		failure = commandFailure{Kind: "invalid_remote_path", Retryable: false}
+		return commandFailure{Kind: "invalid_remote_path", Retryable: false}
 	case errors.Is(err, errSFTPRecursiveLimit):
-		failure = commandFailure{Kind: "recursive_limit", Retryable: false}
-	case errors.Is(err, fs.ErrNotExist):
-		failure = commandFailure{Kind: "local_not_found", Retryable: false}
+		return commandFailure{Kind: "recursive_limit", Retryable: false}
+	// handoff が無い（engine が動いていない）ことも fs.ErrNotExist なので、手元の
+	// 転送元が無いことと取り違えない。
+	case errors.Is(err, fs.ErrNotExist) && !isEngineNotRunning(err):
+		return commandFailure{Kind: "local_not_found", Retryable: false}
+	default:
+		return classifyCommandFailure(err)
 	}
-	exit := 1
-	if errors.Is(err, context.Canceled) {
-		exit = 130
-	}
-	if asJSON {
-		_ = writeCommandEnvelope(stdout, commandEnvelope{SchemaVersion: 1, Success: false, Failure: &failure})
-		return exit
-	}
+}
+
+// writeHumanSFTPFailure は、SFTP の転送に固有の失敗の種別を人向けの文で書く。一部の文は、
+// どのファイルかを示すために元の失敗 cause をそのまま含める。
+func writeHumanSFTPFailure(stderr io.Writer, failure commandFailure, cause error) {
 	switch failure.Kind {
-	case "engine_not_running":
-		fmt.Fprintln(stderr, "sshc: no engine is running; start the desktop app or run sshc engine in another terminal")
-	case "vault_missing":
-		fmt.Fprintln(stderr, "sshc: no vault exists; run sshc vault create")
-	case "vault_locked":
-		fmt.Fprintln(stderr, "sshc: the vault is locked; run sshc vault unlock")
 	case "recursive_required":
 		fmt.Fprintln(stderr, "sshc: the source is a directory; rerun with --recursive")
 	case "destination_exists":
@@ -334,13 +341,13 @@ func finishSFTPFailure(asJSON bool, err error, stdout, stderr io.Writer) int {
 	case "type_mismatch":
 		fmt.Fprintln(stderr, "sshc: a file and directory occupy the same destination path")
 	case "unsupported_file_type":
-		fmt.Fprintf(stderr, "sshc: %v; only files and directories (and links to them) are transferred\n", err)
+		fmt.Fprintf(stderr, "sshc: %v; only files and directories (and links to them) are transferred\n", cause)
 	case "remote_directory_missing":
-		fmt.Fprintf(stderr, "sshc: %v; create it first or put a directory with --recursive\n", err)
+		fmt.Fprintf(stderr, "sshc: %v; create it first or put a directory with --recursive\n", cause)
 	case "invalid_remote_path":
 		fmt.Fprintln(stderr, "sshc: remote paths must be absolute POSIX paths")
 	case "recursive_limit":
-		fmt.Fprintf(stderr, "sshc: %v; choose a narrower source or raise the recursive limit explicitly\n", err)
+		fmt.Fprintf(stderr, "sshc: %v; choose a narrower source or raise the recursive limit explicitly\n", cause)
 	case "local_not_found":
 		fmt.Fprintln(stderr, "sshc: the local source does not exist")
 	case "canceled":
@@ -348,5 +355,4 @@ func finishSFTPFailure(asJSON bool, err error, stdout, stderr io.Writer) int {
 	default:
 		fmt.Fprintf(stderr, "sshc: sftp failed (%s)\n", failure.Kind)
 	}
-	return exit
 }

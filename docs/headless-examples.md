@@ -93,7 +93,7 @@ systemctl --user daemon-reload
 sshc service install
 ```
 
-`sshc service disable`はsshc管理下のunitだけを停止、無効化、削除します。unit変更はuser単位のlockで直列化し、停止後にも内容が変わっていないことを確認してから削除します。`sshc update`は管理unitの実行パスが更新対象と完全に一致し、activeの場合だけ`try-restart`します。再起動によりvaultはロックされるため、別の対話端末から`sshc vault unlock`を再実行してください。停止中のunitをupdateが起動することはありません。binary更新後の再起動だけに失敗した場合は、`sshc service install`を再実行して復旧できます。
+`sshc service disable`はsshc管理下のunitだけを停止、無効化、削除します。unit変更はuser単位のlockで直列化し、停止後にも内容が変わっていないことを確認してから削除します。`sshc update`は管理unitの実行パスが更新対象と完全に一致し、activeの場合だけ`try-restart`します。再起動によりvaultはロックされるため、別の対話端末から`sshc vault unlock`を再実行してください。停止中のunitをupdateが起動することはありません。binary更新後の再起動だけに失敗した場合は、`sshc service install`を再実行して復旧できます。管理unitが以前のsshcの書いた内容のままなら、updateは再起動せずに`sshc service install`の再実行を案内します。
 
 `disable`も削除対象を表示して確認を求めます。対話端末のない自動化では`sshc service disable --yes`を使用してください。
 
@@ -113,9 +113,9 @@ sshc service status
 sshc vault unlock
 ```
 
-`sshc service install`は`~/Library/LaunchAgents/io.github.aida0710.sshc.plist`を0600で原子的に作成し、現在のGUIユーザードメインへ`launchctl bootstrap`で登録します。launchdのPID、sshc handoffのPID、status APIが一致してから成功を返します。再登録時は既存のsshc管理エージェントを`bootout`してから新しい定義を読み込みます。
+`sshc service install`は`~/Library/LaunchAgents/io.github.aida0710.sshc.plist`を0600で原子的に作成し、現在のGUIユーザードメインへ`launchctl bootstrap`で登録します。launchdのPID、sshc handoffのPID、status APIが一致してから成功を返します。再登録時は既存のsshc管理エージェントを`bootout`してから新しい定義を読み込みます。plistは`KeepAlive`の`SuccessfulExit`を`false`に設定し、systemdの`Restart=on-failure`と同じく、`sshc engine`が0以外で終了した場合だけ再起動します。`sshc engine --replace`による置き換えやSIGTERMで0で終了した場合は再起動しないため、エージェントに戻すには`sshc service install`を再実行します。
 
-同名plistにsshcの管理markerがない場合は上書きも削除もしません。`sshc service disable`はsshcが作成したplistだけを`bootout`して削除します。`sshc update`は登録内容が更新対象の実行パスと完全に一致し、エージェントがactiveの場合だけ`launchctl kickstart -k`で再起動します。
+同名plistにsshcの管理markerがない場合は上書きも削除もしません。`sshc service disable`はsshcが作成したplistだけを`bootout`して削除します。`sshc update`は登録内容が更新対象の実行パスと完全に一致し、エージェントがactiveの場合だけ`launchctl kickstart -k`で再起動します。管理markerがあっても、plistが以前のsshcの書いた内容（無条件の`KeepAlive`など）のままなら、`sshc update`は再起動せず、`sshc update`と`sshc service status`は`sshc service install`の再実行を案内します。
 
 ## tmux
 

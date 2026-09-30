@@ -49,13 +49,17 @@ func (display *sftpCLIProgressDisplay) track(id, name string) {
 	display.mu.Unlock()
 }
 
+// sftpProgressRequestTimeout は、進捗を 1 回尋ねる上限である。応答しない engine の
+// 前で表示の更新を長く止めない。取りこぼした分は次の更新で取り直せる。
+const sftpProgressRequestTimeout = 500 * time.Millisecond
+
 func (display *sftpCLIProgressDisplay) refresh(ctx context.Context) {
 	if display == nil {
 		return
 	}
 	display.refreshMu.Lock()
 	defer display.refreshMu.Unlock()
-	requestContext, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	requestContext, cancel := context.WithTimeout(ctx, sftpProgressRequestTimeout)
 	defer cancel()
 	var queue sftpCLITransferQueue
 	if err := display.engine.sendJSON(requestContext, http.MethodGet, "/api/v1/sftp/transfers", nil, &queue); err != nil {

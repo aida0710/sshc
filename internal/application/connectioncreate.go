@@ -239,7 +239,10 @@ func (s *Service) planCreateConnection(
 			return planned{}, HostIdentity{}, err
 		}
 	}
-	block, err := createHostBlock(request.Alias, request.HostName, request.User, port, identityFile, "\n")
+	values := hostBlockValues{
+		alias: request.Alias, hostName: request.HostName, user: request.User, port: port, identityFile: identityFile,
+	}
+	block, err := createHostBlock(values, "\n")
 	if err != nil {
 		return planned{}, HostIdentity{}, err
 	}
@@ -269,7 +272,7 @@ func (s *Service) planCreateConnection(
 			return planned{}, HostIdentity{}, err
 		}
 		file := config.Parse(previous)
-		block, err = createHostBlock(request.Alias, request.HostName, request.User, port, identityFile, dominantEnding(file))
+		block, err = createHostBlock(values, dominantEnding(file))
 		if err != nil {
 			return planned{}, HostIdentity{}, err
 		}
@@ -314,32 +317,44 @@ func (s *Service) planCreateConnection(
 	return prepared, HostIdentity{Path: relative, Alias: request.Alias}, nil
 }
 
-func createHostBlock(alias, hostName, user string, port int, identityFile, ending string) (*config.File, error) {
+// hostBlockValues は、新しい接続の Host ブロックに書く値である。
+type hostBlockValues struct {
+	alias    string
+	hostName string
+	// user が空なら、User の行を書かない。
+	user string
+	port int
+	// identityFile が空なら、IdentityFile の行を書かない。
+	identityFile string
+}
+
+// createHostBlock は、values から Host ブロックを作る。行の終わりは ending にそろえる。
+func createHostBlock(values hostBlockValues, ending string) (*config.File, error) {
 	lines := make([]config.Line, 0, 5)
-	appendLine := func(indent, keyword string, values ...string) error {
-		line, err := buildLine(indent, keyword, values, ending)
+	appendLine := func(indent, keyword string, arguments ...string) error {
+		line, err := buildLine(indent, keyword, arguments, ending)
 		if err != nil {
 			return err
 		}
 		lines = append(lines, line)
 		return nil
 	}
-	if err := appendLine("", "Host", alias); err != nil {
+	if err := appendLine("", "Host", values.alias); err != nil {
 		return nil, err
 	}
-	if err := appendLine("\t", "HostName", hostName); err != nil {
+	if err := appendLine("\t", "HostName", values.hostName); err != nil {
 		return nil, err
 	}
-	if user != "" {
-		if err := appendLine("\t", "User", user); err != nil {
+	if values.user != "" {
+		if err := appendLine("\t", "User", values.user); err != nil {
 			return nil, err
 		}
 	}
-	if err := appendLine("\t", "Port", strconv.Itoa(port)); err != nil {
+	if err := appendLine("\t", "Port", strconv.Itoa(values.port)); err != nil {
 		return nil, err
 	}
-	if identityFile != "" {
-		if err := appendLine("\t", "IdentityFile", identityFile); err != nil {
+	if values.identityFile != "" {
+		if err := appendLine("\t", "IdentityFile", values.identityFile); err != nil {
 			return nil, err
 		}
 	}

@@ -1,18 +1,16 @@
-// Package effective の一部。ssh -G の出力を読む部分だけがここに残っている。
-//
-// このアプリケーションは ssh -G を回さない。設定の解決は Resolve が行い、
-// 何も実行しない。ここにあるのは、その Resolve を実機の OpenSSH と突き合わせる
-// 差分テストのための解析器である。一致を確かめるには、相手の言い分を読める
-// 必要がある。製品の経路からは呼ばれない。
 package effective
 
 import (
 	"strings"
 )
 
-// Values は、OpenSSH がひとつの alias について報告した実効設定。
-// Keywords は出力順を保ち、Entries は、identityfile のように複数回現れうる
-// キーワードのすべての値を保つ。
+// Values は、ひとつの alias について OpenSSH が実際に使う設定。Resolve が
+// 組み立て、sshclient が接続先を決めるときに読む。
+//
+// 形を ssh -G の出力に合わせてあるのは、差分テストが OpenSSH の答えを同じ型に
+// 読んで突き合わせるためである。このアプリケーションは ssh -G を回さない。
+// Keywords は小文字のキーワードを最初に現れた順に保ち、Entries は、identityfile の
+// ように複数回現れうるキーワードのすべての値を保つ。
 type Values struct {
 	Keywords []string
 	Entries  map[string][]string

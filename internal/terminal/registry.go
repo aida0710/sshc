@@ -162,7 +162,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 
 	size := spec.Size
 	if !size.Valid() {
-		size = Size{Cols: 80, Rows: 24}
+		size = DefaultSize()
 	}
 	open := spec.Open
 	if open == nil {
