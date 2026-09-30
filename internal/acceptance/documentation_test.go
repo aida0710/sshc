@@ -35,7 +35,7 @@ func TestNoDocumentationTeachesTheRemovedEntryPoints(t *testing.T) {
 		for _, removed := range []string{"--own-engine", "-open=false", "sshc engine start", "make desktop-dist"} {
 			if strings.Contains(string(contents), removed) &&
 				!strings.Contains(string(contents), removed+"` は未定義") &&
-				!strings.Contains(string(contents), "旧版") {
+				!strings.Contains(string(contents), "旧バージョン") {
 				t.Errorf("%s still teaches %q", name, removed)
 			}
 		}

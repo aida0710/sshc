@@ -49,7 +49,7 @@ type migrationRegistry map[int]documentMigration
 const migrationBaseVersion = 4
 
 // registeredDocumentMigrationsが本番で許可する唯一の経路である。SchemaVersionを
-// 上げる変更は、直前versionをkeyとするstepと旧版fixtureを同じcommitで追加する。
+// 上げる変更は、直前versionをkeyとするstepと旧バージョンのfixtureを同じcommitで追加する。
 // 現在はschema 4を出発点とし、TOTP用の独立した名前空間とhost bindingを
 // schema 5で、VPNプロファイルの秘密の名前空間をschema 6で追加した。既存の
 // 秘密値には触れず、空のmapだけを初期化する。

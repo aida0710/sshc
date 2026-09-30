@@ -120,7 +120,7 @@ func buildFailureSummary(output string) string {
 	return strings.TrimSpace(lines[len(lines)-1])
 }
 
-// removeOtherImages は、前の版の sshc が作ったイメージを消す。
+// removeOtherImages は、前のバージョンの sshc が作ったイメージを消す。
 //
 // タグは中身から決まるので、sshc を更新するたびに新しいイメージが1つ増える。
 // 古いものは誰も使わないまま、数百 MB ずつ残り続ける。まだ動いている

@@ -44,7 +44,7 @@ const (
 )
 
 var (
-	// ErrInvalid は、同じ版であっても接続先として安全でない文書を表す。
+	// ErrInvalid は、同じバージョンであっても接続先として安全でない文書を表す。
 	ErrInvalid = errors.New("invalid handoff document")
 	// ErrSchemaVersion は、文書の構造を CLI が理解できないことを表す。
 	ErrSchemaVersion = errors.New("unsupported handoff schema version")

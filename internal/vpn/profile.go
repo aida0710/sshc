@@ -103,7 +103,7 @@ func (profile Profile) foreignSection() string {
 
 // OwnSecrets は、secrets のうち、このプロファイルの backend の節だけを残した写しを
 // 返す。方式を切り替えたあとに、使わなくなった方式の秘密を Vault に残さない。
-// この版の知らない backend なら、何も残さない。
+// このバージョンの知らない backend なら、何も残さない。
 func (profile Profile) OwnSecrets(secrets Secrets) Secrets {
 	chosen, err := backendFor(profile.Backend)
 	if err != nil {

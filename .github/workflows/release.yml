@@ -49,7 +49,7 @@ jobs:
           export RELEASE_SHA
           scripts/ci/verify-release-source.sh
 
-      # 手動復旧ではcheckout先に旧版のscriptが含まれ得るため、公開channelと単調性は
+      # 手動復旧ではcheckout先に旧バージョンのscriptが含まれ得るため、公開channelと単調性は
       # 現在のworkflow自身に置く。GitHubのlatest印ではなく公開済みstable tagの最大値を見る。
       - name: Select a monotonic publication policy
         id: policy
