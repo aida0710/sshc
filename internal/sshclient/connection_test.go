@@ -10,6 +10,7 @@ import (
 
 	"sshc/internal/knownhosts"
 	"sshc/internal/sshclient"
+	"sshc/internal/testwait"
 )
 
 func TestSubsystemConnectionRefusesAnUnknownHostWithoutPersistingIt(t *testing.T) {
@@ -105,13 +106,9 @@ func TestSubsystemConnectionSendsConfiguredKeepAlivesUntilClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Connect = %v", err)
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && server.KeepAlives() < 3 {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if got := server.KeepAlives(); got < 3 {
+	if !testwait.Reached(func() bool { return server.KeepAlives() >= 3 }) {
 		_ = connection.Close()
-		t.Fatalf("the server saw %d keepalives", got)
+		t.Fatalf("the server saw %d keepalives", server.KeepAlives())
 	}
 	if err := connection.Close(); err != nil {
 		t.Fatalf("Close = %v", err)
@@ -119,11 +116,7 @@ func TestSubsystemConnectionSendsConfiguredKeepAlivesUntilClose(t *testing.T) {
 	// Close の直前に送った keepalive は、Close が戻ったあとでサーバーに数えられる
 	// ことがある。数が増えないことではなく、サーバーから見て接続が終わることを
 	// 確かめる。終わった接続から keepalive が届くことはない。
-	deadline = time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && server.Disconnected() < 1 {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if server.Disconnected() < 1 {
+	if !testwait.Reached(func() bool { return server.Disconnected() >= 1 }) {
 		t.Fatal("the connection stayed open after Close, so keepalives would continue")
 	}
 }

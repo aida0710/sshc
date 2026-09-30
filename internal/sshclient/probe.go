@@ -3,6 +3,7 @@ package sshclient
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -51,9 +52,7 @@ func (d Dialer) Probe(ctx context.Context, target Target) (Probe, error) {
 		return Probe{Tried: recorder.tried(), Banner: recorder.banner(), Elapsed: time.Since(started)}, err
 	}
 	_ = client.Close()
-	for index := len(closers) - 1; index >= 0; index-- {
-		_ = closers[index].Close()
-	}
+	closeAll(closers)
 
 	return Probe{
 		Method:  recorder.last(),
@@ -70,33 +69,26 @@ func (d Dialer) Probe(ctx context.Context, target Target) (Probe, error) {
 // である。手前で止まったなら、それはそのまま失敗として返る。
 func (d Dialer) probeChain(
 	ctx context.Context, target Target, auth []ssh.AuthMethod, recorder *methodRecorder,
-) (*ssh.Client, []ssh.Conn, error) {
+) (*ssh.Client, []io.Closer, error) {
 	var through *ssh.Client
-	var opened []ssh.Conn
+	var opened []io.Closer
 	for _, hop := range target.JumpRoute() {
 		client, err := d.connectOne(ctx, hop, through, noPrompt, nil, 1, 1)
 		if err != nil {
-			for _, conn := range opened {
-				_ = conn.Close()
-			}
+			closeAll(opened)
 			return nil, nil, err
 		}
 		opened = append(opened, client)
 		through = client
 	}
 
-	timeout := target.Timeout
-	if timeout <= 0 {
-		timeout = DefaultTimeout
-	}
+	timeout := target.connectTimeout()
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	conn, err := d.open(ctx, target, through, nil)
 	if err != nil {
-		for _, existing := range opened {
-			_ = existing.Close()
-		}
+		closeAll(opened)
 		return nil, nil, err
 	}
 	connection, channels, requests, err := newClientConn(ctx, conn, target.Address(), &ssh.ClientConfig{
@@ -112,9 +104,7 @@ func (d Dialer) probeChain(
 		Timeout:           timeout,
 	})
 	if err != nil {
-		for _, existing := range opened {
-			_ = existing.Close()
-		}
+		closeAll(opened)
 		return nil, nil, err
 	}
 	return ssh.NewClient(connection, channels, requests), opened, nil

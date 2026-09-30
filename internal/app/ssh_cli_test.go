@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"sshc/internal/sshclient"
+	"sshc/internal/connectionlog"
 )
 
 func TestCLIConnectionAlwaysShowsBasicConnectionProgress(t *testing.T) {
@@ -11,7 +11,7 @@ func TestCLIConnectionAlwaysShowsBasicConnectionProgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := connection.parts.dialer.Verbosity(); got != sshclient.Brief {
+	if got := connection.parts.dialer.Verbosity(); got != connectionlog.Brief {
 		t.Fatalf("CLI verbosity = %d, want basic progress", got)
 	}
 }

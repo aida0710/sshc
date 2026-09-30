@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"sshc/internal/connectionlog"
+	"sshc/internal/platform"
 )
 
 // ErrRouteDisconnected は、利用者が切断した経路を、自動再接続では起動し直さない
@@ -438,7 +439,8 @@ func (manager *Manager) searchedPath() string {
 	if manager.variables == nil {
 		return os.Getenv("PATH")
 	}
-	return pathVariable(manager.variables)
+	path, _ := platform.LookupEnvironment(manager.variables, "PATH")
+	return path
 }
 
 // describeDocker は、使う docker を接続ログの debug2 に書く。経路の起動と接続の

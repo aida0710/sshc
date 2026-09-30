@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"sshc/internal/connectionlog"
 	"sshc/internal/sshclient"
 )
 
@@ -28,14 +29,15 @@ func TestTheFullLogExplainsKeyRejectionAndPasswordSuccess(t *testing.T) {
 		ReadFile: func(string) ([]byte, error) { return contents, nil },
 		Password: func(sshclient.Target) (string, bool) { return password, true },
 	})
-	process := openWithLog(t, dialer, targetWith(server, path), sshclient.Full)
+	process := openWithLog(t, dialer, targetWith(server, path), connectionlog.Full)
 	output, err := io.ReadAll(process)
 	if err != nil {
 		t.Fatal(err)
 	}
-	seen := string(output)
+	info := process.Wait()
+	seen := string(output) + info.Notice
 	expectLines(t, seen,
-		"名乗る鍵交換アルゴリズム：", "名乗る暗号：", "名乗るMAC：",
+		"提示する鍵交換アルゴリズム：", "提示する暗号：", "提示するMAC：",
 		"認証前のサーバーのSSHバージョン：SSH-2.0-Go",
 		"採用された鍵交換：", "クライアント → サーバー：暗号", "サーバー → クライアント：暗号",
 		"サーバーが受け付ける認証方式：", "成功しなかった認証方式：none, publickey",
@@ -46,8 +48,27 @@ func TestTheFullLogExplainsKeyRejectionAndPasswordSuccess(t *testing.T) {
 	if strings.Contains(seen, password) {
 		t.Fatal("the diagnostic log exposed a password")
 	}
-	if process.Wait().Code != 7 {
+	if info.Code != 7 {
 		t.Fatal("logging changed the remote exit status")
+	}
+}
+
+// シェルが終わったあとの接続ログは、出力に書かずに Notice で返す。engine がモードを
+// 戻してから書くので、終わったプログラムの代替画面に隠れない。
+func TestTheLogOfHowTheShellEndedComesWithTheNoticeInsteadOfTheOutput(t *testing.T) {
+	_, dialer, target := streamSetup(t, serverOptions{ExitCode: 7})
+	process := openWithLog(t, dialer, target, connectionlog.Detailed)
+	output, err := io.ReadAll(process)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := process.Wait()
+	const ended = "SSHセッションが終了しました：コード7"
+	if strings.Contains(string(output), ended) {
+		t.Fatalf("output = %q; the line was written where the program's alternate screen hides it", output)
+	}
+	if !strings.Contains(info.Notice, ended) {
+		t.Fatalf("notice = %q, want %q", info.Notice, ended)
 	}
 }
 
@@ -57,9 +78,23 @@ func TestTheKeepAliveLogExplainsWhyAnUnresponsiveConnectionWasClosed(t *testing.
 		OnShell:          func(channel ssh.Channel) { _, _ = io.Copy(io.Discard, channel) },
 	})
 	target.KeepAlive, target.KeepAliveMax = diagnosticKeepAliveInterval, 2
-	process := openWithLog(t, dialer, target, sshclient.Full)
-	seen := readUntil(t, process, "keepaliveの連続失敗が上限に達したため、SSH接続を切断します。")
-	expectLines(t, seen, "keepaliveを送信します。", "連続1/2回", "連続2/2回", "context deadline exceeded")
+	process := openWithLog(t, dialer, target, connectionlog.Full)
+	output, err := io.ReadAll(process)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := process.Wait()
+	expectLines(t, string(output), "keepaliveを送信します。", "連続1/2回", "連続2/2回", "context deadline exceeded")
+
+	// 切断した理由は、出力に書かずに、輸送が落ちたことの文より前に置いて返す。
+	// 出力に書くと、終わったプログラムの代替画面に隠れる。
+	const limitReached = "keepaliveの連続失敗が上限に達したため、SSH接続を切断します。"
+	if strings.Contains(string(output), limitReached) {
+		t.Fatalf("output = %q; the reason was written where the program's alternate screen hides it", output)
+	}
+	if !info.TransportLost || !strings.HasPrefix(strings.TrimLeft(info.Notice, "\r\n"), "[sshc][debug1] "+limitReached) {
+		t.Fatalf("exit = %+v, want a lost transport whose notice begins with %q", info, limitReached)
+	}
 }
 
 // This writer deliberately relies on Stream to serialize diagnostic and remote
@@ -90,7 +125,7 @@ func TestStreamLogsKeepAliveRepliesAlongsideRemoteStderr(t *testing.T) {
 		},
 	})
 	target.KeepAlive = diagnosticKeepAliveInterval
-	dialer.Verbosity = func() sshclient.Verbosity { return sshclient.Full }
+	dialer.Verbosity = func() connectionlog.Level { return connectionlog.Full }
 	// Bound failures of the fixture; a successful keepalive releases it directly.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()

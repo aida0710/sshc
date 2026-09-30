@@ -41,9 +41,9 @@ type sequencedRunner struct {
 }
 
 func (runner *sequencedRunner) run(
-	_ context.Context, target sshclient.Target, command string, stdin []byte,
+	_ context.Context, target sshclient.Target, command sshclient.Command,
 ) (sshclient.Output, error) {
-	call := remoteCall{target: target, command: command, stdin: stdin}
+	call := remoteCall{target: target, command: command.Line, stdin: command.Stdin}
 	if runner.beforeRun != nil {
 		runner.beforeRun(call)
 	}

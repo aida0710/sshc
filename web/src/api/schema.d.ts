@@ -451,7 +451,7 @@ export interface paths {
         delete: operations["closeTerminalSession"];
         options?: never;
         head?: never;
-        patch: operations["renameTerminalSession"];
+        patch?: never;
         trace?: never;
     };
     "/api/v1/terminal/sessions/{id}/title": {
@@ -2541,9 +2541,6 @@ export interface components {
         };
         LocalShellProfileList: {
             profiles: components["schemas"]["LocalShellProfile"][];
-        };
-        RenameTerminalSessionRequest: {
-            title: string;
         };
         SetTerminalSessionTitleRequest: {
             title: string | null;
@@ -4777,32 +4774,6 @@ export interface operations {
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
-        };
-    };
-    renameTerminalSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RenameTerminalSessionRequest"];
-            };
-        };
-        responses: {
-            /** @description The session list after the rename */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TerminalSessionList"];
-                };
-            };
         };
     };
     setTerminalSessionTitle: {

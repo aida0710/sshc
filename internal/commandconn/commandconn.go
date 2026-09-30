@@ -14,10 +14,19 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"sshc/internal/iowrite"
 )
 
 // stopGrace は、パイプを閉じてからプロセスを強制終了するまでの猶予時間。
 const stopGrace = 2 * time.Second
+
+// outputWaitDelay は、プログラムが終わってから、子孫が持ったままの標準エラーを
+// 待つ上限である。過ぎたら os/exec がパイプを閉じ、回収を終える。上限が無いと、
+// 標準エラーを継いだ孫が生きている限り reap が戻らない。Close が止めたあとに
+// 待つ時間（stopGrace）より短くし、止めきれない孫が残っても Close のうちに
+// 回収を終える。
+const outputWaitDelay = stopGrace / 2
 
 // complaintsLimit は、診断用に保持する標準エラーの最大サイズ。
 const complaintsLimit = 8 << 10
@@ -39,7 +48,7 @@ func Start(process *exec.Cmd, name string) (*Conn, error) {
 		return nil, err
 	}
 
-	complaints := &boundedBuffer{limit: complaintsLimit}
+	complaints := iowrite.NewCappedBuffer(complaintsLimit)
 	process.Stdin = childStdin
 	process.Stdout = childStdout
 	if process.Stderr == nil {
@@ -48,10 +57,25 @@ func Start(process *exec.Cmd, name string) (*Conn, error) {
 		process.Stderr = io.MultiWriter(complaints, process.Stderr)
 	}
 
-	if err := process.Start(); err != nil {
+	prepareTree(process)
+	if process.WaitDelay == 0 {
+		process.WaitDelay = outputWaitDelay
+	}
+
+	closePipes := func() {
 		for _, file := range []*os.File{childStdin, ourWriter, ourReader, childStdout} {
 			_ = file.Close()
 		}
+	}
+	if err := process.Start(); err != nil {
+		closePipes()
+		return nil, err
+	}
+	tree, err := adoptTree(process)
+	if err != nil {
+		_ = process.Process.Kill()
+		_ = process.Wait()
+		closePipes()
 		return nil, err
 	}
 	// 親側で不要なパイプ端を閉じ、EOF が伝播するようにする。
@@ -64,6 +88,7 @@ func Start(process *exec.Cmd, name string) (*Conn, error) {
 		reader:     ourReader,
 		writer:     ourWriter,
 		complaints: complaints,
+		tree:       tree,
 		exited:     make(chan struct{}),
 	}
 	go conn.reap()
@@ -76,7 +101,8 @@ type Conn struct {
 	process    *exec.Cmd
 	reader     *os.File
 	writer     *os.File
-	complaints *boundedBuffer
+	complaints *iowrite.CappedBuffer
+	tree       processTree
 
 	// exited は、プログラムが終わって回収できると閉じる。exitErr はその結果である。
 	exited  chan struct{}
@@ -156,16 +182,19 @@ func (c *Conn) Close() error {
 		select {
 		case <-c.exited:
 		case <-time.After(stopGrace):
-			_ = c.process.Process.Kill()
-			// Windows の cmd.exe は子プロセスが継承した pipe を保持していると、
-			// Kill 後も Wait が返らないことがある。Close は接続終了処理なので、
-			// 外部コマンドの不作法によって無期限に止めない。
+			// 直接の子だけでなく、木ごと止める。Windows の cmd.exe の下の proxy の
+			// ように、子が起こした孫がトンネルを開いたまま残らないようにする。
+			_ = c.tree.kill()
+			// 止めても回収が終わらないことがある（止められない孫が標準エラーを
+			// 持ったまま残った）。Close は接続終了処理なので、外部コマンドの
+			// 不作法によって無期限に止めない。
 			select {
 			case <-c.exited:
 			case <-time.After(stopGrace):
 				c.closeErr = fmt.Errorf("%s did not stop after it was killed", c.name)
 			}
 		}
+		c.tree.release()
 	})
 	return c.closeErr
 }
@@ -184,7 +213,7 @@ func (c *Conn) ExitErr() error {
 }
 
 // Complaints は、プログラムが標準エラーへ書いたものを返す。接続失敗の診断に使う。
-func (c *Conn) Complaints() string { return c.complaints.String() }
+func (c *Conn) Complaints() string { return strings.TrimSpace(c.complaints.String()) }
 
 func (c *Conn) LocalAddr() net.Addr  { return Addr{Name: c.name} }
 func (c *Conn) RemoteAddr() net.Addr { return Addr{Name: c.name} }
@@ -241,33 +270,5 @@ type Addr struct{ Name string }
 
 func (Addr) Network() string  { return "command" }
 func (a Addr) String() string { return a.Name }
-
-// boundedBuffer は、上限まで覚えて、その先を捨てる書き込み先である。
-type boundedBuffer struct {
-	limit int
-	mutex sync.Mutex
-	kept  []byte
-}
-
-func (b *boundedBuffer) Write(chunk []byte) (int, error) {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-	if room := b.limit - len(b.kept); room > 0 {
-		if len(chunk) > room {
-			b.kept = append(b.kept, chunk[:room]...)
-		} else {
-			b.kept = append(b.kept, chunk...)
-		}
-	}
-	// 捨てた分も書けたと返す。書けなかったと返すと os/exec は
-	// そこで写しを止め、プログラム側の書き込みが詰まる。
-	return len(chunk), nil
-}
-
-func (b *boundedBuffer) String() string {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-	return strings.TrimSpace(string(b.kept))
-}
 
 var _ net.Conn = (*Conn)(nil)

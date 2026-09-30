@@ -3,7 +3,6 @@
 package handoff
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sshc/internal/randomid"
 	"sshc/internal/storage"
 )
 
@@ -22,9 +22,6 @@ const FileName = "cli"
 // すると Rename のたびに lock の対象 inode が替わり、Write と Remove を直列化
 // できなくなる。
 const mutationLockName = ".cli.mutation.lock"
-
-// secretLength は、秘密の元になるランダムバイト数。
-const secretLength = 32
 
 // handoffDocumentMaxSize は一般のストレージ上限と分ける。handoff は loopback endpoint
 // 1 件と短い bearer secret だけを含むため、4 KiB で将来の schema field にも対応できる。
@@ -71,16 +68,7 @@ const HeaderName = "X-SSHC-CLI"
 
 // Mint は、一回の実行のための秘密を返す。
 func Mint(random io.Reader) (string, error) {
-	return mint(random, base64.RawURLEncoding.EncodeToString)
-}
-
-func mint(random io.Reader, encode func([]byte) string) (string, error) {
-	raw := make([]byte, secretLength)
-	defer zeroBytes(raw)
-	if _, err := io.ReadFull(random, raw); err != nil {
-		return "", err
-	}
-	return encode(raw), nil
+	return randomid.Token(random)
 }
 
 // temporaryPrefix は、公開前の文書を同じディレクトリに隠す名前の先頭。

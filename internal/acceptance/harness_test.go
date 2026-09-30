@@ -165,6 +165,7 @@ func (p *idlePTY) Resize(terminal.Size) error  { return nil }
 func (p *idlePTY) Hangup() error               { p.closeOnce.Do(func() { close(p.done) }); return nil }
 func (p *idlePTY) Wait() terminal.ExitInfo     { <-p.done; return terminal.ExitInfo{Signal: "hangup"} }
 func (p *idlePTY) Close() error                { p.closeOnce.Do(func() { close(p.done) }); return nil }
+func (p *idlePTY) ForceClose() error           { return p.Close() }
 
 // fakeAgent は ssh-agent の代わりを務める。
 // このリポジトリのどのテストも、本物のエージェントとは話さない。
@@ -851,12 +852,12 @@ func (s *recordingScanner) authenticated() []string {
 
 // remoteRun は、リモートで 1 本のコマンドを走らせるインターフェースである。
 func (s *recordingScanner) remoteRun(
-	_ context.Context, target sshclient.Target, command string, stdin []byte,
+	_ context.Context, target sshclient.Target, command sshclient.Command,
 ) (sshclient.Output, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	s.ran = append(s.ran, remoteCall{alias: target.Alias, command: command, stdin: string(stdin)})
-	if command == remotekey.ProbeCommand {
+	s.ran = append(s.ran, remoteCall{alias: target.Alias, command: command.Line, stdin: string(command.Stdin)})
+	if command.Line == remotekey.ProbeCommand {
 		return sshclient.Output{Stdout: []byte(remotekey.ProbeMarker + "\n")}, nil
 	}
 	return sshclient.Output{Stdout: []byte("sshc: added\n")}, nil

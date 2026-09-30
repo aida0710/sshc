@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"testing"
+	"time"
 
 	"sshc/internal/textencoding"
 )
@@ -64,7 +65,10 @@ func TestWrapperPreservesTransportCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := wrapped.(interface{ DiscardPending(context.Context) error }).DiscardPending(context.Background()); err != nil {
+	discarder := wrapped.(interface {
+		DiscardPending(context.Context, time.Duration) error
+	})
+	if err := discarder.DiscardPending(context.Background(), time.Millisecond); err != nil {
 		t.Fatal(err)
 	}
 	if err := wrapped.(interface{ SetWindowSize(uint16, uint16) error }).SetWindowSize(132, 43); err != nil {
@@ -96,7 +100,7 @@ type capableStream struct {
 	width, height uint16
 }
 
-func (stream *capableStream) DiscardPending(context.Context) error {
+func (stream *capableStream) DiscardPending(context.Context, time.Duration) error {
 	stream.discarded = true
 	return nil
 }

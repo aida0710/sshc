@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 	"sshc/internal/commandconn"
+	"sshc/internal/connectionlog"
 )
 
 func TestExpiredProxySSOTokensRequestLoginOnTheEngineMachine(t *testing.T) {
@@ -47,7 +48,7 @@ func TestAnExpiredSSOProxyStopsTheActualHandshakeWithLoginInstructions(t *testin
 		t.Fatalf("SSO failure did not survive the subprocess and SSH handshake: %v", err)
 	}
 	var output strings.Builder
-	describeProxyExit(newTracer(Detailed, &output), connection)
+	describeProxyExit(newTracer(connectionlog.Detailed, &output), connection)
 	if !strings.Contains(output.String(), "ProxyCommandの終了：コード1") {
 		t.Fatalf("missing proxy exit status: %s", output.String())
 	}

@@ -11,7 +11,7 @@ func RestrictFile(path string) error {
 	if err := ValidatePrivatePath(path); err != nil {
 		return err
 	}
-	file, err := openObject(path, true, false)
+	file, err := openObjectToRestrict(path, fileObject)
 	if err != nil {
 		return err
 	}

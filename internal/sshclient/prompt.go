@@ -49,6 +49,12 @@ func (nonInteractivePrompter) Confirm(string) (bool, error) {
 
 var noPrompt Prompter = nonInteractivePrompter{}
 
+// isNonInteractive は、保存済み資格情報だけを使い、利用者へは尋ねない接続かを返す。
+func isNonInteractive(prompt Prompter) bool {
+	_, nonInteractive := prompt.(nonInteractivePrompter)
+	return nonInteractive
+}
+
 // StreamPrompter は、端末のストリームへ問いを出す。
 //
 // 端末は raw モードである（xterm.js はローカルエコーを持たない）。だから

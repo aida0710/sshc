@@ -196,7 +196,7 @@ func RestrictDirectory(path string) error {
 	if err := validatePrivateDirectoryPath(path); err != nil {
 		return err
 	}
-	file, err := openObject(path, true, true)
+	file, err := openObjectToRestrict(path, directoryObject)
 	if err != nil {
 		return err
 	}
@@ -305,7 +305,7 @@ func IsRestrictedToCurrentUser(path string) (bool, error) {
 	if err := ValidatePrivatePath(path); err != nil {
 		return false, err
 	}
-	file, err := openObject(path, false, false)
+	file, err := openObjectToInspect(path)
 	if err != nil {
 		return false, err
 	}
@@ -330,20 +330,20 @@ func IsRestrictedToCurrentUser(path string) (bool, error) {
 // 保護 DACL の検証に成功した後、その通常ファイルのハンドルを返す。後で同じオブジェクトを
 // 削除できるよう、DELETE 権限は最初に要求する。
 func OpenAuthenticatedFile(path string) (*os.File, error) {
-	return openAuthenticatedFile(path, true)
+	return openAuthenticatedFile(path, authenticatedFileReadAccess|windows.DELETE)
 }
 
 // OpenAuthenticatedFileForRead は読み取り専用版である。非公開状態を一定量読むだけの
 // 呼び出しでは DELETE 権限を要求しない。
 func OpenAuthenticatedFileForRead(path string) (*os.File, error) {
-	return openAuthenticatedFile(path, false)
+	return openAuthenticatedFile(path, authenticatedFileReadAccess)
 }
 
-func openAuthenticatedFile(path string, removable bool) (*os.File, error) {
-	access := uint32(windows.FILE_READ_DATA | windows.FILE_READ_ATTRIBUTES | windows.READ_CONTROL)
-	if removable {
-		access |= windows.DELETE
-	}
+// authenticatedFileReadAccess は、通常ファイルの所有者と DACL を検証してから読むのに
+// 要る権限である。
+const authenticatedFileReadAccess = uint32(windows.FILE_READ_DATA | windows.FILE_READ_ATTRIBUTES | windows.READ_CONTROL)
+
+func openAuthenticatedFile(path string, access uint32) (*os.File, error) {
 	file, err := openFileNoReparse(path, access)
 	if err != nil {
 		return nil, err
@@ -487,12 +487,27 @@ func createPrivateDirectory(path string) error {
 	return err
 }
 
-func openObject(path string, writable, directory bool) (*os.File, error) {
-	access := uint32(windows.READ_CONTROL | windows.FILE_READ_ATTRIBUTES)
-	if writable {
-		access |= windows.WRITE_DAC
-	}
-	return openObjectWithAccess(path, access, writable, directory)
+// objectKind は、開いたハンドルが指していなければならない種類である。
+type objectKind int
+
+const (
+	// anyObject は種類を問わない。所有者と DACL を読んで確かめるだけのときに使う。
+	anyObject objectKind = iota
+	fileObject
+	directoryObject
+)
+
+// objectInspectAccess は、所有者と DACL を読むのに要る権限である。
+const objectInspectAccess = uint32(windows.READ_CONTROL | windows.FILE_READ_ATTRIBUTES)
+
+// openObjectToRestrict は、DACL を書き換えるために、kind の種類のオブジェクトを開く。
+func openObjectToRestrict(path string, kind objectKind) (*os.File, error) {
+	return openObjectWithAccess(path, objectInspectAccess|windows.WRITE_DAC, kind)
+}
+
+// openObjectToInspect は、所有者と DACL を読むために、種類を問わずオブジェクトを開く。
+func openObjectToInspect(path string) (*os.File, error) {
+	return openObjectWithAccess(path, objectInspectAccess, anyObject)
 }
 
 func openPrivateFileForUse(path string) (*os.File, error) {
@@ -504,10 +519,10 @@ func openPrivateFileForUse(path string) (*os.File, error) {
 			windows.DELETE |
 			windows.FILE_READ_ATTRIBUTES,
 	)
-	return openObjectWithAccess(path, access, true, false)
+	return openObjectWithAccess(path, access, fileObject)
 }
 
-func openObjectWithAccess(path string, access uint32, writable, directory bool) (*os.File, error) {
+func openObjectWithAccess(path string, access uint32, kind objectKind) (*os.File, error) {
 	pathUTF16, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return nil, err
@@ -530,16 +545,18 @@ func openObjectWithAccess(path string, access uint32, writable, directory bool) 
 		_ = windows.CloseHandle(handle)
 		return nil, os.ErrInvalid
 	}
-	if writable {
-		if err := validateHandleType(handle, directory); err != nil {
-			_ = file.Close()
-			return nil, err
-		}
-	} else if err := validateHandleTypeAny(handle); err != nil {
+	if err := validateHandleKind(handle, kind); err != nil {
 		_ = file.Close()
 		return nil, err
 	}
 	return file, nil
+}
+
+func validateHandleKind(handle windows.Handle, kind objectKind) error {
+	if kind == anyObject {
+		return validateHandleTypeAny(handle)
+	}
+	return validateHandleType(handle, kind == directoryObject)
 }
 
 func validateHandleType(handle windows.Handle, directory bool) error {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"sshc/internal/effective"
 	"sshc/internal/remotekey"
@@ -24,6 +25,8 @@ type remoteCall struct {
 	alias   string
 	command string
 	stdin   []byte
+	// deadline は、接続とコマンドに掛かった期限である。期限が無ければゼロ値。
+	deadline time.Time
 }
 
 // scriptedRunner は、コマンドと標準入力の内容を検証するリモート実行スタブ。
@@ -34,9 +37,12 @@ type scriptedRunner struct {
 }
 
 func (runner *scriptedRunner) run(
-	_ context.Context, target sshclient.Target, command string, stdin []byte,
+	ctx context.Context, target sshclient.Target, command sshclient.Command,
 ) (sshclient.Output, error) {
-	runner.calls = append(runner.calls, remoteCall{alias: target.Alias, command: command, stdin: stdin})
+	deadline, _ := ctx.Deadline()
+	runner.calls = append(runner.calls, remoteCall{
+		alias: target.Alias, command: command.Line, stdin: command.Stdin, deadline: deadline,
+	})
 	if len(runner.outputs) == 0 {
 		return sshclient.Output{}, nil
 	}
@@ -126,6 +132,36 @@ func TestRegisterProbesThenSendsTheKeyOnStandardInput(t *testing.T) {
 	// probe と登録処理の間で接続先を再解決しない。
 	if runner.resolved != 1 {
 		t.Errorf("the destination was resolved %d times, want once", runner.resolved)
+	}
+}
+
+// 認証の段階には ConnectTimeout が掛からない。応答しない相手でも登録の画面が
+// 待ち続けないよう、2 回の接続とコマンドを登録全体の 1 つの期限で打ち切る。
+func TestRegisterEndsBothConnectionsByOneRegistrationDeadline(t *testing.T) {
+	runner := &scriptedRunner{outputs: []sshclient.Output{
+		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
+		{Stdout: []byte("sshc: added\n")},
+	}}
+	key, _, err := remotekey.ParsePublicKey(keyLine)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	started := time.Now()
+	if _, err := newService(runner).Register(context.Background(), effective.Report{}, configSnapshot, "bastion", key, false); err != nil {
+		t.Fatalf("Register = %v", err)
+	}
+	finished := time.Now()
+	if len(runner.calls) != 2 {
+		t.Fatalf("calls = %#v", runner.calls)
+	}
+	probe, register := runner.calls[0], runner.calls[1]
+	earliest, latest := started.Add(remotekey.RegistrationLimit), finished.Add(remotekey.RegistrationLimit)
+	if probe.deadline.Before(earliest) || probe.deadline.After(latest) {
+		t.Errorf("probe deadline = %s, want %s after Register was called", probe.deadline, remotekey.RegistrationLimit)
+	}
+	if !register.deadline.Equal(probe.deadline) {
+		t.Errorf("registration deadline = %s, want the probe's %s", register.deadline, probe.deadline)
 	}
 }
 

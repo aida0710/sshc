@@ -39,3 +39,19 @@ func TestTheLoginShellNeedsNoEnvironmentOnWindows(t *testing.T) {
 		t.Errorf("LoginArguments() = %q, want -NoLogo", arguments)
 	}
 }
+
+// ProxyCommand と Command Prompt のプロファイルが使う cmd.exe も、環境を一つも
+// 渡されずに見つからなければならない。Windows ディレクトリは Windows 自身に尋ねる。
+func TestTheCommandProcessorNeedsNoEnvironmentOnWindows(t *testing.T) {
+	processor, err := CommandProcessor(nil)
+	if err != nil {
+		t.Fatalf("CommandProcessor(nil) = %v", err)
+	}
+	if name := strings.ToLower(filepath.Base(processor)); name != "cmd.exe" {
+		t.Errorf("CommandProcessor(nil) = %q, want cmd.exe", processor)
+	}
+	directory, ok := WindowsDirectory()
+	if !ok || !strings.EqualFold(processor, filepath.Join(directory, "System32", "cmd.exe")) {
+		t.Errorf("CommandProcessor(nil) = %q, want the cmd.exe under %q", processor, directory)
+	}
+}

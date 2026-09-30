@@ -16,7 +16,8 @@ import (
 	"sshc/internal/session"
 )
 
-func TestIntegratedBootstrapFlow(t *testing.T) {
+// 組み立てたサーバーを実際に立て、ブラウザが通る順（ページ、bootstrap、API）で確かめる。
+func TestOnlyOneSameOriginBootstrapOpensTheAPIAndNoSecretReachesURLsOrLogs(t *testing.T) {
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

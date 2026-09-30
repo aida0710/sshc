@@ -5,6 +5,8 @@ import (
 	"crypto/subtle"
 	"errors"
 	"time"
+
+	"sshc/internal/randomid"
 )
 
 const (
@@ -114,7 +116,7 @@ func (m *Manager) IssueAction(sessionID string, request ActionRequest) (string, 
 		return "", ErrTooManyActions
 	}
 
-	value, err := token(m.random)
+	value, err := randomid.Token(m.random)
 	if err != nil {
 		return "", err
 	}

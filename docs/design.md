@@ -122,8 +122,8 @@
 - パスフレーズ変更は既存の秘密鍵を置き換えます。以前は平文の鍵を `~/.ssh/sshc/backups/` に残さないためバックアップを作成せず、`Rollback` も拒否していました。現在は世代バックアップをマスターパスワードで暗号化するため、パスフレーズ変更もバックアップ対象です。入力を誤ると鍵を復号できなくなるため、特に復元機能が重要な操作です。
 - 削除は `~/.ssh/sshc/trash/<entry>/` への `rename` です。バイト列を複製せず、元の権限をそのまま保ちます。復元先が埋まっている、または同一 fingerprint の鍵が既に存在する場合は推測せず blocker を提示して拒否します。完全削除はバックアップを取らないため取り消せません。
 - 秘密鍵の表示と完全削除は、session cookie と `X-SSHC-CSRF` に加えて一度限りの確認 token（`X-SSHC-Action`）を要求します。token は「確認ダイアログが表示していた内容」の digest に関連付けられます。digest はサーバ側で発行時と使用時の両方で計算するため、確認から実行までの間に鍵が差し替わった場合、その token は無効になります。
-- 保存済み資格情報は対応する認証要求にだけ使用します。秘密鍵のパスフレーズは選択された鍵に使用します。アカウントパスワードは password 認証と、keyboard-interactive の単一の非表示質問に使用します。保存済みTOTPは、`OTP`、`TOTP`、`Verification code`、`認証コード`などを明示する非表示質問だけにRFC 6238コードを生成し、曖昧な`Code`や表示入力には使用しません。パスワードとTOTPを同時に尋ねるchallengeでは、TOTPを識別でき、残る非表示質問が厳密に`Password`の場合だけ両方を自動入力します。それ以外の複数質問は利用者へ渡します。保存値が拒否された場合は利用者に入力を求めます。試行上限は方式ごとに3回で、同じパスワードは再送しません。
-- 保存値で処理できない認証要求は接続元の端末に表示します。対象は未知のホスト鍵、未保存の鍵パスフレーズ、パスワード、2FA です。4 種類とも端末への表示と入力の読み取りという共通経路を使用します。入力値は端末に再表示しません。端末のない認証テストと公開鍵のリモート登録では、対話が必要な認証方式を提示しません。
+- 保存済みの認証情報は対応する認証要求にだけ使用します。秘密鍵のパスフレーズは選択された鍵に使用します。アカウントパスワードは password 認証と、keyboard-interactive の単一の非表示質問に使用します。ただしTOTPを尋ねる質問には、保存済みTOTPが無いときも拒否されたあとも使用しません。保存済みTOTPは、`OTP`、`TOTP`、`Verification code`、`認証コード`などを明示する非表示質問だけにRFC 6238コードを生成し、曖昧な`Code`や表示入力には使用しません。パスワードとTOTPを同時に尋ねるchallengeでは、TOTPを識別でき、残る非表示質問が厳密に`Password`の場合だけ両方を自動入力します。それ以外の複数質問は利用者へ渡します。保存値が拒否された場合は利用者に入力を求めます。尋ねられない経路（認証テスト、`sshc run`、SFTP）では、保存値が拒否されたことを認証の拒否として返し、認証テストは`authentication_denied`と報告します。試行上限は方式ごとに3回です。保存済みのパスワードとTOTPのコードは、それぞれ1回の接続で1度だけ送ります。TOTPは同じ時間窓では同じコードになるため、拒否されたコードを送り直しません。
+- 保存値で処理できない認証要求は接続元のターミナルに表示します。対象は未知のホスト鍵、未保存の鍵パスフレーズ、パスワード、2FA です。4 種類ともターミナルへの表示と入力の読み取りという共通経路を使用します。入力値はターミナルに再表示しません。`ConnectTimeout`（未設定なら30秒）はOpenSSHと同じく接続と鍵交換に掛け、認証には掛けません。認証中は利用者の入力のほか、サーバーの側（プッシュ承認、PAMの失敗時の遅延）やエージェントの側（Touch ID）でも待つためです。最初の認証方式を試した時点で数えるのをやめ、以後は取り消し（セッションを閉じる、ジョブを取り消す）でだけ止まります。認証の前に尋ねる未知のホスト鍵の確認は、待つあいだは数えず、答えたら同じ長さで数え直します。ターミナルのない認証テストと公開鍵のリモート登録では、対話が必要な認証方式を提示しません。公開鍵のリモート登録は画面から止められないので、認証の返事をしない相手で待ち続けないよう、登録全体（POSIX shellの確認と登録の2回の接続、認証、2本のコマンド）を2分で打ち切ります。
 - マスターパスワードの検証失敗後は、試行ごとに応答を遅延させます（上限 4 秒）。vault ファイルに対するオフライン攻撃への耐性は Argon2id が提供します。この遅延は、実行中アプリケーションに対する高速なオンライン試行を制限するものです。
 - 鍵導出の同時実行数は 2 つまでです。1 回あたり数十 MiB と複数 thread を使用し、解錠・push・pull のいずれでも実行されるためです。上限がない場合、複数タブから数 GiB のメモリを確保できます。
 - リモートスナップショットには、ローカルデータとは別のパラメータ上限を適用します。外部から受け取った値によって、パスフレーズ検証前に 1 GiB のメモリと 16 thread を使用しないようにするためです。
@@ -179,6 +179,7 @@
   - ProxyCommand本体は利用者の`~/.ssh/config`に書かれたコマンドを実行します。`%h`、`%p`、`%r`、`%n`を展開し、POSIXでは`/bin/sh -c "exec ..."`、Windowsでは`cmd.exe /c`を使用します
   - macOS／Linuxのengineは、ProxyCommandの起動時にログインシェルを対話モードで開き、PATHだけを取得します。これにより、自動起動でも`.zprofile`や`.zshrc`などで追加した`aws`や`session-manager-plugin`を探せます。シェルはローカルTerminalと同じ規則（実行可能な絶対パスの`SHELL`、無ければOS別の候補）で選びます。取得したPATHはそのProxyCommandと子プロセスだけへ渡し、engineの環境は変更しません。CLI接続は呼び出し元の環境をそのまま使います
   - PATHの取得に渡すのは固定コマンドだけです。起動設定の標準出力・標準エラーはSSH通信へ混ぜず、PATH以外の環境変数・alias・関数も取り込みません。最大5秒、取得出力64 KiBで打ち切り、失敗時は接続ログへ理由を表示して起動元のPATHを使います。接続自体のキャンセル・タイムアウト時にはProxyCommandを起動しません。Windows／Androidではこの取得処理を行いません
+  - 接続を閉じるときは、ProxyCommandの標準入力を閉じて2秒待ち、終わらなければ子孫ごと止めます。WindowsではProxyCommandのcmd.exeを止めた状態で起動し、kill-on-closeのJob Objectに入れてから動かし、Job Objectごと止めます。macOS／Linuxのengineは別のプロセスグループで起動し、グループごと止めます。ターミナルから実行したCLI（`sshc ssh`）では、ProxyCommandが/dev/ttyで尋ねられるように前面のプロセスグループに残し、直接の子だけを止めます
   - `ProxyJump` と `ProxyCommand` の両方が書かれた設定は、OpenSSH（10.2 で確認）と同じく先に受理した方だけを使い、後から来た行を無視します。無視した行は解決結果の `proxy_ignored` として Analysis に出します。`ProxyCommand none` の後の `ProxyJump` は無視されます。`ProxyJump none` の後の `ProxyCommand` は OpenSSH のバージョンで結果が割れ（readconf.c の CVE-2026-35386 対応より前は無視、以後は有効）、この解決器は新しい方に合わせて有効にします
   - jump host 経由で到達する先では `ProxyCommand` を使用できません。コマンドはローカルマシンで実行され、jump host 内では実行されないためです
   - 接続失敗時は、コマンドの標準エラー出力を理由に含めます
@@ -245,7 +246,7 @@
 - 埋め込みターミナルは、解錠済みページを侵害した攻撃者に任意コマンド実行を許すリスクがあります。以前はターミナル起動に単回 action token を要求していましたが、埋め込みターミナルでは要求しません。vault の解錠だけが条件です。したがって、解錠中のページを制御できる主体は確認ダイアログなしで複数の shell を起動できます。ターミナルを開くたびに確認を求める操作性とのトレードオフとして、既存の action token を削除しました。
 - ネットワーク切断時は設定した回数だけ再接続します。
 
-  ネットワーク切り替え、端末の sleep、接続先の再起動による切断は自動再接続の対象です。シェルが `exit` で終了した場合は再接続しません。`sshclient` はネットワーク切断を `TransportLost` として記録し、終了コードと区別します。
+  ネットワーク切り替え、マシンの sleep、接続先の再起動による切断は自動再接続の対象です。シェルが `exit` で終了した場合は再接続しません。`sshclient` はネットワーク切断を `TransportLost` として記録し、終了コードと区別します。サーバーが終了コード（exit-status）を送らずにチャンネルを閉じたときは、keepaliveでSSH接続がまだ応答するかを確かめます。応答すればシェルの終了（終了コード255）として扱い、再接続しません。チャンネルを閉じた直後にTCPも切るサーバーは、接続先の再起動と区別できないので再接続します。
 
   再試行間隔の基準は 1、2、5、10、15 秒です。同時に切れた接続が一斉に再試行しないよう、session IDから計算した安定した±20%のjitterを加えます。既定の5回では、再試行終了まで最大40秒かかります。この間、切断されたコンソールは一覧に残ります。利用者が明示的に閉じた場合は再試行しません。設定画面の「ターミナル」で既定・0・1・2・3・5回から選択でき、0は再接続なしを意味します。
 
@@ -253,7 +254,8 @@
   - 0 は明示的な設定値であり、未設定（既定値を使用）と区別するため pointer として保存します
   - 0 の場合は「再接続を諦めました」というメッセージを表示しません
   - 10秒以上安定していた接続は過去の再試行回数を持ち越さず、短時間に切断を繰り返す接続だけを上限で止めます
-  - host key変更、失効、未知鍵、利用可能なidentityや認証方式の欠如、鍵パスフレーズの問題は、利用者の確認が必要なのでreopenを1回で止め、固定problem codeを返します
+  - 自動再接続の対象は、一度確立した接続の切断だけです。最初の接続と手動の再接続がハンドシェイクまでに失敗した場合は、自動再接続しません。一度も接続できていないのに「SSH接続が切れました」と表示しないためです。sessionはexitedになり、固定problem codeがあればそれを、なければ`connect_failed`を返します
+  - host key変更、失効、未知鍵、利用可能なidentityや認証方式の欠如、サーバーによる認証の拒否（`authentication_rejected`。差し出した鍵が多すぎてMaxAuthTriesで切断された場合を含む）、鍵パスフレーズの問題、VPNプロファイル・ProxyJump・ProxyCommandの矛盾した組み合わせ（`route_misconfigured`）は、利用者の確認が必要なのでreopenを1回で止め、固定problem codeを返します
   - UI の「5 回・最大 40 秒」は最大jitterを含む再試行間隔から計算します。`internal/acceptance` は両言語の表示値を `terminal.ReconnectWindow` と照合します
 
   session APIはSSH processの状態を`connecting`、`connected`、`reconnecting`、`exited`で返します。再接続中は試行回数、上限、次回時刻と固定problem codeを返し、raw transport errorは返しません。WebSocketの接続状態はbrowser attachmentの状態であり、SSH processとは別に表示します。Web UIはsessionが存在するときだけ2秒間隔で一覧を更新し、世代番号が古い応答を捨てます。
@@ -293,9 +295,9 @@
 - Terminal内検索はxtermのメモリ上のscrollbackを走査し、大文字小文字、正規表現、全一致highlightを切り替えて前後の一致を選択表示します。検索barはTerminalへ重ね、開閉時にPTYの行数や描画位置を変えません。sshc独自のcommand履歴・入力候補・remote path補完は持たず、shellや接続先アプリケーションの補完をそのまま利用します。
 - Snippet library と startup binding は `~/.ssh/sshc/snippets.json` に保存しますが、ディスク上の文書全体をローカルの master key で暗号化します。旧バージョンの平文文書は、unlock 後の初回読込または master password 変更時に検証してから原子的に暗号化します。remote sync では端末固有の暗号文を運ばず、検証済みの論理文書を snapshot 全体の暗号化内へ載せ、受信端末の master key で再暗号化します。
 - command には `{{name}}` 形式の変数を使用できます。secret 型は入力欄と通常previewを伏せるための明示的な型であり、本文に秘密が含まれるかを推測して拒否する検出は行いません。通常previewは`[secret]`を返し、server-side dispatchは実値を使用します。Quick Commandsの挿入と実行は実値をbrowserへ返さず、表示済みpreviewのevidenceと同じcommand・process generationであることを再確認してからserver側で送ります。途中でSnippetまたはpaneが変わった場合は更新後のpreviewを表示し、もう一度明示操作を求めます。挿入はEnterを付けず、改行や制御文字を含むcommandは「挿入」の意味を破らないよう拒否します。copyだけは利用者が押した時点で実値を取得します。実行後はremote shell history、terminal output、clipboard等に残り得ます。
-- Snippets画面の複数ホストjobは、解決済みの接続先と展開後commandをpreviewに表示し、そのevidenceに紐づく単回action tokenを消費して専用の非対話SSH executionを開始します。1 jobは最大64 targets、既定の並列数は4（上限8）で、server shutdownとcancelに追従します。この一般jobはlive terminalのcwdやshell状態を継承しません。
+- Snippets画面の複数ホストjobは、解決済みの接続先と展開後commandをpreviewに表示し、そのevidenceに紐づく単回action tokenを消費して専用の非対話SSH executionを開始します。1 jobは最大64 targets、既定の並列数は4（上限8）で、server shutdownとcancelに追従します。コマンドの実行時間に上限は置きません。ConnectTimeoutは接続の確立にだけ掛かり、長く走るコマンド（apt-get update、バックアップ）はcancelかserver shutdownまで待ちます。ホストごとの失敗の理由は`problem`（`timed_out`、`cancelled`、`run_failed`）で返し、画面は状態と終了コードに添えて表示します。この一般jobはlive terminalのcwdやshell状態を継承しません。
 - Workspace Command Centerは別契約です。preview evidenceへ展開後commandのdigest、各terminal session ID、kind、接続先表示、title、process generationを含め、単回の`terminal.command.broadcast` tokenで確認します。送信時はkindではなくcapabilityを検査し、同じconnected sessionとgenerationの完全入力対応PTYだけに`command + "\r"`を全量入力します。再接続後の新しいshell、connecting／reconnecting／exited sessionは拒否します。通常打鍵と送信frameはsession単位で直列化します。PTY出力とexit codeをcommand単位には分離せず、APIは`delivered`／`failed`だけを返し、出力は各terminalのstreamとscrollbackへ流します。secret変数はpreviewでは伏せ、確認済みの送信時だけサーバー内で展開します。TTY echoやshell履歴へ残る可能性は通常のcommand入力と同じです。
-- Startup snippet は alias ごとの opt-in です。必要な変数は暗号化された binding に保存します。初回接続と自動再接続の双方で、認証および remote shell の準備完了を `Ready` channel で確認してから command と carriage return を送ります。認証 prompt へ command を誤送信しません。
+- Startup snippet は alias ごとの opt-in です。必要な変数は暗号化された binding に保存します。初回接続と自動再接続の双方で、認証および remote shell の準備完了を `Ready` channel で確認してから command と carriage return を送ります。送るのは `terminal.Session` で、接続（世代）ごとに `terminal.Spec.Startup` から送るcommandを解決し直します。HTTP層はSSHのProcessを包まずにそのまま登録します。認証 prompt へ command を誤送信しません。
 - remote sync受信と対応外VaultのresetでSnippetを別のmaster keyへ移すときは、旧鍵で封印された中間コピーを世代backupへ残しません。この変更を含むjournalが中断した場合はrollbackではなく、同じjournalをcompleteして新しい世代へ収束させます。
 
 ## 強化とリリースの境界

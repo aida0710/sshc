@@ -3,10 +3,11 @@ package terminal
 import (
 	"crypto/rand"
 	"crypto/subtle"
-	"encoding/base64"
 	"io"
 	"sync"
 	"time"
+
+	"sshc/internal/randomid"
 )
 
 // TicketTTL は、発行から引き換えまでに許される時間である。
@@ -61,11 +62,10 @@ func (t *Tickets) random() io.Reader {
 
 // Issue は、ひとつのセッションと再生開始位置に束縛された使い捨てのチケットを作る。
 func (t *Tickets) Issue(sessionID string, cursor uint64) (string, error) {
-	raw := make([]byte, 32)
-	if _, err := io.ReadFull(t.random(), raw); err != nil {
+	token, err := randomid.Token(t.random())
+	if err != nil {
 		return "", err
 	}
-	token := base64.RawURLEncoding.EncodeToString(raw)
 
 	t.mutex.Lock()
 	defer t.mutex.Unlock()

@@ -12,6 +12,7 @@ const (
 	MaxSnippets           = 256
 	MaxVariables          = 32
 	MaxTargets            = 64
+	MaxTargetIDBytes      = 255 // api/openapi.yaml の targetId の maxLength と同じ値
 	MaxConcurrency        = 8
 	DefaultConcurrency    = 4
 	MaxNameBytes          = 96

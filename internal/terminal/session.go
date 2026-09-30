@@ -2,31 +2,12 @@ package terminal
 
 import (
 	"context"
-	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
-// streamDepth は、ひとつのアタッチが溜め込めるチャンクの数である。
-const streamDepth = 256
-
 // readChunk は、PTY から一度に読むバイト数である。
 const readChunk = 32 << 10
-
-// Stream は、ひとつのアタッチである。
-type Stream struct {
-	output  chan []byte
-	closed  sync.Once
-	dropped atomic.Bool
-}
-
-func (s *Stream) Output() <-chan []byte { return s.output }
-
-// Dropped は、このアタッチが追いつけずに落とされたかを報告する。
-func (s *Stream) Dropped() bool { return s.dropped.Load() }
-
-func (s *Stream) close() { s.closed.Do(func() { close(s.output) }) }
 
 // Session は、開かれている端末ひとつである。
 type Session struct {
@@ -61,20 +42,24 @@ type Session struct {
 	connectedCallback func()
 	connectedOnce     sync.Once
 
-	reopen          func(ctx context.Context, size Size) (Process, error)
-	reconnectError  func(error) (retry bool, problem string)
-	stopNotice      func(problem string) string
-	size            Size
-	retries         int
-	reconnectCancel context.CancelFunc
-	now             func() time.Time
+	reopen         func(ctx context.Context, size Size) (Process, error)
+	reconnectError func(error) (retry bool, problem string)
+	stopNotice     func(problem string) string
+	startup        func() []string
+	size           Size
+	// reconnectAttempts は、今の切断から試した自動再接続の回数である。
+	// ReconnectSettled のあいだ安定して繋がったら 0 に戻す。
+	reconnectAttempts int
+	reconnectCancel   context.CancelFunc
+	now               func() time.Time
 	// stopping は、繋ぎ直しを待っている最中に閉じられたことを伝える。
 	stopping chan struct{}
 	// discarded は、ユーザーが自分でこのコンソールを閉じたことを表す。
 	discarded bool
 	delay     func(attempt int) time.Duration
-	// attempts は、繋ぎ直しを何回まで試みてよいかを、試みるたびに返す。
-	attempts func() int
+	// reconnectLimit は、自動再接続を何回まで試みてよいかを、試みるたびに返す。
+	// 設定の変更を次の試みから効かせるため、値ではなく関数で持つ。
+	reconnectLimit func() int
 
 	// done は pump が終わったことを示す。テストと停止処理だけが待つ。
 	done chan struct{}
@@ -84,24 +69,9 @@ type processReadiness struct {
 	done        chan struct{}
 	err         error
 	connectedAt time.Time
-}
-
-// TitleSource says where the display title came from so the UI can offer
-// "return to the automatic name" only when a user pinned one.
-type TitleSource string
-
-const (
-	TitleUser       TitleSource = "user"
-	TitleTerminal   TitleSource = "terminal"
-	TitleConnection TitleSource = "connection"
-	TitleFallback   TitleSource = "fallback"
-)
-
-// Presentation is the display-only view of the title state.
-type Presentation struct {
-	DisplayTitle string
-	TitleSource  TitleSource
-	TitlePinned  bool
+	// userInitiated は、この世代を利用者の操作（開く、手動の再接続）が始めたことを
+	// 表す。自動再接続の試みではないので、Ready の失敗を再接続の予算に数えない。
+	userInitiated bool
 }
 
 // View は、一覧に出すためのセッションひとつ分である。
@@ -164,29 +134,6 @@ func (s *Session) signalConnected() {
 	if connected && callback != nil {
 		s.connectedOnce.Do(callback)
 	}
-}
-
-// Rename は一覧に出す名前を変える。
-func (s *Session) Rename(title string) error {
-	cleaned, err := CleanTitle(title)
-	if err != nil {
-		return err
-	}
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.title = cleaned
-	s.titleSource = TitleUser
-	s.titlePinned = true
-	return nil
-}
-
-// UnpinTitle returns the display title to the title the terminal set or the
-// connection fallback without touching the running process.
-func (s *Session) UnpinTitle() {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.titlePinned = false
-	s.recomputeTitleLocked()
 }
 
 // Exit は終了理由を返す。実行中の場合は nil を返す。
@@ -275,45 +222,6 @@ func (s *Session) StopForward(id string) error {
 	return controller.StopForward(id)
 }
 
-// CanAttachFrom reports whether cursor belongs to the output range written by
-// this session. An old cursor is valid and will be marked truncated; a cursor
-// ahead of the writer is not.
-func (s *Session) CanAttachFrom(cursor uint64) bool {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return s.buffer.CanReadFrom(cursor)
-}
-
-// AttachFrom atomically returns only output after cursor and then follows live
-// output. Registering the stream under the same lock as the range read leaves
-// no gap between replay and live delivery.
-func (s *Session) AttachFrom(cursor uint64) (RingRead, *Stream, bool) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	replay, ok := s.buffer.ReadAvailableFrom(cursor)
-	if !ok {
-		return RingRead{}, nil, false
-	}
-	stream := &Stream{output: make(chan []byte, streamDepth)}
-	if s.exited != nil {
-		// 終了済みのセッションにライブの出力は無い。読めるものを渡してから閉じる。
-		stream.close()
-		return replay, stream, true
-	}
-	s.streams[stream] = true
-	return replay, stream, true
-}
-
-// Detach は接続を解除する。セッション自体は継続する。
-func (s *Session) Detach(stream *Stream) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if s.streams[stream] {
-		delete(s.streams, stream)
-	}
-	stream.close()
-}
-
 // Write は打鍵を PTY へ渡す。
 func (s *Session) Write(p []byte) (int, error) {
 	s.inputMutex.Lock()
@@ -391,7 +299,6 @@ func (s *Session) WriteCommandInput(ctx context.Context, generation uint64, comm
 	return writer.WriteExact(ctx, payload)
 }
 
-// Resize は TIOCSWINSZ を発行する。
 // Resize は PTY の大きさを変え、その大きさを覚える。再接続や置き換えで開く
 // 新しい PTY はこの最新の大きさで始まる。再接続を待っている間（PTY がまだ
 // 無い間）の変更も覚える。ブラウザは一度送った大きさを送り直さないので、
@@ -443,21 +350,22 @@ func (s *Session) Hangup() error {
 	return process.Hangup()
 }
 
-// closeStreams は、アタッチしているものをすべて外す。
-func (s *Session) closeStreams() {
-	s.mutex.Lock()
-	streams := make([]*Stream, 0, len(s.streams))
-	for stream := range s.streams {
-		streams = append(streams, stream)
+// stoppedLocked は、このセッションの process をもう公開しないと決まったかを返す。
+// 利用者が閉じたか（discarded）、再接続を止めたか engine が止まるか（stopping）で決まる。
+// 呼び出し側が mutex を持つ。
+func (s *Session) stoppedLocked() bool {
+	if s.discarded {
+		return true
 	}
-	s.streams = map[*Stream]bool{}
-	s.mutex.Unlock()
-	for _, stream := range streams {
-		stream.close()
+	select {
+	case <-s.stopping:
+		return true
+	default:
+		return false
 	}
 }
 
-// forceClose は、Process が持っていればその強制停止を呼ぶ。
+// forceClose は、自動再接続を止め、生きている Process を強制停止する。
 func (s *Session) forceClose() error {
 	s.stopReconnecting()
 	s.mutex.Lock()
@@ -466,13 +374,7 @@ func (s *Session) forceClose() error {
 	if exited != nil || process == nil {
 		return nil
 	}
-	forcer, ok := process.(forceCloser)
-	if !ok {
-		// 外部実装との互換用fallbackである。sshcが生成するProcessはすべて
-		// ForceCloseを持つため、実運用ではこの経路へ入らない。
-		return process.Hangup()
-	}
-	return forcer.ForceClose()
+	return process.ForceClose()
 }
 
 // observeProcess installs the readiness observation for the current Process.
@@ -485,7 +387,8 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 	s.resetTerminalTitleLocked()
 	s.generation++
 	generation := s.generation
-	readier, asynchronous := s.process.(Readier)
+	process := s.process
+	readier, asynchronous := process.(Readier)
 	if !asynchronous {
 		s.ready = nil
 		s.state = StateConnected
@@ -496,29 +399,23 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 			s.publish([]byte(successMessage))
 		}
 		s.signalConnected()
+		s.sendStartup(process)
 		return
 	}
-	observed := &processReadiness{done: make(chan struct{})}
+	observed := &processReadiness{done: make(chan struct{}), userInitiated: pending == StateConnecting}
 	s.ready = observed
 	s.state = pending
 	s.mutex.Unlock()
 
 	go func() {
-		err, open := <-readier.Ready()
-		if !open {
-			err = nil
-		}
+		<-readier.Ready()
+		err := readier.ReadyErr()
 		observed.err = err
 		if err == nil {
 			observed.connectedAt = s.now()
 		}
 		s.mutex.Lock()
-		stopped := s.discarded || s.exited != nil
-		select {
-		case <-s.stopping:
-			stopped = true
-		default:
-		}
+		stopped := s.stoppedLocked() || s.exited != nil
 		current := s.generation == generation && s.ready == observed && !stopped
 		if current && err == nil {
 			s.state = StateConnected
@@ -532,33 +429,25 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 				s.publish([]byte(successMessage))
 			}
 			s.signalConnected()
+			s.sendStartup(process)
 		}
 	}()
 }
 
-// pump は PTY を読み、バッファへ書き、アタッチしているものへ配る。
-const MaxReconnects = 5
-
-// ReconnectSettled は、再接続予算を戻してよい連続稼働時間である。短時間に
-// 切断を繰り返す接続は有限回で止め、安定していた接続の過去の失敗は持ち越さない。
-const ReconnectSettled = 10 * time.Second
-
-// ReconnectJitterMaxPercent は、再接続の待ち時間に掛かる揺らぎの上限（%）。
-const ReconnectJitterMaxPercent = 120
-
-// ReconnectBackoff は、試みのあいだに置く間隔である。
-// ReconnectBackoff は、n 回目の再接続までに待つ基準の秒数。表の末尾以降は最後の
-// 値を繰り返す。設定画面の文言はこの表から総所要時間を言う。
-var ReconnectBackoff = []time.Duration{time.Second, 2 * time.Second, 5 * time.Second, 10 * time.Second, 15 * time.Second}
-
-// NormaliseReconnects は、範囲の外にある回数を天井へ戻す。
-func NormaliseReconnects(attempts int) int {
-	if attempts < 0 || attempts > MaxReconnects {
-		return MaxReconnects
+// sendStartup は、Spec.Startup のコマンドを、使える状態になった Process へ送る。
+//
+// 世代ごとに呼ぶので、再接続した新しいシェルにも同じコマンドが届く。SSH の
+// Process では Ready を待ってから送るので、認証の問いへ答えとして流れない。
+func (s *Session) sendStartup(process Process) {
+	if s.startup == nil {
+		return
 	}
-	return attempts
+	for _, command := range s.startup() {
+		_, _ = process.Write([]byte(command + "\r"))
+	}
 }
 
+// pump は PTY を読み、バッファへ書き、アタッチしているものへ配る。
 func (s *Session) pump(now func() time.Time) {
 	defer close(s.done)
 	connectedAt := s.started
@@ -581,7 +470,13 @@ func (s *Session) pump(now func() time.Time) {
 				break
 			}
 		}
+		// このプロセスはもう出力しない。次のシェルの出力より前にモードを戻す。
+		s.publish([]byte(leftoverModeReset))
 		info := process.Wait()
+		// 終わり方の文は、戻したあとの通常の画面へ書く。
+		if info.Notice != "" {
+			s.publish([]byte(info.Notice))
+		}
 		var connectionErr error
 		if ready != nil {
 			<-ready.done
@@ -599,10 +494,17 @@ func (s *Session) pump(now func() time.Time) {
 		// 再接続で予算を戻すと、失敗し続ける接続が永久に回り続ける。
 		if connectionErr == nil && info.At.Sub(settledAt) >= ReconnectSettled {
 			s.mutex.Lock()
-			s.retries = 0
+			s.reconnectAttempts = 0
 			s.mutex.Unlock()
 		}
 
+		if connectionErr != nil && ready.userInitiated {
+			// 一度も繋がっていない接続を「切れました」として試し直さない。
+			// 失敗の理由は接続ログとしてターミナルに出ている。
+			s.recordConnectionFailure(connectionErr)
+			s.finish(info)
+			return
+		}
 		if !s.reconnect(info, connectionErr, now) {
 			s.finish(info)
 			return
@@ -611,290 +513,41 @@ func (s *Session) pump(now func() time.Time) {
 	}
 }
 
-// acceptTitle records an OSC 0/1/2 title. An empty title means the program
-// cleared it, so the pane falls back to its connection name.
-func (s *Session) acceptTitle(generation uint64, title string) {
+// problemConnectFailed は、利用者が始めた接続が、固定の problem code を持たない
+// 理由（名前解決、接続の拒否、タイムアウトなど）で失敗したことを表す。
+const problemConnectFailed = "connect_failed"
+
+// recordConnectionFailure は、利用者が始めた接続の失敗を problem に残す。
+// 自動再接続はしていないので、再接続を止めたという文は書かない。
+func (s *Session) recordConnectionFailure(err error) {
+	problem := s.connectionFailureProblem(err)
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if generation != s.generation || s.exited != nil {
-		return
-	}
-	s.terminalTitle = title
-	s.recomputeTitleLocked()
-}
-
-// acceptNotification records an OSC 9/99/777 notification. Clients compare
-// NotificationVersion between polls, so every request counts even when the
-// text repeats.
-func (s *Session) acceptNotification(generation uint64, title, body string, occurredAt time.Time) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if generation != s.generation || s.exited != nil {
-		return
-	}
-	s.notificationVersion++
-	s.lastNotification = &Notification{Title: title, Body: body, OccurredAt: occurredAt}
-}
-
-func (s *Session) resetTerminalTitleLocked() {
-	if s.terminalTitle == "" {
-		return
-	}
-	s.terminalTitle = ""
-	s.recomputeTitleLocked()
-}
-
-func (s *Session) recomputeTitleLocked() {
-	if s.titlePinned {
-		s.titleSource = TitleUser
-		return
-	}
-	if s.terminalTitle != "" {
-		s.title = s.terminalTitle
-		s.titleSource = TitleTerminal
-		return
-	}
-	s.title = s.fallbackTitle
-	if s.alias != "" {
-		s.titleSource = TitleConnection
-	} else {
-		s.titleSource = TitleFallback
-	}
-}
-
-// reconnect は、落ちた輸送を繋ぎ直せたなら真を返す。
-// StopReconnecting abandons the automatic reconnect loop while it is waiting
-// or dialing. The pane stays open in the exited state so the user can decide
-// later whether to reconnect by hand or close it.
-func (s *Session) StopReconnecting() error {
-	s.mutex.Lock()
-	if s.state != StateReconnecting || s.exited != nil {
-		s.mutex.Unlock()
-		return ErrNotReconnecting
-	}
-	s.problem = "reconnect_stopped"
-	handshaking := s.handshakingProcessLocked()
+	s.problem = problem
 	s.mutex.Unlock()
-	s.stopReconnecting()
-	if handshaking != nil {
-		// reopen は握手前に Process を返す。Ready を待つ側は stopping を見て
-		// connected にしないだけで、process 自体は生きて入力を捨て続ける。
-		// 閉じて pump に exited まで進ませ、手動の再接続を使える状態にする。
-		abandonProcess(handshaking)
-	}
-	s.publish([]byte("\r\n[sshc] 再接続を停止しました。\r\n"))
-	return nil
 }
 
-// handshakingProcessLocked は、reopen が返した後で Ready がまだ決まっていない
-// process を返す。待機中や dial 中、または確定後は nil を返す。
-func (s *Session) handshakingProcessLocked() Process {
-	if s.process == nil || s.ready == nil {
-		return nil
+// connectionFailureProblem は、利用者が始めた接続（最初の接続と手動の再接続）の
+// 失敗を problem code にする。自動で試し直さないので、試し直せる失敗も
+// reconnect_failed ではなく connect_failed で表す。Ready の前に開けなかったときも、
+// Ready で失敗したときも同じ code にする。
+func (s *Session) connectionFailureProblem(err error) string {
+	if retry, code := s.classifyReconnectFailure(err); !retry {
+		return code
 	}
-	select {
-	case <-s.ready.done:
-		return nil
-	default:
-		return s.process
-	}
+	return problemConnectFailed
 }
 
 // abandonProcess は、公開しないと決めた process を強制停止して閉じる。
 // 終了の観測は呼び出し側が行う。
 func abandonProcess(process Process) {
-	if forcer, ok := process.(forceCloser); ok {
-		_ = forcer.ForceClose()
-	}
+	_ = process.ForceClose()
 	_ = process.Close()
 }
 
-func (s *Session) stopReconnecting() {
-	s.mutex.Lock()
-	cancel := s.reconnectCancel
-	select {
-	case <-s.stopping:
-	default:
-		close(s.stopping)
-	}
-	s.mutex.Unlock()
-	if cancel != nil {
-		cancel()
-	}
-}
-
-func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.Time) bool {
-	// Dialer.Open は握手前に Process を返す。したがって終了コードが通常の
-	// transport loss でなくても、Ready の失敗は接続失敗として扱う。
-	if !info.Lost() && connectionErr == nil {
-		return false
-	}
-	if connectionErr != nil {
-		retry, problem := true, "reconnect_failed"
-		if s.reconnectError != nil {
-			retry, problem = s.reconnectError(connectionErr)
-		}
-		s.mutex.Lock()
-		if s.reconnectView != nil {
-			s.reconnectView.Problem = problem
-		}
-		if !retry {
-			s.problem = problem
-		}
-		s.mutex.Unlock()
-		if !retry {
-			// 何も書かずに止まると、再接続の途中で止まったのか、もう試さないのかが
-			// 画面から分からない。理由の行は接続ログに出ている。
-			s.publish([]byte("\r\n[sshc] " + s.reconnectStopNotice(problem) + "\r\n"))
-			return false
-		}
-	}
-	for {
-		s.mutex.Lock()
-		reopen, attempt := s.reopen, s.retries
-		stopping := s.exited != nil
-		s.mutex.Unlock()
-		select {
-		case <-s.stopping:
-			stopping = true
-		default:
-		}
-
-		limit := MaxReconnects
-		if s.attempts != nil {
-			limit = NormaliseReconnects(s.attempts())
-		}
-		if reopen == nil || stopping || attempt >= limit {
-			if reopen != nil && limit > 0 && attempt >= limit {
-				s.mutex.Lock()
-				s.problem = "reconnect_exhausted"
-				s.mutex.Unlock()
-				s.publish([]byte("\r\n[sshc] 再接続できる回数の上限に達しました。\r\n"))
-			}
-			return false
-		}
-
-		wait := ReconnectBackoff[min(attempt, len(ReconnectBackoff)-1)]
-		if s.delay != nil {
-			wait = s.delay(attempt)
-		}
-		retryAt := now().Add(wait)
-		s.mutex.Lock()
-		s.process = nil
-		s.state = StateReconnecting
-		s.reconnectView = &ReconnectView{Attempt: attempt + 1, Limit: limit, RetryAt: retryAt}
-		s.mutex.Unlock()
-		seconds := int((wait + time.Second - 1) / time.Second)
-		s.publish([]byte(fmt.Sprintf(
-			"\r\n[sshc] SSH接続が切れました。%d秒後に再接続します（%d/%d）。\r\n",
-			seconds, attempt+1, limit)))
-
-		timer := time.NewTimer(wait)
-		select {
-		case <-timer.C:
-		case <-s.stopping:
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
-			}
-			return false
-		}
-
-		attemptCtx, cancel := context.WithCancel(WithAutomaticReconnect(context.Background()))
-		s.mutex.Lock()
-		select {
-		case <-s.stopping:
-			s.mutex.Unlock()
-			cancel()
-			return false
-		default:
-		}
-		s.reconnectCancel = cancel
-		// The browser may have been resized during the wait; the new shell
-		// must start at that size, so it is read only after waiting.
-		size := s.size
-		s.mutex.Unlock()
-		process, err := reopen(attemptCtx, size)
-		s.mutex.Lock()
-		s.reconnectCancel = nil
-		stopped := s.discarded
-		select {
-		case <-s.stopping:
-			stopped = true
-		default:
-		}
-		s.mutex.Unlock()
-		cancel()
-		if process != nil && stopped {
-			abandonProcess(process)
-			process.Wait()
-			return false
-		}
-		if err != nil {
-			retry, problem := true, "reconnect_failed"
-			if s.reconnectError != nil {
-				retry, problem = s.reconnectError(err)
-			}
-			s.mutex.Lock()
-			s.retries++
-			if s.reconnectView != nil {
-				s.reconnectView.Problem = problem
-			}
-			if !retry {
-				s.problem = problem
-			}
-			s.mutex.Unlock()
-			s.publish([]byte("\r\n[sshc] " + err.Error() + "\r\n"))
-			if !retry {
-				return false
-			}
-			continue
-		}
-
-		s.mutex.Lock()
-		stopped = s.discarded
-		select {
-		case <-s.stopping:
-			stopped = true
-		default:
-		}
-		if !stopped {
-			s.process = process
-			s.retries++
-		}
-		s.mutex.Unlock()
-		if stopped {
-			abandonProcess(process)
-			process.Wait()
-			return false
-		}
-		// Ready が成功するまでは reconnecting のままである。これは新しい
-		// shellなので、成功後にだけ前の続きではないことを伝える。
-		s.observeProcess(StateReconnecting,
-			"\r\n[sshc] 再接続しました。新しいシェルを開始しました。これより前の表示は切断前の記録です。\r\n")
-		return true
-	}
-}
-
-func (s *Session) publish(chunk []byte) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	_, _ = s.buffer.Write(chunk)
-	for stream := range s.streams {
-		// 複製するのは、この配列を次の読み取りが上書きするからである。
-		copied := make([]byte, len(chunk))
-		copy(copied, chunk)
-		select {
-		case stream.output <- copied:
-		default:
-			// 追いつけないアタッチは落とす。PTY は止めない。
-			stream.dropped.Store(true)
-			delete(s.streams, stream)
-			stream.close()
-		}
-	}
+// abandonAndWait は、pump が観測しない process を捨て、終わるまで待つ。
+func abandonAndWait(process Process) {
+	abandonProcess(process)
+	process.Wait()
 }
 
 func (s *Session) finish(info ExitInfo) {
@@ -906,106 +559,10 @@ func (s *Session) finish(info ExitInfo) {
 	s.exited = &info
 	s.state = StateExited
 	s.reconnectView = nil
-	for stream := range s.streams {
-		delete(s.streams, stream)
-		stream.close()
-	}
+	s.closeStreamsLocked()
 	if s.cleanup != nil {
 		cleanup := s.cleanup
 		s.cleanup = nil
 		cleanup()
 	}
-}
-
-// prepareManualReconnect は終了済みのSSHセッションを同じIDで再利用する。
-// 呼び出し側が新しいProcessを確保する間はconnectingとして数え、同時実行と
-// session上限の迂回を防ぐ。
-func (s *Session) prepareManualReconnect() (func(context.Context, Size) (Process, error), Size, ExitInfo, error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if s.exited == nil || s.reopen == nil || s.discarded {
-		return nil, Size{}, ExitInfo{}, ErrReconnectUnavailable
-	}
-	previous := *s.exited
-	s.process = nil
-	s.exited = nil
-	s.state = StateConnecting
-	s.problem = ""
-	s.reconnectView = nil
-	s.retries = 0
-	s.stopping = make(chan struct{})
-	s.done = make(chan struct{})
-	return s.reopen, s.size, previous, nil
-}
-
-// defaultReconnectStopNotice は、再接続を止めた理由に専用の文が無いときに書く文である。
-const defaultReconnectStopNotice = "設定を直さない限り同じ理由で失敗するため、自動再接続を停止しました。"
-
-// reconnectStopNotice は、再接続を止めたときにターミナルへ書く文を返す。
-func (s *Session) reconnectStopNotice(problem string) string {
-	if s.stopNotice != nil {
-		if notice := s.stopNotice(problem); notice != "" {
-			return notice
-		}
-	}
-	return defaultReconnectStopNotice
-}
-
-func (s *Session) manualReconnectProblem(err error) string {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if s.reconnectError == nil {
-		return "reconnect_failed"
-	}
-	_, problem := s.reconnectError(err)
-	if problem == "" {
-		return "reconnect_failed"
-	}
-	return problem
-}
-
-// failManualReconnect は接続前の終了状態へ戻す。新しく作ったdoneを閉じるため、
-// engine停止も失敗した接続を待ち続けない。
-func (s *Session) failManualReconnect(previous ExitInfo, problem string) {
-	s.mutex.Lock()
-	s.process = nil
-	s.exited = &previous
-	s.state = StateExited
-	s.problem = problem
-	s.reconnectView = nil
-	done := s.done
-	for stream := range s.streams {
-		delete(s.streams, stream)
-		stream.close()
-	}
-	s.mutex.Unlock()
-	close(done)
-}
-
-// completeManualReconnect はcloseやshutdownが先行していなければ、新しいProcessを
-// 同じsessionへ公開する。
-func (s *Session) completeManualReconnect(process Process, started time.Time) bool {
-	return s.completeProcessReplacement(process, started,
-		"\r\n[sshc] 手動で再接続しました。新しいシェルを開始しました。これより前の表示は切断前の記録です。\r\n")
-}
-
-func (s *Session) completeProcessReplacement(process Process, started time.Time, successMessage string) bool {
-	s.mutex.Lock()
-	stopped := s.discarded
-	select {
-	case <-s.stopping:
-		stopped = true
-	default:
-	}
-	if stopped || s.exited != nil || s.state != StateConnecting {
-		s.mutex.Unlock()
-		return false
-	}
-	s.process = process
-	s.started = started
-	s.problem = ""
-	s.reconnectView = nil
-	s.mutex.Unlock()
-	s.observeProcess(StateConnecting, successMessage)
-	return true
 }

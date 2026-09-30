@@ -139,9 +139,9 @@ func TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 		Resolve: func(alias string) (sshclient.Target, error) {
 			return sshclient.Target{Alias: alias, HostName: "203.0.113.10", Port: "22"}, nil
 		},
-		Run: func(_ context.Context, target sshclient.Target, command string, _ []byte) (sshclient.Output, error) {
+		Run: func(_ context.Context, target sshclient.Target, command sshclient.Command) (sshclient.Output, error) {
 			reached = append(reached, target.Alias)
-			if command == remotekey.ProbeCommand {
+			if command.Line == remotekey.ProbeCommand {
 				return sshclient.Output{Stdout: []byte(remotekey.ProbeMarker + "\n")}, nil
 			}
 			return sshclient.Output{Stdout: []byte("sshc: added\n")}, nil

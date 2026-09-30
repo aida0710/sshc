@@ -62,3 +62,13 @@ func TestBuildTransportScriptRejectsUnknownFieldsAndTrailingDocuments(t *testing
 		t.Fatal("accepted oversized onFailure.send")
 	}
 }
+
+// 上限と比べるのは行末を足す前の値である。streamrun の send と同じ規則にする。
+func TestBuildTransportScriptAcceptsOnFailureSendAtTheLimitWithALineEnding(t *testing.T) {
+	called := defaultTransportInvocation(transportTelnet, true)
+	called.Script = "-"
+	document := `{"version":1,"steps":[{"send":"show"}],"onFailure":{"send":"` + strings.Repeat("x", streamrun.MaxSendBytes) + `","lineEnding":"crlf"}}`
+	if _, err := buildTransportScript(called, strings.NewReader(document)); err != nil {
+		t.Fatalf("rejected an onFailure.send at the limit with a line ending: %v", err)
+	}
+}

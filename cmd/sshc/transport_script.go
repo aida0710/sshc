@@ -144,11 +144,11 @@ func buildTransportFailureCleanup(document transportFailureCleanupDocument) (tra
 	if document.LineEnding != "" {
 		cleanup.LineEnding = streamrun.LineEnding(document.LineEnding)
 	}
-	ending, ok := transportLineEndingBytes(cleanup.LineEnding)
-	if !ok {
+	if _, ok := transportLineEndingBytes(cleanup.LineEnding); !ok {
 		return transportFailureCleanup{}, errors.New("script onFailure.lineEnding must be none, cr, lf, or crlf")
 	}
-	if len(cleanup.Send) > streamrun.MaxSendBytes || len(cleanup.Send)+len(ending) > streamrun.MaxSendBytes+2 {
+	// streamrun の send と同じく、行末を足す前の値だけを上限と比べる。
+	if len(cleanup.Send) > streamrun.MaxSendBytes {
 		return transportFailureCleanup{}, fmt.Errorf("script onFailure.send exceeds %d bytes", streamrun.MaxSendBytes)
 	}
 	if document.Timeout != "" {
