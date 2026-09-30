@@ -52,7 +52,7 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 			// 何も書かれていない alias。既定値をこちらが正しく持っているか。
 			//
 			// identityfile はここに無い。この解決器は既定を持たないと決めた。
-			// OpenSSH の既定の並びは版とビルドで変わり、この検査が macOS と
+			// OpenSSH の既定の並びはバージョンとビルドで変わり、この検査が macOS と
 			// Linux で違う結果を返したのがその証拠である。
 			name:     "defaults nobody wrote",
 			contents: "Host other\n\tPort 2222\n",
@@ -134,7 +134,7 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 			alias:    "a",
 			keywords: []string{"proxyjump", "proxycommand"},
 		},
-		// `ProxyJump none` の後の ProxyCommand は OpenSSH の版で結果が割れる
+		// `ProxyJump none` の後の ProxyCommand は OpenSSH のバージョンで結果が割れる
 		// （proxyDirectiveIgnored のコメント参照）ので、ここでは比べない。
 		// 解決器が選んだ側は resolve_test.go が固定している。
 		{

@@ -105,7 +105,7 @@ func TestReleaseWorkflowBuildsEveryPlatformNatively(t *testing.T) {
 
 // 一つでも作れなければ、何も公開しない。
 //
-// 部分的なリリースは、利用者から見ると「その OS だけ対応が消えた版」に
+// 部分的なリリースは、利用者から見ると「その OS だけ対応が消えたバージョン」に
 // 見える。落ちたことが分かる方がよい。
 func TestReleasePublishWaitsForEveryPlatform(t *testing.T) {
 	document, _ := readReleaseWorkflow(t)
@@ -281,8 +281,8 @@ func TestReleaseWindowsStepsStopAtTheFirstFailure(t *testing.T) {
 
 // 配るものは、自分が何番かを言えなければならない。
 //
-// APK の versionName はタグから来ていたが、その中で走る engine（AAR）は誰も版を
-// 入れておらず、どの版を配っても自分を "dev" と名乗っていた。通知にも handoff
+// APK の versionName はタグから来ていたが、その中で走る engine（AAR）は誰もバージョンを
+// 入れておらず、どのバージョンを配っても自分を "dev" と名乗っていた。通知にも handoff
 // にも、`sshc status` にもそう出る。
 //
 // 二つを別々に渡せば「APK は 0.4.2 だが engine は dev」が作れてしまうので、
@@ -296,10 +296,10 @@ func TestTheAndroidEngineCarriesTheReleasedVersion(t *testing.T) {
 	}
 
 	if !strings.Contains(android, `ANDROID_VERSION="${RELEASE_TAG#v}"`) {
-		t.Error("gomobile bind にタグの版を渡していない。AAR は dev のまま配られる")
+		t.Error("gomobile bind にタグのバージョンを渡していない。AAR は dev のまま配られる")
 	}
 	if !strings.Contains(android, `-PsshcVersionName="${RELEASE_TAG#v}"`) {
-		t.Error("gradle にタグの版を渡していない")
+		t.Error("gradle にタグのバージョンを渡していない")
 	}
 
 	makefile, err := os.ReadFile(filepath.Join("..", "..", "Makefile"))

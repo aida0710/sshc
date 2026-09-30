@@ -15,7 +15,7 @@ import (
 // だけになり、上げるバイナリを一度も起動しなかった。
 //
 // smoke が確かめるのは、開発機の go test では出ない類の壊れ方である:
-// 版が入っていない（-X が外れる）、画面が入っていない（go:embed が空でも
+// バージョンが入っていない（-X が外れる）、画面が入っていない（go:embed が空でも
 // ビルドは通る）、engine が起きない。
 func TestEveryReleaseJobSmokesWhatItBuilt(t *testing.T) {
 	_, source := readReleaseWorkflow(t)
@@ -36,11 +36,11 @@ func TestEveryReleaseJobSmokesWhatItBuilt(t *testing.T) {
 			t.Errorf("%s は作ったバイナリを起動していない（%s が無い）",
 				strings.TrimSpace(job.id), job.invocation)
 		}
-		// 版を渡していなければ、-X が外れても気づけない。
+		// バージョンを渡していなければ、-X が外れても気づけない。
 		if !strings.Contains(section, "RELEASE_TAG") &&
 			!strings.Contains(section, "GITHUB_REF_NAME") &&
 			!strings.Contains(section, "github.ref_name") {
-			t.Errorf("%s は smoke にタグの版を渡していない", strings.TrimSpace(job.id))
+			t.Errorf("%s は smoke にタグのバージョンを渡していない", strings.TrimSpace(job.id))
 		}
 	}
 }
@@ -66,7 +66,7 @@ func TestBothSmokeScriptsAskTheSameQuestions(t *testing.T) {
 		what          string
 		unix, windows string
 	}{
-		{"版を名乗れること", `"sshc $expected $goos/$goarch"`, `"sshc $ExpectedVersion $goos/$goarch"`},
+		{"バージョンを名乗れること", `"sshc $expected $goos/$goarch"`, `"sshc $ExpectedVersion $goos/$goarch"`},
 		{"engine が居ないときに次の一手を言えること", `"sshc engine"`, `"*sshc engine*"`},
 		{"起動時に handoff を作成すること", `.ssh/sshc/cli`, `.ssh\sshc\cli`},
 		{"status が走っている engine を報告すること", `"running (pid"`, `"*running (pid*"`},

@@ -85,7 +85,7 @@ func applyVPNSecretsMutation(vault, clone *Vault, mutation VPNSecretsMutation) (
 		if mutation.Profile == mutation.NewName {
 			return false, nil
 		}
-		// 移し先の名前に前の版が残した記録があれば捨てる。残すと、秘密を持たない
+		// 移し先の名前に前のバージョンが残した記録があれば捨てる。残すと、秘密を持たない
 		// プロファイルを改名したときに、無関係な秘密を黙って引き継ぐ。
 		_, leftover := vault.Secret(KindVPN, mutation.NewName)
 		if leftover {

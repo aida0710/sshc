@@ -81,7 +81,7 @@ func (c Checker) Latest(ctx context.Context) (Release, error) {
 //
 // candidate はネットワークから来る値なので、SemVerでない値を更新として扱わない。
 // リリースでないローカルビルド（"dev"など）には、正規のリリースがあることだけを
-// 伝える。SemVerのpre-release順序も比較し、安定版から古いpre-releaseへ戻さない。
+// 伝える。SemVerのpre-release順序も比較し、安定バージョンから古いpre-releaseへ戻さない。
 func Newer(current, candidate string) bool {
 	if current == candidate {
 		return false
@@ -97,7 +97,7 @@ func Newer(current, candidate string) bool {
 	return semver.Compare(candidateVersion, currentVersion) > 0
 }
 
-// StableTag は、GitHub Releaseとinstallerへ渡してよい正規の安定版tagを返す。
+// StableTag は、GitHub Releaseとinstallerへ渡してよい正規の安定バージョンのtagを返す。
 // update処理はこの検査を通らないtagからURLや環境変数を組み立てない。
 func StableTag(value string) (string, bool) {
 	parsed, ok := semanticVersion(value)

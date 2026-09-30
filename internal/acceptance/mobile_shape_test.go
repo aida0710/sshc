@@ -200,7 +200,7 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 			cleanSync.Direction, cleanSync.Auto.Phase)
 	}
 
-	// 更新: 版だけを結果、「新しいものがある」とは言わない。
+	// 更新: バージョンだけを結果、「新しいものがある」とは言わない。
 	//
 	// Checker が nil のとき、ここが落ちれば Android の画面は起動直後に赤くなる。
 	response := get("/api/v1/update")

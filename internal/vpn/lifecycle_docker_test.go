@@ -186,7 +186,7 @@ func TestARouteStopsWithoutWaitingOutTheStopTimeout(t *testing.T) {
 	}
 }
 
-// 前の版のイメージは、新しいイメージを作ったあとに消す。
+// 前のバージョンのイメージは、新しいイメージを作ったあとに消す。
 func TestImagesOfEarlierVersionsAreRemoved(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
 	current, err := manager.ensureImage(ctx, ignorePhases)
@@ -202,7 +202,7 @@ func TestImagesOfEarlierVersionsAreRemoved(t *testing.T) {
 	manager.removeOtherImages(ctx, current)
 
 	if _, err := manager.docker.output(ctx, "image", "inspect", stale); err == nil {
-		t.Fatal("前の版のイメージが残った")
+		t.Fatal("前のバージョンのイメージが残った")
 	}
 	if _, err := manager.docker.output(ctx, "image", "inspect", current); err != nil {
 		t.Fatalf("いまのイメージまで消した: %v", err)

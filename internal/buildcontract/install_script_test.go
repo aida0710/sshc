@@ -204,7 +204,7 @@ func TestTheInstallScriptReadsTheRunningEngineVersionFromJSON(t *testing.T) {
 }
 
 func TestTheDocumentedInstallerPinsScriptAndArtifactsToOneRelease(t *testing.T) {
-	// 利用者向けの pages も同じ固定版を示す。README だけ更新して pages が古い版を
+	// 利用者向けの pages も同じ固定バージョンを示す。README だけ更新して pages が古いバージョンを
 	// 案内し続けたことがある。
 	for _, path := range []string{
 		"README.md", filepath.Join("docs", "release-install.md"), "install.sh",

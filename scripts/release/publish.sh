@@ -18,7 +18,7 @@ publish:
   release environmentの保護gateを承認してGitHub Release完了まで待ちます。
 
 --verify-only:
-  既存Releaseのchecksum、attestation、実行版、APK、本文、Homebrew tapを検証します。
+  既存Releaseのchecksum、attestation、実行したバイナリのバージョン、APK、本文、Homebrew tapを検証します。
 EOF
 }
 

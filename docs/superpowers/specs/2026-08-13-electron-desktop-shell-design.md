@@ -66,12 +66,12 @@ Windows は対象外である（Go 側がまだ `GOOS=windows` でビルドで�
 が既にそう決めている）。
 
 **5. Go バイナリは束に同梱する。** アプリの中の 1 つを使い、`~/.local/bin/sshc`
-はそこへの symlink にする。**実体が 1 つになるので版がずれない。**
+はそこへの symlink にする。**実体が 1 つになるのでバージョンがずれない。**
 
 **6. 枠組みは Electron。** Tauri より大きい（150〜200MB 対 10〜15MB）が、
 1 台の macOS から macOS と Linux の両方を作れる。Tauri は Rust を対象ごとに
 コンパイルし、Linux では WebKitGTK にリンクするため実質クロスコンパイルでき
-ない。Linux で Chromium を同梱する分、ディストリごとの WebKitGTK の版差も
+ない。Linux で Chromium を同梱する分、ディストリごとの WebKitGTK のバージョンの違いも
 踏まない。
 
 **7. 署名は後で足す。** ad-hoc のまま出す。macOS では初回に右クリック→開くが

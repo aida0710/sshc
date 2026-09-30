@@ -38,7 +38,7 @@ var (
 	ErrWeakPassphrase = envelope.ErrWeakPassphrase
 	// ErrCostRefused は、開けるのに掛かりすぎるスナップショットを断る。
 	ErrCostRefused = envelope.ErrCostRefused
-	// ErrUnsupportedEnvelopeVersion は、この版で復号できない形式を報告する。
+	// ErrUnsupportedEnvelopeVersion は、このバージョンで復号できない形式を報告する。
 	ErrUnsupportedEnvelopeVersion = envelope.ErrUnsupportedVersion
 	// ErrWorkspaceBusy は、別の処理が同じワークスペースを更新中であることを報告する。
 	ErrWorkspaceBusy = storage.ErrWorkspaceBusy

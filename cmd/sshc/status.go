@@ -98,7 +98,7 @@ type statusAnswer struct {
 }
 
 // readHandoff は CLI の全サブコマンドで同じ互換性判定を使う。旧形式を補完すると、
-// owner や protocol を知らないまま稼働中の app へ要求を送れてしまうため、版を
+// owner や protocol を知らないまま稼働中の app へ要求を送れてしまうため、バージョンを
 // そろえるという復旧可能な失敗として返す。
 //
 // 互換性エラーには現在の実行ファイルを含める。engine と CLI のどちらが古いかは

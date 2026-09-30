@@ -4,7 +4,7 @@
 
 **Goal:** 共通の explicit owner/protocol 実装を Windows の実動作へ拡張し、保存データの安全性、単一 engine、OpenSSH agent、ConPTY local shell、desktop activation、per-user NSIS installer を native Windows で成立させる。
 
-**Architecture:** portable interface は共通 plan で固定し、Windows は build-tagged adapter を提供する。filesystem は reparse point を拒否し restricted DACL と atomic replace を担保する。engine lock は `LockFileEx`、desktop discovery は HKCU、agent は OpenSSH named pipe、local shell は ConPTY + kill-on-close Job Object を用いる。Electron builder は app と同一版の Go binary を `resources\cli` に同梱し、NSIS が user PATH と launcher registry を exact entry 単位で管理する。
+**Architecture:** portable interface は共通 plan で固定し、Windows は build-tagged adapter を提供する。filesystem は reparse point を拒否し restricted DACL と atomic replace を担保する。engine lock は `LockFileEx`、desktop discovery は HKCU、agent は OpenSSH named pipe、local shell は ConPTY + kill-on-close Job Object を用いる。Electron builder は app と同一バージョンの Go binary を `resources\cli` に同梱し、NSIS が user PATH と launcher registry を exact entry 単位で管理する。
 
 **Tech Stack:** Go 1.26 / `golang.org/x/sys/windows` / `golang.org/x/crypto/ssh/agent` / Electron 43 / electron-builder NSIS / PowerShell
 

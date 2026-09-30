@@ -55,7 +55,7 @@ const (
 	// maxConnectLines は、connect の標準エラーを接続ログへ写すために覚える行数の上限である。
 	maxConnectLines = 40
 	// connectStartedMark は、socat が接続先へ繋がり、中継を始めたときに書く文である。
-	// イメージのパッケージは固定してあるので、socat の版とこの文も変わらない。
+	// イメージのパッケージは固定してあるので、socat のバージョンとこの文も変わらない。
 	connectStartedMark = "starting data transfer loop"
 	// maxConnectLineBytes は、connect の標準エラーの1行を覚える上限である。
 	maxConnectLineBytes = 4 << 10

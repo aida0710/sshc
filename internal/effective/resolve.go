@@ -62,7 +62,7 @@ const defaultPort = "22"
 //
 // これは実測に基づく判断である。一度は OpenSSH の既定の並びを写したが、
 // 差分テストが macOS と Linux で違う結果を返した。Linux 側のビルドは
-// ~/.ssh/id_xmss を含んでいた。版とビルドオプションで変わる表であり、
+// ~/.ssh/id_xmss を含んでいた。バージョンとビルドオプションで変わる表であり、
 // 「OpenSSH の既定値表を丸ごと持たない」という判断がここにも当てはまる。
 //
 // 書かれていなければ、この解決器は IdentityFile を応答しない。接続に使う鍵を
@@ -265,10 +265,10 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 // proxyDirectiveIgnored は、ProxyCommand と ProxyJump のうち後から来た方を OpenSSH が
 // 黙って捨てる規則を再現する。`ssh -G` で確かめた: ProxyJump（none 以外）の後の
 // ProxyCommand は無視、ProxyCommand（none を含む）の後の ProxyJump は無視。
-// `ProxyJump none` の後の ProxyCommand だけは版で違う。readconf.c の
+// `ProxyJump none` の後の ProxyCommand だけはバージョンで違う。readconf.c の
 // CVE-2026-35386 対応（parse_jump の書き直し）より前の OpenSSH は "none" を
 // 「ProxyJump 設定済み」と数えて後の ProxyCommand を捨て、対応後（Ubuntu の
-// 10.2p1 パッチ版、上流はそれ以降）は有効にする。ここは新しい方に合わせる。
+// 10.2p1 にパッチを当てたもの、上流はそれ以降）は有効にする。ここは新しい方に合わせる。
 // 捨てた行は Notes に残し、書いた本人が「効いていない」ことを見られるようにする。
 func proxyDirectiveIgnored(keyword string, values Values) (bool, string) {
 	switch strings.ToLower(keyword) {
@@ -287,7 +287,7 @@ func proxyDirectiveIgnored(keyword string, values Values) (bool, string) {
 // applyDefaults は、この解決器が既定値を持つ 5 つだけを埋める。
 //
 // 書かれていない他のキーワードには触れない。OpenSSH の既定値表を丸ごと持つのは、
-// 版ごとに変わるものを追い続ける保守であり、利用者に何も返さない。
+// バージョンごとに変わるものを追い続ける保守であり、利用者に何も返さない。
 func applyDefaults(values *Values, alias string, facts LocalFacts) {
 	fill := func(keyword string, candidates ...string) {
 		if len(values.Entries[keyword]) > 0 {

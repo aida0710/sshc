@@ -281,20 +281,20 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 		return Metadata{}, err
 	}
 	fillWireGuardServers(&metadata)
-	// v3/v4→v5は追加fieldだけのmigrationである。v5は同期するキー設定を旧版で消さないための境界。
+	// v3/v4→v5は追加fieldだけのmigrationである。v5は同期するキー設定を旧バージョンで消さないための境界。
 	// 旧scrollbackBytesはengineの
 	// replay bufferとして意味を変えず、browser側は未設定の既定行数から始める。
 	// v5→v6は、VPNプロファイルの接続先（vpnProfiles[].target）を捨てる。接続先は
 	// プロファイルを付けた接続のHostNameとPortで決まる。知らない項目として読み
-	// 飛ばすので、書き直すと消える。v6はtargetの無いプロファイルを旧版に読ませない
+	// 飛ばすので、書き直すと消える。v6はtargetの無いプロファイルを旧バージョンに読ませない
 	// ための境界でもある。
 	// v6→v7は項目を足すだけである。v7は、v0.39.7までのsshcが知らないVPNの方式
-	// （openvpn、ikev2）のプロファイルを旧版に読ませないための境界である。旧版は知らない
-	// 方式を断るので、版で先に断る方が、何が起きたかが利用者に分かる。
+	// （openvpn、ikev2）のプロファイルを旧バージョンに読ませないための境界である。旧バージョンは知らない
+	// 方式を断るので、バージョンで先に断る方が、何が起きたかが利用者に分かる。
 	// v7→v8は、WireGuardのプロファイルに、Endpointのサーバー（wireguard.servers）を足す。
 	// 設定ファイルはVaultにあり、項目の形（server、peerPublicKey、address）のプロファイルは
 	// 保存し直すまで項目のまま読む（metadata_wireguard.go）。v8は、項目の無い設定ファイルの
-	// 形のプロファイルを旧版に読ませないための境界である。
+	// 形のプロファイルを旧バージョンに読ませないための境界である。
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {
 		metadata.GroupsFile = DefaultGroupsFile
