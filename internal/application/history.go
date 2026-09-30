@@ -109,10 +109,6 @@ func (s *Service) Restore(identifier, relative string) (SaveResult, error) {
 	if err != nil {
 		return SaveResult{}, err
 	}
-	precondition := storage.Precondition{}
-	if exists {
-		precondition = storage.Precondition{Exists: true, Digest: storage.Digest(current)}
-	}
 	graph, err := s.resolve()
 	if err != nil {
 		return SaveResult{}, err
@@ -123,7 +119,7 @@ func (s *Service) Restore(identifier, relative string) (SaveResult, error) {
 	}
 	result, err := s.manager.Commit(storage.Request{
 		Operation: "config.restore",
-		Changes:   []storage.Change{{Path: absolute, Contents: contents, Precondition: precondition}},
+		Changes:   []storage.Change{{Path: absolute, Contents: contents, Precondition: preconditionFor(current, exists)}},
 		Validation: configurationEdit{
 			base:     map[string][]byte{filepath.Clean(absolute): current},
 			baseline: diagnosticBaseline(graph),

@@ -77,6 +77,15 @@ func (s *Service) displayPath(absolute string) string {
 	return reference.Path
 }
 
+// preconditionFor は、readFile で読んだ内容を、あとの commit がディスクと比べる事前
+// 条件にする。無かったファイルは、無いままであることを条件にする。
+func preconditionFor(contents []byte, exists bool) storage.Precondition {
+	if !exists {
+		return storage.Precondition{}
+	}
+	return storage.Precondition{Exists: true, Digest: storage.Digest(contents)}
+}
+
 func (s *Service) readFile(absolute string) (contents []byte, exists bool, err error) {
 	contents, err = s.workspace.FileSystem().ReadFile(absolute)
 	if errors.Is(err, fs.ErrNotExist) {

@@ -285,10 +285,7 @@ func (s *Service) planCreateConnection(
 	}
 	updated := block.Render()
 
-	precondition := storage.Precondition{}
-	if exists {
-		precondition = storage.Precondition{Exists: true, Digest: storage.Digest(previous)}
-	}
+	precondition := preconditionFor(previous, exists)
 	cleaned := filepath.Clean(absolute)
 	prepared := planned{
 		operation:   "connection.create",
