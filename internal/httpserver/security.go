@@ -66,7 +66,7 @@ type Security struct {
 // gateExempt は、vault がロック中でも利用できる初期化・認証ルートを指定する。
 // session/bootstrap と session/recover は gate より前に通すので、ここには無い。
 // recover-compatible-backup と reset-unsupported は、別の版が書いた Vault を
-// 開けず施錠されたままのときにだけ意味を持つため、施錠中に通す必要がある。
+// 開けずロックされたままのときにだけ意味を持つため、ロック中に通す必要がある。
 // どちらも unlock と同じく master password を検証する。
 func gateExempt(method, path string) bool {
 	switch path {

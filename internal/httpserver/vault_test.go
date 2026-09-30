@@ -984,7 +984,7 @@ func TestBrowserCannotManuallyLockPasswordlessVault(t *testing.T) {
 	}
 }
 
-// 別の版が書いた Vault は開けないので、engine は施錠されたままになる。
+// 別の版が書いた Vault は開けないので、engine はロックされたままになる。
 // ロック画面の「作り直す」は本番と同じ middleware の順を通っても
 // handler まで届き、Vault を開いた状態に戻さなければならない。
 func TestAVaultWrittenByANewerVersionCanBeResetWhileTheEngineIsLocked(t *testing.T) {

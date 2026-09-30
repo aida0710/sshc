@@ -42,7 +42,7 @@ func (s *Service) configure(config Config, credentials objectstore.Credentials, 
 // Forget は、同期先の接続一式（アクセスキーとシークレットを含む）を手放す。
 //
 // 同期の設定は Vault の中にあり、Vault が閉じているあいだは読めない。Vault が
-// ロックされたらここを呼び、その平文をメモリに残さない。解錠したあとは、自動同期の
+// ロックされたらここを呼び、その平文をメモリに残さない。ロックを解除したあとは、自動同期の
 // 準備と同期の画面が、未設定と見て Vault から組み直す。
 //
 // operationMutex は待たない。走っている操作は開始時に接続一式を写し取っており、世代を

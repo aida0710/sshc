@@ -12,10 +12,10 @@ import (
 	"sshc/internal/secret"
 )
 
-// FromVault は、Vault が解錠済みで同期がまだ構成されていないときだけ、保存済みの設定から
+// FromVault は、Vault のロックが解除されていて同期がまだ構成されていないときだけ、保存済みの設定から
 // client を組んで service を構成する。
 //
-// 施錠中、未保存、解釈できない向きのときは何もしない。呼び出し側は、同期の状態の Locked や
+// ロック中、未保存、解釈できない向きのときは何もしない。呼び出し側は、同期の状態の Locked や
 // Configured で利用者に伝える。明示的に構成し直した設定は上書きしない。objectStoreHTTP が
 // nil なら既定の HTTP client を使う（テストはここへ bucket の代わりを渡す）。
 func FromVault(service *remotesync.Service, vault *secret.Service, objectStoreHTTP *http.Client) {

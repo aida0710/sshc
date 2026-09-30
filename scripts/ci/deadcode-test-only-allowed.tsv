@@ -10,7 +10,7 @@
 mobile/	*	gomobile が Java へ公開する関数（Start、Stop、LastStartFailure* など）が入口。呼び手は JNI の向こうの Android の外殻に居て、deadcode は main からしか辿らないので、package 全体が main から届かないと数えられる。
 internal/api/contracttest/	*	テスト用の package。手書きの Go の型と api/openapi.yaml を照合するテストだけが使う。
 internal/platform/windowsacl/acltest/	*	テスト用の package。通常の書き込みでは作れない非公開状態の fixture を作る。
-internal/secret/secrettest/	*	テスト用の package。ほかの package のテストが、本番と同じ変更と書き方（CommitAtomic）で解錠中の Vault へ前準備の値を書く。
+internal/secret/secrettest/	*	テスト用の package。ほかの package のテストが、本番と同じ変更と書き方（CommitAtomic）でロックを解除した Vault へ前準備の値を書く。
 internal/testwait/	*	テスト用の package。テストがメモリ上の状態の変化を待つときの上限と待ち方をまとめる。
 internal/app/run.go	Build	internal/acceptance のテストが engine を組み立てる入口。本番の Run と同じ build で組み立てるだけで、HTTP の待ち受け、VPN の監視、自動同期は始めない（テストが要るものだけを自分で始める）。
 internal/httpserver/server.go	Server.Routes	hardening と acceptance のテストが登録済みの全ルートを列挙し、後から足したルートにも同じ検査を掛ける。

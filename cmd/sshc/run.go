@@ -23,7 +23,7 @@ func runRemote(ctx context.Context, alias, command string, environment commandEn
 		return exitUsage
 	}
 
-	// 非対話実行では Vault の解錠を待機せず、施錠状態をエラーとして返す。
+	// 非対話実行では Vault のロックの解除を待たず、ロックされた状態をエラーとして返す。
 	session, err := reachUnlockedEngine(ctx, stateDir, client,
 		func(found handoff.Handoff) engineProbe {
 			return httpProbe{found: found, client: client}
