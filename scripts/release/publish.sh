@@ -14,8 +14,9 @@ Usage:
   scripts/release/publish.sh --verify-only <tag>
 
 publish:
-  HEADとorigin/mainの一致、同じSHAのmain CI成功を確認してannotated tagをpushし、
-  release environmentの保護gateを承認してGitHub Release完了まで待ちます。
+  HEADとorigin/mainの一致、同じSHAのmain CIとRelease UI check（release-ui-check.yml）の
+  成功を確認してannotated tagをpushし、release environmentの保護gateを承認して
+  GitHub Release完了まで待ちます。
 
 --verify-only:
   既存Releaseのchecksum、attestation、実行したバイナリのバージョン、APK、本文、Homebrew tapを検証します。
@@ -239,32 +240,53 @@ remote_main=$(git rev-parse refs/remotes/origin/main)
 [ -z "$(git tag -l "$tag")" ] || die "local tag already exists: $tag"
 [ -z "$(git ls-remote --tags origin "refs/tags/$tag")" ] || die "remote tag already exists: $tag"
 
-ci_run=$(gh api -X GET "repos/$repository/actions/workflows/ci.yml/runs" \
-  -f head_sha="$head_sha" -f branch=main -f per_page=100 |
-  jq -r --arg sha "$head_sha" '
-    [.workflow_runs[] |
-      select(.head_sha == $sha and .head_branch == "main" and (.event == "push" or .event == "workflow_dispatch"))
-    ] | sort_by(.created_at) | last | .id // empty
-  ')
+# main_workflow_run は、.github/workflows/<file>のworkflowが公開するcommitをmainで走らせたrunの
+# うち、いちばん新しいもののIDを出す。無ければ何も出さない。
+main_workflow_run() {
+  local workflow=$1
+  gh api -X GET "repos/$repository/actions/workflows/$workflow/runs" \
+    -f head_sha="$head_sha" -f branch=main -f per_page=100 |
+    jq -r --arg sha "$head_sha" '
+      [.workflow_runs[] |
+        select(.head_sha == $sha and .head_branch == "main" and (.event == "push" or .event == "workflow_dispatch"))
+      ] | sort_by(.created_at) | last | .id // empty
+    '
+}
+
+# wait_for_successful_run は、runが終わるまで状態の変化を「release: <label> <状態>」で表示し、
+# 成功しなければfailureの文で終える。
+wait_for_successful_run() {
+  local run_id=$1 label=$2 failure=$3 run state last_state=
+  while :; do
+    run=$(gh api "repos/$repository/actions/runs/$run_id")
+    state=$(printf '%s' "$run" | jq -r '.status + ":" + (.conclusion // "")')
+    if [ "$state" != "$last_state" ]; then
+      printf 'release: %s %s\n' "$label" "$state"
+      last_state=$state
+    fi
+    case "$state" in
+      completed:success) return 0 ;;
+      completed:*) die "$failure" ;;
+    esac
+    sleep "$poll_seconds"
+  done
+}
+
+# Release UI checkは手で走らせるworkflowなので、走らせ忘れをCIを待つ前に知らせる。
+ci_run=$(main_workflow_run ci.yml)
 [ -n "$ci_run" ] || die "no main CI run exists for $head_sha; push main and wait for CI first"
+ui_check_run=$(main_workflow_run release-ui-check.yml)
+[ -n "$ui_check_run" ] ||
+  die "no Release UI check run exists for $head_sha; run 'gh workflow run release-ui-check.yml --ref main' and wait for it first (docs/releasing.md)"
 printf 'release: waiting for main CI run %s\n' "$ci_run"
-last_state=
-while :; do
-  run=$(gh api "repos/$repository/actions/runs/$ci_run")
-  state=$(printf '%s' "$run" | jq -r '.status + ":" + (.conclusion // "")')
-  if [ "$state" != "$last_state" ]; then
-    printf 'release: CI %s\n' "$state"
-    last_state=$state
-  fi
-  case "$state" in
-    completed:success) break ;;
-    completed:*) die "main CI failed: https://github.com/$repository/actions/runs/$ci_run; no tag was created, so fix main and run this again with $tag" ;;
-  esac
-  sleep "$poll_seconds"
-done
+wait_for_successful_run "$ci_run" CI \
+  "main CI failed: https://github.com/$repository/actions/runs/$ci_run; no tag was created, so fix main and run this again with $tag"
+printf 'release: waiting for Release UI check run %s\n' "$ui_check_run"
+wait_for_successful_run "$ui_check_run" 'Release UI check' \
+  "Release UI check failed: https://github.com/$repository/actions/runs/$ui_check_run; no tag was created, so find why the embedded UI differs on that runner (docs/releasing.md) and run this again with $tag"
 
 git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
-[ "$(git rev-parse refs/remotes/origin/main)" = "$head_sha" ] || die 'origin/main moved while waiting for CI'
+[ "$(git rev-parse refs/remotes/origin/main)" = "$head_sha" ] || die 'origin/main moved while waiting for CI and the Release UI check'
 git tag -a "$tag" "$head_sha" -m "sshc $tag"
 if ! git push origin "refs/tags/$tag"; then
   git tag -d "$tag" >/dev/null
