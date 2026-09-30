@@ -581,6 +581,8 @@ func (s *Session) pump(now func() time.Time) {
 				break
 			}
 		}
+		// このプロセスはもう出力しない。次のシェルの出力より前にモードを戻す。
+		s.publish([]byte(leftoverModeReset))
 		info := process.Wait()
 		var connectionErr error
 		if ready != nil {

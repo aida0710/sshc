@@ -1,0 +1,9 @@
+{
+  "about": [
+    "シェルのプロセスが終わるたびに、エンジンが出力へ足す列である（internal/terminal/leftover_modes.goのleftoverModeReset）。",
+    "切断で終わったプログラムが有効にしたままのモードを、次のシェルへ持ち越さないために足す。",
+    "Goの側（internal/terminal/leftover_modes_test.go）は、終わったシェルのあと、次のシェルの出力より前にこの列が出ることを確かめる。",
+    "画面の側（web/src/terminal/leftoverModeReset.test.ts）は、この列でxterm.jsのモードが戻り、カーソルと画面の内容が保たれることを確かめる。"
+  ],
+  "sequence": "\u001b7\u001b[?1049l\u001b[?9;1000;1002;1003;1005;1006;1015;1016l\u001b[?1004;2004l\u001b[?2026l\u001b[=0;1u\u001b[!p"
+}
