@@ -3,11 +3,14 @@ import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
+import { installMonacoEnvironment } from "./monacoEnvironment";
 import type { SFTPTextEditorModel } from "./useSFTPTextEditor";
 
-const MonacoEditor = lazy(() =>
-  import("./MonacoEditor").then(({ MonacoEditor }) => ({ default: MonacoEditor })),
-);
+const MonacoEditor = lazy(() => {
+  // Monaco reads its environment while its modules are evaluated.
+  installMonacoEnvironment();
+  return import("./MonacoEditor").then(({ MonacoEditor }) => ({ default: MonacoEditor }));
+});
 
 export function SFTPTextEditor({ editor, busy = false }: {
   editor: SFTPTextEditorModel;

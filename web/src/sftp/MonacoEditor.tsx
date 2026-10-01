@@ -1,6 +1,4 @@
 import { useEffect, useRef } from "react";
-import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
-import JSONWorker from "monaco-editor/language/json/json.worker.js?worker";
 import * as monaco from "monaco-editor/editor/editor.api.js";
 import "monaco-editor/languages/definitions/css/register.js";
 import "monaco-editor/languages/definitions/go/register.js";
@@ -22,17 +20,6 @@ type MonacoEditorProps = {
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
-};
-
-type MonacoHost = typeof globalThis & {
-  MonacoEnvironment?: { getWorker: (_moduleId: string, label: string) => Worker };
-};
-
-const host = globalThis as MonacoHost;
-host.MonacoEnvironment ??= {
-  // The worker is emitted as a same-origin Vite asset. Avoiding Monaco's blob
-  // fallback lets the application keep its existing strict script policy.
-  getWorker: (_moduleId, label) => label === "json" ? new JSONWorker() : new EditorWorker(),
 };
 
 function languageFor(path: string): string {

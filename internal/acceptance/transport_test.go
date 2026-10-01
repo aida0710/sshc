@@ -19,7 +19,9 @@ import (
 // 要るようにし、迷い込んだ 'unsafe-inline' が気づかれず紛れ込めないようにする。
 const expectedContentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; " +
 	"frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-	"img-src 'self' data:; connect-src 'self'; trusted-types sshc-service-worker; require-trusted-types-for 'script'"
+	"img-src 'self' data:; connect-src 'self'; trusted-types sshc-service-worker defaultWorkerFactory diffEditorWidget " +
+	"diffReview domLineBreaksComputer dompurify editorGhostText editorViewLayer richScreenReaderContent " +
+	"standaloneColorizer stickyScrollViewLayer tokenizeToString; require-trusted-types-for 'script'"
 
 // transportProblemCodes は、検査対象の transport check が拒否した
 // 証拠としてこの suite が受け入れる唯一の拒否である。
