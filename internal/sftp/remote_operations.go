@@ -152,9 +152,6 @@ func (s Service) PlanRemoteTransfer(ctx context.Context, request RemoteTransferR
 	if err != nil {
 		return RemoteTransferPlan{}, err
 	}
-	if request.SourceAlias == request.TargetAlias && source == target {
-		return RemoteTransferPlan{}, ErrAlreadyExists
-	}
 	remote, err := s.openRequest(ctx, request.SourceAlias)
 	if err != nil {
 		return RemoteTransferPlan{}, err
@@ -164,6 +161,18 @@ func (s Service) PlanRemoteTransfer(ctx context.Context, request RemoteTransferR
 	if err != nil {
 		return RemoteTransferPlan{}, err
 	}
+	if request.SourceAlias == request.TargetAlias {
+		// 同じ alias なら、転送先へ書かずに読むだけで判定できる。木を数える前と、実行中の
+		// 印を記録する前に断る。別の alias は、同じサーバーかを転送先へ書いて確かめるので、
+		// 転送先の接続を開く CopyRemote で断る。
+		ends := remoteTransferEnds{
+			source: remote, target: remote, sourcePath: source, targetPath: target,
+			sameAlias: true, overwrite: request.Overwrite,
+		}
+		if err := s.refuseTransferOntoSource(ends, info); err != nil {
+			return RemoteTransferPlan{}, err
+		}
+	}
 	plan := RemoteTransferPlan{Name: path.Base(source), TotalBytes: info.Size(), Kind: TransferFile}
 	if info.IsDir() {
 		plan.Kind = TransferFolder
@@ -171,7 +180,6 @@ func (s Service) PlanRemoteTransfer(ctx context.Context, request RemoteTransferR
 	} else if !info.Mode().IsRegular() {
 		return RemoteTransferPlan{}, ErrUnsupportedEntry
 	}
-	_ = target
 	return plan, err
 }
 
@@ -217,9 +225,6 @@ func (s Service) CopyRemote(ctx context.Context, request RemoteTransferRequest, 
 	if err != nil {
 		return err
 	}
-	if request.SourceAlias == request.TargetAlias && sourcePath == targetPath {
-		return ErrAlreadyExists
-	}
 	source, err := s.openRequest(ctx, request.SourceAlias)
 	if err != nil {
 		return err
@@ -239,10 +244,12 @@ func (s Service) CopyRemote(ctx context.Context, request RemoteTransferRequest, 
 	if err != nil {
 		return err
 	}
-	if info.IsDir() {
-		if err := s.refuseTargetInsideSource(request, source, target, sourcePath, targetPath); err != nil {
-			return err
-		}
+	ends := remoteTransferEnds{
+		source: source, target: target, sourcePath: sourcePath, targetPath: targetPath,
+		sameAlias: request.SourceAlias == request.TargetAlias, overwrite: request.Overwrite,
+	}
+	if err := s.refuseTransferOntoSource(ends, info); err != nil {
+		return err
 	}
 	if request.SourceAlias == request.TargetAlias && request.Operation == RemoteMove {
 		move := &renameMove{remote: target, overwrite: request.Overwrite, published: newPublishedNames()}

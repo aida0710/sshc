@@ -111,10 +111,7 @@ type fakeRemote struct {
 	openHook     func(string)
 	lstatHook    func(string) error
 	readDirHook  func(string) error
-	// realPathErr makes RealPath fail, as a server does when a folder on the
-	// way is missing or cannot be searched.
-	realPathErr error
-	tick        int
+	tick         int
 }
 
 func remoteWith(entries map[string]node) *fakeRemote {
@@ -151,12 +148,10 @@ const maxFakeLinkHops = 40
 var errFakeLinkLoop = errors.New("too many levels of symbolic links")
 
 // RealPath resolves candidate as OpenSSH's sftp-server does: each folder on
-// the way must exist, and symbolic links are followed. A link node holds its
-// target as content; a relative target starts at the folder holding the link.
+// the way must exist and symbolic links are followed, while the last name may
+// be missing. A link node holds its target as content; a relative target
+// starts at the folder holding the link.
 func (r *fakeRemote) RealPath(candidate string) (string, error) {
-	if r.realPathErr != nil {
-		return "", r.realPathErr
-	}
 	resolved := "/"
 	pending := strings.Split(candidate, "/")
 	hops := 0
@@ -172,6 +167,9 @@ func (r *fakeRemote) RealPath(candidate string) (string, error) {
 		}
 		next := path.Join(resolved, name)
 		info, ok := r.nodes[next]
+		if !ok && onlyEmptyNames(pending) {
+			return next, nil
+		}
 		if !ok {
 			return "", fs.ErrNotExist
 		}
@@ -189,6 +187,17 @@ func (r *fakeRemote) RealPath(candidate string) (string, error) {
 		pending = append(strings.Split(string(info.content), "/"), pending...)
 	}
 	return resolved, nil
+}
+
+// onlyEmptyNames reports whether the names left of a path name nothing more,
+// as the trailing "" of "/work/" and a trailing "." do.
+func onlyEmptyNames(names []string) bool {
+	for _, name := range names {
+		if name != "" && name != "." {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *fakeRemote) ReadDir(ctx context.Context, directory string) ([]fs.FileInfo, error) {
