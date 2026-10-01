@@ -321,6 +321,8 @@ func remoteTransferProblem(err error) string {
 		return "sftp_transfer_too_large"
 	case errors.Is(err, ErrTraversalLimit):
 		return "sftp_traversal_limit"
+	case errors.Is(err, ErrTargetInsideSource):
+		return "sftp_target_inside_source"
 	default:
 		return "sftp_failed"
 	}

@@ -33,6 +33,10 @@ describe("the transfer list's problem", () => {
     expect(sftpProblemText(t, new ApiError("sftp_spool_unavailable", 503, null))).toBe(en["sftp.problem.spoolUnavailable"]);
   });
 
+  it("says a folder copied or moved into itself in its own words", () => {
+    expect(sftpTransferProblemText(t, "sftp_target_inside_source")).toBe(en["sftp.problem.targetInsideSource"]);
+  });
+
   it("is said in words, including a VPN refusal kept as a code", () => {
     expect(sftpTransferProblemText(t, "transfer_interrupted")).toBe(en["sftp.problem.transferInterrupted"]);
     expect(sftpTransferProblemText(t, "vpn_docker_missing")).toBe(en["vpn.dockerMissing"]);
