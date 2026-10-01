@@ -324,7 +324,18 @@ func TestParseTerminalInvocations(t *testing.T) {
 					t.Fatalf("create = %#v", got)
 				}
 			}},
-		{[]string{"sshc", "terminal", "rename", id, "deploy"}, terminalRename, nil},
+		{[]string{"sshc", "terminal", "rename", id, "deploy"}, terminalRename,
+			func(t *testing.T, got terminalInvocation) {
+				if got.Title != "deploy" || got.UnpinTitle || got.JSON {
+					t.Fatalf("rename = %#v", got)
+				}
+			}},
+		{[]string{"sshc", "terminal", "rename", id, "--auto", "--json"}, terminalRename,
+			func(t *testing.T, got terminalInvocation) {
+				if got.Title != "" || !got.UnpinTitle || !got.JSON {
+					t.Fatalf("rename --auto = %#v", got)
+				}
+			}},
 		{[]string{"sshc", "terminal", "close", id}, terminalClose, nil},
 	}
 	for _, test := range tests {
@@ -355,6 +366,102 @@ func TestTerminalInvocationRejectsUnstableSelectorsAndHeuristicWaits(t *testing.
 		if got, err := parseInvocation(argv); err == nil || got.Kind != invocationInvalid {
 			t.Errorf("parseInvocation(%q) = %#v, %v; want usage error", argv, got, err)
 		}
+	}
+}
+
+// 名前と --auto は逆の操作なので、両方を渡されたらどちらかを選ばずに断る。どちらも無い
+// ときも、空の名前を engine へ送らずに断る。どちらも使い方の誤り（invocationInvalid）になる。
+func TestTerminalRenameRefusesBothOrNeitherOfATitleAndAuto(t *testing.T) {
+	requireTerminalRenameRefusals(t, []terminalRenameRefusal{
+		{[]string{"deploy", "--auto"}, "terminal rename cannot combine a title and --auto"},
+		{[]string{"--auto", "deploy"}, "terminal rename cannot combine a title and --auto"},
+		{[]string{"--auto", "--", "-dev"}, "terminal rename cannot combine a title and --auto"},
+		{[]string{}, "terminal rename requires a non-empty title or --auto"},
+		{[]string{"--json"}, "terminal rename requires a non-empty title or --auto"},
+		{[]string{" "}, "terminal rename requires a non-empty title or --auto"},
+		{[]string{"--"}, "terminal rename requires a non-empty title or --auto"},
+	})
+}
+
+// --auto を 2 回書く、--auto に値を付ける、名前を 2 つ渡すといった形の崩れた指定も、
+// 使い方の誤り（invocationInvalid）として断る。"--" の後ろの --json はオプションとして読まず、
+// 2 つ目の名前として断る。
+func TestTerminalRenameRefusesMalformedArguments(t *testing.T) {
+	requireTerminalRenameRefusals(t, []terminalRenameRefusal{
+		{[]string{"--auto", "--auto"}, "terminal rename accepts --auto only once"},
+		{[]string{"--auto=yes"}, "terminal rename --auto does not take a value"},
+		{[]string{"deploy", "extra"}, `terminal rename does not take "extra"`},
+		{[]string{"deploy", "--", "-dev"}, `terminal rename does not take "-dev"`},
+		{[]string{"--", "-dev", "--json"}, `terminal rename does not take "--json"`},
+	})
+}
+
+// "-" で始まる名前はオプションとして読むので、そのままでは未知のオプションとして断る。
+// "--" の後ろに書けば名前として受け、"--" より前の --json も読む。
+func TestTerminalRenameTakesATitleStartingWithHyphenOnlyAfterDoubleDash(t *testing.T) {
+	requireTerminalRenameRefusals(t, []terminalRenameRefusal{
+		{[]string{"-dev"}, `unknown terminal rename option "-dev"`},
+	})
+	for _, test := range []struct {
+		args   []string
+		title  string
+		asJSON bool
+	}{
+		{[]string{"--", "-dev"}, "-dev", false},
+		{[]string{"--json", "--", "-dev"}, "-dev", true},
+		{[]string{"--", "--auto"}, "--auto", false},
+	} {
+		argv := append([]string{"sshc", "terminal", "rename", "01234567"}, test.args...)
+		called, err := parseInvocation(argv)
+		if err != nil || called.Terminal == nil {
+			t.Fatalf("parseInvocation(%q) = %#v, %v", argv, called, err)
+		}
+		got := called.Terminal
+		if got.Title != test.title || got.UnpinTitle || got.JSON != test.asJSON {
+			t.Errorf("parseInvocation(%q) = %#v; want title %q, json %v", argv, got, test.title, test.asJSON)
+		}
+	}
+}
+
+// terminalRenameRefusal は、terminal rename <session-id> の後ろに続く引数と、断るときの文である。
+type terminalRenameRefusal struct {
+	args   []string
+	reason string
+}
+
+func requireTerminalRenameRefusals(t *testing.T, refusals []terminalRenameRefusal) {
+	t.Helper()
+	for _, refusal := range refusals {
+		argv := append([]string{"sshc", "terminal", "rename", "01234567"}, refusal.args...)
+		t.Run(strings.Join(refusal.args, "_"), func(t *testing.T) {
+			called, err := parseInvocation(argv)
+			if err == nil || called.Kind != invocationInvalid || err.Error() != "usage: "+refusal.reason {
+				t.Fatalf("parseInvocation(%q) = %#v, %v; want usage: %s", argv, called, err, refusal.reason)
+			}
+		})
+	}
+}
+
+// --auto は help から辿れないと使われない。全体の usage、terminal の help、rename の help のどれにも載せる。
+func TestTerminalRenameHelpShowsAuto(t *testing.T) {
+	const want = "sshc terminal rename <session-id> --auto [--json]"
+	for _, topic := range []string{"", "terminal", "terminal rename"} {
+		var output strings.Builder
+		usageFor(&output, topic)
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("help for %q does not contain %q:\n%s", topic, want, output.String())
+		}
+	}
+}
+
+// "-" で始まる名前の付け方は rename の help に載せる。そこに無いと、断られた利用者が
+// 名前を付ける書き方を見つけられない。
+func TestTerminalRenameHelpShowsTheDoubleDashForm(t *testing.T) {
+	const want = "sshc terminal rename <session-id> [--json] -- <title>"
+	var output strings.Builder
+	usageFor(&output, "terminal rename")
+	if !strings.Contains(output.String(), want) {
+		t.Errorf("terminal rename help does not contain %q:\n%s", want, output.String())
 	}
 }
 
