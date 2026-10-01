@@ -115,6 +115,19 @@ describe("ConfirmDialog", () => {
     expect(screen.getByRole("button", { name: "Keep it open" })).toBeDisabled();
   });
 
+  it("holds only the confirm button while the caller has not got what is being confirmed", async () => {
+    const { onCancel, onConfirm } = open({ confirmDisabled: true });
+    const user = userEvent.setup();
+    const cancel = screen.getByRole("button", { name: "Keep it open" });
+
+    expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
+    expect(cancel).toBeEnabled();
+    expect(cancel).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(onCancel).toHaveBeenCalled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it("describes the dialog with its body so the consequence is read with the focused button", () => {
     open();
     expect(screen.getByRole("dialog")).toHaveAccessibleDescription("Everything running stops.");

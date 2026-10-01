@@ -343,6 +343,15 @@ export const ja = {
   "sftp.editorCloseDiscard": "破棄して閉じる",
   "sftp.editorReloadHeading": "リモートから再読み込みしますか？",
   "sftp.editorReloadDiscard": "破棄して再読み込み",
+  "sftp.editorConflict":
+    "保存に失敗しました。エディタで開いたあとに、リモートのファイルが変更されています。リモートから再読み込みするか、上書き保存してください。",
+  "sftp.editorOverwrite": "上書き保存",
+  "sftp.editorOverwriteHeading": "リモートのファイルを上書き保存しますか？",
+  "sftp.editorOverwriteBody":
+    "{path}は、エディタで開いたあとにリモートで変更されています。上書き保存すると、リモートでの変更は失われ、エディタの内容に置き換わります。",
+  "sftp.editorOverwriteReading": "リモートのファイルを読み込んでいます…",
+  "sftp.editorOverwriteConflict":
+    "上書き保存に失敗しました。確認しているあいだに、リモートのファイルがまた変更されました。もう一度上書き保存するか、リモートから再読み込みしてください。",
   "sftp.unsaved": "未保存",
   "sftp.unsavedBlocked":
     "編集中のファイルに保存していない変更があります。保存するか、変更を破棄して閉じてから、ほかのファイルを開いてください。",
