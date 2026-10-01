@@ -111,7 +111,10 @@ type fakeRemote struct {
 	openHook     func(string)
 	lstatHook    func(string) error
 	readDirHook  func(string) error
-	tick         int
+	// realPathErr makes RealPath fail, as a server does when a folder on the
+	// way is missing or cannot be searched.
+	realPathErr error
+	tick        int
 }
 
 func remoteWith(entries map[string]node) *fakeRemote {
@@ -140,6 +143,52 @@ func (r *fakeRemote) Getwd(ctx context.Context) (string, error) {
 		return "/", nil
 	}
 	return r.workingDir, nil
+}
+
+// maxFakeLinkHops bounds the links RealPath follows, as ELOOP does on a server.
+const maxFakeLinkHops = 40
+
+var errFakeLinkLoop = errors.New("too many levels of symbolic links")
+
+// RealPath resolves candidate as OpenSSH's sftp-server does: each folder on
+// the way must exist, and symbolic links are followed. A link node holds its
+// target as content; a relative target starts at the folder holding the link.
+func (r *fakeRemote) RealPath(candidate string) (string, error) {
+	if r.realPathErr != nil {
+		return "", r.realPathErr
+	}
+	resolved := "/"
+	pending := strings.Split(candidate, "/")
+	hops := 0
+	for len(pending) > 0 {
+		name := pending[0]
+		pending = pending[1:]
+		switch name {
+		case "", ".":
+			continue
+		case "..":
+			resolved = path.Dir(resolved)
+			continue
+		}
+		next := path.Join(resolved, name)
+		info, ok := r.nodes[next]
+		if !ok {
+			return "", fs.ErrNotExist
+		}
+		if info.mode&fs.ModeSymlink == 0 {
+			resolved = next
+			continue
+		}
+		hops++
+		if hops > maxFakeLinkHops {
+			return "", errFakeLinkLoop
+		}
+		if path.IsAbs(string(info.content)) {
+			resolved = "/"
+		}
+		pending = append(strings.Split(string(info.content), "/"), pending...)
+	}
+	return resolved, nil
 }
 
 func (r *fakeRemote) ReadDir(ctx context.Context, directory string) ([]fs.FileInfo, error) {

@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"path"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -165,9 +164,6 @@ func (s Service) PlanRemoteTransfer(ctx context.Context, request RemoteTransferR
 	if err != nil {
 		return RemoteTransferPlan{}, err
 	}
-	if info.IsDir() && request.SourceAlias == request.TargetAlias && isDescendant(source, target) {
-		return RemoteTransferPlan{}, ErrInvalidTransfer
-	}
 	plan := RemoteTransferPlan{Name: path.Base(source), TotalBytes: info.Size(), Kind: TransferFile}
 	if info.IsDir() {
 		plan.Kind = TransferFolder
@@ -243,13 +239,9 @@ func (s Service) CopyRemote(ctx context.Context, request RemoteTransferRequest, 
 	if err != nil {
 		return err
 	}
-	if info.IsDir() && isDescendant(sourcePath, targetPath) {
-		inside, err := s.targetInsideSource(request, source, target, targetPath)
-		if err != nil {
+	if info.IsDir() {
+		if err := s.refuseTargetInsideSource(request, source, target, sourcePath, targetPath); err != nil {
 			return err
-		}
-		if inside {
-			return ErrInvalidTransfer
 		}
 	}
 	if request.SourceAlias == request.TargetAlias && request.Operation == RemoteMove {
@@ -360,53 +352,6 @@ func cleanRemoteTransferRequest(request RemoteTransferRequest) (string, string, 
 		return "", "", err
 	}
 	return source, target, nil
-}
-
-func isDescendant(parent, candidate string) bool {
-	return strings.HasPrefix(candidate, parent+"/")
-}
-
-// targetInsideSource は、source のパスの配下にある targetPath が、実際に source と
-// 同じファイルを指すかを返す。そうなら folder の copy は自分で作ったディレクトリを
-// source として読み直し、木の上限に当たるまで入れ子を作り続ける。
-//
-// 別の alias（web と web-admin など）が同じサーバーを指すことがあり、alias の一致では
-// 分からない。SFTP は inode も返さない。そこで target から一時ファイルの名前で空の
-// ファイルを作り、source から同じパスに見えるかで確かめる。消し損ねても、一時ファイルの
-// 名前なので一覧に出ず、abandonedTemporaryAge を過ぎれば置き去りとして扱われる。
-func (s Service) targetInsideSource(request RemoteTransferRequest, source, target Remote, targetPath string) (bool, error) {
-	if request.SourceAlias == request.TargetAlias {
-		return true, nil
-	}
-	// copy が書き込む場所に作る。統合先の folder があればその中、無ければ copy が
-	// folder を作る親の中である。
-	directory := path.Dir(targetPath)
-	if existing, err := target.Lstat(targetPath); err == nil && existing.IsDir() {
-		directory = targetPath
-	}
-	probe, err := s.temporaryPath(path.Join(directory, "sshc-probe"))
-	if err != nil {
-		return false, err
-	}
-	written, err := target.Create(probe)
-	if err != nil {
-		return false, err
-	}
-	if err := written.Close(); err != nil {
-		return false, errors.Join(err, target.Remove(probe))
-	}
-	_, seenErr := source.Lstat(probe)
-	if err := target.Remove(probe); err != nil {
-		return false, err
-	}
-	switch {
-	case seenErr == nil:
-		return true, nil
-	case errors.Is(seenErr, fs.ErrNotExist):
-		return false, nil
-	default:
-		return false, seenErr
-	}
 }
 
 // remoteCopy は 1 回の remote→remote copy／move を実行する。source が返す名前や
