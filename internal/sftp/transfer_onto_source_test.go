@@ -5,9 +5,11 @@ import (
 	"errors"
 	"io/fs"
 	"maps"
+	"path"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"sshc/internal/sftp"
 )
@@ -248,16 +250,11 @@ func TestRemoteCopyOrMoveOntoAnExistingEntryOfAnotherAliasAsksToOverwriteBeforeW
 					targetServer := targetOf(sourceServer)
 					created := 0
 					targetServer.createHook = func() { created++ }
-					service := sftp.Service{Open: func(_ context.Context, alias string) (sftp.Remote, error) {
-						if alias == "origin" {
-							return sourceServer, nil
-						}
-						return targetServer, nil
-					}}
+					service := twoHostService(sourceServer, targetServer)
 
 					err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
-						SourceAlias: "origin", SourcePath: source.path,
-						TargetAlias: "mirror", TargetPath: source.path, Operation: operation,
+						SourceAlias: "source", SourcePath: source.path,
+						TargetAlias: "target", TargetPath: source.path, Operation: operation,
 					}, nil)
 					if !errors.Is(err, sftp.ErrAlreadyExists) {
 						t.Fatalf("CopyRemote() error = %v, want ErrAlreadyExists", err)
@@ -267,6 +264,56 @@ func TestRemoteCopyOrMoveOntoAnExistingEntryOfAnotherAliasAsksToOverwriteBeforeW
 					}
 				})
 			}
+		}
+	}
+}
+
+// firstLstatFails is a connection whose first Lstat of path fails, as a
+// momentary permission or connection problem does, and whose later ones
+// answer.
+type firstLstatFails struct {
+	*fakeRemote
+	path   string
+	failed bool
+}
+
+var errLstatFailed = errors.New("lstat failed")
+
+func (remote *firstLstatFails) Lstat(candidate string) (fs.FileInfo, error) {
+	if candidate == remote.path && !remote.failed {
+		remote.failed = true
+		return nil, errLstatFailed
+	}
+	return remote.fakeRemote.Lstat(candidate)
+}
+
+// Taking a target that could not be checked for a missing one would write a
+// probe file before the overwrite is approved, or let a move onto the source
+// itself through, which deletes the source once the copy finds the file.
+func TestRemoteCopyOrMoveThatCannotCheckTheTargetStopsWithThatFailureAndWritesNothing(t *testing.T) {
+	t.Parallel()
+	for _, source := range sourceFolderAndFile {
+		for _, operation := range copyAndMove {
+			t.Run(string(operation)+" "+source.kind, func(t *testing.T) {
+				t.Parallel()
+				server := serverWithSourceFolder(nil)
+				original := nodePaths(server)
+				created := 0
+				server.createHook = func() { created++ }
+				service := twoHostService(server, &firstLstatFails{fakeRemote: server, path: source.path})
+
+				err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
+					SourceAlias: "source", SourcePath: source.path,
+					TargetAlias: "target", TargetPath: source.path, Operation: operation, Overwrite: true,
+				}, stopAtFirstBytes)
+				if !errors.Is(err, errLstatFailed) {
+					t.Fatalf("CopyRemote() error = %v, want the failure to check the target", err)
+				}
+				if created != 0 {
+					t.Fatalf("the transfer wrote %d files after it could not check the target", created)
+				}
+				requireUnchanged(t, server, original)
+			})
 		}
 	}
 }
@@ -295,17 +342,12 @@ func TestRemoteFolderCanBeCopiedBelowTheSamePathOnAnotherServer(t *testing.T) {
 		"/work":        directory("work"),
 		"/work/source": directory("source"),
 	})
-	service := sftp.Service{Open: func(_ context.Context, alias string) (sftp.Remote, error) {
-		if alias == "origin" {
-			return sourceServer, nil
-		}
-		return targetServer, nil
-	}}
+	service := twoHostService(sourceServer, targetServer)
 
 	for _, targetPath := range []string{"/work/source/nested", "/work/source"} {
 		err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
-			SourceAlias: "origin", SourcePath: "/work/source",
-			TargetAlias: "mirror", TargetPath: targetPath, Operation: sftp.RemoteCopy, Overwrite: true,
+			SourceAlias: "source", SourcePath: "/work/source",
+			TargetAlias: "target", TargetPath: targetPath, Operation: sftp.RemoteCopy, Overwrite: true,
 		}, nil)
 		if err != nil {
 			t.Fatalf("CopyRemote(to %s) error = %v", targetPath, err)
@@ -322,27 +364,28 @@ func TestRemoteFolderCanBeCopiedBelowTheSamePathOnAnotherServer(t *testing.T) {
 }
 
 // On another server the same path names another file, which an approved copy
-// or move replaces. A file the target does not have yet cannot be the source,
-// so it is written without a probe file.
+// or move replaces. Only a file that looks the same from both connections
+// could be the source itself, so only then does telling the servers apart
+// write a probe file, which it removes again.
 func TestRemoteFileCanBeCopiedOrMovedToTheSamePathOnAnotherServer(t *testing.T) {
 	t.Parallel()
 	const sourceFile = "/work/source/file.txt"
+	folders := map[string]node{"/work": directory("work"), "/work/source": directory("source")}
+	foldersWithFile := func(existing node) map[string]node {
+		nodes := maps.Clone(folders)
+		nodes[sourceFile] = existing
+		return nodes
+	}
 	targets := []struct {
 		name  string
 		nodes map[string]node
-		// probed is whether telling the servers apart needs a probe file, which
-		// the check removes again.
-		probed bool
+		// probes is how many probe files telling the servers apart writes.
+		probes int
 	}{
-		{
-			name: "onto an existing file",
-			nodes: map[string]node{
-				"/work": directory("work"), "/work/source": directory("source"),
-				sourceFile: file("file.txt", "older contents", 0o644),
-			},
-			probed: true,
-		},
-		{name: "as a new file", nodes: map[string]node{"/work": directory("work"), "/work/source": directory("source")}},
+		{name: "onto a file of another size", nodes: foldersWithFile(file("file.txt", "older contents", 0o644))},
+		{name: "onto a file of another time", nodes: foldersWithFile(withModTime(file("file.txt", "contents", 0o644), testTime.Add(time.Hour)))},
+		{name: "onto a file of the same size and time", nodes: foldersWithFile(file("file.txt", "CONTENTS", 0o644)), probes: 1},
+		{name: "as a new file", nodes: folders},
 	}
 	for _, target := range targets {
 		for _, operation := range copyAndMove {
@@ -350,16 +393,10 @@ func TestRemoteFileCanBeCopiedOrMovedToTheSamePathOnAnotherServer(t *testing.T) 
 				t.Parallel()
 				sourceServer := serverWithSourceFolder(nil)
 				targetServer := remoteWith(maps.Clone(target.nodes))
-				service := sftp.Service{Open: func(_ context.Context, alias string) (sftp.Remote, error) {
-					if alias == "origin" {
-						return sourceServer, nil
-					}
-					return targetServer, nil
-				}}
 
-				err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
-					SourceAlias: "origin", SourcePath: sourceFile,
-					TargetAlias: "mirror", TargetPath: sourceFile, Operation: operation, Overwrite: true,
+				err := twoHostService(sourceServer, targetServer).CopyRemote(context.Background(), sftp.RemoteTransferRequest{
+					SourceAlias: "source", SourcePath: sourceFile,
+					TargetAlias: "target", TargetPath: sourceFile, Operation: operation, Overwrite: true,
 				}, nil)
 				if err != nil {
 					t.Fatalf("CopyRemote() error = %v", err)
@@ -371,13 +408,42 @@ func TestRemoteFileCanBeCopiedOrMovedToTheSamePathOnAnotherServer(t *testing.T) 
 				if sourceKept != (operation == sftp.RemoteCopy) {
 					t.Fatalf("after the %s the source file is kept: %v", operation, sourceKept)
 				}
-				if !target.probed && len(targetServer.removals) != 0 {
-					t.Fatalf("the %s removed %v on the target server, want no probe file", operation, targetServer.removals)
+				if removed := probeRemovals(targetServer); len(removed) != target.probes {
+					t.Fatalf("the %s wrote and removed the probe files %v on the target server, want %d", operation, removed, target.probes)
 				}
+				requireNoProbeLeft(t, targetServer)
 			})
 		}
 	}
 }
+
+// withModTime gives entry another modification time.
+func withModTime(entry node, modified time.Time) node {
+	entry.modTime = modified
+	return entry
+}
+
+// probeRemovals lists the probe files removed from server. The check removes
+// each probe file right after writing it, so this also counts those written.
+func probeRemovals(server *fakeRemote) []string {
+	return slices.DeleteFunc(slices.Clone(server.removals), func(removed string) bool {
+		return !isProbeName(path.Base(removed))
+	})
+}
+
+// requireNoProbeLeft fails when a probe file stayed on server.
+func requireNoProbeLeft(t *testing.T, server *fakeRemote) {
+	t.Helper()
+	for candidate := range server.nodes {
+		if isProbeName(path.Base(candidate)) {
+			t.Fatalf("the check left the probe file %s", candidate)
+		}
+	}
+}
+
+// isProbeName is whether name is that of a probe file, which the check names
+// as a temporary for sshc-probe.
+func isProbeName(name string) bool { return strings.HasPrefix(name, ".sshc-probe.") }
 
 // The destination's own link is not followed: like any other entry there, an
 // approved copy or move replaces the link with the contents. The file the link
@@ -452,16 +518,11 @@ func TestCopyIntoItselfIsRefusedWhenOnlyTheSourceConnectionCanResolvePaths(t *te
 	t.Parallel()
 	server := serverWithSourceFolderBehindALink()
 	original := nodePaths(server)
-	service := sftp.Service{Open: func(_ context.Context, alias string) (sftp.Remote, error) {
-		if alias == "web" {
-			return server, nil
-		}
-		return fixedRealPath{fakeRemote: server, err: fs.ErrPermission}, nil
-	}}
+	service := twoHostService(server, fixedRealPath{fakeRemote: server, err: fs.ErrPermission})
 
 	err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
-		SourceAlias: "web", SourcePath: "/link/source",
-		TargetAlias: "web-admin", TargetPath: "/link/source/nested", Operation: sftp.RemoteCopy,
+		SourceAlias: "source", SourcePath: "/link/source",
+		TargetAlias: "target", TargetPath: "/link/source/nested", Operation: sftp.RemoteCopy,
 	}, stopAtFirstBytes)
 	if !errors.Is(err, sftp.ErrTargetInsideSource) {
 		t.Fatalf("CopyRemote() error = %v, want ErrTargetInsideSource", err)

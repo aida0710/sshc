@@ -186,7 +186,7 @@ func TestRemoteFolderCopyOrMoveIntoItselfThroughASymlinkIsRefusedOnOpenSSHSFTP(t
 		}
 	}
 	integrationUpload(t, &service, path.Join(sourceRoot, "kept.txt"), []byte("kept\n"), false)
-	integrationSymlink(t, &service, sourceRoot, shortcut)
+	integrationSymlink(t, &service, integrationLink{path: shortcut, pointsAt: sourceRoot})
 
 	for _, aliases := range integrationOneAliasAndTwoAliases {
 		for _, operation := range copyAndMove {
@@ -228,7 +228,7 @@ func TestRemoteFileCopyOrMoveOntoItselfIsRefusedOnOpenSSHSFTP(t *testing.T) {
 		}
 	}
 	integrationUpload(t, &service, sourceFile, []byte("kept\n"), false)
-	integrationSymlink(t, &service, folder, shortcut)
+	integrationSymlink(t, &service, integrationLink{path: shortcut, pointsAt: folder})
 
 	for _, aliases := range integrationOneAliasAndTwoAliases {
 		for _, targetPath := range []string{sourceFile, path.Join(shortcut, "kept.txt")} {
@@ -277,7 +277,7 @@ func TestRemoteFileCopyOrMoveOntoALinkToItselfReplacesTheLinkOnOpenSSHSFTP(t *te
 				t.Fatal(err)
 			}
 			integrationUpload(t, &service, sourceFile, []byte("kept\n"), false)
-			integrationSymlink(t, &service, sourceFile, link)
+			integrationSymlink(t, &service, integrationLink{path: link, pointsAt: sourceFile})
 
 			if err := service.CopyRemote(t.Context(), sftp.RemoteTransferRequest{
 				SourceAlias: aliases.source, SourcePath: sourceFile,
@@ -307,17 +307,22 @@ var integrationOneAliasAndTwoAliases = []transferAliases{
 	{source: "integration-source", target: "integration-target"},
 }
 
-// integrationSymlink creates link on the integration server, pointing at
-// target.
-func integrationSymlink(t *testing.T, service *sftp.Service, target, link string) {
+// integrationLink is a symbolic link to create on the integration server.
+type integrationLink struct {
+	// path is where the link is created, and pointsAt is the path it points at.
+	path, pointsAt string
+}
+
+// integrationSymlink creates link on the integration server.
+func integrationSymlink(t *testing.T, service *sftp.Service, link integrationLink) {
 	t.Helper()
 	remote, err := service.Open(t.Context(), "integration")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer remote.Close()
-	if err := remote.(*integrationRemote).Remote.(*sftp.Client).SymlinkForTest(target, link); err != nil {
-		t.Fatalf("create the link %s: %v", link, err)
+	if err := remote.(*integrationRemote).Remote.(*sftp.Client).SymlinkForTest(link.pointsAt, link.path); err != nil {
+		t.Fatalf("create the link %s: %v", link.path, err)
 	}
 }
 

@@ -19,14 +19,15 @@ type remoteTransferEnds struct {
 
 // refuseTransferOntoSource は、転送先が転送元と重なる転送を、転送先を変える前に断る。
 // フォルダは自身か配下への転送（refuseTargetInsideSource）を、ファイルは自身への転送
-// （refuseTargetIsSource）を断る。ほかの種類の項目は、copy・move が ErrUnsupportedEntry で
-// 断るので比べない。REALPATH はリンクをたどるので、リンクそのものとは比べられない。
+// （refuseTargetIsSource）を断る。ほかの種類の項目（シンボリックリンクなど）は、計画
+// （PlanRemoteTransfer）が ErrUnsupportedEntry で断るので比べない。転送元がリンクだと、
+// REALPATH はリンクの先を返すので、リンクそのものとは比べられない。
 func (s Service) refuseTransferOntoSource(ends remoteTransferEnds, sourceInfo fs.FileInfo) error {
 	switch {
 	case sourceInfo.IsDir():
 		return s.refuseTargetInsideSource(ends)
 	case sourceInfo.Mode().IsRegular():
-		return s.refuseTargetIsSource(ends)
+		return s.refuseTargetIsSource(ends, sourceInfo)
 	default:
 		return nil
 	}
@@ -49,16 +50,18 @@ func (s Service) refuseTargetInsideSource(ends remoteTransferEnds) error {
 	if ends.sameAlias {
 		return ErrTargetInsideSource
 	}
-	existing, err := ends.target.Lstat(comparedTargetPath)
-	targetExists := err == nil
+	existing, err := lstatIfExists(ends.target, comparedTargetPath)
+	if err != nil {
+		return err
+	}
 	// copy が書き込む場所に作る。統合先のフォルダがあればその中、無ければ copy が
 	// フォルダを作る親の中である。
 	probeDirectory := path.Dir(comparedTargetPath)
-	if targetExists && existing.IsDir() {
+	if existing != nil && existing.IsDir() {
 		probeDirectory = comparedTargetPath
 	}
 	return s.refuseOnTheSameServer(ends, sameServerCheck{
-		targetExists: targetExists, probeDirectory: probeDirectory, refusal: ErrTargetInsideSource,
+		targetExists: existing != nil, probeDirectory: probeDirectory, refusal: ErrTargetInsideSource,
 	})
 }
 
@@ -70,7 +73,10 @@ func (s Service) refuseTargetInsideSource(ends remoteTransferEnds) error {
 // 移したように見えるだけである。copy も同じ内容で置き換えるだけで、何も転送しない。
 // 同じ alias の同じパスは、上書きの確認に回さずに断る。上書きを承認しても転送できない
 // からである。
-func (s Service) refuseTargetIsSource(ends remoteTransferEnds) error {
+//
+// 別の alias では、転送先が転送元と別のファイルだと分かれば、一時ファイルを作らずに
+// 通す。転送先に何も無いときと、サイズか更新日時が sourceInfo と違うときである。
+func (s Service) refuseTargetIsSource(ends remoteTransferEnds, sourceInfo fs.FileInfo) error {
 	comparedSourcePath, comparedTargetPath := comparablePaths(ends)
 	if comparedTargetPath != comparedSourcePath {
 		return nil
@@ -78,14 +84,23 @@ func (s Service) refuseTargetIsSource(ends remoteTransferEnds) error {
 	if ends.sameAlias {
 		return ErrTargetIsSource
 	}
-	// 転送先に何も無ければ、上書きされる転送元も無い。別のサーバーへの、同じパスへの
-	// 新しいファイルの copy で、一時ファイルを作らずに済む。
-	_, err := ends.target.Lstat(comparedTargetPath)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
+	existing, err := lstatIfExists(ends.target, comparedTargetPath)
 	if err != nil {
 		return err
+	}
+	// 転送先に何も無ければ、上書きされる転送元も無い。
+	if existing == nil {
+		return nil
+	}
+	// 同じファイルなら、どちらの接続からも同じ stat のサイズと更新日時（SFTP では秒）が
+	// 見えるので、違えば別のファイルである。比較の画面の同期は、別のサーバーの同じパスに
+	// ある違うファイルへの上書きをファイルごとに積むので、ここで一時ファイルの作成と削除を
+	// 省く。比べるのは、同じファイルなら必ず同じになるサイズと更新日時だけにする。違って
+	// 見えるだけで通すと、同じファイルを見逃して転送元を消すからである。sourceInfo を
+	// 読んだあとで転送元が変わって違って見えた場合は、copyFile が前後の照合で失敗にし、
+	// 公開しない。
+	if existing.Size() != sourceInfo.Size() || !existing.ModTime().Equal(sourceInfo.ModTime()) {
+		return nil
 	}
 	return s.refuseOnTheSameServer(ends, sameServerCheck{
 		targetExists: true, probeDirectory: path.Dir(comparedTargetPath), refusal: ErrTargetIsSource,
@@ -123,6 +138,18 @@ func (s Service) refuseOnTheSameServer(ends remoteTransferEnds, check sameServer
 		return check.refusal
 	}
 	return nil
+}
+
+// lstatIfExists は、remotePath の項目を返す。無ければ nil を返す。無いこと以外の理由で
+// 確かめられなければ、その失敗を返す。無いとみなして進むと、既存の項目への上書きが
+// 承認される前に、同じサーバーかを確かめる一時ファイルを書きうる。ファイルでは、確かめ
+// ずに通した同じファイルへの move が、直後の copy で転送先を見つけて転送元を消しうる。
+func lstatIfExists(remote Remote, remotePath string) (fs.FileInfo, error) {
+	info, err := remote.Lstat(remotePath)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	return info, err
 }
 
 // comparablePaths は、重なりを比べる転送元と転送先のパスを返す。パスの文字列だけでは、
