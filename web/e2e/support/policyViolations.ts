@@ -1,9 +1,10 @@
 import type { Page } from "@playwright/test";
 
-// How Chromium reports a Content Security Policy violation: a refused load or
-// a Trusted Types policy it may not create name the policy, and a string
-// written where Trusted Types require a trusted value names the type it wanted
-// ("This document requires 'TrustedHTML' assignment.").
+// How Chromium reports a Content Security Policy violation:
+// - a refused load mentions "Content Security Policy";
+// - a refused Trusted Types policy creation mentions "TrustedTypePolicy";
+// - a string written where Trusted Types require a trusted value says, for
+//   example, "This document requires 'TrustedHTML' assignment."
 const policyViolationReport = /Content Security Policy|Trusted ?Type|requires 'Trusted[A-Za-z]+' assignment/i;
 
 // watchForPolicyViolations collects every Content Security Policy violation,

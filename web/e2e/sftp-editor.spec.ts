@@ -110,11 +110,17 @@ async function openInEditor(page: Page, path: string, labels: EditorLabels): Pro
   return page.getByRole("dialog", { name: path });
 }
 
+// The text area Monaco types into. Monaco names it in English in either
+// display language.
+function editorContent(editor: Locator): Locator {
+  return editor.getByRole("textbox", { name: "Editor content" });
+}
+
 // Opens notes.txt in the editor and types at its end. A change then lands on
 // the remote before the save, so the engine refuses the save as a conflict.
 async function editUntilConflict(page: Page, remote: RemoteFile, labels: EditorLabels): Promise<Locator> {
   const editor = await openInEditor(page, "/srv/notes.txt", labels);
-  await editor.getByRole("textbox", { name: "Editor content" }).focus();
+  await editorContent(editor).focus();
   await page.keyboard.press("ControlOrMeta+End");
   // One input event, so that "Unsaved" appears only once all of it is in. Keys
   // typed one by one can still be arriving when Save makes the editor read-only.
@@ -203,7 +209,7 @@ test("draws the opened file's lines as text while the file is typed in and scrol
   await expect(drawnLines).toContainText(htmlLookingLine);
   await expect(drawnLines.locator("b, img")).toHaveCount(0);
 
-  await editor.getByRole("textbox", { name: "Editor content" }).focus();
+  await editorContent(editor).focus();
   await page.keyboard.insertText("typed ");
   await expect(drawnLines).toContainText(`typed ${htmlLookingLine}`);
 
@@ -227,6 +233,35 @@ test("draws the opened file's lines as text while the file is typed in and scrol
   expect(violations).toEqual([]);
 });
 
+// The part of MonacoEnvironment a script on the page could call to ask for a
+// Trusted Types policy.
+type PolicySource = { createTrustedTypesPolicy?(name: string, options: object): unknown };
+
+test("a script on the page gets none of the editor's Trusted Types policies through MonacoEnvironment", async ({ page, installation }) => {
+  await serveRemoteFiles(page, { "/srv/notes.txt": remoteFile("hello\n") });
+  await openApplication(page, installation);
+  await openSection(page, "SFTP");
+  await connectSFTPHost(page, "bastion");
+  const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("hello");
+
+  // Monaco has created editorViewLayer, and the worker policy is sshc's own.
+  // Asking the environment for either name again must not hand out a policy
+  // that lets any string through.
+  const answers = await page.evaluate(() => {
+    const environment = (globalThis as { MonacoEnvironment?: PolicySource }).MonacoEnvironment;
+    const ask = (name: string) => {
+      try {
+        return environment?.createTrustedTypesPolicy?.(name, { createHTML: (value: string) => value, createScriptURL: (value: string) => value }) === undefined ? "none" : "policy";
+      } catch {
+        return "refused";
+      }
+    };
+    return { installed: environment !== undefined, editorViewLayer: ask("editorViewLayer"), defaultWorkerFactory: ask("defaultWorkerFactory") };
+  });
+  expect(answers).toEqual({ installed: true, editorViewLayer: "refused", defaultWorkerFactory: "none" });
+});
+
 test("runs the JSON support and shows the read-only message while a save is held, and the page reports no policy violation", async ({ page, installation }) => {
   const violations = watchForPolicyViolations(page);
   const settings = remoteFile('{\n  "name": "sshc",\n  "port": \n}\n');
@@ -248,7 +283,7 @@ test("runs the JSON support and shows the read-only message while a save is held
   // file is therefore opened again.
   await editor.getByRole("button", { name: englishLabels.close, exact: true }).click();
   editor = await openInEditor(page, "/srv/settings.json", englishLabels);
-  const content = editor.getByRole("textbox", { name: "Editor content" });
+  const content = editorContent(editor);
   await content.focus();
   await page.keyboard.insertText(" ");
   const save = editor.getByRole("button", { name: englishLabels.save, exact: true });
