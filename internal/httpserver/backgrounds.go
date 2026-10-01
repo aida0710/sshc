@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 
@@ -84,22 +83,15 @@ func (h ConfigHandlers) AddBackground(c *echo.Context) error {
 	if body == nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	// 1 バイト余分に読む。ちょうど上限で切ると、超えていることと
-	// ちょうど収まっていることが見分けられない。容量までメモリに載せるのは、
-	// 容量を大きくした利用者がその分だけ負う費用として許す。
-	limit := int64(h.Service.BackgroundCapacityMiB()) << 20
-	contents, err := io.ReadAll(io.LimitReader(body, limit+1))
+	background, err := h.Service.AddBackground(c.QueryParam("name"), body)
 	var overCeiling *http.MaxBytesError
 	switch {
 	case errors.As(err, &overCeiling):
 		// 長さを宣言しない本文が 1 枚の絶対上限を超えた。宣言した本文なら
 		// middleware が先に断っている。
 		return problem(c, http.StatusRequestEntityTooLarge, "background_too_large")
-	case err != nil:
+	case errors.Is(err, application.ErrBackgroundUnreadable):
 		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	background, err := h.Service.AddBackground(c.QueryParam("name"), contents)
-	switch {
 	case errors.Is(err, application.ErrBackgroundTooLarge):
 		return problem(c, http.StatusRequestEntityTooLarge, "background_too_large")
 	case errors.Is(err, application.ErrBackgroundsFull):

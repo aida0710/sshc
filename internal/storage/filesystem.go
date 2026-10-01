@@ -38,6 +38,14 @@ type FileSystem interface {
 	// WriteTemp は directory に新しいファイルを作り、contents を書き、permission を
 	// 適用し、ディスクへフラッシュして、そのパスを返す。
 	WriteTemp(directory, prefix string, permission fs.FileMode, contents []byte) (string, error)
+	// StageFile は、request.Source を読みながら request.Directory の非公開の一時
+	// ファイルへ書き、ディスクへフラッシュする。中身をメモリに持たない。公開する
+	// 名前は、返した StagedFile の Publish で決める。
+	//
+	// ほかの任意実装（WriteAtomic など）と違い、必須のメソッドにしてある。任意実装に
+	// すると、実装しない FileSystem のために中身をメモリへ読む代わりの経路が要り、
+	// FileSystem を包む側が転送を忘れたとき、黙ってその経路へ落ちる。
+	StageFile(request StageRequest) (*StagedFile, error)
 	Rename(oldPath, newPath string) error
 	// MovePrivate はオブジェクトの同一性と非公開状態のセキュリティ規則を維持したまま、
 	// 既存の機密ファイルを移動する。
@@ -199,6 +207,17 @@ func (OSFileSystem) MkdirAll(path string, permission fs.FileMode) error {
 
 func (OSFileSystem) WriteTemp(directory, prefix string, permission fs.FileMode, contents []byte) (string, error) {
 	return writeTemp(directory, prefix, permission, contents, createPrivateTemp)
+}
+
+func (OSFileSystem) StageFile(request StageRequest) (*StagedFile, error) {
+	if request.Maximum < 0 {
+		return nil, ErrFileTooLarge
+	}
+	request.Directory = filepath.Clean(request.Directory)
+	if !filepath.IsAbs(request.Directory) {
+		return nil, os.ErrInvalid
+	}
+	return stageFileNative(request)
 }
 
 type privateTempCreator func(directory, prefix string) (*os.File, error)

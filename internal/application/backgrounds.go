@@ -1,10 +1,13 @@
 package application
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
+	"io"
 	"io/fs"
 	"path/filepath"
 	"slices"
@@ -28,6 +31,16 @@ const (
 	MaxBackgroundBytes = storage.MaxAssetFileSize
 )
 
+const (
+	// imageHeaderLength は、imageType が型を見分けるのに読む先頭の長さである。
+	// 印がいちばん長い WebP（"RIFF" と長さと "WEBP"）が 12 バイト。
+	imageHeaderLength = 12
+	// backgroundTemporaryPrefix は、受け取っている途中の画像を書く一時ファイルの名前の
+	// 先頭である。storage.IsTemporaryName が認める ".sshc-" で始めるので、書いている
+	// 途中やクラッシュで残ったファイルが、背景の一覧にも同期にも入らない。
+	backgroundTemporaryPrefix = ".sshc-background-"
+)
+
 var (
 	// ErrBackgroundTooLarge は、大きすぎる画像を断る。
 	ErrBackgroundTooLarge = errors.New("that image is larger than this application stores")
@@ -35,6 +48,9 @@ var (
 	ErrBackgroundsFull = errors.New("there is no room left for another background")
 	// ErrNotAnImage は、画像に見えないバイト列を断る。
 	ErrNotAnImage = errors.New("those bytes are not an image this application shows")
+	// ErrBackgroundUnreadable は、追加する画像の本文を最後まで読めなかったことを
+	// 報告する。読み取りの元のエラーも errors.Is と errors.As で取り出せる。
+	ErrBackgroundUnreadable = errors.New("the image to add could not be read to the end")
 	// ErrUnknownBackground は、置かれていない画像を指した要求を報告する。
 	ErrUnknownBackground = errors.New("there is no background by that name")
 	// ErrBackgroundAlreadyExists は、明示的な名前変更が既存画像を上書きしようとしたことを報告する。
@@ -112,8 +128,9 @@ func imageType(contents []byte) (mediaType string, extension string) {
 	return "", ""
 }
 
-// safeStem は、希望された表記を、こちらが書いてよい名前に均す。
-func safeStem(suggested string, contents []byte) string {
+// requestedStem は、希望された表記を、こちらが書いてよい名前に均す。使える文字が
+// 残らなければ空を返す。そのときは digestStem で中身から名前を作る。
+func requestedStem(suggested string) string {
 	trimmed := strings.TrimSpace(suggested)
 	if dot := strings.LastIndex(trimmed, "."); dot > 0 && len(trimmed)-dot <= 6 {
 		trimmed = trimmed[:dot]
@@ -133,11 +150,12 @@ func safeStem(suggested string, contents []byte) string {
 			break
 		}
 	}
-	stem := strings.Trim(builder.String(), "-")
-	if stem != "" {
-		return stem
-	}
-	sum := sha256.Sum256(contents)
+	return strings.Trim(builder.String(), "-")
+}
+
+// digestStem は、希望された表記から名前を作れなかった画像に、中身の SHA-256 の
+// 先頭 4 バイトから名前を付ける。
+func digestStem(sum []byte) string {
 	return "background-" + hex.EncodeToString(sum[:4])
 }
 
@@ -156,14 +174,14 @@ func (s *Service) Backgrounds() ([]Background, error) {
 	}
 	found := make([]Background, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || storage.IsTemporaryName(entry.Name()) {
 			continue
 		}
 		info, err := entry.Info()
 		if err != nil || info.Size() < 0 || info.Size() > int64(MaxBackgroundBytes) {
 			continue
 		}
-		contents, err := storage.ReadFilePrefix(s.workspace.FileSystem(), filepath.Join(s.backgroundsRoot(), entry.Name()), 12)
+		contents, err := storage.ReadFilePrefix(s.workspace.FileSystem(), filepath.Join(s.backgroundsRoot(), entry.Name()), imageHeaderLength)
 		if err != nil {
 			continue
 		}
@@ -177,48 +195,150 @@ func (s *Service) Backgrounds() ([]Background, error) {
 	return found, nil
 }
 
-// AddBackground は、送られてきたバイト列を 1 枚の背景として置く。
-func (s *Service) AddBackground(suggested string, contents []byte) (Background, error) {
-	if len(contents) > MaxBackgroundBytes {
-		return Background{}, ErrBackgroundTooLarge
+// AddBackground は、body を読みながら 1 枚の背景として置く。
+//
+// 本文はメモリに載せない。型は先頭だけで見分け、本文は置き場所の一時ファイルへ
+// 書きながら空き容量で打ち切る。名前は書き終えてから決める。
+func (s *Service) AddBackground(suggested string, body io.Reader) (Background, error) {
+	head, err := readImageHeader(body)
+	if err != nil {
+		return Background{}, err
 	}
-	mediaType, extension := imageType(contents)
+	mediaType, extension := imageType(head)
 	if mediaType == "" {
 		return Background{}, ErrNotAnImage
 	}
 
-	existing, err := s.Backgrounds()
+	stem := requestedStem(suggested)
+	contents := io.MultiReader(bytes.NewReader(head), body)
+	// 中身から名前を作るときだけ、書きながらハッシュを求める。
+	var digest hash.Hash
+	if stem == "" {
+		digest = sha256.New()
+		contents = io.TeeReader(contents, digest)
+	}
+	staged, err := s.stageBackground(contents)
 	if err != nil {
 		return Background{}, err
 	}
-	total := len(contents)
-	taken := map[string]bool{}
-	for _, background := range existing {
-		total += background.Bytes
-		taken[background.Name] = true
-	}
-	if int64(total) > s.backgroundCapacityBytes() {
-		return Background{}, ErrBackgroundsFull
+	defer staged.Discard()
+	if digest != nil {
+		stem = digestStem(digest.Sum(nil))
 	}
 
-	stem := safeStem(suggested, contents)
+	name, err := s.publishBackground(staged, stem, extension)
+	if err != nil {
+		return Background{}, err
+	}
+	return Background{Name: name, Bytes: int(staged.Size()), Type: mediaType}, nil
+}
+
+// readImageHeader は、imageType が型を見分けるのに要る先頭だけを読む。それより
+// 短い本文は、全体が先頭である。
+func readImageHeader(body io.Reader) ([]byte, error) {
+	head := make([]byte, 0, imageHeaderLength)
+	for len(head) < imageHeaderLength {
+		count, err := body.Read(head[len(head):imageHeaderLength])
+		head = head[:len(head)+count]
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrBackgroundUnreadable, err)
+		}
+	}
+	return head, nil
+}
+
+// stageBackground は、画像の本文を置き場所の一時ファイルへ書く。いま空いている
+// 分を超えたところで読むのをやめる。
+func (s *Service) stageBackground(contents io.Reader) (*storage.StagedFile, error) {
+	existing, err := s.Backgrounds()
+	if err != nil {
+		return nil, err
+	}
+	room := s.backgroundRoom(existing)
+	root := s.backgroundsRoot()
+	if err := s.workspace.EnsureDirectory(root); err != nil {
+		return nil, err
+	}
+	staged, err := s.workspace.FileSystem().StageFile(storage.StageRequest{
+		Directory:  root,
+		Prefix:     backgroundTemporaryPrefix,
+		Permission: storage.FilePermission,
+		Source:     contents,
+		Maximum:    room,
+	})
+	switch {
+	case errors.Is(err, storage.ErrFileTooLarge):
+		return nil, backgroundOverflow(room)
+	case errors.Is(err, storage.ErrSourceUnreadable):
+		return nil, fmt.Errorf("%w: %w", ErrBackgroundUnreadable, err)
+	case err != nil:
+		return nil, err
+	}
+	return staged, nil
+}
+
+// backgroundRoom は、existing を置いたうえで、あと何バイト置けるかを返す。容量を
+// 下げて既に超えていれば 0 である。
+func (s *Service) backgroundRoom(existing []Background) int64 {
+	used := int64(0)
+	for _, background := range existing {
+		used += int64(background.Bytes)
+	}
+	return max(s.backgroundCapacityBytes()-used, 0)
+}
+
+// backgroundOverflow は、本文が空きを超えたときの断り方を返す。1 枚の絶対上限まで
+// 空いていてなお超えたなら、画像そのものが大きすぎる。そうでなければ、置き場所の
+// 空きが足りない。
+func backgroundOverflow(room int64) error {
+	if room >= MaxBackgroundBytes {
+		return ErrBackgroundTooLarge
+	}
+	return ErrBackgroundsFull
+}
+
+// publishBackground は、書き終えた画像に名前を付けて置き、その名前を返す。
+//
+// 本文を受け取っている間は錠を持たない。そのため同時に受け取った 2 枚が、同じ名前を
+// 選んだり、合わせて容量を超えたりしうる。ここで錠を取って一覧を読み直し、名前と
+// 容量を確かめてから置くまでを、ほかの追加・名前の変更・削除と重ねない。
+func (s *Service) publishBackground(staged *storage.StagedFile, stem, extension string) (string, error) {
+	s.saveMutex.Lock()
+	defer s.saveMutex.Unlock()
+
+	existing, err := s.Backgrounds()
+	if err != nil {
+		return "", err
+	}
+	if staged.Size() > s.backgroundRoom(existing) {
+		return "", ErrBackgroundsFull
+	}
+	name := unusedBackgroundName(stem, extension, existing)
+	target, err := s.workspace.ResolveForWrite(filepath.Join(s.backgroundsRoot(), name))
+	if err != nil {
+		return "", err
+	}
+	if err := staged.Publish(target); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+// unusedBackgroundName は、stem と extension から、existing のどれとも重ならない
+// 名前を作る。
+func unusedBackgroundName(stem, extension string, existing []Background) string {
+	taken := make(map[string]bool, len(existing))
+	for _, background := range existing {
+		taken[background.Name] = true
+	}
 	name := stem + "." + extension
 	for attempt := 2; taken[name]; attempt++ {
 		name = fmt.Sprintf("%s-%d.%s", stem, attempt, extension)
 	}
-
-	root := s.backgroundsRoot()
-	if err := s.workspace.EnsureDirectory(root); err != nil {
-		return Background{}, err
-	}
-	target, err := s.workspace.ResolveForWrite(filepath.Join(root, name))
-	if err != nil {
-		return Background{}, err
-	}
-	if err := storage.WriteAtomicFile(s.workspace.FileSystem(), target, "background", storage.FilePermission, contents); err != nil {
-		return Background{}, err
-	}
-	return Background{Name: name, Bytes: len(contents), Type: mediaType}, nil
+	return name
 }
 
 // BackgroundContents は、その画像のバイト列と型を返す。
@@ -270,7 +390,12 @@ func (s *Service) RenameBackground(current, suggested string) (Background, error
 	if mediaType == "" {
 		return Background{}, ErrNotAnImage
 	}
-	next := safeStem(suggested, contents) + "." + extension
+	stem := requestedStem(suggested)
+	if stem == "" {
+		sum := sha256.Sum256(contents)
+		stem = digestStem(sum[:])
+	}
+	next := stem + "." + extension
 	if next == current {
 		return *found, nil
 	}
