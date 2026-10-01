@@ -75,7 +75,7 @@ Print the resolved SSH target without connecting.
 		{Name: "send", Help: "usage:\n  sshc terminal send <session-id> --text <text> [--no-enter] [--json]\n\nSend text to the current process generation. A carriage return is appended\nunless --no-enter is set.\n"},
 		{Name: "wait", Help: "usage:\n  sshc terminal wait <session-id> --for <state> [--timeout D] [--json]\n\nStates: connecting, connected, reconnecting, exited.\n"},
 		{Name: "create", Help: "usage:\n  sshc terminal create shell [--json]\n  sshc terminal create ssh <alias> [--json]\n\nCreate a local shell or SSH terminal in the running engine.\n"},
-		{Name: "rename", Help: "usage:\n  sshc terminal rename <session-id> <title> [--json]\n  sshc terminal rename <session-id> --auto [--json]\n\nPin the title of a terminal owned by the running engine, so titles that\nprograms set no longer replace it. --auto unpins it and returns to the\nautomatic name: the title the program set, or else the Host alias or shell\nname.\n"},
+		{Name: "rename", Help: "usage:\n  sshc terminal rename <session-id> <title> [--json]\n  sshc terminal rename <session-id> [--json] -- <title>\n  sshc terminal rename <session-id> --auto [--json]\n\nPin the title of a terminal owned by the running engine, so titles that\nprograms set no longer replace it. --auto unpins it and returns to the\nautomatic name: the title the program set, or else the Host alias or shell\nname.\n\nA title that starts with - is read as an option, so put it after --.\n"},
 		{Name: "close", Help: "usage:\n  sshc terminal close <session-id> [--json]\n\nClose a terminal owned by the running engine.\n"},
 	}},
 	{Name: "sftp", Route: "sftp", Help: sftpHelp(), Actions: []Action{

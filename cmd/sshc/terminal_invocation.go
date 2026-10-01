@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -69,9 +70,11 @@ var (
 	terminalWaitOptions = commandOptions{command: "terminal wait", options: []commandOption{
 		valueOption("--for"), valueOption("--timeout"), jsonOption,
 	}}
+	// terminalRenameOptions は "--" の後ろをオプションとして読まない。"-dev" のように "-" で
+	// 始まる名前は、ほかの位置ではオプションとして断られるので、"--" の後ろに書いて付ける。
 	terminalRenameOptions = commandOptions{command: "terminal rename", options: []commandOption{
 		switchOption("--auto"), jsonOption,
-	}}
+	}, endsAtDelimiter: true}
 	terminalReadLimitBounds = integerBounds{minimum: 0, maximum: terminalCLIMaxReadBytes, kind: "a number"}
 )
 
@@ -191,7 +194,8 @@ func readTerminalWaitOptions(args []string, parsed *terminalInvocation) error {
 	return nil
 }
 
-// readTerminalRename は、付ける名前（位置引数）か --auto のどちらか一方を読む。
+// readTerminalRename は、付ける名前か --auto のどちらか一方を読む。名前は "--" の前の
+// 位置引数と "--" の後ろの引数を区別せず、合わせて 1 つだけ受ける。
 func readTerminalRename(args []string, parsed *terminalInvocation) error {
 	arguments, err := terminalRenameOptions.parse(args)
 	if err != nil {
@@ -199,7 +203,7 @@ func readTerminalRename(args []string, parsed *terminalInvocation) error {
 	}
 	parsed.JSON = arguments.has("--json")
 	parsed.UnpinTitle = arguments.has("--auto")
-	titles := arguments.positionals
+	titles := slices.Concat(arguments.positionals, arguments.rest)
 	switch {
 	case len(titles) > 1:
 		return fmt.Errorf("terminal rename does not take %q", titles[1])
