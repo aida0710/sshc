@@ -48,6 +48,9 @@ var (
 	ErrUnsupportedEntry = errors.New("remote entry type cannot be copied")
 	ErrCompareLimit     = errors.New("directory comparison exceeded its safety limit")
 	ErrTraversalLimit   = errors.New("directory traversal exceeded its safety limit")
+	// ErrTargetInsideSource is a folder copy or move whose target is the
+	// source folder itself or lies inside it.
+	ErrTargetInsideSource = errors.New("target is the source folder or inside it")
 )
 
 type EntryType string
@@ -274,6 +277,10 @@ type WriteSeekCloser interface {
 type Remote interface {
 	io.Closer
 	Getwd(ctx context.Context) (string, error)
+	// RealPath asks the server for the absolute form of path (SSH_FXP_REALPATH).
+	// OpenSSH's sftp-server follows the symbolic links on the way; a server
+	// that only cleans the path, as pkg/sftp's does, does not follow them.
+	RealPath(path string) (string, error)
 	ReadDir(ctx context.Context, path string) ([]fs.FileInfo, error)
 	Lstat(path string) (fs.FileInfo, error)
 	ReadLink(path string) (string, error)
