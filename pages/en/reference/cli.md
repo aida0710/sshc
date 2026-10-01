@@ -233,9 +233,12 @@ sshc terminal send <session-id> --text 'uptime' --json
 sshc terminal send <session-id> --text 'partial input' --no-enter
 sshc terminal wait <session-id> --for connected --timeout 30s --json
 sshc terminal rename <session-id> deploy
+sshc terminal rename <session-id> --auto
 sshc terminal close <session-id>
 ```
 
 `create shell` opens a local shell on the engine host. `send` appends Enter (CR) by default; `--no-enter` sends the text as is.
+
+A name set with `rename` is pinned, so titles that programs set no longer change it. `--auto` unpins it and, like **Use automatic name** in the app, shows the title the program set, or else the connection alias or shell name. A name and `--auto` cannot be given together. In the `--json` result, `presentation.titlePinned` tells whether the name is pinned.
 
 `read` returns a scrollback cursor and warns when an older position has already been discarded. `send` checks the current process generation to avoid sending to a replacement process.
