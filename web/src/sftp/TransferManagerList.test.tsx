@@ -270,15 +270,18 @@ describe("the transfer queue", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 
-  it("says why a folder copied into itself failed instead of the general failure", () => {
+  it.each([
+    ["a folder copied into itself", "sftp_target_inside_source", "sftp.problem.targetInsideSource"],
+    ["a file moved onto itself", "sftp_target_is_source", "sftp.problem.targetIsSource"],
+  ] as const)("says why %s failed instead of the general failure", (_, problem, key) => {
     manager.setJobs([job("remote", {
       direction: "remote",
       status: "failed",
-      problem: "sftp_target_inside_source",
+      problem,
       allowedActions: ["retry", "cancel", "remove"],
     })]);
     render(<TransferManagerList />);
-    expect(screen.getByText(en["sftp.problem.targetInsideSource"])).toBeInTheDocument();
+    expect(screen.getByText(en[key])).toBeInTheDocument();
     expect(screen.queryByText(en["sftp.problem.failed"])).not.toBeInTheDocument();
   });
 
