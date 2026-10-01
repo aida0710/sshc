@@ -15,18 +15,7 @@ import {
   terminalScreen,
   viewportBackground,
 } from "./support/terminal";
-
-function watchForPolicyViolations(page: import("@playwright/test").Page): string[] {
-  const violations: string[] = [];
-  page.on("console", (message) => {
-    const text = message.text();
-    if (/Content Security Policy|Trusted Type/i.test(text)) violations.push(text);
-  });
-  page.on("pageerror", (error) => {
-    if (/Trusted Type|Content Security Policy/i.test(error.message)) violations.push(error.message);
-  });
-  return violations;
-}
+import { watchForPolicyViolations } from "./support/policyViolations";
 
 async function typeIntoTerminal(page: import("@playwright/test").Page, line: string) {
   const screen = page.getByRole("region", { name: /^Terminal for / });
