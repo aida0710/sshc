@@ -3,11 +3,10 @@ import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
+import { loadMonacoEditor } from "./loadMonacoEditor";
 import type { SFTPTextEditorModel } from "./useSFTPTextEditor";
 
-const MonacoEditor = lazy(() =>
-  import("./MonacoEditor").then(({ MonacoEditor }) => ({ default: MonacoEditor })),
-);
+const MonacoEditor = lazy(() => loadMonacoEditor().then(({ MonacoEditor }) => ({ default: MonacoEditor })));
 
 export function SFTPTextEditor({ editor, busy = false }: {
   editor: SFTPTextEditorModel;
