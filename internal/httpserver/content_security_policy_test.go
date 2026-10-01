@@ -27,7 +27,8 @@ func pageDirective(t *testing.T, name string) (values []string, ok bool) {
 }
 
 // SFTP のエディタ（Monaco Editor）は、行の HTML を editorViewLayer の policy を通して
-// 入れる。この名前を許さないと本文が 1 行も描かれない（v0.24.0 から起きていた）。
+// 入れる。この名前を許さないと、Trusted Types を強制するブラウザでは本文が 1 行も
+// 描かれない。
 // 名前を許しても、文字列のままの代入を止める require-trusted-types-for 'script' と、
 // 作った名前を後から作り直させない（'allow-duplicates' の無い）trusted-types は保つ。
 func TestThePagePolicyLetsTheEditorDrawItsLinesAndStillRequiresTrustedTypes(t *testing.T) {
@@ -58,11 +59,11 @@ var trustedTypesPolicyCreation = regexp.MustCompile("[`'\"]([A-Za-z][A-Za-z0-9_-
 // domPurifyPolicyName は、Monaco が同梱する DOMPurify の policy の名前を拾う。DOMPurify は
 // 名前を 'dompurify' と接尾辞をつないで組み立てるので、作る呼び出しの引数には名前が
 // 現れない。接尾辞は読み込んだ script 要素の data-tt-policy-suffix から取り、ES module
-// として読み込む sshc の画面では付かない。
+// として読み込む埋め込み UI では付かない。
 var domPurifyPolicyName = regexp.MustCompile("[`'\"](dompurify)[`'\"]\\s*\\+")
 
-// trustedTypesPoliciesTheEmbeddedUICreates は、埋め込んだ画面のスクリプトが作る
-// Trusted Types の policy の名前を、重複を除いて並べて返す。
+// trustedTypesPoliciesTheEmbeddedUICreates は、埋め込み UI（internal/ui/dist）の
+// スクリプトが作る Trusted Types の policy の名前を、重複を除いて並べて返す。
 func trustedTypesPoliciesTheEmbeddedUICreates(t *testing.T) []string {
 	t.Helper()
 	assets, err := ui.FS()
@@ -89,10 +90,11 @@ func trustedTypesPoliciesTheEmbeddedUICreates(t *testing.T) []string {
 	return slices.Compact(names)
 }
 
-// trusted-types に並べる名前は、画面が実際に作る policy と一致させる。Monaco を上げて
-// policy の名前が増えれば、許していない名前の作成が止められてエディタが壊れる。
-// 使われなくなった名前を残せば、ほかのスクリプトがその名前で policy を作れる。
-// どちらもこのテストで気付けるように、web をビルドし直した internal/ui/dist と照合する。
+// trusted-types に並べる名前は、埋め込み UI が実際に作る policy と一致させる。
+// Monaco を上げて policy の名前が増えれば、許していない名前の作成が止められて
+// エディタが壊れる。使われなくなった名前を残せば、ほかのスクリプトがその名前で
+// policy を作れる。どちらもこのテストで気付けるように、web をビルドし直した
+// internal/ui/dist と照合する。
 func TestThePagePolicyAllowsExactlyTheTrustedTypesPoliciesTheEmbeddedUICreates(t *testing.T) {
 	created := trustedTypesPoliciesTheEmbeddedUICreates(t)
 	allowed, ok := pageDirective(t, "trusted-types")
