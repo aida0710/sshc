@@ -22,7 +22,12 @@ Operations on the same host (listing, details, preview, editing, transfers and t
 
 Use the leading `..` row to move to the parent directory. The navigation controls move back or forward through visited directories, return to the server home directory, or open the root directory. The current path is a clickable breadcrumb; use its edit control when you need to type a path directly. You can filter the current list by name.
 
-Select one row, or use the checkboxes to select multiple entries, to reveal download, rename, delete, and other relevant actions in the selection toolbar. On desktop, Shift-click selects a range, Ctrl/Cmd-click adds to the selection, and Ctrl/Cmd+A selects all displayed entries. The action menu can invert the displayed selection or copy selected names or full paths. Permission and rename actions remain available for a single selection. Double-click or press Enter to open a folder or edit a text file in a modal without resizing the list. If the remote file changed after it was opened, the editor refuses the save and says so; Reload from remote reads the current contents. Closing the editor with unsaved changes asks before discarding them. Creation and uploads are grouped in the `+` menu at the upper left.
+Select one row, or use the checkboxes to select multiple entries, to reveal download, rename, delete, and other relevant actions in the selection toolbar. On desktop, Shift-click selects a range, Ctrl/Cmd-click adds to the selection, and Ctrl/Cmd+A selects all displayed entries. The action menu can invert the displayed selection or copy selected names or full paths. Permission and rename actions remain available for a single selection. Double-click or press Enter to open a folder or edit a text file in a modal without resizing the list. Closing the editor with unsaved changes asks before discarding them. Creation and uploads are grouped in the `+` menu at the upper left.
+
+If the remote file changed after it was opened in the editor, the editor refuses the save and says so. You can then choose either action:
+
+- **Reload from remote** discards your unsaved changes and reads the current contents. It asks before discarding them.
+- **Overwrite** asks before discarding the changes made on the remote, then writes the editor's contents over the remote file. If the remote file changes again while you confirm, the editor does not overwrite it and says so.
 
 Sort by name, type, size or modified time. Sizes are shown in KiB, MiB or GiB; the details dialog also gives the exact byte count. Permissions appear below the entry name. The selected host and directory are reflected in navigation state, so a terminal remote-path action can open the same location.
 
