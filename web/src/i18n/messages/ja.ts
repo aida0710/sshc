@@ -170,6 +170,8 @@ export const ja = {
   "sftp.problem.traversalLimit": "フォルダ内の項目が多すぎるため処理できません。",
   "sftp.problem.targetInsideSource":
     "転送先が転送元のフォルダ自身かその中にあるため、コピーも移動もできません。シンボリックリンクを経由して転送元の中を指している場合も同じです。転送元のフォルダの外にある場所を選んでください。",
+  "sftp.problem.targetIsSource":
+    "転送先が転送元のファイルそのものであるため、コピーも移動もできません。同じサーバーを別の接続先として登録している場合や、パスの途中のシンボリックリンクを経由して同じファイルを指している場合も同じです。別の場所か別の名前を選んでください。",
   "sftp.problem.rangeInvalid": "中断した位置からダウンロードを再開できませんでした。もう一度ダウンロードしてください。",
   "sftp.problem.reconciliationRequired": "コピーか移動は終わった可能性がありますが、結果を記録できませんでした。転送先を確認してください。",
   "sftp.problem.nameCollision":
