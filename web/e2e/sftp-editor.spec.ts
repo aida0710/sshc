@@ -1,22 +1,31 @@
 import type { Locator, Page } from "@playwright/test";
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
+import { watchForPolicyViolations } from "./support/policyViolations";
 import { connectSFTPHost } from "./support/sftp";
 
-const notesEntry = {
-  name: "notes.txt", path: "/srv/notes.txt", type: "file", size: 6,
-  modifiedAt: "2026-10-01T03:00:00Z", mode: "0644", revision: "notes-meta",
-};
+// A remote file as the sshc engine would answer for it. A save names the
+// revision it expects, and the engine refuses it as a conflict when the file is
+// no longer that revision. A save waits for saveHeldUntil, when it is set.
+type RemoteFile = { contents: string; revision: string; expectedRevisions: string[]; saveHeldUntil?: Promise<void> };
 
-// The remote notes.txt as the sshc engine would answer for it. A save names
-// the revision it expects, and the engine refuses it as a conflict when the
-// file is no longer that revision.
-type RemoteNotes = { contents: string; revision: string; expectedRevisions: string[] };
+function remoteFile(contents: string): RemoteFile {
+  return { contents, revision: "rev-1", expectedRevisions: [] };
+}
 
-async function serveRemoteNotes(page: Page, remote: RemoteNotes): Promise<void> {
+function fileName(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
+// Serves `files`, by their path, as the only entries of /srv on bastion.
+async function serveRemoteFiles(page: Page, files: Record<string, RemoteFile>): Promise<void> {
+  const entries = Object.fromEntries(Object.entries(files).map(([path, file]) => [path, {
+    name: fileName(path), path, type: "file", size: file.contents.length,
+    modifiedAt: "2026-10-01T03:00:00Z", mode: "0644", revision: `${fileName(path)}-meta`,
+  }]));
   await page.route("**/api/v1/sftp/bastion/entries**", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
-    body: JSON.stringify({ path: "/srv", entries: [notesEntry] }),
+    body: JSON.stringify({ path: "/srv", entries: Object.values(entries) }),
   }));
   await page.route("**/api/v1/sftp/bastion/preview**", (route) => route.fulfill({
     status: 415,
@@ -25,7 +34,18 @@ async function serveRemoteNotes(page: Page, remote: RemoteNotes): Promise<void> 
   }));
   await page.route("**/api/v1/sftp/bastion/text**", async (route) => {
     const request = route.request();
+    const path = new URL(request.url()).searchParams.get("path") ?? "";
+    const remote = files[path];
+    if (remote === undefined) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/problem+json",
+        body: JSON.stringify({ code: "sftp_not_found", message: "No such file." }),
+      });
+      return;
+    }
     if (request.method() === "PUT") {
+      await remote.saveHeldUntil;
       const { contents, expectedRevision } = request.postDataJSON() as { contents: string; expectedRevision: string };
       remote.expectedRevisions.push(expectedRevision);
       if (expectedRevision !== remote.revision) {
@@ -42,14 +62,14 @@ async function serveRemoteNotes(page: Page, remote: RemoteNotes): Promise<void> 
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ entry: notesEntry, contents: remote.contents, revision: remote.revision }),
+      body: JSON.stringify({ entry: entries[path], contents: remote.contents, revision: remote.revision }),
     });
   });
 }
 
 // The names the editor's controls have in one display language.
 type EditorLabels = {
-  details: string;
+  details: (name: string) => string;
   editFile: string;
   unsaved: string;
   save: string;
@@ -60,7 +80,7 @@ type EditorLabels = {
 };
 
 const englishLabels: EditorLabels = {
-  details: "Details for notes.txt",
+  details: (name) => `Details for ${name}`,
   editFile: "Edit file",
   unsaved: "Unsaved",
   save: "Save",
@@ -71,7 +91,7 @@ const englishLabels: EditorLabels = {
 };
 
 const japaneseLabels: EditorLabels = {
-  details: "notes.txtの詳細",
+  details: (name) => `${name}の詳細`,
   editFile: "ファイルを編集",
   unsaved: "未保存",
   save: "保存",
@@ -81,13 +101,26 @@ const japaneseLabels: EditorLabels = {
   close: "閉じる",
 };
 
+// Opens the remote file at `path` in the editor the way a user does: from the
+// file's details.
+async function openInEditor(page: Page, path: string, labels: EditorLabels): Promise<Locator> {
+  const name = fileName(path);
+  await page.getByRole("button", { name, exact: true }).dblclick();
+  await page.getByRole("dialog", { name: labels.details(name) }).getByRole("button", { name: labels.editFile }).click();
+  return page.getByRole("dialog", { name: path });
+}
+
+// The text area Monaco types into. Monaco names it in English in either
+// display language.
+function editorContent(editor: Locator): Locator {
+  return editor.getByRole("textbox", { name: "Editor content" });
+}
+
 // Opens notes.txt in the editor and types at its end. A change then lands on
 // the remote before the save, so the engine refuses the save as a conflict.
-async function editUntilConflict(page: Page, remote: RemoteNotes, labels: EditorLabels): Promise<Locator> {
-  await page.getByRole("button", { name: "notes.txt" }).dblclick();
-  await page.getByRole("dialog", { name: labels.details }).getByRole("button", { name: labels.editFile }).click();
-  const editor = page.getByRole("dialog", { name: "/srv/notes.txt" });
-  await editor.getByRole("textbox", { name: "Editor content" }).focus();
+async function editUntilConflict(page: Page, remote: RemoteFile, labels: EditorLabels): Promise<Locator> {
+  const editor = await openInEditor(page, "/srv/notes.txt", labels);
+  await editorContent(editor).focus();
   await page.keyboard.press("ControlOrMeta+End");
   // One input event, so that "Unsaved" appears only once all of it is in. Keys
   // typed one by one can still be arriving when Save makes the editor read-only.
@@ -111,8 +144,8 @@ async function openOverwriteConfirmation(page: Page, editor: Locator, labels: Ed
 test("overwrites a remote text file that changed after it was opened, only for the revision the user confirmed", async ({ page, installation }) => {
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   test.setTimeout(visualDirectory === undefined ? 30_000 : 120_000);
-  const remote: RemoteNotes = { contents: "hello\n", revision: "rev-1", expectedRevisions: [] };
-  await serveRemoteNotes(page, remote);
+  const remote = remoteFile("hello\n");
+  await serveRemoteFiles(page, { "/srv/notes.txt": remote });
   await openApplication(page, installation);
   await openSection(page, "SFTP");
   await connectSFTPHost(page, "bastion");
@@ -155,4 +188,114 @@ test("overwrites a remote text file that changed after it was opened, only for t
   const japaneseConfirmation = await openOverwriteConfirmation(page, japaneseEditor, japaneseLabels);
   await page.screenshot({ path: `${visualDirectory}/sftp-editor-overwrite-confirm-narrow-ja.png` });
   await japaneseConfirmation.getByRole("button", { name: japaneseLabels.cancel }).click();
+});
+
+// A line that looks like HTML. The editor builds the lines it draws as HTML,
+// so this line shows whether the file's text reaches the page as text.
+const htmlLookingLine = "<b>not bold</b> & <img src=x>";
+
+// More lines than the editor shows at once, so it draws only some of them.
+const manyLines = Array.from({ length: 300 }, (_, index) => `line ${index + 1}`);
+
+test("draws the opened file's lines as text while the file is typed in and scrolled, and the page reports no policy violation", async ({ page, installation }) => {
+  const violations = watchForPolicyViolations(page);
+  await serveRemoteFiles(page, { "/srv/notes.txt": remoteFile([htmlLookingLine, ...manyLines].join("\n")) });
+  await openApplication(page, installation);
+  await openSection(page, "SFTP");
+  await connectSFTPHost(page, "bastion");
+
+  const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  const drawnLines = editor.locator(".view-lines");
+  await expect(drawnLines).toContainText(htmlLookingLine);
+  await expect(drawnLines.locator("b, img")).toHaveCount(0);
+
+  await editorContent(editor).focus();
+  await page.keyboard.insertText("typed ");
+  await expect(drawnLines).toContainText(`typed ${htmlLookingLine}`);
+
+  // The editor draws only the lines in view, so scrolling draws lines it had
+  // not drawn before. Monaco scrolls a fixed step for each wheel event,
+  // whatever its delta, so the wheel turns until the line comes into view.
+  await expect(drawnLines).not.toContainText("line 60");
+  const bounds = await editor.locator(".monaco-editor").boundingBox();
+  if (bounds === null) throw new Error("the editor is not visible");
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await expect(async () => {
+    await page.mouse.wheel(0, 600);
+    await expect(drawnLines).toContainText("line 60", { timeout: 200 });
+  }).toPass({ intervals: [100] });
+  await expect(drawnLines).not.toContainText(htmlLookingLine);
+  await page.keyboard.press("ControlOrMeta+End");
+  await expect(drawnLines).toContainText("line 300");
+  await page.keyboard.press("ControlOrMeta+Home");
+  await expect(drawnLines).toContainText(`typed ${htmlLookingLine}`);
+
+  expect(violations).toEqual([]);
+});
+
+// The part of MonacoEnvironment a script on the page could call to ask for a
+// Trusted Types policy.
+type PolicySource = { createTrustedTypesPolicy?(name: string, options: object): unknown };
+
+test("a script on the page gets none of the editor's Trusted Types policies through MonacoEnvironment", async ({ page, installation }) => {
+  await serveRemoteFiles(page, { "/srv/notes.txt": remoteFile("hello\n") });
+  await openApplication(page, installation);
+  await openSection(page, "SFTP");
+  await connectSFTPHost(page, "bastion");
+  const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("hello");
+
+  // Monaco has created editorViewLayer, and the worker policy is sshc's own.
+  // Asking the environment for either name again must not hand out a policy
+  // that lets any string through.
+  const answers = await page.evaluate(() => {
+    const environment = (globalThis as { MonacoEnvironment?: PolicySource }).MonacoEnvironment;
+    const ask = (name: string) => {
+      try {
+        return environment?.createTrustedTypesPolicy?.(name, { createHTML: (value: string) => value, createScriptURL: (value: string) => value }) === undefined ? "none" : "policy";
+      } catch {
+        return "refused";
+      }
+    };
+    return { installed: environment !== undefined, editorViewLayer: ask("editorViewLayer"), defaultWorkerFactory: ask("defaultWorkerFactory") };
+  });
+  expect(answers).toEqual({ installed: true, editorViewLayer: "refused", defaultWorkerFactory: "none" });
+});
+
+test("runs the JSON support and shows the read-only message while a save is held, and the page reports no policy violation", async ({ page, installation }) => {
+  const violations = watchForPolicyViolations(page);
+  const settings = remoteFile('{\n  "name": "sshc",\n  "port": \n}\n');
+  let releaseSave = () => {};
+  settings.saveHeldUntil = new Promise<void>((release) => { releaseSave = release; });
+  await serveRemoteFiles(page, { "/srv/settings.json": settings });
+  await openApplication(page, installation);
+  await openSection(page, "SFTP");
+  await connectSFTPHost(page, "bastion");
+
+  // A JSON file loads Monaco's JSON support. The missing value is found by the
+  // JSON worker, so its squiggle shows that the worker started.
+  let editor = await openInEditor(page, "/srv/settings.json", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText('"name": "sshc"');
+  await expect(editor.locator(".squiggly-error")).not.toHaveCount(0);
+
+  // The editor features the JSON support loads, among them the message for
+  // typing into a read-only editor, apply to the editors created after it. The
+  // file is therefore opened again.
+  await editor.getByRole("button", { name: englishLabels.close, exact: true }).click();
+  editor = await openInEditor(page, "/srv/settings.json", englishLabels);
+  const content = editorContent(editor);
+  await content.focus();
+  await page.keyboard.insertText(" ");
+  const save = editor.getByRole("button", { name: englishLabels.save, exact: true });
+  await save.click();
+  // The editor is read-only while the save is held. Monaco draws its message
+  // with its Markdown renderer, which sanitizes it with DOMPurify.
+  await expect(save).toBeDisabled();
+  await content.focus();
+  await page.keyboard.press("x");
+  await expect(editor.getByText("Cannot edit in read-only editor")).toBeVisible();
+  releaseSave();
+  await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
+
+  expect(violations).toEqual([]);
 });
