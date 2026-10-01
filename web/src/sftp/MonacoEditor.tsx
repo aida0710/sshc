@@ -1,4 +1,7 @@
 import { useEffect, useRef } from "react";
+// Load this module only through loadMonacoEditor (loadMonacoEditor.ts). Monaco
+// creates its Trusted Types policies through MonacoEnvironment while the
+// imports below are evaluated, so the environment must be installed first.
 import * as monaco from "monaco-editor/editor/editor.api.js";
 import "monaco-editor/languages/definitions/css/register.js";
 import "monaco-editor/languages/definitions/go/register.js";

@@ -32,7 +32,8 @@ const (
 	// 失ったもの: HTML を注入できる者は CSS も注入できる。得たもの: 端末が
 	// 描画できる。前者に必要な注入点をこのアプリケーションは持たない。React が
 	// エスケープし、dangerouslySetInnerHTML はどこにも無く、スクリプトは
-	// 依然として止まる。docs/design.md の CSP の項に同じことが書いてある。
+	// 依然として止まる。docs/design.md の「更新の境界」にある CSP の記述にも
+	// 同じことが書いてある。
 	contentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; " +
 		"trusted-types " + serviceWorkerTrustedTypesPolicy + " " + monacoTrustedTypesPolicies + "; require-trusted-types-for 'script'"
 
@@ -44,22 +45,26 @@ const (
 	// Trusted Types の policy の名前である。
 	//
 	// 許す理由: Monaco は行、折り返しの計測、差分などの HTML を自分で組み立てて
-	// innerHTML へ入れ、worker の URL も自分で渡す。require-trusted-types-for 'script'
-	// のもとでは、その値は名前を許した policy を通さないと止められ、エディタの本文が
-	// 1 行も描かれない。dompurify は Monaco が同梱する DOMPurify の policy で、
-	// 読み取り専用のときのメッセージのような Markdown を表示するときに作られる。
-	// Monaco の policy は値をそのまま通す。ファイルの本文は Monaco がエスケープしてから
-	// HTML にする（web/e2e/sftp-editor.spec.ts が、HTML のような行が文字のまま
-	// 描かれることを確かめる）。
+	// innerHTML へ入れる。require-trusted-types-for 'script' のもとでは、その値は
+	// 名前を許した policy を通さないと止められ、エディタの本文が 1 行も描かれない。
+	// dompurify は Monaco が同梱する DOMPurify の policy で、読み取り専用のときの
+	// メッセージのような Markdown を表示するときに作られる。defaultWorkerFactory は
+	// worker のスクリプトの URL を TrustedScriptURL にする policy で、Monaco の代わりに
+	// web/src/sftp/monacoEnvironment.ts が同じ名前で 1 回だけ作る。Monaco の policy は
+	// 値をそのまま通す。ファイルの本文は Monaco がエスケープしてから HTML にする
+	// （web/e2e/sftp-editor.spec.ts が、HTML のような行が文字のまま描かれることを
+	// 確かめる）。
 	//
 	// 安全な理由: require-trusted-types-for 'script' は保つので、policy を通さない
 	// 文字列の代入は今までどおり止まる。ここで許すのは名前だけで、policy を作れるのは
 	// この画面ですでにスクリプトを実行できる者に限られる。'allow-duplicates' は
-	// 付けないので、Monaco が先に作った名前を、後からほかのスクリプトが作り直すことは
-	// できない。
+	// 付けないので、先に作られた名前を、後からほかのスクリプトが作り直すことは
+	// できない。作られた policy は、作ったモジュールの中にだけ置かれる。
+	// MonacoEnvironment.createTrustedTypesPolicy も作った policy を保持せず、
+	// ほかのスクリプトに渡さない。
 	//
 	// 一覧は Monaco が実際に作る名前だけにする。Monaco を上げて名前が増減すると、
-	// 埋め込んだ画面と照合する
+	// 埋め込み UI（internal/ui/dist）と照合する
 	// TestThePagePolicyAllowsExactlyTheTrustedTypesPoliciesTheEmbeddedUICreates が落ちる。
 	monacoTrustedTypesPolicies = "defaultWorkerFactory diffEditorWidget diffReview domLineBreaksComputer dompurify " +
 		"editorGhostText editorViewLayer richScreenReaderContent standaloneColorizer stickyScrollViewLayer tokenizeToString"
