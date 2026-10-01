@@ -165,6 +165,8 @@ export const en = {
   "sftp.problem.unsupportedEntry": "This kind of entry cannot be copied.",
   "sftp.problem.compareLimit": "The folders are too large to compare.",
   "sftp.problem.traversalLimit": "The folder contains too many entries to process.",
+  "sftp.problem.targetInsideSource":
+    "The destination is the source folder itself or inside it, so the folder cannot be copied or moved there. This includes a destination reached through a symbolic link. Choose a location outside the source folder.",
   "sftp.problem.rangeInvalid": "The download could not resume where it stopped. Download it again.",
   "sftp.problem.reconciliationRequired": "The copy or move may have finished, but its result was not recorded. Check the destination.",
   "sftp.problem.nameCollision":
