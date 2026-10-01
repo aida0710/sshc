@@ -233,9 +233,16 @@ sshc terminal send <session-id> --text 'uptime' --json
 sshc terminal send <session-id> --text 'partial input' --no-enter
 sshc terminal wait <session-id> --for connected --timeout 30s --json
 sshc terminal rename <session-id> deploy
+sshc terminal rename <session-id> --auto
 sshc terminal close <session-id>
 ```
 
 `create shell`はsshcエンジン側のローカルシェルを開きます。`send`は既定で末尾にEnter（CR）を付け、`--no-enter`で付けません。
 
 `read`では、保持しているスクロールバックと次回指定する読み取り位置を取得できます。指定した位置の出力がすでに破棄されている場合は、現在残っている先頭から返し、そのことを警告に含めます。`send`は、確認後にセッション内のプロセスが入れ替わっていた場合には何も送信しません。
+
+`rename`で付けた名前は固定され、プログラムが設定するタイトルでは変わりません。
+
+- `--auto`を付けると固定を外し、画面の［自動の名前に戻す］と同じく、プログラムが設定したタイトル、無ければ接続エイリアスまたはシェル名を表示します。名前と`--auto`は同時に指定できません。
+- `-`で始まる名前は、`sshc terminal rename <session-id> --json -- -dev`のように`--`の後ろに書いてください。`--`より後ろはオプションとして読みません。
+- `--json`の結果では、`presentation.titlePinned`で名前が固定されているかを確認できます。

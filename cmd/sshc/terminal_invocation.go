@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,13 +30,16 @@ type terminalInvocation struct {
 	Kind     string
 	Alias    string
 	Title    string
-	Text     string
-	Cursor   uint64
-	Limit    int
-	WaitFor  string
-	Timeout  time.Duration
-	JSON     bool
-	Submit   bool
+	// UnpinTitle は rename --auto で立つ。Title の代わりに表示名の固定を外し、
+	// 画面の「Use automatic name」と同じく自動の名前へ戻す。
+	UnpinTitle bool
+	Text       string
+	Cursor     uint64
+	Limit      int
+	WaitFor    string
+	Timeout    time.Duration
+	JSON       bool
+	Submit     bool
 }
 
 const (
@@ -66,6 +70,11 @@ var (
 	terminalWaitOptions = commandOptions{command: "terminal wait", options: []commandOption{
 		valueOption("--for"), valueOption("--timeout"), jsonOption,
 	}}
+	// terminalRenameOptions は "--" の後ろをオプションとして読まない。"-dev" のように "-" で
+	// 始まる名前は、ほかの位置ではオプションとして断られるので、"--" の後ろに書いて付ける。
+	terminalRenameOptions = commandOptions{command: "terminal rename", options: []commandOption{
+		switchOption("--auto"), jsonOption,
+	}, endsAtDelimiter: true}
 	terminalReadLimitBounds = integerBounds{minimum: 0, maximum: terminalCLIMaxReadBytes, kind: "a number"}
 )
 
@@ -185,14 +194,28 @@ func readTerminalWaitOptions(args []string, parsed *terminalInvocation) error {
 	return nil
 }
 
+// readTerminalRename は、付ける名前か --auto のどちらか一方を読む。名前は "--" の前の
+// 位置引数と "--" の後ろの引数を区別せず、合わせて 1 つだけ受ける。
 func readTerminalRename(args []string, parsed *terminalInvocation) error {
-	if len(args) == 0 || strings.TrimSpace(args[0]) == "" {
-		return fmt.Errorf("terminal rename requires a non-empty title")
+	arguments, err := terminalRenameOptions.parse(args)
+	if err != nil {
+		return err
 	}
-	parsed.Title = args[0]
-	var err error
-	parsed.JSON, err = parseOptionalJSON("terminal rename", args[1:])
-	return err
+	parsed.JSON = arguments.has("--json")
+	parsed.UnpinTitle = arguments.has("--auto")
+	titles := slices.Concat(arguments.positionals, arguments.rest)
+	switch {
+	case len(titles) > 1:
+		return fmt.Errorf("terminal rename does not take %q", titles[1])
+	case parsed.UnpinTitle && len(titles) == 1:
+		return fmt.Errorf("terminal rename cannot combine a title and --auto")
+	case parsed.UnpinTitle:
+		return nil
+	case len(titles) == 0 || strings.TrimSpace(titles[0]) == "":
+		return fmt.Errorf("terminal rename requires a non-empty title or --auto")
+	}
+	parsed.Title = titles[0]
+	return nil
 }
 
 func readTerminalCreate(args []string, parsed *terminalInvocation) error {
