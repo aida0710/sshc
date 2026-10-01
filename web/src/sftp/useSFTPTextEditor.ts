@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 import { sftpProblemText } from "./sftpProblemText";
 import type { BrowserLocation, NavigationBlocker } from "../routing/useSectionRoute";
 import { useUnsavedDraftGuard } from "../routing/useUnsavedDraftGuard";
@@ -15,13 +16,30 @@ export type SFTPTextSource = {
 type OpenedText = { alias: string; file: RemoteTextFile };
 
 // A problem shown inside the editor, over which the pane's banner would be
-// hidden. `reloadable` offers to read the remote file again, after a save
-// refused because someone else changed it.
-type EditorProblem = { message: string; reloadable: boolean };
+// hidden. `conflict` says the remote file is no longer the revision the
+// editor read, so a save is refused until the user either reads the remote
+// file again or overwrites it.
+type EditorProblem = { message: string; conflict: boolean };
 
 // What the confirmation over the editor is asking before it drops unsaved
 // changes: closing the editor, or replacing them with the remote file.
 type DiscardConfirmation = "close" | "reload";
+
+// A write of the editor's contents: a save over the revision the editor read,
+// or an overwrite of the revision read when the user asked to overwrite.
+// When the engine refuses either as a conflict, the message says which one.
+type WriteKind = "save" | "overwrite";
+
+const conflictMessageKeys: Record<WriteKind, MessageKey> = {
+  save: "sftp.editorConflict",
+  overwrite: "sftp.editorOverwriteConflict",
+};
+
+// The overwrite the user is asked to confirm. `revision` is the remote
+// revision it would replace, read when the confirmation opened, and is null
+// until that read answers. A change made after the read makes the confirmed
+// overwrite a conflict again instead of being lost unseen.
+type OverwriteConfirmation = { revision: string | null };
 
 // The text editor is one modal over the file list: it knows how to read,
 // edit and save a file with its revision, and how to keep the user from
@@ -52,9 +70,12 @@ export function useSFTPTextEditor({
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<EditorProblem | null>(null);
   const [confirming, setConfirming] = useState<DiscardConfirmation | null>(null);
+  const [overwriteConfirmation, setOverwriteConfirmation] = useState<OverwriteConfirmation | null>(null);
   const [leaving, setLeaving] = useState<BrowserLocation | null>(null);
-  // Retired whenever the editor is closed or reset, so that a read or a save
-  // that was still in flight cannot reopen a file the user has left.
+  // Retired whenever the editor is closed or reset, or an overwrite
+  // confirmation is cancelled. A read or a save that was still in flight then
+  // cannot reopen a file the user has left, and the revision read for a
+  // cancelled overwrite is dropped.
   const fileGeneration = useRequestGeneration();
   const dirty = opened !== null && contents !== opened.file.contents;
 
@@ -76,6 +97,7 @@ export function useSFTPTextEditor({
     setBusy(false);
     setProblem(null);
     setConfirming(null);
+    setOverwriteConfirmation(null);
     setLeaving(null);
   }
 
@@ -106,28 +128,30 @@ export function useSFTPTextEditor({
 
   async function open(alias: string, entry: RemoteEntry) {
     if (dirty) {
-      setProblem({ message: t("sftp.unsavedBlocked"), reloadable: false });
+      setProblem({ message: t("sftp.unsavedBlocked"), conflict: false });
       return;
     }
     onProblem("");
     // With a file already open, the pane's banner would sit behind the editor.
-    await read(alias, entry.path, opened === null ? onProblem : (message) => setProblem({ message, reloadable: false }));
+    await read(alias, entry.path, opened === null ? onProblem : (message) => setProblem({ message, conflict: false }));
   }
 
   async function reload() {
     setConfirming(null);
     if (opened === null) return;
-    await read(opened.alias, opened.file.entry.path, (message) => setProblem({ message, reloadable: true }));
+    await read(opened.alias, opened.file.entry.path, (message) => setProblem({ message, conflict: true }));
   }
 
-  async function save() {
+  // Writes the editor's contents. The engine refuses the write when the
+  // remote file is no longer `expectedRevision`.
+  async function writeContents(kind: WriteKind, expectedRevision: string) {
     if (opened === null) return;
     const isCurrent = fileGeneration.observe();
     const { alias, file } = opened;
     setBusy(true);
     setProblem(null);
     try {
-      const saved = await source.saveText(alias, file.entry.path, contents, file.revision);
+      const saved = await source.saveText(alias, file.entry.path, contents, expectedRevision);
       if (!isCurrent()) return;
       // The server holds these contents now, so the next save must send
       // this revision even if refreshing the listing fails.
@@ -136,11 +160,61 @@ export function useSFTPTextEditor({
       await onSaved(alias, saved);
     } catch (error) {
       if (!isCurrent()) return;
-      const conflict = failureCode(error) === "sftp_conflict";
-      setProblem({ message: conflict ? t("sftp.conflict") : sftpProblemText(t, error), reloadable: conflict });
+      const refusedAsConflict = failureCode(error) === "sftp_conflict";
+      setProblem({
+        message: refusedAsConflict ? t(conflictMessageKeys[kind]) : sftpProblemText(t, error),
+        // An overwrite starts from a conflict. When its write fails for another
+        // reason, the editor still holds the revision the remote file has
+        // moved on from, so Reload and Overwrite stay offered rather than
+        // leaving only a Save that would be refused as a conflict.
+        conflict: refusedAsConflict || kind === "overwrite",
+      });
     } finally {
       if (isCurrent()) setBusy(false);
     }
+  }
+
+  async function save() {
+    if (opened === null) return;
+    await writeContents("save", opened.file.revision);
+  }
+
+  // Opens the confirmation and reads the remote file again to learn the
+  // revision it has now. The confirmation opens before the read, while the
+  // clicked button inside the editor still has the focus, so it stacks over
+  // the editor. A button disabled for the read would drop the focus, and a
+  // dialog opened after that would replace the editor instead. The editor's
+  // contents stay as they are.
+  async function requestOverwrite() {
+    if (opened === null) return;
+    const isCurrent = fileGeneration.begin();
+    const { alias, file } = opened;
+    setOverwriteConfirmation({ revision: null });
+    try {
+      const remote = await source.readText(alias, file.entry.path);
+      if (!isCurrent()) return;
+      setOverwriteConfirmation({ revision: remote.revision });
+    } catch (error) {
+      if (!isCurrent()) return;
+      setOverwriteConfirmation(null);
+      setProblem({ message: readProblemText(error), conflict: true });
+    }
+  }
+
+  function cancelOverwrite() {
+    // Drops the read still in flight: its answer belongs to the confirmation
+    // turned down.
+    fileGeneration.retire();
+    setOverwriteConfirmation(null);
+  }
+
+  // The confirmation closes before the write starts, so a refused or failed
+  // overwrite is shown in the editor rather than behind the dialog.
+  async function overwrite() {
+    const revision = overwriteConfirmation?.revision ?? null;
+    if (revision === null) return;
+    setOverwriteConfirmation(null);
+    await writeContents("overwrite", revision);
   }
 
   // Escape, Android back and the close button all land here. Unsaved changes
@@ -173,6 +247,8 @@ export function useSFTPTextEditor({
     busy,
     problem,
     confirming,
+    confirmingOverwrite: overwriteConfirmation !== null,
+    readingOverwriteRevision: overwriteConfirmation !== null && overwriteConfirmation.revision === null,
     leaving,
     open,
     save,
@@ -180,6 +256,9 @@ export function useSFTPTextEditor({
     dismiss,
     requestReload,
     reload,
+    requestOverwrite,
+    overwrite,
+    cancelOverwrite,
     keepEditing: () => setConfirming(null),
     discardAndLeave,
     stay: () => setLeaving(null),

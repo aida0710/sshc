@@ -92,7 +92,7 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 1. 削除してよい検証用directoryを実ホストに作り、SFTPから開く。
 2. nested directory、空directory、小さいtext／binaryを含むフォルダをDrag & Dropし、階層と空directoryが維持され、進捗とfile別結果が表示されることを確認する。
 3. 別のフォルダをアップロードし、既存名へ衝突させる。上書き確認で1件を上書きし、別の1件をskipして、残りが続行されることを確認する。別の転送では取消し、未開始fileが送られないことを確認する。
-4. textをMonacoで開き、別のSSH sessionから内容を変更した後に保存して、競合として拒否されることを確認する。
+4. textをMonacoで開き、別のSSH sessionから内容を変更した後に保存して、競合として拒否されることを確認する。続けて［上書き保存］を選び、確認のあとにエディタの内容でリモートのファイルが上書きされることを確認する。もう一度競合させ、上書き保存の確認ダイアログを開いたまま別のSSH sessionから内容を変更してから確定すると、上書きせずに競合として表示されることも確認する。
 5. file download、directoryのZIP download、rename、空directoryの作成と削除を確認する。非空directoryを削除すると、確認dialogに「フォルダ内の項目もすべて削除されます。」と表示され、配下ごと削除されることも確認する。
 6. upload／file download／folder downloadを3件以上追加し、Transfer Managerが同時2件だけを実行すること、fileごとにbytes、速度、残り時間、attempt、statusを表示することを確認する。
 7. 2 MiBを超えるfileをuploadし、転送中にpauseしてからresumeする。別画面へ移動して戻っても同じjobとbytes進捗が残り、完了前はtarget名のfileが見えず、完了後だけ一覧へ現れ、別画面でも完了通知が出ることを確認する。

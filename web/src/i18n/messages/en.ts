@@ -339,6 +339,15 @@ export const en = {
   "sftp.editorCloseDiscard": "Discard and close",
   "sftp.editorReloadHeading": "Reload from remote?",
   "sftp.editorReloadDiscard": "Discard and reload",
+  "sftp.editorConflict":
+    "Could not save. The remote file changed after it was opened in the editor. Reload it from the remote, or overwrite it.",
+  "sftp.editorOverwrite": "Overwrite",
+  "sftp.editorOverwriteHeading": "Overwrite the remote file?",
+  "sftp.editorOverwriteBody":
+    "{path} changed on the remote after it was opened in the editor. Overwriting replaces it with the editor's contents, and the changes made on the remote are lost.",
+  "sftp.editorOverwriteReading": "Reading the remote file…",
+  "sftp.editorOverwriteConflict":
+    "Could not overwrite. The remote file changed again while the overwrite was being confirmed. Overwrite it again, or reload it from the remote.",
   "sftp.unsaved": "Unsaved",
   "sftp.unsavedBlocked": "The edited file has unsaved changes. Save it, or close it and discard them, before opening another file.",
   "sftp.conflict": "The remote file changed. Reload it before saving again.",
