@@ -152,7 +152,7 @@ _sshc_completion() {
           list) _sshc_complete_words "--json --help" ;;
           show|close) if (( COMP_CWORD >= 4 )); then _sshc_complete_words "--json"; fi ;;
           create) if [[ "${COMP_WORDS[3]}" == "shell" && COMP_CWORD -ge 4 || "${COMP_WORDS[3]}" == "ssh" && COMP_CWORD -ge 5 ]]; then _sshc_complete_words "--json"; fi ;;
-          rename) if (( COMP_CWORD >= 5 )); then _sshc_complete_words "--json"; fi ;;
+          rename) if (( COMP_CWORD == 4 )); then _sshc_complete_words "--auto"; else _sshc_complete_words "--json"; fi ;;
           read) if (( COMP_CWORD >= 4 )); then _sshc_complete_words "--cursor --limit --json"; fi ;;
           send) if (( COMP_CWORD >= 4 )); then _sshc_complete_words "--text --no-enter --json"; fi ;;
           wait) if (( COMP_CWORD >= 4 )); then _sshc_complete_words "--for --timeout --json"; fi ;;
@@ -305,7 +305,7 @@ _sshc() {
           list) _sshc_values '--json --help' ;;
           show|close) (( CURRENT >= 5 )) && _sshc_values '--json' ;;
           create) if [[ "${words[4]}" == 'shell' && CURRENT -ge 5 || "${words[4]}" == 'ssh' && CURRENT -ge 6 ]]; then _sshc_values '--json'; fi ;;
-          rename) (( CURRENT >= 6 )) && _sshc_values '--json' ;;
+          rename) if (( CURRENT == 5 )); then _sshc_values '--auto'; else _sshc_values '--json'; fi ;;
           read) (( CURRENT >= 5 )) && _sshc_values '--cursor --limit --json' ;;
           send) (( CURRENT >= 5 )) && _sshc_values '--text --no-enter --json' ;;
           wait) (( CURRENT >= 5 )) && _sshc_values '--for --timeout --json' ;;
@@ -503,6 +503,7 @@ complete -c sshc -f -n '__sshc_terminal_options' -a '--json'
 complete -c sshc -f -n '__sshc_action terminal read; and __sshc_min_words 4' -a '--cursor --limit'
 complete -c sshc -f -n '__sshc_action terminal send; and __sshc_min_words 4' -a '--text --no-enter'
 complete -c sshc -f -n '__sshc_action terminal wait; and __sshc_min_words 4' -a '--for --timeout'
+complete -c sshc -f -n '__sshc_action terminal rename; and test (count (commandline -opc)) -eq 4' -a '--auto'
 complete -c sshc -f -n '__sshc_previous --for' -a '{{WAIT_STATES}}'
 
 complete -c sshc -f -n '__sshc_command serial' -a '{{SERIAL_OPTIONS}}'

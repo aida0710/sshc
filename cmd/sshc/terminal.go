@@ -105,8 +105,7 @@ func executeTerminal(ctx context.Context, engine *engineAPI, called terminalInvo
 		return readTerminalControl(ctx, engine, session.Id, called.Cursor, called.Limit)
 	case terminalRename:
 		var updated api.TerminalSessionList
-		if err := engine.sendJSON(ctx, http.MethodPut, path+"/title",
-			api.SetTerminalSessionTitleRequest{Title: &called.Title}, &updated); err != nil {
+		if err := engine.sendJSON(ctx, http.MethodPut, path+"/title", terminalTitleRequest(called), &updated); err != nil {
 			return nil, err
 		}
 		return resolveExactTerminalSession(updated.Sessions, session.Id)
@@ -123,6 +122,16 @@ func executeTerminal(ctx context.Context, engine *engineAPI, called terminalInvo
 	default:
 		return nil, errors.New("terminal action is not implemented")
 	}
+}
+
+// terminalTitleRequest は、PUT /title の本文を作る。--auto のときは title を null で
+// 送る。engine は null を受けると表示名の固定を外し、プログラムが付けたタイトル、
+// 無ければ接続エイリアスかシェル名を表示名に戻す。
+func terminalTitleRequest(called terminalInvocation) api.SetTerminalSessionTitleRequest {
+	if called.UnpinTitle {
+		return api.SetTerminalSessionTitleRequest{Title: nil}
+	}
+	return api.SetTerminalSessionTitleRequest{Title: &called.Title}
 }
 
 func terminalSessions(ctx context.Context, engine *engineAPI) (api.TerminalSessionList, error) {

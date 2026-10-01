@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -138,6 +139,64 @@ func TestTerminalRenamePinsTheTitleThroughTheTitleRoute(t *testing.T) {
 	}
 	if session := result.(api.TerminalSession); session.Title != "deploy" || pinned.Load() != 1 {
 		t.Fatalf("result = %#v, title requests = %d", result, pinned.Load())
+	}
+}
+
+// --auto は、画面の「Use automatic name」と同じく title を null で送って固定を外す。
+// title のキーを省くと engine は invalid_request で断るので、null がキーごと載ることまで
+// 確かめる。--json の結果は名前を付けたときと同じ形で、固定が外れたことが titlePinned に出る。
+func TestTerminalRenameAutoSendsANullTitleAndReportsTheUnpinnedSessionAsJSON(t *testing.T) {
+	harness, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		session := terminalTestSession("connected")
+		switch request.URL.Path {
+		case "/api/v1/terminal/sessions":
+			session.Title = "deploy"
+			session.Presentation = &api.TerminalPresentation{DisplayTitle: "deploy", TitleSource: "user", TitlePinned: true}
+		case "/api/v1/terminal/sessions/" + terminalTestID + "/title":
+			session.Presentation = &api.TerminalPresentation{DisplayTitle: "zsh", TitleSource: "fallback", TitlePinned: false}
+		default:
+			t.Errorf("unexpected %s %s", request.Method, request.URL.Path)
+			http.NotFound(response, request)
+			return
+		}
+		_ = json.NewEncoder(response).Encode(api.TerminalSessionList{Sessions: []api.TerminalSession{session}})
+	})
+	defer server.Close()
+	called, err := parseInvocation([]string{"sshc", "terminal", "rename", terminalTestID[:8], "--auto", "--json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr strings.Builder
+	code := runTerminal(context.Background(), *called.Terminal, commandEnvironment{
+		stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr,
+	})
+
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
+	}
+	if methods := strings.Join(harness.methods, ","); methods != "GET,PUT" || len(harness.bodies) != 2 {
+		t.Fatalf("requests = %v %v", harness.methods, harness.paths)
+	}
+	if body := strings.TrimSpace(string(harness.bodies[1])); body != `{"title":null}` {
+		t.Fatalf("title body = %s; want {\"title\":null}", body)
+	}
+	var envelope struct {
+		Success bool `json:"success"`
+		Result  struct {
+			ID           string         `json:"id"`
+			Title        string         `json:"title"`
+			Presentation map[string]any `json:"presentation"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(stdout.String()), &envelope); err != nil {
+		t.Fatalf("stdout = %q: %v", stdout.String(), err)
+	}
+	pinned, reported := envelope.Result.Presentation["titlePinned"]
+	if !envelope.Success || envelope.Result.ID != terminalTestID || envelope.Result.Title != "zsh" ||
+		!reported || pinned != false {
+		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
 
