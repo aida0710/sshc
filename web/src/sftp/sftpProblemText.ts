@@ -25,6 +25,7 @@ const sftpProblemMessages: CodeMessages = {
   sftp_unsupported_entry: "sftp.problem.unsupportedEntry",
   sftp_compare_limit: "sftp.problem.compareLimit",
   sftp_traversal_limit: "sftp.problem.traversalLimit",
+  sftp_target_inside_source: "sftp.problem.targetInsideSource",
   sftp_range_invalid: "sftp.problem.rangeInvalid",
   sftp_cleanup_pending: "sftp.manager.cleanupFailed",
   sftp_reconciliation_required: "sftp.problem.reconciliationRequired",

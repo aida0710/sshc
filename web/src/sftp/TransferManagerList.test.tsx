@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { en } from "../i18n/messages";
 import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { TransferManagerList } from "./TransferManagerList";
 
@@ -267,6 +268,18 @@ describe("the transfer queue", () => {
     expect(screen.queryByText("Select the same file")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
+  it("says why a folder copied into itself failed instead of the general failure", () => {
+    manager.setJobs([job("remote", {
+      direction: "remote",
+      status: "failed",
+      problem: "sftp_target_inside_source",
+      allowedActions: ["retry", "cancel", "remove"],
+    })]);
+    render(<TransferManagerList />);
+    expect(screen.getByText(en["sftp.problem.targetInsideSource"])).toBeInTheDocument();
+    expect(screen.queryByText(en["sftp.problem.failed"])).not.toBeInTheDocument();
   });
 
   it("shows a remote job whose operation is in flight as running", () => {

@@ -63,3 +63,10 @@ const (
 	MaxSearchDepthForTest         = maxSearchDepth
 	MaxSearchVisitedForTest       = maxSearchVisited
 )
+
+// SymlinkForTest creates link on the server, pointing at target. sshc never
+// creates links itself; integration tests use it to build a path that reaches
+// back into a folder through a link.
+func (c *Client) SymlinkForTest(target, link string) error {
+	return c.client.Symlink(target, link)
+}

@@ -34,6 +34,8 @@ func (c *Client) Getwd(ctx context.Context) (string, error) {
 	return workingDirectory, nil
 }
 
+func (c *Client) RealPath(path string) (string, error) { return c.client.RealPath(path) }
+
 func (c *Client) ReadDir(ctx context.Context, path string) ([]fs.FileInfo, error) {
 	return c.client.ReadDirContext(ctx, path)
 }
