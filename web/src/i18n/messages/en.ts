@@ -167,6 +167,8 @@ export const en = {
   "sftp.problem.traversalLimit": "The folder contains too many entries to process.",
   "sftp.problem.targetInsideSource":
     "The destination is the source folder itself or inside it, so the folder cannot be copied or moved there. This includes a destination reached through a symbolic link. Choose a location outside the source folder.",
+  "sftp.problem.targetIsSource":
+    "The destination is the source file itself, so the file cannot be copied or moved there. This includes the same server saved as two hosts and a destination reached through a symbolic link on its path. Choose another location or name.",
   "sftp.problem.rangeInvalid": "The download could not resume where it stopped. Download it again.",
   "sftp.problem.reconciliationRequired": "The copy or move may have finished, but its result was not recorded. Check the destination.",
   "sftp.problem.nameCollision":
