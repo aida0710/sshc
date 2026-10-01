@@ -51,6 +51,10 @@ var (
 	// ErrTargetInsideSource is a folder copy or move whose target is the
 	// source folder itself or lies inside it.
 	ErrTargetInsideSource = errors.New("target is the source folder or inside it")
+	// ErrTargetIsSource is a file copy or move whose target is the source
+	// file itself, also when it is reached through another alias of the same
+	// server or through a symbolic link on the target's path.
+	ErrTargetIsSource = errors.New("target is the source file itself")
 )
 
 type EntryType string

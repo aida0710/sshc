@@ -54,11 +54,23 @@ func nodePaths(server *fakeRemote) []string {
 type transferAliases struct{ source, target string }
 
 var (
-	folderOperations = []sftp.RemoteTransferOperation{sftp.RemoteCopy, sftp.RemoteMove}
+	copyAndMove = []sftp.RemoteTransferOperation{sftp.RemoteCopy, sftp.RemoteMove}
 	// oneAliasAndTwoAliases reach one server through the same alias and through
 	// two aliases, as web and web-admin both naming one host.
 	oneAliasAndTwoAliases = []transferAliases{{source: "same", target: "same"}, {source: "web", target: "web-admin"}}
 )
+
+// sourceEntry is the source folder of serverWithSourceFolder or the file in
+// it, with the refusal of a transfer onto itself.
+type sourceEntry struct {
+	kind, path string
+	refusal    error
+}
+
+var sourceFolderAndFile = []sourceEntry{
+	{kind: "folder", path: "/work/source", refusal: sftp.ErrTargetInsideSource},
+	{kind: "file", path: "/work/source/file.txt", refusal: sftp.ErrTargetIsSource},
+}
 
 // fixedRealPath is a connection whose REALPATH always gives the same answer,
 // as a server does that cannot resolve the paths or answers oddly.
@@ -83,7 +95,7 @@ func TestRemoteFolderCopyOrMoveIntoItselfIsRefused(t *testing.T) {
 	original := nodePaths(server)
 	service := oneServer(server)
 
-	for _, operation := range folderOperations {
+	for _, operation := range copyAndMove {
 		err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
 			SourceAlias: "same", SourcePath: "/work/source",
 			TargetAlias: "same", TargetPath: "/work/source/nested", Operation: operation,
@@ -95,26 +107,31 @@ func TestRemoteFolderCopyOrMoveIntoItselfIsRefused(t *testing.T) {
 	requireUnchanged(t, server, original)
 }
 
-// Approving an overwrite cannot make a folder its own destination, so the
-// transfer is refused instead of asking for an approval that would not help.
-func TestRemoteFolderCopyOrMoveOntoItselfOnOneAliasIsRefusedInsteadOfAskingToOverwrite(t *testing.T) {
+// Approving an overwrite cannot make a folder or a file its own destination,
+// so planning and running refuse the transfer instead of asking for an
+// approval that would not help.
+func TestRemoteCopyOrMoveOntoItselfOnOneAliasIsRefusedInsteadOfAskingToOverwrite(t *testing.T) {
 	t.Parallel()
-	server := serverWithSourceFolder(nil)
-	original := nodePaths(server)
-	service := oneServer(server)
-
-	for _, operation := range folderOperations {
-		for _, overwrite := range []bool{false, true} {
-			err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
-				SourceAlias: "same", SourcePath: "/work/source",
-				TargetAlias: "same", TargetPath: "/work/source", Operation: operation, Overwrite: overwrite,
-			}, stopAtFirstBytes)
-			if !errors.Is(err, sftp.ErrTargetInsideSource) {
-				t.Fatalf("CopyRemote(%s, overwrite %v) error = %v, want ErrTargetInsideSource", operation, overwrite, err)
+	for _, source := range sourceFolderAndFile {
+		server := serverWithSourceFolder(nil)
+		original := nodePaths(server)
+		service := oneServer(server)
+		for _, operation := range copyAndMove {
+			for _, overwrite := range []bool{false, true} {
+				request := sftp.RemoteTransferRequest{
+					SourceAlias: "same", SourcePath: source.path,
+					TargetAlias: "same", TargetPath: source.path, Operation: operation, Overwrite: overwrite,
+				}
+				if _, err := service.PlanRemoteTransfer(context.Background(), request); !errors.Is(err, source.refusal) {
+					t.Fatalf("PlanRemoteTransfer(%s %s, overwrite %v) error = %v, want %v", operation, source.kind, overwrite, err, source.refusal)
+				}
+				if err := service.CopyRemote(context.Background(), request, stopAtFirstBytes); !errors.Is(err, source.refusal) {
+					t.Fatalf("CopyRemote(%s %s, overwrite %v) error = %v, want %v", operation, source.kind, overwrite, err, source.refusal)
+				}
 			}
 		}
+		requireUnchanged(t, server, original)
 	}
-	requireUnchanged(t, server, original)
 }
 
 func TestRemoteFolderCopyOrMoveIntoItselfIsRefusedThroughAnotherAliasOfTheSameServer(t *testing.T) {
@@ -123,7 +140,7 @@ func TestRemoteFolderCopyOrMoveIntoItselfIsRefusedThroughAnotherAliasOfTheSameSe
 	original := nodePaths(server)
 	service := oneServer(server)
 
-	for _, operation := range folderOperations {
+	for _, operation := range copyAndMove {
 		err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
 			SourceAlias: "web", SourcePath: "/work/source",
 			TargetAlias: "web-admin", TargetPath: "/work/source/nested", Operation: operation,
@@ -141,7 +158,7 @@ func TestRemoteFolderCopyOrMoveIntoItselfIsRefusedThroughASymlinkOnTheTargetPath
 		server := serverWithSourceFolder(map[string]node{"/shortcut": symlink("shortcut", "/work/source")})
 		original := nodePaths(server)
 		service := oneServer(server)
-		for _, operation := range folderOperations {
+		for _, operation := range copyAndMove {
 			err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
 				SourceAlias: aliases.source, SourcePath: "/work/source",
 				TargetAlias: aliases.target, TargetPath: "/shortcut/nested", Operation: operation,
@@ -181,63 +198,76 @@ func TestRemoteFolderCopyIntoItselfIsRefusedWhenTheSourcePathGoesThroughASymlink
 	requireUnchanged(t, server, original)
 }
 
-// A move onto the source folder through another alias would copy every file
-// onto itself and then delete the source, which is the only copy.
-func TestRemoteFolderMoveOntoItselfIsRefusedThroughAnotherAliasOfTheSameServer(t *testing.T) {
+// A move onto the source through another alias of the same server would copy
+// each file onto itself and then delete the source, which is the only copy.
+// The same holds for a destination reached through a link to a folder on the
+// way, also on one alias, where the copy would only rewrite the source.
+func TestRemoteCopyOrMoveOntoItselfWithTheOverwriteApprovedIsRefusedAndKeepsTheSource(t *testing.T) {
 	t.Parallel()
-	server := serverWithSourceFolder(map[string]node{"/shortcut": symlink("shortcut", "/work")})
-	original := nodePaths(server)
-	service := oneServer(server)
-
-	for _, targetPath := range []string{"/work/source", "/shortcut/source"} {
-		err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
-			SourceAlias: "web", SourcePath: "/work/source",
-			TargetAlias: "web-admin", TargetPath: targetPath,
-			Operation: sftp.RemoteMove, Overwrite: true,
-		}, stopAtFirstBytes)
-		if !errors.Is(err, sftp.ErrTargetInsideSource) {
-			t.Fatalf("CopyRemote(move to %s) error = %v, want ErrTargetInsideSource", targetPath, err)
+	for _, source := range sourceFolderAndFile {
+		for _, aliases := range oneAliasAndTwoAliases {
+			server := serverWithSourceFolder(map[string]node{"/shortcut": symlink("shortcut", "/work")})
+			original := nodePaths(server)
+			service := oneServer(server)
+			throughTheLink := "/shortcut" + strings.TrimPrefix(source.path, "/work")
+			for _, targetPath := range []string{source.path, throughTheLink} {
+				for _, operation := range copyAndMove {
+					err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
+						SourceAlias: aliases.source, SourcePath: source.path,
+						TargetAlias: aliases.target, TargetPath: targetPath,
+						Operation: operation, Overwrite: true,
+					}, stopAtFirstBytes)
+					if !errors.Is(err, source.refusal) {
+						t.Fatalf("CopyRemote(%s %s to %s, %s→%s) error = %v, want %v", operation, source.kind, targetPath, aliases.source, aliases.target, err, source.refusal)
+					}
+				}
+			}
+			requireUnchanged(t, server, original)
+			if got := string(server.nodes["/work/source/file.txt"].content); got != "contents" {
+				t.Fatalf("the source file holds %q after the refused transfers, want contents", got)
+			}
 		}
 	}
-	requireUnchanged(t, server, original)
 }
 
 // Telling whether another alias reaches the same server writes a probe file.
-// Before the overwrite is approved, nothing is written into the existing
-// folder, whichever server it is on.
-func TestRemoteFolderCopyOntoAnExistingFolderOfAnotherAliasAsksToOverwriteBeforeWritingAnything(t *testing.T) {
+// Before the overwrite is approved, nothing is written next to or into the
+// existing folder or file, whichever server it is on.
+func TestRemoteCopyOrMoveOntoAnExistingEntryOfAnotherAliasAsksToOverwriteBeforeWritingAnything(t *testing.T) {
 	t.Parallel()
 	targets := map[string]func(source *fakeRemote) *fakeRemote{
-		"another server": func(*fakeRemote) *fakeRemote {
-			return remoteWith(map[string]node{"/work": directory("work"), "/work/source": directory("source")})
-		},
+		"another server":  func(*fakeRemote) *fakeRemote { return serverWithSourceFolder(nil) },
 		"the same server": func(source *fakeRemote) *fakeRemote { return source },
 	}
 	for name, targetOf := range targets {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			sourceServer := serverWithSourceFolder(nil)
-			targetServer := targetOf(sourceServer)
-			created := 0
-			targetServer.createHook = func() { created++ }
-			service := sftp.Service{Open: func(_ context.Context, alias string) (sftp.Remote, error) {
-				if alias == "origin" {
-					return sourceServer, nil
-				}
-				return targetServer, nil
-			}}
+		for _, source := range sourceFolderAndFile {
+			for _, operation := range copyAndMove {
+				t.Run(name+"/"+string(operation)+" "+source.kind, func(t *testing.T) {
+					t.Parallel()
+					sourceServer := serverWithSourceFolder(nil)
+					targetServer := targetOf(sourceServer)
+					created := 0
+					targetServer.createHook = func() { created++ }
+					service := sftp.Service{Open: func(_ context.Context, alias string) (sftp.Remote, error) {
+						if alias == "origin" {
+							return sourceServer, nil
+						}
+						return targetServer, nil
+					}}
 
-			err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
-				SourceAlias: "origin", SourcePath: "/work/source",
-				TargetAlias: "mirror", TargetPath: "/work/source", Operation: sftp.RemoteCopy,
-			}, nil)
-			if !errors.Is(err, sftp.ErrAlreadyExists) {
-				t.Fatalf("CopyRemote() error = %v, want ErrAlreadyExists", err)
+					err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
+						SourceAlias: "origin", SourcePath: source.path,
+						TargetAlias: "mirror", TargetPath: source.path, Operation: operation,
+					}, nil)
+					if !errors.Is(err, sftp.ErrAlreadyExists) {
+						t.Fatalf("CopyRemote() error = %v, want ErrAlreadyExists", err)
+					}
+					if created != 0 {
+						t.Fatalf("the target got %d files before the overwrite was approved", created)
+					}
+				})
 			}
-			if created != 0 {
-				t.Fatalf("the target got %d files before the overwrite was approved", created)
-			}
-		})
+		}
 	}
 }
 
@@ -287,6 +317,94 @@ func TestRemoteFolderCanBeCopiedBelowTheSamePathOnAnotherServer(t *testing.T) {
 	for candidate := range targetServer.nodes {
 		if strings.Contains(candidate, ".sshc-") {
 			t.Fatalf("copy left %s on the target server", candidate)
+		}
+	}
+}
+
+// On another server the same path names another file, which an approved copy
+// or move replaces. A file the target does not have yet cannot be the source,
+// so it is written without a probe file.
+func TestRemoteFileCanBeCopiedOrMovedToTheSamePathOnAnotherServer(t *testing.T) {
+	t.Parallel()
+	const sourceFile = "/work/source/file.txt"
+	targets := []struct {
+		name  string
+		nodes map[string]node
+		// probed is whether telling the servers apart needs a probe file, which
+		// the check removes again.
+		probed bool
+	}{
+		{
+			name: "onto an existing file",
+			nodes: map[string]node{
+				"/work": directory("work"), "/work/source": directory("source"),
+				sourceFile: file("file.txt", "older contents", 0o644),
+			},
+			probed: true,
+		},
+		{name: "as a new file", nodes: map[string]node{"/work": directory("work"), "/work/source": directory("source")}},
+	}
+	for _, target := range targets {
+		for _, operation := range copyAndMove {
+			t.Run(target.name+"/"+string(operation), func(t *testing.T) {
+				t.Parallel()
+				sourceServer := serverWithSourceFolder(nil)
+				targetServer := remoteWith(maps.Clone(target.nodes))
+				service := sftp.Service{Open: func(_ context.Context, alias string) (sftp.Remote, error) {
+					if alias == "origin" {
+						return sourceServer, nil
+					}
+					return targetServer, nil
+				}}
+
+				err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
+					SourceAlias: "origin", SourcePath: sourceFile,
+					TargetAlias: "mirror", TargetPath: sourceFile, Operation: operation, Overwrite: true,
+				}, nil)
+				if err != nil {
+					t.Fatalf("CopyRemote() error = %v", err)
+				}
+				if got := string(targetServer.nodes[sourceFile].content); got != "contents" {
+					t.Fatalf("the target file holds %q, want contents", got)
+				}
+				_, sourceKept := sourceServer.nodes[sourceFile]
+				if sourceKept != (operation == sftp.RemoteCopy) {
+					t.Fatalf("after the %s the source file is kept: %v", operation, sourceKept)
+				}
+				if !target.probed && len(targetServer.removals) != 0 {
+					t.Fatalf("the %s removed %v on the target server, want no probe file", operation, targetServer.removals)
+				}
+			})
+		}
+	}
+}
+
+// The destination's own link is not followed: like any other entry there, an
+// approved copy or move replaces the link with the contents. The file the link
+// pointed at is not overwritten; a copy keeps it and a move removes it as any
+// move removes its source.
+func TestRemoteFileCopyOrMoveOntoALinkToItselfReplacesTheLink(t *testing.T) {
+	t.Parallel()
+	for _, aliases := range oneAliasAndTwoAliases {
+		for _, operation := range copyAndMove {
+			server := serverWithSourceFolder(map[string]node{"/work/link.txt": symlink("link.txt", "/work/source/file.txt")})
+			service := oneServer(server)
+
+			err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
+				SourceAlias: aliases.source, SourcePath: "/work/source/file.txt",
+				TargetAlias: aliases.target, TargetPath: "/work/link.txt", Operation: operation, Overwrite: true,
+			}, nil)
+			if err != nil {
+				t.Fatalf("CopyRemote(%s, %s→%s) error = %v", operation, aliases.source, aliases.target, err)
+			}
+			replaced := server.nodes["/work/link.txt"]
+			if !replaced.mode.IsRegular() || string(replaced.content) != "contents" {
+				t.Fatalf("after the %s from %s to %s the link is %v holding %q, want a file holding contents", operation, aliases.source, aliases.target, replaced.mode, replaced.content)
+			}
+			_, sourceKept := server.nodes["/work/source/file.txt"]
+			if sourceKept != (operation == sftp.RemoteCopy) {
+				t.Fatalf("after the %s from %s to %s the source file is kept: %v", operation, aliases.source, aliases.target, sourceKept)
+			}
 		}
 	}
 }
@@ -399,4 +517,48 @@ func TestQueuedCopyIntoItselfFailsWithItsOwnProblemAndWritesNothing(t *testing.T
 		}
 	}
 	requireUnchanged(t, server, original)
+}
+
+// Through another alias the job first asks to overwrite the existing file, as
+// it cannot tell the server apart without writing a probe there. Once the
+// overwrite is approved it fails with its own problem and keeps the file. On
+// one alias it fails at once.
+func TestQueuedFileMoveOntoItselfFailsWithItsOwnProblemAndKeepsTheFile(t *testing.T) {
+	server := serverWithSourceFolder(nil)
+	original := nodePaths(server)
+	service := &sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return fakeConnection{server}, nil }}
+	manager := newTestTransferManager(t, service)
+	defer manager.Close()
+
+	for _, aliases := range oneAliasAndTwoAliases {
+		id := "move_onto_itself_to_" + aliases.target
+		if _, err := manager.CreateJob(sftp.CreateTransferJob{
+			ID: id, BatchID: "batch_" + id, Alias: aliases.target, RemotePath: "/work/source/file.txt",
+			SourceAlias: aliases.source, SourcePath: "/work/source/file.txt", Operation: sftp.RemoteMove,
+			Direction: sftp.TransferRemote, Kind: sftp.TransferFile, Name: "file.txt", TotalBytes: -1,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		job := waitForJob(t, manager, id, func(job sftp.TransferJob) bool {
+			return job.Status == sftp.TransferFailed || job.Status == sftp.TransferNeedsOverwrite
+		})
+		askedToOverwrite := job.Status == sftp.TransferNeedsOverwrite
+		if askedToOverwrite != (aliases.source != aliases.target) {
+			t.Fatalf("the move from %s to %s asked to overwrite: %v", aliases.source, aliases.target, askedToOverwrite)
+		}
+		if askedToOverwrite {
+			if _, err := manager.UpdateJobFromClient(id, sftp.UpdateTransferJob{Action: sftp.TransferResumeAction}); err != nil {
+				t.Fatal(err)
+			}
+			job = waitForJob(t, manager, id, hasStatus(sftp.TransferFailed))
+		}
+		if job.Problem != "sftp_target_is_source" {
+			t.Fatalf("problem of the move from %s to %s = %q, want sftp_target_is_source", aliases.source, aliases.target, job.Problem)
+		}
+	}
+	requireUnchanged(t, server, original)
+	if got := string(server.nodes["/work/source/file.txt"].content); got != "contents" {
+		t.Fatalf("the source file holds %q after the refused moves, want contents", got)
+	}
 }

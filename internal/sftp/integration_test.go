@@ -186,20 +186,10 @@ func TestRemoteFolderCopyOrMoveIntoItselfThroughASymlinkIsRefusedOnOpenSSHSFTP(t
 		}
 	}
 	integrationUpload(t, &service, path.Join(sourceRoot, "kept.txt"), []byte("kept\n"), false)
-	remote, err := service.Open(t.Context(), "integration")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer remote.Close()
-	if err := remote.(*integrationRemote).Remote.(*sftp.Client).SymlinkForTest(sourceRoot, shortcut); err != nil {
-		t.Fatalf("create the link: %v", err)
-	}
+	integrationSymlink(t, &service, sourceRoot, shortcut)
 
-	for _, aliases := range []transferAliases{
-		{source: "integration", target: "integration"},
-		{source: "integration-source", target: "integration-target"},
-	} {
-		for _, operation := range folderOperations {
+	for _, aliases := range integrationOneAliasAndTwoAliases {
+		for _, operation := range copyAndMove {
 			err := service.CopyRemote(t.Context(), sftp.RemoteTransferRequest{
 				SourceAlias: aliases.source, SourcePath: sourceRoot,
 				TargetAlias: aliases.target, TargetPath: path.Join(shortcut, "nested"), Operation: operation,
@@ -215,6 +205,119 @@ func TestRemoteFolderCopyOrMoveIntoItselfThroughASymlinkIsRefusedOnOpenSSHSFTP(t
 	}
 	if len(listing.Entries) != 1 || listing.Entries[0].Name != "kept.txt" {
 		t.Fatalf("the source folder holds %+v after the refused transfers, want only kept.txt", listing.Entries)
+	}
+}
+
+// A move onto the source file through another alias of the same server would
+// replace the file with its own copy and then delete it, which is the only
+// copy. This checks on OpenSSH's sftp-server that the file is recognized at the
+// same path and through a link to its folder, through one alias and through
+// two, and that it stays as it was.
+func TestRemoteFileCopyOrMoveOntoItselfIsRefusedOnOpenSSHSFTP(t *testing.T) {
+	service := integrationService(t)
+	root := fmt.Sprintf("/tmp/sshc-sftp-self-file-%d", time.Now().UnixNano())
+	folder := path.Join(root, "folder")
+	sourceFile := path.Join(folder, "kept.txt")
+	shortcut := path.Join(root, "shortcut")
+	t.Cleanup(func() {
+		_ = service.DeleteTreeForTest(context.Background(), "integration", root)
+	})
+	for _, directory := range []string{root, folder} {
+		if _, err := service.Mkdir(t.Context(), "integration", directory); err != nil {
+			t.Fatal(err)
+		}
+	}
+	integrationUpload(t, &service, sourceFile, []byte("kept\n"), false)
+	integrationSymlink(t, &service, folder, shortcut)
+
+	for _, aliases := range integrationOneAliasAndTwoAliases {
+		for _, targetPath := range []string{sourceFile, path.Join(shortcut, "kept.txt")} {
+			for _, operation := range copyAndMove {
+				err := service.CopyRemote(t.Context(), sftp.RemoteTransferRequest{
+					SourceAlias: aliases.source, SourcePath: sourceFile,
+					TargetAlias: aliases.target, TargetPath: targetPath, Operation: operation, Overwrite: true,
+				}, stopAtFirstBytes)
+				if !errors.Is(err, sftp.ErrTargetIsSource) {
+					t.Fatalf("CopyRemote(%s to %s, %s→%s) error = %v, want ErrTargetIsSource", operation, targetPath, aliases.source, aliases.target, err)
+				}
+			}
+		}
+	}
+	listing, err := service.ListDirectory(t.Context(), "integration", folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listing.Entries) != 1 || listing.Entries[0].Name != "kept.txt" {
+		t.Fatalf("the folder holds %+v after the refused transfers, want only kept.txt", listing.Entries)
+	}
+	if kept, err := service.ReadText(t.Context(), "integration", sourceFile); err != nil || kept.Contents != "kept\n" {
+		t.Fatalf("the source file holds %q (%v) after the refused transfers, want kept", kept.Contents, err)
+	}
+}
+
+// The refusal does not follow the destination's own link, because an approved
+// overwrite replaces the link itself. This checks that OpenSSH's sftp-server
+// renames over the link rather than over the file it points at: a copy keeps
+// that file, and a move leaves its contents at the link's name.
+func TestRemoteFileCopyOrMoveOntoALinkToItselfReplacesTheLinkOnOpenSSHSFTP(t *testing.T) {
+	service := integrationService(t)
+	root := fmt.Sprintf("/tmp/sshc-sftp-link-to-self-%d", time.Now().UnixNano())
+	t.Cleanup(func() {
+		_ = service.DeleteTreeForTest(context.Background(), "integration", root)
+	})
+	if _, err := service.Mkdir(t.Context(), "integration", root); err != nil {
+		t.Fatal(err)
+	}
+
+	for index, aliases := range integrationOneAliasAndTwoAliases {
+		for _, operation := range copyAndMove {
+			folder := path.Join(root, fmt.Sprintf("%s-%d", operation, index))
+			sourceFile, link := path.Join(folder, "kept.txt"), path.Join(folder, "link.txt")
+			if _, err := service.Mkdir(t.Context(), "integration", folder); err != nil {
+				t.Fatal(err)
+			}
+			integrationUpload(t, &service, sourceFile, []byte("kept\n"), false)
+			integrationSymlink(t, &service, sourceFile, link)
+
+			if err := service.CopyRemote(t.Context(), sftp.RemoteTransferRequest{
+				SourceAlias: aliases.source, SourcePath: sourceFile,
+				TargetAlias: aliases.target, TargetPath: link, Operation: operation, Overwrite: true,
+			}, nil); err != nil {
+				t.Fatalf("CopyRemote(%s, %s→%s) error = %v", operation, aliases.source, aliases.target, err)
+			}
+			replaced, err := service.ReadText(t.Context(), "integration", link)
+			if err != nil || replaced.Entry.Type != sftp.EntryFile || replaced.Contents != "kept\n" {
+				t.Fatalf("after the %s from %s to %s the link is %+v (%v), want a file holding kept", operation, aliases.source, aliases.target, replaced, err)
+			}
+			kept, err := service.ReadText(t.Context(), "integration", sourceFile)
+			if operation == sftp.RemoteCopy && (err != nil || kept.Contents != "kept\n") {
+				t.Fatalf("after the copy from %s to %s the source file holds %q (%v), want kept", aliases.source, aliases.target, kept.Contents, err)
+			}
+			if operation == sftp.RemoteMove && !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("after the move from %s to %s reading the source file = %v, want it gone", aliases.source, aliases.target, err)
+			}
+		}
+	}
+}
+
+// integrationOneAliasAndTwoAliases reach the integration server through one
+// alias and through two, as web and web-admin both naming one host.
+var integrationOneAliasAndTwoAliases = []transferAliases{
+	{source: "integration", target: "integration"},
+	{source: "integration-source", target: "integration-target"},
+}
+
+// integrationSymlink creates link on the integration server, pointing at
+// target.
+func integrationSymlink(t *testing.T, service *sftp.Service, target, link string) {
+	t.Helper()
+	remote, err := service.Open(t.Context(), "integration")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer remote.Close()
+	if err := remote.(*integrationRemote).Remote.(*sftp.Client).SymlinkForTest(target, link); err != nil {
+		t.Fatalf("create the link %s: %v", link, err)
 	}
 }
 

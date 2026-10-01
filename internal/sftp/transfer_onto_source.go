@@ -18,22 +18,24 @@ type remoteTransferEnds struct {
 }
 
 // refuseTransferOntoSource は、転送先が転送元と重なる転送を、転送先を変える前に断る。
-// フォルダは refuseTargetInsideSource で判定する。ファイルは、同じ alias の同じパスへの
-// 転送を既存の項目（ErrAlreadyExists）として扱う。
+// フォルダは自身か配下への転送（refuseTargetInsideSource）を、ファイルは自身への転送
+// （refuseTargetIsSource）を断る。ほかの種類の項目は、copy・move が ErrUnsupportedEntry で
+// 断るので比べない。REALPATH はリンクをたどるので、リンクそのものとは比べられない。
 func (s Service) refuseTransferOntoSource(ends remoteTransferEnds, sourceInfo fs.FileInfo) error {
-	if sourceInfo.IsDir() {
+	switch {
+	case sourceInfo.IsDir():
 		return s.refuseTargetInsideSource(ends)
+	case sourceInfo.Mode().IsRegular():
+		return s.refuseTargetIsSource(ends)
+	default:
+		return nil
 	}
-	if ends.sameAlias && ends.sourcePath == ends.targetPath {
-		return ErrAlreadyExists
-	}
-	return nil
 }
 
 // refuseTargetInsideSource は、フォルダの copy・move の転送先が、転送元のフォルダ自身か
 // その配下にあれば ErrTargetInsideSource を返す。断ったときは、転送先に何も残さない。
 // 別の alias では、同じサーバーかを確かめるために転送先へ一時ファイルを作り、すぐ消す
-// （targetVisibleFromSource）。
+// （refuseOnTheSameServer）。
 //
 // 配下への copy は、自分で作ったフォルダを転送元としてまた読み、木の上限に当たるまで
 // 入れ子を作り続ける。転送元と同じフォルダへの move は、別の alias からだと各ファイルを
@@ -47,27 +49,78 @@ func (s Service) refuseTargetInsideSource(ends remoteTransferEnds) error {
 	if ends.sameAlias {
 		return ErrTargetInsideSource
 	}
-	// 別の alias（web と web-admin など）が同じサーバーを指すことがあり、alias の一致では
-	// 分からない。パスが重なって見えても、別のサーバーなら転送してよい。確かめるには
-	// 転送先へ書くので、上書きの承認が要る転送は、承認の前に既存の転送先へ書かないよう
-	// ここで確認に回し、承認したあとの実行で確かめる。
 	existing, err := ends.target.Lstat(comparedTargetPath)
 	targetExists := err == nil
-	if targetExists && !ends.overwrite {
-		return ErrAlreadyExists
-	}
 	// copy が書き込む場所に作る。統合先のフォルダがあればその中、無ければ copy が
 	// フォルダを作る親の中である。
 	probeDirectory := path.Dir(comparedTargetPath)
 	if targetExists && existing.IsDir() {
 		probeDirectory = comparedTargetPath
 	}
-	sameServer, err := s.targetVisibleFromSource(ends, probeDirectory)
+	return s.refuseOnTheSameServer(ends, sameServerCheck{
+		targetExists: targetExists, probeDirectory: probeDirectory, refusal: ErrTargetInsideSource,
+	})
+}
+
+// refuseTargetIsSource は、ファイルの copy・move の転送先が、転送元のファイルそのもの
+// なら ErrTargetIsSource を返す。断ったときは、転送先に何も残さない。
+//
+// 別の alias から同じファイルへの move は、自分の上へ copy してから転送元を消すので、
+// 唯一のファイルを消す。同じ alias の move は、同じファイルへの rename が何もせずに成功し、
+// 移したように見えるだけである。copy も同じ内容で置き換えるだけで、何も転送しない。
+// 同じ alias の同じパスは、上書きの確認に回さずに断る。上書きを承認しても転送できない
+// からである。
+func (s Service) refuseTargetIsSource(ends remoteTransferEnds) error {
+	comparedSourcePath, comparedTargetPath := comparablePaths(ends)
+	if comparedTargetPath != comparedSourcePath {
+		return nil
+	}
+	if ends.sameAlias {
+		return ErrTargetIsSource
+	}
+	// 転送先に何も無ければ、上書きされる転送元も無い。別のサーバーへの、同じパスへの
+	// 新しいファイルの copy で、一時ファイルを作らずに済む。
+	_, err := ends.target.Lstat(comparedTargetPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.refuseOnTheSameServer(ends, sameServerCheck{
+		targetExists: true, probeDirectory: path.Dir(comparedTargetPath), refusal: ErrTargetIsSource,
+	})
+}
+
+// sameServerCheck は、別の alias の転送先が転送元と重なって見えるときに、同じサーバーか
+// を確かめる材料である。
+type sameServerCheck struct {
+	// targetExists は、転送先に既存の項目があるか。あれば、上書きの承認が要る。
+	targetExists bool
+	// probeDirectory は、一時ファイルを作るフォルダ。copy が書き込む場所にする。
+	probeDirectory string
+	// refusal は、同じサーバーだったときに返す失敗。
+	refusal error
+}
+
+// refuseOnTheSameServer は、別の alias の転送先が転送元と同じサーバーにあれば
+// check.refusal を返す。別の alias（web と web-admin など）が同じサーバーを指すことがあり、
+// alias の一致では分からない。パスが重なって見えても、別のサーバーなら転送してよい。
+//
+// 確かめるには転送先へ一時ファイルを書く（targetVisibleFromSource）。そこで、既存の
+// 転送先への上書きがまだ承認されていなければ、書かずに ErrAlreadyExists を返して上書きの
+// 確認に回し、承認したあとの実行で確かめる。承認の前に、既存の項目の隣や中へ書かない
+// ためである。
+func (s Service) refuseOnTheSameServer(ends remoteTransferEnds, check sameServerCheck) error {
+	if check.targetExists && !ends.overwrite {
+		return ErrAlreadyExists
+	}
+	sameServer, err := s.targetVisibleFromSource(ends, check.probeDirectory)
 	if err != nil {
 		return err
 	}
 	if sameServer {
-		return ErrTargetInsideSource
+		return check.refusal
 	}
 	return nil
 }
@@ -75,17 +128,18 @@ func (s Service) refuseTargetInsideSource(ends remoteTransferEnds) error {
 // comparablePaths は、重なりを比べる転送元と転送先のパスを返す。パスの文字列だけでは、
 // 途中のシンボリックリンクが転送元の配下を指していても分からない。そこで両方を
 // サーバーの REALPATH で解決する。転送先は、親を解決して名前を付け直す。転送先そのものは
-// 解決しない。まだ無いことが多く、あってもシンボリックリンクなら、copy・move は種類の
-// 違う項目として上書きせずに断る。
+// 解決しない。まだ無いことが多く、あってもシンボリックリンクなら、copy・move はリンクの
+// 先へ書かない。フォルダの転送は種類の違う項目として上書きせずに断り、ファイルの転送は
+// 承認された上書きでリンクそのものを置き換える。
 //
 // どちらかを解決できなければ、両方とも要求のパスを返す。片方だけ解決したパスと比べると、
 // 同じ場所を別の名前で比べて見逃すからである。
 //
 // 解決できないことを理由には断らない。REALPATH は SFTP v3 の必須の要求で、失敗するのは
 // 途中のフォルダが無いか、たどる権限が無いときである。そのときは copy・move も同じ場所で
-// 失敗し、汎用の失敗（sftp_failed）になる。断ると、自分の配下への転送という誤った理由を
-// 見せる。文字列の比較で見逃したシンボリックリンクがあっても、copy は木の上限
-// （maxTransferTreeEntries）で止まる。
+// 失敗し、汎用の失敗（sftp_failed）になる。断ると、自分自身か配下への転送という誤った
+// 理由を見せる。文字列の比較で見逃したシンボリックリンクがあっても、フォルダの copy は
+// 木の上限（maxTransferTreeEntries）で止まる。
 func comparablePaths(ends remoteTransferEnds) (comparedSourcePath, comparedTargetPath string) {
 	resolvedSourcePath, err := resolveRealPath(ends.source, ends.sourcePath)
 	if err != nil {
