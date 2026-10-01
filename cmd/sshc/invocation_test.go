@@ -324,7 +324,18 @@ func TestParseTerminalInvocations(t *testing.T) {
 					t.Fatalf("create = %#v", got)
 				}
 			}},
-		{[]string{"sshc", "terminal", "rename", id, "deploy"}, terminalRename, nil},
+		{[]string{"sshc", "terminal", "rename", id, "deploy"}, terminalRename,
+			func(t *testing.T, got terminalInvocation) {
+				if got.Title != "deploy" || got.UnpinTitle || got.JSON {
+					t.Fatalf("rename = %#v", got)
+				}
+			}},
+		{[]string{"sshc", "terminal", "rename", id, "--auto", "--json"}, terminalRename,
+			func(t *testing.T, got terminalInvocation) {
+				if got.Title != "" || !got.UnpinTitle || !got.JSON {
+					t.Fatalf("rename --auto = %#v", got)
+				}
+			}},
 		{[]string{"sshc", "terminal", "close", id}, terminalClose, nil},
 	}
 	for _, test := range tests {
@@ -354,6 +365,45 @@ func TestTerminalInvocationRejectsUnstableSelectorsAndHeuristicWaits(t *testing.
 	} {
 		if got, err := parseInvocation(argv); err == nil || got.Kind != invocationInvalid {
 			t.Errorf("parseInvocation(%q) = %#v, %v; want usage error", argv, got, err)
+		}
+	}
+}
+
+// 名前と --auto は逆の操作なので、両方を渡されたらどちらかを選ばずに断る。どちらも無い
+// ときも、空の名前を engine へ送らずに断る。どちらも使い方の誤り（終了コード2）になる。
+func TestTerminalRenameRefusesBothOrNeitherOfATitleAndAuto(t *testing.T) {
+	const id = "01234567"
+	tests := []struct {
+		argv   []string
+		reason string
+	}{
+		{[]string{"sshc", "terminal", "rename", id, "deploy", "--auto"}, "terminal rename cannot combine a title and --auto"},
+		{[]string{"sshc", "terminal", "rename", id, "--auto", "deploy"}, "terminal rename cannot combine a title and --auto"},
+		{[]string{"sshc", "terminal", "rename", id}, "terminal rename requires a non-empty title or --auto"},
+		{[]string{"sshc", "terminal", "rename", id, "--json"}, "terminal rename requires a non-empty title or --auto"},
+		{[]string{"sshc", "terminal", "rename", id, " "}, "terminal rename requires a non-empty title or --auto"},
+		{[]string{"sshc", "terminal", "rename", id, "--auto", "--auto"}, "terminal rename accepts --auto only once"},
+		{[]string{"sshc", "terminal", "rename", id, "--auto=yes"}, "terminal rename --auto does not take a value"},
+		{[]string{"sshc", "terminal", "rename", id, "deploy", "extra"}, `terminal rename does not take "extra"`},
+	}
+	for _, test := range tests {
+		t.Run(strings.Join(test.argv[3:], "_"), func(t *testing.T) {
+			called, err := parseInvocation(test.argv)
+			if err == nil || called.Kind != invocationInvalid || err.Error() != "usage: "+test.reason {
+				t.Fatalf("parseInvocation(%q) = %#v, %v; want usage: %s", test.argv, called, err, test.reason)
+			}
+		})
+	}
+}
+
+// --auto は help から辿れないと使われない。全体の usage、terminal の help、rename の help のどれにも載せる。
+func TestTerminalRenameHelpShowsAuto(t *testing.T) {
+	const want = "sshc terminal rename <session-id> --auto [--json]"
+	for _, topic := range []string{"", "terminal", "terminal rename"} {
+		var output strings.Builder
+		usageFor(&output, topic)
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("help for %q does not contain %q:\n%s", topic, want, output.String())
 		}
 	}
 }
