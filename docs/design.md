@@ -364,7 +364,12 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
 
 ## 強化とリリースの境界
 
-- リクエスト本文には二段の上限があります。middleware の `MaxRequestBodyCeiling`（2 MiB）が全 `/api/` 要求の天井で（例外は SFTP の range upload `PATCH …/uploads/{id}?range=true` の 4 GiB と、背景画像の追加`POST /api/v1/terminal/backgrounds`の1 GiBだけ）、各ハンドラーはさらに小さい上限を持ちます。背景画像の1枚の大きさは、ハンドラーが背景の容量設定で押さえます。宣言された `Content-Length` が天井を超える要求はハンドラーへ届く前に 413 で拒否し、長さを宣言しない chunked 要求は読み取り自体を天井で打ち切ります。本文を読まないルート（`/api/v1/diagnostics/config` や `/api/v1/keys/{keyId}/trash`）にも同じ天井が掛かるのは前者のためです。
+- リクエスト本文には二段の上限があります。middleware の `MaxRequestBodyCeiling`（2 MiB）が全 `/api/` 要求の天井で（例外は SFTP の range upload `PATCH …/uploads/{id}?range=true` の 4 GiB と、背景画像の追加`POST /api/v1/terminal/backgrounds`の1 GiBだけ）、各ハンドラーはさらに小さい上限を持ちます。宣言された `Content-Length` が天井を超える要求はハンドラーへ届く前に 413 で拒否し、長さを宣言しない chunked 要求は読み取り自体を天井で打ち切ります。本文を読まないルート（`/api/v1/diagnostics/config` や `/api/v1/keys/{keyId}/trash`）にも同じ天井が掛かるのは前者のためです。
+- 背景画像の追加は、本文をメモリに載せません。1枚の大きさは、背景の容量設定で押さえます。
+  - 先頭の12バイトで画像の形式を判定します。
+  - 本文全体を保存先と同じディレクトリの一時ファイルへ書き、空き容量を超えたところで読み取りを打ち切ります。
+  - 書き終えてから名前と空き容量を確かめ、1回のrenameで置きます。
+  - 受け取っている途中にsshcエンジンが落ちて残った一時ファイルは、次の起動で消します。
 - リモートコマンドの出力は `sshclient.MaxCapturedOutput`（64 KiB）で打ち切られます。認証テストの banner と失敗理由は `diagnostics.MaxReportedOutput`（8 KiB）までに制限して表示します。
 - `make fuzz` は `FUZZ_TARGETS` に列挙した全 target を順に実行します。`go test -fuzz` は一度に 1 target しか動かせないため、1 行で書くと最初の target しか回りません。target を追加して一覧に加え忘れると `TestMakefileFuzzTargetsCoverEveryFuzzFunction` が失敗します。
 - fuzzの対象は次のとおりです。一覧の正本は`Makefile`の`FUZZ_TARGETS`で、ここに書き漏らすと`TestDesignDocumentNamesEveryFuzzTarget`が失敗します。

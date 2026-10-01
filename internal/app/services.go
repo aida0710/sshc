@@ -82,6 +82,11 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	if err := configService.InitialiseEngineSettings(); err != nil && dependencies.Logger != nil {
 		dependencies.Logger.Error("move the engine settings from metadata.json", "error", err)
 	}
+	// 背景画像を受け取っている途中にsshcエンジンが落ちて残った一時ファイルを消す。HTTPを受け付ける
+	// 前なので、受け取っている途中のものは無い。消せなくても起動は止めない。
+	if err := configService.RemoveLeftoverBackgroundUploads(); err != nil && dependencies.Logger != nil {
+		dependencies.Logger.Error("remove leftover background uploads", "error", err)
+	}
 	keyService, keyTransactions := buildKeyService(workspace, dependencies, configService)
 	configService.SetKeyPassphraseVerifier(keyService)
 	diagnosticsService := diagnostics.NewService(workspace, nil, application.LocalFactsFor(dependencies.Home))

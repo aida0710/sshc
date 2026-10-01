@@ -625,42 +625,9 @@ func syncDirectory(path string) error {
 	return windows.CloseHandle(directory)
 }
 
-func writeAtomicFileNative(path, prefix string, permission fs.FileMode, contents []byte) error {
-	return writeAtomicFileNativeWith(path, prefix, permission, contents, nil)
-}
-
-func writeAtomicFileNativeWith(path, prefix string, permission fs.FileMode, contents []byte, afterParentOpen func()) error {
-	absolute, err := cleanAbsoluteDOSPath(path)
-	if err != nil {
-		return err
-	}
-	directory := filepath.Dir(absolute)
-	parent, err := openNoReparseDirectoryWithAccess(directory, windows.FILE_TRAVERSE|windows.FILE_WRITE_DATA|fileDeleteChild)
-	if err != nil {
-		return err
-	}
-	defer windows.CloseHandle(parent)
-	if afterParentOpen != nil {
-		afterParentOpen()
-	}
-	temporary, err := createPrivateTempRelative(parent, directory, prefix)
-	if err != nil {
-		return err
-	}
-	handle := windows.Handle(temporary.Fd())
-	removeTemporary := true
-	defer func() {
-		if removeTemporary {
-			_ = discardFileHandle(handle)
-		}
-		_ = temporary.Close()
-	}()
-	if err := writeAndFlush(temporary, permission, contents); err != nil {
-		return err
-	}
-	if err := renamePrivateFileHandle(handle, parent, filepath.Base(absolute)); err != nil {
-		return err
-	}
-	removeTemporary = false
-	return temporary.Close()
+// cleanAtomicTargetは、WriteAtomicFileの書き込み先を、ボリュームを持つ絶対パスに均す。
+// デバイスのパス（`\\?\`など）や、代替データストリームの名前（`:`を含むもの）は断る
+// （cleanAbsoluteDOSPath）。
+func cleanAtomicTarget(path string) (string, error) {
+	return cleanAbsoluteDOSPath(path)
 }
