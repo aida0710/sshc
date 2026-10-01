@@ -1,4 +1,13 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
+
+// Connects a pane to `alias` the way a user does: opens the host picker,
+// chooses the host and presses Connect. `pane` defaults to the only visible
+// pane.
+export async function connectSFTPHost(page: Page, alias: string, pane: Locator = page.getByRole("tabpanel")): Promise<void> {
+  await pane.locator("button[data-value]:visible").click();
+  await page.getByRole("dialog").getByText(alias, { exact: true }).click();
+  await pane.getByRole("button", { name: /^(Connect|接続)$/ }).click();
+}
 
 // Opens the second SFTP pane the way a user does: a blank tab is added to the
 // left pane and dragged onto the right half of that pane, which moves the tab
