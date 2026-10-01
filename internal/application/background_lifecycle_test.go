@@ -1,6 +1,7 @@
 package application
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -9,7 +10,7 @@ func TestLargeBackgroundCanBeRenamedAndDeleted(t *testing.T) {
 	for _, operation := range []string{"rename", "delete"} {
 		t.Run(operation, func(t *testing.T) {
 			service, _ := newTerminalService(t)
-			background, err := service.AddBackground("large", png(strings.Repeat("x", 2<<20)))
+			background, err := service.AddBackground("large", bytes.NewReader(png(strings.Repeat("x", 2<<20))))
 			if err != nil {
 				t.Fatalf("upload: %v", err)
 			}
