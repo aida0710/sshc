@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"io/fs"
@@ -38,13 +39,13 @@ type FileSystem interface {
 	// WriteTemp は directory に新しいファイルを作り、contents を書き、permission を
 	// 適用し、ディスクへフラッシュして、そのパスを返す。
 	WriteTemp(directory, prefix string, permission fs.FileMode, contents []byte) (string, error)
-	// StageFile は、request.Source を読みながら request.Directory の非公開の一時
-	// ファイルへ書き、ディスクへフラッシュする。中身をメモリに持たない。公開する
-	// 名前は、返した StagedFile の Publish で決める。
+	// StageFileは、request.Sourceを読みながらrequest.Directoryの非公開の一時ファイルへ
+	// 書き、ディスクへフラッシュする。中身をメモリに持たない。公開する名前は、返した
+	// StagedFileのPublishで決める。
 	//
-	// ほかの任意実装（WriteAtomic など）と違い、必須のメソッドにしてある。任意実装に
-	// すると、実装しない FileSystem のために中身をメモリへ読む代わりの経路が要り、
-	// FileSystem を包む側が転送を忘れたとき、黙ってその経路へ落ちる。
+	// ほかの任意実装（WriteAtomicなど）と違い、必須のメソッドにしてある。任意実装に
+	// すると、実装しないFileSystemのために中身をメモリへ読む代わりの経路が要り、
+	// FileSystemを包む側が転送を忘れたとき、黙ってその経路へ落ちる。
 	StageFile(request StageRequest) (*StagedFile, error)
 	Rename(oldPath, newPath string) error
 	// MovePrivate はオブジェクトの同一性と非公開状態のセキュリティ規則を維持したまま、
@@ -95,6 +96,33 @@ type atomicFileWriter interface {
 
 func (OSFileSystem) WriteAtomic(path, prefix string, permission fs.FileMode, contents []byte) error {
 	return writeAtomicFileNative(path, prefix, permission, contents)
+}
+
+func writeAtomicFileNative(path, prefix string, permission fs.FileMode, contents []byte) error {
+	return writeAtomicFileNativeWith(path, prefix, permission, contents, nil)
+}
+
+// writeAtomicFileNativeWithは、contentsをpathと同じディレクトリの一時ファイルへ書き、
+// 1回のrenameでpathへ置く。手順はStageFileと同じstageFileNativeを使う。原子的な置き換えの
+// 決まり（非公開の一時ファイル、開いたディレクトリへの固定、fsync）を、OSごとに1か所に
+// 保つためである。afterParentOpenはテストの差し込み口である（stageFileNativeを参照）。
+func writeAtomicFileNativeWith(path, prefix string, permission fs.FileMode, contents []byte, afterParentOpen func()) error {
+	target, err := cleanAtomicTarget(path)
+	if err != nil {
+		return err
+	}
+	staged, err := stageFileNative(StageRequest{
+		Directory:  filepath.Dir(target),
+		Prefix:     prefix,
+		Permission: permission,
+		Source:     bytes.NewReader(contents),
+		Maximum:    int64(len(contents)),
+	}, afterParentOpen)
+	if err != nil {
+		return err
+	}
+	defer staged.Discard()
+	return staged.Publish(target)
 }
 
 func (OSFileSystem) ReadFile(path string) ([]byte, error) {
@@ -213,11 +241,12 @@ func (OSFileSystem) StageFile(request StageRequest) (*StagedFile, error) {
 	if request.Maximum < 0 {
 		return nil, ErrFileTooLarge
 	}
-	request.Directory = filepath.Clean(request.Directory)
-	if !filepath.IsAbs(request.Directory) {
-		return nil, os.ErrInvalid
+	directory, err := cleanStageDirectory(request.Directory)
+	if err != nil {
+		return nil, err
 	}
-	return stageFileNative(request)
+	request.Directory = directory
+	return stageFileNative(request, nil)
 }
 
 type privateTempCreator func(directory, prefix string) (*os.File, error)

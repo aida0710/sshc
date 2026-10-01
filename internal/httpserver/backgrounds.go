@@ -51,30 +51,25 @@ func terminalBackground(background application.Background) api.TerminalBackgroun
 	return api.TerminalBackground{Name: background.Name, Bytes: background.Bytes, Type: background.Type}
 }
 
-// backgroundList は、置いてある画像と、あと何バイト置けるかを返す。
+// Backgroundsは、置いてある画像と、あと何バイト置けるかを返す。
 //
-// 残りを数えるのはこちらである。画面が上限を書き写すと、上限を変えた日に
-// 画面だけが古い数を信じる。
+// 残りを数えるのはサーバーである（application.Service.BackgroundUsage）。画面が上限を
+// 書き写すと、上限を変えた日に画面だけが古い数を信じる。
 func (h ConfigHandlers) Backgrounds(c *echo.Context) error {
 	backgrounds, err := h.Service.Backgrounds()
 	if err != nil {
 		return unexpectedProblem(c, "backgrounds_unreadable", err)
 	}
-	used := 0
-	for _, background := range backgrounds {
-		used += background.Bytes
-	}
-	capacity := int64(h.Service.BackgroundCapacityMiB()) << 20
-	remaining := capacity - int64(used)
-	if remaining < 0 {
-		remaining = 0
-	}
+	usage := h.Service.BackgroundUsage(backgrounds)
 	response := make([]api.TerminalBackground, 0, len(backgrounds))
 	for _, background := range backgrounds {
 		response = append(response, terminalBackground(background))
 	}
 	return c.JSON(http.StatusOK, backgroundListResponse{
-		Backgrounds: response, UsedBytes: used, CapacityBytes: capacity, RemainingBytes: int(remaining),
+		Backgrounds:    response,
+		UsedBytes:      int(usage.UsedBytes),
+		CapacityBytes:  usage.CapacityBytes,
+		RemainingBytes: int(usage.RemainingBytes),
 	})
 }
 
@@ -87,8 +82,9 @@ func (h ConfigHandlers) AddBackground(c *echo.Context) error {
 	var overCeiling *http.MaxBytesError
 	switch {
 	case errors.As(err, &overCeiling):
-		// 長さを宣言しない本文が 1 枚の絶対上限を超えた。宣言した本文なら
-		// middleware が先に断っている。
+		// 長さを宣言しない本文が1枚の絶対上限を超えた。宣言した本文ならmiddlewareが先に
+		// 断っている。MaxBytesErrorは本文の読み取りの失敗としてErrBackgroundUnreadableに
+		// 包まれて届くので、このcaseをErrBackgroundUnreadableより先に置く。
 		return problem(c, http.StatusRequestEntityTooLarge, "background_too_large")
 	case errors.Is(err, application.ErrBackgroundUnreadable):
 		return problem(c, http.StatusBadRequest, "invalid_request")

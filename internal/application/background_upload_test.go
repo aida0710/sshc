@@ -1,20 +1,24 @@
 package application
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"testing/iotest"
 
 	"sshc/internal/storage"
 )
 
-// countingReader は、読まれたバイト数を数える。
+// countingReaderは、読まれたバイト数を数える。
 type countingReader struct {
 	reader   io.Reader
 	consumed int64
@@ -26,24 +30,36 @@ func (r *countingReader) Read(buffer []byte) (int, error) {
 	return count, err
 }
 
-// generatedBody は、header のあとに size バイトの決まった並びを続ける本文を、
-// メモリに置かずに作る。
+// generatedBodyは、headerのあとにsizeバイトの決まった並びを続ける本文を、メモリに置かずに
+// 作る。読まれた量は、headerも含めて数える。
 func generatedBody(header []byte, size int64) *countingReader {
-	return &countingReader{reader: io.MultiReader(bytes.NewReader(header), io.LimitReader(&patternSource{}, size))}
+	return &countingReader{reader: io.MultiReader(bytes.NewReader(header), &patternReader{remaining: size})}
 }
 
-// patternSource は、0 から 250 を繰り返すバイトを尽きることなく返す。並びは
-// 読み取りの区切り方によらず、本文の中の位置で決まる。
-type patternSource struct {
-	offset int64
+// patternPeriodは、patternReaderが繰り返す並びの長さである。256より小さい素数にして、
+// 2の冪の読み取りの区切り（io.Copyの32 KiBなど）と周期を揃えない。区切りでずれたり
+// 重なったりした塊を、中身の比較で見つけられる。
+const patternPeriod = 251
+
+// patternReaderは、決まった並びのバイトをremainingバイトまで返す。大きな中身をメモリに
+// 置かずに作り、consumedで読まれた量を数える。storage/staged_file_test.goにも同じ形の
+// ものがある（テストの間で共有する場が無い）。
+type patternReader struct {
+	remaining int64
+	consumed  int64
 }
 
-func (r *patternSource) Read(buffer []byte) (int, error) {
-	for index := range buffer {
-		buffer[index] = byte((r.offset + int64(index)) % 251)
+func (r *patternReader) Read(buffer []byte) (int, error) {
+	if r.remaining <= 0 {
+		return 0, io.EOF
 	}
-	r.offset += int64(len(buffer))
-	return len(buffer), nil
+	count := int(min(int64(len(buffer)), r.remaining))
+	for index := range count {
+		buffer[index] = byte((r.consumed + int64(index)) % patternPeriod)
+	}
+	r.remaining -= int64(count)
+	r.consumed += int64(count)
+	return count, nil
 }
 
 func backgroundDirectoryNames(t *testing.T, workspace *storage.Workspace) []string {
@@ -64,7 +80,7 @@ func backgroundDirectoryNames(t *testing.T, workspace *storage.Workspace) []stri
 
 func TestAnUploadedBackgroundIsStoredWithTheBytesThatWereSent(t *testing.T) {
 	service, workspace := newTerminalService(t)
-	// 1 回の読み取りより大きくし、何回にも分けて書かせる。
+	// 1回の読み取りより大きくし、何回にも分けて書かせる。
 	const size = 3 << 20
 	added, err := service.AddBackground("photo", generatedBody([]byte(pngSignature), size))
 	if err != nil {
@@ -91,14 +107,14 @@ func TestAnUploadedBackgroundIsStoredWithTheBytesThatWereSent(t *testing.T) {
 
 func TestABackgroundLargerThanTheRoomLeftIsRefusedWithoutReadingItAll(t *testing.T) {
 	service, workspace := newTerminalService(t)
-	room := int64(DefaultBackgroundCapacityMiB) << 20
+	remaining := int64(DefaultBackgroundCapacityMiB) << 20
 	body := generatedBody([]byte(pngSignature), 1<<40)
 
 	if _, err := service.AddBackground("huge", body); !errors.Is(err, ErrBackgroundsFull) {
 		t.Fatalf("err = %v, want ErrBackgroundsFull", err)
 	}
-	if body.consumed > room+1 {
-		t.Fatalf("read %d bytes, want reading to stop one byte past the %d bytes left", body.consumed, room)
+	if body.consumed > remaining+1 {
+		t.Fatalf("read %d bytes, want reading to stop one byte past the %d bytes left", body.consumed, remaining)
 	}
 	if names := backgroundDirectoryNames(t, workspace); len(names) != 0 {
 		t.Fatalf("directory = %q, want neither a temporary file nor an image", names)
@@ -148,8 +164,8 @@ func TestABackgroundWithoutAUsableNameIsNamedAfterItsContents(t *testing.T) {
 	}
 }
 
-// 本文を受け取っている間は錠を持たない。そのあいだに同じ名前の画像が置かれても、
-// 置く直前に一覧を読み直すので、先に置かれた画像を上書きしない。
+// 本文を受け取っている間は錠を持たない。そのあいだに同じ名前の画像が置かれても、置く直前に
+// 一覧を読み直すので、先に置かれた画像を上書きしない。
 func TestABackgroundAddedWhileAnotherIsUploadingDoesNotGetOverwritten(t *testing.T) {
 	service, _ := newTerminalService(t)
 	pipeReader, pipeWriter := io.Pipe()
@@ -186,8 +202,8 @@ func TestABackgroundAddedWhileAnotherIsUploadingDoesNotGetOverwritten(t *testing
 	}
 }
 
-// 受け取っている途中の一時ファイルや、クラッシュで残った一時ファイルは、画像の
-// 先頭を持っていても背景として一覧に出さない。
+// 受け取っている途中の一時ファイルや、クラッシュで残った一時ファイルは、画像の先頭を
+// 持っていても背景として一覧に出さない。
 func TestATemporaryFileInTheBackgroundsDirectoryIsNotListed(t *testing.T) {
 	service, workspace := newTerminalService(t)
 	directory := filepath.Join(workspace.Root(), filepath.FromSlash(BackgroundsDirectory))
@@ -216,5 +232,101 @@ func TestOverflowingTheWholeAbsoluteMaximumIsTooLargeAndAnythingLessIsFull(t *te
 	}
 	if err := backgroundOverflow(0); !errors.Is(err, ErrBackgroundsFull) {
 		t.Fatalf("overflow with nothing free = %v, want ErrBackgroundsFull", err)
+	}
+}
+
+// 長さを宣言した本文が先頭の途中で切れると、net/httpはio.ErrUnexpectedEOFを返し、その次から
+// io.EOFを返す。短い本文と取り違えて、切れた画像を置いてはならない。
+func TestABodyCutShortInsideTheLeadingBytesIsRefusedAsUnreadable(t *testing.T) {
+	service, workspace := newTerminalService(t)
+	// JPEGの印（3バイト）と1バイトだけを送り、宣言した長さの残りを送らずに切る。
+	request, err := http.ReadRequest(bufio.NewReader(strings.NewReader(
+		"POST /api/v1/terminal/backgrounds HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 1024\r\n\r\n\xff\xd8\xff\xe0")))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = service.AddBackground("photo", request.Body)
+	if !errors.Is(err, ErrBackgroundUnreadable) || !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("err = %v, want ErrBackgroundUnreadable wrapping io.ErrUnexpectedEOF", err)
+	}
+	if names := backgroundDirectoryNames(t, workspace); len(names) != 0 {
+		t.Fatalf("directory = %q, want nothing stored", names)
+	}
+}
+
+// 入口の上限（http.MaxBytesReader）で読み取りが止まったときも、その元のエラーを取り出せる。
+// handlerは、それを見て送り方の誤りではなく大きすぎる画像として断る。本物の上限（1 GiB）を
+// 超えるにはディスクへ1 GiB書くことになるので、同じ型のエラーを返す小さい上限で代える。
+func TestABodyStoppedByTheRequestCeilingStillCarriesTheCeilingError(t *testing.T) {
+	service, workspace := newTerminalService(t)
+	const ceiling = 64 << 10
+	body := http.MaxBytesReader(nil, io.NopCloser(generatedBody([]byte(pngSignature), 1<<40)), ceiling)
+
+	_, err := service.AddBackground("photo", body)
+	var overCeiling *http.MaxBytesError
+	if !errors.As(err, &overCeiling) || !errors.Is(err, ErrBackgroundUnreadable) {
+		t.Fatalf("err = %v, want ErrBackgroundUnreadable that still carries *http.MaxBytesError", err)
+	}
+	if names := backgroundDirectoryNames(t, workspace); len(names) != 0 {
+		t.Fatalf("directory = %q, want neither a temporary file nor an image", names)
+	}
+}
+
+// allocationAllowanceは、本文をメモリに載せないことを確かめるときに許す割り当ての量である。
+// 本文（memoryProbeBodySize）の8分の1にして、一覧や設定の読み込み、io.Copyの32 KiBの緩衝が
+// 混ざっても収まり、本文を丸ごと読めば必ず超えるようにする。
+const (
+	memoryProbeBodySize = 64 << 20
+	allocationAllowance = memoryProbeBodySize / 8
+)
+
+// 本文はメモリに載せない。大きな本文を受け取っても、割り当てる量は本文よりずっと小さい。
+func TestAddingABackgroundDoesNotHoldTheBodyInMemory(t *testing.T) {
+	service, _ := newTerminalService(t)
+	if _, err := service.SetBackgroundCapacityMiB(2 * memoryProbeBodySize >> 20); err != nil {
+		t.Fatal(err)
+	}
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	added, err := service.AddBackground("large", generatedBody([]byte(pngSignature), memoryProbeBodySize))
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if added.Bytes != len(pngSignature)+memoryProbeBodySize {
+		t.Fatalf("stored %d bytes, want the whole body", added.Bytes)
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > allocationAllowance {
+		t.Fatalf("allocated %d bytes for a %d byte body, want at most %d", allocated, memoryProbeBodySize, allocationAllowance)
+	}
+}
+
+// sshcエンジンが受け取っている途中に落ちて残った一時ファイルは消す。置いてある画像には触れない。
+func TestLeftoverUploadsAreRemovedAndStoredImagesKept(t *testing.T) {
+	service, workspace := newTerminalService(t)
+	stored, err := service.AddBackground("office", bytes.NewReader(png("kept")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := filepath.Join(workspace.Root(), filepath.FromSlash(BackgroundsDirectory))
+	leftover := filepath.Join(directory, backgroundTemporaryPrefix+"0123abcd")
+	if err := os.WriteFile(leftover, png("partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.RemoveLeftoverBackgroundUploads(); err != nil {
+		t.Fatal(err)
+	}
+	if names := backgroundDirectoryNames(t, workspace); len(names) != 1 || names[0] != stored.Name {
+		t.Fatalf("directory = %q, want only %s", names, stored.Name)
+	}
+}
+
+func TestRemovingLeftoverUploadsBeforeAnyBackgroundIsNotAnError(t *testing.T) {
+	service, _ := newTerminalService(t)
+	if err := service.RemoveLeftoverBackgroundUploads(); err != nil {
+		t.Fatalf("err = %v, want nothing to remove", err)
 	}
 }

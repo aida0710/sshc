@@ -9,18 +9,34 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// stagedTemporary は、一時ファイルの名前と、それを作ったディレクトリの fd である。
-// 作成から rename までを同じ fd に対して行い、その間にパスの途中がシンボリック
-// リンクへ差し替えられても、別のディレクトリへ公開しない。
+// stagedTemporaryは、一時ファイルの名前と、それを作ったディレクトリのfdである。作成から
+// renameまでを同じfdに対して行い、その間にパスの途中がシンボリックリンクへ差し替えられても、
+// 別のディレクトリへ公開しない。
 type stagedTemporary struct {
 	parent *os.File
 	name   string
 }
 
-func stageFileNative(request StageRequest) (*StagedFile, error) {
+// cleanStageDirectoryは、StageFileの置き場所を絶対パスに均す。
+func cleanStageDirectory(directory string) (string, error) {
+	cleaned := filepath.Clean(directory)
+	if !filepath.IsAbs(cleaned) {
+		return "", os.ErrInvalid
+	}
+	return cleaned, nil
+}
+
+// stageFileNativeは、StageFileとwriteAtomicFileNativeWithが共有する手順である。
+// request.Directoryは、呼び出し側が確かめた絶対パスである（cleanStageDirectory、
+// cleanAtomicTarget）。afterParentOpenは、ディレクトリを開いた直後に呼ぶテストの差し込み口で、
+// そこでパスを差し替えても、開いたディレクトリへ書くことを確かめるのに使う。本番ではnilである。
+func stageFileNative(request StageRequest, afterParentOpen func()) (*StagedFile, error) {
 	parent, err := openDirectoryNoFollow(request.Directory)
 	if err != nil {
 		return nil, err
+	}
+	if afterParentOpen != nil {
+		afterParentOpen()
 	}
 	file, err := createPrivateTempAt(parent, request.Directory, request.Prefix)
 	if err != nil {
@@ -44,8 +60,8 @@ func (t *stagedTemporary) rename(name string) error {
 	return unix.Renameat(int(t.parent.Fd()), t.name, int(t.parent.Fd()), name)
 }
 
-// syncRename は、rename したディレクトリの変更をディスクへ流す。
-func (t *stagedTemporary) syncRename() error { return t.parent.Sync() }
+// finishPublishは、renameしたディレクトリの変更をディスクへ流す。
+func (t *stagedTemporary) finishPublish() error { return t.parent.Sync() }
 
 func (t *stagedTemporary) remove() { _ = unix.Unlinkat(int(t.parent.Fd()), t.name, 0) }
 

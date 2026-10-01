@@ -7,38 +7,39 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // 名前を決める前に、中身を読みながら書き終える一時ファイル。
 //
-// WriteAtomicFile は中身をメモリに持ってから書く。背景画像のように 1 GiB まで
-// 大きくなりうる中身は、読みながら置き場所と同じディレクトリの一時ファイルへ書き、
-// 書き終えてから名前を決めて rename で公開する。名前をあとで決めるのは、空き容量と
-// 同じ名前の有無を、中身を受け取り終えた時点で確かめるためである。
+// WriteAtomicFileは中身をメモリに持ってから書く。背景画像のように1 GiBまで大きくなり
+// うる中身は、読みながら置き場所と同じディレクトリの一時ファイルへ書き、書き終えてから
+// 名前を決めてrenameで公開する。名前をあとで決めるのは、空き容量と同じ名前の有無を、
+// 中身を受け取り終えた時点で確かめるためである。WriteAtomicFileのOSごとの実装も、
+// この手順（stageFileNative）で書く。
 
-// ErrSourceUnreadable は、StageFile が書き写す元を読めなかったことを示す。元の
-// エラーも errors.Is と errors.As で取り出せる。呼び出し側は、元が途中で切れた
-// （送り手の問題）ことと、書けなかった（このマシンの問題）ことを分けて伝える。
+// ErrSourceUnreadableは、StageFileが書き写す元を読めなかったことを示す。元のエラーも
+// errors.Isとerrors.Asで取り出せる。呼び出し側は、元が途中で切れた（送り手の問題）ことと、
+// 書けなかった（このマシンの問題）ことを分けて伝える。
 var ErrSourceUnreadable = errors.New("the contents to stage could not be read")
 
-// StageRequest は、StageFile が作る一時ファイルの置き場所と中身である。
+// StageRequestは、StageFileが作る一時ファイルの置き場所と中身である。
 type StageRequest struct {
-	// Directory は、一時ファイルを作り、Publish で公開するディレクトリである。
+	// Directoryは、一時ファイルを作り、Publishで公開するディレクトリである。
 	Directory string
-	// Prefix は一時ファイルの名前の先頭である。IsTemporaryName が認める ".sshc-" で
-	// 始めれば、書いている途中のファイルやクラッシュで残ったファイルが、ディレクトリを
-	// 走査する側（一覧、同期）に紛れ込まない。
+	// Prefixは一時ファイルの名前の先頭である。IsTemporaryNameが認める".sshc-"で始めれば、
+	// 書いている途中のファイルやクラッシュで残ったファイルが、ディレクトリを走査する側
+	// （一覧、同期）に紛れ込まない。
 	Prefix     string
 	Permission fs.FileMode
 	Source     io.Reader
-	// Maximum は中身の上限である。Source がこれを超えたら ErrFileTooLarge を返し、
-	// 何も残さない。
+	// Maximumは中身の上限である。Sourceがこれを超えたらErrFileTooLargeを返し、何も残さない。
 	Maximum int64
 }
 
-// StagedFile は、StageFile が書き終えてディスクへフラッシュした、まだ名前の無い
-// 一時ファイルである。呼び出し側は Publish で公開するか、Discard で捨てる。
-// 置き場所のディレクトリを開いたまま持つので、公開しない場合も Discard を呼ぶ。
+// StagedFileは、StageFileが書き終えてディスクへフラッシュした、まだ名前の無い一時ファイル
+// である。呼び出し側はPublishで公開するか、Discardで捨てる。置き場所のディレクトリを
+// 開いたまま持つので、公開しない場合もDiscardを呼ぶ。
 type StagedFile struct {
 	directory string
 	size      int64
@@ -46,12 +47,12 @@ type StagedFile struct {
 	finished  bool
 }
 
-// Size は、書いた中身のバイト数である。
+// Sizeは、書いた中身のバイト数である。
 func (f *StagedFile) Size() int64 { return f.size }
 
-// Publish は、一時ファイルを path へ 1 回の rename で置き、ディレクトリの変更を
-// ディスクへ流す。path は StageFile に渡したディレクトリの直下でなければならない。
-// path に既にファイルがあれば置き換える。
+// Publishは、一時ファイルをpathへ1回のrenameで置き、その置き換えをディスクへ流す。pathは
+// StageFileに渡したディレクトリの直下でなければならない。pathに既にファイルがあれば
+// 置き換える。
 func (f *StagedFile) Publish(path string) error {
 	if f.finished {
 		return os.ErrClosed
@@ -63,15 +64,15 @@ func (f *StagedFile) Publish(path string) error {
 	if err := f.temporary.rename(filepath.Base(cleaned)); err != nil {
 		return err
 	}
-	// rename が通った時点で一時ファイルは公開済みの名前になっている。このあと
-	// Discard が呼ばれても、公開したファイルを消さない。
+	// renameが通った時点で一時ファイルは公開済みの名前になっている。このあとDiscardが
+	// 呼ばれても、公開したファイルを消さない。
 	f.finished = true
 	defer f.temporary.release()
-	return f.temporary.syncRename()
+	return f.temporary.finishPublish()
 }
 
-// Discard は、公開していない一時ファイルを消し、開いているディレクトリを閉じる。
-// Publish のあとや 2 回目の呼び出しでは何もしない。
+// Discardは、公開していない一時ファイルを消し、開いているディレクトリを閉じる。Publishの
+// あとや2回目の呼び出しでは何もしない。
 func (f *StagedFile) Discard() {
 	if f.finished {
 		return
@@ -81,11 +82,44 @@ func (f *StagedFile) Discard() {
 	f.temporary.release()
 }
 
-// copyAndFlush は、request.Source を file へ request.Maximum バイトまで書き、
-// 権限を与えてディスクへフラッシュする。書いたバイト数を返す。
+// RemoveLeftoverStagedFilesは、StageFileがdirectoryにprefixで作り、PublishもDiscardも
+// されずに残った一時ファイルを消す。StageFileの途中でプロセスが落ちると、一時ファイルは
+// こうして残る。".sshc-"で始まる名前は一覧にも同期にも出ないので、消さなければ、見えない
+// まま容量を使い続ける。
 //
-// 1 バイト余分に読む。ちょうど上限で切ると、超えていることとちょうど収まって
-// いることが見分けられない。
+// 書いている途中の一時ファイルも同じ名前なので、呼び出し側は、同じdirectoryとprefixで
+// StageFileを呼ぶ者が居ないとき（sshcエンジンの起動時など）にだけ呼ぶ。prefixは、
+// IsTemporaryNameが認める".sshc-"のあとに用途の名前を続けたものに限る。".sshc-"だけでは、
+// 変更の記録が復旧に使う一時ファイル（removeLeftoverTempsを参照）まで消してしまう。
+func RemoveLeftoverStagedFiles(fileSystem FileSystem, directory, prefix string) error {
+	if !IsTemporaryName(prefix) || len(prefix) <= len(temporaryPrefix) {
+		return os.ErrInvalid
+	}
+	entries, err := fileSystem.ReadDir(directory)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var failures []error
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), prefix) {
+			continue
+		}
+		err := fileSystem.Remove(filepath.Join(directory, entry.Name()))
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
+}
+
+// copyAndFlushは、request.Sourceをfileへrequest.Maximumバイトまで書き、権限を与えて
+// ディスクへフラッシュする。書いたバイト数を返す。
+//
+// 1バイト余分に読む。ちょうど上限で切ると、超えていることとちょうど収まっていることが
+// 見分けられない。
 func copyAndFlush(file *os.File, request StageRequest) (int64, error) {
 	if err := file.Chmod(request.Permission); err != nil {
 		return 0, err
@@ -107,8 +141,8 @@ func copyAndFlush(file *os.File, request StageRequest) (int64, error) {
 	return written, nil
 }
 
-// sourceReader は、元の読み取りで起きたエラーを覚えておく。io.Copy は読み取りと
-// 書き込みのどちらで失敗したかを区別しないので、その区別をここで残す。
+// sourceReaderは、元の読み取りで起きたエラーを覚えておく。io.Copyは読み取りと書き込みの
+// どちらで失敗したかを区別しないので、その区別をここで残す。
 type sourceReader struct {
 	reader io.Reader
 	err    error

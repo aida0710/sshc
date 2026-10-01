@@ -131,45 +131,11 @@ func syncDirectory(path string) error {
 	return directory.Sync()
 }
 
-func writeAtomicFileNative(path, prefix string, permission fs.FileMode, contents []byte) error {
-	return writeAtomicFileNativeWith(path, prefix, permission, contents, nil)
-}
-
-func writeAtomicFileNativeWith(path, prefix string, permission fs.FileMode, contents []byte, afterParentOpen func()) error {
+// cleanAtomicTargetは、WriteAtomicFileの書き込み先を、ファイルの名前を持つ絶対パスに均す。
+func cleanAtomicTarget(path string) (string, error) {
 	cleaned := filepath.Clean(path)
 	if !filepath.IsAbs(cleaned) || filepath.Base(cleaned) == "." {
-		return os.ErrInvalid
+		return "", os.ErrInvalid
 	}
-	directory := filepath.Dir(cleaned)
-	parent, err := openDirectoryNoFollow(directory)
-	if err != nil {
-		return err
-	}
-	defer parent.Close()
-	if afterParentOpen != nil {
-		afterParentOpen()
-	}
-	temporary, err := createPrivateTempAt(parent, directory, prefix)
-	if err != nil {
-		return err
-	}
-	temporaryName := filepath.Base(temporary.Name())
-	removeTemporary := true
-	defer func() {
-		_ = temporary.Close()
-		if removeTemporary {
-			_ = unix.Unlinkat(int(parent.Fd()), temporaryName, 0)
-		}
-	}()
-	if err := writeAndFlush(temporary, permission, contents); err != nil {
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := unix.Renameat(int(parent.Fd()), temporaryName, int(parent.Fd()), filepath.Base(cleaned)); err != nil {
-		return err
-	}
-	removeTemporary = false
-	return parent.Sync()
+	return cleaned, nil
 }

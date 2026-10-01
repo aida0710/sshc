@@ -11,7 +11,7 @@ import (
 	"sshc/internal/storage"
 )
 
-// pngSignature は、PNG の先頭 8 バイトである。
+// pngSignatureは、PNGの先頭8バイトである。
 const pngSignature = "\x89PNG\r\n\x1a\n"
 
 func png(payload string) []byte {
