@@ -168,6 +168,56 @@ func TestRemoteCopyMoveAndCompareAgainstOpenSSHSFTP(t *testing.T) {
 	}
 }
 
+// The refusal of a destination that reaches into the source through a link
+// relies on the server's REALPATH following the links on the way. The unit
+// tests' fake only assumes that; this checks OpenSSH's sftp-server does it,
+// through one alias and through two aliases of the same server.
+func TestRemoteFolderCopyOrMoveIntoItselfThroughASymlinkIsRefusedOnOpenSSHSFTP(t *testing.T) {
+	service := integrationService(t)
+	root := fmt.Sprintf("/tmp/sshc-sftp-self-copy-%d", time.Now().UnixNano())
+	sourceRoot := path.Join(root, "source")
+	shortcut := path.Join(root, "shortcut")
+	t.Cleanup(func() {
+		_ = service.DeleteTreeForTest(context.Background(), "integration", root)
+	})
+	for _, directory := range []string{root, sourceRoot} {
+		if _, err := service.Mkdir(t.Context(), "integration", directory); err != nil {
+			t.Fatal(err)
+		}
+	}
+	integrationUpload(t, &service, path.Join(sourceRoot, "kept.txt"), []byte("kept\n"), false)
+	remote, err := service.Open(t.Context(), "integration")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer remote.Close()
+	if err := remote.(*integrationRemote).Remote.(*sftp.Client).SymlinkForTest(sourceRoot, shortcut); err != nil {
+		t.Fatalf("create the link: %v", err)
+	}
+
+	for _, aliases := range []transferAliases{
+		{source: "integration", target: "integration"},
+		{source: "integration-source", target: "integration-target"},
+	} {
+		for _, operation := range folderOperations {
+			err := service.CopyRemote(t.Context(), sftp.RemoteTransferRequest{
+				SourceAlias: aliases.source, SourcePath: sourceRoot,
+				TargetAlias: aliases.target, TargetPath: path.Join(shortcut, "nested"), Operation: operation,
+			}, stopAtFirstBytes)
+			if !errors.Is(err, sftp.ErrTargetInsideSource) {
+				t.Fatalf("CopyRemote(%s, %s→%s) error = %v, want ErrTargetInsideSource", operation, aliases.source, aliases.target, err)
+			}
+		}
+	}
+	listing, err := service.ListDirectory(t.Context(), "integration", sourceRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listing.Entries) != 1 || listing.Entries[0].Name != "kept.txt" {
+		t.Fatalf("the source folder holds %+v after the refused transfers, want only kept.txt", listing.Entries)
+	}
+}
+
 func integrationUpload(t *testing.T, service *sftp.Service, target string, payload []byte, overwrite bool) {
 	t.Helper()
 	manager := newTestTransferManager(t, service)
