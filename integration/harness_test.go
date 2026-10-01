@@ -12,6 +12,7 @@ package integration
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,7 +53,7 @@ func runWithBuiltBinary(m *testing.M) int {
 	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/sshc")
 	build.Dir = ".."
 	if output, err := build.CombinedOutput(); err != nil {
-		panic(string(output))
+		panic(fmt.Sprintf("go build ./cmd/sshc: %v\n%s", err, output))
 	}
 	return m.Run()
 }
