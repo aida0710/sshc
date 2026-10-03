@@ -15,7 +15,7 @@ const library = {
 
 beforeEach(() => {
   vi.mocked(snippetsApi.library).mockReset().mockResolvedValue(library);
-  vi.mocked(snippetsApi.setStartup).mockReset().mockResolvedValue(undefined as never);
+  vi.mocked(snippetsApi.setStartup).mockReset().mockResolvedValue(undefined);
 });
 
 async function chooseAlpha(user: ReturnType<typeof userEvent.setup>) {
