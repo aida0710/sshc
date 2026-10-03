@@ -152,6 +152,7 @@ const findKey = "Control+F";
 const replaceKey = "Control+H";
 const goToLineKey = "Control+G";
 const toggleCommentKey = "Control+/";
+const suggestKey = "Control+Space";
 
 // Opens notes.txt in the editor and types at its end. A change then lands on
 // the remote before the save, so the engine refuses the save as a conflict.
@@ -435,5 +436,66 @@ test("goes to a line with Ctrl+G and comments it out with Ctrl+/, and Escape clo
   await expect(contextMenu).toBeHidden();
 
   await expect(page.getByRole("dialog")).toHaveCount(1);
+  expect(problems).toEqual(noPageProblems);
+});
+
+// The pause between keys when a test types at a person's pace. A suggestion
+// that Monaco shows while typing comes 10 ms after a key and a request to the
+// editor worker, well within this pause.
+const typingPause = 150;
+
+test("starts a new line when Enter follows the start of a word in the file, and completes a word only on Ctrl+Space", async ({ page, installation }) => {
+  const problems = watchForPageProblems(page);
+  const remote = remoteFile("alphabet soup\nサーバーの設定を変更した。\n");
+  await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remote });
+
+  const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("alphabet soup");
+  await editorContent(editor).focus();
+  await page.keyboard.press(endOfFileKey);
+  // Monaco takes Japanese text up to a space or an ASCII punctuation mark for
+  // one word, so the word in the file that starts with "サーバー" is the whole
+  // sentence. Each character is entered as an input method commits it.
+  await page.keyboard.type("サーバー", { delay: typingPause });
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("alp", { delay: typingPause });
+  await page.keyboard.press("Enter");
+
+  await page.keyboard.type("sou");
+  await page.keyboard.press(suggestKey);
+  await expect(editor.getByRole("listbox", { name: "Suggest" }).getByRole("listitem", { name: /^soup,/ })).toBeVisible();
+  await page.keyboard.press("Enter");
+
+  await editor.getByRole("button", { name: englishLabels.save, exact: true }).click();
+  await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
+  expect(remote.contents).toBe("alphabet soup\nサーバーの設定を変更した。\nサーバー\nalp\nsoup");
+  expect(problems).toEqual(noPageProblems);
+});
+
+// Waits until the page has been idle. Monaco starts most of its editor
+// features once the page is idle after it creates an editor, at the latest
+// 50 ms after.
+async function waitUntilPageIsIdle(page: Page): Promise<void> {
+  await page.evaluate(() => new Promise<void>((resolve) => { requestIdleCallback(() => resolve()); }));
+}
+
+test("opens a file with unusual line terminators as it is, without asking to remove them", async ({ page, installation }) => {
+  const problems = watchForPageProblems(page);
+  const dialogs: string[] = [];
+  // Accepted, so that an offer to remove the terminators would also show as an
+  // unsaved change.
+  page.on("dialog", (dialog) => {
+    dialogs.push(dialog.message());
+    void dialog.accept();
+  });
+  // U+2028 is Line Separator, one of the unusual line terminators.
+  await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remoteFile("first\u2028second\nthird\n") });
+
+  const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("third");
+  await waitUntilPageIsIdle(page);
+
+  expect(dialogs).toEqual([]);
+  await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
   expect(problems).toEqual(noPageProblems);
 });

@@ -30,9 +30,10 @@ The editor supports these keys, among others:
 - Replace: `Ctrl+H` (`Cmd+Option+F` on macOS)
 - Go to line: `Ctrl+G`
 - Toggle line comment: `Ctrl/Cmd+/`
-- Command palette: `F1`, also available from the right-click menu
+- Suggestions: `Ctrl+Space`. They do not appear on their own while you type.
+- The editor's command palette: `F1`, also available from the right-click menu
 
-The command palette lists the other commands, such as folding and multiple cursors, with their keys. Pressing `Esc` closes Find or the command palette and leaves the editor open. Find, the command palette and the right-click menu are shown in English.
+The editor's command palette lists the other commands, such as folding and multiple cursors, with their keys. Pressing `Esc` closes Find or the editor's command palette and leaves the editor open. Find, the editor's command palette and the right-click menu are shown in English.
 
 If the remote file changed after it was opened in the editor, the editor refuses the save and says so. You can then choose either action:
 

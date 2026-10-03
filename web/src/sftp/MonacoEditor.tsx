@@ -43,6 +43,21 @@ function languageFor(path: string): string {
   return "plaintext";
 }
 
+// Holds back the editor features (monacoEditorFeatures.ts) that would change
+// the remote file without the user asking for it:
+// - Suggestions show only on Ctrl+Space, not while typing. A suggestion shown
+//   while typing takes the Enter or Tab meant for a new line or an indent, and
+//   replaces the typed word with another word of the file.
+// - A file with unusual line terminators, such as Line Separator (U+2028), is
+//   opened as it is. Monaco would otherwise ask in a browser dialog to remove
+//   them. The dialog names the file by Monaco's model number and points at a
+//   setting sshc does not have, and removing them changes the file.
+const noUnrequestedEditOptions = {
+  quickSuggestions: false,
+  suggestOnTriggerCharacters: false,
+  unusualLineTerminators: "off",
+} satisfies monaco.editor.IStandaloneEditorConstructionOptions;
+
 export function MonacoEditor({ path, value, onChange, readOnly = false }: MonacoEditorProps) {
   const container = useRef<HTMLDivElement>(null);
   const callback = useRef(onChange);
@@ -61,6 +76,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false }: Monaco
     const view = monaco.editor.create(container.current, {
       model,
       readOnly,
+      ...noUnrequestedEditOptions,
       automaticLayout: true,
       minimap: { enabled: false },
       fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
