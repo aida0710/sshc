@@ -94,21 +94,22 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 3. 別のフォルダをアップロードし、既存名へ衝突させる。上書き確認で1件を上書きし、別の1件をskipして、残りが続行されることを確認する。別の転送では取消し、未開始fileが送られないことを確認する。
 4. textをMonacoで開き、別のSSH sessionから内容を変更した後に保存して、競合として拒否されることを確認する。続けて［上書き保存］を選び、確認のあとにエディタの内容でリモートのファイルが上書きされることを確認する。もう一度競合させ、上書き保存の確認ダイアログを開いたまま別のSSH sessionから内容を変更してから確定すると、上書きせずに競合として表示されることも確認する。
 5. 4のエディタで、`Ctrl/Cmd+F`（検索）、置換（Windows・Linuxは`Ctrl+H`、macOSは`Cmd+Option+F`）、`Ctrl+G`（行へ移動）、`Ctrl/Cmd+/`（行のコメントの切り替え）を押す。ブラウザの検索や履歴が開かず、エディタの検索欄、行へ移動、コメントの切り替えが動くこと、`Esc`で検索欄だけが閉じてエディタは開いたままであることを確認する。E2Eは、Windowsとして動くヘッドレスのChromiumで、キーの既定の動作が止まることしか確かめないので、macOSを含む実際のブラウザで確認する。
-6. file download、directoryのZIP download、rename、空directoryの作成と削除を確認する。非空directoryを削除すると、確認dialogに「フォルダ内の項目もすべて削除されます。」と表示され、配下ごと削除されることも確認する。
-7. upload／file download／folder downloadを3件以上追加し、Transfer Managerが同時2件だけを実行すること、fileごとにbytes、速度、残り時間、attempt、statusを表示することを確認する。
-8. 2 MiBを超えるfileをuploadし、転送中にpauseしてからresumeする。別画面へ移動して戻っても同じjobとbytes進捗が残り、完了前はtarget名のfileが見えず、完了後だけ一覧へ現れ、別画面でも完了通知が出ることを確認する。
-9. folder uploadのうち1 fileだけを失敗させ、batchの「失敗した1件を再実行」で成功済みfileを再送せず失敗fileだけattemptが増えることを確認する。
-10. 転送中にnetworkを一時的に切り、uploadがremote part sizeから、file downloadがHTTP Rangeから再開することを確認する。folder ZIPはretry時に先頭からやり直すことも確認する。
-11. pause／resume／retry／cancelをuploadとfile downloadで試し、cancelしたuploadのpart fileが削除されること、失敗通知を閉じられることを確認する。
-12. fileとdirectoryの権限をchmodで変更し、一覧で名前の下に権限が表示されること、名前・更新日時・サイズ・種別でsortできることを確認する。symlinkにはchmodが表示されないことを確認する。
-13. checkboxでfileとdirectoryを複数選択し、一括downloadと削除確認を実行できることを確認する。1件だけ選んだ場合に限り、renameとchmodが操作menuへ表示されることも確認する。
-14. text fileを開いたとき、一覧の横幅が変わらずmodal editorが表示されることを確認する。未保存の変更がある間は意図せず閉じないことも確認する。
-15. desktopでtabをファイル一覧の右半分へdragし、そのtabが右の新しいペインへ移って左に空のtabが残ることを確認する。接続済みのtabを移した場合は、Connectを押さずに同じdirectoryが開き直ることを確認する。左右で複数tabを追加・切替し、各tabのhost/pathが独立すること、右ペインの最後のtabを左へdragすると1ペインへ戻ること、再読み込み後も両側のtabと分割幅が復元されることを確認する。tabを選んで`Shift`+`←`／`→`でも同じ移動ができることを確認する。異なるhostを左右に開き、fileとdirectoryを片方からもう片方へDrag & Dropする。copyではsourceが残り、moveではtargetの完了後だけsourceが消えること、ローカルのマシンに平文の一時fileが作られないことも確認する。2ペインを開いたままmobile幅へ縮めると、左tab列と1ペインだけになり、右ペイン、比較、tabのdragが動作しないことを確認する。desktop幅へ戻したときは右ペインが復元されることを確認する。
-16. 同じhostの別directoryを2ペインに開き、moveがserver-side renameで完了することを確認する。directoryを自分自身の配下へcopy／moveしようとした場合は、targetを作らず拒否され、転送マネージャーに専用の理由（`sftp_target_inside_source`の文）が出ることも確認する。配下を指すsymlinkを経由した転送先でも同じになることを確認する。同じhostを別のaliasとして2つ登録し、片方のペインからもう片方のペインの同じfileへmoveした場合は、上書きの確認を承認したあとで拒否され、fileが消えずに残り、転送マネージャーに専用の理由（`sftp_target_is_source`の文）が出ることを確認する。
-17. 2ペインの「比較」を開き、同一・左のみ・右のみ・差分・種別違いがsize、mtime、permission、種別を基準に表示されることを確認する。項目を選んで左右へcopyし、相手側だけのfileが自動削除されないことを確認する。
-18. SFTPから「ここでTerminalを開く」を実行し、同じhostのshellが現在directoryから始まることを確認する。TerminalでOSC 7を出すshellからは、現在directoryを同じhostのSFTPで開けることを確認する。
-19. 待機中・一時停止中・転送中のjobを作ってengineを再起動し、queueが復元されることを確認する。Remote→Remoteの転送中jobは待機へ戻って再実行され、`~/.ssh/sshc/transfers.json`が0600で、Remote Syncのsnapshotに含まれないことを確認する。
-20. 作成したfileとdirectoryを削除して原状復帰する。
+6. 4のエディタで、行頭で`Tab`を押すとインデントが入り、`Shift+Tab`で戻り、フォーカスが［閉じる］へ移らないことを確認する。次に、Windows・Linuxは`Ctrl+M`、macOSは`Ctrl+Shift+M`を押してから`Tab`と`Shift+Tab`を繰り返し、フォーカスがエディタから［保存］や［閉じる］へ移り、エディタのダイアログの外へは出ないことを確認する。このキーをブラウザが自分の操作に使わずにエディタのモードが切り替わること、もう一度押すと`Tab`でインデントする動作に戻ることも確認する。E2EはWindowsとして動くヘッドレスのChromiumで確かめるだけなので、macOSを含む実際のブラウザで確認する。
+7. file download、directoryのZIP download、rename、空directoryの作成と削除を確認する。非空directoryを削除すると、確認dialogに「フォルダ内の項目もすべて削除されます。」と表示され、配下ごと削除されることも確認する。
+8. upload／file download／folder downloadを3件以上追加し、Transfer Managerが同時2件だけを実行すること、fileごとにbytes、速度、残り時間、attempt、statusを表示することを確認する。
+9. 2 MiBを超えるfileをuploadし、転送中にpauseしてからresumeする。別画面へ移動して戻っても同じjobとbytes進捗が残り、完了前はtarget名のfileが見えず、完了後だけ一覧へ現れ、別画面でも完了通知が出ることを確認する。
+10. folder uploadのうち1 fileだけを失敗させ、batchの「失敗した1件を再実行」で成功済みfileを再送せず失敗fileだけattemptが増えることを確認する。
+11. 転送中にnetworkを一時的に切り、uploadがremote part sizeから、file downloadがHTTP Rangeから再開することを確認する。folder ZIPはretry時に先頭からやり直すことも確認する。
+12. pause／resume／retry／cancelをuploadとfile downloadで試し、cancelしたuploadのpart fileが削除されること、失敗通知を閉じられることを確認する。
+13. fileとdirectoryの権限をchmodで変更し、一覧で名前の下に権限が表示されること、名前・更新日時・サイズ・種別でsortできることを確認する。symlinkにはchmodが表示されないことを確認する。
+14. checkboxでfileとdirectoryを複数選択し、一括downloadと削除確認を実行できることを確認する。1件だけ選んだ場合に限り、renameとchmodが操作menuへ表示されることも確認する。
+15. text fileを開いたとき、一覧の横幅が変わらずmodal editorが表示されることを確認する。未保存の変更がある間は意図せず閉じないことも確認する。
+16. desktopでtabをファイル一覧の右半分へdragし、そのtabが右の新しいペインへ移って左に空のtabが残ることを確認する。接続済みのtabを移した場合は、Connectを押さずに同じdirectoryが開き直ることを確認する。左右で複数tabを追加・切替し、各tabのhost/pathが独立すること、右ペインの最後のtabを左へdragすると1ペインへ戻ること、再読み込み後も両側のtabと分割幅が復元されることを確認する。tabを選んで`Shift`+`←`／`→`でも同じ移動ができることを確認する。異なるhostを左右に開き、fileとdirectoryを片方からもう片方へDrag & Dropする。copyではsourceが残り、moveではtargetの完了後だけsourceが消えること、ローカルのマシンに平文の一時fileが作られないことも確認する。2ペインを開いたままmobile幅へ縮めると、左tab列と1ペインだけになり、右ペイン、比較、tabのdragが動作しないことを確認する。desktop幅へ戻したときは右ペインが復元されることを確認する。
+17. 同じhostの別directoryを2ペインに開き、moveがserver-side renameで完了することを確認する。directoryを自分自身の配下へcopy／moveしようとした場合は、targetを作らず拒否され、転送マネージャーに専用の理由（`sftp_target_inside_source`の文）が出ることも確認する。配下を指すsymlinkを経由した転送先でも同じになることを確認する。同じhostを別のaliasとして2つ登録し、片方のペインからもう片方のペインの同じfileへmoveした場合は、上書きの確認を承認したあとで拒否され、fileが消えずに残り、転送マネージャーに専用の理由（`sftp_target_is_source`の文）が出ることを確認する。
+18. 2ペインの「比較」を開き、同一・左のみ・右のみ・差分・種別違いがsize、mtime、permission、種別を基準に表示されることを確認する。項目を選んで左右へcopyし、相手側だけのfileが自動削除されないことを確認する。
+19. SFTPから「ここでTerminalを開く」を実行し、同じhostのshellが現在directoryから始まることを確認する。TerminalでOSC 7を出すshellからは、現在directoryを同じhostのSFTPで開けることを確認する。
+20. 待機中・一時停止中・転送中のjobを作ってengineを再起動し、queueが復元されることを確認する。Remote→Remoteの転送中jobは待機へ戻って再実行され、`~/.ssh/sshc/transfers.json`が0600で、Remote Syncのsnapshotに含まれないことを確認する。
+21. 作成したfileとdirectoryを削除して原状復帰する。
 
 ## M8. Workspace Command Center
 

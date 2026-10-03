@@ -13,6 +13,7 @@ const quotesOutsideTheCatalogue = new Map<string, string>([
   ["名前 → リンク先", "SFTPの一覧の表示形式の例。SFTPEntryList.tsxが組み立てる"],
   ["sshcエンジンの記録", "VPNのログの見出し。internal/vpn/status.goが書く"],
   ["コンテナのログ", "VPNのログの見出し。internal/vpn/status.goが書く"],
+  ["Toggle Tab Key Moves Focus", "Monaco Editorのコマンドの名前。Monaco Editorが英語で表示する"],
 ]);
 
 const quotePattern = /［([^［］]+)］|「([^「」]+)」/g;

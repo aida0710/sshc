@@ -35,7 +35,7 @@ import { attachCommandMarkers } from "./commandMarkers";
 import { showBrowserNotification } from "../ui/browserNotifications";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
-import { escapeOwnerProps } from "../ui/useDismissibleLayer";
+import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
 import { useTerminalSearch } from "./useTerminalSearch";
 import { TerminalSearchBar } from "./TerminalSearchBar";
 import { TerminalStatusBanners } from "./TerminalStatusBanners";
@@ -513,7 +513,7 @@ export function TerminalView({
         <div
           ref={host}
           data-terminal-host=""
-          {...escapeOwnerProps}
+          {...keyboardOwnerProps}
           {...(palette === undefined || palette === "" ? {} : { "data-term-palette": palette })}
           {...(font === undefined || font === "" ? {} : { "data-term-font": font })}
           {...(hasBackground ? { "data-term-background": background ?? "" } : {})}
