@@ -144,13 +144,25 @@ shutdown_timeout_seconds() {
 
 # step_interrupt_seconds は、相手を待っている最中のコマンドへ SIGINT を送ってから、
 # SIGTERM を送るまでの長さである。openconnect は SIGINT を受けると、装置へログアウトを
-# 送ってから終わる。sh は背後で起動したコマンドの SIGINT を無視させるので、timeout を
-# 挟まずに起動したもの（swanctl）は SIGTERM で止める。
+# 送ってから終わる。sh は背後で起動したコマンドに SIGINT を無視させる。openconnect は
+# SIGINT の扱いを自分で決めるので受け取れるが、そうしないコマンドは SIGINT では止まらず、
+# SIGTERM で止まる。timeout を挟まずに起動した swanctl がそうで、uutils の timeout は
+# この無視を下のコマンドへ引き継ぐので、その下の getent や ipsec up も同じになる。
 step_interrupt_seconds=2
 
+# signal_waiting_step は、相手を待っている最中のコマンドへ合図（$1）を送る。
+#
+# timeout は自分の process group を作り、下のコマンドもその中にいるので、group ごとに
+# 送る。timeout へ送るだけでは、下のコマンドへ届くかが timeout の実装で変わる。GNU の
+# timeout は受けた合図をどれも渡すが、uutils の timeout（Ubuntu 26.04 の既定）は最初の
+# 合図しか渡さない。group を作らないもの（timeout を挟まずに起動した swanctl）と、まだ
+# 作っていないものには、そのプロセスへ送る。
+signal_waiting_step() {
+	kill -s "$1" -- "-$waiting_pid" 2>/dev/null || kill -s "$1" "$waiting_pid" 2>/dev/null
+}
+
 # stop_waiting_step は、相手を待っている最中のコマンドを、止める手順の持ち時間の中で
-# 止める。SIGINT、SIGTERM の順に送り、それでも終わらなければ SIGKILL で止める。timeout は
-# 受けた合図をコマンドへ渡す。
+# 止める。SIGINT、SIGTERM の順に送り、それでも終わらなければ SIGKILL で止める。
 #
 # 終わったコマンドは wait で片付けるまで残る（kill -0 が成功し続ける）ので、見張りの
 # プロセスに合図を送らせて、こちらは wait で待つ。
@@ -158,12 +170,12 @@ stop_waiting_step() {
 	if [ -z "$waiting_pid" ]; then
 		return 0
 	fi
-	kill -INT "$waiting_pid" 2>/dev/null || true
+	signal_waiting_step INT || true
 	(
 		sleep "$step_interrupt_seconds"
-		kill -TERM "$waiting_pid" 2>/dev/null
+		signal_waiting_step TERM
 		sleep "$(shutdown_seconds_left)"
-		kill -KILL "$waiting_pid" 2>/dev/null
+		signal_waiting_step KILL
 	) </dev/null >/dev/null 2>&1 &
 	watchdog_pid=$!
 	wait "$waiting_pid" 2>/dev/null || true
