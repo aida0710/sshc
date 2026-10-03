@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
-import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
+import { changeDisplayLanguage, expect, openApplication, openSection, test, type Installation } from "./support/environment";
+import { pressShortcutAndReportPrevented } from "./support/keyboard";
 import { watchForPolicyViolations } from "./support/policyViolations";
 import { connectSFTPHost } from "./support/sftp";
 
@@ -67,6 +68,29 @@ async function serveRemoteFiles(page: Page, files: Record<string, RemoteFile>): 
   });
 }
 
+// Opens the application on SFTP, connected to bastion, whose /srv holds only
+// `files`.
+async function openSFTPOnBastion(page: Page, installation: Installation, files: Record<string, RemoteFile>): Promise<void> {
+  await serveRemoteFiles(page, files);
+  await openApplication(page, installation);
+  await openSection(page, "SFTP");
+  await connectSFTPHost(page, "bastion");
+}
+
+// What the page reports that the editor must not cause: the errors the page
+// throws, such as Monaco's for an editor feature it cannot start, and the
+// Content Security Policy violations, Trusted Types included.
+type PageProblems = { errors: string[]; policyViolations: string[] };
+
+const noPageProblems: PageProblems = { errors: [], policyViolations: [] };
+
+// Collects the problems the page reports from now on.
+function watchForPageProblems(page: Page): PageProblems {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  return { errors, policyViolations: watchForPolicyViolations(page) };
+}
+
 // The names the editor's controls have in one display language.
 type EditorLabels = {
   details: (name: string) => string;
@@ -116,12 +140,25 @@ function editorContent(editor: Locator): Locator {
   return editor.getByRole("textbox", { name: "Editor content" });
 }
 
+// Monaco takes its keys from the platform the user agent names, and the suite
+// runs as Desktop Chrome on Windows (playwright.config.ts). These are the keys
+// Monaco answers to there, whichever system runs the suite. Playwright's
+// ControlOrMeta is not used for them: it presses Meta when the suite runs on
+// macOS, where Monaco, still reading Windows from the user agent, expects
+// Control.
+const endOfFileKey = "Control+End";
+const startOfFileKey = "Control+Home";
+const findKey = "Control+F";
+const replaceKey = "Control+H";
+const goToLineKey = "Control+G";
+const toggleCommentKey = "Control+/";
+
 // Opens notes.txt in the editor and types at its end. A change then lands on
 // the remote before the save, so the engine refuses the save as a conflict.
 async function editUntilConflict(page: Page, remote: RemoteFile, labels: EditorLabels): Promise<Locator> {
   const editor = await openInEditor(page, "/srv/notes.txt", labels);
   await editorContent(editor).focus();
-  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.press(endOfFileKey);
   // One input event, so that "Unsaved" appears only once all of it is in. Keys
   // typed one by one can still be arriving when Save makes the editor read-only.
   await page.keyboard.insertText("mine");
@@ -145,10 +182,7 @@ test("overwrites a remote text file that changed after it was opened, only for t
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   test.setTimeout(visualDirectory === undefined ? 30_000 : 120_000);
   const remote = remoteFile("hello\n");
-  await serveRemoteFiles(page, { "/srv/notes.txt": remote });
-  await openApplication(page, installation);
-  await openSection(page, "SFTP");
-  await connectSFTPHost(page, "bastion");
+  await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remote });
 
   const editor = await editUntilConflict(page, remote, englishLabels);
   const problem = editor.getByRole("alert");
@@ -198,11 +232,8 @@ const htmlLookingLine = "<b>not bold</b> & <img src=x>";
 const manyLines = Array.from({ length: 300 }, (_, index) => `line ${index + 1}`);
 
 test("draws the opened file's lines as text while the file is typed in and scrolled, and the page reports no policy violation", async ({ page, installation }) => {
-  const violations = watchForPolicyViolations(page);
-  await serveRemoteFiles(page, { "/srv/notes.txt": remoteFile([htmlLookingLine, ...manyLines].join("\n")) });
-  await openApplication(page, installation);
-  await openSection(page, "SFTP");
-  await connectSFTPHost(page, "bastion");
+  const problems = watchForPageProblems(page);
+  await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remoteFile([htmlLookingLine, ...manyLines].join("\n")) });
 
   const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
   const drawnLines = editor.locator(".view-lines");
@@ -225,12 +256,12 @@ test("draws the opened file's lines as text while the file is typed in and scrol
     await expect(drawnLines).toContainText("line 60", { timeout: 200 });
   }).toPass({ intervals: [100] });
   await expect(drawnLines).not.toContainText(htmlLookingLine);
-  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.press(endOfFileKey);
   await expect(drawnLines).toContainText("line 300");
-  await page.keyboard.press("ControlOrMeta+Home");
+  await page.keyboard.press(startOfFileKey);
   await expect(drawnLines).toContainText(`typed ${htmlLookingLine}`);
 
-  expect(violations).toEqual([]);
+  expect(problems).toEqual(noPageProblems);
 });
 
 // The part of MonacoEnvironment a script on the page could call to ask for a
@@ -238,10 +269,7 @@ test("draws the opened file's lines as text while the file is typed in and scrol
 type PolicySource = { createTrustedTypesPolicy?(name: string, options: object): unknown };
 
 test("a script on the page gets none of the editor's Trusted Types policies through MonacoEnvironment", async ({ page, installation }) => {
-  await serveRemoteFiles(page, { "/srv/notes.txt": remoteFile("hello\n") });
-  await openApplication(page, installation);
-  await openSection(page, "SFTP");
-  await connectSFTPHost(page, "bastion");
+  await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remoteFile("hello\n") });
   const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
   await expect(editor.locator(".view-lines")).toContainText("hello");
 
@@ -263,14 +291,11 @@ test("a script on the page gets none of the editor's Trusted Types policies thro
 });
 
 test("runs the JSON support and shows the read-only message while a save is held, and the page reports no policy violation", async ({ page, installation }) => {
-  const violations = watchForPolicyViolations(page);
+  const problems = watchForPageProblems(page);
   const settings = remoteFile('{\n  "name": "sshc",\n  "port": \n}\n');
   let releaseSave = () => {};
   settings.saveHeldUntil = new Promise<void>((release) => { releaseSave = release; });
-  await serveRemoteFiles(page, { "/srv/settings.json": settings });
-  await openApplication(page, installation);
-  await openSection(page, "SFTP");
-  await connectSFTPHost(page, "bastion");
+  await openSFTPOnBastion(page, installation, { "/srv/settings.json": settings });
 
   // A JSON file loads Monaco's JSON support. The missing value is found by the
   // JSON worker, so its squiggle shows that the worker started.
@@ -292,48 +317,8 @@ test("runs the JSON support and shows the read-only message while a save is held
   releaseSave();
   await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
 
-  expect(violations).toEqual([]);
+  expect(problems).toEqual(noPageProblems);
 });
-
-// Monaco takes its keys from the platform the user agent names, and the suite
-// runs as Desktop Chrome on Windows (playwright.config.ts). These are the keys
-// Monaco answers to there, whichever system runs the suite.
-const findKey = "Control+F";
-const replaceKey = "Control+H";
-const goToLineKey = "Control+G";
-const toggleCommentKey = "Control+/";
-
-// Collects every error the page throws from now on. Monaco reports an editor
-// feature it cannot start, such as one that needs a service it does not know,
-// as an error on the page.
-function watchForPageErrors(page: Page): string[] {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  return errors;
-}
-
-// Presses `shortcut`, such as "Control+F", and tells whether the page kept the
-// browser from acting on it. For Ctrl+F, the browser would otherwise open its
-// own Find bar.
-async function pressKeptFromBrowser(page: Page, shortcut: string): Promise<boolean> {
-  const key = shortcut.slice(shortcut.lastIndexOf("+") + 1).toLowerCase();
-  // Inside an object, so that evaluateHandle returns before the shortcut is
-  // pressed instead of waiting for the answer.
-  const keyDown = await page.evaluateHandle((key) => ({
-    defaultPrevented: new Promise<boolean>((resolve) => {
-      const listener = (event: KeyboardEvent) => {
-        // The modifier keys go down first.
-        if (event.key.toLowerCase() !== key) return;
-        window.removeEventListener("keydown", listener, true);
-        // Read once every listener on the page has had the key.
-        setTimeout(() => resolve(event.defaultPrevented));
-      };
-      window.addEventListener("keydown", listener, true);
-    }),
-  }), key);
-  await page.keyboard.press(shortcut);
-  return keyDown.evaluate((pending) => pending.defaultPrevented);
-}
 
 // The word the Find and Replace tests look for. Each of their files has it
 // three times.
@@ -347,13 +332,13 @@ async function findAndReplaceAll(page: Page, editor: Locator, replacement: strin
   const drawnLines = editor.locator(".view-lines");
   const findWidget = editor.getByRole("dialog", { name: "Find / Replace" });
   await editorContent(editor).focus();
-  expect(await pressKeptFromBrowser(page, findKey)).toBe(true);
+  expect(await pressShortcutAndReportPrevented(page, findKey)).toBe(true);
   await expect(findWidget).toBeVisible();
   await page.keyboard.insertText(searchedWord);
   await expect(findWidget.getByText("1 of 3", { exact: true })).toBeVisible();
   await expect(editor.locator(".view-overlays").locator(".findMatch, .currentFindMatch")).toHaveCount(3);
 
-  expect(await pressKeptFromBrowser(page, replaceKey)).toBe(true);
+  expect(await pressShortcutAndReportPrevented(page, replaceKey)).toBe(true);
   await page.keyboard.insertText(replacement);
   await findWidget.getByRole("button", { name: /^Replace All/ }).click();
   await expect(drawnLines).not.toContainText(searchedWord);
@@ -366,53 +351,41 @@ async function findAndReplaceAll(page: Page, editor: Locator, replacement: strin
 }
 
 test("finds and replaces text in the editor with Ctrl+F and Ctrl+H, and Escape closes only Find", async ({ page, installation }) => {
-  const pageErrors = watchForPageErrors(page);
-  const violations = watchForPolicyViolations(page);
-  await serveRemoteFiles(page, { "/srv/notes.txt": remoteFile(`${searchedWord} one\ntwo ${searchedWord}\n${searchedWord} three\n`) });
-  await openApplication(page, installation);
-  await openSection(page, "SFTP");
-  await connectSFTPHost(page, "bastion");
+  const problems = watchForPageProblems(page);
+  await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remoteFile(`${searchedWord} one\ntwo ${searchedWord}\n${searchedWord} three\n`) });
 
   const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
   await expect(editor.locator(".view-lines")).toContainText(`${searchedWord} one`);
   await findAndReplaceAll(page, editor, "omega");
   await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toBeVisible();
 
-  expect(pageErrors).toEqual([]);
-  expect(violations).toEqual([]);
+  expect(problems).toEqual(noPageProblems);
 });
 
 test("finds and replaces text the same way after the JSON support has loaded, and the page throws no error", async ({ page, installation }) => {
-  const pageErrors = watchForPageErrors(page);
-  const violations = watchForPolicyViolations(page);
+  const problems = watchForPageProblems(page);
   const settings = [`{`, `  "first": "${searchedWord}",`, `  "second": "${searchedWord}",`, `  "third": "${searchedWord}",`, `  "port": `, `}`, ``];
-  await serveRemoteFiles(page, { "/srv/settings.json": remoteFile(settings.join("\n")) });
-  await openApplication(page, installation);
-  await openSection(page, "SFTP");
-  await connectSFTPHost(page, "bastion");
+  await openSFTPOnBastion(page, installation, { "/srv/settings.json": remoteFile(settings.join("\n")) });
 
-  // The JSON support registers Monaco's editor features too. Monaco applies
-  // what is registered after its first editor only to the editors created
-  // later, so the file is opened again once the JSON support has loaded. The
-  // missing value is found by the JSON worker, so its squiggle shows that.
+  // The JSON support imports every editor feature too. A feature that only the
+  // JSON support registered would start only in the editors created after the
+  // JSON support loaded, and those editors would throw "depends on UNKNOWN
+  // service". The file is therefore opened again, and Find and Replace are used
+  // in this second editor. The missing value is found by the JSON worker, so
+  // its squiggle shows that the JSON support has loaded.
   let editor = await openInEditor(page, "/srv/settings.json", englishLabels);
   await expect(editor.locator(".squiggly-error")).not.toHaveCount(0);
   await editor.getByRole("button", { name: englishLabels.close, exact: true }).click();
   editor = await openInEditor(page, "/srv/settings.json", englishLabels);
   await findAndReplaceAll(page, editor, "omega");
 
-  expect(pageErrors).toEqual([]);
-  expect(violations).toEqual([]);
+  expect(problems).toEqual(noPageProblems);
 });
 
 test("goes to a line with Ctrl+G and comments it out with Ctrl+/, and Escape closes only the command palette and the context menu", async ({ page, installation }) => {
-  const pageErrors = watchForPageErrors(page);
-  const violations = watchForPolicyViolations(page);
+  const problems = watchForPageProblems(page);
   const script = ["#!/bin/sh", "set -eu", "echo first", "echo second", "echo third", ""];
-  await serveRemoteFiles(page, { "/srv/deploy.sh": remoteFile(script.join("\n")) });
-  await openApplication(page, installation);
-  await openSection(page, "SFTP");
-  await connectSFTPHost(page, "bastion");
+  await openSFTPOnBastion(page, installation, { "/srv/deploy.sh": remoteFile(script.join("\n")) });
 
   const editor = await openInEditor(page, "/srv/deploy.sh", englishLabels);
   const drawnLines = editor.locator(".view-lines");
@@ -420,7 +393,7 @@ test("goes to a line with Ctrl+G and comments it out with Ctrl+/, and Escape clo
   await editorContent(editor).focus();
 
   // The cursor starts on line 1, so only Go to Line puts the comment on line 4.
-  expect(await pressKeptFromBrowser(page, goToLineKey)).toBe(true);
+  expect(await pressShortcutAndReportPrevented(page, goToLineKey)).toBe(true);
   await expect(editor.getByRole("textbox", { name: /^Go to line\./ })).toBeFocused();
   await page.keyboard.insertText("4");
   await page.keyboard.press("Enter");
@@ -441,6 +414,5 @@ test("goes to a line with Ctrl+G and comments it out with Ctrl+/, and Escape clo
   await expect(contextMenu).toBeHidden();
 
   await expect(page.getByRole("dialog")).toHaveCount(1);
-  expect(pageErrors).toEqual([]);
-  expect(violations).toEqual([]);
+  expect(problems).toEqual(noPageProblems);
 });
