@@ -46,12 +46,14 @@ function languageFor(path: string): string {
 export function MonacoEditor({ path, value, onChange, readOnly = false }: MonacoEditorProps) {
   const container = useRef<HTMLDivElement>(null);
   const callback = useRef(onChange);
-  const current = useRef(value);
+  // The contents the editor reported through onChange that have not come back
+  // as `value` yet, oldest first. React can render one of them after the user
+  // has typed more, so `value` is not always the model's latest contents.
+  const pendingReports = useRef<string[]>([]);
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const { resolved } = useTheme();
   const reducedMotion = useMediaQuery(reducedMotionQuery);
   callback.current = onChange;
-  current.current = value;
 
   useEffect(() => {
     if (container.current === null) return;
@@ -70,9 +72,10 @@ export function MonacoEditor({ path, value, onChange, readOnly = false }: Monaco
       theme: resolved === "dark" ? "vs-dark" : "vs",
     });
     editor.current = view;
+    pendingReports.current = [];
     const subscription = model.onDidChangeContent(() => {
       const next = model.getValue();
-      current.current = next;
+      pendingReports.current.push(next);
       callback.current(next);
     });
     return () => {
@@ -86,11 +89,22 @@ export function MonacoEditor({ path, value, onChange, readOnly = false }: Monaco
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path]);
 
+  // Writes a `value` the parent set itself, such as the contents read again
+  // from the remote, into the model. A `value` the editor reported is skipped
+  // even when it differs from the model: it is an older report rendered after
+  // the user typed more, and writing it would undo that typing and move the
+  // cursor to the start of the file.
   useEffect(() => {
     const model = editor.current?.getModel();
-    if (model !== null && model !== undefined && model.getValue() !== value) {
-      model.setValue(value);
+    if (model === null || model === undefined) return;
+    const report = pendingReports.current.indexOf(value);
+    if (report !== -1) {
+      pendingReports.current.splice(0, report + 1);
+      return;
     }
+    if (model.getValue() !== value) model.setValue(value);
+    // Also drops the report of the setValue above: the parent set that value.
+    pendingReports.current = [];
   }, [value]);
 
   useEffect(() => {

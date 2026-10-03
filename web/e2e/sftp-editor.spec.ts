@@ -264,6 +264,27 @@ test("draws the opened file's lines as text while the file is typed in and scrol
   expect(problems).toEqual(noPageProblems);
 });
 
+test("keeps every key typed in quick succession where it was typed", async ({ page, installation }) => {
+  const problems = watchForPageProblems(page);
+  const remote = remoteFile("first line\n");
+  await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remote });
+
+  const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("first line");
+  await editorContent(editor).focus();
+  await page.keyboard.press(endOfFileKey);
+  // One key after another as fast as the browser takes them, so that a key
+  // often lands before React has finished with the one before it.
+  await page.keyboard.type("the quick brown fox jumps over the lazy dog");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("second line");
+
+  await editor.getByRole("button", { name: englishLabels.save, exact: true }).click();
+  await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
+  expect(remote.contents).toBe("first line\nthe quick brown fox jumps over the lazy dog\nsecond line");
+  expect(problems).toEqual(noPageProblems);
+});
+
 // The part of MonacoEnvironment a script on the page could call to ask for a
 // Trusted Types policy.
 type PolicySource = { createTrustedTypesPolicy?(name: string, options: object): unknown };
