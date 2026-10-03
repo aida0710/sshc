@@ -45,12 +45,12 @@ const overview = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(configApi.overview).mockResolvedValue(overview as never);
+  vi.mocked(configApi.overview).mockResolvedValue(overview);
   vi.mocked(configApi.preview).mockResolvedValue({
     operation: "config.groups",
     diffs: [{ path: "groups.sshc.conf", created: true, lines: [{ op: "insert", text: "Host build01", newLine: 1 }] }],
     effective: [{ alias: "build01", changes: [{ keyword: "Port", before: [], after: ["2222"] }] }],
-  } as never);
+  });
 });
 
 async function select(user: ReturnType<typeof userEvent.setup>, name: string) {
@@ -138,7 +138,7 @@ describe("GroupsPanel", () => {
       transactionId: "t1",
       written: ["groups.sshc.conf"],
       preview: { operation: "config.groups", diffs: [] },
-    } as never);
+    });
     await user.click(screen.getByRole("button", { name: "Save groups" }));
 
     await waitFor(() =>
@@ -240,7 +240,7 @@ describe("GroupsPanel", () => {
       transactionId: "t1",
       written: ["config"],
       preview: { operation: "config.group_rename", diffs: [] },
-    } as never);
+    });
     render(<GroupsPanel />);
 
     await select(user, "company");
@@ -257,7 +257,7 @@ describe("GroupsPanel", () => {
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
       metadata: { ...overview.metadata, groups: [{ name: "company" }, { name: "lab" }] },
-    } as never);
+    });
     render(<GroupsPanel />);
 
     await select(user, "company");
@@ -285,12 +285,12 @@ describe("GroupsPanel", () => {
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
       metadata: { ...overview.metadata, groups: [{ name: "company" }, { name: "archive" }] },
-    } as never);
+    });
     vi.mocked(configApi.deleteGroup).mockResolvedValue({
       transactionId: "t1",
       written: ["config"],
       preview: { operation: "config.group_delete", diffs: [] },
-    } as never);
+    });
     render(<GroupsPanel />);
 
     await select(user, "company");
@@ -325,7 +325,7 @@ describe("GroupsPanel", () => {
         ...overview.metadata,
         groups: [{ name: "office/tokyo" }, { name: "hpc" }, { name: "office" }, { name: "office/osaka" }],
       },
-    } as never);
+    });
     render(<GroupsPanel />);
 
     await screen.findByRole("heading", { name: "hpc" });
@@ -369,7 +369,7 @@ describe("hiding a group from the connections tree", () => {
         { code: "group_not_declared", detail: "scratch", path: "connections/scratch" },
         { code: "group_empty", detail: "archive", path: "connections/archive" },
       ],
-    } as never);
+    });
     render(<GroupsPanel />);
 
     expect(await screen.findByText(/no Include line references it/)).toBeInTheDocument();

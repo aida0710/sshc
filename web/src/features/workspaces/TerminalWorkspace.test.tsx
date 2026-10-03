@@ -459,7 +459,7 @@ describe("TerminalWorkspace pane movement", () => {
       addListener: vi.fn(),
       removeListener: vi.fn(),
       dispatchEvent: vi.fn(),
-    })) as unknown as typeof window.matchMedia;
+    }));
     try {
       function CompactHarness() {
         const [active, setActive] = useState(primary.id);

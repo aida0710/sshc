@@ -15,7 +15,7 @@ function api(overrides: Partial<TerminalSessionsApi> = {}): TerminalSessionsApi 
     closeTerminalSession: vi.fn().mockResolvedValue(list),
     setTerminalSessionTitle: vi.fn().mockResolvedValue(list),
     ...overrides,
-  } as TerminalSessionsApi;
+  };
 }
 
 const translate = ((key: string) => key) as never;

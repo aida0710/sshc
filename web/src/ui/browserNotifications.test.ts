@@ -13,7 +13,7 @@ describe("browser notification permission", () => {
   });
 
   it("requests permission only while it is undecided", async () => {
-    const requestPermission = vi.fn(async () => "granted" as NotificationPermission);
+    const requestPermission = vi.fn(async () => "granted");
     class FakeNotification {
       static permission: NotificationPermission = "default";
       static requestPermission = requestPermission;

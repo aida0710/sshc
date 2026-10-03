@@ -71,7 +71,7 @@ export function buildConnectionBrowserIndex(overview: Overview): ConnectionBrows
   const servers = overview.hosts
     .map((host, sourceOrder) => ({ host, sourceOrder }))
     .filter(({ host }) => host.identity.alias !== "")
-    .map(({ host, sourceOrder }) => {
+    .map(({ host, sourceOrder }): BrowserServer & { sourceOrder: number } => {
       const metadata = hostMetadata.get(identityKey(host.identity));
       return {
         host,
@@ -79,7 +79,7 @@ export function buildConnectionBrowserIndex(overview: Overview): ConnectionBrows
         group: host.group ?? "",
         tags: metadata?.tags ?? [],
         colour: metadata?.colour ?? "",
-        os: (metadata?.os || metadata?.detectedOS || "") as BrowserServer["os"],
+        os: metadata?.os || metadata?.detectedOS || "",
         order: metadata?.order ?? 0,
         duplicateAlias: duplicateAliases.has(host.identity.alias),
         sourceOrder,
