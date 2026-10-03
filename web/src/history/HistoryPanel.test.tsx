@@ -40,7 +40,7 @@ describe("HistoryPanel", () => {
     const user = userEvent.setup();
     vi.mocked(configApi.restore).mockResolvedValue({
       transactionId: "t2", written: ["config"], preview: { operation: "config.restore", diffs: [] },
-    } as never);
+    });
 
     render(<HistoryPanel />);
 
@@ -55,7 +55,7 @@ describe("HistoryPanel", () => {
 
   it("shows an interrupted transaction as unfinished and offers both recoveries", async () => {
     const user = userEvent.setup();
-    vi.mocked(configApi.recover).mockResolvedValue(undefined as never);
+    vi.mocked(configApi.recover).mockResolvedValue(undefined);
 
     render(<HistoryPanel />);
 

@@ -13,7 +13,7 @@ function codeSource(): Pick<CredentialsApi, "totpCodes"> {
       periodSeconds: 30,
       remainingSeconds: 17,
     }),
-  } as unknown as Pick<CredentialsApi, "totpCodes">;
+  };
 }
 
 describe("TOTPCodeCard", () => {

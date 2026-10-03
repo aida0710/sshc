@@ -232,7 +232,7 @@ describe("App", () => {
     const originalSetInterval = window.setInterval.bind(window);
     vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
       if (delay === vaultStatePollIntervalMs && typeof handler === "function") {
-        poll = handler as () => void;
+        poll = handler;
       }
       return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
     });
@@ -264,7 +264,7 @@ describe("App", () => {
     let poll: (() => void) | null = null;
     const originalSetInterval = window.setInterval.bind(window);
     vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
-      if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler as () => void;
+      if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler;
       return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
     });
     const resumed = deferred<PasswordVaultStatus>();
@@ -303,7 +303,7 @@ describe("App", () => {
     let poll: (() => void) | null = null;
     const originalSetInterval = window.setInterval.bind(window);
     vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
-      if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler as () => void;
+      if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler;
       return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
     });
     const focused = deferred<PasswordVaultStatus>();
@@ -366,7 +366,7 @@ describe("App", () => {
     let poll: (() => void) | null = null;
     const originalSetInterval = window.setInterval.bind(window);
     vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
-      if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler as () => void;
+      if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler;
       return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
     });
     const resumed = deferred<PasswordVaultStatus>();

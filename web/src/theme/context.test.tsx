@@ -17,7 +17,7 @@ beforeEach(() => {
     media: query,
     addEventListener: (_: string, handler: () => void) => listeners.add(handler),
     removeEventListener: (_: string, handler: () => void) => listeners.delete(handler),
-  })) as unknown as typeof window.matchMedia;
+  }));
 });
 
 afterEach(() => {

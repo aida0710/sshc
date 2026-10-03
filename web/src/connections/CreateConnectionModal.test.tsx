@@ -93,12 +93,9 @@ function renderModal(overrides: ModalOverrides = {}) {
     <CreateConnectionModal
       groups={overrides.groups ?? groups}
       initialDraft={overrides.initialDraft}
-      config={{ createConnection } as never}
-      keys={{ inventory: keyInventory } as Pick<KeysApi, "inventory">}
-      secrets={{ passwordVault, credentials, initialiseVault, unlockVault } as Pick<
-        ConnectionSecretsApi,
-        "passwordVault" | "credentials" | "initialiseVault" | "unlockVault"
-      >}
+      config={{ createConnection }}
+      keys={{ inventory: keyInventory }}
+      secrets={{ passwordVault, credentials, initialiseVault, unlockVault }}
       onClose={onClose}
       onCreated={onCreated}
       onOpenPrerequisite={onOpenPrerequisite}

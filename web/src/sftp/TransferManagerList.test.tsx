@@ -204,7 +204,7 @@ describe("the transfer queue", () => {
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === mobileViewportQuery, media: query,
       addEventListener: vi.fn(), removeEventListener: vi.fn(),
-    })) as unknown as typeof window.matchMedia;
+    }));
     manager.setJobs([job("one")]);
     const { container, unmount } = render(<TransferManagerList />);
     try {

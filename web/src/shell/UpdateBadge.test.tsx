@@ -5,7 +5,7 @@ import type { UpdateStatus } from "../api/update";
 import type { UpdateApi } from "../api/update";
 
 function buildApi(status: UpdateStatus, overrides: Partial<UpdateApi> = {}): UpdateApi {
-  return { updateStatus: vi.fn().mockResolvedValue(status), ...overrides } as unknown as UpdateApi;
+  return { updateStatus: vi.fn().mockResolvedValue(status), ...overrides };
 }
 
 describe("UpdateBadge", () => {

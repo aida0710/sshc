@@ -22,7 +22,7 @@ function buildSecrets(overrides: Partial<KeySecretsApi> = {}): KeySecretsApi {
     assignCredential: vi.fn().mockResolvedValue(listed),
     unassignCredential: vi.fn().mockResolvedValue(listed),
     ...overrides,
-  } as unknown as KeySecretsApi;
+  };
 }
 
 afterEach(() => {
