@@ -24,6 +24,17 @@ Use the leading `..` row to move to the parent directory. The navigation control
 
 Select one row, or use the checkboxes to select multiple entries, to reveal download, rename, delete, and other relevant actions in the selection toolbar. On desktop, Shift-click selects a range, Ctrl/Cmd-click adds to the selection, and Ctrl/Cmd+A selects all displayed entries. The action menu can invert the displayed selection or copy selected names or full paths. Permission and rename actions remain available for a single selection. Double-click or press Enter to open a folder or edit a text file in a modal without resizing the list. Closing the editor with unsaved changes asks before discarding them. Creation and uploads are grouped in the `+` menu at the upper left.
 
+The editor supports these keys, among others:
+
+- Find: `Ctrl/Cmd+F`
+- Replace: `Ctrl+H` (`Cmd+Option+F` on macOS)
+- Go to line: `Ctrl+G`
+- Toggle line comment: `Ctrl/Cmd+/`
+- Suggestions: `Ctrl+Space`. They do not appear on their own while you type.
+- The editor's command palette: `F1`, also available from the right-click menu
+
+The editor's command palette lists the other commands, such as folding and multiple cursors, with their keys. Pressing `Esc` closes Find or the editor's command palette and leaves the editor open. Find, the editor's command palette and the right-click menu are shown in English.
+
 If the remote file changed after it was opened in the editor, the editor refuses the save and says so. You can then choose either action:
 
 - **Reload from remote** discards your unsaved changes and reads the current contents. It asks before discarding them.
