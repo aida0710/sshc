@@ -127,13 +127,10 @@ function renderForm(overrides: HarnessOverrides = {}) {
       detail={overrides.detail ?? buildDetail()}
       problem={overrides.problem ?? null}
       onSave={onSave}
-      keys={{ inventory: keyInventory } as Pick<KeysApi, "inventory">}
+      keys={{ inventory: keyInventory }}
       secrets={{
         passwordVault, credentials, passwordEligibility, initialiseVault, unlockVault,
-      } as Pick<
-        ConnectionSecretsApi,
-        "passwordVault" | "credentials" | "passwordEligibility" | "initialiseVault" | "unlockVault"
-      >}
+      }}
       preferredKey={overrides.preferredKey}
       onPreferredKeyApplied={overrides.onPreferredKeyApplied}
       savedState={overrides.savedState}

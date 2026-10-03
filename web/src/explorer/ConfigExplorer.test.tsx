@@ -50,7 +50,7 @@ beforeEach(() => {
     digest: "digest",
     editable: true,
     exists: true,
-  }) as never);
+  }));
 });
 
 describe("ConfigExplorer", () => {
@@ -67,7 +67,7 @@ describe("ConfigExplorer", () => {
       complete = () => resolve({
         file: { path, absolute: `/home/tester/.ssh/${path}` },
         contents: "Host next\n", digest: "next", editable: true, exists: true,
-      } as never);
+      });
     }));
     await user.click(screen.getByRole("button", { name: "conf.d/10-home.conf" }));
     expect(hierarchy).toHaveAttribute("aria-expanded", "false");
@@ -99,7 +99,7 @@ describe("ConfigExplorer", () => {
         digest: "digest",
         editable: true,
         exists: true,
-      }) as never;
+      });
     });
     const user = userEvent.setup();
     render(<ConfigExplorer />);
@@ -200,7 +200,7 @@ describe("ConfigExplorer", () => {
     const user = userEvent.setup();
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["conf.d/10-home.conf"], preview: { operation: "config.file_raw", diffs: [] },
-    } as never);
+    });
 
     render(<ConfigExplorer />);
 
@@ -268,7 +268,7 @@ describe("ConfigExplorer", () => {
     const user = userEvent.setup();
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t2", written: ["conf.d/30-lab.conf"], preview: { operation: "config.file_raw", diffs: [] },
-    } as never);
+    });
 
     render(<ConfigExplorer />);
 

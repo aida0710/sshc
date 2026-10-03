@@ -741,7 +741,7 @@ describe("SFTP tabs", () => {
       addListener: vi.fn(),
       removeListener: vi.fn(),
       dispatchEvent: vi.fn(),
-    })) as unknown as typeof window.matchMedia;
+    }));
 
     try {
       render(<SFTPWorkspace aliases={["edge", "miyabi"]} />);
