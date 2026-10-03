@@ -274,15 +274,10 @@ test("runs the JSON support and shows the read-only message while a save is held
 
   // A JSON file loads Monaco's JSON support. The missing value is found by the
   // JSON worker, so its squiggle shows that the worker started.
-  let editor = await openInEditor(page, "/srv/settings.json", englishLabels);
+  const editor = await openInEditor(page, "/srv/settings.json", englishLabels);
   await expect(editor.locator(".view-lines")).toContainText('"name": "sshc"');
   await expect(editor.locator(".squiggly-error")).not.toHaveCount(0);
 
-  // The editor features the JSON support loads, among them the message for
-  // typing into a read-only editor, apply to the editors created after it. The
-  // file is therefore opened again.
-  await editor.getByRole("button", { name: englishLabels.close, exact: true }).click();
-  editor = await openInEditor(page, "/srv/settings.json", englishLabels);
   const content = editorContent(editor);
   await content.focus();
   await page.keyboard.insertText(" ");
@@ -297,5 +292,155 @@ test("runs the JSON support and shows the read-only message while a save is held
   releaseSave();
   await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
 
+  expect(violations).toEqual([]);
+});
+
+// Monaco takes its keys from the platform the user agent names, and the suite
+// runs as Desktop Chrome on Windows (playwright.config.ts). These are the keys
+// Monaco answers to there, whichever system runs the suite.
+const findKey = "Control+F";
+const replaceKey = "Control+H";
+const goToLineKey = "Control+G";
+const toggleCommentKey = "Control+/";
+
+// Collects every error the page throws from now on. Monaco reports an editor
+// feature it cannot start, such as one that needs a service it does not know,
+// as an error on the page.
+function watchForPageErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  return errors;
+}
+
+// Presses `shortcut`, such as "Control+F", and tells whether the page kept the
+// browser from acting on it. For Ctrl+F, the browser would otherwise open its
+// own Find bar.
+async function pressKeptFromBrowser(page: Page, shortcut: string): Promise<boolean> {
+  const key = shortcut.slice(shortcut.lastIndexOf("+") + 1).toLowerCase();
+  // Inside an object, so that evaluateHandle returns before the shortcut is
+  // pressed instead of waiting for the answer.
+  const keyDown = await page.evaluateHandle((key) => ({
+    defaultPrevented: new Promise<boolean>((resolve) => {
+      const listener = (event: KeyboardEvent) => {
+        // The modifier keys go down first.
+        if (event.key.toLowerCase() !== key) return;
+        window.removeEventListener("keydown", listener, true);
+        // Read once every listener on the page has had the key.
+        setTimeout(() => resolve(event.defaultPrevented));
+      };
+      window.addEventListener("keydown", listener, true);
+    }),
+  }), key);
+  await page.keyboard.press(shortcut);
+  return keyDown.evaluate((pending) => pending.defaultPrevented);
+}
+
+// The word the Find and Replace tests look for. Each of their files has it
+// three times.
+const searchedWord = "alpha";
+
+// In the open editor, finds searchedWord with Ctrl+F, replaces every match
+// with `replacement` through Ctrl+H, and closes Find with Escape, the way a
+// user does. Escape must close only Find: the editor stays open, and does not
+// ask whether to discard the replaced text.
+async function findAndReplaceAll(page: Page, editor: Locator, replacement: string): Promise<void> {
+  const drawnLines = editor.locator(".view-lines");
+  const findWidget = editor.getByRole("dialog", { name: "Find / Replace" });
+  await editorContent(editor).focus();
+  expect(await pressKeptFromBrowser(page, findKey)).toBe(true);
+  await expect(findWidget).toBeVisible();
+  await page.keyboard.insertText(searchedWord);
+  await expect(findWidget.getByText("1 of 3", { exact: true })).toBeVisible();
+  await expect(editor.locator(".view-overlays").locator(".findMatch, .currentFindMatch")).toHaveCount(3);
+
+  expect(await pressKeptFromBrowser(page, replaceKey)).toBe(true);
+  await page.keyboard.insertText(replacement);
+  await findWidget.getByRole("button", { name: /^Replace All/ }).click();
+  await expect(drawnLines).not.toContainText(searchedWord);
+  await expect(drawnLines.getByText(replacement)).toHaveCount(3);
+
+  await page.keyboard.press("Escape");
+  await expect(findWidget).toBeHidden();
+  await expect(editor).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+}
+
+test("finds and replaces text in the editor with Ctrl+F and Ctrl+H, and Escape closes only Find", async ({ page, installation }) => {
+  const pageErrors = watchForPageErrors(page);
+  const violations = watchForPolicyViolations(page);
+  await serveRemoteFiles(page, { "/srv/notes.txt": remoteFile(`${searchedWord} one\ntwo ${searchedWord}\n${searchedWord} three\n`) });
+  await openApplication(page, installation);
+  await openSection(page, "SFTP");
+  await connectSFTPHost(page, "bastion");
+
+  const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText(`${searchedWord} one`);
+  await findAndReplaceAll(page, editor, "omega");
+  await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toBeVisible();
+
+  expect(pageErrors).toEqual([]);
+  expect(violations).toEqual([]);
+});
+
+test("finds and replaces text the same way after the JSON support has loaded, and the page throws no error", async ({ page, installation }) => {
+  const pageErrors = watchForPageErrors(page);
+  const violations = watchForPolicyViolations(page);
+  const settings = [`{`, `  "first": "${searchedWord}",`, `  "second": "${searchedWord}",`, `  "third": "${searchedWord}",`, `  "port": `, `}`, ``];
+  await serveRemoteFiles(page, { "/srv/settings.json": remoteFile(settings.join("\n")) });
+  await openApplication(page, installation);
+  await openSection(page, "SFTP");
+  await connectSFTPHost(page, "bastion");
+
+  // The JSON support registers Monaco's editor features too. Monaco applies
+  // what is registered after its first editor only to the editors created
+  // later, so the file is opened again once the JSON support has loaded. The
+  // missing value is found by the JSON worker, so its squiggle shows that.
+  let editor = await openInEditor(page, "/srv/settings.json", englishLabels);
+  await expect(editor.locator(".squiggly-error")).not.toHaveCount(0);
+  await editor.getByRole("button", { name: englishLabels.close, exact: true }).click();
+  editor = await openInEditor(page, "/srv/settings.json", englishLabels);
+  await findAndReplaceAll(page, editor, "omega");
+
+  expect(pageErrors).toEqual([]);
+  expect(violations).toEqual([]);
+});
+
+test("goes to a line with Ctrl+G and comments it out with Ctrl+/, and Escape closes only the command palette and the context menu", async ({ page, installation }) => {
+  const pageErrors = watchForPageErrors(page);
+  const violations = watchForPolicyViolations(page);
+  const script = ["#!/bin/sh", "set -eu", "echo first", "echo second", "echo third", ""];
+  await serveRemoteFiles(page, { "/srv/deploy.sh": remoteFile(script.join("\n")) });
+  await openApplication(page, installation);
+  await openSection(page, "SFTP");
+  await connectSFTPHost(page, "bastion");
+
+  const editor = await openInEditor(page, "/srv/deploy.sh", englishLabels);
+  const drawnLines = editor.locator(".view-lines");
+  await expect(drawnLines).toContainText("echo second");
+  await editorContent(editor).focus();
+
+  // The cursor starts on line 1, so only Go to Line puts the comment on line 4.
+  expect(await pressKeptFromBrowser(page, goToLineKey)).toBe(true);
+  await expect(editor.getByRole("textbox", { name: /^Go to line\./ })).toBeFocused();
+  await page.keyboard.insertText("4");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press(toggleCommentKey);
+  await expect(drawnLines).toContainText("# echo second");
+
+  await page.keyboard.press("F1");
+  const commandPalette = editor.getByRole("textbox", { name: "Type to narrow down results." });
+  await expect(commandPalette).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(commandPalette).toBeHidden();
+
+  // Monaco draws the context menu in a shadow root inside the editor.
+  await drawnLines.click({ button: "right" });
+  const contextMenu = editor.getByRole("menu");
+  await expect(contextMenu.getByRole("menuitem", { name: /^Command Palette/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(contextMenu).toBeHidden();
+
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  expect(pageErrors).toEqual([]);
   expect(violations).toEqual([]);
 });

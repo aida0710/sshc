@@ -3,6 +3,9 @@ import { useEffect, useRef } from "react";
 // creates its Trusted Types policies through MonacoEnvironment while the
 // imports below are evaluated, so the environment must be installed first.
 import * as monaco from "monaco-editor/editor/editor.api.js";
+// Find and Replace and the other editor features. They must be registered
+// before the first model or editor is created (monacoEditorFeatures.ts).
+import "./monacoEditorFeatures";
 import "monaco-editor/languages/definitions/css/register.js";
 import "monaco-editor/languages/definitions/go/register.js";
 import "monaco-editor/languages/definitions/html/register.js";
