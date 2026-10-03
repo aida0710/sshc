@@ -46,7 +46,8 @@ backend_up() {
 	fi
 	# --background は、繋がったあとに自分を背後へ回す。ここが 0 で返らなければ
 	# 繋がっていない。承認待ちは長いので、止める合図を受けられるよう背後で待つ
-	# （wait_for_step）。$! は timeout で、timeout は受けた合図を openconnect へ渡す。
+	# （wait_for_step）。$! は timeout で、止める合図は timeout の process group にいる
+	# openconnect へも届く（signal_waiting_step）。
 	send_answers | timeout "$(timeout_seconds)" openconnect "$@" "$server" \
 		>"$runtime/openconnect.log" 2>&1 &
 	if ! wait_for_step $!; then
