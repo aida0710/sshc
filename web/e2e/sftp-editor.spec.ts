@@ -533,14 +533,15 @@ async function focusIsIn(dialog: Locator): Promise<boolean> {
   return dialog.evaluate((element) => element.contains(document.activeElement));
 }
 
-test("moves focus out of the editor with Tab, within the dialog, from Ctrl+M until Ctrl+M is pressed again, in the next editor too", async ({ page, installation }) => {
+test("moves focus out of the editor with Tab, within the dialog, from Ctrl+M until Ctrl+M is pressed again", async ({ page, installation }) => {
   const problems = watchForPageProblems(page);
   const remote = remoteFile("first\n");
   await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remote });
 
-  let editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
   await expect(editor.locator(".view-lines")).toContainText("first");
-  await editorContent(editor).focus();
+  const content = editorContent(editor);
+  await content.focus();
 
   expect(await pressShortcutAndReportPrevented(page, toggleTabMovesFocusKey)).toBe(true);
   // The editor is the dialog's last control, and Save is disabled until the
@@ -548,29 +549,45 @@ test("moves focus out of the editor with Tab, within the dialog, from Ctrl+M unt
   await page.keyboard.press("Tab");
   await expect(editor.getByRole("button", { name: englishLabels.close, exact: true })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
-  await expect(editorContent(editor)).toBeFocused();
+  await expect(content).toBeFocused();
   // Round the dialog both ways: focus never leaves it.
   for (const key of ["Tab", "Tab", "Tab", "Shift+Tab", "Shift+Tab", "Shift+Tab"]) {
     await page.keyboard.press(key);
     expect(await focusIsIn(editor)).toBe(true);
   }
 
-  // Monaco keeps the mode for the page, so Tab moves focus in the next editor too.
-  await editorContent(editor).focus();
-  await page.keyboard.press("Tab");
-  await page.keyboard.press("Enter");
-  await expect(editor).toBeHidden();
-  editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
-  await expect(editor.locator(".view-lines")).toContainText("first");
-  await editorContent(editor).focus();
-  await page.keyboard.press("Tab");
-  await expect(editor.getByRole("button", { name: englishLabels.close, exact: true })).toBeFocused();
-
   // Pressed again in the editor, the key makes Tab indent again.
-  await editorContent(editor).focus();
+  await content.focus();
   await page.keyboard.press(toggleTabMovesFocusKey);
   await page.keyboard.press("Tab");
-  await expect(editorContent(editor)).toBeFocused();
+  await expect(content).toBeFocused();
+  await editor.getByRole("button", { name: englishLabels.save, exact: true }).click();
+  await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
+  expect(remote.contents).toBe("    first\n");
+  expect(problems).toEqual(noPageProblems);
+});
+
+test("starts the next editor with Tab indenting after Ctrl+M switched the previous one to moving focus", async ({ page, installation }) => {
+  const problems = watchForPageProblems(page);
+  const remote = remoteFile("first\n");
+  await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remote });
+
+  let editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("first");
+  await editorContent(editor).focus();
+  await page.keyboard.press(toggleTabMovesFocusKey);
+  // Close the dialog from the keyboard: Tab moves to Close, and Enter presses it.
+  await page.keyboard.press("Tab");
+  await expect(editor.getByRole("button", { name: englishLabels.close, exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(editor).toBeHidden();
+
+  editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("first");
+  const content = editorContent(editor);
+  await content.focus();
+  expect(await pressShortcutAndReportPrevented(page, "Tab")).toBe(true);
+  await expect(content).toBeFocused();
   await editor.getByRole("button", { name: englishLabels.save, exact: true }).click();
   await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
   expect(remote.contents).toBe("    first\n");

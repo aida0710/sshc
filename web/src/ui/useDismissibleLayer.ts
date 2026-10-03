@@ -18,10 +18,10 @@ const layers: Layer[] = [];
 
 const keyboardOwnerAttribute = "data-keyboard-owner";
 
-// エディタやターミナルのように、キーを自分で使う領域に付ける。レイヤーが使う Escape と Tab も、
-// この中で押したものは先にその領域へ渡す。エディタは Escape で検索欄や補完を閉じ、Tab で
-// インデントする。ターミナルはどちらもシェルへ送る。使われずに document まで届いたときだけ、
-// Escape は最前面のレイヤーを閉じ、Tab はフォーカスをレイヤーの中で回す。
+// エディタやターミナルのように、キーを自分で使う領域に付ける。レイヤーが使うEscapeとTabも、
+// この中で押したものは先にその領域へ渡す。エディタはEscapeで検索欄や補完を閉じ、Tabで
+// インデントする。ターミナルはどちらもシェルへ送る。使われずにdocumentまで届いたときだけ、
+// Escapeは最前面のレイヤーを閉じ、Tabはフォーカスをレイヤーの中で回す。
 export const keyboardOwnerProps = { [keyboardOwnerAttribute]: "" } as const;
 
 function insideKeyboardOwner(target: EventTarget | null): boolean {
@@ -55,8 +55,8 @@ function dismissOutside(event: PointerEvent) {
   layer.dismiss("outside");
 }
 
-// フォーカスを閉じ込めるレイヤーでは、最後の要素からの Tab を最初の要素へ、最初の要素からの
-// Shift+Tab を最後の要素へ回す。レイヤーの外にあるフォーカスは、レイヤーの中へ戻す。
+// フォーカスを閉じ込めるレイヤーでは、最後の要素からのTabを最初の要素へ、最初の要素からの
+// Shift+Tabを最後の要素へ回す。レイヤーの外にあるフォーカスは、レイヤーの中へ戻す。
 function keepTabInLayer(layer: Layer, event: KeyboardEvent) {
   if (!layer.trapFocus) return;
   const focusable = layer.containers().flatMap((container) =>
@@ -72,33 +72,34 @@ function keepTabInLayer(layer: Layer, event: KeyboardEvent) {
   }
 }
 
-// 押された要素より先に、最前面のレイヤーの Escape と Tab を扱う。キーを自分で使う領域の中で
-// 押されたものは、先にその領域へ渡すので handleKeyUnusedByKeyboardOwner が扱う。
-function handleLayerKey(event: KeyboardEvent) {
-  const layer = topLayer();
-  if (layer === undefined || insideKeyboardOwner(event.target)) return;
+// レイヤーが使うキーを最前面のレイヤーで扱う。Tabはフォーカスをレイヤーの中で回し、Escapeは
+// レイヤーを閉じる。stopOtherListenersは、閉じるのに使ったEscapeを押された要素へ届けないときに付ける。
+function routeKeyToLayer(layer: Layer, event: KeyboardEvent, { stopOtherListeners }: { stopOtherListeners: boolean }) {
   if (event.key === "Tab") {
     keepTabInLayer(layer, event);
     return;
   }
   if (event.key !== "Escape") return;
   event.preventDefault();
-  event.stopImmediatePropagation();
+  if (stopOtherListeners) event.stopImmediatePropagation();
   dismissAndRestoreFocus(layer, "escape");
 }
 
-// Monaco と xterm は、使ったキーの伝播を止める（Monaco の検索欄は Tab の既定の動作を止めるだけ）。
-// 既定の動作を止められずにここまで届いたものは、領域が使わなかったキー。
+// captureで、押された要素より先に扱う。キーを自分で使う領域の中で押されたものは、先にその領域へ
+// 渡すので、ここでは扱わずにhandleKeyUnusedByKeyboardOwnerへ任せる。
+function handleKeyOutsideKeyboardOwner(event: KeyboardEvent) {
+  const layer = topLayer();
+  if (layer === undefined || insideKeyboardOwner(event.target)) return;
+  routeKeyToLayer(layer, event, { stopOtherListeners: true });
+}
+
+// MonacoとxtermはDOMのlistenerで、使ったキーの伝播を止める（Monacoの検索欄はTabの既定の動作を
+// 止めるだけ）。既定の動作を止められずにdocumentのbubbleまで届いたものは、領域が使わなかったキー。
+// 押された要素はもう通っているので、ほかのlistenerは止めない。
 function handleKeyUnusedByKeyboardOwner(event: KeyboardEvent) {
   const layer = topLayer();
   if (layer === undefined || event.defaultPrevented || !insideKeyboardOwner(event.target)) return;
-  if (event.key === "Tab") {
-    keepTabInLayer(layer, event);
-    return;
-  }
-  if (event.key !== "Escape") return;
-  event.preventDefault();
-  dismissAndRestoreFocus(layer, "escape");
+  routeKeyToLayer(layer, event, { stopOtherListeners: false });
 }
 
 function dismissAndRestoreFocus(layer: Layer, reason: DismissReason) {
@@ -131,7 +132,7 @@ function dismissForAndroidBack(event: Event) {
 function listen() {
   if (layers.length !== 1) return;
   document.addEventListener("pointerdown", dismissOutside, true);
-  document.addEventListener("keydown", handleLayerKey, true);
+  document.addEventListener("keydown", handleKeyOutsideKeyboardOwner, true);
   document.addEventListener("keydown", handleKeyUnusedByKeyboardOwner);
   document.addEventListener("focusin", keepModalFocus, true);
   window.addEventListener("sshc-android-back", dismissForAndroidBack, true);
@@ -140,7 +141,7 @@ function listen() {
 function unlisten() {
   if (layers.length !== 0) return;
   document.removeEventListener("pointerdown", dismissOutside, true);
-  document.removeEventListener("keydown", handleLayerKey, true);
+  document.removeEventListener("keydown", handleKeyOutsideKeyboardOwner, true);
   document.removeEventListener("keydown", handleKeyUnusedByKeyboardOwner);
   document.removeEventListener("focusin", keepModalFocus, true);
   window.removeEventListener("sshc-android-back", dismissForAndroidBack, true);

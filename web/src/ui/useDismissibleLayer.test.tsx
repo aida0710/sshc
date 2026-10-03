@@ -104,7 +104,7 @@ describe("Escape and Tab inside a region that uses the keyboard itself", () => {
     const panel = useRef<HTMLDivElement>(null);
     const editor = useRef<HTMLTextAreaElement>(null);
     useDismissibleLayer({ open: true, containerRefs: [panel], trapFocus: true, onDismiss: close });
-    // Monaco と xterm は、自分で使ったキーを DOM の listener で止める。
+    // MonacoとxtermはDOMのlistenerで、自分で使ったキーを止める。
     useEffect(() => {
       const input = editor.current;
       if (input === null) return;

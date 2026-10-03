@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 // creates its Trusted Types policies through MonacoEnvironment while the
 // imports below are evaluated, so the environment must be installed first.
 import * as monaco from "monaco-editor/editor/editor.api.js";
+import { TabFocus } from "monaco-editor/editor/browser/config/tabFocus.js";
 // Find and Replace and the other editor features. They must be registered
 // before the first model or editor is created (monacoEditorFeatures.ts).
 import "./monacoEditorFeatures";
@@ -58,6 +59,22 @@ const noUnrequestedEditOptions = {
   unusualLineTerminators: "off",
 } satisfies monaco.editor.IStandaloneEditorConstructionOptions;
 
+// Monaco's command for the mode in which Tab moves focus instead of
+// indenting: Ctrl+M (Ctrl+Shift+M on macOS), or "Toggle Tab Key Moves Focus"
+// in the editor's command palette.
+const toggleTabMovesFocusCommand = "editor.action.toggleTabFocusMode";
+
+// Monaco keeps the mode in which Tab moves focus for the whole page
+// (monacoTabFocus.d.ts), and the editor shows nothing while the mode is on.
+// Each editor starts with Tab indenting, so that the mode switched on in one
+// file does not keep Tab from indenting in the files opened after it. The mode
+// is switched off with Monaco's own command, which also announces to a screen
+// reader that Tab now inserts the tab character.
+function startWithTabIndenting(view: monaco.editor.IStandaloneCodeEditor): void {
+  if (!TabFocus.getTabFocusMode()) return;
+  view.trigger("sshc", toggleTabMovesFocusCommand, null);
+}
+
 export function MonacoEditor({ path, value, onChange, readOnly = false }: MonacoEditorProps) {
   const container = useRef<HTMLDivElement>(null);
   const callback = useRef(onChange);
@@ -87,6 +104,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false }: Monaco
       cursorBlinking: editorCursorBlinking(reducedMotion),
       theme: resolved === "dark" ? "vs-dark" : "vs",
     });
+    startWithTabIndenting(view);
     editor.current = view;
     pendingReports.current = [];
     const subscription = model.onDidChangeContent(() => {
