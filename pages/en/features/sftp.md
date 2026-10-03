@@ -31,11 +31,11 @@ The editor supports these keys, among others:
 - Go to line: `Ctrl+G`
 - Toggle line comment: `Ctrl/Cmd+/`
 - Indent: `Tab`, and `Shift+Tab` to outdent
-- Switch whether `Tab` moves focus: `Ctrl+M` (`Ctrl+Shift+M` on macOS)
+- Toggle the mode in which `Tab` moves focus: `Ctrl+M` (`Ctrl+Shift+M` on macOS)
 - Suggestions: `Ctrl+Space`. They do not appear on their own while you type.
 - The editor's command palette: `F1`, also available from the right-click menu
 
-In the editor, `Tab` indents and focus stays in the editor. To move from the editor to **Save** or **Close** with the keyboard, switch `Tab` to moving focus, then press `Tab`. Focus moves only within the editor's dialog. Switching again makes `Tab` indent again. The mode lasts until the page is reloaded, in the editors of other files too. The editor's command palette also switches it with "Toggle Tab Key Moves Focus".
+In the editor, `Tab` indents and focus stays in the editor. To move from the editor to **Save** or **Close** with the keyboard, switch to the mode in which `Tab` moves focus, then press `Tab`. Focus moves only within the editor's dialog. Toggling the mode again makes `Tab` indent again. The mode lasts until the editor is closed, and the next file you open starts with `Tab` indenting. The editor's command palette also toggles the mode with "Toggle Tab Key Moves Focus".
 
 The editor's command palette lists the other commands, such as folding and multiple cursors, with their keys. Pressing `Esc` closes Find or the editor's command palette and leaves the editor open. Find, the editor's command palette and the right-click menu are shown in English.
 
