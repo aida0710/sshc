@@ -153,6 +153,7 @@ const replaceKey = "Control+H";
 const goToLineKey = "Control+G";
 const toggleCommentKey = "Control+/";
 const suggestKey = "Control+Space";
+const toggleTabMovesFocusKey = "Control+M";
 
 // Opens notes.txt in the editor and types at its end. A change then lands on
 // the remote before the save, so the engine refuses the save as a conflict.
@@ -497,5 +498,125 @@ test("opens a file with unusual line terminators as it is, without asking to rem
 
   expect(dialogs).toEqual([]);
   await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
+  expect(problems).toEqual(noPageProblems);
+});
+
+test("indents with Tab and outdents with Shift+Tab, keeping focus in the editor, and saves the indentation", async ({ page, installation }) => {
+  const problems = watchForPageProblems(page);
+  const remote = remoteFile("first\nsecond\n");
+  await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remote });
+
+  const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("second");
+  const content = editorContent(editor);
+  await content.focus();
+
+  // The cursor starts at the start of the first line. Monaco indents with four
+  // spaces in a file that has no indented line.
+  expect(await pressShortcutAndReportPrevented(page, "Tab")).toBe(true);
+  await expect(content).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  expect(await pressShortcutAndReportPrevented(page, "Shift+Tab")).toBe(true);
+  await expect(content).toBeFocused();
+
+  await editor.getByRole("button", { name: englishLabels.save, exact: true }).click();
+  await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
+  expect(remote.contents).toBe("    first\n    second\n");
+  expect(problems).toEqual(noPageProblems);
+});
+
+// Whether the element that has focus is in `dialog`.
+async function focusIsIn(dialog: Locator): Promise<boolean> {
+  return dialog.evaluate((element) => element.contains(document.activeElement));
+}
+
+test("moves focus out of the editor with Tab, within the dialog, from Ctrl+M until Ctrl+M is pressed again", async ({ page, installation }) => {
+  const problems = watchForPageProblems(page);
+  const remote = remoteFile("first\n");
+  await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remote });
+
+  const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("first");
+  const content = editorContent(editor);
+  await content.focus();
+
+  expect(await pressShortcutAndReportPrevented(page, toggleTabMovesFocusKey)).toBe(true);
+  // The editor is the dialog's last control, and Save is disabled until the
+  // file changes, so Tab goes round to Close.
+  await page.keyboard.press("Tab");
+  await expect(editor.getByRole("button", { name: englishLabels.close, exact: true })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(content).toBeFocused();
+  // Round the dialog both ways: focus never leaves it.
+  for (const key of ["Tab", "Tab", "Tab", "Shift+Tab", "Shift+Tab", "Shift+Tab"]) {
+    await page.keyboard.press(key);
+    expect(await focusIsIn(editor)).toBe(true);
+  }
+
+  // Pressed again in the editor, the key makes Tab indent again.
+  await content.focus();
+  await page.keyboard.press(toggleTabMovesFocusKey);
+  await page.keyboard.press("Tab");
+  await expect(content).toBeFocused();
+  await editor.getByRole("button", { name: englishLabels.save, exact: true }).click();
+  await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
+  expect(remote.contents).toBe("    first\n");
+  expect(problems).toEqual(noPageProblems);
+});
+
+test("starts the next editor with Tab indenting after Ctrl+M switched the previous one to moving focus", async ({ page, installation }) => {
+  const problems = watchForPageProblems(page);
+  const remote = remoteFile("first\n");
+  await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remote });
+
+  let editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("first");
+  await editorContent(editor).focus();
+  await page.keyboard.press(toggleTabMovesFocusKey);
+  // Close the dialog from the keyboard: Tab moves to Close, and Enter presses it.
+  await page.keyboard.press("Tab");
+  await expect(editor.getByRole("button", { name: englishLabels.close, exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(editor).toBeHidden();
+
+  editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("first");
+  const content = editorContent(editor);
+  await content.focus();
+  expect(await pressShortcutAndReportPrevented(page, "Tab")).toBe(true);
+  await expect(content).toBeFocused();
+  await editor.getByRole("button", { name: englishLabels.save, exact: true }).click();
+  await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
+  expect(remote.contents).toBe("    first\n");
+  expect(problems).toEqual(noPageProblems);
+});
+
+test("moves focus out of the editor with Tab, within the dialog, while a save holds the editor read-only", async ({ page, installation }) => {
+  const problems = watchForPageProblems(page);
+  const remote = remoteFile("first\n");
+  let releaseSave = () => {};
+  remote.saveHeldUntil = new Promise<void>((release) => { releaseSave = release; });
+  await openSFTPOnBastion(page, installation, { "/srv/notes.txt": remote });
+
+  const editor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("first");
+  const content = editorContent(editor);
+  await content.focus();
+  await page.keyboard.insertText("typed ");
+  const save = editor.getByRole("button", { name: englishLabels.save, exact: true });
+  await save.click();
+  await expect(save).toBeDisabled();
+
+  // Monaco does not indent a read-only file, so Tab goes on to the dialog's
+  // next control: Close, as Save is disabled during the save.
+  await content.focus();
+  await page.keyboard.press("Tab");
+  await expect(editor.getByRole("button", { name: englishLabels.close, exact: true })).toBeFocused();
+  releaseSave();
+  await expect(editor.getByText(englishLabels.unsaved, { exact: true })).toHaveCount(0);
+  expect(remote.contents).toBe("typed first\n");
   expect(problems).toEqual(noPageProblems);
 });
