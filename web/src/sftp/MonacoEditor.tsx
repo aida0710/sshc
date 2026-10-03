@@ -19,7 +19,7 @@ import "monaco-editor/languages/definitions/yaml/register.js";
 import { useTheme } from "../theme/context";
 import { editorCursorBlinking, reducedMotionQuery } from "../ui/reducedMotion";
 import { useMediaQuery } from "../ui/useMediaQuery";
-import { escapeOwnerProps } from "../ui/useDismissibleLayer";
+import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
 
 type MonacoEditorProps = {
   path: string;
@@ -131,7 +131,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false }: Monaco
     });
   }, [readOnly, reducedMotion, resolved]);
 
-  return <div ref={container} {...escapeOwnerProps} className="h-full min-h-64 w-full overflow-hidden" />;
+  return <div ref={container} {...keyboardOwnerProps} className="h-full min-h-64 w-full overflow-hidden" />;
 }
 
 export { languageFor };

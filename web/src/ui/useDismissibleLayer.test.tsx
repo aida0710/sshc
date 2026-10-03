@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { escapeOwnerProps, useDismissibleLayer } from "./useDismissibleLayer";
+import { keyboardOwnerProps, useDismissibleLayer } from "./useDismissibleLayer";
 
 function Layer({ name, close }: { name: string; close: () => void }) {
   const panel = useRef<HTMLDivElement>(null);
@@ -98,32 +98,41 @@ it("keeps a parent modal open while a nested menu handles Android back", async (
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
-describe("Escape inside a region that uses Escape itself", () => {
-  function EditorDialog({ close, editorUsesEscape }: { close: () => void; editorUsesEscape: boolean }) {
+describe("Escape and Tab inside a region that uses the keyboard itself", () => {
+  // The SFTP editor's dialog: the editor is the dialog's last control.
+  function EditorDialog({ close, keysTheEditorUses }: { close: () => void; keysTheEditorUses: readonly string[] }) {
     const panel = useRef<HTMLDivElement>(null);
     const editor = useRef<HTMLTextAreaElement>(null);
     useDismissibleLayer({ open: true, containerRefs: [panel], trapFocus: true, onDismiss: close });
-    // Monaco と xterm は、自分で使った Escape を DOM の listener で止める。
+    // Monaco と xterm は、自分で使ったキーを DOM の listener で止める。
     useEffect(() => {
       const input = editor.current;
-      if (input === null || !editorUsesEscape) return;
-      const closeFindWidget = (event: KeyboardEvent) => {
-        if (event.key !== "Escape") return;
+      if (input === null) return;
+      const stopKeyTheEditorUses = (event: KeyboardEvent) => {
+        if (!keysTheEditorUses.includes(event.key)) return;
         event.preventDefault();
         event.stopPropagation();
       };
-      input.addEventListener("keydown", closeFindWidget);
-      return () => input.removeEventListener("keydown", closeFindWidget);
-    }, [editorUsesEscape]);
-    return <div ref={panel} role="dialog" aria-label="Editor">
-      <div {...escapeOwnerProps}><textarea ref={editor} aria-label="Contents" /></div>
-    </div>;
+      input.addEventListener("keydown", stopKeyTheEditorUses);
+      return () => input.removeEventListener("keydown", stopKeyTheEditorUses);
+    }, [keysTheEditorUses]);
+    return <>
+      <div ref={panel} role="dialog" aria-label="Editor">
+        <button>Close</button>
+        <div {...keyboardOwnerProps}><textarea ref={editor} aria-label="Contents" /></div>
+      </div>
+      <button>Outside</button>
+    </>;
   }
+
+  const onlyEscape = ["Escape"];
+  const onlyTab = ["Tab"];
+  const noKeys: string[] = [];
 
   it("keeps the dialog open when the editor uses Escape", async () => {
     const close = vi.fn();
     const user = userEvent.setup();
-    render(<EditorDialog close={close} editorUsesEscape />);
+    render(<EditorDialog close={close} keysTheEditorUses={onlyEscape} />);
 
     await user.click(screen.getByRole("textbox", { name: "Contents" }));
     await user.keyboard("{Escape}");
@@ -134,11 +143,34 @@ describe("Escape inside a region that uses Escape itself", () => {
   it("closes the dialog when the editor leaves Escape unused", async () => {
     const close = vi.fn();
     const user = userEvent.setup();
-    render(<EditorDialog close={close} editorUsesEscape={false} />);
+    render(<EditorDialog close={close} keysTheEditorUses={noKeys} />);
 
     await user.click(screen.getByRole("textbox", { name: "Contents" }));
     await user.keyboard("{Escape}");
 
     expect(close).toHaveBeenCalledWith("escape");
+  });
+
+  it("leaves focus in the editor when the editor uses Tab", async () => {
+    const user = userEvent.setup();
+    render(<EditorDialog close={vi.fn()} keysTheEditorUses={onlyTab} />);
+    const contents = screen.getByRole("textbox", { name: "Contents" });
+
+    await user.click(contents);
+    await user.tab();
+    expect(contents).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(contents).toHaveFocus();
+  });
+
+  it("moves focus from the editor to the dialog's first control, not out of the dialog, when the editor leaves Tab unused", async () => {
+    const user = userEvent.setup();
+    render(<EditorDialog close={vi.fn()} keysTheEditorUses={noKeys} />);
+
+    await user.click(screen.getByRole("textbox", { name: "Contents" }));
+    await user.tab();
+
+    expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
   });
 });

@@ -16,15 +16,16 @@ type Layer = {
 
 const layers: Layer[] = [];
 
-const escapeOwnerAttribute = "data-escape-owner";
+const keyboardOwnerAttribute = "data-keyboard-owner";
 
-// エディタの検索欄や補完を閉じる、シェルへ ESC を送るなど、Escape を自分で使う領域に付ける。
-// この中で押した Escape は先にその領域へ渡し、使われずに document まで届いたときだけ
-// 最前面のレイヤーを閉じる。
-export const escapeOwnerProps = { [escapeOwnerAttribute]: "" } as const;
+// エディタやターミナルのように、キーを自分で使う領域に付ける。レイヤーが使う Escape と Tab も、
+// この中で押したものは先にその領域へ渡す。エディタは Escape で検索欄や補完を閉じ、Tab で
+// インデントする。ターミナルはどちらもシェルへ送る。使われずに document まで届いたときだけ、
+// Escape は最前面のレイヤーを閉じ、Tab はフォーカスをレイヤーの中で回す。
+export const keyboardOwnerProps = { [keyboardOwnerAttribute]: "" } as const;
 
-function insideEscapeOwner(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest(`[${escapeOwnerAttribute}]`) !== null;
+function insideKeyboardOwner(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(`[${keyboardOwnerAttribute}]`) !== null;
 }
 
 function topLayer(): Layer | undefined {
@@ -54,33 +55,48 @@ function dismissOutside(event: PointerEvent) {
   layer.dismiss("outside");
 }
 
-function dismissWithEscape(event: KeyboardEvent) {
+// フォーカスを閉じ込めるレイヤーでは、最後の要素からの Tab を最初の要素へ、最初の要素からの
+// Shift+Tab を最後の要素へ回す。レイヤーの外にあるフォーカスは、レイヤーの中へ戻す。
+function keepTabInLayer(layer: Layer, event: KeyboardEvent) {
+  if (!layer.trapFocus) return;
+  const focusable = layer.containers().flatMap((container) =>
+    container === null ? [] : focusableElements(container),
+  );
+  const first = focusable[0] ?? layer.containers()[0] ?? null;
+  const last = focusable[focusable.length - 1] ?? first;
+  if (first === null || last === null) return;
+  const active = document.activeElement;
+  if (event.shiftKey ? active === first || !focusable.includes(active as HTMLElement) : active === last || !focusable.includes(active as HTMLElement)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  }
+}
+
+// 押された要素より先に、最前面のレイヤーの Escape と Tab を扱う。キーを自分で使う領域の中で
+// 押されたものは、先にその領域へ渡すので handleKeyUnusedByKeyboardOwner が扱う。
+function handleLayerKey(event: KeyboardEvent) {
   const layer = topLayer();
-  if (layer === undefined) return;
-  if (event.key === "Tab" && layer.trapFocus) {
-    const focusable = layer.containers().flatMap((container) =>
-      container === null ? [] : focusableElements(container),
-    );
-    const first = focusable[0] ?? layer.containers()[0] ?? null;
-    const last = focusable[focusable.length - 1] ?? first;
-    if (first === null || last === null) return;
-    const active = document.activeElement;
-    if (event.shiftKey ? active === first || !focusable.includes(active as HTMLElement) : active === last || !focusable.includes(active as HTMLElement)) {
-      event.preventDefault();
-      (event.shiftKey ? last : first).focus();
-    }
+  if (layer === undefined || insideKeyboardOwner(event.target)) return;
+  if (event.key === "Tab") {
+    keepTabInLayer(layer, event);
     return;
   }
-  if (event.key !== "Escape" || insideEscapeOwner(event.target)) return;
+  if (event.key !== "Escape") return;
   event.preventDefault();
   event.stopImmediatePropagation();
   dismissAndRestoreFocus(layer, "escape");
 }
 
-// Monaco と xterm は使った Escape の伝播を止める。ここまで届いたものは使われなかった Escape。
-function dismissWithUnusedEscape(event: KeyboardEvent) {
+// Monaco と xterm は、使ったキーの伝播を止める（Monaco の検索欄は Tab の既定の動作を止めるだけ）。
+// 既定の動作を止められずにここまで届いたものは、領域が使わなかったキー。
+function handleKeyUnusedByKeyboardOwner(event: KeyboardEvent) {
   const layer = topLayer();
-  if (layer === undefined || event.key !== "Escape" || event.defaultPrevented || !insideEscapeOwner(event.target)) return;
+  if (layer === undefined || event.defaultPrevented || !insideKeyboardOwner(event.target)) return;
+  if (event.key === "Tab") {
+    keepTabInLayer(layer, event);
+    return;
+  }
+  if (event.key !== "Escape") return;
   event.preventDefault();
   dismissAndRestoreFocus(layer, "escape");
 }
@@ -115,8 +131,8 @@ function dismissForAndroidBack(event: Event) {
 function listen() {
   if (layers.length !== 1) return;
   document.addEventListener("pointerdown", dismissOutside, true);
-  document.addEventListener("keydown", dismissWithEscape, true);
-  document.addEventListener("keydown", dismissWithUnusedEscape);
+  document.addEventListener("keydown", handleLayerKey, true);
+  document.addEventListener("keydown", handleKeyUnusedByKeyboardOwner);
   document.addEventListener("focusin", keepModalFocus, true);
   window.addEventListener("sshc-android-back", dismissForAndroidBack, true);
 }
@@ -124,8 +140,8 @@ function listen() {
 function unlisten() {
   if (layers.length !== 0) return;
   document.removeEventListener("pointerdown", dismissOutside, true);
-  document.removeEventListener("keydown", dismissWithEscape, true);
-  document.removeEventListener("keydown", dismissWithUnusedEscape);
+  document.removeEventListener("keydown", handleLayerKey, true);
+  document.removeEventListener("keydown", handleKeyUnusedByKeyboardOwner);
   document.removeEventListener("focusin", keepModalFocus, true);
   window.removeEventListener("sshc-android-back", dismissForAndroidBack, true);
 }
