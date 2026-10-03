@@ -3,6 +3,9 @@ import { useEffect, useRef } from "react";
 // creates its Trusted Types policies through MonacoEnvironment while the
 // imports below are evaluated, so the environment must be installed first.
 import * as monaco from "monaco-editor/editor/editor.api.js";
+// Find and Replace and the other editor features. They must be registered
+// before the first model or editor is created (monacoEditorFeatures.ts).
+import "./monacoEditorFeatures";
 import "monaco-editor/languages/definitions/css/register.js";
 import "monaco-editor/languages/definitions/go/register.js";
 import "monaco-editor/languages/definitions/html/register.js";
@@ -40,15 +43,32 @@ function languageFor(path: string): string {
   return "plaintext";
 }
 
+// Holds back the editor features (monacoEditorFeatures.ts) that would change
+// the remote file without the user asking for it:
+// - Suggestions show only on Ctrl+Space, not while typing. A suggestion shown
+//   while typing takes the Enter or Tab meant for a new line or an indent, and
+//   replaces the typed word with another word of the file.
+// - A file with unusual line terminators, such as Line Separator (U+2028), is
+//   opened as it is. Monaco would otherwise ask in a browser dialog to remove
+//   them. The dialog names the file by Monaco's model number and points at a
+//   setting sshc does not have, and removing them changes the file.
+const noUnrequestedEditOptions = {
+  quickSuggestions: false,
+  suggestOnTriggerCharacters: false,
+  unusualLineTerminators: "off",
+} satisfies monaco.editor.IStandaloneEditorConstructionOptions;
+
 export function MonacoEditor({ path, value, onChange, readOnly = false }: MonacoEditorProps) {
   const container = useRef<HTMLDivElement>(null);
   const callback = useRef(onChange);
-  const current = useRef(value);
+  // The contents the editor reported through onChange that have not come back
+  // as `value` yet, oldest first. React can render one of them after the user
+  // has typed more, so `value` is not always the model's latest contents.
+  const pendingReports = useRef<string[]>([]);
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const { resolved } = useTheme();
   const reducedMotion = useMediaQuery(reducedMotionQuery);
   callback.current = onChange;
-  current.current = value;
 
   useEffect(() => {
     if (container.current === null) return;
@@ -56,6 +76,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false }: Monaco
     const view = monaco.editor.create(container.current, {
       model,
       readOnly,
+      ...noUnrequestedEditOptions,
       automaticLayout: true,
       minimap: { enabled: false },
       fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
@@ -67,9 +88,10 @@ export function MonacoEditor({ path, value, onChange, readOnly = false }: Monaco
       theme: resolved === "dark" ? "vs-dark" : "vs",
     });
     editor.current = view;
+    pendingReports.current = [];
     const subscription = model.onDidChangeContent(() => {
       const next = model.getValue();
-      current.current = next;
+      pendingReports.current.push(next);
       callback.current(next);
     });
     return () => {
@@ -83,11 +105,22 @@ export function MonacoEditor({ path, value, onChange, readOnly = false }: Monaco
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path]);
 
+  // Writes a `value` the parent set itself, such as the contents read again
+  // from the remote, into the model. A `value` the editor reported is skipped
+  // even when it differs from the model: it is an older report rendered after
+  // the user typed more, and writing it would undo that typing and move the
+  // cursor to the start of the file.
   useEffect(() => {
     const model = editor.current?.getModel();
-    if (model !== null && model !== undefined && model.getValue() !== value) {
-      model.setValue(value);
+    if (model === null || model === undefined) return;
+    const report = pendingReports.current.indexOf(value);
+    if (report !== -1) {
+      pendingReports.current.splice(0, report + 1);
+      return;
     }
+    if (model.getValue() !== value) model.setValue(value);
+    // Also drops the report of the setValue above: the parent set that value.
+    pendingReports.current = [];
   }, [value]);
 
   useEffect(() => {
