@@ -16,6 +16,7 @@ type Service struct {
 	store        Store
 	mutex        sync.Mutex
 	stateError   error
+	ownedJobID   string
 }
 
 func New(dependencies Dependencies) *Service {
@@ -76,7 +77,7 @@ func (service *Service) Start(plan Plan) (Job, error) {
 	}
 	service.mutex.Lock()
 	defer service.mutex.Unlock()
-	return service.store.Change(func(job *Job) error {
+	job, err := service.store.Change(func(job *Job) error {
 		if job.Active() {
 			return ErrBusy
 		}
@@ -90,6 +91,10 @@ func (service *Service) Start(plan Plan) (Job, error) {
 		*job = Job{ID: hex.EncodeToString(nonce), Target: plan.Target, State: JobAccepted, StartedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(), OwnerPID: service.dependencies.PID, Plan: plan}
 		return nil
 	})
+	if err == nil {
+		service.ownedJobID = job.ID
+	}
+	return job, err
 }
 
 func (service *Service) ResponseSent(id string, responseError error) {
@@ -144,7 +149,9 @@ func (service *Service) Status() (Job, error) {
 	if err != nil || (!job.Active() && job.State != JobRestartRequired) {
 		return job, err
 	}
-	if job.OwnerPID == service.dependencies.PID && job.Target != service.dependencies.Current && (job.State != JobRestarting || time.Since(job.UpdatedAt) < RestartTimeout) {
+	// A restarted process may reuse the old PID; only jobs reserved by this
+	// service instance can still have an installer running here.
+	if job.ID == service.ownedJobID && job.Target != service.dependencies.Current && (job.State != JobRestarting || time.Since(job.UpdatedAt) < RestartTimeout) {
 		return job, nil
 	}
 	return service.store.Change(func(stored *Job) error {
