@@ -181,6 +181,15 @@ func TestLaunchdServiceStatusDistinguishesManagedStates(t *testing.T) {
 	}
 }
 
+func TestLaunchdServiceRestartPlanRefusesUnsafeDefinitionsWithoutRunningLaunchctl(t *testing.T) {
+	runner := &fakeLaunchdCommandRunner{}
+	manager := testLaunchdServiceManager(t, runner)
+	assertServiceRestartPlanProtectsDefinitions(t, manager, manager.definitionFile())
+	if len(runner.calls) != 0 {
+		t.Fatalf("planning ran launchctl: %#v", runner.calls)
+	}
+}
+
 func TestLaunchdServiceRestartAndDisableTouchOnlyTheManagedAgent(t *testing.T) {
 	// print (active), kickstart, print again (still active after the restart).
 	runner := &fakeLaunchdCommandRunner{results: []serviceCommandResult{

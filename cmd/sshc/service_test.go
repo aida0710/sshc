@@ -10,11 +10,15 @@ import (
 )
 
 type fakeServiceManager struct {
-	installed string
-	state     serviceState
-	removed   bool
-	outdated  bool
-	err       error
+	installed         string
+	state             serviceState
+	removed           bool
+	outdated          bool
+	err               error
+	restartPlanErr    error
+	restartErr        error
+	restartSkipped    bool
+	restartExecutable string
 }
 
 func (manager *fakeServiceManager) Install(_ context.Context, executable string) error {
@@ -30,8 +34,13 @@ func (manager *fakeServiceManager) Status(context.Context) (serviceState, error)
 	return manager.state, manager.err
 }
 
-func (manager *fakeServiceManager) RestartIfActive(context.Context, string) (bool, error) {
-	return manager.state == serviceActive, manager.err
+func (manager *fakeServiceManager) RestartPlan(executable string) (string, error) {
+	return "restart service using " + executable, manager.restartPlanErr
+}
+
+func (manager *fakeServiceManager) RestartIfActive(_ context.Context, executable string) (bool, error) {
+	manager.restartExecutable = executable
+	return manager.state == serviceActive && !manager.restartSkipped, manager.restartErr
 }
 
 func (manager *fakeServiceManager) IsDefinitionOutdated() (bool, error) {
@@ -44,7 +53,7 @@ func (manager *fakeServiceManager) Disable(context.Context) (bool, error) {
 
 func (manager *fakeServiceManager) DisablePlan() string { return "disable service" }
 
-func TestRunServiceResolvesAStableExecutableOnlyForInstall(t *testing.T) {
+func TestServiceStatusDoesNotResolveAnExecutableWhileInstallUsesAStablePath(t *testing.T) {
 	manager := &fakeServiceManager{}
 	resolved := 0
 	dependencies := serviceDependencies{

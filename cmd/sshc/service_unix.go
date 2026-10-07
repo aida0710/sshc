@@ -83,7 +83,7 @@ type restartableService interface {
 }
 
 // restartServiceIfActive は、sshc 管理下で今動いている service だけを再起動する。停止中の
-// service を update が勝手に起動せず、手書きの定義にも触れないための更新連携用の境界である。
+// service を update や明示restartで勝手に起動せず、手書きの定義にも触れない境界である。
 func restartServiceIfActive(ctx context.Context, service restartableService, executable string) (restarted bool, result error) {
 	release, err := service.acquireOperationLock()
 	if err != nil {

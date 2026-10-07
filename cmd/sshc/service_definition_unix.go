@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"sshc/internal/storage"
@@ -77,6 +78,32 @@ func (definition serviceDefinitionFile) matches(executable string) (bool, error)
 		return false, fmt.Errorf("read %s: %w", definition.path, err)
 	}
 	return bytes.Equal(contents, []byte(expected)), nil
+}
+
+// restartPlan は、登録先がこの導入の現行定義と一致する場合だけ計画を返す。
+// 確認待ちの後の再検査はRestartIfActiveがoperation lock内で行う。
+func (definition serviceDefinitionFile) restartPlan(executable string) (string, error) {
+	snapshot, err := definition.readSnapshot()
+	if err != nil {
+		return "", err
+	}
+	if snapshot.state == serviceAbsent {
+		return "", errServiceNotInstalled
+	}
+	if snapshot.state == serviceUnmanaged {
+		return "", errUnmanagedServiceUnit
+	}
+	matches, err := definition.matches(executable)
+	if err != nil {
+		return "", err
+	}
+	if !matches {
+		if err := outdatedDefinitionError(definition); err != nil {
+			return "", err
+		}
+		return "", errServiceExecutableMismatch
+	}
+	return fmt.Sprintf("restart the active sshc user service at %s using %s; existing connections and transfers will be interrupted", definition.path, filepath.Clean(executable)), nil
 }
 
 // isOutdated は、sshc の印がある定義が、登録した実行ファイルのパスのほかで、今の sshc の

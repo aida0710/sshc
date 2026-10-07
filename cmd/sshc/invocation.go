@@ -142,7 +142,7 @@ func parseInvocation(argv []string) (invocation, error) {
 	return invalidInvocation(fmt.Sprintf("unknown command %q", word))
 }
 
-// parseServiceInvocation は、`sshc service <install|status|disable>` を読む。
+// parseServiceInvocation は、`sshc service <install|status|restart|disable>` を読む。
 func parseServiceInvocation(args []string) (invocation, error) {
 	if helpRequested(args) {
 		return helpInvocation(canonicalCLICommand(cliCommandService)), nil
@@ -151,7 +151,7 @@ func parseServiceInvocation(args []string) (invocation, error) {
 		return helpInvocation(canonicalCLICommand(cliCommandService) + " " + args[0]), nil
 	}
 	if len(args) == 0 || !validServiceAction(args[0]) {
-		return invalidInvocation("service requires install, status, or disable")
+		return invalidInvocation(missingActionMessage("service"))
 	}
 	action := args[0]
 	if action == "status" {
