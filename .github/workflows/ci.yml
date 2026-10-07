@@ -233,6 +233,8 @@ jobs:
       # するので、固定を外れたずれは、インストールされるのではなくビルドを止める
       # べきである。
       - run: npm ci
+      - name: Browser demo archive and release proxy tests
+        run: npm test --prefix ../demo
 
       # 型検査は、アプリケーションと、自前の tsconfig を持つエンドツーエンドの
       # スイートの両方に対して走る。

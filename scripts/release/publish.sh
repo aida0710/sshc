@@ -130,6 +130,10 @@ verify_public_release() {
     sshc-linux-arm64 \
     sshc-windows-amd64.exe \
     sshc-windows-arm64.exe | sort)
+  # v0.44.0以降はVM/UI一式とそのmanifestも公開契約に含む。古いimmutable版も再検証できる。
+  if [ "$(printf '%s\n' v0.44.0 "$tag" | sort -V | head -1)" = v0.44.0 ]; then
+    expected_assets=$(printf '%s\n' "$expected_assets" "sshc-demo-$tag.tar.gz" "sshc-demo-$tag.json" | sort)
+  fi
   actual_assets=$(printf '%s' "$release" | jq -r '.assets[].name' | sort)
   [ "$actual_assets" = "$expected_assets" ] || die 'release asset set differs from the publication contract'
 

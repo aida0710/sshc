@@ -2,6 +2,14 @@ export const messages = {
   pageTitle: "sshc · ブラウザデモ",
   demoTitle: "ブラウザデモ",
   updatedAtLabel: "更新日時:",
+  versionLabel: "バージョン:",
+  checkingRelease: "GitHubの最新リリースを確認しています…",
+  latestRelease: (version) => `起動する版: ${version}（GitHub最新リリース）`,
+  releaseFallback: (version) => `最新リリースを取得できないため、配信済みの${version}で起動します。`,
+  releaseArchiveProgress: ({ state, fraction, completedFiles, totalFiles }) => state === "downloading"
+    ? `デモ一式をダウンロード中 · ${Math.round(fraction * 100)}%`
+    : state === "unpacking" ? "デモ一式を展開しています…"
+    : state === "caching" ? `デモ一式を保存中 · ${completedFiles}/${totalFiles}` : "デモ一式の準備が完了しました",
   clearUICache: "キャッシュを削除して再読み込み",
   cacheClearFailed: "再読み込みに失敗しました。もう一度お試しください。",
   updatedAt: (timestamp) => new Intl.DateTimeFormat("ja-JP", {
@@ -17,7 +25,7 @@ export const messages = {
   memory: "メモリ",
   clientPurpose: "sshcエンジンとCLI",
   serverPurpose: "SSH・SFTP接続先",
-  memoryDetail: (memoryMiB) => `VMのメモリは合計${memoryMiB} MiB。ブラウザ自体のメモリは別途使います。起動すると約40 MBをダウンロードします。操作内容はこのブラウザ内にだけ保持され、ページを閉じると消えます。Web UIのファイル操作は2 MiBまでの小さなファイルでお試しください。`,
+  memoryDetail: (memoryMiB) => `VMのメモリは合計${memoryMiB} MiB。ブラウザ自体のメモリは別途使います。初回は約45 MBをダウンロードします。操作内容はこのブラウザ内にだけ保持され、ページを閉じると消えます。Web UIのファイル操作は2 MiBまでの小さなファイルでお試しください。`,
   confirm: "この構成で起動します。よろしいですか？",
   start: "起動する",
   webTab: "Web UI",

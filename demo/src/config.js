@@ -10,6 +10,7 @@ export async function loadDemoConfiguration() {
   if (!response.ok) throw new Error("Demo configuration is unavailable");
   const config = await response.json();
   return { imageBaseURL: new URL(config.imageBaseURL, window.location.href),
+    version: config.version, releaseProxyURL: config.releaseProxyURL,
     assetSizes: config.assetSizes ?? {}, uiArchive: config.uiArchive,
     entryURL: new URL(config.entryURL ?? "./index.html", window.location.href) };
 }

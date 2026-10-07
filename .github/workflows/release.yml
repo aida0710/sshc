@@ -288,11 +288,58 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  browser-demo:
+    name: Browser demo
+    needs: [verify-source]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.verify-source.outputs.release-sha }}
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            demo/package-lock.json
+            web/package-lock.json
+      - run: npm ci --prefix demo && npm ci --prefix web
+      - run: npm test --prefix demo
+      - name: Build the versioned VM images and UI
+        env:
+          VERSION: ${{ env.RELEASE_TAG }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpio
+          bash demo/scripts/build-images.sh
+          npm run build --prefix web -- --base=./ --outDir ../demo/images/ui
+          npm run build --prefix demo
+      - name: Verify browser SSH and SFTP
+        run: |
+          npx --prefix demo playwright install --with-deps chromium
+          node demo/scripts/serve.mjs > "$RUNNER_TEMP/demo-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          node demo/scripts/check-browser.mjs
+      - name: Package the complete demo
+        run: node demo/scripts/package-release.mjs dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-browser-demo
+          path: dist/sshc-demo-*
+          if-no-files-found: error
+          retention-days: 1
+
   stage-release:
     name: Stage release
     # tapを書き換える前に、attestation付きの完全なdraftを作る。tap成功後に残る
     # 可変処理をdraft公開の一回だけへ縮め、失敗時は同じtagの手動復旧で再構築する。
-    needs: [macos, linux, windows, android, verify-source]
+    needs: [macos, linux, windows, android, browser-demo, verify-source]
     runs-on: ubuntu-24.04
     environment: release
     timeout-minutes: 10
@@ -359,7 +406,7 @@ jobs:
           [ "$count" -eq 1 ] || { echo "the APK must have exactly one signer" >&2; exit 1; }
           [ "$actual" = "$expected" ] || { echo "the APK was signed by an unexpected certificate" >&2; exit 1; }
 
-      # 公開契約の7成果物を各1件だけ受理する。広いglobで同名を上書きすると、
+      # 公開契約の9成果物を各1件だけ受理する。広いglobで同名を上書きすると、
       # job側の重複や欠落を隠したまま部分的なReleaseを作れてしまう。
       - name: Collect
         run: |
@@ -373,6 +420,8 @@ jobs:
           sshc-windows-amd64.exe
           sshc-windows-arm64.exe
           sshc-android-${RELEASE_TAG}.apk
+          sshc-demo-${RELEASE_TAG}.tar.gz
+          sshc-demo-${RELEASE_TAG}.json
           "
           for name in $expected_assets; do
             matches=$(find incoming -type f -name "$name" -print)
@@ -384,8 +433,8 @@ jobs:
             cp "$matches" "dist/$name"
           done
           count=$(find incoming -type f -name 'sshc-*' | wc -l | tr -d ' ')
-          [ "$count" -eq 7 ] || {
-            echo "expected exactly 7 release artifacts, found $count" >&2
+          [ "$count" -eq 9 ] || {
+            echo "expected exactly 9 release artifacts, found $count" >&2
             exit 1
           }
           cp install.ps1 dist/install.ps1
@@ -477,6 +526,8 @@ jobs:
               "checksums.txt",
               "install.ps1",
               ("sshc-android-" + $tag + ".apk"),
+              ("sshc-demo-" + $tag + ".tar.gz"),
+              ("sshc-demo-" + $tag + ".json"),
               "sshc-darwin-amd64",
               "sshc-darwin-arm64",
               "sshc-linux-amd64",

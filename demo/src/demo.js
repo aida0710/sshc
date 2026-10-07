@@ -6,6 +6,8 @@ import { StartupProgress } from "./startup-progress.js";
 import { StartupProgressView } from "./startup-progress-view.js";
 import { prepareUIArchive } from "./ui-archive.js";
 import { UICacheControls } from "./ui-cache-controls.js";
+import { consumeReleaseConsent, fetchLatestRelease, openRelease, deleteReleaseCache } from "./release-loader.js";
+import { releaseBaseURL } from "./ui-cache-addresses.js";
 
 applyMessages(document);
 const updatedAt = document.getElementById("updated-at");
@@ -15,10 +17,24 @@ const uiCacheControls = new UICacheControls({ button: document.getElementById("c
   error: document.getElementById("cache-error"), baseURL: uiBaseURL,
   reload: async () => {
     const configuration = await loadDemoConfiguration();
+    await deleteReleaseCache();
     window.location.assign(configuration.entryURL);
   },
 });
 uiCacheControls.refresh();
+const initialConfiguration = await loadDemoConfiguration();
+document.getElementById("demo-version").textContent = initialConfiguration.version;
+const hasReleaseConsent = consumeReleaseConsent(initialConfiguration.version);
+const releaseStatus = document.getElementById("release-status");
+releaseStatus.textContent = initialConfiguration.releaseProxyURL && !hasReleaseConsent ? messages.checkingRelease : "";
+const latestReleasePromise = hasReleaseConsent ? Promise.resolve(null)
+  : fetchLatestRelease(initialConfiguration.releaseProxyURL).then((manifest) => {
+    if (manifest) releaseStatus.textContent = messages.latestRelease(manifest.version);
+    return manifest;
+  }).catch(() => {
+    releaseStatus.textContent = messages.releaseFallback(initialConfiguration.version);
+    return null;
+  });
 for (const definition of machineDefinitions) {
   const row = document.createElement("tr");
   for (const label of [definition.label, messages[definition.purpose], `${definition.memoryMiB} MiB`]) {
@@ -89,13 +105,29 @@ window.addEventListener("message", (event) => {
   bridge?.send(event.data.request);
 });
 
-document.getElementById("start").addEventListener("click", async () => {
+async function startDemo() {
   document.getElementById("start").disabled = true;
   document.getElementById("confirmation").hidden = true;
   document.getElementById("demo").hidden = false;
   document.getElementById("reset").hidden = false;
   startupView.start();
   renderStartupProgress();
+
+  const latestRelease = await latestReleasePromise;
+  if (latestRelease && (latestRelease.version !== initialConfiguration.version || !releaseBaseURL(new URL(location.href)))) {
+    const releaseProgress = document.getElementById("release-progress");
+    releaseProgress.hidden = false;
+    try {
+      await openRelease({ manifest: latestRelease, onProgress: (progress) => {
+        document.getElementById("release-download").value = progress.fraction;
+        document.getElementById("release-progress-label").textContent = messages.releaseArchiveProgress(progress);
+      } });
+      return;
+    } catch {
+      releaseProgress.hidden = true;
+      status.textContent = messages.releaseFallback(initialConfiguration.version);
+    }
+  }
 
   let imageBaseURL;
   try {
@@ -181,4 +213,7 @@ document.getElementById("start").addEventListener("click", async () => {
     }
     frame.contentWindow?.postMessage({ channel: "sshc-demo", reply }, window.location.origin);
   });
-});
+}
+
+document.getElementById("start").addEventListener("click", startDemo);
+if (hasReleaseConsent) startDemo();
