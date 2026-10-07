@@ -1989,6 +1989,64 @@ export interface paths {
         patch: operations["chmodSFTPEntry"];
         trace?: never;
     };
+    "/api/v1/sftp/{alias}/symlink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Creates a relative or absolute symbolic link, including dangling targets, without overwrite. Requires a single-use confirmation and the shared transfer path lock. */
+        post: operations["createSFTPSymlink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Atomically replaces only the symbolic link in its directory. Requires its revision, a single-use confirmation and server atomic rename support. Never writes to the referenced target. */
+        patch: operations["changeSFTPSymlink"];
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/ownership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Changes numeric SFTP UID/GID for one regular file or directory. Requires metadata containing the entry type and owner IDs, its revision, a single-use confirmation and the shared transfer path lock. Symlinks are refused. */
+        patch: operations["changeSFTPOwnership"];
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/space": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        /** @description Uses statvfs@openssh.com available blocks for the authenticated account. Byte counts are exact decimal strings. Unsupported servers return sftp_unsupported_operation independently of directory listing. */
+        get: operations["getSFTPFilesystemSpace"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces": {
         parameters: {
             query?: never;
@@ -3713,6 +3771,10 @@ export interface components {
             /** Format: date-time */
             modifiedAt: string;
             revision: string;
+            /** Format: int64 */
+            uid?: number;
+            /** Format: int64 */
+            gid?: number;
             linkTarget?: string;
             /** @enum {string} */
             targetType?: "file" | "directory" | "other";
@@ -3785,6 +3847,30 @@ export interface components {
             mode: string;
             expectedRevision: string;
             recursive: boolean;
+        };
+        SFTPCreateSymlinkRequest: {
+            path: string;
+            target: string;
+        };
+        SFTPChangeSymlinkRequest: {
+            path: string;
+            target: string;
+            expectedRevision: string;
+        };
+        SFTPOwnershipRequest: {
+            path: string;
+            /** Format: int64 */
+            uid: number;
+            /** Format: int64 */
+            gid: number;
+            expectedRevision: string;
+        };
+        SFTPFilesystemSpace: {
+            path: string;
+            /** @description Bytes available to the authenticated account as an exact uint64 decimal string. */
+            availableBytes: string;
+            /** @description Total filesystem bytes as an exact uint64 decimal string. */
+            totalBytes: string;
         };
         SFTPTransfer: {
             path: string;
@@ -8173,6 +8259,144 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+        };
+    };
+    createSFTPSymlink: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPCreateSymlinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Entry changed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    changeSFTPSymlink: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPChangeSymlinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Entry changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    changeSFTPOwnership: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPOwnershipRequest"];
+            };
+        };
+        responses: {
+            /** @description Entry changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    getSFTPFilesystemSpace: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Filesystem capacity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPFilesystemSpace"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
         };
     };
     listTerminalWorkspaces: {

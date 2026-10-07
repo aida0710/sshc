@@ -1373,6 +1373,13 @@ type RewrittenKeyReference struct {
 	To         string `json:"to"`
 }
 
+// SFTPChangeSymlinkRequest defines model for SFTPChangeSymlinkRequest.
+type SFTPChangeSymlinkRequest struct {
+	ExpectedRevision string `json:"expectedRevision"`
+	Path             string `json:"path"`
+	Target           string `json:"target"`
+}
+
 // SFTPCreateEntryRequest defines model for SFTPCreateEntryRequest.
 type SFTPCreateEntryRequest struct {
 	Path string                     `json:"path"`
@@ -1381,6 +1388,12 @@ type SFTPCreateEntryRequest struct {
 
 // SFTPCreateEntryRequestType defines model for SFTPCreateEntryRequest.Type.
 type SFTPCreateEntryRequestType string
+
+// SFTPCreateSymlinkRequest defines model for SFTPCreateSymlinkRequest.
+type SFTPCreateSymlinkRequest struct {
+	Path   string `json:"path"`
+	Target string `json:"target"`
+}
 
 // SFTPDirectoryComparison defines model for SFTPDirectoryComparison.
 type SFTPDirectoryComparison struct {
@@ -1411,6 +1424,7 @@ type SFTPDirectoryStats struct {
 
 // SFTPEntry defines model for SFTPEntry.
 type SFTPEntry struct {
+	Gid        *int64               `json:"gid,omitempty"`
 	LinkTarget *string              `json:"linkTarget,omitempty"`
 	Mode       string               `json:"mode"`
 	ModifiedAt time.Time            `json:"modifiedAt"`
@@ -1420,6 +1434,7 @@ type SFTPEntry struct {
 	Size       int64                `json:"size"`
 	TargetType *SFTPEntryTargetType `json:"targetType,omitempty"`
 	Type       SFTPEntryType        `json:"type"`
+	Uid        *int64               `json:"uid,omitempty"`
 }
 
 // SFTPEntryTargetType defines model for SFTPEntry.TargetType.
@@ -1427,6 +1442,16 @@ type SFTPEntryTargetType string
 
 // SFTPEntryType defines model for SFTPEntry.Type.
 type SFTPEntryType string
+
+// SFTPFilesystemSpace defines model for SFTPFilesystemSpace.
+type SFTPFilesystemSpace struct {
+	// AvailableBytes Bytes available to the authenticated account as an exact uint64 decimal string.
+	AvailableBytes string `json:"availableBytes"`
+	Path           string `json:"path"`
+
+	// TotalBytes Total filesystem bytes as an exact uint64 decimal string.
+	TotalBytes string `json:"totalBytes"`
+}
 
 // SFTPLocalDeleteEntry defines model for SFTPLocalDeleteEntry.
 type SFTPLocalDeleteEntry struct {
@@ -1471,6 +1496,14 @@ type SFTPLocalRenameRequest struct {
 	ExpectedRevision string `json:"expectedRevision"`
 	Name             string `json:"name"`
 	Path             string `json:"path"`
+}
+
+// SFTPOwnershipRequest defines model for SFTPOwnershipRequest.
+type SFTPOwnershipRequest struct {
+	ExpectedRevision string `json:"expectedRevision"`
+	Gid              int64  `json:"gid"`
+	Path             string `json:"path"`
+	Uid              int64  `json:"uid"`
 }
 
 // SetTerminalSessionTitleRequest defines model for SetTerminalSessionTitleRequest.

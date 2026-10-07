@@ -6,8 +6,7 @@ import (
 	"sort"
 )
 
-// maxComparedEntries bounds how many entries a directory comparison reads from
-// both sides together.
+// maxComparedEntries bounds each directory tree and the combined comparison list.
 const maxComparedEntries = 20_000
 
 // CompareDirectories compares metadata without downloading file contents.
