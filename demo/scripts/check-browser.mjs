@@ -29,6 +29,12 @@ try {
   });
   // Avoid printing URLs or session tokens when a runtime error occurs.
   page.on("pageerror", (error) => browserErrors.push(error.name));
+  // The published latest release differs from a freshly built tag, and following it would test
+  // that older bundle instead of this one. check-release-browser.mjs covers the latest flow.
+  await page.route(new URL("config.json", demoURL).href, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...await response.json(), releaseProxyURL: "" } });
+  });
   await page.goto(demoURL);
   await page.getByRole("button", { name: "起動する", exact: true }).waitFor();
   const confirmationURL = page.url();
