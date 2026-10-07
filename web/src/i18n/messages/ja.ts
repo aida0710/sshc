@@ -158,6 +158,10 @@ export const ja = {
   "sftp.problem.failed": "SFTPの操作に失敗しました。",
   "sftp.problem.notFound": "ファイルかフォルダが見つかりませんでした。移動または削除された可能性があります。",
   "sftp.problem.permissionDenied": "アクセス権がありません。接続先のパーミッションを確認してください。",
+  "sftp.problem.localPermissionDenied":
+    "sshcエンジン側でアクセス権がありません。sshcエンジンを実行しているユーザーのパーミッションを確認してください。",
+  "sftp.problem.localPrivacyProtection":
+    "macOSのプライバシー保護により、sshcエンジンがこのフォルダにアクセスできません。システム設定の［プライバシーとセキュリティ］→［フルディスクアクセス］でsshcを許可してから、sshcエンジンを再起動してください。",
   "sftp.problem.conflict": "操作中にリモートのファイルが変更されました。もう一度実行してください。",
   "sftp.problem.exists": "同じ名前の項目がすでにあります。",
   "sftp.problem.transferLimit": "転送の数が上限に達しています。いくつかの転送が終わってから、もう一度実行してください。",
