@@ -40,10 +40,12 @@ for (const layout of deletionLayouts) {
 
     for (const entry of deletionEntries) {
       await pane.getByRole("checkbox", { name: `Select ${entry.name}`, exact: true }).check();
-      const remove = pane.getByRole("button", { name: "Delete", exact: true });
-      await expect(remove).toBeVisible();
-      if (layout.mobile) expect((await remove.boundingBox())?.height).toBeGreaterThanOrEqual(44);
-      await remove.click();
+      await expect(pane.getByRole("button", { name: "Delete", exact: true })).toHaveCount(0);
+      const actions = pane.getByRole("button", { name: `Actions for ${entry.name}`, exact: true });
+      await expect(actions).toBeVisible();
+      if (layout.mobile) expect((await actions.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+      await actions.click();
+      await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "Delete this remote entry?", exact: true });
       await expect(dialog).toContainText(entry.path);
       if (entry.type === "directory") await expect(dialog).toContainText("Folders and everything inside them will be deleted.");
@@ -54,7 +56,8 @@ for (const layout of deletionLayouts) {
     }
 
     for (const entry of deletionEntries) await pane.getByRole("checkbox", { name: `Select ${entry.name}`, exact: true }).check();
-    await pane.getByRole("button", { name: "Delete", exact: true }).click();
+    await pane.getByRole("button", { name: "Actions for 3 selected items", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Delete 3 remote entries?", exact: true });
     for (const entry of deletionEntries) await expect(dialog).toContainText(entry.path);
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -65,9 +68,11 @@ for (const layout of deletionLayouts) {
       await changeDisplayLanguage(page, "ja");
       await connectSFTPHost(page, "bastion", pane);
       for (const entry of deletionEntries) await pane.getByRole("checkbox", { name: `${entry.name}を選択`, exact: true }).check();
-      await expect(pane.getByRole("button", { name: "削除", exact: true })).toBeVisible();
-      await page.screenshot({ path: join(visualDirectory, `${layout.name}-selection-ja.png`), animations: "disabled" });
-      await pane.getByRole("button", { name: "削除", exact: true }).click();
+      await expect(pane.getByRole("button", { name: "削除", exact: true })).toHaveCount(0);
+      await pane.getByRole("button", { name: "選択した3件の操作", exact: true }).click();
+      await expect(page.getByRole("menuitem", { name: "削除", exact: true })).toBeVisible();
+      await page.screenshot({ path: join(visualDirectory, `${layout.name}-menu-ja.png`), animations: "disabled" });
+      await page.getByRole("menuitem", { name: "削除", exact: true }).click();
       await expect(page.getByRole("dialog")).toContainText("フォルダ内の項目もすべて削除されます。");
       await page.screenshot({ path: join(visualDirectory, `${layout.name}-confirmation-ja.png`), animations: "disabled" });
       await page.getByRole("dialog").getByRole("button", { name: "キャンセル", exact: true }).click();

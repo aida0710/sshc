@@ -510,14 +510,13 @@ export function SFTPPanel({
                 {compactViewport || !can?.details ? null : <button type="button" disabled={busy} onClick={showDetails} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">{t("sftp.details")}</button>}
                 {compactViewport && !local ? null : <button type="button" disabled={busy || !transferableSelection || !transfers.canTransferOut} title={transfers.canTransferOut ? undefined : t("sftp.local.connectRemote")} onClick={() => void transfers.transferOut(selectedEntries)} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">{transferOutLabel}</button>}
                 {compactViewport || selectedEntry === null || !can?.rename ? null : <button type="button" disabled={busy} onClick={actions.renameSelection} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">{t("sftp.rename")}</button>}
-                {can?.delete ? <button type="button" disabled={busy} onClick={actions.deleteSelection} className={`shrink-0 rounded px-2 py-1 text-xs text-danger hover:bg-hover disabled:text-ink-faint ${mobileInteraction ? "min-h-11 min-w-11" : ""}`}>{t("sftp.delete")}</button> : null}
                 <button
                   type="button"
                   aria-label={selectionMenuLabel()}
                   aria-haspopup="menu"
                   aria-expanded={!mobileInteraction && menu?.kind === "selected"}
                   onClick={(event) => toggleMenu("selected", event.currentTarget)}
-                  className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-7"
+                  className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-7"
                 >
                   <Icon name="moreHorizontal" className="size-4" />
                 </button>
