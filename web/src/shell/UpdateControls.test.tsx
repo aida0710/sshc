@@ -59,6 +59,16 @@ describe("Web self update", () => {
     expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
   });
 
+  it("guides Homebrew installations to CLI updates without offering a Web installation", async () => {
+    const api = updater();
+    vi.mocked(api.updateStatus).mockResolvedValue({ ...available, canUpdate: false, reason: "update_homebrew_unsupported" });
+    render(<UpdateBadge api={api} />);
+    expect(await screen.findByText(/For Homebrew installations/)).toHaveTextContent("update with sshc update in a terminal");
+    expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
+    expect(api.previewUpdate).not.toHaveBeenCalled();
+    expect(api.startUpdate).not.toHaveBeenCalled();
+  });
+
   it("reports the new engine version and persisted successful result", async () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.1.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "succeeded", problem: "" } });

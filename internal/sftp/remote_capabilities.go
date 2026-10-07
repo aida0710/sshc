@@ -10,6 +10,7 @@ type AtomicSymlinkRemote interface {
 	ReplaceSymlink(temporary, linkPath string) error
 }
 type OwnershipRemote interface {
+	// Chown must not follow the final path component, even if it becomes a link.
 	Chown(path string, uid, gid uint32) error
 }
 type SpaceRemote interface {

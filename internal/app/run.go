@@ -332,7 +332,12 @@ func StateDir(home string) (string, error) {
 func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	asked, stopAsked := context.WithCancel(ctx)
 	defer stopAsked()
-	dependencies.StopEngine = stopAsked
+	dependencies.StopEngine = func() {
+		if dependencies.SelfUpdate != nil {
+			dependencies.SelfUpdate.BeginStopping()
+		}
+		stopAsked()
+	}
 
 	built, err := build(dependencies, version)
 	if err != nil {
@@ -389,6 +394,9 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 
 // unwind は engine lock の解放前に停止処理を完了する。
 func (r runtime) unwind(dependencies Dependencies) error {
+	if dependencies.SelfUpdate != nil {
+		dependencies.SelfUpdate.BeginStopping()
+	}
 	timeout := dependencies.ShutdownTimeout
 	if timeout <= 0 {
 		timeout = DefaultShutdownTimeout
@@ -421,9 +429,15 @@ func (r runtime) unwind(dependencies Dependencies) error {
 	if r.autoDone != nil {
 		barrierCount++
 	}
+	if dependencies.SelfUpdate != nil {
+		barrierCount++
+	}
 	barriers := make(chan error, barrierCount)
 	go func() { barriers <- r.terminals.Wait() }()
 	go func() { barriers <- r.server.Wait() }()
+	if dependencies.SelfUpdate != nil {
+		go func() { barriers <- dependencies.SelfUpdate.Stop() }()
+	}
 	if r.autoDone != nil {
 		go func() {
 			<-r.autoDone

@@ -264,6 +264,8 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
 
 ## 更新の境界
 
+- Web画面からの更新はmacOS・Linuxの検証済み`install.sh`導入に限り、確認した安定版tagを指定して実行します。Homebrewは`brew upgrade`で確認したバージョンを指定できないためWeb更新を拒否し、CLIの`sshc update`を案内します。engine停止時は自己更新の新規開始を止め、installerを取り消して終了を待ってからengine lockを解放します。
+
 - 更新確認は、利用者が設定した S3 endpoint への Sync、`sshc update` の installer 取得（`raw.githubusercontent.com`）、VPN経路（コンテナからVPNサーバーへの接続と、コンテナイメージを作るときにdockerが行うDocker Hubと`snapshot.ubuntu.com`からの取得）を除き、このアプリケーションが SSH 接続先以外の外部ホストへ通信する唯一の機能です。`https://api.github.com/repos/aida0710/sshc/releases/latest`へengine起動直後と画面上の確認時にGETします。起動時はHTTP受付開始を先に通知し、3秒以内のbest-effort確認だけを行います。失敗やoffline状態でengineを停止せず、新しい安定バージョンがある場合だけ更新の方法を案内します（Windowsでは`install.ps1`を再実行するPowerShellのコマンド、ほかのOSでは`sshc update`）。server sideからリクエストするため、ページの`connect-src`は`'self'`のままです。
 - `sshc update`は任意の実行ファイルを直接置換しません。Homebrew版は`brew --prefix --installed aida0710/tap/sshc`の管理対象と実行中ファイルを`SameFile`で照合してから、同じ`brew`のformula更新へ委ねます。`install.sh`版は隣接receiptに記録したrepository、安定バージョン、SHA-256が実行中ファイルと一致するときだけ、確認した最新tagに固定したinstallerへ委ねます。`install.sh`はプレリリースを入れるときreceiptを書かず、前のreceiptも削除するため、プレリリースの導入は自動更新と`sshc service install`の対象になりません。変更前に実行ファイル、現在のバージョン、更新後のバージョン、管理元を表示して対話確認を求め、`-y`または`--yes`だけが確認を省略します。Windows、手動配置、source build、変更済みファイル、判定不能な導入は拒否します。Windowsでは、拒否するときに`install.ps1`を再実行するPowerShellのコマンドを表示します。Homebrew版で`brew upgrade`が成功しても実行ファイルが新しいバージョンを報告しないときは、Homebrewがtapを更新しなかった可能性（`HOMEBREW_NO_AUTO_UPDATE`を設定している場合など）を示し、`brew update`のあとに再実行するよう案内します。
 - 以前削除した自己更新機能は、アプリケーション自身がネットワークからbinaryを取得して直接置換する方式でした。署名鍵をrelease workflowと同じ主体が扱う構成ではrepository侵害への防御が増えず、独自updaterの失敗境界だけが増えるため復活させません。現在の更新入口は既存のHomebrewまたはtag固定`install.sh`を管理元として維持し、後者はReleaseの`checksums.txt`、digest付きreceipt、同一directory内renameを必須にします。

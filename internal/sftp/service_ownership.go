@@ -37,7 +37,8 @@ func (s Service) ChangeOwnership(ctx context.Context, alias string, change Owner
 	if !metadataTypeKnown(info) {
 		return Entry{}, ErrMetadataUnavailable
 	}
-	// SFTP SETSTAT follows a symlink. Reject links so an ownership action cannot change its target.
+	// The no-follow mutation protects against a later link replacement; links
+	// already present are refused because this action is for files/directories.
 	if !info.Mode().IsRegular() && !info.IsDir() {
 		return Entry{}, ErrNotRegularFile
 	}
@@ -56,6 +57,9 @@ func (s Service) ChangeOwnership(ctx context.Context, alias string, change Owner
 	updated, err := remote.Lstat(cleaned)
 	if err != nil {
 		return Entry{}, err
+	}
+	if !metadataTypeKnown(updated) || (!updated.Mode().IsRegular() && !updated.IsDir()) {
+		return Entry{}, ErrConflict
 	}
 	owner, available := ownershipFrom(updated)
 	if !available {

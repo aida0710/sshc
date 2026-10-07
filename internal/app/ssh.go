@@ -250,8 +250,8 @@ type sftpTransport interface {
 
 // newSFTPRemote wraps one SFTP session so that the pool can ask whether it is
 // still usable before lending it to the next operation.
-func newSFTPRemote(session *pkgsftp.Client, transport sftpTransport) *sftpRemote {
-	remote := &sftpRemote{Remote: sshcSFTP.NewClient(session), transport: transport, dead: make(chan struct{})}
+func newSFTPRemote(session *sshcSFTP.Client, transport sftpTransport) *sftpRemote {
+	remote := &sftpRemote{Remote: session, transport: transport, dead: make(chan struct{})}
 	// A server can end the SFTP subsystem while the transport stays up: the
 	// sftp-server exits, sshd's ChannelTimeout closes the channel, or a reply
 	// cannot be parsed. Every later request then fails as a lost connection,

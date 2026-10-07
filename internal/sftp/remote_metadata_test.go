@@ -32,6 +32,7 @@ type metadataRemote struct {
 	chownPaths        []string
 	maxFilenameBytes  int
 	preserveOwnership bool
+	beforeChown       func()
 }
 
 func metadataFixture() *metadataRemote {
@@ -75,6 +76,9 @@ func (remote *metadataRemote) ReplaceSymlink(temporary, linkPath string) error {
 	return remote.Replace(temporary, linkPath)
 }
 func (remote *metadataRemote) Chown(candidate string, uid, gid uint32) error {
+	if remote.beforeChown != nil {
+		remote.beforeChown()
+	}
 	if remote.chownErr != nil {
 		return remote.chownErr
 	}
@@ -83,6 +87,26 @@ func (remote *metadataRemote) Chown(candidate string, uid, gid uint32) error {
 		remote.owners[candidate] = sftp.Ownership{UID: uid, GID: gid}
 	}
 	return nil
+}
+
+func TestOwnershipRejectsAnEntryReplacedByALinkAndLeavesItsTargetUnchanged(t *testing.T) {
+	remote := metadataFixture()
+	service := metadataService(remote)
+	before, err := service.Stat(t.Context(), "edge", "/srv/notes.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetOwner := remote.owners["/srv/data"]
+	remote.beforeChown = func() {
+		remote.nodes[before.Path] = symlink("notes.txt", "/srv/data")
+	}
+	_, err = service.ChangeOwnership(t.Context(), "edge", sftp.OwnershipChange{Path: before.Path, UID: 7, GID: 8, ExpectedRevision: before.Revision})
+	if !errors.Is(err, sftp.ErrConflict) {
+		t.Fatalf("replaced entry = %v", err)
+	}
+	if remote.owners["/srv/data"] != targetOwner {
+		t.Fatal("link target ownership changed")
+	}
 }
 func (remote *metadataRemote) StatVFS(string) (*pkgsftp.StatVFS, error) {
 	return remote.stats, remote.spaceErr

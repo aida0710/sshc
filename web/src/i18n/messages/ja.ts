@@ -1124,7 +1124,7 @@ export const ja = {
   "update.stateFailed": "更新状態を保存または読み込みできませんでした。空き容量とパーミッションを確認してからやり直してください。",
   "update.installFailed": "更新に失敗しました。管理元、パーミッション、ネットワークを確認し、更新内容を確認し直してください。",
   "update.interrupted": "更新が中断されました。インストール済みのバージョンを確認してからやり直してください。",
-  "update.homebrewRefreshRequired": "Homebrewで新しいリリースが入りませんでした。ターミナルでbrew updateを実行し、更新内容を確認し直してください。",
+  "update.homebrewUnsupported": "Homebrew版はターミナルでsshc updateを実行してください。Web更新では確認したバージョンを指定できません。",
   "update.restartRequired": "新しいリリースは入りましたが、再起動を確認できませんでした。管理されたサービスはsshc service install、それ以外はsshc engine --replaceを実行し、この画面を再読み込みしてください。",
   "update.checkFailed": "最新リリースを確認できませんでした。ネットワークを確認してやり直してください。",
   "update.unavailable": "この導入では自動更新を利用できません。",

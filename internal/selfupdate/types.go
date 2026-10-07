@@ -89,6 +89,8 @@ type Dependencies struct {
 	Context   context.Context
 	Latest    func(context.Context) (releasecheck.Release, error)
 	Inspect   func(context.Context) (Installation, error)
-	Install   func(context.Context, Plan) error
-	Restart   func(context.Context, Job) error
+	// Install returns only after the installer and its child processes are stopped.
+	Install func(context.Context, Plan) error
+	// Restart launches an independent helper and returns without waiting for engine shutdown.
+	Restart func(context.Context, Job) error
 }
