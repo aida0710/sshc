@@ -32,6 +32,11 @@ func sftpProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	case errors.Is(err, fs.ErrNotExist), errors.Is(err, sshcSFTP.ErrLinkLoop):
 		return problem(c, http.StatusNotFound, "sftp_not_found")
+	// The engine's own refusals come before the server's, which they also match.
+	case errors.Is(err, sshcSFTP.ErrLocalPrivacyProtection):
+		return problem(c, http.StatusForbidden, "sftp_local_privacy_protection")
+	case errors.Is(err, sshcSFTP.ErrLocalPermissionDenied):
+		return problem(c, http.StatusForbidden, "sftp_local_permission_denied")
 	case errors.Is(err, fs.ErrPermission):
 		return problem(c, http.StatusForbidden, "sftp_permission_denied")
 	case errors.Is(err, sshcSFTP.ErrTransferNotFound):

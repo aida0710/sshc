@@ -14,6 +14,11 @@ const quotesOutsideTheCatalogue = new Map<string, string>([
   ["sshcエンジンの記録", "VPNのログの見出し。internal/vpn/status.goが書く"],
   ["コンテナのログ", "VPNのログの見出し。internal/vpn/status.goが書く"],
   ["Toggle Tab Key Moves Focus", "Monaco Editorのコマンドの名前。Monaco Editorが英語で表示する"],
+  ["プライバシーとセキュリティ", "macOSのシステム設定の項目の名前"],
+  ["フルディスクアクセス", "macOSのシステム設定の項目の名前"],
+  ["ファイルとフォルダ", "macOSのシステム設定の項目の名前"],
+  ["+", "macOSのシステム設定で、一覧に項目を追加するボタン"],
+  ["-", "macOSのシステム設定で、一覧から項目を削除するボタン"],
 ]);
 
 const quotePattern = /［([^［］]+)］|「([^「」]+)」/g;

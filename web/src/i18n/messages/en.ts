@@ -176,7 +176,10 @@ export const en = {
   "sftp.problem.notFound": "The file or folder was not found. It may have been moved or deleted.",
   "sftp.problem.permissionDenied": "Permission denied. Check the permissions on the host.",
   "sftp.problem.localMutationConflict": "A local entry changed or is in use by a transfer. Refresh the listing and check transfers.",
-  "sftp.problem.localMutationPermissionDenied": "Permission denied. Check access on the machine running the sshc engine.",
+  "sftp.problem.localPermissionDenied":
+    "Permission denied on the sshc engine's side. Check the permissions of the user running the sshc engine.",
+  "sftp.problem.localPrivacyProtection":
+    "macOS privacy protection keeps the sshc engine out of this folder. Allow sshc in System Settings > Privacy & Security > Full Disk Access, then restart the sshc engine.",
   "sftp.problem.conflict": "The remote file changed during the operation. Try again.",
   "sftp.problem.exists": "An entry with the same name already exists.",
   "sftp.problem.transferLimit": "The transfer limit has been reached. Try again after some transfers finish.",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -54,7 +55,8 @@ func (p *LocalDeletePlan) Close() {
 
 // PrepareLocalDelete validates every selected tree before confirmation. The
 // digest binds the token to descendants as well as the selected root entries.
-func (m *TransferManager) PrepareLocalDelete(ctx context.Context, selection []LocalDeleteEntry) (*LocalDeletePlan, error) {
+func (m *TransferManager) PrepareLocalDelete(ctx context.Context, selection []LocalDeleteEntry) (plan *LocalDeletePlan, err error) {
+	defer func() { err = labelLocalAccessRefusal(err) }()
 	if m == nil || m.isClosed() {
 		return nil, ErrUnavailable
 	}
@@ -62,7 +64,7 @@ func (m *TransferManager) PrepareLocalDelete(ctx context.Context, selection []Lo
 		return nil, ErrInvalidPath
 	}
 	m.localMutationsMutex.Lock()
-	plan := &LocalDeletePlan{unlock: m.localMutationsMutex.Unlock, directoryChildren: make(map[*os.Root][]fs.FileInfo)}
+	plan = &LocalDeletePlan{unlock: m.localMutationsMutex.Unlock, directoryChildren: make(map[*os.Root][]fs.FileInfo)}
 	if err := plan.collect(ctx, selection); err != nil {
 		plan.Close()
 		return nil, err
@@ -219,18 +221,24 @@ func (p *LocalDeletePlan) verify(ctx context.Context) error {
 		}
 		current, err := target.parent.Lstat(target.name)
 		if err != nil {
-			return ErrConflict
+			return localDeleteVerificationError(err)
 		}
 		if !os.SameFile(current, target.metadata) || metadataRevision(current) != metadataRevision(target.metadata) {
 			return ErrConflict
 		}
 		identity, err := localDeletionIdentity(target.parent, target.name, current)
-		if err != nil || identity != target.identity {
+		if err != nil {
+			return localDeleteVerificationError(err)
+		}
+		if identity != target.identity {
 			return ErrConflict
 		}
 		if target.metadata.Mode()&fs.ModeSymlink != 0 {
 			linkTarget, err := target.parent.Readlink(target.name)
-			if err != nil || linkTarget != target.linkTarget {
+			if err != nil {
+				return localDeleteVerificationError(err)
+			}
+			if linkTarget != target.linkTarget {
 				return ErrConflict
 			}
 		}
@@ -255,7 +263,17 @@ func (p *LocalDeletePlan) verify(ctx context.Context) error {
 	return nil
 }
 
-func (p *LocalDeletePlan) Delete(ctx context.Context, expectedRevision string) error {
+func localDeleteVerificationError(err error) error {
+	// A vanished selection needs a fresh confirmation. OS access failures
+	// retain their cause so the UI can explain permissions on the engine.
+	if errors.Is(err, fs.ErrNotExist) {
+		return ErrConflict
+	}
+	return err
+}
+
+func (p *LocalDeletePlan) Delete(ctx context.Context, expectedRevision string) (err error) {
+	defer func() { err = labelLocalAccessRefusal(err) }()
 	if p.unlock == nil {
 		return ErrUnavailable
 	}

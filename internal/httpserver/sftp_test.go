@@ -55,17 +55,41 @@ func TestTransferErrorsUseFileTransferProblemCodes(t *testing.T) {
 		{err: fmt.Errorf("%w: %w", sshcSFTP.ErrSpoolFull, &os.PathError{Op: "write", Path: "download.part", Err: os.ErrInvalid}), status: http.StatusInsufficientStorage, code: "sftp_spool_full"},
 	}
 	for _, test := range tests {
-		engine := echo.New()
-		engine.GET("/transfer", func(c *echo.Context) error {
-			return sftpProblem(c, test.err)
-		})
-		response := httptest.NewRecorder()
-		engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/transfer", nil))
+		response := serveSFTPProblem(test.err)
 		if response.Code != test.status ||
 			!bytes.Contains(response.Body.Bytes(), []byte(`"code":"`+test.code+`"`)) {
 			t.Errorf("%v = %d: %s, want %d %s", test.err, response.Code, response.Body.String(), test.status, test.code)
 		}
 	}
+}
+
+func TestTheEnginesOwnRefusalIsToldApartFromTheServers(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		code string
+	}{
+		{name: "server", err: &os.PathError{Op: "open", Path: "/srv/report.txt", Err: os.ErrPermission}, code: "sftp_permission_denied"},
+		{name: "local file permissions", err: fmt.Errorf("%w: %w", sshcSFTP.ErrLocalPermissionDenied, os.ErrPermission), code: "sftp_local_permission_denied"},
+		{name: "macOS privacy protection", err: fmt.Errorf("%w: %w", sshcSFTP.ErrLocalPrivacyProtection, os.ErrPermission), code: "sftp_local_privacy_protection"},
+	}
+	for _, test := range tests {
+		response := serveSFTPProblem(test.err)
+		if response.Code != http.StatusForbidden || !bytes.Contains(response.Body.Bytes(), []byte(`"code":"`+test.code+`"`)) {
+			t.Errorf("%s = %d: %s, want 403 %s", test.name, response.Code, response.Body.String(), test.code)
+		}
+	}
+}
+
+// serveSFTPProblem answers one request with the problem sftpProblem makes of err.
+func serveSFTPProblem(err error) *httptest.ResponseRecorder {
+	engine := echo.New()
+	engine.GET("/sftp", func(c *echo.Context) error {
+		return sftpProblem(c, err)
+	})
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/sftp", nil))
+	return response
 }
 
 func TestAnUnusableDownloadSpoolIsLoggedWhenTheTransferManagerStarts(t *testing.T) {

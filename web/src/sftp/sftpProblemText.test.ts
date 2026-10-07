@@ -11,6 +11,12 @@ describe("sftpProblemText", () => {
     expect(sftpProblemText(t, new ApiError("sftp_permission_denied", 403, null))).toBe(en["sftp.problem.permissionDenied"]);
   });
 
+  it("tells the sshc engine's own refusal apart from the host's", () => {
+    expect(sftpProblemText(t, new ApiError("sftp_local_permission_denied", 403, null))).toBe(en["sftp.problem.localPermissionDenied"]);
+    expect(sftpProblemText(t, new ApiError("sftp_local_privacy_protection", 403, null))).toBe(en["sftp.problem.localPrivacyProtection"]);
+    expect(sftpTransferProblemText(t, "sftp_local_privacy_protection")).toBe(en["sftp.problem.localPrivacyProtection"]);
+  });
+
   it("says a code the screen's own transfer threw in words", () => {
     expect(sftpProblemText(t, new Error("sftp_transfer_limit"))).toBe(en["sftp.problem.transferLimit"]);
   });
