@@ -52,5 +52,5 @@ it("does not report no differences when a local comparison fails", async () => {
   render(<SFTPCompareDialog left={{ alias: localHostAlias, path: "/missing" }} right={{ alias: "edge", path: "/srv" }} onDismiss={() => undefined} />);
 
   expect(await screen.findByRole("alert")).toBeVisible();
-  expect(screen.queryByText("No differences")).not.toBeInTheDocument();
+  expect(screen.queryByText("The two directories have matching metadata.")).not.toBeInTheDocument();
 });
