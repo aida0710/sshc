@@ -23,8 +23,16 @@ type LocalRenameRequest struct {
 const localCreatedDirectoryMode fs.FileMode = 0o700
 
 func validLocalMutationName(name string) bool {
-	return ValidLocalChildName(name) && !isLocalTemporaryName(name) &&
-		(runtime.GOOS != "windows" || strings.TrimRight(name, ". ") == name)
+	if !ValidLocalChildName(name) || isLocalTemporaryName(name) {
+		return false
+	}
+	if runtime.GOOS != "windows" {
+		return true
+	}
+	// Windows 11 accepts some device names with extensions. Keep mutation names
+	// portable to Windows versions that still interpret them as devices.
+	base, _, _ := strings.Cut(name, ".")
+	return strings.TrimRight(name, ". ") == name && (base == "" || filepath.IsLocal(strings.TrimRight(base, " ")))
 }
 
 func (m *TransferManager) MkdirLocal(ctx context.Context, request LocalMkdirRequest) (entry Entry, err error) {

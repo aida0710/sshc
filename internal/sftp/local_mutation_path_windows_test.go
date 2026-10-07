@@ -16,9 +16,14 @@ func TestWindowsLocalMutationsRejectDriveRelativeDeviceAndUNCTraversalPaths(t *t
 			t.Errorf("root %q = %v", value, err)
 		}
 	}
-	for _, name := range []string{"CON", "NUL.txt", "COM1", "stream:secret", "folder.", "folder ", ".SSHC-DOWNLOAD-ACTIVE"} {
+	for _, name := range []string{"CON", "NUL.txt", "nul.TXT", "CON .txt", "COM1", "LPT2.log", "stream:secret", "folder.", "folder ", ".SSHC-DOWNLOAD-ACTIVE"} {
 		if validLocalMutationName(name) {
 			t.Errorf("accepted Windows name %q", name)
+		}
+	}
+	for _, name := range []string{"notes.txt", ".profile", "console.txt", "COM10.txt"} {
+		if !validLocalMutationName(name) {
+			t.Errorf("rejected ordinary Windows name %q", name)
 		}
 	}
 }

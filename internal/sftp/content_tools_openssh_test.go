@@ -10,7 +10,7 @@ import (
 
 func TestOpenSSHContentSearchReadsMultipleFilesAndSkipsLinks(t *testing.T) {
 	client := openOpenSSHTestClient(t)
-	directory := t.TempDir()
+	directory := newOpenSSHFixtureDirectory(t)
 	for name, contents := range map[string]string{"first.txt": "header\nneedle here\n", "second.txt": "needle again\n"} {
 		if err := os.WriteFile(filepath.Join(directory, name), []byte(contents), 0o600); err != nil {
 			t.Fatal(err)
@@ -38,7 +38,7 @@ func TestOpenSSHContentSearchReadsMultipleFilesAndSkipsLinks(t *testing.T) {
 
 func TestOpenSSHHashesDetectDifferentContentsDespiteMatchingMetadata(t *testing.T) {
 	client := openOpenSSHTestClient(t)
-	directory := t.TempDir()
+	directory := newOpenSSHFixtureDirectory(t)
 	modified := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	for name, contents := range map[string]string{"left": "left value", "right": "right text"} {
 		root := filepath.Join(directory, name)
