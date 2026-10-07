@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -81,6 +82,10 @@ func TestWebUpdateRestartUsesTheManagedServiceOrStopsOnlyTheConfirmedForegroundE
 				response.WriteHeader(http.StatusAccepted)
 			}))
 			defer server.Close()
+			engineURL, err := url.Parse(server.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
 			stateDirectory := t.TempDir()
 			writeTestHandoff(t, stateDirectory, server.URL)
 			job := selfupdate.Job{OwnerPID: testHandoff("").PID, Plan: selfupdate.Plan{Installation: selfupdate.Installation{Executable: "/fixture/updated/sshc"}}}
@@ -101,7 +106,7 @@ func TestWebUpdateRestartUsesTheManagedServiceOrStopsOnlyTheConfirmedForegroundE
 				},
 				startProcess: func(executable string, arguments, environment []string) error {
 					starts++
-					if executable != job.Plan.Installation.Executable || !reflect.DeepEqual(arguments, []string{"engine"}) {
+					if executable != job.Plan.Installation.Executable || !reflect.DeepEqual(arguments, []string{"engine", "--port", engineURL.Port()}) {
 						t.Errorf("unexpected argv = %s %v", executable, arguments)
 					}
 					for _, entry := range environment {
@@ -111,7 +116,7 @@ func TestWebUpdateRestartUsesTheManagedServiceOrStopsOnlyTheConfirmedForegroundE
 					}
 					return nil
 				}}
-			err := restartWebUpdateEngine(context.Background(), run)
+			err = restartWebUpdateEngine(context.Background(), run)
 			switch scenario {
 			case "managed":
 				if err != nil || starts != 0 || stopped.Load() != 0 || serviceCalls != 1 {
