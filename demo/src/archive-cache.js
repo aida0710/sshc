@@ -8,6 +8,13 @@ const contentTypes = {
   wasm: "application/wasm",
 };
 
+// A name such as "https:..." resolves outside the release folder, so every file must stay under it.
+export function archiveEntryURL(path, baseURL) {
+  const url = new URL(path, baseURL);
+  if (!url.href.startsWith(baseURL.href)) throw new Error("Archive entry escapes its folder");
+  return url;
+}
+
 export async function populateArchiveCache({ archive, archiveURL, baseURL, cache, onProgress }) {
   const compressed = await downloadArchive(archiveURL, archive.bytes, onProgress);
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", compressed));
@@ -22,7 +29,7 @@ export async function populateArchiveCache({ archive, archiveURL, baseURL, cache
   for (const request of await cache.keys()) await cache.delete(request);
   for (const [index, file] of files.entries()) {
     const extension = file.path.split(".").at(-1);
-    await cache.put(new URL(file.path, baseURL), new Response(file.bytes, {
+    await cache.put(archiveEntryURL(file.path, baseURL), new Response(file.bytes, {
       headers: { "Content-Type": contentTypes[extension] ?? "application/octet-stream" },
     }));
     onProgress({ state: "caching", fraction: 1, completedFiles: index + 1, totalFiles: files.length });
