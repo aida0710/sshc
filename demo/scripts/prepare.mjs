@@ -14,7 +14,11 @@ for (const filename of ["seabios.bin", "vgabios.bin", "kernel.bin", "client.cpio
 }
 assetSizes["v86.wasm"] = (await stat(resolve(demoDirectory, "node_modules/v86/build/v86.wasm"))).size;
 const uiArchive = await packageUI({ sourceDirectory: resolve(demoDirectory, "images/ui"), outputDirectory });
+const { version } = JSON.parse(await readFile(resolve(demoDirectory, "images/build-version.json"), "utf8"));
 await writeFile(resolve(outputDirectory, "config.json"), JSON.stringify({
+  version,
+  entryURL: "/index.html",
+  releaseProxyURL: process.env.SSHC_DEMO_RELEASE_PROXY_URL ?? "https://sshc-demo-releases.aida0710.workers.dev/",
   imageBaseURL: process.env.SSHC_DEMO_IMAGES_URL ?? "./images/",
   assetSizes,
   uiArchive,
@@ -22,7 +26,7 @@ await writeFile(resolve(outputDirectory, "config.json"), JSON.stringify({
 await cp(resolve(demoDirectory, "src"), outputDirectory, { recursive: true });
 const indexPath = resolve(outputDirectory, "index.html");
 const index = await readFile(indexPath, "utf8");
-await writeFile(indexPath, index.replace("{{updatedAt}}", new Date().toISOString()));
+await writeFile(indexPath, index.replace("{{updatedAt}}", new Date().toISOString()).replace("{{version}}", version));
 await cp(resolve(demoDirectory, "images"), resolve(outputDirectory, "images"), {
   recursive: true,
   filter: (path) => !/\/(?:rootfs|ui)(?:\/|$)|\/(?:sshc|sshc-demo-bridge)$/.test(path),

@@ -152,7 +152,7 @@ func TestReleasePublishWaitsForEveryPlatform(t *testing.T) {
 	if !present {
 		t.Fatal("the release has no stage-release job")
 	}
-	for _, required := range []string{"macos", "linux", "windows", "android"} {
+	for _, required := range []string{"macos", "linux", "windows", "android", "browser-demo"} {
 		if !slices.Contains(stage.Needs, required) {
 			t.Errorf("stage-release does not wait for %s; an incomplete draft could reach the tap", required)
 		}
@@ -196,8 +196,9 @@ func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
 		"sshc-linux-amd64", "sshc-linux-arm64",
 		"sshc-windows-amd64.exe", "sshc-windows-arm64.exe",
 		"sshc-android-${RELEASE_TAG}.apk",
+		"sshc-demo-${RELEASE_TAG}.tar.gz", "sshc-demo-${RELEASE_TAG}.json",
 		`[ "$count" -eq 1 ]`,
-		`[ "$count" -eq 7 ]`,
+		`[ "$count" -eq 9 ]`,
 		`sha256sum sshc-* install.ps1`,
 		`dist/sshc-* dist/install.ps1 dist/checksums.txt`,
 		`--verify-tag`,

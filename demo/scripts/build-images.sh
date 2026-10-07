@@ -27,7 +27,12 @@ fetch_verified "$bios_base/seabios.bin" seabios.bin 73e3f359102e3a9982c35fce98eb
 fetch_verified "$bios_base/vgabios.bin" vgabios.bin a4bc0d80cc3ca028c73dafa8fee396b8d054ce87ebd8abfbd31b06b437607880
 
 cd -- "$repository_directory"
-GOOS=linux GOARCH=386 GO386=sse2 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$images_directory/sshc" ./cmd/sshc
+version=${VERSION:-$(git describe --tags --exact-match 2>/dev/null || printf 'dev')}
+if ! [[ "$version" =~ ^(dev|v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?)$ ]]; then
+    printf 'Invalid demo version\n' >&2
+    exit 1
+fi
+GOOS=linux GOARCH=386 GO386=sse2 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=$version" -o "$images_directory/sshc" ./cmd/sshc
 GOOS=linux GOARCH=386 GO386=sse2 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$images_directory/sshc-demo-bridge" ./demo/guestbridge
 
 image_tag="sshc-browser-demo:$(git rev-parse --short HEAD)"
@@ -35,11 +40,12 @@ docker build --platform linux/386 --tag "$image_tag" --file demo/guest/Dockerfil
 container_id=$(docker create --platform linux/386 "$image_tag")
 docker export "$container_id" | tar -xf - -C "$rootfs_directory"
 cp -- "$images_directory/sshc" "$images_directory/sshc-demo-bridge" "$rootfs_directory/usr/local/bin/"
-python3 - "$rootfs_directory" "$images_directory" <<'PY'
+python3 - "$rootfs_directory" "$images_directory" "$version" <<'PY'
 from pathlib import Path
 import json
 import sys
-rootfs, images = map(Path, sys.argv[1:])
+rootfs, images = map(Path, sys.argv[1:3])
+version = sys.argv[3]
 packages = []
 for package in (rootfs / 'lib/apk/db/installed').read_text().split('\n\n'):
     fields = dict(line.split(':', 1) for line in package.splitlines() if ':' in line)
@@ -47,6 +53,7 @@ for package in (rootfs / 'lib/apk/db/installed').read_text().split('\n\n'):
         packages.append({'name': fields['P'], 'version': fields['V'], 'license': fields.get('L', ''),
                          'origin': fields.get('o', ''), 'sourceCommit': fields.get('c', '')})
 (images / 'alpine-packages.json').write_text(json.dumps(packages, indent=2) + '\n')
+(images / 'build-version.json').write_text(json.dumps({'version': version}) + '\n')
 PY
 
 # Exporting as an unprivileged user changes host ownership. Linux and OpenSSH need root-owned image files.
