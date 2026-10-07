@@ -31,6 +31,7 @@ try {
   page.on("pageerror", (error) => browserErrors.push(error.name));
   await page.goto(demoURL);
   await page.getByRole("button", { name: "起動する", exact: true }).waitFor();
+  const confirmationURL = page.url();
   assert.match(await page.locator("#updated-at").innerText(), /\d{4}\/\d{2}\/\d{2}.*JST/);
   assert.ok(Number.isFinite(await page.locator("#updated-at").evaluate((time) => Date.parse(time.dateTime))));
   assert.equal(await page.evaluate(() => Boolean(window.sshcDemo)), false);
@@ -148,7 +149,13 @@ try {
   assert.equal(await page.evaluate(() => Boolean(window.sshcDemo)), false);
   console.log("PASS: 次回は展開済みUIを再利用し、アーカイブを取り直さない");
   const cacheName = await page.evaluate(() => `sshc-demo-ui:${new URL('./ui/', location.href).href}`);
-  await page.getByRole("button", { name: "キャッシュを削除して再読み込み", exact: true }).click();
+  // R2's root entry redirects again; observing a hidden button can still refer to the departing page.
+  await Promise.all([
+    page.waitForEvent("framenavigated", { predicate: (frame) => frame === page.mainFrame() }),
+    page.getByRole("button", { name: "キャッシュを削除して再読み込み", exact: true }).click(),
+  ]);
+  await page.waitForURL(confirmationURL);
+  await page.waitForLoadState("domcontentloaded");
   await page.getByRole("button", { name: "起動する", exact: true }).waitFor();
   await page.locator("#clear-ui-cache").waitFor({ state: "hidden" });
   assert.equal(await page.evaluate((name) => caches.has(name), cacheName), false);
