@@ -30,6 +30,9 @@ const (
 	ActionRevealVPNSecrets  = "vpn_profile.reveal"
 	ActionPurgeTrashEntry   = "trash.purge"
 	ActionSFTPDelete        = "sftp.delete"
+	ActionSFTPCreateSymlink = "sftp.symlink.create"
+	ActionSFTPSymlink       = "sftp.symlink"
+	ActionSFTPOwnership     = "sftp.ownership"
 	ActionSFTPChmod         = "sftp.chmod"
 	ActionSnippetExecute    = "snippet.execute"
 	ActionTerminalCommand   = "terminal.command.broadcast"
@@ -57,6 +60,9 @@ var knownActionKinds = map[string]bool{
 	ActionPurgeTrashEntry:   true,
 	ActionSFTPDelete:        true,
 	ActionSFTPChmod:         true,
+	ActionSFTPSymlink:       true,
+	ActionSFTPCreateSymlink: true,
+	ActionSFTPOwnership:     true,
 	ActionSnippetExecute:    true,
 	ActionTerminalCommand:   true,
 	ActionSyncForcePush:     true,

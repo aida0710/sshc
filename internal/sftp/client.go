@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"context"
+	"errors"
 	"io"
 	"io/fs"
 	"time"
@@ -89,3 +90,38 @@ func (c *Client) RemoveDirectory(path string) error { return c.client.RemoveDire
 
 var _ Remote = (*Client)(nil)
 var _ RangeRemote = (*Client)(nil)
+var _ SymlinkRemote = (*Client)(nil)
+var _ AtomicSymlinkRemote = (*Client)(nil)
+var _ OwnershipRemote = (*Client)(nil)
+var _ SpaceRemote = (*Client)(nil)
+
+func (c *Client) Symlink(target, linkPath string) error {
+	return capabilityError(c.client.Symlink(target, linkPath))
+}
+
+func (c *Client) ReplaceSymlink(temporary, linkPath string) error {
+	if _, supported := c.client.HasExtension("posix-rename@openssh.com"); !supported {
+		return ErrUnsupportedOperation
+	}
+	return capabilityError(c.client.PosixRename(temporary, linkPath))
+}
+
+func (c *Client) Chown(path string, uid, gid uint32) error {
+	return capabilityError(c.client.Chown(path, int(uid), int(gid)))
+}
+
+func (c *Client) StatVFS(path string) (*pkgsftp.StatVFS, error) {
+	if _, supported := c.client.HasExtension("statvfs@openssh.com"); !supported {
+		return nil, ErrUnsupportedOperation
+	}
+	stats, err := c.client.StatVFS(path)
+	return stats, capabilityError(err)
+}
+
+func capabilityError(err error) error {
+	var status *pkgsftp.StatusError
+	if errors.Is(err, pkgsftp.ErrSSHFxOpUnsupported) || (errors.As(err, &status) && status.FxCode() == pkgsftp.ErrSSHFxOpUnsupported) {
+		return ErrUnsupportedOperation
+	}
+	return err
+}

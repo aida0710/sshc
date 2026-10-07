@@ -45,6 +45,7 @@ func TestHandwrittenHTTPWireTypesMatchOpenAPIRecursively(t *testing.T) {
 		"SFTPSearchResult":                sftpSearchResponse{},
 		"SFTPSaveTextRequest":             sftpSaveTextRequest{},
 		"SFTPRenameRequest":               sftpRenameRequest{},
+		"SFTPOwnershipRequest":            sftpOwnershipRequest{},
 		"SFTPChmodRequest":                sftpChmodRequest{},
 		"SFTPTransfer":                    SFTPTransfer{},
 		"SFTPDownloadPartProgress":        SFTPDownloadPartProgress{},

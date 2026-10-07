@@ -66,6 +66,12 @@ The pane action menu can open an SSH Terminal at the displayed directory. In the
 
 On desktop a narrow pane keeps every column and scrolls the table sideways rather than dropping columns. Phones emphasize the filename, place permissions, size and modified time on one metadata line, and show one horizontally scrollable tab strip and the left pane only; tab dragging, the right pane's connection and comparison stay inactive. Returning to desktop brings the right pane and its tabs back.
 
+The remote creation menu offers **Create symbolic link**. Enter a name and a relative or absolute target, including a target that does not yet exist. Existing entries are never overwritten. **Change link target** in the details dialog replaces only the link itself and leaves the target contents unchanged. Servers without safe link replacement support refuse this change.
+
+The listing and details show owner UID and group GID when supplied by the server. **Change owner and group** in the details dialog accepts numeric UID/GID values from 0 to 4294967295 for regular files and directories. Account names and recursive ownership changes are not supported. Missing attributes, unsupported operations, and insufficient permissions are reported. Ownership changes through symbolic links are refused. If the entry changes during confirmation, refresh the listing and reopen the dialog.
+
+Below the remote listing, the available disk space for the authenticated user and total capacity are shown as exact byte counts. A server without capacity reporting support still provides a usable directory listing.
+
 ## Transfer Manager
 
 The Transfer Manager is docked below the file list. Files and folders share one queue, with two concurrent transfers by default and a configurable limit from one to eight. Its compact state shows the active count, aggregate progress, and speed; expand it for per-file progress, speed, remaining time, and controls. Its action menu can pause, resume or cancel all transfers, and failed files in a batch can be retried independently.

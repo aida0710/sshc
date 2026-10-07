@@ -18,7 +18,8 @@ describe("generated OpenAPI runtime validators", () => {
     // short identifiers made deep paths impossible to delete from the UI.
     const deep = "edge:/" + "a".repeat(4000);
     expect(() => validateAPIRequest("POST", "/api/v1/actions", { kind: "sftp.delete", target: deep })).not.toThrow();
-    expect(() => validateAPIRequest("POST", "/api/v1/actions", { kind: "sftp.delete", target: "x".repeat(4353) })).toThrow("invalid_response");
+    expect(() => validateAPIRequest("POST", "/api/v1/actions", { kind: "sftp.symlink", target: `${deep}:${"a".repeat(22000)}` })).not.toThrow();
+    expect(() => validateAPIRequest("POST", "/api/v1/actions", { kind: "sftp.delete", target: "x".repeat(49153) })).toThrow("invalid_response");
     expect(() => validateAPIRequest("POST", "/api/v1/terminal/sessions", { kind: "shell", cols: 65616, rows: 24 })).toThrow("invalid_response");
   });
 

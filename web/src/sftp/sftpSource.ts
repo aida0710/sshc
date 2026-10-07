@@ -20,6 +20,9 @@ export type SFTPCapabilities = {
   rename: boolean;
   moveEntries: boolean;
   chmod: boolean;
+  symlink: boolean;
+  ownership: boolean;
+  space: boolean;
   delete: boolean;
   search: boolean;
   details: boolean;
@@ -63,6 +66,7 @@ export function remoteJoin(parent: string, name: string): string {
 }
 
 const remoteCapabilities: SFTPCapabilities = {
+  symlink: true, ownership: true, space: true,
   connect: true, edit: true, createEntries: true, createDirectory: true, rename: true, moveEntries: true, chmod: true, delete: true, search: true,
   details: true, browserUpload: true, download: true, dragOut: true, terminal: true,
 };
@@ -112,6 +116,7 @@ export function localJoin(parent: string, name: string): string {
 // The engine's disk offers no editing and takes no files from the browser,
 // but its rows can be dragged onto a host: that drop is the engine-side put.
 const localCapabilities: SFTPCapabilities = {
+  symlink: false, ownership: false, space: false,
   connect: false, edit: false, createEntries: false, createDirectory: true, rename: true, moveEntries: false, chmod: false, delete: true, search: false,
   details: false, browserUpload: false, download: false, dragOut: true, terminal: false,
 };

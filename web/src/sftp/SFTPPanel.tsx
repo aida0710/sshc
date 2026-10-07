@@ -15,7 +15,7 @@ import { formatBytes } from "../ui/format";
 import { entryKind, movable } from "./entryKind";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
 import { SFTPEntryList } from "./SFTPEntryList";
-import { sortEntries, type SFTPSort, type SFTPSortState } from "./sftpEntrySort";
+import { sftpSortColumns, sortEntries, type SFTPSort, type SFTPSortState } from "./sftpEntrySort";
 import { sortColumnLabelKeys } from "./sftpMessageKeys";
 import { useSFTPEntryList } from "./useSFTPEntryList";
 import { SFTPTextEditor } from "./SFTPTextEditor";
@@ -29,6 +29,9 @@ import { SFTPEntryActionDialogs } from "./SFTPEntryActionDialogs";
 import { useSFTPEntryActions } from "./useSFTPEntryActions";
 import { useSFTPSearch } from "./useSFTPSearch";
 import { useSFTPTransfers, type SFTPCounterpart } from "./useSFTPTransfers";
+import { useSFTPMetadataActions } from "./useSFTPMetadataActions";
+import { SFTPMetadataActionDialog } from "./SFTPMetadataActionDialog";
+import { SFTPFilesystemSpace } from "./SFTPFilesystemSpace";
 
 const noHosts: HostEntry[] = [];
 
@@ -226,14 +229,15 @@ export function SFTPPanel({
     onQueueOpen: () => transfers.openQueue(),
     onInteract: () => setMenu(null),
   });
+  const metadataActions = useSFTPMetadataActions(browser, search.refreshAfterChange);
   const transfers = useSFTPTransfers({
     browser,
     selectedEntries,
-    busy: browser.busy || actions.acting || editor.busy,
+    busy: browser.busy || actions.acting || metadataActions.acting || editor.busy,
     counterpart,
     onQueueOpen,
   });
-  const busy = browser.busy || actions.acting || editor.busy || transfers.queuing;
+  const busy = browser.busy || actions.acting || metadataActions.acting || editor.busy || transfers.queuing;
   // A terminal link's file, once its directory is listed, waiting for a render in which the pane shows that host and is idle.
   const [linkedEntry, setLinkedEntry] = useState<{ alias: string; action: "edit" | "download"; entry: RemoteEntry } | null>(null);
 
@@ -389,6 +393,7 @@ export function SFTPPanel({
       ...(can?.createEntries ? [
         { key: "newFile", label: t("sftp.newFile"), disabled: busy || !connected, run: () => actions.ask({ kind: "createFile" }) },
       ] : []),
+      ...(can?.symlink ? [{ key: "newSymlink", label: t("sftp.newSymlink"), disabled: busy || !connected, run: () => { setMenu(null); metadataActions.ask({ kind: "createSymlink" }); } }] : []),
       ...(can?.browserUpload ? [
         { key: "upload", label: t("sftp.upload"), disabled: busy || !connected, run: () => { setMenu(null); transfers.chooseFiles(); } },
         { key: "uploadFolder", label: t("sftp.uploadFolder"), disabled: busy || !connected, run: () => { setMenu(null); transfers.chooseFolder(); } },
@@ -398,7 +403,7 @@ export function SFTPPanel({
       { key: "root", label: t("sftp.rootDirectory"), disabled: busy || dirty || !connected || browser.atRoot, run: () => { setMenu(null); void browser.goRoot(); } },
       ...(can?.terminal && onOpenTerminal !== undefined ? [{ key: "terminal", label: t("sftp.openTerminalHere"), disabled: busy || dirty || !connected, run: () => { setMenu(null); void onOpenTerminal(alias, path); } }] : []),
       { key: "selectAll", label: t("sftp.selectAll"), disabled: busy || displayedEntries.length === 0, run: list.selectAllDisplayed },
-      ...(["name", "type", "size", "modified"] as const).map((key) => ({
+      ...sftpSortColumns.filter((key) => can?.ownership || (key !== "uid" && key !== "gid")).map((key) => ({
         key: `sort-${key}`,
         label: `${t(sortColumnLabelKeys[key])}${t(sort.key === key && sort.direction === "ascending" ? "table.sortDescending" : "table.sortAscending")}`,
         run: () => { changeSort(key); setMenu(null); },
@@ -587,6 +592,7 @@ export function SFTPPanel({
                   <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "mkdir" })} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFolder")}</button>
                   {can?.createEntries ? <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "createFile" })} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFile")}</button> : null}
                 </> : null}
+                {can?.symlink ? <MenuActionList actions={folderMenuActions().filter((action) => action.key === "newSymlink")} /> : null}
                 {can?.browserUpload ? <>
                   <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFiles(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.upload")}</button>
                   <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFolder(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.uploadFolder")}</button>
@@ -664,6 +670,7 @@ export function SFTPPanel({
                 sort={sort}
                 onSort={changeSort}
                 mobileInteraction={mobileInteraction}
+                showOwnership={can.ownership}
                 busy={busy}
                 locked={dirty}
                 parentRowVisible={parentRowVisible}
@@ -673,6 +680,7 @@ export function SFTPPanel({
               />
             )}
           </div>
+          {can?.space && connected ? <SFTPFilesystemSpace alias={alias} path={path} refreshKey={entries} /> : null}
           {showTransfers ? <TransferManagerList openRequest={transfers.openQueueRequest} /> : null}
         </div>
       </div>
@@ -716,9 +724,12 @@ export function SFTPPanel({
           onDownload={(targets) => { setDetails(null); void transfers.transferOut(targets); }}
           canDownload={transfers.sendable}
           onRename={(entry) => { setDetails(null); actions.ask({ kind: "rename", entry }); }}
+          onChangeLinkTarget={can?.symlink ? (entry) => { setDetails(null); metadataActions.ask({ kind: "changeSymlink", entry }); } : undefined}
+          onChangeOwnership={can?.ownership ? (entry) => { setDetails(null); metadataActions.ask({ kind: "ownership", entry }); } : undefined}
         />
       )}
 
+      <SFTPMetadataActionDialog actions={metadataActions} returnFocusRef={activeRow} />
       <SFTPEntryActionDialogs actions={actions} currentPath={path} returnFocusRef={activeRow} />
     </section>
   );
