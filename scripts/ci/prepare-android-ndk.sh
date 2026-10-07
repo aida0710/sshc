@@ -17,6 +17,11 @@ ndk_home="$sdk_root/ndk/$version"
 
 if [ ! -d "$ndk_home" ]; then
   sdkmanager=$(command -v sdkmanager || true)
+  # Runner images may install command-line tools without adding them to PATH.
+  for candidate in "$sdk_root/cmdline-tools/latest/bin/sdkmanager" "$sdk_root"/cmdline-tools/*/bin/sdkmanager; do
+    [ -z "$sdkmanager" ] || break
+    if [ -x "$candidate" ]; then sdkmanager=$candidate; fi
+  done
   if [ -z "$sdkmanager" ]; then
     echo "Android NDK $version is absent and sdkmanager is unavailable" >&2
     exit 1
