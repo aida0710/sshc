@@ -326,6 +326,7 @@ export const ja = {
   "sftp.openTerminalHere": "ここでターミナルを開く",
   "sftp.compare.action": "比較",
   "sftp.compare.heading": "ディレクトリを比較",
+  "sftp.compare.readOnlyDescription": "サイズ、更新日時、権限、種類を比較します。ファイルは変更しません。",
   "sftp.compare.description": "選択した差分を左右どちらかへコピーします。コピー先だけにある項目は削除しません。",
   "sftp.compare.loading": "両方のディレクトリを比較しています…",
   "sftp.compare.noChanges": "2つのディレクトリのメタデータに差分はありません。",
