@@ -87,6 +87,10 @@ def main():
     Path(options.manifest).write_bytes(manifest_bytes)
     client.put_object(Bucket=bucket, Key=prefix + "manifest.json", Body=manifest_bytes,
         ContentType="application/json", CacheControl="public, max-age=31536000, immutable")
+    # Worker registration bypasses Service Worker caches, so these files also live at the public root.
+    for filename in ["demo-release-worker.js", "ui-cache-addresses.js"]:
+        client.put_object(Bucket=bucket, Key=filename, Body=(directory / filename).read_bytes(),
+            ContentType="text/javascript; charset=utf-8", CacheControl="no-store")
     # Update the entry only after every asset has arrived. R2 has no directory index routing.
     destination = f"./{prefix}index.html"
     entry = f'''<!doctype html><html lang="ja"><head><meta charset="utf-8">

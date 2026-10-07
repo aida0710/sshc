@@ -18,9 +18,11 @@
       <p class="detail" id="memory-detail"></p>
       <p class="confirm-question" data-message="confirm"></p>
       <button id="start" class="primary" data-message="start"></button>
+      <p id="release-status" role="status" class="detail"></p>
     </section>
     <section id="demo" hidden>
       <div id="status" role="status" aria-live="polite"></div>
+      <div id="release-progress" hidden><label id="release-progress-label" for="release-download"></label><progress id="release-download" max="1"></progress></div>
       <nav><button id="web-tab" aria-pressed="true" data-message="webTab"></button><button id="cli-tab" aria-pressed="false" data-message="cliTab"></button></nav>
       <div id="web-panel">
         <section id="startup" aria-labelledby="startup-title" hidden>
@@ -40,6 +42,7 @@
     </section>
   </main>
   <footer>
+    <span><span data-message="versionLabel"></span> <span id="demo-version">{{version}}</span></span>
     <span><span data-message="updatedAtLabel"></span> <time id="updated-at" datetime="{{updatedAt}}"></time></span>
     <button id="clear-ui-cache" data-message="clearUICache" hidden></button>
     <span id="cache-error" role="alert" hidden></span>

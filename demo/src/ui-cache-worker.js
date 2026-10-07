@@ -7,6 +7,6 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== baseURL.origin || !url.pathname.startsWith(baseURL.pathname)) return;
   // UI files exist only in the archive. API/VM requests never enter this cache.
-  event.respondWith(caches.open(uiCacheName(baseURL)).then(async (cache) =>
-    await cache.match(event.request, { ignoreSearch: true }) ?? new Response("Missing UI asset", { status: 404 })));
+  event.respondWith(caches.match(event.request, { cacheName: uiCacheName(baseURL), ignoreSearch: true }).then((response) =>
+    response ?? new Response("Missing UI asset", { status: 404 })));
 });

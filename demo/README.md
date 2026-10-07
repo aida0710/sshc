@@ -2,19 +2,19 @@
 
 公開URLを開き、構成を確認して［起動する］を選ぶと、v86上でLinuxを3台起動する。
 sshcエンジンとCLI用に192 MiB、SSH/SFTP接続先のdemo-a・demo-b用に各128 MiBを割り当てる。
-初回ダウンロードは約40 MB。VM以外にもブラウザ・エミュレータがメモリを使う。
+初回ダウンロードは約45 MB。VM以外にもブラウザ・エミュレータがメモリを使う。
 起動中はファイルの読み込み割合、3台それぞれの状態、経過時間を表示する。
 読み込み・Linux起動・エンジン・Web UIの準備が実際に完了したイベントで表示を進める。
-画面下部の更新日時は配信物の生成時に自動で入り、JSTで表示する。
+画面下部に実際に動くsshcのバージョンと、配信物の生成日時（JST）を表示する。
 
 VM間のEthernet通信は同じページ内で転送する。HTTPとWebSocketはデモ専用のシリアル通信を経由し、
 ゲスト内の127.0.0.1で動く通常のsshcエンジンへ届く。外部のSSHサーバやWebSocketリレーは不要。
 Web UIは製品と同じコードを使い、配信したコピーにだけ通信ブリッジを追加する。
 UIのファイルは`ui.tar.gz`にまとめ、起動を選んだ後にブラウザで展開してCacheStorageに保存する。
 Service Workerが元のURLで返すため、動的import・フォント・エディタのWorkerも製品と同じ構成で動く。
-キャッシュするのは配信用UIだけ。VMの操作内容や認証トークンは保存しない。
+配信用のデモ一式とUIをキャッシュする。VMの操作内容や認証トークンは保存しない。
 UIキャッシュがある時は画面下部に削除ボタンを表示する。
-選ぶと表示中の版のUIキャッシュを削除し、公開版の入口に戻る。VMは起動前の確認からやり直す。
+選ぶと表示中の版のUIとデモ一式のキャッシュを削除し、公開版の入口に戻る。VMは起動前の確認からやり直す。
 
 接続鍵はこの公開デモ専用の使い捨て鍵。VMイメージに含まれ、秘密ではない。
 操作したファイルや設定はVMのメモリ内にあり、リセットまたはページを閉じると消える。
@@ -29,7 +29,7 @@ Alpine Linuxの32bitイメージからrootfsを作り、Goのlinux/386ビルド�
 コンテナはイメージ作成にだけ使い、公開デモの実行時は不要。
 
 ```sh
-bash demo/scripts/build-images.sh
+VERSION=v0.44.0 bash demo/scripts/build-images.sh
 npm ci --prefix web
 npm run build --prefix web -- --base=./ --outDir ../demo/images/ui
 npm ci --prefix demo
@@ -96,3 +96,40 @@ SSHC_R2_CREDENTIALS_FILE=/安全な場所/r2-credentials.json npm run deploy --p
 リリース名はJSTの実行日時から生成する。`-- --release <名前> --manifest <保存先>`で指定もできる。
 既存のリリース名は上書きできない。全ファイルのサイズ・SHA-256メタデータを検査してから入口を切り替える。
 manifestの既定保存先は`demo/artifacts/r2-manifest-<名前>.json`。
+
+## GitHubのlatestに追従する
+
+入口と予備のデモはR2へ一度配信し、GitHubのReleaseにデモ一式を追加する。
+Release workflowの`browser-demo` jobがタグの版を埋め込んだVMとUIを作り、実ブラウザで
+SSH・SFTPを検証してから`sshc-demo-<tag>.tar.gz`と`sshc-demo-<tag>.json`を公開する。
+この2ファイルもchecksums.txtとattestationの対象になる。
+
+ブラウザは入口を開くたびに、読取専用Workerの`latest.json`を取得する。
+WorkerはGitHubのlatest redirectを読み、デモのmanifestを返す。最新の確認は最大5分キャッシュする。
+［起動する］を押すと、その版のtar.gzをWorker経由で取得してSHA-256を検査し、展開して保存する。
+ブラウザ内のService Workerが`/github-releases/<tag>/`のファイルを返し、同じ版のコードとVMを起動する。
+展開済みなら再ダウンロードせず、最新取得に失敗した場合はR2の配信済みデモを使う。
+VMイメージを含むReleaseの束では、`SSHC_DEMO_IMAGES_URL`は設定しない。
+
+Workerは指定リポジトリのデモだけをGETで返す。任意URLの中継、VM実行、書き込み、定期実行は行わない。
+GitHub/R2の書き込みキーやKVは不要。ブラウザからの直接取得はGitHub ReleaseのCORS制約で失敗するため、
+この読取用Workerを置く。
+
+```sh
+# 権限600のGit外JSON: {"accountID":"...","apiToken":"..."}
+# トークンの権限は対象アカウントのWorkers Scripts: 編集。
+SSHC_CF_CREDENTIALS_FILE=/path/to/cloudflare.json python3 demo/scripts/deploy-release-proxy.py
+# 出力されたURLが既定値と異なる場合は、ビルド時に指定する。
+SSHC_DEMO_RELEASE_PROXY_URL=https://sshc-demo-releases.aida0710.workers.dev/ npm run build --prefix demo
+npm run package:release --prefix demo -- ../dist
+```
+
+Worker公開後、通常のR2配信スクリプトで入口を更新する。
+Worker登録に必要な`demo-release-worker.js`と`ui-cache-addresses.js`もルートへ保存する。
+以後は通常のGitHub Releaseだけでデモが更新され、リリースごとのR2アップロードは要らない。
+配信形式やルートService Workerの仕様を変える場合は、Worker・R2の入口も更新する。
+
+Workers Freeの上限はアカウント全体で1日10万リクエスト、1回CPU 10ms。
+通常は1回の閲覧でlatest確認1回と初回のアーカイブ取得1回がWorkerを呼ぶ。
+展開とVMの実行は利用者のブラウザで行う。現在の上限は
+[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)で確認する。
