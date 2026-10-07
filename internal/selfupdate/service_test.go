@@ -69,6 +69,7 @@ func TestUpdateWaitsForResponseAndOnlyOneInstallerRuns(t *testing.T) {
 	}
 	service.ResponseSent(job.ID, nil)
 	service.ResponseSent(job.ID, nil)
+	service.ResponseSent(job.ID, errors.New("late duplicate response failed"))
 	select {
 	case <-installed:
 	case <-time.After(time.Second):

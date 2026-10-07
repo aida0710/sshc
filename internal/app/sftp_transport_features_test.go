@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,7 @@ import (
 // The fixture crosses multiple data packets to catch framing errors during transfer.
 const transportFixtureRepetitions = 20_000
 
-func TestPooledSSHSubsystemPreservesContentsAndSupportsRemoteMetadataOperations(t *testing.T) {
+func TestPooledSSHSubsystemPreservesContentsAndRefusesOwnershipWithoutNoFollowExtension(t *testing.T) {
 	server := startSFTPSubsystemServer(t)
 	pool := sshcSFTP.NewRemotePool(func(context.Context, string) (sshcSFTP.RemoteTarget, error) {
 		return sshcSFTP.RemoteTarget{Identity: "fixture", Open: func(context.Context) (sshcSFTP.Remote, error) {
@@ -52,8 +53,8 @@ func TestPooledSSHSubsystemPreservesContentsAndSupportsRemoteMetadataOperations(
 		_, err = service.ChangeOwnership(t.Context(), "fixture", sshcSFTP.OwnershipChange{
 			Path: entry.Path, UID: entry.Ownership.UID, GID: entry.Ownership.GID, ExpectedRevision: entry.Revision,
 		})
-		if err != nil {
-			t.Fatalf("ownership operation lost through the pool: %v", err)
+		if !errors.Is(err, sshcSFTP.ErrUnsupportedOperation) {
+			t.Fatalf("server without no-follow extension accepted ownership change: %v", err)
 		}
 	}
 	linkPath := remotePathOf(filepath.Join(directory, "current"))
