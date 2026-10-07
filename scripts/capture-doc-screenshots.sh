@@ -19,9 +19,10 @@ SSHC_VISUAL_DIR="$visual_dir" SSHC_VISUAL_VERSION="$visual_version" npm run e2e 
   e2e/workspace-drag.spec.ts \
   e2e/narrow.spec.ts \
   e2e/terminal-features.spec.ts \
+  e2e/vpn-screen.spec.ts \
   --workers=1 \
   --output "$visual_dir/test-results" \
-  --grep 'draws one separator above the desktop navigation version|draws one separator above the version in the mobile drawer|separates classification, filtered results, and connection detail without losing management controls|adds Local and SOCKS forwarding from the dedicated advanced view|gives one named secret to two hosts and writes neither name into the file|keeps a chunked SFTP upload visible while another section is open|shows push, preview, apply, persisted success, and a later failure as distinct results|docks connected terminals into a live workspace|broadcasts one command to two live local shells|keeps terminal actions compact and exposes terminal settings|renders the documented non-interactive CLI example'
+  --grep 'draws one separator above the desktop navigation version|draws one separator above the version in the mobile drawer|separates classification, filtered results, and connection detail without losing management controls|adds Local and SOCKS forwarding from the dedicated advanced view|gives one named secret to two hosts and writes neither name into the file|keeps a chunked SFTP upload visible while another section is open|shows push, preview, apply, persisted success, and a later failure as distinct results|docks connected terminals into a live workspace|broadcasts one command to two live local shells|keeps terminal actions compact and exposes terminal settings|renders the documented non-interactive CLI example|lists saved one-time passwords with their current codes in both languages|lists each VPN profile with its protocol, route state, and connections in both languages|moves from the compact connection browser to detail at 360 pixels|keeps every section inside 360 pixels'
 
 install_image() {
   source_name=$1
@@ -54,3 +55,9 @@ install_image transfer-manager-en.png pages/public/images/transfer-manager-en.pn
 install_image transfer-manager-ja.png pages/public/images/transfer-manager-ja.png
 install_image transfer-manager-en.png pages/public/images/transfer-manager.png
 install_image sshc-v0.16.0-live-workspace-desktop.png pages/public/images/workspace-desktop.png
+install_image otp-desktop-en.png pages/public/images/otp-desktop-en.png
+install_image otp-desktop-ja.png pages/public/images/otp-desktop-ja.png
+install_image vpn-desktop-en.png pages/public/images/vpn-desktop-en.png
+install_image vpn-desktop-ja.png pages/public/images/vpn-desktop-ja.png
+node "$repo_dir/scripts/compose-doc-android-card.mjs" "$visual_dir" "$repo_dir/pages/public/images/android-features.png"
+printf '%s\n' pages/public/images/android-features.png
