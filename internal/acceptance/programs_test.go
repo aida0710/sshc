@@ -44,6 +44,9 @@ var startsAProcess = []string{
 // 一覧を持つ形にしてあるのは、増えたときに気づくためである。「OpenSSH が
 // 無いこと」を検査すると、OpenSSH でない何かが増えても緑のままになる。
 var allowedToStartPrograms = []string{
+	// ブラウザデモのVM内で、同梱したsshc openを固定argvで実行する。
+	// 通常のengineから一度だけのbootstrapを取得し、製品の認証を通してUIを開く。
+	"demo/guestbridge/vault_linux.go",
 	// アクセス URLをブラウザへ渡す。出力を取る実行ではない。起動したら手を離すので
 	// インターフェース（出力を集めて返す道）を通す必要が無く、渡すのは自分で組み立てた
 	// loopback の URL ひとつだけである。開けなくても失敗ではない。URL は
