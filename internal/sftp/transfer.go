@@ -16,9 +16,11 @@ var sourceFingerprintPattern = regexp.MustCompile(`^tree-sha256:[0-9a-f]{64}$`)
 var uploadPartNamePattern = regexp.MustCompile(`^\..+\.sshc-upload-[A-Za-z0-9_-]{8,128}\.part$`)
 var editorTemporaryNamePattern = regexp.MustCompile(`^\..+\.sshc-[0-9a-f]{24}\.tmp$`)
 
-// TransferManager は、engine が抱える転送の全体である。3 つの関心ごとに 1 つずつ
+// TransferManager は、engine が抱える転送の全体である。4 つの関心ごとに 1 つずつ
 // lock を持ち、field はその lock の下に並べる。
 //
+//   - ローカル変更（localMutationsMutex）: mkdir／rename／delete と get／put の受付。
+//     local_mutate.go／local_delete.go／local_mutation_transfers.go。
 //   - データプレーン（mutex）: 対象ごとの operation lock、開いた remote、
 //     prepared download の spool。upload_plane.go／download_plane.go／spool.go。
 //     同じ再開用の part file への操作は operation lock で直列にし、別のファイルへの
@@ -34,6 +36,10 @@ var editorTemporaryNamePattern = regexp.MustCompile(`^\..+\.sshc-[0-9a-f]{24}\.t
 // record を更新する。両方の lock を取る唯一の層である。
 type TransferManager struct {
 	Service *Service
+
+	// Local mutations and get/put admission share this lock: a new transfer
+	// cannot acquire a path after a mutation checked the queue.
+	localMutationsMutex sync.Mutex
 
 	// データプレーン。mutex が守る。
 	mutex   sync.Mutex
@@ -76,7 +82,10 @@ type TransferManager struct {
 	// remote worker。remoteJobsMutex が守る。
 	remoteJobsMutex sync.Mutex
 	remoteRuns      map[string]*remoteRun
-	remoteWorkers   sync.WaitGroup
+	// A cancelled job can leave the ledger before its worker returns. Keep
+	// each get/put path protected until that worker actually finishes.
+	localTransferRuns map[*remoteRun]string
+	remoteWorkers     sync.WaitGroup
 
 	// 転送キューの設定の更新。settingsMutex が一つずつ通す。
 	settingsMutex sync.Mutex
@@ -132,7 +141,7 @@ func NewTransferManager(service *Service, downloadSpoolRoot string) *TransferMan
 		Service: service, locks: make(map[string]*transferLock), remotes: make(map[string]Remote),
 		idleRemotes: make(map[string]*idleTransferRemote), after: time.AfterFunc,
 		downloads: make(map[string]preparedDownloadCache), spool: newDownloadSpool(downloadSpoolRoot),
-		remoteRuns: make(map[string]*remoteRun),
+		remoteRuns: make(map[string]*remoteRun), localTransferRuns: make(map[*remoteRun]string),
 	}
 	manager.ConfigureJobs(DefaultTransferConcurrency, time.Now)
 	return manager
