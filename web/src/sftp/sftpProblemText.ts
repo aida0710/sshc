@@ -63,6 +63,13 @@ export function sftpProblemText(t: Translate, error: unknown, fallback: MessageK
   return describeVPNProblem(t, error) ?? codeText(t, sftpProblemCode(error), { messages: sftpProblemMessages, fallback });
 }
 
+export function localMutationProblemText(t: Translate, error: unknown, fallback: MessageKey = "sftp.problem.failed"): string {
+  const code = sftpProblemCode(error);
+  if (code === "sftp_conflict") return t("sftp.problem.localMutationConflict");
+  if (code === "sftp_permission_denied") return t("sftp.problem.localMutationPermissionDenied");
+  return sftpProblemText(t, error, fallback);
+}
+
 // sftpTransferProblemText は、転送一覧が記録した problem code を1文にする。
 export function sftpTransferProblemText(t: Translate, code: string): string {
   return codeText(t, code, { messages: transferProblemMessages, fallback: "sftp.problem.failed" });

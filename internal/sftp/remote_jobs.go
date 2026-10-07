@@ -75,6 +75,7 @@ func (m *TransferManager) finishRemoteWorker(id string, run *remoteRun) {
 	if m.remoteRuns[id] == run {
 		delete(m.remoteRuns, id)
 	}
+	delete(m.localTransferRuns, run)
 	m.remoteJobsMutex.Unlock()
 }
 
@@ -91,6 +92,9 @@ func (m *TransferManager) runRemoteJob(run *remoteRun, id string) {
 	ctx := run.ctx
 	job, started := m.startRemoteJobWhenSlotFree(run, id)
 	if !started {
+		return
+	}
+	if err := m.protectLocalTransferRun(run, job); err != nil {
 		return
 	}
 	// Planning and the operation itself can walk a large tree for longer than

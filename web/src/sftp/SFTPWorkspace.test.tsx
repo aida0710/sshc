@@ -535,7 +535,7 @@ describe("SFTP tabs", () => {
     // The same toolbar and filter, without the operations the engine has no API for.
     expect(within(local).getByRole("button", { name: "Refresh directory" })).toBeInTheDocument();
     expect(within(local).getByRole("searchbox", { name: "Filter entries" })).toBeInTheDocument();
-    expect(within(local).queryByRole("button", { name: "Create or upload" })).not.toBeInTheDocument();
+    expect(within(local).getByRole("button", { name: "Create or upload" })).toBeInTheDocument();
     expect(within(local).queryByRole("button", { name: "Search everything under this directory" })).not.toBeInTheDocument();
     expect(within(local).queryByRole("button", { name: "Open Terminal here" })).not.toBeInTheDocument();
     fireEvent.contextMenu(within(local).getByRole("button", { name: "notes.txt" }));
@@ -543,7 +543,9 @@ describe("SFTP tabs", () => {
     const items = within(contextMenu).getAllByRole("menuitem").map((item) => item.textContent);
     expect(items).toContain("Upload selection");
     expect(items).toContain("Copy full path");
-    for (const missing of ["Delete", "Rename", "Details", "Edit file", "Download"]) expect(items).not.toContain(missing);
+    expect(items).toContain("Delete");
+    expect(items).toContain("Rename");
+    for (const missing of ["New empty file", "Move to folder", "Duplicate", "Details", "Edit file", "Download"]) expect(items).not.toContain(missing);
   });
 
   it("moves rows dropped on another directory of the same host and ignores rows dropped where they came from", async () => {

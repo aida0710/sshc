@@ -363,7 +363,7 @@ export function SFTPPanel({
     if (can?.createEntries && selectedEntry !== null && (selectedEntry.type === "file" || selectedEntry.type === "directory")) {
       items.push({ key: "duplicate", label: t("sftp.duplicate"), disabled: busy, run: () => actions.ask({ kind: "duplicate", entry: selectedEntry }) });
     }
-    if (can?.rename && selectedEntries.length > 0 && selectedEntries.every((entry) => entry.type === "file" || entry.type === "directory")) {
+    if (can?.moveEntries && selectedEntries.length > 0 && selectedEntries.every((entry) => entry.type === "file" || entry.type === "directory")) {
       items.push({ key: "moveTo", label: t("sftp.moveTo"), disabled: busy, run: () => actions.ask({ kind: "moveTo", entries: selectedEntries }) });
     }
     items.push({ key: "copyName", label: t(selectedEntries.length === 1 ? "sftp.copyName" : "sftp.copyNames"), run: () => void actions.copySelected("name") });
@@ -383,8 +383,10 @@ export function SFTPPanel({
   function folderMenuActions(): SFTPMenuAction[] {
     return [
       { key: "copyCurrentPath", label: t("sftp.copyPath"), disabled: !connected, run: () => { setMenu(null); void actions.copyCurrentPath(); } },
-      ...(can?.createEntries ? [
+      ...(can?.createDirectory ? [
         { key: "newFolder", label: t("sftp.newFolder"), disabled: busy || !connected, run: () => actions.ask({ kind: "mkdir" }) },
+      ] : []),
+      ...(can?.createEntries ? [
         { key: "newFile", label: t("sftp.newFile"), disabled: busy || !connected, run: () => actions.ask({ kind: "createFile" }) },
       ] : []),
       ...(can?.browserUpload ? [
@@ -529,7 +531,7 @@ export function SFTPPanel({
               </>
             ) : (
             <>
-            {can?.createEntries || can?.browserUpload ? (
+            {can?.createDirectory || can?.browserUpload ? (
               <button
                 type="button"
                 aria-label={t("sftp.createActions")}
@@ -581,9 +583,9 @@ export function SFTPPanel({
             ) : null}
             {!mobileInteraction && menu?.kind === "create" ? (
               <div ref={menuPanel} role="menu" aria-label={t("sftp.createActions")} className="absolute left-2 top-full z-20 mt-1 w-52 rounded-lg border border-control-line bg-card p-1 shadow-lg">
-                {can?.createEntries ? <>
+                {can?.createDirectory ? <>
                   <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "mkdir" })} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFolder")}</button>
-                  <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "createFile" })} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFile")}</button>
+                  {can?.createEntries ? <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "createFile" })} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFile")}</button> : null}
                 </> : null}
                 {can?.browserUpload ? <>
                   <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFiles(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.upload")}</button>

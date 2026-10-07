@@ -1,5 +1,6 @@
 import { sftpApi, type RemoteEntry } from "./api";
 import { localHostAlias } from "./localHost";
+import { localMutationApi } from "./localMutationApi";
 
 // A source is somewhere a pane can browse: an SSH host over SFTP, or the
 // filesystem of the machine the sshc engine runs on. The pane never asks which
@@ -15,7 +16,9 @@ export type SFTPCapabilities = {
   connect: boolean;
   edit: boolean;
   createEntries: boolean;
+  createDirectory: boolean;
   rename: boolean;
+  moveEntries: boolean;
   chmod: boolean;
   delete: boolean;
   search: boolean;
@@ -33,6 +36,10 @@ export type SFTPSource = {
   local: boolean;
   can: SFTPCapabilities;
   list(path: string): Promise<SFTPListing>;
+  mkdir(directory: string, name: string): Promise<RemoteEntry>;
+  rename(entry: RemoteEntry, name: string): Promise<RemoteEntry>;
+  // Immediate filesystem deletion, instead of a remote transfer job.
+  removeEntries?: (entries: RemoteEntry[]) => Promise<void>;
   parentOf(path: string): string;
   join(directory: string, name: string): string;
   isRoot(path: string): boolean;
@@ -56,7 +63,7 @@ export function remoteJoin(parent: string, name: string): string {
 }
 
 const remoteCapabilities: SFTPCapabilities = {
-  connect: true, edit: true, createEntries: true, rename: true, chmod: true, delete: true, search: true,
+  connect: true, edit: true, createEntries: true, createDirectory: true, rename: true, moveEntries: true, chmod: true, delete: true, search: true,
   details: true, browserUpload: true, download: true, dragOut: true, terminal: true,
 };
 
@@ -66,6 +73,8 @@ export function remoteSource(alias: string): SFTPSource {
     local: false,
     can: remoteCapabilities,
     list: (path) => sftpApi.list(alias, path),
+    mkdir: (directory, name) => sftpApi.mkdir(alias, remoteJoin(directory, name)),
+    rename: (entry, name) => sftpApi.rename(alias, entry.path, remoteJoin(remoteParentOf(entry.path), name)),
     parentOf: remoteParentOf,
     join: remoteJoin,
     isRoot: (path) => path === "/",
@@ -103,7 +112,7 @@ export function localJoin(parent: string, name: string): string {
 // The engine's disk offers no editing and takes no files from the browser,
 // but its rows can be dragged onto a host: that drop is the engine-side put.
 const localCapabilities: SFTPCapabilities = {
-  connect: false, edit: false, createEntries: false, rename: false, chmod: false, delete: false, search: false,
+  connect: false, edit: false, createEntries: false, createDirectory: true, rename: true, moveEntries: false, chmod: false, delete: true, search: false,
   details: false, browserUpload: false, download: false, dragOut: true, terminal: false,
 };
 
@@ -112,6 +121,9 @@ export const localSource: SFTPSource = {
   local: true,
   can: localCapabilities,
   list: (path) => sftpApi.listLocal(path),
+  mkdir: localMutationApi.mkdir,
+  rename: localMutationApi.rename,
+  removeEntries: localMutationApi.remove,
   parentOf: localParentOf,
   join: localJoin,
   isRoot: (path) => path === localRootOf(path),
