@@ -40,6 +40,16 @@ func TestNoCompiledSourceOutlivesItsGoCompanion(t *testing.T) {
 		if !compiled[strings.ToLower(filepath.Ext(entry.Name()))] {
 			return nil
 		}
+		relative, _ := filepath.Rel(root, path)
+		if filepath.ToSlash(relative) == "demo/guest/seed-random.c" {
+			// 仮想CPUにRNGがないため、ゲストのDocker buildが単独Cとしてコンパイルする。
+			// cgoとは別のビルド元が残っていることを確かめる。
+			builder, err := os.ReadFile(filepath.Join(root, "demo", "guest", "Dockerfile"))
+			if err != nil || !strings.Contains(string(builder), "RUN cc ") || !strings.Contains(string(builder), "/seed-random.c -o /seed-random") {
+				t.Error("the standalone demo entropy source has no Docker compiler step")
+			}
+			return nil
+		}
 		checked++
 		// 同じディレクトリに `import "C"` する Go が一つでもあれば、連れは居る。
 		siblings, err := os.ReadDir(filepath.Dir(path))
@@ -58,7 +68,6 @@ func TestNoCompiledSourceOutlivesItsGoCompanion(t *testing.T) {
 				return nil
 			}
 		}
-		relative, _ := filepath.Rel(root, path)
 		orphans = append(orphans, filepath.ToSlash(relative))
 		return nil
 	})
