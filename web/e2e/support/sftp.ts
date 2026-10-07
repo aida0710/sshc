@@ -9,6 +9,19 @@ export async function connectSFTPHost(page: Page, alias: string, pane: Locator =
   await pane.getByRole("button", { name: /^(Connect|接続)$/ }).click();
 }
 
+export async function openLocalSFTPDirectory({ page, pane, directory }: {
+  page: Page;
+  pane: Locator;
+  directory: string;
+}): Promise<void> {
+  await pane.locator("button[data-value]:visible").click();
+  await page.getByRole("dialog").getByText("Local", { exact: true }).click();
+  await pane.getByRole("button", { name: "Edit local path", exact: true }).click();
+  const pathInput = pane.getByRole("textbox", { name: "Engine filesystem path", exact: true });
+  await pathInput.fill(directory);
+  await pathInput.press("Enter");
+}
+
 // Opens the second SFTP pane the way a user does: a blank tab is added to the
 // left pane and dragged onto the right half of that pane, which moves the tab
 // into a new pane on the right. `newTabLabel` is the "+" button's name in the
