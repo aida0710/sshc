@@ -2167,6 +2167,67 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/directories:
+    post:
+      operationId: createLocalSFTPDirectory
+      description: Creates one child directory on the engine filesystem, without replacing existing entries.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPLocalMkdirRequest" } } } }
+      responses:
+        "201": { description: Engine-local directory created, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/rename:
+    post:
+      operationId: renameLocalSFTPEntry
+      description: Renames one engine-local entry within its pinned parent directory. Requires the listing revision and never replaces an existing destination. Symlinks themselves are renamed.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPLocalRenameRequest" } } } }
+      responses:
+        "200": { description: Engine-local entry renamed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/delete-plan:
+    post:
+      operationId: planLocalSFTPDelete
+      description: Inspects all selected trees without following symlinks, checking revisions, home/root protection, reserved temporary names, transfers, and the shared delete traversal limits. Issues a single-use sftp.delete token bound to the complete plan. Does not delete entries.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPLocalDeleteSelection" } } } }
+      responses:
+        "200": { description: Inspected engine-local selection and confirmation token, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPLocalDeletePlan" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/delete:
+    post:
+      operationId: deleteLocalSFTPEntries
+      description: Re-inspects the entire selection and consumes the plan token before deleting children then parents. A revision mismatch or traversal-limit refusal removes nothing. Cancellation or filesystem errors after removal begins can leave a partial result; reload before retrying.
+      parameters:
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 1 } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPLocalDeleteRequest" } } } }
+      responses:
+        "204": { description: Selected engine-local entries deleted }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/local/entries:
     get:
       operationId: listLocalSFTPEntries
@@ -5245,6 +5306,50 @@ components:
       properties:
         path: { type: string }
         entries: { type: array, items: { $ref: "#/components/schemas/SFTPEntry" } }
+    SFTPLocalMkdirRequest:
+      type: object
+      additionalProperties: false
+      required: [directory, name]
+      properties:
+        directory: { type: string, minLength: 1, maxLength: 4096 }
+        name: { type: string, minLength: 1, maxLength: 1024 }
+    SFTPLocalRenameRequest:
+      type: object
+      additionalProperties: false
+      required: [path, name, expectedRevision]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        name: { type: string, minLength: 1, maxLength: 1024 }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPLocalDeleteEntry:
+      type: object
+      additionalProperties: false
+      required: [path, expectedRevision]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPLocalDeleteSelection:
+      type: object
+      additionalProperties: false
+      required: [entries]
+      properties:
+        entries: { type: array, minItems: 1, maxItems: 200, items: { $ref: "#/components/schemas/SFTPLocalDeleteEntry" } }
+    SFTPLocalDeleteRequest:
+      type: object
+      additionalProperties: false
+      required: [entries, expectedRevision]
+      properties:
+        entries: { type: array, minItems: 1, maxItems: 200, items: { $ref: "#/components/schemas/SFTPLocalDeleteEntry" } }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPLocalDeletePlan:
+      type: object
+      additionalProperties: false
+      required: [revision, items, actionToken, actionExpiresAt]
+      properties:
+        revision: { type: string, minLength: 1 }
+        items: { type: integer, format: int64, minimum: 1 }
+        actionToken: { type: string, minLength: 1 }
+        actionExpiresAt: { type: string, format: date-time }
     SFTPLocalListing:
       type: object
       additionalProperties: false
