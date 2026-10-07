@@ -222,6 +222,19 @@ describe("SFTP tabs", () => {
       .toHaveAttribute("data-value", localHostAlias);
   });
 
+  it("enables directory comparison between a local tab and a remote tab", async () => {
+    seedStoredPanes([
+      { tabs: [{ alias: localHostAlias, path: "/home/alice" }] },
+      { tabs: [{ alias: "edge", path: "/srv" }] },
+    ]);
+    api.listLocal.mockResolvedValue({ path: "/home/alice", home: "/home/alice", entries: [] });
+    render(<SFTPWorkspace aliases={["edge"]} />);
+
+    await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("/home/alice"));
+    expect(screen.getByRole("button", { name: "Compare directories" })).toBeEnabled();
+    expect(api.list).not.toHaveBeenCalled();
+  });
+
   it("uses the same back, forward, home, root and refresh controls for Local", async () => {
     api.listLocal.mockImplementation(async (requestedPath: string) => ({
       path: requestedPath || "/home/edge", home: "/home/edge", entries: [],
