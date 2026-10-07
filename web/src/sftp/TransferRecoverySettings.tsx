@@ -1,4 +1,3 @@
-import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { useTranslate } from "../i18n/context";
 import type { TransferSettings } from "./api";
 import { TransferIntegerSetting } from "./TransferIntegerSetting";
@@ -31,9 +30,5 @@ export function TransferRecoverySettings({ speedLimitBytesPerSecond, autoReconne
     <TransferIntegerSetting label={t("sftp.manager.maxReconnectAttempts")} value={maxReconnectAttempts}
       min={0} max={maximumReconnectAttempts}
       onCommit={(value) => onCommit({ maxReconnectAttempts: value })} />
-    <details className="basis-full text-ink-muted">
-      <DisclosureSummary>{t("sftp.manager.recoveryHelp")}</DisclosureSummary>
-      <p>{t("sftp.manager.recoveryHint")}</p>
-    </details>
   </div>;
 }

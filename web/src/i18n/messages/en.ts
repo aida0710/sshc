@@ -740,8 +740,6 @@ export const en = {
   "sftp.manager.speedLimitHint": "0 is unlimited. Shared by all transfers and connections.",
   "sftp.manager.autoReconnect": "Recover after connection loss",
   "sftp.manager.maxReconnectAttempts": "Maximum reconnect attempts",
-  "sftp.manager.recoveryHelp": "Speed limit and recovery coverage",
-  "sftp.manager.recoveryHint": "Single server files resume after checking contents and destination. Browser downloads resume from saved checkpoints; interrupted SSH preparation and ZIP downloads restart from the beginning. Folder server jobs, moves, deletes, authentication refusals, conflicts and uncertain completion are not retried automatically. Browser recovery needs this page and a connection to the engine. Verification counts toward the speed limit, as do both remote-copy directions and both download preparation and delivery. Incoming sequential HTTP upload requests themselves are not limited.",
   "sftp.manager.status.reconnecting": "Waiting to reconnect",
   "sftp.manager.reconnectAttempt": "Reconnect {attempt}/{maximum} (pause to stop)",
   "sftp.manager.settings": "Transfer settings",

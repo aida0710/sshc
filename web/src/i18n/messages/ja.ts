@@ -745,8 +745,6 @@ export const ja = {
   "sftp.manager.speedLimitHint": "0は無制限。全転送・接続の合計。",
   "sftp.manager.autoReconnect": "通信断後に自動復旧",
   "sftp.manager.maxReconnectAttempts": "再接続の上限回数",
-  "sftp.manager.recoveryHelp": "速度上限と復旧の対象",
-  "sftp.manager.recoveryHint": "sshcエンジン側の単一ファイルは内容と転送先を確認して続きを転送します。ブラウザのダウンロードは保存済みの位置から、SSHからの取得中に切れた場合とZIPは先頭から再実行します。フォルダのserver job、移動・削除、認証拒否、競合、完了が確認できない操作は自動再実行しません。ブラウザの復旧にはこのページとsshcエンジンへの接続が必要です。検証に使う通信も速度上限に含み、remote copyの受信・送信、ダウンロードの取得・配信を合算します。順次HTTPアップロードの受信は制限しません。",
   "sftp.manager.status.reconnecting": "再接続待ち",
   "sftp.manager.reconnectAttempt": "再接続 {attempt}/{maximum}（一時停止で中止）",
   "sftp.manager.settings": "転送設定",
