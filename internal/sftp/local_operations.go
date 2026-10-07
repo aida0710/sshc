@@ -150,7 +150,9 @@ func ListLocal(value string) (_ LocalListing, err error) {
 	}
 	entries := make([]Entry, 0, len(children))
 	for _, child := range children {
-		childInfo, err := child.Info()
+		// Windows directory listings can cache metadata that differs from Lstat.
+		// Use fresh metadata so listed revisions agree with local mutations.
+		childInfo, err := os.Lstat(filepath.Join(directory, child.Name()))
 		if err != nil {
 			// The entry was removed after the folder was read.
 			continue

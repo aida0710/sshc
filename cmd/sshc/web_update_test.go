@@ -168,7 +168,12 @@ func TestWebUpdateInspectionRequiresAMatchingReceiptAndWritableDirectory(t *test
 	if runtime.GOOS == "windows" || runtime.GOOS == "android" {
 		t.Skip("platform has no automatic installer")
 	}
-	directory := t.TempDir()
+	installationDirectory := t.TempDir()
+	directory := filepath.Join(t.TempDir(), "installation")
+	// A linked parent reproduces macOS temporary paths such as /var -> /private/var.
+	if err := os.Symlink(installationDirectory, directory); err != nil {
+		t.Fatal(err)
+	}
 	executable := filepath.Join(directory, "sshc")
 	contents := []byte("fixture executable")
 	if err := os.WriteFile(executable, contents, 0o755); err != nil {
@@ -181,8 +186,12 @@ func TestWebUpdateInspectionRequiresAMatchingReceiptAndWritableDirectory(t *test
 	}
 	dependencies := defaultUpdateDependencies()
 	dependencies.executable = func() (string, error) { return executable, nil }
+	resolvedExecutable, err := filepath.EvalSymlinks(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
 	inspected, err := inspectWebInstallation(context.Background(), dependencies)
-	if err != nil || inspected.Manager != "install.sh" || inspected.Executable != executable {
+	if err != nil || inspected.Manager != "install.sh" || inspected.Executable != resolvedExecutable {
 		t.Fatalf("inspection = %+v, %v", inspected, err)
 	}
 	entries, _ := os.ReadDir(directory)
