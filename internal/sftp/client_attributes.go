@@ -14,8 +14,10 @@ const metadataFlagsAttribute = "sshc.metadata-flags"
 const (
 	sftpAttributesPacket      = 105
 	sftpNamesPacket           = 104
+	sftpSizeAttributes        = 1
 	sftpOwnerAttributes       = 2
 	sftpPermissionsAttributes = 4
+	sftpTimeAttributes        = 8
 	sftpExtendedAttributes    = uint32(1 << 31)
 	// Bound every response allocation while allowing large directory metadata replies.
 	maxSFTPPacketBytes = 16 << 20

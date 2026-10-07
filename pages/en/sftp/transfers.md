@@ -88,7 +88,7 @@ Enable **Recover after connection loss** and set **Maximum reconnect attempts** 
 
 Authentication and host-key refusals, permission failures and revision conflicts are not retried. A lost acknowledgement of publication rename also stops recovery: the destination may already be complete. Inspect the destination before cancelling. Paused server file jobs retain their parts; cancellation or removal cleans up only the unpublished part. Failed cleanup keeps its queue record visible.
 
-Resumable server jobs require regular files: the source, destination and part cannot themselves be symlinks. Contents are streamed through fixed-size buffers for verification, which can take time and uses the same speed budget. Browser recovery also needs an open page with access to the engine API. If that API is unreachable or its job state cannot be confirmed, automatic recovery stops.
+Files with missing type, size or modification-time attributes refuse recovery with an error. Resumable server jobs require regular files: the source, destination and part cannot themselves be symlinks. Contents are streamed through fixed-size buffers for verification, which can take time and uses the same speed budget. Browser recovery also needs an open page with access to the engine API. If that API is unreachable or its job state cannot be confirmed, automatic recovery stops.
 
 An engine shutdown leaves a server job that was waiting to reconnect paused after the next startup. A manual resume verifies its saved content and continues from that checkpoint.
 

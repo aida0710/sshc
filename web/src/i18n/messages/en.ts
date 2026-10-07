@@ -110,7 +110,7 @@ export const en = {
   "sftp.filesystemSpace": "Available: {available} bytes / Total: {total} bytes",
   "sftp.spaceUnsupported": "This server does not support filesystem capacity reporting.",
   "sftp.spaceUnavailable": "Filesystem capacity is unavailable.",
-  "sftp.problem.metadataUnavailable": "The server did not provide the entry type, so this change cannot be applied.",
+  "sftp.problem.metadataUnavailable": "The server did not provide the file attributes needed for this operation, so it cannot continue.",
   "sftp.problem.unsupportedOperation": "This server does not support this operation.",
   "sftp.problem.confirmationChanged": "The confirmed entry changed or the confirmation expired. Reopen it from a refreshed listing.",
   "sftp.heading": "Remote files",

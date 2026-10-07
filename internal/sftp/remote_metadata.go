@@ -42,3 +42,17 @@ func metadataTypeKnown(info fs.FileInfo) bool {
 	flags, retained := metadataFlagsFrom(info)
 	return !retained || flags&sftpPermissionsAttributes != 0
 }
+
+// Bounded reads and recovery checkpoints require an observed size and mtime.
+// Missing SFTP attributes must not synthesize an empty, unchanged file.
+func metadataContentKnown(info fs.FileInfo) bool {
+	if info == nil {
+		return false
+	}
+	if _, sftpMetadata := info.Sys().(*pkgsftp.FileStat); !sftpMetadata {
+		return true
+	}
+	flags, retained := metadataFlagsFrom(info)
+	const requiredContentAttributes = sftpSizeAttributes | sftpPermissionsAttributes | sftpTimeAttributes
+	return retained && flags&requiredContentAttributes == requiredContentAttributes
+}

@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { expect, openApplication, openSection, test } from "./support/environment";
 
 test("saves the aggregate speed limit and bounded recovery settings across a reload", async ({ page, installation }) => {
@@ -16,8 +17,9 @@ test("saves the aggregate speed limit and bounded recovery settings across a rel
 
   const recovery = page.getByRole("checkbox", { name: "Recover after connection loss", exact: true });
   const recoverySaved = page.waitForResponse((response) => response.url().endsWith("/api/v1/sftp/transfers/settings") && response.request().method() === "PUT");
-  await recovery.check();
+  await recovery.click();
   expect((await recoverySaved).status()).toBe(200);
+  await expect(recovery).toBeChecked();
   const attempts = page.getByRole("spinbutton", { name: "Maximum reconnect attempts", exact: true });
   await expect(attempts).toHaveValue("3");
   const attemptsSaved = page.waitForResponse((response) => response.url().endsWith("/api/v1/sftp/transfers/settings") && response.request().method() === "PUT");
@@ -37,4 +39,5 @@ test("saves the aggregate speed limit and bounded recovery settings across a rel
   await expect(speed).toHaveValue("128");
   await expect(recovery).toBeChecked();
   await expect(attempts).toHaveValue("2");
+  if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: join(process.env.SSHC_VISUAL_DIR, "transfer-recovery-settings-en.png"), fullPage: true });
 });
