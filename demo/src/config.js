@@ -5,6 +5,11 @@ export const machineDefinitions = [
   { role: "demo-b", label: "demo-b", purpose: "serverPurpose", memoryMiB: 128, image: "server.cpio.gz" },
 ];
 
+// Each file counts once: VMs that share a boot file or image read the browser's cached copy.
+export function bundleDownloadBytes({ assetSizes, uiArchive }) {
+  return Object.values(assetSizes).reduce((sum, bytes) => sum + bytes, 0) + (uiArchive?.bytes ?? 0);
+}
+
 export async function loadDemoConfiguration() {
   const response = await fetch(new URL("./config.json", window.location.href));
   if (!response.ok) throw new Error("Demo configuration is unavailable");

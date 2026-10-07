@@ -14,6 +14,11 @@ export function consumeReleaseConsent(version) {
   return !!releaseBaseURL(new URL(location.href)) && consent === version;
 }
 
+// The entry page always hands over to the GitHub copy; a release page moves only to another version.
+export function shouldOpenRelease(manifest, version) {
+  return !!manifest && (manifest.version !== version || !releaseBaseURL(new URL(location.href)));
+}
+
 export async function fetchLatestRelease(proxyURL) {
   if (!proxyURL) return null;
   const url = new URL(proxyURL);
