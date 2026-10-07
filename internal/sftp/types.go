@@ -19,16 +19,21 @@ const MaxEditableFileBytes = 2 << 20
 const MaxPreviewFileBytes = 8 << 20
 
 var (
-	ErrUnavailable    = errors.New("sftp service is unavailable")
-	ErrInvalidAlias   = errors.New("ssh alias is required")
-	ErrInvalidPath    = errors.New("remote path must be an absolute POSIX path")
-	ErrRootOperation  = errors.New("operation on the remote root is not allowed")
-	ErrNotRegularFile = errors.New("remote path is not a regular file")
-	ErrNotDirectory   = errors.New("remote path is not a directory")
-	ErrTextTooLarge   = errors.New("remote file is too large to edit")
-	ErrNotUTF8        = errors.New("remote file is not UTF-8 text")
-	ErrConflict       = errors.New("remote file changed since it was read")
-	ErrAlreadyExists  = errors.New("remote path already exists")
+	ErrUnsupportedOperation = errors.New("SFTP server does not support this operation")
+	ErrMetadataUnavailable  = errors.New("SFTP server did not provide the entry type")
+	ErrOwnershipUnavailable = errors.New("SFTP server did not provide UID/GID")
+	ErrInvalidSpace         = errors.New("SFTP server returned invalid filesystem capacity")
+	ErrNotSymlink           = errors.New("remote path is not a symbolic link")
+	ErrUnavailable          = errors.New("sftp service is unavailable")
+	ErrInvalidAlias         = errors.New("ssh alias is required")
+	ErrInvalidPath          = errors.New("remote path must be an absolute POSIX path")
+	ErrRootOperation        = errors.New("operation on the remote root is not allowed")
+	ErrNotRegularFile       = errors.New("remote path is not a regular file")
+	ErrNotDirectory         = errors.New("remote path is not a directory")
+	ErrTextTooLarge         = errors.New("remote file is too large to edit")
+	ErrNotUTF8              = errors.New("remote file is not UTF-8 text")
+	ErrConflict             = errors.New("remote file changed since it was read")
+	ErrAlreadyExists        = errors.New("remote path already exists")
 	// ErrNameCollision is a target entry that the same transfer already wrote
 	// under a name differing only by case or Unicode normalization.
 	ErrNameCollision    = errors.New("target resolves two source names to one entry")
@@ -66,6 +71,12 @@ const (
 	EntryOther     EntryType = "other"
 )
 
+// Ownership is available only when the metadata source explicitly supplied both IDs.
+type Ownership struct {
+	UID uint32
+	GID uint32
+}
+
 // Entry は、file browser が表示するひとつのリモート項目である。
 // Revision は metadata revision であり、upload の競合検査に使える。
 type Entry struct {
@@ -76,6 +87,7 @@ type Entry struct {
 	Mode       fs.FileMode
 	ModifiedAt time.Time
 	Revision   string
+	Ownership  *Ownership
 	// For a symlink only: the target as the server reports it, and the type
 	// of the entry the chain ends at. TargetType stays empty when the target
 	// cannot be read. Size and ModifiedAt are the target's when it is a file;

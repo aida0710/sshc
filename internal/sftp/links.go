@@ -99,6 +99,7 @@ func describeLinks(remote Remote, entries []Entry) {
 			defer func() { <-slots }()
 			if target, err := remote.ReadLink(entry.Path); err == nil {
 				entry.LinkTarget = target
+				entry.Revision = symlinkRevision(entry.Revision, target)
 			}
 			_, info, err := followLink(remote, entry.Path)
 			if err != nil {

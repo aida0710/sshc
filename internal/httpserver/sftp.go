@@ -47,9 +47,14 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.DELETE("/api/v1/sftp/:alias/uploads/:id", handlers.CancelUpload)
 	engine.PATCH("/api/v1/sftp/:alias/entry", handlers.Rename)
 	engine.PATCH("/api/v1/sftp/:alias/mode", handlers.Chmod)
+	engine.POST("/api/v1/sftp/:alias/symlink", handlers.CreateSymlink)
+	engine.PATCH("/api/v1/sftp/:alias/symlink", handlers.ChangeSymlink)
+	engine.PATCH("/api/v1/sftp/:alias/ownership", handlers.ChangeOwnership)
+	engine.GET("/api/v1/sftp/:alias/space", handlers.FilesystemSpace)
 }
 
 func addSFTPActions(registry actionRegistry, service *sshcSFTP.Service) {
+	addSFTPMetadataActions(registry, service)
 	registry[session.ActionSFTPDelete] = actionKind{
 		evidence: func(ctx context.Context, target string) (string, error) {
 			alias, remotePath, ok := strings.Cut(target, ":")

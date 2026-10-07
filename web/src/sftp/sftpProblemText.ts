@@ -8,6 +8,12 @@ import { vpnRefusalMessages } from "../vpn/vpnRefusals";
 // SFTP の失敗の code（engine の internal/httpserver/sftp.go の sftpProblem と転送の
 // problem、画面の転送が自分で投げる code）の言い方。
 const sftpProblemMessages: CodeMessages = {
+  sftp_unsupported_operation: "sftp.problem.unsupportedOperation",
+  sftp_metadata_unavailable: "sftp.problem.metadataUnavailable",
+  sftp_ownership_unavailable: "sftp.ownershipUnavailable",
+  sftp_invalid_space: "sftp.spaceUnavailable",
+  action_token_invalid: "sftp.problem.confirmationChanged",
+  action_token_expired: "sftp.problem.confirmationChanged",
   sftp_failed: "sftp.problem.failed",
   sftp_not_found: "sftp.problem.notFound",
   sftp_permission_denied: "sftp.problem.permissionDenied",

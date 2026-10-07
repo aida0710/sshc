@@ -14,6 +14,14 @@ import (
 
 func sftpProblem(c *echo.Context, err error) error {
 	switch {
+	case errors.Is(err, sshcSFTP.ErrUnsupportedOperation):
+		return problem(c, http.StatusNotImplemented, "sftp_unsupported_operation")
+	case errors.Is(err, sshcSFTP.ErrMetadataUnavailable):
+		return problem(c, http.StatusNotImplemented, "sftp_metadata_unavailable")
+	case errors.Is(err, sshcSFTP.ErrOwnershipUnavailable):
+		return problem(c, http.StatusNotImplemented, "sftp_ownership_unavailable")
+	case errors.Is(err, sshcSFTP.ErrInvalidSpace):
+		return problem(c, http.StatusBadGateway, "sftp_invalid_space")
 	// A spool error wraps the engine's own file error. It comes before the
 	// fs errors below, which describe the remote side.
 	case errors.Is(err, sshcSFTP.ErrSpoolUnavailable):
@@ -48,7 +56,7 @@ func sftpProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusUnsupportedMediaType, "sftp_preview_type")
 	case errors.Is(err, sshcSFTP.ErrNotUTF8):
 		return problem(c, http.StatusUnprocessableEntity, "sftp_not_utf8")
-	case errors.Is(err, sshcSFTP.ErrNotRegularFile), errors.Is(err, sshcSFTP.ErrNotDirectory):
+	case errors.Is(err, sshcSFTP.ErrNotRegularFile), errors.Is(err, sshcSFTP.ErrNotDirectory), errors.Is(err, sshcSFTP.ErrNotSymlink):
 		return problem(c, http.StatusUnprocessableEntity, "sftp_wrong_type")
 	case errors.Is(err, sshcSFTP.ErrUnsupportedEntry):
 		return problem(c, http.StatusUnprocessableEntity, "sftp_unsupported_entry")

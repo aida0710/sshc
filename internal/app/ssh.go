@@ -233,7 +233,7 @@ func (p sshParts) openSFTP(ctx context.Context, target sshclient.Target) (sshcSF
 	// than what arrived, so the upload plane truncates a part back to its
 	// acknowledged offset after an error and verifies the whole part before
 	// publishing it.
-	client, err := pkgsftp.NewClient(connection.Client(), pkgsftp.UseConcurrentWrites(true))
+	client, err := sshcSFTP.NewSSHClient(connection.Client(), pkgsftp.UseConcurrentWrites(true))
 	if err != nil {
 		_ = connection.Close()
 		return nil, err
@@ -282,6 +282,8 @@ func (remote *sftpRemote) Alive() bool {
 		return true
 	}
 }
+
+func (remote *sftpRemote) UnderlyingRemote() sshcSFTP.Remote { return remote.Remote }
 
 func (remote *sftpRemote) OpenRange(candidate string, offset int64) (io.ReadCloser, error) {
 	ranged, ok := remote.Remote.(sshcSFTP.RangeRemote)
