@@ -1,13 +1,12 @@
 import { connectVirtualLAN } from "./vm-network.js";
 import { VMBridge } from "./vm-bridge.js";
-import { machineDefinitions, loadDemoConfiguration } from "./config.js";
+import { machineDefinitions, loadDemoConfiguration, bundleDownloadBytes } from "./config.js";
 import { applyMessages, messages } from "./messages.js";
 import { StartupProgress } from "./startup-progress.js";
 import { StartupProgressView } from "./startup-progress-view.js";
 import { prepareUIArchive } from "./ui-archive.js";
 import { UICacheControls } from "./ui-cache-controls.js";
-import { consumeReleaseConsent, fetchLatestRelease, openRelease, deleteReleaseCache } from "./release-loader.js";
-import { releaseBaseURL } from "./ui-cache-addresses.js";
+import { consumeReleaseConsent, fetchLatestRelease, openRelease, deleteReleaseCache, shouldOpenRelease } from "./release-loader.js";
 
 applyMessages(document);
 const updatedAt = document.getElementById("updated-at");
@@ -27,9 +26,15 @@ document.getElementById("demo-version").textContent = initialConfiguration.versi
 const hasReleaseConsent = consumeReleaseConsent(initialConfiguration.version);
 const releaseStatus = document.getElementById("release-status");
 releaseStatus.textContent = initialConfiguration.releaseProxyURL && !hasReleaseConsent ? messages.checkingRelease : "";
+// Until the latest lookup answers, the bundle served with this page is what would be downloaded.
+const downloadTotal = document.getElementById("download-total");
+downloadTotal.textContent = messages.downloadTotal(bundleDownloadBytes(initialConfiguration));
 const latestReleasePromise = hasReleaseConsent ? Promise.resolve(null)
   : fetchLatestRelease(initialConfiguration.releaseProxyURL).then((manifest) => {
     if (manifest) releaseStatus.textContent = messages.latestRelease(manifest.version);
+    if (shouldOpenRelease(manifest, initialConfiguration.version)) {
+      downloadTotal.textContent = messages.downloadTotal(manifest.bytes);
+    }
     return manifest;
   }).catch(() => {
     releaseStatus.textContent = messages.releaseFallback(initialConfiguration.version);
@@ -118,7 +123,7 @@ async function startDemo() {
   renderStartupProgress();
 
   const latestRelease = await latestReleasePromise;
-  if (latestRelease && (latestRelease.version !== initialConfiguration.version || !releaseBaseURL(new URL(location.href)))) {
+  if (shouldOpenRelease(latestRelease, initialConfiguration.version)) {
     startupProgress.startReleaseArchive({ version: latestRelease.version, bytes: latestRelease.bytes });
     renderStartupProgress();
     try {
