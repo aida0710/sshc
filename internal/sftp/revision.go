@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash"
 	"io/fs"
+	"strings"
 )
 
 // Revision は API と UI が「この entry はまだ同じか」を確かめるための不透明な文字列。
@@ -14,6 +15,8 @@ import (
 const (
 	metadataRevisionPrefix = "meta-sha256:"
 	contentRevisionPrefix  = "content-sha256:"
+	// An ancestor's other children can change without changing this path.
+	directoryPathRevisionPrefix = "directory-path-sha256:"
 )
 
 // metadataRevision は size・mode・mtime と取得できる UID/GID から作る。内容を読まずに「変わったか」を
@@ -25,6 +28,24 @@ func metadataRevision(info fs.FileInfo) string {
 		_, _ = fmt.Fprintf(hash, "owner:%d:%d", owner.UID, owner.GID)
 	}
 	return metadataRevisionPrefix + hex.EncodeToString(hash.Sum(nil))
+}
+
+// SFTP has no portable inode identity. Keep the ancestor's type, permissions
+// and ownership evidence without treating sibling creation as path replacement.
+func remoteDirectoryPathRevision(info fs.FileInfo) string {
+	digest := sha256.New()
+	_, _ = fmt.Fprintf(digest, "%d\x00", info.Mode())
+	if owner, available := ownershipFrom(info); available {
+		_, _ = fmt.Fprintf(digest, "owner:%d:%d", owner.UID, owner.GID)
+	}
+	return directoryPathRevisionPrefix + hex.EncodeToString(digest.Sum(nil))
+}
+
+func matchesRemoteObservation(info fs.FileInfo, expectedRevision string) bool {
+	if strings.HasPrefix(expectedRevision, directoryPathRevisionPrefix) {
+		return remoteDirectoryPathRevision(info) == expectedRevision
+	}
+	return metadataRevision(info) == expectedRevision
 }
 
 // contentRevision は内容だけから作る。mtime が変わっても内容が同じなら一致する。

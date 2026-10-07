@@ -110,11 +110,11 @@ func observedRemote(t *testing.T, requests *outstandingRequests) sftp.Remote {
 	}()
 	go relayPackets(toServer, fromClient, requests.sent)
 	go relayPackets(toClient, fromServer, requests.answered)
-	client, err := pkgsftp.NewClientPipe(fromRelayBack, toRelay, pkgsftp.UseConcurrentWrites(true))
+	client, err := sftp.NewClientPipeForTest(fromRelayBack, toRelay, pkgsftp.UseConcurrentWrites(true))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return sftp.NewClient(client)
+	return client
 }
 
 // localPath names a file of the engine's file system in a transfer request.

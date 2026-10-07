@@ -90,7 +90,7 @@ The server must support `lsetstat@openssh.com` version 1 for no-follow attribute
 
 In a remote pane, choose **Name** or **Content**, enter a query and press Enter to search below the current directory. Name search retains its case-insensitive behavior. Content search finds exact, case-sensitive text across files. Each match shows its path, line number and a short snippet; select a match to open that line in the editor. If the file changed after the search, search again.
 
-Content search reads regular UTF-8 files only. Links, binary files and files over 2 MiB are skipped. A search reads up to 64 MiB of file contents in total and stops at 200 matching lines, 20,000 entries or 32 directory levels. Results explain unreadable entries and other omissions. Use **Stop search** to cancel the request. Content search is not available for local tabs.
+Content search reads regular UTF-8 files only. Files with missing type, size or modification-time attributes are also skipped. Links, binary files and files over 2 MiB are skipped. A search reads up to 64 MiB of file contents in total and stops at 200 matching lines, 20,000 entries or 32 directory levels. Results explain unreadable entries and other omissions. Use **Stop search** to cancel the request. Content search is not available for local tabs.
 
 ## Compare contents even when size and modification time match
 

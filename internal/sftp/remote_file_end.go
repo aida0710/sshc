@@ -73,6 +73,9 @@ func (end *serverFileEnd) close(operationErr error) {
 func (end *serverFileEnd) stat(name string) (fs.FileInfo, error) {
 	if end.root == nil {
 		info, err := end.remote.Lstat(name)
+		if err == nil && !metadataContentKnown(info) {
+			return nil, ErrMetadataUnavailable
+		}
 		if err == nil && !info.Mode().IsRegular() {
 			return nil, ErrUnsupportedEntry
 		}

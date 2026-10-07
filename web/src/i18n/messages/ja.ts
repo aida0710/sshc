@@ -113,7 +113,7 @@ export const ja = {
   "sftp.filesystemSpace": "空き容量: {available} bytes / 合計: {total} bytes",
   "sftp.spaceUnsupported": "このサーバーは空き容量の取得に対応していません。",
   "sftp.spaceUnavailable": "空き容量を取得できません。",
-  "sftp.problem.metadataUnavailable": "サーバーから項目の種類を取得できないため、変更できません。",
+  "sftp.problem.metadataUnavailable": "サーバーから操作に必要なファイル属性を取得できないため、続行できません。",
   "sftp.problem.unsupportedOperation": "このサーバーはこの操作に対応していません。",
   "sftp.problem.confirmationChanged": "確認した内容が変更されたか、確認の有効期限が切れました。最新の一覧から開き直してください。",
   "sftp.heading": "リモートファイル",

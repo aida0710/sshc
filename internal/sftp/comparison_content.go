@@ -17,6 +17,9 @@ func (comparison *contentComparison) compare(ctx context.Context, difference *Di
 		difference.Omission = omissionUnsupported
 		return nil
 	}
+	if !metadataContentKnown(comparison.left.metadata[difference.RelativePath]) || !metadataContentKnown(comparison.right.metadata[difference.RelativePath]) {
+		return ErrMetadataUnavailable
+	}
 	if difference.Left.Size != difference.Right.Size {
 		difference.Status = DirectoryDifferent
 		return nil

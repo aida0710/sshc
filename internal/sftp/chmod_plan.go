@@ -139,7 +139,7 @@ func (p *ChmodPlan) inspect(ctx context.Context, candidate string) (fs.FileInfo,
 		return nil, ErrMetadataUnavailable
 	}
 	revision := metadataRevision(info)
-	if previous, exists := p.observed[candidate]; exists && previous != revision {
+	if previous, exists := p.observed[candidate]; exists && !matchesRemoteObservation(info, previous) {
 		return nil, ErrConflict
 	}
 	p.observed[candidate] = revision
@@ -158,12 +158,26 @@ func (p *ChmodPlan) inspectAncestors(ctx context.Context, candidate string) erro
 		}
 	}
 	for index := len(ancestors) - 1; index >= 0; index-- {
-		info, err := p.inspect(ctx, ancestors[index])
+		candidate := ancestors[index]
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		info, err := p.remote.Lstat(candidate)
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() || info.Mode()&fs.ModeSymlink != 0 {
+		if !metadataTypeKnown(info) || !info.IsDir() || info.Mode()&fs.ModeSymlink != 0 {
 			return ErrNotDirectory
+		}
+		if previous, observed := p.observed[candidate]; observed {
+			if !matchesRemoteObservation(info, previous) {
+				return ErrConflict
+			}
+		} else {
+			p.observed[candidate] = remoteDirectoryPathRevision(info)
+		}
+		if len(p.observed) > maxChmodPlanEntries {
+			return ErrTraversalLimit
 		}
 	}
 	return nil
