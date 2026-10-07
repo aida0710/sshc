@@ -48,7 +48,7 @@ header { display: flex; align-items: center; gap: 16px; min-height: 48px; paddin
 #demo-tabs [aria-pressed="true"] { color: var(--ink); background: var(--surface); }
 #status { min-width: 0; color: var(--ink-faint); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #status[role="alert"] { color: var(--danger); }
-#reset { margin-left: auto; flex: none; padding: 5px 12px; font-size: 13px; }
+#reset, #language-switch { margin-left: auto; flex: none; padding: 5px 12px; font-size: 13px; }
 
 footer { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 16px; padding: 8px 16px; color: var(--ink-faint); font-size: 12px; border-top: 1px solid var(--hairline); }
 footer button { padding: 0; border: 0; font-size: inherit; background: transparent; color: var(--ink-muted); text-decoration: underline; text-underline-offset: 3px; }
@@ -62,6 +62,8 @@ th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--ha
 tfoot td { border-bottom: 0; color: var(--ink-muted); font-size: 13px; background: var(--toolbar); }
 th { color: var(--ink-faint); font-size: 12px; font-weight: 500; background: var(--toolbar); }
 thead th:last-child, tbody td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+/* VM names and sizes stay whole; only the role column wraps on narrow screens. */
+tbody td:first-child, tbody td:last-child { white-space: nowrap; }
 .detail { color: var(--ink-muted); font-size: 13px; }
 .confirm-question { margin: 28px 0 12px; }
 .confirm-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
