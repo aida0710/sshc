@@ -106,7 +106,7 @@ type Security struct {
 // どちらも unlock と同じく master password を検証する。
 func gateExempt(method, path string) bool {
 	switch path {
-	case "/api/v1/health":
+	case "/api/v1/health", "/api/v1/update":
 		return method == http.MethodGet
 	case "/api/v1/session/renew":
 		return method == http.MethodPost
