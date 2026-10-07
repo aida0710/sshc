@@ -81,15 +81,6 @@ func openLocalComparisonTree(ctx context.Context, rootPath string, mode Comparis
 	return &comparisonTree{entries: entries, metadata: walker.metadata, localRoot: root, rootPath: rootPath}, nil
 }
 
-func readLocalComparisonTree(ctx context.Context, rootPath string) (map[string]Entry, error) {
-	tree, err := openLocalComparisonTree(ctx, rootPath, ComparisonMetadata)
-	if err != nil {
-		return nil, err
-	}
-	defer tree.close()
-	return tree.entries, nil
-}
-
 func (walker *localComparisonWalker) walk(ctx context.Context) (map[string]Entry, error) {
 	for len(walker.pendingDirectories) > 0 {
 		if err := ctx.Err(); err != nil {
