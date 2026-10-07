@@ -12,22 +12,35 @@ import (
 )
 
 type Service struct {
-	dependencies Dependencies
-	store        Store
-	mutex        sync.Mutex
-	stateError   error
-	ownedJobID   string
+	dependencies  Dependencies
+	store         Store
+	mutex         sync.Mutex
+	stateError    error
+	ownedJobID    string
+	workerContext context.Context
+	cancelWorkers context.CancelFunc
+	stopping      bool
+	workers       sync.WaitGroup
+	waitOnce      sync.Once
+	waitError     error
 }
 
 func New(dependencies Dependencies) *Service {
 	if dependencies.Context == nil {
 		dependencies.Context = context.Background()
 	}
-	return &Service{dependencies: dependencies, store: Store{Path: dependencies.StatePath}}
+	workerContext, cancelWorkers := context.WithCancel(dependencies.Context)
+	return &Service{
+		dependencies: dependencies, store: Store{Path: dependencies.StatePath},
+		workerContext: workerContext, cancelWorkers: cancelWorkers,
+	}
 }
 
 // Inspect reports the installation boundary even when there is no newer release.
 func (service *Service) Inspect(ctx context.Context) (Installation, error) {
+	if service.workerContext.Err() != nil {
+		return Installation{}, ErrUnavailable
+	}
 	if _, ok := releasecheck.StableTag(service.dependencies.Current); !ok {
 		return Installation{}, Failure("update_development_build")
 	}
@@ -72,12 +85,15 @@ func (service *Service) Prepare(ctx context.Context, target string) (Plan, error
 // Start reserves a job. Work starts only after the HTTP adapter reports that the
 // accepted response has been flushed; the domain owns that ordering.
 func (service *Service) Start(plan Plan) (Job, error) {
+	service.mutex.Lock()
+	defer service.mutex.Unlock()
+	if service.stopping || service.workerContext.Err() != nil {
+		return Job{}, ErrUnavailable
+	}
 	if plan.Current != service.dependencies.Current || !releasecheck.Newer(plan.Current, plan.Target) {
 		return Job{}, ErrChanged
 	}
-	service.mutex.Lock()
-	defer service.mutex.Unlock()
-	job, err := service.store.Change(func(job *Job) error {
+	job, err := service.changeJobLocked(func(job *Job) error {
 		if job.Active() {
 			return ErrBusy
 		}
@@ -98,43 +114,63 @@ func (service *Service) Start(plan Plan) (Job, error) {
 }
 
 func (service *Service) ResponseSent(id string, responseError error) {
-	if responseError != nil {
-		service.finish(id, JobFailed, "update_response_failed")
+	service.mutex.Lock()
+	defer service.mutex.Unlock()
+	if service.stopping || service.workerContext.Err() != nil || id != service.ownedJobID {
 		return
 	}
-	go service.install(id)
+	job, err := service.transitionLocked(id, JobAccepted, JobInstalling)
+	if err != nil {
+		return
+	}
+	if responseError != nil {
+		_ = service.finishLocked(id, JobFailed, "update_response_failed")
+		return
+	}
+	// Register under the stopping gate so Wait can never miss a new worker.
+	service.workers.Add(1)
+	go func() {
+		defer service.workers.Done()
+		service.install(job)
+	}()
 }
 
-func (service *Service) install(id string) {
-	job, err := service.transition(id, JobAccepted, JobInstalling)
-	if err != nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(service.dependencies.Context, InstallationTimeout)
+func (service *Service) install(job Job) {
+	ctx, cancel := context.WithTimeout(service.workerContext, InstallationTimeout)
 	defer cancel()
-	installation, err := service.Inspect(ctx)
-	if err == nil && installation != job.Plan.Installation {
-		err = ErrChanged
-	}
-	if err == nil {
-		err = service.dependencies.Install(ctx, job.Plan)
-	}
-	if err != nil {
+	if err := service.installPlan(ctx, job.Plan); err != nil {
 		code := failureCode(err, "update_install_failed")
 		if errors.Is(ctx.Err(), context.Canceled) {
 			code = "update_interrupted"
 		}
-		service.finish(id, JobFailed, code)
+		service.finish(job.ID, JobFailed, code)
 		return
 	}
 	// Never restart without a durable installation result.
-	job, err = service.transition(id, JobInstalling, JobRestarting)
+	job, err := service.transition(job.ID, JobInstalling, JobRestarting)
 	if err != nil {
 		return
 	}
-	if err := service.dependencies.Restart(ctx, job); err != nil {
-		service.finish(id, JobRestartRequired, failureCode(err, "update_restart_failed"))
+	if err = ctx.Err(); err == nil {
+		err = service.dependencies.Restart(ctx, job)
 	}
+	if err != nil {
+		service.finish(job.ID, JobRestartRequired, failureCode(err, "update_restart_failed"))
+	}
+}
+
+func (service *Service) installPlan(ctx context.Context, plan Plan) error {
+	installation, err := service.Inspect(ctx)
+	if err != nil {
+		return err
+	}
+	if installation != plan.Installation {
+		return ErrChanged
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return service.dependencies.Install(ctx, plan)
 }
 
 // Status reconciles with the version of the new engine, including a helper that
@@ -154,7 +190,7 @@ func (service *Service) Status() (Job, error) {
 	if job.ID == service.ownedJobID && job.Target != service.dependencies.Current && (job.State != JobRestarting || time.Since(job.UpdatedAt) < RestartTimeout) {
 		return job, nil
 	}
-	return service.store.Change(func(stored *Job) error {
+	return service.changeJobLocked(func(stored *Job) error {
 		if !stored.Active() && stored.State != JobRestartRequired {
 			return nil
 		}
@@ -173,32 +209,43 @@ func (service *Service) Status() (Job, error) {
 func (service *Service) transition(id, from, to string) (Job, error) {
 	service.mutex.Lock()
 	defer service.mutex.Unlock()
-	job, err := service.store.Change(func(job *Job) error {
+	return service.transitionLocked(id, from, to)
+}
+
+func (service *Service) transitionLocked(id, from, to string) (Job, error) {
+	return service.changeJobLocked(func(job *Job) error {
 		if job.ID != id || job.State != from {
 			return ErrChanged
 		}
 		job.State, job.Problem, job.UpdatedAt = to, "", time.Now().UTC()
 		return nil
 	})
-	if errors.Is(err, ErrState) {
-		service.stateError = err
-	}
-	return job, err
 }
 
 func (service *Service) finish(id, state, problem string) {
 	service.mutex.Lock()
 	defer service.mutex.Unlock()
-	_, err := service.store.Change(func(job *Job) error {
+	_ = service.finishLocked(id, state, problem)
+}
+
+func (service *Service) finishLocked(id, state, problem string) error {
+	_, err := service.changeJobLocked(func(job *Job) error {
 		if job.ID != id || !job.Active() {
 			return ErrChanged
 		}
 		job.State, job.Problem, job.UpdatedAt = state, problem, time.Now().UTC()
 		return nil
 	})
+	return err
+}
+
+// changeJobLocked retains persistence failures while service.mutex is held.
+func (service *Service) changeJobLocked(change func(*Job) error) (Job, error) {
+	job, err := service.store.Change(change)
 	if errors.Is(err, ErrState) {
 		service.stateError = err
 	}
+	return job, err
 }
 
 func failureCode(err error, fallback string) string {

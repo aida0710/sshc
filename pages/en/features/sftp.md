@@ -70,7 +70,7 @@ On desktop a narrow pane keeps every column and scrolls the table sideways rathe
 
 The remote creation menu offers **Create symbolic link**. Enter a name and a relative or absolute target, including a target that does not yet exist. Existing entries are never overwritten. **Change link target** in the details dialog replaces only the link itself and leaves the target contents unchanged. Servers without safe link replacement support refuse this change.
 
-The listing and details show owner UID and group GID when supplied by the server. **Change owner and group** in the details dialog accepts numeric UID/GID values from 0 to 4294967295 for regular files and directories. Account names and recursive ownership changes are not supported. Missing attributes, unsupported operations, and insufficient permissions are reported. Ownership changes through symbolic links are refused. If the entry changes during confirmation, refresh the listing and reopen the dialog.
+The listing and details show owner UID and group GID when supplied by the server. **Change owner and group** in the details dialog accepts numeric UID/GID values from 0 to 4294967295 for regular files and directories. Account names and recursive ownership changes are not supported. The server must support the no-follow `lsetstat@openssh.com` extension. Missing attributes, unsupported operations, and insufficient permissions are reported. Ownership changes through symbolic links are refused. If the entry changes during confirmation, refresh the listing and reopen the dialog.
 
 Below the remote listing, the available disk space for the authenticated user and total capacity are shown as exact byte counts. A server without capacity reporting support still provides a usable directory listing.
 

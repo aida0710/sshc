@@ -14,7 +14,7 @@ const updateMessages: Readonly<Record<string, MessageKey>> = {
   update_state_failed: "update.stateFailed",
   update_install_failed: "update.installFailed",
   update_interrupted: "update.interrupted",
-  update_homebrew_refresh_required: "update.homebrewRefreshRequired",
+  update_homebrew_unsupported: "update.homebrewUnsupported",
   update_restart_failed: "update.restartRequired",
   update_check_failed: "update.checkFailed",
 };

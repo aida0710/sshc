@@ -1122,7 +1122,7 @@ export const en = {
   "update.stateFailed": "The update state could not be saved or read. Check disk space and permissions before retrying.",
   "update.installFailed": "The update failed. Check the installation, permissions and network, then review the update again.",
   "update.interrupted": "The update was interrupted. Check the installed version before retrying.",
-  "update.homebrewRefreshRequired": "Homebrew did not install the new release. Run brew update in a terminal, then review the update again.",
+  "update.homebrewUnsupported": "For Homebrew installations, update with sshc update in a terminal. Web updates cannot pin the version shown in the confirmation.",
   "update.restartRequired": "The new release was installed, but restart could not be confirmed. Run sshc service install for a managed service, or sshc engine --replace for another engine, then reload this page.",
   "update.checkFailed": "Could not check the latest release. Check the network and try again.",
   "update.unavailable": "Automatic update is unavailable for this installation.",

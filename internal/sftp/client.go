@@ -12,14 +12,19 @@ import (
 
 // Client は github.com/pkg/sftp の client を Remote 境界へ適合させる。
 type Client struct {
-	client *pkgsftp.Client
+	client            *pkgsftp.Client
+	noFollowOwnership bool
 }
 
+// NewClient adapts an external client; ownership changes require the no-follow
+// transport installed by NewSSHClient and remain unavailable here.
 func NewClient(client *pkgsftp.Client) *Client {
 	return &Client{client: client}
 }
 
 func (c *Client) Close() error { return c.client.Close() }
+
+func (c *Client) Wait() error { return c.client.Wait() }
 
 func (c *Client) Getwd(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
@@ -107,6 +112,14 @@ func (c *Client) ReplaceSymlink(temporary, linkPath string) error {
 }
 
 func (c *Client) Chown(path string, uid, gid uint32) error {
+	// A prior Lstat cannot prevent another process replacing the entry with a
+	// symlink. Only the no-follow transport may issue this mutation.
+	if !c.noFollowOwnership {
+		return ErrUnsupportedOperation
+	}
+	if version, supported := c.client.HasExtension(noFollowSetstatExtension); !supported || version != "1" {
+		return ErrUnsupportedOperation
+	}
 	return capabilityError(c.client.Chown(path, int(uid), int(gid)))
 }
 
