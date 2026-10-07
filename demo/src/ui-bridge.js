@@ -13,6 +13,7 @@
   const sockets = new Map();
   const originalFetch = window.fetch.bind(window);
   let nextRequestID = 0;
+  let hasNotifiedUIReady = false;
   const send = (request) => parent.postMessage({ channel, request }, location.origin);
   const nextID = () => String(++nextRequestID);
   const encodeBytes = (bytes) => {
@@ -34,7 +35,7 @@
       get length() { return entries.size; },
     } });
   }
-  // The demo supplies assets statically; a production service worker would intercept them.
+  // Only the archive worker may serve this demo; disable the product's PWA worker.
   if (navigator.serviceWorker) {
     navigator.serviceWorker.register = async () => { throw new Error("Demo uses static assets"); };
   }
@@ -50,7 +51,7 @@
     if (bytes.length > maxBodyBytes) throw new Error("Demo requests are limited to 2 MiB");
     const body = encodeBytes(bytes);
     return new Promise((resolve, reject) => {
-      pendingRequests.set(id, { resolve, reject });
+      pendingRequests.set(id, { resolve, reject, path: url.pathname });
       send({ id, kind: "fetch", path: url.pathname + url.search, method: request.method,
         headers: Object.fromEntries(request.headers), body });
     });
@@ -105,7 +106,10 @@
     const pending = pendingRequests.get(reply.id);
     if (pending) {
       pendingRequests.delete(reply.id);
-      if (reply.kind === "error") pending.reject(new Error(reply.text));
+      if (reply.kind === "error") {
+        pending.reject(new Error(reply.text));
+        if (!hasNotifiedUIReady) parent.postMessage({ channel, startup: "ui-failed" }, location.origin);
+      }
       else {
         const headers = new Headers();
         for (const [name, values] of Object.entries(reply.headers ?? {})) {
@@ -114,6 +118,21 @@
         }
         const body = [204, 205, 304].includes(reply.status) ? null : decodeBytes(reply.body);
         pending.resolve(new Response(body, { status: reply.status, headers }));
+        // The product enters its ready state after bootstrap, health and Vault status.
+        if (!hasNotifiedUIReady && pending.path === "/api/v1/passwords" && reply.status === 200) {
+          try {
+            if (JSON.parse(new TextDecoder().decode(body)).unlocked === true) {
+              hasNotifiedUIReady = true;
+              parent.postMessage({ channel, startup: "ui-ready" }, location.origin);
+            }
+          } catch {
+            parent.postMessage({ channel, startup: "ui-failed" }, location.origin);
+          }
+        }
+        if (!hasNotifiedUIReady && reply.status >= 400 &&
+            ["/api/v1/session/bootstrap", "/api/v1/health", "/api/v1/passwords"].includes(pending.path)) {
+          parent.postMessage({ channel, startup: "ui-failed" }, location.origin);
+        }
       }
       return;
     }
