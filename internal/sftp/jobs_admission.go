@@ -162,7 +162,7 @@ func (m *TransferManager) admitJob(input CreateTransferJob) (TransferJob, error)
 			cleanupJob := cleanup.job
 			m.jobsMutex.Unlock()
 			closeRemotes(staleRemotes)
-			cleanupErr := m.cleanupEvictedUploadPart(cleanupJob)
+			cleanupErr := m.cleanupTransferPart(cleanupJob)
 			m.jobsMutex.Lock()
 			var persistErr error
 			if current := m.jobs[cleanupJob.ID]; current == cleanup {

@@ -424,7 +424,7 @@ func (c *localCopy) put(ctx context.Context, source, target string, info fs.File
 			resultErr = errors.Join(resultErr, unpublished.remove(ctx))
 		}
 	}()
-	written, copyErr := copyContext(ctx, &progressWriter{Writer: output, report: c.report}, input, info.Size())
+	written, copyErr := copyContext(ctx, &progressWriter{Writer: c.service.transferWriter(ctx, output), report: c.report}, input, info.Size())
 	closeErr := output.Close()
 	if copyErr != nil {
 		return copyErr
@@ -516,7 +516,7 @@ func (c *localCopy) get(ctx context.Context, source, target string, info fs.File
 		return err
 	}
 	defer c.root.Remove(temporary)
-	written, copyErr := copyContext(ctx, &progressWriter{Writer: output, report: c.report}, input, info.Size())
+	written, copyErr := copyContext(ctx, &progressWriter{Writer: c.service.transferWriter(ctx, output), report: c.report}, input, info.Size())
 	syncErr := output.Sync()
 	closeErr := output.Close()
 	if copyErr != nil {

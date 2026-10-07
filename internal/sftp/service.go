@@ -12,7 +12,9 @@ import (
 )
 
 type Service struct {
-	Open OpenRemote
+	// Installed once at engine startup; copies of Service share this budget.
+	transferLimiter *transferLimiter
+	Open            OpenRemote
 	// TemporaryPath はテスト時に差し替える。本番では対象と同じディレクトリへ予測不能な名前を作る。
 	TemporaryPath func(target string) (string, error)
 	// ConnectionLimit says how many connections one transfer may open to a
@@ -144,6 +146,8 @@ func (remote *contextRangeRemote) OpenRange(candidate string, offset int64) (io.
 	}
 	return ranged.OpenRange(candidate, offset)
 }
+
+func (remote *contextRemote) Discard() error { return remote.finish(true) }
 
 func (remote *contextRemote) Close() error {
 	return remote.finish(false)

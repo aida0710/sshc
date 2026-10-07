@@ -1,3 +1,4 @@
+import { retryableTransferFailure, waitForTransferReconnect } from "./transferRecovery";
 import { failureCode } from "../api/client";
 import { sftpApi, type TransferJobList, type TransferKind, type TransferQueueMove, type TransferSettings } from "./api";
 import { DownloadPlane } from "./downloadPlane";
@@ -71,6 +72,9 @@ export class SFTPTransferManager {
   private maxConcurrent: number;
   private clearCompletedAfter = 0;
   private processingStopped = false;
+  private speedLimitBytesPerSecond = 0;
+  private autoReconnect = false;
+  private maxReconnectAttempts = 0;
   private largeFileThreshold = defaultLargeFileThreshold;
   private largeFileParallelism = defaultLargeFileParallelism;
   private largeFileChunkBytes = defaultLargeFileChunkBytes;
@@ -101,6 +105,9 @@ export class SFTPTransferManager {
   getMaxConcurrent = (): number => this.maxConcurrent;
   getClearCompletedAfter = (): number => this.clearCompletedAfter;
   getProcessingStopped = (): boolean => this.processingStopped;
+  getSpeedLimitBytesPerSecond = (): number => this.speedLimitBytesPerSecond;
+  getAutoReconnect = (): boolean => this.autoReconnect;
+  getMaxReconnectAttempts = (): number => this.maxReconnectAttempts;
   getLargeFileThreshold = (): number => this.largeFileThreshold;
   getLargeFileParallelism = (): number => this.largeFileParallelism;
   getLargeFileChunkBytes = (): number => this.largeFileChunkBytes;
@@ -108,7 +115,7 @@ export class SFTPTransferManager {
   // Whether closing this page would cut a transfer short: the page is running
   // it, or holds the File of an upload waiting to run, which no other page has.
   hasBrowserTransfers = (): boolean => this.jobs.some((job) =>
-    (job.status === "running" && this.inFlight.has(job.id)) ||
+    ((job.status === "running" || job.status === "reconnecting") && this.inFlight.has(job.id)) ||
     (job.status === "queued" && job.direction === "upload" && this.uploads.has(job.id)));
   subscribe = (listener: () => void): (() => void) => this.ledger.subscribe(listener);
   subscribeNotices = (listener: () => void): (() => void) => this.ledger.subscribeNotices(listener);
@@ -386,6 +393,12 @@ export class SFTPTransferManager {
     this.maxConcurrent = listed.maxConcurrent;
     this.clearCompletedAfter = listed.clearCompletedAfterSeconds ?? 0;
     this.processingStopped = listed.processingStopped === true;
+    this.speedLimitBytesPerSecond = listed.speedLimitBytesPerSecond;
+    this.autoReconnect = listed.autoReconnect;
+    this.maxReconnectAttempts = listed.maxReconnectAttempts;
+    for (const job of this.jobs) {
+      if (job.status === "reconnecting" && (this.processingStopped || !this.autoReconnect || job.reconnectAttempt > this.maxReconnectAttempts)) this.controllers.get(job.id)?.abort();
+    }
     this.largeFileThreshold = listed.largeFileThresholdBytes ?? defaultLargeFileThreshold;
     this.largeFileParallelism = listed.largeFileParallelism ?? defaultLargeFileParallelism;
     this.largeFileChunkBytes = listed.largeFileChunkBytes ?? defaultLargeFileChunkBytes;
@@ -475,11 +488,43 @@ export class SFTPTransferManager {
       if (!await this.prepareServer(job)) return;
       job = this.ledger.find(id);
       if (job === undefined || job.status !== "running") return;
-      if (job.direction === "upload") await this.uploads.run(id, sourceFingerprint);
-      else await this.downloads.run(id);
+      while (true) {
+        try {
+          if (job.direction === "upload") await this.uploads.run(id, sourceFingerprint);
+          else await this.downloads.run(id);
+          return;
+        } catch (error) {
+          if (!await this.reconnectBrowserTransfer(id, error)) throw error;
+          job = this.ledger.find(id);
+          if (job === undefined || job.status !== "running") return;
+        }
+      }
     } catch (error) {
       await this.settleFailure(id, error);
     }
+  }
+
+  private async reconnectBrowserTransfer(id: string, error: unknown): Promise<boolean> {
+    const current = this.ledger.find(id);
+    if (!retryableTransferFailure(error) || !this.autoReconnect || this.processingStopped || current?.status !== "running" || current.reconnectAttempt >= this.maxReconnectAttempts) return false;
+    const waiting = await this.api.updateTransfer(id, "reconnect");
+    this.ledger.replaceServer(waiting);
+    const controller = new AbortController();
+    this.controllers.set(id, controller);
+    try {
+      await waitForTransferReconnect(controller.signal, Date.parse(waiting.reconnectAt) - this.now());
+    } catch {
+      await this.controlOperations.get(id);
+      if (this.ledger.find(id)?.status === "reconnecting") {
+        this.ledger.replaceServer(await this.api.updateTransfer(id, "pause"));
+      }
+      return false;
+    }
+    if (this.processingStopped || !this.autoReconnect || waiting.reconnectAttempt > this.maxReconnectAttempts || this.ledger.find(id)?.status !== "reconnecting") return false;
+    if (waiting.kind === "folder") this.downloads.restart(id);
+    const resumed = await this.api.updateTransfer(id, "start");
+    this.ledger.replaceServer(resumed);
+    return resumed.status === "running";
   }
 
   // Decides what a thrown error means for the job: nothing, a short wait

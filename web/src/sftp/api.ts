@@ -1,5 +1,5 @@
 import { apiClient } from "../api/client";
-import { issueAction, patchJSON, postJSON, putJSON } from "../api/guards";
+import { issueAction, patchJSON, postJSON, putJSON, sendJSON } from "../api/guards";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
 import { saveWithAndroid } from "../android/native";
@@ -38,7 +38,7 @@ export type RemotePreview = {
 // that asked: the list, the search and the comparison say why
 // (sftpProblemText), and the details dialog marks the value unavailable. The
 // application-wide failure notice on top would repeat it.
-const connectionProblems = ["sftp_failed", ...vpnProblemCodes];
+const connectionProblems = ["sftp_failed", "sftp_connection_lost", ...vpnProblemCodes];
 
 // preview が返しうる問題は、詳細モーダルがその場で言葉にする。共通の失敗
 // 通知まで重ねると、preview できない普通のファイルを開くたびに全画面の
@@ -56,6 +56,8 @@ const previewProblems = [
 // completion notice. Reporting the same expected failure as an application-wide
 // diagnostic obscures the queue controls, especially on a narrow screen.
 const transferProblems = [
+  "sftp_connection_lost",
+  "sftp_reconciliation_required",
   "sftp_failed",
   "sftp_cleanup_pending",
   "sftp_conflict",
@@ -81,12 +83,12 @@ export type StreamDownloadOptions = {
 
 // The running upload job and the remote file it writes.
 export type UploadTarget = { alias: string; id: string; remotePath: string };
-export type UploadStart = UploadTarget & { size: number; sourceFingerprint: string };
+export type UploadStart = UploadTarget & { size: number; sourceFingerprint: string; signal?: AbortSignal };
 // One chunk of an upload. A range chunk is one configured slice of a split
 // upload and may arrive in any order; a sequential chunk starts where the
 // engine's part file ends.
 export type UploadChunk = UploadTarget & { offset: number; total: number; chunk: Blob; range: boolean; signal?: AbortSignal };
-export type UploadCompletion = UploadTarget & { size: number; expectedRevision: string; sourceFingerprint: string };
+export type UploadCompletion = UploadTarget & { size: number; expectedRevision: string; sourceFingerprint: string; signal?: AbortSignal };
 // The running download job and the remote entry it reads.
 export type DownloadTarget = { alias: string; jobId: string; remotePath: string };
 // Where a download response starts: a folder is always sent whole as a zip.
@@ -208,8 +210,8 @@ export const sftpApi = {
   async rename(alias: string, from: string, to: string): Promise<RemoteEntry> {
     return entry(await patchJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entry`, { from, to }));
   },
-  async startUpload({ alias, id, remotePath, size, sourceFingerprint }: UploadStart): Promise<ResumableUpload> {
-    return resumableUpload(await postJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}`, { path: remotePath, size, sourceFingerprint }, undefined, transferProblems));
+  async startUpload({ alias, id, remotePath, size, sourceFingerprint, signal }: UploadStart): Promise<ResumableUpload> {
+    return resumableUpload(await sendJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}`, { method: "POST", body: { path: remotePath, size, sourceFingerprint }, locallyHandledCodes: transferProblems, ...(signal === undefined ? {} : { signal }) }));
   },
   async appendUpload({ alias, id, remotePath, offset, total, chunk, range, signal }: UploadChunk): Promise<ResumableUpload> {
     const rangeQuery = range ? `&range=true&length=${chunk.size}` : "";
@@ -221,8 +223,8 @@ export const sftpApi = {
       ...(signal === undefined ? {} : { signal }),
     }, { locallyHandledCodes: transferProblems }));
   },
-  async completeUpload({ alias, id, remotePath, size, expectedRevision, sourceFingerprint }: UploadCompletion): Promise<void> {
-    await postJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}/complete`, { path: remotePath, size, expectedRevision, sourceFingerprint }, undefined, transferProblems);
+  async completeUpload({ alias, id, remotePath, size, expectedRevision, sourceFingerprint, signal }: UploadCompletion): Promise<void> {
+    await sendJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}/complete`, { method: "POST", body: { path: remotePath, size, expectedRevision, sourceFingerprint }, locallyHandledCodes: transferProblems, ...(signal === undefined ? {} : { signal }) });
   },
   async cancelUpload({ alias, id, remotePath }: UploadTarget): Promise<void> {
     await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}`, {

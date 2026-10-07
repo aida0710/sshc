@@ -147,7 +147,7 @@ func clonePreparedDownload(source *PreparedDownload) (*PreparedDownload, error) 
 		return nil, ErrTransferState
 	}
 	source.lease.acquire()
-	return &PreparedDownload{file: file, name: source.name, lease: source.lease, Size: source.Size, Revision: source.Revision}, nil
+	return &PreparedDownload{file: file, name: source.name, lease: source.lease, limiter: source.limiter, Size: source.Size, Revision: source.Revision}, nil
 }
 
 func (m *TransferManager) canInstallPrepared(id string) bool {

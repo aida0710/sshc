@@ -65,17 +65,20 @@ type TransferManager struct {
 	// clearCompletedAfter が 0 なら、完了項目は手動でだけ消える。
 	clearCompletedAfter time.Duration
 	// processingStopped の間は start を通さない。実行中のものは走り切る。
-	processingStopped    bool
-	activeJobs           int
-	maxConcurrent        int
-	largeFileThreshold   int64
-	largeFileParallelism int
-	largeFileChunkBytes  int64
-	now                  func() time.Time
-	dataPlane            map[string]int
-	queuePath            string
-	lastQueuePersist     time.Time
-	queuePersistError    error
+	processingStopped        bool
+	activeJobs               int
+	maxConcurrent            int
+	largeFileThreshold       int64
+	largeFileParallelism     int
+	largeFileChunkBytes      int64
+	speedLimitBytesPerSecond int64
+	autoReconnect            bool
+	maxReconnectAttempts     int
+	now                      func() time.Time
+	dataPlane                map[string]int
+	queuePath                string
+	lastQueuePersist         time.Time
+	queuePersistError        error
 	// slotReleased is closed when a slot may have opened; see slotWait.
 	slotReleased chan struct{}
 
@@ -92,6 +95,7 @@ type TransferManager struct {
 	// saveSettings は、engine に適用する前に設定を残す。nil なら設定は
 	// engine の process が生きているあいだだけ効く。
 	saveSettings func(TransferSettings) error
+	limiter      *transferLimiter
 }
 
 // transferRemoteIdleTimeout is how long a sequential upload keeps its
@@ -143,6 +147,10 @@ func NewTransferManager(service *Service, downloadSpoolRoot string) *TransferMan
 		downloads: make(map[string]preparedDownloadCache), spool: newDownloadSpool(downloadSpoolRoot),
 		remoteRuns: make(map[string]*remoteRun), localTransferRuns: make(map[*remoteRun]string),
 	}
+	manager.limiter = newTransferLimiter()
+	if service != nil {
+		service.transferLimiter = manager.limiter
+	}
 	manager.ConfigureJobs(DefaultTransferConcurrency, time.Now)
 	return manager
 }
@@ -164,6 +172,7 @@ func (m *TransferManager) Close() error {
 	m.closeOnce.Do(func() {
 		m.mutex.Lock()
 		m.closed = true
+		m.limiter.close()
 		remotes := make([]Remote, 0, len(m.remotes))
 		for key, remote := range m.remotes {
 			delete(m.remotes, key)
@@ -396,6 +405,18 @@ func (m *TransferManager) SaveText(ctx context.Context, alias, remotePath, conte
 	unlock := m.lock(alias, cleaned)
 	defer unlock()
 	return m.Service.SaveText(ctx, alias, cleaned, contents, expectedRevision)
+}
+
+// releaseRemoteAfterTransfer never returns a failed or possibly in-flight
+// connection to the SSH pool, including an uncertain publication response.
+func (m *TransferManager) releaseRemoteAfterTransfer(target UploadTarget, operationErr error) {
+	if operationErr == nil {
+		m.releaseRemote(target.Alias, target.ID, target.RemotePath)
+		return
+	}
+	if remote := m.detachRemote(target.Alias, target.ID, target.RemotePath); remote != nil {
+		discardRemote(remote)
+	}
 }
 
 func (m *TransferManager) releaseRemote(alias, id, target string) {

@@ -14,6 +14,7 @@ const sftpProblemMessages: CodeMessages = {
   sftp_invalid_space: "sftp.spaceUnavailable",
   action_token_invalid: "sftp.problem.confirmationChanged",
   action_token_expired: "sftp.problem.confirmationChanged",
+  sftp_connection_lost: "sftp.problem.connectionLost",
   sftp_failed: "sftp.problem.failed",
   sftp_not_found: "sftp.problem.notFound",
   sftp_permission_denied: "sftp.problem.permissionDenied",

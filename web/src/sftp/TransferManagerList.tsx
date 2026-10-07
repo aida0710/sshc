@@ -1,3 +1,5 @@
+import { TransferIntegerSetting } from "./TransferIntegerSetting";
+import { TransferRecoverySettings } from "./TransferRecoverySettings";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
@@ -30,56 +32,6 @@ const maxLargeFileParallelism = 128;
 
 type QueueView = { collapsed: boolean; height: number };
 
-// A whole number typed into the transfer settings, shown in `scale` units
-// (a MiB setting has a scale of 1 MiB) and committed in the setting's own
-// unit. A value outside min and max, counted in the shown unit, is put back.
-function IntegerSetting({ label, value, min, max, scale = 1, unit, onCommit }: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  scale?: number;
-  unit?: string;
-  onCommit: (value: number) => void;
-}) {
-  const shownValue = value / scale;
-  const [draft, setDraft] = useState(String(shownValue));
-  useEffect(() => setDraft(String(shownValue)), [shownValue]);
-  function commit() {
-    const parsed = Number(draft);
-    if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
-      setDraft(String(shownValue));
-      return;
-    }
-    onCommit(parsed * scale);
-  }
-  return (
-    <label className="flex items-center gap-1 text-ink-muted">
-      <span>{label}</span>
-      <input
-        type="number"
-        inputMode="numeric"
-        aria-label={label}
-        min={min}
-        max={max}
-        step={1}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
-          if (event.key === "Escape") {
-            setDraft(String(shownValue));
-            event.currentTarget.blur();
-          }
-        }}
-        className="w-16 rounded border border-control-line bg-control px-1 py-0.5 text-right text-xs tabular-nums"
-      />
-      {unit === undefined ? null : <span aria-hidden="true">{unit}</span>}
-    </label>
-  );
-}
-
 function clampHeight(value: number): number {
   return Math.min(maxQueueHeight, Math.max(minQueueHeight, Math.round(value)));
 }
@@ -104,6 +56,7 @@ type DisplayedStatus = ManagedTransferJob["status"] | "reconcile";
 const statusLabelKeys: Record<DisplayedStatus, MessageKey> = {
   queued: "sftp.manager.status.queued",
   running: "sftp.manager.status.running",
+  reconnecting: "sftp.manager.status.reconnecting",
   paused: "sftp.manager.status.paused",
   reattach: "sftp.manager.status.reattach",
   needs_overwrite: "sftp.manager.status.needs_overwrite",
@@ -129,15 +82,15 @@ function statusClass(status: DisplayedStatus): string {
   return "text-ink-muted";
 }
 
-// A Remote→Remote job whose external copy or move already crossed its commit
+// A job whose publication or local save may already have crossed its commit
 // point, but whose terminal result could not be recorded, must not read as an
 // upload waiting for the same local file again, nor as an ordinary pause. It
-// is the engine's remoteOutcomeUnrecorded (internal/sftp/jobs_state.go), which also
+// is the engine's transferOutcomeUnrecorded (internal/sftp/jobs_state.go), which also
 // leaves cancel as the only allowed action; a running job carries the same
 // problem while its operation is in flight.
 function needsReconciliation(job: ManagedTransferJob): boolean {
-  return job.direction === "remote" && job.problem === "sftp_reconciliation_required" &&
-    job.status !== "running";
+  return job.problem === "sftp_reconciliation_required" &&
+    job.status !== "running" && job.status !== "reconnecting";
 }
 
 export function TransferManagerList({ openRequest = 0 }: { openRequest?: number }) {
@@ -251,6 +204,9 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
       largeFileThresholdBytes: largeFileThreshold,
       largeFileParallelism,
       largeFileChunkBytes,
+      speedLimitBytesPerSecond: sftpTransferManager.getSpeedLimitBytesPerSecond(),
+      autoReconnect: sftpTransferManager.getAutoReconnect(),
+      maxReconnectAttempts: sftpTransferManager.getMaxReconnectAttempts(),
     };
     runControl(() => sftpTransferManager.applySettings({ ...current, ...next }));
   }
@@ -275,6 +231,12 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
   });
   useMenuKeyboard({ open: menuOpen, menuRef: menuPanel, onClose: () => setMenuOpen(false) });
   const settings = <>
+        <TransferRecoverySettings
+          speedLimitBytesPerSecond={sftpTransferManager.getSpeedLimitBytesPerSecond()}
+          autoReconnect={sftpTransferManager.getAutoReconnect()}
+          maxReconnectAttempts={sftpTransferManager.getMaxReconnectAttempts()}
+          onCommit={applySettings}
+        />
         <label className="flex items-center gap-1 text-ink-muted">
           <span className={compactViewport ? "" : "hidden sm:inline"}>{t("sftp.manager.concurrency")}</span>
           <select
@@ -299,7 +261,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
             ))}
           </select>
         </label>
-        <IntegerSetting
+        <TransferIntegerSetting
           label={t("sftp.manager.largeFileThreshold")}
           value={largeFileThreshold}
           min={16}
@@ -308,14 +270,14 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
           unit="MiB"
           onCommit={(value) => applySettings({ largeFileThresholdBytes: value })}
         />
-        <IntegerSetting
+        <TransferIntegerSetting
           label={t("sftp.manager.largeFileParallelism")}
           value={largeFileParallelism}
           min={1}
           max={maxLargeFileParallelism}
           onCommit={(value) => applySettings({ largeFileParallelism: value })}
         />
-        <IntegerSetting
+        <TransferIntegerSetting
           label={t("sftp.manager.largeFileChunk")}
           value={largeFileChunkBytes}
           min={8}
@@ -434,6 +396,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
                               ? t("sftp.manager.status.held")
                               : t(statusLabelKeys[displayedStatus])}
                         </span>
+                        {item.status === "reconnecting" ? <span className="text-notice-ink">{t("sftp.manager.reconnectAttempt", { attempt: item.reconnectAttempt, maximum: sftpTransferManager.getMaxReconnectAttempts() })}</span> : null}
                         {item.status === "queued" && waiting.length > 1 ? (
                           <>
                             <button type="button" aria-label={t("sftp.manager.moveUp", { name: item.name })} disabled={waiting[0]?.id === item.id} onClick={() => runControl(() => sftpTransferManager.move(item.id, "up"))} className="flex size-9 items-center justify-center rounded text-accent disabled:text-ink-faint md:size-5"><Icon name="arrowUp" className="size-3.5" /></button>

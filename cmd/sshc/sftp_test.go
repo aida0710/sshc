@@ -198,6 +198,7 @@ func TestSFTPSettingsShowsAndPersistsSplitDefaults(t *testing.T) {
 	settings := httpserver.SFTPTransferJobList{
 		MaxConcurrent: 3, ClearCompletedAfterSeconds: 300, ProcessingStopped: true,
 		LargeFileThresholdBytes: 100 << 20, LargeFileParallelism: 4, LargeFileChunkBytes: 32 << 20,
+		SpeedLimitBytesPerSecond: 2048 << 10, AutoReconnect: true, MaxReconnectAttempts: 3,
 		Jobs: []httpserver.SFTPTransferJob{},
 	}
 	var updates int
@@ -225,10 +226,11 @@ func TestSFTPSettingsShowsAndPersistsSplitDefaults(t *testing.T) {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
 	}
 	if updates != 1 || settings.MaxConcurrent != 3 || settings.ClearCompletedAfterSeconds != 300 || !settings.ProcessingStopped ||
-		settings.LargeFileThresholdBytes != 73<<20 || settings.LargeFileParallelism != 7 || settings.LargeFileChunkBytes != 41<<20 {
+		settings.LargeFileThresholdBytes != 73<<20 || settings.LargeFileParallelism != 7 || settings.LargeFileChunkBytes != 41<<20 ||
+		settings.SpeedLimitBytesPerSecond != 2048<<10 || !settings.AutoReconnect || settings.MaxReconnectAttempts != 3 {
 		t.Fatalf("settings=%+v updates=%d", settings, updates)
 	}
-	if got := stdout.String(); got != "split-size  73 MiB\nsplit-jobs  7\nchunk-size  41 MiB\n" {
+	if got := stdout.String(); got != "split-size  73 MiB\nsplit-jobs  7\nchunk-size  41 MiB\nspeed-limit  2048 KiB/s (0: unlimited)\nauto-reconnect  true\nreconnect-attempts  3\n" {
 		t.Fatalf("stdout=%q", got)
 	}
 

@@ -116,6 +116,8 @@ type SFTPTransferJob struct {
 	Status            sshcSFTP.TransferJobStatus       `json:"status"`
 	AllowedActions    []sshcSFTP.TransferControlAction `json:"allowedActions"`
 	Attempt           int                              `json:"attempt"`
+	ReconnectAttempt  int                              `json:"reconnectAttempt"`
+	ReconnectAt       string                           `json:"reconnectAt"`
 	Problem           string                           `json:"problem"`
 	LastModified      int64                            `json:"lastModified"`
 	ExpectedRevision  string                           `json:"expectedRevision"`
@@ -149,6 +151,7 @@ func describeTransferJob(job sshcSFTP.TransferJob) SFTPTransferJob {
 		TransferredBytes: job.TransferredBytes, BytesPerSecond: job.BytesPerSecond,
 		RemainingSeconds: job.RemainingSeconds, Status: job.Status,
 		AllowedActions: sshcSFTP.AllowedTransferActions(job), Attempt: job.Attempt,
+		ReconnectAttempt: job.ReconnectAttempt, ReconnectAt: describeReconnectAt(job.ReconnectAt),
 		Problem: job.Problem, LastModified: job.LastModified,
 		ExpectedRevision: job.ExpectedRevision, SourceFingerprint: job.SourceFingerprint,
 		Overwrite: job.Overwrite, DownloadRevision: job.DownloadRevision,
@@ -159,10 +162,13 @@ func describeTransferJob(job sshcSFTP.TransferJob) SFTPTransferJob {
 
 // SFTPTransferJobList は、転送キューの設定と job の一覧である。
 type SFTPTransferJobList struct {
-	MaxConcurrent           int   `json:"maxConcurrent"`
-	LargeFileThresholdBytes int64 `json:"largeFileThresholdBytes"`
-	LargeFileParallelism    int   `json:"largeFileParallelism"`
-	LargeFileChunkBytes     int64 `json:"largeFileChunkBytes"`
+	MaxConcurrent            int   `json:"maxConcurrent"`
+	LargeFileThresholdBytes  int64 `json:"largeFileThresholdBytes"`
+	LargeFileParallelism     int   `json:"largeFileParallelism"`
+	LargeFileChunkBytes      int64 `json:"largeFileChunkBytes"`
+	SpeedLimitBytesPerSecond int64 `json:"speedLimitBytesPerSecond"`
+	AutoReconnect            bool  `json:"autoReconnect"`
+	MaxReconnectAttempts     int   `json:"maxReconnectAttempts"`
 	// 0 は自動消去なしである。
 	ClearCompletedAfterSeconds int `json:"clearCompletedAfterSeconds"`
 	// 停止中は待機の job を新しく開始しない。
@@ -177,6 +183,9 @@ type sftpTransferSettingsRequest struct {
 	LargeFileThresholdBytes    int64 `json:"largeFileThresholdBytes"`
 	LargeFileParallelism       int   `json:"largeFileParallelism"`
 	LargeFileChunkBytes        int64 `json:"largeFileChunkBytes"`
+	SpeedLimitBytesPerSecond   int64 `json:"speedLimitBytesPerSecond"`
+	AutoReconnect              bool  `json:"autoReconnect"`
+	MaxReconnectAttempts       int   `json:"maxReconnectAttempts"`
 }
 
 type sftpTransferQueueMoveRequest struct {
@@ -252,4 +261,11 @@ func describeResumableUpload(upload sshcSFTP.ResumableUpload) SFTPResumableUploa
 		ExpectedRevision: upload.ExpectedRevision, CompletedRanges: ranges,
 		Parallelism: upload.Parallelism, ChunkBytes: upload.ChunkBytes,
 	}
+}
+
+func describeReconnectAt(at time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	return at.Format(time.RFC3339Nano)
 }

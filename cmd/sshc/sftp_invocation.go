@@ -14,23 +14,25 @@ const (
 )
 
 type sftpInvocation struct {
-	Action       sftpAction
-	Alias        string
-	Source       string
-	Destination  string
-	Recursive    bool
-	Overwrite    bool
-	SkipExisting bool
-	DryRun       bool
-	JSON         bool
-	Yes          bool
-	Jobs         int
-	SplitSizeMiB int
-	SplitJobs    int
-	ChunkSizeMiB int
-	MaxDepth     int
-	MaxEntries   int
-	MaxTotalMiB  int64
+	Action            sftpAction
+	Alias             string
+	Source            string
+	Destination       string
+	Recursive         bool
+	Overwrite         bool
+	SkipExisting      bool
+	DryRun            bool
+	JSON              bool
+	Yes               bool
+	Jobs              int
+	SplitSizeMiB      int
+	SplitJobs         int
+	ChunkSizeMiB      int
+	SpeedLimitKiB     *int
+	ReconnectAttempts *int
+	MaxDepth          int
+	MaxEntries        int
+	MaxTotalMiB       int64
 }
 
 // sftpDefaultJobs は、--jobs を指定しないときに同時に転送するファイルの数である。
@@ -58,7 +60,7 @@ var sftpTransferOptions = commandOptions{command: "sftp", options: append([]comm
 }, sftpSplitOptions...)}
 
 var sftpSettingsOptions = commandOptions{
-	command: "sftp settings", options: append([]commandOption{jsonOption}, sftpSplitOptions...),
+	command: "sftp settings", options: append([]commandOption{jsonOption, valueOption("--speed-limit"), valueOption("--reconnect-attempts")}, sftpSplitOptions...),
 }
 
 // sftpRecursiveLimitOptions は、再帰の get だけが受け取る安全の上限である。
@@ -159,6 +161,9 @@ func parseSFTPSettingsInvocation(args []string) (invocation, error) {
 	}
 	called := sftpInvocation{Action: sftpSettings, JSON: arguments.has("--json")}
 	if err := readSFTPSplitOptions(arguments, &called); err != nil {
+		return invalidInvocation(err.Error())
+	}
+	if err := readSFTPRecoverySettings(arguments, &called); err != nil {
 		return invalidInvocation(err.Error())
 	}
 	return invocation{Kind: invocationSFTP, JSON: called.JSON, SFTP: &called}, nil
