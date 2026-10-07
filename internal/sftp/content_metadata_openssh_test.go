@@ -55,7 +55,7 @@ func TestContentSearchDoesNotReadFilesWithMissingSizeOrModificationTime(t *testi
 		t.Run(name, func(t *testing.T) {
 			client := openOpenSSHTestClient(t)
 			remote := &incompleteContentRemote{Client: client, missingAttribute: attribute}
-			directory := t.TempDir()
+			directory := newOpenSSHFixtureDirectory(t)
 			if err := os.WriteFile(filepath.Join(directory, "file.txt"), []byte("needle\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}

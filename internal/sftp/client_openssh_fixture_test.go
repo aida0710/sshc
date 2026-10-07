@@ -3,8 +3,20 @@ package sftp
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 )
+
+func newOpenSSHFixtureDirectory(t *testing.T) string {
+	t.Helper()
+	// macOS TempDir paths include /var, a symlink. Remote operations reject
+	// symlink ancestors, so fixtures must use the actual directory path.
+	directory, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return directory
+}
 
 func openOpenSSHTestClient(t *testing.T) *Client {
 	t.Helper()

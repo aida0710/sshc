@@ -384,7 +384,14 @@ func TestContentComparisonCancelsDuringHashingBeforeReadingTheOtherSide(t *testi
 }
 
 func TestContentToolsUseTheSFTPProtocolWithoutExecutingARemoteShell(t *testing.T) {
-	left, right := t.TempDir(), t.TempDir()
+	left, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	right, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, folder := range []string{left, right} {
 		if err := os.WriteFile(filepath.Join(folder, "notes.txt"), []byte("first\nneedle 一致\n"), 0o644); err != nil {
 			t.Fatal(err)

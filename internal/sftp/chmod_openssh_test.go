@@ -9,7 +9,7 @@ import (
 
 func TestOpenSSHBatchPermissionsChangeFilesAndDirectoriesWithoutChangingALinkTarget(t *testing.T) {
 	client := openOpenSSHTestClient(t)
-	directory := t.TempDir()
+	directory := newOpenSSHFixtureDirectory(t)
 	group := filepath.Join(directory, "group")
 	if err := os.Mkdir(group, 0o700); err != nil {
 		t.Fatal(err)
