@@ -40,6 +40,14 @@ outline: false
 
   <section class="sshc-home-section">
     <div class="sshc-section-heading">
+      <h2>Try the demo</h2>
+      <p>Start three Linux VMs in your browser and try SSH connections and SFTP from the sshc Web UI and CLI. A desktop browser is recommended.</p>
+    </div>
+    <div class="sshc-actions"><a class="sshc-action primary" href="https://sshc-demo.aida0710.work/index.html">Open the demo</a></div>
+  </section>
+
+  <section class="sshc-home-section">
+    <div class="sshc-section-heading">
       <h2>Install</h2>
       <p>Install through Homebrew on macOS and Linux, or use the verified PowerShell installer from GitHub Releases on Windows.</p>
     </div>

@@ -40,6 +40,14 @@ outline: false
 
   <section class="sshc-home-section">
     <div class="sshc-section-heading">
+      <h2>デモを試す</h2>
+      <p>ブラウザの中でLinuxのVMを3台起動し、sshcのWeb UIとCLIからSSH接続やSFTPを試せます。デスクトップのブラウザでお試しください。</p>
+    </div>
+    <div class="sshc-actions"><a class="sshc-action primary" href="https://sshc-demo.aida0710.work/index.html">デモを開く</a></div>
+  </section>
+
+  <section class="sshc-home-section">
+    <div class="sshc-section-heading">
       <h2>インストール</h2>
       <p>macOSとLinuxではHomebrewからインストールできます。Windows向けには、GitHub Releasesで検証済みのPowerShellインストーラーを配布しています。</p>
     </div>
