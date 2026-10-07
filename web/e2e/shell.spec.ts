@@ -77,6 +77,36 @@ test("keeps the engine version visible when the release check fails", async ({ p
   }
 });
 
+test("folds the Homebrew update guidance under the navigation version", async ({ page, installation }) => {
+  await page.route("**/api/v1/update", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ current: "v1.0.0", latest: "v1.0.0", available: false, canUpdate: false, reason: "update_homebrew_unsupported" }),
+    });
+  });
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+  await openApplication(page, installation);
+
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  const version = navigation.getByRole("button", { name: "Version v1.0.0" });
+  const guidance = navigation.getByText(/For Homebrew installations/);
+  await expect(version).toHaveAttribute("aria-expanded", "false");
+  await expect(guidance).toBeHidden();
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/version-folded.png` });
+  }
+  await version.click();
+  await expect(version).toHaveAttribute("aria-expanded", "true");
+  await expect(guidance).toBeVisible();
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    // The chevron turns with a transition; capture it after it settles.
+    await version.locator("svg").evaluate((icon) => Promise.all(icon.getAnimations().map((animation) => animation.finished)));
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/version-opened.png` });
+  }
+});
+
 test("shows safe diagnostics for a failed operation", async ({ page, installation }) => {
   await stubUpdateStatus(page);
   await page.route("**/api/v1/config/overview", async (route) => {
