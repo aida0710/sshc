@@ -23,9 +23,13 @@
   };
   const decodeBytes = (body) => Uint8Array.from(atob(body ?? ""), (character) => character.charCodeAt(0));
 
+  // The product reads its language from this key (web/src/ui/browserStorageKeys.ts); the demo
+  // page has already chosen one, so the Web UI opens in the same language.
+  const productLanguageKey = "sshc.language";
+  const demoLanguage = parent.document.documentElement.lang;
   // A new VM starts a new demo; tokens and settings from previous VMs must not survive.
   for (const storageName of ["localStorage", "sessionStorage"]) {
-    const entries = new Map();
+    const entries = new Map(storageName === "localStorage" && demoLanguage ? [[productLanguageKey, demoLanguage]] : []);
     Object.defineProperty(window, storageName, { value: {
       getItem: (name) => entries.get(name) ?? null,
       setItem: (name, value) => entries.set(name, String(value)),

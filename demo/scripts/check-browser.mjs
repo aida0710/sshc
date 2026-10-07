@@ -12,6 +12,22 @@ const browser = await chromium.launch({
 });
 let page;
 try {
+  // The demo follows the browser language, and the header switch changes it before any VM starts.
+  const englishPage = await browser.newPage({ locale: "en-US" });
+  await englishPage.route(new URL("config.json", demoURL).href, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...await response.json(), releaseProxyURL: "" } });
+  });
+  await englishPage.goto(demoURL);
+  await englishPage.getByRole("heading", { name: "Try sshc on the web" }).waitFor();
+  await englishPage.getByRole("button", { name: "Start", exact: true }).waitFor();
+  assert.equal(await englishPage.evaluate(() => document.documentElement.lang), "en");
+  await englishPage.getByRole("button", { name: "日本語", exact: true }).click();
+  await englishPage.getByRole("heading", { name: "sshcをWebで試してみる" }).waitFor();
+  assert.equal(await englishPage.evaluate(() => Boolean(window.sshcDemo)), false);
+  await englishPage.close();
+  console.log("PASS: ブラウザの言語で英語を表示し、起動前に日本語へ切り替えられる");
+
   page = await browser.newPage({ viewport: { width: 1440, height: 980 }, locale: "ja-JP" });
   page.setDefaultTimeout(60_000);
   const imageRequests = [];
