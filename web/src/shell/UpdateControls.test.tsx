@@ -59,11 +59,20 @@ describe("Web self update", () => {
     expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
   });
 
-  it("guides Homebrew installations to CLI updates without offering a Web installation", async () => {
+  it("guides Homebrew installations to CLI updates only after the version is opened", async () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, canUpdate: false, reason: "update_homebrew_unsupported" });
     render(<UpdateBadge api={api} />);
-    expect(await screen.findByText(/For Homebrew installations/)).toHaveTextContent("update with sshc update in a terminal");
+    const version = await screen.findByRole("button", { name: "Version v1.0.0" });
+    expect(version).toHaveAttribute("aria-expanded", "false");
+    const guidance = screen.getByText(/For Homebrew installations/);
+    expect(guidance).not.toBeVisible();
+    await userEvent.click(version);
+    expect(version).toHaveAttribute("aria-expanded", "true");
+    expect(guidance).toBeVisible();
+    expect(guidance).toHaveTextContent("update with sshc update in a terminal");
+    await userEvent.click(version);
+    expect(guidance).not.toBeVisible();
     expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
     expect(api.previewUpdate).not.toHaveBeenCalled();
     expect(api.startUpdate).not.toHaveBeenCalled();
@@ -77,12 +86,26 @@ describe("Web self update", () => {
     expect(screen.getByText("Version v1.1.0")).toBeVisible();
   });
 
-  it.each(["update_unmanaged", "update_permission_denied", "update_development_build", "update_windows_unsupported", "update_android_unsupported"])("explains %s and offers no automatic update", async (reason) => {
+  it.each(["update_unmanaged", "update_permission_denied", "update_development_build", "update_windows_unsupported", "update_android_unsupported"])("explains %s under the version and offers no automatic update", async (reason) => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, canUpdate: false, reason });
     render(<UpdateBadge api={api} />);
-    await screen.findByText("Version v1.0.0");
+    const version = await screen.findByRole("button", { name: "Version v1.0.0" });
+    const explanation = document.getElementById(version.getAttribute("aria-controls") ?? "");
+    expect(explanation).not.toBeVisible();
+    await userEvent.click(version);
+    expect(explanation).toBeVisible();
+    expect(explanation?.textContent).not.toBe("");
     expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain("unavailable for this installation");
+  });
+
+  it("keeps the version as plain text when there is nothing to explain", async () => {
+    const api = updater();
+    vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.0.0", latest: "v1.0.0", available: false, canUpdate: false, reason: "" });
+    render(<UpdateBadge api={api} />);
+    await screen.findByText("Version v1.0.0");
+    await waitFor(() => expect(api.updateStatus).toHaveBeenCalled());
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });
