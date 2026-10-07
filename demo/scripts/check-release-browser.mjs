@@ -13,7 +13,8 @@ const origin = new URL(demoURL).origin;
 await mkdir(artifactDirectory, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 980 } });
+  // The demo follows the browser language; these checks read the Japanese screen.
+  const context = await browser.newContext({ viewport: { width: 1440, height: 980 }, locale: "ja-JP" });
   let archiveRequests = 0;
   await context.route(`${origin}/config.json`, async (route) => {
     const response = await route.fetch();
@@ -67,7 +68,7 @@ try {
   console.log("PASS: キャッシュ削除でUIとReleaseの束を両方消し、起動前の入口に戻る");
   await context.close();
 
-  const fallbackContext = await browser.newContext();
+  const fallbackContext = await browser.newContext({ locale: "ja-JP" });
   await fallbackContext.route(`${origin}/config.json`, async route => {
     const response = await route.fetch();
     await route.fulfill({ json: { ...await response.json(), releaseProxyURL: `${origin}/` } });
