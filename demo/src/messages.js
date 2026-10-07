@@ -6,10 +6,6 @@ export const messages = {
   checkingRelease: "GitHubの最新リリースを確認しています…",
   latestRelease: (version) => `起動する版: ${version}（GitHub最新リリース）`,
   releaseFallback: (version) => `最新リリースを取得できないため、配信済みの${version}で起動します。`,
-  releaseArchiveProgress: ({ state, fraction, completedFiles, totalFiles }) => state === "downloading"
-    ? `デモ一式をダウンロード中 · ${Math.round(fraction * 100)}%`
-    : state === "unpacking" ? "デモ一式を展開しています…"
-    : state === "caching" ? `デモ一式を保存中 · ${completedFiles}/${totalFiles}` : "デモ一式の準備が完了しました",
   clearUICache: "キャッシュを削除して再読み込み",
   cacheClearFailed: "再読み込みに失敗しました。もう一度お試しください。",
   updatedAt: (timestamp) => new Intl.DateTimeFormat("ja-JP", {
@@ -39,13 +35,15 @@ export const messages = {
   downloadProgress: (percentage) => percentage === null ? "起動ファイルを読み込んでいます" : `起動ファイルの読み込み ${percentage}%`,
   machineLoading: (percentage) => percentage === null ? "読み込み中" : `読み込み中 · ${percentage}%`,
   machineDownload: (label) => `${label}の起動ファイルの読み込み`,
-  uiArchiveProgress: ({ state, downloadPercentage, completedFiles, totalFiles }) => {
-    const detail = state === "downloading" ? `ダウンロード中 · ${downloadPercentage}%`
-      : state === "unpacking" ? "展開中"
-      : state === "caching" ? `準備中 · ${completedFiles}/${totalFiles}`
-      : state === "ready" ? "読み込み済み" : "待機中";
-    return `Web UIファイル — ${detail}`;
-  },
+  releaseArchiveLabel: (version) => `デモ一式 ${version}`,
+  uiArchiveLabel: "Web UI",
+  archiveDownload: (label) => `${label}のダウンロード`,
+  archiveStates: ({ state, downloadPercentage, completedFiles, totalFiles }) => state === "downloading"
+    ? `ダウンロード中 · ${downloadPercentage}%`
+    : state === "unpacking" ? "展開中"
+    : state === "caching" ? `保存中 · ${completedFiles}/${totalFiles}`
+    : state === "ready" ? "準備完了"
+    : state === "unavailable" ? "取得できないため配信済みの版で起動します" : "待機中",
   machineStates: { waiting: "待機中", booting: "Linuxを起動中", engine: "sshcエンジンを起動中", ready: "起動済み", failed: "読み込みに失敗" },
   startupPhases: {
     configuration: "起動の準備をしています…",
@@ -63,6 +61,6 @@ export function applyMessages(document) {
     element.textContent = messages[element.dataset.message];
   }
   document.title = messages.pageTitle;
-  document.querySelector("nav").setAttribute("aria-label", messages.tabsLabel);
+  document.getElementById("demo-tabs").setAttribute("aria-label", messages.tabsLabel);
   document.getElementById("sshc-ui").title = messages.frameTitle;
 }
