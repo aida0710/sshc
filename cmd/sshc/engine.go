@@ -150,6 +150,11 @@ func runEngineApp(
 		// engine は止めない。SFTP のダウンロードだけが sftp_spool_unavailable で失敗する。
 		logger.Warn("SFTP downloads are unavailable without a user cache directory", "error", err)
 	}
+	stateDirectory, err := app.StateDir(home)
+	if err != nil {
+		logger.Error("find update state directory", "error", err)
+		return exitFailure
+	}
 	dependencyValues := app.Dependencies{
 		Random:      rand.Reader,
 		Port:        options.Port,
@@ -172,6 +177,7 @@ func runEngineApp(
 		},
 		// 起動通知とWeb UIの手動確認は同じrelease判定を使用する。
 		Updates:         updates,
+		SelfUpdate:      newWebUpdater(runCtx, userPaths{home: home, stateDir: stateDirectory}, version),
 		Listen:          net.Listen,
 		UI:              assets,
 		Logger:          logger,

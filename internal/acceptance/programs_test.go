@@ -56,6 +56,9 @@ var allowedToStartPrograms = []string{
 	// tagのscriptへ委ねる。どちらにも該当しない実行ファイルからは起動しない。serviceは
 	// Homebrewへ固定argvでformulaの場所を尋ねるだけである。
 	"cmd/sshc/installation_commands.go",
+	// Web更新の再起動helperは、照合済みのsshcへ固定argvだけを渡す。
+	// engineのHTTP停止に巻き込まれず、管理サービスまたは確認したengineだけを再起動する。
+	"cmd/sshc/web_update_restart.go",
 	// service command（Linux は systemctl、macOS は launchctl）はここの runner だけから
 	// 起動する。tool は既知のpathまたはPATHから実行可能な絶対pathへ一度解決し、
 	// 固定argvで呼ぶ。利用者の入力をprogramや引数へ渡さず、sshc管理marker付きの

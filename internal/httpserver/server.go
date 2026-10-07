@@ -30,6 +30,7 @@ import (
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
+	"sshc/internal/selfupdate"
 	"sshc/internal/session"
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/snippets"
@@ -57,9 +58,10 @@ type Options struct {
 	// Updates はプロジェクトのリリースを調べる。nil の場合、バージョンを
 	// 報告するのみで何も提示しない。比較すべきリリースを持たないビルドが
 	// すべきことはこれである。
-	Updates  *releasecheck.Checker
-	Listener net.Listener
-	Sessions *session.Manager
+	Updates    *releasecheck.Checker
+	SelfUpdate *selfupdate.Service
+	Listener   net.Listener
+	Sessions   *session.Manager
 	// BrowserAuth keeps only hashes of browser enrolment capabilities. It is
 	// device-local state and lets a fixed-origin bookmark recover after restart.
 	BrowserAuth *browserauth.Store
@@ -425,7 +427,7 @@ func New(options Options) (*Server, error) {
 			Binding:     passwordBinding,
 		})
 	}
-	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Checker: options.Updates})
+	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Checker: options.Updates, Service: options.SelfUpdate, Actions: actions})
 
 	registerCLIRoutes(e, newCLIHandlers(options, host))
 	if options.Sync != nil {

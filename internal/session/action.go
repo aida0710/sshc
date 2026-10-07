@@ -34,6 +34,7 @@ const (
 	ActionSnippetExecute    = "snippet.execute"
 	ActionTerminalCommand   = "terminal.command.broadcast"
 	ActionSyncForcePush     = "sync.force_push"
+	ActionUpdate            = "update.install"
 )
 
 var (
@@ -59,6 +60,7 @@ var knownActionKinds = map[string]bool{
 	ActionSnippetExecute:    true,
 	ActionTerminalCommand:   true,
 	ActionSyncForcePush:     true,
+	ActionUpdate:            true,
 }
 
 // KnownActionKind は、kind がこのアプリケーションのいずれかの確認対象となる操作か

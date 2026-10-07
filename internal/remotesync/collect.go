@@ -15,6 +15,7 @@ import (
 	"sshc/internal/keys"
 	"sshc/internal/recent"
 	"sshc/internal/secret"
+	"sshc/internal/selfupdate"
 	"sshc/internal/storage"
 	terminalworkspace "sshc/internal/workspace"
 )
@@ -36,6 +37,10 @@ var neverTravels = slices.Concat([]string{
 	// handoff文書を原子的に更新するための端末固有ロック。公開文書の兄弟fileなので、
 	// sshc/cliの子path除外だけでは拾えない。
 	path.Join(storage.StateDirectoryName, handoff.MutationLockName),
+	// Update results and locks identify one installed executable and engine.
+	path.Join(storage.StateDirectoryName, selfupdate.StateFileName),
+	path.Join(storage.StateDirectoryName, selfupdate.StateFileName+selfupdate.StateLockSuffix),
+	path.Join(storage.StateDirectoryName, selfupdate.StateFileName+selfupdate.RestartLockSuffix),
 	// このマシンで消した鍵の退避先。
 	keys.TrashPathRelative,
 	// 接続履歴はこの端末での操作状態であり、別の端末へ移さない。
