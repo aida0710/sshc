@@ -151,14 +151,20 @@ func TestFailedResponseAndChangedInstallationNeverRunAnInstaller(t *testing.T) {
 }
 
 func TestInterruptedJobIsRecoveredWithoutRepeatingTheInstaller(t *testing.T) {
-	dependencies := updateFixture(t)
-	service := New(dependencies)
-	plan, _ := service.Prepare(context.Background(), "v1.1.0")
-	job, _ := service.Start(plan)
-	dependencies.PID = 202
-	recovered, err := New(dependencies).Status()
-	if err != nil || recovered.State != "failed" || recovered.Problem != "update_interrupted" || recovered.ID != job.ID {
-		t.Fatalf("job = %+v, %v", recovered, err)
+	for _, scenario := range []string{"different PID", "reused PID"} {
+		t.Run(scenario, func(t *testing.T) {
+			dependencies := updateFixture(t)
+			service := New(dependencies)
+			plan, _ := service.Prepare(context.Background(), "v1.1.0")
+			job, _ := service.Start(plan)
+			if scenario == "different PID" {
+				dependencies.PID++
+			}
+			recovered, err := New(dependencies).Status()
+			if err != nil || recovered.State != "failed" || recovered.Problem != "update_interrupted" || recovered.ID != job.ID {
+				t.Fatalf("job = %+v, %v", recovered, err)
+			}
+		})
 	}
 }
 
