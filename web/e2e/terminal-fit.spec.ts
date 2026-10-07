@@ -1,34 +1,18 @@
 import type { Page } from "@playwright/test";
-import { expect, openApplication, test, windowsShell, openLocalShell } from "./support/environment";
+import { expect, openApplication, test, openLocalShell } from "./support/environment";
 import {
   drawnRowCount,
   loseTerminalWebGLContext,
   terminalCanvasCount,
   terminalDrawingRects,
   terminalKeyboard,
+  waitForTerminalLayout,
 } from "./support/terminal";
+
+import { expectTerminalPTYSize, watchTerminalStream } from "./support/terminalStream";
 
 // Renderer changes need the real WebGL path, unlike the DOM-oriented suite.
 test.use({ launchOptions: { args: [] }, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
-
-type TerminalSize = { cols: number; rows: number };
-
-function watchTerminal(page: Page) {
-  const sizes: TerminalSize[] = [];
-  let output = "";
-  page.on("websocket", (socket) => {
-    socket.on("framesent", ({ payload }) => {
-      try {
-        const frame = JSON.parse(typeof payload === "string" ? payload : payload.toString("utf8")) as { resize?: TerminalSize };
-        if (frame.resize !== undefined) sizes.push(frame.resize);
-      } catch { /* Input frames are not resize messages. */ }
-    });
-    socket.on("framereceived", ({ payload }) => {
-      output += typeof payload === "string" ? payload : payload.toString("utf8");
-    });
-  });
-  return { sizes, output: () => output };
-}
 
 async function expectDrawingFits(page: Page) {
   await expect.poll(async () => {
@@ -46,29 +30,13 @@ async function openWebGLShell(page: Page) {
   await openLocalShell(page);
   await expect(terminalKeyboard(page)).toBeAttached();
   await expect.poll(() => terminalCanvasCount(page)).toBeGreaterThan(0);
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-  });
+  await waitForTerminalLayout(page);
   await expectDrawingFits(page);
   return terminalDrawingRects(page);
 }
 
-async function expectPTYSize(page: Page, observed: ReturnType<typeof watchTerminal>) {
-  const size = observed.sizes.at(-1)!;
-  expect(size.cols).toBeGreaterThan(1);
-  expect(size.rows).toBeGreaterThan(1);
-  const outputStart = observed.output().length;
-  await terminalKeyboard(page).focus();
-  await page.keyboard.type(windowsShell
-    ? '"FIT_SIZE=$($Host.UI.RawUI.WindowSize.Height)-$($Host.UI.RawUI.WindowSize.Width)"'
-    : 'printf "FIT_SIZE="; stty size | tr " " "-"');
-  await page.keyboard.press("Enter");
-  await expect.poll(() => observed.output().slice(outputStart)).toContain(`FIT_SIZE=${size.rows}-${size.cols}`);
-}
-
 test("refits every terminal row and column when DPR changes without resizing the host", async ({ page, installation }) => {
-  const observed = watchTerminal(page);
+  const observed = watchTerminalStream(page);
   await openApplication(page, installation);
   const before = await openWebGLShell(page);
   await expect.poll(() => observed.sizes.length).toBeGreaterThan(0);
@@ -89,11 +57,11 @@ test("refits every terminal row and column when DPR changes without resizing the
   });
   await expectDrawingFits(page);
   expect((await terminalDrawingRects(page)).host).toEqual(before.host);
-  await expectPTYSize(page, observed);
+  await expectTerminalPTYSize(page, observed);
 });
 
 test("refits terminal columns and rows after WebGL context loss switches to DOM rendering", async ({ page, installation }) => {
-  const observed = watchTerminal(page);
+  const observed = watchTerminalStream(page);
   await openApplication(page, installation);
   const before = await openWebGLShell(page);
   await expect.poll(() => observed.sizes.length).toBeGreaterThan(0);
@@ -102,5 +70,5 @@ test("refits terminal columns and rows after WebGL context loss switches to DOM 
   await expectDrawingFits(page);
   expect((await terminalDrawingRects(page)).host).toEqual(before.host);
   await expect.poll(() => drawnRowCount(page)).toBe(observed.sizes.at(-1)!.rows);
-  await expectPTYSize(page, observed);
+  await expectTerminalPTYSize(page, observed);
 });
