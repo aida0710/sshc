@@ -1,16 +1,28 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { packageUI } from "./package-ui.mjs";
 
 const demoDirectory = fileURLToPath(new URL("..", import.meta.url));
 const outputDirectory = resolve(demoDirectory, "dist");
 // dist is generated exclusively by this script; clearing it prevents stale UI bundles from being published.
 await rm(outputDirectory, { recursive: true, force: true });
 await mkdir(outputDirectory, { recursive: true });
+const assetSizes = {};
+for (const filename of ["seabios.bin", "vgabios.bin", "kernel.bin", "client.cpio.gz", "server.cpio.gz"]) {
+  assetSizes[filename] = (await stat(resolve(demoDirectory, "images", filename))).size;
+}
+assetSizes["v86.wasm"] = (await stat(resolve(demoDirectory, "node_modules/v86/build/v86.wasm"))).size;
+const uiArchive = await packageUI({ sourceDirectory: resolve(demoDirectory, "images/ui"), outputDirectory });
 await writeFile(resolve(outputDirectory, "config.json"), JSON.stringify({
   imageBaseURL: process.env.SSHC_DEMO_IMAGES_URL ?? "./images/",
+  assetSizes,
+  uiArchive,
 }) + "\n");
 await cp(resolve(demoDirectory, "src"), outputDirectory, { recursive: true });
+const indexPath = resolve(outputDirectory, "index.html");
+const index = await readFile(indexPath, "utf8");
+await writeFile(indexPath, index.replace("{{updatedAt}}", new Date().toISOString()));
 await cp(resolve(demoDirectory, "images"), resolve(outputDirectory, "images"), {
   recursive: true,
   filter: (path) => !/\/(?:rootfs|ui)(?:\/|$)|\/(?:sshc|sshc-demo-bridge)$/.test(path),
@@ -31,9 +43,4 @@ for (const [source, filename] of [
 ]) {
   await cp(resolve(demoDirectory, source), resolve(outputDirectory, "licenses", filename));
 }
-await cp(resolve(demoDirectory, "images/ui"), resolve(outputDirectory, "ui"), { recursive: true });
-const nativeIndex = await readFile(resolve(outputDirectory, "ui/index.html"), "utf8");
-// The production UI is reused verbatim; only this demo copy installs the VM transport.
-await writeFile(resolve(outputDirectory, "ui/index.html"), nativeIndex
-  .replace('<head>', '<head><script src="../ui-bridge.js"></script>'));
 console.log(`Prepared ${outputDirectory}`);

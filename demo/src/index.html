@@ -22,10 +22,28 @@
     <section id="demo" hidden>
       <div id="status" role="status" aria-live="polite"></div>
       <nav><button id="web-tab" aria-pressed="true" data-message="webTab"></button><button id="cli-tab" aria-pressed="false" data-message="cliTab"></button></nav>
-      <div id="web-panel"><iframe id="sshc-ui" title="sshc Web UI" hidden></iframe></div>
+      <div id="web-panel">
+        <section id="startup" aria-labelledby="startup-title" hidden>
+          <div class="startup-heading"><h2 id="startup-title" data-message="startupTitle"></h2><span id="startup-elapsed"></span></div>
+          <ol class="startup-stages"></ol>
+          <label id="startup-download-label" for="startup-download"></label>
+          <progress id="startup-download" max="100"></progress>
+          <div class="startup-ui">
+            <label id="startup-ui-label" for="startup-ui-download"></label>
+            <progress id="startup-ui-download" max="100"></progress>
+          </div>
+          <ul class="startup-machines"></ul>
+        </section>
+        <iframe id="sshc-ui" title="sshc Web UI" hidden></iframe>
+      </div>
       <div id="cli-panel" hidden><p class="cli-hint"><span data-message="commandExamples"></span> <code>sshc ssh demo-a</code>　<code>sshc ssh demo-b</code>　<code>sshc status</code></p><div id="cli"></div></div>
     </section>
   </main>
+  <footer>
+    <span><span data-message="updatedAtLabel"></span> <time id="updated-at" datetime="{{updatedAt}}"></time></span>
+    <button id="clear-ui-cache" data-message="clearUICache" hidden></button>
+    <span id="cache-error" role="alert" hidden></span>
+  </footer>
   <script src="./v86/libv86.js"></script>
   <script src="./xterm.js"></script>
   <script src="./addon-fit.js"></script>
