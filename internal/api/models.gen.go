@@ -1428,11 +1428,49 @@ type SFTPEntryTargetType string
 // SFTPEntryType defines model for SFTPEntry.Type.
 type SFTPEntryType string
 
+// SFTPLocalDeleteEntry defines model for SFTPLocalDeleteEntry.
+type SFTPLocalDeleteEntry struct {
+	ExpectedRevision string `json:"expectedRevision"`
+	Path             string `json:"path"`
+}
+
+// SFTPLocalDeletePlan defines model for SFTPLocalDeletePlan.
+type SFTPLocalDeletePlan struct {
+	ActionExpiresAt time.Time `json:"actionExpiresAt"`
+	ActionToken     string    `json:"actionToken"`
+	Items           int64     `json:"items"`
+	Revision        string    `json:"revision"`
+}
+
+// SFTPLocalDeleteRequest defines model for SFTPLocalDeleteRequest.
+type SFTPLocalDeleteRequest struct {
+	Entries          []SFTPLocalDeleteEntry `json:"entries"`
+	ExpectedRevision string                 `json:"expectedRevision"`
+}
+
+// SFTPLocalDeleteSelection defines model for SFTPLocalDeleteSelection.
+type SFTPLocalDeleteSelection struct {
+	Entries []SFTPLocalDeleteEntry `json:"entries"`
+}
+
 // SFTPLocalListing defines model for SFTPLocalListing.
 type SFTPLocalListing struct {
 	Entries []SFTPEntry `json:"entries"`
 	Home    string      `json:"home"`
 	Path    string      `json:"path"`
+}
+
+// SFTPLocalMkdirRequest defines model for SFTPLocalMkdirRequest.
+type SFTPLocalMkdirRequest struct {
+	Directory string `json:"directory"`
+	Name      string `json:"name"`
+}
+
+// SFTPLocalRenameRequest defines model for SFTPLocalRenameRequest.
+type SFTPLocalRenameRequest struct {
+	ExpectedRevision string `json:"expectedRevision"`
+	Name             string `json:"name"`
+	Path             string `json:"path"`
 }
 
 // SetTerminalSessionTitleRequest defines model for SetTerminalSessionTitleRequest.
