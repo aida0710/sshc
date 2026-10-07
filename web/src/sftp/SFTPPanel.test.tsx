@@ -1198,6 +1198,41 @@ describe("SFTPPanel uploads", () => {
       expect(within(dialog).getByText("/remote/notes.txt")).toBeVisible();
     });
 
+    it("offers deletion after selecting filtered files and folders and queues them only after confirmation", async () => {
+      const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["delete-project", "delete-notes"]);
+      const onQueueOpen = vi.fn();
+      render(<SFTPPanel aliases={["edge"]} onQueueOpen={onQueueOpen} />);
+      await chooseHost("edge");
+      await userEvent.click(screen.getByRole("button", { name: "Search files" }));
+      await userEvent.type(screen.getByRole("searchbox", { name: "Filter entries" }), "notes");
+      await userEvent.click(screen.getByRole("checkbox", { name: "Select notes.txt" }));
+
+      expect(screen.getByRole("button", { name: "Search files" })).toHaveAttribute("aria-expanded", "false");
+      await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+      const fileDialog = screen.getByRole("dialog", { name: "Delete this remote entry?" });
+      expect(fileDialog).toHaveTextContent("/remote/notes.txt");
+      expect(addRemoteTransfers).not.toHaveBeenCalled();
+      await userEvent.click(within(fileDialog).getByRole("button", { name: "Cancel" }));
+      expect(screen.getByRole("checkbox", { name: "Select notes.txt" })).toBeChecked();
+
+      await userEvent.click(screen.getByRole("button", { name: "Search files" }));
+      await userEvent.clear(screen.getByRole("searchbox", { name: "Filter entries" }));
+      await userEvent.click(screen.getByRole("checkbox", { name: "Select project" }));
+      await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+      const batchDialog = screen.getByRole("dialog", { name: "Delete 2 remote entries?" });
+      expect(batchDialog).toHaveTextContent("Folders and everything inside them will be deleted.");
+      expect(batchDialog).toHaveTextContent("/remote/project");
+      expect(batchDialog).toHaveTextContent("/remote/notes.txt");
+      expect(addRemoteTransfers).not.toHaveBeenCalled();
+      await userEvent.click(within(batchDialog).getByRole("button", { name: "Delete" }));
+      expect(addRemoteTransfers).toHaveBeenCalledOnce();
+      expect(addRemoteTransfers).toHaveBeenCalledWith([
+        expect.objectContaining({ sourceAlias: "edge", sourcePath: "/remote/project", kind: "folder" }),
+        expect.objectContaining({ sourceAlias: "edge", sourcePath: "/remote/notes.txt", kind: "file" }),
+      ], "delete");
+      expect(onQueueOpen).toHaveBeenCalledOnce();
+    });
+
     it("keeps creation, navigation, selection and sorting in the folder sheet", async () => {
       render(<SFTPPanel aliases={["edge"]} />);
       await chooseHost("edge");
