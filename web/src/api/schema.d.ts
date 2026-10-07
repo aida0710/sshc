@@ -903,9 +903,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Reports the latest release, installation boundary and durable update job. Result checks are available while the vault is locked after restart. */
         get: operations["checkForUpdate"];
         put?: never;
-        post?: never;
+        /** @description Consumes the preview's single-use X-SSHC-Action token, bound to the release and inspected installation. Flushes the accepted response before starting installation and restart. Terminals and transfers disconnect. */
+        post: operations["startSelfUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/update/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Checks Homebrew ownership or the install.sh receipt, permissions and latest stable release. This never runs an installer. Confirmation expires after two minutes. */
+        post: operations["previewSelfUpdate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2154,6 +2173,30 @@ export interface components {
             latest?: string;
             available: boolean;
             pageUrl?: string;
+            /** @enum {string} */
+            manager?: "homebrew" | "install.sh";
+            canUpdate?: boolean;
+            /** @description Stable reason code explaining why automatic updates are unavailable */
+            reason?: string;
+            job?: components["schemas"]["UpdateJob"];
+        };
+        UpdateRequest: {
+            target: string;
+        };
+        UpdatePreview: {
+            current: string;
+            target: string;
+            /** @enum {string} */
+            manager: "homebrew" | "install.sh";
+            actionToken: string;
+            actionExpiresAt: string;
+        };
+        UpdateJob: {
+            id: string;
+            target: string;
+            /** @enum {string} */
+            state: "accepted" | "installing" | "restarting" | "succeeded" | "failed" | "restart_required";
+            problem: string;
         };
         ChangeMasterPasswordRequest: {
             current: string;
@@ -5690,7 +5733,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description What is installed and what is published */
+            /** @description Current release and update state */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5702,6 +5745,69 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    startSelfUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description A single durable update job was reserved */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateJob"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    previewSelfUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Exact update plan and one-time confirmation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdatePreview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
         };
     };

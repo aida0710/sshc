@@ -117,6 +117,9 @@ func dispatchInvocation(called invocation, paths userPaths, client *http.Client)
 	case invocationStatus:
 		return runStatus(ctx, systemCommandEnvironment(paths, client), called.JSON)
 	case invocationUpdate:
+		if id := os.Getenv(webUpdateRestartEnvironment); id != "" && called.Yes {
+			return runWebUpdateRestart(paths, id)
+		}
 		updateCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
 		return runUpdate(updateCtx, updateRun{

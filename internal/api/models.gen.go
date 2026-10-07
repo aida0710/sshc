@@ -443,6 +443,72 @@ func (e TerminalSessionState) Valid() bool {
 	}
 }
 
+// Defines values for UpdateJobState.
+const (
+	Accepted        UpdateJobState = "accepted"
+	Failed          UpdateJobState = "failed"
+	Installing      UpdateJobState = "installing"
+	RestartRequired UpdateJobState = "restart_required"
+	Restarting      UpdateJobState = "restarting"
+	Succeeded       UpdateJobState = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the UpdateJobState enum.
+func (e UpdateJobState) Valid() bool {
+	switch e {
+	case Accepted:
+		return true
+	case Failed:
+		return true
+	case Installing:
+		return true
+	case RestartRequired:
+		return true
+	case Restarting:
+		return true
+	case Succeeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdatePreviewManager.
+const (
+	UpdatePreviewManagerHomebrew  UpdatePreviewManager = "homebrew"
+	UpdatePreviewManagerInstallSh UpdatePreviewManager = "install.sh"
+)
+
+// Valid indicates whether the value is a known member of the UpdatePreviewManager enum.
+func (e UpdatePreviewManager) Valid() bool {
+	switch e {
+	case UpdatePreviewManagerHomebrew:
+		return true
+	case UpdatePreviewManagerInstallSh:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateStatusManager.
+const (
+	UpdateStatusManagerHomebrew  UpdateStatusManager = "homebrew"
+	UpdateStatusManagerInstallSh UpdateStatusManager = "install.sh"
+)
+
+// Valid indicates whether the value is a known member of the UpdateStatusManager enum.
+func (e UpdateStatusManager) Valid() bool {
+	switch e {
+	case UpdateStatusManagerHomebrew:
+		return true
+	case UpdateStatusManagerInstallSh:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VaultAutoLockSettingsMode.
 const (
 	Idle    VaultAutoLockSettingsMode = "idle"
@@ -1903,6 +1969,17 @@ type UpdateCredentialRequest struct {
 	Secret string `json:"secret"`
 }
 
+// UpdateJob defines model for UpdateJob.
+type UpdateJob struct {
+	Id      string         `json:"id"`
+	Problem string         `json:"problem"`
+	State   UpdateJobState `json:"state"`
+	Target  string         `json:"target"`
+}
+
+// UpdateJobState defines model for UpdateJob.State.
+type UpdateJobState string
+
 // UpdatePasswordConfirmRoute defines model for UpdatePasswordConfirmRoute.
 type UpdatePasswordConfirmRoute struct {
 	Kind string `json:"kind"`
@@ -1918,13 +1995,39 @@ type UpdatePasswordUnchanged struct {
 	Kind string `json:"kind"`
 }
 
+// UpdatePreview defines model for UpdatePreview.
+type UpdatePreview struct {
+	ActionExpiresAt string               `json:"actionExpiresAt"`
+	ActionToken     string               `json:"actionToken"`
+	Current         string               `json:"current"`
+	Manager         UpdatePreviewManager `json:"manager"`
+	Target          string               `json:"target"`
+}
+
+// UpdatePreviewManager defines model for UpdatePreview.Manager.
+type UpdatePreviewManager string
+
+// UpdateRequest defines model for UpdateRequest.
+type UpdateRequest struct {
+	Target string `json:"target"`
+}
+
 // UpdateStatus defines model for UpdateStatus.
 type UpdateStatus struct {
-	Available bool    `json:"available"`
-	Current   string  `json:"current"`
-	Latest    *string `json:"latest,omitempty"`
-	PageUrl   *string `json:"pageUrl,omitempty"`
+	Available bool                 `json:"available"`
+	CanUpdate *bool                `json:"canUpdate,omitempty"`
+	Current   string               `json:"current"`
+	Job       *UpdateJob           `json:"job,omitempty"`
+	Latest    *string              `json:"latest,omitempty"`
+	Manager   *UpdateStatusManager `json:"manager,omitempty"`
+	PageUrl   *string              `json:"pageUrl,omitempty"`
+
+	// Reason Stable reason code explaining why automatic updates are unavailable
+	Reason *string `json:"reason,omitempty"`
 }
+
+// UpdateStatusManager defines model for UpdateStatus.Manager.
+type UpdateStatusManager string
 
 // UpdateTOTPConfirmRoute defines model for UpdateTOTPConfirmRoute.
 type UpdateTOTPConfirmRoute struct {

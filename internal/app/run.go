@@ -25,6 +25,7 @@ import (
 	"sshc/internal/releasecheck"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
+	"sshc/internal/selfupdate"
 	"sshc/internal/session"
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/sshclient"
@@ -66,6 +67,7 @@ type Dependencies struct {
 	Probe        func(ctx context.Context, alias string) (sshclient.Probe, error)
 	RemoteRun    func(ctx context.Context, target sshclient.Target, command sshclient.Command) (sshclient.Output, error)
 	Updates      *releasecheck.Checker
+	SelfUpdate   *selfupdate.Service
 	// Lookup は親の環境を読み、利用者のログインシェルを見つけるために使う。
 	Lookup func(string) (string, bool)
 	// TerminalStarter は PTY を確保する。nil の場合は既定実装を使用する。
@@ -215,9 +217,10 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 	}
 
 	server, err := httpserver.New(httpserver.Options{
-		Listener:  listener,
-		CLISecret: cliSecret,
-		Updates:   dependencies.Updates,
+		Listener:   listener,
+		CLISecret:  cliSecret,
+		Updates:    dependencies.Updates,
+		SelfUpdate: dependencies.SelfUpdate,
 		ConnectWarnings: func(alias string) []string {
 			if err := validate.Alias(alias); err != nil {
 				return []string{unsafeAliasWarning}

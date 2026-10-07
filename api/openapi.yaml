@@ -1164,15 +1164,60 @@ paths:
   /api/v1/update:
     get:
       operationId: checkForUpdate
+      description: Reports the latest release, installation boundary and durable update job. Result checks are available while the vault is locked after restart.
       responses:
         "200":
-          description: What is installed and what is published
+          description: Current release and update state
           content:
             application/json:
               schema: { $ref: "#/components/schemas/UpdateStatus" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: startSelfUpdate
+      description: Consumes the preview's single-use X-SSHC-Action token, bound to the release and inspected installation. Flushes the accepted response before starting installation and restart. Terminals and transfers disconnect.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRequest" }
+      responses:
+        "202":
+          description: A single durable update job was reserved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpdateJob" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/update/preview:
+    post:
+      operationId: previewSelfUpdate
+      description: Checks Homebrew ownership or the install.sh receipt, permissions and latest stable release. This never runs an installer. Confirmation expires after two minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRequest" }
+      responses:
+        "200":
+          description: Exact update plan and one-time confirmation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpdatePreview" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
   /api/v1/passwords/change:
     post:
@@ -2774,12 +2819,38 @@ components:
       required: [current, available]
       properties:
         current: { type: string }
-        # 何かが公開されるまで、あるいは確認が走るまでは空。
         latest: { type: string }
         available: { type: boolean }
-        # 何が変わったかをユーザーが読み、どうするかを決める場所。このアプリケーションは
-        # 何も取得せず、何も置き換えない。
         pageUrl: { type: string }
+        manager: { type: string, enum: [homebrew, install.sh] }
+        canUpdate: { type: boolean }
+        reason: { type: string, description: Stable reason code explaining why automatic updates are unavailable }
+        job: { $ref: "#/components/schemas/UpdateJob" }
+    UpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [target]
+      properties:
+        target: { type: string, minLength: 1, maxLength: 128 }
+    UpdatePreview:
+      type: object
+      additionalProperties: false
+      required: [current, target, manager, actionToken, actionExpiresAt]
+      properties:
+        current: { type: string }
+        target: { type: string }
+        manager: { type: string, enum: [homebrew, install.sh] }
+        actionToken: { type: string }
+        actionExpiresAt: { type: string }
+    UpdateJob:
+      type: object
+      additionalProperties: false
+      required: [id, target, state, problem]
+      properties:
+        id: { type: string }
+        target: { type: string }
+        state: { type: string, enum: [accepted, installing, restarting, succeeded, failed, restart_required] }
+        problem: { type: string }
     ChangeMasterPasswordRequest:
       type: object
       additionalProperties: false

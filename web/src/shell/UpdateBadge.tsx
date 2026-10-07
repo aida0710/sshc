@@ -1,30 +1,20 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { updateApi, type UpdateApi, type UpdateStatus } from "../api/update";
+import { type ReactNode } from "react";
+import { updateApi, type UpdateApi } from "../api/update";
 import { useTranslate } from "../i18n/context";
+import { useUpdateStatus } from "./useUpdateStatus";
+import { UpdateControls } from "./UpdateControls";
 import { isSafeHttpURL } from "../terminal/links";
 
 type UpdateBadgeProps = {
   api?: UpdateApi;
   current?: string;
   indicator?: ReactNode;
+  enabled?: boolean;
 };
 
-export function UpdateBadge({ api = updateApi, current = "", indicator }: UpdateBadgeProps) {
+export function UpdateBadge({ api = updateApi, current = "", indicator, enabled = true }: UpdateBadgeProps) {
   const t = useTranslate();
-  const [status, setStatus] = useState<UpdateStatus | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void api
-      .updateStatus()
-      .then((loaded) => {
-        if (active) setStatus(loaded);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [api]);
+  const { status, setStatus } = useUpdateStatus(api, enabled);
 
   const displayedCurrent = status?.current ?? current;
   if (displayedCurrent === "") {
@@ -48,6 +38,7 @@ export function UpdateBadge({ api = updateApi, current = "", indicator }: Update
           </a>
         </p>
       )}
+      {status === null ? null : <UpdateControls status={status} api={api} onStart={(job) => setStatus({ ...status, canUpdate: false, job })} />}
     </div>
   );
 }

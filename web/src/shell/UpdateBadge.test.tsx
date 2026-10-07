@@ -5,10 +5,18 @@ import type { UpdateStatus } from "../api/update";
 import type { UpdateApi } from "../api/update";
 
 function buildApi(status: UpdateStatus, overrides: Partial<UpdateApi> = {}): UpdateApi {
-  return { updateStatus: vi.fn().mockResolvedValue(status), ...overrides };
+  return { updateStatus: vi.fn().mockResolvedValue(status), previewUpdate: vi.fn(), startUpdate: vi.fn(), ...overrides };
 }
 
 describe("UpdateBadge", () => {
+  it("loads update information after the browser session becomes ready", async () => {
+    const api = buildApi({ current: "v1.0.0", latest: "v1.1.0", available: true, canUpdate: true });
+    const { rerender } = render(<UpdateBadge api={api} current="v1.0.0" enabled={false} />);
+    expect(api.updateStatus).not.toHaveBeenCalled();
+    rerender(<UpdateBadge api={api} current="v1.0.0" enabled />);
+    expect(await screen.findByRole("button", { name: "Update sshc" })).toBeVisible();
+    expect(api.updateStatus).toHaveBeenCalledTimes(1);
+  });
   it("shows the version and offers nothing when there is nothing newer", async () => {
     render(<UpdateBadge api={buildApi({ current: "0.1.0", available: false })} />);
 
