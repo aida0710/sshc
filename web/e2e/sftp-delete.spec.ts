@@ -82,17 +82,46 @@ for (const layout of deletionLayouts) {
   });
 }
 
-test("offers no remote deletion controls for engine-local files", async ({ page, installation }) => {
-  await page.route("**/api/v1/sftp/local/entries**", (route) => route.fulfill({ json: { home: "/home/fixture", path: "/home/fixture", entries: [
-    { ...deletionEntries[1], path: "/home/fixture/notes.txt" },
-  ] } }));
+test("requires confirmation for engine-local deletion through the menu and keyboard", async ({ page, installation }) => {
+  await installation.write("local-delete/notes.txt", "keep until confirmed");
+  await installation.write("local-delete/project/child.txt", "nested content");
+  const mutations: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() !== "GET" && new URL(request.url()).pathname.startsWith("/api/v1/sftp/")) {
+      mutations.push(new URL(request.url()).pathname);
+    }
+  });
   await openApplication(page, installation);
   await openSection(page, "SFTP");
   const pane = page.getByRole("tabpanel");
   await pane.locator("button[data-value]:visible").click();
   await page.getByRole("dialog").getByText("Local", { exact: true }).click();
+  await pane.getByRole("button", { name: "Edit local path", exact: true }).click();
+  const pathInput = pane.getByRole("textbox", { name: "Engine filesystem path", exact: true });
+  await pathInput.fill(join(installation.home, ".ssh", "local-delete"));
+  await pathInput.press("Enter");
   await pane.getByRole("checkbox", { name: "Select notes.txt", exact: true }).check();
+  await pane.getByRole("checkbox", { name: "Select project", exact: true }).check();
   await expect(pane.getByRole("button", { name: "Delete", exact: true })).toHaveCount(0);
-  await pane.getByRole("button", { name: "Actions for notes.txt", exact: true }).click();
-  await expect(page.getByRole("menuitem", { name: "Delete", exact: true })).toHaveCount(0);
+  await pane.getByRole("button", { name: "Actions for 2 selected items", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Delete 2 local entries?", exact: true });
+  await expect(dialog).toContainText("machine running the sshc engine");
+  await expect(dialog).toContainText("Folders and everything inside them will be deleted.");
+  await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+  expect(mutations).toEqual([]);
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(await installation.read("local-delete/notes.txt")).toBe("keep until confirmed");
+  expect(await installation.read("local-delete/project/child.txt")).toBe("nested content");
+
+  await pane.getByRole("row", { name: /notes.txt/ }).press("Delete");
+  await expect(dialog).toBeVisible();
+  expect(mutations).toEqual([]);
+  await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(pane.getByRole("checkbox", { name: "Select notes.txt", exact: true })).toHaveCount(0);
+  await expect(pane.getByRole("checkbox", { name: "Select project", exact: true })).toHaveCount(0);
+  await expect(installation.read("local-delete/notes.txt")).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(installation.read("local-delete/project/child.txt")).rejects.toMatchObject({ code: "ENOENT" });
+  expect(mutations).toEqual(["/api/v1/sftp/local/delete-plan", "/api/v1/sftp/local/delete"]);
 });
