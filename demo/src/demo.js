@@ -51,9 +51,12 @@ const frame = document.getElementById("sshc-ui");
 const startupProgress = new StartupProgress(machineDefinitions);
 const startupView = new StartupProgressView(document.getElementById("startup"), machineDefinitions);
 let bridge;
+// The terminal takes its colors from demo.css so the frame and the terminal read as one surface.
+const pageStyle = getComputedStyle(document.documentElement);
 const terminal = new window.Terminal({
   cols: 100, rows: 28, fontSize: 14, cursorBlink: true,
-  theme: { background: "#0c1015", foreground: "#e5e9f0" },
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace',
+  theme: { background: pageStyle.getPropertyValue("--term-bg").trim(), foreground: pageStyle.getPropertyValue("--term-fg").trim() },
 });
 const fit = new window.FitAddon.FitAddon();
 terminal.loadAddon(fit);
@@ -109,23 +112,24 @@ async function startDemo() {
   document.getElementById("start").disabled = true;
   document.getElementById("confirmation").hidden = true;
   document.getElementById("demo").hidden = false;
+  document.getElementById("demo-controls").hidden = false;
   document.getElementById("reset").hidden = false;
   startupView.start();
   renderStartupProgress();
 
   const latestRelease = await latestReleasePromise;
   if (latestRelease && (latestRelease.version !== initialConfiguration.version || !releaseBaseURL(new URL(location.href)))) {
-    const releaseProgress = document.getElementById("release-progress");
-    releaseProgress.hidden = false;
+    startupProgress.startReleaseArchive({ version: latestRelease.version, bytes: latestRelease.bytes });
+    renderStartupProgress();
     try {
       await openRelease({ manifest: latestRelease, onProgress: (progress) => {
-        document.getElementById("release-download").value = progress.fraction;
-        document.getElementById("release-progress-label").textContent = messages.releaseArchiveProgress(progress);
+        startupProgress.updateReleaseArchive(progress);
+        renderStartupProgress();
       } });
       return;
     } catch {
-      releaseProgress.hidden = true;
-      status.textContent = messages.releaseFallback(initialConfiguration.version);
+      startupProgress.markReleaseArchiveUnavailable();
+      renderStartupProgress();
     }
   }
 
