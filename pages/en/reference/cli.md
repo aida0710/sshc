@@ -43,6 +43,7 @@ sshc vault lock
 sshc vault change-password
 sshc service install
 sshc service status
+sshc service restart
 sshc service disable
 sshc update
 ```
@@ -51,7 +52,9 @@ sshc update
 
 Interactive secrets such as the Vault master password display one `*` per typed character instead of the value. Backspace and `Ctrl+U` update the mask, and the plaintext is never written to Terminal scrollback.
 
-`sshc service` manages a systemd user service on Linux or a launchd user agent on macOS. `install` registers a stable Homebrew or `install.sh` path, and `disable` removes only a definition created by sshc. `install`, `disable`, and `update` show the planned changes and ask for confirmation. Use `-y` or `--yes` only when automation must skip the prompt.
+`sshc service` manages a systemd user service on Linux or a launchd user agent on macOS. `install` registers a stable Homebrew or `install.sh` path, `restart` restarts an active service whose definition matches this installation, and `disable` removes only a definition created by sshc. `install`, `restart`, `disable`, and `update` show the planned changes and ask for confirmation. Use `-y` or `--yes` only when automation must skip the prompt.
+
+`sshc service restart` refuses inactive, absent, unmanaged, outdated, or other-executable services with exit code 1. Restarting ends existing sessions and transfers. Success requires the service PID, engine handoff, and status API to agree. See [Installation](/en/guide/install) for recovery steps.
 
 `sshc vault change-password` validates the current password as soon as you press Enter, before asking for a new password. Passwordless Vaults skip the current-password prompt. Leave both the new password and confirmation empty to remove password protection. `sshc vault lock` keeps a passwordless Vault unlocked; set a master password to enable locking. After upgrading the CLI, restart the engine to apply these changes.
 

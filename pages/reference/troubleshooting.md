@@ -12,7 +12,7 @@ sshc status
 sshc engine --replace
 ```
 
-CLIとsshcエンジンのバージョンが違う場合は、古い方を更新してから、sshcエンジンを起動し直してください。`sshc service install`で登録したサービスは`sshc service install`で、それ以外のsshcエンジンは`sshc engine --replace`で再起動します。Androidでは、エラー画面にバージョン、エラーコード、詳細、Android SDK、機種名、ABIが表示され、［診断情報をコピー］でまとめて共有できます。シークレットは診断レポートに含まれません。
+CLIとsshcエンジンのバージョンが違う場合は、古い方を更新してから、sshcエンジンを起動し直してください。`sshc service install`で登録した稼働中のサービスは`sshc service restart`で、それ以外のsshcエンジンは`sshc engine --replace`で再起動します。サービスが停止中、または定義が古い場合は`sshc service install`を使います。Androidでは、エラー画面にバージョン、エラーコード、詳細、Android SDK、機種名、ABIが表示され、［診断情報をコピー］でまとめて共有できます。シークレットは診断レポートに含まれません。
 
 起動時に`was recorded by an sshc release before v0.24.0`と表示されて止まる場合は、v0.24.0より前のsshcで中断した変更の記録が`~/.ssh/sshc/journal/`に残っています。今のバージョンでは、その変更を完了させることも取り消すこともできません。前に使っていたバージョンのsshcを起動し、［History］画面の「中断した変更」で［完了させる］か［取り消す］を選んでから、もう一度更新してください。前のバージョンに戻せない場合は、表示されたファイルを`~/.ssh/sshc/journal/`の外へ移すと起動できます。ただし、その変更は途中のまま残るので、記録の`path`に書かれたファイルの内容を確かめてください。`was recorded by a newer sshc release`と表示された場合は、記録を書いた新しいバージョンのsshcへ更新してから片付けてください。
 

@@ -34,6 +34,7 @@ type engineServiceManager interface {
 	InstallPlan(string) (string, error)
 	Install(context.Context, string) error
 	Status(context.Context) (serviceState, error)
+	RestartPlan(string) (string, error)
 	RestartIfActive(context.Context, string) (bool, error)
 	// IsDefinitionOutdated は、sshc が書いた定義が以前の版の形のままかを返す。
 	IsDefinitionOutdated() (bool, error)
@@ -74,7 +75,7 @@ func managedServiceExecutable(ctx context.Context) (string, error) {
 
 // serviceRun は、`sshc service <action>` の 1 回の実行である。
 type serviceRun struct {
-	// action は install、status、disable のどれかである。
+	// action は install、status、restart、disable のどれかである。
 	action string
 	// yes は、変更の確認を省く。
 	yes          bool
@@ -95,6 +96,8 @@ func runService(ctx context.Context, run serviceRun) int {
 		return run.install(ctx, manager)
 	case "status":
 		return run.status(ctx, manager)
+	case "restart":
+		return run.restart(ctx, manager)
 	case "disable":
 		return run.disable(ctx, manager)
 	default:

@@ -127,6 +127,10 @@ func (manager *launchdServiceManager) Status(ctx context.Context) (serviceState,
 	return serviceInactive, nil
 }
 
+func (manager *launchdServiceManager) RestartPlan(executable string) (string, error) {
+	return manager.definitionFile().restartPlan(executable)
+}
+
 func (manager *launchdServiceManager) RestartIfActive(ctx context.Context, executable string) (bool, error) {
 	return restartServiceIfActive(ctx, manager, executable)
 }

@@ -62,6 +62,7 @@ func TestParseInvocationSeparatesOwnersFromOpeningTheBrowser(t *testing.T) {
 		{[]string{"sshc", "status"}, invocationStatus, nil},
 		{[]string{"sshc", "service", "install"}, invocationService, []string{"install"}},
 		{[]string{"sshc", "service", "status"}, invocationService, []string{"status"}},
+		{[]string{"sshc", "service", "restart"}, invocationService, []string{"restart"}},
 		{[]string{"sshc", "service", "disable"}, invocationService, []string{"disable"}},
 		{[]string{"sshc", "otp", "list"}, invocationOTP, nil},
 		{[]string{"sshc", "otp", "production"}, invocationOTP, nil},
@@ -119,6 +120,7 @@ func TestEveryPublishedCommandAcceptsItsOwnHelpFlag(t *testing.T) {
 		{[]string{"sshc", "service", "--help"}, "service", "sshc service install"},
 		{[]string{"sshc", "service", "install", "--help"}, "service install", "sshc service install"},
 		{[]string{"sshc", "service", "status", "--help"}, "service status", "sshc service status"},
+		{[]string{"sshc", "service", "restart", "--help"}, "service restart", "sshc service restart"},
 		{[]string{"sshc", "service", "disable", "--help"}, "service disable", "sshc service disable"},
 		{[]string{"sshc", "otp", "--help"}, "otp", "sshc otp list [--json]"},
 		{[]string{"sshc", "otp", "list", "--help"}, "otp list", "sshc otp list [--json]"},
@@ -660,7 +662,7 @@ func TestServiceIsReservedAndRequiresOneKnownAction(t *testing.T) {
 			t.Fatalf("parseInvocation(%q) accepted an invalid service command", argv)
 		}
 	}
-	for _, action := range []string{"install", "disable"} {
+	for _, action := range []string{"install", "restart", "disable"} {
 		called, err := parseInvocation([]string{"sshc", "service", action, "--yes"})
 		if err != nil || called.Kind != invocationService || !called.Yes || len(called.Args) != 1 || called.Args[0] != action {
 			t.Errorf("service %s --yes = %#v, %v", action, called, err)
@@ -672,7 +674,7 @@ func TestServiceIsReservedAndRequiresOneKnownAction(t *testing.T) {
 
 	var out bytes.Buffer
 	usage(&out)
-	for _, command := range []string{"sshc service install", "sshc service status", "sshc service disable"} {
+	for _, command := range []string{"sshc service install", "sshc service status", "sshc service restart", "sshc service disable"} {
 		if !strings.Contains(out.String(), command) {
 			t.Errorf("usage does not mention %q", command)
 		}

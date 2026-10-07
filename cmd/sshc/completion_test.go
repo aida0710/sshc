@@ -156,6 +156,19 @@ func TestBashCompletesEveryActionAfterItsCommandAndAfterHelp(t *testing.T) {
 	}
 }
 
+func TestBashCompletesServiceRestartConfirmationFlags(t *testing.T) {
+	completion := newBashCompletionFixture(t)
+	candidates := completion.candidates(t, "sshc", "service", "restart", "")
+	for _, flag := range []string{"-y", "--yes", "--help"} {
+		if !containsCompletion(candidates, flag) {
+			t.Errorf("service restart completions=%q, want %q", candidates, flag)
+		}
+	}
+	if containsCompletion(candidates, "--json") {
+		t.Fatalf("service restart offered an unsupported flag: %q", candidates)
+	}
+}
+
 // bashCompletionFixture は、補完の雛形と、alias を固定で返す偽の sshc を一時ディレクトリに置く。
 type bashCompletionFixture struct {
 	bash           string

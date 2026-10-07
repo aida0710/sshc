@@ -109,7 +109,28 @@ sshc vault unlock
 
 launchdがsshcエンジンを再起動するのは、sshcエンジンが異常終了した場合だけです。`sshc engine --replace`で置き換えた場合など、sshcエンジンが正常に終了した場合は再起動しません。サービスに戻すには`sshc service install`を再実行してください。
 
-以前のバージョンのsshcで登録したplistは、`sshc service install`を再実行するまで、sshcエンジンが正常に終了しても再起動する以前の定義のままです。`sshc service status`と`sshc update`は、この場合に`sshc service install`の再実行を案内します。
+以前のバージョンのsshcで登録したplistは、`sshc service install`を再実行するまで、sshcエンジンが正常に終了しても再起動する以前の定義のままです。`sshc service status`、`sshc service restart`、`sshc update`は、この場合に`sshc service install`の再実行を案内します。
+
+## 登録済みサービスを再起動する
+
+LinuxとmacOSでは、稼働中のユーザーサービスを次のコマンドで再起動できます。
+
+```sh
+sshc service restart
+```
+
+サービス定義の場所と実行ファイルのパスを表示して、再起動するか確認します。再起動すると接続中のセッションと転送が終了します。自動化で確認を省略する場合は`sshc service restart --yes`を使用してください。
+
+このコマンドで使えるのは、Homebrewまたはreceiptに対応した`install.sh`で導入され、この導入の安定パスと現在の定義が一致するサービスです。次の場合は再起動せず、終了コード1で終わります。
+
+| 状態 | 対処 |
+| --- | --- |
+| 未登録・停止中 | `sshc service install`で登録・起動する |
+| sshc管理外の定義 | 手書きの定義を確認し、そのサービスの管理方法で操作する |
+| 古い定義 | `sshc service install`で現在の定義へ更新する |
+| 別の実行ファイルを指す定義 | 登録した導入から実行する。現在の導入へ切り替える場合は`sshc service install`を使う |
+
+確認待ちの間に定義や稼働状態が変わった場合も、成功扱いにはしません。`sshc service status`で状態を確認してから再実行してください。再起動後はサービスのPIDとsshcエンジンの起動情報、status APIを照合します。パスワードを設定したVaultはロックされるため、`sshc vault unlock`を実行してください。パスワードなしのVaultは自動でロックを解除します。
 
 ## 更新
 
@@ -117,7 +138,7 @@ launchdがsshcエンジンを再起動するのは、sshcエンジンが異常�
 - Windows: インストール用のPowerShellコマンドを再実行
 - Android: GitHub Releasesから新しいAPKをインストール
 
-`sshc service install`で管理しているサービスが動作中で、サービス定義に記録された実行ファイルが今回の更新対象と一致する場合だけ、`sshc update`が更新後にサービスを再起動します。パスワードを設定したVaultは再起動でロックされるため、`sshc vault unlock`を実行してください。パスワードなしのVaultは、sshcエンジンの起動時に自動でロックを解除します。更新は成功したものの再起動だけに失敗した場合は、表示に従って`sshc service install`を再実行できます。`install.sh`を直接実行して更新した場合は、サービスを自動では再起動しないため、`sshc service install`で再起動してください。サービス管理外のsshcエンジンは`sshc engine --replace`で再起動します。
+`sshc service install`で管理しているサービスが動作中で、サービス定義に記録された実行ファイルが今回の更新対象と一致する場合だけ、`sshc update`が更新後にサービスを再起動します。パスワードを設定したVaultは再起動でロックされるため、`sshc vault unlock`を実行してください。パスワードなしのVaultは、sshcエンジンの起動時に自動でロックを解除します。更新は成功したものの再起動だけに失敗した場合は、表示に従って`sshc service install`を再実行できます。`install.sh`を直接実行して更新した場合は、サービスを自動では再起動しないため、稼働中なら`sshc service restart`を実行してください。停止中や古い定義の場合は`sshc service install`を使います。サービス管理外のsshcエンジンは`sshc engine --replace`で再起動します。
 
 ## アンインストール
 

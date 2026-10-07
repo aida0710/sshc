@@ -107,7 +107,28 @@ sshc vault unlock
 
 launchd restarts the engine only after it fails. When the engine exits normally, for example after `sshc engine --replace`, launchd leaves it stopped. Run `sshc service install` again to return to the service.
 
-A plist registered by an older sshc keeps the previous definition, which restarts the engine even after a normal exit, until you run `sshc service install` again. `sshc service status` and `sshc update` tell you to run it when this applies.
+A plist registered by an older sshc keeps the previous definition, which restarts the engine even after a normal exit, until you run `sshc service install` again. `sshc service status`, `sshc service restart`, and `sshc update` tell you to run it when this applies.
+
+## Restart a registered service
+
+On Linux and macOS, restart an active user service with:
+
+```sh
+sshc service restart
+```
+
+The command shows the definition and executable paths before asking for confirmation. Restarting ends existing sessions and transfers. Use `sshc service restart --yes` when automation must skip the prompt.
+
+The service must use the stable path of this verified Homebrew or receipt-based `install.sh` installation and match the current service definition. The following cases are refused with exit code 1:
+
+| State | Recovery |
+| --- | --- |
+| Absent or inactive | Run `sshc service install` to register and start it |
+| Definition not managed by sshc | Inspect the hand-written definition and use its own service management procedure |
+| Outdated definition | Run `sshc service install` to update the definition |
+| Definition uses another executable | Run the command from the registered installation, or use `sshc service install` to switch to this installation |
+
+A state or definition change while waiting for confirmation also prevents success. Check `sshc service status` before retrying. After restarting, the service PID must match the engine handoff and status API. A password-protected vault becomes locked, so run `sshc vault unlock`; a passwordless vault unlocks itself.
 
 ## Update
 
@@ -115,7 +136,7 @@ A plist registered by an older sshc keeps the previous definition, which restart
 - Windows: run the PowerShell installer again
 - Android: install the newer APK from GitHub Releases
 
-When an active service was created by `sshc service install` and its executable matches the installation being updated, `sshc update` restarts it automatically. The restart locks a password-protected vault, so run `sshc vault unlock` again; a passwordless vault unlocks itself when the engine starts. If the update succeeds but only the restart fails, follow the message and run `sshc service install` again. Running `install.sh` directly does not restart the service, so run `sshc service install` afterwards. Restart engines outside service management with `sshc engine --replace`.
+When an active service was created by `sshc service install` and its executable matches the installation being updated, `sshc update` restarts it automatically. The restart locks a password-protected vault, so run `sshc vault unlock` again; a passwordless vault unlocks itself when the engine starts. If the update succeeds but only the restart fails, follow the message and run `sshc service install` again. Running `install.sh` directly does not restart the service, so run `sshc service restart` afterwards if it is active. Use `sshc service install` for an inactive service or an outdated definition. Restart engines outside service management with `sshc engine --replace`.
 
 ## Uninstall
 
