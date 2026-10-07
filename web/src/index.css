@@ -203,6 +203,12 @@
   padding: 0.5rem;
 }
 
+/* xterm's legacy viewport spans the padding and defaults to black, making
+   the margin look like a frame even when the renderer uses another color. */
+[data-terminal-host] > .xterm .xterm-viewport {
+  background-color: var(--ui-term-bg);
+}
+
 .sshc-card {
   border: 1px solid var(--ui-line);
   border-radius: var(--radius-lg);
