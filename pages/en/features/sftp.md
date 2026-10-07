@@ -56,7 +56,9 @@ Symlinks are listed as `name → target`. A link to a directory opens as that di
 
 ![The two-pane SFTP view with independent tabs on each side](/images/sftp-two-pane-en.png)
 
-Use **Compare** to recursively inspect the directories in the currently selected left and right tabs by metadata such as size, modification time, permissions, and type. The preview distinguishes left-only, right-only, changed, and type-mismatched entries. Select only the entries you want, then copy left to right or right to left. Comparison never deletes entries that exist only on the destination.
+Use **Compare** to recursively inspect the directories in the currently selected left and right tabs by metadata such as size, modification time, permissions, and type. The preview distinguishes left-only, right-only, changed, and type-mismatched entries. For comparisons between remote tabs, select only the entries you want, then copy left to right or right to left. Comparison never deletes entries that exist only on the destination.
+
+Local tabs can also be compared. Comparisons involving a local tab display differences without modifying files.
 
 ![Comparison preview for two remote directories](/images/sftp-compare-en.png)
 
