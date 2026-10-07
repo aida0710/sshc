@@ -324,6 +324,10 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
 
 ## SFTP、Workspace、Snippets の境界
 
+- 名前検索は既定のまま維持し、内容モードではSFTPでUTF-8の通常ファイルを固定文字列検索します。1ファイル2MiB、総読取量64MiB、200行の一致、2万項目、深さ32段までです。省略理由と部分結果を返し、contextのキャンセルでtransportを閉じます。結果から開くときは検索時のmetadata revisionで通常ファイルを再検証し、新しいリンクを辿りません。
+- ディレクトリ比較の内容モードは通常ファイルのSHA256をstreamで計算し、両側の総読取量を256MiBへ制限します。未読のファイルを`unverified`として返し、同一とは扱いません。メタデータ比較を既定とし、既存の2万項目上限とローカルの128件ずつのReadDirを維持します。
+- 比較中はローカルのos.RootとSFTP接続を保持します。ローカルでは一覧時・open後・読取後のfile identityとmetadata revisionを照合し、両側のhash計算後にも確認します。リモートはLstatとFstatのrevisionを照合し、リンクを含むパスを拒否します。SFTP v3がinodeやO_NOFOLLOWを公開しないため、すべての属性を維持した差替えや一時的なリンク差替えの検出はbest-effortです。全フォルダの同時点snapshotは保証しません。
+
 - SFTP はターミナル channel と同じ接続設定、vault、`known_hosts`、`ProxyJump` chain を使いますが、現在の対話ターミナルの transport 自体は共有しません。各 API 操作は現在の設定を解決し、alias と全 hop の解決済み設定が一致する SFTP 接続だけを pool から再利用します。一つの接続を同時に貸し出すのは一操作だけで、idle 接続は 60 秒後に全 hop を閉じます。設定変更後の操作では旧接続を再利用せず、解決できなくなった alias への操作は失敗します。未知のホスト鍵は常に拒否するため、最初の確認はターミナル接続で行う必要があります。
 - リモートeditorはUTF-8の通常ファイルだけを扱い、上限は2 MiBです。バイナリまたは大きなファイルはdownloadを使用します。saveは同じdirectoryの一時ファイルを書いてrenameし、既存modeを維持します。外部変更は次のように検出します。
   - saveは、読み込み時のrevision（内容のSHA-256）と、保存の直前に読んだファイル内容のrevisionを比較します。一致しなければ競合（`sftp_conflict`）として断ります。mtimeやmodeだけが変わっても、内容が同じなら競合にしません

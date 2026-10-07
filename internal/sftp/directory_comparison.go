@@ -2,16 +2,23 @@ package sftp
 
 import (
 	"context"
-	"path"
 	"sort"
 )
 
 // maxComparedEntries bounds each directory tree and the combined comparison list.
 const maxComparedEntries = 20_000
 
-// CompareDirectories compares metadata without downloading file contents.
+// CompareDirectories compares metadata by default or streams bounded content hashes.
 // Symlinks are listed but never followed.
-func (s Service) CompareDirectories(ctx context.Context, leftAlias, leftPath, rightAlias, rightPath string) (DirectoryComparison, error) {
+func (s Service) CompareDirectories(ctx context.Context, options CompareOptions) (DirectoryComparison, error) {
+	if options.Mode == "" {
+		options.Mode = ComparisonMetadata
+	}
+	if options.Mode != ComparisonMetadata && options.Mode != ComparisonContent {
+		return DirectoryComparison{}, ErrInvalidQuery
+	}
+	leftAlias, leftPath := options.Left.Alias, options.Left.Path
+	rightAlias, rightPath := options.Right.Alias, options.Right.Path
 	leftRoot, err := cleanComparisonPath(leftAlias, leftPath)
 	if err != nil {
 		return DirectoryComparison{}, err
@@ -20,14 +27,26 @@ func (s Service) CompareDirectories(ctx context.Context, leftAlias, leftPath, ri
 	if err != nil {
 		return DirectoryComparison{}, err
 	}
-	left, err := s.readComparisonTree(ctx, leftAlias, leftRoot)
+	leftTree, err := s.readComparisonTree(ctx, ComparisonLocation{Alias: leftAlias, Path: leftRoot}, options.Mode)
 	if err != nil {
 		return DirectoryComparison{}, err
 	}
-	right, err := s.readComparisonTree(ctx, rightAlias, rightRoot)
+	defer leftTree.close()
+	var rightTree *comparisonTree
+	sharesRemote := leftAlias == rightAlias && leftAlias != localComparisonAlias
+	if sharesRemote {
+		// Reuse one SFTP transport, including hosts allowing only one OTP connection.
+		rightTree, err = readRemoteComparisonTree(ctx, leftTree.remote, rightRoot)
+	} else {
+		rightTree, err = s.readComparisonTree(ctx, ComparisonLocation{Alias: rightAlias, Path: rightRoot}, options.Mode)
+	}
 	if err != nil {
 		return DirectoryComparison{}, err
 	}
+	if !sharesRemote {
+		defer rightTree.close()
+	}
+	left, right := leftTree.entries, rightTree.entries
 	keys := make([]string, 0, len(left)+len(right))
 	seen := make(map[string]struct{}, len(left)+len(right))
 	for candidate := range left {
@@ -44,9 +63,13 @@ func (s Service) CompareDirectories(ctx context.Context, leftAlias, leftPath, ri
 		return DirectoryComparison{}, ErrCompareLimit
 	}
 	sort.Strings(keys)
-	result := DirectoryComparison{LeftPath: leftRoot, RightPath: rightRoot, Entries: make([]DirectoryDifference, 0, len(keys))}
+	result := DirectoryComparison{LeftPath: leftRoot, RightPath: rightRoot, Mode: options.Mode, Entries: make([]DirectoryDifference, 0, len(keys))}
+	content := contentComparison{left: leftTree, right: rightTree, budget: contentReadBudget{maxBytes: maxContentComparisonBytes}}
 	entryIndex := make(map[string]int, len(keys))
 	for _, relative := range keys {
+		if err := ctx.Err(); err != nil {
+			return DirectoryComparison{}, err
+		}
 		leftEntry, leftOK := left[relative]
 		rightEntry, rightOK := right[relative]
 		difference := DirectoryDifference{RelativePath: relative}
@@ -72,69 +95,42 @@ func (s Service) CompareDirectories(ctx context.Context, leftAlias, leftPath, ri
 		default:
 			difference.Status = DirectoryDifferent
 		}
+		if options.Mode == ComparisonContent {
+			if err := content.compare(ctx, &difference); err != nil {
+				return DirectoryComparison{}, err
+			}
+			if difference.Status == DirectoryUnverified {
+				result.Truncated = true
+			}
+		}
 		entryIndex[relative] = len(result.Entries)
 		result.Entries = append(result.Entries, difference)
 	}
-	// A directory is different when any descendant differs. This lets the UI
-	// summarize a large tree without pretending equal directory mtimes imply
-	// equal contents.
-	for index := len(result.Entries) - 1; index >= 0; index-- {
-		item := result.Entries[index]
-		if item.Status == DirectorySame || item.RelativePath == "" {
-			continue
+	propagateComparisonDifferences(result.Entries, entryIndex)
+	if options.Mode == ComparisonContent {
+		if err := leftTree.verify(ctx); err != nil {
+			return DirectoryComparison{}, err
 		}
-		parent := path.Dir(item.RelativePath)
-		for parent != "." && parent != "/" {
-			if parentIndex, ok := entryIndex[parent]; ok {
-				candidate := &result.Entries[parentIndex]
-				if candidate.Status == DirectorySame {
-					candidate.Status = DirectoryDifferent
-				}
-			}
-			parent = path.Dir(parent)
+		if err := rightTree.verify(ctx); err != nil {
+			return DirectoryComparison{}, err
 		}
+		result.BytesRead = content.budget.bytesRead
 	}
 	return result, nil
 }
 
-func (s Service) readComparisonTree(ctx context.Context, alias, root string) (map[string]Entry, error) {
+func (s Service) readComparisonTree(ctx context.Context, location ComparisonLocation, mode ComparisonMode) (*comparisonTree, error) {
+	alias, root := location.Alias, location.Path
 	if alias == localComparisonAlias {
-		return readLocalComparisonTree(ctx, root)
+		return openLocalComparisonTree(ctx, root, mode)
 	}
 	remote, err := s.openRequest(ctx, alias)
 	if err != nil {
 		return nil, err
 	}
-	defer remote.Close()
-	result := make(map[string]Entry)
-	pending := []string{root}
-	for len(pending) > 0 {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		directory := pending[0]
-		pending = pending[1:]
-		infos, err := readChildren(ctx, remote, directory)
-		if err != nil {
-			return nil, err
-		}
-		for _, info := range infos {
-			if isInternalName(info.Name()) {
-				continue
-			}
-			entry := entryFrom(directory, info)
-			relative := entry.Path[len(root):]
-			if len(relative) > 0 && relative[0] == '/' {
-				relative = relative[1:]
-			}
-			result[relative] = entry
-			if len(result) > maxComparedEntries {
-				return nil, ErrCompareLimit
-			}
-			if entry.Type == EntryDirectory {
-				pending = append(pending, entry.Path)
-			}
-		}
+	tree, err := readRemoteComparisonTree(ctx, remote, root)
+	if err != nil {
+		remote.Close()
 	}
-	return result, nil
+	return tree, err
 }

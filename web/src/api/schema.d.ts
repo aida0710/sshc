@@ -1694,7 +1694,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description Names matching a query under one remote directory. Symlinks are not followed and the walk is bounded; truncated says so. */
+        /** @description Bounded recursive name search (default) or case-sensitive literal UTF-8 content search over SFTP. Content search skips links, binary and files over 2 MiB; total reads are limited to 64 MiB, 200 matching lines, 20000 entries and depth 32. Omissions explain partial results. */
         get: operations["searchSFTPEntries"];
         put?: never;
         post?: never;
@@ -1799,6 +1799,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Metadata comparison is the default. Content mode streams SHA256 of regular files from both sides, limited to 256 MiB total; unread files are unverified. Local roots stay pinned and path or handle changes are conflicts. Symlinks are never followed. */
         get: operations["compareSFTPDirectories"];
         put?: never;
         post?: never;
@@ -4016,18 +4017,43 @@ export interface components {
             query: string;
             truncated: boolean;
             entries: components["schemas"]["SFTPEntry"][];
+            matches?: components["schemas"]["SFTPContentMatch"][];
+            omissions?: components["schemas"]["SFTPSearchOmission"][];
+            /** Format: int64 */
+            bytesRead?: number;
+        };
+        SFTPContentMatch: {
+            entry: components["schemas"]["SFTPEntry"];
+            line: number;
+            snippet: string;
+        };
+        SFTPSearchOmission: {
+            /** @description symlink, unsupported, binary, file_size, unreadable, changed, byte_limit, result_limit, entry_limit or depth_limit */
+            reason: string;
+            count: number;
         };
         SFTPDirectoryDifference: {
             relativePath: string;
             /** @enum {string} */
-            status: "same" | "different" | "left_only" | "right_only" | "type_mismatch";
+            status: "same" | "different" | "left_only" | "right_only" | "type_mismatch" | "unverified";
             left?: components["schemas"]["SFTPEntry"];
             right?: components["schemas"]["SFTPEntry"];
+            /** @description byte_limit or unsupported; the content was not compared */
+            omission?: string;
         };
+        /**
+         * @default metadata
+         * @enum {string}
+         */
+        SFTPComparisonMode: "metadata" | "content";
         SFTPDirectoryComparison: {
             leftPath: string;
             rightPath: string;
             entries: components["schemas"]["SFTPDirectoryDifference"][];
+            mode?: components["schemas"]["SFTPComparisonMode"];
+            /** Format: int64 */
+            bytesRead?: number;
+            truncated?: boolean;
         };
         SFTPTransferSettingsRequest: {
             maxConcurrent: number;
@@ -7681,6 +7707,7 @@ export interface operations {
             query: {
                 path: string;
                 query: string;
+                mode?: "name" | "content";
             };
             header?: never;
             path: {
@@ -7741,6 +7768,8 @@ export interface operations {
         parameters: {
             query: {
                 path: string;
+                /** @description Optional metadata revision from a content search. Pins the read to that regular file and refuses links or changed metadata. */
+                expectedRevision?: string;
             };
             header?: never;
             path: {
@@ -7947,6 +7976,7 @@ export interface operations {
                 leftPath: string;
                 rightAlias: string;
                 rightPath: string;
+                mode?: components["schemas"]["SFTPComparisonMode"];
             };
             header?: never;
             path?: never;
@@ -7954,7 +7984,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Metadata comparison of two remote directory trees */
+            /** @description Comparison of two local or remote directory trees */
             200: {
                 headers: {
                     [name: string]: unknown;

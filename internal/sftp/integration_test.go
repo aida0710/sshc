@@ -131,7 +131,7 @@ func TestRemoteCopyMoveAndCompareAgainstOpenSSHSFTP(t *testing.T) {
 	}, nil); err != nil {
 		t.Fatalf("remote copy: %v", err)
 	}
-	comparison, err := service.CompareDirectories(t.Context(), "integration-source", sourceRoot, "integration-target", targetRoot)
+	comparison, err := service.CompareDirectories(t.Context(), sftp.CompareOptions{Left: sftp.ComparisonLocation{Alias: "integration-source", Path: sourceRoot}, Right: sftp.ComparisonLocation{Alias: "integration-target", Path: targetRoot}})
 	if err != nil {
 		t.Fatalf("compare: %v", err)
 	}

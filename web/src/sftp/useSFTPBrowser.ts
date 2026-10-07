@@ -6,8 +6,9 @@ import type { RemoteEntry } from "./api";
 import { localHostAlias } from "./localHost";
 import { sourceFor, type SFTPListing } from "./sftpSource";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
+import type { SFTPLocation } from "./sftpLocation";
 
-export type SFTPLocation = { alias: string; path: string };
+export type { SFTPLocation } from "./sftpLocation";
 // A restored location, plus whether it was live when the tab was put away. A
 // tab moved between panes was connected a moment ago and reopens at once.
 export type RestoredSFTPLocation = SFTPLocation & { connect?: boolean };

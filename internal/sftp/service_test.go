@@ -669,7 +669,7 @@ func TestSearchMatchesNamesBelowARootWithoutFollowingSymlinks(t *testing.T) {
 	})
 	service := serviceFor(remote)
 
-	found, err := service.Search(context.Background(), "edge", "/srv", "LOG")
+	found, err := service.Search(context.Background(), sftp.SearchOptions{Alias: "edge", Path: "/srv", Query: "LOG"})
 	if err != nil {
 		t.Fatalf("Search() = %v", err)
 	}
@@ -688,11 +688,11 @@ func TestSearchMatchesNamesBelowARootWithoutFollowingSymlinks(t *testing.T) {
 	}
 
 	for _, query := range []string{"", "   ", strings.Repeat("x", sftp.MaxSearchQueryBytes+1)} {
-		if _, err := service.Search(context.Background(), "edge", "/srv", query); !errors.Is(err, sftp.ErrInvalidQuery) {
+		if _, err := service.Search(context.Background(), sftp.SearchOptions{Alias: "edge", Path: "/srv", Query: query}); !errors.Is(err, sftp.ErrInvalidQuery) {
 			t.Fatalf("Search(%q) = %v, want %v", query, err, sftp.ErrInvalidQuery)
 		}
 	}
-	if _, err := service.Search(context.Background(), "edge", "relative", "log"); !errors.Is(err, sftp.ErrInvalidPath) {
+	if _, err := service.Search(context.Background(), sftp.SearchOptions{Alias: "edge", Path: "relative", Query: "log"}); !errors.Is(err, sftp.ErrInvalidPath) {
 		t.Fatalf("Search(relative) = %v, want %v", err, sftp.ErrInvalidPath)
 	}
 }

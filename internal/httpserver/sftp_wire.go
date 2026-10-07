@@ -19,10 +19,24 @@ type SFTPListing struct {
 }
 
 type sftpSearchResponse struct {
-	Path      string          `json:"path"`
-	Query     string          `json:"query"`
-	Truncated bool            `json:"truncated"`
-	Entries   []api.SFTPEntry `json:"entries"`
+	Path      string                        `json:"path"`
+	Query     string                        `json:"query"`
+	Truncated bool                          `json:"truncated"`
+	Entries   []api.SFTPEntry               `json:"entries"`
+	Matches   *[]sftpContentMatchResponse   `json:"matches,omitempty"`
+	Omissions *[]sftpSearchOmissionResponse `json:"omissions,omitempty"`
+	BytesRead *int64                        `json:"bytesRead,omitempty"`
+}
+
+type sftpContentMatchResponse struct {
+	Entry   api.SFTPEntry `json:"entry"`
+	Line    int           `json:"line"`
+	Snippet string        `json:"snippet"`
+}
+
+type sftpSearchOmissionResponse struct {
+	Reason string `json:"reason"`
+	Count  int    `json:"count"`
 }
 
 type sftpTextFileResponse struct {
