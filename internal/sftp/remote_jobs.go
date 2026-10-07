@@ -329,6 +329,10 @@ func remoteTransferProblem(err error) string {
 		return "sftp_target_inside_source"
 	case errors.Is(err, ErrTargetIsSource):
 		return "sftp_target_is_source"
+	case errors.Is(err, ErrLocalPrivacyProtection):
+		return "sftp_local_privacy_protection"
+	case errors.Is(err, ErrLocalPermissionDenied):
+		return "sftp_local_permission_denied"
 	default:
 		return "sftp_failed"
 	}

@@ -27,7 +27,8 @@ func validLocalMutationName(name string) bool {
 		(runtime.GOOS != "windows" || strings.TrimRight(name, ". ") == name)
 }
 
-func (m *TransferManager) MkdirLocal(ctx context.Context, request LocalMkdirRequest) (Entry, error) {
+func (m *TransferManager) MkdirLocal(ctx context.Context, request LocalMkdirRequest) (entry Entry, err error) {
+	defer func() { err = labelLocalAccessRefusal(err) }()
 	if m == nil {
 		return Entry{}, ErrUnavailable
 	}
@@ -67,7 +68,8 @@ func (m *TransferManager) MkdirLocal(ctx context.Context, request LocalMkdirRequ
 	return localMutationEntry(target.publicPath, metadata), nil
 }
 
-func (m *TransferManager) RenameLocal(ctx context.Context, request LocalRenameRequest) (Entry, error) {
+func (m *TransferManager) RenameLocal(ctx context.Context, request LocalRenameRequest) (entry Entry, err error) {
+	defer func() { err = labelLocalAccessRefusal(err) }()
 	if !validLocalMutationName(request.Name) {
 		return Entry{}, ErrInvalidPath
 	}
