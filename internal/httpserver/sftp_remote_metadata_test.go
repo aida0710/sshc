@@ -131,7 +131,8 @@ func TestMetadataHTTPRequiresConfirmationBindsParametersAndConsumesOnlyOnce(t *t
 				body = mustMarshal(t, api.SFTPCreateSymlinkRequest{Path: "/new", Target: "relative:リンク"})
 			} else if operation == "ownership" {
 				endpoint, kind, target = "/api/v1/sftp/edge/ownership", session.ActionSFTPOwnership, "edge:/file:42:43"
-				body = mustMarshal(t, api.SFTPOwnershipRequest{Path: "/file", Uid: 42, Gid: 43, ExpectedRevision: entry.Revision})
+				uid, gid := int64(42), int64(43)
+				body = mustMarshal(t, api.SFTPOwnershipRequest{Path: "/file", Uid: &uid, Gid: &gid, ExpectedRevision: entry.Revision})
 			}
 			response := sendKeyRequest(t, engine, credentials, method, endpoint, body, "")
 			if response.Code != http.StatusForbidden || problemCode(t, response.Body.Bytes()) != "action_token_required" || remote.mutations != 0 {

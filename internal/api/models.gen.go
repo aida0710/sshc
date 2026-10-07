@@ -1501,9 +1501,9 @@ type SFTPLocalRenameRequest struct {
 // SFTPOwnershipRequest defines model for SFTPOwnershipRequest.
 type SFTPOwnershipRequest struct {
 	ExpectedRevision string `json:"expectedRevision"`
-	Gid              int64  `json:"gid"`
+	Gid              *int64 `json:"gid"`
 	Path             string `json:"path"`
-	Uid              int64  `json:"uid"`
+	Uid              *int64 `json:"uid"`
 }
 
 // SetTerminalSessionTitleRequest defines model for SetTerminalSessionTitleRequest.

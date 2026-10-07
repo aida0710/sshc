@@ -61,8 +61,8 @@ func (h SFTPHandlers) ChangeSymlink(c *echo.Context) error {
 }
 
 func (h SFTPHandlers) ChangeOwnership(c *echo.Context) error {
-	var body sftpOwnershipRequest
-	if err := decodeJSON(c, &body); err != nil || body.ExpectedRevision == "" || !validSFTPOwnerID(body.UID) || !validSFTPOwnerID(body.GID) {
+	var body api.SFTPOwnershipRequest
+	if err := decodeJSON(c, &body); err != nil || body.ExpectedRevision == "" || !validSFTPOwnerID(body.Uid) || !validSFTPOwnerID(body.Gid) {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	alias := c.Param("alias")
@@ -71,11 +71,11 @@ func (h SFTPHandlers) ChangeOwnership(c *echo.Context) error {
 		return sftpProblem(c, err)
 	}
 	defer unlock()
-	target := fmt.Sprintf("%s:%s:%d:%d", alias, body.Path, *body.UID, *body.GID)
+	target := fmt.Sprintf("%s:%s:%d:%d", alias, body.Path, *body.Uid, *body.Gid)
 	if allowed, response := h.Actions.consume(c, session.ActionSFTPOwnership, target); !allowed {
 		return response
 	}
-	entry, err := h.Service.ChangeOwnership(c.Request().Context(), alias, sshcSFTP.OwnershipChange{Path: body.Path, UID: uint32(*body.UID), GID: uint32(*body.GID), ExpectedRevision: body.ExpectedRevision})
+	entry, err := h.Service.ChangeOwnership(c.Request().Context(), alias, sshcSFTP.OwnershipChange{Path: body.Path, UID: uint32(*body.Uid), GID: uint32(*body.Gid), ExpectedRevision: body.ExpectedRevision})
 	if err != nil {
 		return sftpProblem(c, err)
 	}
@@ -147,14 +147,6 @@ func addSFTPMetadataActions(registry actionRegistry, service *sshcSFTP.Service) 
 			return entry.Revision, nil
 		}}
 	}
-}
-
-// Pointers distinguish omitted IDs from the valid numeric ID 0.
-type sftpOwnershipRequest struct {
-	Path             string `json:"path"`
-	UID              *int64 `json:"uid"`
-	GID              *int64 `json:"gid"`
-	ExpectedRevision string `json:"expectedRevision"`
 }
 
 // SFTP v3 owner IDs are unsigned 32-bit integers.

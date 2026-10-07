@@ -5494,8 +5494,9 @@ components:
       required: [path, uid, gid, expectedRevision]
       properties:
         path: { type: string, minLength: 1, maxLength: 4096 }
-        uid: { type: integer, format: int64, minimum: 0, maximum: 4294967295 }
-        gid: { type: integer, format: int64, minimum: 0, maximum: 4294967295 }
+        # Go must distinguish missing owner IDs from the valid numeric ID 0.
+        uid: { type: integer, format: int64, minimum: 0, maximum: 4294967295, x-go-type: "*int64" }
+        gid: { type: integer, format: int64, minimum: 0, maximum: 4294967295, x-go-type: "*int64" }
         expectedRevision: { type: string, minLength: 1 }
     SFTPFilesystemSpace:
       type: object
