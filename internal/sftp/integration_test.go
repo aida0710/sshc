@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	pkgsftp "github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
 	"sshc/internal/sftp"
@@ -37,6 +36,8 @@ func (remote *integrationRemote) OpenRange(candidate string, offset int64) (io.R
 	}
 	return ranged.OpenRange(candidate, offset)
 }
+
+func (remote *integrationRemote) UnderlyingRemote() sftp.Remote { return remote.Remote }
 
 func (remote *integrationRemote) Close() error {
 	return errors.Join(remote.Remote.Close(), remote.transport.Close())
@@ -88,12 +89,12 @@ func integrationService(t *testing.T) sftp.Service {
 		if err != nil {
 			return nil, err
 		}
-		client, err := pkgsftp.NewClient(transport.Client())
+		client, err := sftp.NewSSHClient(transport.Client())
 		if err != nil {
 			_ = transport.Close()
 			return nil, err
 		}
-		return &integrationRemote{Remote: sftp.NewClient(client), transport: transport}, nil
+		return &integrationRemote{Remote: client, transport: transport}, nil
 	}}
 }
 

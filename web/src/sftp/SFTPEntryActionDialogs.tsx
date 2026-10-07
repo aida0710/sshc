@@ -44,12 +44,10 @@ export function SFTPEntryActionDialogs({ actions, currentPath, returnFocusRef }:
           heading={t(inputText.heading)}
           label={t(inputText.label)}
           initialValue={inputText.initialValue}
-          inputMode={inputIntent.kind === "chmod" ? "numeric" : "text"}
           submitLabel={t(inputText.submit)}
           cancelLabel={t("sftp.cancel")}
           returnFocusRef={returnFocusRef}
           validate={(value) => {
-            if (inputIntent.kind === "chmod") return /^0?[0-7]{3}$/.test(value) ? "" : t("sftp.chmodInvalid");
             if (inputIntent.kind === "moveTo") return value.startsWith("/") ? "" : t("sftp.pathAbsolute");
             if (value === "") return t("sftp.nameRequired");
             if (value === "." || value === ".." || /[/\\\0]/.test(value)) return t("sftp.nameInvalid");

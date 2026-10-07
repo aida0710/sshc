@@ -15,16 +15,17 @@ const (
 )
 
 // pkg/sftp has no lsetstat API. Its serialized sendPacket writes a request
-// header followed by a separate attribute/file payload. Translate owner
+// header followed by a separate attribute/file payload. Translate no-follow
 // SETSTAT headers and track the payload so file bytes are never parsed.
-type noFollowOwnershipWriter struct {
+type noFollowAttributesWriter struct {
 	destination  io.WriteCloser
 	payloadBytes uint32
+	permissions  bool
 }
 
-func (writer *noFollowOwnershipWriter) Close() error { return writer.destination.Close() }
+func (writer *noFollowAttributesWriter) Close() error { return writer.destination.Close() }
 
-func (writer *noFollowOwnershipWriter) Write(packet []byte) (int, error) {
+func (writer *noFollowAttributesWriter) Write(packet []byte) (int, error) {
 	if len(packet) == 0 {
 		return 0, nil
 	}
@@ -47,7 +48,7 @@ func (writer *noFollowOwnershipWriter) Write(packet []byte) (int, error) {
 	if packet[4] != sftpSetstatPacket {
 		return writer.destination.Write(packet)
 	}
-	translated, err := noFollowOwnershipPacket(packet, writer.payloadBytes)
+	translated, err := noFollowAttributesPacket(packet, writer.payloadBytes, writer.permissions)
 	if err != nil {
 		return 0, err
 	}
@@ -61,7 +62,7 @@ func (writer *noFollowOwnershipWriter) Write(packet []byte) (int, error) {
 	return len(packet), nil
 }
 
-func noFollowOwnershipPacket(packet []byte, payloadBytes uint32) ([]byte, error) {
+func noFollowAttributesPacket(packet []byte, payloadBytes uint32, permissions bool) ([]byte, error) {
 	// SETSTAT contains the request ID, a length-prefixed path, then attributes.
 	const pathLengthOffset = sftpFrameHeaderBytes + 4
 	if len(packet) < pathLengthOffset+4 {
@@ -73,13 +74,15 @@ func noFollowOwnershipPacket(packet []byte, payloadBytes uint32) ([]byte, error)
 		return nil, io.ErrUnexpectedEOF
 	}
 	flags := binary.BigEndian.Uint32(packet[flagsOffset:])
-	if flags&sftpOwnerAttributes == 0 {
+	attributeBytes := uint64(8) // Ownership has two uint32 IDs.
+	if flags == sftpPermissionsAttributes && permissions {
+		attributeBytes = 4 // Permissions have one uint32 mode.
+	} else if flags&sftpOwnerAttributes == 0 {
 		return packet, nil
 	}
-	// Chown sends only two uint32 owner IDs. Refuse a changed library encoding
-	// rather than silently applying any other attributes through this boundary.
-	if flags != sftpOwnerAttributes || flagsOffset+12 != uint64(len(packet))+uint64(payloadBytes) {
-		return nil, fmt.Errorf("invalid SFTP ownership attributes")
+	// Refuse a changed library encoding instead of silently changing other attributes.
+	if (flags != sftpOwnerAttributes && flags != sftpPermissionsAttributes) || flagsOffset+4+attributeBytes != uint64(len(packet))+uint64(payloadBytes) {
+		return nil, fmt.Errorf("invalid SFTP no-follow attributes")
 	}
 	extensionBytes := 4 + len(noFollowSetstatExtension)
 	translated := make([]byte, len(packet)+extensionBytes)

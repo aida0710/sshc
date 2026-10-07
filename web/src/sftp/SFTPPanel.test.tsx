@@ -32,9 +32,13 @@ const api = vi.hoisted(() => ({
   previewFile: vi.fn(),
   clearFinishedTransfers: vi.fn(),
 }));
+const permissions = vi.hoisted(() => ({ plan: vi.fn(), apply: vi.fn() }));
 const clipboard = vi.hoisted(() => ({ writeText: vi.fn(async () => undefined) }));
 
 vi.mock("./api", () => ({ sftpApi: api }));
+vi.mock("./chmodApi", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./chmodApi")>(), chmodApi: permissions,
+}));
 vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText: clipboard.writeText } }));
 vi.mock("../api/recentConnections", () => ({ recentConnectionsApi: { recentConnections: vi.fn(async () => ({ connections: [] })) } }));
 
@@ -58,6 +62,13 @@ describe("SFTPPanel uploads", () => {
       contents: "hello\n",
       revision: "rev",
     });
+    permissions.plan.mockImplementation(async (_alias, selection) => ({
+      revision: "permission-plan", selectionCount: selection.entries.length,
+      files: selection.entries.filter((entry: { path: string }) => entry.path.endsWith(".txt")).length,
+      directories: selection.entries.filter((entry: { path: string }) => !entry.path.endsWith(".txt")).length,
+      skippedSymlinks: 0, options: selection.options, actionToken: "permission-token", actionExpiresAt: "2026-10-07T12:01:00Z",
+    }));
+    permissions.apply.mockResolvedValue({ applied: 1, items: 1, complete: true });
     api.mkdir.mockResolvedValue(undefined);
     api.createEmptyFile.mockResolvedValue(undefined);
     api.rename.mockResolvedValue(undefined);
@@ -258,6 +269,7 @@ describe("SFTPPanel uploads", () => {
       entries: [
         { name: "project", path: "/remote/project", type: "directory", size: 0, mode: "0755", modifiedAt: "2026-08-24T10:00:00Z", revision: "dir" },
         { name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "2026-08-24T11:00:00Z", revision: "file" },
+        { name: "link", path: "/remote/link", type: "symlink", size: 4, mode: "lrwxrwxrwx", modifiedAt: "", revision: "link" },
       ],
     });
     render(<SFTPPanel aliases={["edge"]} />);
@@ -271,8 +283,71 @@ describe("SFTPPanel uploads", () => {
     expect(screen.queryByRole("menuitem", { name: "Open folder" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Change permissions" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Rename" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Change selected permissions" })).toBeEnabled();
     expect(screen.getByRole("menuitem", { name: "Download" })).toBeEnabled();
     expect(screen.getByRole("menuitem", { name: "Delete" })).toBeEnabled();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select link" }));
+    await userEvent.click(screen.getByRole("button", { name: "Actions for 3 selected items" }));
+    expect(screen.queryByRole("menuitem", { name: "Change selected permissions" })).not.toBeInTheDocument();
+    expect(permissions.plan).not.toHaveBeenCalled();
+  });
+
+  it("requires confirmation for batch permissions and cancellation sends no changes", async () => {
+    api.list.mockResolvedValue({ path: "/remote", entries: [
+      { name: "project", path: "/remote/project", type: "directory", size: 0, mode: "drwxr-xr-x", modifiedAt: "", revision: "directory-revision" },
+      { name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 1, mode: "-rw-------", modifiedAt: "", revision: "file-revision" },
+    ] });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Select project" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select notes.txt" }));
+    const openPermissions = async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Actions for 2 selected items" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "Change selected permissions" }));
+      return screen.getByRole("dialog", { name: "Change selected permissions" });
+    };
+    const cancelledForm = await openPermissions();
+    await userEvent.click(within(cancelledForm).getByRole("button", { name: "Cancel" }));
+    expect(permissions.plan).not.toHaveBeenCalled();
+    const form = await openPermissions();
+    expect(within(form).getByRole("textbox", { name: "File permissions (octal)" })).toHaveValue("644");
+    expect(within(form).getByRole("textbox", { name: "Folder permissions (octal)" })).toHaveValue("755");
+    await userEvent.click(within(form).getByRole("checkbox", { name: "Apply to folder contents recursively" }));
+    await userEvent.click(within(form).getByRole("button", { name: "Review changes" }));
+    const confirmation = await screen.findByRole("dialog", { name: "Confirm permission changes" });
+    expect(within(confirmation).getByText("Selected: 2. Targets: 1 files and 1 folders.")).toBeVisible();
+    expect(within(confirmation).getByText("Files: 644 / Folders: 755")).toBeVisible();
+    expect(within(confirmation).getByText("Recursive: include folder contents.")).toBeVisible();
+    expect(permissions.plan).toHaveBeenCalledWith("edge", {
+      entries: [{ path: "/remote/project", expectedRevision: "directory-revision" }, { path: "/remote/notes.txt", expectedRevision: "file-revision" }],
+      options: { fileMode: "644", directoryMode: "755", recursive: true },
+    });
+    expect(permissions.apply).not.toHaveBeenCalled();
+    await userEvent.click(within(confirmation).getByRole("button", { name: "Cancel" }));
+    expect(permissions.apply).not.toHaveBeenCalled();
+  });
+
+  it("displays partial permission changes and requires a fresh selection before another attempt", async () => {
+    api.list.mockResolvedValue({ path: "/remote", entries: [
+      { name: "first.txt", path: "/remote/first.txt", type: "file", size: 1, mode: "-rw-------", modifiedAt: "", revision: "first" },
+      { name: "second.txt", path: "/remote/second.txt", type: "file", size: 1, mode: "-rw-------", modifiedAt: "", revision: "second" },
+    ] });
+    permissions.apply.mockResolvedValue({ applied: 1, items: 2, complete: false });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Select first.txt" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select second.txt" }));
+    await userEvent.click(screen.getByRole("button", { name: "Actions for 2 selected items" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Change selected permissions" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Review changes" }));
+    const confirmation = await screen.findByRole("dialog", { name: "Confirm permission changes" });
+    await userEvent.click(within(confirmation).getByRole("button", { name: "Apply" }));
+    expect(await within(confirmation).findByRole("alert")).toHaveTextContent("Stopped with 1 of 2 permission changes confirmed.");
+    expect(within(confirmation).getByRole("button", { name: "Apply" })).toBeDisabled();
+    expect(permissions.apply).toHaveBeenCalledTimes(1);
+    await userEvent.click(within(confirmation).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("queues a duplicate beside the selected remote entry", async () => {
@@ -1095,14 +1170,25 @@ describe("SFTPPanel uploads", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "Change permissions" }));
     const dialog = screen.getByRole("dialog", { name: "Change permissions" });
     expect(within(dialog).getByRole("textbox", { name: "Permissions (octal, for example 640)" })).toHaveValue("750");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Change permissions" }));
-    await waitFor(() => expect(api.chmod).toHaveBeenCalledWith({ alias: "edge", remotePath: "/remote/project", mode: "750", expectedRevision: "rev", recursive: false }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Review changes" }));
+    const confirmation = await screen.findByRole("dialog", { name: "Confirm permission changes" });
+    expect(permissions.apply).not.toHaveBeenCalled();
+    expect(within(confirmation).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await userEvent.click(within(confirmation).getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(permissions.apply).toHaveBeenCalledWith(expect.objectContaining({ alias: "edge", selection: {
+      entries: [{ path: "/remote/project", expectedRevision: "rev" }], options: { fileMode: "750", directoryMode: "750", recursive: false },
+    } })));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
     await userEvent.click(screen.getByRole("button", { name: "Actions for project" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Change permissions recursively" }));
     const recursiveDialog = screen.getByRole("dialog", { name: "Change permissions recursively" });
-    await userEvent.click(within(recursiveDialog).getByRole("button", { name: "Change permissions" }));
-    await waitFor(() => expect(api.chmod).toHaveBeenLastCalledWith({ alias: "edge", remotePath: "/remote/project", mode: "750", expectedRevision: "rev", recursive: true }));
+    expect(within(recursiveDialog).getByRole("checkbox", { name: "Apply to folder contents recursively" })).toBeChecked();
+    await userEvent.click(within(recursiveDialog).getByRole("button", { name: "Review changes" }));
+    await userEvent.click(within(await screen.findByRole("dialog", { name: "Confirm permission changes" })).getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(permissions.apply).toHaveBeenLastCalledWith(expect.objectContaining({ alias: "edge", selection: {
+      entries: [{ path: "/remote/project", expectedRevision: "rev" }], options: { fileMode: "750", directoryMode: "750", recursive: true },
+    } })));
   });
   it("tells the parent of a new sort order once per click, even when StrictMode calls updaters twice", async () => {
     api.list.mockResolvedValue({

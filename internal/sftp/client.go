@@ -12,12 +12,12 @@ import (
 
 // Client は github.com/pkg/sftp の client を Remote 境界へ適合させる。
 type Client struct {
-	client            *pkgsftp.Client
-	noFollowOwnership bool
+	client             *pkgsftp.Client
+	noFollowAttributes bool
 }
 
-// NewClient adapts an external client; ownership changes require the no-follow
-// transport installed by NewSSHClient and remain unavailable here.
+// NewClient adapts an external client. Public metadata changes require the
+// no-follow transport installed by NewSSHClient and remain unavailable here.
 func NewClient(client *pkgsftp.Client) *Client {
 	return &Client{client: client}
 }
@@ -74,6 +74,18 @@ func (c *Client) Mkdir(path string) error { return c.client.Mkdir(path) }
 
 func (c *Client) Chmod(path string, mode fs.FileMode) error { return c.client.Chmod(path, mode) }
 
+// ChmodNoFollow refuses unprotected transports before issuing any mutation.
+func (c *Client) ChmodNoFollow(path string, mode fs.FileMode) error {
+	if err := c.CheckChmodNoFollow(); err != nil {
+		return err
+	}
+	return capabilityError(c.client.Chmod(path, mode))
+}
+
+func (c *Client) CheckChmodNoFollow() error {
+	return c.checkNoFollowAttributes()
+}
+
 func (c *Client) Chtimes(path string, modified time.Time) error {
 	return c.client.Chtimes(path, modified, modified)
 }
@@ -114,13 +126,20 @@ func (c *Client) ReplaceSymlink(temporary, linkPath string) error {
 func (c *Client) Chown(path string, uid, gid uint32) error {
 	// A prior Lstat cannot prevent another process replacing the entry with a
 	// symlink. Only the no-follow transport may issue this mutation.
-	if !c.noFollowOwnership {
+	if err := c.checkNoFollowAttributes(); err != nil {
+		return err
+	}
+	return capabilityError(c.client.Chown(path, int(uid), int(gid)))
+}
+
+func (c *Client) checkNoFollowAttributes() error {
+	if !c.noFollowAttributes {
 		return ErrUnsupportedOperation
 	}
 	if version, supported := c.client.HasExtension(noFollowSetstatExtension); !supported || version != "1" {
 		return ErrUnsupportedOperation
 	}
-	return capabilityError(c.client.Chown(path, int(uid), int(gid)))
+	return nil
 }
 
 func (c *Client) StatVFS(path string) (*pkgsftp.StatVFS, error) {
