@@ -18,6 +18,11 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     chunkBytes: 32 << 20,
   });
 
+  await page.route("**/api/v1/sftp/*/space**", (route) => route.fulfill({ json: {
+    path: new URL(route.request().url()).searchParams.get("path") ?? "/",
+    availableBytes: "1073741824",
+    totalBytes: "2147483648",
+  } }));
   await page.route("**/api/v1/sftp/bastion/entries**", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -115,7 +120,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
   await page.route("**/api/v1/sftp/bastion/preview**", (route) => route.fulfill({
     status: 415,
     contentType: "application/problem+json",
-    body: JSON.stringify({ code: "sftp_preview_type", detail: "Text preview uses the text endpoint." }),
+    body: JSON.stringify({ code: "sftp_preview_type", message: "Text preview uses the text endpoint." }),
   }));
   await page.route("**/api/v1/sftp/bastion/uploads/**", async (route) => {
     const request = route.request();
@@ -289,7 +294,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.keyboard.press("Escape");
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-transfer-manager-mobile.png`, fullPage: true });
-    await page.locator('input[type="file"]:not([webkitdirectory])').first().setInputFiles({
+    await page.getByRole("tabpanel").locator('input[type="file"]:not([webkitdirectory])').setInputFiles({
       name: "broken.bin",
       mimeType: "application/octet-stream",
       buffer: Buffer.from("broken"),
