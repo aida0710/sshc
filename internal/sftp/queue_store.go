@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"sshc/internal/storage"
@@ -88,9 +89,13 @@ func (m *TransferManager) EnableQueuePersistence(filename string) error {
 				m.jobsMutex.Unlock()
 				return ErrInvalidTransfer
 			}
-			if job.Status == TransferRunning {
+			if job.Status == TransferRunning || job.Status == TransferReconnecting {
 				if job.Direction == TransferRemote {
-					if job.Problem == RemoteReconciliationProblem {
+					if job.Status == TransferReconnecting {
+						// Shutdown ends the recovery budget. Preserve the verified
+						// checkpoint for an explicit resume after engine restart.
+						job.Status = TransferPaused
+					} else if job.Problem == RemoteReconciliationProblem {
 						job.Status = TransferReattach
 					} else {
 						job.Status = TransferQueued
@@ -100,6 +105,7 @@ func (m *TransferManager) EnableQueuePersistence(filename string) error {
 					job.Status = TransferReattach
 				}
 				job.BytesPerSecond, job.RemainingSeconds = 0, -1
+				job.ReconnectAt = time.Time{}
 				if job.Problem != RemoteReconciliationProblem {
 					job.Problem = "transfer_interrupted"
 				}
@@ -155,6 +161,15 @@ func validPersistedJob(job TransferJob) error {
 	if _, err := validateTransferJobShape(job.shape()); err != nil {
 		return err
 	}
+	if job.RemoteCheckpoint != nil {
+		checkpoint := job.RemoteCheckpoint
+		if !recoverableRemoteFile(job) || !strings.HasPrefix(checkpoint.SourceRevision, metadataRevisionPrefix) || !strings.HasPrefix(checkpoint.SourceContentRevision, contentRevisionPrefix) || (checkpoint.TargetRevision != AbsentRevision && !strings.HasPrefix(checkpoint.TargetRevision, metadataRevisionPrefix)) {
+			return ErrInvalidTransfer
+		}
+	}
+	if !validReconnectAttempts(job.ReconnectAttempt) {
+		return ErrInvalidTransfer
+	}
 	if job.TransferredBytes < 0 || (job.TotalBytes >= 0 && job.TransferredBytes > job.TotalBytes) ||
 		job.Attempt < 1 || job.CreatedAt.IsZero() || job.UpdatedAt.IsZero() {
 		return ErrInvalidTransfer
@@ -165,7 +180,7 @@ func validPersistedJob(job TransferJob) error {
 		return ErrInvalidTransfer
 	}
 	switch job.Status {
-	case TransferQueued, TransferRunning, TransferPaused, TransferReattach, TransferNeedsOverwrite, TransferCompleted, TransferFailed, TransferCancelled:
+	case TransferQueued, TransferRunning, TransferReconnecting, TransferPaused, TransferReattach, TransferNeedsOverwrite, TransferCompleted, TransferFailed, TransferCancelled:
 		return nil
 	default:
 		return ErrInvalidTransfer

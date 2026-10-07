@@ -451,3 +451,13 @@ Terminal画面のCtrl+F/Meta+FはブラウザFindへ渡さない。選択中セ�
 Connections一覧もHomeと同じOperatingSystemIconを使用し、手動OS指定→自動判定→汎用サーバーの順で表示する。一覧では20pxの領域に16pxの単色アイコンを置き、接続ごとの色は小さなバッジとして保持する。
 
 Amazon Linuxはos-releaseのID=amznをamazonlinuxへ正規化し、ID_LIKEのFedora/CentOSより優先する。Amazon Linux 2/2023は同じOS区分で扱い、バージョンは保存しない。UIではAmazon Linuxとして選択・判定結果を表示し、絵柄は同梱の汎用Linuxアイコンを使う。汎用サーバーを除く判定区分は15種類で、固定の種類数上限はない。
+
+### 転送速度上限と通信断復旧
+
+`TransferManager`が速度上限（bytes/s、0は無制限）と自動復旧の有効／無効・回数上限を保持し、既存の`FileTransferSettings`へ永続化します。`Service`のコピーも共有する`transferLimiter`が全jobと並列接続の合算を制御します。有限のgrantへ分け、contextと設定変更で待機を中断します。ローカルでのハッシュ計算には適用せず、転送用のリモート内容検証には適用します。prepared spoolの読み出しにも同じlimiterを使うため、キャッシュ済みの配信にも上限が効きます。
+
+`reconnecting`は転送スロットを保持するdomainの状態です。試行回数と次回時刻をjobと転送台帳に記録します。backoffは1秒から最大30秒、復旧回数は最大10回です。remote workerのcontextがpause／cancel／shutdownで待機とI/Oを止め、設定変更も待機を起こします。move／deleteとフォルダのserver jobは自動再実行しません。
+
+復旧を有効にした単一ファイルのcopy／get／putは、device-localのcheckpointへ転送元metadata／内容ハッシュと転送先revisionを保存します。再接続時は一時ファイルの実サイズをoffsetとし、その全prefixが転送元と一致した場合だけ続きを書きます。remote copy／putは既存の予約upload part名、getはdescriptor-rootedなローカル一時ファイルを使います。公開の直前にも元と先を照合し、renameの結果が曖昧な場合は`RemoteReconciliationProblem`で停止します。engine再起動後の曖昧なcommit intentは既存のreconciliation規則で自動実行しません。
+
+Webのupload／download planeは、domainが許可した再接続だけを実行します。無条件に3回再実行する処理は廃止し、permission／auth／revision拒否と公開完了の不明確な状態を再実行しません。ブラウザuploadはページ内の`File`、downloadは既存のimmutable spool・OPFS checkpointを再利用します。ZIPは先頭から再実行します。CLIの`get`／`put`は速度設定を共有しますが、自身の通信断を自動再試行しません。`sshc sftp settings --speed-limit <KiB/s> --reconnect-attempts <0..10>`で共有設定を変更できます。

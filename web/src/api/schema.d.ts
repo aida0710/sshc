@@ -3559,6 +3559,10 @@ export interface components {
             largeFileParallelism?: number;
             /** Format: int64 */
             largeFileChunkBytes?: number;
+            /** Format: int64 */
+            speedLimitBytesPerSecond?: number;
+            autoReconnect?: boolean;
+            maxReconnectAttempts?: number;
         };
         EmbeddedTerminal: {
             maxSessions?: number;
@@ -3978,9 +3982,12 @@ export interface components {
             /** Format: int64 */
             remainingSeconds: number;
             /** @enum {string} */
-            status: "queued" | "running" | "paused" | "reattach" | "needs_overwrite" | "completed" | "failed" | "cancelled";
+            status: "queued" | "running" | "reconnecting" | "paused" | "reattach" | "needs_overwrite" | "completed" | "failed" | "cancelled";
             allowedActions: ("pause" | "resume" | "retry" | "cancel" | "remove")[];
             attempt: number;
+            reconnectAttempt: number;
+            /** @description Next reconnect time, or empty while not waiting. */
+            reconnectAt: string;
             problem: string;
             /** Format: int64 */
             lastModified: number;
@@ -4010,6 +4017,10 @@ export interface components {
             largeFileParallelism: number;
             /** Format: int64 */
             largeFileChunkBytes: number;
+            /** Format: int64 */
+            speedLimitBytesPerSecond: number;
+            autoReconnect: boolean;
+            maxReconnectAttempts: number;
             jobs: components["schemas"]["SFTPTransferJob"][];
         };
         SFTPSearchResult: {
@@ -4064,6 +4075,10 @@ export interface components {
             largeFileParallelism: number;
             /** Format: int64 */
             largeFileChunkBytes: number;
+            /** Format: int64 */
+            speedLimitBytesPerSecond: number;
+            autoReconnect: boolean;
+            maxReconnectAttempts: number;
         };
         SFTPTransferQueueMoveRequest: {
             /** @enum {string} */
@@ -4099,7 +4114,7 @@ export interface components {
         };
         SFTPTransferJobActionRequest: {
             /** @enum {string} */
-            action: "start" | "pause" | "resume" | "retry" | "cancel" | "progress" | "complete" | "fail" | "needs_overwrite";
+            action: "start" | "reconnect" | "pause" | "resume" | "retry" | "cancel" | "progress" | "complete" | "fail" | "needs_overwrite";
             /** Format: int64 */
             transferredBytes?: number;
             /** Format: int64 */

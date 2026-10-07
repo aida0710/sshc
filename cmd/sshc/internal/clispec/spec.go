@@ -81,7 +81,7 @@ Print the resolved SSH target without connecting.
 	{Name: "sftp", Route: "sftp", Help: sftpHelp(), Actions: []Action{
 		{Name: "get", Help: "usage:\n  sshc sftp get <alias> <remote-path> <local-path> [options]\n\nDownload a file or, with --recursive, a directory. Existing files require\n--overwrite and confirmation, or --skip-existing.\n"},
 		{Name: "put", Help: "usage:\n  sshc sftp put <alias> <local-path> <remote-path> [options]\n\nUpload a file or, with --recursive, a directory. Existing files require\n--overwrite and confirmation, or --skip-existing.\n"},
-		{Name: "settings", Help: "usage:\n  sshc sftp settings [--split-size <MiB>] [--split-jobs <n>] [--chunk-size <MiB>] [--json]\n\nShow the engine-wide split-transfer defaults. Supplied values are persisted and\nused by Web and CLI transfers; get/put flags still override one invocation.\n"},
+		{Name: "settings", Help: "usage:\n  sshc sftp settings [--split-size <MiB>] [--split-jobs <n>] [--chunk-size <MiB>] [--speed-limit <KiB/s>] [--reconnect-attempts <n>] [--json]\n\nShow the engine-wide transfer defaults. Speed limit 0 is unlimited;\nreconnect attempts 0 disables automatic recovery (maximum 10). Supplied values are persisted and\nused by Web and CLI transfers; get/put flags still override one invocation.\nThe CLI get/put client does not automatically retry connection failures.\n"},
 	}},
 	{Name: "serial", Route: "serial", Help: `usage:
   sshc serial [--json]
@@ -159,7 +159,7 @@ var Values = map[string][]string{
 	"serial-options":        {"--json", "--non-interactive", "--require-output", "--encoding", "--baud", "--data-bits", "--parity", "--stop-bits", "--flow", "--dtr", "--rts", "--break", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--help"},
 	"telnet-options":        {"--non-interactive", "--require-output", "--encoding", "--connect-timeout", "--terminal-type", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--json", "--help"},
 	"sftp-options":          {"-r", "--recursive", "--overwrite", "--skip-existing", "--dry-run", "-j", "--jobs", "--split-size", "--split-jobs", "--chunk-size", "--max-depth", "--max-entries", "--max-total-size", "--json", "-y", "--yes", "--help"},
-	"sftp-settings-options": {"--split-size", "--split-jobs", "--chunk-size", "--json", "--help"},
+	"sftp-settings-options": {"--split-size", "--split-jobs", "--chunk-size", "--speed-limit", "--reconnect-attempts", "--json", "--help"},
 }
 
 const GlobalHelp = `usage:
@@ -197,9 +197,10 @@ const GlobalHelp = `usage:
                        inspect and control terminals owned by the running engine
   sshc sftp get <alias> <remote-path> <local-path> [options]
   sshc sftp put <alias> <local-path> <remote-path> [options]
-  sshc sftp settings [split-options]
+  sshc sftp settings [options]
                        transfer files through the running engine
                        split options: --split-size --split-jobs --chunk-size
+                       shared settings: --speed-limit --reconnect-attempts
                        transfer options: -r --overwrite --skip-existing --dry-run --json -y
   sshc serial [--json]
                        list serial devices
@@ -255,7 +256,7 @@ func sftpHelp() string {
 	return fmt.Sprintf(`usage:
   sshc sftp get <alias> <remote-path> <local-path> [options]
   sshc sftp put <alias> <local-path> <remote-path> [options]
-  sshc sftp settings [split-options]
+  sshc sftp settings [options]
 
 Transfer files through the running engine and its SSH/Vault configuration.
 Remote paths must be absolute POSIX paths.

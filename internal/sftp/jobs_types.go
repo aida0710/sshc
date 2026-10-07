@@ -22,6 +22,7 @@ type TransferJobStatus string
 const (
 	TransferQueued         TransferJobStatus = "queued"
 	TransferRunning        TransferJobStatus = "running"
+	TransferReconnecting   TransferJobStatus = "reconnecting"
 	TransferPaused         TransferJobStatus = "paused"
 	TransferReattach       TransferJobStatus = "reattach"
 	TransferNeedsOverwrite TransferJobStatus = "needs_overwrite"
@@ -52,24 +53,28 @@ type DownloadPartProgress struct {
 }
 
 type TransferJob struct {
-	ID                      string
-	BatchID                 string
-	BatchName               string
-	BatchKind               TransferKind
-	Alias                   string
-	SourceAlias             string
-	SourcePath              string
-	Operation               RemoteTransferOperation
-	Direction               TransferDirection
-	Kind                    TransferKind
-	Name                    string
-	RemotePath              string
-	TotalBytes              int64
-	TransferredBytes        int64
-	BytesPerSecond          float64
-	RemainingSeconds        int64
-	Status                  TransferJobStatus
-	Attempt                 int
+	ID               string
+	BatchID          string
+	BatchName        string
+	BatchKind        TransferKind
+	Alias            string
+	SourceAlias      string
+	SourcePath       string
+	Operation        RemoteTransferOperation
+	Direction        TransferDirection
+	Kind             TransferKind
+	Name             string
+	RemotePath       string
+	TotalBytes       int64
+	TransferredBytes int64
+	BytesPerSecond   float64
+	RemainingSeconds int64
+	Status           TransferJobStatus
+	Attempt          int
+	ReconnectAttempt int
+	ReconnectAt      time.Time
+	// Server file checkpoint is device-local and never supplied by a client.
+	RemoteCheckpoint        *remoteFileCheckpoint `json:",omitempty"`
 	Problem                 string
 	LastModified            int64
 	ExpectedRevision        string

@@ -15,7 +15,7 @@ import (
 
 // DownloadArchive streams a directory as a ZIP without following symlinks.
 // Symlinks become regular text entries containing the link target so extraction cannot escape via a link.
-func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, destination io.Writer) (Transfer, error) {
+func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, destination io.Writer) (_ Transfer, operationErr error) {
 	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
 		return Transfer{}, err
@@ -24,7 +24,7 @@ func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, 
 	if err != nil {
 		return Transfer{}, err
 	}
-	defer remote.Close()
+	defer func() { closeTransferRemote(remote, operationErr) }()
 	info, err := remote.Lstat(cleaned)
 	if err != nil {
 		return Transfer{}, err
@@ -36,7 +36,7 @@ func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, 
 	if !ValidLocalChildName(rootName) {
 		return Transfer{}, ErrInvalidPath
 	}
-	walk := &archiveWalk{archive: zip.NewWriter(destination), remote: remote, budget: archiveBudget{entries: 1}}
+	walk := &archiveWalk{archive: zip.NewWriter(destination), remote: remote, service: s, budget: archiveBudget{entries: 1}}
 	if err := walk.addDirectory(ctx, archiveItem{remotePath: cleaned, archivePath: rootName, depth: 1}); err != nil {
 		_ = walk.archive.Close()
 		return Transfer{}, err
@@ -50,6 +50,7 @@ func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, 
 // archiveWalk is the state of writing one ZIP. The budget counts the whole
 // tree, not one folder.
 type archiveWalk struct {
+	service Service
 	archive *zip.Writer
 	remote  Remote
 	budget  archiveBudget
@@ -156,7 +157,7 @@ func (w *archiveWalk) addFile(ctx context.Context, file archiveItem, info fs.Fil
 	if err != nil {
 		return err
 	}
-	count, copyErr := copyContext(ctx, entry, io.LimitReader(source, available+1), 0)
+	count, copyErr := copyContext(ctx, w.service.transferWriter(ctx, entry), io.LimitReader(source, available+1), 0)
 	closeErr := source.Close()
 	w.written += count
 	if copyErr != nil {

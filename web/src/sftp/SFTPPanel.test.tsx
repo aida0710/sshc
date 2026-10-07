@@ -89,7 +89,7 @@ describe("SFTPPanel uploads", () => {
     api.createTransfer.mockImplementation(async (input: Record<string, unknown>) => {
       const existing = server.get(input.id as string);
       if (existing !== undefined) return existing;
-      const created = { ...input, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", allowedActions: ["pause", "cancel"], attempt: 1, problem: "", expectedRevision: "", sourceFingerprint: "", overwrite: false, downloadRevision: "", downloadParts: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const created = { ...input, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", allowedActions: ["pause", "cancel"], attempt: 1, reconnectAttempt: 0, reconnectAt: "", problem: "", expectedRevision: "", sourceFingerprint: "", overwrite: false, downloadRevision: "", downloadParts: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       server.set(input.id as string, created);
       return created;
     });
@@ -109,7 +109,7 @@ describe("SFTPPanel uploads", () => {
     });
     api.listTransfers.mockImplementation(async () => ({
       maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false,
-      largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, jobs: [...server.values()],
+      largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, jobs: [...server.values()],
     }));
     api.clearFinishedTransfers.mockImplementation(async () => {
       for (const [id, job] of server) if (job.status === "completed" || job.status === "cancelled") server.delete(id);
@@ -133,8 +133,8 @@ describe("SFTPPanel uploads", () => {
     });
 
     await waitFor(() => expect(api.startUpload).toHaveBeenCalledTimes(2));
-    expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/first.txt", size: first.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/) });
-    expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/second.txt", size: second.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/) });
+    expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/first.txt", size: first.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/), signal: expect.any(AbortSignal) });
+    expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/second.txt", size: second.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/), signal: expect.any(AbortSignal) });
     expect(await screen.findByText("Completed")).toBeInTheDocument();
     expect(await screen.findByText("The SFTP operation failed.")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
@@ -826,7 +826,7 @@ describe("SFTPPanel uploads", () => {
       ["edge", "/remote/project"],
       ["edge", "/remote/project/config"],
     ]);
-    expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/project/config/file.txt", size: nested.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/) });
+    expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/project/config/file.txt", size: nested.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/), signal: expect.any(AbortSignal) });
   });
 
   it("rejects queue overflow before creating remote directories and always releases the busy state", async () => {
@@ -862,7 +862,7 @@ describe("SFTPPanel uploads", () => {
     expect(await screen.findByText("Confirm overwrite")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Overwrite" }));
     await waitFor(() => expect(api.startUpload).toHaveBeenCalledTimes(2));
-    expect(api.startUpload).toHaveBeenLastCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/existing.txt", size: file.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/) });
+    expect(api.startUpload).toHaveBeenLastCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/existing.txt", size: file.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/), signal: expect.any(AbortSignal) });
   });
 
   it("moves the row cursor with the arrow keys, Home and End while selecting the row it lands on", async () => {

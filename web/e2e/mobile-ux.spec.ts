@@ -19,13 +19,13 @@ const entry = (name: string, type: "file" | "directory", parent = "/workspace") 
 const rootEntries = [entry("projects", "directory"), entry("archives", "directory"), ...Array.from({ length: 12 }, (_, index) => entry(`report-${index + 1}.txt`, "file"))];
 const transferList = {
   maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: true,
-  largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20,
+  largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0,
   jobs: [{
     id: "mobile-demo-transfer", batchId: "mobile-demo-batch", batchName: "Demo download", batchKind: "file",
     alias: "bastion", sourceAlias: "", sourcePath: "", operation: "", direction: "download", kind: "file",
     name: "reports.zip", remotePath: "/workspace/reports.zip", totalBytes: 10 << 20, transferredBytes: 4 << 20,
     bytesPerSecond: 0, remainingSeconds: -1, status: "paused", allowedActions: ["resume", "cancel"],
-    attempt: 1, problem: "", lastModified: 0, expectedRevision: "", sourceFingerprint: "", overwrite: false,
+    attempt: 1, reconnectAttempt: 0, reconnectAt: "", problem: "", lastModified: 0, expectedRevision: "", sourceFingerprint: "", overwrite: false,
     downloadRevision: "demo-revision", downloadParts: [], createdAt: "2026-09-12T00:00:00Z", updatedAt: "2026-09-12T00:00:00Z",
   }],
 };

@@ -6,14 +6,17 @@ import (
 	"time"
 )
 
-// uploadPartCleanupTimeout bounds how long removing a failed upload's part
+// uploadPartCleanupTimeout bounds how long removing an unpublished part
 // holds up the request that needs the job gone: admitting a new job or
 // removing the failed one. An unreachable host then fails that request instead
 // of stalling it.
 const uploadPartCleanupTimeout = 5 * time.Second
 
-func (m *TransferManager) cleanupEvictedUploadPart(job TransferJob) error {
+func (m *TransferManager) cleanupTransferPart(job TransferJob) error {
 	m.releasePreparedDownload(job.ID)
+	if recoverableRemoteFile(job) && job.RemoteCheckpoint != nil {
+		return m.cleanupServerFilePart(job)
+	}
 	if job.Direction != TransferUpload || job.Kind != TransferFile || m.Service == nil || m.Service.Open == nil {
 		return ErrTransferState
 	}
@@ -25,6 +28,9 @@ func (m *TransferManager) cleanupEvictedUploadPart(job TransferJob) error {
 // ClearFinished removes terminal records from the engine-owned ledger. Active,
 // paused and failed work remains available for control or diagnosis.
 func (m *TransferManager) ClearFinished() (int, error) {
+	if err := m.removeCancelledServerFiles(); err != nil {
+		return 0, err
+	}
 	return m.removeFinishedJobs(func(TransferJob, time.Time) bool { return true })
 }
 
@@ -45,7 +51,7 @@ func (m *TransferManager) removeFinishedJobs(selected func(job TransferJob, now 
 	removing := make(map[string]bool)
 	for _, id := range m.jobOrder {
 		record := m.jobs[id]
-		if record != nil && terminalTransferStatus(record.job.Status) && m.dataPlane[id] == 0 && selected(record.job, now) {
+		if record != nil && terminalTransferStatus(record.job.Status) && !mayHoldRemotePart(record.job) && m.dataPlane[id] == 0 && selected(record.job, now) {
 			removing[id] = true
 		}
 	}
@@ -110,7 +116,7 @@ func (m *TransferManager) RemoveJob(id string) error {
 		}
 		m.jobsMutex.Unlock()
 
-		cleanupErr := m.cleanupEvictedUploadPart(job)
+		cleanupErr := m.cleanupTransferPart(job)
 		m.jobsMutex.Lock()
 		current := m.jobs[id]
 		if current == nil {
@@ -154,14 +160,10 @@ func uploadJobHasRemotePart(job TransferJob) bool {
 		(job.ExpectedRevision != "" || job.TransferredBytes > 0 || len(job.UploadRanges) > 0)
 }
 
-// mayHoldRemotePart says whether forgetting a retained job could leave a
-// partial upload behind on the host, so that evicting or removing it must
-// first reach the host to remove the part. Only a failed upload that recorded
-// its part can. A completed upload renamed the part into place, a cancelled
-// one had its part removed before it became cancelled (see CancelOwned), and a
-// failed one that recorded nothing never prepared it. The others therefore go
-// without a connection, and an unreachable host blocks neither the queue nor
-// the CLI's finished uploads.
+// mayHoldRemotePart requires cleanup before forgetting a failed upload or an
+// interrupted server-file checkpoint. Completed jobs have published their
+// part; browser upload cancellation already removes it (see CancelOwned).
 func mayHoldRemotePart(job TransferJob) bool {
-	return job.Status == TransferFailed && uploadJobHasRemotePart(job)
+	return (job.Status == TransferFailed && uploadJobHasRemotePart(job)) ||
+		((job.Status == TransferFailed || job.Status == TransferCancelled) && job.RemoteCheckpoint != nil)
 }
