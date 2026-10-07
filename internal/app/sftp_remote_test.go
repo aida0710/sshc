@@ -113,7 +113,7 @@ func (server *sftpSubsystemServer) open(t *testing.T) *sftpRemote {
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := pkgsftp.NewClient(transport)
+	session, err := sshcSFTP.NewSSHClient(transport)
 	if err != nil {
 		_ = transport.Close()
 		t.Fatal(err)

@@ -46,6 +46,7 @@ export function SFTPEntryList({
   sort,
   onSort,
   mobileInteraction,
+  showOwnership = true,
   busy,
   locked = false,
   parentRowVisible,
@@ -58,6 +59,7 @@ export function SFTPEntryList({
   sort: SFTPSortState;
   onSort: (key: SFTPSort) => void;
   mobileInteraction: boolean;
+  showOwnership?: boolean;
   busy: boolean;
   locked?: boolean;
   parentRowVisible: boolean;
@@ -146,6 +148,7 @@ export function SFTPEntryList({
                 <span className="block truncate font-mono text-sm font-medium leading-4 text-ink"><EntryName entry={entry} /></span>
                 <span className="mt-0.5 flex min-w-0 gap-2 text-[11px] leading-3 text-ink-muted">
                   <span className="truncate font-mono">{entryContext === undefined ? entry.mode : entryContext(entry)}</span>
+                  {!showOwnership || entry.uid === undefined ? null : <span>{t("sftp.ownerIds", { uid: entry.uid, gid: entry.gid ?? "—" })}</span>}
                   <span>{entrySize(entry)}</span>
                   <time className="truncate" dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleString()}</time>
                 </span>
@@ -174,12 +177,16 @@ export function SFTPEntryList({
         <SortableTableHeader column="modified" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 md:py-1">{t("sftp.modified")}</SortableTableHeader>
         <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 text-right md:py-1" buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
         <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="w-24 whitespace-nowrap px-2 py-1.5 md:py-1">{t("sftp.type")}</SortableTableHeader>
+        {showOwnership ? <>
+        <SortableTableHeader column="uid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 md:py-1">{t("sftp.uid")}</SortableTableHeader>
+        <SortableTableHeader column="gid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 md:py-1">{t("sftp.gid")}</SortableTableHeader>
+        </> : null}
         <th scope="col" className="w-28 whitespace-nowrap px-2 py-1.5 md:py-1">{t("sftp.permissions")}</th>
       </tr></thead>
       <tbody>
         {parentRowVisible ? (
           <tr data-row-key={parentRowKey} className="border-t border-line/40 hover:bg-hover/60">
-            <td className="px-2 py-1 md:py-0.5" colSpan={6}>
+            <td className="px-2 py-1 md:py-0.5" colSpan={showOwnership ? 8 : 6}>
               <button
                 type="button"
                 {...parentButtonProps}
@@ -220,6 +227,10 @@ export function SFTPEntryList({
             <td className="whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5">{new Date(entry.modifiedAt).toLocaleString()}</td>
             <td className="px-2 py-1 text-right text-xs text-ink-muted md:py-0.5">{entrySize(entry)}</td>
             <td className="w-24 whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5">{t(entryTypeLabelKeys[entry.type])}</td>
+            {showOwnership ? <>
+            <td className="px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.uid ?? "—"}</td>
+            <td className="px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.gid ?? "—"}</td>
+            </> : null}
             <td className="w-28 whitespace-nowrap px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.mode}</td>
           </tr>
         ))}

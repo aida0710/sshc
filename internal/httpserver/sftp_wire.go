@@ -66,6 +66,11 @@ func describeSFTPEntry(entry sshcSFTP.Entry) api.SFTPEntry {
 		Name: entry.Name, Path: entry.Path, Type: api.SFTPEntryType(entry.Type), Size: entry.Size,
 		Mode: entry.Mode.String(), ModifiedAt: entry.ModifiedAt.UTC(), Revision: entry.Revision,
 	}
+	if entry.Ownership != nil {
+		uid, gid := int64(entry.Ownership.UID), int64(entry.Ownership.GID)
+		described.Uid = &uid
+		described.Gid = &gid
+	}
 	if entry.LinkTarget != "" {
 		described.LinkTarget = &entry.LinkTarget
 	}

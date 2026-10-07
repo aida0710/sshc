@@ -71,6 +71,8 @@ export function SFTPDetailsDialog({
   onDownload,
   canDownload,
   onRename,
+  onChangeLinkTarget,
+  onChangeOwnership,
   returnFocusRef,
 }: {
   alias: string;
@@ -82,6 +84,8 @@ export function SFTPDetailsDialog({
   // Whether "send it over" can take an entry; the pane knows where it goes.
   canDownload: (entry: RemoteEntry) => boolean;
   onRename: (entry: RemoteEntry) => void;
+  onChangeLinkTarget?: ((entry: RemoteEntry) => void) | undefined;
+  onChangeOwnership?: ((entry: RemoteEntry) => void) | undefined;
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
@@ -184,6 +188,8 @@ export function SFTPDetailsDialog({
                 <time dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleString()}</time>
               </Property>
               <Property label={t("sftp.permissions")}>{`${entry.mode} (${symbolicModeToOctal(entry.mode)})`}</Property>
+              <Property label={t("sftp.uid")}>{entry.uid ?? t("sftp.ownershipUnavailable")}</Property>
+              <Property label={t("sftp.gid")}>{entry.gid ?? t("sftp.ownershipUnavailable")}</Property>
               <Property label={t("sftp.revision")}>{entry.revision}</Property>
             </>
           )}
@@ -236,6 +242,8 @@ export function SFTPDetailsDialog({
         {entries.some(canDownload)
           ? <Button disabled={busy} onClick={() => onDownload(entries)}>{t("sftp.download")}</Button>
           : null}
+        {entry?.type === "symlink" && onChangeLinkTarget ? <Button disabled={busy} onClick={() => onChangeLinkTarget(entry)}>{t("sftp.changeLinkTarget")}</Button> : null}
+        {entry !== null && (entry.type === "file" || entry.type === "directory") && onChangeOwnership ? <Button disabled={busy || entry.uid === undefined || entry.gid === undefined} onClick={() => onChangeOwnership(entry)}>{t("sftp.changeOwnership")}</Button> : null}
         {entry === null ? null : <Button disabled={busy} onClick={() => onRename(entry)}>{t("sftp.rename")}</Button>}
       </div>
     </ModalShell>

@@ -1,4 +1,4 @@
-import type { SFTPSort, SFTPSortState } from "./SFTPPanel";
+import { sftpSortColumns, type SFTPSort, type SFTPSortState } from "./sftpEntrySort";
 import { isLocalPath, localHostAlias } from "./localHost";
 import { blankPane, maxPanes, maxTabsPerPane, paneOf, type SFTPPane, type SFTPTab } from "./sftpPanes";
 import { clampSplitRatio } from "../ui/SplitResizeHandle";
@@ -14,8 +14,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function restoredSort(value: Record<string, unknown>): SFTPSortState {
-  const keys: readonly SFTPSort[] = ["name", "type", "size", "modified"];
-  const key = typeof value.sortKey === "string" && keys.includes(value.sortKey as SFTPSort)
+  const key = typeof value.sortKey === "string" && sftpSortColumns.includes(value.sortKey as SFTPSort)
     ? value.sortKey as SFTPSort
     : "name";
   const direction = value.sortDirection === "descending" ? "descending" : "ascending";

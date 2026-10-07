@@ -2573,6 +2573,73 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/symlink:
+    parameters: *sftpAlias
+    post:
+      operationId: createSFTPSymlink
+      description: Creates a relative or absolute symbolic link, including dangling targets, without overwrite. Requires a single-use confirmation and the shared transfer path lock.
+      parameters:
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPCreateSymlinkRequest" } } } }
+      responses:
+        "201": { description: Entry changed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: changeSFTPSymlink
+      description: Atomically replaces only the symbolic link in its directory. Requires its revision, a single-use confirmation and server atomic rename support. Never writes to the referenced target.
+      parameters:
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChangeSymlinkRequest" } } } }
+      responses:
+        "200": { description: Entry changed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/ownership:
+    parameters: *sftpAlias
+    patch:
+      operationId: changeSFTPOwnership
+      description: Changes numeric SFTP UID/GID for one regular file or directory. Requires metadata containing the entry type and owner IDs, its revision, a single-use confirmation and the shared transfer path lock. Symlinks are refused.
+      parameters:
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPOwnershipRequest" } } } }
+      responses:
+        "200": { description: Entry changed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/space:
+    parameters: *sftpAlias
+    get:
+      operationId: getSFTPFilesystemSpace
+      description: Uses statvfs@openssh.com available blocks for the authenticated account. Byte counts are exact decimal strings. Unsupported servers return sftp_unsupported_operation independently of directory listing.
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Filesystem capacity, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPFilesystemSpace" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/workspaces:
     get:
       operationId: listTerminalWorkspaces
@@ -4066,9 +4133,9 @@ components:
       required: [kind, target]
       properties:
         kind: { type: string, minLength: 1, maxLength: 64 }
-        # SFTP の kind は `alias:絶対パス(:mode)` を target にするので、path の上限（4096）に
-        # alias と区切りの分を足した長さまで受け付ける。サーバーも同じ上限で拒否する。
-        target: { type: string, minLength: 1, maxLength: 4352 }
+        # リンク確認は alias:path:Base64(target)。4096文字のUTF-8パスとリンク先を
+        # 収める上限とし、サーバーも同じ上限で拒否する。
+        target: { type: string, minLength: 1, maxLength: 49152 }
     IssueActionResponse:
       type: object
       additionalProperties: false
@@ -5293,6 +5360,8 @@ components:
         mode: { type: string }
         modifiedAt: { type: string, format: date-time }
         revision: { type: string }
+        uid: { type: integer, format: int64, minimum: 0, maximum: 4294967295 }
+        gid: { type: integer, format: int64, minimum: 0, maximum: 4294967295 }
         # Symlinks only: the target as the server reports it, and the type of
         # the entry the link chain ends at. targetType is absent when the target
         # cannot be read (a broken link or a loop). size is then the target's
@@ -5404,6 +5473,38 @@ components:
         mode: { type: string, pattern: "^0?[0-7]{3}$" }
         expectedRevision: { type: string, minLength: 1 }
         recursive: { type: boolean }
+    SFTPCreateSymlinkRequest:
+      type: object
+      additionalProperties: false
+      required: [path, target]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        target: { type: string, minLength: 1, maxLength: 4096 }
+    SFTPChangeSymlinkRequest:
+      type: object
+      additionalProperties: false
+      required: [path, target, expectedRevision]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        target: { type: string, minLength: 1, maxLength: 4096 }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPOwnershipRequest:
+      type: object
+      additionalProperties: false
+      required: [path, uid, gid, expectedRevision]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        uid: { type: integer, format: int64, minimum: 0, maximum: 4294967295 }
+        gid: { type: integer, format: int64, minimum: 0, maximum: 4294967295 }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPFilesystemSpace:
+      type: object
+      additionalProperties: false
+      required: [path, availableBytes, totalBytes]
+      properties:
+        path: { type: string }
+        availableBytes: { type: string, pattern: "^(0|[1-9][0-9]{0,19})$", description: Bytes available to the authenticated account as an exact uint64 decimal string. }
+        totalBytes: { type: string, pattern: "^(0|[1-9][0-9]{0,19})$", description: Total filesystem bytes as an exact uint64 decimal string. }
     SFTPTransfer:
       type: object
       additionalProperties: false

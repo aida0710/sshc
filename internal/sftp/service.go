@@ -176,6 +176,9 @@ func (remote *contextRemote) finish(cancelled bool) error {
 }
 
 func entryTypeOf(info fs.FileInfo) EntryType {
+	if !metadataTypeKnown(info) {
+		return EntryOther
+	}
 	switch {
 	case info.IsDir():
 		return EntryDirectory
@@ -188,7 +191,7 @@ func entryTypeOf(info fs.FileInfo) EntryType {
 }
 
 func entryFrom(parent string, info fs.FileInfo) Entry {
-	return Entry{
+	entry := Entry{
 		Name:       info.Name(),
 		Path:       path.Join(parent, info.Name()),
 		Type:       entryTypeOf(info),
@@ -197,6 +200,10 @@ func entryFrom(parent string, info fs.FileInfo) Entry {
 		ModifiedAt: info.ModTime().UTC(),
 		Revision:   metadataRevision(info),
 	}
+	if owner, available := ownershipFrom(info); available {
+		entry.Ownership = &owner
+	}
+	return entry
 }
 
 // copyChunkBytes is how much one read or write of a copy asks for. pkg/sftp
@@ -289,7 +296,8 @@ type namedInfo struct {
 	name string
 }
 
-func (i namedInfo) Name() string { return i.name }
+func (i namedInfo) Name() string                    { return i.name }
+func (info namedInfo) Ownership() (Ownership, bool) { return ownershipFrom(info.FileInfo) }
 
 type closedWriter struct{}
 

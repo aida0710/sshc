@@ -16,11 +16,14 @@ const (
 	contentRevisionPrefix  = "content-sha256:"
 )
 
-// metadataRevision は size・mode・mtime だけから作る。内容を読まずに「変わったか」を
+// metadataRevision は size・mode・mtime と取得できる UID/GID から作る。内容を読まずに「変わったか」を
 // 判定する用途（一覧、rename、chmod、copy 後の照合）で使う。
 func metadataRevision(info fs.FileInfo) string {
 	hash := sha256.New()
 	_, _ = fmt.Fprintf(hash, "%d\x00%d\x00%d\x00", info.Size(), info.Mode(), info.ModTime().UTC().UnixNano())
+	if owner, available := ownershipFrom(info); available {
+		_, _ = fmt.Fprintf(hash, "owner:%d:%d", owner.UID, owner.GID)
+	}
 	return metadataRevisionPrefix + hex.EncodeToString(hash.Sum(nil))
 }
 
