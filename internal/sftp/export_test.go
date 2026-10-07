@@ -2,8 +2,11 @@ package sftp
 
 import (
 	"context"
+	"io"
 	"io/fs"
 	"time"
+
+	pkgsftp "github.com/pkg/sftp"
 )
 
 // PrepareDownloadForTest spools one remote file sequentially into the OS
@@ -64,6 +67,10 @@ const (
 	MaxSearchDepthForTest         = maxSearchDepth
 	MaxSearchVisitedForTest       = maxSearchVisited
 )
+
+func NewClientPipeForTest(reader io.Reader, writer io.WriteCloser, options ...pkgsftp.ClientOption) (*Client, error) {
+	return newClientPipe(reader, writer, options...)
+}
 
 // SymlinkForTest creates link on the server, pointing at target. sshc never
 // creates links itself; integration tests use it to build a path that reaches

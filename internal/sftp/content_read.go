@@ -99,10 +99,17 @@ func inspectRemoteReadPath(remote Remote, candidate string) (map[string]fs.FileI
 	}
 }
 
-func verifyRemoteReadPath(remote Remote, metadata map[string]fs.FileInfo) error {
+func verifyRemoteReadPath(remote Remote, metadata map[string]fs.FileInfo, target string) error {
 	for candidate, expected := range metadata {
 		current, err := remote.Lstat(candidate)
-		if err != nil || metadataRevision(current) != metadataRevision(expected) {
+		if err != nil {
+			return ErrConflict
+		}
+		expectedRevision := metadataRevision(expected)
+		if candidate != target {
+			expectedRevision = remoteDirectoryPathRevision(expected)
+		}
+		if !matchesRemoteObservation(current, expectedRevision) {
 			return ErrConflict
 		}
 	}
@@ -121,7 +128,7 @@ func readStableRemoteDirectory(ctx context.Context, remote Remote, directory str
 	if err != nil {
 		return nil, err
 	}
-	if err := verifyRemoteReadPath(remote, metadata); err != nil {
+	if err := verifyRemoteReadPath(remote, metadata, directory); err != nil {
 		return nil, err
 	}
 	return children, nil
@@ -133,6 +140,9 @@ func openStableRemoteFile(remote Remote, entry Entry) (stableContentFile, error)
 		return stableContentFile{}, existingContentReadError(err)
 	}
 	expected := metadata[entry.Path]
+	if !metadataContentKnown(expected) {
+		return stableContentFile{}, ErrMetadataUnavailable
+	}
 	if !expected.Mode().IsRegular() || metadataRevision(expected) != entry.Revision {
 		return stableContentFile{}, ErrConflict
 	}
@@ -147,10 +157,10 @@ func openStableRemoteFile(remote Remote, entry Entry) (stableContentFile, error)
 	}
 	verify := func() error {
 		current, err := reader.Stat()
-		if err != nil || !metadataTypeKnown(current) || !current.Mode().IsRegular() || metadataRevision(current) != entry.Revision {
+		if err != nil || !metadataContentKnown(current) || !current.Mode().IsRegular() || metadataRevision(current) != entry.Revision {
 			return ErrConflict
 		}
-		return verifyRemoteReadPath(remote, metadata)
+		return verifyRemoteReadPath(remote, metadata, entry.Path)
 	}
 	if err := verify(); err != nil {
 		reader.Close()
