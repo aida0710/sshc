@@ -322,6 +322,7 @@ export const en = {
   "sftp.openTerminalHere": "Open Terminal here",
   "sftp.compare.action": "Compare",
   "sftp.compare.heading": "Compare directories",
+  "sftp.compare.readOnlyDescription": "Compare size, modification time, permissions, and type. Files are left unchanged.",
   "sftp.compare.description": "Copy selected differences in either direction. Items that exist only on the destination are not deleted.",
   "sftp.compare.loading": "Comparing both directory trees…",
   "sftp.compare.noChanges": "The two directories have matching metadata.",

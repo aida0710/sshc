@@ -203,8 +203,7 @@ export function SFTPWorkspace({
   }, [target, leftPane, leftLocation, rightLocation?.alias, visibleSplit, aliases]);
 
   const compareEnabled = visibleSplit && leftLocation !== null && rightLocation !== null &&
-    leftLocation.alias !== "" && rightLocation.alias !== "" &&
-    leftLocation.alias !== localHostAlias && rightLocation.alias !== localHostAlias;
+    leftLocation.alias !== "" && rightLocation.alias !== "";
 
   function renderPane(pane: SFTPPane, index: number) {
     const concealed = index > 0 && !visibleSplit;
