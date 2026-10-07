@@ -1,0 +1,43 @@
+#!/bin/sh
+set -eu
+
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mkdir -p /dev/pts /tmp /run
+mount -t devpts devpts /dev/pts
+exec </dev/ttyS0 >/dev/ttyS0 2>&1
+
+role=client
+entropy=
+for argument in $(cat /proc/cmdline); do
+    case "$argument" in
+        demo_role=*) role=${argument#demo_role=} ;;
+        demo_entropy=*) entropy=${argument#demo_entropy=} ;;
+    esac
+done
+/usr/local/bin/seed-random "$entropy"
+case "$role" in
+    client) address=10.77.0.10 ;;
+    demo-a) address=10.77.0.11 ;;
+    demo-b) address=10.77.0.12 ;;
+    *) echo 'Unknown demo role'; exec /bin/sh ;;
+esac
+hostname "$role"
+ifconfig lo up
+ifconfig eth0 "$address" netmask 255.255.255.0 up
+export HOME=/root TERM=xterm-256color PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+cd /root
+
+if [ "$role" = client ]; then
+    sshc engine --port 60001 >/tmp/engine.log 2>&1 &
+    /usr/local/bin/sshc-demo-bridge &
+else
+    /usr/sbin/sshd -e
+fi
+
+printf '\nSSHC_DEMO_BOOTED:%s\n' "$role"
+printf 'Try: sshc ssh demo-a   |   sshc ssh demo-b\n'
+while :; do
+    setsid -c /bin/bash --noprofile --norc -i
+done
