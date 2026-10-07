@@ -1,7 +1,8 @@
 import { connectVirtualLAN } from "./vm-network.js";
 import { VMBridge } from "./vm-bridge.js";
 import { machineDefinitions, loadDemoConfiguration, bundleDownloadBytes } from "./config.js";
-import { applyMessages, messages } from "./messages.js";
+import { applyMessages, language, messages } from "./messages.js";
+import { languageNames, saveLanguage } from "./language.js";
 import { StartupProgress } from "./startup-progress.js";
 import { StartupProgressView } from "./startup-progress-view.js";
 import { prepareUIArchive } from "./ui-archive.js";
@@ -9,6 +10,15 @@ import { UICacheControls } from "./ui-cache-controls.js";
 import { consumeReleaseConsent, fetchLatestRelease, openRelease, deleteReleaseCache, shouldOpenRelease } from "./release-loader.js";
 
 applyMessages(document);
+// Switching reloads the confirmation page, so it is offered only before any VM starts.
+const languageSwitch = document.getElementById("language-switch");
+const otherLanguage = Object.keys(languageNames).find((candidate) => candidate !== language);
+languageSwitch.textContent = languageNames[otherLanguage];
+languageSwitch.lang = otherLanguage;
+languageSwitch.addEventListener("click", () => {
+  saveLanguage(otherLanguage);
+  window.location.reload();
+});
 const updatedAt = document.getElementById("updated-at");
 updatedAt.textContent = messages.updatedAt(updatedAt.dateTime);
 const uiBaseURL = new URL("./ui/", window.location.href);
@@ -119,6 +129,7 @@ async function startDemo() {
   document.getElementById("demo").hidden = false;
   document.getElementById("demo-controls").hidden = false;
   document.getElementById("reset").hidden = false;
+  languageSwitch.hidden = true;
   startupView.start();
   renderStartupProgress();
 
