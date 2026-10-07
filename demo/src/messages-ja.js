@@ -24,6 +24,8 @@ export const japaneseMessages = {
   downloadTotal: (bytes) => `初回にダウンロードするデータは合計 約${Math.round(bytes / 1_000_000)} MBです。`,
   confirm: "この構成で起動します。よろしいですか？",
   start: "起動する",
+  framed: "他のページに埋め込まれた状態では起動できません。",
+  openInNewTab: "新しいタブで開く",
   webTab: "Web UI",
   cliTab: "CLI",
   tabsLabel: "デモ操作",

@@ -26,7 +26,12 @@
   // The product reads its language from this key (web/src/ui/browserStorageKeys.ts); the demo
   // page has already chosen one, so the Web UI opens in the same language.
   const productLanguageKey = "sshc.language";
-  const demoLanguage = parent.document.documentElement.lang;
+  let demoLanguage = "";
+  try {
+    demoLanguage = parent.document.documentElement.lang;
+  } catch {
+    // Only the demo page may host this UI; a foreign parent keeps the browser language.
+  }
   // A new VM starts a new demo; tokens and settings from previous VMs must not survive.
   for (const storageName of ["localStorage", "sessionStorage"]) {
     const entries = new Map(storageName === "localStorage" && demoLanguage ? [[productLanguageKey, demoLanguage]] : []);
