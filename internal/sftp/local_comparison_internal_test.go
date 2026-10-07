@@ -179,3 +179,12 @@ func (entry localComparisonTestEntry) Name() string {
 func (entry localComparisonTestEntry) IsDir() bool                { return false }
 func (entry localComparisonTestEntry) Type() fs.FileMode          { return 0 }
 func (entry localComparisonTestEntry) Info() (fs.FileInfo, error) { return nil, fs.ErrNotExist }
+
+func readLocalComparisonTree(ctx context.Context, rootPath string) (map[string]Entry, error) {
+	tree, err := openLocalComparisonTree(ctx, rootPath, ComparisonMetadata)
+	if err != nil {
+		return nil, err
+	}
+	defer tree.close()
+	return tree.entries, nil
+}
