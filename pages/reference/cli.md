@@ -43,6 +43,7 @@ sshc vault lock
 sshc vault change-password
 sshc service install
 sshc service status
+sshc service restart
 sshc service disable
 sshc update
 ```
@@ -51,7 +52,9 @@ sshc update
 
 Vaultのマスターパスワードなどを対話入力すると、入力した値の代わりに`*`を表示します。入力値がTerminalのスクロールバックへ平文で残ることはありません。
 
-`sshc service`はLinuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェントを管理します。`install`はHomebrewまたは`install.sh`で導入された安定パスを登録し、`disable`はsshcが作成した定義だけを削除します。`install`、`disable`、`update`は変更内容を表示してから確認を求めます。自動化で確認を省略する場合だけ`-y`または`--yes`を付けてください。
+`sshc service`はLinuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェントを管理します。`install`はHomebrewまたは`install.sh`で導入された安定パスを登録し、`restart`はこの導入と定義が一致する稼働中のサービスを再起動します。`disable`はsshcが作成した定義だけを削除します。`install`、`restart`、`disable`、`update`は変更内容を表示してから確認を求めます。自動化で確認を省略する場合だけ`-y`または`--yes`を付けてください。
+
+`sshc service restart`は、停止中・未登録・管理外・古い定義・別の実行ファイルを指すサービスを拒否し、終了コード1で終わります。接続中のセッションと転送は再起動で終了します。再起動後のPID、sshcエンジンの起動情報、status APIを照合してから成功と表示します。詳しい対処は[インストール](/guide/install)を参照してください。
 
 `sshc vault change-password`は、現在のパスワードを入力してEnterを押すと、検証後に新しいパスワードの入力を求めます。パスワードなしのVaultでは、現在のパスワードの入力を省きます。新しいパスワードと確認を両方空欄にすると、パスワード保護を外せます。パスワードなしのVaultでは、`sshc vault lock`を実行してもロックされません。ロックを使う場合はマスターパスワードを設定してください。CLI更新後はsshcエンジンも再起動して変更を反映してください。
 

@@ -12,7 +12,7 @@ sshc status
 sshc engine --replace
 ```
 
-When the CLI and engine versions differ, update the older one and restart the engine: `sshc service install` restarts the managed service, and `sshc engine --replace` restarts any other engine. On Android, the failure screen shows the version, error code, detail, Android SDK, device, and ABI, and **Copy diagnostics** copies them together. The report excludes secrets.
+When the CLI and engine versions differ, update the older one and restart the engine: `sshc service restart` restarts an active managed service, and `sshc engine --replace` restarts any other engine. Use `sshc service install` if the service is inactive or its definition is outdated. On Android, the failure screen shows the version, error code, detail, Android SDK, device, and ABI, and **Copy diagnostics** copies them together. The report excludes secrets.
 
 If startup stops with `was recorded by an sshc release before v0.24.0`, an interrupted change recorded by sshc before v0.24.0 is still in `~/.ssh/sshc/journal/`. This release can neither complete nor roll back that change. Start the sshc release you used before, choose **Complete** or **Roll back** under **Interrupted transactions** in **History**, and then update again. If you cannot go back to that release, moving the named file out of `~/.ssh/sshc/journal/` lets the engine start, but the change stays half applied, so check the files listed under `path` in that record. If the message says `was recorded by a newer sshc release`, update to the newer release that wrote the record and resolve it there.
 

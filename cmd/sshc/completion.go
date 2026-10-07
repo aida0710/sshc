@@ -187,7 +187,7 @@ _sshc_completion() {
       if (( COMP_CWORD == 2 )); then
         _sshc_complete_words "{{ACTIONS:service}} --help"
       elif (( COMP_CWORD == 3 )); then
-        case "${COMP_WORDS[2]}" in install|disable) _sshc_complete_words "-y --yes --help" ;; *) _sshc_complete_words "--help" ;; esac
+        case "${COMP_WORDS[2]}" in install|restart|disable) _sshc_complete_words "-y --yes --help" ;; *) _sshc_complete_words "--help" ;; esac
       fi
       ;;
     otp)
@@ -331,7 +331,7 @@ _sshc() {
       if (( CURRENT == 3 )); then
         _sshc_values '{{ACTIONS:service}} --help'
       elif (( CURRENT == 4 )); then
-        case "${words[3]}" in install|disable) _sshc_values '-y --yes --help' ;; *) _sshc_values '--help' ;; esac
+        case "${words[3]}" in install|restart|disable) _sshc_values '-y --yes --help' ;; *) _sshc_values '--help' ;; esac
       fi
       ;;
     otp)
@@ -481,7 +481,7 @@ complete -c sshc -f -n '__sshc_prefix vpn' -a '{{ACTIONS:vpn}} --json --help'
 complete -c sshc -f -n '__sshc_prefix vpn bind; or __sshc_prefix vpn unbind' -a '(command sshc ssh --list 2>/dev/null)'
 complete -c sshc -f -n '__sshc_action vpn remove; and __sshc_min_words 4' -a '-y --yes'
 complete -c sshc -f -n '__sshc_vpn_json' -a '--json'
-complete -c sshc -f -n '__sshc_prefix service install; or __sshc_prefix service disable' -a '-y --yes --help'
+complete -c sshc -f -n '__sshc_prefix service install; or __sshc_prefix service restart; or __sshc_prefix service disable' -a '-y --yes --help'
 complete -c sshc -f -n '__sshc_prefix service status' -a '--help'
 complete -c sshc -f -n '__sshc_prefix otp list; or __sshc_prefix otp show' -a '--json --help'
 complete -c sshc -f -n '__sshc_prefix otp add; or __sshc_prefix otp edit' -a '--help'

@@ -158,6 +158,10 @@ func (manager *linuxServiceManager) Status(ctx context.Context) (serviceState, e
 	}
 }
 
+func (manager *linuxServiceManager) RestartPlan(executable string) (string, error) {
+	return manager.definitionFile().restartPlan(executable)
+}
+
 func (manager *linuxServiceManager) RestartIfActive(ctx context.Context, executable string) (bool, error) {
 	return restartServiceIfActive(ctx, manager, executable)
 }

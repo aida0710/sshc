@@ -109,9 +109,10 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
 	{Name: "open", Route: "open", Help: "usage:\n  sshc open\n\nPrint a one-time UI URL for the running engine.\n"},
 	{Name: "status", Route: "status", Help: "usage:\n  sshc status [--json]\n\nPrint what the running engine is doing.\n"},
 	{Name: "update", Route: "update", Help: "usage:\n  sshc update [-y|--yes]\n\nUpdate an installation managed by Homebrew or install.sh. The command shows the plan and asks before changing the installation; -y or --yes skips the prompt.\n"},
-	{Name: "service", Route: "service", Help: "usage:\n  sshc service install [-y|--yes]\n  sshc service status\n  sshc service disable [-y|--yes]\n\nManage the sshc engine as a systemd user service on Linux or a launchd user agent on macOS. Mutating actions show the plan and ask for confirmation; -y or --yes skips the prompt.\n", Actions: []Action{
+	{Name: "service", Route: "service", Help: "usage:\n  sshc service install [-y|--yes]\n  sshc service status\n  sshc service restart [-y|--yes]\n  sshc service disable [-y|--yes]\n\nManage the sshc engine as a systemd user service on Linux or a launchd user agent on macOS. Mutating actions show the plan and ask for confirmation; -y or --yes skips the prompt.\n", Actions: []Action{
 		{Name: "install", Help: "usage:\n  sshc service install [-y|--yes]\n\nInstall and start the sshc user service on Linux or macOS. The command asks for confirmation unless -y or --yes is given.\n"},
 		{Name: "status", Help: "usage:\n  sshc service status\n\nPrint whether the sshc-managed user service is active.\n"},
+		{Name: "restart", Help: "usage:\n  sshc service restart [-y|--yes]\n\nRestart an active sshc-managed user service on Linux or macOS. The definition must match this installation's stable executable and the current service definition. Inactive, absent, unmanaged, outdated, or other-installation services are refused. The command shows the plan and asks for confirmation unless -y or --yes is given. Existing connections and transfers will be interrupted. Success requires the service PID, engine handoff, and status API to agree.\n"},
 		{Name: "disable", Help: "usage:\n  sshc service disable [-y|--yes]\n\nStop and remove the sshc-managed user service. The command asks for confirmation unless -y or --yes is given.\n"},
 	}},
 	{Name: "otp", Route: "otp", Help: "usage:\n  sshc otp list [--json]\n  sshc otp <name> [--json]\n  sshc otp show <name> [--json]\n  sshc otp add <name>\n  sshc otp edit <name>\n  sshc otp remove <name> [-y|--yes]\n\nList and manage TOTP credentials in the unlocked vault. Showing a credential prints the previous, current, and next short-lived code; the provisioning secret never leaves the engine. Add and edit read the setup key interactively without echoing it.\n", Actions: []Action{
@@ -225,6 +226,7 @@ const GlobalHelp = `usage:
   sshc update [-y]     update an installation managed by Homebrew or install.sh
   sshc service install install and start a user service on Linux or macOS
   sshc service status  print whether the managed service is active
+  sshc service restart restart the active managed service after confirmation
   sshc service disable stop and remove the managed service
   sshc otp list        list saved one-time-password credentials
   sshc otp <name>      print previous, current, and next TOTP codes
