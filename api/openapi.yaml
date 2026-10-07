@@ -4993,6 +4993,10 @@ components:
         largeFileThresholdBytes: { type: integer, format: int64, minimum: 16777216, maximum: 1073741824 }
         largeFileParallelism: { type: integer, minimum: 1, maximum: 128 }
         largeFileChunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
+        # Aggregate engine payload budget. 0 is unlimited.
+        speedLimitBytesPerSecond: { type: integer, format: int64, minimum: 0, maximum: 1073741824 }
+        autoReconnect: { type: boolean }
+        maxReconnectAttempts: { type: integer, minimum: 0, maximum: 10 }
     # 埋め込みターミナルの設定。数値の範囲外は読み取りで既定へ戻し、書き込みでは拒否する。
     EmbeddedTerminal:
       type: object
@@ -5616,7 +5620,7 @@ components:
     SFTPTransferJob:
       type: object
       additionalProperties: false
-      required: [id, batchId, batchName, batchKind, alias, sourceAlias, sourcePath, operation, direction, kind, name, remotePath, totalBytes, transferredBytes, bytesPerSecond, remainingSeconds, status, allowedActions, attempt, problem, lastModified, expectedRevision, sourceFingerprint, overwrite, downloadRevision, downloadParts, createdAt, updatedAt]
+      required: [id, batchId, batchName, batchKind, alias, sourceAlias, sourcePath, operation, direction, kind, name, remotePath, totalBytes, transferredBytes, bytesPerSecond, remainingSeconds, status, allowedActions, attempt, reconnectAttempt, reconnectAt, problem, lastModified, expectedRevision, sourceFingerprint, overwrite, downloadRevision, downloadParts, createdAt, updatedAt]
       properties:
         id: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
         batchId: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
@@ -5634,13 +5638,15 @@ components:
         transferredBytes: { type: integer, format: int64, minimum: 0 }
         bytesPerSecond: { type: number, format: double, minimum: 0 }
         remainingSeconds: { type: integer, format: int64, minimum: -1 }
-        status: { type: string, enum: [queued, running, paused, reattach, needs_overwrite, completed, failed, cancelled] }
+        status: { type: string, enum: [queued, running, reconnecting, paused, reattach, needs_overwrite, completed, failed, cancelled] }
         allowedActions:
           type: array
           uniqueItems: true
           maxItems: 3
           items: { type: string, enum: [pause, resume, retry, cancel, remove] }
         attempt: { type: integer, minimum: 1 }
+        reconnectAttempt: { type: integer, minimum: 0, maximum: 10 }
+        reconnectAt: { type: string, description: "Next reconnect time, or empty while not waiting." }
         problem: { type: string, maxLength: 128 }
         lastModified: { type: integer, format: int64, minimum: 0 }
         expectedRevision: { type: string, maxLength: 256 }
@@ -5665,7 +5671,7 @@ components:
     SFTPTransferJobList:
       type: object
       additionalProperties: false
-      required: [maxConcurrent, clearCompletedAfterSeconds, processingStopped, largeFileThresholdBytes, largeFileParallelism, largeFileChunkBytes, jobs]
+      required: [maxConcurrent, clearCompletedAfterSeconds, processingStopped, largeFileThresholdBytes, largeFileParallelism, largeFileChunkBytes, speedLimitBytesPerSecond, autoReconnect, maxReconnectAttempts, jobs]
       properties:
         maxConcurrent: { type: integer, minimum: 1, maximum: 8 }
         # 0 means finished jobs are only removed on request.
@@ -5675,6 +5681,10 @@ components:
         largeFileThresholdBytes: { type: integer, format: int64, minimum: 16777216, maximum: 1073741824 }
         largeFileParallelism: { type: integer, minimum: 1, maximum: 128 }
         largeFileChunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
+        # Aggregate engine payload budget. 0 is unlimited.
+        speedLimitBytesPerSecond: { type: integer, format: int64, minimum: 0, maximum: 1073741824 }
+        autoReconnect: { type: boolean }
+        maxReconnectAttempts: { type: integer, minimum: 0, maximum: 10 }
         jobs: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/SFTPTransferJob" } }
     SFTPSearchResult:
       type: object
@@ -5732,7 +5742,7 @@ components:
     SFTPTransferSettingsRequest:
       type: object
       additionalProperties: false
-      required: [maxConcurrent, clearCompletedAfterSeconds, processingStopped, largeFileThresholdBytes, largeFileParallelism, largeFileChunkBytes]
+      required: [maxConcurrent, clearCompletedAfterSeconds, processingStopped, largeFileThresholdBytes, largeFileParallelism, largeFileChunkBytes, speedLimitBytesPerSecond, autoReconnect, maxReconnectAttempts]
       properties:
         maxConcurrent: { type: integer, minimum: 1, maximum: 8 }
         clearCompletedAfterSeconds: { type: integer, minimum: 0, maximum: 86400 }
@@ -5740,6 +5750,10 @@ components:
         largeFileThresholdBytes: { type: integer, format: int64, minimum: 16777216, maximum: 1073741824 }
         largeFileParallelism: { type: integer, minimum: 1, maximum: 128 }
         largeFileChunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
+        # Aggregate engine payload budget. 0 is unlimited.
+        speedLimitBytesPerSecond: { type: integer, format: int64, minimum: 0, maximum: 1073741824 }
+        autoReconnect: { type: boolean }
+        maxReconnectAttempts: { type: integer, minimum: 0, maximum: 10 }
     SFTPTransferQueueMoveRequest:
       type: object
       additionalProperties: false
@@ -5775,7 +5789,7 @@ components:
       additionalProperties: false
       required: [action]
       properties:
-        action: { type: string, enum: [start, pause, resume, retry, cancel, progress, complete, fail, needs_overwrite] }
+        action: { type: string, enum: [start, reconnect, pause, resume, retry, cancel, progress, complete, fail, needs_overwrite] }
         transferredBytes: { type: integer, format: int64, minimum: 0 }
         totalBytes: { type: integer, format: int64, minimum: 0 }
         problem: { type: string, maxLength: 128 }

@@ -36,12 +36,33 @@ func TestTransferSettingsThatCannotBeSavedLeaveTheEngineAsItWas(t *testing.T) {
 	manager.EnableTransferSettingsPersistence(func(sftp.TransferSettings) error { return unwritable })
 	settings := sftp.DefaultTransferSettings()
 	settings.MaxConcurrent, settings.ProcessingStopped = 5, true
+	settings.SpeedLimitBytesPerSecond, settings.AutoReconnect, settings.MaxReconnectAttempts = 1024, true, 3
 	if err := manager.SetTransferSettings(settings); !errors.Is(err, unwritable) {
 		t.Fatalf("SetTransferSettings() = %v, want the save error", err)
 	}
-	if manager.MaxConcurrent() != sftp.DefaultTransferConcurrency || manager.ProcessingStopped() {
+	if manager.MaxConcurrent() != sftp.DefaultTransferConcurrency || manager.ProcessingStopped() ||
+		manager.SpeedLimitBytesPerSecond() != 0 || manager.AutoReconnect() || manager.MaxReconnectAttempts() != 0 {
 		t.Fatalf("the engine took settings that were not saved: %d concurrent, stopped %v",
 			manager.MaxConcurrent(), manager.ProcessingStopped())
+	}
+}
+
+func TestSavedRecoverySettingsRestoreAndRejectOnlyInvalidBounds(t *testing.T) {
+	manager := newTestTransferManager(t, nil)
+	var saved sftp.TransferSettings
+	manager.EnableTransferSettingsPersistence(func(settings sftp.TransferSettings) error { saved = settings; return nil })
+	settings := sftp.DefaultTransferSettings()
+	settings.SpeedLimitBytesPerSecond, settings.AutoReconnect, settings.MaxReconnectAttempts = 2048, true, 3
+	if err := manager.SetTransferSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	restored := newTestTransferManager(t, nil)
+	if rejected := restored.RestoreTransferSettings(saved); len(rejected) != 0 || restored.SpeedLimitBytesPerSecond() != 2048 || !restored.AutoReconnect() || restored.MaxReconnectAttempts() != 3 {
+		t.Fatalf("restored recovery settings rejected %v", rejected)
+	}
+	saved.SpeedLimitBytesPerSecond, saved.MaxReconnectAttempts = -1, sftp.MaxReconnectAttempts+1
+	if rejected := restored.RestoreTransferSettings(saved); !slices.Equal(rejected, []string{"speedLimitBytesPerSecond", "maxReconnectAttempts"}) || restored.SpeedLimitBytesPerSecond() != 0 || restored.MaxReconnectAttempts() != 0 || !restored.AutoReconnect() {
+		t.Fatalf("invalid recovery bounds rejected %v", rejected)
 	}
 }
 

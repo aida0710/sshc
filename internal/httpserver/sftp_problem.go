@@ -13,7 +13,12 @@ import (
 )
 
 func sftpProblem(c *echo.Context, err error) error {
+	if sshcSFTP.ConnectionLost(err) {
+		return problem(c, http.StatusBadGateway, "sftp_connection_lost")
+	}
 	switch {
+	case errors.Is(err, sshcSFTP.ErrAmbiguousTransfer):
+		return problem(c, http.StatusConflict, sshcSFTP.RemoteReconciliationProblem)
 	case errors.Is(err, sshcSFTP.ErrUnsupportedOperation):
 		return problem(c, http.StatusNotImplemented, "sftp_unsupported_operation")
 	case errors.Is(err, sshcSFTP.ErrMetadataUnavailable):

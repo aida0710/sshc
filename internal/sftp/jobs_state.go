@@ -5,21 +5,22 @@ import (
 	"time"
 )
 
-// remoteOutcomeUnrecorded reports a stopped remote job that still carries
-// RemoteReconciliationProblem: its operation may have changed the remote side
+// transferOutcomeUnrecorded reports a stopped job that still carries
+// RemoteReconciliationProblem: its operation may have changed the destination
 // without the result reaching the queue. The allowed actions and the update
 // validation both use this one predicate, so the UI never offers a resume that
 // the engine then refuses. A running job carries the same problem while its
 // operation is in flight; its worker clears it when a pause interrupts the
 // operation before the result.
-func remoteOutcomeUnrecorded(job TransferJob) bool {
-	return job.Direction == TransferRemote && job.Problem == RemoteReconciliationProblem && job.Status != TransferRunning
+func transferOutcomeUnrecorded(job TransferJob) bool {
+	return job.Problem == RemoteReconciliationProblem && job.Status != TransferRunning && job.Status != TransferReconnecting
 }
 
 type TransferJobAction string
 
 const (
 	TransferStartAction          TransferJobAction = "start"
+	TransferReconnectAction      TransferJobAction = "reconnect"
 	TransferPauseAction          TransferJobAction = "pause"
 	TransferResumeAction         TransferJobAction = "resume"
 	TransferRetryAction          TransferJobAction = "retry"
@@ -44,11 +45,11 @@ const (
 // the engine state machine. Data-plane-only actions such as progress and
 // complete intentionally remain private to the transfer implementation.
 func AllowedTransferActions(job TransferJob) []TransferControlAction {
-	if remoteOutcomeUnrecorded(job) {
+	if transferOutcomeUnrecorded(job) {
 		return []TransferControlAction{TransferCancelControl}
 	}
 	switch job.Status {
-	case TransferQueued, TransferRunning:
+	case TransferQueued, TransferRunning, TransferReconnecting:
 		return []TransferControlAction{TransferPauseControl, TransferCancelControl}
 	case TransferPaused, TransferReattach, TransferNeedsOverwrite:
 		return []TransferControlAction{TransferResumeControl, TransferCancelControl}
@@ -173,11 +174,14 @@ func (m *TransferManager) updateJob(request transferUpdateRequest) (TransferJob,
 		committed = true
 		return *job, nil
 	}
+	if job.Status != TransferReconnecting {
+		job.ReconnectAt = time.Time{}
+	}
 	job.UpdatedAt = now
 	if err := m.persistJobsLocked(update.Action != TransferProgressAction); err != nil {
 		return TransferJob{}, err
 	}
-	if job.Status != TransferRunning && job.Status != TransferQueued {
+	if job.Status != TransferRunning && job.Status != TransferQueued && job.Status != TransferReconnecting {
 		terminalRemote = m.detachRemote(job.Alias, job.ID, job.RemotePath)
 		if job.Direction == TransferRemote {
 			// The run has finished with the job, whether its worker settled it
@@ -201,6 +205,13 @@ func (m *TransferManager) applyTransferActionLocked(record *transferJobRecord, u
 	job := &record.job
 	switch update.Action {
 	case TransferStartAction:
+		if job.Status == TransferReconnecting {
+			if m.processingStopped || !m.autoReconnect || job.ReconnectAttempt > m.maxReconnectAttempts || now.Before(job.ReconnectAt) {
+				return false, ErrTransferState
+			}
+			job.Status, job.Problem, job.ReconnectAt = TransferRunning, "", time.Time{}
+			return false, nil
+		}
 		if job.Status != TransferQueued {
 			return false, ErrTransferState
 		}
@@ -215,8 +226,20 @@ func (m *TransferManager) applyTransferActionLocked(record *transferJobRecord, u
 		job.Status = TransferRunning
 		m.activeJobs++
 		record.sampleAt, record.sampleBytes = now, job.TransferredBytes
+	case TransferReconnectAction:
+		if job.Status != TransferRunning || !m.autoReconnect || m.processingStopped || job.ReconnectAttempt >= m.maxReconnectAttempts {
+			return false, ErrTransferState
+		}
+		if job.Direction == TransferRemote && !recoverableRemoteFile(*job) {
+			return false, ErrTransferState
+		}
+		job.ReconnectAttempt++
+		job.Attempt++
+		job.Status, job.Problem = TransferReconnecting, "sftp_connection_lost"
+		job.ReconnectAt = now.Add(reconnectDelay(job.ReconnectAttempt))
+		job.BytesPerSecond, job.RemainingSeconds = 0, -1
 	case TransferPauseAction:
-		if job.Status != TransferQueued && job.Status != TransferRunning {
+		if job.Status != TransferQueued && job.Status != TransferRunning && job.Status != TransferReconnecting {
 			return false, ErrTransferState
 		}
 		m.releaseJobLocked(job.Status)
@@ -242,6 +265,7 @@ func (m *TransferManager) applyTransferActionLocked(record *transferJobRecord, u
 		}
 		job.Status = TransferQueued
 		job.Problem = ""
+		job.ReconnectAttempt, job.ReconnectAt = 0, time.Time{}
 	case TransferRetryAction:
 		if job.Status != TransferFailed {
 			return false, ErrTransferState
@@ -257,6 +281,7 @@ func (m *TransferManager) applyTransferActionLocked(record *transferJobRecord, u
 			}
 		}
 		job.Status, job.Problem = TransferQueued, ""
+		job.ReconnectAttempt, job.ReconnectAt = 0, time.Time{}
 		job.Attempt++
 		job.BytesPerSecond, job.RemainingSeconds = 0, -1
 		record.sampleAt, record.sampleBytes = now, job.TransferredBytes
@@ -295,13 +320,13 @@ func (m *TransferManager) applyTransferActionLocked(record *transferJobRecord, u
 		job.Status, job.Problem = TransferCompleted, ""
 		job.RemainingSeconds = 0
 	case TransferFailAction:
-		if job.Status != TransferRunning && job.Status != TransferQueued {
+		if job.Status != TransferRunning && job.Status != TransferQueued && job.Status != TransferReconnecting {
 			return false, ErrTransferState
 		}
 		m.releaseJobLocked(job.Status)
 		job.Status, job.Problem = TransferFailed, boundedTransferProblem(update.Problem)
 	case TransferNeedsOverwriteAction:
-		if job.Status != TransferRunning && job.Status != TransferQueued {
+		if job.Status != TransferRunning && job.Status != TransferQueued && job.Status != TransferReconnecting {
 			return false, ErrTransferState
 		}
 		m.releaseJobLocked(job.Status)
@@ -320,11 +345,14 @@ func validateTransferUpdate(job TransferJob, update UpdateTransferJob, origin tr
 	hasTotal := update.TotalBytes != nil
 	hasProblem := strings.TrimSpace(update.Problem) != ""
 	noPayload := !hasTransferred && !hasTotal && !hasProblem && !update.ResetProgress
-	if remoteOutcomeUnrecorded(job) && (update.Action == TransferResumeAction || update.Action == TransferRetryAction) {
+	if transferOutcomeUnrecorded(job) && (update.Action == TransferResumeAction || update.Action == TransferRetryAction) {
 		return ErrTransferState
 	}
 
 	if origin == transferUpdateClient {
+		if job.Direction == TransferRemote && update.Action == TransferReconnectAction {
+			return ErrTransferState
+		}
 		if job.Direction == TransferUpload && (update.Action == TransferProgressAction || update.Action == TransferCompleteAction || update.Action == TransferCancelAction) {
 			return ErrTransferState
 		}
@@ -341,7 +369,7 @@ func validateTransferUpdate(job TransferJob, update UpdateTransferJob, origin tr
 	}
 
 	switch update.Action {
-	case TransferStartAction, TransferPauseAction, TransferCancelAction, TransferNeedsOverwriteAction:
+	case TransferStartAction, TransferReconnectAction, TransferPauseAction, TransferCancelAction, TransferNeedsOverwriteAction:
 		if !noPayload {
 			return ErrInvalidTransfer
 		}
@@ -429,7 +457,7 @@ func (m *TransferManager) updateRateLocked(record *transferJobRecord, now time.T
 }
 
 func (m *TransferManager) releaseJobLocked(status TransferJobStatus) {
-	if status == TransferRunning && m.activeJobs > 0 {
+	if (status == TransferRunning || status == TransferReconnecting) && m.activeJobs > 0 {
 		m.activeJobs--
 		m.signalSlotLocked()
 	}

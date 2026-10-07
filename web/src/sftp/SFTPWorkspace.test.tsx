@@ -75,7 +75,7 @@ describe("SFTP tabs", () => {
     }));
     api.listTransfers.mockResolvedValue({
       maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false,
-      largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, jobs: [],
+      largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, jobs: [],
     });
   });
 

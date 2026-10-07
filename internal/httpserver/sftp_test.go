@@ -163,7 +163,7 @@ func putTransferSettings(t *testing.T, harness *testHarness, body string) (*sshc
 func TestSavedTransferSettingsAreAppliedAndKeptForTheNextStart(t *testing.T) {
 	harness := newConfigHarness(t)
 	manager, response := putTransferSettings(t, harness,
-		`{"maxConcurrent":5,"clearCompletedAfterSeconds":600,"processingStopped":true,"largeFileThresholdBytes":104857600,"largeFileParallelism":2,"largeFileChunkBytes":33554432}`,
+		`{"maxConcurrent":5,"clearCompletedAfterSeconds":600,"processingStopped":true,"largeFileThresholdBytes":104857600,"largeFileParallelism":2,"largeFileChunkBytes":33554432,"speedLimitBytesPerSecond":2048,"autoReconnect":true,"maxReconnectAttempts":3}`,
 	)
 	if response.Code != http.StatusOK {
 		t.Fatalf("save = %d: %s", response.Code, response.Body.String())
@@ -171,13 +171,23 @@ func TestSavedTransferSettingsAreAppliedAndKeptForTheNextStart(t *testing.T) {
 	want := application.FileTransferSettings{
 		MaxConcurrent: 5, ClearCompletedAfterSeconds: 600, ProcessingStopped: true,
 		LargeFileThresholdBytes: 104857600, LargeFileParallelism: 2, LargeFileChunkBytes: 33554432,
+		SpeedLimitBytesPerSecond: 2048, AutoReconnect: true, MaxReconnectAttempts: 3,
 	}
 	if stored := harness.service.FileTransferSettings(); stored != want {
 		t.Fatalf("metadata.json holds %+v, want %+v", stored, want)
 	}
-	if manager.MaxConcurrent() != 5 || manager.ClearCompletedAfter() != 10*time.Minute || !manager.ProcessingStopped() {
+	if manager.MaxConcurrent() != 5 || manager.ClearCompletedAfter() != 10*time.Minute || !manager.ProcessingStopped() ||
+		manager.SpeedLimitBytesPerSecond() != 2048 || !manager.AutoReconnect() || manager.MaxReconnectAttempts() != 3 {
 		t.Fatalf("the engine runs %d concurrent, clears after %v, stopped %v",
 			manager.MaxConcurrent(), manager.ClearCompletedAfter(), manager.ProcessingStopped())
+	}
+	restarted, err := newTransferManager(Options{Config: harness.service, SFTPDownloadSpoolRoot: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restarted.Close()
+	if restarted.SpeedLimitBytesPerSecond() != 2048 || !restarted.AutoReconnect() || restarted.MaxReconnectAttempts() != 3 {
+		t.Fatal("restarting did not restore the saved speed and recovery settings")
 	}
 }
 

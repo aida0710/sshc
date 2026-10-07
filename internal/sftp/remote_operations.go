@@ -370,7 +370,7 @@ func (c *remoteCopy) copyFile(ctx context.Context, sourcePath, targetPath string
 			resultErr = errors.Join(resultErr, unpublished.remove(ctx))
 		}
 	}()
-	written, err := copyContext(ctx, &progressWriter{Writer: output, report: c.report}, input, before.Size())
+	written, err := copyContext(ctx, &progressWriter{Writer: c.service.transferWriter(ctx, output), report: c.report}, &limitedTransferReader{ctx: ctx, source: input, limiter: c.service.transferLimiter}, before.Size())
 	if err != nil {
 		return err
 	}

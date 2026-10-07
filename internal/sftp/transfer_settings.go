@@ -8,6 +8,10 @@ import "time"
 // 一つだけ置く。保存先は EnableTransferSettingsPersistence で受け取る。
 type TransferSettings struct {
 	MaxConcurrent int
+	// 0 permits unrestricted payload traffic.
+	SpeedLimitBytesPerSecond int64
+	AutoReconnect            bool
+	MaxReconnectAttempts     int
 	// ClearCompletedAfter が 0 なら、完了項目は手動でだけ消える。
 	ClearCompletedAfter time.Duration
 	// ProcessingStopped の間は待機中の job を新しく開始しない。
@@ -32,7 +36,8 @@ func (settings TransferSettings) Validate() error {
 	if !validMaxConcurrent(settings.MaxConcurrent) || !validClearCompletedAfter(settings.ClearCompletedAfter) ||
 		!validLargeFileThreshold(settings.LargeFileThresholdBytes) ||
 		!validLargeFileParallelism(settings.LargeFileParallelism) ||
-		!validLargeFileChunkBytes(settings.LargeFileChunkBytes) {
+		!validLargeFileChunkBytes(settings.LargeFileChunkBytes) ||
+		!validTransferSpeed(settings.SpeedLimitBytesPerSecond) || !validReconnectAttempts(settings.MaxReconnectAttempts) {
 		return ErrInvalidTransfer
 	}
 	return nil
@@ -103,6 +108,16 @@ func (m *TransferManager) RestoreTransferSettings(stored TransferSettings) (reje
 func restorableTransferSettings(stored TransferSettings) (restored TransferSettings, rejected []string) {
 	defaults := DefaultTransferSettings()
 	restored.ProcessingStopped = stored.ProcessingStopped
+	restored.AutoReconnect = stored.AutoReconnect
+	var usableSpeed, usableAttempts bool
+	restored.SpeedLimitBytesPerSecond, usableSpeed = storedOrDefault(stored.SpeedLimitBytesPerSecond, int64(0), validTransferSpeed)
+	if !usableSpeed {
+		rejected = append(rejected, "speedLimitBytesPerSecond")
+	}
+	restored.MaxReconnectAttempts, usableAttempts = storedOrDefault(stored.MaxReconnectAttempts, 0, validReconnectAttempts)
+	if !usableAttempts {
+		rejected = append(rejected, "maxReconnectAttempts")
+	}
 	var usable bool
 	if restored.MaxConcurrent, usable = storedOrDefault(stored.MaxConcurrent, defaults.MaxConcurrent, validMaxConcurrent); !usable {
 		rejected = append(rejected, "maxConcurrent")
@@ -141,6 +156,10 @@ func (m *TransferManager) applyTransferSettings(settings TransferSettings) {
 	m.maxConcurrent = settings.MaxConcurrent
 	m.clearCompletedAfter = settings.ClearCompletedAfter
 	m.processingStopped = settings.ProcessingStopped
+	m.speedLimitBytesPerSecond = settings.SpeedLimitBytesPerSecond
+	m.autoReconnect = settings.AutoReconnect
+	m.maxReconnectAttempts = settings.MaxReconnectAttempts
+	m.limiter.setRate(settings.SpeedLimitBytesPerSecond)
 	m.largeFileThreshold = settings.LargeFileThresholdBytes
 	m.largeFileParallelism = settings.LargeFileParallelism
 	m.largeFileChunkBytes = settings.LargeFileChunkBytes

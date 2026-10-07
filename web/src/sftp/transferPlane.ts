@@ -44,19 +44,3 @@ export type TransferPlaneContext = {
   progress(id: string, transferredBytes: number, totalBytes: number): void;
   reconcile(): Promise<void>;
 };
-
-// Three tries with a short back-off, for the one request that hit a hiccup.
-// An abort is the user's doing and is not retried.
-export async function retryOperation<T>(operation: () => Promise<T>): Promise<T> {
-  let last: unknown;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") throw error;
-      last = error;
-      if (attempt < 2) await new Promise((resolve) => globalThis.setTimeout(resolve, 250 * (2 ** attempt)));
-    }
-  }
-  throw last;
-}

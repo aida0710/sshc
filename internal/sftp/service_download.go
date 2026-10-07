@@ -30,6 +30,7 @@ type PreparedDownload struct {
 	lease    *preparedSpoolLease
 	Size     int64
 	Revision string
+	limiter  *transferLimiter
 }
 
 func (download *PreparedDownload) Close() error {
@@ -69,7 +70,7 @@ func (s Service) prepareArchive(ctx context.Context, alias, remotePath, temporar
 	if err != nil {
 		return nil, err
 	}
-	prepared := &PreparedDownload{file: temporary, name: temporary.Name(), remove: true}
+	prepared := &PreparedDownload{file: temporary, name: temporary.Name(), remove: true, limiter: s.transferLimiter}
 	defer func() {
 		if resultErr != nil {
 			_ = prepared.Close()
@@ -99,7 +100,7 @@ func (download *PreparedDownload) WriteFrom(ctx context.Context, offset int64, d
 	if _, err := download.file.Seek(offset, io.SeekStart); err != nil {
 		return 0, err
 	}
-	return copyContext(ctx, destination, io.LimitReader(download.file, download.Size-offset), 0)
+	return copyContext(ctx, download.transferWriter(ctx, destination), io.LimitReader(download.file, download.Size-offset), 0)
 }
 
 // DownloadRequest は、リモートのファイルを spool へ取り込む条件。
@@ -141,7 +142,7 @@ func (s Service) prepareDownload(ctx context.Context, request DownloadRequest) (
 	if err != nil {
 		return nil, err
 	}
-	defer remote.Close()
+	defer func() { closeTransferRemote(remote, resultErr) }()
 	// A symlink downloads the file it points to, under the link's own name.
 	file, err := locateFile(remote, cleaned)
 	if err != nil {
@@ -170,7 +171,7 @@ func (s Service) prepareDownload(ctx context.Context, request DownloadRequest) (
 	if err != nil {
 		return nil, err
 	}
-	prepared := &PreparedDownload{file: temporary, name: temporary.Name(), remove: true}
+	prepared := &PreparedDownload{file: temporary, name: temporary.Name(), remove: true, limiter: s.transferLimiter}
 	defer func() {
 		if resultErr != nil {
 			_ = prepared.Close()
@@ -195,7 +196,7 @@ func (s Service) prepareDownload(ctx context.Context, request DownloadRequest) (
 		}
 	}
 	if written == 0 && before.Size() > 0 && err == nil {
-		written, err = copyDownloadSequential(ctx, remote, cleaned, temporary, before.Size(), progress)
+		written, err = s.copyDownloadSequential(ctx, remote, cleaned, temporary, before.Size(), progress)
 	}
 	if err != nil {
 		return nil, err
@@ -224,7 +225,7 @@ func (s Service) prepareDownload(ctx context.Context, request DownloadRequest) (
 	return prepared, nil
 }
 
-func copyDownloadSequential(
+func (s Service) copyDownloadSequential(
 	ctx context.Context, remote Remote, remotePath string, destination *os.File, size int64,
 	progress func(DownloadPartProgress),
 ) (int64, error) {
@@ -236,9 +237,9 @@ func copyDownloadSequential(
 	if progress != nil {
 		progress(DownloadPartProgress{Index: 0, TotalBytes: size})
 	}
-	output := io.Writer(destination)
+	output := s.transferWriter(ctx, destination)
 	if progress != nil {
-		output = &downloadProgressWriter{destination: destination, progress: func(written int64) {
+		output = &downloadProgressWriter{destination: output, progress: func(written int64) {
 			progress(DownloadPartProgress{Index: 0, TransferredBytes: written, TotalBytes: size})
 		}}
 	}
@@ -297,7 +298,7 @@ var errRangeConnections = errors.New("could not open the connections for a range
 // representation used by HTTP retries and browser checkpoints. The extra
 // connections are opened before any range is read, so a host that refuses
 // them costs nothing but the attempt.
-func (s Service) copyDownloadRanges(ctx context.Context, firstRemote Remote, work downloadRanges) (int64, error) {
+func (s Service) copyDownloadRanges(ctx context.Context, firstRemote Remote, work downloadRanges) (_ int64, operationErr error) {
 	alias, remotePath, destination, progress := work.alias, work.remotePath, work.destination, work.progress
 	size, parallelism, chunkBytes := work.size, work.parallelism, work.chunkBytes
 	if size <= 0 || parallelism <= 1 || chunkBytes <= 0 {
@@ -323,7 +324,7 @@ func (s Service) copyDownloadRanges(ctx context.Context, firstRemote Remote, wor
 	}
 	defer func() {
 		for _, opened := range remotes[1:] {
-			_ = opened.Close()
+			closeTransferRemote(opened, operationErr)
 		}
 	}()
 	if err := destination.Truncate(size); err != nil {
@@ -364,7 +365,7 @@ func (s Service) copyDownloadRanges(ctx context.Context, firstRemote Remote, wor
 			var workerWritten int64
 			for _, portion := range assignments[workerIndex] {
 				last := portion.offset+portion.size == size
-				written, err := copyDownloadRange(workerContext, ranged, remotePath, destination, portion, last, func(chunkWritten int64) {
+				written, err := s.copyDownloadRange(workerContext, ranged, remotePath, destination, portion, last, func(chunkWritten int64) {
 					if progress != nil {
 						progress(DownloadPartProgress{Index: workerIndex, TransferredBytes: workerWritten + chunkWritten, TotalBytes: workerTotal})
 					}
@@ -390,7 +391,7 @@ func (s Service) copyDownloadRanges(ctx context.Context, firstRemote Remote, wor
 	return written, nil
 }
 
-func copyDownloadRange(
+func (s Service) copyDownloadRange(
 	ctx context.Context, remote RangeRemote, remotePath string, destination *os.File, portion downloadRange, last bool,
 	progress func(int64),
 ) (int64, error) {
@@ -399,7 +400,7 @@ func copyDownloadRange(
 		return 0, err
 	}
 	defer source.Close()
-	output := io.Writer(io.NewOffsetWriter(destination, portion.offset))
+	output := s.transferWriter(ctx, io.NewOffsetWriter(destination, portion.offset))
 	if progress != nil {
 		output = &downloadProgressWriter{destination: output, progress: progress}
 	}

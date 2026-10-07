@@ -26,6 +26,9 @@ func storedTransferSettings(settings sshcSFTP.TransferSettings) application.File
 		LargeFileThresholdBytes:    settings.LargeFileThresholdBytes,
 		LargeFileParallelism:       settings.LargeFileParallelism,
 		LargeFileChunkBytes:        settings.LargeFileChunkBytes,
+		SpeedLimitBytesPerSecond:   settings.SpeedLimitBytesPerSecond,
+		AutoReconnect:              settings.AutoReconnect,
+		MaxReconnectAttempts:       settings.MaxReconnectAttempts,
 	}
 }
 
@@ -34,11 +37,14 @@ func storedTransferSettings(settings sshcSFTP.TransferSettings) application.File
 // 通る。
 func engineTransferSettings(stored application.FileTransferSettings) sshcSFTP.TransferSettings {
 	return sshcSFTP.TransferSettings{
-		MaxConcurrent:           stored.MaxConcurrent,
-		ClearCompletedAfter:     time.Duration(stored.ClearCompletedAfterSeconds) * time.Second,
-		ProcessingStopped:       stored.ProcessingStopped,
-		LargeFileThresholdBytes: stored.LargeFileThresholdBytes,
-		LargeFileParallelism:    stored.LargeFileParallelism,
-		LargeFileChunkBytes:     stored.LargeFileChunkBytes,
+		MaxConcurrent:            stored.MaxConcurrent,
+		ClearCompletedAfter:      time.Duration(stored.ClearCompletedAfterSeconds) * time.Second,
+		ProcessingStopped:        stored.ProcessingStopped,
+		LargeFileThresholdBytes:  stored.LargeFileThresholdBytes,
+		LargeFileParallelism:     stored.LargeFileParallelism,
+		LargeFileChunkBytes:      stored.LargeFileChunkBytes,
+		SpeedLimitBytesPerSecond: stored.SpeedLimitBytesPerSecond,
+		AutoReconnect:            stored.AutoReconnect,
+		MaxReconnectAttempts:     stored.MaxReconnectAttempts,
 	}
 }

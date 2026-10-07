@@ -11,6 +11,10 @@ type transferQueueSnapshot struct {
 
 func cloneTransferJobRecord(record *transferJobRecord) transferJobRecord {
 	cloned := *record
+	if record.job.RemoteCheckpoint != nil {
+		checkpoint := *record.job.RemoteCheckpoint
+		cloned.job.RemoteCheckpoint = &checkpoint
+	}
 	cloned.job.DownloadParts = append([]DownloadPartProgress(nil), record.job.DownloadParts...)
 	cloned.job.UploadRanges = append([]UploadRange(nil), record.job.UploadRanges...)
 	return cloned
