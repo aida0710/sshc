@@ -32,6 +32,25 @@ sshc does not use a key whose `IdentityFile` is a relative path (`id_work`), ano
 
 Every jump host as well as the final host needs the matching saved password or key passphrase. Run the authentication check to identify the failing hop. Prompts that cannot be answered from saved values, such as 2FA, remain visible in the terminal.
 
+## Downloads and other folders do not open on macOS
+
+In a pane that shows the engine's files, opening Downloads, Documents, Desktop or a similar folder, or transferring into one, can fail with a message that macOS privacy protection keeps the sshc engine out (`sftp_local_privacy_protection`). macOS does not let a process read or write these folders until you allow it. Allow sshc as follows.
+
+1. Open **System Settings → Privacy & Security → Full Disk Access**.
+2. Click **+** below the list, press ⌘⇧G, and enter the path of the sshc executable. For a Homebrew install it is `/opt/homebrew/opt/sshc/bin/sshc` (`/usr/local/opt/sshc/bin/sshc` on an Intel Mac), and for `install.sh` it is `~/.local/bin/sshc`.
+3. Restart the engine: `sshc service install` restarts the service it registered, and `sshc engine --replace` restarts any other engine. A vault with a password locks on restart, so unlock it with `sshc vault unlock`.
+
+```sh
+sshc service install
+sshc vault unlock
+```
+
+Full Disk Access lets sshc read and write the whole disk, not only these folders. If sshc is listed under **Privacy & Security → Files and Folders**, you can allow only the folders you use there instead.
+
+If you run `sshc engine` in a terminal, allow that terminal app (Terminal, iTerm2 and so on) instead of sshc.
+
+The sshc executable is not signed with an Apple Developer ID, so updating sshc can remove the permission. If that happens, remove sshc from the list with **-** and add it again.
+
 ## Sync does not advance
 
 ```sh
