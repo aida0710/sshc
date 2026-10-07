@@ -136,6 +136,14 @@ A state or definition change while waiting for confirmation also prevents succes
 - Windows: run the PowerShell installer again
 - Android: install the newer APK from GitHub Releases
 
+### Update from the web UI
+
+On macOS and Linux, verified Homebrew and `install.sh` installations show an update button beside the version when a newer stable release is available. Review the current version, target version, and installation method before confirming. The installation directory must be writable. Manual installations, development builds, Windows, and Android show guidance for updating through their installation method.
+
+The engine restarts after installation, ending connected sessions and transfers. Unlock a password-protected vault again after the restart. The UI shows progress and refuses duplicate updates. If installation succeeds but restarting fails, follow the restart guidance and reload the page without reinstalling.
+
+### Update from the CLI
+
 When an active service was created by `sshc service install` and its executable matches the installation being updated, `sshc update` restarts it automatically. The restart locks a password-protected vault, so run `sshc vault unlock` again; a passwordless vault unlocks itself when the engine starts. If the update succeeds but only the restart fails, follow the message and run `sshc service install` again. Running `install.sh` directly does not restart the service, so run `sshc service restart` afterwards if it is active. Use `sshc service install` for an inactive service or an outdated definition. Restart engines outside service management with `sshc engine --replace`.
 
 ## Uninstall
