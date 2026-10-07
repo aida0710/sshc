@@ -28,6 +28,8 @@ import { useSFTPBrowser, type RestoredSFTPLocation } from "./useSFTPBrowser";
 import { SFTPEntryActionDialogs } from "./SFTPEntryActionDialogs";
 import { useSFTPEntryActions } from "./useSFTPEntryActions";
 import { useSFTPSearch } from "./useSFTPSearch";
+import { SFTPSearchControls } from "./SFTPSearchControls";
+import { SFTPContentSearchResults } from "./SFTPContentSearchResults";
 import { useSFTPTransfers, type SFTPCounterpart } from "./useSFTPTransfers";
 import { useSFTPMetadataActions } from "./useSFTPMetadataActions";
 import { SFTPMetadataActionDialog } from "./SFTPMetadataActionDialog";
@@ -420,7 +422,7 @@ export function SFTPPanel({
   const filterInput = (
     <input
       type="search"
-      aria-label={t("sftp.filter")}
+      aria-label={t(search.mode === "content" ? "sftp.search.contentPlaceholder" : "sftp.filter")}
       value={search.filter}
       onChange={(event) => search.setFilter(event.target.value)}
       onKeyDown={(event) => {
@@ -428,7 +430,7 @@ export function SFTPPanel({
         event.preventDefault();
         void search.runSearch();
       }}
-      placeholder={t("sftp.filterPlaceholder")}
+      placeholder={t(search.mode === "content" ? "sftp.search.contentPlaceholder" : "sftp.filterPlaceholder")}
       className="h-8 w-full rounded-md border border-control-line/60 bg-control/70 py-1 pl-7 pr-2 text-xs outline-none focus:border-accent md:h-7"
     />
   );
@@ -469,11 +471,12 @@ export function SFTPPanel({
       />
 
       {problem === "" || listingFailed ? null : <Notice tone="danger">{problem}</Notice>}
+      {can?.search && connected ? <SFTPSearchControls search={search} disabled={busy || dirty} /> : null}
       {search.search === null ? null : (
         <p role="status" className="flex items-center gap-3 rounded-md border border-line bg-surface-subtle px-3 py-2 text-sm text-ink-muted">
           <span className="min-w-0 grow truncate">
-            {t(search.search.truncated ? "sftp.searchResultsTruncated" : "sftp.searchResults", {
-              count: search.search.entries.length,
+            {t(search.search.truncated ? (search.search.mode === "content" ? "sftp.search.contentResultsPartial" : "sftp.searchResultsTruncated") : "sftp.searchResults", {
+              count: search.search.mode === "content" ? search.search.matches?.length ?? 0 : search.search.entries.length,
               query: search.search.query,
               path: search.search.root,
             })}
@@ -536,7 +539,7 @@ export function SFTPPanel({
               </>
             ) : mobileInteraction ? (
               <>
-                <input ref={search.searchInput} type="search" aria-label={t("sftp.filter")} value={search.filter} onChange={(event) => search.setFilter(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); if (can?.search) void search.runSearch(); event.currentTarget.blur(); } }} placeholder={t("sftp.filterPlaceholder")} className="h-11 min-w-0 flex-1 rounded-md border border-control-line bg-control px-3 text-base" />
+                <input ref={search.searchInput} type="search" aria-label={t(search.mode === "content" ? "sftp.search.contentPlaceholder" : "sftp.filter")} value={search.filter} onChange={(event) => search.setFilter(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); if (can?.search) void search.runSearch(); event.currentTarget.blur(); } }} placeholder={t(search.mode === "content" ? "sftp.search.contentPlaceholder" : "sftp.filterPlaceholder")} className="h-11 min-w-0 flex-1 rounded-md border border-control-line bg-control px-3 text-base" />
                 {can?.search ? <button type="button" aria-label={t("sftp.searchBelow")} disabled={busy || !connected || search.filter.trim() === ""} onClick={() => { search.searchInput.current?.blur(); void search.runSearch(); }} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted disabled:text-ink-faint"><Icon name="search" className="size-4" /></button> : null}
                 <button type="button" aria-label={t("sftp.close")} onClick={() => { search.setMobileSearchOpen(false); search.setFilter(""); }} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted"><Icon name="close" className="size-4" /></button>
               </>
@@ -652,6 +655,8 @@ export function SFTPPanel({
                 title={problem}
                 action={<Button onClick={() => void browser.retry()}>{t("sftp.retry")}</Button>}
               />
+            ) : search.search?.mode === "content" ? (
+              <SFTPContentSearchResults search={search.search} disabled={busy || dirty} onOpen={(match) => void editor.open(alias, match.entry, { line: match.line, expectedRevision: match.entry.revision })} />
             ) : search.search !== null && displayedEntries.length === 0 ? (
               <PanelState
                 tone="empty"

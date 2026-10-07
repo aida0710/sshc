@@ -5,10 +5,11 @@ import (
 	"strconv"
 
 	"github.com/labstack/echo/v5"
+	sshcSFTP "sshc/internal/sftp"
 )
 
 func (h SFTPHandlers) ReadText(c *echo.Context) error {
-	file, err := h.Service.ReadText(c.Request().Context(), c.Param("alias"), c.QueryParam("path"))
+	file, err := h.Service.ReadTextWithRevision(c.Request().Context(), sshcSFTP.TextReadOptions{Alias: c.Param("alias"), Path: c.QueryParam("path"), ExpectedRevision: c.QueryParam("expectedRevision")})
 	if err != nil {
 		return sftpProblem(c, err)
 	}

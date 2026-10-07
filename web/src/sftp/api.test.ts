@@ -38,8 +38,8 @@ describe("sftpApi resumable download", () => {
     ));
     const reads = [
       () => sftpApi.list("edge", "/"),
-      () => sftpApi.search("edge", "/", "needle"),
-      () => sftpApi.compareDirectories("edge", "/left", "other", "/right"),
+      () => sftpApi.search({ alias: "edge", path: "/", query: "needle" }),
+      () => sftpApi.compareDirectories({ left: { alias: "edge", path: "/left" }, right: { alias: "other", path: "/right" } }),
       () => sftpApi.directoryStats("edge", "/left"),
       () => sftpApi.previewFile("edge", "/left/image.png"),
     ];

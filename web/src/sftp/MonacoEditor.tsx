@@ -27,6 +27,7 @@ type MonacoEditorProps = {
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
+  initialLine?: number;
 };
 
 function languageFor(path: string): string {
@@ -75,7 +76,7 @@ function startWithTabIndenting(view: monaco.editor.IStandaloneCodeEditor): void 
   view.trigger("sshc", toggleTabMovesFocusCommand, null);
 }
 
-export function MonacoEditor({ path, value, onChange, readOnly = false }: MonacoEditorProps) {
+export function MonacoEditor({ path, value, onChange, readOnly = false, initialLine = 1 }: MonacoEditorProps) {
   const container = useRef<HTMLDivElement>(null);
   const callback = useRef(onChange);
   // The contents the editor reported through onChange that have not come back
@@ -148,6 +149,15 @@ export function MonacoEditor({ path, value, onChange, readOnly = false }: Monaco
       theme: resolved === "dark" ? "vs-dark" : "vs",
     });
   }, [readOnly, reducedMotion, resolved]);
+
+  useEffect(() => {
+    const view = editor.current;
+    const lineCount = view?.getModel()?.getLineCount();
+    if (view === null || lineCount === undefined) return;
+    const line = Math.max(1, Math.min(initialLine, lineCount));
+    view.setPosition({ lineNumber: line, column: 1 });
+    view.revealLineInCenter(line);
+  }, [path, initialLine]);
 
   return <div ref={container} {...keyboardOwnerProps} className="h-full min-h-64 w-full overflow-hidden" />;
 }

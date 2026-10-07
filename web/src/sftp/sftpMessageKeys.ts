@@ -28,4 +28,5 @@ export const comparisonStatusLabelKeys: Record<DirectoryComparison["entries"][nu
   left_only: "sftp.compare.left_only",
   right_only: "sftp.compare.right_only",
   type_mismatch: "sftp.compare.type_mismatch",
+  unverified: "sftp.compare.unverified",
 };

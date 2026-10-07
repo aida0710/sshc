@@ -9,11 +9,12 @@ import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
 
 export type SFTPTextSource = {
-  readText(alias: string, path: string): Promise<RemoteTextFile>;
+  readText(alias: string, path: string, options?: { expectedRevision: string }): Promise<RemoteTextFile>;
   saveText(alias: string, path: string, contents: string, expectedRevision: string): Promise<RemoteTextFile>;
 };
 
-type OpenedText = { alias: string; file: RemoteTextFile };
+type EditorPosition = { line: number; expectedRevision?: string };
+type OpenedText = { alias: string; file: RemoteTextFile; initialLine: number };
 
 // A problem shown inside the editor, over which the pane's banner would be
 // hidden. `conflict` says the remote file is no longer the revision the
@@ -109,13 +110,17 @@ export function useSFTPTextEditor({
   }
 
   // Reads a file into the editor, replacing what it shows.
-  async function read(alias: string, path: string, reportFailure: (message: string) => void) {
+  async function read(alias: string, path: string, { reportFailure, position }: { reportFailure: (message: string) => void; position?: EditorPosition }) {
     const isCurrent = fileGeneration.begin();
     setBusy(true);
     try {
-      const file = await source.readText(alias, path);
+      const file = position?.expectedRevision === undefined ? await source.readText(alias, path) : await source.readText(alias, path, { expectedRevision: position.expectedRevision });
       if (!isCurrent()) return;
-      setOpened({ alias, file });
+      if (position?.expectedRevision !== undefined && position.expectedRevision !== file.entry.revision) {
+        reportFailure(t("sftp.search.changedBeforeOpen"));
+        return;
+      }
+      setOpened({ alias, file, initialLine: position?.line ?? 1 });
       setContents(file.contents);
       setProblem(null);
     } catch (error) {
@@ -126,20 +131,20 @@ export function useSFTPTextEditor({
     }
   }
 
-  async function open(alias: string, entry: RemoteEntry) {
+  async function open(alias: string, entry: RemoteEntry, position?: EditorPosition) {
     if (dirty) {
       setProblem({ message: t("sftp.unsavedBlocked"), conflict: false });
       return;
     }
     onProblem("");
     // With a file already open, the pane's banner would sit behind the editor.
-    await read(alias, entry.path, opened === null ? onProblem : (message) => setProblem({ message, conflict: false }));
+    await read(alias, entry.path, { reportFailure: opened === null ? onProblem : (message) => setProblem({ message, conflict: false }), ...(position === undefined ? {} : { position }) });
   }
 
   async function reload() {
     setConfirming(null);
     if (opened === null) return;
-    await read(opened.alias, opened.file.entry.path, (message) => setProblem({ message, conflict: true }));
+    await read(opened.alias, opened.file.entry.path, { reportFailure: (message) => setProblem({ message, conflict: true }) });
   }
 
   // Writes the editor's contents. The engine refuses the write when the
@@ -155,7 +160,7 @@ export function useSFTPTextEditor({
       if (!isCurrent()) return;
       // The server holds these contents now, so the next save must send
       // this revision even if refreshing the listing fails.
-      setOpened({ alias, file: saved });
+      setOpened({ alias, file: saved, initialLine: opened.initialLine });
       setContents(saved.contents);
       await onSaved(alias, saved);
     } catch (error) {
@@ -241,6 +246,7 @@ export function useSFTPTextEditor({
 
   return {
     opened: opened?.file ?? null,
+    initialLine: opened?.initialLine ?? 1,
     contents,
     setContents,
     dirty,
