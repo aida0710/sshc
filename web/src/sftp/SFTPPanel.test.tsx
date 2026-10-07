@@ -1208,7 +1208,9 @@ describe("SFTPPanel uploads", () => {
       await userEvent.click(screen.getByRole("checkbox", { name: "Select notes.txt" }));
 
       expect(screen.getByRole("button", { name: "Search files" })).toHaveAttribute("aria-expanded", "false");
-      await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+      expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Actions for notes.txt" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
       const fileDialog = screen.getByRole("dialog", { name: "Delete this remote entry?" });
       expect(fileDialog).toHaveTextContent("/remote/notes.txt");
       expect(addRemoteTransfers).not.toHaveBeenCalled();
@@ -1218,7 +1220,8 @@ describe("SFTPPanel uploads", () => {
       await userEvent.click(screen.getByRole("button", { name: "Search files" }));
       await userEvent.clear(screen.getByRole("searchbox", { name: "Filter entries" }));
       await userEvent.click(screen.getByRole("checkbox", { name: "Select project" }));
-      await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+      await userEvent.click(screen.getByRole("button", { name: "Actions for 2 selected items" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
       const batchDialog = screen.getByRole("dialog", { name: "Delete 2 remote entries?" });
       expect(batchDialog).toHaveTextContent("Folders and everything inside them will be deleted.");
       expect(batchDialog).toHaveTextContent("/remote/project");
