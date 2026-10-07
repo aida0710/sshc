@@ -6,6 +6,8 @@ const startupPhases = ["download", "boot", "engine", "web"];
 
 export class StartupProgressView {
   #root;
+  #releaseRow;
+  #uiRow;
   #machineRows = new Map();
   #startedAt;
   #elapsedTimer;
@@ -17,21 +19,16 @@ export class StartupProgressView {
       step.textContent = label;
       root.querySelector("ol").append(step);
     }
+    const archiveList = root.querySelector(".startup-archives");
+    this.#releaseRow = createProgressRow(archiveList, "");
+    this.#releaseRow.row.hidden = true;
+    this.#uiRow = createProgressRow(archiveList, messages.uiArchiveLabel);
+    this.#uiRow.bar.setAttribute("aria-label", messages.archiveDownload(messages.uiArchiveLabel));
     for (const definition of definitions) {
-      const row = document.createElement("li");
-      row.dataset.machine = definition.role;
-      const heading = document.createElement("div");
-      heading.className = "startup-machine-heading";
-      const name = document.createElement("strong");
-      name.textContent = definition.label;
-      const state = document.createElement("span");
-      heading.append(name, state);
-      const bar = document.createElement("progress");
-      bar.max = 100;
-      bar.setAttribute("aria-label", messages.machineDownload(definition.label));
-      row.append(heading, bar);
-      root.querySelector("ul").append(row);
-      this.#machineRows.set(definition.role, { row, state, bar });
+      const machineRow = createProgressRow(root.querySelector(".startup-machines"), definition.label);
+      machineRow.row.dataset.machine = definition.role;
+      machineRow.bar.setAttribute("aria-label", messages.machineDownload(definition.label));
+      this.#machineRows.set(definition.role, machineRow);
     }
   }
 
@@ -50,20 +47,18 @@ export class StartupProgressView {
       if (index === stepIndex) step.setAttribute("aria-current", "step");
       else step.removeAttribute("aria-current");
     }
-    const bar = this.#root.querySelector("#startup-download");
     const percentage = snapshot.downloadPercentage;
-    if (percentage === null) bar.removeAttribute("value");
-    else bar.value = percentage;
+    setProgress(this.#root.querySelector("#startup-download"), percentage);
     this.#root.querySelector("#startup-download-label").textContent = messages.downloadProgress(percentage);
-    this.#root.querySelector("#startup-ui-label").textContent = messages.uiArchiveProgress(snapshot.uiArchive);
-    this.#root.querySelector("#startup-ui-download").value = snapshot.uiArchive.downloadPercentage;
+    if (snapshot.releaseArchive) this.#renderReleaseArchive(snapshot.releaseArchive);
+    renderArchiveRow(this.#uiRow, snapshot.uiArchive);
     for (const machine of snapshot.machines) {
-      const { row, state, bar: machineBar } = this.#machineRows.get(machine.role);
+      const { row, state, bar } = this.#machineRows.get(machine.role);
       row.dataset.state = machine.state;
       state.textContent = machine.state === "downloading"
         ? messages.machineLoading(machine.downloadPercentage) : messages.machineStates[machine.state];
-      if (machine.downloadPercentage === null) machineBar.removeAttribute("value");
-      else machineBar.value = machine.downloadPercentage;
+      // A machine that has not started reading files is idle, not of unknown progress.
+      setProgress(bar, machine.state === "waiting" ? 0 : machine.downloadPercentage);
     }
     if (snapshot.phase === "ready" || snapshot.phase === "failed") {
       clearInterval(this.#elapsedTimer);
@@ -72,8 +67,42 @@ export class StartupProgressView {
     this.#root.hidden = snapshot.phase === "ready";
   }
 
+  #renderReleaseArchive(releaseArchive) {
+    const label = messages.releaseArchiveLabel(releaseArchive.version);
+    this.#releaseRow.row.hidden = false;
+    this.#releaseRow.name.textContent = label;
+    this.#releaseRow.bar.setAttribute("aria-label", messages.archiveDownload(label));
+    renderArchiveRow(this.#releaseRow, releaseArchive);
+  }
+
   #updateElapsed() {
     const seconds = Math.floor((performance.now() - this.#startedAt) / 1000);
     this.#root.querySelector("#startup-elapsed").textContent = messages.elapsed(seconds);
   }
+}
+
+function createProgressRow(list, label) {
+  const row = document.createElement("li");
+  const heading = document.createElement("div");
+  heading.className = "startup-item-heading";
+  const name = document.createElement("strong");
+  name.textContent = label;
+  const state = document.createElement("span");
+  heading.append(name, state);
+  const bar = document.createElement("progress");
+  bar.max = 100;
+  row.append(heading, bar);
+  list.append(row);
+  return { row, name, state, bar };
+}
+
+function renderArchiveRow({ row, state, bar }, archive) {
+  row.dataset.state = archive.state;
+  state.textContent = messages.archiveStates(archive);
+  setProgress(bar, archive.state === "unavailable" ? 0 : archive.downloadPercentage);
+}
+
+function setProgress(bar, percentage) {
+  if (percentage === null) bar.removeAttribute("value");
+  else bar.value = percentage;
 }

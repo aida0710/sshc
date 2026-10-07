@@ -8,6 +8,8 @@ export class StartupProgress {
   #isUIReady = false;
   #hasFailed = false;
   #uiArchive = { size: 0, fraction: 0, state: "waiting" };
+  // Only set while this page downloads a newer GitHub release before navigating into it.
+  #releaseArchive = null;
 
   constructor(definitions) {
     this.#machines = new Map(definitions.map((definition) => [definition.role, {
@@ -24,6 +26,20 @@ export class StartupProgress {
       machine.state = "downloading";
       for (const [name, file] of machine.files) file.size = assetSizes[name] ?? 0;
     }
+  }
+
+  startReleaseArchive({ version, bytes }) {
+    this.#releaseArchive = { version, size: bytes, fraction: 0, state: "downloading" };
+  }
+
+  updateReleaseArchive(progress) {
+    if (this.#hasFailed || !this.#releaseArchive) return;
+    Object.assign(this.#releaseArchive, progress);
+  }
+
+  // The page falls back to its own bundle, so the abandoned archive no longer counts as pending work.
+  markReleaseArchiveUnavailable() {
+    if (this.#releaseArchive) this.#releaseArchive.state = "unavailable";
   }
 
   updateUIArchive(progress) {
@@ -71,16 +87,23 @@ export class StartupProgress {
   get snapshot() {
     const machines = [...this.#machines.values()];
     const bootedCount = machines.filter((machine) => machine.state === "booted").length;
+    const release = this.#releaseArchive;
+    const isReleaseActive = release && release.state !== "unavailable";
     let phase = "ready";
     if (this.#hasFailed) phase = "failed";
+    else if (isReleaseActive && release.state !== "ready") phase = "download";
     else if (!this.#isConfigured) phase = "configuration";
     else if (this.#uiArchive.state !== "ready" || machines.some((machine) => machine.state === "downloading")) phase = "download";
     else if (bootedCount < machines.length) phase = "boot";
     else if (!this.#isEngineReady) phase = "engine";
     else if (!this.#isUIReady) phase = "web";
     const allFiles = [this.#uiArchive, ...machines.flatMap((machine) => [...machine.files.values()])];
+    if (isReleaseActive) allFiles.push(release);
     return {
       phase, bootedCount, downloadPercentage: downloadPercentage(allFiles),
+      releaseArchive: release && { version: release.version, state: release.state,
+        downloadPercentage: Math.floor(release.fraction * 100),
+        completedFiles: release.completedFiles, totalFiles: release.totalFiles },
       uiArchive: { ...this.#uiArchive, downloadPercentage: Math.floor(this.#uiArchive.fraction * 100) },
       machines: machines.map((machine) => ({
         role: machine.role, label: machine.label,

@@ -76,3 +76,29 @@ test("UIの展開が完了するまでVMが起動済みでも読み込みを終�
   progress.updateUIArchive({ state: "ready", fraction: 1 });
   assert.equal(progress.snapshot.phase, "web");
 });
+
+test("GitHubのデモ一式を取得している間は読み込み段階としてその割合を出す", () => {
+  const progress = new StartupProgress(machineDefinitions);
+  progress.startReleaseArchive({ version: "v1.2.3", bytes: 1000 });
+  assert.equal(progress.snapshot.phase, "download");
+  assert.equal(progress.snapshot.downloadPercentage, 0);
+  progress.updateReleaseArchive({ state: "downloading", fraction: 0.42 });
+  assert.equal(progress.snapshot.downloadPercentage, 42);
+  assert.deepEqual(progress.snapshot.releaseArchive,
+    { version: "v1.2.3", state: "downloading", downloadPercentage: 42, completedFiles: undefined, totalFiles: undefined });
+  progress.updateReleaseArchive({ state: "caching", fraction: 1, completedFiles: 3, totalFiles: 40 });
+  assert.equal(progress.snapshot.phase, "download");
+  assert.equal(progress.snapshot.releaseArchive.completedFiles, 3);
+});
+
+test("取得できなかったデモ一式は配信済みの版の読み込み割合に混ぜない", () => {
+  const progress = new StartupProgress(machineDefinitions);
+  progress.startReleaseArchive({ version: "v1.2.3", bytes: 1000 });
+  progress.updateReleaseArchive({ state: "downloading", fraction: 0.5 });
+  progress.markReleaseArchiveUnavailable();
+  assert.equal(progress.snapshot.phase, "configuration");
+  assert.equal(progress.snapshot.downloadPercentage, null);
+  progress.configureDownloads(assetSizes);
+  assert.equal(progress.snapshot.downloadPercentage, 0);
+  assert.equal(progress.snapshot.releaseArchive.state, "unavailable");
+});
