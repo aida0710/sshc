@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -108,11 +109,16 @@ func restartWebUpdateEngine(ctx context.Context, run webUpdateRestartRun) error 
 	if err != nil || restarted {
 		return err
 	}
+	engineURL, err := url.Parse(found.URL)
+	if err != nil || engineURL.Port() == "" {
+		return selfupdate.ErrChanged
+	}
 	// Target the exact proved handoff. A concurrent replacement must never be
 	// stopped just because it shares the state directory.
 	if err := stopRunningEngine(ctx, paths.stateDir, found, client, lockEngineStart); err != nil {
 		return err
 	}
 	environment := replaceEnvironment(os.Environ(), map[string]string{webUpdateRestartEnvironment: ""})
-	return run.startProcess(job.Plan.Installation.Executable, []string{"engine"}, environment)
+	// Keep this browser's origin even when --port overrode the saved engine settings.
+	return run.startProcess(job.Plan.Installation.Executable, []string{"engine", "--port", engineURL.Port()}, environment)
 }
