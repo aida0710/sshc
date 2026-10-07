@@ -11,6 +11,8 @@ const sftpProblemMessages: CodeMessages = {
   sftp_failed: "sftp.problem.failed",
   sftp_not_found: "sftp.problem.notFound",
   sftp_permission_denied: "sftp.problem.permissionDenied",
+  sftp_local_permission_denied: "sftp.problem.localPermissionDenied",
+  sftp_local_privacy_protection: "sftp.problem.localPrivacyProtection",
   sftp_conflict: "sftp.problem.conflict",
   sftp_exists: "sftp.problem.exists",
   sftp_transfer_limit: "sftp.problem.transferLimit",

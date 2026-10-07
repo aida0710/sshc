@@ -130,7 +130,8 @@ func checkLocal(root *os.Root, relative string, allowMissing bool) (fs.FileInfo,
 // follows every link on the way, as opening a remote one does. A link inside
 // it is listed as a symlink with what it points to, so the pane refuses to
 // hand it to a transfer, which never follows links.
-func ListLocal(value string) (LocalListing, error) {
+func ListLocal(value string) (_ LocalListing, err error) {
+	defer func() { err = labelLocalAccessRefusal(err) }()
 	cleaned, err := cleanLocalPath(value)
 	if err != nil {
 		return LocalListing{}, err
@@ -183,7 +184,8 @@ func describeLocalLink(entry *Entry, linkPath string) {
 	}
 }
 
-func (s Service) PlanLocalTransfer(ctx context.Context, request RemoteTransferRequest) (RemoteTransferPlan, error) {
+func (s Service) PlanLocalTransfer(ctx context.Context, request RemoteTransferRequest) (_ RemoteTransferPlan, err error) {
+	defer func() { err = labelLocalAccessRefusal(err) }()
 	var localPath, remotePath string
 	if request.Operation == RemotePut {
 		localPath, remotePath = request.SourcePath, request.TargetPath
@@ -271,7 +273,8 @@ func localTreeBytes(ctx context.Context, root *os.Root, relative string, info fs
 	}
 	return total, nil
 }
-func (s Service) CopyLocal(ctx context.Context, request RemoteTransferRequest, progress func(int64) error) error {
+func (s Service) CopyLocal(ctx context.Context, request RemoteTransferRequest, progress func(int64) error) (err error) {
+	defer func() { err = labelLocalAccessRefusal(err) }()
 	if request.Operation != RemoteGet && request.Operation != RemotePut {
 		return ErrInvalidTransfer
 	}
