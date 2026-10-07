@@ -288,3 +288,47 @@ test("saves the Vault auto-lock policy and warns when automatic locking is disab
     await page.screenshot({ path: `${visualDirectory}/vault-auto-lock-mobile.png`, fullPage: true });
   }
 });
+
+test("lists saved one-time passwords with their current codes in both languages", async ({ page, installation }) => {
+  // Published example and RFC 6238 test keys; the screen shows only the derived codes.
+  const setupKeys = {
+    "bastion-otp": "JBSWY3DPEHPK3PXP",
+    "production-otp": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+    "staging-otp": "MFRGGZDFMZTWQ2LKNNWG23TPOBYXE43U",
+  };
+  await openApplication(page, installation);
+  await openSection(page, "OTP");
+
+  const tokens = page.getByRole("region", { name: "One-time passwords (TOTP)" });
+  for (const [name, setupKey] of Object.entries(setupKeys)) {
+    await tokens.getByLabel("New one-time password name").fill(name);
+    await tokens.getByLabel("Base32 setup key or otpauth URI", { exact: true }).fill(setupKey);
+    await tokens.getByRole("button", { name: "Store one-time password" }).click();
+    await expect(tokens.getByRole("article", { name })).toContainText(/\d{3} \d{3}/);
+  }
+
+  await openSection(page, "Connections");
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
+  const authentication = page.getByRole("region", { name: "Authentication" });
+  await authentication.getByLabel("One-time password action").selectOption("saved_totp");
+  await authentication.getByLabel("Saved TOTP").selectOption("bastion-otp");
+  await page.getByRole("button", { name: "Save Basic settings" }).click();
+  await expect(authentication.getByText("Assigned: bastion-otp")).toBeVisible();
+  await openSection(page, "OTP");
+  await expect(page.getByRole("article", { name: "bastion-otp" })).toBeVisible();
+  for (const setupKey of Object.values(setupKeys)) {
+    await expect(page.locator("body")).not.toContainText(setupKey);
+  }
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/otp-desktop-en.png` });
+    await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
+    await page.reload();
+    await expect(page.getByRole("region", { name: "ワンタイムパスワード（TOTP）" })).toBeVisible();
+    await expect(page.getByRole("article", { name: "bastion-otp" })).toContainText(/\d{3} \d{3}/);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/otp-desktop-ja.png` });
+  }
+});
