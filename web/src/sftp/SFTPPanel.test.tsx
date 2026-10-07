@@ -11,6 +11,7 @@ import type { UploadChunk, UploadCompletion, UploadStart } from "./api";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
+  listLocal: vi.fn(),
   readText: vi.fn(),
   upload: vi.fn(),
   mkdir: vi.fn(),
@@ -1092,6 +1093,54 @@ describe("SFTPPanel uploads", () => {
     expect(await screen.findByText("This directory is empty.")).toBeVisible();
   });
 
+  it("searches file contents with a mode switch and opens a result in the editor", async () => {
+    api.list.mockResolvedValue({ path: "/srv", entries: [] });
+    const entry = { name: "notes.txt", path: "/srv/sub/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "meta-revision" };
+    api.search.mockResolvedValue({ path: "/srv", query: "needle", entries: [], truncated: true, bytesRead: 12, omissions: [{ reason: "binary", count: 1 }], matches: [{ entry, line: 2, snippet: "needle here" }] });
+    api.readText.mockResolvedValue({ entry, contents: "first\nneedle here\n", revision: "content-revision" });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Search mode" }), "content");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Text to find in files" }), "needle{Enter}");
+    const match = await screen.findByRole("button", { name: "Open /srv/sub/notes.txt at line 2" });
+    expect(screen.getByText("Matching lines: 1 for “needle” under /srv. Some entries were skipped or not searched.")).toBeVisible();
+    expect(api.search).toHaveBeenLastCalledWith({ alias: "edge", path: "/srv", query: "needle", mode: "content", signal: expect.any(AbortSignal) });
+    await userEvent.click(match);
+    await waitFor(() => expect(api.readText).toHaveBeenCalledWith("edge", "/srv/sub/notes.txt", { expectedRevision: "meta-revision" }));
+  });
+
+  it("stops an active content search without replacing the current file list", async () => {
+    api.list.mockResolvedValue({ path: "/srv", entries: [] });
+    let finish!: (result: unknown) => void;
+    api.search.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Search mode" }), "content");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Text to find in files" }), "needle{Enter}");
+    const request = api.search.mock.calls.at(-1)?.[0] as { signal: AbortSignal };
+    await userEvent.click(await screen.findByRole("button", { name: "Stop search" }));
+    expect(request.signal.aborted).toBe(true);
+    finish({ path: "/srv", query: "needle", entries: [], truncated: false, matches: [] });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Stop search" })).not.toBeInTheDocument());
+    expect(screen.queryByText("No matching text was found.")).not.toBeInTheDocument();
+  });
+
+  it("retains local name filtering after leaving a remote content search mode", async () => {
+    const entry = { name: "notes.txt", path: "/local/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "revision" };
+    api.listLocal.mockResolvedValue({ path: "/local", home: "/local", entries: [entry, { ...entry, name: "other.txt", path: "/local/other.txt" }] });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Search mode" }), "content");
+    await userEvent.click(screen.getByRole("button", { name: "Host" }));
+    const local = await screen.findByText("Local", { selector: "span.font-medium" });
+    await userEvent.click(local.closest("button")!);
+    await screen.findByRole("button", { name: "other.txt" });
+    await userEvent.type(screen.getByRole("searchbox", { name: "Filter entries" }), "notes");
+    expect(screen.getByRole("button", { name: "notes.txt" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "other.txt" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Search mode" })).not.toBeInTheDocument();
+  });
+
   it("searches below the open directory and shows where each match lives", async () => {
     api.list.mockResolvedValue({
       path: "/srv",
@@ -1111,7 +1160,7 @@ describe("SFTPPanel uploads", () => {
     await screen.findByRole("button", { name: "app" });
 
     await userEvent.type(screen.getByRole("searchbox", { name: "Filter entries" }), "log{Enter}");
-    await waitFor(() => expect(api.search).toHaveBeenCalledWith("edge", "/srv", "log"));
+    await waitFor(() => expect(api.search).toHaveBeenCalledWith({ alias: "edge", path: "/srv", query: "log", mode: "name", signal: expect.any(AbortSignal) }));
 
     expect(await screen.findByText("2 matches for “log” under /srv")).toBeVisible();
     const table = screen.getByRole("table");

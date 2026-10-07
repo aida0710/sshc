@@ -15,6 +15,7 @@ export type RequestFailureDiagnostic = Readonly<{
 }>;
 
 type RequestFailureOptions = Readonly<{
+  signal?: AbortSignal;
   locallyHandledCodes?: readonly string[];
 }>;
 
@@ -225,9 +226,9 @@ export const apiClient = {
     if (!csrfToken) throw new Error("csrf_unavailable");
     let response: Response;
     try {
-      response = await requestWithSession(path, {}, csrfToken);
+      response = await requestWithSession(path, options.signal === undefined ? {} : { signal: options.signal }, csrfToken);
     } catch (error) {
-      if (!options.locallyHandledCodes?.includes("network_request_failed")) notifyNetworkFailure("GET", path);
+      if (!options.signal?.aborted && !options.locallyHandledCodes?.includes("network_request_failed")) notifyNetworkFailure("GET", path);
       throw error;
     }
     if (!response.ok) throw await failure(response, "GET", path, options);

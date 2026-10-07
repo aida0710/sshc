@@ -1,14 +1,12 @@
 package sftp
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
 	"io/fs"
 	"path"
 	"strings"
-	"unicode/utf8"
 )
 
 // Text and preview reads for the built-in editor, and the write-back that
@@ -222,8 +220,4 @@ func readText(ctx context.Context, remote Remote, file fileLocation) (TextFile, 
 	}
 	entry := entryFrom(path.Dir(file.shown), namedInfo{FileInfo: after, name: path.Base(file.shown)})
 	return TextFile{Entry: entry, Contents: string(contents), Revision: contentRevision(contents)}, nil
-}
-
-func validText(contents []byte) bool {
-	return utf8.Valid(contents) && !bytes.ContainsRune(contents, '\x00')
 }

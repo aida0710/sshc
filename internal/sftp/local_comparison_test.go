@@ -43,7 +43,7 @@ func TestLocalAndRemoteComparisonReportsNestedDifferencesWithoutWriting(t *testi
 		openedAliases = append(openedAliases, alias)
 		return remote, nil
 	}}
-	comparison, err := service.CompareDirectories(context.Background(), "sshc://local", filepath.ToSlash(folder), "edge", "/work")
+	comparison, err := service.CompareDirectories(context.Background(), sftp.CompareOptions{Left: sftp.ComparisonLocation{Alias: "sshc://local", Path: filepath.ToSlash(folder)}, Right: sftp.ComparisonLocation{Alias: "edge", Path: "/work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestLocalComparisonListsLinksWithoutFollowingTheirTargets(t *testing.T) {
 		t.Fatal("local comparison opened an SSH connection")
 		return nil, fs.ErrInvalid
 	}}
-	comparison, err := service.CompareDirectories(context.Background(), "sshc://local", filepath.ToSlash(left), "sshc://local", filepath.ToSlash(right))
+	comparison, err := service.CompareDirectories(context.Background(), sftp.CompareOptions{Left: sftp.ComparisonLocation{Alias: "sshc://local", Path: filepath.ToSlash(left)}, Right: sftp.ComparisonLocation{Alias: "sshc://local", Path: filepath.ToSlash(right)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,12 +87,12 @@ func TestLocalComparisonListsLinksWithoutFollowingTheirTargets(t *testing.T) {
 func TestLocalComparisonRejectsRelativePathsAndHonorsCancellation(t *testing.T) {
 	service := sftp.Service{}
 	folder := filepath.ToSlash(t.TempDir())
-	if _, err := service.CompareDirectories(context.Background(), "sshc://local", "relative", "sshc://local", folder); !errors.Is(err, sftp.ErrInvalidPath) {
+	if _, err := service.CompareDirectories(context.Background(), sftp.CompareOptions{Left: sftp.ComparisonLocation{Alias: "sshc://local", Path: "relative"}, Right: sftp.ComparisonLocation{Alias: "sshc://local", Path: folder}}); !errors.Is(err, sftp.ErrInvalidPath) {
 		t.Fatalf("relative comparison = %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := service.CompareDirectories(ctx, "sshc://local", folder, "sshc://local", folder); !errors.Is(err, context.Canceled) {
+	if _, err := service.CompareDirectories(ctx, sftp.CompareOptions{Left: sftp.ComparisonLocation{Alias: "sshc://local", Path: folder}, Right: sftp.ComparisonLocation{Alias: "sshc://local", Path: folder}}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled comparison = %v", err)
 	}
 }
@@ -111,7 +111,7 @@ func TestLocalComparisonReportsSizeAndModificationTimeChanges(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	comparison, err := (sftp.Service{}).CompareDirectories(context.Background(), "sshc://local", filepath.ToSlash(left), "sshc://local", filepath.ToSlash(right))
+	comparison, err := (sftp.Service{}).CompareDirectories(context.Background(), sftp.CompareOptions{Left: sftp.ComparisonLocation{Alias: "sshc://local", Path: filepath.ToSlash(left)}, Right: sftp.ComparisonLocation{Alias: "sshc://local", Path: filepath.ToSlash(right)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestLocalComparisonAccepts20000EntriesAndRejects20001(t *testing.T) {
 	}
 	leftPath, rightPath := filepath.ToSlash(left), filepath.ToSlash(right)
 	t.Run("20000 entries succeed", func(t *testing.T) {
-		comparison, err := (sftp.Service{}).CompareDirectories(t.Context(), "sshc://local", leftPath, "sshc://local", rightPath)
+		comparison, err := (sftp.Service{}).CompareDirectories(t.Context(), sftp.CompareOptions{Left: sftp.ComparisonLocation{Alias: "sshc://local", Path: leftPath}, Right: sftp.ComparisonLocation{Alias: "sshc://local", Path: rightPath}})
 		if err != nil || len(comparison.Entries) != comparisonLimit {
 			t.Fatalf("20,000 entries: count = %d, err = %v", len(comparison.Entries), err)
 		}
@@ -145,7 +145,7 @@ func TestLocalComparisonAccepts20000EntriesAndRejects20001(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(right, "right-only"), nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		comparison, err := (sftp.Service{}).CompareDirectories(t.Context(), "sshc://local", leftPath, "sshc://local", rightPath)
+		comparison, err := (sftp.Service{}).CompareDirectories(t.Context(), sftp.CompareOptions{Left: sftp.ComparisonLocation{Alias: "sshc://local", Path: leftPath}, Right: sftp.ComparisonLocation{Alias: "sshc://local", Path: rightPath}})
 		if !errors.Is(err, sftp.ErrCompareLimit) || len(comparison.Entries) != 0 {
 			t.Fatalf("20,001 combined entries: count = %d, err = %v", len(comparison.Entries), err)
 		}
@@ -158,7 +158,7 @@ func TestLocalComparisonAccepts20000EntriesAndRejects20001(t *testing.T) {
 			t.Fatal("comparison opened the other side after exhausting the local budget")
 			return nil, fs.ErrInvalid
 		}}
-		comparison, err := service.CompareDirectories(t.Context(), "sshc://local", leftPath, "edge", "/work")
+		comparison, err := service.CompareDirectories(t.Context(), sftp.CompareOptions{Left: sftp.ComparisonLocation{Alias: "sshc://local", Path: leftPath}, Right: sftp.ComparisonLocation{Alias: "edge", Path: "/work"}})
 		if !errors.Is(err, sftp.ErrCompareLimit) || len(comparison.Entries) != 0 {
 			t.Fatalf("20,001 tree entries: count = %d, err = %v", len(comparison.Entries), err)
 		}
@@ -172,7 +172,7 @@ func TestLocalComparisonHidesInternalNamesAndKeepsOrdinaryDotFiles(t *testing.T)
 			t.Fatal(err)
 		}
 	}
-	comparison, err := (sftp.Service{}).CompareDirectories(t.Context(), "sshc://local", filepath.ToSlash(left), "sshc://local", filepath.ToSlash(right))
+	comparison, err := (sftp.Service{}).CompareDirectories(t.Context(), sftp.CompareOptions{Left: sftp.ComparisonLocation{Alias: "sshc://local", Path: filepath.ToSlash(left)}, Right: sftp.ComparisonLocation{Alias: "sshc://local", Path: filepath.ToSlash(right)}})
 	if err != nil {
 		t.Fatal(err)
 	}

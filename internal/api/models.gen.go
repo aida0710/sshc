@@ -137,6 +137,24 @@ func (e PullRequestResolve) Valid() bool {
 	}
 }
 
+// Defines values for SFTPComparisonMode.
+const (
+	Content  SFTPComparisonMode = "content"
+	Metadata SFTPComparisonMode = "metadata"
+)
+
+// Valid indicates whether the value is a known member of the SFTPComparisonMode enum.
+func (e SFTPComparisonMode) Valid() bool {
+	switch e {
+	case Content:
+		return true
+	case Metadata:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SFTPCreateEntryRequestType.
 const (
 	SFTPCreateEntryRequestTypeDirectory SFTPCreateEntryRequestType = "directory"
@@ -162,6 +180,7 @@ const (
 	RightOnly    SFTPDirectoryDifferenceStatus = "right_only"
 	Same         SFTPDirectoryDifferenceStatus = "same"
 	TypeMismatch SFTPDirectoryDifferenceStatus = "type_mismatch"
+	Unverified   SFTPDirectoryDifferenceStatus = "unverified"
 )
 
 // Valid indicates whether the value is a known member of the SFTPDirectoryDifferenceStatus enum.
@@ -176,6 +195,8 @@ func (e SFTPDirectoryDifferenceStatus) Valid() bool {
 	case Same:
 		return true
 	case TypeMismatch:
+		return true
+	case Unverified:
 		return true
 	default:
 		return false
@@ -1425,6 +1446,9 @@ type SFTPChmodSelectionRequest struct {
 	Options          SFTPChmodOptions `json:"options"`
 }
 
+// SFTPComparisonMode defines model for SFTPComparisonMode.
+type SFTPComparisonMode string
+
 // SFTPCreateEntryRequest defines model for SFTPCreateEntryRequest.
 type SFTPCreateEntryRequest struct {
 	Path string                     `json:"path"`
@@ -1442,14 +1466,20 @@ type SFTPCreateSymlinkRequest struct {
 
 // SFTPDirectoryComparison defines model for SFTPDirectoryComparison.
 type SFTPDirectoryComparison struct {
+	BytesRead *int64                    `json:"bytesRead,omitempty"`
 	Entries   []SFTPDirectoryDifference `json:"entries"`
 	LeftPath  string                    `json:"leftPath"`
+	Mode      *SFTPComparisonMode       `json:"mode,omitempty"`
 	RightPath string                    `json:"rightPath"`
+	Truncated *bool                     `json:"truncated,omitempty"`
 }
 
 // SFTPDirectoryDifference defines model for SFTPDirectoryDifference.
 type SFTPDirectoryDifference struct {
-	Left         *SFTPEntry                    `json:"left,omitempty"`
+	Left *SFTPEntry `json:"left,omitempty"`
+
+	// Omission byte_limit or unsupported; the content was not compared
+	Omission     *string                       `json:"omission,omitempty"`
 	RelativePath string                        `json:"relativePath"`
 	Right        *SFTPEntry                    `json:"right,omitempty"`
 	Status       SFTPDirectoryDifferenceStatus `json:"status"`

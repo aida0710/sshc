@@ -34,6 +34,19 @@ async function startOverwriteRead() {
 }
 
 describe("useSFTPTextEditor", () => {
+  it("opens a search match at its line only while its metadata revision still matches", async () => {
+    const file = notesFile("first\nsecond\nmatching\n", "content-revision");
+    const source = { readText: vi.fn(async () => file), saveText: vi.fn() };
+    const onProblem = vi.fn();
+    const { result } = renderHook(() => useSFTPTextEditor({ source, onProblem, onSaved: async () => undefined }));
+    await act(() => result.current.open("edge", file.entry, { line: 3, expectedRevision: file.entry.revision }));
+    expect(result.current.initialLine).toBe(3);
+    expect(result.current.opened).toEqual(file);
+    act(() => result.current.close());
+    await act(() => result.current.open("edge", file.entry, { line: 3, expectedRevision: "old-metadata" }));
+    expect(result.current.opened).toBeNull();
+    expect(onProblem).toHaveBeenLastCalledWith("The file changed after the search. Search again before opening this match.");
+  });
   it("offers to reload or overwrite after the save is refused as a conflict", async () => {
     const source = {
       readText: vi.fn(async () => notesFile("hello\n", "rev-1")),

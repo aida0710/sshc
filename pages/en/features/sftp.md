@@ -86,6 +86,20 @@ The selection is limited to 200 entries. All selected trees share a 20,000-entry
 
 The server must support `lsetstat@openssh.com` version 1 for no-follow attribute changes. Unsupported servers refuse permission changes, including single-entry changes. SFTP cannot atomically compare an entry type and change its permissions, so concurrent changes made by other clients remain a best-effort boundary.
 
+## Search file names or contents
+
+In a remote pane, choose **Name** or **Content**, enter a query and press Enter to search below the current directory. Name search retains its case-insensitive behavior. Content search finds exact, case-sensitive text across files. Each match shows its path, line number and a short snippet; select a match to open that line in the editor. If the file changed after the search, search again.
+
+Content search reads regular UTF-8 files only. Links, binary files and files over 2 MiB are skipped. A search reads up to 64 MiB of file contents in total and stops at 200 matching lines, 20,000 entries or 32 directory levels. Results explain unreadable entries and other omissions. Use **Stop search** to cancel the request. Content search is not available for local tabs.
+
+## Compare contents even when size and modification time match
+
+**Compare** defaults to **Metadata**. Choose **Content (SHA256)** to stream regular files from both sides and compare their SHA256 hashes. Different bytes are detected even when size and modification time match. File content comparison ignores modification time and permissions. Both local-to-remote and remote-to-remote comparisons are supported.
+
+Reading both sides uses network traffic and takes longer than metadata comparison. File-content reads are limited to 256 MiB in total, with the existing 20,000-entry traversal budget. Links are not followed. Over-budget and unsupported files are shown as **Not compared**; these entries prevent the result from confirming a whole-folder match. Closing the dialog or changing modes cancels the current reads.
+
+Changes detected before or after reading end the comparison as a conflict. SFTP servers do not necessarily expose file identities, so a replacement preserving all observable metadata may be undetectable. The operation does not take a simultaneous snapshot of the whole directory.
+
 ## Transfer Manager
 
 The Transfer Manager is docked below the file list. Files and folders share one queue, with two concurrent transfers by default and a configurable limit from one to eight. Its compact state shows the active count, aggregate progress, and speed; expand it for per-file progress, speed, remaining time, and controls. Its action menu can pause, resume or cancel all transfers, and failed files in a batch can be retried independently.

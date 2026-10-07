@@ -43,6 +43,8 @@ func TestHandwrittenHTTPWireTypesMatchOpenAPIRecursively(t *testing.T) {
 		"SFTPListing":                     SFTPListing{},
 		"SFTPTextFile":                    sftpTextFileResponse{},
 		"SFTPSearchResult":                sftpSearchResponse{},
+		"SFTPContentMatch":                sftpContentMatchResponse{},
+		"SFTPSearchOmission":              sftpSearchOmissionResponse{},
 		"SFTPSaveTextRequest":             sftpSaveTextRequest{},
 		"SFTPRenameRequest":               sftpRenameRequest{},
 		"SFTPChmodRequest":                sftpChmodRequest{},
@@ -208,6 +210,7 @@ var wireEnumValues = map[reflect.Type][]string{
 	reflect.TypeOf(sftp.DirectoryDifferenceStatus("")): {
 		string(sftp.DirectorySame), string(sftp.DirectoryDifferent), string(sftp.DirectoryLeftOnly),
 		string(sftp.DirectoryRightOnly), string(sftp.DirectoryTypeMismatch),
+		string(sftp.DirectoryUnverified),
 	},
 	reflect.TypeOf(sftp.TransferKind("")): {
 		string(sftp.TransferFile), string(sftp.TransferFolder),

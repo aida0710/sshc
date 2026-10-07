@@ -127,15 +127,19 @@ type TextFile struct {
 	Revision string
 }
 
-// SearchResult は、あるディレクトリ配下の名前一致である。
+// SearchResult は、あるディレクトリ配下の名前または内容の一致である。
 //
-// Truncated は、予算のどれかに当たって歩き切らずに戻ったことを言う。
+// Truncated は、上限や読み取れない項目のために検索が部分的だったことを示す。
 // 「これで全部だ」と言えないことを、画面がそのまま言えるようにする。
 type SearchResult struct {
 	Path      string
 	Query     string
 	Entries   []Entry
 	Truncated bool
+	Mode      SearchMode
+	Matches   []ContentMatch
+	Omissions []SearchOmission
+	BytesRead int64
 }
 
 // DirectoryStats is a bounded summary of a remote directory tree. Truncated
@@ -157,21 +161,26 @@ const (
 	DirectoryLeftOnly     DirectoryDifferenceStatus = "left_only"
 	DirectoryRightOnly    DirectoryDifferenceStatus = "right_only"
 	DirectoryTypeMismatch DirectoryDifferenceStatus = "type_mismatch"
+	DirectoryUnverified   DirectoryDifferenceStatus = "unverified"
 )
 
-// DirectoryDifference describes one relative path below two independently
-// connected SFTP roots. Entries are pointers because one side may not exist.
+// DirectoryDifference describes one relative path below two comparison roots.
+// Entries are pointers because one side may not exist.
 type DirectoryDifference struct {
 	RelativePath string
 	Status       DirectoryDifferenceStatus
 	Left         *Entry
 	Right        *Entry
+	Omission     string
 }
 
 type DirectoryComparison struct {
 	LeftPath  string
 	RightPath string
 	Entries   []DirectoryDifference
+	Mode      ComparisonMode
+	BytesRead int64
+	Truncated bool
 }
 
 type RemoteTransferOperation string

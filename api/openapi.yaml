@@ -2289,10 +2289,11 @@ paths:
     parameters: *sftpAlias
     get:
       operationId: searchSFTPEntries
-      description: Names matching a query under one remote directory. Symlinks are not followed and the walk is bounded; truncated says so.
+      description: Bounded recursive name search (default) or case-sensitive literal UTF-8 content search over SFTP. Content search skips links, binary and files over 2 MiB; total reads are limited to 64 MiB, 200 matching lines, 20000 entries and depth 32. Omissions explain partial results.
       parameters:
         - { name: path, in: query, required: true, schema: { type: string } }
         - { name: query, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        - { name: mode, in: query, schema: { type: string, enum: [name, content], default: name } }
       responses:
         "200": { description: Matching remote entries, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPSearchResult" } } } }
         "400": { $ref: "#/components/responses/Problem" }
@@ -2321,6 +2322,7 @@ paths:
       operationId: readSFTPText
       parameters:
         - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: expectedRevision, in: query, description: "Optional metadata revision from a content search. Pins the read to that regular file and refuses links or changed metadata.", schema: { type: string } }
       responses:
         "200": { description: Editable UTF-8 file, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTextFile" } } } }
         "401": { $ref: "#/components/responses/Problem" }
@@ -2408,13 +2410,15 @@ paths:
   /api/v1/sftp/compare:
     get:
       operationId: compareSFTPDirectories
+      description: Metadata comparison is the default. Content mode streams SHA256 of regular files from both sides, limited to 256 MiB total; unread files are unverified. Local roots stay pinned and path or handle changes are conflicts. Symlinks are never followed.
       parameters:
         - { name: leftAlias, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 64 } }
         - { name: leftPath, in: query, required: true, schema: { type: string } }
         - { name: rightAlias, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 64 } }
         - { name: rightPath, in: query, required: true, schema: { type: string } }
+        - { name: mode, in: query, schema: { $ref: "#/components/schemas/SFTPComparisonMode" } }
       responses:
-        "200": { description: Metadata comparison of two remote directory trees, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPDirectoryComparison" } } } }
+        "200": { description: Comparison of two local or remote directory trees, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPDirectoryComparison" } } } }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -5679,18 +5683,41 @@ components:
       properties:
         path: { type: string }
         query: { type: string }
-        # true means a budget stopped the walk before it finished.
+        # A traversal budget or skipped contents made the search incomplete.
         truncated: { type: boolean }
         entries: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/SFTPEntry" } }
+        matches: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/SFTPContentMatch" } }
+        omissions: { type: array, maxItems: 10, items: { $ref: "#/components/schemas/SFTPSearchOmission" } }
+        bytesRead: { type: integer, format: int64, minimum: 0, maximum: 67108864 }
+    SFTPContentMatch:
+      type: object
+      additionalProperties: false
+      required: [entry, line, snippet]
+      properties:
+        entry: { $ref: "#/components/schemas/SFTPEntry" }
+        line: { type: integer, minimum: 1 }
+        snippet: { type: string, maxLength: 162 }
+    SFTPSearchOmission:
+      type: object
+      additionalProperties: false
+      required: [reason, count]
+      properties:
+        reason: { type: string, description: "symlink, unsupported, binary, file_size, unreadable, changed, byte_limit, result_limit, entry_limit or depth_limit" }
+        count: { type: integer, minimum: 1 }
     SFTPDirectoryDifference:
       type: object
       additionalProperties: false
       required: [relativePath, status]
       properties:
         relativePath: { type: string }
-        status: { type: string, enum: [same, different, left_only, right_only, type_mismatch] }
+        status: { type: string, enum: [same, different, left_only, right_only, type_mismatch, unverified] }
         left: { $ref: "#/components/schemas/SFTPEntry" }
         right: { $ref: "#/components/schemas/SFTPEntry" }
+        omission: { type: string, description: "byte_limit or unsupported; the content was not compared" }
+    SFTPComparisonMode:
+      type: string
+      enum: [metadata, content]
+      default: metadata
     SFTPDirectoryComparison:
       type: object
       additionalProperties: false
@@ -5699,6 +5726,9 @@ components:
         leftPath: { type: string }
         rightPath: { type: string }
         entries: { type: array, maxItems: 20000, items: { $ref: "#/components/schemas/SFTPDirectoryDifference" } }
+        mode: { $ref: "#/components/schemas/SFTPComparisonMode" }
+        bytesRead: { type: integer, format: int64, minimum: 0, maximum: 268435456 }
+        truncated: { type: boolean }
     SFTPTransferSettingsRequest:
       type: object
       additionalProperties: false

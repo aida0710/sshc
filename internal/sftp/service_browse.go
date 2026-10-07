@@ -7,6 +7,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // Read-only views of a remote tree: listings, stat, bounded search and
@@ -74,9 +75,19 @@ func sortListing(entries []Entry) {
 // Search は、あるディレクトリ配下から名前に query を含む項目を集める。
 //
 // symlink は辿らない。辿れば輪に入りうるし、同じ実体を別の名前で二度返す。
-func (s Service) Search(ctx context.Context, alias, remotePath, query string) (SearchResult, error) {
+func (s Service) Search(ctx context.Context, options SearchOptions) (SearchResult, error) {
+	alias, remotePath, query := options.Alias, options.Path, options.Query
 	needle := strings.ToLower(strings.TrimSpace(query))
 	if needle == "" || len(needle) > MaxSearchQueryBytes {
+		return SearchResult{}, ErrInvalidQuery
+	}
+	if options.Mode == SearchContent {
+		if !utf8.ValidString(query) || strings.ContainsAny(query, "\x00\r\n") || len(query) > MaxSearchQueryBytes {
+			return SearchResult{}, ErrInvalidQuery
+		}
+		return s.searchContents(ctx, options)
+	}
+	if options.Mode != "" && options.Mode != SearchName {
 		return SearchResult{}, ErrInvalidQuery
 	}
 	root, err := cleanPublicPath(remotePath, true)

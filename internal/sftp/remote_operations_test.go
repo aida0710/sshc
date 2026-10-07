@@ -240,7 +240,7 @@ func TestCompareDirectoriesReportsBothSidesAndChangedMetadata(t *testing.T) {
 		}
 		return right, nil
 	}}
-	comparison, err := service.CompareDirectories(context.Background(), "left", "/work", "right", "/copy")
+	comparison, err := service.CompareDirectories(context.Background(), sftp.CompareOptions{Left: sftp.ComparisonLocation{Alias: "left", Path: "/work"}, Right: sftp.ComparisonLocation{Alias: "right", Path: "/copy"}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -4,6 +4,7 @@ import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
 import { saveWithAndroid } from "../android/native";
 import { vpnProblemCodes } from "../vpn/vpnRefusals";
+import type { DirectoryCompareOptions, SearchOptions } from "./contentToolTypes";
 
 export type RemoteEntry = components["schemas"]["SFTPEntry"];
 export type LocalListing = components["schemas"]["SFTPLocalListing"];
@@ -136,10 +137,11 @@ export const sftpApi = {
       actionToken ?? undefined,
     ));
   },
-  async compareDirectories(leftAlias: string, leftPath: string, rightAlias: string, rightPath: string): Promise<DirectoryComparison> {
-    const query = new URLSearchParams({ leftAlias, leftPath, rightAlias, rightPath });
+  async compareDirectories({ left, right, mode = "metadata", signal }: DirectoryCompareOptions): Promise<DirectoryComparison> {
+    const query = new URLSearchParams({ leftAlias: left.alias, leftPath: left.path, rightAlias: right.alias, rightPath: right.path, mode });
     return validateOpenAPISchema<DirectoryComparison>("SFTPDirectoryComparison", await apiClient.read(`/api/v1/sftp/compare?${query.toString()}`, {
-      locallyHandledCodes: [...connectionProblems, "sftp_compare_limit", "sftp_not_found"],
+      ...(signal === undefined ? {} : { signal }),
+      locallyHandledCodes: [...connectionProblems, "sftp_compare_limit", "sftp_not_found", "sftp_conflict", "sftp_unsupported_operation", "sftp_local_privacy_protection"],
     }));
   },
   async clearFinishedTransfers(): Promise<void> {
@@ -169,10 +171,12 @@ export const sftpApi = {
       locallyHandledCodes: connectionProblems,
     }));
   },
-  async search(alias: string, remotePath: string, query: string): Promise<RemoteSearchResult> {
-    const endpoint = `/api/v1/sftp/${encodeURIComponent(alias)}/search?path=${encodeURIComponent(remotePath)}&query=${encodeURIComponent(query)}`;
+  async search({ alias, path, query, mode = "name", signal }: SearchOptions): Promise<RemoteSearchResult> {
+    const parameters = new URLSearchParams({ path, query, mode });
+    const endpoint = `/api/v1/sftp/${encodeURIComponent(alias)}/search?${parameters.toString()}`;
     return validateOpenAPISchema<RemoteSearchResult>("SFTPSearchResult", await apiClient.read(endpoint, {
-      locallyHandledCodes: [...connectionProblems, "sftp_not_found", "invalid_request"],
+      ...(signal === undefined ? {} : { signal }),
+      locallyHandledCodes: [...connectionProblems, "sftp_not_found", "invalid_request", "sftp_unsupported_entry", "sftp_wrong_type"],
     }));
   },
   async directoryStats(alias: string, remotePath: string): Promise<RemoteDirectoryStats> {
@@ -188,8 +192,9 @@ export const sftpApi = {
       blob: await response.blob(),
     };
   },
-  async readText(alias: string, remotePath: string): Promise<RemoteTextFile> {
-    return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await apiClient.read(pathFor(alias, "text", remotePath)));
+  async readText(alias: string, remotePath: string, options?: { expectedRevision: string }): Promise<RemoteTextFile> {
+    const endpoint = pathFor(alias, "text", remotePath) + (options === undefined ? "" : `&expectedRevision=${encodeURIComponent(options.expectedRevision)}`);
+    return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await apiClient.read(endpoint, { locallyHandledCodes: ["sftp_conflict", "sftp_unsupported_entry"] }));
   },
   async saveText(alias: string, remotePath: string, contents: string, expectedRevision: string): Promise<RemoteTextFile> {
     return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await putJSON<unknown>(pathFor(alias, "text", remotePath), { contents, expectedRevision }));
