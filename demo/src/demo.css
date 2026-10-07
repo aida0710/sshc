@@ -68,6 +68,8 @@ tbody td:first-child, tbody td:last-child { white-space: nowrap; }
 .confirm-question { margin: 28px 0 12px; }
 .confirm-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
 .confirm-actions .detail { margin: 0; }
+#framed-notice { margin: 12px 0 0; color: var(--danger); }
+#framed-notice a { color: var(--ink); }
 
 #demo { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 #web-panel, #cli-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }

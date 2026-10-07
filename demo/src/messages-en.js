@@ -24,6 +24,8 @@ export const englishMessages = {
   downloadTotal: (bytes) => `The first start downloads about ${Math.round(bytes / 1_000_000)} MB in total.`,
   confirm: "Start the demo with this setup?",
   start: "Start",
+  framed: "The demo cannot start inside another page.",
+  openInNewTab: "Open in a new tab",
   webTab: "Web UI",
   cliTab: "CLI",
   tabsLabel: "Demo views",
