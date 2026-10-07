@@ -1563,6 +1563,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/local/directories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Creates one child directory on the engine filesystem, without replacing existing entries. */
+        post: operations["createLocalSFTPDirectory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/local/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Renames one engine-local entry within its pinned parent directory. Requires the listing revision and never replaces an existing destination. Symlinks themselves are renamed. */
+        post: operations["renameLocalSFTPEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/local/delete-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Inspects all selected trees without following symlinks, checking revisions, home/root protection, reserved temporary names, transfers, and the shared delete traversal limits. Issues a single-use sftp.delete token bound to the complete plan. Does not delete entries. */
+        post: operations["planLocalSFTPDelete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/local/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Re-inspects the entire selection and consumes the plan token before deleting children then parents. A revision mismatch or traversal-limit refusal removes nothing. Cancellation or filesystem errors after removal begins can leave a partial result; reload before retrying. */
+        post: operations["deleteLocalSFTPEntries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/local/entries": {
         parameters: {
             query?: never;
@@ -3652,6 +3720,34 @@ export interface components {
         SFTPListing: {
             path: string;
             entries: components["schemas"]["SFTPEntry"][];
+        };
+        SFTPLocalMkdirRequest: {
+            directory: string;
+            name: string;
+        };
+        SFTPLocalRenameRequest: {
+            path: string;
+            name: string;
+            expectedRevision: string;
+        };
+        SFTPLocalDeleteEntry: {
+            path: string;
+            expectedRevision: string;
+        };
+        SFTPLocalDeleteSelection: {
+            entries: components["schemas"]["SFTPLocalDeleteEntry"][];
+        };
+        SFTPLocalDeleteRequest: {
+            entries: components["schemas"]["SFTPLocalDeleteEntry"][];
+            expectedRevision: string;
+        };
+        SFTPLocalDeletePlan: {
+            revision: string;
+            /** Format: int64 */
+            items: number;
+            actionToken: string;
+            /** Format: date-time */
+            actionExpiresAt: string;
         };
         SFTPLocalListing: {
             path: string;
@@ -7172,6 +7268,133 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+        };
+    };
+    createLocalSFTPDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPLocalMkdirRequest"];
+            };
+        };
+        responses: {
+            /** @description Engine-local directory created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    renameLocalSFTPEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPLocalRenameRequest"];
+            };
+        };
+        responses: {
+            /** @description Engine-local entry renamed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    planLocalSFTPDelete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPLocalDeleteSelection"];
+            };
+        };
+        responses: {
+            /** @description Inspected engine-local selection and confirmation token */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPLocalDeletePlan"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    deleteLocalSFTPEntries: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPLocalDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Selected engine-local entries deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
         };
     };
     listLocalSFTPEntries: {
