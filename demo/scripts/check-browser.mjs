@@ -28,6 +28,20 @@ try {
   await englishPage.close();
   console.log("PASS: ブラウザの言語で英語を表示し、起動前に日本語へ切り替えられる");
 
+  // Another site must not be able to frame the demo and have a visitor start the VMs.
+  const framingPage = await browser.newPage({ locale: "ja-JP" });
+  await framingPage.route(new URL("config.json", demoURL).href, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...await response.json(), releaseProxyURL: "" } });
+  });
+  await framingPage.setContent(`<iframe src="${demoURL}" width="1200" height="800"></iframe>`);
+  const framedDemo = framingPage.frameLocator("iframe");
+  await framedDemo.locator("#framed-notice").waitFor({ state: "visible" });
+  assert.equal(await framedDemo.locator("#start").isVisible(), false);
+  assert.equal(await framedDemo.getByRole("link", { name: "新しいタブで開く" }).getAttribute("target"), "_blank");
+  await framingPage.close();
+  console.log("PASS: 他のページに埋め込まれた場合は起動ボタンを出さない");
+
   page = await browser.newPage({ viewport: { width: 1440, height: 980 }, locale: "ja-JP" });
   page.setDefaultTimeout(60_000);
   const imageRequests = [];

@@ -10,6 +10,14 @@ import { UICacheControls } from "./ui-cache-controls.js";
 import { consumeReleaseConsent, fetchLatestRelease, openRelease, deleteReleaseCache, shouldOpenRelease } from "./release-loader.js";
 
 applyMessages(document);
+// Another site could frame the demo and trick a visitor into starting the VMs, so it runs only as the top page.
+const isFramed = window.top !== window.self;
+if (isFramed) {
+  document.getElementById("start").hidden = true;
+  const framedNotice = document.getElementById("framed-notice");
+  framedNotice.querySelector("a").href = window.location.href;
+  framedNotice.hidden = false;
+}
 // Switching reloads the confirmation page, so it is offered only before any VM starts.
 const languageSwitch = document.getElementById("language-switch");
 const otherLanguage = Object.keys(languageNames).find((candidate) => candidate !== language);
@@ -124,6 +132,7 @@ window.addEventListener("message", (event) => {
 });
 
 async function startDemo() {
+  if (isFramed) return;
   document.getElementById("start").disabled = true;
   document.getElementById("confirmation").hidden = true;
   document.getElementById("demo").hidden = false;
