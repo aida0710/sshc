@@ -19,13 +19,14 @@ func cleanComparisonPath(alias, value string) (string, error) {
 
 // Hold the selected directory open so that a replaced child cannot redirect
 // traversal outside it. Symlinks below this root are compared without following.
-func readLocalComparisonTree(ctx context.Context, rootPath string) (map[string]Entry, error) {
+func readLocalComparisonTree(ctx context.Context, rootPath string) (entries map[string]Entry, err error) {
+	defer func() { err = labelLocalAccessRefusal(err) }()
 	root, err := os.OpenRoot(filepath.FromSlash(rootPath))
 	if err != nil {
 		return nil, err
 	}
 	defer root.Close()
-	entries := make(map[string]Entry)
+	entries = make(map[string]Entry)
 	pending := []string{"."}
 	for len(pending) > 0 {
 		if err := ctx.Err(); err != nil {
