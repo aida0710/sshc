@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"context"
+	"io/fs"
 	"time"
 )
 
@@ -69,4 +70,31 @@ const (
 // back into a folder through a link.
 func (c *Client) SymlinkForTest(target, link string) error {
 	return c.client.Symlink(target, link)
+}
+
+// Single-entry test helpers exercise the same complete plan as the HTTP API.
+func (s Service) Chmod(ctx context.Context, alias, remotePath string, mode fs.FileMode, expectedRevision string) (Entry, error) {
+	return s.chmodEntry(ctx, ChmodRequest{Alias: alias, Entries: []ChmodEntry{{Path: remotePath, ExpectedRevision: expectedRevision}},
+		Options: ChmodOptions{FileMode: mode, DirectoryMode: mode}})
+}
+
+// ChmodRecursive keeps the single-mode operation while sharing the batch plan.
+func (s Service) ChmodRecursive(ctx context.Context, alias, remotePath string, mode fs.FileMode, expectedRevision string) (Entry, error) {
+	return s.chmodEntry(ctx, ChmodRequest{Alias: alias, Entries: []ChmodEntry{{Path: remotePath, ExpectedRevision: expectedRevision}},
+		Options: ChmodOptions{FileMode: mode, DirectoryMode: mode, Recursive: true}})
+}
+
+func (s Service) chmodEntry(ctx context.Context, request ChmodRequest) (Entry, error) {
+	plan, err := s.PrepareChmod(ctx, request)
+	if err != nil {
+		return Entry{}, err
+	}
+	defer plan.Close()
+	if request.Options.Recursive && plan.Directories == 0 {
+		return Entry{}, ErrNotDirectory
+	}
+	if _, err := plan.Apply(ctx, plan.Revision); err != nil {
+		return Entry{}, err
+	}
+	return plan.Entry(request.Entries[0].Path)
 }

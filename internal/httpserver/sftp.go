@@ -47,6 +47,8 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.DELETE("/api/v1/sftp/:alias/uploads/:id", handlers.CancelUpload)
 	engine.PATCH("/api/v1/sftp/:alias/entry", handlers.Rename)
 	engine.PATCH("/api/v1/sftp/:alias/mode", handlers.Chmod)
+	engine.POST("/api/v1/sftp/:alias/mode-plan", handlers.PlanChmod)
+	engine.PATCH("/api/v1/sftp/:alias/modes", handlers.ChmodSelection)
 	engine.POST("/api/v1/sftp/:alias/symlink", handlers.CreateSymlink)
 	engine.PATCH("/api/v1/sftp/:alias/symlink", handlers.ChangeSymlink)
 	engine.PATCH("/api/v1/sftp/:alias/ownership", handlers.ChangeOwnership)
@@ -71,20 +73,7 @@ func addSFTPActions(registry actionRegistry, service *sshcSFTP.Service) {
 	}
 	registry[session.ActionSFTPChmod] = actionKind{
 		evidence: func(ctx context.Context, target string) (string, error) {
-			alias, remainder, ok := strings.Cut(target, ":")
-			if !ok {
-				return "", sshcSFTP.ErrInvalidPath
-			}
-			remainder = strings.TrimSuffix(remainder, ":recursive")
-			separator := strings.LastIndexByte(remainder, ':')
-			if separator <= 0 || separator == len(remainder)-1 {
-				return "", sshcSFTP.ErrInvalidPath
-			}
-			entry, err := service.Stat(ctx, alias, remainder[:separator])
-			if err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("%s:%s:%s", entry.Type, entry.Revision, entry.Mode.Perm()), nil
+			return service.ChmodActionEvidence(ctx, target)
 		},
 		fail: sftpProblem,
 	}

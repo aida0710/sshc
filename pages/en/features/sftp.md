@@ -22,7 +22,7 @@ Operations on the same host (listing, details, preview, editing, transfers and t
 
 Use the leading `..` row to move to the parent directory. The navigation controls move back or forward through visited directories, return to the server home directory, or open the root directory. The current path is a clickable breadcrumb; use its edit control when you need to type a path directly. You can filter the current list by name.
 
-Select one row, or use the checkboxes to select multiple entries, to reveal download, rename, and the three-dot action menu in the selection toolbar. Choose Delete from this menu. A confirmation modal shows the selected paths before deletion; cancelling leaves the files unchanged. The Delete key opens the same confirmation. On desktop, Shift-click selects a range, Ctrl/Cmd-click adds to the selection, and Ctrl/Cmd+A selects all displayed entries. The action menu can invert the displayed selection or copy selected names or full paths. Permission and rename actions remain available for a single selection. Double-click or press Enter to open a folder or edit a text file in a modal without resizing the list. Closing the editor with unsaved changes asks before discarding them. Creation and uploads are grouped in the `+` menu at the upper left.
+Select one row, or use the checkboxes to select multiple entries, to reveal download, rename, and the three-dot action menu in the selection toolbar. Choose Delete from this menu. A confirmation modal shows the selected paths before deletion; cancelling leaves the files unchanged. The Delete key opens the same confirmation. On desktop, Shift-click selects a range, Ctrl/Cmd-click adds to the selection, and Ctrl/Cmd+A selects all displayed entries. The action menu can invert the displayed selection or copy selected names or full paths. Rename remains available for a single selection. Permissions can also be changed for multiple selected files and folders. Double-click or press Enter to open a folder or edit a text file in a modal without resizing the list. Closing the editor with unsaved changes asks before discarding them. Creation and uploads are grouped in the `+` menu at the upper left.
 
 Local panes support folder creation, rename, and deletion on the machine running the sshc engine. Deletion bypasses the trash and recursively removes selected folders. Selecting a symlink removes only the link. Deletion and rename of the root, home directory, or folders containing them are refused. sshc temporary files and paths used by transfers are also protected. Deletion is refused if the selection changed after confirmation. Local rename is unavailable on Android.
 
@@ -73,6 +73,18 @@ The remote creation menu offers **Create symbolic link**. Enter a name and a rel
 The listing and details show owner UID and group GID when supplied by the server. **Change owner and group** in the details dialog accepts numeric UID/GID values from 0 to 4294967295 for regular files and directories. Account names and recursive ownership changes are not supported. The server must support the no-follow `lsetstat@openssh.com` extension. Missing attributes, unsupported operations, and insufficient permissions are reported. Ownership changes through symbolic links are refused. If the entry changes during confirmation, refresh the listing and reopen the dialog.
 
 Below the remote listing, the available disk space for the authenticated user and total capacity are shown as exact byte counts. A server without capacity reporting support still provides a usable directory listing.
+
+## Change permissions for selected remote entries
+
+Select remote files and folders with their checkboxes, then choose **Change selected permissions** from the selection toolbar's three-dot menu. Enter separate octal modes for files and folders; the defaults are `644` and `755`. **Apply to folder contents recursively** also applies those modes to each matching type below selected folders.
+
+Choose **Review changes** to validate the targets and open a confirmation modal. It shows the selection count, the file and folder target counts including recursive contents, both modes, and the recursive setting. Choose **Apply** to proceed. Cancelling either modal changes no permissions. Single-entry changes and applying one mode recursively to a single folder remain available.
+
+Symbolic links are never followed or changed. A selection containing a link has no permissions action. Links found inside recursive folders are skipped and counted in the confirmation. Local panes do not offer chmod.
+
+The selection is limited to 200 entries. All selected trees share a 20,000-entry budget, with a depth limit of 32. Changes detected before execution refuse the entire selection. Connection or permission failures after execution starts can leave partial changes. The dialog reports the count of confirmed changes; partial changes are not rolled back automatically. Refresh the listing, inspect permissions, and select only the entries that still need changes.
+
+The server must support `lsetstat@openssh.com` version 1 for no-follow attribute changes. Unsupported servers refuse permission changes, including single-entry changes. SFTP cannot atomically compare an entry type and change its permissions, so concurrent changes made by other clients remain a best-effort boundary.
 
 ## Transfer Manager
 

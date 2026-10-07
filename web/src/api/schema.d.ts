@@ -1986,7 +1986,46 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /** @description Applies one mode to a single entry or recursively to a folder using the shared permission plan. Requires lsetstat@openssh.com version 1. Preflight conflicts change nothing; failures after execution starts may leave partial changes. The selection API returns confirmed counts for partial outcomes. */
         patch: operations["chmodSFTPEntry"];
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/mode-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Validates the complete selection and recursive trees without changing permissions. Returns counts and a single-use action token bound to the selection, type-specific modes, recursive option and plan revision. */
+        post: operations["planSFTPChmod"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/modes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Rebuilds and verifies the complete confirmed plan before any mutation. Files and directories use separate modes. Symlinks are never followed or changed. Requires lsetstat@openssh.com version 1. A preflight conflict changes nothing; failures after execution starts may leave partial changes and return 207 with the applied count. */
+        patch: operations["chmodSFTPSelection"];
         trace?: never;
     };
     "/api/v1/sftp/{alias}/symlink": {
@@ -3847,6 +3886,40 @@ export interface components {
             mode: string;
             expectedRevision: string;
             recursive: boolean;
+        };
+        SFTPChmodEntry: {
+            path: string;
+            expectedRevision: string;
+        };
+        SFTPChmodOptions: {
+            fileMode: string;
+            directoryMode: string;
+            recursive: boolean;
+        };
+        SFTPChmodSelection: {
+            entries: components["schemas"]["SFTPChmodEntry"][];
+            options: components["schemas"]["SFTPChmodOptions"];
+        };
+        SFTPChmodSelectionRequest: {
+            entries: components["schemas"]["SFTPChmodEntry"][];
+            options: components["schemas"]["SFTPChmodOptions"];
+            expectedRevision: string;
+        };
+        SFTPChmodPlan: {
+            revision: string;
+            selectionCount: number;
+            files: number;
+            directories: number;
+            skippedSymlinks: number;
+            options: components["schemas"]["SFTPChmodOptions"];
+            actionToken: string;
+            /** Format: date-time */
+            actionExpiresAt: string;
+        };
+        SFTPChmodResult: {
+            applied: number;
+            items: number;
+            complete: boolean;
         };
         SFTPCreateSymlinkRequest: {
             path: string;
@@ -8258,7 +8331,93 @@ export interface operations {
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    planSFTPChmod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPChmodSelection"];
+            };
+        };
+        responses: {
+            /** @description Permission change confirmation plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPChmodPlan"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    chmodSFTPSelection: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPChmodSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description All permissions changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPChmodResult"];
+                };
+            };
+            /** @description Partially applied permissions; inspect and confirm a fresh plan before retrying */
+            207: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPChmodResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
         };
     };
     createSFTPSymlink: {

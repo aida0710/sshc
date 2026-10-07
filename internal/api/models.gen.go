@@ -1380,6 +1380,51 @@ type SFTPChangeSymlinkRequest struct {
 	Target           string `json:"target"`
 }
 
+// SFTPChmodEntry defines model for SFTPChmodEntry.
+type SFTPChmodEntry struct {
+	ExpectedRevision string `json:"expectedRevision"`
+	Path             string `json:"path"`
+}
+
+// SFTPChmodOptions defines model for SFTPChmodOptions.
+type SFTPChmodOptions struct {
+	DirectoryMode string `json:"directoryMode"`
+	FileMode      string `json:"fileMode"`
+	Recursive     bool   `json:"recursive"`
+}
+
+// SFTPChmodPlan defines model for SFTPChmodPlan.
+type SFTPChmodPlan struct {
+	ActionExpiresAt time.Time        `json:"actionExpiresAt"`
+	ActionToken     string           `json:"actionToken"`
+	Directories     int              `json:"directories"`
+	Files           int              `json:"files"`
+	Options         SFTPChmodOptions `json:"options"`
+	Revision        string           `json:"revision"`
+	SelectionCount  int              `json:"selectionCount"`
+	SkippedSymlinks int              `json:"skippedSymlinks"`
+}
+
+// SFTPChmodResult defines model for SFTPChmodResult.
+type SFTPChmodResult struct {
+	Applied  int  `json:"applied"`
+	Complete bool `json:"complete"`
+	Items    int  `json:"items"`
+}
+
+// SFTPChmodSelection defines model for SFTPChmodSelection.
+type SFTPChmodSelection struct {
+	Entries []SFTPChmodEntry `json:"entries"`
+	Options SFTPChmodOptions `json:"options"`
+}
+
+// SFTPChmodSelectionRequest defines model for SFTPChmodSelectionRequest.
+type SFTPChmodSelectionRequest struct {
+	Entries          []SFTPChmodEntry `json:"entries"`
+	ExpectedRevision string           `json:"expectedRevision"`
+	Options          SFTPChmodOptions `json:"options"`
+}
+
 // SFTPCreateEntryRequest defines model for SFTPCreateEntryRequest.
 type SFTPCreateEntryRequest struct {
 	Path string                     `json:"path"`

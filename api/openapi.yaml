@@ -2564,6 +2564,7 @@ paths:
     parameters: *sftpAlias
     patch:
       operationId: chmodSFTPEntry
+      description: Applies one mode to a single entry or recursively to a folder using the shared permission plan. Requires lsetstat@openssh.com version 1. Preflight conflicts change nothing; failures after execution starts may leave partial changes. The selection API returns confirmed counts for partial outcomes.
       parameters:
         - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodRequest" } } } }
@@ -2573,6 +2574,48 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/mode-plan:
+    parameters: *sftpAlias
+    post:
+      operationId: planSFTPChmod
+      description: Validates the complete selection and recursive trees without changing permissions. Returns counts and a single-use action token bound to the selection, type-specific modes, recursive option and plan revision.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodSelection" } } } }
+      responses:
+        "200": { description: Permission change confirmation plan, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodPlan" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/modes:
+    parameters: *sftpAlias
+    patch:
+      operationId: chmodSFTPSelection
+      description: Rebuilds and verifies the complete confirmed plan before any mutation. Files and directories use separate modes. Symlinks are never followed or changed. Requires lsetstat@openssh.com version 1. A preflight conflict changes nothing; failures after execution starts may leave partial changes and return 207 with the applied count.
+      parameters:
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodSelectionRequest" } } } }
+      responses:
+        "200": { description: All permissions changed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodResult" } } } }
+        "207": { description: Partially applied permissions; inspect and confirm a fresh plan before retrying, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodResult" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/symlink:
     parameters: *sftpAlias
     post:
@@ -5473,6 +5516,58 @@ components:
         mode: { type: string, pattern: "^0?[0-7]{3}$" }
         expectedRevision: { type: string, minLength: 1 }
         recursive: { type: boolean }
+    SFTPChmodEntry:
+      type: object
+      additionalProperties: false
+      required: [path, expectedRevision]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPChmodOptions:
+      type: object
+      additionalProperties: false
+      required: [fileMode, directoryMode, recursive]
+      properties:
+        fileMode: { type: string, pattern: "^0?[0-7]{3}$" }
+        directoryMode: { type: string, pattern: "^0?[0-7]{3}$" }
+        recursive: { type: boolean }
+    SFTPChmodSelection:
+      type: object
+      additionalProperties: false
+      required: [entries, options]
+      properties:
+        entries: { type: array, minItems: 1, maxItems: 200, items: { $ref: "#/components/schemas/SFTPChmodEntry" } }
+        options: { $ref: "#/components/schemas/SFTPChmodOptions" }
+    SFTPChmodSelectionRequest:
+      type: object
+      additionalProperties: false
+      required: [entries, options, expectedRevision]
+      properties:
+        entries: { type: array, minItems: 1, maxItems: 200, items: { $ref: "#/components/schemas/SFTPChmodEntry" } }
+        options: { $ref: "#/components/schemas/SFTPChmodOptions" }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPChmodPlan:
+      type: object
+      additionalProperties: false
+      required: [revision, selectionCount, files, directories, skippedSymlinks, options, actionToken, actionExpiresAt]
+      properties:
+        revision: { type: string, minLength: 1 }
+        selectionCount: { type: integer, minimum: 1, maximum: 200 }
+        files: { type: integer, minimum: 0 }
+        directories: { type: integer, minimum: 0 }
+        skippedSymlinks: { type: integer, minimum: 0 }
+        options: { $ref: "#/components/schemas/SFTPChmodOptions" }
+        actionToken: { type: string, minLength: 43, maxLength: 43 }
+        actionExpiresAt: { type: string, format: date-time }
+    SFTPChmodResult:
+      type: object
+      additionalProperties: false
+      required: [applied, items, complete]
+      properties:
+        applied: { type: integer, minimum: 0 }
+        items: { type: integer, minimum: 1 }
+        complete: { type: boolean }
+      x-sshc-less-than-or-equal: [[applied, items]]
     SFTPCreateSymlinkRequest:
       type: object
       additionalProperties: false

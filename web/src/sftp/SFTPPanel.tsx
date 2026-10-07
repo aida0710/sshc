@@ -32,6 +32,8 @@ import { useSFTPTransfers, type SFTPCounterpart } from "./useSFTPTransfers";
 import { useSFTPMetadataActions } from "./useSFTPMetadataActions";
 import { SFTPMetadataActionDialog } from "./SFTPMetadataActionDialog";
 import { SFTPFilesystemSpace } from "./SFTPFilesystemSpace";
+import { useSFTPPermissions } from "./useSFTPPermissions";
+import { SFTPPermissionsDialog } from "./SFTPPermissionsDialog";
 
 const noHosts: HostEntry[] = [];
 
@@ -230,14 +232,15 @@ export function SFTPPanel({
     onInteract: () => setMenu(null),
   });
   const metadataActions = useSFTPMetadataActions(browser, search.refreshAfterChange);
+  const permissions = useSFTPPermissions({ browser, refreshAfterChange: search.refreshAfterChange, offerUndo: actions.offerUndo, onInteract: () => setMenu(null) });
   const transfers = useSFTPTransfers({
     browser,
     selectedEntries,
-    busy: browser.busy || actions.acting || metadataActions.acting || editor.busy,
+    busy: browser.busy || actions.acting || metadataActions.acting || permissions.applying || editor.busy,
     counterpart,
     onQueueOpen,
   });
-  const busy = browser.busy || actions.acting || metadataActions.acting || editor.busy || transfers.queuing;
+  const busy = browser.busy || actions.acting || metadataActions.acting || permissions.applying || editor.busy || transfers.queuing;
   // A terminal link's file, once its directory is listed, waiting for a render in which the pane shows that host and is idle.
   const [linkedEntry, setLinkedEntry] = useState<{ alias: string; action: "edit" | "download"; entry: RemoteEntry } | null>(null);
 
@@ -356,10 +359,13 @@ export function SFTPPanel({
       items.push({ key: "download", label: transferOutLabel, disabled: busy, run: () => { setMenu(null); void transfers.transferOut(selectedEntries); } });
     }
     if (can?.chmod && selectedEntry !== null && (selectedEntry.type === "file" || selectedEntry.type === "directory")) {
-      items.push({ key: "chmod", label: t("sftp.chmod"), disabled: busy, run: () => actions.ask({ kind: "chmod", entry: selectedEntry, recursive: false }) });
+      items.push({ key: "chmod", label: t("sftp.chmod"), disabled: busy, run: () => permissions.ask([selectedEntry]) });
     }
     if (can?.chmod && selectedEntry !== null && selectedEntry.type === "directory") {
-      items.push({ key: "chmodRecursive", label: t("sftp.chmodRecursive"), disabled: busy, run: () => actions.ask({ kind: "chmod", entry: selectedEntry, recursive: true }) });
+      items.push({ key: "chmodRecursive", label: t("sftp.chmodRecursive"), disabled: busy, run: () => permissions.ask([selectedEntry], true) });
+    }
+    if (can?.chmod && selectedEntries.length > 1 && selectedEntries.every((entry) => entry.type === "file" || entry.type === "directory")) {
+      items.push({ key: "chmodBatch", label: t("sftp.chmodBatch"), disabled: busy, run: () => permissions.ask(selectedEntries) });
     }
     if (can?.rename && selectedEntry !== null) {
       items.push({ key: "rename", label: t("sftp.rename"), disabled: busy, run: actions.renameSelection });
@@ -730,6 +736,7 @@ export function SFTPPanel({
       )}
 
       <SFTPMetadataActionDialog actions={metadataActions} returnFocusRef={activeRow} />
+      <SFTPPermissionsDialog permissions={permissions} returnFocusRef={activeRow} />
       <SFTPEntryActionDialogs actions={actions} currentPath={path} returnFocusRef={activeRow} />
     </section>
   );

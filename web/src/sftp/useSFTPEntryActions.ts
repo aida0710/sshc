@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { localMutationProblemText, sftpProblemText } from "./sftpProblemText";
@@ -8,7 +7,6 @@ import { sftpApi, type RemoteEntry } from "./api";
 import { parentRowKey, type SFTPEntryListModel } from "./useSFTPEntryList";
 import { remoteJoin as join, remoteParentOf as parentOf, type SFTPSource } from "./sftpSource";
 import { sftpTransferManager } from "./transferManager";
-import { symbolicModeToOctal } from "./transfers";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 
 type SFTPInputIntent =
@@ -16,11 +14,10 @@ type SFTPInputIntent =
   | { kind: "createFile" }
   | { kind: "duplicate"; entry: RemoteEntry }
   | { kind: "moveTo"; entries: RemoteEntry[] }
-  | { kind: "rename"; entry: RemoteEntry }
-  | { kind: "chmod"; entry: RemoteEntry; recursive: boolean };
+  | { kind: "rename"; entry: RemoteEntry };
 
 // Everything that changes entries on a host: creating, renaming, moving,
-// copying, changing modes and deleting, with the state of the dialogs that ask
+// copying and deleting, with the state of the dialogs that ask
 // for a name or a confirmation (drawn by SFTPEntryActionDialogs), and the
 // one-step undo for the changes that have one.
 // Delete has no undo on purpose: SFTP has no trash, so offering one would be
@@ -138,32 +135,6 @@ export function useSFTPEntryActions({
     } catch (error) {
       if (!isCurrent()) return;
       report(error);
-    } finally {
-      setActing(false);
-    }
-  }
-
-  async function chmod(entry: RemoteEntry, mode: string, recursive: boolean) {
-    if (entry.type === "symlink" || entry.type === "other") return;
-    const isCurrent = generation.observe();
-    const targetAlias = alias;
-    const targetPath = path;
-    const previous = symbolicModeToOctal(entry.mode);
-    setActing(true);
-    try {
-      await sftpApi.chmod({ alias: targetAlias, remotePath: entry.path, mode, expectedRevision: entry.revision, recursive });
-      if (!isCurrent()) return;
-      const reloaded = await browser.load(targetPath, { alias: targetAlias, refresh: true });
-      const now = reloaded?.find((candidate) => candidate.path === entry.path);
-      if (!recursive && now !== undefined && previous !== mode) {
-        offerUndo(t("sftp.permissionsChanged", { mode }), async () => {
-          await sftpApi.chmod({ alias: targetAlias, remotePath: entry.path, mode: previous, expectedRevision: now.revision, recursive: false });
-          await browser.load(targetPath, { alias: targetAlias, refresh: true });
-        });
-      }
-    } catch (error) {
-      if (!isCurrent()) return;
-      setProblem(failureCode(error) === "sftp_conflict" ? t("sftp.conflict") : sftpProblemText(t, error));
     } finally {
       setActing(false);
     }
@@ -288,6 +259,7 @@ export function useSFTPEntryActions({
     acting,
     undo,
     dismissUndo: () => setUndo(null),
+    offerUndo,
     inputIntent,
     deleting,
     deletingLocal: deleteIntent?.source.local ?? false,
@@ -309,7 +281,6 @@ export function useSFTPEntryActions({
       else if (intent.kind === "rename") void rename(intent.entry, value);
       else if (intent.kind === "duplicate") void queueRemoteOperation([intent.entry], "copy", () => join(parentOf(intent.entry.path), value));
       else if (intent.kind === "moveTo") void queueRemoteOperation(intent.entries, "move", (entry) => join(value, entry.name));
-      else void chmod(intent.entry, value, intent.recursive);
     },
     remove,
   };
