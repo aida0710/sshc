@@ -1,9 +1,24 @@
 import { connectVirtualLAN } from "./vm-network.js";
 import { VMBridge } from "./vm-bridge.js";
-import { machineDefinitions, loadImageBaseURL } from "./config.js";
+import { machineDefinitions, loadDemoConfiguration } from "./config.js";
 import { applyMessages, messages } from "./messages.js";
+import { StartupProgress } from "./startup-progress.js";
+import { StartupProgressView } from "./startup-progress-view.js";
+import { prepareUIArchive } from "./ui-archive.js";
+import { UICacheControls } from "./ui-cache-controls.js";
 
 applyMessages(document);
+const updatedAt = document.getElementById("updated-at");
+updatedAt.textContent = messages.updatedAt(updatedAt.dateTime);
+const uiBaseURL = new URL("./ui/", window.location.href);
+const uiCacheControls = new UICacheControls({ button: document.getElementById("clear-ui-cache"),
+  error: document.getElementById("cache-error"), baseURL: uiBaseURL,
+  reload: async () => {
+    const configuration = await loadDemoConfiguration();
+    window.location.assign(configuration.entryURL);
+  },
+});
+uiCacheControls.refresh();
 for (const definition of machineDefinitions) {
   const row = document.createElement("tr");
   for (const label of [definition.label, messages[definition.purpose], `${definition.memoryMiB} MiB`]) {
@@ -17,8 +32,9 @@ document.getElementById("memory-detail").textContent = messages.memoryDetail(
   machineDefinitions.reduce((sum, definition) => sum + definition.memoryMiB, 0));
 const status = document.getElementById("status");
 const frame = document.getElementById("sshc-ui");
+const startupProgress = new StartupProgress(machineDefinitions);
+const startupView = new StartupProgressView(document.getElementById("startup"), machineDefinitions);
 let bridge;
-let bootedCount = 0;
 const terminal = new window.Terminal({
   cols: 100, rows: 28, fontSize: 14, cursorBlink: true,
   theme: { background: "#0c1015", foreground: "#e5e9f0" },
@@ -45,10 +61,31 @@ document.getElementById("web-tab").addEventListener("click", () => selectTab("we
 document.getElementById("cli-tab").addEventListener("click", () => selectTab("cli"));
 document.getElementById("reset").addEventListener("click", () => window.location.reload());
 
+function renderStartupProgress() {
+  const snapshot = startupProgress.snapshot;
+  startupView.render(snapshot);
+  if (snapshot.phase === "ready") {
+    status.textContent = messages.ready;
+    frame.hidden = false;
+  } else if (snapshot.phase === "failed") {
+    status.textContent = messages.failed;
+    status.setAttribute("role", "alert");
+  } else {
+    status.textContent = snapshot.phase === "boot" ? messages.bootProgress(snapshot.bootedCount)
+      : messages.startupPhases[snapshot.phase];
+  }
+}
+
 // Only this demo's iframe can ask the VM bridge to access the guest loopback engine.
 window.addEventListener("message", (event) => {
   if (event.origin !== window.location.origin || event.source !== frame.contentWindow) return;
   if (event.data?.channel !== "sshc-demo") return;
+  if (event.data.startup) {
+    if (event.data.startup === "ui-ready") startupProgress.markUIReady();
+    else if (event.data.startup === "ui-failed") startupProgress.fail();
+    renderStartupProgress();
+    return;
+  }
   bridge?.send(event.data.request);
 });
 
@@ -57,13 +94,25 @@ document.getElementById("start").addEventListener("click", async () => {
   document.getElementById("confirmation").hidden = true;
   document.getElementById("demo").hidden = false;
   document.getElementById("reset").hidden = false;
-  status.textContent = messages.loading;
+  startupView.start();
+  renderStartupProgress();
 
   let imageBaseURL;
   try {
-    imageBaseURL = await loadImageBaseURL();
+    const configuration = await loadDemoConfiguration();
+    imageBaseURL = configuration.imageBaseURL;
+    startupProgress.configureDownloads(configuration.assetSizes, configuration.uiArchive);
+    renderStartupProgress();
+    await prepareUIArchive({ archive: configuration.uiArchive, baseURL: uiBaseURL,
+      onProgress: (progress) => {
+        startupProgress.updateUIArchive(progress);
+        renderStartupProgress();
+      },
+    });
+    await uiCacheControls.refresh();
   } catch {
-    status.textContent = messages.failed;
+    startupProgress.fail();
+    renderStartupProgress();
     return;
   }
 
@@ -93,17 +142,31 @@ document.getElementById("start").addEventListener("click", async () => {
     machine.add_listener("serial0-output-byte", (byte) => {
       if (index === 0) terminal.write(Uint8Array.of(byte));
       if (byte === 10) {
-        if (bootLine.includes("SSHC_DEMO_BOOTED:")) {
-          bootedCount++;
-          status.textContent = messages.bootProgress(bootedCount);
+        if (bootLine.trim() === `SSHC_DEMO_BOOTED:${machineDefinitions[index].role}`) {
+          startupProgress.markMachineBooted(machineDefinitions[index].role);
+          renderStartupProgress();
         }
         bootLine = "";
       } else {
         bootLine += String.fromCharCode(byte);
       }
     });
-    machine.add_listener("emulator-ready", () => machine.run());
-    machine.add_listener("download-error", () => { status.textContent = messages.failed; });
+    const role = machineDefinitions[index].role;
+    machine.add_listener("download-progress", (event) => {
+      startupProgress.updateDownload(role, event);
+      renderStartupProgress();
+    });
+    machine.add_listener("emulator-ready", () => {
+      if (startupProgress.snapshot.phase === "failed") return;
+      startupProgress.markMachineStarted(role);
+      renderStartupProgress();
+      machine.run();
+    });
+    machine.add_listener("download-error", () => {
+      startupProgress.fail(role);
+      renderStartupProgress();
+      for (const pendingMachine of machines) pendingMachine.stop();
+    });
   });
   terminal.onData((input) => {
     for (const byte of new TextEncoder().encode(input)) machines[0].bus.send("serial0-input", byte);
@@ -111,9 +174,9 @@ document.getElementById("start").addEventListener("click", async () => {
   bridge = new VMBridge(machines[0]);
   bridge.subscribe((reply) => {
     if (reply.kind === "ready") {
-      status.textContent = messages.ready;
+      startupProgress.markEngineReady();
       frame.src = `./ui/index.html#${reply.bootstrap}`;
-      frame.hidden = false;
+      renderStartupProgress();
       return;
     }
     frame.contentWindow?.postMessage({ channel: "sshc-demo", reply }, window.location.origin);

@@ -16,20 +16,34 @@ try {
   page.setDefaultTimeout(60_000);
   const imageRequests = [];
   const browserErrors = [];
+  const archiveRequests = [];
+  const uiResponses = [];
   page.on("request", (request) => {
     if (/\.(?:bin|cpio\.gz|wasm)(?:\?|$)/.test(request.url())) imageRequests.push(request.url());
+    if (request.url().endsWith("/ui.tar.gz")) archiveRequests.push(request.url());
+  });
+  page.on("response", (response) => {
+    if (new URL(response.url()).pathname.includes("/ui/")) {
+      uiResponses.push({ status: response.status(), fromCacheWorker: response.fromServiceWorker() });
+    }
   });
   // Avoid printing URLs or session tokens when a runtime error occurs.
   page.on("pageerror", (error) => browserErrors.push(error.name));
   await page.goto(demoURL);
   await page.getByRole("button", { name: "起動する", exact: true }).waitFor();
+  assert.match(await page.locator("#updated-at").innerText(), /\d{4}\/\d{2}\/\d{2}.*JST/);
+  assert.ok(Number.isFinite(await page.locator("#updated-at").evaluate((time) => Date.parse(time.dateTime))));
   assert.equal(await page.evaluate(() => Boolean(window.sshcDemo)), false);
   assert.equal(imageRequests.length, 0, "VM assets must wait for consent");
+  assert.equal(archiveRequests.length, 0, "UI archive must wait for consent");
+  await page.locator("#clear-ui-cache").waitFor({ state: "hidden" });
   await page.screenshot({ path: resolve(artifactDirectory, "confirmation.png") });
   console.log("PASS: 起動を選ぶまでVMイメージを取得しない");
 
   const startedAt = Date.now();
   await page.getByRole("button", { name: "起動する", exact: true }).click();
+  await page.locator("#startup").waitFor({ state: "visible" });
+  assert.equal(await page.locator(".startup-machines li").count(), 3);
   await page.waitForFunction(() => window.sshcDemo?.machines.length === 3);
   await page.evaluate(() => {
     window.demoVerificationCLI = "";
@@ -39,7 +53,12 @@ try {
     });
   });
   const ui = page.frameLocator("#sshc-ui");
+  await page.locator('.startup-machines li[data-state="booting"]').first().waitFor();
+  await page.screenshot({ path: resolve(artifactDirectory, "startup-progress.png") });
   await ui.getByRole("button", { name: /demo-a/ }).first().waitFor({ timeout: 150_000 });
+  await page.locator("#startup").waitFor({ state: "hidden" });
+  assert.equal(await page.locator("#startup-download").evaluate((bar) => bar.value), 100);
+  assert.equal(await page.locator('.startup-machines li[data-state="ready"]').count(), 3);
   console.log(`PASS: VM3台とWeb UI起動（${Math.round((Date.now() - startedAt) / 1000)}秒）`);
 
   await page.getByRole("button", { name: "CLI", exact: true }).click();
@@ -108,11 +127,33 @@ try {
   assert.equal(saved.contents, contents);
   await page.screenshot({ path: resolve(artifactDirectory, "sftp-editor.png") });
   console.log("PASS: SFTPで一覧・編集・日本語の保存と再読み込み");
+  assert.equal(archiveRequests.length, 1);
+  await page.locator("#clear-ui-cache").waitFor({ state: "visible" });
+  assert.ok(uiResponses.length > 10);
+  assert.ok(uiResponses.every((response) => response.status === 200 && response.fromCacheWorker));
+  console.log("PASS: UIはtar.gzを1回取得し、画面・エディタ・フォントをブラウザ内から読む");
   assert.deepEqual(browserErrors, []);
   await page.getByRole("button", { name: "最初からやり直す" }).click();
   await page.getByRole("button", { name: "起動する", exact: true }).waitFor();
   assert.equal(await page.evaluate(() => Boolean(window.sshcDemo)), false);
   console.log("PASS: リセットするとVMを破棄し、起動前の確認に戻る");
+  await page.route("**/ui.tar.gz", (route) => route.abort());
+  await page.evaluate(async () => {
+    const { prepareUIArchive } = await import("./ui-archive.js");
+    const configuration = await (await fetch("./config.json")).json();
+    await prepareUIArchive({ archive: configuration.uiArchive, baseURL: new URL("./ui/", location.href),
+      onProgress: () => {}, });
+  });
+  assert.equal(archiveRequests.length, 1);
+  assert.equal(await page.evaluate(() => Boolean(window.sshcDemo)), false);
+  console.log("PASS: 次回は展開済みUIを再利用し、アーカイブを取り直さない");
+  const cacheName = await page.evaluate(() => `sshc-demo-ui:${new URL('./ui/', location.href).href}`);
+  await page.getByRole("button", { name: "キャッシュを削除して再読み込み", exact: true }).click();
+  await page.getByRole("button", { name: "起動する", exact: true }).waitFor();
+  await page.locator("#clear-ui-cache").waitFor({ state: "hidden" });
+  assert.equal(await page.evaluate((name) => caches.has(name), cacheName), false);
+  assert.equal(await page.evaluate(() => Boolean(window.sshcDemo)), false);
+  console.log("PASS: UIキャッシュを削除して公開版の入口へ戻り、VMは起動前の状態になる");
 } catch (error) {
   await page?.screenshot({ path: resolve(artifactDirectory, "failure.png") });
   console.log("Failure UI:", await page?.frameLocator("#sshc-ui").locator("body").innerText().catch(() => "unavailable"));
