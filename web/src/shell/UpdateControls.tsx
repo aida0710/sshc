@@ -68,9 +68,6 @@ export function UpdateControls({ status, api, onStart }: UpdateControlsProps) {
           ) : null}
         </div>
       )}
-      {status.reason === undefined || status.reason === "" || status.reason === job?.problem || isUpdateActive(job) ? null : (
-        <p className="mt-2">{t(updateMessage(status.reason))}</p>
-      )}
       {status.canUpdate !== true || isUpdateActive(job) ? null : (
         <button
           ref={buttonRef}

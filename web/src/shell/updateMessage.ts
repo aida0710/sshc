@@ -1,5 +1,6 @@
-import type { UpdateJob } from "../api/update";
+import type { UpdateJob, UpdateStatus } from "../api/update";
 import type { MessageKey } from "../i18n/messages/en";
+import { isUpdateActive } from "./useUpdateStatus";
 
 const updateMessages: Readonly<Record<string, MessageKey>> = {
   update_unmanaged: "update.unmanaged",
@@ -21,6 +22,13 @@ const updateMessages: Readonly<Record<string, MessageKey>> = {
 
 export function updateMessage(code: string): MessageKey {
   return updateMessages[code] ?? "update.unavailable";
+}
+
+// The reason explains why this installation cannot update from the Web. A job that is
+// running or has failed reports its own outcome, so the reason would only repeat it.
+export function explainedUpdateReason({ reason, job }: UpdateStatus): string | undefined {
+  if (reason === undefined || reason === "" || reason === job?.problem || isUpdateActive(job)) return undefined;
+  return reason;
 }
 
 export function updateJobMessage(job: UpdateJob): MessageKey {
