@@ -15,7 +15,7 @@ require (
 	github.com/pkg/sftp v1.13.11
 	go.bug.st/serial v1.8.0
 	golang.org/x/crypto v0.56.0
-	golang.org/x/mod v0.39.0
+	golang.org/x/mod v0.40.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 	golang.org/x/text v0.41.0
