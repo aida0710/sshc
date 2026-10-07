@@ -41,7 +41,7 @@ func sftpProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusForbidden, "sftp_permission_denied")
 	case errors.Is(err, sshcSFTP.ErrTransferNotFound):
 		return problem(c, http.StatusNotFound, "sftp_transfer_not_found")
-	case errors.Is(err, sshcSFTP.ErrInvalidAlias), errors.Is(err, sshcSFTP.ErrInvalidPath), errors.Is(err, sshcSFTP.ErrRootOperation), errors.Is(err, sshcSFTP.ErrRevisionRequired), errors.Is(err, sshcSFTP.ErrInvalidTransfer), errors.Is(err, sshcSFTP.ErrInvalidQuery):
+	case errors.Is(err, fs.ErrInvalid), errors.Is(err, sshcSFTP.ErrInvalidAlias), errors.Is(err, sshcSFTP.ErrInvalidPath), errors.Is(err, sshcSFTP.ErrRootOperation), errors.Is(err, sshcSFTP.ErrRevisionRequired), errors.Is(err, sshcSFTP.ErrInvalidTransfer), errors.Is(err, sshcSFTP.ErrInvalidQuery):
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	case errors.Is(err, sshcSFTP.ErrConflict), errors.Is(err, sshcSFTP.ErrOffsetMismatch), errors.Is(err, sshcSFTP.ErrUploadIncomplete):
 		return problem(c, http.StatusConflict, "sftp_conflict")

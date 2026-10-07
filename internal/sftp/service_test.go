@@ -329,6 +329,19 @@ func (r *fakeRemote) Chmod(candidate string, mode fs.FileMode) error {
 	return nil
 }
 
+func (r *fakeRemote) CheckChmodNoFollow() error { return nil }
+
+func (r *fakeRemote) ChmodNoFollow(candidate string, mode fs.FileMode) error {
+	info, err := r.Lstat(candidate)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		return sftp.ErrConflict
+	}
+	return r.Chmod(candidate, mode)
+}
+
 func (r *fakeRemote) Replace(from, to string) error {
 	r.replacements = append(r.replacements, [2]string{from, to})
 	if r.replaceHook != nil {

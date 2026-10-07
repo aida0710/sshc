@@ -106,10 +106,10 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | full pathをcopy | 対応 | 単一／複数を改行区切りでcopy | 維持 |
 | file URL生成 | 未対応 | なし | `sftp://`とsshc内deep linkを分けて設計 |
 | properties表示 | 対応 | 詳細modalでpath、type、size、mtime、権限、revisionを表示。directoryは上限付き走査で配下の容量と件数も計算。複数選択では件数と合計size | link targetは未表示 |
-| chmod | 対応 | 単一file／directoryに加え、directory配下への再帰適用に対応。symlinkは対象外 | 複数選択へ拡張 |
+| chmod | 対応 | リモートの単一・再帰・複数選択に対応。複数選択はfile／directory別mode、全対象プランと確認modalで保護。symlinkは対象外。lsetstat拡張バージョン1が必要 | ローカルchmodは対象外 |
 | chown／chgrp | 未対応 | owner/group属性なし | capability確認付きで追加 |
 | timestamp変更 | 未対応 | なし | SFTP Setstat対応後 |
-| propertiesの複数／再帰適用 | 部分 | directoryの再帰chmodに対応 | 複数選択への一括適用は未対応 |
+| propertiesの複数／再帰適用 | 部分 | 権限はリモートの複数選択・再帰に対応。事前競合は全件未変更、実行中の失敗は部分適用を表示 | 権限以外の一括適用は未対応 |
 | lock／unlock | 未対応 | protocol lock操作なし | server capability依存として判断 |
 | directory size計算 | 対応 | 最大20,000項目・深さ32でsymlinkを辿らず集計し、打ち切り時は部分値と明示 | 維持 |
 | custom file command | 部分 | SnippetsとTerminalはあるが選択pathを渡せない | file path変数を安全にquoteして接続 |

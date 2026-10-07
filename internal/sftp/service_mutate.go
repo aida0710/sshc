@@ -12,7 +12,7 @@ import (
 	"path"
 )
 
-// Changes to the remote tree: create, chmod, rename, delete, and the
+// Changes to the remote tree: create, rename, delete, and the
 // temporary-file replace that keeps a half-written file from being seen.
 
 func (s Service) Mkdir(ctx context.Context, alias, remotePath string) (Entry, error) {
@@ -73,86 +73,6 @@ func (s Service) CreateEmptyFile(ctx context.Context, alias, remotePath string) 
 		return Entry{}, ErrNotRegularFile
 	}
 	return entryFrom(path.Dir(cleaned), namedInfo{FileInfo: info, name: path.Base(cleaned)}), nil
-}
-
-func (s Service) Chmod(ctx context.Context, alias, remotePath string, mode fs.FileMode, expectedRevision string) (Entry, error) {
-	return s.chmod(ctx, alias, remotePath, mode, expectedRevision, false)
-}
-
-// ChmodRecursive applies one permission mode to a directory and every regular
-// file and directory below it. The complete, bounded tree is inspected before
-// the first mutation and symlinks are never followed or changed.
-func (s Service) ChmodRecursive(ctx context.Context, alias, remotePath string, mode fs.FileMode, expectedRevision string) (Entry, error) {
-	return s.chmod(ctx, alias, remotePath, mode, expectedRevision, true)
-}
-
-// chmodTarget は chmod する項目と、走査で見たときの metadata revision。変える直前に
-// 同じ revision かを確かめ、走査のあとに置き換わった項目を変えない。
-type chmodTarget struct {
-	path     string
-	revision string
-}
-
-func (s Service) chmod(ctx context.Context, alias, remotePath string, mode fs.FileMode, expectedRevision string, recursive bool) (Entry, error) {
-	if expectedRevision == "" {
-		return Entry{}, ErrRevisionRequired
-	}
-	cleaned, err := cleanPublicPath(remotePath, false)
-	if err != nil {
-		return Entry{}, err
-	}
-	remote, err := s.openRequest(ctx, alias)
-	if err != nil {
-		return Entry{}, err
-	}
-	defer remote.Close()
-	info, err := remote.Lstat(cleaned)
-	if err != nil {
-		return Entry{}, err
-	}
-	if info.Mode()&fs.ModeSymlink != 0 || (!info.Mode().IsRegular() && !info.IsDir()) {
-		return Entry{}, ErrNotRegularFile
-	}
-	if metadataRevision(info) != expectedRevision {
-		return Entry{}, ErrConflict
-	}
-	targets := []chmodTarget{{path: cleaned, revision: metadataRevision(info)}}
-	if recursive {
-		if !info.IsDir() {
-			return Entry{}, ErrNotDirectory
-		}
-		// 読めないディレクトリがあれば失敗にする。飛ばすと、利用者が頼んだ木の一部だけが変わる。
-		err = walkBoundedTree(ctx, remote, boundedTreeWalk{
-			root: cleaned,
-			visit: func(directory string, child fs.FileInfo) error {
-				if child.Mode()&fs.ModeSymlink != 0 || (!child.Mode().IsRegular() && !child.IsDir()) {
-					return nil
-				}
-				targets = append(targets, chmodTarget{path: path.Join(directory, child.Name()), revision: metadataRevision(child)})
-				return nil
-			},
-		})
-		if err != nil {
-			return Entry{}, err
-		}
-	}
-	for index := len(targets) - 1; index >= 0; index-- {
-		current, err := remote.Lstat(targets[index].path)
-		if err != nil {
-			return Entry{}, err
-		}
-		if metadataRevision(current) != targets[index].revision {
-			return Entry{}, ErrConflict
-		}
-		if err := remote.Chmod(targets[index].path, mode.Perm()); err != nil {
-			return Entry{}, err
-		}
-	}
-	updated, err := remote.Lstat(cleaned)
-	if err != nil {
-		return Entry{}, err
-	}
-	return entryFrom(path.Dir(cleaned), namedInfo{FileInfo: updated, name: path.Base(cleaned)}), nil
 }
 
 // Rename は既存の移動先を上書きしない。置換は Upload と SaveText だけが明示的に扱う。

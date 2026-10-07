@@ -13,6 +13,8 @@ import (
 // 読めないディレクトリの扱いは、呼び出し側が決める。
 type boundedTreeWalk struct {
 	root string
+	// Mutation plans recheck directory metadata before a later breadth-first read.
+	verifyDirectory func(directory string) error
 	// visit は root の配下の項目を浅い段から順に受け取る。内部名は渡さない。
 	// errStopWalk を返すと、走査は失敗せずにそこで終わる。
 	visit func(directory string, child fs.FileInfo) error
@@ -60,6 +62,11 @@ type boundedTreeWalker struct {
 func (w *boundedTreeWalker) visitDirectory(ctx context.Context, directory string) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if w.walk.verifyDirectory != nil {
+		if err := w.walk.verifyDirectory(directory); err != nil {
+			return nil, err
+		}
 	}
 	children, err := readChildren(ctx, w.remote, directory)
 	if err != nil {

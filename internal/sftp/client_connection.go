@@ -38,11 +38,14 @@ func NewSSHClient(connection *ssh.Client, options ...pkgsftp.ClientOption) (*Cli
 }
 
 func newClientPipe(reader io.Reader, writer io.WriteCloser, options ...pkgsftp.ClientOption) (*Client, error) {
-	client, err := pkgsftp.NewClientPipe(&attributeReader{source: reader}, &noFollowOwnershipWriter{destination: writer}, options...)
+	attributes := &noFollowAttributesWriter{destination: writer}
+	client, err := pkgsftp.NewClientPipe(&attributeReader{source: reader}, attributes, options...)
 	if err != nil {
 		return nil, err
 	}
 	remote := NewClient(client)
-	remote.noFollowOwnership = true
+	remote.noFollowAttributes = true
+	version, supported := client.HasExtension(noFollowSetstatExtension)
+	attributes.permissions = supported && version == "1"
 	return remote, nil
 }

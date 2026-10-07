@@ -1,5 +1,4 @@
 import type { MessageKey } from "../i18n/messages";
-import { symbolicModeToOctal } from "./transfers";
 import type { SFTPEntryActionsModel } from "./useSFTPEntryActions";
 
 type EntryInputIntent = NonNullable<SFTPEntryActionsModel["inputIntent"]>;
@@ -30,12 +29,5 @@ export function entryInputDialogText(intent: EntryInputIntent, currentPath: stri
       };
     case "moveTo":
       return { heading: "sftp.moveTo", label: "sftp.moveToPrompt", submit: "sftp.move", initialValue: currentPath };
-    case "chmod":
-      return {
-        heading: intent.recursive ? "sftp.chmodRecursive" : "sftp.chmod",
-        label: "sftp.chmodPrompt",
-        submit: "sftp.chmod",
-        initialValue: symbolicModeToOctal(intent.entry.mode),
-      };
   }
 }
