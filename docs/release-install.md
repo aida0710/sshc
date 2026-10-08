@@ -13,8 +13,8 @@ Homebrewのformulaはソースからビルドするため、GoもHomebrewによ�
 ## インストールスクリプト（macOS / Linux）
 
 ```sh
-SSHC_VERSION=v0.44.2 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.44.2/install.sh | sh'
+SSHC_VERSION=v0.44.3 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.44.3/install.sh | sh'
 ```
 
 URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`上のスクリプトは次の変更で内容が変わるため、パイプで直接実行しません。新しいバージョンへ更新するときは、[GitHub Releases](https://github.com/aida0710/sshc/releases)でタグを確認して両方を置き換えます。
@@ -38,7 +38,7 @@ URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`
 
 `SSHC_VERSION`を指定しない場合は、タグを固定せずにReleaseワークフローの署名を確かめます。通常は`~/.local/bin`にインストールし、rootで実行した場合は`/usr/local/bin`を使用します。
 
-手動でダウンロードしたCLIやAPKは、GitHub CLIで次のように検証できます。`<downloaded-file>`にはCLIまたはAPKの実ファイルを、`<tag>`には導入するタグ（例: `v0.44.2`）を指定します。
+手動でダウンロードしたCLIやAPKは、GitHub CLIで次のように検証できます。`<downloaded-file>`にはCLIまたはAPKの実ファイルを、`<tag>`には導入するタグ（例: `v0.44.3`）を指定します。
 
 ```sh
 gh attestation verify <downloaded-file> --repo aida0710/sshc \
@@ -62,7 +62,7 @@ gh api repos/aida0710/sshc/compare/<tag>...main --jq .status
 
 `sshc update`は、receiptのSHA-256が現在の実行ファイルと一致するときだけ、公開済みのタグに固定した`install.sh`で更新します。receiptを書かない古いインストーラー、手動コピー、`make install`で入れたもの、変更したバイナリは、推測で置き換えません。SHA-256が一致しない場合、`sshc update`と`sshc service install`はエラーで終了します。`install.sh`で入れ直すか、実行ファイルを自分で置き換えた場合はreceiptを削除してください。古いインストーラーから移行する場合は、上のタグを固定した手順を一度手動で実行してください。
 
-`SSHC_VERSION`でプレリリース（`v0.44.2-rc.1`のように`-`を含むタグ）を指定した場合、receiptは保存せず、同じ配置先にある前のreceiptも削除します。このため、プレリリースは`sshc update`と`sshc service install`の対象外です。対象に戻すには、安定バージョンのタグを指定して`install.sh`を実行し直してください。
+`SSHC_VERSION`でプレリリース（`v0.44.3-rc.1`のように`-`を含むタグ）を指定した場合、receiptは保存せず、同じ配置先にある前のreceiptも削除します。このため、プレリリースは`sshc update`と`sshc service install`の対象外です。対象に戻すには、安定バージョンのタグを指定して`install.sh`を実行し直してください。
 
 ## 自動判定による更新
 
@@ -103,8 +103,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/a
 再現可能な導入では、スクリプトと成果物を同じタグへ固定します。
 
 ```powershell
-$env:SSHC_VERSION = 'v0.44.2'
-irm https://github.com/aida0710/sshc/releases/download/v0.44.2/install.ps1 | iex
+$env:SSHC_VERSION = 'v0.44.3'
+irm https://github.com/aida0710/sshc/releases/download/v0.44.3/install.ps1 | iex
 ```
 
 手動で配置する場合は、[GitHub Releases](https://github.com/aida0710/sshc/releases)からx64では`sshc-windows-amd64.exe`、Arm64では`sshc-windows-arm64.exe`を取得し、`checksums.txt`と照合してから`sshc.exe`へ名前を変更します。
