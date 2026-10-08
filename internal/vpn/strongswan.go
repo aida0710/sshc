@@ -27,6 +27,30 @@ type strongSwanDocument struct {
 	Documents map[string]string `json:"documents"`
 }
 
+// strongSwanDaemonConfiguration は、charon が読む strongswan.conf を作る。イメージの
+// 既定の設定を読み込み、charon の節に charonSettings（1段下げた行）を足して、ログを
+// runtime の logFile へ書かせる。
+//
+// charon の既定のログの書き先は syslog で、コンテナの中には受け取る相手がいない。
+// agent は失敗の理由と、失敗したときに見せるログを、このファイルから読む。
+func strongSwanDaemonConfiguration(logFile string, charonSettings []string) string {
+	lines := append([]string{"include /etc/strongswan.conf", "charon {"}, charonSettings...)
+	lines = append(lines,
+		"    filelog {",
+		"        sshc {",
+		"            path = "+agentRuntimeDirectory+"/"+logFile,
+		"            default = 1",
+		"            time_format = %H:%M:%S",
+		// 書きためられると、止めたときに失われ、agent も途中で読めない。
+		"            flush_line = yes",
+		"        }",
+		"    }",
+		"}",
+		"",
+	)
+	return strings.Join(lines, "\n")
+}
+
 // validateProposals は、IKE と ESP の暗号スイートを確かめる。どちらも任意で、
 // 設定ファイルへそのまま書くので、空白・引用符・backslash を含むものは断る。
 //
