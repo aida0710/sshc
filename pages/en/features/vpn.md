@@ -56,7 +56,7 @@ When editing, the VPN screen opens with the stored secrets in their fields, and 
 
 A value that cannot be accepted is reported with the field and the reason (missing, wrongly written, over a limit and so on), both on the screen and by `sshc vpn add`.
 
-For L2TP/IPsec, set IKE and ESP proposals only when an older device rejects the defaults.
+For L2TP/IPsec, set IKE and ESP proposals only when an older device rejects the defaults. The defaults include the combinations common on L2TP/IPsec devices: AES with SHA-256 or SHA-1, and for IKE the MODP 3072, 2048, and 1024-bit DH groups.
 
 For OpenConnect, choose the product the VPN server runs; leave Cisco AnyConnect if unsure.
 

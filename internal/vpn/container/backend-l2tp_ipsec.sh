@@ -24,8 +24,10 @@ l2tp_fail() {
 
 establish_ipsec() {
 	# 応えない相手には締め切りまで IKE を送り直すので、止める合図を受けられるよう背後で
-	# 待つ（wait_for_step）。
-	timeout "$(timeout_seconds)" ipsec up "$connection" >>"$runtime/ipsec.log" 2>&1 &
+	# 待つ（wait_for_step）。ipsec up の出力は使わない。charon のログの写しで、charon が
+	# 同じ行を ipsec.log へ書いている。ファイルへ書かせると書きためられ、締め切りで止めた
+	# ときに失われる。
+	timeout "$(timeout_seconds)" ipsec up "$connection" >/dev/null 2>&1 &
 	if ! wait_for_step $!; then
 		l2tp_fail ipsec_negotiation "IPsecのネゴシエーションに失敗しました。事前共有鍵、サーバー、暗号スイートを確認してください。"
 	fi
@@ -66,22 +68,35 @@ backend_read() {
 
 backend_up() {
 	resolve_server_address "$runtime/ipsec.conf" "$runtime/xl2tpd.conf"
-	ln -sf "$runtime/ipsec.conf" /etc/ipsec.conf
-	ln -sf "$runtime/ipsec.secrets" /etc/ipsec.secrets
 
 	# IPsec のポリシーが無いまま L2TP を出さない。SA が切れた瞬間に、
 	# 中身が平文で出ていくことを防ぐ。
 	iptables -A OUTPUT -p udp --dport 1701 -m policy --dir out --pol ipsec -j ACCEPT
 	iptables -A OUTPUT -p udp --dport 1701 -j REJECT
 
+	start_ipsec
+	start_l2tp
+	l2tp_diagnostics
+}
+
+# start_ipsec は、strongSwan を起動し、L2TP を運ぶ transport mode の SA を確立する。
+start_ipsec() {
+	ln -sf "$runtime/ipsec.conf" /etc/ipsec.conf
+	ln -sf "$runtime/ipsec.secrets" /etc/ipsec.secrets
+
 	echo "IPsecの接続を開始します。"
-	ipsec start --nofork >"$runtime/ipsec.log" 2>&1 &
+	# charon は engine が書いた strongswan.conf に従い、自分のログを ipsec.log へ足して
+	# いく。starter の出力も同じファイルへ足す。
+	STRONGSWAN_CONF="$runtime/strongswan.conf" ipsec start --nofork >>"$runtime/ipsec.log" 2>&1 &
 	if ! wait_for_file /run/charon.ctl; then
 		l2tp_fail unknown "IPsecサービスの起動に失敗しました。"
 	fi
 	establish_ipsec
 	echo "IPsecの接続が完了しました。"
+}
 
+# start_l2tp は、IPsec の中で L2TP を接続し、PPP の認証を通ってアドレスが付くまで待つ。
+start_l2tp() {
 	echo "L2TPの接続とPPPの認証を開始します。"
 	xl2tpd -D -c "$runtime/xl2tpd.conf" -p "$runtime/xl2tpd.pid" \
 		-C "$runtime/l2tp-control" >"$runtime/xl2tpd.log" 2>&1 &
@@ -94,7 +109,6 @@ backend_up() {
 	fi
 	wait_for_ppp_address
 	echo "PPPのIPアドレスを取得しました。"
-	l2tp_diagnostics
 }
 
 # PPP にアドレスが付いたことが、相手の認証を通ったことを示している。
