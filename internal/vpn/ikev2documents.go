@@ -50,9 +50,7 @@ func ikev2Documents(settings IKEv2Settings, secrets IKEv2Secrets) (map[string]st
 // ikev2DaemonConfiguration は、charon が読む strongswan.conf を作る。イメージの
 // 既定の設定を読み込み、この経路に要る違いだけを上書きする。
 func ikev2DaemonConfiguration() string {
-	return strings.Join([]string{
-		"include /etc/strongswan.conf",
-		"charon {",
+	return strongSwanDaemonConfiguration("charon.log", []string{
 		// 経路は agent が接続先ごとに作る。サーバーが配るトラフィックセレクターを
 		// 経路表へ入れさせると、コンテナのほかの通信までトンネルへ向かう。
 		"    install_routes = no",
@@ -70,18 +68,7 @@ func ikev2DaemonConfiguration() string {
 		"            load = no",
 		"        }",
 		"    }",
-		"    filelog {",
-		"        sshc {",
-		"            path = " + agentRuntimeDirectory + "/charon.log",
-		"            default = 1",
-		"            time_format = %H:%M:%S",
-		// agent は失敗の理由をこのログから読む。書きためられると読めない。
-		"            flush_line = yes",
-		"        }",
-		"    }",
-		"}",
-		"",
-	}, "\n")
+	})
 }
 
 // ikev2SwanctlConfiguration は、swanctl が読む接続と秘密を作る。authorities は、
