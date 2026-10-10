@@ -437,7 +437,8 @@ describe("SFTP tabs", () => {
       const local = screen.getByRole("region", { name: "Local files" });
       await waitFor(() => expect(within(local).getByRole("button", { name: /notes.txt/ })).toBeVisible());
       expect(within(local).getByRole("navigation", { name: "Local folder path" })).toHaveTextContent("~");
-      await userEvent.click(within(local).getByRole("button", { name: "Copy full path" }));
+      await userEvent.click(within(local).getByRole("button", { name: "Folder actions" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "Copy full path" }));
       expect(clipboard.writeText).toHaveBeenLastCalledWith("/home/edge");
       fireEvent.click(within(local).getByRole("navigation", { name: "Local folder path" }));
       const directPath = within(local).getByRole("textbox", { name: "Engine filesystem path" });
@@ -535,7 +536,8 @@ describe("SFTP tabs", () => {
       path: "/home/edge", home: "/home/edge",
       entries: [{ name: "notes.txt", path: "/home/edge/notes.txt", type: "file", size: 5, mode: "-rw-------", modifiedAt: "2026-09-17T08:00:00Z", revision: "notes" }],
     });
-    render(<SFTPWorkspace aliases={["edge"]} onOpenTerminal={vi.fn()} />);
+    const onOpenTerminal = vi.fn();
+    render(<SFTPWorkspace aliases={["edge"]} onOpenTerminal={onOpenTerminal} />);
     await chooseHost("edge");
     const remote = screen.getByRole("region", { name: "Remote files" });
     expect(within(remote).getByRole("button", { name: "Create or upload" })).toBeInTheDocument();
@@ -551,7 +553,8 @@ describe("SFTP tabs", () => {
     expect(within(local).getByRole("searchbox", { name: "Filter entries" })).toBeInTheDocument();
     expect(within(local).getByRole("button", { name: "Create or upload" })).toBeInTheDocument();
     expect(within(local).queryByRole("button", { name: "Search everything under this directory" })).not.toBeInTheDocument();
-    expect(within(local).queryByRole("button", { name: "Open Terminal here" })).not.toBeInTheDocument();
+    await userEvent.click(within(local).getByRole("button", { name: "Open Terminal here" }));
+    expect(onOpenTerminal).toHaveBeenCalledWith(localHostAlias, "/home/edge");
     fireEvent.contextMenu(within(local).getByRole("button", { name: "notes.txt" }));
     const contextMenu = await within(local).findByRole("menu", { name: "Actions for notes.txt" });
     const items = within(contextMenu).getAllByRole("menuitem").map((item) => item.textContent);
