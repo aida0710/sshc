@@ -682,7 +682,7 @@
   },
   {
     "name": "Go",
-    "version": "go1.26.6",
+    "version": "go1.26.9",
     "category": "Runtime",
     "url": "https://go.dev",
     "license": "BSD-3-Clause",
