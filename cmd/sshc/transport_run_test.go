@@ -388,29 +388,26 @@ func TestRequireOutputRejectsSilentReadFor(t *testing.T) {
 }
 
 func TestRequireOutputAcceptsReadForResponse(t *testing.T) {
+	// 応答の有無を確認するテストなので、CIで最初のReadを開始する時間を確保する。
+	const responseReadInterval = 100 * time.Millisecond
+	const response = "ready"
 	called, err := parseInvocation([]string{
 		"sshc", "serial", "/dev/ttyUSB0", "--non-interactive",
-		"--require-output", "--read-for", "20ms", "--json", "--", "show", "clock",
+		"--require-output", "--read-for", responseReadInterval.String(), "--json", "--", "show", "clock",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	reader, writer := io.Pipe()
 	t.Cleanup(func() { _ = writer.Close() })
-	stream := &fakeDuplex{reader: reader, close: reader.Close}
+	// read-forは受信期間より前のEOFを失敗扱いにするため、応答後は
+	// ストリームの終了まで読み取りを待たせる。
+	stream := &fakeDuplex{reader: io.MultiReader(strings.NewReader(response), reader), close: reader.Close}
 	dependencies := transportDependencies{
 		openSerial: func(context.Context, serialtransport.Config) (duplexStream, error) { return stream, nil },
 	}
-	written := make(chan error, 1)
-	go func() {
-		_, err := writer.Write([]byte("ready"))
-		written <- err
-	}()
 	var stdout, stderr bytes.Buffer
 	code := runTransportAutomation(context.Background(), *called.Transport, nil, strings.NewReader(""), &stdout, &stderr, dependencies)
-	if err := <-written; err != nil {
-		t.Fatal(err)
-	}
 	var report struct {
 		Success       bool `json:"success"`
 		BytesReceived int  `json:"bytesReceived"`
@@ -418,7 +415,7 @@ func TestRequireOutputAcceptsReadForResponse(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if code != 0 || stderr.Len() != 0 || !report.Success || report.BytesReceived != len("ready") {
+	if code != 0 || stderr.Len() != 0 || !report.Success || report.BytesReceived != len(response) {
 		t.Fatalf("code = %d, stderr = %q, report = %#v", code, stderr.String(), report)
 	}
 }
