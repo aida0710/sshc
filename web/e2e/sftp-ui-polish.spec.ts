@@ -136,6 +136,19 @@ async function expectFileRowInsideList(pane: Locator, name: string): Promise<voi
   }).toBe(true);
 }
 
+async function expectSelectedLocation(page: Page, location: { alias: string; path: string }): Promise<void> {
+  const host = location.alias === "sshc://local" ? "Local" : location.alias;
+  // Selection replaces the compact toolbar; the active tab still identifies
+  // its folder, and its persisted location must survive the tab switch.
+  await expect(page.getByRole("tab", { selected: true })).toHaveAttribute("title", `${host}:${location.path}`);
+  await expect.poll(() => page.evaluate(({ alias, path }) => {
+    const panes = JSON.parse(localStorage.getItem("sshc.sftp.panes.v1") ?? "[]") as Array<{
+      tabs: Array<{ alias: string; path: string }>;
+    }>;
+    return panes.some((pane) => pane.tabs.some((tab) => tab.alias === alias && tab.path === path));
+  }, location)).toBe(true);
+}
+
 async function captureCompactFiles(page: Page, name: string): Promise<void> {
   const directory = process.env.SSHC_VISUAL_DIR;
   if (directory === undefined) return;
@@ -166,20 +179,21 @@ test("adds a compact file tab and preserves both directories and selections with
   await expectCompactControls(page);
   await firstTab.click();
   const pane = page.getByRole("tabpanel");
-  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", firstPath);
+  await expectSelectedLocation(page, { alias: "sshc://local", path: firstPath });
   await expect(page.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "sshc://local");
   await expect(pane.getByRole("checkbox", { name: "Select notes.txt", exact: true })).toBeChecked();
   await secondTab.click();
-  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", secondPath);
+  await expectSelectedLocation(page, { alias: "sshc://local", path: secondPath });
   await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
   await expectCompactControls(page);
   await expectFileRowInsideList(pane, "report.txt");
   await captureCompactFiles(page, "compact-sftp-local-tabs-390x640-en");
   await page.setViewportSize({ width: 844, height: 390 });
   await expectCompactControls(page);
-  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", secondPath);
+  await expectSelectedLocation(page, { alias: "sshc://local", path: secondPath });
   await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
   await expectFileRowInsideList(pane, "report.txt");
+  await captureCompactFiles(page, "compact-sftp-local-tabs-844x390-en");
 });
 
 test("restores two compact sources in one tab strip and preserves the host, path and selection", async ({ page, installation }) => {
@@ -220,13 +234,13 @@ test("restores two compact sources in one tab strip and preserves the host, path
   await pane.getByRole("checkbox", { name: "Select report.txt", exact: true }).check();
   await expectCompactControls(page);
   await localTab.click();
-  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/home/engine");
+  await expectSelectedLocation(page, { alias: "sshc://local", path: "/home/engine" });
   await expect(page.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "sshc://local");
   await expect(pane.getByRole("checkbox", { name: "Select notes.txt", exact: true })).toBeChecked();
   await remoteTab.click();
   await expect(page.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "bastion");
   await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
-  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
+  await expectSelectedLocation(page, { alias: "bastion", path: "/srv" });
   expect(remoteReads).toBe(1);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("sshc.sftp.panes.v1") ?? "[]"))).toHaveLength(2);
   await expectCompactControls(page);
@@ -234,7 +248,8 @@ test("restores two compact sources in one tab strip and preserves the host, path
   await captureCompactFiles(page, "compact-sftp-restored-tabs-390x640-en");
   await page.setViewportSize({ width: 844, height: 390 });
   await expectCompactControls(page);
-  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
+  await expectSelectedLocation(page, { alias: "bastion", path: "/srv" });
   await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
   await expectFileRowInsideList(pane, "report.txt");
+  await captureCompactFiles(page, "compact-sftp-restored-tabs-844x390-en");
 });
