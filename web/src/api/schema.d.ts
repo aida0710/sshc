@@ -903,9 +903,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Reports the latest release, installation boundary and durable update job. Result checks are available while the vault is locked after restart. */
         get: operations["checkForUpdate"];
         put?: never;
-        post?: never;
+        /** @description Consumes the preview's single-use X-SSHC-Action token, bound to the release and inspected installation. Flushes the accepted response before starting installation and restart. Terminals and transfers disconnect. */
+        post: operations["startSelfUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/update/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Checks Homebrew ownership or the install.sh receipt, permissions and latest stable release. This never runs an installer. Confirmation expires after two minutes. */
+        post: operations["previewSelfUpdate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1544,6 +1563,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/local/directories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Creates one child directory on the engine filesystem, without replacing existing entries. */
+        post: operations["createLocalSFTPDirectory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/local/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Renames one engine-local entry within its pinned parent directory. Requires the listing revision and never replaces an existing destination. Symlinks themselves are renamed. */
+        post: operations["renameLocalSFTPEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/local/delete-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Inspects all selected trees without following symlinks, checking revisions, home/root protection, reserved temporary names, transfers, and the shared delete traversal limits. Issues a single-use sftp.delete token bound to the complete plan. Does not delete entries. */
+        post: operations["planLocalSFTPDelete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/local/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Re-inspects the entire selection and consumes the plan token before deleting children then parents. A revision mismatch or traversal-limit refusal removes nothing. Cancellation or filesystem errors after removal begins can leave a partial result; reload before retrying. */
+        post: operations["deleteLocalSFTPEntries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/local/entries": {
         parameters: {
             query?: never;
@@ -1607,7 +1694,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description Names matching a query under one remote directory. Symlinks are not followed and the walk is bounded; truncated says so. */
+        /** @description Bounded recursive name search (default) or case-sensitive literal UTF-8 content search over SFTP. Content search skips links, binary and files over 2 MiB; total reads are limited to 64 MiB, 200 matching lines, 20000 entries and depth 32. Omissions explain partial results. */
         get: operations["searchSFTPEntries"];
         put?: never;
         post?: never;
@@ -1712,6 +1799,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Metadata comparison is the default. Content mode streams SHA256 of regular files from both sides, limited to 256 MiB total; unread files are unverified. Local roots stay pinned and path or handle changes are conflicts. Symlinks are never followed. */
         get: operations["compareSFTPDirectories"];
         put?: never;
         post?: never;
@@ -1899,7 +1987,104 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /** @description Applies one mode to a single entry or recursively to a folder using the shared permission plan. Requires lsetstat@openssh.com version 1. Preflight conflicts change nothing; failures after execution starts may leave partial changes. The selection API returns confirmed counts for partial outcomes. */
         patch: operations["chmodSFTPEntry"];
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/mode-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Validates the complete selection and recursive trees without changing permissions. Returns counts and a single-use action token bound to the selection, type-specific modes, recursive option and plan revision. */
+        post: operations["planSFTPChmod"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/modes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Rebuilds and verifies the complete confirmed plan before any mutation. Files and directories use separate modes. Symlinks are never followed or changed. Requires lsetstat@openssh.com version 1. A preflight conflict changes nothing; failures after execution starts may leave partial changes and return 207 with the applied count. */
+        patch: operations["chmodSFTPSelection"];
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/symlink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Creates a relative or absolute symbolic link, including dangling targets, without overwrite. Requires a single-use confirmation and the shared transfer path lock. */
+        post: operations["createSFTPSymlink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Atomically replaces only the symbolic link in its directory. Requires its revision, a single-use confirmation and server atomic rename support. Never writes to the referenced target. */
+        patch: operations["changeSFTPSymlink"];
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/ownership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Changes numeric SFTP UID/GID for one regular file or directory. Requires metadata containing the entry type and owner IDs, its revision, a single-use confirmation and the shared transfer path lock. Symlinks are refused. */
+        patch: operations["changeSFTPOwnership"];
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/space": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        /** @description Uses statvfs@openssh.com available blocks for the authenticated account. Byte counts are exact decimal strings. Unsupported servers return sftp_unsupported_operation independently of directory listing. */
+        get: operations["getSFTPFilesystemSpace"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/workspaces": {
@@ -2154,6 +2339,32 @@ export interface components {
             latest?: string;
             available: boolean;
             pageUrl?: string;
+            /** @enum {string} */
+            manager?: "homebrew" | "install.sh";
+            canUpdate?: boolean;
+            /** @description Stable reason code explaining why automatic updates are unavailable */
+            reason?: string;
+            job?: components["schemas"]["UpdateJob"];
+        };
+        UpdateRequest: {
+            target: string;
+        };
+        UpdatePreview: {
+            current: string;
+            target: string;
+            /** @enum {string} */
+            manager: "homebrew" | "install.sh";
+            actionToken: string;
+            actionExpiresAt: string;
+        };
+        UpdateJob: {
+            id: string;
+            target: string;
+            /** @description Stable version reported by the installed executable. */
+            installedVersion?: string;
+            /** @enum {string} */
+            state: "accepted" | "installing" | "restarting" | "succeeded" | "failed" | "restart_required";
+            problem: string;
         };
         ChangeMasterPasswordRequest: {
             current: string;
@@ -3350,6 +3561,10 @@ export interface components {
             largeFileParallelism?: number;
             /** Format: int64 */
             largeFileChunkBytes?: number;
+            /** Format: int64 */
+            speedLimitBytesPerSecond?: number;
+            autoReconnect?: boolean;
+            maxReconnectAttempts?: number;
         };
         EmbeddedTerminal: {
             maxSessions?: number;
@@ -3602,6 +3817,10 @@ export interface components {
             /** Format: date-time */
             modifiedAt: string;
             revision: string;
+            /** Format: int64 */
+            uid?: number;
+            /** Format: int64 */
+            gid?: number;
             linkTarget?: string;
             /** @enum {string} */
             targetType?: "file" | "directory" | "other";
@@ -3609,6 +3828,34 @@ export interface components {
         SFTPListing: {
             path: string;
             entries: components["schemas"]["SFTPEntry"][];
+        };
+        SFTPLocalMkdirRequest: {
+            directory: string;
+            name: string;
+        };
+        SFTPLocalRenameRequest: {
+            path: string;
+            name: string;
+            expectedRevision: string;
+        };
+        SFTPLocalDeleteEntry: {
+            path: string;
+            expectedRevision: string;
+        };
+        SFTPLocalDeleteSelection: {
+            entries: components["schemas"]["SFTPLocalDeleteEntry"][];
+        };
+        SFTPLocalDeleteRequest: {
+            entries: components["schemas"]["SFTPLocalDeleteEntry"][];
+            expectedRevision: string;
+        };
+        SFTPLocalDeletePlan: {
+            revision: string;
+            /** Format: int64 */
+            items: number;
+            actionToken: string;
+            /** Format: date-time */
+            actionExpiresAt: string;
         };
         SFTPLocalListing: {
             path: string;
@@ -3647,6 +3894,64 @@ export interface components {
             expectedRevision: string;
             recursive: boolean;
         };
+        SFTPChmodEntry: {
+            path: string;
+            expectedRevision: string;
+        };
+        SFTPChmodOptions: {
+            fileMode: string;
+            directoryMode: string;
+            recursive: boolean;
+        };
+        SFTPChmodSelection: {
+            entries: components["schemas"]["SFTPChmodEntry"][];
+            options: components["schemas"]["SFTPChmodOptions"];
+        };
+        SFTPChmodSelectionRequest: {
+            entries: components["schemas"]["SFTPChmodEntry"][];
+            options: components["schemas"]["SFTPChmodOptions"];
+            expectedRevision: string;
+        };
+        SFTPChmodPlan: {
+            revision: string;
+            selectionCount: number;
+            files: number;
+            directories: number;
+            skippedSymlinks: number;
+            options: components["schemas"]["SFTPChmodOptions"];
+            actionToken: string;
+            /** Format: date-time */
+            actionExpiresAt: string;
+        };
+        SFTPChmodResult: {
+            applied: number;
+            items: number;
+            complete: boolean;
+        };
+        SFTPCreateSymlinkRequest: {
+            path: string;
+            target: string;
+        };
+        SFTPChangeSymlinkRequest: {
+            path: string;
+            target: string;
+            expectedRevision: string;
+        };
+        SFTPOwnershipRequest: {
+            path: string;
+            /** Format: int64 */
+            uid: number;
+            /** Format: int64 */
+            gid: number;
+            expectedRevision: string;
+        };
+        SFTPFilesystemSpace: {
+            path: string;
+            /** @description Bytes available to the authenticated account as an exact uint64 decimal string. */
+            availableBytes: string;
+            /** @description Total filesystem bytes as an exact uint64 decimal string. */
+            totalBytes: string;
+        };
         SFTPTransfer: {
             path: string;
             /** Format: int64 */
@@ -3679,9 +3984,12 @@ export interface components {
             /** Format: int64 */
             remainingSeconds: number;
             /** @enum {string} */
-            status: "queued" | "running" | "paused" | "reattach" | "needs_overwrite" | "completed" | "failed" | "cancelled";
+            status: "queued" | "running" | "reconnecting" | "paused" | "reattach" | "needs_overwrite" | "completed" | "failed" | "cancelled";
             allowedActions: ("pause" | "resume" | "retry" | "cancel" | "remove")[];
             attempt: number;
+            reconnectAttempt: number;
+            /** @description Next reconnect time, or empty while not waiting. */
+            reconnectAt: string;
             problem: string;
             /** Format: int64 */
             lastModified: number;
@@ -3711,6 +4019,10 @@ export interface components {
             largeFileParallelism: number;
             /** Format: int64 */
             largeFileChunkBytes: number;
+            /** Format: int64 */
+            speedLimitBytesPerSecond: number;
+            autoReconnect: boolean;
+            maxReconnectAttempts: number;
             jobs: components["schemas"]["SFTPTransferJob"][];
         };
         SFTPSearchResult: {
@@ -3718,18 +4030,43 @@ export interface components {
             query: string;
             truncated: boolean;
             entries: components["schemas"]["SFTPEntry"][];
+            matches?: components["schemas"]["SFTPContentMatch"][];
+            omissions?: components["schemas"]["SFTPSearchOmission"][];
+            /** Format: int64 */
+            bytesRead?: number;
+        };
+        SFTPContentMatch: {
+            entry: components["schemas"]["SFTPEntry"];
+            line: number;
+            snippet: string;
+        };
+        SFTPSearchOmission: {
+            /** @description symlink, unsupported, binary, file_size, unreadable, changed, byte_limit, result_limit, entry_limit or depth_limit */
+            reason: string;
+            count: number;
         };
         SFTPDirectoryDifference: {
             relativePath: string;
             /** @enum {string} */
-            status: "same" | "different" | "left_only" | "right_only" | "type_mismatch";
+            status: "same" | "different" | "left_only" | "right_only" | "type_mismatch" | "unverified";
             left?: components["schemas"]["SFTPEntry"];
             right?: components["schemas"]["SFTPEntry"];
+            /** @description byte_limit or unsupported; the content was not compared */
+            omission?: string;
         };
+        /**
+         * @default metadata
+         * @enum {string}
+         */
+        SFTPComparisonMode: "metadata" | "content";
         SFTPDirectoryComparison: {
             leftPath: string;
             rightPath: string;
             entries: components["schemas"]["SFTPDirectoryDifference"][];
+            mode?: components["schemas"]["SFTPComparisonMode"];
+            /** Format: int64 */
+            bytesRead?: number;
+            truncated?: boolean;
         };
         SFTPTransferSettingsRequest: {
             maxConcurrent: number;
@@ -3740,6 +4077,10 @@ export interface components {
             largeFileParallelism: number;
             /** Format: int64 */
             largeFileChunkBytes: number;
+            /** Format: int64 */
+            speedLimitBytesPerSecond: number;
+            autoReconnect: boolean;
+            maxReconnectAttempts: number;
         };
         SFTPTransferQueueMoveRequest: {
             /** @enum {string} */
@@ -3775,7 +4116,7 @@ export interface components {
         };
         SFTPTransferJobActionRequest: {
             /** @enum {string} */
-            action: "start" | "pause" | "resume" | "retry" | "cancel" | "progress" | "complete" | "fail" | "needs_overwrite";
+            action: "start" | "reconnect" | "pause" | "resume" | "retry" | "cancel" | "progress" | "complete" | "fail" | "needs_overwrite";
             /** Format: int64 */
             transferredBytes?: number;
             /** Format: int64 */
@@ -5690,7 +6031,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description What is installed and what is published */
+            /** @description Current release and update state */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5702,6 +6043,69 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    startSelfUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description A single durable update job was reserved */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateJob"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    previewSelfUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Exact update plan and one-time confirmation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdatePreview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
         };
     };
@@ -7068,6 +7472,133 @@ export interface operations {
             409: components["responses"]["Problem"];
         };
     };
+    createLocalSFTPDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPLocalMkdirRequest"];
+            };
+        };
+        responses: {
+            /** @description Engine-local directory created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    renameLocalSFTPEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPLocalRenameRequest"];
+            };
+        };
+        responses: {
+            /** @description Engine-local entry renamed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    planLocalSFTPDelete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPLocalDeleteSelection"];
+            };
+        };
+        responses: {
+            /** @description Inspected engine-local selection and confirmation token */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPLocalDeletePlan"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    deleteLocalSFTPEntries: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPLocalDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Selected engine-local entries deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
     listLocalSFTPEntries: {
         parameters: {
             query?: {
@@ -7193,6 +7724,7 @@ export interface operations {
             query: {
                 path: string;
                 query: string;
+                mode?: "name" | "content";
             };
             header?: never;
             path: {
@@ -7253,6 +7785,8 @@ export interface operations {
         parameters: {
             query: {
                 path: string;
+                /** @description Optional metadata revision from a content search. Pins the read to that regular file and refuses links or changed metadata. */
+                expectedRevision?: string;
             };
             header?: never;
             path: {
@@ -7459,6 +7993,7 @@ export interface operations {
                 leftPath: string;
                 rightAlias: string;
                 rightPath: string;
+                mode?: components["schemas"]["SFTPComparisonMode"];
             };
             header?: never;
             path?: never;
@@ -7466,7 +8001,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Metadata comparison of two remote directory trees */
+            /** @description Comparison of two local or remote directory trees */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7843,7 +8378,231 @@ export interface operations {
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    planSFTPChmod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPChmodSelection"];
+            };
+        };
+        responses: {
+            /** @description Permission change confirmation plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPChmodPlan"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    chmodSFTPSelection: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPChmodSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description All permissions changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPChmodResult"];
+                };
+            };
+            /** @description Partially applied permissions; inspect and confirm a fresh plan before retrying */
+            207: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPChmodResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    createSFTPSymlink: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPCreateSymlinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Entry changed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    changeSFTPSymlink: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPChangeSymlinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Entry changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    changeSFTPOwnership: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPOwnershipRequest"];
+            };
+        };
+        responses: {
+            /** @description Entry changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPEntry"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    getSFTPFilesystemSpace: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Filesystem capacity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPFilesystemSpace"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            501: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
         };
     };
     listTerminalWorkspaces: {

@@ -130,7 +130,8 @@ func checkLocal(root *os.Root, relative string, allowMissing bool) (fs.FileInfo,
 // follows every link on the way, as opening a remote one does. A link inside
 // it is listed as a symlink with what it points to, so the pane refuses to
 // hand it to a transfer, which never follows links.
-func ListLocal(value string) (LocalListing, error) {
+func ListLocal(value string) (_ LocalListing, err error) {
+	defer func() { err = labelLocalAccessRefusal(err) }()
 	cleaned, err := cleanLocalPath(value)
 	if err != nil {
 		return LocalListing{}, err
@@ -149,7 +150,9 @@ func ListLocal(value string) (LocalListing, error) {
 	}
 	entries := make([]Entry, 0, len(children))
 	for _, child := range children {
-		childInfo, err := child.Info()
+		// Windows directory listings can cache metadata that differs from Lstat.
+		// Use fresh metadata so listed revisions agree with local mutations.
+		childInfo, err := os.Lstat(filepath.Join(directory, child.Name()))
 		if err != nil {
 			// The entry was removed after the folder was read.
 			continue
@@ -183,7 +186,8 @@ func describeLocalLink(entry *Entry, linkPath string) {
 	}
 }
 
-func (s Service) PlanLocalTransfer(ctx context.Context, request RemoteTransferRequest) (RemoteTransferPlan, error) {
+func (s Service) PlanLocalTransfer(ctx context.Context, request RemoteTransferRequest) (_ RemoteTransferPlan, err error) {
+	defer func() { err = labelLocalAccessRefusal(err) }()
 	var localPath, remotePath string
 	if request.Operation == RemotePut {
 		localPath, remotePath = request.SourcePath, request.TargetPath
@@ -271,7 +275,8 @@ func localTreeBytes(ctx context.Context, root *os.Root, relative string, info fs
 	}
 	return total, nil
 }
-func (s Service) CopyLocal(ctx context.Context, request RemoteTransferRequest, progress func(int64) error) error {
+func (s Service) CopyLocal(ctx context.Context, request RemoteTransferRequest, progress func(int64) error) (err error) {
+	defer func() { err = labelLocalAccessRefusal(err) }()
 	if request.Operation != RemoteGet && request.Operation != RemotePut {
 		return ErrInvalidTransfer
 	}
@@ -419,7 +424,7 @@ func (c *localCopy) put(ctx context.Context, source, target string, info fs.File
 			resultErr = errors.Join(resultErr, unpublished.remove(ctx))
 		}
 	}()
-	written, copyErr := copyContext(ctx, &progressWriter{Writer: output, report: c.report}, input, info.Size())
+	written, copyErr := copyContext(ctx, &progressWriter{Writer: c.service.transferWriter(ctx, output), report: c.report}, input, info.Size())
 	closeErr := output.Close()
 	if copyErr != nil {
 		return copyErr
@@ -511,7 +516,7 @@ func (c *localCopy) get(ctx context.Context, source, target string, info fs.File
 		return err
 	}
 	defer c.root.Remove(temporary)
-	written, copyErr := copyContext(ctx, &progressWriter{Writer: output, report: c.report}, input, info.Size())
+	written, copyErr := copyContext(ctx, &progressWriter{Writer: c.service.transferWriter(ctx, output), report: c.report}, input, info.Size())
 	syncErr := output.Sync()
 	closeErr := output.Close()
 	if copyErr != nil {

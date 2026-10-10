@@ -7,6 +7,7 @@ import type {
   StreamDownloadOptions,
   TransferJob,
   TransferJobAction,
+  TransferSettings,
   UploadChunk,
   UploadCompletion,
   UploadStart,
@@ -15,23 +16,28 @@ import type {
 import { browserSaveRetentionMs } from "./downloadPlane";
 import { SFTPTransferManager } from "./transferManager";
 
+// Exercise the same waiting transition without a production one-second backoff.
+const testReconnectDelayMs = 10;
+
 function engineAPI(overrides: Record<string, unknown> = {}) {
   const jobs = new Map<string, TransferJob>();
   const now = () => new Date().toISOString();
-  const allowedActions = (status: TransferJob["status"]): TransferJob["allowedActions"] => {
-    if (status === "queued" || status === "running") return ["pause", "cancel"];
+  const allowedActions = (status: TransferJob["status"], problem = ""): TransferJob["allowedActions"] => {
+    if (problem === "sftp_reconciliation_required" && status !== "running" && status !== "reconnecting") return ["cancel"];
+    if (status === "queued" || status === "running" || status === "reconnecting") return ["pause", "cancel"];
     if (status === "paused" || status === "reattach" || status === "needs_overwrite") return ["resume", "cancel"];
     if (status === "failed") return ["retry", "cancel", "remove"];
     if (status === "completed" || status === "cancelled") return ["remove"];
     return [];
   };
+  const recoverySettings = { autoReconnect: false, maxReconnectAttempts: 0 };
   const createTransfer = vi.fn(async (input: CreateTransferJob): Promise<TransferJob> => {
     const existing = jobs.get(input.id);
     if (existing !== undefined) return existing;
     const job: TransferJob = {
       sourceAlias: "", sourcePath: "", operation: "", ...input,
       transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", allowedActions: ["pause", "cancel"],
-      attempt: 1, problem: "", expectedRevision: "", sourceFingerprint: "", overwrite: false,
+      attempt: 1, reconnectAttempt: 0, reconnectAt: "", problem: "", expectedRevision: "", sourceFingerprint: "", overwrite: false,
       downloadRevision: "", downloadParts: [], createdAt: now(), updatedAt: now(),
     };
     jobs.set(job.id, job);
@@ -45,14 +51,18 @@ function engineAPI(overrides: Record<string, unknown> = {}) {
     const current = jobs.get(id);
     if (current === undefined) throw new Error("sftp_transfer_not_found");
     const statuses: Partial<Record<TransferJobAction, TransferJob["status"]>> = {
-      start: "running", pause: "paused", resume: "queued", retry: "queued", cancel: "cancelled",
+      start: "running", reconnect: "reconnecting", pause: "paused", resume: "queued", retry: "queued", cancel: "cancelled",
       complete: "completed", fail: "failed", needs_overwrite: "needs_overwrite",
     };
     const status = statuses[action] ?? current.status;
+    const problem = action === "fail" ? options.problem ?? "sftp_failed" : action === "retry" ? "" : current.problem;
     const updated: TransferJob = {
-      ...current, status, allowedActions: allowedActions(status),
+      ...current, status,
+      reconnectAttempt: action === "reconnect" ? current.reconnectAttempt + 1 : current.reconnectAttempt,
+      reconnectAt: action === "reconnect" ? new Date(Date.now() + testReconnectDelayMs).toISOString() : "",
+      allowedActions: allowedActions(status, problem),
       attempt: action === "retry" ? current.attempt + 1 : current.attempt,
-      problem: action === "fail" ? options.problem ?? "sftp_failed" : action === "retry" ? "" : current.problem,
+      problem,
       overwrite: action === "resume" && current.status === "needs_overwrite" ? true : current.overwrite,
       ...(options.resetProgress ? { transferredBytes: 0, downloadRevision: "" } : {}),
       ...(options.transferredBytes === undefined ? {} : { transferredBytes: options.transferredBytes }),
@@ -63,11 +73,12 @@ function engineAPI(overrides: Record<string, unknown> = {}) {
   });
   return {
     jobs,
-    listTransfers: vi.fn(async () => ({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, jobs: [...jobs.values()] })),
-    updateTransferSettings: vi.fn(async (settings: { maxConcurrent: number; clearCompletedAfterSeconds: number; processingStopped: boolean; largeFileThresholdBytes: number; largeFileParallelism: number; largeFileChunkBytes: number }) => ({
+    recoverySettings,
+    listTransfers: vi.fn(async () => ({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, ...recoverySettings, jobs: [...jobs.values()] })),
+    updateTransferSettings: vi.fn(async (settings: TransferSettings) => ({
       ...settings, jobs: [...jobs.values()],
     })),
-    moveTransfer: vi.fn(async () => ({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, jobs: [...jobs.values()] })),
+    moveTransfer: vi.fn(async () => ({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, ...recoverySettings, jobs: [...jobs.values()] })),
     createTransfer,
     updateTransfer,
     clearFinishedTransfers: vi.fn(async () => {
@@ -299,6 +310,7 @@ describe("SFTPTransferManager engine ownership", () => {
     expect(api.completeUpload).toHaveBeenCalledWith({
       alias: "edge", id: expect.any(String), remotePath: "/large.bin", size: 8, expectedRevision: "absent",
       sourceFingerprint: expect.stringMatching(/^tree-sha256:/),
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -386,24 +398,69 @@ describe("SFTPTransferManager engine ownership", () => {
   it("resumes a file download after a transient disconnect", async () => {
     let calls = 0;
     const api = engineAPI();
+    api.recoverySettings.autoReconnect = true;
+    api.recoverySettings.maxReconnectAttempts = 3;
     api.streamDownload.mockImplementation(async ({ offset }, options) => {
       options.onRevision?.('"revision-resume"');
       calls += 1;
       if (calls === 1) {
         expect(offset).toBe(0);
         await options.onChunk(new TextEncoder().encode("abc"), 6);
-        throw new Error("connection_lost");
+        throw new Error("sftp_connection_lost");
       }
       expect(offset).toBe(3);
       await options.onChunk(new TextEncoder().encode("def"), 6);
       return { bytes: 6, total: 6 };
     });
     const manager = new SFTPTransferManager(api);
+    await manager.reconcile();
     await manager.addDownload("edge", "/resume.bin", "file", 6);
     await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("completed"));
     expect(api.streamDownload).toHaveBeenCalledTimes(2);
     const parts = api.saveDownload.mock.calls[0]![2];
     await expect(new Blob(parts).text()).resolves.toBe("abcdef");
+  });
+
+  it("stops browser upload recovery at the engine attempt budget", async () => {
+    const api = engineAPI();
+    api.recoverySettings.autoReconnect = true;
+    api.recoverySettings.maxReconnectAttempts = 2;
+    api.appendUpload.mockRejectedValue(new Error("sftp_connection_lost"));
+    const manager = new SFTPTransferManager(api);
+    await manager.reconcile();
+    await manager.addUploads([{ alias: "edge", remotePath: "/bounded.bin", localName: "bounded.bin", file: new File(["payload"], "bounded.bin") }]);
+    await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("failed"));
+    expect(api.appendUpload).toHaveBeenCalledTimes(3);
+    expect(manager.getSnapshot()[0]?.reconnectAttempt).toBe(2);
+  });
+
+  it("does not replay a browser save whose completion is uncertain", async () => {
+    const api = engineAPI();
+    api.recoverySettings.autoReconnect = true;
+    api.recoverySettings.maxReconnectAttempts = 2;
+    api.saveDownload.mockRejectedValue(new TypeError("save acknowledgement lost"));
+    const manager = new SFTPTransferManager(api);
+    await manager.reconcile();
+    await manager.addDownload("edge", "/save-once.bin", "file", 4);
+    await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("failed"));
+    expect(api.saveDownload).toHaveBeenCalledOnce();
+    expect(manager.getSnapshot()[0]?.allowedActions).toEqual(["cancel"]);
+    expect(api.streamDownload).toHaveBeenCalledOnce();
+    expect(api.updateTransfer.mock.calls.some(([, action]) => action === "reconnect")).toBe(false);
+  });
+
+  it("does not replay an upload publication whose acknowledgement is lost", async () => {
+    const api = engineAPI();
+    api.recoverySettings.autoReconnect = true;
+    api.recoverySettings.maxReconnectAttempts = 2;
+    api.completeUpload.mockRejectedValue(new TypeError("publication acknowledgement lost"));
+    const manager = new SFTPTransferManager(api);
+    await manager.reconcile();
+    await manager.addUploads([{ alias: "edge", remotePath: "/publish-once.bin", localName: "publish-once.bin", file: new File(["payload"], "publish-once.bin") }]);
+    await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("failed"));
+    expect(api.completeUpload).toHaveBeenCalledOnce();
+    expect(manager.getSnapshot()[0]?.allowedActions).toEqual(["cancel"]);
+    expect(api.updateTransfer.mock.calls.some(([, action]) => action === "reconnect")).toBe(false);
   });
 
   it("checkpoints a download by volume and at the end instead of after every chunk", async () => {
@@ -431,7 +488,7 @@ describe("SFTPTransferManager engine ownership", () => {
     let failBad = true;
     const api = engineAPI();
     api.startUpload.mockImplementation(async ({ id, remotePath: path, size }) => {
-      if (path.endsWith("bad.txt") && failBad) throw new Error("connection_lost");
+      if (path.endsWith("bad.txt") && failBad) throw new Error("sftp_connection_lost");
       return { id, path, offset: 0, size, expectedRevision: "absent", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 };
     });
     const manager = new SFTPTransferManager(api);

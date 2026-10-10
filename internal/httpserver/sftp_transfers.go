@@ -38,6 +38,9 @@ func (h SFTPHandlers) describeTransferQueue() (SFTPTransferJobList, error) {
 		LargeFileThresholdBytes:    h.Transfers.LargeFileThreshold(),
 		LargeFileParallelism:       h.Transfers.LargeFileParallelism(),
 		LargeFileChunkBytes:        h.Transfers.LargeFileChunkBytes(),
+		SpeedLimitBytesPerSecond:   h.Transfers.SpeedLimitBytesPerSecond(),
+		AutoReconnect:              h.Transfers.AutoReconnect(),
+		MaxReconnectAttempts:       h.Transfers.MaxReconnectAttempts(),
 		ClearCompletedAfterSeconds: int(h.Transfers.ClearCompletedAfter() / time.Second),
 		ProcessingStopped:          h.Transfers.ProcessingStopped(),
 		Jobs:                       described,
@@ -60,6 +63,9 @@ func (h SFTPHandlers) UpdateTransferSettings(c *echo.Context) error {
 		LargeFileThresholdBytes:    body.LargeFileThresholdBytes,
 		LargeFileParallelism:       body.LargeFileParallelism,
 		LargeFileChunkBytes:        body.LargeFileChunkBytes,
+		SpeedLimitBytesPerSecond:   body.SpeedLimitBytesPerSecond,
+		AutoReconnect:              body.AutoReconnect,
+		MaxReconnectAttempts:       body.MaxReconnectAttempts,
 	})
 	if err := h.Transfers.SetTransferSettings(settings); err != nil {
 		if errors.Is(err, sshcSFTP.ErrInvalidTransfer) {

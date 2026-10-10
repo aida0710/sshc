@@ -19,8 +19,8 @@ type L2TPSettings struct {
 	Server string
 	// Username は、VPNの利用者名である。パスワードはVaultにある。
 	Username string
-	// IKE と ESP は、装置に合わせて暗号方式を指定する。空ならIKEは
-	// strongSwanの既定、ESPはL2TP向けの互換性を持たせた候補を使う。
+	// IKE と ESP は、装置に合わせて暗号方式を指定する。空なら、どちらも
+	// L2TP装置との互換性を持たせた候補を使う。
 	IKE string
 	ESP string
 }
@@ -28,9 +28,25 @@ type L2TPSettings struct {
 // pppMTU は、PPP・L2TP・UDP・IPsec の各ヘッダを載せても 1500 に収まる大きさである。
 const pppMTU = 1280
 
-// IKEv1では1つのproposalに複数の暗号・MACを並べても先頭しか送られない。
-// SHA-256を優先し、L2TP装置で使われるHMAC-SHA1も独立した候補として提示する。
+// IKEv1では、1つのproposalに複数の暗号・MAC・DH群を並べても、それぞれ先頭の
+// 1つしか送られない。IKEもESPも、L2TP装置で使われる組み合わせを独立した候補として
+// 提示する。
+//
+// ipsec.conf は指定した候補のあとに strongSwan の既定の候補も提示するが、そこから
+// 送られるのは AES-128・SHA-256 と、イメージのプラグインで最初に使えるDH群
+// （ECP-256）の1組だけである。MODPとSHA-1だけを受け付ける装置は、これに応答しない。
+// IKEはSHA-256とMODP 3072・2048を優先し、SHA-1とMODP 2048・1024も提示する。
+const defaultL2TPIKE = "aes256-sha256-modp3072,aes128-sha256-modp3072," +
+	"aes256-sha256-modp2048,aes128-sha256-modp2048," +
+	"aes256-sha1-modp2048,aes128-sha1-modp2048," +
+	"aes256-sha1-modp1024,aes128-sha1-modp1024"
+
+// ESPはSHA-256を優先し、HMAC-SHA1も提示する。
 const defaultL2TPESP = "aes256-sha256,aes128-sha256,aes256-sha1,aes128-sha1"
+
+// l2tpIPsecLog は、starter と charon のログを書く runtime のファイルである。agent は
+// 失敗したときに、このファイルの末尾を見せる。
+const l2tpIPsecLog = "ipsec.log"
 
 type l2tpBackend struct{}
 
@@ -86,20 +102,15 @@ func (l2tpBackend) waitsForApproval(Profile) bool { return false }
 
 func (l2tpBackend) ownSecrets(_ Profile, secrets Secrets) Secrets { return Secrets{L2TP: secrets.L2TP} }
 
-// l2tpDocuments は、コンテナへ渡す4つの本文を返す。
+// l2tpDocuments は、コンテナへ渡す5つの本文を返す。
 func l2tpDocuments(settings L2TPSettings, secrets L2TPSecrets) map[string]string {
+	if settings.IKE == "" {
+		settings.IKE = defaultL2TPIKE
+	}
 	if settings.ESP == "" {
 		settings.ESP = defaultL2TPESP
 	}
-	proposals := ""
-	for _, proposal := range []struct{ field, value string }{{"ike", settings.IKE}, {"esp", settings.ESP}} {
-		if proposal.value != "" {
-			proposals += "    " + proposal.field + "=" + proposal.value + "\n"
-		}
-	}
 	ipsec := strings.Join([]string{
-		"config setup",
-		`    charondebug="ike 1, knl 1, cfg 0"`,
 		"conn " + connectionName,
 		"    keyexchange=ikev1",
 		"    authby=psk",
@@ -117,7 +128,9 @@ func l2tpDocuments(settings L2TPSettings, secrets L2TPSecrets) map[string]string
 		"    dpdaction=clear",
 		"    dpddelay=30s",
 		"    auto=add",
-		proposals,
+		"    ike=" + settings.IKE,
+		"    esp=" + settings.ESP,
+		"",
 	}, "\n")
 	ppp := strings.Join([]string{
 		"ipcp-accept-local",
@@ -141,7 +154,8 @@ func l2tpDocuments(settings L2TPSettings, secrets L2TPSecrets) map[string]string
 		"",
 	}, "\n")
 	return map[string]string{
-		"ipsec.conf": ipsec,
+		"strongswan.conf": strongSwanDaemonConfiguration(l2tpIPsecLog, nil),
+		"ipsec.conf":      ipsec,
 		// 16 進で書く。事前共有鍵に引用符や backslash があっても、strongSwan の
 		// 構文として解釈されない。
 		"ipsec.secrets": ": PSK " + strongSwanSecret(secrets.PreSharedKey) + "\n",

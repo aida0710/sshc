@@ -38,8 +38,8 @@ describe("sftpApi resumable download", () => {
     ));
     const reads = [
       () => sftpApi.list("edge", "/"),
-      () => sftpApi.search("edge", "/", "needle"),
-      () => sftpApi.compareDirectories("edge", "/left", "other", "/right"),
+      () => sftpApi.search({ alias: "edge", path: "/", query: "needle" }),
+      () => sftpApi.compareDirectories({ left: { alias: "edge", path: "/left" }, right: { alias: "other", path: "/right" } }),
       () => sftpApi.directoryStats("edge", "/left"),
       () => sftpApi.previewFile("edge", "/left/image.png"),
     ];
@@ -86,13 +86,13 @@ describe("sftpApi resumable download", () => {
       processingStopped: false,
       largeFileThresholdBytes: 100 << 20,
       largeFileParallelism: 4,
-      largeFileChunkBytes: 32 << 20,
+      largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0,
       jobs: [{
         id: "transfer_test01", batchId: "batch_test0001", batchName: "file.bin", batchKind: "file",
         alias: "edge", direction: "download", kind: "file", name: "file.bin", remotePath: "/file.bin",
         sourceAlias: "", sourcePath: "", operation: "", overwrite: false,
         totalBytes: 4, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1,
-        status: "queued", allowedActions: ["pause", "cancel"], attempt: 1, problem: "", lastModified: 0,
+        status: "queued", allowedActions: ["pause", "cancel"], attempt: 1, reconnectAttempt: 0, reconnectAt: "", problem: "", lastModified: 0,
         expectedRevision: "", sourceFingerprint: "", downloadRevision: "", downloadParts: [],
         createdAt: "2026-08-31T00:00:00Z", updatedAt: "2026-08-31T00:00:00Z",
       }],

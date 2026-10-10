@@ -43,6 +43,8 @@ func TestHandwrittenHTTPWireTypesMatchOpenAPIRecursively(t *testing.T) {
 		"SFTPListing":                     SFTPListing{},
 		"SFTPTextFile":                    sftpTextFileResponse{},
 		"SFTPSearchResult":                sftpSearchResponse{},
+		"SFTPContentMatch":                sftpContentMatchResponse{},
+		"SFTPSearchOmission":              sftpSearchOmissionResponse{},
 		"SFTPSaveTextRequest":             sftpSaveTextRequest{},
 		"SFTPRenameRequest":               sftpRenameRequest{},
 		"SFTPChmodRequest":                sftpChmodRequest{},
@@ -208,12 +210,13 @@ var wireEnumValues = map[reflect.Type][]string{
 	reflect.TypeOf(sftp.DirectoryDifferenceStatus("")): {
 		string(sftp.DirectorySame), string(sftp.DirectoryDifferent), string(sftp.DirectoryLeftOnly),
 		string(sftp.DirectoryRightOnly), string(sftp.DirectoryTypeMismatch),
+		string(sftp.DirectoryUnverified),
 	},
 	reflect.TypeOf(sftp.TransferKind("")): {
 		string(sftp.TransferFile), string(sftp.TransferFolder),
 	},
 	reflect.TypeOf(sftp.TransferJobStatus("")): {
-		string(sftp.TransferQueued), string(sftp.TransferRunning), string(sftp.TransferPaused), string(sftp.TransferReattach),
+		string(sftp.TransferQueued), string(sftp.TransferRunning), string(sftp.TransferReconnecting), string(sftp.TransferPaused), string(sftp.TransferReattach),
 		string(sftp.TransferNeedsOverwrite), string(sftp.TransferCompleted), string(sftp.TransferFailed), string(sftp.TransferCancelled),
 	},
 	reflect.TypeOf(sftp.TransferQueueMove("")): {
@@ -221,7 +224,7 @@ var wireEnumValues = map[reflect.Type][]string{
 		string(sftp.TransferMoveTop), string(sftp.TransferMoveBottom),
 	},
 	reflect.TypeOf(sftp.TransferJobAction("")): {
-		string(sftp.TransferStartAction), string(sftp.TransferPauseAction), string(sftp.TransferResumeAction),
+		string(sftp.TransferStartAction), string(sftp.TransferReconnectAction), string(sftp.TransferPauseAction), string(sftp.TransferResumeAction),
 		string(sftp.TransferRetryAction), string(sftp.TransferCancelAction), string(sftp.TransferProgressAction),
 		string(sftp.TransferCompleteAction), string(sftp.TransferFailAction), string(sftp.TransferNeedsOverwriteAction),
 	},

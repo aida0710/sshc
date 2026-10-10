@@ -15,11 +15,11 @@ sshcはmacOS、Linux、Windows、Androidで利用できるターミナルアプ�
 brew install aida0710/tap/sshc
 ```
 
-Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.42.0`を導入する例です。
+Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.44.4`を導入する例です。
 
 ```sh
-SSHC_VERSION=v0.42.0 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.42.0/install.sh | sh'
+SSHC_VERSION=v0.44.4 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.44.4/install.sh | sh'
 ```
 
 導入後は`sshc update`で更新できます。Homebrewで入れた場合はHomebrewから、`install.sh`で入れた場合は同じ配布元から更新されます。スクリプトなどで確認を省略する場合は、`sshc update --yes`を指定してください。
@@ -109,7 +109,28 @@ sshc vault unlock
 
 launchdがsshcエンジンを再起動するのは、sshcエンジンが異常終了した場合だけです。`sshc engine --replace`で置き換えた場合など、sshcエンジンが正常に終了した場合は再起動しません。サービスに戻すには`sshc service install`を再実行してください。
 
-以前のバージョンのsshcで登録したplistは、`sshc service install`を再実行するまで、sshcエンジンが正常に終了しても再起動する以前の定義のままです。`sshc service status`と`sshc update`は、この場合に`sshc service install`の再実行を案内します。
+以前のバージョンのsshcで登録したplistは、`sshc service install`を再実行するまで、sshcエンジンが正常に終了しても再起動する以前の定義のままです。`sshc service status`、`sshc service restart`、`sshc update`は、この場合に`sshc service install`の再実行を案内します。
+
+## 登録済みサービスを再起動する
+
+LinuxとmacOSでは、稼働中のユーザーサービスを次のコマンドで再起動できます。
+
+```sh
+sshc service restart
+```
+
+サービス定義の場所と実行ファイルのパスを表示して、再起動するか確認します。再起動すると接続中のセッションと転送が終了します。自動化で確認を省略する場合は`sshc service restart --yes`を使用してください。
+
+このコマンドで使えるのは、Homebrewまたはreceiptに対応した`install.sh`で導入され、この導入の安定パスと現在の定義が一致するサービスです。次の場合は再起動せず、終了コード1で終わります。
+
+| 状態 | 対処 |
+| --- | --- |
+| 未登録・停止中 | `sshc service install`で登録・起動する |
+| sshc管理外の定義 | 手書きの定義を確認し、そのサービスの管理方法で操作する |
+| 古い定義 | `sshc service install`で現在の定義へ更新する |
+| 別の実行ファイルを指す定義 | 登録した導入から実行する。現在の導入へ切り替える場合は`sshc service install`を使う |
+
+確認待ちの間に定義や稼働状態が変わった場合も、成功扱いにはしません。`sshc service status`で状態を確認してから再実行してください。再起動後はサービスのPIDとsshcエンジンの起動情報、status APIを照合します。パスワードを設定したVaultはロックされるため、`sshc vault unlock`を実行してください。パスワードなしのVaultは自動でロックを解除します。
 
 ## 更新
 
@@ -117,7 +138,15 @@ launchdがsshcエンジンを再起動するのは、sshcエンジンが異常�
 - Windows: インストール用のPowerShellコマンドを再実行
 - Android: GitHub Releasesから新しいAPKをインストール
 
-`sshc service install`で管理しているサービスが動作中で、サービス定義に記録された実行ファイルが今回の更新対象と一致する場合だけ、`sshc update`が更新後にサービスを再起動します。パスワードを設定したVaultは再起動でロックされるため、`sshc vault unlock`を実行してください。パスワードなしのVaultは、sshcエンジンの起動時に自動でロックを解除します。更新は成功したものの再起動だけに失敗した場合は、表示に従って`sshc service install`を再実行できます。`install.sh`を直接実行して更新した場合は、サービスを自動では再起動しないため、`sshc service install`で再起動してください。サービス管理外のsshcエンジンは`sshc engine --replace`で再起動します。
+### Web画面から更新する
+
+macOS・LinuxのHomebrew版と`install.sh`版では、新しい安定版があると、画面のバージョン表示欄に更新ボタンが出ます。確認画面で現在のバージョン、更新先、導入方法を確認してから実行してください。更新にはインストール先への書き込み権限が必要です。Homebrew版は`brew upgrade`で更新し、実際に入ったバージョンを確認します。実行時のHomebrewの定義に従うため、確認画面より新しいバージョンが入る場合があります。`install.sh`版は確認したバージョンへ更新します。手動配置・開発ビルド・Windows・Androidでは、画面に表示される案内に従って更新します。
+
+更新後はsshcエンジンが再起動し、接続中のセッションと転送が終了します。パスワードを設定したVaultは、再起動後にロックを解除してください。更新中は進行状況を表示し、重複した更新を受け付けません。インストールが成功して再起動だけに失敗した場合は、再インストールせず、案内に従って再起動してから画面を再読み込みしてください。
+
+### CLIから更新する
+
+`sshc service install`で管理しているサービスが動作中で、サービス定義に記録された実行ファイルが今回の更新対象と一致する場合だけ、`sshc update`が更新後にサービスを再起動します。パスワードを設定したVaultは再起動でロックされるため、`sshc vault unlock`を実行してください。パスワードなしのVaultは、sshcエンジンの起動時に自動でロックを解除します。更新は成功したものの再起動だけに失敗した場合は、表示に従って`sshc service install`を再実行できます。`install.sh`を直接実行して更新した場合は、サービスを自動では再起動しないため、稼働中なら`sshc service restart`を実行してください。停止中や古い定義の場合は`sshc service install`を使います。サービス管理外のsshcエンジンは`sshc engine --replace`で再起動します。
 
 ## アンインストール
 

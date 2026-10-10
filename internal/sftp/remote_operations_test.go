@@ -240,7 +240,7 @@ func TestCompareDirectoriesReportsBothSidesAndChangedMetadata(t *testing.T) {
 		}
 		return right, nil
 	}}
-	comparison, err := service.CompareDirectories(context.Background(), "left", "/work", "right", "/copy")
+	comparison, err := service.CompareDirectories(context.Background(), sftp.CompareOptions{Left: sftp.ComparisonLocation{Alias: "left", Path: "/work"}, Right: sftp.ComparisonLocation{Alias: "right", Path: "/copy"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,88 +251,6 @@ func TestCompareDirectoriesReportsBothSidesAndChangedMetadata(t *testing.T) {
 	if statuses["same"] != sftp.DirectorySame || statuses["changed"] != sftp.DirectoryDifferent ||
 		statuses["left"] != sftp.DirectoryLeftOnly || statuses["right"] != sftp.DirectoryRightOnly {
 		t.Fatalf("unexpected comparison: %#v", statuses)
-	}
-}
-
-func TestRemoteDirectoryCannotBeCopiedIntoItself(t *testing.T) {
-	t.Parallel()
-	remote := remoteWith(map[string]node{
-		"/source":          {name: "source", mode: fs.ModeDir | 0o755, modTime: testTime},
-		"/source/file.txt": {name: "file.txt", mode: 0o644, content: []byte("contents"), modTime: testTime},
-	})
-	service := sftp.Service{Open: func(_ context.Context, alias string) (sftp.Remote, error) {
-		if alias != "same" {
-			t.Fatalf("unexpected alias %q", alias)
-		}
-		return remote, nil
-	}}
-
-	err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
-		SourceAlias: "same", SourcePath: "/source",
-		TargetAlias: "same", TargetPath: "/source/nested", Operation: sftp.RemoteCopy,
-	}, nil)
-	if !errors.Is(err, sftp.ErrInvalidTransfer) {
-		t.Fatalf("CopyRemote() error = %v, want ErrInvalidTransfer", err)
-	}
-	if _, exists := remote.nodes["/source/nested"]; exists {
-		t.Fatal("target was created below its own source")
-	}
-}
-
-func TestRemoteDirectoryCannotBeCopiedIntoItselfThroughAnotherAliasOfTheSameServer(t *testing.T) {
-	t.Parallel()
-	server := remoteWith(map[string]node{
-		"/source":          {name: "source", mode: fs.ModeDir | 0o755, modTime: testTime},
-		"/source/file.txt": {name: "file.txt", mode: 0o644, content: []byte("contents"), modTime: testTime},
-	})
-	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return server, nil }}
-
-	for _, operation := range []sftp.RemoteTransferOperation{sftp.RemoteCopy, sftp.RemoteMove} {
-		err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
-			SourceAlias: "web", SourcePath: "/source",
-			TargetAlias: "web-admin", TargetPath: "/source/nested", Operation: operation,
-		}, nil)
-		if !errors.Is(err, sftp.ErrInvalidTransfer) {
-			t.Fatalf("CopyRemote(%s) error = %v, want ErrInvalidTransfer", operation, err)
-		}
-	}
-	for candidate := range server.nodes {
-		if candidate != "/" && candidate != "/source" && candidate != "/source/file.txt" {
-			t.Fatalf("refused copy left %s on the server", candidate)
-		}
-	}
-}
-
-func TestRemoteDirectoryCanBeCopiedBelowTheSamePathOnAnotherServer(t *testing.T) {
-	t.Parallel()
-	sourceServer := remoteWith(map[string]node{
-		"/source":          {name: "source", mode: fs.ModeDir | 0o755, modTime: testTime},
-		"/source/file.txt": {name: "file.txt", mode: 0o644, content: []byte("contents"), modTime: testTime},
-	})
-	targetServer := remoteWith(map[string]node{
-		"/source": {name: "source", mode: fs.ModeDir | 0o755, modTime: testTime},
-	})
-	service := sftp.Service{Open: func(_ context.Context, alias string) (sftp.Remote, error) {
-		if alias == "origin" {
-			return sourceServer, nil
-		}
-		return targetServer, nil
-	}}
-
-	err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
-		SourceAlias: "origin", SourcePath: "/source",
-		TargetAlias: "mirror", TargetPath: "/source/nested", Operation: sftp.RemoteCopy,
-	}, nil)
-	if err != nil {
-		t.Fatalf("CopyRemote() error = %v", err)
-	}
-	if got := string(targetServer.nodes["/source/nested/file.txt"].content); got != "contents" {
-		t.Fatalf("copied file = %q, want contents", got)
-	}
-	for candidate := range targetServer.nodes {
-		if strings.Contains(candidate, ".sshc-") {
-			t.Fatalf("copy left %s on the target server", candidate)
-		}
 	}
 }
 

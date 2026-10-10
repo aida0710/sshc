@@ -6,13 +6,8 @@ import (
 	"io/fs"
 	"path"
 	"sort"
-	"strings"
 	"time"
 )
-
-// maxComparedEntries bounds how many entries a directory comparison reads from
-// both sides together.
-const maxComparedEntries = 20_000
 
 // maxTransferTreeEntries bounds the entries a remote copy, move or get walks in
 // one folder tree. Planning and the transfer itself count against the same
@@ -21,140 +16,10 @@ const maxComparedEntries = 20_000
 // comparison may read does not change what a transfer may copy.
 const maxTransferTreeEntries = 20_000
 
-// CompareDirectories compares metadata without downloading file contents.
-// Symlinks are listed but never followed.
-func (s Service) CompareDirectories(ctx context.Context, leftAlias, leftPath, rightAlias, rightPath string) (DirectoryComparison, error) {
-	leftRoot, err := cleanPublicPath(leftPath, true)
-	if err != nil {
-		return DirectoryComparison{}, err
-	}
-	rightRoot, err := cleanPublicPath(rightPath, true)
-	if err != nil {
-		return DirectoryComparison{}, err
-	}
-	left, err := s.readTree(ctx, leftAlias, leftRoot)
-	if err != nil {
-		return DirectoryComparison{}, err
-	}
-	right, err := s.readTree(ctx, rightAlias, rightRoot)
-	if err != nil {
-		return DirectoryComparison{}, err
-	}
-	keys := make([]string, 0, len(left)+len(right))
-	seen := make(map[string]struct{}, len(left)+len(right))
-	for candidate := range left {
-		seen[candidate] = struct{}{}
-		keys = append(keys, candidate)
-	}
-	for candidate := range right {
-		if _, ok := seen[candidate]; ok {
-			continue
-		}
-		keys = append(keys, candidate)
-	}
-	if len(keys) > maxComparedEntries {
-		return DirectoryComparison{}, ErrCompareLimit
-	}
-	sort.Strings(keys)
-	result := DirectoryComparison{LeftPath: leftRoot, RightPath: rightRoot, Entries: make([]DirectoryDifference, 0, len(keys))}
-	entryIndex := make(map[string]int, len(keys))
-	for _, relative := range keys {
-		leftEntry, leftOK := left[relative]
-		rightEntry, rightOK := right[relative]
-		difference := DirectoryDifference{RelativePath: relative}
-		if leftOK {
-			copy := leftEntry
-			difference.Left = &copy
-		}
-		if rightOK {
-			copy := rightEntry
-			difference.Right = &copy
-		}
-		switch {
-		case !rightOK:
-			difference.Status = DirectoryLeftOnly
-		case !leftOK:
-			difference.Status = DirectoryRightOnly
-		case leftEntry.Type != rightEntry.Type:
-			difference.Status = DirectoryTypeMismatch
-		case leftEntry.Type == EntryDirectory:
-			difference.Status = DirectorySame
-		case leftEntry.Size == rightEntry.Size && leftEntry.Mode.Perm() == rightEntry.Mode.Perm() && leftEntry.ModifiedAt.Equal(rightEntry.ModifiedAt):
-			difference.Status = DirectorySame
-		default:
-			difference.Status = DirectoryDifferent
-		}
-		entryIndex[relative] = len(result.Entries)
-		result.Entries = append(result.Entries, difference)
-	}
-	// A directory is different when any descendant differs. This lets the UI
-	// summarize a large tree without pretending equal directory mtimes imply
-	// equal contents.
-	for index := len(result.Entries) - 1; index >= 0; index-- {
-		item := result.Entries[index]
-		if item.Status == DirectorySame || item.RelativePath == "" {
-			continue
-		}
-		parent := path.Dir(item.RelativePath)
-		for parent != "." && parent != "/" {
-			if parentIndex, ok := entryIndex[parent]; ok {
-				candidate := &result.Entries[parentIndex]
-				if candidate.Status == DirectorySame {
-					candidate.Status = DirectoryDifferent
-				}
-			}
-			parent = path.Dir(parent)
-		}
-	}
-	return result, nil
-}
-
-func (s Service) readTree(ctx context.Context, alias, root string) (map[string]Entry, error) {
-	remote, err := s.openRequest(ctx, alias)
-	if err != nil {
-		return nil, err
-	}
-	defer remote.Close()
-	result := make(map[string]Entry)
-	pending := []string{root}
-	for len(pending) > 0 {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		directory := pending[0]
-		pending = pending[1:]
-		infos, err := readChildren(ctx, remote, directory)
-		if err != nil {
-			return nil, err
-		}
-		for _, info := range infos {
-			if isInternalName(info.Name()) {
-				continue
-			}
-			entry := entryFrom(directory, info)
-			relative := entry.Path[len(root):]
-			if len(relative) > 0 && relative[0] == '/' {
-				relative = relative[1:]
-			}
-			result[relative] = entry
-			if len(result) > maxComparedEntries {
-				return nil, ErrCompareLimit
-			}
-			if entry.Type == EntryDirectory {
-				pending = append(pending, entry.Path)
-			}
-		}
-	}
-	return result, nil
-}
-
 func (s Service) PlanRemoteTransfer(ctx context.Context, request RemoteTransferRequest) (RemoteTransferPlan, error) {
 	source, target, err := cleanRemoteTransferRequest(request)
 	if err != nil {
 		return RemoteTransferPlan{}, err
-	}
-	if request.SourceAlias == request.TargetAlias && source == target {
-		return RemoteTransferPlan{}, ErrAlreadyExists
 	}
 	remote, err := s.openRequest(ctx, request.SourceAlias)
 	if err != nil {
@@ -165,8 +30,17 @@ func (s Service) PlanRemoteTransfer(ctx context.Context, request RemoteTransferR
 	if err != nil {
 		return RemoteTransferPlan{}, err
 	}
-	if info.IsDir() && request.SourceAlias == request.TargetAlias && isDescendant(source, target) {
-		return RemoteTransferPlan{}, ErrInvalidTransfer
+	if request.SourceAlias == request.TargetAlias {
+		// 同じ alias なら、転送先へ書かずに読むだけで判定できる。木を数える前と、実行中の
+		// 印を記録する前に断る。別の alias は、同じサーバーかを転送先へ書いて確かめるので、
+		// 転送先の接続を開く CopyRemote で断る。
+		ends := remoteTransferEnds{
+			source: remote, target: remote, sourcePath: source, targetPath: target,
+			sameAlias: true, overwrite: request.Overwrite,
+		}
+		if err := s.refuseTransferOntoSource(ends, info); err != nil {
+			return RemoteTransferPlan{}, err
+		}
 	}
 	plan := RemoteTransferPlan{Name: path.Base(source), TotalBytes: info.Size(), Kind: TransferFile}
 	if info.IsDir() {
@@ -175,7 +49,6 @@ func (s Service) PlanRemoteTransfer(ctx context.Context, request RemoteTransferR
 	} else if !info.Mode().IsRegular() {
 		return RemoteTransferPlan{}, ErrUnsupportedEntry
 	}
-	_ = target
 	return plan, err
 }
 
@@ -221,9 +94,6 @@ func (s Service) CopyRemote(ctx context.Context, request RemoteTransferRequest, 
 	if err != nil {
 		return err
 	}
-	if request.SourceAlias == request.TargetAlias && sourcePath == targetPath {
-		return ErrAlreadyExists
-	}
 	source, err := s.openRequest(ctx, request.SourceAlias)
 	if err != nil {
 		return err
@@ -243,14 +113,12 @@ func (s Service) CopyRemote(ctx context.Context, request RemoteTransferRequest, 
 	if err != nil {
 		return err
 	}
-	if info.IsDir() && isDescendant(sourcePath, targetPath) {
-		inside, err := s.targetInsideSource(request, source, target, targetPath)
-		if err != nil {
-			return err
-		}
-		if inside {
-			return ErrInvalidTransfer
-		}
+	ends := remoteTransferEnds{
+		source: source, target: target, sourcePath: sourcePath, targetPath: targetPath,
+		sameAlias: request.SourceAlias == request.TargetAlias, overwrite: request.Overwrite,
+	}
+	if err := s.refuseTransferOntoSource(ends, info); err != nil {
+		return err
 	}
 	if request.SourceAlias == request.TargetAlias && request.Operation == RemoteMove {
 		move := &renameMove{remote: target, overwrite: request.Overwrite, published: newPublishedNames()}
@@ -360,53 +228,6 @@ func cleanRemoteTransferRequest(request RemoteTransferRequest) (string, string, 
 		return "", "", err
 	}
 	return source, target, nil
-}
-
-func isDescendant(parent, candidate string) bool {
-	return strings.HasPrefix(candidate, parent+"/")
-}
-
-// targetInsideSource は、source のパスの配下にある targetPath が、実際に source と
-// 同じファイルを指すかを返す。そうなら folder の copy は自分で作ったディレクトリを
-// source として読み直し、木の上限に当たるまで入れ子を作り続ける。
-//
-// 別の alias（web と web-admin など）が同じサーバーを指すことがあり、alias の一致では
-// 分からない。SFTP は inode も返さない。そこで target から一時ファイルの名前で空の
-// ファイルを作り、source から同じパスに見えるかで確かめる。消し損ねても、一時ファイルの
-// 名前なので一覧に出ず、abandonedTemporaryAge を過ぎれば置き去りとして扱われる。
-func (s Service) targetInsideSource(request RemoteTransferRequest, source, target Remote, targetPath string) (bool, error) {
-	if request.SourceAlias == request.TargetAlias {
-		return true, nil
-	}
-	// copy が書き込む場所に作る。統合先の folder があればその中、無ければ copy が
-	// folder を作る親の中である。
-	directory := path.Dir(targetPath)
-	if existing, err := target.Lstat(targetPath); err == nil && existing.IsDir() {
-		directory = targetPath
-	}
-	probe, err := s.temporaryPath(path.Join(directory, "sshc-probe"))
-	if err != nil {
-		return false, err
-	}
-	written, err := target.Create(probe)
-	if err != nil {
-		return false, err
-	}
-	if err := written.Close(); err != nil {
-		return false, errors.Join(err, target.Remove(probe))
-	}
-	_, seenErr := source.Lstat(probe)
-	if err := target.Remove(probe); err != nil {
-		return false, err
-	}
-	switch {
-	case seenErr == nil:
-		return true, nil
-	case errors.Is(seenErr, fs.ErrNotExist):
-		return false, nil
-	default:
-		return false, seenErr
-	}
 }
 
 // remoteCopy は 1 回の remote→remote copy／move を実行する。source が返す名前や
@@ -549,7 +370,7 @@ func (c *remoteCopy) copyFile(ctx context.Context, sourcePath, targetPath string
 			resultErr = errors.Join(resultErr, unpublished.remove(ctx))
 		}
 	}()
-	written, err := copyContext(ctx, &progressWriter{Writer: output, report: c.report}, input, before.Size())
+	written, err := copyContext(ctx, &progressWriter{Writer: c.service.transferWriter(ctx, output), report: c.report}, &limitedTransferReader{ctx: ctx, source: input, limiter: c.service.transferLimiter}, before.Size())
 	if err != nil {
 		return err
 	}

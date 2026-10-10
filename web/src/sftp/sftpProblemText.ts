@@ -8,9 +8,18 @@ import { vpnRefusalMessages } from "../vpn/vpnRefusals";
 // SFTP の失敗の code（engine の internal/httpserver/sftp.go の sftpProblem と転送の
 // problem、画面の転送が自分で投げる code）の言い方。
 const sftpProblemMessages: CodeMessages = {
+  sftp_unsupported_operation: "sftp.problem.unsupportedOperation",
+  sftp_metadata_unavailable: "sftp.problem.metadataUnavailable",
+  sftp_ownership_unavailable: "sftp.ownershipUnavailable",
+  sftp_invalid_space: "sftp.spaceUnavailable",
+  action_token_invalid: "sftp.problem.confirmationChanged",
+  action_token_expired: "sftp.problem.confirmationChanged",
+  sftp_connection_lost: "sftp.problem.connectionLost",
   sftp_failed: "sftp.problem.failed",
   sftp_not_found: "sftp.problem.notFound",
   sftp_permission_denied: "sftp.problem.permissionDenied",
+  sftp_local_permission_denied: "sftp.problem.localPermissionDenied",
+  sftp_local_privacy_protection: "sftp.problem.localPrivacyProtection",
   sftp_conflict: "sftp.problem.conflict",
   sftp_exists: "sftp.problem.exists",
   sftp_transfer_limit: "sftp.problem.transferLimit",
@@ -25,6 +34,8 @@ const sftpProblemMessages: CodeMessages = {
   sftp_unsupported_entry: "sftp.problem.unsupportedEntry",
   sftp_compare_limit: "sftp.problem.compareLimit",
   sftp_traversal_limit: "sftp.problem.traversalLimit",
+  sftp_target_inside_source: "sftp.problem.targetInsideSource",
+  sftp_target_is_source: "sftp.problem.targetIsSource",
   sftp_range_invalid: "sftp.problem.rangeInvalid",
   sftp_cleanup_pending: "sftp.manager.cleanupFailed",
   sftp_reconciliation_required: "sftp.problem.reconciliationRequired",
@@ -59,6 +70,13 @@ export function sftpProblemCode(error: unknown): string {
 // ことが利用者に分からないからである。表に無い失敗は fallback の文にする。
 export function sftpProblemText(t: Translate, error: unknown, fallback: MessageKey = "sftp.problem.failed"): string {
   return describeVPNProblem(t, error) ?? codeText(t, sftpProblemCode(error), { messages: sftpProblemMessages, fallback });
+}
+
+export function localMutationProblemText(t: Translate, error: unknown, fallback: MessageKey = "sftp.problem.failed"): string {
+  const code = sftpProblemCode(error);
+  if (code === "sftp_conflict") return t("sftp.problem.localMutationConflict");
+  if (code === "sftp_permission_denied") return t("sftp.problem.localPermissionDenied");
+  return sftpProblemText(t, error, fallback);
 }
 
 // sftpTransferProblemText は、転送一覧が記録した problem code を1文にする。

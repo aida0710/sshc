@@ -26,7 +26,7 @@ func TestBoundedWalkReachesATreeExactlyAsDeepAsItsBudget(t *testing.T) {
 	remote := remoteWith(deepTree("/srv", sftp.MaxSearchDepthForTest))
 	service := serviceFor(remote)
 
-	found, err := service.Search(t.Context(), "edge", "/srv", "d")
+	found, err := service.Search(t.Context(), sftp.SearchOptions{Alias: "edge", Path: "/srv", Query: "d"})
 	if err != nil || found.Truncated || len(found.Entries) != sftp.MaxSearchDepthForTest {
 		t.Fatalf("Search() = %d entries, truncated %v, %v; want all %d", len(found.Entries), found.Truncated, err, sftp.MaxSearchDepthForTest)
 	}
@@ -40,7 +40,7 @@ func TestBoundedWalkStopsAtATreeDeeperThanItsBudget(t *testing.T) {
 	remote := remoteWith(deepTree("/srv", sftp.MaxSearchDepthForTest+1))
 	service := serviceFor(remote)
 
-	found, err := service.Search(t.Context(), "edge", "/srv", "d")
+	found, err := service.Search(t.Context(), sftp.SearchOptions{Alias: "edge", Path: "/srv", Query: "d"})
 	if err != nil || !found.Truncated {
 		t.Fatalf("Search() = truncated %v, %v; want truncated", found.Truncated, err)
 	}
@@ -60,7 +60,7 @@ func TestBoundedWalkStopsAtMoreEntriesThanItsBudget(t *testing.T) {
 	remote := remoteWith(nodes)
 	service := serviceFor(remote)
 
-	found, err := service.Search(t.Context(), "edge", "/srv", "absent")
+	found, err := service.Search(t.Context(), sftp.SearchOptions{Alias: "edge", Path: "/srv", Query: "absent"})
 	if err != nil || !found.Truncated {
 		t.Fatalf("Search() = truncated %v, %v; want truncated", found.Truncated, err)
 	}
@@ -89,7 +89,7 @@ func TestBoundedWalkSkipsAnUnreadableBranchOnlyForSearchAndStats(t *testing.T) {
 	}
 	service := serviceFor(remote)
 
-	found, err := service.Search(t.Context(), "edge", "/srv", ".log")
+	found, err := service.Search(t.Context(), sftp.SearchOptions{Alias: "edge", Path: "/srv", Query: ".log"})
 	if err != nil || !found.Truncated || len(found.Entries) != 1 || found.Entries[0].Path != "/srv/open/b.log" {
 		t.Fatalf("Search() = %+v, %v; want only /srv/open/b.log and truncated", found, err)
 	}

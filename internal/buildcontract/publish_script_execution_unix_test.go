@@ -23,6 +23,8 @@ func publishedReleaseAssets() []string {
 		"checksums.txt",
 		"install.ps1",
 		"sshc-android-" + verifiedReleaseTag + ".apk",
+		"sshc-demo-" + verifiedReleaseTag + ".tar.gz",
+		"sshc-demo-" + verifiedReleaseTag + ".json",
 		"sshc-darwin-amd64",
 		"sshc-darwin-arm64",
 		"sshc-linux-amd64",

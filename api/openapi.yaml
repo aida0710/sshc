@@ -1164,15 +1164,60 @@ paths:
   /api/v1/update:
     get:
       operationId: checkForUpdate
+      description: Reports the latest release, installation boundary and durable update job. Result checks are available while the vault is locked after restart.
       responses:
         "200":
-          description: What is installed and what is published
+          description: Current release and update state
           content:
             application/json:
               schema: { $ref: "#/components/schemas/UpdateStatus" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: startSelfUpdate
+      description: Consumes the preview's single-use X-SSHC-Action token, bound to the release and inspected installation. Flushes the accepted response before starting installation and restart. Terminals and transfers disconnect.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRequest" }
+      responses:
+        "202":
+          description: A single durable update job was reserved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpdateJob" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/update/preview:
+    post:
+      operationId: previewSelfUpdate
+      description: Checks Homebrew ownership or the install.sh receipt, permissions and latest stable release. This never runs an installer. Confirmation expires after two minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRequest" }
+      responses:
+        "200":
+          description: Exact update plan and one-time confirmation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpdatePreview" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
   /api/v1/passwords/change:
     post:
@@ -2122,6 +2167,67 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/directories:
+    post:
+      operationId: createLocalSFTPDirectory
+      description: Creates one child directory on the engine filesystem, without replacing existing entries.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPLocalMkdirRequest" } } } }
+      responses:
+        "201": { description: Engine-local directory created, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/rename:
+    post:
+      operationId: renameLocalSFTPEntry
+      description: Renames one engine-local entry within its pinned parent directory. Requires the listing revision and never replaces an existing destination. Symlinks themselves are renamed.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPLocalRenameRequest" } } } }
+      responses:
+        "200": { description: Engine-local entry renamed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/delete-plan:
+    post:
+      operationId: planLocalSFTPDelete
+      description: Inspects all selected trees without following symlinks, checking revisions, home/root protection, reserved temporary names, transfers, and the shared delete traversal limits. Issues a single-use sftp.delete token bound to the complete plan. Does not delete entries.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPLocalDeleteSelection" } } } }
+      responses:
+        "200": { description: Inspected engine-local selection and confirmation token, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPLocalDeletePlan" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/delete:
+    post:
+      operationId: deleteLocalSFTPEntries
+      description: Re-inspects the entire selection and consumes the plan token before deleting children then parents. A revision mismatch or traversal-limit refusal removes nothing. Cancellation or filesystem errors after removal begins can leave a partial result; reload before retrying.
+      parameters:
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 1 } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPLocalDeleteRequest" } } } }
+      responses:
+        "204": { description: Selected engine-local entries deleted }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/local/entries:
     get:
       operationId: listLocalSFTPEntries
@@ -2183,10 +2289,11 @@ paths:
     parameters: *sftpAlias
     get:
       operationId: searchSFTPEntries
-      description: Names matching a query under one remote directory. Symlinks are not followed and the walk is bounded; truncated says so.
+      description: Bounded recursive name search (default) or case-sensitive literal UTF-8 content search over SFTP. Content search skips links, binary and files over 2 MiB; total reads are limited to 64 MiB, 200 matching lines, 20000 entries and depth 32. Omissions explain partial results.
       parameters:
         - { name: path, in: query, required: true, schema: { type: string } }
         - { name: query, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        - { name: mode, in: query, schema: { type: string, enum: [name, content], default: name } }
       responses:
         "200": { description: Matching remote entries, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPSearchResult" } } } }
         "400": { $ref: "#/components/responses/Problem" }
@@ -2215,6 +2322,7 @@ paths:
       operationId: readSFTPText
       parameters:
         - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: expectedRevision, in: query, description: "Optional metadata revision from a content search. Pins the read to that regular file and refuses links or changed metadata.", schema: { type: string } }
       responses:
         "200": { description: Editable UTF-8 file, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTextFile" } } } }
         "401": { $ref: "#/components/responses/Problem" }
@@ -2302,13 +2410,15 @@ paths:
   /api/v1/sftp/compare:
     get:
       operationId: compareSFTPDirectories
+      description: Metadata comparison is the default. Content mode streams SHA256 of regular files from both sides, limited to 256 MiB total; unread files are unverified. Local roots stay pinned and path or handle changes are conflicts. Symlinks are never followed.
       parameters:
         - { name: leftAlias, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 64 } }
         - { name: leftPath, in: query, required: true, schema: { type: string } }
         - { name: rightAlias, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 64 } }
         - { name: rightPath, in: query, required: true, schema: { type: string } }
+        - { name: mode, in: query, schema: { $ref: "#/components/schemas/SFTPComparisonMode" } }
       responses:
-        "200": { description: Metadata comparison of two remote directory trees, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPDirectoryComparison" } } } }
+        "200": { description: Comparison of two local or remote directory trees, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPDirectoryComparison" } } } }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -2458,6 +2568,7 @@ paths:
     parameters: *sftpAlias
     patch:
       operationId: chmodSFTPEntry
+      description: Applies one mode to a single entry or recursively to a folder using the shared permission plan. Requires lsetstat@openssh.com version 1. Preflight conflicts change nothing; failures after execution starts may leave partial changes. The selection API returns confirmed counts for partial outcomes.
       parameters:
         - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodRequest" } } } }
@@ -2467,6 +2578,115 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/mode-plan:
+    parameters: *sftpAlias
+    post:
+      operationId: planSFTPChmod
+      description: Validates the complete selection and recursive trees without changing permissions. Returns counts and a single-use action token bound to the selection, type-specific modes, recursive option and plan revision.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodSelection" } } } }
+      responses:
+        "200": { description: Permission change confirmation plan, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodPlan" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/modes:
+    parameters: *sftpAlias
+    patch:
+      operationId: chmodSFTPSelection
+      description: Rebuilds and verifies the complete confirmed plan before any mutation. Files and directories use separate modes. Symlinks are never followed or changed. Requires lsetstat@openssh.com version 1. A preflight conflict changes nothing; failures after execution starts may leave partial changes and return 207 with the applied count.
+      parameters:
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodSelectionRequest" } } } }
+      responses:
+        "200": { description: All permissions changed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodResult" } } } }
+        "207": { description: Partially applied permissions; inspect and confirm a fresh plan before retrying, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodResult" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/symlink:
+    parameters: *sftpAlias
+    post:
+      operationId: createSFTPSymlink
+      description: Creates a relative or absolute symbolic link, including dangling targets, without overwrite. Requires a single-use confirmation and the shared transfer path lock.
+      parameters:
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPCreateSymlinkRequest" } } } }
+      responses:
+        "201": { description: Entry changed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: changeSFTPSymlink
+      description: Atomically replaces only the symbolic link in its directory. Requires its revision, a single-use confirmation and server atomic rename support. Never writes to the referenced target.
+      parameters:
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChangeSymlinkRequest" } } } }
+      responses:
+        "200": { description: Entry changed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/ownership:
+    parameters: *sftpAlias
+    patch:
+      operationId: changeSFTPOwnership
+      description: Changes numeric SFTP UID/GID for one regular file or directory. Requires metadata containing the entry type and owner IDs, its revision, a single-use confirmation and the shared transfer path lock. Symlinks are refused.
+      parameters:
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPOwnershipRequest" } } } }
+      responses:
+        "200": { description: Entry changed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/space:
+    parameters: *sftpAlias
+    get:
+      operationId: getSFTPFilesystemSpace
+      description: Uses statvfs@openssh.com available blocks for the authenticated account. Byte counts are exact decimal strings. Unsupported servers return sftp_unsupported_operation independently of directory listing.
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Filesystem capacity, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPFilesystemSpace" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "501": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/workspaces:
     get:
       operationId: listTerminalWorkspaces
@@ -2774,12 +2994,39 @@ components:
       required: [current, available]
       properties:
         current: { type: string }
-        # 何かが公開されるまで、あるいは確認が走るまでは空。
         latest: { type: string }
         available: { type: boolean }
-        # 何が変わったかをユーザーが読み、どうするかを決める場所。このアプリケーションは
-        # 何も取得せず、何も置き換えない。
         pageUrl: { type: string }
+        manager: { type: string, enum: [homebrew, install.sh] }
+        canUpdate: { type: boolean }
+        reason: { type: string, description: Stable reason code explaining why automatic updates are unavailable }
+        job: { $ref: "#/components/schemas/UpdateJob" }
+    UpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [target]
+      properties:
+        target: { type: string, minLength: 1, maxLength: 128 }
+    UpdatePreview:
+      type: object
+      additionalProperties: false
+      required: [current, target, manager, actionToken, actionExpiresAt]
+      properties:
+        current: { type: string }
+        target: { type: string }
+        manager: { type: string, enum: [homebrew, install.sh] }
+        actionToken: { type: string }
+        actionExpiresAt: { type: string }
+    UpdateJob:
+      type: object
+      additionalProperties: false
+      required: [id, target, state, problem]
+      properties:
+        id: { type: string }
+        target: { type: string }
+        installedVersion: { type: string, description: Stable version reported by the installed executable. }
+        state: { type: string, enum: [accepted, installing, restarting, succeeded, failed, restart_required] }
+        problem: { type: string }
     ChangeMasterPasswordRequest:
       type: object
       additionalProperties: false
@@ -3934,9 +4181,9 @@ components:
       required: [kind, target]
       properties:
         kind: { type: string, minLength: 1, maxLength: 64 }
-        # SFTP の kind は `alias:絶対パス(:mode)` を target にするので、path の上限（4096）に
-        # alias と区切りの分を足した長さまで受け付ける。サーバーも同じ上限で拒否する。
-        target: { type: string, minLength: 1, maxLength: 4352 }
+        # リンク確認は alias:path:Base64(target)。4096文字のUTF-8パスとリンク先を
+        # 収める上限とし、サーバーも同じ上限で拒否する。
+        target: { type: string, minLength: 1, maxLength: 49152 }
     IssueActionResponse:
       type: object
       additionalProperties: false
@@ -4747,6 +4994,10 @@ components:
         largeFileThresholdBytes: { type: integer, format: int64, minimum: 16777216, maximum: 1073741824 }
         largeFileParallelism: { type: integer, minimum: 1, maximum: 128 }
         largeFileChunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
+        # Aggregate engine payload budget. 0 is unlimited.
+        speedLimitBytesPerSecond: { type: integer, format: int64, minimum: 0, maximum: 1073741824 }
+        autoReconnect: { type: boolean }
+        maxReconnectAttempts: { type: integer, minimum: 0, maximum: 10 }
     # 埋め込みターミナルの設定。数値の範囲外は読み取りで既定へ戻し、書き込みでは拒否する。
     EmbeddedTerminal:
       type: object
@@ -5161,6 +5412,8 @@ components:
         mode: { type: string }
         modifiedAt: { type: string, format: date-time }
         revision: { type: string }
+        uid: { type: integer, format: int64, minimum: 0, maximum: 4294967295 }
+        gid: { type: integer, format: int64, minimum: 0, maximum: 4294967295 }
         # Symlinks only: the target as the server reports it, and the type of
         # the entry the link chain ends at. targetType is absent when the target
         # cannot be read (a broken link or a loop). size is then the target's
@@ -5174,6 +5427,50 @@ components:
       properties:
         path: { type: string }
         entries: { type: array, items: { $ref: "#/components/schemas/SFTPEntry" } }
+    SFTPLocalMkdirRequest:
+      type: object
+      additionalProperties: false
+      required: [directory, name]
+      properties:
+        directory: { type: string, minLength: 1, maxLength: 4096 }
+        name: { type: string, minLength: 1, maxLength: 1024 }
+    SFTPLocalRenameRequest:
+      type: object
+      additionalProperties: false
+      required: [path, name, expectedRevision]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        name: { type: string, minLength: 1, maxLength: 1024 }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPLocalDeleteEntry:
+      type: object
+      additionalProperties: false
+      required: [path, expectedRevision]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPLocalDeleteSelection:
+      type: object
+      additionalProperties: false
+      required: [entries]
+      properties:
+        entries: { type: array, minItems: 1, maxItems: 200, items: { $ref: "#/components/schemas/SFTPLocalDeleteEntry" } }
+    SFTPLocalDeleteRequest:
+      type: object
+      additionalProperties: false
+      required: [entries, expectedRevision]
+      properties:
+        entries: { type: array, minItems: 1, maxItems: 200, items: { $ref: "#/components/schemas/SFTPLocalDeleteEntry" } }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPLocalDeletePlan:
+      type: object
+      additionalProperties: false
+      required: [revision, items, actionToken, actionExpiresAt]
+      properties:
+        revision: { type: string, minLength: 1 }
+        items: { type: integer, format: int64, minimum: 1 }
+        actionToken: { type: string, minLength: 1 }
+        actionExpiresAt: { type: string, format: date-time }
     SFTPLocalListing:
       type: object
       additionalProperties: false
@@ -5228,6 +5525,91 @@ components:
         mode: { type: string, pattern: "^0?[0-7]{3}$" }
         expectedRevision: { type: string, minLength: 1 }
         recursive: { type: boolean }
+    SFTPChmodEntry:
+      type: object
+      additionalProperties: false
+      required: [path, expectedRevision]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPChmodOptions:
+      type: object
+      additionalProperties: false
+      required: [fileMode, directoryMode, recursive]
+      properties:
+        fileMode: { type: string, pattern: "^0?[0-7]{3}$" }
+        directoryMode: { type: string, pattern: "^0?[0-7]{3}$" }
+        recursive: { type: boolean }
+    SFTPChmodSelection:
+      type: object
+      additionalProperties: false
+      required: [entries, options]
+      properties:
+        entries: { type: array, minItems: 1, maxItems: 200, items: { $ref: "#/components/schemas/SFTPChmodEntry" } }
+        options: { $ref: "#/components/schemas/SFTPChmodOptions" }
+    SFTPChmodSelectionRequest:
+      type: object
+      additionalProperties: false
+      required: [entries, options, expectedRevision]
+      properties:
+        entries: { type: array, minItems: 1, maxItems: 200, items: { $ref: "#/components/schemas/SFTPChmodEntry" } }
+        options: { $ref: "#/components/schemas/SFTPChmodOptions" }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPChmodPlan:
+      type: object
+      additionalProperties: false
+      required: [revision, selectionCount, files, directories, skippedSymlinks, options, actionToken, actionExpiresAt]
+      properties:
+        revision: { type: string, minLength: 1 }
+        selectionCount: { type: integer, minimum: 1, maximum: 200 }
+        files: { type: integer, minimum: 0 }
+        directories: { type: integer, minimum: 0 }
+        skippedSymlinks: { type: integer, minimum: 0 }
+        options: { $ref: "#/components/schemas/SFTPChmodOptions" }
+        actionToken: { type: string, minLength: 43, maxLength: 43 }
+        actionExpiresAt: { type: string, format: date-time }
+    SFTPChmodResult:
+      type: object
+      additionalProperties: false
+      required: [applied, items, complete]
+      properties:
+        applied: { type: integer, minimum: 0 }
+        items: { type: integer, minimum: 1 }
+        complete: { type: boolean }
+      x-sshc-less-than-or-equal: [[applied, items]]
+    SFTPCreateSymlinkRequest:
+      type: object
+      additionalProperties: false
+      required: [path, target]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        target: { type: string, minLength: 1, maxLength: 4096 }
+    SFTPChangeSymlinkRequest:
+      type: object
+      additionalProperties: false
+      required: [path, target, expectedRevision]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        target: { type: string, minLength: 1, maxLength: 4096 }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPOwnershipRequest:
+      type: object
+      additionalProperties: false
+      required: [path, uid, gid, expectedRevision]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        # Go must distinguish missing owner IDs from the valid numeric ID 0.
+        uid: { type: integer, format: int64, minimum: 0, maximum: 4294967295, x-go-type: "*int64" }
+        gid: { type: integer, format: int64, minimum: 0, maximum: 4294967295, x-go-type: "*int64" }
+        expectedRevision: { type: string, minLength: 1 }
+    SFTPFilesystemSpace:
+      type: object
+      additionalProperties: false
+      required: [path, availableBytes, totalBytes]
+      properties:
+        path: { type: string }
+        availableBytes: { type: string, pattern: "^(0|[1-9][0-9]{0,19})$", description: Bytes available to the authenticated account as an exact uint64 decimal string. }
+        totalBytes: { type: string, pattern: "^(0|[1-9][0-9]{0,19})$", description: Total filesystem bytes as an exact uint64 decimal string. }
     SFTPTransfer:
       type: object
       additionalProperties: false
@@ -5239,7 +5621,7 @@ components:
     SFTPTransferJob:
       type: object
       additionalProperties: false
-      required: [id, batchId, batchName, batchKind, alias, sourceAlias, sourcePath, operation, direction, kind, name, remotePath, totalBytes, transferredBytes, bytesPerSecond, remainingSeconds, status, allowedActions, attempt, problem, lastModified, expectedRevision, sourceFingerprint, overwrite, downloadRevision, downloadParts, createdAt, updatedAt]
+      required: [id, batchId, batchName, batchKind, alias, sourceAlias, sourcePath, operation, direction, kind, name, remotePath, totalBytes, transferredBytes, bytesPerSecond, remainingSeconds, status, allowedActions, attempt, reconnectAttempt, reconnectAt, problem, lastModified, expectedRevision, sourceFingerprint, overwrite, downloadRevision, downloadParts, createdAt, updatedAt]
       properties:
         id: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
         batchId: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
@@ -5257,13 +5639,15 @@ components:
         transferredBytes: { type: integer, format: int64, minimum: 0 }
         bytesPerSecond: { type: number, format: double, minimum: 0 }
         remainingSeconds: { type: integer, format: int64, minimum: -1 }
-        status: { type: string, enum: [queued, running, paused, reattach, needs_overwrite, completed, failed, cancelled] }
+        status: { type: string, enum: [queued, running, reconnecting, paused, reattach, needs_overwrite, completed, failed, cancelled] }
         allowedActions:
           type: array
           uniqueItems: true
           maxItems: 3
           items: { type: string, enum: [pause, resume, retry, cancel, remove] }
         attempt: { type: integer, minimum: 1 }
+        reconnectAttempt: { type: integer, minimum: 0, maximum: 10 }
+        reconnectAt: { type: string, description: "Next reconnect time, or empty while not waiting." }
         problem: { type: string, maxLength: 128 }
         lastModified: { type: integer, format: int64, minimum: 0 }
         expectedRevision: { type: string, maxLength: 256 }
@@ -5288,7 +5672,7 @@ components:
     SFTPTransferJobList:
       type: object
       additionalProperties: false
-      required: [maxConcurrent, clearCompletedAfterSeconds, processingStopped, largeFileThresholdBytes, largeFileParallelism, largeFileChunkBytes, jobs]
+      required: [maxConcurrent, clearCompletedAfterSeconds, processingStopped, largeFileThresholdBytes, largeFileParallelism, largeFileChunkBytes, speedLimitBytesPerSecond, autoReconnect, maxReconnectAttempts, jobs]
       properties:
         maxConcurrent: { type: integer, minimum: 1, maximum: 8 }
         # 0 means finished jobs are only removed on request.
@@ -5298,6 +5682,10 @@ components:
         largeFileThresholdBytes: { type: integer, format: int64, minimum: 16777216, maximum: 1073741824 }
         largeFileParallelism: { type: integer, minimum: 1, maximum: 128 }
         largeFileChunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
+        # Aggregate engine payload budget. 0 is unlimited.
+        speedLimitBytesPerSecond: { type: integer, format: int64, minimum: 0, maximum: 1073741824 }
+        autoReconnect: { type: boolean }
+        maxReconnectAttempts: { type: integer, minimum: 0, maximum: 10 }
         jobs: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/SFTPTransferJob" } }
     SFTPSearchResult:
       type: object
@@ -5306,18 +5694,41 @@ components:
       properties:
         path: { type: string }
         query: { type: string }
-        # true means a budget stopped the walk before it finished.
+        # A traversal budget or skipped contents made the search incomplete.
         truncated: { type: boolean }
         entries: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/SFTPEntry" } }
+        matches: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/SFTPContentMatch" } }
+        omissions: { type: array, maxItems: 10, items: { $ref: "#/components/schemas/SFTPSearchOmission" } }
+        bytesRead: { type: integer, format: int64, minimum: 0, maximum: 67108864 }
+    SFTPContentMatch:
+      type: object
+      additionalProperties: false
+      required: [entry, line, snippet]
+      properties:
+        entry: { $ref: "#/components/schemas/SFTPEntry" }
+        line: { type: integer, minimum: 1 }
+        snippet: { type: string, maxLength: 162 }
+    SFTPSearchOmission:
+      type: object
+      additionalProperties: false
+      required: [reason, count]
+      properties:
+        reason: { type: string, description: "symlink, unsupported, binary, file_size, unreadable, changed, byte_limit, result_limit, entry_limit or depth_limit" }
+        count: { type: integer, minimum: 1 }
     SFTPDirectoryDifference:
       type: object
       additionalProperties: false
       required: [relativePath, status]
       properties:
         relativePath: { type: string }
-        status: { type: string, enum: [same, different, left_only, right_only, type_mismatch] }
+        status: { type: string, enum: [same, different, left_only, right_only, type_mismatch, unverified] }
         left: { $ref: "#/components/schemas/SFTPEntry" }
         right: { $ref: "#/components/schemas/SFTPEntry" }
+        omission: { type: string, description: "byte_limit or unsupported; the content was not compared" }
+    SFTPComparisonMode:
+      type: string
+      enum: [metadata, content]
+      default: metadata
     SFTPDirectoryComparison:
       type: object
       additionalProperties: false
@@ -5326,10 +5737,13 @@ components:
         leftPath: { type: string }
         rightPath: { type: string }
         entries: { type: array, maxItems: 20000, items: { $ref: "#/components/schemas/SFTPDirectoryDifference" } }
+        mode: { $ref: "#/components/schemas/SFTPComparisonMode" }
+        bytesRead: { type: integer, format: int64, minimum: 0, maximum: 268435456 }
+        truncated: { type: boolean }
     SFTPTransferSettingsRequest:
       type: object
       additionalProperties: false
-      required: [maxConcurrent, clearCompletedAfterSeconds, processingStopped, largeFileThresholdBytes, largeFileParallelism, largeFileChunkBytes]
+      required: [maxConcurrent, clearCompletedAfterSeconds, processingStopped, largeFileThresholdBytes, largeFileParallelism, largeFileChunkBytes, speedLimitBytesPerSecond, autoReconnect, maxReconnectAttempts]
       properties:
         maxConcurrent: { type: integer, minimum: 1, maximum: 8 }
         clearCompletedAfterSeconds: { type: integer, minimum: 0, maximum: 86400 }
@@ -5337,6 +5751,10 @@ components:
         largeFileThresholdBytes: { type: integer, format: int64, minimum: 16777216, maximum: 1073741824 }
         largeFileParallelism: { type: integer, minimum: 1, maximum: 128 }
         largeFileChunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
+        # Aggregate engine payload budget. 0 is unlimited.
+        speedLimitBytesPerSecond: { type: integer, format: int64, minimum: 0, maximum: 1073741824 }
+        autoReconnect: { type: boolean }
+        maxReconnectAttempts: { type: integer, minimum: 0, maximum: 10 }
     SFTPTransferQueueMoveRequest:
       type: object
       additionalProperties: false
@@ -5372,7 +5790,7 @@ components:
       additionalProperties: false
       required: [action]
       properties:
-        action: { type: string, enum: [start, pause, resume, retry, cancel, progress, complete, fail, needs_overwrite] }
+        action: { type: string, enum: [start, reconnect, pause, resume, retry, cancel, progress, complete, fail, needs_overwrite] }
         transferredBytes: { type: integer, format: int64, minimum: 0 }
         totalBytes: { type: integer, format: int64, minimum: 0 }
         problem: { type: string, maxLength: 128 }

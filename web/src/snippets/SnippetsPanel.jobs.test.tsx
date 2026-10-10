@@ -37,7 +37,7 @@ function runningJob(stdout: string): Job {
     status: "running",
     startedAt: "2026-09-30T00:00:00Z",
     results: [{ targetId: "web-1", alias: "web-1", status: "running", stdout }],
-  } as Job;
+  };
 }
 
 beforeEach(() => {

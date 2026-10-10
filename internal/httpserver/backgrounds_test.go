@@ -3,18 +3,32 @@ package httpserver
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/labstack/echo/v5"
+
+	"sshc/internal/application"
 )
 
 // raw は、JSON ではない本文をそのまま送る。画像はバイト列であって書類ではない。
 func (h *testHarness) raw(t *testing.T, method, target string, body []byte) *httptest.ResponseRecorder {
 	t.Helper()
-	request := httptest.NewRequest(method, target, bytes.NewReader(body))
+	return h.stream(t, method, target, bytes.NewReader(body))
+}
+
+// streamは、bodyを読みながら送る。bodyが長さを持つ型（bytes.Readerなど）でなければ、
+// 長さを宣言しない（chunkedと同じ）本文になる。
+func (h *testHarness) stream(t *testing.T, method, target string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(method, target, body)
 	request.Host = "127.0.0.1:43123"
 	request.Header.Set(echo.HeaderContentType, "application/octet-stream")
 	request.Header.Set("Sec-Fetch-Site", "same-origin")
@@ -162,6 +176,57 @@ func TestABackgroundBeyondTheCapacityIsRefusedAsFull(t *testing.T) {
 	}
 	if code := problemCode(t, refused.Body.Bytes()); code != "backgrounds_full" {
 		t.Errorf("code = %q", code)
+	}
+}
+
+// backgroundDirectoryEntriesは、背景の置き場所にあるものの数を返す。置き場所がまだ無ければ、
+// 何も無いのと同じである。
+func backgroundDirectoryEntries(t *testing.T, harness *testHarness) int {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(harness.root, filepath.FromSlash(application.BackgroundsDirectory)))
+	if errors.Is(err, os.ErrNotExist) {
+		return 0
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(entries)
+}
+
+// 本文が途中で切れた画像は、送り方の誤りとして断る。受け取り途中の一時ファイルも残さない。
+func TestAnUploadThatBreaksOffIsRefusedAndLeavesNothingBehind(t *testing.T) {
+	harness := newConfigHarness(t)
+	body := io.MultiReader(bytes.NewReader(pngBytes(strings.Repeat("x", 256<<10))), iotest.ErrReader(errors.New("connection reset")))
+
+	response := harness.stream(t, http.MethodPost, "/api/v1/terminal/backgrounds?name=photo", body)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("POST = %d, body %s", response.Code, response.Body.String())
+	}
+	if code := problemCode(t, response.Body.Bytes()); code != "invalid_request" {
+		t.Errorf("code = %q", code)
+	}
+	if left := backgroundDirectoryEntries(t, harness); left != 0 {
+		t.Fatalf("%d entries were left in the backgrounds directory", left)
+	}
+}
+
+// 長さを宣言しない本文が入口の上限を超えたら、送り方の誤りではなく大きすぎる画像として断る。
+// 本物の上限（1 GiB）を超えるにはディスクへ1 GiB書くことになるので、middlewareと同じ
+// http.MaxBytesReaderで、小さい上限を本文に掛けて代える。
+func TestAnUploadBeyondTheRequestCeilingIsRefusedAsTooLarge(t *testing.T) {
+	harness := newConfigHarness(t)
+	const ceiling = 64 << 10
+	body := http.MaxBytesReader(nil, io.NopCloser(bytes.NewReader(pngBytes(strings.Repeat("x", 4*ceiling)))), ceiling)
+
+	response := harness.stream(t, http.MethodPost, "/api/v1/terminal/backgrounds?name=photo", body)
+	if response.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("POST = %d, body %s", response.Code, response.Body.String())
+	}
+	if code := problemCode(t, response.Body.Bytes()); code != "background_too_large" {
+		t.Errorf("code = %q", code)
+	}
+	if left := backgroundDirectoryEntries(t, harness); left != 0 {
+		t.Fatalf("%d entries were left in the backgrounds directory", left)
 	}
 }
 

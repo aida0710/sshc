@@ -44,7 +44,7 @@ scripts/release/publish.sh v0.33.2
 2. 注釈付きタグを作成してpush
 3. Releaseワークフローのrunを見つけ、`release` environmentだけを実行者の認証情報で承認（確認の入力は求めない）
 4. ワークフローのすべてのjobが成功するまで、状態の変化を表示
-5. Immutable Release、9つの成果物、`checksums.txt`、すべてのattestation、APK、このマシン向けのバイナリが報告するバージョン、Releaseの本文を検証
+5. Immutable Release、11個の成果物（デモ一式のtar.gzとmanifestを含む）、`checksums.txt`、すべてのattestation、APK、このマシン向けのバイナリが報告するバージョン、Releaseの本文を検証
 6. 安定バージョンでは、Homebrewのformulaが指すタグとソースのSHA-256を検証
 
 main CI、`release-ui-check.yml`、Releaseワークフローのどれかが失敗した場合、タグを動かしたり削除したりせず終了します。対処は次の「失敗したとき」を参照してください。

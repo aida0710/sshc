@@ -8,6 +8,19 @@ const KEYBOARD = ".xterm-helper-textarea";
 const SELECTION = ".xterm-selection div";
 const VIEWPORT = ".xterm-viewport";
 const SCROLLBAR_SLIDER = ".xterm-scrollable-element > .scrollbar.vertical > .slider";
+// These fit tests use 13px fonts: allow the 16px padding and one rounded row.
+export const maxTerminalUnusedHeightPx = 40;
+export async function waitForTerminalLayout(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    // Font application, renderer layout and ResizeObserver's queued fit each
+    // need a frame before the browser's final dimensions can be asserted.
+    const layoutFrames = 3;
+    for (let frame = 0; frame < layoutFrames; frame++) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+  });
+}
 export function terminalRoot(page: Page): Locator {
   return page.locator(ROOT);
 }

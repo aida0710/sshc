@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"context"
+	"errors"
 	"io"
 	"io/fs"
 	"time"
@@ -11,14 +12,19 @@ import (
 
 // Client は github.com/pkg/sftp の client を Remote 境界へ適合させる。
 type Client struct {
-	client *pkgsftp.Client
+	client             *pkgsftp.Client
+	noFollowAttributes bool
 }
 
+// NewClient adapts an external client. Public metadata changes require the
+// no-follow transport installed by NewSSHClient and remain unavailable here.
 func NewClient(client *pkgsftp.Client) *Client {
 	return &Client{client: client}
 }
 
 func (c *Client) Close() error { return c.client.Close() }
+
+func (c *Client) Wait() error { return c.client.Wait() }
 
 func (c *Client) Getwd(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
@@ -33,6 +39,8 @@ func (c *Client) Getwd(ctx context.Context) (string, error) {
 	}
 	return workingDirectory, nil
 }
+
+func (c *Client) RealPath(path string) (string, error) { return c.client.RealPath(path) }
 
 func (c *Client) ReadDir(ctx context.Context, path string) ([]fs.FileInfo, error) {
 	return c.client.ReadDirContext(ctx, path)
@@ -66,6 +74,18 @@ func (c *Client) Mkdir(path string) error { return c.client.Mkdir(path) }
 
 func (c *Client) Chmod(path string, mode fs.FileMode) error { return c.client.Chmod(path, mode) }
 
+// ChmodNoFollow refuses unprotected transports before issuing any mutation.
+func (c *Client) ChmodNoFollow(path string, mode fs.FileMode) error {
+	if err := c.CheckChmodNoFollow(); err != nil {
+		return err
+	}
+	return capabilityError(c.client.Chmod(path, mode))
+}
+
+func (c *Client) CheckChmodNoFollow() error {
+	return c.checkNoFollowAttributes()
+}
+
 func (c *Client) Chtimes(path string, modified time.Time) error {
 	return c.client.Chtimes(path, modified, modified)
 }
@@ -87,3 +107,53 @@ func (c *Client) RemoveDirectory(path string) error { return c.client.RemoveDire
 
 var _ Remote = (*Client)(nil)
 var _ RangeRemote = (*Client)(nil)
+var _ SymlinkRemote = (*Client)(nil)
+var _ AtomicSymlinkRemote = (*Client)(nil)
+var _ OwnershipRemote = (*Client)(nil)
+var _ SpaceRemote = (*Client)(nil)
+
+func (c *Client) Symlink(target, linkPath string) error {
+	return capabilityError(c.client.Symlink(target, linkPath))
+}
+
+func (c *Client) ReplaceSymlink(temporary, linkPath string) error {
+	if _, supported := c.client.HasExtension("posix-rename@openssh.com"); !supported {
+		return ErrUnsupportedOperation
+	}
+	return capabilityError(c.client.PosixRename(temporary, linkPath))
+}
+
+func (c *Client) Chown(path string, uid, gid uint32) error {
+	// A prior Lstat cannot prevent another process replacing the entry with a
+	// symlink. Only the no-follow transport may issue this mutation.
+	if err := c.checkNoFollowAttributes(); err != nil {
+		return err
+	}
+	return capabilityError(c.client.Chown(path, int(uid), int(gid)))
+}
+
+func (c *Client) checkNoFollowAttributes() error {
+	if !c.noFollowAttributes {
+		return ErrUnsupportedOperation
+	}
+	if version, supported := c.client.HasExtension(noFollowSetstatExtension); !supported || version != "1" {
+		return ErrUnsupportedOperation
+	}
+	return nil
+}
+
+func (c *Client) StatVFS(path string) (*pkgsftp.StatVFS, error) {
+	if _, supported := c.client.HasExtension("statvfs@openssh.com"); !supported {
+		return nil, ErrUnsupportedOperation
+	}
+	stats, err := c.client.StatVFS(path)
+	return stats, capabilityError(err)
+}
+
+func capabilityError(err error) error {
+	var status *pkgsftp.StatusError
+	if errors.Is(err, pkgsftp.ErrSSHFxOpUnsupported) || (errors.As(err, &status) && status.FxCode() == pkgsftp.ErrSSHFxOpUnsupported) {
+		return ErrUnsupportedOperation
+	}
+	return err
+}

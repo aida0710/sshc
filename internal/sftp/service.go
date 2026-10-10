@@ -12,7 +12,9 @@ import (
 )
 
 type Service struct {
-	Open OpenRemote
+	// Installed once at engine startup; copies of Service share this budget.
+	transferLimiter *transferLimiter
+	Open            OpenRemote
 	// TemporaryPath はテスト時に差し替える。本番では対象と同じディレクトリへ予測不能な名前を作る。
 	TemporaryPath func(target string) (string, error)
 	// ConnectionLimit says how many connections one transfer may open to a
@@ -145,6 +147,8 @@ func (remote *contextRangeRemote) OpenRange(candidate string, offset int64) (io.
 	return ranged.OpenRange(candidate, offset)
 }
 
+func (remote *contextRemote) Discard() error { return remote.finish(true) }
+
 func (remote *contextRemote) Close() error {
 	return remote.finish(false)
 }
@@ -176,6 +180,9 @@ func (remote *contextRemote) finish(cancelled bool) error {
 }
 
 func entryTypeOf(info fs.FileInfo) EntryType {
+	if !metadataTypeKnown(info) {
+		return EntryOther
+	}
 	switch {
 	case info.IsDir():
 		return EntryDirectory
@@ -188,7 +195,7 @@ func entryTypeOf(info fs.FileInfo) EntryType {
 }
 
 func entryFrom(parent string, info fs.FileInfo) Entry {
-	return Entry{
+	entry := Entry{
 		Name:       info.Name(),
 		Path:       path.Join(parent, info.Name()),
 		Type:       entryTypeOf(info),
@@ -197,6 +204,10 @@ func entryFrom(parent string, info fs.FileInfo) Entry {
 		ModifiedAt: info.ModTime().UTC(),
 		Revision:   metadataRevision(info),
 	}
+	if owner, available := ownershipFrom(info); available {
+		entry.Ownership = &owner
+	}
+	return entry
 }
 
 // copyChunkBytes is how much one read or write of a copy asks for. pkg/sftp
@@ -289,7 +300,8 @@ type namedInfo struct {
 	name string
 }
 
-func (i namedInfo) Name() string { return i.name }
+func (i namedInfo) Name() string                    { return i.name }
+func (info namedInfo) Ownership() (Ownership, bool) { return ownershipFrom(info.FileInfo) }
 
 type closedWriter struct{}
 

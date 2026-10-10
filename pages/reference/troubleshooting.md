@@ -12,7 +12,7 @@ sshc status
 sshc engine --replace
 ```
 
-CLIとsshcエンジンのバージョンが違う場合は、古い方を更新してから、sshcエンジンを起動し直してください。`sshc service install`で登録したサービスは`sshc service install`で、それ以外のsshcエンジンは`sshc engine --replace`で再起動します。Androidでは、エラー画面にバージョン、エラーコード、詳細、Android SDK、機種名、ABIが表示され、［診断情報をコピー］でまとめて共有できます。シークレットは診断レポートに含まれません。
+CLIとsshcエンジンのバージョンが違う場合は、古い方を更新してから、sshcエンジンを起動し直してください。`sshc service install`で登録した稼働中のサービスは`sshc service restart`で、それ以外のsshcエンジンは`sshc engine --replace`で再起動します。サービスが停止中、または定義が古い場合は`sshc service install`を使います。Androidでは、エラー画面にバージョン、エラーコード、詳細、Android SDK、機種名、ABIが表示され、［診断情報をコピー］でまとめて共有できます。シークレットは診断レポートに含まれません。
 
 起動時に`was recorded by an sshc release before v0.24.0`と表示されて止まる場合は、v0.24.0より前のsshcで中断した変更の記録が`~/.ssh/sshc/journal/`に残っています。今のバージョンでは、その変更を完了させることも取り消すこともできません。前に使っていたバージョンのsshcを起動し、［History］画面の「中断した変更」で［完了させる］か［取り消す］を選んでから、もう一度更新してください。前のバージョンに戻せない場合は、表示されたファイルを`~/.ssh/sshc/journal/`の外へ移すと起動できます。ただし、その変更は途中のまま残るので、記録の`path`に書かれたファイルの内容を確かめてください。`was recorded by a newer sshc release`と表示された場合は、記録を書いた新しいバージョンのsshcへ更新してから片付けてください。
 
@@ -40,6 +40,25 @@ CLIとsshcエンジンのバージョンが違う場合は、古い方を更新�
 ## ProxyJumpでパスワードを求められる
 
 非対話SSHやSFTPで接続する場合は、最終接続先だけでなく、各踏み台に必要なパスワードまたは鍵のパスフレーズも保存してください。Connectionsの認証テストで、どの接続先が失敗したかを確認できます。2FAなど保存済みの認証情報だけでは完了できない接続は、対話Terminalから開いて追加入力します。
+
+## macOSでダウンロードなどのフォルダを開けない
+
+sshcエンジン側のファイルを開いたペインで、ダウンロード、書類、デスクトップなどのフォルダを開いたり、そこへ転送したりすると、macOSのプライバシー保護によりアクセスできないと表示されることがあります（`sftp_local_privacy_protection`）。macOSは、許可していないプロセスにこれらのフォルダを読み書きさせないためです。次の手順でsshcを許可してください。
+
+1. システム設定の［プライバシーとセキュリティ］→［フルディスクアクセス］を開きます。
+2. 一覧の下の［+］を押し、⌘⇧Gでsshcの実行ファイルのパスを入力して追加します。Homebrewで入れた場合は`/opt/homebrew/opt/sshc/bin/sshc`（Intel Macでは`/usr/local/opt/sshc/bin/sshc`）、`install.sh`で入れた場合は`~/.local/bin/sshc`です。
+3. sshcエンジンを再起動します。`sshc service install`で登録した稼働中のサービスは`sshc service restart`で、それ以外のsshcエンジンは`sshc engine --replace`で再起動します。パスワードを設定したVaultは再起動でロックされるため、`sshc vault unlock`でロックを解除してください。
+
+```sh
+sshc service restart
+sshc vault unlock
+```
+
+フルディスクアクセスは、これらのフォルダだけでなく、ディスク全体の読み書きを許可します。［プライバシーとセキュリティ］→［ファイルとフォルダ］にsshcが表示されている場合は、そこで使うフォルダだけを許可することもできます。
+
+ターミナルで`sshc engine`を実行している場合は、sshcではなく、そのターミナルのアプリ（ターミナル、iTerm2など）を許可してください。
+
+sshcの実行ファイルにはApple Developer IDの署名が無いため、sshcを更新すると許可が外れることがあります。その場合は、一覧のsshcを［-］で削除してから、もう一度追加してください。
 
 ## Syncが進まない
 

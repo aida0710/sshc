@@ -12,7 +12,7 @@ sshc status
 sshc engine --replace
 ```
 
-When the CLI and engine versions differ, update the older one and restart the engine: `sshc service install` restarts the managed service, and `sshc engine --replace` restarts any other engine. On Android, the failure screen shows the version, error code, detail, Android SDK, device, and ABI, and **Copy diagnostics** copies them together. The report excludes secrets.
+When the CLI and engine versions differ, update the older one and restart the engine: `sshc service restart` restarts an active managed service, and `sshc engine --replace` restarts any other engine. Use `sshc service install` if the service is inactive or its definition is outdated. On Android, the failure screen shows the version, error code, detail, Android SDK, device, and ABI, and **Copy diagnostics** copies them together. The report excludes secrets.
 
 If startup stops with `was recorded by an sshc release before v0.24.0`, an interrupted change recorded by sshc before v0.24.0 is still in `~/.ssh/sshc/journal/`. This release can neither complete nor roll back that change. Start the sshc release you used before, choose **Complete** or **Roll back** under **Interrupted transactions** in **History**, and then update again. If you cannot go back to that release, moving the named file out of `~/.ssh/sshc/journal/` lets the engine start, but the change stays half applied, so check the files listed under `path` in that record. If the message says `was recorded by a newer sshc release`, update to the newer release that wrote the record and resolve it there.
 
@@ -31,6 +31,25 @@ sshc does not use a key whose `IdentityFile` is a relative path (`id_work`), ano
 ## ProxyJump asks for a password
 
 Every jump host as well as the final host needs the matching saved password or key passphrase. Run the authentication check to identify the failing hop. Prompts that cannot be answered from saved values, such as 2FA, remain visible in the terminal.
+
+## Downloads and other folders do not open on macOS
+
+In a pane that shows the engine's files, opening Downloads, Documents, Desktop or a similar folder, or transferring into one, can fail with a message that macOS privacy protection keeps the sshc engine out (`sftp_local_privacy_protection`). macOS does not let a process read or write these folders until you allow it. Allow sshc as follows.
+
+1. Open **System Settings → Privacy & Security → Full Disk Access**.
+2. Click **+** below the list, press ⌘⇧G, and enter the path of the sshc executable. For a Homebrew install it is `/opt/homebrew/opt/sshc/bin/sshc` (`/usr/local/opt/sshc/bin/sshc` on an Intel Mac), and for `install.sh` it is `~/.local/bin/sshc`.
+3. Restart the engine: use `sshc service restart` for an active service registered by `sshc service install`, or `sshc engine --replace` for any other engine. A vault with a password locks on restart, so unlock it with `sshc vault unlock`.
+
+```sh
+sshc service restart
+sshc vault unlock
+```
+
+Full Disk Access lets sshc read and write the whole disk, not only these folders. If sshc is listed under **Privacy & Security → Files and Folders**, you can allow only the folders you use there instead.
+
+If you run `sshc engine` in a terminal, allow that terminal app (Terminal, iTerm2 and so on) instead of sshc.
+
+The sshc executable is not signed with an Apple Developer ID, so updating sshc can remove the permission. If that happens, remove sshc from the list with **-** and add it again.
 
 ## Sync does not advance
 

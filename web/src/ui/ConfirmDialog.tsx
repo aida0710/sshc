@@ -14,6 +14,9 @@ import { Button } from "./surface";
 //   プロファイル・スニペットの削除などがこちら。
 // onConfirm が Promise を返す間と busy の間は、両方のボタンとダイアログを閉じる操作を
 // 止め、二度押しで要求が 2 回飛ばないようにする。
+// confirmDisabled は、確かめる内容がまだ揃っていない間（確認の前提をサーバーから
+// 読み込んでいる間など）、確認ボタンだけを止める。キャンセルとダイアログを閉じる
+// 操作は止めない。開いた直後のフォーカスもキャンセルに置いたままにする。
 export function ConfirmDialog({
   id,
   heading,
@@ -25,6 +28,7 @@ export function ConfirmDialog({
   returnFocusRef,
   confirmKind = "danger",
   busy = false,
+  confirmDisabled = false,
   error = "",
 }: {
   id: string;
@@ -37,6 +41,7 @@ export function ConfirmDialog({
   returnFocusRef?: RefObject<HTMLElement | null>;
   confirmKind?: "primary" | "danger";
   busy?: boolean;
+  confirmDisabled?: boolean;
   error?: string;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -48,7 +53,7 @@ export function ConfirmDialog({
   useFocusConfirmAfterUnlock(locked, confirmRef);
 
   function confirm() {
-    if (locked) return;
+    if (locked || confirmDisabled) return;
     const pending = onConfirm();
     if (pending === undefined) return;
     setConfirming(true);
@@ -79,7 +84,7 @@ export function ConfirmDialog({
         <Button ref={cancelRef} disabled={locked} onClick={onCancel} className="focus:outline-2 focus:outline-offset-2 focus:outline-accent">
           {cancelLabel}
         </Button>
-        <Button ref={confirmRef} kind={confirmKind} disabled={locked} onClick={confirm} className="focus:outline-2 focus:outline-offset-2 focus:outline-accent">
+        <Button ref={confirmRef} kind={confirmKind} disabled={locked || confirmDisabled} onClick={confirm} className="focus:outline-2 focus:outline-offset-2 focus:outline-accent">
           {confirmLabel}
         </Button>
       </div>

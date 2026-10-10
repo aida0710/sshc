@@ -66,6 +66,7 @@ Print the resolved SSH target without connecting.
   sshc terminal create shell [--json]
   sshc terminal create ssh <alias> [--json]
   sshc terminal rename <session-id> <title> [--json]
+  sshc terminal rename <session-id> --auto [--json]
   sshc terminal close <session-id> [--json]
 `, Actions: []Action{
 		{Name: "list", Help: "usage:\n  sshc terminal list [--json]\n\nList terminals owned by the running engine.\n"},
@@ -74,13 +75,13 @@ Print the resolved SSH target without connecting.
 		{Name: "send", Help: "usage:\n  sshc terminal send <session-id> --text <text> [--no-enter] [--json]\n\nSend text to the current process generation. A carriage return is appended\nunless --no-enter is set.\n"},
 		{Name: "wait", Help: "usage:\n  sshc terminal wait <session-id> --for <state> [--timeout D] [--json]\n\nStates: connecting, connected, reconnecting, exited.\n"},
 		{Name: "create", Help: "usage:\n  sshc terminal create shell [--json]\n  sshc terminal create ssh <alias> [--json]\n\nCreate a local shell or SSH terminal in the running engine.\n"},
-		{Name: "rename", Help: "usage:\n  sshc terminal rename <session-id> <title> [--json]\n\nSet the title of a terminal owned by the running engine.\n"},
+		{Name: "rename", Help: "usage:\n  sshc terminal rename <session-id> <title> [--json]\n  sshc terminal rename <session-id> [--json] -- <title>\n  sshc terminal rename <session-id> --auto [--json]\n\nPin the title of a terminal owned by the running engine, so titles that\nprograms set no longer replace it. --auto unpins it and returns to the\nautomatic name: the title the program set, or else the Host alias or shell\nname.\n\nA title that starts with - is read as an option, so put it after --.\n"},
 		{Name: "close", Help: "usage:\n  sshc terminal close <session-id> [--json]\n\nClose a terminal owned by the running engine.\n"},
 	}},
 	{Name: "sftp", Route: "sftp", Help: sftpHelp(), Actions: []Action{
 		{Name: "get", Help: "usage:\n  sshc sftp get <alias> <remote-path> <local-path> [options]\n\nDownload a file or, with --recursive, a directory. Existing files require\n--overwrite and confirmation, or --skip-existing.\n"},
 		{Name: "put", Help: "usage:\n  sshc sftp put <alias> <local-path> <remote-path> [options]\n\nUpload a file or, with --recursive, a directory. Existing files require\n--overwrite and confirmation, or --skip-existing.\n"},
-		{Name: "settings", Help: "usage:\n  sshc sftp settings [--split-size <MiB>] [--split-jobs <n>] [--chunk-size <MiB>] [--json]\n\nShow the engine-wide split-transfer defaults. Supplied values are persisted and\nused by Web and CLI transfers; get/put flags still override one invocation.\n"},
+		{Name: "settings", Help: "usage:\n  sshc sftp settings [--split-size <MiB>] [--split-jobs <n>] [--chunk-size <MiB>] [--speed-limit <KiB/s>] [--reconnect-attempts <n>] [--json]\n\nShow the engine-wide transfer defaults. Speed limit 0 is unlimited;\nreconnect attempts 0 disables automatic recovery (maximum 10). Supplied values are persisted and\nused by Web and CLI transfers; get/put flags still override one invocation.\nThe CLI get/put client does not automatically retry connection failures.\n"},
 	}},
 	{Name: "serial", Route: "serial", Help: `usage:
   sshc serial [--json]
@@ -108,9 +109,10 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
 	{Name: "open", Route: "open", Help: "usage:\n  sshc open\n\nPrint a one-time UI URL for the running engine.\n"},
 	{Name: "status", Route: "status", Help: "usage:\n  sshc status [--json]\n\nPrint what the running engine is doing.\n"},
 	{Name: "update", Route: "update", Help: "usage:\n  sshc update [-y|--yes]\n\nUpdate an installation managed by Homebrew or install.sh. The command shows the plan and asks before changing the installation; -y or --yes skips the prompt.\n"},
-	{Name: "service", Route: "service", Help: "usage:\n  sshc service install [-y|--yes]\n  sshc service status\n  sshc service disable [-y|--yes]\n\nManage the sshc engine as a systemd user service on Linux or a launchd user agent on macOS. Mutating actions show the plan and ask for confirmation; -y or --yes skips the prompt.\n", Actions: []Action{
+	{Name: "service", Route: "service", Help: "usage:\n  sshc service install [-y|--yes]\n  sshc service status\n  sshc service restart [-y|--yes]\n  sshc service disable [-y|--yes]\n\nManage the sshc engine as a systemd user service on Linux or a launchd user agent on macOS. Mutating actions show the plan and ask for confirmation; -y or --yes skips the prompt.\n", Actions: []Action{
 		{Name: "install", Help: "usage:\n  sshc service install [-y|--yes]\n\nInstall and start the sshc user service on Linux or macOS. The command asks for confirmation unless -y or --yes is given.\n"},
 		{Name: "status", Help: "usage:\n  sshc service status\n\nPrint whether the sshc-managed user service is active.\n"},
+		{Name: "restart", Help: "usage:\n  sshc service restart [-y|--yes]\n\nRestart an active sshc-managed user service on Linux or macOS. The definition must match this installation's stable executable and the current service definition. Inactive, absent, unmanaged, outdated, or other-installation services are refused. The command shows the plan and asks for confirmation unless -y or --yes is given. Existing connections and transfers will be interrupted. Success requires the service PID, engine handoff, and status API to agree.\n"},
 		{Name: "disable", Help: "usage:\n  sshc service disable [-y|--yes]\n\nStop and remove the sshc-managed user service. The command asks for confirmation unless -y or --yes is given.\n"},
 	}},
 	{Name: "otp", Route: "otp", Help: "usage:\n  sshc otp list [--json]\n  sshc otp <name> [--json]\n  sshc otp show <name> [--json]\n  sshc otp add <name>\n  sshc otp edit <name>\n  sshc otp remove <name> [-y|--yes]\n\nList and manage TOTP credentials in the unlocked vault. Showing a credential prints the previous, current, and next short-lived code; the provisioning secret never leaves the engine. Add and edit read the setup key interactively without echoing it.\n", Actions: []Action{
@@ -157,7 +159,7 @@ var Values = map[string][]string{
 	"serial-options":        {"--json", "--non-interactive", "--require-output", "--encoding", "--baud", "--data-bits", "--parity", "--stop-bits", "--flow", "--dtr", "--rts", "--break", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--help"},
 	"telnet-options":        {"--non-interactive", "--require-output", "--encoding", "--connect-timeout", "--terminal-type", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--json", "--help"},
 	"sftp-options":          {"-r", "--recursive", "--overwrite", "--skip-existing", "--dry-run", "-j", "--jobs", "--split-size", "--split-jobs", "--chunk-size", "--max-depth", "--max-entries", "--max-total-size", "--json", "-y", "--yes", "--help"},
-	"sftp-settings-options": {"--split-size", "--split-jobs", "--chunk-size", "--json", "--help"},
+	"sftp-settings-options": {"--split-size", "--split-jobs", "--chunk-size", "--speed-limit", "--reconnect-attempts", "--json", "--help"},
 }
 
 const GlobalHelp = `usage:
@@ -190,13 +192,15 @@ const GlobalHelp = `usage:
   sshc terminal create shell [--json]
   sshc terminal create ssh <alias> [--json]
   sshc terminal rename <session-id> <title> [--json]
+  sshc terminal rename <session-id> --auto [--json]
   sshc terminal close <session-id> [--json]
                        inspect and control terminals owned by the running engine
   sshc sftp get <alias> <remote-path> <local-path> [options]
   sshc sftp put <alias> <local-path> <remote-path> [options]
-  sshc sftp settings [split-options]
+  sshc sftp settings [options]
                        transfer files through the running engine
                        split options: --split-size --split-jobs --chunk-size
+                       shared settings: --speed-limit --reconnect-attempts
                        transfer options: -r --overwrite --skip-existing --dry-run --json -y
   sshc serial [--json]
                        list serial devices
@@ -223,6 +227,7 @@ const GlobalHelp = `usage:
   sshc update [-y]     update an installation managed by Homebrew or install.sh
   sshc service install install and start a user service on Linux or macOS
   sshc service status  print whether the managed service is active
+  sshc service restart restart the active managed service after confirmation
   sshc service disable stop and remove the managed service
   sshc otp list        list saved one-time-password credentials
   sshc otp <name>      print previous, current, and next TOTP codes
@@ -251,7 +256,7 @@ func sftpHelp() string {
 	return fmt.Sprintf(`usage:
   sshc sftp get <alias> <remote-path> <local-path> [options]
   sshc sftp put <alias> <local-path> <remote-path> [options]
-  sshc sftp settings [split-options]
+  sshc sftp settings [options]
 
 Transfer files through the running engine and its SSH/Vault configuration.
 Remote paths must be absolute POSIX paths.

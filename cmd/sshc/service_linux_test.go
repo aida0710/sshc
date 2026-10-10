@@ -171,6 +171,15 @@ func TestLinuxServiceStatusDistinguishesManagedStates(t *testing.T) {
 	}
 }
 
+func TestLinuxServiceRestartPlanRefusesUnsafeDefinitionsWithoutRunningSystemctl(t *testing.T) {
+	runner := &fakeServiceCommandRunner{}
+	manager := testLinuxServiceManager(t, runner)
+	assertServiceRestartPlanProtectsDefinitions(t, manager, manager.definitionFile())
+	if len(runner.calls) != 0 {
+		t.Fatalf("planning ran systemctl: %#v", runner.calls)
+	}
+}
+
 func TestLinuxServiceRestartTouchesOnlyAnActiveManagedUnit(t *testing.T) {
 	runner := &fakeServiceCommandRunner{results: []serviceCommandResult{{ExitCode: 0}, {ExitCode: 0}}}
 	manager := testLinuxServiceManager(t, runner)

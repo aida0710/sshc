@@ -61,9 +61,28 @@ test("enforces the content security policy in the browser, not only in the heade
   expect(response?.headers()["content-security-policy"]).toBe(
     "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; " +
       "form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-      "img-src 'self' data:; connect-src 'self'; trusted-types sshc-service-worker; " +
+      "img-src 'self' data:; connect-src 'self'; trusted-types sshc-service-worker defaultWorkerFactory " +
+      "diffEditorWidget diffReview domLineBreaksComputer dompurify editorGhostText editorViewLayer " +
+      "richScreenReaderContent standaloneColorizer stickyScrollViewLayer tokenizeToString; " +
       "require-trusted-types-for 'script'",
   );
+
+  // The policy names only the Trusted Types policies sshc and its editor
+  // create, and without 'allow-duplicates' a name, once created, cannot be
+  // created again. The editor is not loaded on this page yet.
+  const policyCreation = await page.evaluate(() => {
+    const factory = (window as unknown as { trustedTypes: { createPolicy(name: string, rules: object): unknown } }).trustedTypes;
+    const create = (name: string) => {
+      try {
+        factory.createPolicy(name, {});
+        return "created";
+      } catch {
+        return "refused";
+      }
+    };
+    return { unlisted: create("sshc-unlisted"), listed: create("editorViewLayer"), again: create("editorViewLayer") };
+  });
+  expect(policyCreation).toEqual({ unlisted: "refused", listed: "created", again: "refused" });
 
   const inlineRan = await page.evaluate(async () => {
     const marker = "__sshc_inline_marker";

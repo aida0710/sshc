@@ -137,3 +137,38 @@ test("the VPN screen lists the profiles before the route states are checked", as
   await expect(route).toContainText("route open");
   await expect(route.getByRole("button", { name: "Disconnect" })).toBeEnabled();
 });
+
+test("lists each VPN profile with its protocol, route state, and connections in both languages", async ({ page, installation }) => {
+  // Example hosts only: reserved example domains and fixture connection names.
+  const profiles = [
+    { profile: labProfile, running: true, relaySocket: "/home/fixture/.ssh/sshc/vpn/lab/engine.sock",
+      connections: ["lab-db", "lab-web"], openConnections: 1 },
+    { profile: { name: "office", backend: "openvpn", openvpn: { servers: ["vpn.example.com"], username: "alice" } },
+      running: false, relaySocket: "", connections: ["office-git"], openConnections: 0 },
+    { profile: { name: "datacenter", backend: "ikev2",
+      ikev2: { server: "ike.example.org", authentication: "eap-mschapv2", identity: "alice" } },
+      running: true, relaySocket: "/home/fixture/.ssh/sshc/vpn/datacenter/engine.sock",
+      connections: ["dc-bastion"], openConnections: 0 },
+  ];
+  await page.route(vpnOverviewPath, (route) => route.fulfill({ status: 200, contentType: "application/json",
+    body: JSON.stringify({ available: true, checking: false, profiles }) }));
+  await openApplication(page, installation);
+  await openVPN(page);
+  for (const name of ["lab", "office", "datacenter"]) {
+    await expect(page.getByRole("article", { name })).toBeVisible();
+  }
+  await expect(page.getByRole("article", { name: "lab" })).toContainText("route open");
+  await expect(page.getByRole("article", { name: "office" })).toContainText("stopped");
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/vpn-desktop-en.png` });
+    await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
+    await page.reload();
+    await openVPN(page);
+    await expect(page.getByRole("article", { name: "office" })).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/vpn-desktop-ja.png` });
+  }
+});

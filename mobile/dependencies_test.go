@@ -96,9 +96,10 @@ var androidFieldIntent = map[string]string{
 	"SFTPDownloadSpoolRoot": "wired: アプリの cacheDir の下。アプリのプロセスには HOME が無い",
 
 	// 意図して空にする。
-	"Toolchain": "absent: ssh-keygen が Android に居ない",
-	"KeyAgent":  "absent: ssh-agent が Android に居ない",
-	"Updates":   "absent: バイナリを置き換える経路が無い",
+	"Toolchain":  "absent: ssh-keygen が Android に居ない",
+	"KeyAgent":   "absent: ssh-agent が Android に居ない",
+	"SelfUpdate": "absent: アプリの更新はOSで行う",
+	"Updates":    "absent: バイナリを置き換える経路が無い",
 
 	"StopEngine": "default: Run が自分で埋める。engine を止められるのは engine 自身だけである",
 	"Port":       "default: WebView は通知された URL を使うため、ポート番号を指定させない",

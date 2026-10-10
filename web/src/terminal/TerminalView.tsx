@@ -8,7 +8,7 @@ import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
 import { connectionProgressText } from "./progress";
-import { fontStack } from "./fonts";
+import { useTerminalFont } from "./useTerminalFont";
 import { defaultTint } from "./appearance";
 import { useBackgroundImage } from "./backgroundImage";
 import { clipboard } from "../ui/clipboard";
@@ -35,7 +35,7 @@ import { attachCommandMarkers } from "./commandMarkers";
 import { showBrowserNotification } from "../ui/browserNotifications";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
-import { escapeOwnerProps } from "../ui/useDismissibleLayer";
+import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
 import { useTerminalSearch } from "./useTerminalSearch";
 import { TerminalSearchBar } from "./TerminalSearchBar";
 import { TerminalStatusBanners } from "./TerminalStatusBanners";
@@ -118,6 +118,7 @@ export function TerminalView({
   const reducedMotion = useMediaQuery(reducedMotionQuery);
   const mobile = useMediaQuery(mobileViewportQuery);
   const resolvedFontSize = fontSize ?? (mobile ? mobileTerminalFontSize : desktopTerminalFontSize);
+  const resolvedFontFamily = useTerminalFont(font ?? "", resolvedFontSize);
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
   const host = useRef<HTMLDivElement>(null);
@@ -188,7 +189,7 @@ export function TerminalView({
       rows: 24,
       convertEol: false,
       cursorBlink: session.state !== "exited" && cursorAnimationEnabled(reducedMotion),
-      fontFamily: fontStack(font ?? ""),
+      fontFamily: resolvedFontFamily,
       fontSize: resolvedFontSize,
       theme: terminalTheme(container, hasBackground),
       scrollback: scrollbackLines,
@@ -263,6 +264,9 @@ export function TerminalView({
     let decoder = new TextDecoder();
     let sent = "";
     const syncSize = () => {
+      // Restoring a hidden session must preserve its PTY size until this
+      // host can be measured, rather than sending xterm's initial 80x24.
+      if (container.clientWidth === 0 || container.clientHeight === 0) return;
       const stream = linkController.currentStream();
       const size = `${view.cols}x${view.rows}`;
       if (stream === null || view.cols === 0 || view.rows === 0 || size === sent) return;
@@ -279,7 +283,7 @@ export function TerminalView({
         if (!coarse && session.state !== "exited" && !search.hasFocus()) {
           view.focus();
         }
-        syncSize();
+        fitAndSync();
       },
       onReplay: (replay) => {
         if (!replay.truncated) return;
@@ -407,9 +411,9 @@ export function TerminalView({
 
   useEffect(() => {
     if (terminal.current === null) return;
-    terminal.current.options.fontFamily = fontStack(font ?? "");
+    terminal.current.options.fontFamily = resolvedFontFamily;
     refit.current?.();
-  }, [font]);
+  }, [resolvedFontFamily]);
 
   useEffect(() => {
     if (terminal.current === null) return;
@@ -513,7 +517,7 @@ export function TerminalView({
         <div
           ref={host}
           data-terminal-host=""
-          {...escapeOwnerProps}
+          {...keyboardOwnerProps}
           {...(palette === undefined || palette === "" ? {} : { "data-term-palette": palette })}
           {...(font === undefined || font === "" ? {} : { "data-term-font": font })}
           {...(hasBackground ? { "data-term-background": background ?? "" } : {})}

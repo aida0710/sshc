@@ -682,7 +682,7 @@
   },
   {
     "name": "Go",
-    "version": "go1.26.6",
+    "version": "go1.26.9",
     "category": "Runtime",
     "url": "https://go.dev",
     "license": "BSD-3-Clause",
@@ -746,9 +746,9 @@
   },
   {
     "name": "golang.org/x/mod",
-    "version": "v0.39.0",
+    "version": "v0.40.0",
     "category": "Go",
-    "url": "https://pkg.go.dev/golang.org/x/mod@v0.39.0",
+    "url": "https://pkg.go.dev/golang.org/x/mod@v0.40.0",
     "license": "BSD",
     "notices": [
       {

@@ -179,6 +179,7 @@ export function AppNavigation({
         </p>
         <UpdateBadge
           current={version}
+          enabled={state === "ready" || state === "locked"}
           indicator={(
             <span
               aria-hidden="true"

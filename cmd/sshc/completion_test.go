@@ -156,6 +156,19 @@ func TestBashCompletesEveryActionAfterItsCommandAndAfterHelp(t *testing.T) {
 	}
 }
 
+func TestBashCompletesServiceRestartConfirmationFlags(t *testing.T) {
+	completion := newBashCompletionFixture(t)
+	candidates := completion.candidates(t, "sshc", "service", "restart", "")
+	for _, flag := range []string{"-y", "--yes", "--help"} {
+		if !containsCompletion(candidates, flag) {
+			t.Errorf("service restart completions=%q, want %q", candidates, flag)
+		}
+	}
+	if containsCompletion(candidates, "--json") {
+		t.Fatalf("service restart offered an unsupported flag: %q", candidates)
+	}
+}
+
 // bashCompletionFixture は、補完の雛形と、alias を固定で返す偽の sshc を一時ディレクトリに置く。
 type bashCompletionFixture struct {
 	bash           string
@@ -217,6 +230,9 @@ func TestBashCompletionUsesLiveAliasesAndNestedValues(t *testing.T) {
 		{name: "otp action", words: []string{"sshc", "otp", "e"}, want: "edit"},
 		{name: "sync auto value", words: []string{"sshc", "sync", "auto", "o"}, want: "on"},
 		{name: "terminal state", words: []string{"sshc", "terminal", "wait", "deadbeef", "--for", "reconn"}, want: "reconnecting"},
+		{name: "terminal rename auto", words: []string{"sshc", "terminal", "rename", "deadbeef", "--a"}, want: "--auto"},
+		{name: "terminal rename auto json", words: []string{"sshc", "terminal", "rename", "deadbeef", "--auto", "--j"}, want: "--json"},
+		{name: "terminal rename title json", words: []string{"sshc", "terminal", "rename", "deadbeef", "deploy", "--j"}, want: "--json"},
 		{name: "sftp alias", words: []string{"sshc", "sftp", "get", "b"}, want: "beta-prod"},
 		{name: "sftp settings option", words: []string{"sshc", "sftp", "settings", "--split"}, want: "--split-size"},
 		{name: "encoding", words: []string{"sshc", "serial", "/dev/ttyUSB0", "--encoding", "shift"}, want: "shift_jis"},

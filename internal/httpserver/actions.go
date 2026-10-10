@@ -13,8 +13,8 @@ import (
 )
 
 // maxActionTargetLength は api/openapi.yaml の IssueActionRequest.target と同じ上限。
-// SFTP の kind は `alias:絶対パス(:mode)` を target にするため path の上限を超える。
-const maxActionTargetLength = 4352
+// SFTP のリンク確認はパスと Base64 化したリンク先を含むため、両方を収める。
+const maxActionTargetLength = 49152
 
 // actionKind は、確認可能な操作 1 個をそれを所有するサブシステムに結び付ける。
 //
