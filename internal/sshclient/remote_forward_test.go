@@ -28,16 +28,25 @@ type remoteForwardSettings struct {
 }
 
 type remoteForwardFixture struct {
-	settings  remoteForwardSettings
-	mutex     sync.Mutex
-	listeners map[string]net.Listener
-	requested chan string
+	settings          remoteForwardSettings
+	mutex             sync.Mutex
+	listeners         map[string]net.Listener
+	reservedListeners map[string]net.Listener
+	requested         chan string
 }
 
 func remoteForwardSession(t *testing.T, settings remoteForwardSettings) (terminal.Process, *remoteForwardFixture) {
 	t.Helper()
-	fixture := &remoteForwardFixture{settings: settings, listeners: make(map[string]net.Listener), requested: make(chan string, 4)}
+	fixture := &remoteForwardFixture{
+		settings: settings, listeners: make(map[string]net.Listener),
+		reservedListeners: make(map[string]net.Listener), requested: make(chan string, 4),
+	}
 	t.Cleanup(func() { fixture.close() })
+	for index := range fixture.settings.specs {
+		if fixture.settings.specs[index].ListenPort == "" {
+			fixture.settings.specs[index].ListenPort = fixture.reservePort(t)
+		}
+	}
 	path, contents, public := keyPair(t)
 	server := newTestServer(t, serverOptions{
 		AcceptKeys:      []ssh.PublicKey{public},
@@ -49,7 +58,7 @@ func remoteForwardSession(t *testing.T, settings remoteForwardSettings) (termina
 	})
 	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
 	target := targetWith(server, path)
-	target.Forwards = settings.specs
+	target.Forwards = fixture.settings.specs
 	process, err := dialerFor(t, server, auth).Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatal(err)
@@ -59,10 +68,32 @@ func remoteForwardSession(t *testing.T, settings remoteForwardSettings) (termina
 	return process, fixture
 }
 
+func (fixture *remoteForwardFixture) reservePort(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, port, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		_ = listener.Close()
+		t.Fatal(err)
+	}
+	// Keep the listener open until the SSH request claims it. Closing a
+	// "free" port first lets another fixture or process occupy that address.
+	fixture.mutex.Lock()
+	fixture.reservedListeners[listener.Addr().String()] = listener
+	fixture.mutex.Unlock()
+	return port
+}
+
 func (fixture *remoteForwardFixture) close() {
 	fixture.mutex.Lock()
 	defer fixture.mutex.Unlock()
 	for _, listener := range fixture.listeners {
+		_ = listener.Close()
+	}
+	for _, listener := range fixture.reservedListeners {
 		_ = listener.Close()
 	}
 }
@@ -101,14 +132,17 @@ func (fixture *remoteForwardFixture) handle(connection ssh.Conn, request *ssh.Re
 		_ = request.Reply(false, nil)
 		return true
 	}
-	listener, err := net.Listen("tcp", name)
-	if err != nil {
+	fixture.mutex.Lock()
+	listener := fixture.reservedListeners[name]
+	delete(fixture.reservedListeners, name)
+	if listener != nil {
+		fixture.listeners[name] = listener
+	}
+	fixture.mutex.Unlock()
+	if listener == nil {
 		_ = request.Reply(false, nil)
 		return true
 	}
-	fixture.mutex.Lock()
-	fixture.listeners[name] = listener
-	fixture.mutex.Unlock()
 	_ = request.Reply(true, nil)
 	go func() {
 		_ = connection.Wait()
@@ -176,9 +210,9 @@ func remoteForwardDial(t *testing.T, address string) net.Conn {
 }
 
 func TestRemoteForwardCarriesBytesFromTheSSHServerToTheEngineDestination(t *testing.T) {
-	port := freePort(t)
 	destination := echoServer(t)
-	process, fixture := remoteForwardSession(t, remoteForwardSettings{specs: []sshclient.ForwardSpec{{Kind: terminal.ForwardRemote, ListenPort: port, Requested: "0.0.0.0", To: destination}}})
+	process, fixture := remoteForwardSession(t, remoteForwardSettings{specs: []sshclient.ForwardSpec{{Kind: terminal.ForwardRemote, Requested: "0.0.0.0", To: destination}}})
+	port := fixture.settings.specs[0].ListenPort
 	if requested := <-fixture.requested; requested != "127.0.0.1:"+port {
 		t.Fatalf("remote listener = %q", requested)
 	}
@@ -210,9 +244,9 @@ func TestStoppingRemoteForwardClosesItsActiveTunnelsAndKeepsTheSession(t *testin
 			accepted <- connection
 		}
 	}()
-	process, _ := remoteForwardSession(t, remoteForwardSettings{})
+	process, fixture := remoteForwardSession(t, remoteForwardSettings{})
 	controller := process.(terminal.ForwardController)
-	forward, err := controller.StartForward(terminal.ForwardRemote, freePort(t), listener.Addr().String())
+	forward, err := controller.StartForward(terminal.ForwardRemote, fixture.reservePort(t), listener.Addr().String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,12 +282,12 @@ func TestStoppingRemoteForwardClosesItsActiveTunnelsAndKeepsTheSession(t *testin
 }
 
 func TestRemoteForwardDenialIsVisibleWithoutEndingTheSession(t *testing.T) {
-	process, _ := remoteForwardSession(t, remoteForwardSettings{deny: true, specs: []sshclient.ForwardSpec{{Kind: terminal.ForwardRemote, ListenPort: freePort(t), To: "127.0.0.1:80"}}})
+	process, fixture := remoteForwardSession(t, remoteForwardSettings{deny: true, specs: []sshclient.ForwardSpec{{Kind: terminal.ForwardRemote, To: "127.0.0.1:80"}}})
 	forwards := process.(terminal.Forwarder).Forwards()
 	if len(forwards) != 1 || forwards[0].Problem != terminal.ForwardProblemRemoteDenied {
 		t.Fatalf("forwards = %#v", forwards)
 	}
-	forward, err := process.(terminal.ForwardController).StartForward(terminal.ForwardRemote, freePort(t), "127.0.0.1:80")
+	forward, err := process.(terminal.ForwardController).StartForward(terminal.ForwardRemote, fixture.reservePort(t), "127.0.0.1:80")
 	if err == nil || forward.Problem != terminal.ForwardProblemRemoteDenied {
 		t.Fatalf("temporary forward = %#v, %v", forward, err)
 	}
@@ -266,8 +300,14 @@ func TestRemoteForwardDenialIsVisibleWithoutEndingTheSession(t *testing.T) {
 }
 
 func TestRemoteForwardRejectsExternallyOriginatedConnections(t *testing.T) {
-	process, _ := remoteForwardSession(t, remoteForwardSettings{origin: "203.0.113.10"})
-	forward, err := process.(terminal.ForwardController).StartForward(terminal.ForwardRemote, freePort(t), echoServer(t))
+	process, fixture := remoteForwardSession(t, remoteForwardSettings{origin: "203.0.113.10"})
+	port := fixture.reservePort(t)
+	if competitor, err := net.Listen("tcp", "127.0.0.1:"+port); err == nil {
+		_ = competitor.Close()
+		t.Fatal("remote listener reservation was released before its SSH request")
+	}
+	destination := echoServer(t)
+	forward, err := process.(terminal.ForwardController).StartForward(terminal.ForwardRemote, port, destination)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,8 +319,10 @@ func TestRemoteForwardRejectsExternallyOriginatedConnections(t *testing.T) {
 }
 
 func TestClosingTheSessionDoesNotWaitForRemoteListenerCancellation(t *testing.T) {
-	process, _ := remoteForwardSession(t, remoteForwardSettings{ignoreCancel: true})
-	if _, err := process.(terminal.ForwardController).StartForward(terminal.ForwardRemote, freePort(t), echoServer(t)); err != nil {
+	process, fixture := remoteForwardSession(t, remoteForwardSettings{ignoreCancel: true})
+	port := fixture.reservePort(t)
+	destination := echoServer(t)
+	if _, err := process.(terminal.ForwardController).StartForward(terminal.ForwardRemote, port, destination); err != nil {
 		t.Fatal(err)
 	}
 	closed := make(chan error, 1)
@@ -298,7 +340,7 @@ func TestClosingTheSessionDoesNotWaitForRemoteListenerCancellation(t *testing.T)
 func TestClosingTheSessionCancelsAPendingRemoteListenRequest(t *testing.T) {
 	process, fixture := remoteForwardSession(t, remoteForwardSettings{ignoreListen: true})
 	started := make(chan error, 1)
-	port := freePort(t)
+	port := fixture.reservePort(t)
 	go func() {
 		_, err := process.(terminal.ForwardController).StartForward(terminal.ForwardRemote, port, "127.0.0.1:80")
 		started <- err
@@ -351,8 +393,8 @@ func TestRemoteForwardDeliversTheResponseAfterTheCallerHalfCloses(t *testing.T) 
 			_, _ = connection.Write(append([]byte("after EOF:"), contents...))
 		}
 	}()
-	process, _ := remoteForwardSession(t, remoteForwardSettings{})
-	forward, err := process.(terminal.ForwardController).StartForward(terminal.ForwardRemote, freePort(t), listener.Addr().String())
+	process, fixture := remoteForwardSession(t, remoteForwardSettings{})
+	forward, err := process.(terminal.ForwardController).StartForward(terminal.ForwardRemote, fixture.reservePort(t), listener.Addr().String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,9 +430,9 @@ func TestRemoteForwardRejectsConnectionsAboveItsLimit(t *testing.T) {
 			}()
 		}
 	}()
-	process, _ := remoteForwardSession(t, remoteForwardSettings{})
+	process, fixture := remoteForwardSession(t, remoteForwardSettings{})
 	controller := process.(terminal.ForwardController)
-	forward, err := controller.StartForward(terminal.ForwardRemote, freePort(t), listener.Addr().String())
+	forward, err := controller.StartForward(terminal.ForwardRemote, fixture.reservePort(t), listener.Addr().String())
 	if err != nil {
 		t.Fatal(err)
 	}
