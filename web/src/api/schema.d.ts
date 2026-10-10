@@ -1631,6 +1631,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/local/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["readLocalSFTPText"];
+        put: operations["saveLocalSFTPText"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/local/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["previewLocalSFTPFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/local/entries": {
         parameters: {
             query?: never;
@@ -3565,6 +3597,8 @@ export interface components {
             speedLimitBytesPerSecond?: number;
             autoReconnect?: boolean;
             maxReconnectAttempts?: number;
+            /** @description Folder contents to exclude. Basenames match at any depth; patterns containing / start at the selected folder. Supports * and ? only. Defaults to no exclusions. */
+            excludePatterns?: string[];
         };
         EmbeddedTerminal: {
             maxSessions?: number;
@@ -3996,6 +4030,8 @@ export interface components {
             expectedRevision: string;
             sourceFingerprint: string;
             overwrite: boolean;
+            /** @description Exclusions captured when this folder job was queued. */
+            excludePatterns?: string[];
             downloadRevision: string;
             downloadParts: components["schemas"]["SFTPDownloadPartProgress"][];
             /** Format: date-time */
@@ -4023,6 +4059,8 @@ export interface components {
             speedLimitBytesPerSecond: number;
             autoReconnect: boolean;
             maxReconnectAttempts: number;
+            /** @description Folder contents to exclude. Basenames match at any depth; patterns containing / start at the selected folder. Supports * and ? only. Defaults to no exclusions. */
+            excludePatterns?: string[];
             jobs: components["schemas"]["SFTPTransferJob"][];
         };
         SFTPSearchResult: {
@@ -4081,6 +4119,8 @@ export interface components {
             speedLimitBytesPerSecond: number;
             autoReconnect: boolean;
             maxReconnectAttempts: number;
+            /** @description Folder contents to exclude. Basenames match at any depth; patterns containing / start at the selected folder. Supports * and ? only. Defaults to no exclusions. */
+            excludePatterns?: string[];
         };
         SFTPTransferQueueMoveRequest: {
             /** @enum {string} */
@@ -7599,6 +7639,105 @@ export interface operations {
             502: components["responses"]["Problem"];
         };
     };
+    readLocalSFTPText: {
+        parameters: {
+            query: {
+                path: string;
+                /** @description Optional metadata revision from a search or comparison. Pins the read to that regular file and refuses links or changed metadata. */
+                expectedRevision?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Engine-local regular UTF-8 file (links refused) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPTextFile"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    saveLocalSFTPText: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPSaveTextRequest"];
+            };
+        };
+        responses: {
+            /** @description Engine-local text saved atomically with content and file identity checks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPTextFile"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    previewLocalSFTPFile: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Engine-local raster image with a type determined from its bytes; links refused */
+            200: {
+                headers: {
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/webp": string;
+                    "image/gif": string;
+                    "image/bmp": string;
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            415: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
     listLocalSFTPEntries: {
         parameters: {
             query?: {
@@ -7785,7 +7924,7 @@ export interface operations {
         parameters: {
             query: {
                 path: string;
-                /** @description Optional metadata revision from a content search. Pins the read to that regular file and refuses links or changed metadata. */
+                /** @description Optional metadata revision from a search or comparison. Pins the read to that regular file and refuses links or changed metadata. */
                 expectedRevision?: string;
             };
             header?: never;
