@@ -1,10 +1,20 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
+export async function sftpHostPicker(page: Page, pane: Locator): Promise<Locator> {
+  const inline = pane.locator("button[data-value]:visible");
+  if (await inline.count() > 0) return inline;
+  const paneContainer = pane.locator("xpath=ancestor-or-self::*[@data-sftp-pane]");
+  const tabTrigger = paneContainer.locator("button[data-value]:visible");
+  if (await tabTrigger.count() > 0) return tabTrigger;
+  // Phones share one tab strip outside the visible pane.
+  return page.locator("[data-sftp-pane-tabs] button[data-value]:visible");
+}
+
 // Connects a pane to `alias` the way a user does: opens the host picker,
 // chooses the host and presses Connect. `pane` defaults to the only visible
 // pane.
 export async function connectSFTPHost(page: Page, alias: string, pane: Locator = page.getByRole("tabpanel")): Promise<void> {
-  await pane.locator("button[data-value]:visible").click();
+  await (await sftpHostPicker(page, pane)).click();
   await page.getByRole("dialog").getByText(alias, { exact: true }).click();
   await pane.getByRole("button", { name: /^(Connect|接続)$/ }).click();
 }
@@ -14,7 +24,7 @@ export async function openLocalSFTPDirectory({ page, pane, directory }: {
   pane: Locator;
   directory: string;
 }): Promise<void> {
-  await pane.locator("button[data-value]:visible").click();
+  await (await sftpHostPicker(page, pane)).click();
   await page.getByRole("dialog").getByText("Local", { exact: true }).click();
   await pane.getByRole("button", { name: "Edit local path", exact: true }).click();
   const pathInput = pane.getByRole("textbox", { name: "Engine filesystem path", exact: true });

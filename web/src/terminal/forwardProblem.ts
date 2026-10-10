@@ -8,6 +8,8 @@ const forwardProblems: CodeMessages = {
   permission_denied: "terminal.forwardProblem.permissionDenied",
   agent_unreachable: "terminal.forwardProblem.agentUnreachable",
   failed: "terminal.forwardProblem.failed",
+  remote_denied: "terminal.forwardProblem.remoteDenied",
+  remote_timeout: "terminal.forwardProblem.remoteTimeout",
 };
 
 export function describeForwardProblem(t: Translate, problem: string): string {

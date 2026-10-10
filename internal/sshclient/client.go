@@ -224,7 +224,7 @@ func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace
 	route := target.JumpRoute()
 
 	// 読みはするが従わない設定は、`sshc info` の他にここでしか言えない。
-	// 効かない RemoteForward を書いて繋いだ人が、なぜ効かないかを知る場所である。
+	// 適用しない設定は、CLIとWebの接続ログでも理由を確認できるようにする。
 	for _, notice := range target.Notices {
 		trace.say(connectionlog.Detailed, "設定%sは適用しません：%s", notice.Keyword, notice.Detail)
 	}

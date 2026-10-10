@@ -4,6 +4,23 @@ import { ApiError } from "../api/client";
 import { notesEntry, notesFile, pendingRead, readsThenRereads, saveConflict } from "../testing/sftpTextFiles";
 import { useSFTPTextEditor, type SFTPTextSource } from "./useSFTPTextEditor";
 
+it("saves once when the shortcut is repeated and clears saved status on the next edit", async () => {
+  let finish!: (file: ReturnType<typeof notesFile>) => void;
+  const source = { readText: vi.fn(async () => notesFile("hello", "r1")), saveText: vi.fn(() => new Promise<ReturnType<typeof notesFile>>((resolve) => { finish = resolve; })) };
+  const { result } = renderHook(() => useSFTPTextEditor({ source, onProblem: () => undefined, onSaved: async () => undefined }));
+  await act(() => result.current.open("edge", notesEntry));
+  act(() => result.current.setContents("edited"));
+  let writing!: Promise<void>;
+  act(() => { writing = result.current.save(); void result.current.save(); });
+  expect(source.saveText).toHaveBeenCalledTimes(1);
+  expect(result.current.saving).toBe(true);
+  await act(async () => { finish(notesFile("edited", "r2")); await writing; });
+  expect(result.current.saving).toBe(false);
+  expect(result.current.saved).toBe(true);
+  act(() => result.current.setContents("edited again"));
+  expect(result.current.saved).toBe(false);
+});
+
 // Opens notes.txt at rev-1, edits it, and has the save refused because the
 // remote file changed.
 async function editorInConflict(source: SFTPTextSource) {

@@ -48,6 +48,8 @@ function describeForward(t: Translate, forward: TerminalForward): string {
       return t("terminal.forwardAgent");
     case "dynamic":
       return t("terminal.forwardDynamic", { listen: forward.listen });
+    case "remote":
+      return t("terminal.forwardRemote", { listen: forward.listen, to: forward.to });
     default:
       return t("terminal.forwardLocal", { listen: forward.listen, to: forward.to });
   }

@@ -59,14 +59,13 @@ func openStableLocalFile(request localContentRead) (stableContentFile, error) {
 			return stableContentFile{}, ErrConflict
 		}
 	}
-	opened, err := request.root.Open(relative)
+	opened, err := openLocalContentFile(request.root, relative)
 	if err != nil {
 		return stableContentFile{}, labelLocalAccessRefusal(existingContentReadError(err))
 	}
 	verify := func() error {
-		info, err := opened.Stat()
-		if err != nil || !os.SameFile(info, expected) || metadataRevision(info) != metadataRevision(expected) {
-			return ErrConflict
+		if err := verifyLocalOpenedFile(opened, expected); err != nil {
+			return err
 		}
 		return verifyLocalReadPath(request.root, metadata)
 	}
@@ -75,4 +74,12 @@ func openStableLocalFile(request localContentRead) (stableContentFile, error) {
 		return stableContentFile{}, err
 	}
 	return stableContentFile{reader: opened, size: expected.Size(), verify: verify}, nil
+}
+
+func verifyLocalOpenedFile(opened *os.File, expected fs.FileInfo) error {
+	info, err := opened.Stat()
+	if err != nil || !info.Mode().IsRegular() || !os.SameFile(info, expected) || metadataRevision(info) != metadataRevision(expected) {
+		return ErrConflict
+	}
+	return nil
 }

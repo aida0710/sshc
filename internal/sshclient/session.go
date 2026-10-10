@@ -81,7 +81,7 @@ func newSession(size terminal.Size, cancel context.CancelFunc) *Session {
 // Forwards は、このセッションが開いている転送を報告する。
 func (s *Session) Forwards() []terminal.Forward { return s.forwarded.list() }
 
-// StartForward opens one loopback-only local or SOCKS5 forward on the existing
+// StartForward opens one loopback-only local, remote or SOCKS5 forward on the existing
 // authenticated transport.
 func (s *Session) StartForward(kind, listenPort, destination string) (terminal.Forward, error) {
 	var (
@@ -91,6 +91,8 @@ func (s *Session) StartForward(kind, listenPort, destination string) (terminal.F
 	switch kind {
 	case terminal.ForwardLocal:
 		spec, err = ParseLocalForward(listenPort + " " + destination)
+	case terminal.ForwardRemote:
+		spec, err = ParseRemoteForward(listenPort + " " + destination)
 	case terminal.ForwardDynamic:
 		if destination != "" {
 			return terminal.Forward{}, terminal.ErrInvalidForward
@@ -261,11 +263,13 @@ func (s *Session) Close() error {
 		remote, closers := s.remote, s.closers
 		s.client = nil
 		s.mutex.Unlock()
+		// Remote listener cancellation needs a reply. Closing transport first
+		// releases that wait even when the server has stopped answering requests.
+		closeAll(closers)
 		s.forwarded.close()
 		if remote != nil {
 			_ = remote.Close()
 		}
-		closeAll(closers)
 		_ = s.input.Close()
 		_ = s.writer.Close()
 		// 自分から閉じたときも、シェルが終わったのではないので輸送の断絶として
@@ -317,6 +321,7 @@ func (s *Session) fail(reason error) {
 	closers := s.closers
 	s.mutex.Unlock()
 	closeAll(closers)
+	s.forwarded.close()
 }
 
 // terminalNewlines は、文の中の改行を端末の改行（CRLF）にする。LF のままだと、
@@ -361,7 +366,6 @@ func (s *Session) run(remote *ssh.Session, client *ssh.Client, keepAlive keepAli
 	err := remote.Wait()
 	describeSessionExit(s.closingTrace, err, s.trace.since(started))
 	s.finish(s.exitInfo(err, client, keepAlive))
-	s.forwarded.close()
 	_ = s.writer.Close()
 	_ = s.input.Close()
 
@@ -369,6 +373,7 @@ func (s *Session) run(remote *ssh.Session, client *ssh.Client, keepAlive keepAli
 	closers := s.closers
 	s.mutex.Unlock()
 	closeAll(closers)
+	s.forwarded.close()
 }
 
 // exitStatusMissingNotice は、終了コードを送らずにチャンネルを閉じるサーバーで

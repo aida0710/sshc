@@ -130,15 +130,16 @@ type GroupMetadata struct {
 
 // FileTransferSettings は、SFTP転送キューの設定である。
 type FileTransferSettings struct {
-	MaxConcurrent              int   `json:"maxConcurrent,omitempty"`
-	ClearCompletedAfterSeconds int   `json:"clearCompletedAfterSeconds,omitempty"`
-	ProcessingStopped          bool  `json:"processingStopped,omitempty"`
-	LargeFileThresholdBytes    int64 `json:"largeFileThresholdBytes,omitempty"`
-	LargeFileParallelism       int   `json:"largeFileParallelism,omitempty"`
-	LargeFileChunkBytes        int64 `json:"largeFileChunkBytes,omitempty"`
-	SpeedLimitBytesPerSecond   int64 `json:"speedLimitBytesPerSecond,omitempty"`
-	AutoReconnect              bool  `json:"autoReconnect,omitempty"`
-	MaxReconnectAttempts       int   `json:"maxReconnectAttempts,omitempty"`
+	MaxConcurrent              int      `json:"maxConcurrent,omitempty"`
+	ClearCompletedAfterSeconds int      `json:"clearCompletedAfterSeconds,omitempty"`
+	ProcessingStopped          bool     `json:"processingStopped,omitempty"`
+	LargeFileThresholdBytes    int64    `json:"largeFileThresholdBytes,omitempty"`
+	LargeFileParallelism       int      `json:"largeFileParallelism,omitempty"`
+	LargeFileChunkBytes        int64    `json:"largeFileChunkBytes,omitempty"`
+	SpeedLimitBytesPerSecond   int64    `json:"speedLimitBytesPerSecond,omitempty"`
+	AutoReconnect              bool     `json:"autoReconnect,omitempty"`
+	MaxReconnectAttempts       int      `json:"maxReconnectAttempts,omitempty"`
+	ExcludePatterns            []string `json:"excludePatterns,omitempty"`
 }
 
 // BackgroundSettings は背景画像ライブラリの保存方針である。

@@ -173,6 +173,31 @@ describe("AdvancedSettings", () => {
     ]);
   });
 
+  it("adds a remote tunnel using the SSH server port and an engine destination", async () => {
+    const user = userEvent.setup();
+    const harness = renderAdvanced("Forwards");
+    await user.selectOptions(screen.getByLabelText("Type"), "remote");
+    await user.type(screen.getByLabelText("SSH server port"), "9080");
+    await user.type(screen.getByLabelText("Destination"), "127.0.0.1:3000");
+    await user.click(screen.getByRole("button", { name: "Add forwarding" }));
+    expect(screen.getByText("9080 127.0.0.1:3000")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(harness.props.onFieldEdits).toHaveBeenCalledWith([{ action: "add", keyword: "RemoteForward", values: ["9080", "127.0.0.1:3000"] }]);
+  });
+
+  it("shows a saved RemoteForward in the forwarding view and allows its removal", async () => {
+    const saved: HostDetail = { ...detail, form: { ...detail.form, fields: [
+      ...detail.form.fields,
+      { line: 4, keyword: "RemoteForward", values: ["9080", "127.0.0.1:3000"], category: "advanced", editable: true },
+    ] } };
+    const harness = renderAdvanced("Forwards", saved);
+    expect(screen.getAllByText("Remote tunnel")).toHaveLength(2);
+    expect(screen.getByLabelText("RemoteForward 4")).toHaveValue("9080 127.0.0.1:3000");
+    await userEvent.click(screen.getByRole("button", { name: "Remove" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(harness.props.onFieldEdits).toHaveBeenCalledWith([{ action: "remove", line: 4 }]);
+  });
+
   it("adds and removes Local and Dynamic forwarding through semantic edits", async () => {
     const forwarded: HostDetail = {
       ...detail,

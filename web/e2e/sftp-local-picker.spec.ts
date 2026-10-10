@@ -1,5 +1,5 @@
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
-import { openSecondSFTPPane } from "./support/sftp";
+import { openSecondSFTPPane, sftpHostPicker } from "./support/sftp";
 
 test("selects the pinned Local destination beside an SSH host", async ({ page, installation }) => {
   test.setTimeout(60_000);
@@ -23,13 +23,13 @@ test("selects the pinned Local destination beside an SSH host", async ({ page, i
   await openSection(page, "SFTP");
   await changeDisplayLanguage(page, "ja");
   const first = page.getByLabel("1つ目のリモートペイン");
-  await first.getByRole("button", { name: "ホスト" }).click();
+  await (await sftpHostPicker(page, first)).click();
   await page.getByRole("dialog").getByText("bastion", { exact: true }).click();
   await first.getByRole("button", { name: "接続" }).click();
   await expect(first.getByRole("button", { name: "README.md" })).toBeVisible();
   await openSecondSFTPPane(page, "新しいタブ");
   const second = page.getByLabel("2つ目のリモートペイン");
-  await second.getByRole("button", { name: "ホスト" }).click();
+  await (await sftpHostPicker(page, second)).click();
   const picker = page.getByRole("dialog");
   await expect(picker.getByRole("button", { name: /ローカル.*sshc/ })).toBeVisible();
   await picker.getByRole("button", { name: /ローカル.*sshc/ }).click();
@@ -62,7 +62,9 @@ test("selects the pinned Local destination beside an SSH host", async ({ page, i
   await expect(second.getByRole("textbox", { name: "sshcエンジン側のファイルパス" })).toHaveValue("/home/engine/projects");
   if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-toolbar-path-ja.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 800 });
-  await first.getByRole("button", { name: "ホスト" }).click();
+  await expect(second).toBeVisible();
+  await page.getByRole("tablist", { name: "ファイルタブ", exact: true }).getByRole("tab", { name: "bastion:projects", exact: true }).click();
+  await (await sftpHostPicker(page, first)).click();
   await page.getByRole("dialog").getByRole("button", { name: /ローカル.*sshc/ }).click();
   await expect(first.getByRole("button", { name: "draft.txt" })).toBeVisible();
   // On a phone the local side falls back to the same two-line list as a remote host.

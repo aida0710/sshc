@@ -8,6 +8,7 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/session"
+	sshcSFTP "sshc/internal/sftp"
 )
 
 const (
@@ -78,9 +79,16 @@ const (
 	// 後で追加されたルートが忘れて無制限の body を読めないようにするためだ。
 	MaxRequestBodyCeiling         = 2 << 20
 	MaxSFTPUploadRangeBodyCeiling = int64(4 << 30)
+	// JSON can encode one text byte as six bytes (\uXXXX); the envelope
+	// must not reduce the editor's decoded 2 MiB limit.
+	MaxSFTPTextJSONBodyCeiling = 6*sshcSFTP.MaxEditableFileBytes + (16 << 10)
 )
 
 func requestBodyCeiling(request *http.Request) int64 {
+	textRoute := strings.TrimPrefix(request.URL.Path, "/api/v1/sftp/")
+	if request.Method == http.MethodPut && textRoute != request.URL.Path && strings.Count(textRoute, "/") == 1 && strings.HasSuffix(textRoute, "/text") {
+		return MaxSFTPTextJSONBodyCeiling
+	}
 	if request.Method == http.MethodPatch && strings.HasPrefix(request.URL.Path, "/api/v1/sftp/") &&
 		strings.Contains(request.URL.Path, "/uploads/") && request.URL.Query().Get("range") == "true" {
 		return MaxSFTPUploadRangeBodyCeiling

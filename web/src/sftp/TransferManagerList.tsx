@@ -1,12 +1,10 @@
-import { TransferIntegerSetting } from "./TransferIntegerSetting";
-import { TransferRecoverySettings } from "./TransferRecoverySettings";
+import { TransferBatchList } from "./TransferBatchList";
+import { TransferSettingsDialog } from "./TransferSettingsDialog";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
-import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
-import type { MessageKey } from "../i18n/messages";
-import { Icon, type IconName } from "../ui/icons";
+import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { Notice } from "../ui/surface";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
@@ -14,10 +12,10 @@ import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { readStoredJSON, writeStoredJSON } from "../ui/browserStorage";
 import { localStorageKeys } from "../ui/browserStorageKeys";
-import { formatBytes, formatDuration } from "../ui/format";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
 import type { TransferSettings } from "./api";
-import { sftpTransferProblemText } from "./sftpProblemText";
+import { getTransferQueueSummary } from "./transferQueueSummary";
+import { TransferQueueSummary } from "./TransferQueueSummary";
 
 const minQueueHeight = 96;
 const maxQueueHeight = 560;
@@ -25,11 +23,6 @@ const defaultQueueHeight = 224;
 // An arrow key moves the divider by this much, so about fifteen presses cross
 // the whole range from minQueueHeight to maxQueueHeight.
 const keyboardResizeStep = 32;
-const concurrencyChoices = [1, 2, 3, 4, 5, 6, 7, 8];
-const autoClearChoices = [0, 30, 300, 3600];
-const mebibyte = 1 << 20;
-const maxLargeFileParallelism = 128;
-
 type QueueView = { collapsed: boolean; height: number };
 
 function clampHeight(value: number): number {
@@ -49,48 +42,6 @@ function restoreView(): QueueView {
 
 function rememberView(view: QueueView): void {
   writeStoredJSON(localStorageKeys.sftpQueueView, view);
-}
-
-type DisplayedStatus = ManagedTransferJob["status"] | "reconcile";
-
-const statusLabelKeys: Record<DisplayedStatus, MessageKey> = {
-  queued: "sftp.manager.status.queued",
-  running: "sftp.manager.status.running",
-  reconnecting: "sftp.manager.status.reconnecting",
-  paused: "sftp.manager.status.paused",
-  reattach: "sftp.manager.status.reattach",
-  needs_overwrite: "sftp.manager.status.needs_overwrite",
-  reconcile: "sftp.manager.status.reconcile",
-  completed: "sftp.manager.status.completed",
-  failed: "sftp.manager.status.failed",
-  cancelled: "sftp.manager.status.cancelled",
-};
-
-// operationIcon は、まとまりの見出しに出す操作の種類の印である。削除、アップロード、
-// ダウンロードのどれでもないものは、リモートからリモートへのコピーと移動である。
-function operationIcon(job: ManagedTransferJob): IconName {
-  if (job.operation === "delete") return "delete";
-  if (job.operation === "put" || job.direction === "upload") return "upload";
-  if (job.operation === "get" || job.direction === "download") return "download";
-  return "arrowLeftRight";
-}
-
-function statusClass(status: DisplayedStatus): string {
-  if (status === "failed") return "text-danger";
-  if (status === "completed") return "text-live";
-  if (status === "needs_overwrite" || status === "reconcile") return "text-notice-ink";
-  return "text-ink-muted";
-}
-
-// A job whose publication or local save may already have crossed its commit
-// point, but whose terminal result could not be recorded, must not read as an
-// upload waiting for the same local file again, nor as an ordinary pause. It
-// is the engine's transferOutcomeUnrecorded (internal/sftp/jobs_state.go), which also
-// leaves cancel as the only allowed action; a running job carries the same
-// problem while its operation is in flight.
-function needsReconciliation(job: ManagedTransferJob): boolean {
-  return job.problem === "sftp_reconciliation_required" &&
-    job.status !== "running" && job.status !== "reconnecting";
 }
 
 export function TransferManagerList({ openRequest = 0 }: { openRequest?: number }) {
@@ -114,6 +65,8 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
   const headingId = useId();
   const [menuOpen, setMenuOpen] = useState(false);
   const [controlProblem, setControlProblem] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsTrigger = useRef<HTMLButtonElement>(null);
   const collapsed = compactViewport ? !sheetOpen : view.collapsed;
   const menuRoot = useRef<HTMLDivElement>(null);
   const menuPanel = useRef<HTMLDivElement>(null);
@@ -137,12 +90,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
   const largeFileThreshold = sftpTransferManager.getLargeFileThreshold();
   const largeFileParallelism = sftpTransferManager.getLargeFileParallelism();
   const largeFileChunkBytes = sftpTransferManager.getLargeFileChunkBytes();
-  const activeJobs = jobs.filter((job) => job.status !== "completed" && job.status !== "cancelled" && job.status !== "failed");
-  const runningJobs = jobs.filter((job) => job.status === "running");
-  const aggregateTotal = activeJobs.reduce((sum, job) => sum + Math.max(job.totalBytes, 0), 0);
-  const aggregateTransferred = activeJobs.reduce((sum, job) => sum + Math.max(job.transferredBytes, 0), 0);
-  const aggregateProgress = aggregateTotal > 0 ? Math.min(100, Math.round((aggregateTransferred / aggregateTotal) * 100)) : 0;
-  const aggregateSpeed = runningJobs.reduce((sum, job) => sum + Math.max(job.bytesPerSecond, 0), 0);
+  const summary = getTransferQueueSummary(jobs, { processingStopped, hasUploadSource: (id) => sftpTransferManager.hasUploadSource(id) });
   const queueHeight = view.height;
   const queueMaximum = maxQueueHeight;
 
@@ -196,19 +144,21 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
     else if (key === "ArrowDown") changeQueueHeight(clampHeight(queueHeight - keyboardResizeStep), true);
   }
 
+  const currentSettings: TransferSettings = {
+    maxConcurrent,
+    clearCompletedAfterSeconds: clearCompletedAfter,
+    processingStopped,
+    largeFileThresholdBytes: largeFileThreshold,
+    largeFileParallelism,
+    largeFileChunkBytes,
+    speedLimitBytesPerSecond: sftpTransferManager.getSpeedLimitBytesPerSecond(),
+    autoReconnect: sftpTransferManager.getAutoReconnect(),
+    maxReconnectAttempts: sftpTransferManager.getMaxReconnectAttempts(),
+    excludePatterns: [...sftpTransferManager.getExcludePatterns()],
+  };
+
   function applySettings(next: Partial<TransferSettings>) {
-    const current: TransferSettings = {
-      maxConcurrent,
-      clearCompletedAfterSeconds: clearCompletedAfter,
-      processingStopped,
-      largeFileThresholdBytes: largeFileThreshold,
-      largeFileParallelism,
-      largeFileChunkBytes,
-      speedLimitBytesPerSecond: sftpTransferManager.getSpeedLimitBytesPerSecond(),
-      autoReconnect: sftpTransferManager.getAutoReconnect(),
-      maxReconnectAttempts: sftpTransferManager.getMaxReconnectAttempts(),
-    };
-    runControl(() => sftpTransferManager.applySettings({ ...current, ...next }));
+    runControl(() => sftpTransferManager.applySettings({ ...currentSettings, ...next }));
   }
 
   function runControl(operation: () => Promise<void>) {
@@ -230,63 +180,6 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
     returnFocusRef: menuTrigger,
   });
   useMenuKeyboard({ open: menuOpen, menuRef: menuPanel, onClose: () => setMenuOpen(false) });
-  const settings = <>
-        <TransferRecoverySettings
-          speedLimitBytesPerSecond={sftpTransferManager.getSpeedLimitBytesPerSecond()}
-          autoReconnect={sftpTransferManager.getAutoReconnect()}
-          maxReconnectAttempts={sftpTransferManager.getMaxReconnectAttempts()}
-          onCommit={applySettings}
-        />
-        <label className="flex items-center gap-1 text-ink-muted">
-          <span className={compactViewport ? "" : "hidden sm:inline"}>{t("sftp.manager.concurrency")}</span>
-          <select
-            aria-label={t("sftp.manager.concurrency")}
-            value={maxConcurrent}
-            onChange={(event) => applySettings({ maxConcurrent: Number(event.target.value) })}
-            className="rounded border border-control-line bg-control px-1 py-0.5 text-xs"
-          >
-            {concurrencyChoices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
-          </select>
-        </label>
-        <label className="flex items-center gap-1 text-ink-muted">
-          <span className={compactViewport ? "" : "hidden md:inline"}>{t("sftp.manager.autoClear")}</span>
-          <select
-            aria-label={t("sftp.manager.autoClear")}
-            value={autoClearChoices.includes(clearCompletedAfter) ? clearCompletedAfter : 0}
-            onChange={(event) => applySettings({ clearCompletedAfterSeconds: Number(event.target.value) })}
-            className="rounded border border-control-line bg-control px-1 py-0.5 text-xs"
-          >
-            {autoClearChoices.map((choice) => (
-              <option key={choice} value={choice}>{choice === 0 ? t("sftp.manager.autoClearOff") : formatDuration(choice, t)}</option>
-            ))}
-          </select>
-        </label>
-        <TransferIntegerSetting
-          label={t("sftp.manager.largeFileThreshold")}
-          value={largeFileThreshold}
-          min={16}
-          max={1024}
-          scale={mebibyte}
-          unit="MiB"
-          onCommit={(value) => applySettings({ largeFileThresholdBytes: value })}
-        />
-        <TransferIntegerSetting
-          label={t("sftp.manager.largeFileParallelism")}
-          value={largeFileParallelism}
-          min={1}
-          max={maxLargeFileParallelism}
-          onCommit={(value) => applySettings({ largeFileParallelism: value })}
-        />
-        <TransferIntegerSetting
-          label={t("sftp.manager.largeFileChunk")}
-          value={largeFileChunkBytes}
-          min={8}
-          max={4096}
-          scale={mebibyte}
-          unit="MiB"
-          onCommit={(value) => applySettings({ largeFileChunkBytes: value })}
-        />
-</>;
   const content = (
     <section className={compactViewport ? "flex min-h-0 flex-1 flex-col text-sm" : "relative mt-3 shrink-0 overflow-visible rounded-md border border-line/60 bg-toolbar/30 text-xs md:mt-2"} aria-labelledby={headingId}>
       {compactViewport || collapsed || jobs.length === 0 ? null : (
@@ -309,142 +202,80 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
           <span aria-hidden="true" className="h-1 w-10 rounded-full bg-control-line transition-colors group-hover:bg-ink-muted group-active:bg-accent group-focus-visible:bg-accent" />
         </div>
       )}
-      <div className={`relative flex shrink-0 items-center gap-2 px-3 ${compactViewport ? "min-h-14 border-b border-line py-1" : "min-h-9 flex-wrap py-1.5 md:min-h-8 md:py-1"}`}>
+      <div className={`relative flex min-w-0 shrink-0 items-center gap-2 px-3 ${compactViewport ? "min-h-14 flex-wrap border-b border-line py-1" : "min-h-9 py-1.5 md:min-h-8 md:py-1"}`}>
         {compactViewport ? <h3 id={headingId} className="min-w-0 flex-1 truncate font-medium">{t("sftp.manager.heading")}</h3> : (
-        <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-expanded={!collapsed} aria-controls={`${headingId}-jobs`} onClick={() => changeView({ collapsed: !collapsed })} className={`flex min-w-0 items-center gap-1.5 rounded ${collapsed ? "after:absolute after:inset-0 after:cursor-pointer after:rounded-md" : ""} hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent`}>
+        <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-describedby={`${headingId}-summary`} aria-expanded={!collapsed} aria-controls={`${headingId}-jobs`} onClick={() => changeView({ collapsed: !collapsed })} className="flex min-w-0 flex-1 items-center gap-2 rounded text-left hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent">
           <DisclosureChevron expanded={!collapsed} className="size-3" />
-          <h3 id={headingId} className={`${collapsed ? "text-ink-muted" : "text-ink"} truncate font-medium`}>{t("sftp.manager.heading")}</h3>
+          <h3 id={headingId} className={`${collapsed ? "text-ink-muted" : "text-ink"} shrink-0 truncate font-medium`}>{t("sftp.manager.heading")}</h3>
+          <TransferQueueSummary summary={summary} id={`${headingId}-summary`} compact />
         </button>
         )}
-        {collapsed ? (
-          <>
-            <span className="min-w-0 grow truncate font-medium text-ink">
-              {activeJobs.length > 0
-                ? t("sftp.manager.summaryRunning", { count: activeJobs.length, progress: aggregateProgress, speed: formatBytes(aggregateSpeed) })
-                : t("sftp.manager.summaryIdle", { count: jobs.length })}
-            </span>
-            {aggregateTotal > 0 ? <progress className="hidden w-28 sm:block" max={aggregateTotal} value={aggregateTransferred} /> : null}
-          </>
-        ) : (
+        {compactViewport ? <div className="order-last w-full pb-2">
+          <TransferQueueSummary summary={summary} id={`${headingId}-summary`} compact />
+        </div> : null}
+        {collapsed && summary.totalBytes > 0 ? <progress className="hidden w-28 sm:block" max={summary.totalBytes} value={summary.transferredBytes} /> : null}
+        {collapsed ? null : (
         <>
           <button
           type="button"
           aria-pressed={processingStopped}
           aria-label={t(processingStopped ? "sftp.manager.startProcessing" : "sftp.manager.stopProcessing")}
           onClick={() => applySettings({ processingStopped: !processingStopped })}
-          className={`flex size-9 items-center justify-center rounded md:size-7 ${processingStopped ? "text-notice-ink" : "text-ink-muted"} hover:bg-select-fill focus:bg-select-fill focus:outline-none`}
+          className={`flex size-11 shrink-0 items-center justify-center rounded md:size-8 [@media(pointer:coarse)]:size-11 ${processingStopped ? "text-notice-ink" : "text-ink-muted"} hover:bg-select-fill focus:bg-select-fill focus:outline-none`}
         >
           <Icon name={processingStopped ? "play" : "pause"} className="size-4" />
         </button>
-        {compactViewport ? null : settings}
         </>
         )}
+        <button ref={settingsTrigger} type="button" aria-label={t("sftp.manager.settings")} title={t("sftp.manager.settings")} onClick={() => setSettingsOpen(true)} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill md:size-8 [@media(pointer:coarse)]:size-11"><Icon name="settings" className="size-4" /></button>
         <div ref={menuRoot} className="relative ml-auto">
-          {hasMenuActions ? <button ref={menuTrigger} type="button" aria-label={t("sftp.manager.actions")} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)} className="flex size-8 items-center justify-center rounded text-ink-muted hover:bg-select-fill hover:text-ink focus:bg-select-fill focus:outline-none">
+          {hasMenuActions ? <button ref={menuTrigger} type="button" aria-label={t("sftp.manager.actions")} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)} className="flex size-11 items-center justify-center rounded md:size-8 [@media(pointer:coarse)]:size-11 text-ink-muted hover:bg-select-fill hover:text-ink focus:bg-select-fill focus:outline-none">
             <Icon name="moreHorizontal" className="size-4" />
           </button> : null}
           {menuOpen ? (
             <div ref={menuPanel} role="menu" aria-label={t("sftp.manager.actions")} className={`absolute right-0 z-20 w-48 rounded-lg border border-control-line bg-card p-1 shadow-lg ${compactViewport ? "top-full mt-1" : "bottom-full mb-1"}`}>
-              {canPause ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.pauseAll()); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.manager.pauseAll")}</button> : null}
-              {canResume ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.resumeAll()); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.manager.resumeAll")}</button> : null}
-              {canCancel ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.cancelAll()); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm text-danger hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.manager.cancelAll")}</button> : null}
-              {canClear ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.clearFinished()); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.transfer.clear")}</button> : null}
-              {canClearFailed ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.clearFailed()); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.manager.clearFailed")}</button> : null}
+              {canPause ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.pauseAll()); }} className="block min-h-11 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-8 [@media(pointer:coarse)]:min-h-11">{t("sftp.manager.pauseAll")}</button> : null}
+              {canResume ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.resumeAll()); }} className="block min-h-11 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-8 [@media(pointer:coarse)]:min-h-11">{t("sftp.manager.resumeAll")}</button> : null}
+              {canCancel ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.cancelAll()); }} className="block min-h-11 w-full rounded px-2.5 py-2 text-left text-sm text-danger hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-8 [@media(pointer:coarse)]:min-h-11">{t("sftp.manager.cancelAll")}</button> : null}
+              {canClear ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.clearFinished()); }} className="block min-h-11 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-8 [@media(pointer:coarse)]:min-h-11">{t("sftp.transfer.clear")}</button> : null}
+              {canClearFailed ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.clearFailed()); }} className="block min-h-11 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-8 [@media(pointer:coarse)]:min-h-11">{t("sftp.manager.clearFailed")}</button> : null}
             </div>
           ) : null}
         </div>
         {compactViewport ? <button ref={closeSheet} type="button" aria-label={t("sftp.manager.close")} onClick={dismissSheet} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill"><Icon name="close" className="size-4" /></button> : null}
       </div>
-      {compactViewport ? <details className="shrink-0 border-b border-line px-3"><DisclosureSummary className="py-3 text-sm text-ink-muted">{t("sftp.manager.settings")}</DisclosureSummary><div className="flex max-h-40 flex-wrap items-center gap-3 overflow-y-auto pb-3">{settings}</div></details> : null}
       {controlProblem !== "" ? <div className="mx-2.5 mb-2"><Notice tone="danger" compact><span className="grow">{controlProblem}</span><button type="button" aria-label={t("sftp.manager.dismissError")} onClick={() => setControlProblem("")} className="shrink-0 text-ink-muted hover:text-ink"><Icon name="close" className="size-3.5" /></button></Notice></div> : null}
       {compactViewport && jobs.length === 0 ? <p className="p-6 text-center text-ink-muted">{t("sftp.manager.summaryIdle", { count: 0 })}</p> : null}
       {collapsed || jobs.length === 0 ? null : <div id={`${headingId}-jobs`} style={compactViewport ? undefined : { height: queueHeight }} className={`space-y-1.5 overflow-auto overscroll-contain px-2.5 pb-2.5 ${compactViewport ? "min-h-0 flex-1 pt-2" : ""}`}>
-        {batches.map(([batchId, items]) => {
-          const first = items[0]!;
-          const failed = items.filter((item) => item.status === "failed").length;
-          const completed = items.filter((item) => item.status === "completed").length;
-          return (
-            <section key={batchId} className="rounded-md bg-surface-subtle/70 p-2" aria-label={first.batchName}>
-              <div className="mb-1 flex flex-wrap items-center gap-2">
-                <Icon name={operationIcon(first)} className="size-3.5 text-ink-muted" />
-                <span className="min-w-0 grow truncate font-medium" title={first.batchName}>{first.batchName}</span>
-                <span className="text-ink-muted">{t(first.batchKind === "folder" ? "sftp.manager.folder" : "sftp.manager.file")}</span>
-                <span className="tabular-nums text-ink-muted">{completed}/{items.length}</span>
-                {failed > 0 ? <button type="button" className="text-accent" onClick={() => runControl(() => sftpTransferManager.retryFailed(batchId))}>{t("sftp.manager.retryFailed", { count: failed })}</button> : null}
-              </div>
-              <ul className="space-y-1" aria-label={t("sftp.manager.items")}>
-                {items.map((item) => {
-                  const total = item.totalBytes >= 0 ? item.totalBytes : Math.max(item.transferredBytes, 1);
-                  const sourceMissing = item.direction === "upload" &&
-                    (item.status === "queued" || item.status === "paused" || item.status === "reattach" || item.status === "needs_overwrite") &&
-                    !sftpTransferManager.hasUploadSource(item.id);
-                  const displayedStatus: DisplayedStatus = needsReconciliation(item)
-                    ? "reconcile"
-                    : sourceMissing ? "reattach" : item.status;
-                  return (
-                    <li key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
-                      <span className="truncate font-mono" title={`${item.alias}:${item.remotePath}`}>{item.name}</span>
-                      <span className="flex items-center justify-self-end gap-1">
-                        <progress className="w-14" max={Math.max(total, 1)} value={item.transferredBytes} />
-                        <span className="tabular-nums text-ink-muted">{item.operation === "delete" ? `${item.transferredBytes}/${Math.max(item.totalBytes, 0)}` : item.totalBytes < 0 ? formatBytes(item.transferredBytes) : `${formatBytes(item.transferredBytes)}/${formatBytes(item.totalBytes)}`}</span>
-                      </span>
-                      <span className="tabular-nums text-ink-muted">{item.operation === "delete" ? t("sftp.manager.delete") : item.bytesPerSecond > 0 ? `${formatBytes(item.bytesPerSecond)}/s` : "—"}</span>
-                      <span className="tabular-nums text-ink-muted">{item.remainingSeconds >= 0 && item.status === "running" ? t("sftp.manager.remaining", { duration: formatDuration(item.remainingSeconds, t) }) : "—"}</span>
-                      <span className="col-span-2 flex flex-wrap items-center justify-end gap-2 whitespace-nowrap">
-                        <span className={statusClass(displayedStatus)}>
-                          {processingStopped && displayedStatus === "queued"
-                              ? t("sftp.manager.status.held")
-                              : t(statusLabelKeys[displayedStatus])}
-                        </span>
-                        {item.status === "reconnecting" ? <span className="text-notice-ink">{t("sftp.manager.reconnectAttempt", { attempt: item.reconnectAttempt, maximum: sftpTransferManager.getMaxReconnectAttempts() })}</span> : null}
-                        {item.status === "queued" && waiting.length > 1 ? (
-                          <>
-                            <button type="button" aria-label={t("sftp.manager.moveUp", { name: item.name })} disabled={waiting[0]?.id === item.id} onClick={() => runControl(() => sftpTransferManager.move(item.id, "up"))} className="flex size-9 items-center justify-center rounded text-accent disabled:text-ink-faint md:size-5"><Icon name="arrowUp" className="size-3.5" /></button>
-                            <button type="button" aria-label={t("sftp.manager.moveDown", { name: item.name })} disabled={waiting[waiting.length - 1]?.id === item.id} onClick={() => runControl(() => sftpTransferManager.move(item.id, "down"))} className="flex size-9 items-center justify-center rounded text-accent disabled:text-ink-faint md:size-5"><Icon name="arrowDown" className="size-3.5" /></button>
-                          </>
-                        ) : null}
-                        {!sourceMissing && item.allowedActions.includes("pause") ? <button type="button" className="text-accent" onClick={() => runControl(() => sftpTransferManager.pause(item.id))}>{t("sftp.transfer.pause")}</button> : null}
-                        {!sourceMissing && item.allowedActions.includes("resume") && item.status !== "needs_overwrite" ? <button type="button" className="text-accent" onClick={() => runControl(() => sftpTransferManager.resume(item.id))}>{t("sftp.transfer.resume")}</button> : null}
-                        {item.allowedActions.includes("retry") ? <button type="button" className="text-accent" onClick={() => runControl(() => sftpTransferManager.retry(item.id))}>{t("sftp.manager.retry")}</button> : null}
-                        {!sourceMissing && item.allowedActions.includes("resume") && item.status === "needs_overwrite" ? <button type="button" className="text-notice-ink" onClick={() => runControl(() => sftpTransferManager.overwrite(item.id))}>{t("sftp.overwrite")}</button> : null}
-                        {item.allowedActions.includes("cancel") ? <button type="button" className="text-danger" onClick={() => runControl(() => sftpTransferManager.cancel(item.id))}>{t("sftp.cancel")}</button> : null}
-                        {item.allowedActions.includes("remove") ? <button type="button" className="text-ink-muted hover:text-ink" onClick={() => runControl(() => sftpTransferManager.remove(item.id))}>{t("sftp.manager.remove")}</button> : null}
-                      </span>
-                      {displayedStatus === "failed" && item.problem !== "" ? (
-                        <span className="col-span-2 text-right text-danger">{sftpTransferProblemText(t, item.problem)}</span>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          );
-        })}
+        <TransferBatchList batches={batches} waiting={waiting} processingStopped={processingStopped}
+          maxReconnectAttempts={sftpTransferManager.getMaxReconnectAttempts()} runControl={runControl} />
       </div>}
     </section>
   );
-  if (!compactViewport) return content;
+  const settingsDialog = <TransferSettingsDialog open={settingsOpen} settings={currentSettings} problem={controlProblem}
+    onCommit={applySettings} onDismiss={() => setSettingsOpen(false)} returnFocusRef={settingsTrigger} />;
+  if (!compactViewport) return <>{content}{settingsDialog}</>;
   return (
     <>
       <button
         ref={dockTrigger}
         type="button"
         aria-label={t("sftp.manager.expand")}
+        aria-describedby={`${headingId}-dock-summary`}
         aria-haspopup="dialog"
         aria-expanded={sheetOpen}
         onClick={() => setSheetOpen(true)}
-        className="relative mt-1 flex min-h-11 shrink-0 items-center gap-2 overflow-hidden rounded-md border border-line/60 bg-toolbar/50 px-3 text-left text-xs active:bg-select-fill"
+        className="relative mt-1 flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-line/60 bg-toolbar/50 px-3 py-1 text-left text-xs active:bg-select-fill"
       >
         <Icon name="chevronRight" className="size-3 -rotate-90 text-ink-muted" />
-        <span className="shrink-0 font-medium">{t("sftp.manager.heading")}</span>
-        <span className="min-w-0 flex-1 truncate text-ink-muted">{activeJobs.length > 0
-          ? t("sftp.manager.summaryRunning", { count: activeJobs.length, progress: aggregateProgress, speed: formatBytes(aggregateSpeed) })
-          : t("sftp.manager.summaryIdle", { count: jobs.length })}</span>
-        {aggregateTotal > 0 ? <span aria-hidden="true" className="absolute bottom-0 left-0 h-0.5 bg-accent transition-[width]" style={{ width: `${aggregateProgress}%` }} /> : null}
+        <span className="sr-only">{t("sftp.manager.heading")}</span>
+        <TransferQueueSummary summary={summary} id={`${headingId}-dock-summary`} compact />
+        {summary.totalBytes > 0 ? <span aria-hidden="true" className="absolute bottom-0 left-0 h-0.5 rounded-full bg-accent transition-[width]" style={{ width: `${summary.progress}%` }} /> : null}
       </button>
       <ModalShell open={sheetOpen} labelledBy={headingId} onDismiss={dismissSheet} closeOnOutside initialFocusRef={closeSheet} returnFocusRef={dockTrigger} placement="sheet" panelClassName="flex h-[min(36rem,85dvh)] max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl">
         {content}
       </ModalShell>
+      {settingsDialog}
     </>
   );
 }

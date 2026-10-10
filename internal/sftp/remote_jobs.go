@@ -225,7 +225,7 @@ func remoteTransferRequestFor(job TransferJob) RemoteTransferRequest {
 	return RemoteTransferRequest{
 		SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
 		TargetAlias: job.Alias, TargetPath: job.RemotePath,
-		Operation: job.Operation, Overwrite: job.Overwrite,
+		Operation: job.Operation, Overwrite: job.Overwrite, ExcludePatterns: job.ExcludePatterns,
 	}
 }
 

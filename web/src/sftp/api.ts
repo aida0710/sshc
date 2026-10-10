@@ -1,3 +1,4 @@
+import { localHostAlias } from "./localHost";
 import { apiClient } from "../api/client";
 import { issueAction, patchJSON, postJSON, putJSON, sendJSON } from "../api/guards";
 import type { components } from "../api/schema";
@@ -100,6 +101,7 @@ export type BrowserSave = { release(): void };
 export type ModeChange = { alias: string; remotePath: string; mode: string; expectedRevision: string; recursive: boolean };
 
 function pathFor(alias: string, suffix: string, remotePath: string): string {
+  if (alias === localHostAlias && (suffix === "text" || suffix === "preview")) return `/api/v1/sftp/local/${suffix}?path=${encodeURIComponent(remotePath)}`;
   return `/api/v1/sftp/${encodeURIComponent(alias)}/${suffix}?path=${encodeURIComponent(remotePath)}`;
 }
 
@@ -194,12 +196,12 @@ export const sftpApi = {
       blob: await response.blob(),
     };
   },
-  async readText(alias: string, remotePath: string, options?: { expectedRevision: string }): Promise<RemoteTextFile> {
-    const endpoint = pathFor(alias, "text", remotePath) + (options === undefined ? "" : `&expectedRevision=${encodeURIComponent(options.expectedRevision)}`);
-    return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await apiClient.read(endpoint, { locallyHandledCodes: ["sftp_conflict", "sftp_unsupported_entry"] }));
+  async readText(alias: string, remotePath: string, options?: { expectedRevision?: string; signal?: AbortSignal }): Promise<RemoteTextFile> {
+    const endpoint = pathFor(alias, "text", remotePath) + (options?.expectedRevision === undefined ? "" : `&expectedRevision=${encodeURIComponent(options.expectedRevision)}`);
+    return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await apiClient.read(endpoint, { ...(options?.signal === undefined ? {} : { signal: options.signal }), locallyHandledCodes: [...connectionProblems, "sftp_conflict", "sftp_unsupported_entry", "sftp_not_utf8", "sftp_text_too_large", "sftp_local_permission_denied", "sftp_local_privacy_protection"] }));
   },
   async saveText(alias: string, remotePath: string, contents: string, expectedRevision: string): Promise<RemoteTextFile> {
-    return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await putJSON<unknown>(pathFor(alias, "text", remotePath), { contents, expectedRevision }));
+    return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await putJSON<unknown>(pathFor(alias, "text", remotePath), { contents, expectedRevision }, [...connectionProblems, "sftp_conflict", "sftp_not_found", "sftp_unsupported_entry", "sftp_local_permission_denied", "sftp_local_privacy_protection"]));
   },
   async mkdir(alias: string, remotePath: string): Promise<RemoteEntry> {
     return entry(await postJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entries`, { path: remotePath, type: "directory" }));

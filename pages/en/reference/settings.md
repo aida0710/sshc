@@ -67,7 +67,7 @@ When an image is renamed, its extension follows the detected format and overall 
 
 ## Local shell and notifications
 
-Choose a default shell profile and start directory. Detected choices include PowerShell variants on Windows and available zsh, fish, bash, and similar shells on Unix systems.
+Choose a default shell profile and start directory. Detected choices include PowerShell variants on Windows and available zsh, fish, bash, and similar shells on Unix systems. **Open Terminal here** from a local SFTP folder uses that default profile with the displayed folder as its start directory. A local shell opened through the usual **New session** action uses the start directory configured here.
 
 Browser notification permission is requested only after an explicit click. Configure the sound and volume used when a terminal program sends a notification through OSC 9/99/777, and test delivery. See [Titles and notifications](/en/terminal/notifications) for details.
 

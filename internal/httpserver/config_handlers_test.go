@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -239,7 +240,7 @@ func TestSavingWholeMetadataThroughConfigSaveIsABadRequest(t *testing.T) {
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_request") {
 		t.Fatalf("response = %d, body %s", response.Code, response.Body.String())
 	}
-	if settings := harness.service.FileTransferSettings(); settings != (application.FileTransferSettings{}) {
+	if settings := harness.service.FileTransferSettings(); !reflect.DeepEqual(settings, application.FileTransferSettings{}) {
 		t.Fatalf("a refused save wrote transfer settings: %#v", settings)
 	}
 }

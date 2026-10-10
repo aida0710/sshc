@@ -9,9 +9,11 @@ description: Queue files and folders, then pause, resume, retry, or cancel them.
 
 File upload, folder upload, file download, folder download, and remote-to-remote copy or move share one queue. Two transfers run concurrently by default. The Transfer Manager is docked below the SFTP view and normally shows only the active count, aggregate progress, and speed. Expand it for per-file status and controls.
 
-While expanded, drag the grip on its upper edge to resize the job list. Mobile resizing snaps to three useful heights, while desktop resizing remains continuous; each viewport keeps its own saved height. With the grip focused, the arrow, Home, and End keys provide the same control from a keyboard.
+On desktop, drag the upper grip of the expanded list to resize it. With the grip focused, the arrow, Home, and End keys provide the same control from a keyboard. Height and folded state are saved in the browser. On phones, tap the bottom bar showing counts and progress to open the queue in a separate sheet.
 
-Each job shows per-file progress, transferred and total bytes, current speed, remaining time, and a queued/running/paused/completed/failed/canceled state.
+**Transfer settings** is available even when the queue is empty or folded. Its dialog groups speed and recovery, queue and finished transfers, split transfers, and exclusion rules. Number fields apply when focus leaves them; selections and checkboxes apply when changed. Exclusion rules require **Save exclusions**.
+
+Each job shows its name, source → destination, progress, transferred and total bytes, speed, remaining time, status, and available actions. Open the row's details for full paths, the exclusions captured when it started, and failure information.
 
 - Pause stops new reads and writes while retaining recovery state.
 - Resume continues a file transfer when its recovery requirements are met.
@@ -33,7 +35,7 @@ File downloads resume through HTTP Range when the browser retains the downloaded
 
 When the sshc engine runs on Windows, a folder cannot be packaged as a ZIP, and its download fails, if the folder itself or anything inside it has a name that contains `:` or is a Windows reserved name such as `CON`, `NUL`, or `COM1`. Windows cannot store a file under such a name as it is: `:` selects a drive or an alternate data stream, and a reserved name refers to a device. Downloads to a folder on the engine's disk and `sshc sftp get` refuse the same names. An engine on Linux or macOS does not refuse them. If the folder itself or anything inside it has a name that contains `\`, the folder cannot be packaged as a ZIP, whatever platform the engine runs on.
 
-You can expand the Transfer Manager and edit split-transfer defaults even when the queue is empty. The stream count starts at one, so large uploads and downloads initially use a single SFTP connection without splitting. With two or more streams, files at or above the split threshold (initially 100 MiB) are divided into chunks (initially 32 MiB) and processed over up to that many independent SFTP connections. Enter any integer threshold from 16 to 1024 MiB, stream count from one to 128, and chunk size from 8 to 4096 MiB. The actual connection count is capped by the number of unfinished chunks. The engine persists these settings and shares them with the Web UI and CLI. A file already being transferred keeps the settings it started with when the defaults change. `sshc sftp settings` displays or saves the defaults, while the same options on `get` or `put` override one invocation.
+Open **Transfer settings** to edit split-transfer defaults even when the queue is empty. The stream count starts at one, so large uploads and downloads initially use a single SFTP connection without splitting. With two or more streams, files at or above the split threshold (initially 100 MiB) are divided into chunks (initially 32 MiB) and processed over up to that many independent SFTP connections. Enter any integer threshold from 16 to 1024 MiB, stream count from one to 128, and chunk size from 8 to 4096 MiB. The actual connection count is capped by the number of unfinished chunks. The engine persists these settings and shares them with the Web UI and CLI. A file already being transferred keeps the settings it started with when the defaults change. `sshc sftp settings` displays or saves the defaults, while the same options on `get` or `put` override one invocation.
 
 Regular files up to 512 GiB can be uploaded or downloaded. A split upload preallocates a remote temporary file and writes non-overlapping ranges through independent connections; the engine persists completed ranges in its transfer queue. To guarantee that download retries use the same remote contents, the engine first prepares the entire file in its private spool, so keep roughly the file size available there. The spool is `$XDG_CACHE_HOME/sshc/sftp-spool` on Linux (`~/.cache/sshc/sftp-spool` when the variable is unset), `~/Library/Caches/sshc/sftp-spool` on macOS, `%LocalAppData%\sshc\sftp-spool` on Windows, and `sftp-spool` in the app's cache directory on Android. If the spool cannot be used, for example because no user cache directory is known, the download fails with `sftp_spool_unavailable` instead of waiting, and the engine logs the reason when it starts. If the spool has less free space than the file size plus 64 MiB, or runs out while the file is written, the download fails with `sftp_spool_full`. Folder downloads packaged as ZIP use a separate limit.
 
@@ -98,3 +100,13 @@ CLI settings use the same persisted engine defaults. `--speed-limit` is KiB/s; `
 sshc sftp settings --speed-limit 2048 --reconnect-attempts 3
 sshc sftp settings --speed-limit 0 --reconnect-attempts 0
 ```
+
+## Excluding entries from folder transfers
+
+Open **Transfer exclusions** in the Transfer Manager settings and save one pattern per line. No entries are excluded by default. Names such as `.git`, `node_modules` and `*.log` match at any depth inside the selected folder. A matching directory and its contents are omitted without entering that directory. Patterns containing `/`, such as `build/cache`, start at the selected folder.
+
+Only `*` and `?` wildcard syntax is supported. `*` matches any sequence within one path segment and `?` matches one character. `**`, negation with `!`, brackets, backslashes, absolute paths and `.` or `..` segments are unsupported. You can save up to 64 patterns, each up to 512 bytes.
+
+Rules apply to browser folder uploads, folder copies between hosts, folder transfers between a host and the engine's local disk, folder ZIP downloads, and CLI `get --recursive` / `put --recursive`. Explicit single-file selections, moves and deletion are unchanged. Omitted entries are not created at the destination and are not part of a successful transfer. Browser uploads report the omitted entry count; engine folder jobs show their captured exclusion rules.
+
+Settings persist in the engine. A queued folder job retains the rules captured when it was registered, including after settings changes or a restart. Prepared ZIP contents stay unchanged on retry. The CLI snapshots the rules at invocation start; `sshc sftp settings` also displays the current rules.

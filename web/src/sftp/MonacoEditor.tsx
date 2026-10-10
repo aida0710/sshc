@@ -1,3 +1,4 @@
+import { useTranslate } from "../i18n/context";
 import { useEffect, useRef } from "react";
 // Load this module only through loadMonacoEditor (loadMonacoEditor.ts). Monaco
 // creates its Trusted Types policies through MonacoEnvironment while the
@@ -28,6 +29,7 @@ type MonacoEditorProps = {
   onChange: (value: string) => void;
   readOnly?: boolean;
   initialLine?: number;
+  onSave?: (() => void) | undefined;
 };
 
 function languageFor(path: string): string {
@@ -76,9 +78,11 @@ function startWithTabIndenting(view: monaco.editor.IStandaloneCodeEditor): void 
   view.trigger("sshc", toggleTabMovesFocusCommand, null);
 }
 
-export function MonacoEditor({ path, value, onChange, readOnly = false, initialLine = 1 }: MonacoEditorProps) {
+export function MonacoEditor({ path, value, onChange, readOnly = false, initialLine = 1, onSave }: MonacoEditorProps) {
+  const t = useTranslate();
   const container = useRef<HTMLDivElement>(null);
   const callback = useRef(onChange);
+  const saveCallback = useRef(onSave);
   // The contents the editor reported through onChange that have not come back
   // as `value` yet, oldest first. React can render one of them after the user
   // has typed more, so `value` is not always the model's latest contents.
@@ -87,6 +91,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false, initialL
   const { resolved } = useTheme();
   const reducedMotion = useMediaQuery(reducedMotionQuery);
   callback.current = onChange;
+  saveCallback.current = onSave;
 
   useEffect(() => {
     if (container.current === null) return;
@@ -106,6 +111,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false, initialL
       theme: resolved === "dark" ? "vs-dark" : "vs",
     });
     startWithTabIndenting(view);
+    const saveAction = view.addAction({ id: "sshc.saveFile", label: t("sftp.save"), keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS], run: () => { saveCallback.current?.(); } });
     editor.current = view;
     pendingReports.current = [];
     const subscription = model.onDidChangeContent(() => {
@@ -114,6 +120,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false, initialL
       callback.current(next);
     });
     return () => {
+      saveAction.dispose();
       subscription.dispose();
       view.dispose();
       model.dispose();

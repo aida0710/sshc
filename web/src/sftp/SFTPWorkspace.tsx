@@ -13,9 +13,11 @@ import { SFTPCompareDialog } from "./SFTPCompareDialog";
 import { SFTPTabDropTarget } from "./SFTPTabDropTarget";
 import { SFTPTabStrip, tabElementId, tabPanelElementId } from "./SFTPTabStrip";
 import { TransferManagerList } from "./TransferManagerList";
+import { SFTPCompareTabsDialog } from "./SFTPCompareTabsDialog";
+import type { SFTPLocation } from "./sftpLocation";
 import { rememberPanes, rememberSplitRatio, restorePanes, restoreSplitRatio } from "./sftpPaneStorage";
 import {
-  activeTab, addTab, allTabs, blankTab, canSplit, closeTab, findTab, moveTab, relocateTab, resortTab, selectTab,
+  activeTab, addTab, allTabs, blankTab, canSplit, closeTab, findTab, maxTabsPerPane, moveTab, relocateTab, resortTab, selectTab,
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
 } from "./sftpPanes";
 
@@ -65,8 +67,10 @@ export function SFTPWorkspace({
   const [splitRatio, setSplitRatio] = useState(restoreSplitRatio);
   const [focusedPaneId, setFocusedPaneId] = useState(() => panes[0]?.id ?? "");
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
-  const [compareOpen, setCompareOpen] = useState(false);
+  const [comparisonLocations, setComparisonLocations] = useState<{ left: SFTPLocation; right: SFTPLocation } | null>(null);
+  const [compareTabsOpen, setCompareTabsOpen] = useState(false);
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
+  const [hostPickerRequests, setHostPickerRequests] = useState<Record<string, number>>({});
   const [dirtyTabs, setDirtyTabs] = useState<Map<string, string>>(() => new Map());
   const [closeTabIntent, setCloseTabIntent] = useState<{ tabId: string; path: string } | null>(null);
   const workspaceRoot = useRef<HTMLElement | null>(null);
@@ -79,14 +83,11 @@ export function SFTPWorkspace({
   const leftPane = panes[0] ?? null;
   const rightPane = panes[1] ?? null;
   const focusedPane = panes.find((pane) => pane.id === focusedPaneId) ?? leftPane;
+  const focusedLocation = focusedPane === null ? null : activeTab(focusedPane);
+  const compactTabs = focusedPane === null ? null : { ...focusedPane, tabs: allTabs(panes) };
+  const comparisonTabs = allTabs(panes).filter((tab) => tab.alias !== "");
 
   useEffect(() => { rememberPanes(panes); }, [panes]);
-
-  useEffect(() => {
-    if (!compactViewport || leftPane === null) return;
-    setFocusedPaneId(leftPane.id);
-    setCompareOpen(false);
-  }, [compactViewport, leftPane]);
 
   useEffect(() => {
     if (draggedTabId !== null && findTab(panes, draggedTabId) === null) setDraggedTabId(null);
@@ -121,6 +122,12 @@ export function SFTPWorkspace({
     blockers.current.delete(tabId);
     blockerReporter.forget(tabId);
     dirtyReporter.forget(tabId);
+    setHostPickerRequests((current) => {
+      if (!(tabId in current)) return current;
+      const next = { ...current };
+      delete next[tabId];
+      return next;
+    });
     setDirtyTabs((current) => {
       if (!current.has(tabId)) return current;
       const next = new Map(current);
@@ -191,24 +198,57 @@ export function SFTPWorkspace({
   const leftLocation = leftPane === null ? null : activeTab(leftPane);
   const rightLocation = rightPane === null ? null : activeTab(rightPane);
 
-  // A request from another screen names a host. When the visible tabs all show
-  // the engine's own disk, the left tab switches to that host first.
+  // A request from another screen names a host. If every visible pane is
+  // local, the selected pane switches to that host before handling the path.
   useEffect(() => {
-    if (target === null || leftLocation === null || leftLocation.alias !== localHostAlias ||
+    const destination = compactViewport ? focusedLocation : leftLocation;
+    if (target === null || destination === null || destination.alias !== localHostAlias ||
       (visibleSplit && rightLocation?.alias !== localHostAlias)) return;
     const alias = aliases.includes(target.alias) ? target.alias : "";
-    restoring.current.set(leftLocation.id, { alias, path: "" });
-    setPanes((current) => relocateTab(current, leftLocation.id, alias, ""));
-    if (leftPane !== null) setFocusedPaneId(leftPane.id);
-  }, [target, leftPane, leftLocation, rightLocation?.alias, visibleSplit, aliases]);
+    restoring.current.set(destination.id, { alias, path: "" });
+    setPanes((current) => relocateTab(current, destination.id, alias, ""));
+    if (!compactViewport && leftPane !== null) setFocusedPaneId(leftPane.id);
+  }, [target, leftPane, leftLocation, focusedLocation, rightLocation?.alias, visibleSplit, compactViewport, aliases]);
 
-  const compareEnabled = visibleSplit && leftLocation !== null && rightLocation !== null &&
+  const compareReady = leftLocation !== null && rightLocation !== null &&
     leftLocation.alias !== "" && rightLocation.alias !== "";
 
+  function selectFileTab(tabId: string) {
+    const found = findTab(panes, tabId);
+    if (found !== null) chooseTab(found.pane, tabId);
+  }
+
+  function requestHostChange(tab: SFTPTab) {
+    if (dirtyTabs.has(tab.id)) return;
+    selectFileTab(tab.id);
+    setHostPickerRequests((current) => ({ ...current, [tab.id]: (current[tab.id] ?? 0) + 1 }));
+  }
+
+  function openFileTab() {
+    const destination = focusedPane !== null && focusedPane.tabs.length < maxTabsPerPane
+      ? focusedPane : panes.find((pane) => pane.tabs.length < maxTabsPerPane);
+    if (destination !== undefined && destination !== null) openTab(destination);
+  }
+
+  function requestComparison() {
+    if (compactViewport) {
+      setCompareTabsOpen(true);
+    } else if (compareReady && leftLocation !== null && rightLocation !== null) {
+      setComparisonLocations({ left: leftLocation, right: rightLocation });
+    }
+  }
+
+  function comparisonButton(enabled: boolean) {
+    return <button type="button" aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")}
+      disabled={!enabled} onClick={requestComparison}
+      className={`flex shrink-0 items-center rounded text-sm text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint ${compactViewport ? "min-h-12 w-12 justify-center" : "gap-1.5 px-2"}`}>
+      <Icon name="arrowLeftRight" className={compactViewport ? "size-5" : "size-4"} />{compactViewport ? null : t("sftp.compare.action")}
+    </button>;
+  }
+
   function renderPane(pane: SFTPPane, index: number) {
-    const concealed = index > 0 && !visibleSplit;
+    const concealed = compactViewport && pane.id !== focusedPane?.id;
     const other = index === 0 ? rightLocation : leftLocation;
-    const otherVisible = visibleSplit ? other : null;
     const last = index === panes.length - 1;
     const closable = pane.tabs.length > 1 || panes.length > 1;
     const dropPlacement = draggedTabId === null || compactViewport ? null
@@ -220,6 +260,7 @@ export function SFTPWorkspace({
           <SplitResizeHandle direction="horizontal" ratio={splitRatio} label={t("sftp.resizePanes")} onRatioChange={changeSplitRatio} />
         ) : null}
         <div
+          data-sftp-pane={pane.id}
           className="flex min-h-0 min-w-0 flex-col"
           style={{ flexBasis: visibleSplit ? `${index === 0 ? splitRatio : 100 - splitRatio}%` : "100%" }}
           hidden={concealed}
@@ -227,37 +268,27 @@ export function SFTPWorkspace({
           onPointerDown={() => setFocusedPaneId(pane.id)}
           onFocusCapture={() => setFocusedPaneId(pane.id)}
         >
-          <SFTPTabStrip
+          {compactViewport ? null : <SFTPTabStrip
             pane={pane}
             label={t(index === 0 ? "sftp.primaryTabs" : "sftp.secondaryTabs")}
             closable={closable}
             movable={(tab) => !compactViewport && !dirtyTabs.has(tab.id)}
-            trailing={last && visibleSplit ? (
-              <button
-                type="button"
-                aria-label={t("sftp.compare.heading")}
-                title={t("sftp.compare.heading")}
-                disabled={!compareEnabled}
-                onClick={() => setCompareOpen(true)}
-                className="flex shrink-0 items-center gap-1.5 rounded px-2.5 text-sm text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint"
-              >
-                <Icon name="arrowLeftRight" className="size-4" />
-                {t("sftp.compare.action")}
-              </button>
-            ) : null}
+            trailing={last && visibleSplit ? comparisonButton(compareReady) : null}
+            onChangeHost={requestHostChange}
+            canChangeHost={(tab) => !dirtyTabs.has(tab.id)}
             onSelect={(tabId) => chooseTab(pane, tabId)}
             onClose={requestCloseTab}
             onAdd={() => openTab(pane)}
             onDragStart={setDraggedTabId}
             onDragEnd={() => setDraggedTabId(null)}
             onMove={moveTabWithKeyboard}
-          />
-          <div data-sftp-pane-content={pane.id} className="relative flex min-h-0 min-w-0 flex-1 flex-col pt-2">
+          />}
+          <div data-sftp-pane-content={pane.id} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {pane.tabs.map((tab) => {
               const selected = tab.id === pane.activeId;
               const restored = restoring.current.get(tab.id);
               const ownsTarget = selected && tab.alias !== localHostAlias &&
-                (compactViewport ? index === 0 : otherVisible?.alias === localHostAlias || focusedPane?.id === pane.id);
+                (compactViewport ? pane.id === focusedPane?.id : other?.alias === localHostAlias || focusedPane?.id === pane.id);
               return (
                 <div
                   key={tab.id}
@@ -269,13 +300,14 @@ export function SFTPWorkspace({
                 >
                   <SFTPPanel
                     aliases={aliases}
+                    hostPickerRequest={hostPickerRequests[tab.id] ?? 0}
                     {...(hosts === undefined ? {} : { hosts })}
                     {...(hostVPN === undefined ? {} : { hostVPN })}
                     target={ownsTarget ? target : null}
                     initialLocation={restored === undefined || restored.alias === "" ? null : restored}
                     initialSort={tab.sort}
                     showTransfers={false}
-                    counterpart={otherVisible?.alias && otherVisible.path ? { alias: otherVisible.alias, path: otherVisible.path } : null}
+                    counterpart={other?.alias && other.path ? { alias: other.alias, path: other.path } : null}
                     onQueueOpen={() => setOpenQueueRequest((current) => current + 1)}
                     {...(selected ? { onNavigationBlockerChange: blockerReporter.forTab(tab.id) } : {})}
                     onDirtyChange={dirtyReporter.forTab(tab.id)}
@@ -302,6 +334,13 @@ export function SFTPWorkspace({
 
   return (
     <section ref={workspaceRoot} className="flex h-full min-h-0 min-w-0 flex-col" aria-label={t("sftp.tabs")}>
+      {compactViewport && compactTabs !== null ? <SFTPTabStrip
+        pane={compactTabs} compact label={t("sftp.mobileTabs")} closable={compactTabs.tabs.length > 1}
+        movable={() => false} addDisabled={panes.every((pane) => pane.tabs.length >= maxTabsPerPane)}
+        trailing={comparisonButton(comparisonTabs.length > 1)} onChangeHost={requestHostChange}
+        canChangeHost={(tab) => !dirtyTabs.has(tab.id)} onSelect={selectFileTab} onClose={requestCloseTab}
+        onAdd={openFileTab} onDragStart={setDraggedTabId} onDragEnd={() => setDraggedTabId(null)} onMove={moveTabWithKeyboard}
+      /> : null}
       <div className="flex min-h-0 min-w-0 flex-1">
         {panes.map(renderPane)}
       </div>
@@ -321,11 +360,14 @@ export function SFTPWorkspace({
           onCancel={() => setCloseTabIntent(null)}
         />
       )}
-      {compareOpen && compareEnabled && leftLocation !== null && rightLocation !== null ? (
+      {compareTabsOpen ? <SFTPCompareTabsDialog tabs={comparisonTabs} currentTabId={focusedLocation?.id ?? ""}
+        onCompare={(left, right) => { setCompareTabsOpen(false); setComparisonLocations({ left, right }); }}
+        onDismiss={() => setCompareTabsOpen(false)} /> : null}
+      {comparisonLocations !== null ? (
         <SFTPCompareDialog
-          left={{ alias: leftLocation.alias, path: leftLocation.path || "/" }}
-          right={{ alias: rightLocation.alias, path: rightLocation.path || "/" }}
-          onDismiss={() => setCompareOpen(false)}
+          left={{ alias: comparisonLocations.left.alias, path: comparisonLocations.left.path || "/" }}
+          right={{ alias: comparisonLocations.right.alias, path: comparisonLocations.right.path || "/" }}
+          onDismiss={() => setComparisonLocations(null)}
         />
       ) : null}
     </section>

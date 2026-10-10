@@ -134,7 +134,7 @@ func (m *TransferManager) admitJob(input CreateTransferJob) (TransferJob, error)
 	}
 	if existing := m.jobs[input.ID]; existing != nil {
 		if sameTransferIdentity(existing.job, input, cleaned, name) {
-			job := existing.job
+			job := cloneTransferJob(existing.job)
 			m.jobsMutex.Unlock()
 			closeRemotes(staleRemotes)
 			return job, nil
@@ -204,6 +204,9 @@ func (m *TransferManager) admitJob(input CreateTransferJob) (TransferJob, error)
 		Status:              TransferQueued, Attempt: 1, CreatedAt: now, UpdatedAt: now,
 		RemainingSeconds: -1,
 	}
+	if input.Kind == TransferFolder && input.Operation != RemoteMove && input.Operation != RemoteDelete {
+		job.ExcludePatterns = append([]string(nil), m.excludePatterns...)
+	}
 	m.jobs[input.ID] = &transferJobRecord{job: job, sampleAt: now}
 	m.jobOrder = append(m.jobOrder, input.ID)
 	if persistErr := m.persistJobsLocked(true); persistErr != nil {
@@ -218,7 +221,7 @@ func (m *TransferManager) admitJob(input CreateTransferJob) (TransferJob, error)
 	if evictedID != "" {
 		m.releasePreparedDownload(evictedID)
 	}
-	return job, nil
+	return cloneTransferJob(job), nil
 }
 
 // sameTransferIdentity reports whether a resent CreateJob asks for the job
