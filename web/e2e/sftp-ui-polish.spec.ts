@@ -75,10 +75,23 @@ async function expectCompactControls(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: "Open right pane", exact: true })).toHaveCount(0);
   await expect(page.getByRole("tab", { name: /^(Left|Right):/ })).toHaveCount(0);
   for (const target of await strip.getByRole("tab").all()) {
-    await target.scrollIntoViewIfNeeded();
+    await target.locator("..").scrollIntoViewIfNeeded();
     await expectTouchTarget(target);
   }
   for (const close of await strip.getByRole("button").all()) await expectTouchTarget(close);
+  // Measurements may scroll an inactive tab into view. Restore the selected
+  // tab's whole group so its close control stays reachable in the final view.
+  const selectedGroup = strip.getByRole("tab", { selected: true }).locator("..");
+  await selectedGroup.scrollIntoViewIfNeeded();
+  const selectedClose = selectedGroup.getByRole("button");
+  if (await selectedClose.count() > 0) {
+    await expect.poll(async () => {
+      const stripBounds = await strip.boundingBox();
+      const closeBounds = await selectedClose.boundingBox();
+      return stripBounds !== null && closeBounds !== null &&
+        closeBounds.x >= stripBounds.x && closeBounds.x + closeBounds.width <= stripBounds.x + stripBounds.width;
+    }).toBe(true);
+  }
   await expectTouchTarget(page.getByRole("button", { name: "New tab", exact: true }));
   const pane = page.getByRole("tabpanel");
   await expect(pane).toHaveCount(1);
