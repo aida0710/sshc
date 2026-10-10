@@ -53,11 +53,11 @@ export function SFTPHostPicker({
         onClick={() => setOpen(true)}
         title={value === localHostAlias ? localName : value || t("sftp.chooseHost")}
         className={compact
-          ? "flex size-11 shrink-0 items-center justify-center rounded-md border border-control-line bg-control text-ink-muted active:bg-select-fill disabled:text-ink-faint"
+          ? "flex size-12 shrink-0 items-center justify-center rounded-md border border-control-line bg-control text-ink-muted active:bg-select-fill disabled:text-ink-faint"
           : "flex min-h-9 min-w-0 max-w-full items-center justify-between gap-2 rounded-md border border-control-line bg-control px-3 py-1.5 text-left text-sm disabled:text-ink-faint md:min-h-8 md:py-1"}
       >
         {compact ? (
-          <Icon name={value === localHostAlias ? "home" : "terminal"} className="size-4" />
+          <Icon name={value === localHostAlias ? "home" : "terminal"} className="size-5" />
         ) : (
           <>
             <span className="truncate">

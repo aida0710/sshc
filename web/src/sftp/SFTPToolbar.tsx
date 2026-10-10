@@ -91,76 +91,77 @@ export function SFTPToolbar({
 
   if (mobile) {
     return (
-      <div className="flex min-h-11 shrink-0 items-center gap-1 border-b border-line/50 pb-1">
-        <SFTPHostPicker aliases={aliases} {...(hosts === undefined ? {} : { hosts })} value={alias} disabled={locked} onChange={onHostChange} compact includeLocal />
-        <VPNProfileChip name={vpnProfile} />
-        <button
-          type="button"
-          aria-label={t("sftp.back")}
-          disabled={busy || locked || !browser.canBack}
-          onClick={() => void browser.back()}
-          className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint"
-        >
-          <Icon name="arrowLeft" className="size-4" />
-        </button>
-        {pathEditing ? (
-          <form
-            className="flex min-w-0 flex-1 items-center gap-1"
-            onSubmit={(event) => {
-              event.preventDefault();
-              submitPath();
-            }}
-          >
-            <input
-              ref={pathInput}
-              aria-label={labels.input}
-              value={pathDraft}
-              onChange={(event) => setPathDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") cancelEdit();
+      <div className="flex shrink-0 flex-col gap-1 border-b border-line/50 pb-1">
+        <div className="flex min-h-12 min-w-0 items-center gap-2">
+          <SFTPHostPicker aliases={aliases} {...(hosts === undefined ? {} : { hosts })} value={alias} disabled={locked} onChange={onHostChange} compact includeLocal />
+          {pathEditing ? (
+            <form
+              className="flex min-w-0 flex-1 items-center gap-1"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitPath();
               }}
-              className="h-11 min-w-0 w-full rounded border border-control-line bg-control px-2 font-mono text-base"
-            />
-            <Button type="submit" disabled={navigationDisabled}>{t("sftp.go")}</Button>
-          </form>
-        ) : (
-          <button
-            type="button"
-            data-testid="sftp-current-path"
-            data-path={path}
-            aria-label={labels.editPath}
-            title={path}
-            disabled={navigationDisabled}
-            onClick={() => setPathEditing(true)}
-            className="flex h-11 min-w-0 flex-1 items-center gap-1 rounded px-2 text-left active:bg-select-fill disabled:text-ink-faint"
-          >
-            <span className="truncate font-mono text-sm font-medium">{current?.label ?? "/"}</span>
-            <Icon name="chevronRight" className="size-3 shrink-0 rotate-90 text-ink-muted" />
-          </button>
-        )}
-        {pathEditing ? (
-          <button
-            type="button"
-            aria-label={t("sftp.cancel")}
-            onClick={cancelEdit}
-            className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted"
-          >
-            <Icon name="close" className="size-4" />
-          </button>
-        ) : (
-          <>
+            >
+              <input
+                ref={pathInput}
+                aria-label={labels.input}
+                value={pathDraft}
+                onChange={(event) => setPathDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") cancelEdit();
+                }}
+                className="h-12 min-w-0 w-full rounded border border-control-line bg-control px-3 font-mono text-base"
+              />
+              <Button type="submit" disabled={navigationDisabled} className="min-h-12 min-w-12">{t("sftp.go")}</Button>
+            </form>
+          ) : (
             <button
               type="button"
-              aria-label={t("sftp.refreshDirectory")}
+              data-testid="sftp-current-path"
+              data-path={path}
+              aria-label={labels.editPath}
+              title={path}
               disabled={navigationDisabled}
-              onClick={refresh}
-              className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint"
+              onClick={() => setPathEditing(true)}
+              className="flex min-h-12 min-w-0 flex-1 items-center gap-2 rounded px-3 text-left active:bg-select-fill disabled:text-ink-faint"
             >
-              <Icon name="sync" className="size-4" />
+              <span className="min-w-0 flex-1 truncate font-mono text-base font-medium">{current?.label ?? "/"}</span>
+              <Icon name="chevronRight" className="size-4 shrink-0 rotate-90 text-ink-muted" />
             </button>
-            {mobileActions}
-          </>
-        )}
+          )}
+          {pathEditing ? (
+            <button
+              type="button"
+              aria-label={t("sftp.cancel")}
+              onClick={cancelEdit}
+              className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"
+            >
+              <Icon name="close" className="size-5" />
+            </button>
+          ) : null}
+        </div>
+        <div className="flex min-h-12 items-center gap-2">
+          <button
+            type="button"
+            aria-label={t("sftp.back")}
+            disabled={busy || locked || !browser.canBack}
+            onClick={() => void browser.back()}
+            className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint"
+          >
+            <Icon name="arrowLeft" className="size-5" />
+          </button>
+          <button
+            type="button"
+            aria-label={t("sftp.refreshDirectory")}
+            disabled={navigationDisabled}
+            onClick={refresh}
+            className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint"
+          >
+            <Icon name="sync" className="size-5" />
+          </button>
+          <div className="min-w-0 flex-1"><VPNProfileChip name={vpnProfile} className="block truncate" /></div>
+          <div className="flex shrink-0 items-center gap-2">{mobileActions}</div>
+        </div>
       </div>
     );
   }

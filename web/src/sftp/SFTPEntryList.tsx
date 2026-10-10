@@ -120,7 +120,7 @@ export function SFTPEntryList({
             <button
               type="button"
               {...parentButtonProps}
-              className="flex min-h-11 w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-hover disabled:text-ink-faint md:min-h-8 md:py-0.5"
+              className="flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left text-base hover:bg-hover disabled:text-ink-faint"
             >
               <ParentRowLabel />
             </button>
@@ -135,18 +135,18 @@ export function SFTPEntryList({
             draggable={rowDraggable(entry)}
             onDragStart={(event) => onDragStart?.(event, entry)}
           >
-            <label className="flex size-11 shrink-0 items-center justify-center">
-              <input type="checkbox" {...entryCheckboxProps(entry)} />
+            <label className="flex min-h-12 w-12 shrink-0 self-stretch items-center justify-center">
+              <input type="checkbox" {...entryCheckboxProps(entry)} className="size-5 accent-accent" />
             </label>
             <button
               type="button"
               {...entryButtonProps(entry)}
-              className="flex min-h-12 min-w-0 grow touch-pan-y select-none items-center gap-2 px-2 py-2 text-left hover:bg-hover active:bg-select-fill disabled:text-ink-faint"
+              className="flex min-h-16 min-w-0 grow touch-pan-y select-none items-center gap-3 px-3 py-2 text-left hover:bg-hover active:bg-select-fill disabled:text-ink-faint"
             >
-              <Icon name={entryIcon(entry)} className="size-4 shrink-0 text-ink-muted" />
+              <Icon name={entryIcon(entry)} className="size-5 shrink-0 text-ink-muted" />
               <span className="min-w-0 grow">
-                <span className="block truncate font-mono text-sm font-medium leading-4 text-ink"><EntryName entry={entry} /></span>
-                <span className="mt-0.5 flex min-w-0 gap-2 text-[11px] leading-3 text-ink-muted">
+                <span className="block truncate font-mono text-base font-medium leading-5 text-ink"><EntryName entry={entry} /></span>
+                <span className="mt-1 flex min-w-0 gap-2 text-xs leading-4 text-ink-muted">
                   <span className="truncate font-mono">{entryContext === undefined ? entry.mode : entryContext(entry)}</span>
                   {!showOwnership || entry.uid === undefined ? null : <span>{t("sftp.ownerIds", { uid: entry.uid, gid: entry.gid ?? "—" })}</span>}
                   <span>{entrySize(entry)}</span>

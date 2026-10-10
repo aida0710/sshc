@@ -1342,7 +1342,9 @@ describe("SFTPPanel uploads", () => {
     it("uses checkboxes to enter selection mode and otherwise previews files with one tap", async () => {
       render(<SFTPPanel aliases={["edge"]} />);
       await chooseHost("edge");
-      await userEvent.click(await screen.findByRole("checkbox", { name: "Select project" }));
+      const projectSelection = await screen.findByRole("checkbox", { name: "Select project" });
+      await userEvent.click(projectSelection.closest("label")!);
+      expect(projectSelection).toBeChecked();
       await userEvent.click(screen.getByRole("button", { name: "notes.txt" }));
       expect(screen.getByRole("checkbox", { name: "Select notes.txt" })).toBeChecked();
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -1413,6 +1415,39 @@ describe("SFTPPanel uploads", () => {
       expect(screen.getByRole("menuitem", { name: "Download" })).toBeEnabled();
       await userEvent.keyboard("{Escape}");
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("shows search options while the input is open and retains the mode when reopened", async () => {
+      render(<SFTPPanel aliases={["edge"]} />);
+      await chooseHost("edge");
+      expect(screen.queryByRole("combobox", { name: "Search mode" })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Search files" }));
+      expect(screen.getByRole("searchbox", { name: "Filter entries" })).toHaveFocus();
+      await userEvent.selectOptions(screen.getByRole("combobox", { name: "Search mode" }), "content");
+      expect(screen.getByRole("searchbox", { name: "Text to find in files" })).toBeVisible();
+      await userEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(screen.queryByRole("combobox", { name: "Search mode" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "notes.txt" })).toBeVisible();
+      await userEvent.click(screen.getByRole("button", { name: "Search files" }));
+      expect(screen.getByRole("combobox", { name: "Search mode" })).toHaveValue("content");
+    });
+
+    it("keeps search cancellation available after closing the mobile search input", async () => {
+      let finish!: (found: unknown) => void;
+      api.search.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+      render(<SFTPPanel aliases={["edge"]} />);
+      await chooseHost("edge");
+      await userEvent.click(screen.getByRole("button", { name: "Search files" }));
+      await userEvent.type(screen.getByRole("searchbox", { name: "Filter entries" }), "needle{Enter}");
+      const request = api.search.mock.calls.at(-1)?.[0] as { signal: AbortSignal };
+      await userEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Stop search" }));
+      expect(request.signal.aborted).toBe(true);
+      finish({ path: "/remote", query: "needle", entries: [], truncated: false });
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Stop search" })).not.toBeInTheDocument());
+      expect(screen.getByRole("button", { name: "notes.txt" })).toBeVisible();
     });
   });
 
