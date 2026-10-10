@@ -12,6 +12,7 @@ package integration
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +29,17 @@ import (
 var binaryPath string
 
 func TestMain(m *testing.M) {
+	os.Exit(runWithBuiltBinary(m))
+}
+
+// runWithBuiltBinary は、sshc を一時ディレクトリへビルドしてテストを走らせ、
+// 終了コードを返す。
+//
+// 一時ディレクトリの片付けを TestMain に置かないのは、os.Exit が defer を
+// 飛ばすからである。TestMain に置くと、実行のたびに約 30 MB のバイナリが
+// /tmp に残る。ここで return してから os.Exit すれば、defer はテストの後にも、
+// ビルドの失敗で panic したときにも走る。
+func runWithBuiltBinary(m *testing.M) int {
 	directory, err := os.MkdirTemp("", "sshc-integration-")
 	if err != nil {
 		panic(err)
@@ -41,9 +53,9 @@ func TestMain(m *testing.M) {
 	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/sshc")
 	build.Dir = ".."
 	if output, err := build.CombinedOutput(); err != nil {
-		panic(string(output))
+		panic(fmt.Sprintf("go build ./cmd/sshc: %v\n%s", err, output))
 	}
-	os.Exit(m.Run())
+	return m.Run()
 }
 
 // lockedBuffer は、走っている子の出力を、テストが読みながら集める。
