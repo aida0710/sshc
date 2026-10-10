@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import type { Locator, Page } from "@playwright/test";
 import type { TransferJob, TransferJobList } from "../src/sftp/api";
 import { expect, openApplication, openSection, test } from "./support/environment";
 import { openLocalSFTPDirectory } from "./support/sftp";
@@ -51,23 +53,82 @@ test("keeps transfer states visible while settings are folded and identifies bot
   if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: join(process.env.SSHC_VISUAL_DIR, "transfer-states-and-routes-en.png"), animations: "disabled" });
 });
 
-test("opens a second compact pane from one pane and keeps the original selection", async ({ page, installation }) => {
-  await installation.write("mobile-left/notes.txt", "notes");
+// Compact navigation and file controls must remain easy to tap on a phone.
+const minimumTouchTargetSize = 44;
+
+async function expectTouchTarget(target: Locator): Promise<void> {
+  await expect(target).toBeVisible();
+  // A viewport resize can return before React replaces the desktop controls.
+  await expect.poll(async () => {
+    const bounds = await target.boundingBox();
+    return Math.min(bounds?.width ?? 0, bounds?.height ?? 0);
+  }).toBeGreaterThanOrEqual(minimumTouchTargetSize);
+}
+
+async function expectCompactControls(page: Page): Promise<void> {
+  const strip = page.getByRole("tablist", { name: "File tabs", exact: true });
+  await expect(strip).toHaveCount(1);
+  await expect(page.getByRole("navigation", { name: "SFTP pane switcher", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open right pane", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: /^(Left|Right):/ })).toHaveCount(0);
+  for (const target of await strip.getByRole("tab").all()) {
+    await target.scrollIntoViewIfNeeded();
+    await expectTouchTarget(target);
+  }
+  for (const close of await strip.getByRole("button").all()) await expectTouchTarget(close);
+  await expectTouchTarget(page.getByRole("button", { name: "New tab", exact: true }));
+  const pane = page.getByRole("tabpanel");
+  await expect(pane).toHaveCount(1);
+  for (const name of ["Host", "Back", "Refresh directory", "Search files", "Folder actions"]) {
+    await expectTouchTarget(pane.getByRole("button", { name, exact: true }));
+  }
+  await expectTouchTarget(pane.getByTestId("sftp-current-path"));
+  await expectTouchTarget(pane.getByRole("button", { name: "Clear selection", exact: true }));
+  await expectTouchTarget(pane.getByRole("button", { name: /^Actions for / }));
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+}
+
+async function captureCompactFiles(page: Page, name: string): Promise<void> {
+  const directory = process.env.SSHC_VISUAL_DIR;
+  if (directory === undefined) return;
+  await mkdir(directory, { recursive: true });
+  await page.screenshot({ path: join(directory, `${name}.png`), animations: "disabled" });
+}
+
+test("adds a compact file tab and preserves both directories and selections without choosing a side", async ({ page, installation }) => {
+  const firstPath = join(installation.home, ".ssh/mobile-first");
+  const secondPath = join(installation.home, ".ssh/mobile-second");
+  await installation.write("mobile-first/notes.txt", "notes");
+  await installation.write("mobile-second/report.txt", "report");
   await openApplication(page, installation);
   await openSection(page, "SFTP");
-  await openLocalSFTPDirectory({ page, pane: page.getByRole("tabpanel"), directory: join(installation.home, ".ssh/mobile-left") });
+  await openLocalSFTPDirectory({ page, pane: page.getByRole("tabpanel"), directory: firstPath });
   await page.getByRole("checkbox", { name: "Select notes.txt", exact: true }).check();
   await page.setViewportSize({ width: 390, height: 640 });
-  await page.getByRole("button", { name: "Open right pane", exact: true }).click();
-  const switcher = page.getByRole("navigation", { name: "SFTP pane switcher" });
-  await expect(switcher.getByRole("button", { name: "Right: New tab", exact: true })).toHaveAttribute("aria-current", "page");
-  await switcher.getByRole("button", { name: "Left: Local", exact: true }).click();
-  await expect(page.getByRole("checkbox", { name: "Select notes.txt", exact: true })).toBeChecked();
-  await expect(page.getByRole("tabpanel").getByTestId("sftp-current-path")).toHaveAttribute("data-path", join(installation.home, ".ssh/mobile-left"));
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await expectCompactControls(page);
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await openLocalSFTPDirectory({ page, pane: page.getByRole("tabpanel"), directory: secondPath });
+  const strip = page.getByRole("tablist", { name: "File tabs", exact: true });
+  await expect(strip.getByRole("tab")).toHaveCount(2);
+  const firstTab = strip.getByRole("tab", { name: "Local:mobile-first", exact: true });
+  const secondTab = strip.getByRole("tab", { name: "Local:mobile-second", exact: true });
+  await expect(secondTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel").getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "sshc://local");
+  await page.getByRole("checkbox", { name: "Select report.txt", exact: true }).check();
+  await expectCompactControls(page);
+  await firstTab.click();
+  const pane = page.getByRole("tabpanel");
+  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", firstPath);
+  await expect(pane.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "sshc://local");
+  await expect(pane.getByRole("checkbox", { name: "Select notes.txt", exact: true })).toBeChecked();
+  await secondTab.click();
+  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", secondPath);
+  await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
+  await expectCompactControls(page);
+  await captureCompactFiles(page, "compact-sftp-local-tabs-390x640-en");
 });
 
-test("switches compact SFTP panes while preserving the host, path and selection", async ({ page, installation }) => {
+test("restores two compact sources in one tab strip and preserves the host, path and selection", async ({ page, installation }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("sshc.sftp.panes.v1", JSON.stringify([
       { tabs: [{ alias: "sshc://local", path: "/home/engine" }], activeIndex: 0 },
@@ -89,20 +150,31 @@ test("switches compact SFTP panes while preserving the host, path and selection"
   await openApplication(page, installation);
   await openSection(page, "SFTP");
   await page.setViewportSize({ width: 390, height: 640 });
-  const switcher = page.getByRole("navigation", { name: "SFTP pane switcher" });
-  await expect(page.getByRole("button", { name: "notes.txt", exact: true })).toBeVisible();
-  await switcher.getByRole("button", { name: "Right: bastion", exact: true }).click();
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await expect(page.getByRole("tabpanel").getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
-  await page.getByRole("checkbox", { name: "Select report.txt", exact: true }).check();
-  await switcher.getByRole("button", { name: "Left: Local", exact: true }).click();
-  await expect(page.getByRole("tabpanel").getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/home/engine");
-  await expect(page.getByRole("button", { name: "notes.txt", exact: true })).toBeVisible();
-  await switcher.getByRole("button", { name: "Right: bastion", exact: true }).click();
-  await expect(page.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
-  await expect(page.getByRole("tabpanel").getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
+  const strip = page.getByRole("tablist", { name: "File tabs", exact: true });
+  await expect(strip).toHaveCount(1);
+  await expect(strip.getByRole("tab")).toHaveCount(2);
+  const localTab = strip.getByRole("tab", { name: "Local:engine", exact: true });
+  const remoteTab = strip.getByRole("tab", { name: "bastion:srv", exact: true });
+  const pane = page.getByRole("tabpanel");
+  await expect(pane.getByRole("button", { name: "notes.txt", exact: true })).toBeVisible();
+  await pane.getByRole("checkbox", { name: "Select notes.txt", exact: true }).check();
+  await expectCompactControls(page);
+  await remoteTab.click();
+  await expect(pane.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "bastion");
+  await pane.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
+  await pane.getByRole("checkbox", { name: "Select report.txt", exact: true }).check();
+  await expectCompactControls(page);
+  await localTab.click();
+  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/home/engine");
+  await expect(pane.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "sshc://local");
+  await expect(pane.getByRole("checkbox", { name: "Select notes.txt", exact: true })).toBeChecked();
+  await remoteTab.click();
+  await expect(pane.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "bastion");
+  await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
+  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
   expect(remoteReads).toBe(1);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("sshc.sftp.panes.v1") ?? "[]"))).toHaveLength(2);
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
-  if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: join(process.env.SSHC_VISUAL_DIR, "compact-sftp-pane-switcher-en.png"), animations: "disabled" });
+  await expectCompactControls(page);
+  await captureCompactFiles(page, "compact-sftp-restored-tabs-390x640-en");
 });
