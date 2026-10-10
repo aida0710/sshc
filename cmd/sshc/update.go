@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -45,6 +44,7 @@ type updateDependencies struct {
 	detect            func(string) (installation, error)
 	latest            func(context.Context) (releasecheck.Release, error)
 	install           func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error
+	upgradeHomebrew   func(context.Context, installation) (string, error)
 	serviceExecutable func(context.Context, installation) (string, error)
 	restartService    func(context.Context, string) (bool, error)
 	// engineStatus は、再起動した engine の Vault の状態を読み、次にすることを選ぶために使う。
@@ -70,9 +70,10 @@ func defaultUpdateDependencies() updateDependencies {
 		serviceExecutable: func(ctx context.Context, found installation) (string, error) {
 			return managedInstallationExecutable(ctx, found, commands)
 		},
-		restartService: restartManagedServiceAfterUpdate,
-		engineStatus:   readEngineStatus,
-		confirm:        systemActionConfirmer,
+		upgradeHomebrew: (updateInstaller{commands: commands, stdout: io.Discard, stderr: io.Discard}).upgradeHomebrewFromWeb,
+		restartService:  restartManagedServiceAfterUpdate,
+		engineStatus:    readEngineStatus,
+		confirm:         systemActionConfirmer,
 	}
 }
 
@@ -274,17 +275,9 @@ func (installer updateInstaller) install(ctx context.Context, found installation
 }
 
 func (installer updateInstaller) upgradeHomebrew(ctx context.Context, found installation, tag string) error {
-	managedPath, err := homebrewManagedExecutable(ctx, found, installer.commands)
+	managedPath, err := installer.runHomebrewUpgrade(ctx, found)
 	if err != nil {
 		return err
-	}
-	if err := installer.commands.Run(ctx, installationProcess{
-		name:   found.brew,
-		args:   []string{"upgrade", "--formula", "--no-ask", homebrewFormula},
-		stdout: installer.stdout,
-		stderr: installer.stderr,
-	}); err != nil {
-		return fmt.Errorf("brew upgrade: %w", err)
 	}
 	if err := installer.verifyReportedVersion(ctx, managedPath, tag); err != nil {
 		if errors.As(err, new(unexpectedVersionError)) {
@@ -431,11 +424,7 @@ func allowTaggedInstallerRedirect(request *http.Request, _ []*http.Request) erro
 }
 
 func reportsVersion(line []byte, tag string) bool {
-	fields := bytes.Fields(line)
-	if len(fields) != 3 || string(fields[0]) != "sshc" {
-		return false
-	}
-	reported, ok := releasecheck.StableTag(string(fields[1]))
+	reported, ok := reportedReleaseVersion(line)
 	return ok && reported == tag
 }
 

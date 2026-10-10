@@ -15,11 +15,11 @@ sshc is a terminal app for macOS, Linux, Windows, and Android. On desktop, one `
 brew install aida0710/tap/sshc
 ```
 
-Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.44.3`.
+Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.44.4`.
 
 ```sh
-SSHC_VERSION=v0.44.3 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.44.3/install.sh | sh'
+SSHC_VERSION=v0.44.4 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.44.4/install.sh | sh'
 ```
 
 After installation, `sshc update` delegates upgrades to Homebrew or to a receipt-aware installer. It shows the planned change and asks for confirmation. In non-interactive automation, review the plan and use `sshc update --yes`.
@@ -138,7 +138,7 @@ A state or definition change while waiting for confirmation also prevents succes
 
 ### Update from the web UI
 
-On macOS and Linux, verified `install.sh` installations show an update button beside the version when a newer stable release is available. Review the current version, target version, and installation method before confirming. The installation directory must be writable. Homebrew installations cannot pin the confirmed version during a Web update; run `sshc update` in a terminal. Manual installations, development builds, Windows, and Android show guidance for updating through their installation method.
+On macOS and Linux, verified Homebrew and `install.sh` installations show an update button beside the version when a newer stable release is available. Review the current version, target version, and installation method before confirming. The installation directory must be writable. Homebrew runs `brew upgrade` and checks the version actually installed. Its formula can advance after confirmation, so a newer version may be installed. The `install.sh` installer uses the confirmed version. Manual installations, development builds, Windows, and Android show guidance for updating through their installation method.
 
 The engine restarts after installation, ending connected sessions and transfers. Unlock a password-protected vault again after the restart. The UI shows progress and refuses duplicate updates. If installation succeeds but restarting fails, follow the restart guidance and reload the page without reinstalling.
 

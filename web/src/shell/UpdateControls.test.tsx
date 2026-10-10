@@ -59,23 +59,25 @@ describe("Web self update", () => {
     expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
   });
 
-  it("guides Homebrew installations to CLI updates only after the version is opened", async () => {
+  it("reviews Homebrew's formula update before starting it", async () => {
     const api = updater();
-    vi.mocked(api.updateStatus).mockResolvedValue({ ...available, canUpdate: false, reason: "update_homebrew_unsupported" });
+    vi.mocked(api.updateStatus).mockResolvedValue({ ...available, manager: "homebrew" });
+    vi.mocked(api.previewUpdate).mockResolvedValue({ current: "v1.0.0", target: "v1.1.0", manager: "homebrew", actionToken: "confirmed-plan", actionExpiresAt: "2026-10-10T09:00:00Z" });
     render(<UpdateBadge api={api} />);
-    const version = await screen.findByRole("button", { name: "Version v1.0.0" });
-    expect(version).toHaveAttribute("aria-expanded", "false");
-    const guidance = screen.getByText(/For Homebrew installations/);
-    expect(guidance).not.toBeVisible();
-    await userEvent.click(version);
-    expect(version).toHaveAttribute("aria-expanded", "true");
-    expect(guidance).toBeVisible();
-    expect(guidance).toHaveTextContent("update with sshc update in a terminal");
-    await userEvent.click(version);
-    expect(guidance).not.toBeVisible();
-    expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
-    expect(api.previewUpdate).not.toHaveBeenCalled();
+    await userEvent.click(await screen.findByRole("button", { name: "Update sshc" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText(/A newer version may be installed/);
     expect(api.startUpdate).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Update sshc" }));
+    expect(api.startUpdate).toHaveBeenCalledExactlyOnceWith("v1.1.0", "confirmed-plan");
+  });
+
+  it("reports the installed Homebrew version when it is newer than the preview", async () => {
+    const api = updater();
+    vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.2.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", installedVersion: "v1.2.0", state: "succeeded", problem: "" } });
+    render(<UpdateBadge api={api} />);
+    expect(await screen.findByRole("status")).toHaveTextContent("Updated to v1.2.0");
+    expect(screen.getByText("Version v1.2.0")).toBeVisible();
   });
 
   it("reports the new engine version and persisted successful result", async () => {
@@ -84,6 +86,15 @@ describe("Web self update", () => {
     render(<UpdateBadge api={api} />);
     expect(await screen.findByRole("status")).toHaveTextContent("Updated to v1.1.0");
     expect(screen.getByText("Version v1.1.0")).toBeVisible();
+  });
+
+  it("asks to refresh Homebrew when the installation did not update", async () => {
+    const api = updater();
+    vi.mocked(api.updateStatus).mockResolvedValue({ ...available, manager: "homebrew", job: { id: "job-one", target: "v1.1.0", state: "failed", problem: "update_homebrew_not_updated" } });
+    render(<UpdateBadge api={api} />);
+    expect(await screen.findByRole("status")).toHaveTextContent("brew update");
+    expect(screen.getByText("Version v1.0.0")).toBeVisible();
+    expect(api.startUpdate).not.toHaveBeenCalled();
   });
 
   it.each(["update_unmanaged", "update_permission_denied", "update_development_build", "update_windows_unsupported", "update_android_unsupported"])("explains %s under the version and offers no automatic update", async (reason) => {

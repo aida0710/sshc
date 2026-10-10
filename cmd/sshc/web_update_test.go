@@ -43,7 +43,7 @@ func webUpdateInstallationFixture(t *testing.T) updateDependencies {
 	}
 }
 
-func TestWebUpdateRefusesHomebrewBeforeInstallationAndKeepsTheShellInstaller(t *testing.T) {
+func TestWebUpdateUsesTheInstallationManagerAndKeepsTheInstalledVersion(t *testing.T) {
 	if runtime.GOOS == "windows" || runtime.GOOS == "android" {
 		t.Skip("platform has no automatic installer")
 	}
@@ -66,21 +66,22 @@ func TestWebUpdateRefusesHomebrewBeforeInstallationAndKeepsTheShellInstaller(t *
 				}
 				return nil
 			}
+			installationDependencies.upgradeHomebrew = func(_ context.Context, found installation) (string, error) {
+				installs.Add(1)
+				if found.manager != managerHomebrew {
+					t.Errorf("unexpected Homebrew installation = %+v", found)
+				}
+				return "v1.2.0", nil
+			}
 			dependencies := webUpdateDependencies(selfupdate.Dependencies{
 				Current: "v1.0.0", PID: 101, StatePath: filepath.Join(t.TempDir(), selfupdate.StateFileName),
 			}, installationDependencies)
-			restarted := make(chan struct{}, 1)
-			dependencies.Restart = func(context.Context, selfupdate.Job) error { restarted <- struct{}{}; return nil }
+			restarted := make(chan selfupdate.Job, 1)
+			dependencies.Restart = func(_ context.Context, job selfupdate.Job) error { restarted <- job; return nil }
 			service := selfupdate.New(dependencies)
 			t.Cleanup(func() { _ = service.Stop() })
 			plan, err := service.Prepare(context.Background(), "v1.1.0")
-			if manager == managerHomebrew {
-				if err != selfupdate.Failure("update_homebrew_unsupported") {
-					t.Fatalf("Homebrew preparation = %v", err)
-				}
-				// Even a plan reserved before this restriction must fail on reinspection.
-				plan = selfupdate.Plan{Current: "v1.0.0", Target: "v1.1.0", Installation: selfupdate.Installation{Manager: "homebrew", Executable: executable}}
-			} else if err != nil {
+			if err != nil {
 				t.Fatal(err)
 			}
 			job, err := service.Start(plan)
@@ -88,19 +89,19 @@ func TestWebUpdateRefusesHomebrewBeforeInstallationAndKeepsTheShellInstaller(t *
 				t.Fatal(err)
 			}
 			service.ResponseSent(job.ID, nil)
-			if manager == managerShell {
-				select {
-				case <-restarted:
-				case <-time.After(webUpdateCompletionTimeout):
-					t.Fatal("shell installation did not reach restart")
+			select {
+			case installed := <-restarted:
+				want := "v1.1.0"
+				if manager == managerHomebrew {
+					want = "v1.2.0"
 				}
-			} else {
-				awaitWebUpdateFailure(t, service)
+				if installed.InstalledVersion != want || installed.Target != plan.Target {
+					t.Fatalf("installation result = %+v", installed)
+				}
+			case <-time.After(webUpdateCompletionTimeout):
+				t.Fatal("installation did not reach restart")
 			}
-			if err := service.Stop(); err != nil {
-				t.Fatal(err)
-			}
-			if manager == managerHomebrew && installs.Load() != 0 || manager == managerShell && installs.Load() != 1 {
+			if installs.Load() != 1 {
 				t.Fatalf("installer calls = %d", installs.Load())
 			}
 		})
@@ -110,32 +111,7 @@ func TestWebUpdateRefusesHomebrewBeforeInstallationAndKeepsTheShellInstaller(t *
 // Bound asynchronous worker checks without depending on installer duration.
 const webUpdateCompletionTimeout = 3 * time.Second
 
-func awaitWebUpdateFailure(t *testing.T, service *selfupdate.Service) {
-	t.Helper()
-	deadline := time.NewTimer(webUpdateCompletionTimeout)
-	defer deadline.Stop()
-	ticker := time.NewTicker(time.Millisecond)
-	defer ticker.Stop()
-	for {
-		job, err := service.Status()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if job.State == selfupdate.JobFailed {
-			if job.Problem != "update_homebrew_unsupported" {
-				t.Fatalf("refused job = %+v", job)
-			}
-			return
-		}
-		select {
-		case <-ticker.C:
-		case <-deadline.C:
-			t.Fatal("Homebrew worker did not fail before installing")
-		}
-	}
-}
-
-func TestWebUpdateRefusesAChangeToHomebrewImmediatelyBeforeInstallation(t *testing.T) {
+func TestWebUpdateRefusesAChangedManagerImmediatelyBeforeInstallation(t *testing.T) {
 	if runtime.GOOS == "windows" || runtime.GOOS == "android" {
 		t.Skip("platform has no automatic installer")
 	}
@@ -145,21 +121,15 @@ func TestWebUpdateRefusesAChangeToHomebrewImmediatelyBeforeInstallation(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	detections := 0
 	dependencies.detect = func(string) (installation, error) {
-		detections++
-		manager := managerShell
-		if detections > 1 {
-			manager = managerHomebrew
-		}
-		return installation{manager: manager, executable: executable}, nil
+		return installation{manager: managerHomebrew, executable: executable}, nil
 	}
-	dependencies.install = func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error {
-		t.Error("installer ran after manager changed to Homebrew")
-		return nil
+	dependencies.upgradeHomebrew = func(context.Context, installation) (string, error) {
+		t.Error("installer ran after the installation manager changed")
+		return "v1.1.0", nil
 	}
-	err = installWebUpdate(context.Background(), selfupdate.Plan{Target: "v1.1.0", Installation: inspection}, dependencies)
-	if err != selfupdate.Failure("update_homebrew_unsupported") {
+	_, err = installWebUpdate(context.Background(), selfupdate.Plan{Target: "v1.1.0", Installation: inspection}, dependencies)
+	if err != selfupdate.ErrChanged {
 		t.Fatalf("changed manager = %v", err)
 	}
 }

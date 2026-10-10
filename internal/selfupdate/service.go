@@ -138,7 +138,8 @@ func (service *Service) ResponseSent(id string, responseError error) {
 func (service *Service) install(job Job) {
 	ctx, cancel := context.WithTimeout(service.workerContext, InstallationTimeout)
 	defer cancel()
-	if err := service.installPlan(ctx, job.Plan); err != nil {
+	installedVersion, err := service.installPlan(ctx, job.Plan)
+	if err != nil {
 		code := failureCode(err, "update_install_failed")
 		if errors.Is(ctx.Err(), context.Canceled) {
 			code = "update_interrupted"
@@ -147,7 +148,7 @@ func (service *Service) install(job Job) {
 		return
 	}
 	// Never restart without a durable installation result.
-	job, err := service.transition(job.ID, JobInstalling, JobRestarting)
+	job, err = service.recordInstallation(job.ID, installedVersion)
 	if err != nil {
 		return
 	}
@@ -159,18 +160,25 @@ func (service *Service) install(job Job) {
 	}
 }
 
-func (service *Service) installPlan(ctx context.Context, plan Plan) error {
+func (service *Service) installPlan(ctx context.Context, plan Plan) (string, error) {
 	installation, err := service.Inspect(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if installation != plan.Installation {
-		return ErrChanged
+		return "", ErrChanged
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return "", err
 	}
-	return service.dependencies.Install(ctx, plan)
+	installedVersion, err := service.dependencies.Install(ctx, plan)
+	if err != nil {
+		return "", err
+	}
+	if err := validateInstalledVersion(plan, installedVersion); err != nil {
+		return "", err
+	}
+	return installedVersion, nil
 }
 
 // Status reconciles with the version of the new engine, including a helper that
@@ -187,14 +195,14 @@ func (service *Service) Status() (Job, error) {
 	}
 	// A restarted process may reuse the old PID; only jobs reserved by this
 	// service instance can still have an installer running here.
-	if job.ID == service.ownedJobID && job.Target != service.dependencies.Current && (job.State != JobRestarting || time.Since(job.UpdatedAt) < RestartTimeout) {
+	if job.ID == service.ownedJobID && job.RestartVersion() != service.dependencies.Current && (job.State != JobRestarting || time.Since(job.UpdatedAt) < RestartTimeout) {
 		return job, nil
 	}
 	return service.changeJobLocked(func(stored *Job) error {
 		if !stored.Active() && stored.State != JobRestartRequired {
 			return nil
 		}
-		if stored.Target == service.dependencies.Current {
+		if stored.RestartVersion() == service.dependencies.Current {
 			stored.State, stored.Problem = JobSucceeded, ""
 		} else if stored.State == JobRestarting || stored.State == JobRestartRequired {
 			stored.State, stored.Problem = JobRestartRequired, "update_restart_failed"
@@ -204,12 +212,6 @@ func (service *Service) Status() (Job, error) {
 		stored.UpdatedAt = time.Now().UTC()
 		return nil
 	})
-}
-
-func (service *Service) transition(id, from, to string) (Job, error) {
-	service.mutex.Lock()
-	defer service.mutex.Unlock()
-	return service.transitionLocked(id, from, to)
 }
 
 func (service *Service) transitionLocked(id, from, to string) (Job, error) {
