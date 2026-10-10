@@ -2228,6 +2228,46 @@ paths:
         "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/text:
+    get:
+      operationId: readLocalSFTPText
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: expectedRevision, in: query, description: "Optional metadata revision from a search or comparison. Pins the read to that regular file and refuses links or changed metadata.", schema: { type: string } }
+      responses:
+        "200": { description: Engine-local regular UTF-8 file (links refused), content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTextFile" } } } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: saveLocalSFTPText
+      parameters: [ { name: path, in: query, required: true, schema: { type: string } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPSaveTextRequest" } } } }
+      responses:
+        "200": { description: Engine-local text saved atomically with content and file identity checks, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTextFile" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/preview:
+    get:
+      operationId: previewLocalSFTPFile
+      parameters: [ { name: path, in: query, required: true, schema: { type: string } } ]
+      responses:
+        "200":
+          description: Engine-local raster image with a type determined from its bytes; links refused
+          headers: { ETag: { required: true, schema: { type: string } } }
+          content: { image/png: { schema: { type: string, format: binary } }, image/jpeg: { schema: { type: string, format: binary } }, image/webp: { schema: { type: string, format: binary } }, image/gif: { schema: { type: string, format: binary } }, image/bmp: { schema: { type: string, format: binary } } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/local/entries:
     get:
       operationId: listLocalSFTPEntries
@@ -2322,7 +2362,7 @@ paths:
       operationId: readSFTPText
       parameters:
         - { name: path, in: query, required: true, schema: { type: string } }
-        - { name: expectedRevision, in: query, description: "Optional metadata revision from a content search. Pins the read to that regular file and refuses links or changed metadata.", schema: { type: string } }
+        - { name: expectedRevision, in: query, description: "Optional metadata revision from a search or comparison. Pins the read to that regular file and refuses links or changed metadata.", schema: { type: string } }
       responses:
         "200": { description: Editable UTF-8 file, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTextFile" } } } }
         "401": { $ref: "#/components/responses/Problem" }

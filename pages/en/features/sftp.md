@@ -15,6 +15,10 @@ Operations on the same host (listing, details, preview, editing, transfers and t
 
 ## File operations
 
+Engine-local regular UTF-8 files up to 2 MiB can be edited, and their text or raster images previewed in Details. Selected symlinks are refused. Saving checks both contents and file identity, refuses external changes or replacements, and protects paths used by transfers.
+
+Save with `Ctrl/Cmd+S`; the editor shows Saving and Saved. In directory comparisons, View text differences opens a read-only line comparison. An absent side is displayed as empty. Each text file is limited to 2 MiB and pinned to the listed revision; changed files must be compared again. Narrow screens use an inline diff.
+
 - Navigate, create, rename, chmod and delete remote entries
 - Select or drag and drop files and folders for upload
 - Download files or folders as ZIP archives
@@ -28,6 +32,7 @@ Local panes support folder creation, rename, and deletion on the machine running
 
 The editor supports these keys, among others:
 
+- Save: `Ctrl/Cmd+S` (the editor shows Saving and Saved)
 - Find: `Ctrl/Cmd+F`
 - Replace: `Ctrl+H` (`Cmd+Option+F` on macOS)
 - Go to line: `Ctrl+G`
@@ -111,3 +116,5 @@ The engine Transfer Manager owns the queue and persists it in `~/.ssh/sshc/trans
 The browser or WebView still handles local file I/O for uploads and downloads. Those transfers continue when you navigate away from SFTP within the same application, but byte transfer stops when the browser or WebView closes. After a reload, an upload requires you to select the same local file again. A folder ZIP download restarts from byte zero rather than resuming.
 
 See [Transfer Manager](/en/sftp/transfers) for states, recovery, and cancellation.
+
+On narrow screens, switch between panes with the Left and Right buttons. Connections, directories, and selections are retained, and the hidden pane can still be a transfer destination. The transfer list shows source → destination and counts paused, reconnecting, confirmation-needed, and failed jobs separately from running transfers. Transfer settings and search limits are available in collapsible details.

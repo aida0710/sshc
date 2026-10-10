@@ -545,7 +545,9 @@ describe("SFTP tabs", () => {
     expect(items).toContain("Copy full path");
     expect(items).toContain("Delete");
     expect(items).toContain("Rename");
-    for (const missing of ["New empty file", "Move to folder", "Duplicate", "Details", "Edit file", "Download"]) expect(items).not.toContain(missing);
+    expect(items).toContain("Details");
+    expect(items).toContain("Edit file");
+    for (const missing of ["New empty file", "Move to folder", "Duplicate", "Download"]) expect(items).not.toContain(missing);
   });
 
   it("moves rows dropped on another directory of the same host and ignores rows dropped where they came from", async () => {

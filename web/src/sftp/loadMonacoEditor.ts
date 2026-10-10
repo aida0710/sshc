@@ -7,3 +7,8 @@ export function loadMonacoEditor(): Promise<typeof import("./MonacoEditor")> {
   installMonacoEnvironment();
   return import("./MonacoEditor");
 }
+
+export function loadMonacoDiffEditor(): Promise<typeof import("./MonacoDiffEditor")> {
+  installMonacoEnvironment();
+  return import("./MonacoDiffEditor");
+}

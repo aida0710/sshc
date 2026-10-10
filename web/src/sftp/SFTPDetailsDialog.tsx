@@ -6,6 +6,7 @@ import type { MessageKey } from "../i18n/messages";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
+import { localHostAlias } from "./localHost";
 import { sftpApi, type RemoteDirectoryStats, type RemoteEntry } from "./api";
 import { formatBytes } from "../ui/format";
 import { entryKind } from "./entryKind";
@@ -96,7 +97,7 @@ export function SFTPDetailsDialog({
   const entry = entries.length === 1 ? entries[0] ?? null : null;
   const kind = entry === null ? null : entryKind(entry);
   const previewPath = entry !== null && kind === "file" ? entry.path : null;
-  const directoryPath = entry !== null && kind === "directory" ? entry.path : null;
+  const directoryPath = entry !== null && kind === "directory" && alias !== localHostAlias ? entry.path : null;
   const totalBytes = entries.reduce((sum, item) => sum + (entryKind(item) === "file" ? item.size : 0), 0);
   const heading = entry === null ? t("sftp.detailsForCount", { count: entries.length }) : t("sftp.detailsFor", { name: entry.name });
 

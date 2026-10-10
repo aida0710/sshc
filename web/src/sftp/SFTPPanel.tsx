@@ -1,3 +1,4 @@
+import { sourceFor } from "./sftpSource";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import type { HostEntry } from "../api/config";
 import type { NavigationBlocker } from "../routing/useSectionRoute";
@@ -180,7 +181,7 @@ export function SFTPPanel({
     onProblem: setProblem,
     // The saved revision is what the listing must show next.
     onSaved: async (targetAlias, saved) => {
-      await browser.load(remoteParentOf(saved.entry.path), { alias: targetAlias, refresh: true });
+      await browser.load(sourceFor(targetAlias)?.parentOf(saved.entry.path) ?? remoteParentOf(saved.entry.path), { alias: targetAlias, refresh: true });
     },
     onNavigationBlockerChange,
     onDirtyChange,

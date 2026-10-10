@@ -29,8 +29,8 @@ export function SFTPTextEditor({ editor, busy = false }: {
         >
           <div className="flex items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
             <h2 id={`${id}-editor`} className="min-w-0 grow truncate font-mono text-xs">{opened.entry.path}</h2>
-            {dirty ? <span className="text-xs text-notice-ink">{t("sftp.unsaved")}</span> : null}
-            <Button disabled={writeDisabled} onClick={() => void editor.save()}>{t("sftp.save")}</Button>
+            <span role="status" className="text-xs text-ink-muted">{editor.saving ? t("sftp.editorSaving") : dirty ? t("sftp.unsaved") : editor.saved ? t("sftp.editorSaved") : ""}</span>
+            <Button disabled={writeDisabled} onClick={() => void editor.save()}>{editor.saving ? t("sftp.editorSaving") : t("sftp.save")}</Button>
             <button type="button" className="text-xs text-ink-muted" onClick={editor.dismiss}>{t("sftp.close")}</button>
           </div>
           {problem === null ? null : (
@@ -41,7 +41,7 @@ export function SFTPTextEditor({ editor, busy = false }: {
                   <span className="grow basis-48">{problem.message}</span>
                   {problem.conflict ? (
                     <span className="flex shrink-0 gap-3">
-                      <button type="button" disabled={editor.busy} className="text-accent disabled:text-ink-faint" onClick={editor.requestReload}>{t("sftp.editorReload")}</button>
+                      <button type="button" disabled={editor.busy} className="text-accent disabled:text-ink-faint" onClick={editor.requestReload}>{t(editor.local ? "sftp.editorLocalReload" : "sftp.editorReload")}</button>
                       <button type="button" disabled={writeDisabled} className="text-accent disabled:text-ink-faint" onClick={() => void editor.requestOverwrite()}>{t("sftp.editorOverwrite")}</button>
                     </span>
                   ) : null}
@@ -51,7 +51,7 @@ export function SFTPTextEditor({ editor, busy = false }: {
           )}
           <div className="min-h-0 flex-1">
             <Suspense fallback={<div className="p-4 text-sm text-ink-muted">{t("sftp.editorLoading")}</div>}>
-              <MonacoEditor path={opened.entry.path} value={contents} onChange={setContents} readOnly={editor.busy} initialLine={editor.initialLine} />
+              <MonacoEditor path={opened.entry.path} value={contents} onChange={setContents} onSave={() => { if (!writeDisabled) void editor.save(); }} readOnly={editor.busy} initialLine={editor.initialLine} />
             </Suspense>
           </div>
         </ModalShell>
@@ -59,7 +59,7 @@ export function SFTPTextEditor({ editor, busy = false }: {
       {confirming === null ? null : (
         <ConfirmDialog
           id={`${id}-discard`}
-          heading={t(confirming === "close" ? "sftp.editorCloseHeading" : "sftp.editorReloadHeading")}
+          heading={t(confirming === "close" ? "sftp.editorCloseHeading" : editor.local ? "sftp.editorLocalReloadHeading" : "sftp.editorReloadHeading")}
           body={<p className="text-sm text-ink-muted">{t("sftp.leaveBody", { path })}</p>}
           confirmLabel={t(confirming === "close" ? "sftp.editorCloseDiscard" : "sftp.editorReloadDiscard")}
           cancelLabel={t("sftp.leaveStay")}
@@ -70,12 +70,12 @@ export function SFTPTextEditor({ editor, busy = false }: {
       {editor.confirmingOverwrite ? (
         <ConfirmDialog
           id={`${id}-overwrite`}
-          heading={t("sftp.editorOverwriteHeading")}
+          heading={t(editor.local ? "sftp.editorLocalOverwriteHeading" : "sftp.editorOverwriteHeading")}
           body={(
             <>
-              <p className="text-sm text-ink-muted">{t("sftp.editorOverwriteBody", { path })}</p>
+              <p className="text-sm text-ink-muted">{t(editor.local ? "sftp.editorLocalOverwriteBody" : "sftp.editorOverwriteBody", { path })}</p>
               {/* Says why Overwrite cannot be pressed yet: over a slow route the read can take seconds. */}
-              {editor.readingOverwriteRevision ? <p role="status" className="text-sm text-ink-muted">{t("sftp.editorOverwriteReading")}</p> : null}
+              {editor.readingOverwriteRevision ? <p role="status" className="text-sm text-ink-muted">{t(editor.local ? "sftp.editorLocalOverwriteReading" : "sftp.editorOverwriteReading")}</p> : null}
             </>
           )}
           confirmLabel={t("sftp.editorOverwrite")}
