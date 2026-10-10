@@ -14,12 +14,20 @@ export function MonacoDiffEditor({ path, original, modified }: { path: string; o
     const editor = monaco.editor.createDiffEditor(container.current, {
       readOnly: true, originalEditable: false, automaticLayout: true,
       renderSideBySide: true, useInlineViewWhenSpaceIsLimited: true,
+      // This comparison has no apply/revert actions or their gutter menu.
+      renderGutterMenu: false,
       minimap: { enabled: false }, scrollBeyondLastLine: false,
       fontFamily: "JetBrains Mono, ui-monospace, monospace", fontSize: 13,
       theme: resolved === "dark" ? "vs-dark" : "vs", unusualLineTerminators: "off",
     });
     editor.setModel({ original: originalModel, modified: modifiedModel });
-    return () => { editor.dispose(); originalModel.dispose(); modifiedModel.dispose(); };
+    return () => {
+      // Detach the models while the diff editor's context and observers are live.
+      editor.setModel(null);
+      editor.dispose();
+      originalModel.dispose();
+      modifiedModel.dispose();
+    };
     // Theme updates do not discard the comparison's scroll position.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, original, modified]);
