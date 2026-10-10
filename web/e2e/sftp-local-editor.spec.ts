@@ -15,15 +15,23 @@ test("edits an engine-local file with Ctrl+S and confirms an external overwrite"
   await pane.getByRole("button", { name: "notes.txt", exact: true }).dblclick();
   await page.getByRole("dialog", { name: "Details for notes.txt", exact: true }).getByRole("button", { name: "Edit file", exact: true }).click();
   const editor = page.getByRole("dialog", { name: /editor-local\/notes.txt$/ });
-  const input = editor.locator(".monaco-editor textarea");
-  await input.press("Control+End");
-  await input.pressSequentially("second line");
-  await input.press("Control+s");
+  // Native EditContext exposes a textbox div and a hidden readonly textarea.
+  // Use the accessible editor control in either Monaco input mode.
+  const input = editor.getByRole("textbox", { name: "Editor content", exact: true });
+  await input.focus();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.insertText("second line");
+  await expect(editor.getByRole("status")).toHaveText("Unsaved");
+  await expect(editor.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
+  await page.keyboard.press("Control+s");
   await expect(editor.getByRole("status")).toHaveText("Saved");
   expect(await installation.read("editor-local/notes.txt")).toBe("first line\nsecond line");
-  await input.pressSequentially(" mine");
+  await input.focus();
+  await page.keyboard.insertText(" mine");
+  await expect(editor.getByRole("status")).toHaveText("Unsaved");
+  await expect(editor.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
   await installation.write("editor-local/notes.txt", "external change\n");
-  await input.press("Control+s");
+  await page.keyboard.press("Control+s");
   await expect(editor.getByRole("alert")).toContainText("The local file changed or was replaced");
   expect(await installation.read("editor-local/notes.txt")).toBe("external change\n");
   await editor.getByRole("button", { name: "Overwrite", exact: true }).click();
