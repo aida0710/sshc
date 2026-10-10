@@ -22,10 +22,9 @@ function tabLabel(tab: SFTPTab, unnamed: string, localName: string): string {
   return `${name}:${directory}`;
 }
 
-// SFTPTabStrip is the row of tabs above one pane. Tabs share one width so the
-// strip does not reflow as hosts and directories change; when the pane is
-// narrower than its tabs they shrink together and then scroll. A tab can be
-// dragged onto a pane, or moved with Shift+Arrow, to split or join panes.
+// Tabs share one width so changing hosts and directories does not reflow the
+// strip. Compact screens combine all file tabs here and keep touch controls
+// large; other screens allow movable tabs to split or join panes.
 export function SFTPTabStrip({
   pane,
   label,
