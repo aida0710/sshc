@@ -118,3 +118,69 @@ func TestCancellingRemoteForwardStopFinishesEvenWhenATunnelCannotClose(t *testin
 		t.Fatalf("listener after cancellation = %v", err)
 	}
 }
+
+type lateRemoteListenerTransport struct {
+	started   chan struct{}
+	reply     chan net.Listener
+	closed    chan struct{}
+	closeOnce sync.Once
+}
+
+func (transport *lateRemoteListenerTransport) Listen(_, _ string) (net.Listener, error) {
+	close(transport.started)
+	return <-transport.reply, nil
+}
+
+func (transport *lateRemoteListenerTransport) Close() error {
+	transport.closeOnce.Do(func() { close(transport.closed) })
+	return nil
+}
+
+type observedRemoteListener struct {
+	net.Listener
+	closed    chan struct{}
+	closeOnce sync.Once
+}
+
+func (listener *observedRemoteListener) Close() error {
+	err := listener.Listener.Close()
+	listener.closeOnce.Do(func() { close(listener.closed) })
+	return err
+}
+
+func TestCancelledListenReturnsBeforeALateReplyAndClosesItsListener(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	observed := &observedRemoteListener{Listener: listener, closed: make(chan struct{})}
+	transport := &lateRemoteListenerTransport{started: make(chan struct{}), reply: make(chan net.Listener, 1), closed: make(chan struct{})}
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { transport.reply <- observed }) }
+	t.Cleanup(release)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	returned := make(chan error, 1)
+	go func() { _, err := requestRemoteForward(ctx, transport, "127.0.0.1:9080"); returned <- err }()
+	select {
+	case <-transport.started:
+	case <-time.After(remoteForwardRequestTestDeadline):
+		t.Fatal("listen never started")
+	}
+	cancel()
+	select {
+	case err := <-returned:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled request = %v", err)
+		}
+	case <-time.After(remoteForwardRequestTestDeadline):
+		t.Fatal("cancelled request waited for its late reply")
+	}
+	release()
+	select {
+	case <-observed.closed:
+	case <-time.After(remoteForwardRequestTestDeadline):
+		t.Fatal("late reply left its unused listener open")
+	}
+}

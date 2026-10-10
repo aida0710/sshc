@@ -27,45 +27,42 @@ func requestRemoteForward(ctx context.Context, transport remoteForwardTransport,
 	})
 	if ctx.Err() != nil && listener != nil {
 		_ = transport.Close()
-		_ = listener.Close()
+		_ = closeRemoteForwardListener(ctx, transport, listener)
 		return nil, ctx.Err()
 	}
 	return listener, err
 }
 
 func closeRemoteForwardListener(ctx context.Context, transport remoteForwardTransport, listener net.Listener) error {
-	_, err := awaitRemoteForwardRequest(ctx, transport, func() (struct{}, error) {
-		return struct{}{}, listener.Close()
-	})
-	if ctx.Err() != nil {
-		// Even an already cancelled stop must remove the local listener from
-		// the SSH client after closing the transport.
-		_ = transport.Close()
-		_ = listener.Close()
-	}
-	return err
+	return startRemoteListenerClose(ctx, transport, listener).wait(ctx)
 }
 
-func awaitRemoteForwardRequest[T any](ctx context.Context, transport remoteForwardTransport, request func() (T, error)) (T, error) {
+func awaitRemoteForwardRequest(ctx context.Context, transport remoteForwardTransport, request func() (net.Listener, error)) (net.Listener, error) {
 	type requestReply struct {
-		value T
-		err   error
+		listener net.Listener
+		err      error
 	}
 	if err := ctx.Err(); err != nil {
-		var empty T
-		return empty, err
+		return nil, err
 	}
-	completed := make(chan requestReply, 1)
+	// The rendezvous transfers listener ownership. A buffered reply could
+	// leave a successful late listener unread after the caller cancels.
+	completed := make(chan requestReply)
 	go func() {
-		value, err := request()
-		completed <- requestReply{value: value, err: err}
+		listener, err := request()
+		select {
+		case completed <- requestReply{listener: listener, err: err}:
+		case <-ctx.Done():
+			if listener != nil {
+				_ = closeRemoteForwardListener(ctx, transport, listener)
+			}
+		}
 	}()
 	select {
 	case reply := <-completed:
-		return reply.value, reply.err
+		return reply.listener, reply.err
 	case <-ctx.Done():
 		_ = transport.Close()
-		reply := <-completed
-		return reply.value, ctx.Err()
+		return nil, ctx.Err()
 	}
 }

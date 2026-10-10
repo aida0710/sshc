@@ -36,6 +36,8 @@ type remoteForward struct {
 	connections map[net.Conn]struct{}
 	workers     sync.WaitGroup
 	closeOnce   sync.Once
+	cancelClose context.CancelFunc
+	closed      chan struct{}
 	closeError  error
 }
 
@@ -48,6 +50,7 @@ func newRemoteForward(listener net.Listener, destination string, transport remot
 		context:     ctx,
 		cancel:      cancel,
 		connections: make(map[net.Conn]struct{}),
+		closed:      make(chan struct{}),
 	}
 	forward.workers.Add(1)
 	return forward
@@ -61,27 +64,59 @@ func (forward *remoteForward) Close() error {
 
 func (forward *remoteForward) close(ctx context.Context) error {
 	forward.closeOnce.Do(func() {
-		// Closing a forwarded channel also writes to the SSH transport. Bound
-		// the whole stop operation, including peers that no longer read packets.
-		stopClosing := context.AfterFunc(ctx, func() { _ = forward.transport.Close() })
-		defer stopClosing()
 		forward.mutex.Lock()
 		forward.cancel()
-		connections := make([]net.Conn, 0, len(forward.connections))
-		for connection := range forward.connections {
-			connections = append(connections, connection)
-		}
 		forward.mutex.Unlock()
-		for _, connection := range connections {
-			_ = connection.Close()
-		}
-		forward.closeError = closeRemoteForwardListener(ctx, forward.transport, forward.listener)
-		forward.workers.Wait()
-		if err := ctx.Err(); err != nil {
-			forward.closeError = err
-		}
+		closeContext, cancelClose := context.WithCancel(ctx)
+		forward.cancelClose = cancelClose
+		go forward.finishClose(closeContext)
 	})
-	return forward.closeError
+	if err := ctx.Err(); err != nil {
+		forward.cancelClose()
+		_ = forward.transport.Close()
+		return err
+	}
+	select {
+	case <-forward.closed:
+		return forward.closeError
+	case <-ctx.Done():
+		forward.cancelClose()
+		_ = forward.transport.Close()
+		return ctx.Err()
+	}
+}
+
+// Session shutdown has already closed the transport. Do not wait on a reply
+// or on a concurrent temporary StopForward; background cleanup drains its queue.
+func (forward *remoteForward) closeAfterTransport() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	return forward.close(ctx)
+}
+
+func (forward *remoteForward) finishClose(ctx context.Context) {
+	defer close(forward.closed)
+	defer forward.cancelClose()
+	// Channel Close also writes to SSH, so the deadline covers active sockets
+	// as well as the global cancellation request.
+	stopClosing := context.AfterFunc(ctx, func() { _ = forward.transport.Close() })
+	defer stopClosing()
+	listenerClose := startRemoteListenerClose(ctx, forward.transport, forward.listener)
+	forward.mutex.Lock()
+	connections := make([]net.Conn, 0, len(forward.connections))
+	for connection := range forward.connections {
+		connections = append(connections, connection)
+	}
+	forward.mutex.Unlock()
+	for _, connection := range connections {
+		_ = connection.Close()
+	}
+	<-listenerClose.completed
+	forward.workers.Wait()
+	forward.closeError = listenerClose.err
+	if err := ctx.Err(); err != nil {
+		forward.closeError = err
+	}
 }
 
 func (forward *remoteForward) accept() {

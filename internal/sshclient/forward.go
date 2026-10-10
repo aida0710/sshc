@@ -166,7 +166,11 @@ func (f *forwards) close() {
 	}
 	f.mutex.Unlock()
 	for _, closer := range closers {
-		_ = closer.Close()
+		if remote, ok := closer.(*remoteForward); ok {
+			_ = remote.closeAfterTransport()
+		} else {
+			_ = closer.Close()
+		}
 	}
 }
 
@@ -239,7 +243,13 @@ func (f *forwards) listen(client *ssh.Client, spec ForwardSpec, origin forwardOr
 	f.mutex.Lock()
 	if f.closed {
 		f.mutex.Unlock()
-		_ = listener.Close()
+		if spec.Kind == terminal.ForwardRemote {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			_ = closeRemoteForwardListener(ctx, client, listener)
+		} else {
+			_ = listener.Close()
+		}
 		return terminal.Forward{}, terminal.ErrNotConnected
 	}
 	entry.ID = f.nextID()
