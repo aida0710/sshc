@@ -6,8 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"syscall"
-
-	"golang.org/x/sys/unix"
 )
 
 func captureLocalTextMetadata(file *os.File) (localTextMetadata, error) {
@@ -46,22 +44,8 @@ func applyLocalTextMetadata(_ *os.File, staged *os.File, snapshot localTextMetad
 			return err
 		}
 	}
-	fd := int(staged.Fd())
-	// A directory's inherited ACL must not broaden the replacement's access.
-	for name := range current.extendedAttributes {
-		if _, retain := snapshot.extendedAttributes[name]; !retain {
-			if err := unix.Fremovexattr(fd, name); err != nil {
-				return err
-			}
-		}
-	}
 	if err := staged.Chmod(snapshot.mode.Perm()); err != nil {
 		return err
 	}
-	for name, value := range snapshot.extendedAttributes {
-		if err := unix.Fsetxattr(fd, name, value, 0); err != nil {
-			return err
-		}
-	}
-	return nil
+	return applyLocalTextExtendedAttributes(staged, snapshot.extendedAttributes)
 }

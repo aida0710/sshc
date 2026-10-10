@@ -219,3 +219,33 @@ func TestLocalTextSaveLeavesPrivilegedFilesUnchangedAndCleansStaging(t *testing.
 		t.Fatalf("staging left after refused save = %v, %v", children, err)
 	}
 }
+
+func TestLocalTextStagingDropsDefaultACLBeforeCreatingContents(t *testing.T) {
+	directory := t.TempDir()
+	setLocalTextFixtureAttribute(t, directory, localTextFixtureAttribute{name: localTextDefaultACLAttribute, value: localTextFixtureACL(uint32(os.Getuid() + 1))})
+	parent, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer parent.Close()
+	staging, err := openLocalTextStagingFile(parent, "stage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer staging.cleanup(parent)
+	for _, relative := range []string{"stage", "stage/" + localTextStagingContentsName} {
+		for _, name := range []string{localTextAccessACLAttribute, localTextDefaultACLAttribute} {
+			if _, err := unix.Getxattr(filepath.Join(directory, relative), name, nil); !errors.Is(err, unix.ENODATA) {
+				t.Fatalf("%s inherited %s: %v", relative, name, err)
+			}
+		}
+	}
+	privateDirectory, err := parent.Stat("stage")
+	if err != nil || privateDirectory.Mode().Perm() != localTextStagingDirectoryPermission {
+		t.Fatalf("staging directory permissions = %v, %v", privateDirectory, err)
+	}
+	privateContents, err := staging.file.Stat()
+	if err != nil || privateContents.Mode().Perm() != localTextStagingPermission {
+		t.Fatalf("staging contents permissions = %v, %v", privateContents, err)
+	}
+}

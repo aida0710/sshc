@@ -172,20 +172,17 @@ func publishLocalText(ctx context.Context, publication localTextPublication) err
 	if err != nil {
 		return err
 	}
-	defer target.parent.Remove(temporary)
-	if _, err := staged.WriteString(request.Contents); err != nil {
-		staged.Close()
+	defer staged.cleanup(target.parent)
+	if _, err := staged.file.WriteString(request.Contents); err != nil {
 		return err
 	}
-	if err := preserveLocalTextMetadata(target, staged, publication.metadata); err != nil {
-		staged.Close()
+	if err := preserveLocalTextMetadata(target, staged.file, publication.metadata); err != nil {
 		return err
 	}
-	if err := staged.Sync(); err != nil {
-		staged.Close()
+	if err := staged.file.Sync(); err != nil {
 		return err
 	}
-	if err := staged.Close(); err != nil {
+	if err := staged.file.Close(); err != nil {
 		return err
 	}
 	read, err := readLocalBytes(ctx, localByteReadRequest{target: target, limit: MaxEditableFileBytes, withTextMetadata: true})
@@ -203,5 +200,5 @@ func publishLocalText(ctx context.Context, publication localTextPublication) err
 		return err
 	}
 	// Rename publishes a complete sibling and never follows a destination link.
-	return publishLocalTextReplacement(target.parent, temporary, target.name)
+	return publishLocalTextReplacement(target.parent, staged, target.name)
 }

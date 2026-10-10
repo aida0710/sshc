@@ -10,6 +10,32 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// Chown and Chmod can change ACL masks or other attributes. Read the current
+// values afterward so unchanged system labels do not need write permission.
+func applyLocalTextExtendedAttributes(file *os.File, attributes map[string][]byte) error {
+	current, err := readLocalTextExtendedAttributes(file)
+	if err != nil {
+		return err
+	}
+	fd := int(file.Fd())
+	for name := range current {
+		if _, retain := attributes[name]; !retain {
+			if err := unix.Fremovexattr(fd, name); err != nil {
+				return err
+			}
+		}
+	}
+	for name, value := range attributes {
+		if existing, exists := current[name]; exists && bytes.Equal(existing, value) {
+			continue
+		}
+		if err := unix.Fsetxattr(fd, name, value, 0); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func readLocalTextExtendedAttributes(file *os.File) (map[string][]byte, error) {
 	fd := int(file.Fd())
 	nameBytes, err := unix.Flistxattr(fd, nil)
