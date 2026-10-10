@@ -19,34 +19,64 @@ type LocalTextSaveRequest struct {
 	ExpectedRevision string
 }
 
+type localByteReadRequest struct {
+	target           localMutationTarget
+	limit            int64
+	withTextMetadata bool
+}
+
+type localByteRead struct {
+	contents     []byte
+	metadata     fs.FileInfo
+	textMetadata localTextMetadata
+}
+
 // Pin the resolved parent as local mutations do, then refuse the final link.
 // The handle and path must still name the same regular file after the read.
-func readLocalBytes(ctx context.Context, target localMutationTarget, limit int64) ([]byte, fs.FileInfo, error) {
+func readLocalBytes(ctx context.Context, request localByteReadRequest) (localByteRead, error) {
+	target, limit := request.target, request.limit
 	metadata, err := inspectLocalReadPath(target.parent, target.name)
 	if err != nil {
-		return nil, nil, err
+		return localByteRead{}, err
 	}
 	info := metadata[target.name]
 	if !info.Mode().IsRegular() {
-		return nil, nil, ErrNotRegularFile
+		return localByteRead{}, ErrNotRegularFile
 	}
 	if info.Size() < 0 || info.Size() > limit {
-		return nil, nil, ErrTextTooLarge
+		return localByteRead{}, ErrTextTooLarge
 	}
 	file, err := openStableLocalFile(localContentRead{root: target.parent, relative: target.name, metadata: metadata})
 	if err != nil {
-		return nil, nil, err
+		return localByteRead{}, err
 	}
 	defer file.reader.Close()
+	textMetadata := localTextMetadata{}
+	if request.withTextMetadata {
+		textMetadata, err = captureLocalTextMetadata(file.reader.(*os.File))
+		if err != nil {
+			return localByteRead{}, err
+		}
+	}
 	var contents bytes.Buffer
 	budget := contentReadBudget{maxBytes: limit}
 	if err := budget.stream(ctx, contentStream{file: file, destination: &contents}); err != nil {
-		return nil, nil, err
+		return localByteRead{}, err
 	}
-	return contents.Bytes(), info, nil
+	if request.withTextMetadata {
+		latest, err := captureLocalTextMetadata(file.reader.(*os.File))
+		if err != nil {
+			return localByteRead{}, err
+		}
+		if latest.revision != textMetadata.revision {
+			return localByteRead{}, ErrConflict
+		}
+	}
+	return localByteRead{contents: contents.Bytes(), metadata: info, textMetadata: textMetadata}, nil
 }
 
-func localTextFile(target localMutationTarget, contents []byte, metadata fs.FileInfo) (TextFile, error) {
+func localTextFile(target localMutationTarget, read localByteRead) (TextFile, error) {
+	contents, metadata := read.contents, read.metadata
 	if !validText(contents) {
 		return TextFile{}, ErrNotUTF8
 	}
@@ -55,7 +85,7 @@ func localTextFile(target localMutationTarget, contents []byte, metadata fs.File
 		return TextFile{}, err
 	}
 	// Content alone cannot detect replacement by another file with equal bytes.
-	revision := contentRevision([]byte(fmt.Sprintf("%s\x00%s\x00%s", identity, metadataRevision(metadata), contentRevision(contents))))
+	revision := contentRevision([]byte(fmt.Sprintf("%s\x00%s\x00%s\x00%s", identity, metadataRevision(metadata), contentRevision(contents), read.textMetadata.revision)))
 	return TextFile{Entry: localMutationEntry(target.publicPath, metadata), Contents: string(contents), Revision: revision}, nil
 }
 
@@ -66,14 +96,14 @@ func ReadLocalText(ctx context.Context, options LocalTextReadOptions) (file Text
 		return TextFile{}, err
 	}
 	defer target.parent.Close()
-	contents, metadata, err := readLocalBytes(ctx, target, MaxEditableFileBytes)
+	read, err := readLocalBytes(ctx, localByteReadRequest{target: target, limit: MaxEditableFileBytes, withTextMetadata: true})
 	if err != nil {
 		return TextFile{}, err
 	}
-	if options.ExpectedRevision != "" && metadataRevision(metadata) != options.ExpectedRevision {
+	if options.ExpectedRevision != "" && metadataRevision(read.metadata) != options.ExpectedRevision {
 		return TextFile{}, ErrConflict
 	}
-	return localTextFile(target, contents, metadata)
+	return localTextFile(target, read)
 }
 
 func (m *TransferManager) SaveLocalText(ctx context.Context, request LocalTextSaveRequest) (file TextFile, err error) {
@@ -103,42 +133,42 @@ func (m *TransferManager) SaveLocalText(ctx context.Context, request LocalTextSa
 	if err := m.refuseLocalTransferOverlap([]string{target.absolute}); err != nil {
 		return TextFile{}, err
 	}
-	contents, metadata, err := readLocalBytes(ctx, target, MaxEditableFileBytes)
+	read, err := readLocalBytes(ctx, localByteReadRequest{target: target, limit: MaxEditableFileBytes, withTextMetadata: true})
 	if err != nil {
 		return TextFile{}, err
 	}
-	current, err := localTextFile(target, contents, metadata)
+	current, err := localTextFile(target, read)
 	if err != nil {
 		return TextFile{}, err
 	}
 	if current.Revision != request.ExpectedRevision {
 		return TextFile{}, ErrConflict
 	}
-	if err := publishLocalText(ctx, localTextPublication{target: target, request: request, mode: metadata.Mode().Perm()}); err != nil {
+	if err := publishLocalText(ctx, localTextPublication{target: target, request: request, metadata: read.textMetadata}); err != nil {
 		return TextFile{}, err
 	}
-	contents, metadata, err = readLocalBytes(ctx, target, MaxEditableFileBytes)
+	read, err = readLocalBytes(ctx, localByteReadRequest{target: target, limit: MaxEditableFileBytes, withTextMetadata: true})
 	if err != nil {
 		return TextFile{}, err
 	}
-	return localTextFile(target, contents, metadata)
+	return localTextFile(target, read)
 }
 
 type localTextPublication struct {
-	target  localMutationTarget
-	request LocalTextSaveRequest
-	mode    fs.FileMode
+	target   localMutationTarget
+	request  LocalTextSaveRequest
+	metadata localTextMetadata
 }
 
 func publishLocalText(ctx context.Context, publication localTextPublication) error {
-	target, request, mode := publication.target, publication.request, publication.mode
+	target, request := publication.target, publication.request
 	suffix, err := newLocalSuffix()
 	if err != nil {
 		return err
 	}
 	// Keep the sibling name short enough to edit files with maximum-length names.
 	temporary := ".sshc-editor.sshc-" + suffix + ".tmp"
-	staged, err := target.parent.OpenFile(temporary, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+	staged, err := openLocalTextStagingFile(target.parent, temporary)
 	if err != nil {
 		return err
 	}
@@ -147,7 +177,7 @@ func publishLocalText(ctx context.Context, publication localTextPublication) err
 		staged.Close()
 		return err
 	}
-	if err := staged.Chmod(mode); err != nil {
+	if err := preserveLocalTextMetadata(target, staged, publication.metadata); err != nil {
 		staged.Close()
 		return err
 	}
@@ -158,11 +188,11 @@ func publishLocalText(ctx context.Context, publication localTextPublication) err
 	if err := staged.Close(); err != nil {
 		return err
 	}
-	contents, metadata, err := readLocalBytes(ctx, target, MaxEditableFileBytes)
+	read, err := readLocalBytes(ctx, localByteReadRequest{target: target, limit: MaxEditableFileBytes, withTextMetadata: true})
 	if err != nil {
 		return err
 	}
-	current, err := localTextFile(target, contents, metadata)
+	current, err := localTextFile(target, read)
 	if err != nil {
 		return err
 	}
@@ -173,5 +203,5 @@ func publishLocalText(ctx context.Context, publication localTextPublication) err
 		return err
 	}
 	// Rename publishes a complete sibling and never follows a destination link.
-	return target.parent.Rename(temporary, target.name)
+	return publishLocalTextReplacement(target.parent, temporary, target.name)
 }
