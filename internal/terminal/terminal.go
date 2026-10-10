@@ -26,6 +26,7 @@ func ValidKind(kind Kind) bool { return kind == KindSSH || kind == KindShell }
 // 転送の種類。
 const (
 	ForwardLocal   = "local"
+	ForwardRemote  = "remote"
 	ForwardDynamic = "dynamic"
 	ForwardAgent   = "agent"
 )
@@ -36,6 +37,8 @@ const (
 	ForwardProblemAddressInUse     = "address_in_use"
 	ForwardProblemPermissionDenied = "permission_denied"
 	ForwardProblemAgentUnreachable = "agent_unreachable"
+	ForwardProblemRemoteDenied     = "remote_denied"
+	ForwardProblemRemoteTimeout    = "remote_timeout"
 	ForwardProblemFailed           = "failed"
 )
 
@@ -44,7 +47,7 @@ type Forward struct {
 	// ID は同じセッション内で一意な、停止操作用の不透明な識別子。
 	ID   string
 	Kind string
-	// Listen は、このマシンで開いている場所。agent 転送では空。
+	// Listen は待ち受け場所。remote はSSH接続先、それ以外はこのマシン。agent では空。
 	Listen string
 	// To は、その先。dynamic と agent では空。
 	To string

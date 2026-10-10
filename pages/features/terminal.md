@@ -61,7 +61,7 @@ Kitty keyboard protocolは、リモートアプリケーションからの要求
 
 ## リンクとリモートパス
 
-OSC 8リンクと画面上のURLは、OS標準のブラウザで開けます。検出したリモートパスに加え、OSC 7で通知された現在の作業ディレクトリも、Terminalで使用中の接続先を選択したSFTP画面で直接開けます。SFTP側から現在のディレクトリを指定して新しいSSH Terminalを開くこともできます。
+OSC 8リンクと画面上のURLは、OS標準のブラウザで開けます。検出したリモートパスに加え、OSC 7で通知された現在の作業ディレクトリも、Terminalで使用中の接続先を選択したSFTP画面で直接開けます。SFTP側の［ここでターミナルを開く］では、リモートなら現在のディレクトリを指定したSSH Terminal、ローカルなら表示中のフォルダを開始場所にしたローカルシェルを開けます。ローカルシェルが動くのはsshcエンジンのマシンです。
 
 ## ローカルシェル
 
@@ -75,7 +75,7 @@ sshcが通常のシェル出力からプログラムの状態を推測したり�
 
 ## ポート転送
 
-SSH接続ごとにLocal forwardingとDynamic SOCKSを管理できます。Local forwardingではローカルの待ち受けアドレス／ポートと転送先のホスト／ポートを指定でき、Dynamic forwardingではローカルにSOCKSエンドポイントを開けます。Remote forwardingには対応していません。
+SSH接続ごとにLocal forwarding、Remote forwarding、Dynamic SOCKSを管理できます。Local forwardingはローカルのポートからSSH接続先へ、Remote forwardingはSSH接続先のポートからsshcエンジン側へ転送します。Dynamic forwardingではローカルにSOCKSエンドポイントを開けます。
 
 設定方法は、[ポート転送](/terminal/port-forwarding)を参照してください。
 

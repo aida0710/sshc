@@ -1581,6 +1581,19 @@ type SFTPOwnershipRequest struct {
 	Uid              *int64 `json:"uid"`
 }
 
+// SFTPSaveTextRequest defines model for SFTPSaveTextRequest.
+type SFTPSaveTextRequest struct {
+	Contents         string `json:"contents"`
+	ExpectedRevision string `json:"expectedRevision"`
+}
+
+// SFTPTextFile defines model for SFTPTextFile.
+type SFTPTextFile struct {
+	Contents string    `json:"contents"`
+	Entry    SFTPEntry `json:"entry"`
+	Revision string    `json:"revision"`
+}
+
 // SetTerminalSessionTitleRequest defines model for SetTerminalSessionTitleRequest.
 type SetTerminalSessionTitleRequest struct {
 	Title *string `json:"title"`

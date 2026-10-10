@@ -174,7 +174,7 @@ func (h TerminalHandlers) StartForward(c *echo.Context) error {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
 	var request api.StartTerminalForwardRequest
-	if err := decodeJSON(c, &request); err != nil || (request.Kind != "local" && request.Kind != "dynamic") {
+	if err := decodeJSON(c, &request); err != nil || (request.Kind != "local" && request.Kind != "remote" && request.Kind != "dynamic") {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	destination := ""
@@ -182,7 +182,7 @@ func (h TerminalHandlers) StartForward(c *echo.Context) error {
 		destination = *request.Destination
 	}
 	if request.ListenPort < 1 || request.ListenPort > 65535 || len(destination) > 512 ||
-		(request.Kind == "local" && destination == "") ||
+		(request.Kind != "dynamic" && destination == "") ||
 		(request.Kind == "dynamic" && destination != "") {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
@@ -220,6 +220,9 @@ func terminalForwardProblem(c *echo.Context, err error, bindReason string) error
 	case errors.Is(err, terminal.ErrNotConnected), errors.Is(err, terminal.ErrForwardUnavailable):
 		return problem(c, http.StatusConflict, "terminal_forward_unavailable")
 	default:
+		if bindReason == "" && errors.Is(err, context.DeadlineExceeded) {
+			bindReason = terminal.ForwardProblemRemoteTimeout
+		}
 		return problemWith(c, http.StatusConflict, problemPayload{
 			Code: "terminal_forward_bind_failed", Reason: bindReason, Detail: boundedProblemDetail(err.Error()),
 		})
@@ -271,10 +274,7 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 		size = candidate
 	}
 
-	spec, err := h.spec(kind, request.Alias, request.Cwd, size)
-	if kind == terminal.KindShell && request.ProfileId != nil {
-		spec, err = h.shellSpec(request.ProfileId, size)
-	}
+	spec, err := h.spec(request, size)
 	if err != nil {
 		return h.startProblem(c, err)
 	}
@@ -346,10 +346,11 @@ func (h TerminalHandlers) SetTitle(c *echo.Context) error {
 }
 
 // spec は、開こうとしているセッションひとつ分の起動一式を組み立てる。
-func (h TerminalHandlers) spec(kind terminal.Kind, alias, cwd *string, size terminal.Size) (terminal.Spec, error) {
-	if kind == terminal.KindShell {
-		return h.shellSpec(nil, size)
+func (h TerminalHandlers) spec(request api.OpenTerminalSessionRequest, size terminal.Size) (terminal.Spec, error) {
+	if request.Kind == api.OpenTerminalSessionRequestKindShell {
+		return h.shellSpec(request.ProfileId, request.Cwd, size)
 	}
+	alias, cwd := request.Alias, request.Cwd
 
 	if alias == nil {
 		return terminal.Spec{}, errMissingAlias
@@ -429,17 +430,24 @@ func quotePOSIXShell(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
-func (h TerminalHandlers) shellSpec(requested *string, size terminal.Size) (terminal.Spec, error) {
+func (h TerminalHandlers) shellSpec(requested, cwd *string, size terminal.Size) (terminal.Spec, error) {
 	profile, err := h.resolveShellProfile(requested)
 	if err != nil {
 		return terminal.Spec{}, err
+	}
+	directory := h.startDirectory()
+	if cwd != nil {
+		directory, err = terminal.ResolveLocalWorkingDirectory(*cwd)
+		if err != nil {
+			return terminal.Spec{}, err
+		}
 	}
 	return terminal.Spec{
 		Kind: terminal.KindShell, Title: shellTitle(profile.Path), Size: size,
 		Command: terminal.Command{
 			Path: profile.Path, Argv0: profile.Argv0,
 			Arguments: append([]string(nil), profile.Arguments...), Env: h.environment(),
-			Dir: h.startDirectory(),
+			Dir: directory,
 		},
 	}, nil
 }
@@ -540,6 +548,8 @@ func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 		// SFTP で開いているフォルダの名前は接続先が決める。制御文字を含む名前は
 		// cd の行に書けないので、そのフォルダでは開けないと伝える。
 		return problem(c, http.StatusBadRequest, "remote_working_directory_unsupported")
+	case errors.Is(err, terminal.ErrInvalidLocalWorkingDirectory):
+		return problem(c, http.StatusBadRequest, "local_working_directory_unavailable")
 	case errors.Is(err, platform.ErrUnknownShellProfile):
 		return problem(c, http.StatusBadRequest, "local_shell_profile_unavailable")
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"sshc/internal/httpserver"
@@ -73,12 +74,13 @@ type sftpCLIResult struct {
 }
 
 type sftpCLISettingsResult struct {
-	SpeedLimitKiB     float64 `json:"speedLimitKiB"`
-	AutoReconnect     bool    `json:"autoReconnect"`
-	ReconnectAttempts int     `json:"reconnectAttempts"`
-	SplitSizeMiB      int64   `json:"splitSizeMiB"`
-	SplitJobs         int     `json:"splitJobs"`
-	ChunkSizeMiB      int64   `json:"chunkSizeMiB"`
+	SpeedLimitKiB     float64  `json:"speedLimitKiB"`
+	AutoReconnect     bool     `json:"autoReconnect"`
+	ReconnectAttempts int      `json:"reconnectAttempts"`
+	SplitSizeMiB      int64    `json:"splitSizeMiB"`
+	SplitJobs         int      `json:"splitJobs"`
+	ChunkSizeMiB      int64    `json:"chunkSizeMiB"`
+	ExcludePatterns   []string `json:"excludePatterns"`
 }
 
 func runSFTP(ctx context.Context, called sftpInvocation, environment commandEnvironment) int {
@@ -90,6 +92,14 @@ func runSFTP(ctx context.Context, called sftpInvocation, environment commandEnvi
 	defer func() { _ = engine.Close() }()
 	if called.Action == sftpSettings {
 		return runSFTPSettings(ctx, engine, called, stdout, stderr)
+	}
+
+	if called.Recursive {
+		settings, err := readSFTPTransferSettings(ctx, engine)
+		if err != nil {
+			return finishSFTPFailure(called.JSON, err, stdout, stderr)
+		}
+		called.ExcludePatterns = settings.ExcludePatterns
 	}
 
 	var plan sftpCLIPlan
@@ -164,12 +174,9 @@ func runSFTP(ctx context.Context, called sftpInvocation, environment commandEnvi
 }
 
 func runSFTPSettings(ctx context.Context, engine *engineAPI, called sftpInvocation, stdout, stderr io.Writer) int {
-	var settings httpserver.SFTPTransferJobList
-	if err := engine.sendJSON(ctx, http.MethodGet, "/api/v1/sftp/transfers", nil, &settings); err != nil {
+	settings, err := readSFTPTransferSettings(ctx, engine)
+	if err != nil {
 		return finishSFTPFailure(called.JSON, err, stdout, stderr)
-	}
-	if !validSFTPCLITransferSettings(settings) {
-		return finishSFTPFailure(called.JSON, errEngineInvalidResponse, stdout, stderr)
 	}
 	if called.SplitSizeMiB > 0 {
 		settings.LargeFileThresholdBytes = int64(called.SplitSizeMiB) << 20
@@ -193,6 +200,7 @@ func runSFTPSettings(ctx context.Context, engine *engineAPI, called sftpInvocati
 			"processingStopped": settings.ProcessingStopped, "largeFileThresholdBytes": settings.LargeFileThresholdBytes,
 			"largeFileParallelism": settings.LargeFileParallelism, "largeFileChunkBytes": settings.LargeFileChunkBytes,
 			"speedLimitBytesPerSecond": settings.SpeedLimitBytesPerSecond, "autoReconnect": settings.AutoReconnect, "maxReconnectAttempts": settings.MaxReconnectAttempts,
+			"excludePatterns": append([]string{}, settings.ExcludePatterns...),
 		}
 		if err := engine.sendJSON(ctx, http.MethodPut, "/api/v1/sftp/transfers/settings", request, &settings); err != nil {
 			return finishSFTPFailure(called.JSON, err, stdout, stderr)
@@ -204,9 +212,10 @@ func runSFTPSettings(ctx context.Context, engine *engineAPI, called sftpInvocati
 	result := sftpCLISettingsResult{
 		// Preserve sub-KiB API settings instead of displaying them as unlimited.
 		SpeedLimitKiB: float64(settings.SpeedLimitBytesPerSecond) / float64(1<<10), AutoReconnect: settings.AutoReconnect, ReconnectAttempts: settings.MaxReconnectAttempts,
-		SplitSizeMiB: settings.LargeFileThresholdBytes >> 20,
-		SplitJobs:    settings.LargeFileParallelism,
-		ChunkSizeMiB: settings.LargeFileChunkBytes >> 20,
+		SplitSizeMiB:    settings.LargeFileThresholdBytes >> 20,
+		SplitJobs:       settings.LargeFileParallelism,
+		ChunkSizeMiB:    settings.LargeFileChunkBytes >> 20,
+		ExcludePatterns: settings.ExcludePatterns,
 	}
 	if called.JSON {
 		if err := writeCommandSuccess(stdout, result); err != nil {
@@ -214,9 +223,23 @@ func runSFTPSettings(ctx context.Context, engine *engineAPI, called sftpInvocati
 		}
 		return 0
 	}
+	if len(result.ExcludePatterns) > 0 {
+		fmt.Fprintf(stdout, "exclude-patterns  %s\n", strings.Join(result.ExcludePatterns, ", "))
+	}
 	fmt.Fprintf(stdout, "split-size  %d MiB\nsplit-jobs  %d\nchunk-size  %d MiB\n", result.SplitSizeMiB, result.SplitJobs, result.ChunkSizeMiB)
 	fmt.Fprintf(stdout, "speed-limit  %g KiB/s (0: unlimited)\nauto-reconnect  %t\nreconnect-attempts  %d\n", result.SpeedLimitKiB, result.AutoReconnect, result.ReconnectAttempts)
 	return 0
+}
+
+func readSFTPTransferSettings(ctx context.Context, engine *engineAPI) (httpserver.SFTPTransferJobList, error) {
+	var settings httpserver.SFTPTransferJobList
+	if err := engine.sendJSON(ctx, http.MethodGet, "/api/v1/sftp/transfers", nil, &settings); err != nil {
+		return settings, err
+	}
+	if !validSFTPCLITransferSettings(settings) {
+		return settings, errEngineInvalidResponse
+	}
+	return settings, nil
 }
 
 func validSFTPCLITransferSettings(settings httpserver.SFTPTransferJobList) bool {
@@ -226,7 +249,8 @@ func validSFTPCLITransferSettings(settings httpserver.SFTPTransferJobList) bool 
 		settings.LargeFileParallelism >= 1 && settings.LargeFileParallelism <= sftpcore.MaxLargeFileParallelism &&
 		settings.LargeFileChunkBytes >= sftpcore.MinLargeFileChunkBytes && settings.LargeFileChunkBytes <= sftpcore.MaxLargeFileChunkBytes &&
 		settings.SpeedLimitBytesPerSecond >= 0 && settings.SpeedLimitBytesPerSecond <= sftpcore.MaxTransferSpeedBytesPerSecond &&
-		settings.MaxReconnectAttempts >= 0 && settings.MaxReconnectAttempts <= sftpcore.MaxReconnectAttempts
+		settings.MaxReconnectAttempts >= 0 && settings.MaxReconnectAttempts <= sftpcore.MaxReconnectAttempts &&
+		sftpcore.ValidateTransferExclusionPatterns(settings.ExcludePatterns) == nil
 }
 
 func sftpIsNotFound(err error) bool {

@@ -39,16 +39,9 @@ type sftpSearchOmissionResponse struct {
 	Count  int    `json:"count"`
 }
 
-type sftpTextFileResponse struct {
-	Entry    api.SFTPEntry `json:"entry"`
-	Contents string        `json:"contents"`
-	Revision string        `json:"revision"`
-}
+type sftpTextFileResponse = api.SFTPTextFile
 
-type sftpSaveTextRequest struct {
-	Contents         string `json:"contents"`
-	ExpectedRevision string `json:"expectedRevision"`
-}
+type sftpSaveTextRequest = api.SFTPSaveTextRequest
 
 type sftpRenameRequest struct {
 	From string `json:"from"`
@@ -124,6 +117,7 @@ type SFTPTransferJob struct {
 	SourceFingerprint string                           `json:"sourceFingerprint"`
 	Overwrite         bool                             `json:"overwrite"`
 	DownloadRevision  string                           `json:"downloadRevision"`
+	ExcludePatterns   []string                         `json:"excludePatterns,omitempty"`
 	DownloadParts     []SFTPDownloadPartProgress       `json:"downloadParts"`
 	CreatedAt         string                           `json:"createdAt"`
 	UpdatedAt         string                           `json:"updatedAt"`
@@ -154,7 +148,7 @@ func describeTransferJob(job sshcSFTP.TransferJob) SFTPTransferJob {
 		ReconnectAttempt: job.ReconnectAttempt, ReconnectAt: describeReconnectAt(job.ReconnectAt),
 		Problem: job.Problem, LastModified: job.LastModified,
 		ExpectedRevision: job.ExpectedRevision, SourceFingerprint: job.SourceFingerprint,
-		Overwrite: job.Overwrite, DownloadRevision: job.DownloadRevision,
+		Overwrite: job.Overwrite, DownloadRevision: job.DownloadRevision, ExcludePatterns: job.ExcludePatterns,
 		DownloadParts: parts,
 		CreatedAt:     job.CreatedAt.Format(time.RFC3339Nano), UpdatedAt: job.UpdatedAt.Format(time.RFC3339Nano),
 	}
@@ -162,13 +156,14 @@ func describeTransferJob(job sshcSFTP.TransferJob) SFTPTransferJob {
 
 // SFTPTransferJobList は、転送キューの設定と job の一覧である。
 type SFTPTransferJobList struct {
-	MaxConcurrent            int   `json:"maxConcurrent"`
-	LargeFileThresholdBytes  int64 `json:"largeFileThresholdBytes"`
-	LargeFileParallelism     int   `json:"largeFileParallelism"`
-	LargeFileChunkBytes      int64 `json:"largeFileChunkBytes"`
-	SpeedLimitBytesPerSecond int64 `json:"speedLimitBytesPerSecond"`
-	AutoReconnect            bool  `json:"autoReconnect"`
-	MaxReconnectAttempts     int   `json:"maxReconnectAttempts"`
+	MaxConcurrent            int      `json:"maxConcurrent"`
+	LargeFileThresholdBytes  int64    `json:"largeFileThresholdBytes"`
+	LargeFileParallelism     int      `json:"largeFileParallelism"`
+	LargeFileChunkBytes      int64    `json:"largeFileChunkBytes"`
+	SpeedLimitBytesPerSecond int64    `json:"speedLimitBytesPerSecond"`
+	AutoReconnect            bool     `json:"autoReconnect"`
+	MaxReconnectAttempts     int      `json:"maxReconnectAttempts"`
+	ExcludePatterns          []string `json:"excludePatterns,omitempty"`
 	// 0 は自動消去なしである。
 	ClearCompletedAfterSeconds int `json:"clearCompletedAfterSeconds"`
 	// 停止中は待機の job を新しく開始しない。
@@ -177,15 +172,16 @@ type SFTPTransferJobList struct {
 }
 
 type sftpTransferSettingsRequest struct {
-	MaxConcurrent              int   `json:"maxConcurrent"`
-	ClearCompletedAfterSeconds int   `json:"clearCompletedAfterSeconds"`
-	ProcessingStopped          bool  `json:"processingStopped"`
-	LargeFileThresholdBytes    int64 `json:"largeFileThresholdBytes"`
-	LargeFileParallelism       int   `json:"largeFileParallelism"`
-	LargeFileChunkBytes        int64 `json:"largeFileChunkBytes"`
-	SpeedLimitBytesPerSecond   int64 `json:"speedLimitBytesPerSecond"`
-	AutoReconnect              bool  `json:"autoReconnect"`
-	MaxReconnectAttempts       int   `json:"maxReconnectAttempts"`
+	MaxConcurrent              int      `json:"maxConcurrent"`
+	ClearCompletedAfterSeconds int      `json:"clearCompletedAfterSeconds"`
+	ProcessingStopped          bool     `json:"processingStopped"`
+	LargeFileThresholdBytes    int64    `json:"largeFileThresholdBytes"`
+	LargeFileParallelism       int      `json:"largeFileParallelism"`
+	LargeFileChunkBytes        int64    `json:"largeFileChunkBytes"`
+	SpeedLimitBytesPerSecond   int64    `json:"speedLimitBytesPerSecond"`
+	AutoReconnect              bool     `json:"autoReconnect"`
+	MaxReconnectAttempts       int      `json:"maxReconnectAttempts"`
+	ExcludePatterns            []string `json:"excludePatterns,omitempty"`
 }
 
 type sftpTransferQueueMoveRequest struct {

@@ -2,6 +2,7 @@ package application
 
 import (
 	"errors"
+	"reflect"
 
 	"sshc/internal/platform"
 	"sshc/internal/storage"
@@ -190,11 +191,12 @@ func (s *Service) FileTransferSettings() FileTransferSettings {
 
 // SetFileTransferSettings は、節をまるごと置き換える。
 func (s *Service) SetFileTransferSettings(settings FileTransferSettings) (SaveResult, error) {
+	settings.ExcludePatterns = append([]string(nil), settings.ExcludePatterns...)
 	stored, precondition, err := s.metadata.Load()
 	if err != nil {
 		return SaveResult{}, err
 	}
-	if settings == (FileTransferSettings{}) {
+	if reflect.DeepEqual(settings, FileTransferSettings{}) {
 		// 既定のままなら節ごと消す。空の節を残さない。
 		stored.FileTransfers = nil
 	} else {

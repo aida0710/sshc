@@ -172,7 +172,7 @@ func (m *TransferManager) updateJob(request transferUpdateRequest) (TransferJob,
 	}
 	if settled {
 		committed = true
-		return *job, nil
+		return cloneTransferJob(*job), nil
 	}
 	if job.Status != TransferReconnecting {
 		job.ReconnectAt = time.Time{}
@@ -194,7 +194,7 @@ func (m *TransferManager) updateJob(request transferUpdateRequest) (TransferJob,
 		}
 	}
 	committed = true
-	return *job, nil
+	return cloneTransferJob(*job), nil
 }
 
 // applyTransferActionLocked moves a job through one queue action. It edits

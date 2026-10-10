@@ -81,10 +81,16 @@ func (m *TransferManager) transferSplitSettings(id string) (int64, int, int64, e
 
 func (m *TransferManager) PrepareOwnedArchive(ctx context.Context, id, alias, remotePath string) (*PreparedDownload, error) {
 	return m.prepareOwnedSpool(id, func(directory string) (*PreparedDownload, int64, error) {
+		patterns, err := m.jobExclusions(id)
+		if err != nil {
+			return nil, 0, err
+		}
+		service := *m.Service
+		service.selectedExclusions = patterns
 		if err := m.spool.reserve(maxArchiveSpoolBytes); err != nil {
 			return nil, 0, err
 		}
-		prepared, err := m.Service.prepareArchive(ctx, alias, remotePath, directory, maxArchiveSpoolBytes)
+		prepared, err := service.prepareArchive(ctx, alias, remotePath, directory, maxArchiveSpoolBytes)
 		if err != nil {
 			m.spool.release(maxArchiveSpoolBytes)
 			return nil, 0, err
@@ -208,7 +214,7 @@ func (m *TransferManager) StartDownloadDataPlane(id, alias, remotePath string, k
 		m.jobsMutex.Unlock()
 		return TransferJob{}, nil, ErrTransferNotFound
 	}
-	job := record.job
+	job := cloneTransferJob(record.job)
 	if job.Direction != TransferDownload || job.Kind != kind || job.Alias != alias || job.RemotePath != cleaned {
 		m.jobsMutex.Unlock()
 		return TransferJob{}, nil, ErrConflict
@@ -272,7 +278,7 @@ func (m *TransferManager) BeginDownload(id string, total int64, revision string,
 		*record = original
 		return TransferJob{}, err
 	}
-	return *job, nil
+	return cloneTransferJob(*job), nil
 }
 
 // RecordDownloadSent records a server-observed socket high-water mark. It does
@@ -308,7 +314,7 @@ func (m *TransferManager) RecordDownloadSent(id string, sent, total int64, revis
 		*record = original
 		return TransferJob{}, err
 	}
-	return *job, nil
+	return cloneTransferJob(*job), nil
 }
 
 // VerifyDownloadComplete confirms that an earlier response from this engine
@@ -338,7 +344,7 @@ func (m *TransferManager) VerifyDownloadComplete(id string, total int64, revisio
 		*record = original
 		return TransferJob{}, err
 	}
-	return *job, nil
+	return cloneTransferJob(*job), nil
 }
 
 // AcknowledgeDownload advances (or reconciles backwards) to an OPFS-durable
@@ -375,5 +381,5 @@ func (m *TransferManager) AcknowledgeDownload(id string, offset int64, revision 
 		*record = original
 		return TransferJob{}, err
 	}
-	return *job, nil
+	return cloneTransferJob(*job), nil
 }

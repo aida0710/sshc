@@ -36,7 +36,7 @@ describe("local entry actions through the shared pane", () => {
     localMutations.remove.mockResolvedValue(undefined);
   });
 
-  it("offers folder creation, rename and deletion without offering local editing or chmod", async () => {
+  it("offers local editing, details, folder creation, rename and deletion without chmod", async () => {
     await openLocalPanel();
     await userEvent.click(screen.getByRole("button", { name: "Create or upload" }));
     expect(screen.getByRole("menuitem", { name: "New folder" })).toBeVisible();
@@ -52,7 +52,9 @@ describe("local entry actions through the shared pane", () => {
     const menu = screen.getByRole("menu", { name: "Actions for notes.txt" });
     expect(within(menu).getByRole("menuitem", { name: "Rename" })).toBeVisible();
     expect(within(menu).getByRole("menuitem", { name: "Delete" })).toBeVisible();
-    expect(within(menu).queryByRole("menuitem", { name: /permission|edit|duplicate|move/i })).toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: "Edit file" })).toBeVisible();
+    expect(within(menu).getByRole("menuitem", { name: "Details" })).toBeVisible();
+    expect(within(menu).queryByRole("menuitem", { name: /permission|duplicate|move/i })).toBeNull();
   });
 
   it("renames Windows paths through the local source and uses the returned revision for undo", async () => {

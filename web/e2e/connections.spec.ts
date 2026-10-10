@@ -88,12 +88,12 @@ test("separates classification, filtered results, and connection detail without 
   }
 });
 
-test("adds Local and SOCKS forwarding from the dedicated advanced view", async ({ page, installation }) => {
+test("adds Local, reverse and SOCKS forwarding from the dedicated advanced view", async ({ page, installation }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openBastion(page, installation.url);
   await page.getByRole("tab", { name: "Advanced" }).click();
   await page.getByRole("tab", { name: "Port forwarding" }).click();
-  await expect(page.getByText(/Listeners are bound to this device only/)).toBeVisible();
+  await expect(page.getByText(/Listeners use 127\.0\.0\.1 on this device or the SSH server/)).toBeVisible();
 
   const forwardType = page.getByRole("combobox", { name: "Type", exact: true });
   await forwardType.selectOption("dynamic");
@@ -110,6 +110,14 @@ test("adds Local and SOCKS forwarding from the dedicated advanced view", async (
   expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(200);
   await expect(page.getByRole("textbox", { name: /LocalForward/ })).toHaveValue("18080 127.0.0.1:5432");
   expect(await installation.read("config")).toContain("LocalForward 18080 127.0.0.1:5432");
+
+  await forwardType.selectOption("remote");
+  await page.getByLabel("SSH server port").fill("19080");
+  await page.getByLabel("Destination").fill("127.0.0.1:3000");
+  await page.getByRole("button", { name: "Add forwarding" }).click();
+  expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(200);
+  await expect(page.getByRole("textbox", { name: /RemoteForward/ })).toHaveValue("19080 127.0.0.1:3000");
+  expect(await installation.read("config")).toContain("RemoteForward 19080 127.0.0.1:3000");
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/port-forwarding-settings-desktop.png`, fullPage: true });

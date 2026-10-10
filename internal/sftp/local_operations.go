@@ -186,97 +186,11 @@ func describeLocalLink(entry *Entry, linkPath string) {
 	}
 }
 
-func (s Service) PlanLocalTransfer(ctx context.Context, request RemoteTransferRequest) (_ RemoteTransferPlan, err error) {
-	defer func() { err = labelLocalAccessRefusal(err) }()
-	var localPath, remotePath string
-	if request.Operation == RemotePut {
-		localPath, remotePath = request.SourcePath, request.TargetPath
-	} else if request.Operation == RemoteGet {
-		localPath, remotePath = request.TargetPath, request.SourcePath
-	} else {
-		return RemoteTransferPlan{}, ErrInvalidTransfer
-	}
-	if _, err := cleanLocalPath(localPath); err != nil {
-		return RemoteTransferPlan{}, err
-	}
-	if _, err := cleanPublicPath(remotePath, false); err != nil {
-		return RemoteTransferPlan{}, err
-	}
-	if request.Operation == RemotePut {
-		root, relative, err := openLocalRoot(localPath)
-		if err != nil {
-			return RemoteTransferPlan{}, err
-		}
-		defer root.Close()
-		info, err := checkLocal(root, relative, false)
-		if err != nil {
-			return RemoteTransferPlan{}, err
-		}
-		total, err := localTreeBytes(ctx, root, relative, info)
-		if err != nil {
-			return RemoteTransferPlan{}, err
-		}
-		kind := TransferFile
-		if info.IsDir() {
-			kind = TransferFolder
-		}
-		return RemoteTransferPlan{Name: path.Base(relative), Kind: kind, TotalBytes: total}, nil
-	}
-	remote, err := s.openRequest(ctx, request.SourceAlias)
-	if err != nil {
-		return RemoteTransferPlan{}, err
-	}
-	defer remote.Close()
-	info, err := remote.Lstat(remotePath)
-	if err != nil {
-		return RemoteTransferPlan{}, err
-	}
-	total := info.Size()
-	kind := TransferFile
-	if info.IsDir() {
-		kind = TransferFolder
-		total, err = treeBytes(ctx, remote, remotePath)
-	} else if !info.Mode().IsRegular() {
-		return RemoteTransferPlan{}, ErrUnsupportedEntry
-	}
-	return RemoteTransferPlan{Name: path.Base(remotePath), Kind: kind, TotalBytes: total}, err
-}
-func localTreeBytes(ctx context.Context, root *os.Root, relative string, info fs.FileInfo) (int64, error) {
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
-	if info.Mode().IsRegular() {
-		return info.Size(), nil
-	}
-	if !info.IsDir() {
-		return 0, ErrUnsupportedEntry
-	}
-	directory, err := root.Open(relative)
-	if err != nil {
-		return 0, err
-	}
-	defer directory.Close()
-	infos, err := directory.Readdir(0)
-	if err != nil {
-		return 0, err
-	}
-	var total int64
-	for _, child := range infos {
-		childRelative := path.Join(relative, child.Name())
-		checked, err := checkLocal(root, childRelative, false)
-		if err != nil {
-			return 0, err
-		}
-		size, err := localTreeBytes(ctx, root, childRelative, checked)
-		if err != nil {
-			return 0, err
-		}
-		total += size
-	}
-	return total, nil
-}
 func (s Service) CopyLocal(ctx context.Context, request RemoteTransferRequest, progress func(int64) error) (err error) {
 	defer func() { err = labelLocalAccessRefusal(err) }()
+	if !validTransferExclusionPatterns(request.ExcludePatterns) {
+		return ErrInvalidTransfer
+	}
 	if request.Operation != RemoteGet && request.Operation != RemotePut {
 		return ErrInvalidTransfer
 	}
@@ -293,7 +207,7 @@ func (s Service) CopyLocal(ctx context.Context, request RemoteTransferRequest, p
 	defer root.Close()
 	transfer := &localCopy{
 		service: s, root: root, overwrite: request.Overwrite, progress: progress,
-		published: newPublishedNames(),
+		published: newPublishedNames(), exclusions: transferExclusions(request.ExcludePatterns),
 	}
 	if request.Operation == RemotePut {
 		sourceInfo, err := checkLocal(root, relative, false)
@@ -305,7 +219,7 @@ func (s Service) CopyLocal(ctx context.Context, request RemoteTransferRequest, p
 			return err
 		}
 		defer remote.Close()
-		transfer.alias, transfer.remote = request.TargetAlias, remote
+		transfer.alias, transfer.remote, transfer.sourceRoot = request.TargetAlias, remote, relative
 		return transfer.put(ctx, relative, request.TargetPath, sourceInfo)
 	}
 	remote, err := s.openRequest(ctx, request.SourceAlias)
@@ -317,7 +231,7 @@ func (s Service) CopyLocal(ctx context.Context, request RemoteTransferRequest, p
 	if err != nil {
 		return err
 	}
-	transfer.alias, transfer.remote = request.SourceAlias, remote
+	transfer.alias, transfer.remote, transfer.sourceRoot = request.SourceAlias, remote, request.SourcePath
 	return transfer.get(ctx, request.SourcePath, relative, sourceInfo)
 }
 
@@ -343,6 +257,17 @@ type localCopy struct {
 	published *publishedNames
 
 	transferred int64
+	sourceRoot  string
+	exclusions  transferExclusions
+	visited     int
+}
+
+func (c *localCopy) visit() error {
+	c.visited++
+	if c.visited > maxTransferTreeEntries {
+		return ErrTraversalLimit
+	}
+	return nil
 }
 
 func (c *localCopy) report(delta int64) error {
@@ -354,6 +279,9 @@ func (c *localCopy) report(delta int64) error {
 }
 
 func (c *localCopy) put(ctx context.Context, source, target string, info fs.FileInfo) (resultErr error) {
+	if err := c.visit(); err != nil {
+		return err
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -384,6 +312,15 @@ func (c *localCopy) put(ctx context.Context, source, target string, info fs.File
 		}
 		for _, child := range children {
 			childSource := path.Join(source, child.Name())
+			if !ValidLocalChildName(child.Name()) {
+				return ErrInvalidPath
+			}
+			if c.exclusions.excludesChild(c.sourceRoot, childSource) {
+				if err := c.visit(); err != nil {
+					return err
+				}
+				continue
+			}
 			checked, err := checkLocal(c.root, childSource, false)
 			if err != nil {
 				return err
@@ -456,6 +393,9 @@ func (c *localCopy) put(ctx context.Context, source, target string, info fs.File
 }
 
 func (c *localCopy) get(ctx context.Context, source, target string, info fs.FileInfo) error {
+	if err := c.visit(); err != nil {
+		return err
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -488,6 +428,12 @@ func (c *localCopy) get(ctx context.Context, source, target string, info fs.File
 			}
 			if !ValidLocalChildName(child.Name()) {
 				return ErrInvalidPath
+			}
+			if c.exclusions.excludesChild(c.sourceRoot, path.Join(source, child.Name())) {
+				if err := c.visit(); err != nil {
+					return err
+				}
+				continue
 			}
 			if err := c.get(ctx, path.Join(source, child.Name()), path.Join(target, child.Name()), child); err != nil {
 				return err

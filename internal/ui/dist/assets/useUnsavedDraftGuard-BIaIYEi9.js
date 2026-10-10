@@ -1,0 +1,1 @@
+import{m as e}from"./context-DwLykEGO.js";import{j as t}from"./index-kGIsE_va.js";var n=e();function r({dirty:e,blocker:r,onNavigationBlockerChange:i}){(0,n.useEffect)(()=>{if(!e){i?.(null);return}return i?.(r),()=>i?.(null)},[r,e,i]),t(e)}export{r as t};

@@ -41,6 +41,7 @@ func (h SFTPHandlers) describeTransferQueue() (SFTPTransferJobList, error) {
 		SpeedLimitBytesPerSecond:   h.Transfers.SpeedLimitBytesPerSecond(),
 		AutoReconnect:              h.Transfers.AutoReconnect(),
 		MaxReconnectAttempts:       h.Transfers.MaxReconnectAttempts(),
+		ExcludePatterns:            h.Transfers.ExcludePatterns(),
 		ClearCompletedAfterSeconds: int(h.Transfers.ClearCompletedAfter() / time.Second),
 		ProcessingStopped:          h.Transfers.ProcessingStopped(),
 		Jobs:                       described,
@@ -56,6 +57,10 @@ func (h SFTPHandlers) UpdateTransferSettings(c *echo.Context) error {
 	if err := decodeJSON(c, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
+	patterns := body.ExcludePatterns
+	if patterns == nil {
+		patterns = h.Transfers.ExcludePatterns()
+	}
 	settings := engineTransferSettings(application.FileTransferSettings{
 		MaxConcurrent:              body.MaxConcurrent,
 		ClearCompletedAfterSeconds: body.ClearCompletedAfterSeconds,
@@ -66,6 +71,7 @@ func (h SFTPHandlers) UpdateTransferSettings(c *echo.Context) error {
 		SpeedLimitBytesPerSecond:   body.SpeedLimitBytesPerSecond,
 		AutoReconnect:              body.AutoReconnect,
 		MaxReconnectAttempts:       body.MaxReconnectAttempts,
+		ExcludePatterns:            patterns,
 	})
 	if err := h.Transfers.SetTransferSettings(settings); err != nil {
 		if errors.Is(err, sshcSFTP.ErrInvalidTransfer) {

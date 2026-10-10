@@ -21,6 +21,40 @@ function listed(forwards: NonNullable<TerminalSession["forwards"]>) {
 }
 
 describe("TerminalPortForwards", () => {
+  it("starts and saves a remote tunnel with a clearly identified SSH server port", async () => {
+    const forward = { id: "pf-remote", kind: "remote", listen: "127.0.0.1:9080", to: "127.0.0.1:3000", problem: "", temporary: true };
+    const api = { startTerminalForward: vi.fn().mockResolvedValue(listed([forward])), stopTerminalForward: vi.fn().mockResolvedValue(listed([])) };
+    const saveApi = {
+      overview: vi.fn().mockResolvedValue({ hosts: [{ identity: { path: "connections/work.conf", alias: "bastion" } }] }),
+      host: vi.fn().mockResolvedValue({ file: { contents: "Host bastion\n" } }),
+      save: vi.fn().mockResolvedValue({}),
+    };
+    render(<LanguageProvider><TerminalPortForwards session={session} api={api} saveApi={saveApi as never} onClose={vi.fn()} /></LanguageProvider>);
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "remote");
+    await userEvent.type(screen.getByLabelText("SSH server port"), "9080");
+    await userEvent.type(screen.getByLabelText("Destination"), "127.0.0.1:3000");
+    await userEvent.click(screen.getByRole("checkbox", { name: /Save to this connection/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    expect(api.startTerminalForward).toHaveBeenCalledWith("session-1", { kind: "remote", listenPort: 9080, destination: "127.0.0.1:3000" });
+    expect(saveApi.save).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ action: "add", keyword: "RemoteForward", values: ["9080", "127.0.0.1:3000"] }] }));
+    expect(screen.getByText("SSH server 127.0.0.1:9080 → engine 127.0.0.1:3000")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(api.stopTerminalForward).toHaveBeenCalledWith("session-1", "pf-remote");
+  });
+
+  it("explains when the SSH server denies the remote listener", async () => {
+    const api = {
+      startTerminalForward: vi.fn().mockRejectedValue(new ApiError("terminal_forward_bind_failed", 409, { code: "terminal_forward_bind_failed", message: "request rejected", reason: "remote_denied" })),
+      stopTerminalForward: vi.fn(),
+    };
+    render(<LanguageProvider><TerminalPortForwards session={session} api={api} onClose={vi.fn()} /></LanguageProvider>);
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "remote");
+    await userEvent.type(screen.getByLabelText("SSH server port"), "9080");
+    await userEvent.type(screen.getByLabelText("Destination"), "127.0.0.1:3000");
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The SSH server refused the listener.");
+  });
+
   it("starts a temporary Local tunnel and can stop it without closing the terminal", async () => {
     const forward = {
       id: "pf-1", kind: "local", listen: "127.0.0.1:8080", to: "db.internal:5432",

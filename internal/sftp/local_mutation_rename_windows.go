@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -13,12 +14,17 @@ import (
 const windowsUTF16CodeUnitBytes = 2
 
 // windowsLocalRenameInformation is the native FILE_RENAME_INFORMATION layout.
-// ReplaceIfExists stays zero, so a racing destination is never overwritten.
 type windowsLocalRenameInformation struct {
 	ReplaceIfExists byte
 	RootDirectory   windows.Handle
 	FileNameLength  uint32
 	FileName        [1]uint16
+}
+
+type windowsLocalRenameRequest struct {
+	source          windows.Handle
+	destinationName string
+	replaceExisting bool
 }
 
 func renameLocalMutationInDirectory(directory *os.File, from, to string) error {
@@ -27,8 +33,12 @@ func renameLocalMutationInDirectory(directory *os.File, from, to string) error {
 		return err
 	}
 	defer windows.CloseHandle(sourceHandle)
+	return renameLocalWindowsHandleInDirectory(directory, windowsLocalRenameRequest{source: sourceHandle, destinationName: to})
+}
+
+func renameLocalWindowsHandleInDirectory(directory *os.File, request windowsLocalRenameRequest) error {
 	parentHandle := windows.Handle(directory.Fd())
-	name, err := windows.UTF16FromString(to)
+	name, err := windows.UTF16FromString(request.destinationName)
 	if err != nil {
 		return err
 	}
@@ -36,11 +46,16 @@ func renameLocalMutationInDirectory(directory *os.File, from, to string) error {
 	nameBytes := (len(name) - 1) * windowsUTF16CodeUnitBytes
 	buffer := make([]byte, int(unsafe.Offsetof(header.FileName))+nameBytes)
 	rename := (*windowsLocalRenameInformation)(unsafe.Pointer(&buffer[0]))
+	if request.replaceExisting {
+		rename.ReplaceIfExists = 1
+	}
 	rename.RootDirectory = parentHandle
 	rename.FileNameLength = uint32(nameBytes)
 	copy(unsafe.Slice(&rename.FileName[0], len(name)-1), name[:len(name)-1])
 	var status windows.IO_STATUS_BLOCK
-	return localWindowsFileError(windows.NtSetInformationFile(sourceHandle, &status, &buffer[0], uint32(len(buffer)), windows.FileRenameInformation))
+	err = windows.NtSetInformationFile(request.source, &status, &buffer[0], uint32(len(buffer)), windows.FileRenameInformation)
+	runtime.KeepAlive(directory)
+	return localWindowsFileError(err)
 }
 
 // Open relative to the pinned directory, including the reparse point itself.
