@@ -98,3 +98,13 @@ CLI settings use the same persisted engine defaults. `--speed-limit` is KiB/s; `
 sshc sftp settings --speed-limit 2048 --reconnect-attempts 3
 sshc sftp settings --speed-limit 0 --reconnect-attempts 0
 ```
+
+## Excluding entries from folder transfers
+
+Open **Transfer exclusions** in the Transfer Manager settings and save one pattern per line. No entries are excluded by default. Names such as `.git`, `node_modules` and `*.log` match at any depth inside the selected folder. A matching directory and its contents are omitted without entering that directory. Patterns containing `/`, such as `build/cache`, start at the selected folder.
+
+Only `*` and `?` wildcard syntax is supported. `*` matches any sequence within one path segment and `?` matches one character. `**`, negation with `!`, brackets, backslashes, absolute paths and `.` or `..` segments are unsupported. You can save up to 64 patterns, each up to 512 bytes.
+
+Rules apply to browser folder uploads, folder copies between hosts, folder transfers between a host and the engine's local disk, folder ZIP downloads, and CLI `get --recursive` / `put --recursive`. Explicit single-file selections, moves and deletion are unchanged. Omitted entries are not created at the destination and are not part of a successful transfer. Browser uploads report the omitted entry count; engine folder jobs show their captured exclusion rules.
+
+Settings persist in the engine. A queued folder job retains the rules captured when it was registered, including after settings changes or a restart. Prepared ZIP contents stay unchanged on retry. The CLI snapshots the rules at invocation start; `sshc sftp settings` also displays the current rules.

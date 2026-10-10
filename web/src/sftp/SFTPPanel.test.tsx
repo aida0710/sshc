@@ -811,6 +811,23 @@ describe("SFTPPanel uploads", () => {
     expect(api.startUpload).not.toHaveBeenCalled();
   });
 
+  it("omits excluded folder files before creating their directories or registering uploads", async () => {
+    const rules = vi.spyOn(sftpTransferManager, "getExcludePatterns").mockReturnValue([".git", "*.log"]);
+    const { container } = render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    const files = ["project/src/main.go", "project/.git/config", "project/src/debug.log"].map((relativePath) => {
+      const file = new File(["contents"], relativePath.split("/").at(-1)!);
+      Object.defineProperty(file, "webkitRelativePath", { value: relativePath });
+      return file;
+    });
+    fireEvent.change(container.querySelector<HTMLInputElement>('input[webkitdirectory]')!, { target: { files } });
+    await waitFor(() => expect(api.startUpload).toHaveBeenCalledTimes(1));
+    expect(api.startUpload.mock.calls[0]?.[0].remotePath).toBe("/remote/project/src/main.go");
+    expect(api.mkdir.mock.calls).toEqual([["edge", "/remote/project"], ["edge", "/remote/project/src"]]);
+    expect(screen.getByText("Omitting 2 matching entries, including their folder contents.")).toBeInTheDocument();
+    rules.mockRestore();
+  });
+
   it("preserves folder paths and creates parent directories before upload", async () => {
     const { container } = render(<SFTPPanel aliases={["edge"]} />);
     await chooseHost("edge");

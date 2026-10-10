@@ -38,6 +38,7 @@ const manager = vi.hoisted(() => {
     getSpeedLimitBytesPerSecond: vi.fn(() => 0),
     getAutoReconnect: vi.fn(() => false),
     getMaxReconnectAttempts: vi.fn(() => 0),
+    getExcludePatterns: vi.fn(() => []),
     getLargeFileThreshold: vi.fn(() => 100 << 20),
     getLargeFileParallelism: vi.fn(() => 4),
     getLargeFileChunkBytes: vi.fn(() => 32 << 20),
@@ -187,25 +188,25 @@ describe("the transfer queue", () => {
     expect(screen.getByRole("combobox", { name: "Clear finished after" })).toHaveValue("300");
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "5");
-    expect(manager.applySettings).toHaveBeenCalledWith({ maxConcurrent: 5, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0 });
+    expect(manager.applySettings).toHaveBeenCalledWith({ maxConcurrent: 5, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, excludePatterns: [] });
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Clear finished after" }), "0");
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0 });
+    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, excludePatterns: [] });
 
     const splitAt = screen.getByRole("spinbutton", { name: "Split at" });
     fireEvent.change(splitAt, { target: { value: "73" } });
     fireEvent.blur(splitAt);
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 73 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0 });
+    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 73 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, excludePatterns: [] });
 
     const streams = screen.getByRole("spinbutton", { name: "Streams" });
     fireEvent.change(streams, { target: { value: "128" } });
     fireEvent.blur(streams);
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 128, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0 });
+    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 128, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, excludePatterns: [] });
 
     const chunk = screen.getByRole("spinbutton", { name: "Chunk" });
     fireEvent.change(chunk, { target: { value: "41" } });
     fireEvent.blur(chunk);
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 41 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0 });
+    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 41 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, excludePatterns: [] });
   });
 
   it("stops the whole queue without touching what is already running", async () => {
@@ -213,7 +214,7 @@ describe("the transfer queue", () => {
     const { rerender } = render(<TransferManagerList />);
 
     await userEvent.click(screen.getByRole("button", { name: "Stop starting new transfers" }));
-    expect(manager.applySettings).toHaveBeenCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: true, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0 });
+    expect(manager.applySettings).toHaveBeenCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: true, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, excludePatterns: [] });
 
     manager.getProcessingStopped.mockReturnValue(true);
     rerender(<TransferManagerList />);

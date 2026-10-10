@@ -1,3 +1,5 @@
+import { TransferExclusionSummary } from "./TransferExclusionSummary";
+import { TransferExclusionSettings } from "./TransferExclusionSettings";
 import { TransferIntegerSetting } from "./TransferIntegerSetting";
 import { TransferRecoverySettings } from "./TransferRecoverySettings";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
@@ -192,6 +194,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
       speedLimitBytesPerSecond: sftpTransferManager.getSpeedLimitBytesPerSecond(),
       autoReconnect: sftpTransferManager.getAutoReconnect(),
       maxReconnectAttempts: sftpTransferManager.getMaxReconnectAttempts(),
+      excludePatterns: [...sftpTransferManager.getExcludePatterns()],
     };
     runControl(() => sftpTransferManager.applySettings({ ...current, ...next }));
   }
@@ -216,6 +219,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
   });
   useMenuKeyboard({ open: menuOpen, menuRef: menuPanel, onClose: () => setMenuOpen(false) });
   const settings = <>
+        <TransferExclusionSettings patterns={sftpTransferManager.getExcludePatterns()} onCommit={applySettings} />
         <TransferRecoverySettings
           speedLimitBytesPerSecond={sftpTransferManager.getSpeedLimitBytesPerSecond()}
           autoReconnect={sftpTransferManager.getAutoReconnect()}
@@ -367,6 +371,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
                       <span className="tabular-nums text-ink-muted">{item.operation === "delete" ? t("sftp.manager.delete") : item.bytesPerSecond > 0 ? `${formatBytes(item.bytesPerSecond)}/s` : "—"}</span>
                       <span className="tabular-nums text-ink-muted">{item.remainingSeconds >= 0 && item.status === "running" ? t("sftp.manager.remaining", { duration: formatDuration(item.remainingSeconds, t) }) : "—"}</span>
                       <span className="col-span-2 flex flex-wrap items-center justify-end gap-2 whitespace-nowrap">
+                        <TransferExclusionSummary patterns={item.excludePatterns ?? []} />
                         <span className={statusClass(displayedStatus)}>
                           {processingStopped && displayedStatus === "queued"
                               ? t("sftp.manager.status.held")

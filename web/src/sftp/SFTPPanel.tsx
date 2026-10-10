@@ -472,6 +472,7 @@ export function SFTPPanel({
       />
 
       {problem === "" || listingFailed ? null : <Notice tone="danger">{problem}</Notice>}
+      {transfers.exclusionNotice === "" ? null : <Notice compact>{transfers.exclusionNotice}</Notice>}
       {can?.search && connected ? <SFTPSearchControls search={search} disabled={busy || dirty} /> : null}
       {search.search === null ? null : (
         <p role="status" className="flex items-center gap-3 rounded-md border border-line bg-surface-subtle px-3 py-2 text-sm text-ink-muted">

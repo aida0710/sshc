@@ -8,6 +8,7 @@ import { localJoin, localParentOf, remoteParentOf, sourceFor } from "./sftpSourc
 import { entryKind, movable } from "./entryKind";
 import { sftpTransferManager } from "./transferManager";
 import { directoryPaths, remoteEntriesMime, safeRelativePath, type LocalTransferFile, type RemoteDragPayload } from "./transfers";
+import { browserUploadExcluded, createTransferExclusions } from "./transferExclusions";
 import { payloadFor, registerDrag, releaseDrag } from "./dragRegistry";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 
@@ -19,20 +20,21 @@ type DroppedEntry = {
   createReader?: () => { readEntries: (success: (entries: DroppedEntry[]) => void, failure?: (error: DOMException) => void) => void };
 };
 
-async function droppedFiles(transfer: DataTransfer): Promise<{ files: LocalTransferFile[]; directories: string[] }> {
+async function droppedFiles(transfer: DataTransfer, excludes: (path: string) => boolean): Promise<{ files: LocalTransferFile[]; directories: string[]; excludedEntries: number }> {
+  let excludedEntries = 0;
   const collected: LocalTransferFile[] = [];
   const directories = new Set<string>();
   const visit = async (entry: DroppedEntry, prefix: string): Promise<void> => {
-    const relativePath = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+    const relativePath = safeRelativePath(prefix === "" ? entry.name : `${prefix}/${entry.name}`);
+    if (relativePath === null) return;
+    if (browserUploadExcluded(relativePath, excludes)) { excludedEntries += 1; return; }
     if (entry.isFile && entry.file !== undefined) {
       const file = await new Promise<File>((resolve, reject) => entry.file?.(resolve, reject));
-      const safe = safeRelativePath(relativePath);
-      if (safe !== null) collected.push({ file, relativePath: safe });
+      collected.push({ file, relativePath });
       return;
     }
     if (!entry.isDirectory || entry.createReader === undefined) return;
-    const safeDirectory = safeRelativePath(relativePath);
-    if (safeDirectory !== null) directories.add(safeDirectory);
+    directories.add(relativePath);
     const reader = entry.createReader();
     while (true) {
       const children = await new Promise<DroppedEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
@@ -44,12 +46,12 @@ async function droppedFiles(transfer: DataTransfer): Promise<{ files: LocalTrans
   const entries = items.map((item) => (item as DataTransferItem & { webkitGetAsEntry?: () => DroppedEntry | null }).webkitGetAsEntry?.() ?? null);
   if (entries.some((entry) => entry !== null)) {
     for (const entry of entries) if (entry !== null) await visit(entry, "");
-    return { files: collected, directories: [...directories] };
+    return { files: collected, directories: [...directories], excludedEntries };
   }
   return { files: [...transfer.files].flatMap((file) => {
     const safe = safeRelativePath(file.name);
     return safe === null ? [] : [{ file, relativePath: safe }];
-  }), directories: [] };
+  }), directories: [], excludedEntries };
 }
 
 // A dragged row's name becomes the last segment of the target path, so it
@@ -88,6 +90,7 @@ export function useSFTPTransfers({
   const [dragging, setDragging] = useState(false);
   const [remoteDrop, setRemoteDrop] = useState<RemoteDragPayload | null>(null);
   const [queuing, setQueuing] = useState(false);
+  const [exclusionNotice, setExclusionNotice] = useState<{ alias: string; path: string; message: string } | null>(null);
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
   const uploadInput = useRef<HTMLInputElement>(null);
   const folderUploadInput = useRef<HTMLInputElement>(null);
@@ -122,16 +125,24 @@ export function useSFTPTransfers({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transferJobs, alias, path, connected, local]);
 
-  async function uploadFiles(files: LocalTransferFile[], droppedDirectories: string[] = []) {
-    if (alias === "" || local || (files.length === 0 && droppedDirectories.length === 0) || busy) return;
+  async function uploadFiles(files: LocalTransferFile[], options: { directories?: string[]; patterns?: readonly string[]; excludedEntries?: number } = {}) {
+    const droppedDirectories = options.directories ?? [];
+    const excludes = createTransferExclusions(options.patterns ?? sftpTransferManager.getExcludePatterns());
+    let excludedEntries = options.excludedEntries ?? 0;
+    if (alias === "" || local || (files.length === 0 && droppedDirectories.length === 0 && excludedEntries === 0) || busy) return;
     const safeFiles = files.flatMap((item) => {
       const relativePath = safeRelativePath(item.relativePath);
-      return relativePath === null ? [] : [{ file: item.file, relativePath }];
+      if (relativePath === null) return [];
+      if (browserUploadExcluded(relativePath, excludes)) { excludedEntries += 1; return []; }
+      return [{ file: item.file, relativePath }];
     });
     const safeDirectories = droppedDirectories.flatMap((directory) => {
       const safe = safeRelativePath(directory);
-      return safe === null ? [] : [safe];
+      if (safe === null) return [];
+      if (browserUploadExcluded(safe, excludes)) { excludedEntries += 1; return []; }
+      return [safe];
     });
+    setExclusionNotice(excludedEntries > 0 ? { alias, path, message: t("sftp.manager.exclusionsSkipped", { count: excludedEntries }) } : null);
     if (safeFiles.length === 0 && safeDirectories.length === 0) return;
     const join = (name: string) => browser.source?.join(path, name) ?? `${path}/${name}`;
     setQueuing(true);
@@ -239,8 +250,9 @@ export function useSFTPTransfers({
       return;
     }
     if (local) return;
-    const selection = await droppedFiles(event.dataTransfer);
-    await uploadFiles(selection.files, selection.directories);
+    const patterns = [...sftpTransferManager.getExcludePatterns()];
+    const selection = await droppedFiles(event.dataTransfer, createTransferExclusions(patterns));
+    await uploadFiles(selection.files, { directories: selection.directories, patterns, excludedEntries: selection.excludedEntries });
   }
 
   function dragEnter(event: ReactDragEvent<HTMLElement>) {
@@ -342,6 +354,7 @@ export function useSFTPTransfers({
   }
 
   return {
+    exclusionNotice: exclusionNotice?.alias === alias && exclusionNotice.path === path ? exclusionNotice.message : "",
     dragging,
     sendable,
     dragEnter,
@@ -365,4 +378,3 @@ export function useSFTPTransfers({
     openQueue,
   };
 }
-

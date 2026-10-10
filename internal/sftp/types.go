@@ -194,12 +194,13 @@ const (
 )
 
 type RemoteTransferRequest struct {
-	SourceAlias string
-	SourcePath  string
-	TargetAlias string
-	TargetPath  string
-	Operation   RemoteTransferOperation
-	Overwrite   bool
+	SourceAlias     string
+	SourcePath      string
+	TargetAlias     string
+	TargetPath      string
+	Operation       RemoteTransferOperation
+	Overwrite       bool
+	ExcludePatterns []string
 }
 
 type RemoteTransferPlan struct {

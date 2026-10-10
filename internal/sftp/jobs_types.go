@@ -84,6 +84,7 @@ type TransferJob struct {
 	LargeFileThresholdBytes int64
 	LargeFileParallelism    int
 	LargeFileChunkBytes     int64
+	ExcludePatterns         []string
 	DownloadParts           []DownloadPartProgress `json:"-"`
 	UploadRanges            []UploadRange
 	CreatedAt               time.Time

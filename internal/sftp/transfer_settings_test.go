@@ -111,3 +111,12 @@ func TestOverlappingSettingsUpdatesLeaveTheEngineOnTheLastSavedSettings(t *testi
 		t.Fatalf("saved %v, engine runs %d concurrent, want both on the last update", saved, manager.MaxConcurrent())
 	}
 }
+
+func TestInvalidStoredExclusionsRestoreOnlyThatSettingToEmpty(t *testing.T) {
+	manager := newTestTransferManager(t, nil)
+	settings := sftp.DefaultTransferSettings()
+	settings.ExcludePatterns, settings.ProcessingStopped = []string{"../secret"}, true
+	if rejected := manager.RestoreTransferSettings(settings); !slices.Equal(rejected, []string{"excludePatterns"}) || len(manager.ExcludePatterns()) != 0 || !manager.ProcessingStopped() {
+		t.Fatalf("rejected = %v, exclusions = %v", rejected, manager.ExcludePatterns())
+	}
+}

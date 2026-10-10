@@ -5038,6 +5038,7 @@ components:
         speedLimitBytesPerSecond: { type: integer, format: int64, minimum: 0, maximum: 1073741824 }
         autoReconnect: { type: boolean }
         maxReconnectAttempts: { type: integer, minimum: 0, maximum: 10 }
+        excludePatterns: { type: array, maxItems: 64, items: { type: string, minLength: 1, maxLength: 512 }, description: "Folder contents to exclude. Basenames match at any depth; patterns containing / start at the selected folder. Supports * and ? only. Defaults to no exclusions." }
     # 埋め込みターミナルの設定。数値の範囲外は読み取りで既定へ戻し、書き込みでは拒否する。
     EmbeddedTerminal:
       type: object
@@ -5693,6 +5694,7 @@ components:
         expectedRevision: { type: string, maxLength: 256 }
         sourceFingerprint: { type: string, maxLength: 128 }
         overwrite: { type: boolean }
+        excludePatterns: { type: array, maxItems: 64, items: { type: string, minLength: 1, maxLength: 512 }, description: "Exclusions captured when this folder job was queued." }
         downloadRevision: { type: string, maxLength: 256 }
         downloadParts:
           type: array
@@ -5726,6 +5728,7 @@ components:
         speedLimitBytesPerSecond: { type: integer, format: int64, minimum: 0, maximum: 1073741824 }
         autoReconnect: { type: boolean }
         maxReconnectAttempts: { type: integer, minimum: 0, maximum: 10 }
+        excludePatterns: { type: array, maxItems: 64, items: { type: string, minLength: 1, maxLength: 512 }, description: "Folder contents to exclude. Basenames match at any depth; patterns containing / start at the selected folder. Supports * and ? only. Defaults to no exclusions." }
         jobs: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/SFTPTransferJob" } }
     SFTPSearchResult:
       type: object
@@ -5795,6 +5798,7 @@ components:
         speedLimitBytesPerSecond: { type: integer, format: int64, minimum: 0, maximum: 1073741824 }
         autoReconnect: { type: boolean }
         maxReconnectAttempts: { type: integer, minimum: 0, maximum: 10 }
+        excludePatterns: { type: array, maxItems: 64, items: { type: string, minLength: 1, maxLength: 512 }, description: "Folder contents to exclude. Basenames match at any depth; patterns containing / start at the selected folder. Supports * and ? only. Defaults to no exclusions." }
     SFTPTransferQueueMoveRequest:
       type: object
       additionalProperties: false

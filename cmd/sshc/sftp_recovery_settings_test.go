@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -43,7 +44,7 @@ func TestSFTPRecoverySettingsDistinguishOmittedValuesFromExplicitZero(t *testing
 
 func TestSFTPRecoverySettingsPersistExplicitValuesAndPreserveOtherSettings(t *testing.T) {
 	stored := httpserver.SFTPTransferJobList{MaxConcurrent: 3, ProcessingStopped: true, ClearCompletedAfterSeconds: 300,
-		LargeFileThresholdBytes: 100 << 20, LargeFileParallelism: 4, LargeFileChunkBytes: 32 << 20, Jobs: []httpserver.SFTPTransferJob{}}
+		LargeFileThresholdBytes: 100 << 20, LargeFileParallelism: 4, LargeFileChunkBytes: 32 << 20, ExcludePatterns: []string{".git", "*.log"}, Jobs: []httpserver.SFTPTransferJob{}}
 	updates := 0
 	engine := &engineAPI{origin: "http://engine.invalid", client: &http.Client{Transport: engineAPIRoundTripFunc(func(request *http.Request) (*http.Response, error) {
 		if request.Method == http.MethodPut {
@@ -79,7 +80,7 @@ func TestSFTPRecoverySettingsPersistExplicitValuesAndPreserveOtherSettings(t *te
 			t.Fatalf("settings refused: %d, %s", code, stderr.String())
 		}
 		if stored.SpeedLimitBytesPerSecond != values.wantRate || stored.AutoReconnect != values.wantAuto || !stored.ProcessingStopped ||
-			stored.MaxConcurrent != 3 || stored.ClearCompletedAfterSeconds != 300 || stored.LargeFileParallelism != 4 || stored.LargeFileThresholdBytes != 100<<20 || stored.LargeFileChunkBytes != 32<<20 {
+			stored.MaxConcurrent != 3 || stored.ClearCompletedAfterSeconds != 300 || stored.LargeFileParallelism != 4 || stored.LargeFileThresholdBytes != 100<<20 || stored.LargeFileChunkBytes != 32<<20 || !slices.Equal(stored.ExcludePatterns, []string{".git", "*.log"}) {
 			t.Fatalf("persisted settings = %+v", stored)
 		}
 	}

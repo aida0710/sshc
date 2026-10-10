@@ -45,14 +45,24 @@ func (s Service) PlanRemoteTransfer(ctx context.Context, request RemoteTransferR
 	plan := RemoteTransferPlan{Name: path.Base(source), TotalBytes: info.Size(), Kind: TransferFile}
 	if info.IsDir() {
 		plan.Kind = TransferFolder
-		plan.TotalBytes, err = treeBytes(ctx, remote, source)
+		patterns := request.ExcludePatterns
+		if request.Operation == RemoteMove {
+			patterns = nil
+		}
+		plan.TotalBytes, err = treeBytes(ctx, remote, remoteTreeSelection{root: source, exclusions: transferExclusions(patterns)})
 	} else if !info.Mode().IsRegular() {
 		return RemoteTransferPlan{}, ErrUnsupportedEntry
 	}
 	return plan, err
 }
 
-func treeBytes(ctx context.Context, remote Remote, root string) (int64, error) {
+type remoteTreeSelection struct {
+	root       string
+	exclusions transferExclusions
+}
+
+func treeBytes(ctx context.Context, remote Remote, selection remoteTreeSelection) (int64, error) {
+	root, exclusions := selection.root, selection.exclusions
 	var total int64
 	pending := []string{root}
 	visited := 0
@@ -73,6 +83,9 @@ func treeBytes(ctx context.Context, remote Remote, root string) (int64, error) {
 			visited++
 			if visited > maxTransferTreeEntries {
 				return 0, ErrTraversalLimit
+			}
+			if exclusions.excludesChild(root, path.Join(directory, info.Name())) {
+				continue
 			}
 			if info.IsDir() {
 				pending = append(pending, path.Join(directory, info.Name()))
@@ -135,8 +148,10 @@ func (s Service) CopyRemote(ctx context.Context, request RemoteTransferRequest, 
 	copier := &remoteCopy{
 		service: s, source: source, target: target, targetAlias: request.TargetAlias,
 		overwrite: request.Overwrite, progress: progress, published: newPublishedNames(),
+		sourceRoot: sourcePath, exclusions: transferExclusions(request.ExcludePatterns),
 	}
 	if request.Operation == RemoteMove {
+		copier.exclusions = nil
 		copier.copied = make(map[string]copiedFile)
 	}
 	if info.IsDir() {
@@ -210,6 +225,9 @@ func (m *renameMove) move(ctx context.Context, sourcePath, targetPath string, in
 }
 
 func cleanRemoteTransferRequest(request RemoteTransferRequest) (string, string, error) {
+	if !validTransferExclusionPatterns(request.ExcludePatterns) {
+		return "", "", ErrInvalidTransfer
+	}
 	if err := validateAlias(request.SourceAlias); err != nil {
 		return "", "", err
 	}
@@ -238,6 +256,8 @@ type remoteCopy struct {
 	source      Remote
 	target      Remote
 	targetAlias string
+	sourceRoot  string
+	exclusions  transferExclusions
 	overwrite   bool
 	progress    func(int64) error
 	// published は、上書きの承認を、この実行より前から target にあった entry だけに
@@ -313,6 +333,12 @@ func (c *remoteCopy) copyDirectory(ctx context.Context, sourcePath, targetPath s
 			continue
 		}
 		sourceChild := path.Join(sourcePath, info.Name())
+		if c.exclusions.excludesChild(c.sourceRoot, sourceChild) {
+			if err := c.visit(); err != nil {
+				return err
+			}
+			continue
+		}
 		targetChild := path.Join(targetPath, info.Name())
 		switch {
 		case info.IsDir():

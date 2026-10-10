@@ -74,6 +74,7 @@ type TransferManager struct {
 	speedLimitBytesPerSecond int64
 	autoReconnect            bool
 	maxReconnectAttempts     int
+	excludePatterns          []string
 	now                      func() time.Time
 	dataPlane                map[string]int
 	queuePath                string
@@ -150,6 +151,7 @@ func NewTransferManager(service *Service, downloadSpoolRoot string) *TransferMan
 	manager.limiter = newTransferLimiter()
 	if service != nil {
 		service.transferLimiter = manager.limiter
+		service.transferExclusions = manager.ExcludePatterns
 	}
 	manager.ConfigureJobs(DefaultTransferConcurrency, time.Now)
 	return manager

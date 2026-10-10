@@ -30,9 +30,11 @@ type sftpInvocation struct {
 	ChunkSizeMiB      int
 	SpeedLimitKiB     *int
 	ReconnectAttempts *int
-	MaxDepth          int
-	MaxEntries        int
-	MaxTotalMiB       int64
+	// Snapshot of persisted exclusions for this recursive invocation.
+	ExcludePatterns []string
+	MaxDepth        int
+	MaxEntries      int
+	MaxTotalMiB     int64
 }
 
 // sftpDefaultJobs は、--jobs を指定しないときに同時に転送するファイルの数である。

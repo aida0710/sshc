@@ -12,6 +12,7 @@ type TransferSettings struct {
 	SpeedLimitBytesPerSecond int64
 	AutoReconnect            bool
 	MaxReconnectAttempts     int
+	ExcludePatterns          []string
 	// ClearCompletedAfter が 0 なら、完了項目は手動でだけ消える。
 	ClearCompletedAfter time.Duration
 	// ProcessingStopped の間は待機中の job を新しく開始しない。
@@ -37,7 +38,8 @@ func (settings TransferSettings) Validate() error {
 		!validLargeFileThreshold(settings.LargeFileThresholdBytes) ||
 		!validLargeFileParallelism(settings.LargeFileParallelism) ||
 		!validLargeFileChunkBytes(settings.LargeFileChunkBytes) ||
-		!validTransferSpeed(settings.SpeedLimitBytesPerSecond) || !validReconnectAttempts(settings.MaxReconnectAttempts) {
+		!validTransferSpeed(settings.SpeedLimitBytesPerSecond) || !validReconnectAttempts(settings.MaxReconnectAttempts) ||
+		!validTransferExclusionPatterns(settings.ExcludePatterns) {
 		return ErrInvalidTransfer
 	}
 	return nil
@@ -81,6 +83,7 @@ func (m *TransferManager) SetTransferSettings(settings TransferSettings) error {
 	if err := settings.Validate(); err != nil {
 		return err
 	}
+	settings.ExcludePatterns = append([]string(nil), settings.ExcludePatterns...)
 	m.settingsMutex.Lock()
 	defer m.settingsMutex.Unlock()
 	if m.saveSettings != nil {
@@ -109,6 +112,11 @@ func restorableTransferSettings(stored TransferSettings) (restored TransferSetti
 	defaults := DefaultTransferSettings()
 	restored.ProcessingStopped = stored.ProcessingStopped
 	restored.AutoReconnect = stored.AutoReconnect
+	if validTransferExclusionPatterns(stored.ExcludePatterns) {
+		restored.ExcludePatterns = append([]string(nil), stored.ExcludePatterns...)
+	} else {
+		rejected = append(rejected, "excludePatterns")
+	}
 	var usableSpeed, usableAttempts bool
 	restored.SpeedLimitBytesPerSecond, usableSpeed = storedOrDefault(stored.SpeedLimitBytesPerSecond, int64(0), validTransferSpeed)
 	if !usableSpeed {
@@ -159,6 +167,7 @@ func (m *TransferManager) applyTransferSettings(settings TransferSettings) {
 	m.speedLimitBytesPerSecond = settings.SpeedLimitBytesPerSecond
 	m.autoReconnect = settings.AutoReconnect
 	m.maxReconnectAttempts = settings.MaxReconnectAttempts
+	m.excludePatterns = append([]string(nil), settings.ExcludePatterns...)
 	m.limiter.setRate(settings.SpeedLimitBytesPerSecond)
 	m.largeFileThreshold = settings.LargeFileThresholdBytes
 	m.largeFileParallelism = settings.LargeFileParallelism
