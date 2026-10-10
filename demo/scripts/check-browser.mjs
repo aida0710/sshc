@@ -138,9 +138,13 @@ try {
 
   await ui.getByRole("link", { name: "SFTP", exact: true }).click();
   const pane = ui.getByRole("tabpanel");
-  await pane.locator("button[data-value]:visible").click();
-  await ui.getByRole("dialog").getByText("demo-a", { exact: true }).click();
+  const fileTabs = ui.getByRole("tablist", { name: "左ペインのタブ", exact: true });
+  await fileTabs.getByRole("button", { name: "ホスト", exact: true }).click();
+  await ui.getByRole("dialog", { name: "接続先を選択", exact: true })
+    .getByRole("button", { name: /^demo-a(?:\s|$)/ }).click();
+  await fileTabs.getByRole("tab", { name: "demo-a", selected: true, exact: true }).waitFor();
   await pane.getByRole("button", { name: "接続", exact: true }).click();
+  await fileTabs.getByRole("tab", { name: "demo-a:root", selected: true, exact: true }).waitFor();
   await ui.getByRole("button", { name: "welcome.txt", exact: true }).dblclick();
   await ui.getByRole("dialog", { name: "welcome.txtの詳細" }).getByRole("button", { name: "ファイルを編集" }).click();
   const editor = ui.getByRole("dialog", { name: "/root/welcome.txt", exact: true });
@@ -151,8 +155,9 @@ try {
   await page.keyboard.insertText(contents);
   await editor.getByText("未保存", { exact: true }).waitFor();
   await editor.getByRole("button", { name: "保存", exact: true }).click();
-  // A click starts the write; only the cleared dirty state confirms that it completed.
-  await editor.getByText("未保存", { exact: true }).waitFor({ state: "hidden" });
+  // Saving replaces the dirty indicator before the write finishes. Read only
+  // after the editor confirms that the file was saved.
+  await editor.getByRole("status").filter({ hasText: /^保存済み$/ }).waitFor();
   const iframe = await page.locator("#sshc-ui").contentFrame().locator("body").elementHandle();
   const saved = await iframe.evaluate(async () => {
     const response = await fetch("/api/v1/sftp/demo-a/text?path=%2Froot%2Fwelcome.txt", {
