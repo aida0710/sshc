@@ -18,6 +18,9 @@ import { formatBytes, formatDuration } from "../ui/format";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
 import type { TransferSettings } from "./api";
 import { sftpTransferProblemText } from "./sftpProblemText";
+import { getDisplayedTransferStatus, getTransferQueueSummary, type DisplayedTransferStatus } from "./transferQueueSummary";
+import { TransferQueueSummary } from "./TransferQueueSummary";
+import { TransferJobRoute } from "./TransferJobRoute";
 
 const minQueueHeight = 96;
 const maxQueueHeight = 560;
@@ -51,9 +54,7 @@ function rememberView(view: QueueView): void {
   writeStoredJSON(localStorageKeys.sftpQueueView, view);
 }
 
-type DisplayedStatus = ManagedTransferJob["status"] | "reconcile";
-
-const statusLabelKeys: Record<DisplayedStatus, MessageKey> = {
+const statusLabelKeys: Record<DisplayedTransferStatus, MessageKey> = {
   queued: "sftp.manager.status.queued",
   running: "sftp.manager.status.running",
   reconnecting: "sftp.manager.status.reconnecting",
@@ -75,22 +76,11 @@ function operationIcon(job: ManagedTransferJob): IconName {
   return "arrowLeftRight";
 }
 
-function statusClass(status: DisplayedStatus): string {
+function statusClass(status: DisplayedTransferStatus): string {
   if (status === "failed") return "text-danger";
   if (status === "completed") return "text-live";
   if (status === "needs_overwrite" || status === "reconcile") return "text-notice-ink";
   return "text-ink-muted";
-}
-
-// A job whose publication or local save may already have crossed its commit
-// point, but whose terminal result could not be recorded, must not read as an
-// upload waiting for the same local file again, nor as an ordinary pause. It
-// is the engine's transferOutcomeUnrecorded (internal/sftp/jobs_state.go), which also
-// leaves cancel as the only allowed action; a running job carries the same
-// problem while its operation is in flight.
-function needsReconciliation(job: ManagedTransferJob): boolean {
-  return job.problem === "sftp_reconciliation_required" &&
-    job.status !== "running" && job.status !== "reconnecting";
 }
 
 export function TransferManagerList({ openRequest = 0 }: { openRequest?: number }) {
@@ -137,12 +127,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
   const largeFileThreshold = sftpTransferManager.getLargeFileThreshold();
   const largeFileParallelism = sftpTransferManager.getLargeFileParallelism();
   const largeFileChunkBytes = sftpTransferManager.getLargeFileChunkBytes();
-  const activeJobs = jobs.filter((job) => job.status !== "completed" && job.status !== "cancelled" && job.status !== "failed");
-  const runningJobs = jobs.filter((job) => job.status === "running");
-  const aggregateTotal = activeJobs.reduce((sum, job) => sum + Math.max(job.totalBytes, 0), 0);
-  const aggregateTransferred = activeJobs.reduce((sum, job) => sum + Math.max(job.transferredBytes, 0), 0);
-  const aggregateProgress = aggregateTotal > 0 ? Math.min(100, Math.round((aggregateTransferred / aggregateTotal) * 100)) : 0;
-  const aggregateSpeed = runningJobs.reduce((sum, job) => sum + Math.max(job.bytesPerSecond, 0), 0);
+  const summary = getTransferQueueSummary(jobs, { processingStopped, hasUploadSource: (id) => sftpTransferManager.hasUploadSource(id) });
   const queueHeight = view.height;
   const queueMaximum = maxQueueHeight;
 
@@ -238,7 +223,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
           onCommit={applySettings}
         />
         <label className="flex items-center gap-1 text-ink-muted">
-          <span className={compactViewport ? "" : "hidden sm:inline"}>{t("sftp.manager.concurrency")}</span>
+          <span>{t("sftp.manager.concurrency")}</span>
           <select
             aria-label={t("sftp.manager.concurrency")}
             value={maxConcurrent}
@@ -249,7 +234,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
           </select>
         </label>
         <label className="flex items-center gap-1 text-ink-muted">
-          <span className={compactViewport ? "" : "hidden md:inline"}>{t("sftp.manager.autoClear")}</span>
+          <span>{t("sftp.manager.autoClear")}</span>
           <select
             aria-label={t("sftp.manager.autoClear")}
             value={autoClearChoices.includes(clearCompletedAfter) ? clearCompletedAfter : 0}
@@ -309,23 +294,16 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
           <span aria-hidden="true" className="h-1 w-10 rounded-full bg-control-line transition-colors group-hover:bg-ink-muted group-active:bg-accent group-focus-visible:bg-accent" />
         </div>
       )}
-      <div className={`relative flex shrink-0 items-center gap-2 px-3 ${compactViewport ? "min-h-14 border-b border-line py-1" : "min-h-9 flex-wrap py-1.5 md:min-h-8 md:py-1"}`}>
-        {compactViewport ? <h3 id={headingId} className="min-w-0 flex-1 truncate font-medium">{t("sftp.manager.heading")}</h3> : (
-        <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-expanded={!collapsed} aria-controls={`${headingId}-jobs`} onClick={() => changeView({ collapsed: !collapsed })} className={`flex min-w-0 items-center gap-1.5 rounded ${collapsed ? "after:absolute after:inset-0 after:cursor-pointer after:rounded-md" : ""} hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent`}>
+      <div className={`relative flex shrink-0 flex-wrap items-center gap-2 px-3 ${compactViewport ? "min-h-14 border-b border-line py-1" : "min-h-9 py-1.5 md:min-h-8 md:py-1"}`}>
+        {compactViewport ? <h3 id={headingId} className="shrink-0 font-medium">{t("sftp.manager.heading")}</h3> : (
+        <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-describedby={`${headingId}-summary`} aria-expanded={!collapsed} aria-controls={`${headingId}-jobs`} onClick={() => changeView({ collapsed: !collapsed })} className={`flex min-w-0 items-center gap-1.5 rounded ${collapsed ? "after:absolute after:inset-0 after:cursor-pointer after:rounded-md" : ""} hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent`}>
           <DisclosureChevron expanded={!collapsed} className="size-3" />
           <h3 id={headingId} className={`${collapsed ? "text-ink-muted" : "text-ink"} truncate font-medium`}>{t("sftp.manager.heading")}</h3>
         </button>
         )}
-        {collapsed ? (
-          <>
-            <span className="min-w-0 grow truncate font-medium text-ink">
-              {activeJobs.length > 0
-                ? t("sftp.manager.summaryRunning", { count: activeJobs.length, progress: aggregateProgress, speed: formatBytes(aggregateSpeed) })
-                : t("sftp.manager.summaryIdle", { count: jobs.length })}
-            </span>
-            {aggregateTotal > 0 ? <progress className="hidden w-28 sm:block" max={aggregateTotal} value={aggregateTransferred} /> : null}
-          </>
-        ) : (
+        <TransferQueueSummary summary={summary} id={`${headingId}-summary`} />
+        {collapsed && summary.totalBytes > 0 ? <progress className="hidden w-28 sm:block" max={summary.totalBytes} value={summary.transferredBytes} /> : null}
+        {collapsed ? null : (
         <>
           <button
           type="button"
@@ -336,7 +314,6 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
         >
           <Icon name={processingStopped ? "play" : "pause"} className="size-4" />
         </button>
-        {compactViewport ? null : settings}
         </>
         )}
         <div ref={menuRoot} className="relative ml-auto">
@@ -355,7 +332,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
         </div>
         {compactViewport ? <button ref={closeSheet} type="button" aria-label={t("sftp.manager.close")} onClick={dismissSheet} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill"><Icon name="close" className="size-4" /></button> : null}
       </div>
-      {compactViewport ? <details className="shrink-0 border-b border-line px-3"><DisclosureSummary className="py-3 text-sm text-ink-muted">{t("sftp.manager.settings")}</DisclosureSummary><div className="flex max-h-40 flex-wrap items-center gap-3 overflow-y-auto pb-3">{settings}</div></details> : null}
+      {collapsed ? null : <details className="shrink-0 border-b border-line/60 px-3"><DisclosureSummary className={`${compactViewport ? "min-h-11 py-2 text-sm" : "py-1.5 text-xs"} text-ink-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}>{t("sftp.manager.settings")}</DisclosureSummary><div className="flex max-h-40 flex-wrap items-center gap-3 overflow-y-auto pb-3">{settings}</div></details>}
       {controlProblem !== "" ? <div className="mx-2.5 mb-2"><Notice tone="danger" compact><span className="grow">{controlProblem}</span><button type="button" aria-label={t("sftp.manager.dismissError")} onClick={() => setControlProblem("")} className="shrink-0 text-ink-muted hover:text-ink"><Icon name="close" className="size-3.5" /></button></Notice></div> : null}
       {compactViewport && jobs.length === 0 ? <p className="p-6 text-center text-ink-muted">{t("sftp.manager.summaryIdle", { count: 0 })}</p> : null}
       {collapsed || jobs.length === 0 ? null : <div id={`${headingId}-jobs`} style={compactViewport ? undefined : { height: queueHeight }} className={`space-y-1.5 overflow-auto overscroll-contain px-2.5 pb-2.5 ${compactViewport ? "min-h-0 flex-1 pt-2" : ""}`}>
@@ -378,9 +355,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
                   const sourceMissing = item.direction === "upload" &&
                     (item.status === "queued" || item.status === "paused" || item.status === "reattach" || item.status === "needs_overwrite") &&
                     !sftpTransferManager.hasUploadSource(item.id);
-                  const displayedStatus: DisplayedStatus = needsReconciliation(item)
-                    ? "reconcile"
-                    : sourceMissing ? "reattach" : item.status;
+                  const displayedStatus = getDisplayedTransferStatus(item, sftpTransferManager.hasUploadSource(item.id));
                   return (
                     <li key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
                       <span className="truncate font-mono" title={`${item.alias}:${item.remotePath}`}>{item.name}</span>
@@ -388,6 +363,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
                         <progress className="w-14" max={Math.max(total, 1)} value={item.transferredBytes} />
                         <span className="tabular-nums text-ink-muted">{item.operation === "delete" ? `${item.transferredBytes}/${Math.max(item.totalBytes, 0)}` : item.totalBytes < 0 ? formatBytes(item.transferredBytes) : `${formatBytes(item.transferredBytes)}/${formatBytes(item.totalBytes)}`}</span>
                       </span>
+                      <TransferJobRoute job={item} />
                       <span className="tabular-nums text-ink-muted">{item.operation === "delete" ? t("sftp.manager.delete") : item.bytesPerSecond > 0 ? `${formatBytes(item.bytesPerSecond)}/s` : "—"}</span>
                       <span className="tabular-nums text-ink-muted">{item.remainingSeconds >= 0 && item.status === "running" ? t("sftp.manager.remaining", { duration: formatDuration(item.remainingSeconds, t) }) : "—"}</span>
                       <span className="col-span-2 flex flex-wrap items-center justify-end gap-2 whitespace-nowrap">
@@ -430,17 +406,16 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
         ref={dockTrigger}
         type="button"
         aria-label={t("sftp.manager.expand")}
+        aria-describedby={`${headingId}-dock-summary`}
         aria-haspopup="dialog"
         aria-expanded={sheetOpen}
         onClick={() => setSheetOpen(true)}
-        className="relative mt-1 flex min-h-11 shrink-0 items-center gap-2 overflow-hidden rounded-md border border-line/60 bg-toolbar/50 px-3 text-left text-xs active:bg-select-fill"
+        className="relative mt-1 flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-line/60 bg-toolbar/50 px-3 py-1 text-left text-xs active:bg-select-fill"
       >
         <Icon name="chevronRight" className="size-3 -rotate-90 text-ink-muted" />
         <span className="shrink-0 font-medium">{t("sftp.manager.heading")}</span>
-        <span className="min-w-0 flex-1 truncate text-ink-muted">{activeJobs.length > 0
-          ? t("sftp.manager.summaryRunning", { count: activeJobs.length, progress: aggregateProgress, speed: formatBytes(aggregateSpeed) })
-          : t("sftp.manager.summaryIdle", { count: jobs.length })}</span>
-        {aggregateTotal > 0 ? <span aria-hidden="true" className="absolute bottom-0 left-0 h-0.5 bg-accent transition-[width]" style={{ width: `${aggregateProgress}%` }} /> : null}
+        <TransferQueueSummary summary={summary} id={`${headingId}-dock-summary`} />
+        {summary.totalBytes > 0 ? <span aria-hidden="true" className="absolute bottom-0 left-0 h-0.5 rounded-full bg-accent transition-[width]" style={{ width: `${summary.progress}%` }} /> : null}
       </button>
       <ModalShell open={sheetOpen} labelledBy={headingId} onDismiss={dismissSheet} closeOnOutside initialFocusRef={closeSheet} returnFocusRef={dockTrigger} placement="sheet" panelClassName="flex h-[min(36rem,85dvh)] max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl">
         {content}

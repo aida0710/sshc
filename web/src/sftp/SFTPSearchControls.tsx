@@ -1,6 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import { Button } from "../ui/surface";
 import type { SFTPSearchModel } from "./useSFTPSearch";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 
 export function SFTPSearchControls({ search, disabled }: { search: SFTPSearchModel; disabled: boolean }) {
   const t = useTranslate();
@@ -12,7 +13,7 @@ export function SFTPSearchControls({ search, disabled }: { search: SFTPSearchMod
         <option value="content">{t("sftp.search.content")}</option>
       </select>
     </label>
-    {search.mode === "content" ? <p className="min-w-0 flex-1">{t("sftp.search.contentHint")}</p> : null}
+    {search.mode === "content" ? <details className="min-w-0 flex-1"><DisclosureSummary className="min-h-8 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">{t("sftp.search.contentScope")}</DisclosureSummary><p className="pb-2 leading-5">{t("sftp.search.contentHint")}</p></details> : null}
     {search.searching ? <Button onClick={search.cancelSearch}>{t("sftp.search.stop")}</Button> : null}
   </div>;
 }

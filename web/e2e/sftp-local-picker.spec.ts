@@ -62,6 +62,8 @@ test("selects the pinned Local destination beside an SSH host", async ({ page, i
   await expect(second.getByRole("textbox", { name: "sshcエンジン側のファイルパス" })).toHaveValue("/home/engine/projects");
   if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-toolbar-path-ja.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 800 });
+  await expect(second).toBeVisible();
+  await page.getByRole("navigation", { name: "SFTPの左右切替" }).getByRole("button", { name: "左：bastion", exact: true }).click();
   await first.getByRole("button", { name: "ホスト" }).click();
   await page.getByRole("dialog").getByRole("button", { name: /ローカル.*sshc/ }).click();
   await expect(first.getByRole("button", { name: "draft.txt" })).toBeVisible();

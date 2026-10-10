@@ -11,6 +11,11 @@ type Job = {
   direction: string;
   problem: string;
   allowedActions: string[];
+  operation: string;
+  sourceAlias: string;
+  sourcePath: string;
+  alias: string;
+  remotePath: string;
 };
 
 const manager = vi.hoisted(() => {
@@ -76,6 +81,7 @@ function job(id: string, overrides: Partial<Job> = {}) {
     allowedActions: ["pause", "cancel"],
     attempt: 1, reconnectAttempt: 0, reconnectAt: "",
     problem: "",
+    operation: "", sourceAlias: "", sourcePath: "",
     lastModified: 0,
     expectedRevision: "",
     sourceFingerprint: "",
@@ -102,12 +108,17 @@ describe("the transfer queue", () => {
     manager.getLargeFileThreshold.mockReturnValue(100 << 20);
     manager.getLargeFileParallelism.mockReturnValue(4);
     manager.getLargeFileChunkBytes.mockReturnValue(32 << 20);
+    manager.hasUploadSource.mockReturnValue(true);
     manager.setJobs([]);
   });
 
-  it("keeps the saved split settings available before a transfer starts", () => {
+  it("opens the saved settings only when requested before a transfer starts", async () => {
     render(<TransferManagerList />);
     expect(screen.getByRole("button", { name: "Collapse Transfer Manager" })).toBeVisible();
+    expect(screen.getByLabelText("Split at")).not.toBeVisible();
+    const disclosure = screen.getByText("Transfer settings");
+    disclosure.focus();
+    await userEvent.keyboard("{Enter}");
     expect(screen.getByRole("spinbutton", { name: "Split at" })).toHaveValue(100);
     expect(screen.getByRole("spinbutton", { name: "Streams" })).toHaveValue(4);
     expect(screen.getByRole("spinbutton", { name: "Chunk" })).toHaveValue(32);
@@ -116,6 +127,7 @@ describe("the transfer queue", () => {
 
   it("commits an explicit KiB/s limit and enables a bounded recovery budget", async () => {
     render(<TransferManagerList />);
+    await userEvent.click(screen.getByText("Transfer settings"));
     const speed = screen.getByRole("spinbutton", { name: "Speed limit" });
     fireEvent.change(speed, { target: { value: "2048" } });
     fireEvent.blur(speed);
@@ -140,7 +152,8 @@ describe("the transfer queue", () => {
     render(<TransferManagerList />);
 
     expect(screen.getByRole("button", { name: "Expand Transfer Manager" })).toBeVisible();
-    expect(screen.getByText("1 active · 0% · 0 B/s")).toBeVisible();
+    expect(screen.getByText("1 transferring")).toBeVisible();
+    expect(screen.getByText("0% · 0 B/s")).toBeVisible();
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
   });
 
@@ -169,6 +182,7 @@ describe("the transfer queue", () => {
     manager.getClearCompletedAfter.mockReturnValue(300);
     manager.setJobs([job("one")]);
     render(<TransferManagerList />);
+    await userEvent.click(screen.getByText("Transfer settings"));
 
     expect(screen.getByRole("combobox", { name: "Clear finished after" })).toHaveValue("300");
 
@@ -321,5 +335,58 @@ describe("the transfer queue", () => {
     render(<TransferManagerList />);
     expect(screen.queryByText("Check the destination")).not.toBeInTheDocument();
     expect(screen.getByText("Transferring…")).toBeInTheDocument();
+  });
+
+  it("keeps paused, reconnecting and attention counts visible while folded", () => {
+    window.localStorage.removeItem("sshc.sftp.queueView");
+    manager.setJobs([
+      job("sending", { status: "running" }),
+      job("paused", { status: "paused" }),
+      job("reconnect", { status: "reconnecting" }),
+      job("overwrite", { status: "needs_overwrite" }),
+      job("failed", { status: "failed" }),
+    ]);
+    render(<TransferManagerList />);
+    expect(screen.getByText("1 transferring")).toBeVisible();
+    expect(screen.getByText("1 paused")).toBeVisible();
+    expect(screen.getByText("1 reconnecting")).toBeVisible();
+    expect(screen.getByText("Needs attention: 1")).toBeVisible();
+    expect(screen.getByText("1 failed")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Expand Transfer Manager" })).toHaveAccessibleDescription(/Needs attention: 1.*1 failed.*1 transferring.*1 reconnecting.*1 paused/);
+    expect(screen.queryByText(/5 transferring/)).not.toBeInTheDocument();
+  });
+
+  it("does not describe stopped processing or a missing upload source as transferring", () => {
+    window.localStorage.removeItem("sshc.sftp.queueView");
+    manager.getProcessingStopped.mockReturnValue(true);
+    manager.hasUploadSource.mockReturnValue(false);
+    manager.setJobs([job("queued"), job("upload", { direction: "upload" })]);
+    render(<TransferManagerList />);
+    expect(screen.getByText("1 held")).toBeVisible();
+    expect(screen.getByText("Needs attention: 1")).toBeVisible();
+    expect(screen.queryByText(/transferring/)).not.toBeInTheDocument();
+  });
+
+  it("keeps a failed-only queue distinguishable from finished work", () => {
+    window.localStorage.removeItem("sshc.sftp.queueView");
+    manager.setJobs([job("failed", { status: "failed" })]);
+    render(<TransferManagerList />);
+    expect(screen.getByText("1 failed")).toBeVisible();
+    expect(screen.queryByText("1 transfers")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [{ direction: "remote", operation: "copy", sourceAlias: "edge", sourcePath: "/srv/report.txt", alias: "nas", remotePath: "/backup/report.txt" }, "Copy", "edge:/srv/report.txt → nas:/backup/report.txt"],
+    [{ direction: "remote", operation: "move", sourceAlias: "edge", sourcePath: "/old/report.txt", alias: "edge", remotePath: "/new/report.txt" }, "Move", "edge:/old/report.txt → edge:/new/report.txt"],
+    [{ direction: "remote", operation: "get", sourceAlias: "edge", sourcePath: "/srv/report.txt", alias: "edge", remotePath: "/home/alice/report.txt" }, "Download", "edge:/srv/report.txt → Local:/home/alice/report.txt"],
+    [{ direction: "remote", operation: "put", sourceAlias: "edge", sourcePath: "/home/alice/report.txt", alias: "edge", remotePath: "/srv/report.txt" }, "Upload", "Local:/home/alice/report.txt → edge:/srv/report.txt"],
+    [{ direction: "download", alias: "edge", remotePath: "/srv/report.txt" }, "Download", "edge:/srv/report.txt → Browser save location"],
+    [{ direction: "upload", alias: "edge", remotePath: "/srv/report.txt" }, "Upload", "Browser:report.txt → edge:/srv/report.txt"],
+    [{ direction: "remote", operation: "delete", sourceAlias: "edge", sourcePath: "/old/report.txt", alias: "edge", remotePath: "/old/report.txt" }, "Delete", "edge:/old/report.txt"],
+  ] as const)("shows the actual source and destination for %j", (overrides, operation, route) => {
+    manager.setJobs([job("report.txt", overrides)]);
+    render(<TransferManagerList />);
+    expect(screen.getByText(operation, { selector: "span.mr-2" })).toBeVisible();
+    expect(screen.getByText(route)).toBeVisible();
   });
 });

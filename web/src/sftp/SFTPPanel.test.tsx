@@ -1101,6 +1101,12 @@ describe("SFTPPanel uploads", () => {
     render(<SFTPPanel aliases={["edge"]} />);
     await chooseHost("edge");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Search mode" }), "content");
+    const scope = screen.getByText("Search scope and limits");
+    const explanation = screen.getByText(/Find exact text, with matching case/);
+    expect(explanation).not.toBeVisible();
+    await userEvent.click(scope);
+    expect(explanation).toBeVisible();
+    await userEvent.click(scope);
     await userEvent.type(screen.getByRole("searchbox", { name: "Text to find in files" }), "needle{Enter}");
     const match = await screen.findByRole("button", { name: "Open /srv/sub/notes.txt at line 2" });
     expect(screen.getByText("Matching lines: 1 for “needle” under /srv. Some entries were skipped or not searched.")).toBeVisible();

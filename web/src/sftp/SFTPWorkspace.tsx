@@ -13,6 +13,7 @@ import { SFTPCompareDialog } from "./SFTPCompareDialog";
 import { SFTPTabDropTarget } from "./SFTPTabDropTarget";
 import { SFTPTabStrip, tabElementId, tabPanelElementId } from "./SFTPTabStrip";
 import { TransferManagerList } from "./TransferManagerList";
+import { SFTPPaneSwitcher } from "./SFTPPaneSwitcher";
 import { rememberPanes, rememberSplitRatio, restorePanes, restoreSplitRatio } from "./sftpPaneStorage";
 import {
   activeTab, addTab, allTabs, blankTab, canSplit, closeTab, findTab, moveTab, relocateTab, resortTab, selectTab,
@@ -79,14 +80,13 @@ export function SFTPWorkspace({
   const leftPane = panes[0] ?? null;
   const rightPane = panes[1] ?? null;
   const focusedPane = panes.find((pane) => pane.id === focusedPaneId) ?? leftPane;
+  const focusedLocation = focusedPane === null ? null : activeTab(focusedPane);
 
   useEffect(() => { rememberPanes(panes); }, [panes]);
 
   useEffect(() => {
-    if (!compactViewport || leftPane === null) return;
-    setFocusedPaneId(leftPane.id);
-    setCompareOpen(false);
-  }, [compactViewport, leftPane]);
+    if (compactViewport) setCompareOpen(false);
+  }, [compactViewport]);
 
   useEffect(() => {
     if (draggedTabId !== null && findTab(panes, draggedTabId) === null) setDraggedTabId(null);
@@ -191,24 +191,24 @@ export function SFTPWorkspace({
   const leftLocation = leftPane === null ? null : activeTab(leftPane);
   const rightLocation = rightPane === null ? null : activeTab(rightPane);
 
-  // A request from another screen names a host. When the visible tabs all show
-  // the engine's own disk, the left tab switches to that host first.
+  // A request from another screen names a host. If every visible pane is
+  // local, the selected pane switches to that host before handling the path.
   useEffect(() => {
-    if (target === null || leftLocation === null || leftLocation.alias !== localHostAlias ||
+    const destination = compactViewport ? focusedLocation : leftLocation;
+    if (target === null || destination === null || destination.alias !== localHostAlias ||
       (visibleSplit && rightLocation?.alias !== localHostAlias)) return;
     const alias = aliases.includes(target.alias) ? target.alias : "";
-    restoring.current.set(leftLocation.id, { alias, path: "" });
-    setPanes((current) => relocateTab(current, leftLocation.id, alias, ""));
-    if (leftPane !== null) setFocusedPaneId(leftPane.id);
-  }, [target, leftPane, leftLocation, rightLocation?.alias, visibleSplit, aliases]);
+    restoring.current.set(destination.id, { alias, path: "" });
+    setPanes((current) => relocateTab(current, destination.id, alias, ""));
+    if (!compactViewport && leftPane !== null) setFocusedPaneId(leftPane.id);
+  }, [target, leftPane, leftLocation, focusedLocation, rightLocation?.alias, visibleSplit, compactViewport, aliases]);
 
   const compareEnabled = visibleSplit && leftLocation !== null && rightLocation !== null &&
     leftLocation.alias !== "" && rightLocation.alias !== "";
 
   function renderPane(pane: SFTPPane, index: number) {
-    const concealed = index > 0 && !visibleSplit;
+    const concealed = compactViewport && pane.id !== focusedPane?.id;
     const other = index === 0 ? rightLocation : leftLocation;
-    const otherVisible = visibleSplit ? other : null;
     const last = index === panes.length - 1;
     const closable = pane.tabs.length > 1 || panes.length > 1;
     const dropPlacement = draggedTabId === null || compactViewport ? null
@@ -257,7 +257,7 @@ export function SFTPWorkspace({
               const selected = tab.id === pane.activeId;
               const restored = restoring.current.get(tab.id);
               const ownsTarget = selected && tab.alias !== localHostAlias &&
-                (compactViewport ? index === 0 : otherVisible?.alias === localHostAlias || focusedPane?.id === pane.id);
+                (compactViewport ? pane.id === focusedPane?.id : other?.alias === localHostAlias || focusedPane?.id === pane.id);
               return (
                 <div
                   key={tab.id}
@@ -275,7 +275,7 @@ export function SFTPWorkspace({
                     initialLocation={restored === undefined || restored.alias === "" ? null : restored}
                     initialSort={tab.sort}
                     showTransfers={false}
-                    counterpart={otherVisible?.alias && otherVisible.path ? { alias: otherVisible.alias, path: otherVisible.path } : null}
+                    counterpart={other?.alias && other.path ? { alias: other.alias, path: other.path } : null}
                     onQueueOpen={() => setOpenQueueRequest((current) => current + 1)}
                     {...(selected ? { onNavigationBlockerChange: blockerReporter.forTab(tab.id) } : {})}
                     onDirtyChange={dirtyReporter.forTab(tab.id)}
@@ -302,6 +302,7 @@ export function SFTPWorkspace({
 
   return (
     <section ref={workspaceRoot} className="flex h-full min-h-0 min-w-0 flex-col" aria-label={t("sftp.tabs")}>
+      {compactViewport && panes.length > 1 && focusedPane !== null ? <SFTPPaneSwitcher panes={panes} focusedPaneId={focusedPane.id} onSelect={setFocusedPaneId} /> : null}
       <div className="flex min-h-0 min-w-0 flex-1">
         {panes.map(renderPane)}
       </div>

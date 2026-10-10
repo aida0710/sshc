@@ -162,7 +162,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     buffer: Buffer.alloc((2 << 20) + 17, 0x61),
   });
   const transferManager = page.getByRole("region", { name: "Transfer Manager" });
-  await expect(transferManager.getByText(/1 active/)).toBeVisible();
+  await expect(transferManager.getByText("1 transferring", { exact: true })).toBeVisible();
   await transferManager.getByRole("button", { name: "Expand Transfer Manager" }).click();
   await expect(page.getByText("Transferring…")).toBeVisible();
   const fileListBounds = await page.getByRole("table").boundingBox();
@@ -281,6 +281,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.getByRole("button", { name: "project", exact: true }).click();
     await openSecondSFTPPane(page, "New tab");
     await page.setViewportSize({ width: 360, height: 800 });
+    await page.getByRole("navigation", { name: "SFTP pane switcher" }).getByRole("button", { name: "Left: bastion", exact: true }).click();
     await page.waitForTimeout(400);
     await expect(page.getByRole("tablist", { name: "Left pane tabs" })).toBeVisible();
     await expect(page.getByRole("tablist", { name: "Right pane tabs" })).toHaveCount(0);

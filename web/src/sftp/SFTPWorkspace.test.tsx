@@ -743,7 +743,7 @@ describe("SFTP tabs", () => {
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
   });
 
-  it("renders only the primary tab strip and pane on a compact viewport", () => {
+  it("switches between compact panes without losing their connected directories", async () => {
     const originalMatchMedia = window.matchMedia;
     seedStoredPanes([
       { tabs: [{ alias: "", path: "" }] },
@@ -761,7 +761,7 @@ describe("SFTP tabs", () => {
     }));
 
     try {
-      render(<SFTPWorkspace aliases={["edge", "miyabi"]} />);
+      const workspace = render(<SFTPWorkspace aliases={["edge", "miyabi"]} />);
 
       expect(screen.getByRole("tablist", { name: "Left pane tabs" })).toBeVisible();
       expect(screen.queryByRole("tablist", { name: "Right pane tabs" })).not.toBeInTheDocument();
@@ -770,6 +770,28 @@ describe("SFTP tabs", () => {
       expect(screen.queryByRole("separator", { name: "Resize the panes" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Compare directories" })).not.toBeInTheDocument();
       expect(storedPanes()).toHaveLength(2);
+      const switcher = screen.getByRole("navigation", { name: "SFTP pane switcher" });
+      await userEvent.click(within(switcher).getByRole("button", { name: "Right: miyabi" }));
+      const second = screen.getByLabelText("Second remote pane");
+      expect(second).toBeVisible();
+      expect(screen.getByLabelText("First remote pane")).not.toBeVisible();
+      expect(screen.getByRole("tablist", { name: "Right pane tabs" })).toBeVisible();
+      await userEvent.click(within(second).getByRole("button", { name: "Connect" }));
+      await waitFor(() => expect(within(second).getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv"));
+      expect(api.list).toHaveBeenCalledOnce();
+      await userEvent.click(within(switcher).getByRole("button", { name: "Left: New tab" }));
+      expect(screen.getByRole("tablist", { name: "Left pane tabs" })).toBeVisible();
+      await userEvent.click(within(switcher).getByRole("button", { name: "Right: miyabi" }));
+      expect(within(second).getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
+      expect(api.list).toHaveBeenCalledOnce();
+      expect(storedPanes()).toEqual([
+        { tabs: [{ alias: "", path: "", sortKey: "name", sortDirection: "ascending" }], activeIndex: 0 },
+        { tabs: [{ alias: "miyabi", path: "/srv", sortKey: "name", sortDirection: "ascending" }], activeIndex: 0 },
+      ]);
+      workspace.rerender(<SFTPWorkspace aliases={["edge", "miyabi"]} target={{ alias: "edge", path: "/var/log/report.txt", action: "browse", request: 1 }} />);
+      await waitFor(() => expect(api.list).toHaveBeenLastCalledWith("edge", "/var/log"));
+      expect(within(second).getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "edge");
+      expect(within(screen.getByLabelText("First remote pane")).getByRole("button", { name: "Host", hidden: true })).toHaveAttribute("data-value", "");
     } finally {
       window.matchMedia = originalMatchMedia;
     }
