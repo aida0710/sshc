@@ -38,7 +38,7 @@ const manager = vi.hoisted(() => {
     getSpeedLimitBytesPerSecond: vi.fn(() => 0),
     getAutoReconnect: vi.fn(() => false),
     getMaxReconnectAttempts: vi.fn(() => 0),
-    getExcludePatterns: vi.fn(() => []),
+    getExcludePatterns: vi.fn(() => [] as string[]),
     getLargeFileThreshold: vi.fn(() => 100 << 20),
     getLargeFileParallelism: vi.fn(() => 4),
     getLargeFileChunkBytes: vi.fn(() => 32 << 20),
@@ -106,6 +106,7 @@ describe("the transfer queue", () => {
     manager.getSpeedLimitBytesPerSecond.mockReturnValue(0);
     manager.getAutoReconnect.mockReturnValue(false);
     manager.getMaxReconnectAttempts.mockReturnValue(0);
+    manager.getExcludePatterns.mockReturnValue([]);
     manager.getLargeFileThreshold.mockReturnValue(100 << 20);
     manager.getLargeFileParallelism.mockReturnValue(4);
     manager.getLargeFileChunkBytes.mockReturnValue(32 << 20);
@@ -113,22 +114,54 @@ describe("the transfer queue", () => {
     manager.setJobs([]);
   });
 
+  it("shows one name for a single transfer and keeps its saved exclusions in the details", async () => {
+    manager.getExcludePatterns.mockReturnValue(["node_modules"]);
+    manager.setJobs([{ ...job("report.txt", { status: "completed", allowedActions: ["remove"] }), batchName: "report.txt", excludePatterns: [".git"] }]);
+    render(<TransferManagerList />);
+    expect(screen.getAllByText("report.txt")).toHaveLength(1);
+    expect(screen.queryByText("1 exclusion rules")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Show details for report.txt" }));
+    expect(screen.getByText("1 exclusion rules")).toHaveAttribute("title", expect.stringContaining(".git"));
+    expect(screen.queryByText("node_modules")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Hide details for report.txt" }));
+    expect(screen.queryByText("1 exclusion rules")).not.toBeInTheDocument();
+    expect(screen.getByText("Completed")).toBeVisible();
+  });
+
+  it("opens grouped settings from a folded empty queue and returns focus after closing", async () => {
+    window.localStorage.setItem("sshc.sftp.queueView", JSON.stringify({ collapsed: true, height: 224 }));
+    render(<TransferManagerList />);
+    const trigger = screen.getByRole("button", { name: "Transfer settings" });
+    await userEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Transfer settings" })).toBeVisible();
+    expect(screen.getByRole("group", { name: "Speed and recovery" })).toBeVisible();
+    expect(screen.getByRole("group", { name: "Queue and finished transfers" })).toBeVisible();
+    expect(screen.getByRole("group", { name: "Split transfers" })).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Exclusion patterns (one per line)" })).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Expand Transfer Manager" })).toBeVisible();
+    expect(JSON.parse(window.localStorage.getItem("sshc.sftp.queueView") ?? "{}")).toMatchObject({ collapsed: true, height: 224 });
+  });
+
   it("opens the saved settings only when requested before a transfer starts", async () => {
     render(<TransferManagerList />);
     expect(screen.getByRole("button", { name: "Collapse Transfer Manager" })).toBeVisible();
-    expect(screen.getByLabelText("Split at")).not.toBeVisible();
-    const disclosure = screen.getByText("Transfer settings");
-    disclosure.focus();
+    expect(screen.queryByLabelText("Split at")).not.toBeInTheDocument();
+    const settingsButton = screen.getByRole("button", { name: "Transfer settings" });
+    settingsButton.focus();
     await userEvent.keyboard("{Enter}");
     expect(screen.getByRole("spinbutton", { name: "Split at" })).toHaveValue(100);
     expect(screen.getByRole("spinbutton", { name: "Streams" })).toHaveValue(4);
     expect(screen.getByRole("spinbutton", { name: "Chunk" })).toHaveValue(32);
+    expect(screen.getByRole("dialog", { name: "Transfer settings" })).toBeVisible();
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
   });
 
   it("commits an explicit KiB/s limit and enables a bounded recovery budget", async () => {
     render(<TransferManagerList />);
-    await userEvent.click(screen.getByText("Transfer settings"));
+    await userEvent.click(screen.getByRole("button", { name: "Transfer settings" }));
     const speed = screen.getByRole("spinbutton", { name: "Speed limit" });
     fireEvent.change(speed, { target: { value: "2048" } });
     fireEvent.blur(speed);
@@ -183,7 +216,7 @@ describe("the transfer queue", () => {
     manager.getClearCompletedAfter.mockReturnValue(300);
     manager.setJobs([job("one")]);
     render(<TransferManagerList />);
-    await userEvent.click(screen.getByText("Transfer settings"));
+    await userEvent.click(screen.getByRole("button", { name: "Transfer settings" }));
 
     expect(screen.getByRole("combobox", { name: "Clear finished after" })).toHaveValue("300");
 
@@ -258,9 +291,11 @@ describe("the transfer queue", () => {
       expect(container.querySelector('[role="dialog"]')).toBeNull();
       expect(screen.queryByRole("separator")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Close Transfer Manager" })).toHaveFocus();
-      expect(screen.getByLabelText("Split at")).not.toBeVisible();
-      await userEvent.click(screen.getByText("Transfer settings"));
+      expect(screen.queryByLabelText("Split at")).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Transfer settings" }));
       expect(screen.getByRole("spinbutton", { name: "Split at" })).toBeVisible();
+      await userEvent.click(screen.getByRole("button", { name: "Close transfer settings" }));
+      expect(screen.getByRole("button", { name: "Transfer settings" })).toHaveFocus();
       await userEvent.click(screen.getByRole("button", { name: "Transfer queue actions" }));
       expect(screen.getByRole("dialog", { name: "Transfer Manager" })).toBeVisible();
       await userEvent.click(screen.getByRole("menuitem", { name: "Pause all" }));
@@ -314,7 +349,7 @@ describe("the transfer queue", () => {
   it.each([
     ["a folder copied into itself", "sftp_target_inside_source", "sftp.problem.targetInsideSource"],
     ["a file moved onto itself", "sftp_target_is_source", "sftp.problem.targetIsSource"],
-  ] as const)("says why %s failed instead of the general failure", (_, problem, key) => {
+  ] as const)("says why %s failed instead of the general failure", async (_, problem, key) => {
     manager.setJobs([job("remote", {
       direction: "remote",
       status: "failed",
@@ -322,6 +357,7 @@ describe("the transfer queue", () => {
       allowedActions: ["retry", "cancel", "remove"],
     })]);
     render(<TransferManagerList />);
+    await userEvent.click(screen.getByRole("button", { name: "Show details for remote" }));
     expect(screen.getByText(en[key])).toBeInTheDocument();
     expect(screen.queryByText(en["sftp.problem.failed"])).not.toBeInTheDocument();
   });
@@ -384,10 +420,12 @@ describe("the transfer queue", () => {
     [{ direction: "download", alias: "edge", remotePath: "/srv/report.txt" }, "Download", "edge:/srv/report.txt → Browser save location"],
     [{ direction: "upload", alias: "edge", remotePath: "/srv/report.txt" }, "Upload", "Browser:report.txt → edge:/srv/report.txt"],
     [{ direction: "remote", operation: "delete", sourceAlias: "edge", sourcePath: "/old/report.txt", alias: "edge", remotePath: "/old/report.txt" }, "Delete", "edge:/old/report.txt"],
-  ] as const)("shows the actual source and destination for %j", (overrides, operation, route) => {
+  ] as const)("shows the actual source and destination for %j", async (overrides, operation, route) => {
     manager.setJobs([job("report.txt", overrides)]);
     render(<TransferManagerList />);
     expect(screen.getByText(operation, { selector: "span.mr-2" })).toBeVisible();
+    expect(screen.queryByText(route)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Show details for report.txt" }));
     expect(screen.getByText(route)).toBeVisible();
   });
 });

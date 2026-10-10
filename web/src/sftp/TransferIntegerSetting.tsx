@@ -24,28 +24,30 @@ export function TransferIntegerSetting({ label, value, min, max, scale = 1, unit
     onCommit(parsed * scale);
   }
   return (
-    <label className="flex items-center gap-1 text-ink-muted">
+    <label className="flex min-w-0 flex-col gap-1.5 text-sm text-ink-muted">
       <span>{label}</span>
-      <input
-        type="number"
-        inputMode="numeric"
-        aria-label={label}
-        min={min}
-        max={max}
-        step={1}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
-          if (event.key === "Escape") {
-            setDraft(String(shownValue));
-            event.currentTarget.blur();
-          }
-        }}
-        className="w-16 rounded border border-control-line bg-control px-1 py-0.5 text-right text-xs tabular-nums"
-      />
-      {unit === undefined ? null : <span aria-hidden="true">{unit}</span>}
+      <span className="flex items-center gap-2">
+        <input
+          type="number"
+          inputMode="numeric"
+          aria-label={label}
+          min={min}
+          max={max}
+          step={1}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Escape") {
+              setDraft(String(shownValue));
+              event.currentTarget.blur();
+            }
+          }}
+          className="h-11 w-24 rounded-md border border-control-line bg-control px-3 text-right text-sm tabular-nums md:h-9 [@media(pointer:coarse)]:h-11"
+        />
+        {unit === undefined ? null : <span aria-hidden="true">{unit}</span>}
+      </span>
     </label>
   );
 }

@@ -15,20 +15,20 @@ const countLabelKeys = {
   cancelled: "sftp.manager.summary.cancelled",
 } as const satisfies Record<keyof TransferQueueCounts, MessageKey>;
 
-export function TransferQueueSummary({ summary, id }: { summary: TransferQueueSummaryModel; id?: string }) {
+export function TransferQueueSummary({ summary, id, compact = false }: { summary: TransferQueueSummaryModel; id?: string; compact?: boolean }) {
   const t = useTranslate();
   const activeTransferCount = summary.counts.running + summary.counts.reconnecting + summary.counts.paused +
     summary.counts.held + summary.counts.queued + summary.counts.attention;
   const displayedStatuses = (Object.keys(countLabelKeys) as (keyof TransferQueueCounts)[]).filter((status) =>
     summary.counts[status] > 0 && (activeTransferCount === 0 || (status !== "completed" && status !== "cancelled")));
   return (
-    <span id={id} className="flex min-w-0 grow flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+    <span id={id} className={`flex min-w-0 grow items-center gap-x-2 text-xs ${compact ? "overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "flex-wrap gap-y-0.5"}`}>
       {displayedStatuses.length === 0 ? <span className="text-ink-muted">{t("sftp.manager.summaryIdle", { count: 0 })}</span> : displayedStatuses.map((status) => (
-        <span key={status} className={`whitespace-nowrap ${status === "failed" ? "text-danger" : status === "attention" ? "text-notice-ink font-medium" : "text-ink-muted"}`}>
+        <span key={status} className={`shrink-0 whitespace-nowrap ${status === "failed" ? "text-danger" : status === "attention" ? "text-notice-ink font-medium" : "text-ink-muted"}`}>
           {t(countLabelKeys[status], { count: summary.counts[status] })}{" "}
         </span>
       ))}
-      {summary.counts.running > 0 ? <span className="whitespace-nowrap tabular-nums text-ink-muted">{t("sftp.manager.summaryProgress", { progress: summary.progress, speed: formatBytes(summary.bytesPerSecond) })}</span> : null}
+      {summary.counts.running > 0 ? <span className="shrink-0 whitespace-nowrap tabular-nums text-ink-muted">{t("sftp.manager.summaryProgress", { progress: summary.progress, speed: formatBytes(summary.bytesPerSecond) })}</span> : null}
     </span>
   );
 }
