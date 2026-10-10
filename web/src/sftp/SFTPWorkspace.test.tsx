@@ -743,7 +743,7 @@ describe("SFTP tabs", () => {
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
   });
 
-  it("switches between compact panes without losing their connected directories", async () => {
+  it("combines restored panes into one compact tab strip and keeps each directory", async () => {
     const originalMatchMedia = window.matchMedia;
     seedStoredPanes([
       { tabs: [{ alias: "", path: "" }] },
@@ -763,25 +763,26 @@ describe("SFTP tabs", () => {
     try {
       const workspace = render(<SFTPWorkspace aliases={["edge", "miyabi"]} />);
 
-      expect(screen.getByRole("tablist", { name: "Left pane tabs" })).toBeVisible();
+      expect(screen.getByRole("tablist", { name: "File tabs" })).toBeVisible();
+      expect(screen.getAllByRole("tablist")).toHaveLength(1);
       expect(screen.queryByRole("tablist", { name: "Right pane tabs" })).not.toBeInTheDocument();
       expect(screen.getByLabelText("First remote pane")).toBeVisible();
       expect(screen.getByLabelText("Second remote pane")).not.toBeVisible();
       expect(screen.queryByRole("separator", { name: "Resize the panes" })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Compare directories" })).toBeDisabled();
       expect(storedPanes()).toHaveLength(2);
-      const switcher = screen.getByRole("navigation", { name: "SFTP pane switcher" });
-      await userEvent.click(within(switcher).getByRole("button", { name: "Right: miyabi" }));
+      const tabs = screen.getByRole("tablist", { name: "File tabs" });
+      await userEvent.click(within(tabs).getByRole("tab", { name: "miyabi:srv" }));
       const second = screen.getByLabelText("Second remote pane");
       expect(second).toBeVisible();
       expect(screen.getByLabelText("First remote pane")).not.toBeVisible();
-      expect(screen.getByRole("tablist", { name: "Right pane tabs" })).toBeVisible();
+      expect(screen.getByRole("tablist", { name: "File tabs" })).toBeVisible();
       await userEvent.click(within(second).getByRole("button", { name: "Connect" }));
       await waitFor(() => expect(within(second).getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv"));
       expect(api.list).toHaveBeenCalledOnce();
-      await userEvent.click(within(switcher).getByRole("button", { name: "Left: New tab" }));
-      expect(screen.getByRole("tablist", { name: "Left pane tabs" })).toBeVisible();
-      await userEvent.click(within(switcher).getByRole("button", { name: "Right: miyabi" }));
+      await userEvent.click(within(tabs).getByRole("tab", { name: "New tab" }));
+      expect(screen.getByRole("tablist", { name: "File tabs" })).toBeVisible();
+      await userEvent.click(within(tabs).getByRole("tab", { name: "miyabi:srv" }));
       expect(within(second).getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
       expect(api.list).toHaveBeenCalledOnce();
       expect(storedPanes()).toEqual([

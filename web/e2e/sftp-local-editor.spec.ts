@@ -49,7 +49,7 @@ test("shows line differences between two engine-local files without writing eith
   await installation.write("text-right/notes.txt", "first line\nright value\n");
   const violations = watchForPolicyViolations(page);
   const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("pageerror", (error) => errors.push(error.stack ?? error.message));
   await openApplication(page, installation);
   await openSection(page, "SFTP");
   await openSecondSFTPPane(page, "New tab");
@@ -74,6 +74,9 @@ test("shows line differences between two engine-local files without writing eith
   await expect(comparison).toBeVisible();
   await comparison.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.getByRole("button", { name: "Compare directories", exact: true }).click();
+  const tabs = page.getByRole("dialog", { name: "Choose tabs to compare", exact: true });
+  await expect(tabs).toBeVisible();
+  await tabs.getByRole("button", { name: "Compare", exact: true }).click();
   await expect(comparison).toBeVisible();
   await comparison.getByRole("button", { name: "View text differences for notes.txt", exact: true }).click();
   await expect(text.locator(".monaco-diff-editor")).toBeVisible();

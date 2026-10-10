@@ -13,10 +13,11 @@ import { SFTPCompareDialog } from "./SFTPCompareDialog";
 import { SFTPTabDropTarget } from "./SFTPTabDropTarget";
 import { SFTPTabStrip, tabElementId, tabPanelElementId } from "./SFTPTabStrip";
 import { TransferManagerList } from "./TransferManagerList";
-import { SFTPPaneSwitcher } from "./SFTPPaneSwitcher";
+import { SFTPCompareTabsDialog } from "./SFTPCompareTabsDialog";
+import type { SFTPLocation } from "./sftpLocation";
 import { rememberPanes, rememberSplitRatio, restorePanes, restoreSplitRatio } from "./sftpPaneStorage";
 import {
-  activeTab, addTab, allTabs, blankPane, blankTab, canSplit, closeTab, findTab, moveTab, relocateTab, resortTab, selectTab,
+  activeTab, addTab, allTabs, blankTab, canSplit, closeTab, findTab, maxTabsPerPane, moveTab, relocateTab, resortTab, selectTab,
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
 } from "./sftpPanes";
 
@@ -66,7 +67,8 @@ export function SFTPWorkspace({
   const [splitRatio, setSplitRatio] = useState(restoreSplitRatio);
   const [focusedPaneId, setFocusedPaneId] = useState(() => panes[0]?.id ?? "");
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
-  const [compareOpen, setCompareOpen] = useState(false);
+  const [comparisonLocations, setComparisonLocations] = useState<{ left: SFTPLocation; right: SFTPLocation } | null>(null);
+  const [compareTabsOpen, setCompareTabsOpen] = useState(false);
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
   const [dirtyTabs, setDirtyTabs] = useState<Map<string, string>>(() => new Map());
   const [closeTabIntent, setCloseTabIntent] = useState<{ tabId: string; path: string } | null>(null);
@@ -81,6 +83,8 @@ export function SFTPWorkspace({
   const rightPane = panes[1] ?? null;
   const focusedPane = panes.find((pane) => pane.id === focusedPaneId) ?? leftPane;
   const focusedLocation = focusedPane === null ? null : activeTab(focusedPane);
+  const compactTabs = focusedPane === null ? null : { ...focusedPane, tabs: allTabs(panes) };
+  const comparisonTabs = allTabs(panes).filter((tab) => tab.alias !== "");
 
   useEffect(() => { rememberPanes(panes); }, [panes]);
 
@@ -202,11 +206,31 @@ export function SFTPWorkspace({
   const compareReady = leftLocation !== null && rightLocation !== null &&
     leftLocation.alias !== "" && rightLocation.alias !== "";
 
-  function openRightPane() {
-    if (panes.length !== 1) return;
-    const right = blankPane();
-    setPanes((current) => current.length === 1 ? [...current, right] : current);
-    setFocusedPaneId(right.id);
+  function selectFileTab(tabId: string) {
+    const found = findTab(panes, tabId);
+    if (found !== null) chooseTab(found.pane, tabId);
+  }
+
+  function openFileTab() {
+    const destination = focusedPane !== null && focusedPane.tabs.length < maxTabsPerPane
+      ? focusedPane : panes.find((pane) => pane.tabs.length < maxTabsPerPane);
+    if (destination !== undefined && destination !== null) openTab(destination);
+  }
+
+  function requestComparison() {
+    if (compactViewport) {
+      setCompareTabsOpen(true);
+    } else if (compareReady && leftLocation !== null && rightLocation !== null) {
+      setComparisonLocations({ left: leftLocation, right: rightLocation });
+    }
+  }
+
+  function comparisonButton(enabled: boolean) {
+    return <button type="button" aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")}
+      disabled={!enabled} onClick={requestComparison}
+      className={`flex shrink-0 items-center rounded text-sm text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint ${compactViewport ? "min-h-12 w-12 justify-center" : "gap-1.5 px-2"}`}>
+      <Icon name="arrowLeftRight" className={compactViewport ? "size-5" : "size-4"} />{compactViewport ? null : t("sftp.compare.action")}
+    </button>;
   }
 
   function renderPane(pane: SFTPPane, index: number) {
@@ -230,36 +254,19 @@ export function SFTPWorkspace({
           onPointerDown={() => setFocusedPaneId(pane.id)}
           onFocusCapture={() => setFocusedPaneId(pane.id)}
         >
-          <SFTPTabStrip
+          {compactViewport ? null : <SFTPTabStrip
             pane={pane}
             label={t(index === 0 ? "sftp.primaryTabs" : "sftp.secondaryTabs")}
             closable={closable}
             movable={(tab) => !compactViewport && !dirtyTabs.has(tab.id)}
-            trailing={compactViewport && panes.length === 1 ? (
-              <button type="button" aria-label={t("sftp.openRightPane")} title={t("sftp.openRightPane")}
-                onClick={openRightPane} className="flex min-h-11 shrink-0 items-center gap-1 rounded px-2 text-xs text-ink-muted hover:bg-card/50 hover:text-ink">
-                <Icon name="arrowLeftRight" className="size-4" />{t("sftp.rightPaneButton")}
-              </button>
-            ) : (last && visibleSplit) || (compactViewport && panes.length > 1) ? (
-              <button
-                type="button"
-                aria-label={t("sftp.compare.heading")}
-                title={t("sftp.compare.heading")}
-                disabled={!compareReady}
-                onClick={() => setCompareOpen(true)}
-                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded px-2.5 text-sm text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint"
-              >
-                <Icon name="arrowLeftRight" className="size-4" />
-                {t("sftp.compare.action")}
-              </button>
-            ) : null}
+            trailing={last && visibleSplit ? comparisonButton(compareReady) : null}
             onSelect={(tabId) => chooseTab(pane, tabId)}
             onClose={requestCloseTab}
             onAdd={() => openTab(pane)}
             onDragStart={setDraggedTabId}
             onDragEnd={() => setDraggedTabId(null)}
             onMove={moveTabWithKeyboard}
-          />
+          />}
           <div data-sftp-pane-content={pane.id} className="relative flex min-h-0 min-w-0 flex-1 flex-col pt-2">
             {pane.tabs.map((tab) => {
               const selected = tab.id === pane.activeId;
@@ -310,7 +317,12 @@ export function SFTPWorkspace({
 
   return (
     <section ref={workspaceRoot} className="flex h-full min-h-0 min-w-0 flex-col" aria-label={t("sftp.tabs")}>
-      {compactViewport && panes.length > 1 && focusedPane !== null ? <SFTPPaneSwitcher panes={panes} focusedPaneId={focusedPane.id} onSelect={setFocusedPaneId} /> : null}
+      {compactViewport && compactTabs !== null ? <SFTPTabStrip
+        pane={compactTabs} compact label={t("sftp.mobileTabs")} closable={compactTabs.tabs.length > 1}
+        movable={() => false} addDisabled={panes.every((pane) => pane.tabs.length >= maxTabsPerPane)}
+        trailing={comparisonButton(comparisonTabs.length > 1)} onSelect={selectFileTab} onClose={requestCloseTab}
+        onAdd={openFileTab} onDragStart={setDraggedTabId} onDragEnd={() => setDraggedTabId(null)} onMove={moveTabWithKeyboard}
+      /> : null}
       <div className="flex min-h-0 min-w-0 flex-1">
         {panes.map(renderPane)}
       </div>
@@ -330,11 +342,14 @@ export function SFTPWorkspace({
           onCancel={() => setCloseTabIntent(null)}
         />
       )}
-      {compareOpen && compareReady && leftLocation !== null && rightLocation !== null ? (
+      {compareTabsOpen ? <SFTPCompareTabsDialog tabs={comparisonTabs} currentTabId={focusedLocation?.id ?? ""}
+        onCompare={(left, right) => { setCompareTabsOpen(false); setComparisonLocations({ left, right }); }}
+        onDismiss={() => setCompareTabsOpen(false)} /> : null}
+      {comparisonLocations !== null ? (
         <SFTPCompareDialog
-          left={{ alias: leftLocation.alias, path: leftLocation.path || "/" }}
-          right={{ alias: rightLocation.alias, path: rightLocation.path || "/" }}
-          onDismiss={() => setCompareOpen(false)}
+          left={{ alias: comparisonLocations.left.alias, path: comparisonLocations.left.path || "/" }}
+          right={{ alias: comparisonLocations.right.alias, path: comparisonLocations.right.path || "/" }}
+          onDismiss={() => setComparisonLocations(null)}
         />
       ) : null}
     </section>

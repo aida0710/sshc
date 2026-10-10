@@ -73,7 +73,7 @@ Local tabs can also be compared. Comparisons involving a local tab display diffe
 
 The pane action menu can open an SSH Terminal at the displayed directory. In the other direction, a remote directory reported by OSC 7 can be opened in SFTP from the Terminal action menu.
 
-On desktop a narrow pane keeps every column and scrolls the table sideways rather than dropping columns. Phones emphasize the filename, place permissions, size and modified time on one metadata line, and show one horizontally scrollable tab strip and the left pane only; tab dragging, the right pane's connection and comparison stay inactive. Returning to desktop brings the right pane and its tabs back.
+On desktop a narrow pane keeps every column and scrolls the table sideways rather than dropping columns. Phones emphasize the filename and place permissions, size and modified time on one metadata line. All file tabs share one horizontally scrollable strip, with only the selected tab's directory visible. Hosts, paths and selections stay in their tabs; returning to desktop restores the two-pane layout. Use **Compare** to choose any two configured tabs. Tabs and action buttons are 48px tall and file rows are 64px tall. Search scope controls appear when search is open.
 
 The remote creation menu offers **Create symbolic link**. Enter a name and a relative or absolute target, including a target that does not yet exist. Existing entries are never overwritten. **Change link target** in the details dialog replaces only the link itself and leaves the target contents unchanged. Servers without safe link replacement support refuse this change.
 
@@ -119,4 +119,4 @@ The browser or WebView still handles local file I/O for uploads and downloads. T
 
 See [Transfer Manager](/en/sftp/transfers) for states, recovery, and cancellation.
 
-On narrow screens, switch between panes with the Left and Right buttons. Connections, directories, and selections are retained, and the hidden pane can still be a transfer destination. The transfer list shows source → destination and counts paused, reconnecting, confirmation-needed, and failed jobs separately from running transfers. Transfer settings and search limits are available in collapsible details.
+The transfer list shows source → destination and counts paused, reconnecting, confirmation-needed, and failed jobs separately from running transfers. Transfer settings and search limits are available in collapsible details.

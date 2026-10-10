@@ -37,19 +37,19 @@ export function SFTPCompareTabsDialog({ tabs, currentTabId, onCompare, onDismiss
     <form className="mt-4 space-y-4" onSubmit={(event) => { event.preventDefault(); compare(); }}>
       <label className="flex flex-col gap-1 text-sm">
         {t("sftp.compare.firstTab")}
-        <select ref={initialFocus} className={`${control} max-md:min-h-12`} value={firstTabId} disabled={availableTabs.length === 0} onChange={(event) => setFirstTabId(event.target.value)}>
+        <select ref={initialFocus} className={`${control} min-h-12 text-base`} value={firstTabId} disabled={availableTabs.length === 0} onChange={(event) => setFirstTabId(event.target.value)}>
           {availableTabs.map((tab) => <option key={tab.id} value={tab.id} disabled={tab.id === secondTabId}>{tabLabel(tab)}</option>)}
         </select>
       </label>
       <label className="flex flex-col gap-1 text-sm">
         {t("sftp.compare.secondTab")}
-        <select className={`${control} max-md:min-h-12`} value={secondTabId} disabled={availableTabs.length < 2} onChange={(event) => setSecondTabId(event.target.value)}>
+        <select className={`${control} min-h-12 text-base`} value={secondTabId} disabled={availableTabs.length < 2} onChange={(event) => setSecondTabId(event.target.value)}>
           {availableTabs.map((tab) => <option key={tab.id} value={tab.id} disabled={tab.id === firstTabId}>{tabLabel(tab)}</option>)}
         </select>
       </label>
       <div className="flex justify-end gap-2">
-        <Button className="max-md:min-h-12 max-md:min-w-12" onClick={onDismiss}>{t("sftp.cancel")}</Button>
-        <Button kind="primary" type="submit" className="max-md:min-h-12 max-md:min-w-12" disabled={!canCompare}>{t("sftp.compare.action")}</Button>
+        <Button className="min-h-12 min-w-12" onClick={onDismiss}>{t("sftp.cancel")}</Button>
+        <Button kind="primary" type="submit" className="min-h-12 min-w-12" disabled={!canCompare}>{t("sftp.compare.action")}</Button>
       </div>
     </form>
   </ModalShell>;
