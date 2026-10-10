@@ -46,11 +46,11 @@ func TestStopCancelsInstallationAndWaitsForItsCompletion(t *testing.T) {
 	installationContext := make(chan context.Context, 1)
 	allowInstallerExit := make(chan struct{})
 	var releaseOnce sync.Once
-	dependencies.Install = func(ctx context.Context, _ Plan) error {
+	dependencies.Install = func(ctx context.Context, _ Plan) (string, error) {
 		installationContext <- ctx
 		<-ctx.Done()
 		<-allowInstallerExit
-		return ctx.Err()
+		return "v1.1.0", ctx.Err()
 	}
 	dependencies.Restart = func(context.Context, Job) error {
 		t.Error("interrupted installation restarted the engine")
@@ -110,7 +110,7 @@ func TestStoppingBeforeResponseSentPersistsInterruptionAndRejectsLateResponses(t
 		t.Run(scenario.name, func(t *testing.T) {
 			dependencies := updateFixture(t)
 			var installs atomic.Int32
-			dependencies.Install = func(context.Context, Plan) error { installs.Add(1); return nil }
+			dependencies.Install = func(context.Context, Plan) (string, error) { installs.Add(1); return "v1.1.0", nil }
 			service := New(dependencies)
 			job := startUpdateFixture(t, service)
 			service.BeginStopping()
@@ -138,7 +138,10 @@ func TestParentCancellationRejectsReservationsAndResponseWorkers(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dependencies.Context = ctx
-	dependencies.Install = func(context.Context, Plan) error { t.Error("installer ran after cancellation"); return nil }
+	dependencies.Install = func(context.Context, Plan) (string, error) {
+		t.Error("installer ran after cancellation")
+		return "v1.1.0", nil
+	}
 	service := New(dependencies)
 	job := startUpdateFixture(t, service)
 	cancel()
@@ -158,10 +161,10 @@ func TestParentCancellationRejectsReservationsAndResponseWorkers(t *testing.T) {
 func TestConcurrentResponsesAndStopLeaveNoActiveJobOrInstaller(t *testing.T) {
 	dependencies := updateFixture(t)
 	var installs atomic.Int32
-	dependencies.Install = func(ctx context.Context, _ Plan) error {
+	dependencies.Install = func(ctx context.Context, _ Plan) (string, error) {
 		installs.Add(1)
 		<-ctx.Done()
-		return ctx.Err()
+		return "v1.1.0", ctx.Err()
 	}
 	service := New(dependencies)
 	job := startUpdateFixture(t, service)

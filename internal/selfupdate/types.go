@@ -21,7 +21,7 @@ const (
 	RestartTimeout = 2 * time.Minute
 )
 
-// Job phases are durable; only a new engine reporting Target confirms success.
+// Job phases are durable; only a new engine reporting the installed version confirms success.
 const (
 	JobAccepted        = "accepted"
 	JobInstalling      = "installing"
@@ -56,18 +56,27 @@ func (plan Plan) Evidence() string {
 }
 
 type Job struct {
-	ID        string    `json:"id"`
-	Target    string    `json:"target"`
-	State     string    `json:"state"`
-	Problem   string    `json:"problem"`
-	StartedAt time.Time `json:"startedAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	OwnerPID  int       `json:"ownerPid"`
-	Plan      Plan      `json:"plan"`
+	ID               string    `json:"id"`
+	Target           string    `json:"target"`
+	InstalledVersion string    `json:"installedVersion,omitempty"`
+	State            string    `json:"state"`
+	Problem          string    `json:"problem"`
+	StartedAt        time.Time `json:"startedAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+	OwnerPID         int       `json:"ownerPid"`
+	Plan             Plan      `json:"plan"`
 }
 
 func (job Job) Active() bool {
 	return job.State == JobAccepted || job.State == JobInstalling || job.State == JobRestarting
+}
+
+func (job Job) RestartVersion() string {
+	if job.InstalledVersion != "" {
+		return job.InstalledVersion
+	}
+	// Until installation completes, the reviewed target is the expected restart version.
+	return job.Target
 }
 
 type Failure string
@@ -89,8 +98,8 @@ type Dependencies struct {
 	Context   context.Context
 	Latest    func(context.Context) (releasecheck.Release, error)
 	Inspect   func(context.Context) (Installation, error)
-	// Install returns only after the installer and its child processes are stopped.
-	Install func(context.Context, Plan) error
+	// Install reports the installed version only after the installer and its child processes are stopped.
+	Install func(context.Context, Plan) (string, error)
 	// Restart launches an independent helper and returns without waiting for engine shutdown.
 	Restart func(context.Context, Job) error
 }

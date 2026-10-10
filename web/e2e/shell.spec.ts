@@ -77,11 +77,11 @@ test("keeps the engine version visible when the release check fails", async ({ p
   }
 });
 
-test("folds the Homebrew update guidance under the navigation version", async ({ page, installation }) => {
+test("folds update guidance for an unmanaged installation under the navigation version", async ({ page, installation }) => {
   await page.route("**/api/v1/update", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ current: "v1.0.0", latest: "v1.0.0", available: false, canUpdate: false, reason: "update_homebrew_unsupported" }),
+      body: JSON.stringify({ current: "v1.0.0", latest: "v1.0.0", available: false, canUpdate: false, reason: "update_unmanaged" }),
     });
   });
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
@@ -91,7 +91,7 @@ test("folds the Homebrew update guidance under the navigation version", async ({
 
   const navigation = page.getByRole("navigation", { name: "Primary" });
   const version = navigation.getByRole("button", { name: "Version v1.0.0" });
-  const guidance = navigation.getByText(/For Homebrew installations/);
+  const guidance = navigation.getByText(/not managed by Homebrew/);
   await expect(version).toHaveAttribute("aria-expanded", "false");
   await expect(guidance).toBeHidden();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {

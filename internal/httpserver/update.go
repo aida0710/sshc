@@ -132,7 +132,11 @@ func (h *UpdateHandlers) Start(c *echo.Context) error {
 }
 
 func updateJobResponse(job selfupdate.Job) api.UpdateJob {
-	return api.UpdateJob{Id: job.ID, Target: job.Target, State: api.UpdateJobState(job.State), Problem: job.Problem}
+	response := api.UpdateJob{Id: job.ID, Target: job.Target, State: api.UpdateJobState(job.State), Problem: job.Problem}
+	if job.InstalledVersion != "" {
+		response.InstalledVersion = &job.InstalledVersion
+	}
+	return response
 }
 
 func updateProblem(c *echo.Context, err error) error {

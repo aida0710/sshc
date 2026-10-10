@@ -2117,10 +2117,13 @@ type UpdateCredentialRequest struct {
 
 // UpdateJob defines model for UpdateJob.
 type UpdateJob struct {
-	Id      string         `json:"id"`
-	Problem string         `json:"problem"`
-	State   UpdateJobState `json:"state"`
-	Target  string         `json:"target"`
+	Id string `json:"id"`
+
+	// InstalledVersion Stable version reported by the installed executable.
+	InstalledVersion *string        `json:"installedVersion,omitempty"`
+	Problem          string         `json:"problem"`
+	State            UpdateJobState `json:"state"`
+	Target           string         `json:"target"`
 }
 
 // UpdateJobState defines model for UpdateJob.State.

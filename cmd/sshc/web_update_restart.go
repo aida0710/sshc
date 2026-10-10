@@ -47,7 +47,7 @@ func runWebUpdateRestart(paths userPaths, id string) int {
 	}
 	defer release()
 	job, err := store.Read()
-	if err != nil || job.ID != id || job.State != selfupdate.JobRestarting || job.Target != version {
+	if err != nil || job.ID != id || job.State != selfupdate.JobRestarting || job.RestartVersion() != version {
 		return exitFailure
 	}
 	dependencies := defaultUpdateDependencies()

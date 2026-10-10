@@ -22,22 +22,23 @@ import (
 )
 
 type webUpdateHarness struct {
-	engine        *echo.Echo
-	handlers      *UpdateHandlers
-	credentials   session.Credentials
-	updater       *selfupdate.Service
-	installation  selfupdate.Installation
-	dependencies  selfupdate.Dependencies
-	installed     atomic.Int32
-	restarted     atomic.Int32
-	installResult chan error
-	locked        bool
-	sessions      *session.Manager
+	engine           *echo.Echo
+	handlers         *UpdateHandlers
+	credentials      session.Credentials
+	updater          *selfupdate.Service
+	installation     selfupdate.Installation
+	dependencies     selfupdate.Dependencies
+	installed        atomic.Int32
+	installedVersion string
+	restarted        atomic.Int32
+	installResult    chan error
+	locked           bool
+	sessions         *session.Manager
 }
 
 func newWebUpdateHarness(t *testing.T) *webUpdateHarness {
 	t.Helper()
-	harness := &webUpdateHarness{engine: echo.New(), installation: selfupdate.Installation{Manager: "install.sh", Executable: "/fixture/sshc", Identity: "receipt-digest"}, installResult: make(chan error, 1)}
+	harness := &webUpdateHarness{installedVersion: "v1.1.0", engine: echo.New(), installation: selfupdate.Installation{Manager: "install.sh", Executable: "/fixture/sshc", Identity: "receipt-digest"}, installResult: make(chan error, 1)}
 	manager, bootstrap, err := session.NewManager(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -52,13 +53,13 @@ func newWebUpdateHarness(t *testing.T) *webUpdateHarness {
 			return releasecheck.Release{Version: "v1.1.0"}, nil
 		},
 		Inspect: func(context.Context) (selfupdate.Installation, error) { return harness.installation, nil },
-		Install: func(ctx context.Context, _ selfupdate.Plan) error {
+		Install: func(ctx context.Context, _ selfupdate.Plan) (string, error) {
 			harness.installed.Add(1)
 			select {
 			case err := <-harness.installResult:
-				return err
+				return harness.installedVersion, err
 			case <-ctx.Done():
-				return ctx.Err()
+				return "v1.1.0", ctx.Err()
 			}
 		},
 		Restart: func(context.Context, selfupdate.Job) error { harness.restarted.Add(1); return nil }}
@@ -132,33 +133,45 @@ func TestWebUpdateStartsOnceReportsFailureAndRejectsTokenReplay(t *testing.T) {
 }
 
 func TestWebUpdateResultSurvivesRestartAndIsReadableWithALockedVault(t *testing.T) {
-	harness := newWebUpdateHarness(t)
-	preview := harness.preview(t)
-	accepted := sendKeyRequest(t, harness.engine, harness.credentials, http.MethodPost, "/api/v1/update", []byte(`{"target":"v1.1.0"}`), preview.ActionToken)
-	if accepted.Code != http.StatusAccepted {
-		t.Fatal(accepted.Body.String())
-	}
-	harness.installResult <- nil
-	awaitWebUpdate(t, harness, "restarting")
-	for deadline := time.Now().Add(time.Second); harness.restarted.Load() == 0 && time.Now().Before(deadline); time.Sleep(time.Millisecond) {
-	}
-	if harness.restarted.Load() != 1 {
-		t.Fatal("restart was not requested")
-	}
-	harness.dependencies.Current, harness.dependencies.PID = "v1.1.0", 202
-	harness.updater = selfupdate.New(harness.dependencies)
-	harness.engine = echo.New()
-	manager, bootstrap, _ := session.NewManager(rand.Reader)
-	harness.credentials, _, _ = manager.BootstrapForSession(bootstrap, "")
-	harness.engine.Use((Security{ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: manager, Unlocked: func() bool { return false }}).Middleware)
-	registerUpdateRoutes(harness.engine, &UpdateHandlers{Current: "v1.1.0", Service: harness.updater, Actions: ActionHandlers{Sessions: manager}})
-	status := awaitWebUpdate(t, harness, "succeeded")
-	if status.Current != "v1.1.0" {
-		t.Fatalf("current = %q", status.Current)
-	}
-	denied := sendKeyRequest(t, harness.engine, harness.credentials, http.MethodPost, "/api/v1/update/preview", []byte(`{"target":"v1.2.0"}`), "")
-	if denied.Code != http.StatusConflict || problemCode(t, denied.Body.Bytes()) != "vault_locked" {
-		t.Fatal("locked vault permitted another update")
+	for _, scenario := range []struct{ manager, installedVersion string }{
+		{manager: "install.sh", installedVersion: "v1.1.0"},
+		{manager: "homebrew", installedVersion: "v1.2.0"},
+	} {
+		t.Run(scenario.manager, func(t *testing.T) {
+			harness := newWebUpdateHarness(t)
+			harness.installation.Manager = scenario.manager
+			harness.installedVersion = scenario.installedVersion
+			preview := harness.preview(t)
+			accepted := sendKeyRequest(t, harness.engine, harness.credentials, http.MethodPost, "/api/v1/update", []byte(`{"target":"v1.1.0"}`), preview.ActionToken)
+			if accepted.Code != http.StatusAccepted {
+				t.Fatal(accepted.Body.String())
+			}
+			harness.installResult <- nil
+			awaitWebUpdate(t, harness, "restarting")
+			for deadline := time.Now().Add(time.Second); harness.restarted.Load() == 0 && time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+			}
+			if harness.restarted.Load() != 1 {
+				t.Fatal("restart was not requested")
+			}
+			harness.dependencies.Current, harness.dependencies.PID = scenario.installedVersion, 202
+			harness.updater = selfupdate.New(harness.dependencies)
+			harness.engine = echo.New()
+			manager, bootstrap, _ := session.NewManager(rand.Reader)
+			harness.credentials, _, _ = manager.BootstrapForSession(bootstrap, "")
+			harness.engine.Use((Security{ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: manager, Unlocked: func() bool { return false }}).Middleware)
+			registerUpdateRoutes(harness.engine, &UpdateHandlers{Current: scenario.installedVersion, Service: harness.updater, Actions: ActionHandlers{Sessions: manager}})
+			status := awaitWebUpdate(t, harness, "succeeded")
+			if status.Current != scenario.installedVersion {
+				t.Fatalf("current = %q", status.Current)
+			}
+			if status.Job.Target != "v1.1.0" || status.Job.InstalledVersion == nil || *status.Job.InstalledVersion != scenario.installedVersion {
+				t.Fatalf("installed version = %+v", status.Job)
+			}
+			denied := sendKeyRequest(t, harness.engine, harness.credentials, http.MethodPost, "/api/v1/update/preview", []byte(`{"target":"v1.2.0"}`), "")
+			if denied.Code != http.StatusConflict || problemCode(t, denied.Body.Bytes()) != "vault_locked" {
+				t.Fatal("locked vault permitted another update")
+			}
+		})
 	}
 }
 
