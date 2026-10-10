@@ -120,7 +120,7 @@ export function SFTPEntryList({
             <button
               type="button"
               {...parentButtonProps}
-              className="flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left text-base hover:bg-hover disabled:text-ink-faint"
+              className="flex min-h-11 w-full items-center gap-2.5 px-3 py-1.5 text-left text-base hover:bg-hover disabled:text-ink-faint"
             >
               <ParentRowLabel />
             </button>
@@ -135,22 +135,22 @@ export function SFTPEntryList({
             draggable={rowDraggable(entry)}
             onDragStart={(event) => onDragStart?.(event, entry)}
           >
-            <label className="flex min-h-12 w-12 shrink-0 self-stretch items-center justify-center">
+            <label className="flex min-h-11 w-11 shrink-0 self-stretch items-center justify-center">
               <input type="checkbox" {...entryCheckboxProps(entry)} className="size-5 accent-accent" />
             </label>
             <button
               type="button"
               {...entryButtonProps(entry)}
-              className="flex min-h-16 min-w-0 grow touch-pan-y select-none items-center gap-3 px-3 py-2 text-left hover:bg-hover active:bg-select-fill disabled:text-ink-faint"
+              className="flex min-h-14 min-w-0 flex-1 touch-pan-y select-none items-center gap-2.5 px-2.5 py-1.5 text-left hover:bg-hover active:bg-select-fill disabled:text-ink-faint"
             >
               <Icon name={entryIcon(entry)} className="size-5 shrink-0 text-ink-muted" />
-              <span className="min-w-0 grow">
-                <span className="block truncate font-mono text-base font-medium leading-5 text-ink"><EntryName entry={entry} /></span>
-                <span className="mt-1 flex min-w-0 gap-2 text-xs leading-4 text-ink-muted">
-                  <span className="truncate font-mono">{entryContext === undefined ? entry.mode : entryContext(entry)}</span>
-                  {!showOwnership || entry.uid === undefined ? null : <span>{t("sftp.ownerIds", { uid: entry.uid, gid: entry.gid ?? "—" })}</span>}
-                  <span>{entrySize(entry)}</span>
-                  <time className="truncate" dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleString()}</time>
+              <span className="min-w-0 flex-1">
+                <span title={entry.type === "symlink" ? `${entry.name} → ${entry.linkTarget ?? ""}` : entry.name} className="block truncate font-mono text-base font-medium leading-5 text-ink"><EntryName entry={entry} /></span>
+                <span className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs leading-4 text-ink-muted">
+                  <span title={entryContext === undefined ? entry.mode : entryContext(entry)} className="max-w-full truncate font-mono">{entryContext === undefined ? entry.mode : entryContext(entry)}</span>
+                  {!showOwnership || entry.uid === undefined ? null : <span title={t("sftp.ownerIds", { uid: entry.uid, gid: entry.gid ?? "—" })} aria-label={t("sftp.ownerIds", { uid: entry.uid, gid: entry.gid ?? "—" })} className="max-w-full truncate font-mono">{entry.uid}:{entry.gid ?? "—"}</span>}
+                  <span className="whitespace-nowrap">{entrySize(entry)}</span>
+                  <time title={new Date(entry.modifiedAt).toLocaleString()} className="whitespace-nowrap" dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleDateString()}</time>
                 </span>
               </span>
             </button>

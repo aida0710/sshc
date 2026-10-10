@@ -14,12 +14,16 @@ export function tabPanelElementId(tabId: string): string {
   return `sftp-tabpanel-${tabId}`;
 }
 
-function tabLabel(tab: SFTPTab, unnamed: string, localName: string): string {
-  if (tab.alias === "") return unnamed;
-  const name = tab.alias === localHostAlias ? localName : tab.alias;
-  if (tab.path === "" || tab.path === "/") return name;
-  const directory = tab.path.split("/").filter(Boolean).pop() ?? tab.path;
-  return `${name}:${directory}`;
+function tabLabels(tab: SFTPTab, unnamed: string, localName: string) {
+  if (tab.alias === "") return { name: unnamed, folder: unnamed, host: "", title: "" };
+  const host = tab.alias === localHostAlias ? localName : tab.alias;
+  const folder = tab.path === "" ? host : tab.path.split("/").filter(Boolean).pop() ?? "/";
+  return {
+    name: tab.path === "" || tab.path === "/" ? host : `${host}:${folder}`,
+    folder,
+    host: tab.path === "" ? "" : host,
+    title: tab.path === "" ? host : `${host}:${tab.path}`,
+  };
 }
 
 // Tabs share one width so changing hosts and directories does not reflow the
@@ -36,6 +40,8 @@ export function SFTPTabStrip({
   onSelect,
   onClose,
   onAdd,
+  onChangeHost,
+  canChangeHost = () => true,
   onDragStart,
   onDragEnd,
   onMove,
@@ -52,6 +58,8 @@ export function SFTPTabStrip({
   onSelect: (tabId: string) => void;
   onClose: (tab: SFTPTab) => void;
   onAdd: () => void;
+  onChangeHost?: (tab: SFTPTab) => void;
+  canChangeHost?: (tab: SFTPTab) => boolean;
   onDragStart: (tabId: string) => void;
   onDragEnd: () => void;
   onMove: (tabId: string, side: PaneSide) => void;
@@ -61,9 +69,8 @@ export function SFTPTabStrip({
 
   useEffect(() => {
     const selected = scroller.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
-    // Keep the selected tab's close button visible in the phone's shared strip.
-    const scrollTarget = compact ? selected?.parentElement : selected;
-    scrollTarget?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    // The destination and close controls belong to the selected tab too.
+    selected?.parentElement?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [compact, pane.activeId, pane.tabs.length]);
 
   function beginDrag(event: DragEvent<HTMLElement>, tab: SFTPTab) {
@@ -82,15 +89,15 @@ export function SFTPTabStrip({
   }
 
   return (
-    <div data-sftp-pane-tabs={pane.id} className={`flex min-w-0 shrink-0 items-stretch gap-1 rounded-md border border-line/60 bg-toolbar p-1 ${compact ? "min-h-14" : "h-11 md:h-9"}`}>
+    <div data-sftp-pane-tabs={pane.id} className="flex min-w-0 shrink-0 items-stretch gap-1 border-b border-line/70 bg-toolbar px-1 py-0.5">
       <div
         ref={scroller}
         role="tablist"
         aria-label={label}
-        className="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto overscroll-x-contain"
+        className="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {pane.tabs.map((tab, index) => {
-          const name = tabLabel(tab, t("sftp.newTab"), t("sftp.local.connection"));
+          const labels = tabLabels(tab, t("sftp.newTab"), t("sftp.local.connection"));
           const selected = tab.id === pane.activeId;
           const draggable = movable(tab);
           return (
@@ -99,7 +106,7 @@ export function SFTPTabStrip({
               draggable={draggable}
               onDragStart={draggable ? (event) => beginDrag(event, tab) : undefined}
               onDragEnd={draggable ? onDragEnd : undefined}
-              className={`group relative flex w-44 shrink items-stretch rounded ${compact ? "min-w-40" : "min-w-24"} ${selected ? "bg-card shadow-sm" : "hover:bg-card/50"} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+              className={`group relative flex w-52 shrink-0 items-stretch rounded ${selected ? "bg-card shadow-sm" : "hover:bg-card/50"} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
             >
               <button
                 type="button"
@@ -109,19 +116,35 @@ export function SFTPTabStrip({
                 aria-controls={tabPanelElementId(tab.id)}
                 aria-keyshortcuts={draggable ? "Shift+ArrowLeft Shift+ArrowRight" : undefined}
                 tabIndex={selected ? 0 : -1}
-                title={name}
+                aria-label={labels.name}
+                title={labels.title || labels.name}
                 onClick={() => onSelect(tab.id)}
                 onKeyDown={(event) => keyDown(event, tab, index)}
-                className={`min-w-0 flex-1 truncate rounded px-3 text-left text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${compact ? "min-h-12" : ""} ${selected ? "font-medium text-ink" : "text-ink-muted"}`}
+                className={`flex min-w-0 flex-1 flex-col justify-center rounded px-2 py-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${compact ? "min-h-11" : "min-h-10"} ${selected ? "text-ink" : "text-ink-muted"}`}
               >
-                {name}
+                <span className="block w-full truncate text-sm font-medium leading-4">{labels.folder}</span>
+                {labels.host === "" ? null : <span className="mt-0.5 block w-full truncate text-[11px] leading-3.5 text-ink-muted">{labels.host}</span>}
               </button>
+              {selected && onChangeHost !== undefined ? (
+                <button
+                  type="button"
+                  aria-label={t("sftp.host")}
+                  aria-haspopup="dialog"
+                  data-value={tab.alias}
+                  title={t("sftp.chooseHostHeading")}
+                  disabled={!canChangeHost(tab)}
+                  onClick={() => onChangeHost(tab)}
+                  className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint ${compact ? "min-h-11 w-11" : "min-h-10 w-8"}`}
+                >
+                  <Icon name="chevronRight" className="size-3.5 rotate-90" />
+                </button>
+              ) : null}
               {closable ? (
                 <button
                   type="button"
-                  aria-label={t("sftp.closeTab", { name })}
+                  aria-label={t("sftp.closeTab", { name: labels.name })}
                   onClick={() => onClose(tab)}
-                  className={`flex shrink-0 items-center justify-center rounded text-ink-faint hover:text-danger ${compact ? "min-h-12 w-12" : "w-9 md:w-7"}`}
+                  className={`flex shrink-0 items-center justify-center rounded text-ink-faint hover:text-danger ${compact ? "min-h-11 w-11" : "min-h-10 w-8"}`}
                 >
                   <Icon name="close" className={compact ? "size-4" : "size-3"} />
                 </button>
@@ -135,7 +158,7 @@ export function SFTPTabStrip({
         aria-label={t("sftp.newTab")}
         disabled={addDisabled}
         onClick={onAdd}
-        className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint ${compact ? "min-h-12 w-12" : "w-9 md:w-7"}`}
+        className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint ${compact ? "min-h-11 w-11" : "min-h-10 w-8"}`}
       >
         <Icon name="plus" className={compact ? "size-5" : "size-4"} />
       </button>
