@@ -43,6 +43,7 @@ sshc vault lock
 sshc vault change-password
 sshc service install
 sshc service status
+sshc service restart
 sshc service disable
 sshc update
 ```
@@ -51,7 +52,9 @@ sshc update
 
 Vaultのマスターパスワードなどを対話入力すると、入力した値の代わりに`*`を表示します。入力値がTerminalのスクロールバックへ平文で残ることはありません。
 
-`sshc service`はLinuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェントを管理します。`install`はHomebrewまたは`install.sh`で導入された安定パスを登録し、`disable`はsshcが作成した定義だけを削除します。`install`、`disable`、`update`は変更内容を表示してから確認を求めます。自動化で確認を省略する場合だけ`-y`または`--yes`を付けてください。
+`sshc service`はLinuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェントを管理します。`install`はHomebrewまたは`install.sh`で導入された安定パスを登録し、`restart`はこの導入と定義が一致する稼働中のサービスを再起動します。`disable`はsshcが作成した定義だけを削除します。`install`、`restart`、`disable`、`update`は変更内容を表示してから確認を求めます。自動化で確認を省略する場合だけ`-y`または`--yes`を付けてください。
+
+`sshc service restart`は、停止中・未登録・管理外・古い定義・別の実行ファイルを指すサービスを拒否し、終了コード1で終わります。接続中のセッションと転送は再起動で終了します。再起動後のPID、sshcエンジンの起動情報、status APIを照合してから成功と表示します。詳しい対処は[インストール](/guide/install)を参照してください。
 
 `sshc vault change-password`は、現在のパスワードを入力してEnterを押すと、検証後に新しいパスワードの入力を求めます。パスワードなしのVaultでは、現在のパスワードの入力を省きます。新しいパスワードと確認を両方空欄にすると、パスワード保護を外せます。パスワードなしのVaultでは、`sshc vault lock`を実行してもロックされません。ロックを使う場合はマスターパスワードを設定してください。CLI更新後はsshcエンジンも再起動して変更を反映してください。
 
@@ -233,9 +236,16 @@ sshc terminal send <session-id> --text 'uptime' --json
 sshc terminal send <session-id> --text 'partial input' --no-enter
 sshc terminal wait <session-id> --for connected --timeout 30s --json
 sshc terminal rename <session-id> deploy
+sshc terminal rename <session-id> --auto
 sshc terminal close <session-id>
 ```
 
 `create shell`はsshcエンジン側のローカルシェルを開きます。`send`は既定で末尾にEnter（CR）を付け、`--no-enter`で付けません。
 
 `read`では、保持しているスクロールバックと次回指定する読み取り位置を取得できます。指定した位置の出力がすでに破棄されている場合は、現在残っている先頭から返し、そのことを警告に含めます。`send`は、確認後にセッション内のプロセスが入れ替わっていた場合には何も送信しません。
+
+`rename`で付けた名前は固定され、プログラムが設定するタイトルでは変わりません。
+
+- `--auto`を付けると固定を外し、画面の［自動の名前に戻す］と同じく、プログラムが設定したタイトル、無ければ接続エイリアスまたはシェル名を表示します。名前と`--auto`は同時に指定できません。
+- `-`で始まる名前は、`sshc terminal rename <session-id> --json -- -dev`のように`--`の後ろに書いてください。`--`より後ろはオプションとして読みません。
+- `--json`の結果では、`presentation.titlePinned`で名前が固定されているかを確認できます。

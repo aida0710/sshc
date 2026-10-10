@@ -18,6 +18,8 @@ export const sortColumnLabelKeys: Record<SFTPSort, MessageKey> = {
   type: "sftp.type",
   size: "sftp.size",
   modified: "sftp.modified",
+  uid: "sftp.uid",
+  gid: "sftp.gid",
 };
 
 export const comparisonStatusLabelKeys: Record<DirectoryComparison["entries"][number]["status"], MessageKey> = {
@@ -26,4 +28,5 @@ export const comparisonStatusLabelKeys: Record<DirectoryComparison["entries"][nu
   left_only: "sftp.compare.left_only",
   right_only: "sftp.compare.right_only",
   type_mismatch: "sftp.compare.type_mismatch",
+  unverified: "sftp.compare.unverified",
 };

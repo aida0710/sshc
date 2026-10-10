@@ -11,8 +11,11 @@ import (
 	"sshc/internal/storage"
 )
 
+// pngSignatureは、PNGの先頭8バイトである。
+const pngSignature = "\x89PNG\r\n\x1a\n"
+
 func png(payload string) []byte {
-	return append([]byte("\x89PNG\r\n\x1a\n"), []byte(payload)...)
+	return append([]byte(pngSignature), []byte(payload)...)
 }
 
 func TestTheServerNamesTheFileItWrites(t *testing.T) {
@@ -26,7 +29,7 @@ func TestTheServerNamesTheFileItWrites(t *testing.T) {
 		{"..", ""},
 		{"", ""},
 	} {
-		background, err := service.AddBackground(probe.suggested, png(probe.suggested+"payload"))
+		background, err := service.AddBackground(probe.suggested, bytes.NewReader(png(probe.suggested+"payload")))
 		if err != nil {
 			t.Fatalf("%q: %v", probe.suggested, err)
 		}
@@ -46,13 +49,13 @@ func TestTheServerNamesTheFileItWrites(t *testing.T) {
 func TestOnlyBytesThatLookLikeAnImageAreStored(t *testing.T) {
 	service, _ := newTerminalService(t)
 
-	if _, err := service.AddBackground("payload.png", []byte("<html><script>alert(1)</script>")); !errors.Is(err, ErrNotAnImage) {
+	if _, err := service.AddBackground("payload.png", strings.NewReader("<html><script>alert(1)</script>")); !errors.Is(err, ErrNotAnImage) {
 		t.Fatalf("err = %v, want it refused as not an image", err)
 	}
-	if _, err := service.AddBackground("art.svg", []byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`)); !errors.Is(err, ErrNotAnImage) {
+	if _, err := service.AddBackground("art.svg", strings.NewReader(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`)); !errors.Is(err, ErrNotAnImage) {
 		t.Fatalf("err = %v, want svg refused", err)
 	}
-	background, err := service.AddBackground("photo.txt", png("real"))
+	background, err := service.AddBackground("photo.txt", bytes.NewReader(png("real")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +67,7 @@ func TestOnlyBytesThatLookLikeAnImageAreStored(t *testing.T) {
 func TestBackgroundsRoundTripAndCanBeRemoved(t *testing.T) {
 	service, _ := newTerminalService(t)
 
-	added, err := service.AddBackground("office", png("bytes"))
+	added, err := service.AddBackground("office", bytes.NewReader(png("bytes")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +89,7 @@ func TestBackgroundsRoundTripAndCanBeRemoved(t *testing.T) {
 
 func TestReadingRefusesNamesThatWereNeverStored(t *testing.T) {
 	service, _ := newTerminalService(t)
-	if _, err := service.AddBackground("office", png("bytes")); err != nil {
+	if _, err := service.AddBackground("office", bytes.NewReader(png("bytes"))); err != nil {
 		t.Fatal(err)
 	}
 
@@ -100,11 +103,11 @@ func TestReadingRefusesNamesThatWereNeverStored(t *testing.T) {
 func TestTwoImagesWithTheSameNameBothSurvive(t *testing.T) {
 	service, _ := newTerminalService(t)
 
-	first, err := service.AddBackground("wall", png("one"))
+	first, err := service.AddBackground("wall", bytes.NewReader(png("one")))
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := service.AddBackground("wall", png("two"))
+	second, err := service.AddBackground("wall", bytes.NewReader(png("two")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +121,7 @@ func TestTwoImagesWithTheSameNameBothSurvive(t *testing.T) {
 
 func TestRenamingABackgroundMovesSavedReferencesInTheSameTransaction(t *testing.T) {
 	service, workspace := newTerminalService(t)
-	added, err := service.AddBackground("office", png("one"))
+	added, err := service.AddBackground("office", bytes.NewReader(png("one")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,11 +173,11 @@ func TestRenamingABackgroundMovesSavedReferencesInTheSameTransaction(t *testing.
 
 func TestRenamingABackgroundWillNotOverwriteAnotherImage(t *testing.T) {
 	service, _ := newTerminalService(t)
-	first, err := service.AddBackground("first", png("one"))
+	first, err := service.AddBackground("first", bytes.NewReader(png("one")))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.AddBackground("second", png("two")); err != nil {
+	if _, err := service.AddBackground("second", bytes.NewReader(png("two"))); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.RenameBackground(first.Name, "second"); !errors.Is(err, ErrBackgroundAlreadyExists) {
@@ -192,7 +195,7 @@ func TestThereIsARoofOverWhatTheBackgroundsMayWeigh(t *testing.T) {
 	chunk := png(strings.Repeat("x", chunkSize-64))
 	var lastErr error
 	for round := 0; round < DefaultBackgroundCapacityMiB+2; round++ {
-		if _, lastErr = service.AddBackground("wall", chunk); lastErr != nil {
+		if _, lastErr = service.AddBackground("wall", bytes.NewReader(chunk)); lastErr != nil {
 			break
 		}
 	}
@@ -203,7 +206,7 @@ func TestThereIsARoofOverWhatTheBackgroundsMayWeigh(t *testing.T) {
 
 func TestBackgroundCapacityCanBeChangedWithoutRewritingImages(t *testing.T) {
 	service, workspace := newTerminalService(t)
-	added, err := service.AddBackground("original", png("exact bytes"))
+	added, err := service.AddBackground("original", bytes.NewReader(png("exact bytes")))
 	if err != nil {
 		t.Fatal(err)
 	}

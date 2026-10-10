@@ -55,17 +55,41 @@ func TestTransferErrorsUseFileTransferProblemCodes(t *testing.T) {
 		{err: fmt.Errorf("%w: %w", sshcSFTP.ErrSpoolFull, &os.PathError{Op: "write", Path: "download.part", Err: os.ErrInvalid}), status: http.StatusInsufficientStorage, code: "sftp_spool_full"},
 	}
 	for _, test := range tests {
-		engine := echo.New()
-		engine.GET("/transfer", func(c *echo.Context) error {
-			return sftpProblem(c, test.err)
-		})
-		response := httptest.NewRecorder()
-		engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/transfer", nil))
+		response := serveSFTPProblem(test.err)
 		if response.Code != test.status ||
 			!bytes.Contains(response.Body.Bytes(), []byte(`"code":"`+test.code+`"`)) {
 			t.Errorf("%v = %d: %s, want %d %s", test.err, response.Code, response.Body.String(), test.status, test.code)
 		}
 	}
+}
+
+func TestTheEnginesOwnRefusalIsToldApartFromTheServers(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		code string
+	}{
+		{name: "server", err: &os.PathError{Op: "open", Path: "/srv/report.txt", Err: os.ErrPermission}, code: "sftp_permission_denied"},
+		{name: "local file permissions", err: fmt.Errorf("%w: %w", sshcSFTP.ErrLocalPermissionDenied, os.ErrPermission), code: "sftp_local_permission_denied"},
+		{name: "macOS privacy protection", err: fmt.Errorf("%w: %w", sshcSFTP.ErrLocalPrivacyProtection, os.ErrPermission), code: "sftp_local_privacy_protection"},
+	}
+	for _, test := range tests {
+		response := serveSFTPProblem(test.err)
+		if response.Code != http.StatusForbidden || !bytes.Contains(response.Body.Bytes(), []byte(`"code":"`+test.code+`"`)) {
+			t.Errorf("%s = %d: %s, want 403 %s", test.name, response.Code, response.Body.String(), test.code)
+		}
+	}
+}
+
+// serveSFTPProblem answers one request with the problem sftpProblem makes of err.
+func serveSFTPProblem(err error) *httptest.ResponseRecorder {
+	engine := echo.New()
+	engine.GET("/sftp", func(c *echo.Context) error {
+		return sftpProblem(c, err)
+	})
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/sftp", nil))
+	return response
 }
 
 func TestAnUnusableDownloadSpoolIsLoggedWhenTheTransferManagerStarts(t *testing.T) {
@@ -139,7 +163,7 @@ func putTransferSettings(t *testing.T, harness *testHarness, body string) (*sshc
 func TestSavedTransferSettingsAreAppliedAndKeptForTheNextStart(t *testing.T) {
 	harness := newConfigHarness(t)
 	manager, response := putTransferSettings(t, harness,
-		`{"maxConcurrent":5,"clearCompletedAfterSeconds":600,"processingStopped":true,"largeFileThresholdBytes":104857600,"largeFileParallelism":2,"largeFileChunkBytes":33554432}`,
+		`{"maxConcurrent":5,"clearCompletedAfterSeconds":600,"processingStopped":true,"largeFileThresholdBytes":104857600,"largeFileParallelism":2,"largeFileChunkBytes":33554432,"speedLimitBytesPerSecond":2048,"autoReconnect":true,"maxReconnectAttempts":3}`,
 	)
 	if response.Code != http.StatusOK {
 		t.Fatalf("save = %d: %s", response.Code, response.Body.String())
@@ -147,13 +171,23 @@ func TestSavedTransferSettingsAreAppliedAndKeptForTheNextStart(t *testing.T) {
 	want := application.FileTransferSettings{
 		MaxConcurrent: 5, ClearCompletedAfterSeconds: 600, ProcessingStopped: true,
 		LargeFileThresholdBytes: 104857600, LargeFileParallelism: 2, LargeFileChunkBytes: 33554432,
+		SpeedLimitBytesPerSecond: 2048, AutoReconnect: true, MaxReconnectAttempts: 3,
 	}
 	if stored := harness.service.FileTransferSettings(); stored != want {
 		t.Fatalf("metadata.json holds %+v, want %+v", stored, want)
 	}
-	if manager.MaxConcurrent() != 5 || manager.ClearCompletedAfter() != 10*time.Minute || !manager.ProcessingStopped() {
+	if manager.MaxConcurrent() != 5 || manager.ClearCompletedAfter() != 10*time.Minute || !manager.ProcessingStopped() ||
+		manager.SpeedLimitBytesPerSecond() != 2048 || !manager.AutoReconnect() || manager.MaxReconnectAttempts() != 3 {
 		t.Fatalf("the engine runs %d concurrent, clears after %v, stopped %v",
 			manager.MaxConcurrent(), manager.ClearCompletedAfter(), manager.ProcessingStopped())
+	}
+	restarted, err := newTransferManager(Options{Config: harness.service, SFTPDownloadSpoolRoot: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restarted.Close()
+	if restarted.SpeedLimitBytesPerSecond() != 2048 || !restarted.AutoReconnect() || restarted.MaxReconnectAttempts() != 3 {
+		t.Fatal("restarting did not restore the saved speed and recovery settings")
 	}
 }
 

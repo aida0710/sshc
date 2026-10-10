@@ -1,3 +1,4 @@
+import { retryableTransferFailure, TransferPublicationUncertain } from "./transferRecovery";
 import type { BrowserSave } from "./api";
 import { downloadCheckpointInterval } from "./downloadCheckpointInterval";
 import { DownloadSinkStore, type DownloadSink } from "./downloadSinks";
@@ -121,7 +122,8 @@ export class DownloadPlane {
         await this.api.checkpointDownload(id, sink.position, job.downloadRevision);
         ledger.replace(id, { transferredBytes: sink.position });
         job = ledger.find(id)!;
-      } catch {
+      } catch (error) {
+        if ((ledger.find(id)?.reconnectAttempt ?? 0) > 0 || retryableTransferFailure(error)) throw error;
         await sink.writer.truncate(0);
         await sink.writer.seek(0);
         sink.position = 0;
@@ -140,10 +142,17 @@ export class DownloadPlane {
       this.sinks.release(id);
     }
     const parts = sink !== null ? [await sink.handle.getFile()] : chunks.map((chunk) => new Uint8Array(chunk));
-    const save = await this.api.saveDownload(job.remotePath, job.kind === "folder", parts);
+    let save;
+    try { save = await this.api.saveDownload(job.remotePath, job.kind === "folder", parts); }
+    catch (error) {
+      if (retryableTransferFailure(error)) throw new TransferPublicationUncertain();
+      throw error;
+    }
     if (save === null) await this.sinks.discard(id);
     else this.browserSaves.set(id, { save, handedAt: this.now() });
-    const completed = await this.api.updateTransfer(id, "complete");
+    let completed;
+    try { completed = await this.api.updateTransfer(id, "complete"); }
+    catch { await this.context.reconcile().catch(() => undefined); throw new TransferPublicationUncertain(); }
     this.chunks.delete(id);
     ledger.replaceServer(completed);
     ledger.notify(completed);
@@ -155,9 +164,8 @@ export class DownloadPlane {
   }
 
   // Pulls the rest of the file from the engine's current offset and returns
-  // how much the in-memory buffer holds afterwards. A file download gets two
-  // more tries after a dropped connection; a folder archive cannot be
-  // resumed and fails at once.
+  // how much the in-memory buffer holds afterwards. The manager owns the
+  // bounded reconnect policy; a folder archive restarts from byte zero.
   //
   // Received bytes are checkpointed in batches that grow with the committed
   // position (downloadCheckpointInterval). A checkpoint commits the part file
@@ -169,7 +177,6 @@ export class DownloadPlane {
   private async stream(id: string, sink: DownloadSink | null, chunks: Uint8Array[], buffered: number): Promise<number> {
     const { ledger } = this.context;
     let bufferedBytes = buffered;
-    let failures = 0;
     let responseRevision = ledger.find(id)?.downloadRevision ?? "";
     let position = sink === null ? bufferedBytes : sink.position;
     let uncheckpointedBytes = 0;
@@ -201,6 +208,7 @@ export class DownloadPlane {
             ledger.replace(id, { downloadRevision: revision });
           },
           onReset: async (total) => {
+            if ((ledger.find(id)?.reconnectAttempt ?? 0) > 0) throw new Error("sftp_conflict");
             chunks.length = 0;
             bufferedBytes = 0;
             position = 0;
@@ -243,11 +251,11 @@ export class DownloadPlane {
       } catch (error) {
         const current = ledger.find(id);
         if (current === undefined || current.status !== "running" || controller.signal.aborted) throw error;
-        if (current.kind === "folder" || failures >= 2) throw error;
+        if (!retryableTransferFailure(error)) throw error;
         // The retry asks the engine to continue from the bytes held here, so
         // the engine must have been told about them first.
         if (uncheckpointedBytes > 0) await checkpoint(knownTotal);
-        failures += 1;
+        throw error;
       }
     }
   }

@@ -44,6 +44,9 @@ var startsAProcess = []string{
 // 一覧を持つ形にしてあるのは、増えたときに気づくためである。「OpenSSH が
 // 無いこと」を検査すると、OpenSSH でない何かが増えても緑のままになる。
 var allowedToStartPrograms = []string{
+	// ブラウザデモのVM内で、同梱したsshc openを固定argvで実行する。
+	// 通常のengineから一度だけのbootstrapを取得し、製品の認証を通してUIを開く。
+	"demo/guestbridge/vault_linux.go",
 	// アクセス URLをブラウザへ渡す。出力を取る実行ではない。起動したら手を離すので
 	// インターフェース（出力を集めて返す道）を通す必要が無く、渡すのは自分で組み立てた
 	// loopback の URL ひとつだけである。開けなくても失敗ではない。URL は
@@ -56,6 +59,9 @@ var allowedToStartPrograms = []string{
 	// tagのscriptへ委ねる。どちらにも該当しない実行ファイルからは起動しない。serviceは
 	// Homebrewへ固定argvでformulaの場所を尋ねるだけである。
 	"cmd/sshc/installation_commands.go",
+	// Web更新の再起動helperは、照合済みのsshcへ固定argvだけを渡す。
+	// engineのHTTP停止に巻き込まれず、管理サービスまたは確認したengineだけを再起動する。
+	"cmd/sshc/web_update_restart.go",
 	// service command（Linux は systemctl、macOS は launchctl）はここの runner だけから
 	// 起動する。tool は既知のpathまたはPATHから実行可能な絶対pathへ一度解決し、
 	// 固定argvで呼ぶ。利用者の入力をprogramや引数へ渡さず、sshc管理marker付きの

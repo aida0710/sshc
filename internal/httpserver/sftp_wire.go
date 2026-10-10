@@ -19,10 +19,24 @@ type SFTPListing struct {
 }
 
 type sftpSearchResponse struct {
-	Path      string          `json:"path"`
-	Query     string          `json:"query"`
-	Truncated bool            `json:"truncated"`
-	Entries   []api.SFTPEntry `json:"entries"`
+	Path      string                        `json:"path"`
+	Query     string                        `json:"query"`
+	Truncated bool                          `json:"truncated"`
+	Entries   []api.SFTPEntry               `json:"entries"`
+	Matches   *[]sftpContentMatchResponse   `json:"matches,omitempty"`
+	Omissions *[]sftpSearchOmissionResponse `json:"omissions,omitempty"`
+	BytesRead *int64                        `json:"bytesRead,omitempty"`
+}
+
+type sftpContentMatchResponse struct {
+	Entry   api.SFTPEntry `json:"entry"`
+	Line    int           `json:"line"`
+	Snippet string        `json:"snippet"`
+}
+
+type sftpSearchOmissionResponse struct {
+	Reason string `json:"reason"`
+	Count  int    `json:"count"`
 }
 
 type sftpTextFileResponse struct {
@@ -66,6 +80,11 @@ func describeSFTPEntry(entry sshcSFTP.Entry) api.SFTPEntry {
 		Name: entry.Name, Path: entry.Path, Type: api.SFTPEntryType(entry.Type), Size: entry.Size,
 		Mode: entry.Mode.String(), ModifiedAt: entry.ModifiedAt.UTC(), Revision: entry.Revision,
 	}
+	if entry.Ownership != nil {
+		uid, gid := int64(entry.Ownership.UID), int64(entry.Ownership.GID)
+		described.Uid = &uid
+		described.Gid = &gid
+	}
 	if entry.LinkTarget != "" {
 		described.LinkTarget = &entry.LinkTarget
 	}
@@ -97,6 +116,8 @@ type SFTPTransferJob struct {
 	Status            sshcSFTP.TransferJobStatus       `json:"status"`
 	AllowedActions    []sshcSFTP.TransferControlAction `json:"allowedActions"`
 	Attempt           int                              `json:"attempt"`
+	ReconnectAttempt  int                              `json:"reconnectAttempt"`
+	ReconnectAt       string                           `json:"reconnectAt"`
 	Problem           string                           `json:"problem"`
 	LastModified      int64                            `json:"lastModified"`
 	ExpectedRevision  string                           `json:"expectedRevision"`
@@ -130,6 +151,7 @@ func describeTransferJob(job sshcSFTP.TransferJob) SFTPTransferJob {
 		TransferredBytes: job.TransferredBytes, BytesPerSecond: job.BytesPerSecond,
 		RemainingSeconds: job.RemainingSeconds, Status: job.Status,
 		AllowedActions: sshcSFTP.AllowedTransferActions(job), Attempt: job.Attempt,
+		ReconnectAttempt: job.ReconnectAttempt, ReconnectAt: describeReconnectAt(job.ReconnectAt),
 		Problem: job.Problem, LastModified: job.LastModified,
 		ExpectedRevision: job.ExpectedRevision, SourceFingerprint: job.SourceFingerprint,
 		Overwrite: job.Overwrite, DownloadRevision: job.DownloadRevision,
@@ -140,10 +162,13 @@ func describeTransferJob(job sshcSFTP.TransferJob) SFTPTransferJob {
 
 // SFTPTransferJobList は、転送キューの設定と job の一覧である。
 type SFTPTransferJobList struct {
-	MaxConcurrent           int   `json:"maxConcurrent"`
-	LargeFileThresholdBytes int64 `json:"largeFileThresholdBytes"`
-	LargeFileParallelism    int   `json:"largeFileParallelism"`
-	LargeFileChunkBytes     int64 `json:"largeFileChunkBytes"`
+	MaxConcurrent            int   `json:"maxConcurrent"`
+	LargeFileThresholdBytes  int64 `json:"largeFileThresholdBytes"`
+	LargeFileParallelism     int   `json:"largeFileParallelism"`
+	LargeFileChunkBytes      int64 `json:"largeFileChunkBytes"`
+	SpeedLimitBytesPerSecond int64 `json:"speedLimitBytesPerSecond"`
+	AutoReconnect            bool  `json:"autoReconnect"`
+	MaxReconnectAttempts     int   `json:"maxReconnectAttempts"`
 	// 0 は自動消去なしである。
 	ClearCompletedAfterSeconds int `json:"clearCompletedAfterSeconds"`
 	// 停止中は待機の job を新しく開始しない。
@@ -158,6 +183,9 @@ type sftpTransferSettingsRequest struct {
 	LargeFileThresholdBytes    int64 `json:"largeFileThresholdBytes"`
 	LargeFileParallelism       int   `json:"largeFileParallelism"`
 	LargeFileChunkBytes        int64 `json:"largeFileChunkBytes"`
+	SpeedLimitBytesPerSecond   int64 `json:"speedLimitBytesPerSecond"`
+	AutoReconnect              bool  `json:"autoReconnect"`
+	MaxReconnectAttempts       int   `json:"maxReconnectAttempts"`
 }
 
 type sftpTransferQueueMoveRequest struct {
@@ -233,4 +261,11 @@ func describeResumableUpload(upload sshcSFTP.ResumableUpload) SFTPResumableUploa
 		ExpectedRevision: upload.ExpectedRevision, CompletedRanges: ranges,
 		Parallelism: upload.Parallelism, ChunkBytes: upload.ChunkBytes,
 	}
+}
+
+func describeReconnectAt(at time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	return at.Format(time.RFC3339Nano)
 }

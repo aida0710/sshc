@@ -136,6 +136,9 @@ type FileTransferSettings struct {
 	LargeFileThresholdBytes    int64 `json:"largeFileThresholdBytes,omitempty"`
 	LargeFileParallelism       int   `json:"largeFileParallelism,omitempty"`
 	LargeFileChunkBytes        int64 `json:"largeFileChunkBytes,omitempty"`
+	SpeedLimitBytesPerSecond   int64 `json:"speedLimitBytesPerSecond,omitempty"`
+	AutoReconnect              bool  `json:"autoReconnect,omitempty"`
+	MaxReconnectAttempts       int   `json:"maxReconnectAttempts,omitempty"`
 }
 
 // BackgroundSettings は背景画像ライブラリの保存方針である。

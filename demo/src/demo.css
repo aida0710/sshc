@@ -1,0 +1,126 @@
+/* Neutral colors are based on the dark theme in web/src/index.css so the frame matches the embedded Web UI. */
+:root {
+  color-scheme: dark;
+  --canvas: #121416;
+  --toolbar: #1c1f22;
+  --card: #1a1c1f;
+  --surface: #2c3034;
+  --line: #3b4045;
+  --hairline: #2e3337;
+  --hover: #2d3135;
+  --ink: #e5e7e8;
+  --ink-muted: #b9bfc4;
+  --ink-faint: #8f979e;
+  --danger: #ff858d;
+  --term-bg: #080b0d;
+  --term-fg: #d8dfe4;
+  --accent: #a9e1bd;
+  --accent-hover: #c5efd2;
+  --accent-ink: #10271a;
+  --track: #2e3337;
+  --focus: #70c3fa;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--canvas);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; min-height: 100dvh; display: flex; flex-direction: column; background: var(--canvas); }
+/* While VMs run, the page is an app frame: the Web UI or CLI fills the space between header and footer. */
+body:has(#demo:not([hidden])) { height: 100dvh; }
+main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+button { font: inherit; font-size: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 16px; cursor: pointer; color: inherit; background: var(--toolbar); }
+button:hover { background: var(--hover); }
+button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+button:disabled { opacity: .6; cursor: wait; }
+.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; min-width: 144px; border-color: var(--accent); }
+.primary:hover { background: var(--accent-hover); }
+
+header { display: flex; align-items: center; gap: 16px; min-height: 48px; padding: 0 16px; background: var(--toolbar); border-bottom: 1px solid var(--hairline); }
+.brand { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.brand strong { font-size: 16px; letter-spacing: -.01em; }
+.brand span { color: var(--ink-faint); font-size: 13px; }
+#demo-controls { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+#demo-tabs { display: flex; flex: none; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); }
+#demo-tabs button { border: 0; border-radius: 6px; padding: 4px 12px; font-size: 13px; color: var(--ink-faint); background: transparent; }
+#demo-tabs button:hover { color: var(--ink); }
+#demo-tabs [aria-pressed="true"] { color: var(--ink); background: var(--surface); }
+#status { min-width: 0; color: var(--ink-faint); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#status[role="alert"] { color: var(--danger); }
+#reset, #language-switch { margin-left: auto; flex: none; padding: 5px 12px; font-size: 13px; }
+
+footer { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 16px; padding: 8px 16px; color: var(--ink-faint); font-size: 12px; border-top: 1px solid var(--hairline); }
+footer button { padding: 0; border: 0; font-size: inherit; background: transparent; color: var(--ink-muted); text-decoration: underline; text-underline-offset: 3px; }
+footer button:hover { background: transparent; color: var(--ink); }
+#cache-error { color: var(--danger); }
+
+#confirmation { width: 100%; max-width: 680px; margin: 0 auto; padding: 56px 24px; line-height: 1.75; }
+h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.3; letter-spacing: -.02em; margin: 0 0 16px; }
+table { width: 100%; margin: 28px 0 16px; border-collapse: separate; border-spacing: 0; border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden; background: var(--card); }
+th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--hairline); }
+tfoot td { border-bottom: 0; color: var(--ink-muted); font-size: 13px; background: var(--toolbar); }
+th { color: var(--ink-faint); font-size: 12px; font-weight: 500; background: var(--toolbar); }
+thead th:last-child, tbody td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+/* VM names and sizes stay whole; only the role column wraps on narrow screens. */
+tbody td:first-child, tbody td:last-child { white-space: nowrap; }
+.detail { color: var(--ink-muted); font-size: 13px; }
+.confirm-question { margin: 28px 0 12px; }
+.confirm-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.confirm-actions .detail { margin: 0; }
+#framed-notice { margin: 12px 0 0; color: var(--danger); }
+#framed-notice a { color: var(--ink); }
+
+#demo { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+#web-panel, #cli-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+#web-panel { overflow-y: auto; }
+iframe { flex: 1; width: 100%; border: 0; background: var(--canvas); }
+
+#startup { width: calc(100% - 32px); max-width: 640px; margin: 40px auto; padding: 24px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--card); }
+.startup-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.startup-heading h2 { font-size: 18px; margin: 0; }
+#startup-elapsed { color: var(--ink-faint); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.startup-stages { display: flex; gap: 6px; list-style: none; padding: 0; margin: 20px 0 24px; }
+/* A fixed line height keeps Latin-only and Japanese labels on one baseline. */
+.startup-stages li { flex: 1; padding-top: 8px; border-top: 3px solid var(--track); color: var(--ink-faint); font-size: 12px; line-height: 16px; }
+.startup-stages [data-state="complete"], .startup-stages [data-state="current"] { border-color: var(--accent); color: var(--accent); }
+.startup-total label { display: block; margin-bottom: 8px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.startup-items { list-style: none; padding: 0; margin: 0; }
+.startup-archives { margin-top: 20px; }
+.startup-items li { padding: 12px 0; border-top: 1px solid var(--hairline); }
+.startup-item-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; font-size: 13px; }
+.startup-item-heading strong { font-weight: 600; white-space: nowrap; }
+.startup-item-heading span { color: var(--ink-faint); text-align: right; font-variant-numeric: tabular-nums; }
+.startup-items [data-state="ready"] span { color: var(--accent); }
+.startup-items [data-state="failed"] span, .startup-items [data-state="unavailable"] span { color: var(--danger); }
+
+progress { appearance: none; display: block; width: 100%; height: 4px; border: 0; border-radius: 2px; overflow: hidden; background: var(--track); accent-color: var(--accent); }
+.startup-total progress { height: 6px; border-radius: 3px; }
+progress::-webkit-progress-bar { background: var(--track); }
+progress::-webkit-progress-value { background: var(--accent); transition: width .2s; }
+progress::-moz-progress-bar { background: var(--accent); }
+/* Without a value the size is still unknown, so show activity rather than an empty track. */
+progress:indeterminate { background: linear-gradient(90deg, var(--track) 30%, var(--accent) 50%, var(--track) 70%) 0 0 / 300% 100%; animation: progress-pending 1.6s linear infinite; }
+/* Vendor pseudo-elements stay in separate rules: one unknown selector would drop the whole rule. */
+progress:indeterminate::-webkit-progress-bar { background: transparent; }
+progress:indeterminate::-moz-progress-bar { background: transparent; }
+@keyframes progress-pending { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { progress:indeterminate { animation: none; } }
+
+#cli-panel { gap: 10px; padding: 12px 16px 16px; }
+.cli-hint { margin: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--ink-faint); font-size: 13px; }
+.cli-hint code { padding: 2px 8px; border: 1px solid var(--hairline); border-radius: 6px; color: var(--ink-muted); background: var(--card); font-size: 12px; }
+/* Padding lives on the frame: FitAddon measures the terminal parent, so #cli itself must stay unpadded. */
+.cli-frame { flex: 1; display: flex; min-height: 0; padding: 12px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--term-bg); }
+#cli { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+
+@media (max-width: 640px) {
+  header { flex-wrap: wrap; gap: 8px 12px; padding: 8px 16px; }
+  .brand { flex: 1; }
+  #demo-controls { order: 1; flex-basis: 100%; }
+  #confirmation { padding: 32px 16px; }
+  th, td { padding: 10px 12px; }
+  #startup { width: calc(100% - 24px); margin: 12px auto; padding: 16px; }
+  .startup-stages li { font-size: 11px; }
+  #cli-panel { padding: 8px; }
+}

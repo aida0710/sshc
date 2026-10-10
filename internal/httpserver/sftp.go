@@ -28,6 +28,10 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.POST("/api/v1/sftp/transfers/:id/download-checkpoint", handlers.CheckpointDownload)
 	engine.GET("/api/v1/sftp/compare", handlers.CompareDirectories)
 	engine.GET("/api/v1/sftp/local/entries", handlers.ListLocal)
+	engine.POST("/api/v1/sftp/local/directories", handlers.MkdirLocal)
+	engine.POST("/api/v1/sftp/local/rename", handlers.RenameLocal)
+	engine.POST("/api/v1/sftp/local/delete-plan", handlers.PlanLocalDelete)
+	engine.POST("/api/v1/sftp/local/delete", handlers.DeleteLocal)
 	engine.GET("/api/v1/sftp/:alias/entries", handlers.List)
 	engine.POST("/api/v1/sftp/:alias/entries", handlers.CreateEntry)
 	engine.GET("/api/v1/sftp/:alias/stats", handlers.DirectoryStats)
@@ -43,9 +47,16 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.DELETE("/api/v1/sftp/:alias/uploads/:id", handlers.CancelUpload)
 	engine.PATCH("/api/v1/sftp/:alias/entry", handlers.Rename)
 	engine.PATCH("/api/v1/sftp/:alias/mode", handlers.Chmod)
+	engine.POST("/api/v1/sftp/:alias/mode-plan", handlers.PlanChmod)
+	engine.PATCH("/api/v1/sftp/:alias/modes", handlers.ChmodSelection)
+	engine.POST("/api/v1/sftp/:alias/symlink", handlers.CreateSymlink)
+	engine.PATCH("/api/v1/sftp/:alias/symlink", handlers.ChangeSymlink)
+	engine.PATCH("/api/v1/sftp/:alias/ownership", handlers.ChangeOwnership)
+	engine.GET("/api/v1/sftp/:alias/space", handlers.FilesystemSpace)
 }
 
 func addSFTPActions(registry actionRegistry, service *sshcSFTP.Service) {
+	addSFTPMetadataActions(registry, service)
 	registry[session.ActionSFTPDelete] = actionKind{
 		evidence: func(ctx context.Context, target string) (string, error) {
 			alias, remotePath, ok := strings.Cut(target, ":")
@@ -62,20 +73,7 @@ func addSFTPActions(registry actionRegistry, service *sshcSFTP.Service) {
 	}
 	registry[session.ActionSFTPChmod] = actionKind{
 		evidence: func(ctx context.Context, target string) (string, error) {
-			alias, remainder, ok := strings.Cut(target, ":")
-			if !ok {
-				return "", sshcSFTP.ErrInvalidPath
-			}
-			remainder = strings.TrimSuffix(remainder, ":recursive")
-			separator := strings.LastIndexByte(remainder, ':')
-			if separator <= 0 || separator == len(remainder)-1 {
-				return "", sshcSFTP.ErrInvalidPath
-			}
-			entry, err := service.Stat(ctx, alias, remainder[:separator])
-			if err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("%s:%s:%s", entry.Type, entry.Revision, entry.Mode.Perm()), nil
+			return service.ChmodActionEvidence(ctx, target)
 		},
 		fail: sftpProblem,
 	}

@@ -26,6 +26,8 @@ type fakeRestartableService struct {
 	afterStatus    func()
 	restarts       int
 	readinessWaits int
+	readinessErr   error
+	lock           func() (func() error, error)
 }
 
 func (service *fakeRestartableService) definitionFile() serviceDefinitionFile {
@@ -33,6 +35,9 @@ func (service *fakeRestartableService) definitionFile() serviceDefinitionFile {
 }
 
 func (service *fakeRestartableService) acquireOperationLock() (func() error, error) {
+	if service.lock != nil {
+		return service.lock()
+	}
 	return func() error { return nil }, nil
 }
 
@@ -52,7 +57,7 @@ func (service *fakeRestartableService) restartRunning(context.Context) error {
 
 func (service *fakeRestartableService) waitUntilReady(context.Context) error {
 	service.readinessWaits++
-	return nil
+	return service.readinessErr
 }
 
 func testServiceDefinition(t *testing.T) serviceDefinitionFile {

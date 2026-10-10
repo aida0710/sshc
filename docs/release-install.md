@@ -13,8 +13,8 @@ Homebrewのformulaはソースからビルドするため、GoもHomebrewによ�
 ## インストールスクリプト（macOS / Linux）
 
 ```sh
-SSHC_VERSION=v0.42.0 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.42.0/install.sh | sh'
+SSHC_VERSION=v0.44.4 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.44.4/install.sh | sh'
 ```
 
 URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`上のスクリプトは次の変更で内容が変わるため、パイプで直接実行しません。新しいバージョンへ更新するときは、[GitHub Releases](https://github.com/aida0710/sshc/releases)でタグを確認して両方を置き換えます。
@@ -38,7 +38,7 @@ URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`
 
 `SSHC_VERSION`を指定しない場合は、タグを固定せずにReleaseワークフローの署名を確かめます。通常は`~/.local/bin`にインストールし、rootで実行した場合は`/usr/local/bin`を使用します。
 
-手動でダウンロードしたCLIやAPKは、GitHub CLIで次のように検証できます。`<downloaded-file>`にはCLIまたはAPKの実ファイルを、`<tag>`には導入するタグ（例: `v0.42.0`）を指定します。
+手動でダウンロードしたCLIやAPKは、GitHub CLIで次のように検証できます。`<downloaded-file>`にはCLIまたはAPKの実ファイルを、`<tag>`には導入するタグ（例: `v0.44.4`）を指定します。
 
 ```sh
 gh attestation verify <downloaded-file> --repo aida0710/sshc \
@@ -62,7 +62,7 @@ gh api repos/aida0710/sshc/compare/<tag>...main --jq .status
 
 `sshc update`は、receiptのSHA-256が現在の実行ファイルと一致するときだけ、公開済みのタグに固定した`install.sh`で更新します。receiptを書かない古いインストーラー、手動コピー、`make install`で入れたもの、変更したバイナリは、推測で置き換えません。SHA-256が一致しない場合、`sshc update`と`sshc service install`はエラーで終了します。`install.sh`で入れ直すか、実行ファイルを自分で置き換えた場合はreceiptを削除してください。古いインストーラーから移行する場合は、上のタグを固定した手順を一度手動で実行してください。
 
-`SSHC_VERSION`でプレリリース（`v0.42.0-rc.1`のように`-`を含むタグ）を指定した場合、receiptは保存せず、同じ配置先にある前のreceiptも削除します。このため、プレリリースは`sshc update`と`sshc service install`の対象外です。対象に戻すには、安定バージョンのタグを指定して`install.sh`を実行し直してください。
+`SSHC_VERSION`でプレリリース（`v0.44.4-rc.1`のように`-`を含むタグ）を指定した場合、receiptは保存せず、同じ配置先にある前のreceiptも削除します。このため、プレリリースは`sshc update`と`sshc service install`の対象外です。対象に戻すには、安定バージョンのタグを指定して`install.sh`を実行し直してください。
 
 ## 自動判定による更新
 
@@ -81,10 +81,12 @@ sshc update
 
 ### エンジンの再起動
 
-更新後のバージョンを使うには、動いているエンジンを再起動します。`sshc update`と`install.sh`の表示も、この方法を案内します。
+更新後のバージョンを使うには、動いているエンジンを再起動します。
 
-- `sshc service install`で登録したサービス: `sshc update`で更新した場合は、上のとおり自動で再起動します。`install.sh`を直接実行した場合など、自動で再起動しなかったときは`sshc service install`を実行します
+- `sshc service install`で登録したサービス: `sshc update`で更新した場合は、上のとおり自動で再起動します。`install.sh`を直接実行した場合など、稼働中のサービスを手動で再起動するときは`sshc service restart`を実行します。停止中や古い定義の場合は`sshc service install`を使用します
 - それ以外のエンジン（フォアグラウンドやtmuxで起動したもの）: `sshc engine --replace`で、更新後のバイナリから起動し直します
+
+`sshc service restart`はLinuxとmacOSで利用できます。この導入の安定パスと現在のサービス定義が一致する場合だけ、稼働中のサービスを再起動します。接続中のセッションと転送が終了するため、対象を表示して確認を求めます。確認を省略する場合は`-y`または`--yes`を指定します。未登録・停止中・管理外・古い定義・別の実行ファイルを指すサービスは拒否し、終了コード1で終わります。定義の書き換えや再登録は行いません。
 
 ## Windows
 
@@ -101,8 +103,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/a
 再現可能な導入では、スクリプトと成果物を同じタグへ固定します。
 
 ```powershell
-$env:SSHC_VERSION = 'v0.42.0'
-irm https://github.com/aida0710/sshc/releases/download/v0.42.0/install.ps1 | iex
+$env:SSHC_VERSION = 'v0.44.4'
+irm https://github.com/aida0710/sshc/releases/download/v0.44.4/install.ps1 | iex
 ```
 
 手動で配置する場合は、[GitHub Releases](https://github.com/aida0710/sshc/releases)からx64では`sshc-windows-amd64.exe`、Arm64では`sshc-windows-arm64.exe`を取得し、`checksums.txt`と照合してから`sshc.exe`へ名前を変更します。

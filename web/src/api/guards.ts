@@ -46,6 +46,7 @@ export async function issueAction(kind: string, target: string): Promise<string>
 }
 
 export type JSONRequest = {
+  signal?: AbortSignal;
   method: "POST" | "PUT" | "PATCH";
   body: unknown;
   // A confirmation token from issueAction, for operations the engine gates.
@@ -65,7 +66,7 @@ export function sendJSON<T>(path: string, request: JSONRequest): Promise<T> {
     ...(request.locallyHandledCodes === undefined ? {} : { locallyHandledCodes: request.locallyHandledCodes }),
     ...(request.refusalStatus === undefined ? {} : { refusalStatus: request.refusalStatus }),
   };
-  return apiClient.mutate<T>(path, { method: request.method, headers, body: JSON.stringify(request.body) }, options);
+  return apiClient.mutate<T>(path, { method: request.method, headers, body: JSON.stringify(request.body), ...(request.signal === undefined ? {} : { signal: request.signal }) }, options);
 }
 
 export function postJSON<T>(

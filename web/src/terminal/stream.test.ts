@@ -52,7 +52,7 @@ class FakeSocket {
 }
 
 function withFakeSocket(): typeof FakeSocket {
-  vi.stubGlobal("WebSocket", FakeSocket as unknown as typeof WebSocket);
+  vi.stubGlobal("WebSocket", FakeSocket);
   Object.assign(FakeSocket, { OPEN: 1 });
   return FakeSocket;
 }

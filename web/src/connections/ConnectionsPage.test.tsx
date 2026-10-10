@@ -76,10 +76,10 @@ const terminalSessionProps = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(configApi.overview).mockResolvedValue(overview as never);
+  vi.mocked(configApi.overview).mockResolvedValue(overview);
   vi.mocked(configApi.host).mockResolvedValue(detail as never);
-  vi.mocked(terminalSessionsApi.terminalSessions).mockResolvedValue({ sessions: [], maxSessions: 50 } as never);
-  vi.mocked(terminalSessionsApi.closeTerminalSession).mockResolvedValue({ sessions: [], maxSessions: 50 } as never);
+  vi.mocked(terminalSessionsApi.terminalSessions).mockResolvedValue({ sessions: [], maxSessions: 50 });
+  vi.mocked(terminalSessionsApi.closeTerminalSession).mockResolvedValue({ sessions: [], maxSessions: 50 });
   vi.mocked(terminalSessionsApi.openTerminalSession).mockResolvedValue({
     session: { id: "session-1", kind: "ssh", alias: "bastion", title: "bastion", startedAt: "2026-08-13T09:00:00Z", state: "connected", problem: "" },
     streamTicket: "one-time",
@@ -88,10 +88,10 @@ beforeEach(() => {
   vi.mocked(credentialsApi.credentials).mockResolvedValue({ credentials: [] } as never);
   vi.mocked(vaultApi.passwordEligibility).mockResolvedValue({
     alias: "bastion", storable: true, blockers: [], warnings: [],
-  } as never);
+  });
   vi.mocked(keysApi.inventory).mockResolvedValue({
     items: [], unreadable: [], agentDelegations: [], unresolvedReferences: [], agentAvailable: false, agentIdentities: [],
-  } as never);
+  });
 });
 
 describe("ConnectionsPage", () => {
@@ -109,7 +109,7 @@ describe("ConnectionsPage", () => {
           editable: true,
         },
       ],
-    } as never);
+    });
     render(
       <ConnectionsPage
         {...terminalSessionProps}
@@ -315,7 +315,7 @@ describe("ConnectionsPage", () => {
         { code: "unnamed_host_block", path: "config", line: 9 },
         { code: "duplicate_alias", path: "config", line: 1 },
       ],
-    } as never);
+    });
 
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
@@ -328,7 +328,7 @@ describe("ConnectionsPage", () => {
     const user = userEvent.setup();
     vi.mocked(configApi.updateConnection).mockResolvedValue({
       transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
-    } as never);
+    });
 
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
@@ -485,7 +485,7 @@ describe("ConnectionsPage", () => {
     const user = userEvent.setup();
     vi.mocked(configApi.updateConnection).mockResolvedValue({
       transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
-    } as never);
+    });
     vi.mocked(configApi.host)
       .mockResolvedValueOnce(detail as never)
       .mockRejectedValueOnce(new Error("reload failed"));
@@ -532,7 +532,7 @@ describe("ConnectionsPage", () => {
     } as never);
     vi.mocked(configApi.updateConnection).mockResolvedValue({
       transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
-    } as never);
+    });
     vi.mocked(configApi.host)
       .mockResolvedValueOnce(detail as never)
       .mockRejectedValueOnce(new Error("reload failed"))
@@ -595,7 +595,7 @@ describe("ConnectionsPage", () => {
     const savedDetail = { ...detail, metadata: { ...detail.metadata, encoding: "shift_jis" } };
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
-    } as never);
+    });
     vi.mocked(configApi.host)
       .mockResolvedValueOnce(detail as never)
       .mockResolvedValue(savedDetail as never);
@@ -640,7 +640,7 @@ describe("ConnectionsPage", () => {
       }));
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["config"], preview: { operation: "config.save", diffs: [] },
-    } as never);
+    });
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     return { finishListReload: () => finishListReload() };
   }
@@ -687,7 +687,7 @@ describe("ConnectionsPage", () => {
     const { finishListReload } = renderWhileTheListReloads();
     vi.mocked(configApi.updateConnection).mockResolvedValue({
       transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
-    } as never);
+    });
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     const port = await screen.findByLabelText("Port");
@@ -706,7 +706,7 @@ describe("ConnectionsPage", () => {
     const { finishListReload } = renderWhileTheListReloads();
     vi.mocked(configApi.updateConnection).mockResolvedValue({
       transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
-    } as never);
+    });
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     const port = await screen.findByLabelText("Port");
@@ -724,11 +724,11 @@ describe("ConnectionsPage", () => {
   it("moves the focus to the reload button when the reload after a save fails, without saying it is reloading", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.overview)
-      .mockResolvedValueOnce(overview as never)
+      .mockResolvedValueOnce(overview)
       .mockRejectedValue(new Error("reload failed"));
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
-    } as never);
+    });
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
@@ -749,7 +749,7 @@ describe("ConnectionsPage", () => {
     const user = userEvent.setup();
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
-    } as never);
+    });
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
@@ -806,7 +806,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
       metadata: { schemaVersion: 1, hosts: [{ identity: { path: "config", alias: "retired" }, note: "old", orphan: true }] },
-    } as never);
+    });
     vi.mocked(configApi.save).mockRejectedValue(new ApiError("metadata_changed", 409, {
       code: "metadata_changed",
       message: "metadata changed since it was loaded; reload before saving",
@@ -863,7 +863,7 @@ describe("ConnectionsPage", () => {
           ],
         }],
       },
-    } as never);
+    });
 
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
@@ -893,7 +893,7 @@ describe("ConnectionsPage", () => {
           line: 5, patterns: ["nas"], editable: true,
         },
       ],
-    } as never);
+    });
     vi.mocked(configApi.updateConnection).mockResolvedValue({
       transactionId: "t1",
       written: ["config"],
@@ -901,7 +901,7 @@ describe("ConnectionsPage", () => {
         operation: "connection.update",
         diffs: [{ path: "config", lines: [{ op: "insert", text: "\tPort 2299", newLine: 2 }] }],
       },
-    } as never);
+    });
 
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
@@ -931,7 +931,7 @@ describe("ConnectionsPage", () => {
           line: 5, patterns: ["nas"], editable: true,
         },
       ],
-    } as never);
+    });
     vi.mocked(configApi.host).mockImplementation(async (_path, alias) => {
       if (alias === "bastion") return detail as never;
       return await new Promise(() => undefined);
@@ -958,7 +958,7 @@ describe("ConnectionsPage", () => {
           line: 9, patterns: ["*"], wildcard: true, editable: true,
         },
       ],
-    } as never);
+    });
 
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
@@ -1051,7 +1051,7 @@ describe("ConnectionsPage", () => {
       transactionId: "t-create",
       identity: { path: "config", alias: "build01" },
       preview: { operation: "connection.create", diffs: [] },
-    } as never);
+    });
     vi.mocked(configApi.host).mockResolvedValue(createdDetail as never);
 
     render(
@@ -1090,7 +1090,7 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t-rename", written: ["config"], preview: { operation: "config.rename", diffs: [] },
-    } as never);
+    });
     render(
       <ConnectionsPage
         {...terminalSessionProps}
@@ -1119,7 +1119,7 @@ describe("ConnectionsPage", () => {
       .mockRejectedValueOnce(new Error("detail refresh failed"));
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t-rename", written: ["config"], preview: { operation: "config.rename", diffs: [] },
-    } as never);
+    });
     render(
       <ConnectionsPage
         {...terminalSessionProps}
@@ -1149,16 +1149,16 @@ describe("ConnectionsPage", () => {
         { file: { path: "config", absolute: "/home/tester/.ssh/config" }, editable: true, loads: 1 },
         { file: { path: "conf.d/10-home.conf", absolute: "/home/tester/.ssh/conf.d/10-home.conf" }, editable: true, loads: 1 },
       ],
-    } as never);
+    });
     vi.mocked(configApi.file).mockResolvedValue({
       file: { path: "conf.d/10-home.conf", absolute: "/home/tester/.ssh/conf.d/10-home.conf" },
       contents: "Host nas\n\tUser aida\n", digest: "digest", editable: true, exists: true,
-    } as never);
+    });
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1",
       written: ["config", "conf.d/10-home.conf"],
       preview: { operation: "config.move", diffs: [] },
-    } as never);
+    });
 
     render(
       <ConnectionsPage
@@ -1198,11 +1198,11 @@ describe("ConnectionsPage", () => {
         { file: { path: "config", absolute: "/home/tester/.ssh/config" }, editable: true, loads: 1 },
         { file: { path: "conf.d/10-home.conf", absolute: "/home/tester/.ssh/conf.d/10-home.conf" }, editable: true, loads: 1 },
       ],
-    } as never);
+    });
     vi.mocked(configApi.file).mockResolvedValue({
       file: { path: "conf.d/10-home.conf", absolute: "/home/tester/.ssh/conf.d/10-home.conf" },
       contents: "Host nas\n", digest: "digest", editable: true, exists: true,
-    } as never);
+    });
     vi.mocked(configApi.save).mockRejectedValue(new Error("move conflict"));
     render(
       <ConnectionsPage
@@ -1229,7 +1229,7 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["config"], preview: { operation: "config.file_raw", diffs: [] },
-    } as never);
+    });
 
     render(
       <ConnectionsPage
@@ -1290,10 +1290,10 @@ describe("taking a connection out of every group", () => {
     vi.mocked(configApi.file).mockResolvedValue({
       file: { path: "config", absolute: "/home/tester/.ssh/config" },
       contents: "Host other\n", digest: "d", editable: true, exists: true,
-    } as never);
+    });
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.move", diffs: [] },
-    } as never);
+    });
 
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
@@ -1357,14 +1357,14 @@ describe("dropping in the tree", () => {
   }
 
   beforeEach(() => {
-    vi.mocked(configApi.overview).mockResolvedValue(grouped as never);
+    vi.mocked(configApi.overview).mockResolvedValue(grouped);
     vi.mocked(configApi.file).mockResolvedValue({
       file: { path: "connections/home/nas.conf", absolute: "/x" },
       contents: "Host nas\n", digest: "d", editable: true, exists: true,
-    } as never);
+    });
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.move", diffs: [] },
-    } as never);
+    });
   });
 
   it("moves a direct connection into a visible child group", async () => {
@@ -1398,7 +1398,7 @@ describe("dropping in the tree", () => {
       }],
     };
     vi.mocked(configApi.overview)
-      .mockResolvedValueOnce(grouped as never)
+      .mockResolvedValueOnce(grouped)
       .mockResolvedValue(moved as never);
 
     render(
@@ -1438,7 +1438,7 @@ describe("dropping in the tree", () => {
   it("nests a group by renaming it under its new parent", async () => {
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
-    } as never);
+    });
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
     const source = screen.getByRole("button", { name: "work" });
@@ -1482,11 +1482,11 @@ describe("dropping in the tree", () => {
       ],
     };
     vi.mocked(configApi.overview)
-      .mockResolvedValueOnce(grouped as never)
+      .mockResolvedValueOnce(grouped)
       .mockResolvedValue(renamed as never);
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
-    } as never);
+    });
     render(
       <ConnectionsPage
         {...terminalSessionProps}
@@ -1510,7 +1510,7 @@ describe("dropping in the tree", () => {
   it("takes a nested group back to the top level", async () => {
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
-    } as never);
+    });
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
     const source = screen.getByRole("button", { name: "home/eu" });

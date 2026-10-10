@@ -5,7 +5,7 @@ import { GroupInspector } from "./GroupInspector";
 import type { GroupMetadata } from "../api/config";
 
 function group(overrides: Partial<GroupMetadata> = {}): GroupMetadata {
-  return { name: "company", ...overrides } as GroupMetadata;
+  return { name: "company", ...overrides };
 }
 
 describe("GroupInspector", () => {

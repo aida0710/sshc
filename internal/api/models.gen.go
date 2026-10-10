@@ -137,6 +137,24 @@ func (e PullRequestResolve) Valid() bool {
 	}
 }
 
+// Defines values for SFTPComparisonMode.
+const (
+	Content  SFTPComparisonMode = "content"
+	Metadata SFTPComparisonMode = "metadata"
+)
+
+// Valid indicates whether the value is a known member of the SFTPComparisonMode enum.
+func (e SFTPComparisonMode) Valid() bool {
+	switch e {
+	case Content:
+		return true
+	case Metadata:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SFTPCreateEntryRequestType.
 const (
 	SFTPCreateEntryRequestTypeDirectory SFTPCreateEntryRequestType = "directory"
@@ -162,6 +180,7 @@ const (
 	RightOnly    SFTPDirectoryDifferenceStatus = "right_only"
 	Same         SFTPDirectoryDifferenceStatus = "same"
 	TypeMismatch SFTPDirectoryDifferenceStatus = "type_mismatch"
+	Unverified   SFTPDirectoryDifferenceStatus = "unverified"
 )
 
 // Valid indicates whether the value is a known member of the SFTPDirectoryDifferenceStatus enum.
@@ -176,6 +195,8 @@ func (e SFTPDirectoryDifferenceStatus) Valid() bool {
 	case Same:
 		return true
 	case TypeMismatch:
+		return true
+	case Unverified:
 		return true
 	default:
 		return false
@@ -437,6 +458,72 @@ func (e TerminalSessionState) Valid() bool {
 	case TerminalSessionStateExited:
 		return true
 	case TerminalSessionStateReconnecting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateJobState.
+const (
+	Accepted        UpdateJobState = "accepted"
+	Failed          UpdateJobState = "failed"
+	Installing      UpdateJobState = "installing"
+	RestartRequired UpdateJobState = "restart_required"
+	Restarting      UpdateJobState = "restarting"
+	Succeeded       UpdateJobState = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the UpdateJobState enum.
+func (e UpdateJobState) Valid() bool {
+	switch e {
+	case Accepted:
+		return true
+	case Failed:
+		return true
+	case Installing:
+		return true
+	case RestartRequired:
+		return true
+	case Restarting:
+		return true
+	case Succeeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdatePreviewManager.
+const (
+	UpdatePreviewManagerHomebrew  UpdatePreviewManager = "homebrew"
+	UpdatePreviewManagerInstallSh UpdatePreviewManager = "install.sh"
+)
+
+// Valid indicates whether the value is a known member of the UpdatePreviewManager enum.
+func (e UpdatePreviewManager) Valid() bool {
+	switch e {
+	case UpdatePreviewManagerHomebrew:
+		return true
+	case UpdatePreviewManagerInstallSh:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateStatusManager.
+const (
+	UpdateStatusManagerHomebrew  UpdateStatusManager = "homebrew"
+	UpdateStatusManagerInstallSh UpdateStatusManager = "install.sh"
+)
+
+// Valid indicates whether the value is a known member of the UpdateStatusManager enum.
+func (e UpdateStatusManager) Valid() bool {
+	switch e {
+	case UpdateStatusManagerHomebrew:
+		return true
+	case UpdateStatusManagerInstallSh:
 		return true
 	default:
 		return false
@@ -1307,6 +1394,61 @@ type RewrittenKeyReference struct {
 	To         string `json:"to"`
 }
 
+// SFTPChangeSymlinkRequest defines model for SFTPChangeSymlinkRequest.
+type SFTPChangeSymlinkRequest struct {
+	ExpectedRevision string `json:"expectedRevision"`
+	Path             string `json:"path"`
+	Target           string `json:"target"`
+}
+
+// SFTPChmodEntry defines model for SFTPChmodEntry.
+type SFTPChmodEntry struct {
+	ExpectedRevision string `json:"expectedRevision"`
+	Path             string `json:"path"`
+}
+
+// SFTPChmodOptions defines model for SFTPChmodOptions.
+type SFTPChmodOptions struct {
+	DirectoryMode string `json:"directoryMode"`
+	FileMode      string `json:"fileMode"`
+	Recursive     bool   `json:"recursive"`
+}
+
+// SFTPChmodPlan defines model for SFTPChmodPlan.
+type SFTPChmodPlan struct {
+	ActionExpiresAt time.Time        `json:"actionExpiresAt"`
+	ActionToken     string           `json:"actionToken"`
+	Directories     int              `json:"directories"`
+	Files           int              `json:"files"`
+	Options         SFTPChmodOptions `json:"options"`
+	Revision        string           `json:"revision"`
+	SelectionCount  int              `json:"selectionCount"`
+	SkippedSymlinks int              `json:"skippedSymlinks"`
+}
+
+// SFTPChmodResult defines model for SFTPChmodResult.
+type SFTPChmodResult struct {
+	Applied  int  `json:"applied"`
+	Complete bool `json:"complete"`
+	Items    int  `json:"items"`
+}
+
+// SFTPChmodSelection defines model for SFTPChmodSelection.
+type SFTPChmodSelection struct {
+	Entries []SFTPChmodEntry `json:"entries"`
+	Options SFTPChmodOptions `json:"options"`
+}
+
+// SFTPChmodSelectionRequest defines model for SFTPChmodSelectionRequest.
+type SFTPChmodSelectionRequest struct {
+	Entries          []SFTPChmodEntry `json:"entries"`
+	ExpectedRevision string           `json:"expectedRevision"`
+	Options          SFTPChmodOptions `json:"options"`
+}
+
+// SFTPComparisonMode defines model for SFTPComparisonMode.
+type SFTPComparisonMode string
+
 // SFTPCreateEntryRequest defines model for SFTPCreateEntryRequest.
 type SFTPCreateEntryRequest struct {
 	Path string                     `json:"path"`
@@ -1316,16 +1458,28 @@ type SFTPCreateEntryRequest struct {
 // SFTPCreateEntryRequestType defines model for SFTPCreateEntryRequest.Type.
 type SFTPCreateEntryRequestType string
 
+// SFTPCreateSymlinkRequest defines model for SFTPCreateSymlinkRequest.
+type SFTPCreateSymlinkRequest struct {
+	Path   string `json:"path"`
+	Target string `json:"target"`
+}
+
 // SFTPDirectoryComparison defines model for SFTPDirectoryComparison.
 type SFTPDirectoryComparison struct {
+	BytesRead *int64                    `json:"bytesRead,omitempty"`
 	Entries   []SFTPDirectoryDifference `json:"entries"`
 	LeftPath  string                    `json:"leftPath"`
+	Mode      *SFTPComparisonMode       `json:"mode,omitempty"`
 	RightPath string                    `json:"rightPath"`
+	Truncated *bool                     `json:"truncated,omitempty"`
 }
 
 // SFTPDirectoryDifference defines model for SFTPDirectoryDifference.
 type SFTPDirectoryDifference struct {
-	Left         *SFTPEntry                    `json:"left,omitempty"`
+	Left *SFTPEntry `json:"left,omitempty"`
+
+	// Omission byte_limit or unsupported; the content was not compared
+	Omission     *string                       `json:"omission,omitempty"`
 	RelativePath string                        `json:"relativePath"`
 	Right        *SFTPEntry                    `json:"right,omitempty"`
 	Status       SFTPDirectoryDifferenceStatus `json:"status"`
@@ -1345,6 +1499,7 @@ type SFTPDirectoryStats struct {
 
 // SFTPEntry defines model for SFTPEntry.
 type SFTPEntry struct {
+	Gid        *int64               `json:"gid,omitempty"`
 	LinkTarget *string              `json:"linkTarget,omitempty"`
 	Mode       string               `json:"mode"`
 	ModifiedAt time.Time            `json:"modifiedAt"`
@@ -1354,6 +1509,7 @@ type SFTPEntry struct {
 	Size       int64                `json:"size"`
 	TargetType *SFTPEntryTargetType `json:"targetType,omitempty"`
 	Type       SFTPEntryType        `json:"type"`
+	Uid        *int64               `json:"uid,omitempty"`
 }
 
 // SFTPEntryTargetType defines model for SFTPEntry.TargetType.
@@ -1362,11 +1518,67 @@ type SFTPEntryTargetType string
 // SFTPEntryType defines model for SFTPEntry.Type.
 type SFTPEntryType string
 
+// SFTPFilesystemSpace defines model for SFTPFilesystemSpace.
+type SFTPFilesystemSpace struct {
+	// AvailableBytes Bytes available to the authenticated account as an exact uint64 decimal string.
+	AvailableBytes string `json:"availableBytes"`
+	Path           string `json:"path"`
+
+	// TotalBytes Total filesystem bytes as an exact uint64 decimal string.
+	TotalBytes string `json:"totalBytes"`
+}
+
+// SFTPLocalDeleteEntry defines model for SFTPLocalDeleteEntry.
+type SFTPLocalDeleteEntry struct {
+	ExpectedRevision string `json:"expectedRevision"`
+	Path             string `json:"path"`
+}
+
+// SFTPLocalDeletePlan defines model for SFTPLocalDeletePlan.
+type SFTPLocalDeletePlan struct {
+	ActionExpiresAt time.Time `json:"actionExpiresAt"`
+	ActionToken     string    `json:"actionToken"`
+	Items           int64     `json:"items"`
+	Revision        string    `json:"revision"`
+}
+
+// SFTPLocalDeleteRequest defines model for SFTPLocalDeleteRequest.
+type SFTPLocalDeleteRequest struct {
+	Entries          []SFTPLocalDeleteEntry `json:"entries"`
+	ExpectedRevision string                 `json:"expectedRevision"`
+}
+
+// SFTPLocalDeleteSelection defines model for SFTPLocalDeleteSelection.
+type SFTPLocalDeleteSelection struct {
+	Entries []SFTPLocalDeleteEntry `json:"entries"`
+}
+
 // SFTPLocalListing defines model for SFTPLocalListing.
 type SFTPLocalListing struct {
 	Entries []SFTPEntry `json:"entries"`
 	Home    string      `json:"home"`
 	Path    string      `json:"path"`
+}
+
+// SFTPLocalMkdirRequest defines model for SFTPLocalMkdirRequest.
+type SFTPLocalMkdirRequest struct {
+	Directory string `json:"directory"`
+	Name      string `json:"name"`
+}
+
+// SFTPLocalRenameRequest defines model for SFTPLocalRenameRequest.
+type SFTPLocalRenameRequest struct {
+	ExpectedRevision string `json:"expectedRevision"`
+	Name             string `json:"name"`
+	Path             string `json:"path"`
+}
+
+// SFTPOwnershipRequest defines model for SFTPOwnershipRequest.
+type SFTPOwnershipRequest struct {
+	ExpectedRevision string `json:"expectedRevision"`
+	Gid              *int64 `json:"gid"`
+	Path             string `json:"path"`
+	Uid              *int64 `json:"uid"`
 }
 
 // SetTerminalSessionTitleRequest defines model for SetTerminalSessionTitleRequest.
@@ -1903,6 +2115,20 @@ type UpdateCredentialRequest struct {
 	Secret string `json:"secret"`
 }
 
+// UpdateJob defines model for UpdateJob.
+type UpdateJob struct {
+	Id string `json:"id"`
+
+	// InstalledVersion Stable version reported by the installed executable.
+	InstalledVersion *string        `json:"installedVersion,omitempty"`
+	Problem          string         `json:"problem"`
+	State            UpdateJobState `json:"state"`
+	Target           string         `json:"target"`
+}
+
+// UpdateJobState defines model for UpdateJob.State.
+type UpdateJobState string
+
 // UpdatePasswordConfirmRoute defines model for UpdatePasswordConfirmRoute.
 type UpdatePasswordConfirmRoute struct {
 	Kind string `json:"kind"`
@@ -1918,13 +2144,39 @@ type UpdatePasswordUnchanged struct {
 	Kind string `json:"kind"`
 }
 
+// UpdatePreview defines model for UpdatePreview.
+type UpdatePreview struct {
+	ActionExpiresAt string               `json:"actionExpiresAt"`
+	ActionToken     string               `json:"actionToken"`
+	Current         string               `json:"current"`
+	Manager         UpdatePreviewManager `json:"manager"`
+	Target          string               `json:"target"`
+}
+
+// UpdatePreviewManager defines model for UpdatePreview.Manager.
+type UpdatePreviewManager string
+
+// UpdateRequest defines model for UpdateRequest.
+type UpdateRequest struct {
+	Target string `json:"target"`
+}
+
 // UpdateStatus defines model for UpdateStatus.
 type UpdateStatus struct {
-	Available bool    `json:"available"`
-	Current   string  `json:"current"`
-	Latest    *string `json:"latest,omitempty"`
-	PageUrl   *string `json:"pageUrl,omitempty"`
+	Available bool                 `json:"available"`
+	CanUpdate *bool                `json:"canUpdate,omitempty"`
+	Current   string               `json:"current"`
+	Job       *UpdateJob           `json:"job,omitempty"`
+	Latest    *string              `json:"latest,omitempty"`
+	Manager   *UpdateStatusManager `json:"manager,omitempty"`
+	PageUrl   *string              `json:"pageUrl,omitempty"`
+
+	// Reason Stable reason code explaining why automatic updates are unavailable
+	Reason *string `json:"reason,omitempty"`
 }
+
+// UpdateStatusManager defines model for UpdateStatus.Manager.
+type UpdateStatusManager string
 
 // UpdateTOTPConfirmRoute defines model for UpdateTOTPConfirmRoute.
 type UpdateTOTPConfirmRoute struct {

@@ -11,6 +11,7 @@ import (
 	"sshc/internal/recent"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
+	"sshc/internal/selfupdate"
 	"sshc/internal/storage"
 	terminalworkspace "sshc/internal/workspace"
 )
@@ -19,6 +20,9 @@ import (
 // パスを、持ち主の定数から集める。app が持つパスは app のテストが照合する。
 func ownedDeviceLocalPaths() []string {
 	return append([]string{
+		path.Join(storage.StateDirectoryName, selfupdate.StateFileName),
+		path.Join(storage.StateDirectoryName, selfupdate.StateFileName+selfupdate.StateLockSuffix),
+		path.Join(storage.StateDirectoryName, selfupdate.StateFileName+selfupdate.RestartLockSuffix),
 		secret.LocalKeyPath,
 		secret.SettingsPath,
 		path.Join(storage.StateDirectoryName, handoff.FileName),

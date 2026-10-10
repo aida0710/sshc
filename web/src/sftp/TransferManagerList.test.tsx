@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { en } from "../i18n/messages";
 import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { TransferManagerList } from "./TransferManagerList";
 
@@ -29,6 +30,9 @@ const manager = vi.hoisted(() => {
     getMaxConcurrent: vi.fn(() => 2),
     getClearCompletedAfter: vi.fn(() => 0),
     getProcessingStopped: vi.fn(() => false),
+    getSpeedLimitBytesPerSecond: vi.fn(() => 0),
+    getAutoReconnect: vi.fn(() => false),
+    getMaxReconnectAttempts: vi.fn(() => 0),
     getLargeFileThreshold: vi.fn(() => 100 << 20),
     getLargeFileParallelism: vi.fn(() => 4),
     getLargeFileChunkBytes: vi.fn(() => 32 << 20),
@@ -70,7 +74,7 @@ function job(id: string, overrides: Partial<Job> = {}) {
     remainingSeconds: -1,
     status: "queued",
     allowedActions: ["pause", "cancel"],
-    attempt: 1,
+    attempt: 1, reconnectAttempt: 0, reconnectAt: "",
     problem: "",
     lastModified: 0,
     expectedRevision: "",
@@ -92,6 +96,9 @@ describe("the transfer queue", () => {
     manager.getMaxConcurrent.mockReturnValue(2);
     manager.getClearCompletedAfter.mockReturnValue(0);
     manager.getProcessingStopped.mockReturnValue(false);
+    manager.getSpeedLimitBytesPerSecond.mockReturnValue(0);
+    manager.getAutoReconnect.mockReturnValue(false);
+    manager.getMaxReconnectAttempts.mockReturnValue(0);
     manager.getLargeFileThreshold.mockReturnValue(100 << 20);
     manager.getLargeFileParallelism.mockReturnValue(4);
     manager.getLargeFileChunkBytes.mockReturnValue(32 << 20);
@@ -105,6 +112,26 @@ describe("the transfer queue", () => {
     expect(screen.getByRole("spinbutton", { name: "Streams" })).toHaveValue(4);
     expect(screen.getByRole("spinbutton", { name: "Chunk" })).toHaveValue(32);
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+  });
+
+  it("commits an explicit KiB/s limit and enables a bounded recovery budget", async () => {
+    render(<TransferManagerList />);
+    const speed = screen.getByRole("spinbutton", { name: "Speed limit" });
+    fireEvent.change(speed, { target: { value: "2048" } });
+    fireEvent.blur(speed);
+    expect(manager.applySettings).toHaveBeenLastCalledWith(expect.objectContaining({ speedLimitBytesPerSecond: 2048 * 1024 }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Recover after connection loss" }));
+    expect(manager.applySettings).toHaveBeenLastCalledWith(expect.objectContaining({ autoReconnect: true, maxReconnectAttempts: 3 }));
+    expect(screen.getByText("KiB/s")).toBeVisible();
+  });
+
+  it("shows a reconnect wait with its budget and a manual pause action", () => {
+    manager.getMaxReconnectAttempts.mockReturnValue(3);
+    manager.setJobs([{ ...job("waiting"), status: "reconnecting", reconnectAttempt: 2 }]);
+    render(<TransferManagerList />);
+    expect(screen.getByText("Waiting to reconnect")).toBeVisible();
+    expect(screen.getByText("Reconnect 2/3 (pause to stop)")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Pause" })).toBeEnabled();
   });
 
   it("starts as a compact dock and summarises active work", () => {
@@ -146,25 +173,25 @@ describe("the transfer queue", () => {
     expect(screen.getByRole("combobox", { name: "Clear finished after" })).toHaveValue("300");
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "5");
-    expect(manager.applySettings).toHaveBeenCalledWith({ maxConcurrent: 5, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20 });
+    expect(manager.applySettings).toHaveBeenCalledWith({ maxConcurrent: 5, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0 });
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Clear finished after" }), "0");
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20 });
+    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0 });
 
     const splitAt = screen.getByRole("spinbutton", { name: "Split at" });
     fireEvent.change(splitAt, { target: { value: "73" } });
     fireEvent.blur(splitAt);
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 73 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20 });
+    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 73 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0 });
 
     const streams = screen.getByRole("spinbutton", { name: "Streams" });
     fireEvent.change(streams, { target: { value: "128" } });
     fireEvent.blur(streams);
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 128, largeFileChunkBytes: 32 << 20 });
+    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 128, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0 });
 
     const chunk = screen.getByRole("spinbutton", { name: "Chunk" });
     fireEvent.change(chunk, { target: { value: "41" } });
     fireEvent.blur(chunk);
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 41 << 20 });
+    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 41 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0 });
   });
 
   it("stops the whole queue without touching what is already running", async () => {
@@ -172,7 +199,7 @@ describe("the transfer queue", () => {
     const { rerender } = render(<TransferManagerList />);
 
     await userEvent.click(screen.getByRole("button", { name: "Stop starting new transfers" }));
-    expect(manager.applySettings).toHaveBeenCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: true, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20 });
+    expect(manager.applySettings).toHaveBeenCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: true, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0 });
 
     manager.getProcessingStopped.mockReturnValue(true);
     rerender(<TransferManagerList />);
@@ -203,7 +230,7 @@ describe("the transfer queue", () => {
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === mobileViewportQuery, media: query,
       addEventListener: vi.fn(), removeEventListener: vi.fn(),
-    })) as unknown as typeof window.matchMedia;
+    }));
     manager.setJobs([job("one")]);
     const { container, unmount } = render(<TransferManagerList />);
     try {
@@ -255,9 +282,9 @@ describe("the transfer queue", () => {
     expect(manager.remove).toHaveBeenCalledWith("failed");
   });
 
-  it.each(["reattach", "paused", "failed"])("asks for a destination check when a %s remote result could not be recorded", (status) => {
+  it.each(["remote", "upload", "download"].flatMap((direction) => ["reattach", "paused", "failed"].map((status) => [direction, status])))("asks for a destination check when a %s %s result could not be recorded", (direction, status) => {
     manager.setJobs([job("remote", {
-      direction: "remote",
+      direction,
       status,
       problem: "sftp_reconciliation_required",
       allowedActions: ["cancel"],
@@ -267,6 +294,21 @@ describe("the transfer queue", () => {
     expect(screen.queryByText("Select the same file")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["a folder copied into itself", "sftp_target_inside_source", "sftp.problem.targetInsideSource"],
+    ["a file moved onto itself", "sftp_target_is_source", "sftp.problem.targetIsSource"],
+  ] as const)("says why %s failed instead of the general failure", (_, problem, key) => {
+    manager.setJobs([job("remote", {
+      direction: "remote",
+      status: "failed",
+      problem,
+      allowedActions: ["retry", "cancel", "remove"],
+    })]);
+    render(<TransferManagerList />);
+    expect(screen.getByText(en[key])).toBeInTheDocument();
+    expect(screen.queryByText(en["sftp.problem.failed"])).not.toBeInTheDocument();
   });
 
   it("shows a remote job whose operation is in flight as running", () => {

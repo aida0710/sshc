@@ -19,16 +19,21 @@ const MaxEditableFileBytes = 2 << 20
 const MaxPreviewFileBytes = 8 << 20
 
 var (
-	ErrUnavailable    = errors.New("sftp service is unavailable")
-	ErrInvalidAlias   = errors.New("ssh alias is required")
-	ErrInvalidPath    = errors.New("remote path must be an absolute POSIX path")
-	ErrRootOperation  = errors.New("operation on the remote root is not allowed")
-	ErrNotRegularFile = errors.New("remote path is not a regular file")
-	ErrNotDirectory   = errors.New("remote path is not a directory")
-	ErrTextTooLarge   = errors.New("remote file is too large to edit")
-	ErrNotUTF8        = errors.New("remote file is not UTF-8 text")
-	ErrConflict       = errors.New("remote file changed since it was read")
-	ErrAlreadyExists  = errors.New("remote path already exists")
+	ErrUnsupportedOperation = errors.New("SFTP server does not support this operation")
+	ErrMetadataUnavailable  = errors.New("SFTP server did not provide the entry type")
+	ErrOwnershipUnavailable = errors.New("SFTP server did not provide UID/GID")
+	ErrInvalidSpace         = errors.New("SFTP server returned invalid filesystem capacity")
+	ErrNotSymlink           = errors.New("remote path is not a symbolic link")
+	ErrUnavailable          = errors.New("sftp service is unavailable")
+	ErrInvalidAlias         = errors.New("ssh alias is required")
+	ErrInvalidPath          = errors.New("remote path must be an absolute POSIX path")
+	ErrRootOperation        = errors.New("operation on the remote root is not allowed")
+	ErrNotRegularFile       = errors.New("remote path is not a regular file")
+	ErrNotDirectory         = errors.New("remote path is not a directory")
+	ErrTextTooLarge         = errors.New("remote file is too large to edit")
+	ErrNotUTF8              = errors.New("remote file is not UTF-8 text")
+	ErrConflict             = errors.New("remote file changed since it was read")
+	ErrAlreadyExists        = errors.New("remote path already exists")
 	// ErrNameCollision is a target entry that the same transfer already wrote
 	// under a name differing only by case or Unicode normalization.
 	ErrNameCollision    = errors.New("target resolves two source names to one entry")
@@ -48,6 +53,13 @@ var (
 	ErrUnsupportedEntry = errors.New("remote entry type cannot be copied")
 	ErrCompareLimit     = errors.New("directory comparison exceeded its safety limit")
 	ErrTraversalLimit   = errors.New("directory traversal exceeded its safety limit")
+	// ErrTargetInsideSource is a folder copy or move whose target is the
+	// source folder itself or lies inside it.
+	ErrTargetInsideSource = errors.New("target is the source folder or inside it")
+	// ErrTargetIsSource is a file copy or move whose target is the source
+	// file itself, also when it is reached through another alias of the same
+	// server or through a symbolic link on the target's path.
+	ErrTargetIsSource = errors.New("target is the source file itself")
 )
 
 type EntryType string
@@ -59,6 +71,12 @@ const (
 	EntryOther     EntryType = "other"
 )
 
+// Ownership is available only when the metadata source explicitly supplied both IDs.
+type Ownership struct {
+	UID uint32
+	GID uint32
+}
+
 // Entry は、file browser が表示するひとつのリモート項目である。
 // Revision は metadata revision であり、upload の競合検査に使える。
 type Entry struct {
@@ -69,6 +87,7 @@ type Entry struct {
 	Mode       fs.FileMode
 	ModifiedAt time.Time
 	Revision   string
+	Ownership  *Ownership
 	// For a symlink only: the target as the server reports it, and the type
 	// of the entry the chain ends at. TargetType stays empty when the target
 	// cannot be read. Size and ModifiedAt are the target's when it is a file;
@@ -108,15 +127,19 @@ type TextFile struct {
 	Revision string
 }
 
-// SearchResult は、あるディレクトリ配下の名前一致である。
+// SearchResult は、あるディレクトリ配下の名前または内容の一致である。
 //
-// Truncated は、予算のどれかに当たって歩き切らずに戻ったことを言う。
+// Truncated は、上限や読み取れない項目のために検索が部分的だったことを示す。
 // 「これで全部だ」と言えないことを、画面がそのまま言えるようにする。
 type SearchResult struct {
 	Path      string
 	Query     string
 	Entries   []Entry
 	Truncated bool
+	Mode      SearchMode
+	Matches   []ContentMatch
+	Omissions []SearchOmission
+	BytesRead int64
 }
 
 // DirectoryStats is a bounded summary of a remote directory tree. Truncated
@@ -138,21 +161,26 @@ const (
 	DirectoryLeftOnly     DirectoryDifferenceStatus = "left_only"
 	DirectoryRightOnly    DirectoryDifferenceStatus = "right_only"
 	DirectoryTypeMismatch DirectoryDifferenceStatus = "type_mismatch"
+	DirectoryUnverified   DirectoryDifferenceStatus = "unverified"
 )
 
-// DirectoryDifference describes one relative path below two independently
-// connected SFTP roots. Entries are pointers because one side may not exist.
+// DirectoryDifference describes one relative path below two comparison roots.
+// Entries are pointers because one side may not exist.
 type DirectoryDifference struct {
 	RelativePath string
 	Status       DirectoryDifferenceStatus
 	Left         *Entry
 	Right        *Entry
+	Omission     string
 }
 
 type DirectoryComparison struct {
 	LeftPath  string
 	RightPath string
 	Entries   []DirectoryDifference
+	Mode      ComparisonMode
+	BytesRead int64
+	Truncated bool
 }
 
 type RemoteTransferOperation string
@@ -274,6 +302,10 @@ type WriteSeekCloser interface {
 type Remote interface {
 	io.Closer
 	Getwd(ctx context.Context) (string, error)
+	// RealPath asks the server for the absolute form of path (SSH_FXP_REALPATH).
+	// OpenSSH's sftp-server follows the symbolic links on the way; a server
+	// that only cleans the path, as pkg/sftp's does, does not follow them.
+	RealPath(path string) (string, error)
 	ReadDir(ctx context.Context, path string) ([]fs.FileInfo, error)
 	Lstat(path string) (fs.FileInfo, error)
 	ReadLink(path string) (string, error)

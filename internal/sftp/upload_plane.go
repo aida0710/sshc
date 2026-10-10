@@ -24,6 +24,7 @@ import (
 // preparation with append, complete, pause and cancel; ranged writes later
 // share this lock with each other.
 func (m *TransferManager) StartOwned(ctx context.Context, alias, id, remotePath string, options StartUploadOptions) (ResumableUpload, error) {
+	ctx = m.withTransferLimiter(ctx)
 	unlock := m.lock("", jobOwnerLockKey(id))
 	defer unlock()
 	done, err := m.KeepJobActive(id)
@@ -172,7 +173,7 @@ func (m *TransferManager) AppendRangeOwned(ctx context.Context, write UploadRang
 // The caller fills in Parallelism and ChunkBytes from the job's split.
 func (m *TransferManager) startParallelUpload(
 	ctx context.Context, target UploadTarget, options StartUploadOptions, completed []UploadRange,
-) (ResumableUpload, error) {
+) (_ ResumableUpload, operationErr error) {
 	alias, id := target.Alias, target.ID
 	cleaned, err := resumablePath(id, target.RemotePath)
 	if err != nil || options.Size < 0 || validateUploadRanges(completed, options.Size) != nil {
@@ -187,7 +188,7 @@ func (m *TransferManager) startParallelUpload(
 	if err != nil {
 		return ResumableUpload{}, err
 	}
-	defer remote.Close()
+	defer func() { closeTransferRemote(remote, operationErr) }()
 	expected, err := expectedTargetRevision(ctx, remote, cleaned, options)
 	if err != nil {
 		return ResumableUpload{}, err
@@ -269,7 +270,7 @@ func (m *TransferManager) clearParallelUploadRangesBeforeReset(id string, comple
 	return nil
 }
 
-func (m *TransferManager) writeUploadRange(ctx context.Context, write UploadRangeWrite) error {
+func (m *TransferManager) writeUploadRange(ctx context.Context, write UploadRangeWrite) (operationErr error) {
 	cleaned, err := resumablePath(write.Target.ID, write.Target.RemotePath)
 	if err != nil {
 		return err
@@ -280,7 +281,7 @@ func (m *TransferManager) writeUploadRange(ctx context.Context, write UploadRang
 	if err != nil {
 		return err
 	}
-	defer remote.Close()
+	defer func() { closeTransferRemote(remote, operationErr) }()
 	part := uploadPartPath(cleaned, write.Target.ID)
 	info, err := remote.Lstat(part)
 	if err != nil {
@@ -294,7 +295,7 @@ func (m *TransferManager) writeUploadRange(ctx context.Context, write UploadRang
 		return err
 	}
 	if _, err = file.Seek(write.Range.Offset, io.SeekStart); err == nil {
-		err = consumeExactUploadRange(ctx, file, write.Contents, write.Range.Size)
+		err = consumeExactUploadRange(ctx, m.Service.transferWriter(ctx, file), write.Contents, write.Range.Size)
 	}
 	closeErr := file.Close()
 	if err != nil {
@@ -410,6 +411,7 @@ func (m *TransferManager) AppendOwned(ctx context.Context, chunk UploadAppend) (
 // request returns, so the remote file is never renamed into place while the
 // job record still describes an unfinished upload.
 func (m *TransferManager) CompleteOwned(ctx context.Context, completion UploadCompletion) (Transfer, error) {
+	ctx = m.withTransferLimiter(ctx)
 	alias, id, remotePath := completion.Target.Alias, completion.Target.ID, completion.Target.RemotePath
 	total, expectedRevision, sourceFingerprint := completion.Total, completion.ExpectedRevision, completion.SourceFingerprint
 	unlock := m.lock("", jobOwnerLockKey(id))
@@ -453,10 +455,14 @@ func (m *TransferManager) CompleteOwned(ctx context.Context, completion UploadCo
 	}
 	transfer, err := m.completeUploadPart(ctx, completion)
 	if err != nil {
+		if errors.Is(err, ErrAmbiguousTransfer) {
+			m.recordUncertainUpload(id)
+		}
 		return Transfer{}, err
 	}
 	if _, err := m.updateUploadJob(id, UpdateTransferJob{Action: TransferCompleteAction, TransferredBytes: &total}); err != nil {
-		return Transfer{}, err
+		m.markTransferReconciliationRequired(nil, id, total)
+		return Transfer{}, errors.Join(ErrAmbiguousTransfer, err)
 	}
 	return transfer, nil
 }
@@ -558,7 +564,7 @@ func (m *TransferManager) CancelOwned(ctx context.Context, alias, id, remotePath
 // job recorded as written, before one stream continues from its end.
 func (m *TransferManager) startSequentialUpload(
 	ctx context.Context, target UploadTarget, options StartUploadOptions, acknowledged int64,
-) (ResumableUpload, error) {
+) (_ ResumableUpload, operationErr error) {
 	if m.isClosed() {
 		return ResumableUpload{}, ErrUnavailable
 	}
@@ -583,7 +589,7 @@ func (m *TransferManager) startSequentialUpload(
 		if keepRemote {
 			m.keepRemoteIdle(alias, id, cleaned, remote)
 		} else {
-			m.releaseRemote(alias, id, cleaned)
+			m.releaseRemoteAfterTransfer(target, operationErr)
 		}
 	}()
 
@@ -652,7 +658,7 @@ func truncateRemoteFile(remote Remote, name string, size int64) error {
 // *UploadPart functions check a request against the part only, not against the
 // job's state, its owner lock or its queue slot. Requests reach it through
 // AppendOwned, which checks those first.
-func (m *TransferManager) appendUploadPart(ctx context.Context, chunk UploadAppend) (ResumableUpload, error) {
+func (m *TransferManager) appendUploadPart(ctx context.Context, chunk UploadAppend) (_ ResumableUpload, operationErr error) {
 	alias, id, remotePath := chunk.Target.Alias, chunk.Target.ID, chunk.Target.RemotePath
 	offset, total, contents := chunk.Offset, chunk.Total, chunk.Contents
 	if m.isClosed() {
@@ -675,7 +681,7 @@ func (m *TransferManager) appendUploadPart(ctx context.Context, chunk UploadAppe
 		if keepRemote {
 			m.keepRemoteIdle(alias, id, cleaned, remote)
 		} else {
-			m.releaseRemote(alias, id, cleaned)
+			m.releaseRemoteAfterTransfer(chunk.Target, operationErr)
 		}
 	}()
 	part := uploadPartPath(cleaned, id)
@@ -695,7 +701,7 @@ func (m *TransferManager) appendUploadPart(ctx context.Context, chunk UploadAppe
 	}
 	if _, err = file.Seek(offset, 0); err == nil {
 		var written int64
-		written, err = io.Copy(file, bytes.NewReader(contents))
+		written, err = io.Copy(m.Service.transferWriter(ctx, file), bytes.NewReader(contents))
 		if err == nil && written != int64(len(contents)) {
 			err = io.ErrShortWrite
 		}
@@ -726,7 +732,7 @@ func (m *TransferManager) appendUploadPart(ctx context.Context, chunk UploadAppe
 
 // completeUploadPart publishes a part that holds every byte and matches the
 // source fingerprint. Requests reach it through CompleteOwned.
-func (m *TransferManager) completeUploadPart(ctx context.Context, completion UploadCompletion) (Transfer, error) {
+func (m *TransferManager) completeUploadPart(ctx context.Context, completion UploadCompletion) (_ Transfer, operationErr error) {
 	alias, id, remotePath := completion.Target.Alias, completion.Target.ID, completion.Target.RemotePath
 	total, expectedRevision, sourceFingerprint := completion.Total, completion.ExpectedRevision, completion.SourceFingerprint
 	if m.isClosed() {
@@ -744,7 +750,7 @@ func (m *TransferManager) completeUploadPart(ctx context.Context, completion Upl
 	}
 	stopCancellation := m.watchRemoteCancellation(ctx, alias, id, cleaned, remote)
 	defer stopCancellation()
-	defer m.releaseRemote(alias, id, cleaned)
+	defer func() { m.releaseRemoteAfterTransfer(completion.Target, operationErr) }()
 	part := uploadPartPath(cleaned, id)
 	info, err := remote.Lstat(part)
 	if err != nil {
@@ -757,7 +763,7 @@ func (m *TransferManager) completeUploadPart(ctx context.Context, completion Upl
 	if err != nil {
 		return Transfer{}, err
 	}
-	actualFingerprint, fingerprintErr := SourceFingerprint(ctx, source, total)
+	actualFingerprint, fingerprintErr := SourceFingerprint(ctx, transferVerificationReader(ctx, source), total)
 	closeErr := source.Close()
 	if fingerprintErr != nil {
 		return Transfer{}, fingerprintErr
@@ -797,7 +803,7 @@ func (m *TransferManager) completeUploadPart(ctx context.Context, completion Upl
 		return Transfer{}, ErrConflict
 	}
 	if err := publishUploadPart(remote, part, cleaned, expectedRevision); err != nil {
-		return Transfer{}, err
+		return Transfer{}, publicationFailure(err)
 	}
 	// Publication is the commit point. A diagnostic Lstat failure after it must
 	// not turn an already-visible target into a failed, un-retryable job.
@@ -841,7 +847,7 @@ func SourceFingerprint(ctx context.Context, source io.Reader, size int64) (strin
 }
 
 // cancelUploadPart removes the part. Requests reach it through CancelOwned,
-// and a failed upload's part is removed through cleanupEvictedUploadPart.
+// and a failed upload's part is removed through cleanupTransferPart.
 func (m *TransferManager) cancelUploadPart(ctx context.Context, alias, id, remotePath string) error {
 	if m.isClosed() {
 		return ErrUnavailable
@@ -960,7 +966,7 @@ func targetContentRevision(ctx context.Context, remote Remote, target string, be
 		return "", err
 	}
 	hash := sha256.New()
-	written, copyErr := copyContext(ctx, hash, source, 0)
+	written, copyErr := copyContext(ctx, hash, transferVerificationReader(ctx, source), 0)
 	closeErr := source.Close()
 	if copyErr != nil {
 		return "", copyErr

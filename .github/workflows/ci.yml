@@ -233,6 +233,8 @@ jobs:
       # するので、固定を外れたずれは、インストールされるのではなくビルドを止める
       # べきである。
       - run: npm ci
+      - name: Browser demo archive and release proxy tests
+        run: npm test --prefix ../demo
 
       # 型検査は、アプリケーションと、自前の tsconfig を持つエンドツーエンドの
       # スイートの両方に対して走る。
@@ -342,15 +344,17 @@ jobs:
         run: docker build internal/vpn/container
       # IKEv2/IPsec は、トンネルをカーネルの XFRM インターフェースに結び付ける。
       # runner のカーネル（amd64 と arm64）で、テストの中で立てた strongSwan の
-      # サーバーへ実際に接続できることを確かめる。
+      # サーバーへ実際に接続できることを確かめる。L2TP/IPsec は、既定の暗号スイートで
+      # 組み合わせを1つしか受け付けないサーバーと IPsec を確立できることを確かめる。
+      # IKEv1 で送られる候補は、イメージの strongSwan のプラグインで変わる。
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - name: Connect through IKEv2/IPsec in the VPN container
+      - name: Connect through IKEv2/IPsec and L2TP/IPsec in the VPN container
         env:
           SSHC_VPN_DOCKER_TEST: "1"
-        run: go test ./internal/vpn -run IKEv2 -count=1 -timeout 15m
+        run: go test ./internal/vpn -run 'IKEv2|L2TP' -count=1 -timeout 15m
 
   integration:
     name: Integration

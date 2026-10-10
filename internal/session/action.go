@@ -30,10 +30,14 @@ const (
 	ActionRevealVPNSecrets  = "vpn_profile.reveal"
 	ActionPurgeTrashEntry   = "trash.purge"
 	ActionSFTPDelete        = "sftp.delete"
+	ActionSFTPCreateSymlink = "sftp.symlink.create"
+	ActionSFTPSymlink       = "sftp.symlink"
+	ActionSFTPOwnership     = "sftp.ownership"
 	ActionSFTPChmod         = "sftp.chmod"
 	ActionSnippetExecute    = "snippet.execute"
 	ActionTerminalCommand   = "terminal.command.broadcast"
 	ActionSyncForcePush     = "sync.force_push"
+	ActionUpdate            = "update.install"
 )
 
 var (
@@ -56,9 +60,13 @@ var knownActionKinds = map[string]bool{
 	ActionPurgeTrashEntry:   true,
 	ActionSFTPDelete:        true,
 	ActionSFTPChmod:         true,
+	ActionSFTPSymlink:       true,
+	ActionSFTPCreateSymlink: true,
+	ActionSFTPOwnership:     true,
 	ActionSnippetExecute:    true,
 	ActionTerminalCommand:   true,
 	ActionSyncForcePush:     true,
+	ActionUpdate:            true,
 }
 
 // KnownActionKind は、kind がこのアプリケーションのいずれかの確認対象となる操作か

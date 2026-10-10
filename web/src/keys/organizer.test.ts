@@ -28,7 +28,7 @@ function item(relativePath: string, id = relativePath): KeyItem {
     sizeBytes: 444,
     references: [],
     notes: [],
-  } as unknown as KeyItem;
+  };
 }
 
 function relocated(overrides: Partial<RelocateKeyResponse> = {}): RelocateKeyResponse {
@@ -174,7 +174,7 @@ describe("moveInto", () => {
 
 describe("shownItems", () => {
   function kinded(relativePath: string, kind: string, permissionRisk = false): KeyItem {
-    return { ...item(relativePath), kind, permissionRisk } as unknown as KeyItem;
+    return { ...item(relativePath), kind, permissionRisk };
   }
 
   const everything = [
@@ -213,7 +213,7 @@ describe("keyItemGroups", () => {
       ...item("id_work.pub", "public"),
       kind: "public_key",
       fingerprint: "SHA256:work",
-    } as KeyItem;
+    };
     const certificate = {
       ...item("id_work-cert.pub", "certificate"),
       kind: "certificate",
@@ -224,7 +224,7 @@ describe("keyItemGroups", () => {
       ...item("colleague.pub", "standalone"),
       kind: "public_key",
       fingerprint: "SHA256:colleague",
-    } as KeyItem;
+    };
 
     const grouped = keyItemGroups([publicKey, standalone, privateKey, certificate]);
 
@@ -241,12 +241,12 @@ describe("keyItemGroups", () => {
       ...item("id_work.pub", "public"),
       kind: "public_key",
       fingerprint: "SHA256:work",
-    } as KeyItem;
+    };
     const standalone = {
       ...item("colleague.pub", "standalone"),
       kind: "public_key",
       fingerprint: "SHA256:colleague",
-    } as KeyItem;
+    };
 
     expect(includeKeyPairContext([privateKey, publicKey, standalone], [publicKey]).map((entry) => entry.id)).toEqual([
       "private",

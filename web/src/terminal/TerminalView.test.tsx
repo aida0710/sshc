@@ -40,7 +40,7 @@ beforeEach(() => {
     removeListener: () => {},
     addEventListener: () => {},
     removeEventListener: () => {},
-  })) as unknown as typeof window.matchMedia;
+  }));
   window.ResizeObserver = class {
     observe() {}
     unobserve() {}
@@ -89,7 +89,7 @@ describe("TerminalView", () => {
       removeListener: () => {},
       addEventListener: () => {},
       removeEventListener: () => {},
-    })) as unknown as typeof window.matchMedia;
+    }));
     let cursorBlink: boolean | undefined;
     const originalOpen = Terminal.prototype.open;
     const open = vi.spyOn(Terminal.prototype, "open").mockImplementation(function (this: Terminal, parent: HTMLElement) {
@@ -115,7 +115,7 @@ describe("TerminalView", () => {
       removeListener: () => {},
       addEventListener: (_type: string, listener: () => void) => { listeners.push(listener); },
       removeEventListener: () => {},
-    })) as unknown as typeof window.matchMedia;
+    }));
     let view: Terminal | undefined;
     const originalOpen = Terminal.prototype.open;
     const open = vi.spyOn(Terminal.prototype, "open").mockImplementation(function (this: Terminal, parent: HTMLElement) {
@@ -149,7 +149,7 @@ describe("TerminalView", () => {
       matches: query.includes("pointer: coarse"), media: query,
       addEventListener: vi.fn(), removeEventListener: vi.fn(),
       addListener: vi.fn(), removeListener: vi.fn(),
-    })) as unknown as typeof window.matchMedia;
+    }));
     const focus = vi.spyOn(Terminal.prototype, "focus");
     try {
       renderView();

@@ -49,7 +49,7 @@ function build(): HostDetail {
       editable: true,
       exists: true,
     },
-  } as HostDetail;
+  };
 }
 
 // saveButton は、下書きに変更があるときだけ現れる保存ボタンである。

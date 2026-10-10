@@ -233,7 +233,7 @@ func (p sshParts) openSFTP(ctx context.Context, target sshclient.Target) (sshcSF
 	// than what arrived, so the upload plane truncates a part back to its
 	// acknowledged offset after an error and verifies the whole part before
 	// publishing it.
-	client, err := pkgsftp.NewClient(connection.Client(), pkgsftp.UseConcurrentWrites(true))
+	client, err := sshcSFTP.NewSSHClient(connection.Client(), pkgsftp.UseConcurrentWrites(true))
 	if err != nil {
 		_ = connection.Close()
 		return nil, err
@@ -250,8 +250,8 @@ type sftpTransport interface {
 
 // newSFTPRemote wraps one SFTP session so that the pool can ask whether it is
 // still usable before lending it to the next operation.
-func newSFTPRemote(session *pkgsftp.Client, transport sftpTransport) *sftpRemote {
-	remote := &sftpRemote{Remote: sshcSFTP.NewClient(session), transport: transport, dead: make(chan struct{})}
+func newSFTPRemote(session *sshcSFTP.Client, transport sftpTransport) *sftpRemote {
+	remote := &sftpRemote{Remote: session, transport: transport, dead: make(chan struct{})}
 	// A server can end the SFTP subsystem while the transport stays up: the
 	// sftp-server exits, sshd's ChannelTimeout closes the channel, or a reply
 	// cannot be parsed. Every later request then fails as a lost connection,
@@ -282,6 +282,8 @@ func (remote *sftpRemote) Alive() bool {
 		return true
 	}
 }
+
+func (remote *sftpRemote) UnderlyingRemote() sshcSFTP.Remote { return remote.Remote }
 
 func (remote *sftpRemote) OpenRange(candidate string, offset int64) (io.ReadCloser, error) {
 	ranged, ok := remote.Remote.(sshcSFTP.RangeRemote)

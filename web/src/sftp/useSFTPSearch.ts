@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { sftpApi, type RemoteEntry } from "./api";
+import { sftpApi, type RemoteEntry, type RemoteSearchResult } from "./api";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
+import type { SearchMode } from "./contentToolTypes";
 
-type SearchResult = { root: string; query: string; entries: RemoteEntry[]; truncated: boolean };
+type SearchResult = RemoteSearchResult & { root: string; mode: SearchMode };
 
 // The filter box and the recursive search behind it. While a search is
 // showing, the rows are its results rather than one directory; everything
@@ -18,8 +19,15 @@ export function useSFTPSearch({
   const { alias, path, entries } = browser;
   const [search, setSearch] = useState<SearchResult | null>(null);
   const [filter, setFilter] = useState("");
+  const [remoteMode, setMode] = useState<SearchMode>("name");
+  // Sources without recursive search retain their existing name filter.
+  const mode: SearchMode = browser.source?.can.search === true ? remoteMode : "name";
+  const [searching, setSearching] = useState(false);
+  const request = useRef<AbortController | null>(null);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => () => { request.current?.abort(); }, [alias, path]);
 
   useEffect(() => {
     if (mobileSearchOpen) searchInput.current?.focus();
@@ -29,20 +37,35 @@ export function useSFTPSearch({
   const normalizedFilter = filter.trim().toLocaleLowerCase();
   // The filter box is the query in search mode; matching again locally would
   // hide results whose match is in a parent directory's name.
-  const matches = (rows: RemoteEntry[]) => normalizedFilter === "" || search !== null
+  const matches = (rows: RemoteEntry[]) => normalizedFilter === "" || search !== null || mode === "content"
     ? rows
     : rows.filter((entry) => entry.name.toLocaleLowerCase().includes(normalizedFilter));
 
   async function runSearch(query = filter, root = search?.root ?? path) {
-    const needle = query.trim();
-    if (alias === "" || needle === "" || root === "") return;
-    const found = await browser.track(root, () => sftpApi.search(alias, root, needle));
-    if (found === null) return;
-    setSearch({ root: found.path, query: found.query, entries: found.entries, truncated: found.truncated });
+    const needle = mode === "name" ? query.trim() : query;
+    if (!browser.source?.can.search || alias === "" || needle.trim() === "" || root === "") return;
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    setSearching(true);
+    const found = await browser.track(root, async () => {
+      try {
+        return await sftpApi.search({ alias, path: root, query: needle, mode, signal: controller.signal });
+      } catch (error) {
+        if (controller.signal.aborted) return null;
+        throw error;
+      }
+    });
+    if (request.current !== controller) return;
+    setSearching(false);
+    request.current = null;
+    if (found === null || controller.signal.aborted) return;
+    setSearch({ ...found, root: found.path, mode });
     onResults?.();
   }
 
   function endSearch() {
+    request.current?.abort();
     if (search === null) return;
     const root = search.root;
     setSearch(null);
@@ -68,12 +91,17 @@ export function useSFTPSearch({
   }
 
   function clear() {
+    request.current?.abort();
     setSearch(null);
     setFilter("");
     setMobileSearchOpen(false);
   }
 
   return {
+    mode,
+    setMode: (next: SearchMode) => { request.current?.abort(); setMode(next); setSearch(null); },
+    searching,
+    cancelSearch: () => request.current?.abort(),
     search,
     setSearch,
     filter,
@@ -93,3 +121,4 @@ export function useSFTPSearch({
   };
 }
 
+export type SFTPSearchModel = ReturnType<typeof useSFTPSearch>;

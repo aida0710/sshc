@@ -142,6 +142,64 @@ func (r *fakeRemote) Getwd(ctx context.Context) (string, error) {
 	return r.workingDir, nil
 }
 
+// maxFakeLinkHops bounds the links RealPath follows, as ELOOP does on a server.
+const maxFakeLinkHops = 40
+
+var errFakeLinkLoop = errors.New("too many levels of symbolic links")
+
+// RealPath resolves candidate as OpenSSH's sftp-server does: each folder on
+// the way must exist and symbolic links are followed, while the last name may
+// be missing. A link node holds its target as content; a relative target
+// starts at the folder holding the link.
+func (r *fakeRemote) RealPath(candidate string) (string, error) {
+	resolved := "/"
+	pending := strings.Split(candidate, "/")
+	hops := 0
+	for len(pending) > 0 {
+		name := pending[0]
+		pending = pending[1:]
+		switch name {
+		case "", ".":
+			continue
+		case "..":
+			resolved = path.Dir(resolved)
+			continue
+		}
+		next := path.Join(resolved, name)
+		info, ok := r.nodes[next]
+		if !ok && onlyEmptyNames(pending) {
+			return next, nil
+		}
+		if !ok {
+			return "", fs.ErrNotExist
+		}
+		if info.mode&fs.ModeSymlink == 0 {
+			resolved = next
+			continue
+		}
+		hops++
+		if hops > maxFakeLinkHops {
+			return "", errFakeLinkLoop
+		}
+		if path.IsAbs(string(info.content)) {
+			resolved = "/"
+		}
+		pending = append(strings.Split(string(info.content), "/"), pending...)
+	}
+	return resolved, nil
+}
+
+// onlyEmptyNames reports whether the names left of a path name nothing more,
+// as the trailing "" of "/work/" and a trailing "." do.
+func onlyEmptyNames(names []string) bool {
+	for _, name := range names {
+		if name != "" && name != "." {
+			return false
+		}
+	}
+	return true
+}
+
 func (r *fakeRemote) ReadDir(ctx context.Context, directory string) ([]fs.FileInfo, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -269,6 +327,19 @@ func (r *fakeRemote) Chmod(candidate string, mode fs.FileMode) error {
 	info.mode = info.mode.Type() | mode&^fs.ModeType
 	r.nodes[candidate] = info
 	return nil
+}
+
+func (r *fakeRemote) CheckChmodNoFollow() error { return nil }
+
+func (r *fakeRemote) ChmodNoFollow(candidate string, mode fs.FileMode) error {
+	info, err := r.Lstat(candidate)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		return sftp.ErrConflict
+	}
+	return r.Chmod(candidate, mode)
 }
 
 func (r *fakeRemote) Replace(from, to string) error {
@@ -598,7 +669,7 @@ func TestSearchMatchesNamesBelowARootWithoutFollowingSymlinks(t *testing.T) {
 	})
 	service := serviceFor(remote)
 
-	found, err := service.Search(context.Background(), "edge", "/srv", "LOG")
+	found, err := service.Search(context.Background(), sftp.SearchOptions{Alias: "edge", Path: "/srv", Query: "LOG"})
 	if err != nil {
 		t.Fatalf("Search() = %v", err)
 	}
@@ -617,11 +688,11 @@ func TestSearchMatchesNamesBelowARootWithoutFollowingSymlinks(t *testing.T) {
 	}
 
 	for _, query := range []string{"", "   ", strings.Repeat("x", sftp.MaxSearchQueryBytes+1)} {
-		if _, err := service.Search(context.Background(), "edge", "/srv", query); !errors.Is(err, sftp.ErrInvalidQuery) {
+		if _, err := service.Search(context.Background(), sftp.SearchOptions{Alias: "edge", Path: "/srv", Query: query}); !errors.Is(err, sftp.ErrInvalidQuery) {
 			t.Fatalf("Search(%q) = %v, want %v", query, err, sftp.ErrInvalidQuery)
 		}
 	}
-	if _, err := service.Search(context.Background(), "edge", "relative", "log"); !errors.Is(err, sftp.ErrInvalidPath) {
+	if _, err := service.Search(context.Background(), sftp.SearchOptions{Alias: "edge", Path: "relative", Query: "log"}); !errors.Is(err, sftp.ErrInvalidPath) {
 		t.Fatalf("Search(relative) = %v, want %v", err, sftp.ErrInvalidPath)
 	}
 }

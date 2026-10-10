@@ -152,7 +152,7 @@ _sshc_completion() {
           list) _sshc_complete_words "--json --help" ;;
           show|close) if (( COMP_CWORD >= 4 )); then _sshc_complete_words "--json"; fi ;;
           create) if [[ "${COMP_WORDS[3]}" == "shell" && COMP_CWORD -ge 4 || "${COMP_WORDS[3]}" == "ssh" && COMP_CWORD -ge 5 ]]; then _sshc_complete_words "--json"; fi ;;
-          rename) if (( COMP_CWORD >= 5 )); then _sshc_complete_words "--json"; fi ;;
+          rename) if (( COMP_CWORD == 4 )); then _sshc_complete_words "--auto"; else _sshc_complete_words "--json"; fi ;;
           read) if (( COMP_CWORD >= 4 )); then _sshc_complete_words "--cursor --limit --json"; fi ;;
           send) if (( COMP_CWORD >= 4 )); then _sshc_complete_words "--text --no-enter --json"; fi ;;
           wait) if (( COMP_CWORD >= 4 )); then _sshc_complete_words "--for --timeout --json"; fi ;;
@@ -187,7 +187,7 @@ _sshc_completion() {
       if (( COMP_CWORD == 2 )); then
         _sshc_complete_words "{{ACTIONS:service}} --help"
       elif (( COMP_CWORD == 3 )); then
-        case "${COMP_WORDS[2]}" in install|disable) _sshc_complete_words "-y --yes --help" ;; *) _sshc_complete_words "--help" ;; esac
+        case "${COMP_WORDS[2]}" in install|restart|disable) _sshc_complete_words "-y --yes --help" ;; *) _sshc_complete_words "--help" ;; esac
       fi
       ;;
     otp)
@@ -305,7 +305,7 @@ _sshc() {
           list) _sshc_values '--json --help' ;;
           show|close) (( CURRENT >= 5 )) && _sshc_values '--json' ;;
           create) if [[ "${words[4]}" == 'shell' && CURRENT -ge 5 || "${words[4]}" == 'ssh' && CURRENT -ge 6 ]]; then _sshc_values '--json'; fi ;;
-          rename) (( CURRENT >= 6 )) && _sshc_values '--json' ;;
+          rename) if (( CURRENT == 5 )); then _sshc_values '--auto'; else _sshc_values '--json'; fi ;;
           read) (( CURRENT >= 5 )) && _sshc_values '--cursor --limit --json' ;;
           send) (( CURRENT >= 5 )) && _sshc_values '--text --no-enter --json' ;;
           wait) (( CURRENT >= 5 )) && _sshc_values '--for --timeout --json' ;;
@@ -331,7 +331,7 @@ _sshc() {
       if (( CURRENT == 3 )); then
         _sshc_values '{{ACTIONS:service}} --help'
       elif (( CURRENT == 4 )); then
-        case "${words[3]}" in install|disable) _sshc_values '-y --yes --help' ;; *) _sshc_values '--help' ;; esac
+        case "${words[3]}" in install|restart|disable) _sshc_values '-y --yes --help' ;; *) _sshc_values '--help' ;; esac
       fi
       ;;
     otp)
@@ -481,7 +481,7 @@ complete -c sshc -f -n '__sshc_prefix vpn' -a '{{ACTIONS:vpn}} --json --help'
 complete -c sshc -f -n '__sshc_prefix vpn bind; or __sshc_prefix vpn unbind' -a '(command sshc ssh --list 2>/dev/null)'
 complete -c sshc -f -n '__sshc_action vpn remove; and __sshc_min_words 4' -a '-y --yes'
 complete -c sshc -f -n '__sshc_vpn_json' -a '--json'
-complete -c sshc -f -n '__sshc_prefix service install; or __sshc_prefix service disable' -a '-y --yes --help'
+complete -c sshc -f -n '__sshc_prefix service install; or __sshc_prefix service restart; or __sshc_prefix service disable' -a '-y --yes --help'
 complete -c sshc -f -n '__sshc_prefix service status' -a '--help'
 complete -c sshc -f -n '__sshc_prefix otp list; or __sshc_prefix otp show' -a '--json --help'
 complete -c sshc -f -n '__sshc_prefix otp add; or __sshc_prefix otp edit' -a '--help'
@@ -503,6 +503,7 @@ complete -c sshc -f -n '__sshc_terminal_options' -a '--json'
 complete -c sshc -f -n '__sshc_action terminal read; and __sshc_min_words 4' -a '--cursor --limit'
 complete -c sshc -f -n '__sshc_action terminal send; and __sshc_min_words 4' -a '--text --no-enter'
 complete -c sshc -f -n '__sshc_action terminal wait; and __sshc_min_words 4' -a '--for --timeout'
+complete -c sshc -f -n '__sshc_action terminal rename; and test (count (commandline -opc)) -eq 4' -a '--auto'
 complete -c sshc -f -n '__sshc_previous --for' -a '{{WAIT_STATES}}'
 
 complete -c sshc -f -n '__sshc_command serial' -a '{{SERIAL_OPTIONS}}'

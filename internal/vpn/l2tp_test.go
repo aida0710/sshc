@@ -3,6 +3,7 @@ package vpn
 import (
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -76,13 +77,36 @@ func TestTheUserAndPasswordAreQuotedForPPP(t *testing.T) {
 	}
 }
 
-func TestExplicitESPProposalsArePreservedAndIKEUsesTheLibraryDefault(t *testing.T) {
-	documents := l2tpDocuments(*l2tpProfile().L2TP, *l2tpSecrets().L2TP)
-	if !strings.Contains(documents["ipsec.conf"], "    esp=aes256-sha256,aes128-sha1") {
-		t.Errorf("ipsec.conf = %s", documents["ipsec.conf"])
+func TestExplicitProposalsArePreserved(t *testing.T) {
+	settings := *l2tpProfile().L2TP
+	settings.IKE = "aes256-sha1-modp2048!"
+	documents := l2tpDocuments(settings, *l2tpSecrets().L2TP)
+	for _, want := range []string{"    ike=aes256-sha1-modp2048!\n", "    esp=aes256-sha256,aes128-sha1\n"} {
+		if !strings.Contains(documents["ipsec.conf"], want) {
+			t.Errorf("ipsec.conf に %q が無い:\n%s", want, documents["ipsec.conf"])
+		}
 	}
-	if strings.Contains(documents["ipsec.conf"], "    ike=") {
-		t.Errorf("指定していない ike が書かれた: %s", documents["ipsec.conf"])
+}
+
+// IKEv1 では proposal ごとに暗号・MAC・DH群の先頭の1つしか送られないので、既定の IKE は
+// 組み合わせを1つずつ並べる。末尾に ! を付けず、strongSwan の既定の候補も後ろに残す。
+func TestAnUnconfiguredIKEOffersEachSuiteAsItsOwnProposal(t *testing.T) {
+	settings := *l2tpProfile().L2TP
+	settings.IKE = ""
+	documents := l2tpDocuments(settings, *l2tpSecrets().L2TP)
+	if !strings.Contains(documents["ipsec.conf"], "    ike="+defaultL2TPIKE+"\n") {
+		t.Fatalf("既定の IKE が書かれていない: %s", documents["ipsec.conf"])
+	}
+	proposals := strings.Split(defaultL2TPIKE, ",")
+	for _, want := range []string{"aes256-sha1-modp2048", "aes128-sha1-modp1024", "aes128-sha256-modp3072"} {
+		if !slices.Contains(proposals, want) {
+			t.Errorf("既定の IKE に %s が無い: %s", want, defaultL2TPIKE)
+		}
+	}
+	for _, proposal := range proposals {
+		if strings.Count(proposal, "-") != 2 || strings.HasSuffix(proposal, "!") {
+			t.Errorf("1つの組み合わせでない候補がある: %s", proposal)
+		}
 	}
 }
 
@@ -92,6 +116,22 @@ func TestAnUnconfiguredESPIncludesSeparateSHA1ProposalsForL2TPServers(t *testing
 	documents := l2tpDocuments(settings, *l2tpSecrets().L2TP)
 	if !strings.Contains(documents["ipsec.conf"], "    esp=aes256-sha256,aes128-sha256,aes256-sha1,aes128-sha1\n") {
 		t.Fatalf("default ESP omits IKEv1-compatible proposals: %s", documents["ipsec.conf"])
+	}
+}
+
+// charon のログの既定の書き先は syslog で、コンテナの中には受け取る相手がいない。
+// agent が失敗したときに見せる ipsec.log へ、書くたびに書き出させる。
+func TestCharonWritesItsLogToTheFileTheAgentShows(t *testing.T) {
+	documents := l2tpDocuments(*l2tpProfile().L2TP, *l2tpSecrets().L2TP)
+	daemon := documents["strongswan.conf"]
+	for _, want := range []string{
+		"include /etc/strongswan.conf\n",
+		"path = " + agentRuntimeDirectory + "/ipsec.log\n",
+		"flush_line = yes\n",
+	} {
+		if !strings.Contains(daemon, want) {
+			t.Errorf("strongswan.conf に %q が無い:\n%s", want, daemon)
+		}
 	}
 }
 
@@ -112,7 +152,7 @@ func TestTheL2TPDocumentCarriesEveryFileTheContainerNeeds(t *testing.T) {
 	if decoded.L2TP == nil || decoded.L2TP.Server != "vpn.example.jp" {
 		t.Fatalf("l2tp = %+v", decoded.L2TP)
 	}
-	for _, name := range []string{"ipsec.conf", "ipsec.secrets", "xl2tpd.conf", "ppp.options"} {
+	for _, name := range []string{"strongswan.conf", "ipsec.conf", "ipsec.secrets", "xl2tpd.conf", "ppp.options"} {
 		if decoded.L2TP.Documents[name] == "" {
 			t.Errorf("%s が無い", name)
 		}

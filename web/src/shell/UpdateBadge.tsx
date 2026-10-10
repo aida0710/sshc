@@ -1,43 +1,58 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { updateApi, type UpdateApi, type UpdateStatus } from "../api/update";
+import { useId, useState, type ReactNode } from "react";
+import { updateApi, type UpdateApi } from "../api/update";
 import { useTranslate } from "../i18n/context";
+import { useUpdateStatus } from "./useUpdateStatus";
+import { UpdateControls } from "./UpdateControls";
 import { isSafeHttpURL } from "../terminal/links";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
+import { explainedUpdateReason, updateMessage } from "./updateMessage";
 
 type UpdateBadgeProps = {
   api?: UpdateApi;
   current?: string;
   indicator?: ReactNode;
+  enabled?: boolean;
 };
 
-export function UpdateBadge({ api = updateApi, current = "", indicator }: UpdateBadgeProps) {
+export function UpdateBadge({ api = updateApi, current = "", indicator, enabled = true }: UpdateBadgeProps) {
   const t = useTranslate();
-  const [status, setStatus] = useState<UpdateStatus | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void api
-      .updateStatus()
-      .then((loaded) => {
-        if (active) setStatus(loaded);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [api]);
+  const { status, setStatus } = useUpdateStatus(api, enabled);
+  const [isReasonOpen, setReasonOpen] = useState(false);
+  const reasonId = useId();
 
   const displayedCurrent = status?.current ?? current;
   if (displayedCurrent === "") {
     return null;
   }
+  const versionLabel = t("update.version", { version: displayedCurrent });
+  const reason = status === null ? undefined : explainedUpdateReason(status);
+  const detailIndent = indicator === undefined ? "mt-1" : "mt-1 pl-3.5";
   return (
     <div className="border-t border-line px-2 py-2 text-xs text-ink-muted">
-      <div className="flex items-center gap-2">
-        {indicator}
-        <p>{t("update.version", { version: displayedCurrent })}</p>
-      </div>
+      {reason === undefined ? (
+        <div className="flex items-center gap-2">
+          {indicator}
+          <p>{versionLabel}</p>
+        </div>
+      ) : (
+        // The reason only says how to update outside the Web UI, so it stays folded under the version.
+        <button
+          type="button"
+          aria-expanded={isReasonOpen}
+          aria-controls={reasonId}
+          className="flex items-center gap-2 text-left hover:text-ink"
+          onClick={() => setReasonOpen(!isReasonOpen)}
+        >
+          {indicator}
+          <span>{versionLabel}</span>
+          <DisclosureChevron expanded={isReasonOpen} className="size-3" />
+        </button>
+      )}
+      {reason === undefined ? null : (
+        <p id={reasonId} hidden={!isReasonOpen} className={detailIndent}>{t(updateMessage(reason))}</p>
+      )}
       {status === null || !status.available || status.pageUrl === undefined || !isSafeHttpURL(status.pageUrl) ? null : (
-        <p className={indicator === undefined ? "mt-1" : "mt-1 pl-3.5"}>
+        <p className={detailIndent}>
           <a
             href={status.pageUrl}
             target="_blank"
@@ -48,6 +63,7 @@ export function UpdateBadge({ api = updateApi, current = "", indicator }: Update
           </a>
         </p>
       )}
+      {status === null ? null : <UpdateControls status={status} api={api} onStart={(job) => setStatus({ ...status, canUpdate: false, job })} />}
     </div>
   );
 }

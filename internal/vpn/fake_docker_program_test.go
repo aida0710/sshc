@@ -29,13 +29,6 @@ type fakeDockerWrite struct {
 	Text   string `json:"text"`
 }
 
-func TestMain(m *testing.M) {
-	if encoded, found := os.LookupEnv(fakeDockerReplyVariable); found {
-		os.Exit(writeFakeDockerReply(encoded))
-	}
-	os.Exit(m.Run())
-}
-
 // writeFakeDockerReply は、偽の docker として答えを書き、終了コードを返す。
 func writeFakeDockerReply(encoded string) int {
 	var reply fakeDockerReply

@@ -13,7 +13,20 @@ import (
 )
 
 func sftpProblem(c *echo.Context, err error) error {
+	if sshcSFTP.ConnectionLost(err) {
+		return problem(c, http.StatusBadGateway, "sftp_connection_lost")
+	}
 	switch {
+	case errors.Is(err, sshcSFTP.ErrAmbiguousTransfer):
+		return problem(c, http.StatusConflict, sshcSFTP.RemoteReconciliationProblem)
+	case errors.Is(err, sshcSFTP.ErrUnsupportedOperation):
+		return problem(c, http.StatusNotImplemented, "sftp_unsupported_operation")
+	case errors.Is(err, sshcSFTP.ErrMetadataUnavailable):
+		return problem(c, http.StatusNotImplemented, "sftp_metadata_unavailable")
+	case errors.Is(err, sshcSFTP.ErrOwnershipUnavailable):
+		return problem(c, http.StatusNotImplemented, "sftp_ownership_unavailable")
+	case errors.Is(err, sshcSFTP.ErrInvalidSpace):
+		return problem(c, http.StatusBadGateway, "sftp_invalid_space")
 	// A spool error wraps the engine's own file error. It comes before the
 	// fs errors below, which describe the remote side.
 	case errors.Is(err, sshcSFTP.ErrSpoolUnavailable):
@@ -24,11 +37,16 @@ func sftpProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	case errors.Is(err, fs.ErrNotExist), errors.Is(err, sshcSFTP.ErrLinkLoop):
 		return problem(c, http.StatusNotFound, "sftp_not_found")
+	// The engine's own refusals come before the server's, which they also match.
+	case errors.Is(err, sshcSFTP.ErrLocalPrivacyProtection):
+		return problem(c, http.StatusForbidden, "sftp_local_privacy_protection")
+	case errors.Is(err, sshcSFTP.ErrLocalPermissionDenied):
+		return problem(c, http.StatusForbidden, "sftp_local_permission_denied")
 	case errors.Is(err, fs.ErrPermission):
 		return problem(c, http.StatusForbidden, "sftp_permission_denied")
 	case errors.Is(err, sshcSFTP.ErrTransferNotFound):
 		return problem(c, http.StatusNotFound, "sftp_transfer_not_found")
-	case errors.Is(err, sshcSFTP.ErrInvalidAlias), errors.Is(err, sshcSFTP.ErrInvalidPath), errors.Is(err, sshcSFTP.ErrRootOperation), errors.Is(err, sshcSFTP.ErrRevisionRequired), errors.Is(err, sshcSFTP.ErrInvalidTransfer), errors.Is(err, sshcSFTP.ErrInvalidQuery):
+	case errors.Is(err, fs.ErrInvalid), errors.Is(err, sshcSFTP.ErrInvalidAlias), errors.Is(err, sshcSFTP.ErrInvalidPath), errors.Is(err, sshcSFTP.ErrRootOperation), errors.Is(err, sshcSFTP.ErrRevisionRequired), errors.Is(err, sshcSFTP.ErrInvalidTransfer), errors.Is(err, sshcSFTP.ErrInvalidQuery):
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	case errors.Is(err, sshcSFTP.ErrConflict), errors.Is(err, sshcSFTP.ErrOffsetMismatch), errors.Is(err, sshcSFTP.ErrUploadIncomplete):
 		return problem(c, http.StatusConflict, "sftp_conflict")
@@ -48,7 +66,7 @@ func sftpProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusUnsupportedMediaType, "sftp_preview_type")
 	case errors.Is(err, sshcSFTP.ErrNotUTF8):
 		return problem(c, http.StatusUnprocessableEntity, "sftp_not_utf8")
-	case errors.Is(err, sshcSFTP.ErrNotRegularFile), errors.Is(err, sshcSFTP.ErrNotDirectory):
+	case errors.Is(err, sshcSFTP.ErrNotRegularFile), errors.Is(err, sshcSFTP.ErrNotDirectory), errors.Is(err, sshcSFTP.ErrNotSymlink):
 		return problem(c, http.StatusUnprocessableEntity, "sftp_wrong_type")
 	case errors.Is(err, sshcSFTP.ErrUnsupportedEntry):
 		return problem(c, http.StatusUnprocessableEntity, "sftp_unsupported_entry")

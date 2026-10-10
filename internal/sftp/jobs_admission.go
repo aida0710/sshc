@@ -101,6 +101,10 @@ func (m *TransferManager) evictForAdmissionLocked() (evictedID string, cleanup *
 // already admitted starts nothing new: a live run is kept, and a job that is
 // no longer queued refuses to start.
 func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error) {
+	if input.Operation == RemoteGet || input.Operation == RemotePut {
+		m.localMutationsMutex.Lock()
+		defer m.localMutationsMutex.Unlock()
+	}
 	job, err := m.admitJob(input)
 	if err == nil && job.Direction == TransferRemote {
 		m.scheduleRemoteJob(job.ID)
@@ -158,7 +162,7 @@ func (m *TransferManager) admitJob(input CreateTransferJob) (TransferJob, error)
 			cleanupJob := cleanup.job
 			m.jobsMutex.Unlock()
 			closeRemotes(staleRemotes)
-			cleanupErr := m.cleanupEvictedUploadPart(cleanupJob)
+			cleanupErr := m.cleanupTransferPart(cleanupJob)
 			m.jobsMutex.Lock()
 			var persistErr error
 			if current := m.jobs[cleanupJob.ID]; current == cleanup {

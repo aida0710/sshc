@@ -75,6 +75,7 @@ func (m *TransferManager) finishRemoteWorker(id string, run *remoteRun) {
 	if m.remoteRuns[id] == run {
 		delete(m.remoteRuns, id)
 	}
+	delete(m.localTransferRuns, run)
 	m.remoteJobsMutex.Unlock()
 }
 
@@ -88,9 +89,13 @@ func (m *TransferManager) reportRemoteRun(run *remoteRun, id string, update Upda
 
 func (m *TransferManager) runRemoteJob(run *remoteRun, id string) {
 	defer m.finishRemoteWorker(id, run)
+	defer m.cleanupCancelledServerFile(id)
 	ctx := run.ctx
 	job, started := m.startRemoteJobWhenSlotFree(run, id)
 	if !started {
+		return
+	}
+	if err := m.protectLocalTransferRun(run, job); err != nil {
 		return
 	}
 	// Planning and the operation itself can walk a large tree for longer than
@@ -101,44 +106,53 @@ func (m *TransferManager) runRemoteJob(run *remoteRun, id string) {
 		return
 	}
 	defer release()
-	operation := remoteJobOperationFor(m.Service, job)
-	totalBytes, err := operation.plan(ctx)
-	if err == nil {
-		zero := int64(0)
-		total := totalBytes
-		_, err = m.reportRemoteRun(run, id, UpdateTransferJob{Action: TransferProgressAction, TransferredBytes: &zero, TotalBytes: &total, ResetProgress: true})
-	}
-	if err != nil {
-		m.failRemoteJobBeforeOperation(run, id, err)
-		return
-	}
-	// Persist an explicit intent before the operation can publish target data or
-	// remove an entry. If the terminal queue commit later fails, restart restores
-	// this job as reconciliation-required instead of automatically repeating it.
-	if err = m.markRemoteCommitPending(run, id); err != nil {
-		// The intent could not be recorded, so the operation has not started and no
-		// external state changed. Report it like any other pre-transfer failure
-		// instead of leaving a running row for the stale sweep to reap.
-		m.failRemoteJobBeforeOperation(run, id, err)
-		return
-	}
-	report := func(transferred int64) error {
-		_, progressErr := m.reportRemoteRun(run, id, UpdateTransferJob{Action: TransferProgressAction, TransferredBytes: &transferred})
-		return progressErr
-	}
-	err = operation.run(ctx, totalBytes, report)
-	if err == nil {
-		completed := totalBytes
-		if _, commitErr := m.reportRemoteRun(run, id, UpdateTransferJob{Action: TransferCompleteAction, TransferredBytes: &completed}); commitErr != nil {
-			m.markRemoteReconciliationRequired(run, id, completed)
+	for {
+		operation := remoteJobOperationFor(m.Service, job)
+		totalBytes, err := operation.plan(ctx)
+		if err == nil && job.RemoteCheckpoint == nil {
+			zero := int64(0)
+			job, err = m.reportRemoteRun(run, id, UpdateTransferJob{Action: TransferProgressAction, TransferredBytes: &zero, TotalBytes: &totalBytes, ResetProgress: true})
+		}
+		beforeOperation := err != nil
+		if err == nil {
+			// Persist intent before publication so an interrupted final queue
+			// commit can never cause an automatic repeat after engine restart.
+			err = m.markRemoteCommitPending(run, id)
+			beforeOperation = err != nil
+		}
+		if err == nil {
+			if recoverableRemoteFile(job) && (m.AutoReconnect() || job.RemoteCheckpoint != nil) {
+				err = m.copyServerFile(run, job)
+			} else {
+				err = operation.run(ctx, totalBytes, func(transferred int64) error { return m.reportServerFileOffset(run, id, transferred) })
+			}
+		}
+		if err == nil {
+			completed := totalBytes
+			if _, commitErr := m.reportRemoteRun(run, id, UpdateTransferJob{Action: TransferCompleteAction, TransferredBytes: &completed}); commitErr != nil {
+				m.markTransferReconciliationRequired(run, id, completed)
+			}
+			return
+		}
+		if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+			m.clearCommitPendingAfterPause(id)
+			return
+		}
+		if recoverableRemoteFile(job) && ConnectionLost(err) && m.waitToReconnect(run, id) {
+			m.jobsMutex.Lock()
+			if record := m.jobs[id]; record != nil {
+				job = record.job
+			}
+			m.jobsMutex.Unlock()
+			continue
+		}
+		if beforeOperation {
+			m.failRemoteJobBeforeOperation(run, id, err)
+		} else {
+			m.failRemoteJobAfterOperation(run, id, err)
 		}
 		return
 	}
-	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
-		m.clearCommitPendingAfterPause(id)
-		return
-	}
-	m.failRemoteJobAfterOperation(run, id, err)
 }
 
 // startRemoteJobWhenSlotFree waits for a free transfer slot and marks the job
@@ -260,27 +274,6 @@ func (m *TransferManager) clearCommitPendingAfterPause(id string) {
 	}
 }
 
-func (m *TransferManager) markRemoteReconciliationRequired(run *remoteRun, id string, transferred int64) {
-	m.jobsMutex.Lock()
-	defer m.jobsMutex.Unlock()
-	record := m.jobs[id]
-	if record == nil || record.job.Direction != TransferRemote || record.job.Status != TransferRunning {
-		return
-	}
-	if run.ownershipError() != nil {
-		return
-	}
-	m.releaseJobLocked(record.job.Status)
-	record.job.Status = TransferReattach
-	record.job.Problem = RemoteReconciliationProblem
-	if transferred >= 0 && (record.job.TotalBytes < 0 || transferred <= record.job.TotalBytes) {
-		record.job.TransferredBytes = transferred
-	}
-	record.job.BytesPerSecond = 0
-	record.job.RemainingSeconds = -1
-	record.job.UpdatedAt = m.now().UTC()
-}
-
 // failRemoteJobBeforeOperation reports a failure from before the operation
 // could change the remote side. A refused report leaves the job as it is:
 // nothing happened that running it again would repeat.
@@ -294,7 +287,7 @@ func (m *TransferManager) failRemoteJobBeforeOperation(run *remoteRun, id string
 // repeated automatically.
 func (m *TransferManager) failRemoteJobAfterOperation(run *remoteRun, id string, err error) {
 	if m.reportRemoteFailure(run, id, err) != nil {
-		m.markRemoteReconciliationRequired(run, id, -1)
+		m.markTransferReconciliationRequired(run, id, -1)
 	}
 }
 
@@ -311,6 +304,10 @@ func (m *TransferManager) reportRemoteFailure(run *remoteRun, id string, err err
 
 func remoteTransferProblem(err error) string {
 	switch {
+	case errors.Is(err, ErrAmbiguousTransfer):
+		return RemoteReconciliationProblem
+	case ConnectionLost(err):
+		return "sftp_connection_lost"
 	case errors.Is(err, ErrConflict):
 		return "sftp_conflict"
 	case errors.Is(err, ErrNameCollision):
@@ -321,6 +318,14 @@ func remoteTransferProblem(err error) string {
 		return "sftp_transfer_too_large"
 	case errors.Is(err, ErrTraversalLimit):
 		return "sftp_traversal_limit"
+	case errors.Is(err, ErrTargetInsideSource):
+		return "sftp_target_inside_source"
+	case errors.Is(err, ErrTargetIsSource):
+		return "sftp_target_is_source"
+	case errors.Is(err, ErrLocalPrivacyProtection):
+		return "sftp_local_privacy_protection"
+	case errors.Is(err, ErrLocalPermissionDenied):
+		return "sftp_local_permission_denied"
 	default:
 		return "sftp_failed"
 	}

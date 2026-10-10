@@ -1,5 +1,5 @@
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
-import { moveRightSFTPTabLeft, openSecondSFTPPane } from "./support/sftp";
+import { connectSFTPHost, moveRightSFTPTabLeft, openSecondSFTPPane } from "./support/sftp";
 
 test("keeps a chunked SFTP upload visible while another section is open", async ({ page, installation }) => {
   test.setTimeout(process.env.SSHC_VISUAL_DIR === undefined ? 30_000 : 180_000);
@@ -18,6 +18,11 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     chunkBytes: 32 << 20,
   });
 
+  await page.route("**/api/v1/sftp/*/space**", (route) => route.fulfill({ json: {
+    path: new URL(route.request().url()).searchParams.get("path") ?? "/",
+    availableBytes: "1073741824",
+    totalBytes: "2147483648",
+  } }));
   await page.route("**/api/v1/sftp/bastion/entries**", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -115,7 +120,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
   await page.route("**/api/v1/sftp/bastion/preview**", (route) => route.fulfill({
     status: 415,
     contentType: "application/problem+json",
-    body: JSON.stringify({ code: "sftp_preview_type", detail: "Text preview uses the text endpoint." }),
+    body: JSON.stringify({ code: "sftp_preview_type", message: "Text preview uses the text endpoint." }),
   }));
   await page.route("**/api/v1/sftp/bastion/uploads/**", async (route) => {
     const request = route.request();
@@ -150,13 +155,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
 
   await openApplication(page, installation);
   await openSection(page, "SFTP");
-  const chooseHost = async (alias: string, scope = page.getByRole("tabpanel")) => {
-    await scope.locator("button[data-value]:visible").click();
-    const dialog = page.getByRole("dialog");
-    await dialog.getByText(alias, { exact: true }).click();
-    await scope.getByRole("button", { name: /^(Connect|接続)$/ }).click();
-  };
-  await chooseHost("bastion");
+  await connectSFTPHost(page, "bastion");
   await page.locator('input[type="file"]:not([webkitdirectory])').first().setInputFiles({
     name: "large.bin",
     mimeType: "application/octet-stream",
@@ -182,8 +181,8 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
   await openSection(page, "SFTP");
   await expect(page.getByText("Transferring…")).toBeVisible();
   const reloadBastion = async () => {
-    await chooseHost("nas");
-    await chooseHost("bastion");
+    await connectSFTPHost(page, "nas");
+    await connectSFTPHost(page, "bastion");
     await expect(page.getByRole("button", { name: "project", exact: true })).toBeVisible();
   };
   await reloadBastion();
@@ -220,7 +219,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await expect(secondTabs.getByRole("tab")).toHaveCount(1);
     await expect(secondTabs.getByRole("tab", { name: "新しいタブ" })).toHaveAttribute("aria-selected", "true");
     const secondPane = page.getByLabel("2つ目のリモートペイン");
-    await chooseHost("nas", secondPane);
+    await connectSFTPHost(page, "nas", secondPane);
     await expect(secondTabs.getByRole("tab", { name: /^nas:/ })).toBeVisible();
     await expect(page.locator("[data-sftp-pane-tabs]").nth(1).getByRole("button", { name: "新しいタブ" })).toBeVisible();
     await expect(secondPane.getByRole("button", { name: "backups" })).toBeVisible();
@@ -246,8 +245,8 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     const englishFirstPane = page.getByLabel("First remote pane");
     const englishSecondPane = page.getByLabel("Second remote pane");
     await expect(englishSecondPane.locator("button[data-value]:visible")).toHaveAttribute("data-value", "nas");
-    await chooseHost("bastion", englishFirstPane);
-    await chooseHost("nas", englishSecondPane);
+    await connectSFTPHost(page, "bastion", englishFirstPane);
+    await connectSFTPHost(page, "nas", englishSecondPane);
     await page.getByRole("button", { name: "Compare directories", exact: true }).click();
     const englishCompareDialog = page.getByRole("dialog", { name: "Compare directories" });
     await expect(englishCompareDialog.getByText("Left only", { exact: true })).toBeVisible();
@@ -295,7 +294,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.keyboard.press("Escape");
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-transfer-manager-mobile.png`, fullPage: true });
-    await page.locator('input[type="file"]:not([webkitdirectory])').first().setInputFiles({
+    await page.getByRole("tabpanel").locator('input[type="file"]:not([webkitdirectory])').setInputFiles({
       name: "broken.bin",
       mimeType: "application/octet-stream",
       buffer: Buffer.from("broken"),

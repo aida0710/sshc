@@ -15,11 +15,11 @@ sshc is a terminal app for macOS, Linux, Windows, and Android. On desktop, one `
 brew install aida0710/tap/sshc
 ```
 
-Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.42.0`.
+Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.44.4`.
 
 ```sh
-SSHC_VERSION=v0.42.0 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.42.0/install.sh | sh'
+SSHC_VERSION=v0.44.4 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.44.4/install.sh | sh'
 ```
 
 After installation, `sshc update` delegates upgrades to Homebrew or to a receipt-aware installer. It shows the planned change and asks for confirmation. In non-interactive automation, review the plan and use `sshc update --yes`.
@@ -107,7 +107,28 @@ sshc vault unlock
 
 launchd restarts the engine only after it fails. When the engine exits normally, for example after `sshc engine --replace`, launchd leaves it stopped. Run `sshc service install` again to return to the service.
 
-A plist registered by an older sshc keeps the previous definition, which restarts the engine even after a normal exit, until you run `sshc service install` again. `sshc service status` and `sshc update` tell you to run it when this applies.
+A plist registered by an older sshc keeps the previous definition, which restarts the engine even after a normal exit, until you run `sshc service install` again. `sshc service status`, `sshc service restart`, and `sshc update` tell you to run it when this applies.
+
+## Restart a registered service
+
+On Linux and macOS, restart an active user service with:
+
+```sh
+sshc service restart
+```
+
+The command shows the definition and executable paths before asking for confirmation. Restarting ends existing sessions and transfers. Use `sshc service restart --yes` when automation must skip the prompt.
+
+The service must use the stable path of this verified Homebrew or receipt-based `install.sh` installation and match the current service definition. The following cases are refused with exit code 1:
+
+| State | Recovery |
+| --- | --- |
+| Absent or inactive | Run `sshc service install` to register and start it |
+| Definition not managed by sshc | Inspect the hand-written definition and use its own service management procedure |
+| Outdated definition | Run `sshc service install` to update the definition |
+| Definition uses another executable | Run the command from the registered installation, or use `sshc service install` to switch to this installation |
+
+A state or definition change while waiting for confirmation also prevents success. Check `sshc service status` before retrying. After restarting, the service PID must match the engine handoff and status API. A password-protected vault becomes locked, so run `sshc vault unlock`; a passwordless vault unlocks itself.
 
 ## Update
 
@@ -115,7 +136,15 @@ A plist registered by an older sshc keeps the previous definition, which restart
 - Windows: run the PowerShell installer again
 - Android: install the newer APK from GitHub Releases
 
-When an active service was created by `sshc service install` and its executable matches the installation being updated, `sshc update` restarts it automatically. The restart locks a password-protected vault, so run `sshc vault unlock` again; a passwordless vault unlocks itself when the engine starts. If the update succeeds but only the restart fails, follow the message and run `sshc service install` again. Running `install.sh` directly does not restart the service, so run `sshc service install` afterwards. Restart engines outside service management with `sshc engine --replace`.
+### Update from the web UI
+
+On macOS and Linux, verified Homebrew and `install.sh` installations show an update button beside the version when a newer stable release is available. Review the current version, target version, and installation method before confirming. The installation directory must be writable. Homebrew runs `brew upgrade` and checks the version actually installed. Its formula can advance after confirmation, so a newer version may be installed. The `install.sh` installer uses the confirmed version. Manual installations, development builds, Windows, and Android show guidance for updating through their installation method.
+
+The engine restarts after installation, ending connected sessions and transfers. Unlock a password-protected vault again after the restart. The UI shows progress and refuses duplicate updates. If installation succeeds but restarting fails, follow the restart guidance and reload the page without reinstalling.
+
+### Update from the CLI
+
+When an active service was created by `sshc service install` and its executable matches the installation being updated, `sshc update` restarts it automatically. The restart locks a password-protected vault, so run `sshc vault unlock` again; a passwordless vault unlocks itself when the engine starts. If the update succeeds but only the restart fails, follow the message and run `sshc service install` again. Running `install.sh` directly does not restart the service, so run `sshc service restart` afterwards if it is active. Use `sshc service install` for an inactive service or an outdated definition. Restart engines outside service management with `sshc engine --replace`.
 
 ## Uninstall
 

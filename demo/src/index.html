@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>sshc · ブラウザデモ</title>
+  <link rel="stylesheet" href="./demo.css">
+  <link rel="stylesheet" href="./xterm.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><strong>sshc</strong><span data-message="demoTitle"></span></div>
+    <div id="demo-controls" hidden>
+      <nav id="demo-tabs"><button id="web-tab" aria-pressed="true" data-message="webTab"></button><button id="cli-tab" aria-pressed="false" data-message="cliTab"></button></nav>
+      <div id="status" role="status" aria-live="polite"></div>
+    </div>
+    <button id="language-switch" type="button"></button>
+    <button id="reset" data-message="reset" hidden></button>
+  </header>
+  <main>
+    <section id="confirmation" aria-labelledby="confirmation-title">
+      <h1 id="confirmation-title" data-message="heading"></h1>
+      <p data-message="introduction"></p>
+      <table><thead><tr><th data-message="machine"></th><th data-message="purpose"></th><th data-message="memory"></th></tr></thead><tbody id="machine-list"></tbody><tfoot><tr><td colspan="3" id="download-total"></td></tr></tfoot></table>
+      <p class="detail" id="memory-detail"></p>
+      <p class="confirm-question" data-message="confirm"></p>
+      <div class="confirm-actions">
+        <button id="start" class="primary" data-message="start"></button>
+        <p id="release-status" role="status" class="detail"></p>
+      </div>
+      <p id="framed-notice" class="detail" role="alert" hidden><span data-message="framed"></span> <a target="_blank" rel="noopener" data-message="openInNewTab"></a></p>
+    </section>
+    <section id="demo" hidden>
+      <div id="web-panel">
+        <section id="startup" aria-labelledby="startup-title" hidden>
+          <div class="startup-heading"><h2 id="startup-title" data-message="startupTitle"></h2><span id="startup-elapsed"></span></div>
+          <ol class="startup-stages"></ol>
+          <div class="startup-total">
+            <label id="startup-download-label" for="startup-download"></label>
+            <progress id="startup-download" max="100"></progress>
+          </div>
+          <ul class="startup-items startup-archives"></ul>
+          <ul class="startup-items startup-machines"></ul>
+        </section>
+        <iframe id="sshc-ui" title="sshc Web UI" hidden></iframe>
+      </div>
+      <div id="cli-panel" hidden>
+        <p class="cli-hint"><span data-message="commandExamples"></span> <code>sshc ssh demo-a</code> <code>sshc ssh demo-b</code> <code>sshc status</code></p>
+        <div class="cli-frame"><div id="cli"></div></div>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <span><span data-message="versionLabel"></span> <span id="demo-version">{{version}}</span></span>
+    <span><span data-message="updatedAtLabel"></span> <time id="updated-at" datetime="{{updatedAt}}"></time></span>
+    <button id="clear-ui-cache" data-message="clearUICache" hidden></button>
+    <span id="cache-error" role="alert" hidden></span>
+  </footer>
+  <script src="./v86/libv86.js"></script>
+  <script src="./xterm.js"></script>
+  <script src="./addon-fit.js"></script>
+  <script type="module" src="./demo.js"></script>
+</body>
+</html>

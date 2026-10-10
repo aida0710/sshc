@@ -25,6 +25,7 @@ import (
 	"sshc/internal/releasecheck"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
+	"sshc/internal/selfupdate"
 	"sshc/internal/session"
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/sshclient"
@@ -66,6 +67,7 @@ type Dependencies struct {
 	Probe        func(ctx context.Context, alias string) (sshclient.Probe, error)
 	RemoteRun    func(ctx context.Context, target sshclient.Target, command sshclient.Command) (sshclient.Output, error)
 	Updates      *releasecheck.Checker
+	SelfUpdate   *selfupdate.Service
 	// Lookup は親の環境を読み、利用者のログインシェルを見つけるために使う。
 	Lookup func(string) (string, bool)
 	// TerminalStarter は PTY を確保する。nil の場合は既定実装を使用する。
@@ -215,9 +217,10 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 	}
 
 	server, err := httpserver.New(httpserver.Options{
-		Listener:  listener,
-		CLISecret: cliSecret,
-		Updates:   dependencies.Updates,
+		Listener:   listener,
+		CLISecret:  cliSecret,
+		Updates:    dependencies.Updates,
+		SelfUpdate: dependencies.SelfUpdate,
 		ConnectWarnings: func(alias string) []string {
 			if err := validate.Alias(alias); err != nil {
 				return []string{unsafeAliasWarning}
@@ -329,7 +332,12 @@ func StateDir(home string) (string, error) {
 func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	asked, stopAsked := context.WithCancel(ctx)
 	defer stopAsked()
-	dependencies.StopEngine = stopAsked
+	dependencies.StopEngine = func() {
+		if dependencies.SelfUpdate != nil {
+			dependencies.SelfUpdate.BeginStopping()
+		}
+		stopAsked()
+	}
 
 	built, err := build(dependencies, version)
 	if err != nil {
@@ -386,6 +394,9 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 
 // unwind は engine lock の解放前に停止処理を完了する。
 func (r runtime) unwind(dependencies Dependencies) error {
+	if dependencies.SelfUpdate != nil {
+		dependencies.SelfUpdate.BeginStopping()
+	}
 	timeout := dependencies.ShutdownTimeout
 	if timeout <= 0 {
 		timeout = DefaultShutdownTimeout
@@ -418,9 +429,15 @@ func (r runtime) unwind(dependencies Dependencies) error {
 	if r.autoDone != nil {
 		barrierCount++
 	}
+	if dependencies.SelfUpdate != nil {
+		barrierCount++
+	}
 	barriers := make(chan error, barrierCount)
 	go func() { barriers <- r.terminals.Wait() }()
 	go func() { barriers <- r.server.Wait() }()
+	if dependencies.SelfUpdate != nil {
+		go func() { barriers <- dependencies.SelfUpdate.Stop() }()
+	}
 	if r.autoDone != nil {
 		go func() {
 			<-r.autoDone

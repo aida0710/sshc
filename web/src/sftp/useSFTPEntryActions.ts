@@ -1,14 +1,12 @@
 import { useState } from "react";
-import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { sftpProblemText } from "./sftpProblemText";
+import { localMutationProblemText, sftpProblemText } from "./sftpProblemText";
 import { clipboard } from "../ui/clipboard";
 import { sftpApi, type RemoteEntry } from "./api";
 import { parentRowKey, type SFTPEntryListModel } from "./useSFTPEntryList";
-import { remoteJoin as join, remoteParentOf as parentOf } from "./sftpSource";
+import { remoteJoin as join, remoteParentOf as parentOf, type SFTPSource } from "./sftpSource";
 import { sftpTransferManager } from "./transferManager";
-import { symbolicModeToOctal } from "./transfers";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 
 type SFTPInputIntent =
@@ -16,11 +14,10 @@ type SFTPInputIntent =
   | { kind: "createFile" }
   | { kind: "duplicate"; entry: RemoteEntry }
   | { kind: "moveTo"; entries: RemoteEntry[] }
-  | { kind: "rename"; entry: RemoteEntry }
-  | { kind: "chmod"; entry: RemoteEntry; recursive: boolean };
+  | { kind: "rename"; entry: RemoteEntry };
 
 // Everything that changes entries on a host: creating, renaming, moving,
-// copying, changing modes and deleting, with the state of the dialogs that ask
+// copying and deleting, with the state of the dialogs that ask
 // for a name or a confirmation (drawn by SFTPEntryActionDialogs), and the
 // one-step undo for the changes that have one.
 // Delete has no undo on purpose: SFTP has no trash, so offering one would be
@@ -45,18 +42,21 @@ export function useSFTPEntryActions({
   onInteract?: () => void;
 }) {
   const t = useTranslate();
-  const { alias, path, setProblem } = browser;
+  const { alias, path, source, setProblem } = browser;
   const generation = browser.generation;
   const { selectedEntries, selectedEntry, rowKeys, setSelectedPaths, focusAfterReload, cancelPendingFocus } = list;
   const [acting, setActing] = useState(false);
   const [inputIntent, setInputIntent] = useState<SFTPInputIntent | null>(null);
-  const [deleting, setDeleting] = useState<RemoteEntry[] | null>(null);
+  const [deleteIntent, setDeleteIntent] = useState<{
+    entries: RemoteEntry[]; source: SFTPSource; path: string; isCurrent: () => boolean;
+  } | null>(null);
+  const deleting = deleteIntent?.entries ?? null;
   const [deleteProblem, setDeleteProblem] = useState("");
   // What the last change was, and how to put it back.
   const [undo, setUndo] = useState<{ label: string; run: () => Promise<void> } | null>(null);
 
   function report(error: unknown, fallback: MessageKey = "sftp.problem.failed") {
-    setProblem(sftpProblemText(t, error, fallback));
+    setProblem(source?.local ? localMutationProblemText(t, error, fallback) : sftpProblemText(t, error, fallback));
   }
 
   // The offer stands until the next thing happens. A timer would take it away
@@ -76,14 +76,15 @@ export function useSFTPEntryActions({
   }
 
   async function makeDirectory(name: string) {
+    if (source === null || !source.can.createDirectory) return;
     const isCurrent = generation.observe();
     const targetAlias = alias;
     const targetPath = path;
     setActing(true);
     try {
-      await sftpApi.mkdir(targetAlias, join(targetPath, name));
+      await source.mkdir(targetPath, name);
       if (!isCurrent()) return;
-      focusAfterReload(join(targetPath, name));
+      focusAfterReload(source.join(targetPath, name));
       await browser.load(targetPath, { alias: targetAlias });
     } catch (error) {
       if (!isCurrent()) return;
@@ -94,6 +95,7 @@ export function useSFTPEntryActions({
   }
 
   async function makeEmptyFile(name: string) {
+    if (!source?.can.createEntries) return;
     const isCurrent = generation.observe();
     const targetAlias = alias;
     const targetPath = path;
@@ -114,18 +116,19 @@ export function useSFTPEntryActions({
   }
 
   async function rename(entry: RemoteEntry, name: string) {
+    if (source === null || !source.can.rename) return;
     const isCurrent = generation.observe();
     const targetAlias = alias;
-    const targetPath = parentOf(entry.path);
-    const renamed = join(targetPath, name);
+    const targetPath = source.parentOf(entry.path);
+    const renamed = source.join(targetPath, name);
     setActing(true);
     try {
-      await sftpApi.rename(targetAlias, entry.path, renamed);
+      const updated = await source.rename(entry, name);
       if (!isCurrent()) return;
       focusAfterReload(renamed);
       await refreshAfterChange(targetPath, targetAlias);
       offerUndo(t("sftp.renamedTo", { name }), async () => {
-        await sftpApi.rename(targetAlias, renamed, entry.path);
+        await source.rename({ ...entry, path: renamed, name, revision: updated?.revision ?? entry.revision }, entry.name);
         focusAfterReload(entry.path);
         await refreshAfterChange(targetPath, targetAlias);
       });
@@ -137,33 +140,8 @@ export function useSFTPEntryActions({
     }
   }
 
-  async function chmod(entry: RemoteEntry, mode: string, recursive: boolean) {
-    if (entry.type === "symlink" || entry.type === "other") return;
-    const isCurrent = generation.observe();
-    const targetAlias = alias;
-    const targetPath = path;
-    const previous = symbolicModeToOctal(entry.mode);
-    setActing(true);
-    try {
-      await sftpApi.chmod({ alias: targetAlias, remotePath: entry.path, mode, expectedRevision: entry.revision, recursive });
-      if (!isCurrent()) return;
-      const reloaded = await browser.load(targetPath, { alias: targetAlias, refresh: true });
-      const now = reloaded?.find((candidate) => candidate.path === entry.path);
-      if (!recursive && now !== undefined && previous !== mode) {
-        offerUndo(t("sftp.permissionsChanged", { mode }), async () => {
-          await sftpApi.chmod({ alias: targetAlias, remotePath: entry.path, mode: previous, expectedRevision: now.revision, recursive: false });
-          await browser.load(targetPath, { alias: targetAlias, refresh: true });
-        });
-      }
-    } catch (error) {
-      if (!isCurrent()) return;
-      setProblem(failureCode(error) === "sftp_conflict" ? t("sftp.conflict") : sftpProblemText(t, error));
-    } finally {
-      setActing(false);
-    }
-  }
-
   async function queueRemoteOperation(entries: RemoteEntry[], operation: "copy" | "move", destination: (entry: RemoteEntry) => string) {
+    if (operation === "move" ? !source?.can.moveEntries : !source?.can.createEntries) return;
     setActing(true);
     setProblem("");
     try {
@@ -187,10 +165,16 @@ export function useSFTPEntryActions({
   // 削除ジョブを積めなかったときは、確認ダイアログを開いたまま、その中に失敗を出す。
   // 一部でも積めたらダイアログを閉じ、失敗は画面に出す。
   async function remove() {
-    if (deleting === null || acting) return;
+    if (deleteIntent === null || acting || !deleteIntent.isCurrent()) return;
+    if (deleteIntent.source.removeEntries !== undefined) {
+      await removeImmediate(deleteIntent);
+      return;
+    }
+    const deleting = deleteIntent.entries;
+    const targetAlias = deleteIntent.source.alias;
     const existingJobIds = new Set(sftpTransferManager.getSnapshot().map((job) => job.id));
     const queued = () => {
-      setDeleting(null);
+      setDeleteIntent(null);
       setSelectedPaths(new Set());
       onQueueOpen();
     };
@@ -199,8 +183,8 @@ export function useSFTPEntryActions({
     setDeleteProblem("");
     try {
       await sftpTransferManager.addRemoteTransfers(deleting.map((entry) => ({
-        sourceAlias: alias, sourcePath: entry.path,
-        targetAlias: alias, targetPath: entry.path,
+        sourceAlias: targetAlias, sourcePath: entry.path,
+        targetAlias, targetPath: entry.path,
         kind: entry.type === "directory" ? "folder" : "file",
         name: entry.name, totalBytes: -1,
       })), "delete");
@@ -217,8 +201,25 @@ export function useSFTPEntryActions({
     }
   }
 
+  async function removeImmediate(intent: NonNullable<typeof deleteIntent>) {
+    setActing(true);
+    setProblem("");
+    setDeleteProblem("");
+    try {
+      await intent.source.removeEntries?.(intent.entries);
+      if (!intent.isCurrent()) return;
+      setDeleteIntent(null);
+      setSelectedPaths(new Set());
+      await refreshAfterChange(intent.path, intent.source.alias);
+    } catch (error) {
+      if (intent.isCurrent()) setDeleteProblem(localMutationProblemText(t, error, "sftp.problem.deleteFailed"));
+    } finally {
+      setActing(false);
+    }
+  }
+
   function deleteSelection() {
-    if (selectedEntries.length === 0 || acting) return;
+    if (selectedEntries.length === 0 || acting || source === null || !source.can.delete) return;
     // Focus survives the reload by moving to whatever takes the topmost
     // removed row's place.
     const removed = new Set(selectedEntries.map((entry) => entry.path));
@@ -226,7 +227,7 @@ export function useSFTPEntryActions({
     focusAfterReload(survivor ?? rowKeys.filter((key) => !removed.has(key)).pop() ?? parentRowKey);
     onInteract?.();
     setDeleteProblem("");
-    setDeleting(selectedEntries);
+    setDeleteIntent({ entries: selectedEntries, source, path, isCurrent: generation.observe() });
   }
 
   function renameSelection() {
@@ -258,12 +259,14 @@ export function useSFTPEntryActions({
     acting,
     undo,
     dismissUndo: () => setUndo(null),
+    offerUndo,
     inputIntent,
     deleting,
+    deletingLocal: deleteIntent?.source.local ?? false,
     deleteProblem,
     ask,
     cancelInput: () => setInputIntent(null),
-    cancelDelete: () => { cancelPendingFocus(); setDeleting(null); },
+    cancelDelete: () => { if (acting) return; cancelPendingFocus(); setDeleteIntent(null); },
     deleteSelection,
     renameSelection,
     copySelected,
@@ -278,7 +281,6 @@ export function useSFTPEntryActions({
       else if (intent.kind === "rename") void rename(intent.entry, value);
       else if (intent.kind === "duplicate") void queueRemoteOperation([intent.entry], "copy", () => join(parentOf(intent.entry.path), value));
       else if (intent.kind === "moveTo") void queueRemoteOperation(intent.entries, "move", (entry) => join(value, entry.name));
-      else void chmod(intent.entry, value, intent.recursive);
     },
     remove,
   };
