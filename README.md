@@ -19,8 +19,8 @@ brew install aida0710/tap/sshc
 Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。
 
 ```sh
-SSHC_VERSION=v0.44.4 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.44.4/install.sh | sh'
+SSHC_VERSION=v0.44.5 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.44.5/install.sh | sh'
 ```
 
 Windows PowerShell:
