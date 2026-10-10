@@ -129,6 +129,8 @@ export const ja = {
   "sftp.firstPane": "1つ目のリモートペイン",
   "sftp.secondPane": "2つ目のリモートペイン",
   "sftp.local.heading": "ローカルファイル",
+  "sftp.openRightPane": "右ペインを開く",
+  "sftp.rightPaneButton": "右ペイン",
   "sftp.paneSwitcher": "SFTPの左右切替",
   "sftp.leftPane": "左：{host}",
   "sftp.rightPane": "右：{host}",

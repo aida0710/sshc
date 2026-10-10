@@ -16,7 +16,7 @@ import { TransferManagerList } from "./TransferManagerList";
 import { SFTPPaneSwitcher } from "./SFTPPaneSwitcher";
 import { rememberPanes, rememberSplitRatio, restorePanes, restoreSplitRatio } from "./sftpPaneStorage";
 import {
-  activeTab, addTab, allTabs, blankTab, canSplit, closeTab, findTab, moveTab, relocateTab, resortTab, selectTab,
+  activeTab, addTab, allTabs, blankPane, blankTab, canSplit, closeTab, findTab, moveTab, relocateTab, resortTab, selectTab,
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
 } from "./sftpPanes";
 
@@ -206,6 +206,13 @@ export function SFTPWorkspace({
   const compareEnabled = visibleSplit && leftLocation !== null && rightLocation !== null &&
     leftLocation.alias !== "" && rightLocation.alias !== "";
 
+  function openRightPane() {
+    if (panes.length !== 1) return;
+    const right = blankPane();
+    setPanes((current) => current.length === 1 ? [...current, right] : current);
+    setFocusedPaneId(right.id);
+  }
+
   function renderPane(pane: SFTPPane, index: number) {
     const concealed = compactViewport && pane.id !== focusedPane?.id;
     const other = index === 0 ? rightLocation : leftLocation;
@@ -232,7 +239,12 @@ export function SFTPWorkspace({
             label={t(index === 0 ? "sftp.primaryTabs" : "sftp.secondaryTabs")}
             closable={closable}
             movable={(tab) => !compactViewport && !dirtyTabs.has(tab.id)}
-            trailing={last && visibleSplit ? (
+            trailing={compactViewport && panes.length === 1 ? (
+              <button type="button" aria-label={t("sftp.openRightPane")} title={t("sftp.openRightPane")}
+                onClick={openRightPane} className="flex min-h-11 shrink-0 items-center gap-1 rounded px-2 text-xs text-ink-muted hover:bg-card/50 hover:text-ink">
+                <Icon name="arrowLeftRight" className="size-4" />{t("sftp.rightPaneButton")}
+              </button>
+            ) : last && visibleSplit ? (
               <button
                 type="button"
                 aria-label={t("sftp.compare.heading")}

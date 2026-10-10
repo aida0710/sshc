@@ -13,6 +13,7 @@ test("edits an engine-local file with Ctrl+S and confirms an external overwrite"
   const pane = page.getByRole("tabpanel");
   await openLocalSFTPDirectory({ page, pane, directory: join(installation.home, ".ssh/editor-local") });
   await pane.getByRole("button", { name: "notes.txt", exact: true }).dblclick();
+  await page.getByRole("dialog", { name: "Details for notes.txt", exact: true }).getByRole("button", { name: "Edit file", exact: true }).click();
   const editor = page.getByRole("dialog", { name: /editor-local\/notes.txt$/ });
   const input = editor.locator(".monaco-editor textarea");
   await input.press("Control+End");

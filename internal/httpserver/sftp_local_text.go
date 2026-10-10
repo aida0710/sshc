@@ -18,7 +18,7 @@ func (h SFTPHandlers) ReadLocalText(c *echo.Context) error {
 
 func (h SFTPHandlers) SaveLocalText(c *echo.Context) error {
 	var body sftpSaveTextRequest
-	if err := decodeJSON(c, &body); err != nil {
+	if err := decodeJSONWithin(c, MaxSFTPTextJSONBodyCeiling, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	file, err := h.Transfers.SaveLocalText(c.Request().Context(), sshcSFTP.LocalTextSaveRequest{Path: c.QueryParam("path"), Contents: body.Contents, ExpectedRevision: body.ExpectedRevision})

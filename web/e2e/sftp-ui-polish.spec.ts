@@ -1,10 +1,11 @@
 import { join } from "node:path";
 import type { TransferJob, TransferJobList } from "../src/sftp/api";
 import { expect, openApplication, openSection, test } from "./support/environment";
+import { openLocalSFTPDirectory } from "./support/sftp";
 
 function transferJob(id: string, overrides: Partial<TransferJob>): TransferJob {
   return {
-    id, batchId: `batch-${id}`, batchName: `${id}.txt`, batchKind: "file", alias: "bastion",
+    id: `fixture_${id}`, batchId: `batch-${id}`, batchName: `${id}.txt`, batchKind: "file", alias: "bastion",
     sourceAlias: "nas", sourcePath: `/source/${id}.txt`, operation: "copy", direction: "remote", kind: "file",
     name: `${id}.txt`, remotePath: `/destination/${id}.txt`, totalBytes: 4096, transferredBytes: 1024,
     bytesPerSecond: 0, remainingSeconds: -1, status: "paused", allowedActions: ["resume", "cancel"],
@@ -50,6 +51,22 @@ test("keeps transfer states visible while settings are folded and identifies bot
   if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: join(process.env.SSHC_VISUAL_DIR, "transfer-states-and-routes-en.png"), animations: "disabled" });
 });
 
+test("opens a second compact pane from one pane and keeps the original selection", async ({ page, installation }) => {
+  await installation.write("mobile-left/notes.txt", "notes");
+  await openApplication(page, installation);
+  await openSection(page, "SFTP");
+  await openLocalSFTPDirectory({ page, pane: page.getByRole("tabpanel"), directory: join(installation.home, ".ssh/mobile-left") });
+  await page.getByRole("checkbox", { name: "Select notes.txt", exact: true }).check();
+  await page.setViewportSize({ width: 390, height: 640 });
+  await page.getByRole("button", { name: "Open right pane", exact: true }).click();
+  const switcher = page.getByRole("navigation", { name: "SFTP pane switcher" });
+  await expect(switcher.getByRole("button", { name: "Right: New tab", exact: true })).toHaveAttribute("aria-current", "page");
+  await switcher.getByRole("button", { name: "Left: Local", exact: true }).click();
+  await expect(page.getByRole("checkbox", { name: "Select notes.txt", exact: true })).toBeChecked();
+  await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", join(installation.home, ".ssh/mobile-left"));
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+});
+
 test("switches compact SFTP panes while preserving the host, path and selection", async ({ page, installation }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("sshc.sftp.panes.v1", JSON.stringify([
@@ -69,9 +86,9 @@ test("switches compact SFTP panes while preserving the host, path and selection"
     remoteReads += 1;
     return route.fulfill({ json: { path: "/srv", entries: [entry("report.txt", "/srv")] } });
   });
-  await page.setViewportSize({ width: 390, height: 640 });
   await openApplication(page, installation);
   await openSection(page, "SFTP");
+  await page.setViewportSize({ width: 390, height: 640 });
   const switcher = page.getByRole("navigation", { name: "SFTP pane switcher" });
   await expect(page.getByRole("button", { name: "notes.txt", exact: true })).toBeVisible();
   await switcher.getByRole("button", { name: "Right: bastion", exact: true }).click();

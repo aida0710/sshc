@@ -126,6 +126,8 @@ export const en = {
   "sftp.firstPane": "First remote pane",
   "sftp.secondPane": "Second remote pane",
   "sftp.local.heading": "Local files",
+  "sftp.openRightPane": "Open right pane",
+  "sftp.rightPaneButton": "Right pane",
   "sftp.paneSwitcher": "SFTP pane switcher",
   "sftp.leftPane": "Left: {host}",
   "sftp.rightPane": "Right: {host}",

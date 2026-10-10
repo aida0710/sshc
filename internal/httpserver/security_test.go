@@ -120,7 +120,7 @@ func TestSecurityRefusesEveryAPIRequestFromAnotherSite(t *testing.T) {
 // TestSecurityBoundsABodyAHandlerReadsWithoutItsOwnLimit は、上限のうち
 // 現状どの登録済みルートも到達できない半分をカバーする。
 //
-// ツリー内のすべてのハンドラは MaxRequestBodyCeiling 以下の自前の
+// ツリー内のすべてのハンドラはリクエストの種類に応じた自前の
 // 制限をかけており、大きすぎる長さを宣言したリクエストはどのハンドラ
 // が実行される前にも拒否される。したがって MaxBytesReader wrapper が
 // 意味を持つのは、後で追加され自前の制限なしに body を読むルートが、
@@ -462,6 +462,19 @@ func TestReadsRequireTheTokenAsWellAsTheCookie(t *testing.T) {
 	for _, route := range privileged {
 		if recorder := runGuarded(t, host, security, withoutToken, route.method, route.path); recorder.Code != http.StatusForbidden {
 			t.Errorf("forged localhost %s %s with cookie only = %d, want 403", route.method, route.path, recorder.Code)
+		}
+	}
+}
+
+func TestTextSaveBodyCeilingOnlyAppliesToTextPUTRoutes(t *testing.T) {
+	for _, endpoint := range []string{"/api/v1/sftp/local/text", "/api/v1/sftp/edge/text?path=/file"} {
+		if got := requestBodyCeiling(httptest.NewRequest(http.MethodPut, endpoint, nil)); got != MaxSFTPTextJSONBodyCeiling {
+			t.Fatalf("%s ceiling = %d", endpoint, got)
+		}
+	}
+	for _, endpoint := range []string{"/api/v1/sftp/edge/text/other", "/api/v1/sftp/edge/entries", "/api/v1/other/text"} {
+		if got := requestBodyCeiling(httptest.NewRequest(http.MethodPut, endpoint, nil)); got != MaxRequestBodyCeiling {
+			t.Fatalf("%s ceiling = %d", endpoint, got)
 		}
 	}
 }
