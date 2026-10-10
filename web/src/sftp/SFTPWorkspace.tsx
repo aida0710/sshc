@@ -85,10 +85,6 @@ export function SFTPWorkspace({
   useEffect(() => { rememberPanes(panes); }, [panes]);
 
   useEffect(() => {
-    if (compactViewport) setCompareOpen(false);
-  }, [compactViewport]);
-
-  useEffect(() => {
     if (draggedTabId !== null && findTab(panes, draggedTabId) === null) setDraggedTabId(null);
   }, [draggedTabId, panes]);
 
@@ -203,7 +199,7 @@ export function SFTPWorkspace({
     if (!compactViewport && leftPane !== null) setFocusedPaneId(leftPane.id);
   }, [target, leftPane, leftLocation, focusedLocation, rightLocation?.alias, visibleSplit, compactViewport, aliases]);
 
-  const compareEnabled = visibleSplit && leftLocation !== null && rightLocation !== null &&
+  const compareReady = leftLocation !== null && rightLocation !== null &&
     leftLocation.alias !== "" && rightLocation.alias !== "";
 
   function openRightPane() {
@@ -244,14 +240,14 @@ export function SFTPWorkspace({
                 onClick={openRightPane} className="flex min-h-11 shrink-0 items-center gap-1 rounded px-2 text-xs text-ink-muted hover:bg-card/50 hover:text-ink">
                 <Icon name="arrowLeftRight" className="size-4" />{t("sftp.rightPaneButton")}
               </button>
-            ) : last && visibleSplit ? (
+            ) : (last && visibleSplit) || (compactViewport && panes.length > 1) ? (
               <button
                 type="button"
                 aria-label={t("sftp.compare.heading")}
                 title={t("sftp.compare.heading")}
-                disabled={!compareEnabled}
+                disabled={!compareReady}
                 onClick={() => setCompareOpen(true)}
-                className="flex shrink-0 items-center gap-1.5 rounded px-2.5 text-sm text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint"
+                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded px-2.5 text-sm text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint"
               >
                 <Icon name="arrowLeftRight" className="size-4" />
                 {t("sftp.compare.action")}
@@ -334,7 +330,7 @@ export function SFTPWorkspace({
           onCancel={() => setCloseTabIntent(null)}
         />
       )}
-      {compareOpen && compareEnabled && leftLocation !== null && rightLocation !== null ? (
+      {compareOpen && compareReady && leftLocation !== null && rightLocation !== null ? (
         <SFTPCompareDialog
           left={{ alias: leftLocation.alias, path: leftLocation.path || "/" }}
           right={{ alias: rightLocation.alias, path: rightLocation.path || "/" }}

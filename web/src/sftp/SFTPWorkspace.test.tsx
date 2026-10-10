@@ -768,7 +768,7 @@ describe("SFTP tabs", () => {
       expect(screen.getByLabelText("First remote pane")).toBeVisible();
       expect(screen.getByLabelText("Second remote pane")).not.toBeVisible();
       expect(screen.queryByRole("separator", { name: "Resize the panes" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Compare directories" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Compare directories" })).toBeDisabled();
       expect(storedPanes()).toHaveLength(2);
       const switcher = screen.getByRole("navigation", { name: "SFTP pane switcher" });
       await userEvent.click(within(switcher).getByRole("button", { name: "Right: miyabi" }));

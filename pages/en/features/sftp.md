@@ -17,6 +17,8 @@ Operations on the same host (listing, details, preview, editing, transfers and t
 
 Engine-local regular UTF-8 files up to 2 MiB can be edited, and their text or raster images previewed in Details. Selected symlinks are refused. Saving checks both contents and file identity, refuses external changes or replacements, and protects paths used by transfers. It also retains the owner, group, access controls and extended attributes. Saving is refused if these cannot be read or retained, metadata exceeds 16 MiB, or the file carries privileged execution attributes.
 
+On Windows, saving retains the owner, group, DACL, integrity label, resource attributes, named streams, extended attributes, creation time and ordinary file attributes. Unsupported attributes such as encryption, compression and read-only state are refused. Ordinary audit SACLs are outside the preservation guarantee.
+
 Save with `Ctrl/Cmd+S`; the editor shows Saving and Saved. In directory comparisons, View text differences opens a read-only line comparison. An absent side is displayed as empty. Each text file is limited to 2 MiB and pinned to the listed revision; changed files must be compared again. Narrow screens use an inline diff.
 
 - Navigate, create, rename, chmod and delete remote entries

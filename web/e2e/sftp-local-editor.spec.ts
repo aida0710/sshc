@@ -64,6 +64,12 @@ test("shows line differences between two engine-local files without writing eith
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   await text.getByRole("button", { name: "Close", exact: true }).click();
   await expect(comparison).toBeVisible();
+  await comparison.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Compare directories", exact: true }).click();
+  await expect(comparison).toBeVisible();
+  await comparison.getByRole("button", { name: "View text differences for notes.txt", exact: true }).click();
+  await expect(text.locator(".monaco-diff-editor")).toBeVisible();
+  await text.getByRole("button", { name: "Close", exact: true }).click();
   expect(await installation.read("text-left/notes.txt")).toBe("first line\nleft value\n");
   expect(await installation.read("text-right/notes.txt")).toBe("first line\nright value\n");
   expect(violations).toEqual([]);

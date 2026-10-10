@@ -333,7 +333,8 @@ test("runs the JSON support and shows the read-only message while a save is held
   await save.click();
   // The editor is read-only while the save is held. Monaco draws its message
   // with its Markdown renderer, which sanitizes it with DOMPurify.
-  await expect(save).toBeDisabled();
+  await expect(editor.getByRole("button", { name: "Saving…", exact: true })).toBeDisabled();
+  await expect(editor.getByRole("status")).toHaveText("Saving…");
   await content.focus();
   await page.keyboard.press("x");
   await expect(editor.getByText("Cannot edit in read-only editor")).toBeVisible();
@@ -608,7 +609,7 @@ test("moves focus out of the editor with Tab, within the dialog, while a save ho
   await page.keyboard.insertText("typed ");
   const save = editor.getByRole("button", { name: englishLabels.save, exact: true });
   await save.click();
-  await expect(save).toBeDisabled();
+  await expect(editor.getByRole("button", { name: "Saving…", exact: true })).toBeDisabled();
 
   // Monaco does not indent a read-only file, so Tab goes on to the dialog's
   // next control: Close, as Save is disabled during the save.

@@ -63,7 +63,7 @@ test("opens a second compact pane from one pane and keeps the original selection
   await expect(switcher.getByRole("button", { name: "Right: New tab", exact: true })).toHaveAttribute("aria-current", "page");
   await switcher.getByRole("button", { name: "Left: Local", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "Select notes.txt", exact: true })).toBeChecked();
-  await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", join(installation.home, ".ssh/mobile-left"));
+  await expect(page.getByRole("tabpanel").getByTestId("sftp-current-path")).toHaveAttribute("data-path", join(installation.home, ".ssh/mobile-left"));
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 });
 
@@ -93,14 +93,14 @@ test("switches compact SFTP panes while preserving the host, path and selection"
   await expect(page.getByRole("button", { name: "notes.txt", exact: true })).toBeVisible();
   await switcher.getByRole("button", { name: "Right: bastion", exact: true }).click();
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
+  await expect(page.getByRole("tabpanel").getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
   await page.getByRole("checkbox", { name: "Select report.txt", exact: true }).check();
   await switcher.getByRole("button", { name: "Left: Local", exact: true }).click();
-  await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/home/engine");
+  await expect(page.getByRole("tabpanel").getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/home/engine");
   await expect(page.getByRole("button", { name: "notes.txt", exact: true })).toBeVisible();
   await switcher.getByRole("button", { name: "Right: bastion", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
-  await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
+  await expect(page.getByRole("tabpanel").getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
   expect(remoteReads).toBe(1);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("sshc.sftp.panes.v1") ?? "[]"))).toHaveLength(2);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);

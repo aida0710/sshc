@@ -224,7 +224,7 @@ test("opens forwarding management only for an SSH terminal", async ({ page, inst
   await terminal.getByRole("menuitem", { name: "Port forwarding" }).click();
   const dialog = page.getByRole("dialog", { name: "Port forwarding" });
   await expect(dialog.getByText("socks5://127.0.0.1:1080")).toBeVisible();
-  await expect(dialog.getByText(/Listeners are bound to this device only/)).toBeVisible();
+  await expect(dialog.getByText(/Listeners use 127\.0\.0\.1 on this device or the SSH server/)).toBeVisible();
 
   if (visualDirectory !== undefined) {
     await page.screenshot({ path: join(visualDirectory, "port-forwarding-live-desktop.png"), fullPage: true });
