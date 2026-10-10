@@ -21,7 +21,9 @@ test("keeps sessions in the sidebar and moves product navigation to the Menu pag
   await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Open Home", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open Connections", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Open SFTP", exact: true })).toHaveCount(0);
+  // The SFTP screen stays in the sidebar; the Menu links only to its settings page.
+  await expect(page.getByRole("region", { name: "Menu" }).locator('a[href="/files"]')).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open SFTP", exact: true })).toHaveAttribute("href", "/settings/sftp");
   await expect(page.getByRole("link", { name: "Open Settings", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open Engine", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Open Terminal", exact: true })).toHaveAttribute(
@@ -42,6 +44,7 @@ test("keeps sessions in the sidebar and moves product navigation to the Menu pag
     for (const label of [
       "Engine",
       "Terminal",
+      "SFTP",
       "Notifications",
       "Open connections",
       "Master password",

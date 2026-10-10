@@ -1,8 +1,6 @@
 import { TransferBatchList } from "./TransferBatchList";
-import { TransferSettingsDialog } from "./TransferSettingsDialog";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
-import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
@@ -12,10 +10,11 @@ import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { readStoredJSON, writeStoredJSON } from "../ui/browserStorage";
 import { localStorageKeys } from "../ui/browserStorageKeys";
+import { settingsPagePath } from "../settings/settingsRoute";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
-import type { TransferSettings } from "./api";
 import { getTransferQueueSummary } from "./transferQueueSummaryModel";
 import { TransferQueueSummary } from "./TransferQueueSummary";
+import { useTransferControl } from "./useTransferControl";
 
 const minQueueHeight = 96;
 const maxQueueHeight = 560;
@@ -44,7 +43,12 @@ function rememberView(view: QueueView): void {
   writeStoredJSON(localStorageKeys.sftpQueueView, view);
 }
 
-export function TransferManagerList({ openRequest = 0 }: { openRequest?: number }) {
+// The transfer settings live in Settings > SFTP. Without a way to navigate
+// there, the settings button is left out.
+export function TransferManagerList({ openRequest = 0, onNavigateLocation }: {
+  openRequest?: number;
+  onNavigateLocation?: ((url: string) => void) | undefined;
+}) {
   const t = useTranslate();
   const [view, setView] = useState<QueueView>(restoreView);
   const compactViewport = useMediaQuery(mobileViewportQuery);
@@ -64,9 +68,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
   const closeSheet = useRef<HTMLButtonElement>(null);
   const headingId = useId();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [controlProblem, setControlProblem] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const settingsTrigger = useRef<HTMLButtonElement>(null);
+  const { problem: controlProblem, runControl, dismissProblem } = useTransferControl();
   const collapsed = compactViewport ? !sheetOpen : view.collapsed;
   const menuRoot = useRef<HTMLDivElement>(null);
   const menuPanel = useRef<HTMLDivElement>(null);
@@ -84,12 +86,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
   const canClearFailed = jobs.some((job) => job.status === "failed" && job.allowedActions.includes("remove"));
   const hasMenuActions = canPause || canResume || canCancel || canClear || canClearFailed;
   const waiting = jobs.filter((job) => job.status === "queued");
-  const maxConcurrent = sftpTransferManager.getMaxConcurrent();
-  const clearCompletedAfter = sftpTransferManager.getClearCompletedAfter();
   const processingStopped = sftpTransferManager.getProcessingStopped();
-  const largeFileThreshold = sftpTransferManager.getLargeFileThreshold();
-  const largeFileParallelism = sftpTransferManager.getLargeFileParallelism();
-  const largeFileChunkBytes = sftpTransferManager.getLargeFileChunkBytes();
   const summary = getTransferQueueSummary(jobs, { processingStopped, hasUploadSource: (id) => sftpTransferManager.hasUploadSource(id) });
   const queueHeight = view.height;
   const queueMaximum = maxQueueHeight;
@@ -144,34 +141,9 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
     else if (key === "ArrowDown") changeQueueHeight(clampHeight(queueHeight - keyboardResizeStep), true);
   }
 
-  const currentSettings: TransferSettings = {
-    maxConcurrent,
-    clearCompletedAfterSeconds: clearCompletedAfter,
-    processingStopped,
-    largeFileThresholdBytes: largeFileThreshold,
-    largeFileParallelism,
-    largeFileChunkBytes,
-    speedLimitBytesPerSecond: sftpTransferManager.getSpeedLimitBytesPerSecond(),
-    autoReconnect: sftpTransferManager.getAutoReconnect(),
-    maxReconnectAttempts: sftpTransferManager.getMaxReconnectAttempts(),
-    excludePatterns: [...sftpTransferManager.getExcludePatterns()],
-  };
-
-  function applySettings(next: Partial<TransferSettings>) {
-    runControl(() => sftpTransferManager.applySettings({ ...currentSettings, ...next }));
-  }
-
-  function runControl(operation: () => Promise<void>) {
-    setControlProblem("");
-    void operation().catch(async (error) => {
-      await sftpTransferManager.reconcile().catch(() => undefined);
-      const code = failureCode(error) || (error instanceof Error ? error.message : "");
-      setControlProblem(code === "sftp_transfer_state"
-        ? t("sftp.manager.controlChanged")
-        : code === "sftp_failed" || code === "sftp_cleanup_pending"
-          ? t("sftp.manager.cleanupFailed")
-          : t("sftp.manager.controlFailed"));
-    });
+  function openSettings() {
+    dismissSheet();
+    onNavigateLocation?.(settingsPagePath("SFTP"));
   }
   useDismissibleLayer({
     open: menuOpen,
@@ -220,14 +192,14 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
           type="button"
           aria-pressed={processingStopped}
           aria-label={t(processingStopped ? "sftp.manager.startProcessing" : "sftp.manager.stopProcessing")}
-          onClick={() => applySettings({ processingStopped: !processingStopped })}
+          onClick={() => runControl(() => sftpTransferManager.applySettings({ processingStopped: !processingStopped }))}
           className={`flex size-11 shrink-0 items-center justify-center rounded md:size-8 [@media(pointer:coarse)]:size-11 ${processingStopped ? "text-notice-ink" : "text-ink-muted"} hover:bg-select-fill focus:bg-select-fill focus:outline-none`}
         >
           <Icon name={processingStopped ? "play" : "pause"} className="size-4" />
         </button>
         </>
         )}
-        <button ref={settingsTrigger} type="button" aria-label={t("sftp.manager.settings")} title={t("sftp.manager.settings")} onClick={() => setSettingsOpen(true)} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill md:size-8 [@media(pointer:coarse)]:size-11"><Icon name="settings" className="size-4" /></button>
+        {onNavigateLocation === undefined ? null : <button type="button" aria-label={t("sftp.manager.settings")} title={t("sftp.manager.settings")} onClick={openSettings} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill md:size-8 [@media(pointer:coarse)]:size-11"><Icon name="settings" className="size-4" /></button>}
         <div ref={menuRoot} className="relative ml-auto">
           {hasMenuActions ? <button ref={menuTrigger} type="button" aria-label={t("sftp.manager.actions")} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)} className="flex size-11 items-center justify-center rounded md:size-8 [@media(pointer:coarse)]:size-11 text-ink-muted hover:bg-select-fill hover:text-ink focus:bg-select-fill focus:outline-none">
             <Icon name="moreHorizontal" className="size-4" />
@@ -244,7 +216,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
         </div>
         {compactViewport ? <button ref={closeSheet} type="button" aria-label={t("sftp.manager.close")} onClick={dismissSheet} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill"><Icon name="close" className="size-4" /></button> : null}
       </div>
-      {controlProblem !== "" ? <div className="mx-2.5 mb-2"><Notice tone="danger" compact><span className="grow">{controlProblem}</span><button type="button" aria-label={t("sftp.manager.dismissError")} onClick={() => setControlProblem("")} className="shrink-0 text-ink-muted hover:text-ink"><Icon name="close" className="size-3.5" /></button></Notice></div> : null}
+      {controlProblem !== "" ? <div className="mx-2.5 mb-2"><Notice tone="danger" compact><span className="grow">{controlProblem}</span><button type="button" aria-label={t("sftp.manager.dismissError")} onClick={dismissProblem} className="shrink-0 text-ink-muted hover:text-ink"><Icon name="close" className="size-3.5" /></button></Notice></div> : null}
       {compactViewport && jobs.length === 0 ? <p className="p-6 text-center text-ink-muted">{t("sftp.manager.summaryIdle", { count: 0 })}</p> : null}
       {collapsed || jobs.length === 0 ? null : <div id={`${headingId}-jobs`} style={compactViewport ? undefined : { height: queueHeight }} className={`space-y-1.5 overflow-auto overscroll-contain px-2.5 pb-2.5 ${compactViewport ? "min-h-0 flex-1 pt-2" : ""}`}>
         <TransferBatchList batches={batches} waiting={waiting} processingStopped={processingStopped}
@@ -252,9 +224,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
       </div>}
     </section>
   );
-  const settingsDialog = <TransferSettingsDialog open={settingsOpen} settings={currentSettings} problem={controlProblem}
-    onCommit={applySettings} onDismiss={() => setSettingsOpen(false)} returnFocusRef={settingsTrigger} />;
-  if (!compactViewport) return <>{content}{settingsDialog}</>;
+  if (!compactViewport) return content;
   return (
     <>
       <button
@@ -275,7 +245,6 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
       <ModalShell open={sheetOpen} labelledBy={headingId} onDismiss={dismissSheet} closeOnOutside initialFocusRef={closeSheet} returnFocusRef={dockTrigger} placement="sheet" panelClassName="flex h-[min(36rem,85dvh)] max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl">
         {content}
       </ModalShell>
-      {settingsDialog}
     </>
   );
 }

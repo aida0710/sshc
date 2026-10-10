@@ -45,7 +45,6 @@ async function chooseHost(alias: string, scope: HTMLElement = screen.getByRole("
   await userEvent.click(getHostButton(scope));
   const label = await screen.findByText(alias, { selector: "span.font-medium" });
   await userEvent.click(label.closest("button")!);
-  await userEvent.click(within(scope).getByRole("button", { name: "Connect" }));
 }
 
 function currentPath(): HTMLElement {
@@ -152,6 +151,47 @@ describe("SFTP tabs", () => {
     const remaining = screen.getAllByRole("tab");
     expect(remaining).toHaveLength(1);
     expect(remaining[0]).toHaveAccessibleName("edge:edge");
+  });
+
+  it("asks before closing a tab that holds an SSH connection", async () => {
+    render(<SFTPWorkspace aliases={["edge"]} />);
+    await chooseHost("edge");
+    await waitFor(() => expect(screen.getByRole("tab", { name: "edge:edge" })).toBeVisible());
+    await userEvent.click(screen.getByRole("button", { name: "New tab" }));
+
+    const close = screen.getByRole("button", { name: "Close the edge:edge tab" });
+    await userEvent.click(close);
+    let confirmation = await screen.findByRole("dialog", { name: "Close the connection to edge?" });
+    expect(confirmation).toHaveTextContent("Hold Shift while closing to skip this confirmation.");
+    await userEvent.click(within(confirmation).getByRole("button", { name: "Keep it open" }));
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+
+    await userEvent.click(close);
+    confirmation = await screen.findByRole("dialog", { name: "Close the connection to edge?" });
+    await userEvent.click(within(confirmation).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(1));
+    expect(screen.getByRole("tab")).toHaveAccessibleName("New tab");
+  });
+
+  it("closes a connected tab at once when Shift is held", async () => {
+    render(<SFTPWorkspace aliases={["edge"]} />);
+    await chooseHost("edge");
+    await waitFor(() => expect(screen.getByRole("tab", { name: "edge:edge" })).toBeVisible());
+    await userEvent.click(screen.getByRole("button", { name: "New tab" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Close the edge:edge tab" }), { shiftKey: true });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+  });
+
+  it("closes a restored tab that never connected without asking", async () => {
+    seedStoredPanes([{ tabs: [{ alias: "edge", path: "/var/log" }, { alias: "", path: "" }] }]);
+    render(<SFTPWorkspace aliases={["edge"]} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Close the edge:log tab" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+    expect(api.list).not.toHaveBeenCalled();
   });
 
   it("asks before a tab with an unsaved remote edit is closed", async () => {

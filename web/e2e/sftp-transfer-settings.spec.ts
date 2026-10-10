@@ -7,6 +7,8 @@ test("saves the aggregate speed limit and bounded recovery settings across a rel
   await openSection(page, "SFTP");
   await page.getByRole("button", { name: "Expand Transfer Manager", exact: true }).click();
   await page.getByRole("button", { name: "Transfer settings", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings\/sftp$/);
+  await expect(page.getByRole("heading", { name: "SFTP", exact: true })).toBeVisible();
 
   const speed = page.getByRole("spinbutton", { name: "Speed limit", exact: true });
   await expect(speed).toHaveValue("0");
@@ -37,7 +39,6 @@ test("saves the aggregate speed limit and bounded recovery settings across a rel
     maxReconnectAttempts: 2,
   });
   await page.reload();
-  await page.getByRole("button", { name: "Transfer settings", exact: true }).click();
   await expect(speed).toHaveValue("128");
   await expect(recovery).toBeChecked();
   await expect(attempts).toHaveValue("2");

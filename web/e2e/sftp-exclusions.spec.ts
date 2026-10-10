@@ -6,6 +6,7 @@ test("saves folder exclusion rules and preserves them while changing other trans
   await openSection(page, "SFTP");
   await page.getByRole("button", { name: "Expand Transfer Manager", exact: true }).click();
   await page.getByRole("button", { name: "Transfer settings", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings\/sftp$/);
   const patterns = page.getByRole("textbox", { name: "Exclusion patterns (one per line)", exact: true });
   await patterns.fill(".git\nnode_modules\n*.log");
   const exclusionsSaved = page.waitForResponse((response) => response.url().endsWith("/api/v1/sftp/transfers/settings") && response.request().method() === "PUT");
@@ -25,7 +26,6 @@ test("saves folder exclusion rules and preserves them while changing other trans
   expect(metadata.fileTransfers.speedLimitBytesPerSecond).toBe(128 * 1024);
 
   await page.reload();
-  await page.getByRole("button", { name: "Transfer settings", exact: true }).click();
   await expect(page.getByText("3 exclusion rules", { exact: true })).toBeVisible();
   await expect(patterns).toHaveValue(".git\nnode_modules\n*.log");
   await patterns.fill("../secret");
