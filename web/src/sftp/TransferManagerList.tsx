@@ -14,7 +14,7 @@ import { readStoredJSON, writeStoredJSON } from "../ui/browserStorage";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
 import type { TransferSettings } from "./api";
-import { getTransferQueueSummary } from "./transferQueueSummary";
+import { getTransferQueueSummary } from "./transferQueueSummaryModel";
 import { TransferQueueSummary } from "./TransferQueueSummary";
 
 const minQueueHeight = 96;

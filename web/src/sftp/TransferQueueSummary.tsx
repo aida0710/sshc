@@ -1,7 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { formatBytes } from "../ui/format";
-import type { TransferQueueCounts, TransferQueueSummaryModel } from "./transferQueueSummary";
+import type { TransferQueueCounts, TransferQueueSummaryModel } from "./transferQueueSummaryModel";
 
 const countLabelKeys = {
   attention: "sftp.manager.summary.attention",
