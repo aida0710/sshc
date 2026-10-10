@@ -70,6 +70,7 @@ export function SFTPWorkspace({
   const [comparisonLocations, setComparisonLocations] = useState<{ left: SFTPLocation; right: SFTPLocation } | null>(null);
   const [compareTabsOpen, setCompareTabsOpen] = useState(false);
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
+  const [hostPickerRequests, setHostPickerRequests] = useState<Record<string, number>>({});
   const [dirtyTabs, setDirtyTabs] = useState<Map<string, string>>(() => new Map());
   const [closeTabIntent, setCloseTabIntent] = useState<{ tabId: string; path: string } | null>(null);
   const workspaceRoot = useRef<HTMLElement | null>(null);
@@ -121,6 +122,12 @@ export function SFTPWorkspace({
     blockers.current.delete(tabId);
     blockerReporter.forget(tabId);
     dirtyReporter.forget(tabId);
+    setHostPickerRequests((current) => {
+      if (!(tabId in current)) return current;
+      const next = { ...current };
+      delete next[tabId];
+      return next;
+    });
     setDirtyTabs((current) => {
       if (!current.has(tabId)) return current;
       const next = new Map(current);
@@ -211,6 +218,12 @@ export function SFTPWorkspace({
     if (found !== null) chooseTab(found.pane, tabId);
   }
 
+  function requestHostChange(tab: SFTPTab) {
+    if (dirtyTabs.has(tab.id)) return;
+    selectFileTab(tab.id);
+    setHostPickerRequests((current) => ({ ...current, [tab.id]: (current[tab.id] ?? 0) + 1 }));
+  }
+
   function openFileTab() {
     const destination = focusedPane !== null && focusedPane.tabs.length < maxTabsPerPane
       ? focusedPane : panes.find((pane) => pane.tabs.length < maxTabsPerPane);
@@ -247,6 +260,7 @@ export function SFTPWorkspace({
           <SplitResizeHandle direction="horizontal" ratio={splitRatio} label={t("sftp.resizePanes")} onRatioChange={changeSplitRatio} />
         ) : null}
         <div
+          data-sftp-pane={pane.id}
           className="flex min-h-0 min-w-0 flex-col"
           style={{ flexBasis: visibleSplit ? `${index === 0 ? splitRatio : 100 - splitRatio}%` : "100%" }}
           hidden={concealed}
@@ -260,6 +274,8 @@ export function SFTPWorkspace({
             closable={closable}
             movable={(tab) => !compactViewport && !dirtyTabs.has(tab.id)}
             trailing={last && visibleSplit ? comparisonButton(compareReady) : null}
+            onChangeHost={requestHostChange}
+            canChangeHost={(tab) => !dirtyTabs.has(tab.id)}
             onSelect={(tabId) => chooseTab(pane, tabId)}
             onClose={requestCloseTab}
             onAdd={() => openTab(pane)}
@@ -267,7 +283,7 @@ export function SFTPWorkspace({
             onDragEnd={() => setDraggedTabId(null)}
             onMove={moveTabWithKeyboard}
           />}
-          <div data-sftp-pane-content={pane.id} className="relative flex min-h-0 min-w-0 flex-1 flex-col pt-2">
+          <div data-sftp-pane-content={pane.id} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {pane.tabs.map((tab) => {
               const selected = tab.id === pane.activeId;
               const restored = restoring.current.get(tab.id);
@@ -284,6 +300,7 @@ export function SFTPWorkspace({
                 >
                   <SFTPPanel
                     aliases={aliases}
+                    hostPickerRequest={hostPickerRequests[tab.id] ?? 0}
                     {...(hosts === undefined ? {} : { hosts })}
                     {...(hostVPN === undefined ? {} : { hostVPN })}
                     target={ownsTarget ? target : null}
@@ -320,7 +337,8 @@ export function SFTPWorkspace({
       {compactViewport && compactTabs !== null ? <SFTPTabStrip
         pane={compactTabs} compact label={t("sftp.mobileTabs")} closable={compactTabs.tabs.length > 1}
         movable={() => false} addDisabled={panes.every((pane) => pane.tabs.length >= maxTabsPerPane)}
-        trailing={comparisonButton(comparisonTabs.length > 1)} onSelect={selectFileTab} onClose={requestCloseTab}
+        trailing={comparisonButton(comparisonTabs.length > 1)} onChangeHost={requestHostChange}
+        canChangeHost={(tab) => !dirtyTabs.has(tab.id)} onSelect={selectFileTab} onClose={requestCloseTab}
         onAdd={openFileTab} onDragStart={setDraggedTabId} onDragEnd={() => setDraggedTabId(null)} onMove={moveTabWithKeyboard}
       /> : null}
       <div className="flex min-h-0 min-w-0 flex-1">

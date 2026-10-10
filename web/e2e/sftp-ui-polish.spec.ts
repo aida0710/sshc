@@ -113,7 +113,7 @@ async function expectCompactControls(page: Page): Promise<void> {
     await expectTouchTarget(clearSelection);
     await expectTouchTarget(pane.getByRole("button", { name: /^Actions for / }));
   } else {
-    for (const name of ["Back", "Folder actions"]) {
+    for (const name of ["Parent directory", "Folder actions"]) {
       await expectTouchTarget(pane.getByRole("button", { name, exact: true }));
     }
     await expectTouchTarget(pane.getByTestId("sftp-current-path"));

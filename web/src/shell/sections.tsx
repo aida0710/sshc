@@ -5,6 +5,7 @@ import { parseSettingsPage, settingsPageMeta, settingsPages } from "../settings/
 import type { IconName } from "../ui/icons";
 import type { MessageKey } from "../i18n/messages";
 import type { SFTPTarget } from "../sftp/SFTPPanel";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { MenuPanel, type MenuGroup } from "./MenuPanel";
 import type { Declared, Handoff, Navigation, Shell } from "./sectionProps";
 
@@ -201,6 +202,7 @@ export type SectionViewProps = {
 };
 
 export function SectionView(props: SectionViewProps) {
+  const compactFiles = useMediaQuery(mobileViewportQuery);
   if (props.section === "Terminal") {
     return null;
   }
@@ -222,7 +224,7 @@ export function SectionView(props: SectionViewProps) {
   }
   return (
     <div className={props.section === "Files"
-      ? "h-full overflow-hidden p-2 md:px-5 md:pb-5 md:pt-3"
+      ? `h-full overflow-hidden ${compactFiles ? "p-1" : "p-2 md:px-5 md:pb-5 md:pt-3"}`
       : "h-full overflow-y-auto p-4 md:p-5"}
     >
       {<PaddedSection {...props} />}

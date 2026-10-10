@@ -1,5 +1,5 @@
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
-import { connectSFTPHost, moveRightSFTPTabLeft, openSecondSFTPPane } from "./support/sftp";
+import { connectSFTPHost, moveRightSFTPTabLeft, openSecondSFTPPane, sftpHostPicker } from "./support/sftp";
 
 test("keeps a chunked SFTP upload visible while another section is open", async ({ page, installation }) => {
   test.setTimeout(process.env.SSHC_VISUAL_DIR === undefined ? 30_000 : 180_000);
@@ -171,7 +171,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
   await transferManager.getByRole("button", { name: "Collapse Transfer Manager" }).click();
   await expect(transferManager.getByText("large.bin", { exact: true })).toHaveCount(0);
   await transferManager.getByRole("button", { name: "Expand Transfer Manager" }).click();
-  await expect(transferManager.getByText("large.bin", { exact: true })).toHaveCount(2);
+  await expect(transferManager.getByText("large.bin", { exact: true })).toHaveCount(1);
 
   await openSection(page, "Connections");
   const sftpNavigation = page.getByRole("link", { name: "SFTP", exact: true });
@@ -244,7 +244,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await changeDisplayLanguage(page, "en");
     const englishFirstPane = page.getByLabel("First remote pane");
     const englishSecondPane = page.getByLabel("Second remote pane");
-    await expect(englishSecondPane.locator("button[data-value]:visible")).toHaveAttribute("data-value", "nas");
+    await expect(await sftpHostPicker(page, englishSecondPane)).toHaveAttribute("data-value", "nas");
     await connectSFTPHost(page, "bastion", englishFirstPane);
     await connectSFTPHost(page, "nas", englishSecondPane);
     await page.getByRole("button", { name: "Compare directories", exact: true }).click();

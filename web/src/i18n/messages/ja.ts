@@ -215,7 +215,6 @@ export const ja = {
   "sftp.path": "リモートパス",
   "sftp.editPath": "パスを編集",
   "sftp.go": "移動",
-  "sftp.navigation": "ディレクトリ移動",
   "sftp.back": "戻る",
   "sftp.forward": "進む",
   "sftp.homeDirectory": "ホームディレクトリ",

@@ -1,9 +1,9 @@
 import type { ComponentPropsWithoutRef, ComponentPropsWithRef, DragEvent as ReactDragEvent } from "react";
-import { useTranslate } from "../i18n/context";
+import { useLanguage, useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { SortableTableHeader } from "../ui/tableSort";
 import type { RemoteEntry } from "./api";
-import { formatBytes } from "../ui/format";
+import { formatBytes, formatDateTime } from "../ui/format";
 import { entryKind } from "./entryKind";
 import { entryTypeLabelKeys } from "./sftpMessageKeys";
 import type { SFTPSort, SFTPSortState } from "./sftpEntrySort";
@@ -46,6 +46,7 @@ export function SFTPEntryList({
   sort,
   onSort,
   mobileInteraction,
+  compact = false,
   showOwnership = true,
   busy,
   locked = false,
@@ -59,6 +60,7 @@ export function SFTPEntryList({
   sort: SFTPSortState;
   onSort: (key: SFTPSort) => void;
   mobileInteraction: boolean;
+  compact?: boolean;
   showOwnership?: boolean;
   busy: boolean;
   locked?: boolean;
@@ -70,6 +72,8 @@ export function SFTPEntryList({
   entryContext?: ((entry: RemoteEntry) => string) | undefined;
 }) {
   const t = useTranslate();
+  const { locale } = useLanguage();
+  const tableOwnership = showOwnership && !compact;
   const {
     selectedPaths, activeRowKey, allDisplayedSelected, selectAll, registerRow, setFocusedKey,
     activate, openParent, clickEntry, toggleSelection, toggleAllDisplayed,
@@ -150,7 +154,7 @@ export function SFTPEntryList({
                   <span title={entryContext === undefined ? entry.mode : entryContext(entry)} className="max-w-full truncate font-mono">{entryContext === undefined ? entry.mode : entryContext(entry)}</span>
                   {!showOwnership || entry.uid === undefined ? null : <span title={t("sftp.ownerIds", { uid: entry.uid, gid: entry.gid ?? "—" })} aria-label={t("sftp.ownerIds", { uid: entry.uid, gid: entry.gid ?? "—" })} className="max-w-full truncate font-mono">{entry.uid}:{entry.gid ?? "—"}</span>}
                   <span className="whitespace-nowrap">{entrySize(entry)}</span>
-                  <time title={new Date(entry.modifiedAt).toLocaleString()} className="whitespace-nowrap" dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleDateString()}</time>
+                  <time title={new Date(entry.modifiedAt).toLocaleString(locale)} className="whitespace-nowrap" dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleDateString(locale)}</time>
                 </span>
               </span>
             </button>
@@ -161,7 +165,8 @@ export function SFTPEntryList({
   }
 
   return (
-    <table className="w-full min-w-[44rem] text-left text-sm">
+    <table className={`w-full text-left text-sm ${compact ? "table-fixed" : "min-w-[44rem]"}`}>
+      {compact ? <colgroup><col className="w-9" /><col /><col className="w-36" /><col className="w-20" /><col className="w-20" /></colgroup> : null}
       <thead className="sticky top-0 bg-toolbar/75 text-xs text-ink-muted"><tr>
         <th scope="col" className="w-9 px-2 py-1.5 md:py-1">
           <input
@@ -177,16 +182,16 @@ export function SFTPEntryList({
         <SortableTableHeader column="modified" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 md:py-1">{t("sftp.modified")}</SortableTableHeader>
         <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 text-right md:py-1" buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
         <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="w-24 whitespace-nowrap px-2 py-1.5 md:py-1">{t("sftp.type")}</SortableTableHeader>
-        {showOwnership ? <>
+        {tableOwnership ? <>
         <SortableTableHeader column="uid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 md:py-1">{t("sftp.uid")}</SortableTableHeader>
         <SortableTableHeader column="gid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 md:py-1">{t("sftp.gid")}</SortableTableHeader>
         </> : null}
-        <th scope="col" className="w-28 whitespace-nowrap px-2 py-1.5 md:py-1">{t("sftp.permissions")}</th>
+        {compact ? null : <th scope="col" className="w-28 whitespace-nowrap px-2 py-1.5 md:py-1">{t("sftp.permissions")}</th>}
       </tr></thead>
       <tbody>
         {parentRowVisible ? (
           <tr data-row-key={parentRowKey} className="border-t border-line/40 hover:bg-hover/60">
-            <td className="px-2 py-1 md:py-0.5" colSpan={showOwnership ? 8 : 6}>
+            <td className="px-2 py-1 md:py-0.5" colSpan={compact ? 5 : tableOwnership ? 8 : 6}>
               <button
                 type="button"
                 {...parentButtonProps}
@@ -224,14 +229,14 @@ export function SFTPEntryList({
                 </span>
               </button>
             </td>
-            <td className="whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5">{new Date(entry.modifiedAt).toLocaleString()}</td>
-            <td className="px-2 py-1 text-right text-xs text-ink-muted md:py-0.5">{entrySize(entry)}</td>
+            <td className="truncate whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5" title={new Date(entry.modifiedAt).toLocaleString(locale)}>{formatDateTime(entry.modifiedAt, locale)}</td>
+            <td className="whitespace-nowrap px-2 py-1 text-right text-xs text-ink-muted md:py-0.5">{entrySize(entry)}</td>
             <td className="w-24 whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5">{t(entryTypeLabelKeys[entry.type])}</td>
-            {showOwnership ? <>
+            {tableOwnership ? <>
             <td className="px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.uid ?? "—"}</td>
             <td className="px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.gid ?? "—"}</td>
             </> : null}
-            <td className="w-28 whitespace-nowrap px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.mode}</td>
+            {compact ? null : <td className="w-28 whitespace-nowrap px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.mode}</td>}
           </tr>
         ))}
       </tbody>

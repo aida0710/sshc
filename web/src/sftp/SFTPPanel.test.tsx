@@ -136,6 +136,7 @@ describe("SFTPPanel uploads", () => {
     expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/first.txt", size: first.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/), signal: expect.any(AbortSignal) });
     expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/second.txt", size: second.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/), signal: expect.any(AbortSignal) });
     expect(await screen.findByText("Completed")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Show details for second.txt" }));
     expect(await screen.findByText("The SFTP operation failed.")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.queryByText(/upload_failed/)).toBeNull();
@@ -217,9 +218,11 @@ describe("SFTPPanel uploads", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Forward" }));
     await waitFor(() => expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/home/edge/project"));
-    await userEvent.click(screen.getByRole("button", { name: "Root directory" }));
+    await userEvent.click(screen.getByRole("button", { name: "Folder actions" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Root directory" }));
     await waitFor(() => expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/"));
-    await userEvent.click(screen.getByRole("button", { name: "Home directory" }));
+    await userEvent.click(screen.getByRole("button", { name: "Folder actions" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Home directory" }));
     await waitFor(() => expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/home/edge"));
     expect(api.list).toHaveBeenCalledWith("edge", "");
   });
@@ -446,7 +449,8 @@ describe("SFTPPanel uploads", () => {
   it("copies the current directory and edits it from the empty breadcrumb area", async () => {
     render(<SFTPPanel aliases={["edge"]} />);
     await chooseHost("edge");
-    await userEvent.click(screen.getByRole("button", { name: "Copy full path" }));
+    await userEvent.click(screen.getByRole("button", { name: "Folder actions" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Copy full path" }));
     expect(clipboard.writeText).toHaveBeenLastCalledWith("/remote");
     fireEvent.click(screen.getByRole("navigation", { name: "Remote path" }));
     const input = screen.getByRole("textbox", { name: "Remote path" });
@@ -1117,6 +1121,7 @@ describe("SFTPPanel uploads", () => {
     api.readText.mockResolvedValue({ entry, contents: "first\nneedle here\n", revision: "content-revision" });
     render(<SFTPPanel aliases={["edge"]} />);
     await chooseHost("edge");
+    await userEvent.click(screen.getByRole("button", { name: "Search mode" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Search mode" }), "content");
     const scope = screen.getByText("Search scope and limits");
     const explanation = screen.getByText(/Find exact text, with matching case/);
@@ -1124,6 +1129,7 @@ describe("SFTPPanel uploads", () => {
     await userEvent.click(scope);
     expect(explanation).toBeVisible();
     await userEvent.click(scope);
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Search mode" })).getByRole("button", { name: "Close" }));
     await userEvent.type(screen.getByRole("searchbox", { name: "Text to find in files" }), "needle{Enter}");
     const match = await screen.findByRole("button", { name: "Open /srv/sub/notes.txt at line 2" });
     expect(screen.getByText("Matching lines: 1 for “needle” under /srv. Some entries were skipped or not searched.")).toBeVisible();
@@ -1138,7 +1144,9 @@ describe("SFTPPanel uploads", () => {
     api.search.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     render(<SFTPPanel aliases={["edge"]} />);
     await chooseHost("edge");
+    await userEvent.click(screen.getByRole("button", { name: "Search mode" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Search mode" }), "content");
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Search mode" })).getByRole("button", { name: "Close" }));
     await userEvent.type(screen.getByRole("searchbox", { name: "Text to find in files" }), "needle{Enter}");
     const request = api.search.mock.calls.at(-1)?.[0] as { signal: AbortSignal };
     await userEvent.click(await screen.findByRole("button", { name: "Stop search" }));
@@ -1153,7 +1161,9 @@ describe("SFTPPanel uploads", () => {
     api.listLocal.mockResolvedValue({ path: "/local", home: "/local", entries: [entry, { ...entry, name: "other.txt", path: "/local/other.txt" }] });
     render(<SFTPPanel aliases={["edge"]} />);
     await chooseHost("edge");
+    await userEvent.click(screen.getByRole("button", { name: "Search mode" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Search mode" }), "content");
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Search mode" })).getByRole("button", { name: "Close" }));
     await userEvent.click(screen.getByRole("button", { name: "Host" }));
     const local = await screen.findByText("Local", { selector: "span.font-medium" });
     await userEvent.click(local.closest("button")!);
@@ -1278,8 +1288,7 @@ describe("SFTPPanel uploads", () => {
     expect(onSortChange).toHaveBeenCalledWith({ key: "size", direction: "ascending" });
   });
   describe("narrow desktop pane", () => {
-    // Two panes side by side leave each one under 680px, but the pointer is
-    // still a mouse: every column stays and the table scrolls sideways.
+    // Split panes prioritize file names while Details retains complete metadata.
     const clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
     beforeEach(() => {
       Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 600 });
@@ -1291,17 +1300,16 @@ describe("SFTPPanel uploads", () => {
       if (clientWidth !== undefined) Object.defineProperty(HTMLElement.prototype, "clientWidth", clientWidth);
     });
 
-    it("keeps every column in a table that scrolls sideways instead of dropping columns", async () => {
+    it("keeps the main file columns and makes permissions available in Details", async () => {
       render(<SFTPPanel aliases={["edge"]} />);
       await chooseHost("edge");
       const table = await screen.findByRole("table");
-      for (const column of [/Name/, /Modified/, /Size/, /Type/, "Permissions"]) {
+      for (const column of [/Name/, /Modified/, /Size/, /Type/]) {
         expect(within(table).getByRole("columnheader", { name: column })).toBeInTheDocument();
       }
-      expect(within(table).getByRole("row", { name: /notes.txt/ })).toHaveTextContent("0644");
-      // The table keeps its natural width and the list box scrolls it.
-      expect(table.className).toContain("min-w-[44rem]");
-      expect(screen.getByTestId("sftp-file-list").className).toContain("overflow-auto");
+      expect(within(table).queryByRole("columnheader", { name: "Permissions" })).not.toBeInTheDocument();
+      await userEvent.dblClick(within(table).getByRole("button", { name: "notes.txt" }));
+      expect(await within(screen.getByRole("dialog", { name: "Details for notes.txt" })).findByText(/^0644 \(/)).toBeVisible();
       expect(screen.queryByRole("list", { name: "File list" })).not.toBeInTheDocument();
     });
   });
@@ -1417,19 +1425,22 @@ describe("SFTPPanel uploads", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
 
-    it("shows search options while the input is open and retains the mode when reopened", async () => {
+    it("opens search options on demand and retains the mode when reopened", async () => {
       render(<SFTPPanel aliases={["edge"]} />);
       await chooseHost("edge");
       expect(screen.queryByRole("combobox", { name: "Search mode" })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "Search files" }));
       expect(screen.getByRole("searchbox", { name: "Filter entries" })).toHaveFocus();
+      await userEvent.click(screen.getByRole("button", { name: "Search mode" }));
       await userEvent.selectOptions(screen.getByRole("combobox", { name: "Search mode" }), "content");
+      await userEvent.click(within(screen.getByRole("dialog", { name: "Search mode" })).getByRole("button", { name: "Close" }));
       expect(screen.getByRole("searchbox", { name: "Text to find in files" })).toBeVisible();
       await userEvent.click(screen.getByRole("button", { name: "Close" }));
       expect(screen.queryByRole("combobox", { name: "Search mode" })).not.toBeInTheDocument();
       expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "notes.txt" })).toBeVisible();
       await userEvent.click(screen.getByRole("button", { name: "Search files" }));
+      await userEvent.click(screen.getByRole("button", { name: "Search mode" }));
       expect(screen.getByRole("combobox", { name: "Search mode" })).toHaveValue("content");
     });
 

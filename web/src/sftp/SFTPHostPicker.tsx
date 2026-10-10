@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { HostEntry } from "../api/config";
 import type { RecentConnection } from "../api/recentConnections";
 import { useTranslate } from "../i18n/context";
@@ -8,8 +8,8 @@ import { localHostAlias } from "./localHost";
 
 const noHosts: HostEntry[] = [];
 
-// SFTPHostPicker is the pane's destination button. The dialog behind it is
-// shared with the session list so every place a host is chosen looks alike.
+// The shared chooser opens from the workspace tab or a standalone toolbar.
+// A request opens the same dialog without duplicating the source label.
 export function SFTPHostPicker({
   aliases,
   hosts = noHosts,
@@ -17,6 +17,8 @@ export function SFTPHostPicker({
   disabled = false,
   compact = false,
   includeLocal = false,
+  hideTrigger = false,
+  openRequest = 0,
   loadRecent,
   onChange,
 }: {
@@ -26,12 +28,22 @@ export function SFTPHostPicker({
   disabled?: boolean;
   compact?: boolean;
   includeLocal?: boolean;
+  hideTrigger?: boolean;
+  openRequest?: number;
   loadRecent?: () => Promise<{ connections: RecentConnection[] }>;
   onChange: (alias: string) => void;
 }) {
   const t = useTranslate();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
+  const handledRequest = useRef(openRequest);
+  useEffect(() => {
+    if (handledRequest.current === openRequest) return;
+    handledRequest.current = openRequest;
+    if (disabled) return;
+    if (document.activeElement instanceof HTMLButtonElement) trigger.current = document.activeElement;
+    setOpen(true);
+  }, [openRequest, disabled]);
   const localName = t("sftp.local.connection");
   const local = includeLocal
     ? [{ id: "engine", label: localName, detail: t("sftp.local.engine"), current: value === localHostAlias }]
@@ -44,7 +56,7 @@ export function SFTPHostPicker({
 
   return (
     <>
-      <button
+      {hideTrigger ? null : <button
         ref={trigger}
         type="button"
         aria-label={t("sftp.host")}
@@ -68,7 +80,7 @@ export function SFTPHostPicker({
             <Icon name="chevronRight" className="size-3 rotate-90 text-ink-muted" />
           </>
         )}
-      </button>
+      </button>}
       <HostPickerDialog
         open={open}
         heading={t("sftp.chooseHostHeading")}

@@ -212,7 +212,6 @@ export const en = {
   "sftp.path": "Remote path",
   "sftp.editPath": "Edit path",
   "sftp.go": "Go",
-  "sftp.navigation": "Directory navigation",
   "sftp.back": "Back",
   "sftp.forward": "Forward",
   "sftp.homeDirectory": "Home directory",
