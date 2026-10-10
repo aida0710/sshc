@@ -1,8 +1,6 @@
 module sshc
 
-go 1.26.0
-
-toolchain go1.26.6
+go 1.26.9
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.43.4
