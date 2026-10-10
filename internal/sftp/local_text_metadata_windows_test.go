@@ -558,10 +558,12 @@ func TestWindowsLocalTextSaveRefusesAnUnexpectedInheritedIntegrityLabel(t *testi
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer parent.Close()
 			staged, err := openLocalTextStagingFile(parent, "verify-label.txt")
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer staged.cleanup(parent)
 			stageMetadata, err := captureLocalTextMetadata(staged.file)
 			if err != nil {
 				t.Fatal(err)
