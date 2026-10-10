@@ -15,7 +15,7 @@ Operations on the same host (listing, details, preview, editing, transfers and t
 
 ## File operations
 
-Engine-local regular UTF-8 files up to 2 MiB can be edited, and their text or raster images previewed in Details. Selected symlinks are refused. Saving checks both contents and file identity, refuses external changes or replacements, and protects paths used by transfers.
+Engine-local regular UTF-8 files up to 2 MiB can be edited, and their text or raster images previewed in Details. Selected symlinks are refused. Saving checks both contents and file identity, refuses external changes or replacements, and protects paths used by transfers. It also retains the owner, group, access controls and extended attributes. Saving is refused if these cannot be read or retained, metadata exceeds 16 MiB, or the file carries privileged execution attributes.
 
 Save with `Ctrl/Cmd+S`; the editor shows Saving and Saved. In directory comparisons, View text differences opens a read-only line comparison. An absent side is displayed as empty. Each text file is limited to 2 MiB and pinned to the listed revision; changed files must be compared again. Narrow screens use an inline diff.
 

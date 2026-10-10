@@ -59,6 +59,9 @@ test("shows line differences between two engine-local files without writing eith
     await mkdir(process.env.SSHC_VISUAL_DIR, { recursive: true });
     await page.screenshot({ path: join(process.env.SSHC_VISUAL_DIR, "sftp-text-differences-en.png") });
   }
+  await page.setViewportSize({ width: 390, height: 640 });
+  await expect(text.locator(".line-insert").first()).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   await text.getByRole("button", { name: "Close", exact: true }).click();
   await expect(comparison).toBeVisible();
   expect(await installation.read("text-left/notes.txt")).toBe("first line\nleft value\n");

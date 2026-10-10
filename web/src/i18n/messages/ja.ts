@@ -196,7 +196,7 @@ export const ja = {
   "sftp.problem.transferNotFound": "転送が見つかりませんでした。一覧から削除された可能性があります。",
   "sftp.problem.transferTooLarge": "ファイルが転送できるサイズを超えています。",
   "sftp.problem.wrongType": "対象がファイルかフォルダかが、想定と異なります。",
-  "sftp.problem.unsupportedEntry": "この種類の項目はコピーできません。",
+  "sftp.problem.unsupportedEntry": "この種類の項目には、この操作を行えません。",
   "sftp.problem.compareLimit": "フォルダが大きすぎるため比較できません。",
   "sftp.problem.traversalLimit": "フォルダ内の項目が多すぎるため処理できません。",
   "sftp.problem.targetInsideSource":
@@ -295,7 +295,7 @@ export const ja = {
   "sftp.manager.summary.failed": "失敗{count}件",
   "sftp.manager.summary.completed": "完了{count}件",
   "sftp.manager.summary.cancelled": "キャンセル{count}件",
-  "sftp.manager.summaryProgress": "{progress}% · {speed}/s",
+  "sftp.manager.summaryProgress": "{progress}% · {speed}/秒",
   "sftp.manager.browserSource": "ブラウザ",
   "sftp.manager.browserDestination": "ブラウザの保存先",
   "sftp.manager.operation.copy": "コピー",
@@ -861,7 +861,7 @@ export const ja = {
   "terminal.forwardStop": "停止",
   "terminal.forwardStopping": "停止中…",
   "terminal.forwardStopped": "転送を停止しました。",
-  "terminal.forwardRemoteAddress": "SSH接続先 {listen} → エンジン側 {to}",
+  "terminal.forwardRemoteAddress": "SSH接続先 {listen} → sshcエンジン側 {to}",
   "terminal.forwardNew": "ポート転送を開始",
   "terminal.forwardSaveConnection": "この接続設定にも保存する",
   "terminal.forwardSaveHint":

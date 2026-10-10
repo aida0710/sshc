@@ -39,16 +39,9 @@ type sftpSearchOmissionResponse struct {
 	Count  int    `json:"count"`
 }
 
-type sftpTextFileResponse struct {
-	Entry    api.SFTPEntry `json:"entry"`
-	Contents string        `json:"contents"`
-	Revision string        `json:"revision"`
-}
+type sftpTextFileResponse = api.SFTPTextFile
 
-type sftpSaveTextRequest struct {
-	Contents         string `json:"contents"`
-	ExpectedRevision string `json:"expectedRevision"`
-}
+type sftpSaveTextRequest = api.SFTPSaveTextRequest
 
 type sftpRenameRequest struct {
 	From string `json:"from"`

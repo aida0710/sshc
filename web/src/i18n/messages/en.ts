@@ -193,7 +193,7 @@ export const en = {
   "sftp.problem.transferNotFound": "The transfer was not found. It may have been removed from the list.",
   "sftp.problem.transferTooLarge": "The file exceeds the size that can be transferred.",
   "sftp.problem.wrongType": "The entry is not the file or folder that was expected.",
-  "sftp.problem.unsupportedEntry": "This kind of entry cannot be copied.",
+  "sftp.problem.unsupportedEntry": "This operation is not supported for this kind of entry.",
   "sftp.problem.compareLimit": "The folders are too large to compare.",
   "sftp.problem.traversalLimit": "The folder contains too many entries to process.",
   "sftp.problem.targetInsideSource":
