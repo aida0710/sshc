@@ -15,11 +15,11 @@ sshcはmacOS、Linux、Windows、Androidで利用できるターミナルアプ�
 brew install aida0710/tap/sshc
 ```
 
-Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.44.3`を導入する例です。
+Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.44.4`を導入する例です。
 
 ```sh
-SSHC_VERSION=v0.44.3 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.44.3/install.sh | sh'
+SSHC_VERSION=v0.44.4 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.44.4/install.sh | sh'
 ```
 
 導入後は`sshc update`で更新できます。Homebrewで入れた場合はHomebrewから、`install.sh`で入れた場合は同じ配布元から更新されます。スクリプトなどで確認を省略する場合は、`sshc update --yes`を指定してください。
@@ -140,7 +140,7 @@ sshc service restart
 
 ### Web画面から更新する
 
-macOS・Linuxの`install.sh`版では、新しい安定版があると、画面のバージョン表示欄に更新ボタンが出ます。確認画面で現在のバージョン、更新先、導入方法を確認してから実行してください。更新にはインストール先への書き込み権限が必要です。Homebrew版は確認したバージョンをWeb更新で指定できないため、ターミナルで`sshc update`を実行してください。手動配置・開発ビルド・Windows・Androidでは、画面に表示される案内に従って更新します。
+macOS・LinuxのHomebrew版と`install.sh`版では、新しい安定版があると、画面のバージョン表示欄に更新ボタンが出ます。確認画面で現在のバージョン、更新先、導入方法を確認してから実行してください。更新にはインストール先への書き込み権限が必要です。Homebrew版は`brew upgrade`で更新し、実際に入ったバージョンを確認します。実行時のHomebrewの定義に従うため、確認画面より新しいバージョンが入る場合があります。`install.sh`版は確認したバージョンへ更新します。手動配置・開発ビルド・Windows・Androidでは、画面に表示される案内に従って更新します。
 
 更新後はsshcエンジンが再起動し、接続中のセッションと転送が終了します。パスワードを設定したVaultは、再起動後にロックを解除してください。更新中は進行状況を表示し、重複した更新を受け付けません。インストールが成功して再起動だけに失敗した場合は、再インストールせず、案内に従って再起動してから画面を再読み込みしてください。
 

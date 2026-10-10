@@ -56,7 +56,7 @@ export function UpdateControls({ status, api, onStart }: UpdateControlsProps) {
     <>
       {job === undefined ? null : (
         <div role="status" className="mt-2 space-y-1">
-          <p>{t(updateJobMessage(job), { version: job.target })}</p>
+          <p>{t(updateJobMessage(job), { version: job.installedVersion ?? job.target })}</p>
           {job.state === "restarting" || job.state === "restart_required" ? (
             <button
               type="button"
@@ -85,7 +85,7 @@ export function UpdateControls({ status, api, onStart }: UpdateControlsProps) {
           heading={t("update.confirmTitle")}
           body={
             <>
-              <p>{preview === null ? t("update.preparing") : t("update.confirmVersion", {
+              <p>{preview === null ? t("update.preparing") : t(preview.manager === "homebrew" ? "update.confirmHomebrewVersion" : "update.confirmVersion", {
                 current: preview.current,
                 target: preview.target,
                 manager: preview.manager === "homebrew" ? "Homebrew" : "install.sh",

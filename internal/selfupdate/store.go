@@ -66,5 +66,8 @@ func (store Store) Read() (Job, error) {
 	if len(job.ID) != jobIDLength || job.Target != job.Plan.Target || job.OwnerPID <= 0 {
 		return Job{}, ErrState
 	}
+	if job.InstalledVersion != "" && validateInstalledVersion(job.Plan, job.InstalledVersion) != nil {
+		return Job{}, ErrState
+	}
 	return job, nil
 }

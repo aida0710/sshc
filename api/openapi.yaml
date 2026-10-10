@@ -3024,6 +3024,7 @@ components:
       properties:
         id: { type: string }
         target: { type: string }
+        installedVersion: { type: string, description: Stable version reported by the installed executable. }
         state: { type: string, enum: [accepted, installing, restarting, succeeded, failed, restart_required] }
         problem: { type: string }
     ChangeMasterPasswordRequest:

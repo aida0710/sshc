@@ -2360,6 +2360,8 @@ export interface components {
         UpdateJob: {
             id: string;
             target: string;
+            /** @description Stable version reported by the installed executable. */
+            installedVersion?: string;
             /** @enum {string} */
             state: "accepted" | "installing" | "restarting" | "succeeded" | "failed" | "restart_required";
             problem: string;
