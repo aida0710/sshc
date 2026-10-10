@@ -82,12 +82,12 @@ async function expectCompactControls(page: Page): Promise<void> {
     await target.locator("..").scrollIntoViewIfNeeded();
     await expectTouchTarget(target);
   }
-  for (const close of await strip.getByRole("button").all()) await expectTouchTarget(close);
+  for (const control of await strip.getByRole("button").all()) await expectTouchTarget(control);
   // Measurements may scroll an inactive tab into view. Restore the selected
   // tab's whole group so its close control stays reachable in the final view.
   const selectedGroup = strip.getByRole("tab", { selected: true }).locator("..");
   await selectedGroup.scrollIntoViewIfNeeded();
-  const selectedClose = selectedGroup.getByRole("button");
+  const selectedClose = selectedGroup.getByRole("button", { name: /^Close the .* tab$/ });
   if (await selectedClose.count() > 0) {
     await expect.poll(async () => {
       const stripBounds = await strip.boundingBox();
@@ -96,16 +96,44 @@ async function expectCompactControls(page: Page): Promise<void> {
         closeBounds.x >= stripBounds.x && closeBounds.x + closeBounds.width <= stripBounds.x + stripBounds.width;
     }).toBe(true);
   }
+  await expect.poll(async () => {
+    const stripBounds = await strip.boundingBox();
+    const groupBounds = await selectedGroup.boundingBox();
+    return stripBounds !== null && groupBounds !== null &&
+      groupBounds.x >= stripBounds.x && groupBounds.x + groupBounds.width <= stripBounds.x + stripBounds.width &&
+      groupBounds.y >= stripBounds.y && groupBounds.y + groupBounds.height <= stripBounds.y + stripBounds.height;
+  }).toBe(true);
   await expectTouchTarget(page.getByRole("button", { name: "New tab", exact: true }));
   const pane = page.getByRole("tabpanel");
   await expect(pane).toHaveCount(1);
-  for (const name of ["Host", "Back", "Refresh directory", "Search files", "Folder actions"]) {
-    await expectTouchTarget(pane.getByRole("button", { name, exact: true }));
+  await expectTouchTarget(page.getByRole("button", { name: "Host", exact: true }));
+  await expectTouchTarget(pane.getByRole("button", { name: "Search files", exact: true }));
+  const clearSelection = pane.getByRole("button", { name: "Clear selection", exact: true });
+  if (await clearSelection.isVisible()) {
+    await expectTouchTarget(clearSelection);
+    await expectTouchTarget(pane.getByRole("button", { name: /^Actions for / }));
+  } else {
+    for (const name of ["Back", "Folder actions"]) {
+      await expectTouchTarget(pane.getByRole("button", { name, exact: true }));
+    }
+    await expectTouchTarget(pane.getByTestId("sftp-current-path"));
   }
-  await expectTouchTarget(pane.getByTestId("sftp-current-path"));
-  await expectTouchTarget(pane.getByRole("button", { name: "Clear selection", exact: true }));
-  await expectTouchTarget(pane.getByRole("button", { name: /^Actions for / }));
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+}
+
+async function expectFileRowInsideList(pane: Locator, name: string): Promise<void> {
+  const list = pane.getByTestId("sftp-file-list");
+  const row = list.getByRole("button", { name, exact: true });
+  await row.scrollIntoViewIfNeeded();
+  // Visibility alone allows a row to sit beneath the clipped list or navigation.
+  await expect.poll(async () => {
+    const listBounds = await list.boundingBox();
+    const rowBounds = await row.boundingBox();
+    return listBounds !== null && rowBounds !== null &&
+      rowBounds.height >= minimumTouchTargetSize &&
+      rowBounds.y >= listBounds.y - 1 && rowBounds.y + rowBounds.height <= listBounds.y + listBounds.height + 1 &&
+      rowBounds.x >= listBounds.x - 1 && rowBounds.x + rowBounds.width <= listBounds.x + listBounds.width + 1;
+  }).toBe(true);
 }
 
 async function captureCompactFiles(page: Page, name: string): Promise<void> {
@@ -133,23 +161,25 @@ test("adds a compact file tab and preserves both directories and selections with
   const firstTab = strip.getByRole("tab", { name: "Local:mobile-first", exact: true });
   const secondTab = strip.getByRole("tab", { name: "Local:mobile-second", exact: true });
   await expect(secondTab).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tabpanel").getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "sshc://local");
+  await expect(page.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "sshc://local");
   await page.getByRole("checkbox", { name: "Select report.txt", exact: true }).check();
   await expectCompactControls(page);
   await firstTab.click();
   const pane = page.getByRole("tabpanel");
   await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", firstPath);
-  await expect(pane.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "sshc://local");
+  await expect(page.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "sshc://local");
   await expect(pane.getByRole("checkbox", { name: "Select notes.txt", exact: true })).toBeChecked();
   await secondTab.click();
   await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", secondPath);
   await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
   await expectCompactControls(page);
+  await expectFileRowInsideList(pane, "report.txt");
   await captureCompactFiles(page, "compact-sftp-local-tabs-390x640-en");
   await page.setViewportSize({ width: 844, height: 390 });
   await expectCompactControls(page);
   await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", secondPath);
   await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
+  await expectFileRowInsideList(pane, "report.txt");
 });
 
 test("restores two compact sources in one tab strip and preserves the host, path and selection", async ({ page, installation }) => {
@@ -184,25 +214,27 @@ test("restores two compact sources in one tab strip and preserves the host, path
   await pane.getByRole("checkbox", { name: "Select notes.txt", exact: true }).check();
   await expectCompactControls(page);
   await remoteTab.click();
-  await expect(pane.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "bastion");
+  await expect(page.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "bastion");
   await pane.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
   await pane.getByRole("checkbox", { name: "Select report.txt", exact: true }).check();
   await expectCompactControls(page);
   await localTab.click();
   await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/home/engine");
-  await expect(pane.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "sshc://local");
+  await expect(page.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "sshc://local");
   await expect(pane.getByRole("checkbox", { name: "Select notes.txt", exact: true })).toBeChecked();
   await remoteTab.click();
-  await expect(pane.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "bastion");
+  await expect(page.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "bastion");
   await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
   await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
   expect(remoteReads).toBe(1);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("sshc.sftp.panes.v1") ?? "[]"))).toHaveLength(2);
   await expectCompactControls(page);
+  await expectFileRowInsideList(pane, "report.txt");
   await captureCompactFiles(page, "compact-sftp-restored-tabs-390x640-en");
   await page.setViewportSize({ width: 844, height: 390 });
   await expectCompactControls(page);
   await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
   await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
+  await expectFileRowInsideList(pane, "report.txt");
 });
