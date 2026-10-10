@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -221,9 +222,13 @@ func TestSecretsWithQuotesSurviveTheRequestBody(t *testing.T) {
 	}
 }
 
+// relayConnected は、engine の中継が接続先へ繋げたときに1行目へ答える JSON である。
+const relayConnected = "{}"
+
 // relayStub は、engine の中継の代わりに、1行目の接続先を受け取って reply を答える。
-// 答えが繋がったなら、そのあとに届いたバイト列を served へ渡し、greeting を返す。
-func relayStub(t *testing.T, reply string, greeting string) (socket string, requested <-chan string, served <-chan []byte) {
+// 受け取った接続先は requested へ渡す。答えが relayConnected なら、そのあとの接続を
+// carry に任せ、carry が戻ったら閉じる。ほかの答えなら carry は呼ばない。
+func relayStub(t *testing.T, reply string, carry func(net.Conn)) (socket string, requested <-chan string) {
 	t.Helper()
 	socket = filepath.Join(shortSocketDirectory(t), "engine.sock")
 	listener, err := net.Listen("unix", socket)
@@ -232,7 +237,6 @@ func relayStub(t *testing.T, reply string, greeting string) (socket string, requ
 	}
 	t.Cleanup(func() { _ = listener.Close() })
 	addresses := make(chan string, 1)
-	bodies := make(chan []byte, 1)
 	go func() {
 		connection, err := listener.Accept()
 		if err != nil {
@@ -242,14 +246,11 @@ func relayStub(t *testing.T, reply string, greeting string) (socket string, requ
 		defer func() { _ = connection.Close() }()
 		addresses <- readRequestedAddress(connection)
 		_, _ = connection.Write([]byte(reply + "\n"))
-		if reply != "{}" {
-			return
+		if reply == relayConnected {
+			carry(connection)
 		}
-		received, _ := io.ReadAll(connection)
-		_, _ = connection.Write([]byte(greeting))
-		bodies <- received
 	}()
-	return socket, addresses, bodies
+	return socket, addresses
 }
 
 // readRequestedAddress は、繋ぐ側が1行目に送った接続先を読む。
@@ -270,19 +271,61 @@ func relayOverview(t *testing.T, socket string) string {
 		`"running":true,"relaySocket":` + jsonString(t, socket) + `,"connections":[]}]}`
 }
 
-// ProxyCommand は、接続先を engine の中継へ伝えてから、標準入出力をそのまま流す。
-func TestTheProxyPipesStandardInputAndOutputThroughTheRoute(t *testing.T) {
-	socket, requested, served := relayStub(t, "{}", "SSH-2.0-remote\r\n")
+// relayEngineEnvironment は、経路の中継が socket にあると答える engine を立て、その
+// engine へ繋ぐ環境を返す。標準入出力は呼び出し側が埋める。
+func relayEngineEnvironment(t *testing.T, socket string) commandEnvironment {
+	t.Helper()
 	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")
 		_, _ = response.Write([]byte(relayOverview(t, socket)))
 	})
-	defer server.Close()
-	stdin := writeTemporaryFile(t, "SSH-2.0-local\r\n")
-	var stdout, stderr strings.Builder
+	t.Cleanup(server.Close)
+	return commandEnvironment{stateDir: stateDir, client: server.Client()}
+}
 
-	code := runVPN(context.Background(), vpnInvocation{Action: vpnProxy, Name: "lab", Target: "10.9.9.1:22"},
-		commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: stdin, stdout: &stdout, stderr: &stderr})
+// proxyReturnTimeout は、proxy が戻らないのを固まったと見なすまでの待ち。遅い CI の
+// マシンでも、中継が閉じてから戻るまでには十分な長さにする。
+const proxyReturnTimeout = 5 * time.Second
+
+// runProxyWithinTimeout は、environment で sshc vpn proxy を走らせ、終了コードを返す。
+// proxyReturnTimeout までに戻らなければ、stuck を理由にテストを落とす。go test の
+// 上限まで待つと、パッケージごと打ち切られて、どこで止まったかが分かりにくい。
+func runProxyWithinTimeout(t *testing.T, environment commandEnvironment, stuck string) int {
+	t.Helper()
+	code := make(chan int, 1)
+	go func() {
+		code <- runVPN(context.Background(), vpnInvocation{Action: vpnProxy, Name: "lab", Target: "10.9.9.1:22"},
+			environment)
+	}()
+	select {
+	case got := <-code:
+		return got
+	case <-time.After(proxyReturnTimeout):
+		t.Fatal(stuck)
+		return 0
+	}
+}
+
+// ProxyCommand は、接続先を engine の中継へ伝えてから、標準入力を中継へ、中継から
+// 届いたものを標準出力へ運ぶ。
+//
+// 中継は標準入力に置いたバイト数だけ読み、答えを返して閉じる。標準入力の終わりが中継へ
+// 届くことには頼らない。それは TestTheProxyTellsTheRelayWhenStandardInputEnds が確かめる。
+func TestTheProxyPipesStandardInputAndOutputThroughTheRoute(t *testing.T) {
+	const sent, greeting = "SSH-2.0-local\r\n", "SSH-2.0-remote\r\n"
+	served := make(chan string, 1)
+	socket, requested := relayStub(t, relayConnected, func(connection net.Conn) {
+		received := make([]byte, len(sent))
+		read, _ := io.ReadFull(connection, received)
+		served <- string(received[:read])
+		_, _ = connection.Write([]byte(greeting))
+	})
+	environment := relayEngineEnvironment(t, socket)
+	environment.stdin = writeTemporaryFile(t, sent)
+	var stdout, stderr strings.Builder
+	environment.stdout, environment.stderr = &stdout, &stderr
+
+	code := runProxyWithinTimeout(t, environment, "中継が閉じたのに proxy が戻らない")
 
 	if code != 0 {
 		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
@@ -290,44 +333,53 @@ func TestTheProxyPipesStandardInputAndOutputThroughTheRoute(t *testing.T) {
 	if address := <-requested; address != "10.9.9.1:22" {
 		t.Fatalf("中継へ伝えた接続先 = %q", address)
 	}
-	if sent := string(<-served); sent != "SSH-2.0-local\r\n" {
-		t.Fatalf("中継へ届いた本文 = %q", sent)
+	if body := <-served; body != sent {
+		t.Fatalf("中継へ届いた本文 = %q", body)
 	}
-	if stdout.String() != "SSH-2.0-remote\r\n" {
+	if stdout.String() != greeting {
 		t.Fatalf("標準出力 = %q", stdout.String())
 	}
 }
 
-// proxyReturnTimeout は、proxy が戻らないのを固まったと見なすまでの待ち。遅い CI の
-// マシンでも、中継が閉じてから戻るまでには十分な長さにする。
-const proxyReturnTimeout = 5 * time.Second
+// 標準入力が終わったら、送る側だけを閉じて中継へ伝え、中継から届くものは受け取り
+// 続ける。伝えないと、入力の終わりを待って答える接続先とのあいだで止まったままになる。
+//
+// Windows では、相手が CloseWrite するのと同時に読み始めた Read が起こされず、止まった
+// ままになることがある。Go の net の TestCloseWrite も、Windows と macOS/arm64 では読むのと
+// 閉じるのが重ならないよう待っている（go.dev/issue/49352）。そのときは proxyReturnTimeout で
+// 落ちる。
+func TestTheProxyTellsTheRelayWhenStandardInputEnds(t *testing.T) {
+	const farewell = "bye\r\n"
+	endOfInput := make(chan error, 1)
+	socket, _ := relayStub(t, relayConnected, func(connection net.Conn) {
+		// 標準入力は空なので、最初の Read が入力の終わりを読む。
+		_, err := connection.Read(make([]byte, 1))
+		endOfInput <- err
+		_, _ = connection.Write([]byte(farewell))
+	})
+	environment := relayEngineEnvironment(t, socket)
+	environment.stdin = writeTemporaryFile(t, "")
+	var stdout, stderr strings.Builder
+	environment.stdout, environment.stderr = &stdout, &stderr
 
-// closingRelayStub は、1行目に "{}" と答えて greeting を返したあと、closeRelay で
-// 中継の側から先に閉じる。
-func closingRelayStub(t *testing.T, greeting string, closeRelay func(net.Conn)) string {
-	t.Helper()
-	socket := filepath.Join(shortSocketDirectory(t), "engine.sock")
-	listener, err := net.Listen("unix", socket)
-	if err != nil {
-		t.Fatal(err)
+	code := runProxyWithinTimeout(t, environment, "標準入力の終わりが中継へ届かず、proxy と中継が互いを待ち続けた")
+
+	if code != 0 {
+		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
 	}
-	t.Cleanup(func() { _ = listener.Close() })
-	go func() {
-		connection, err := listener.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = connection.Close() }()
-		readRequestedAddress(connection)
-		_, _ = connection.Write([]byte("{}\n" + greeting))
-		closeRelay(connection)
-	}()
-	return socket
+	if err := <-endOfInput; !errors.Is(err, io.EOF) {
+		t.Fatalf("中継の Read = %v, want EOF", err)
+	}
+	// 接続全体を閉じていれば、中継が終わりを読んだあとに返したものは届かない。
+	if stdout.String() != farewell {
+		t.Fatalf("標準出力 = %q", stdout.String())
+	}
 }
 
 // 接続先の切断、sshc vpn down、engine の終了で中継が先に閉じたら、proxy は標準入力が
 // 開いたままでも戻る。ssh は ProxyCommand の標準出力が閉じるまで切断に気付かない。
 func TestTheProxyReturnsWhenTheRelayClosesFirstWhileStandardInputStaysOpen(t *testing.T) {
+	const greeting = "SSH-2.0-remote\r\n"
 	closings := map[string]func(net.Conn){
 		"中継が接続を閉じる": func(connection net.Conn) { _ = connection.Close() },
 		"中継が送る側だけを閉じる": func(connection net.Conn) {
@@ -337,34 +389,26 @@ func TestTheProxyReturnsWhenTheRelayClosesFirstWhileStandardInputStaysOpen(t *te
 	}
 	for name, closeRelay := range closings {
 		t.Run(name, func(t *testing.T) {
-			socket := closingRelayStub(t, "SSH-2.0-remote\r\n", closeRelay)
-			_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
-				response.Header().Set("Content-Type", "application/json")
-				_, _ = response.Write([]byte(relayOverview(t, socket)))
+			socket, _ := relayStub(t, relayConnected, func(connection net.Conn) {
+				_, _ = connection.Write([]byte(greeting))
+				closeRelay(connection)
 			})
-			defer server.Close()
+			environment := relayEngineEnvironment(t, socket)
 			stdin, stdinWriter, err := os.Pipe()
 			if err != nil {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = stdinWriter.Close(); _ = stdin.Close() })
+			environment.stdin = stdin
 			var stdout, stderr strings.Builder
+			environment.stdout, environment.stderr = &stdout, &stderr
 
-			code := make(chan int, 1)
-			go func() {
-				code <- runVPN(context.Background(), vpnInvocation{Action: vpnProxy, Name: "lab", Target: "10.9.9.1:22"},
-					commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: stdin, stdout: &stdout, stderr: &stderr})
-			}()
+			code := runProxyWithinTimeout(t, environment, "中継が閉じたのに proxy が標準入力を待ち続けた")
 
-			select {
-			case got := <-code:
-				if got != 0 || stderr.Len() != 0 {
-					t.Fatalf("code = %d, stderr = %q", got, stderr.String())
-				}
-			case <-time.After(proxyReturnTimeout):
-				t.Fatal("中継が閉じたのに proxy が標準入力を待ち続けた")
+			if code != 0 || stderr.Len() != 0 {
+				t.Fatalf("code = %d, stderr = %q", code, stderr.String())
 			}
-			if stdout.String() != "SSH-2.0-remote\r\n" {
+			if stdout.String() != greeting {
 				t.Fatalf("標準出力 = %q", stdout.String())
 			}
 		})
@@ -374,17 +418,14 @@ func TestTheProxyReturnsWhenTheRelayClosesFirstWhileStandardInputStaysOpen(t *te
 // 接続先へ繋げなかったときは、engine が答えた理由を英語の文で出し、標準出力には
 // 何も書かない。
 func TestTheProxySaysWhyTheRouteCouldNotReachTheDestination(t *testing.T) {
-	socket, _, _ := relayStub(t, `{"code":"vpn_target_failed","reason":"target_unresolved"}`, "")
-	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
-		response.Header().Set("Content-Type", "application/json")
-		_, _ = response.Write([]byte(relayOverview(t, socket)))
-	})
-	defer server.Close()
-	stdin := writeTemporaryFile(t, "")
+	socket, _ := relayStub(t, `{"code":"vpn_target_failed","reason":"target_unresolved"}`, nil)
+	environment := relayEngineEnvironment(t, socket)
+	environment.stdin = writeTemporaryFile(t, "")
 	var stdout, stderr strings.Builder
+	environment.stdout, environment.stderr = &stdout, &stderr
 
 	code := runVPN(context.Background(), vpnInvocation{Action: vpnProxy, Name: "lab", Target: "db.internal:22"},
-		commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: stdin, stdout: &stdout, stderr: &stderr})
+		environment)
 
 	if code != 1 {
 		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
