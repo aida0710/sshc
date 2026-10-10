@@ -103,16 +103,22 @@ export class SFTPTransferManager {
 
   getSnapshot = (): readonly ManagedTransferJob[] => this.ledger.snapshot();
   getNoticeSnapshot = (): readonly TransferNotice[] => this.ledger.noticeSnapshot();
-  getMaxConcurrent = (): number => this.maxConcurrent;
-  getClearCompletedAfter = (): number => this.clearCompletedAfter;
   getProcessingStopped = (): boolean => this.processingStopped;
-  getSpeedLimitBytesPerSecond = (): number => this.speedLimitBytesPerSecond;
-  getAutoReconnect = (): boolean => this.autoReconnect;
   getMaxReconnectAttempts = (): number => this.maxReconnectAttempts;
   getExcludePatterns = (): readonly string[] => [...this.excludePatterns];
-  getLargeFileThreshold = (): number => this.largeFileThreshold;
-  getLargeFileParallelism = (): number => this.largeFileParallelism;
-  getLargeFileChunkBytes = (): number => this.largeFileChunkBytes;
+  // The settings as the engine last reported them.
+  getSettings = (): TransferSettings => ({
+    maxConcurrent: this.maxConcurrent,
+    clearCompletedAfterSeconds: this.clearCompletedAfter,
+    processingStopped: this.processingStopped,
+    largeFileThresholdBytes: this.largeFileThreshold,
+    largeFileParallelism: this.largeFileParallelism,
+    largeFileChunkBytes: this.largeFileChunkBytes,
+    speedLimitBytesPerSecond: this.speedLimitBytesPerSecond,
+    autoReconnect: this.autoReconnect,
+    maxReconnectAttempts: this.maxReconnectAttempts,
+    excludePatterns: [...this.excludePatterns],
+  });
   hasUploadSource = (id: string): boolean => this.uploads.has(id);
   // Whether closing this page would cut a transfer short: the page is running
   // it, or holds the File of an upload waiting to run, which no other page has.
@@ -138,9 +144,10 @@ export class SFTPTransferManager {
   }
 
   // The queue belongs to the engine, so the settings do too: one value, shared
-  // by every browser and every tab looking at the same engine.
-  async applySettings(settings: TransferSettings): Promise<void> {
-    const listed = await this.api.updateTransferSettings(settings);
+  // by every browser and every tab looking at the same engine. The engine
+  // replaces the settings whole, so a change carries the current others along.
+  async applySettings(change: Partial<TransferSettings>): Promise<void> {
+    const listed = await this.api.updateTransferSettings({ ...this.getSettings(), ...change });
     this.adoptQueue(listed);
     this.kick();
   }

@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { failureCode } from "../api/client";
+import { formatBytes } from "../ui/format";
 import { remoteMetadataApi, type FilesystemSpace } from "./remoteMetadataApi";
 
 type SpaceState = { alias: string; path: string } & (
   | { kind: "loaded"; space: FilesystemSpace }
   | { kind: "unsupported" | "unavailable" }
 );
+
+// The engine sends 64-bit counts as decimal strings. Number loses precision
+// only past 2^53 bytes (8 PiB), and by far less than the one decimal shown.
+function formatFilesystemBytes(bytes: string): string {
+  return formatBytes(Number(bytes));
+}
 
 // The capacity request has its own state: an unsupported extension never fails the listing.
 export function SFTPFilesystemSpace({ alias, path, refreshKey }: { alias: string; path: string; refreshKey: unknown }) {
@@ -22,6 +29,6 @@ export function SFTPFilesystemSpace({ alias, path, refreshKey }: { alias: string
   }, [alias, path, refreshKey]);
   if (state === null || state.alias !== alias || state.path !== path) return null;
   return <p className="shrink-0 px-2 py-1 text-xs text-ink-muted" role="status">{state.kind === "loaded"
-    ? t("sftp.filesystemSpace", { available: BigInt(state.space.availableBytes).toLocaleString(), total: BigInt(state.space.totalBytes).toLocaleString() })
+    ? t("sftp.filesystemSpace", { available: formatFilesystemBytes(state.space.availableBytes), total: formatFilesystemBytes(state.space.totalBytes) })
     : t(state.kind === "unsupported" ? "sftp.spaceUnsupported" : "sftp.spaceUnavailable")}</p>;
 }

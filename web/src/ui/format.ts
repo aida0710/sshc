@@ -12,8 +12,10 @@ export type ByteUnits = {
   locale?: string;
 };
 
-const binaryUnits = ["B", "KiB", "MiB", "GiB", "TiB"];
-const decimalUnits = ["B", "kB", "MB", "GB", "TB"];
+// Up to exa so that a shared filesystem in the petabytes, and the 64-bit
+// maximum (16 EiB) a server may report, still get a unit of their own.
+const binaryUnits = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
+const decimalUnits = ["B", "kB", "MB", "GB", "TB", "PB", "EB"];
 
 export function formatBytes(bytes: number, units: ByteUnits = {}): string {
   const names = units.decimal ? decimalUnits : binaryUnits;

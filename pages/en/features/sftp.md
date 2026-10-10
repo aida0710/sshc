@@ -9,7 +9,7 @@ description: Remote file operations and a resumable SFTP Transfer Manager.
 
 Each tab shows its folder and host on separate lines. To change a host, use the destination button at the right of the selected tab. Host changes are disabled while that tab has unsaved edits.
 
-Selecting a host does not open an SFTP connection. sshc connects only after you press **Connect**. Restored tabs show their saved host and path without reconnecting in the background. The host picker searches aliases, groups, destination hosts and users, and switches between recently connected and SSH Config group views. A first connection opens the login user's home directory reported by the SFTP server and reuses the saved SSH configuration, host keys and credentials.
+Opening the SFTP screen does not connect to a saved server. Choosing a host in the host picker connects right away. Restored tabs show their saved host and path without reconnecting in the background, and connect when you press **Connect**. Closing a tab connected to an SSH host asks for confirmation; hold Shift while closing to skip it. The host picker searches aliases, groups, destination hosts and users, and switches between recently connected and SSH Config group views. A first connection opens the login user's home directory reported by the SFTP server and reuses the saved SSH configuration, host keys and credentials.
 
 Switching hosts immediately clears the previous listing and open file. A delayed response from the previous host is discarded instead of being shown under the new selection.
 
@@ -81,7 +81,7 @@ The remote creation menu offers **Create symbolic link**. Enter a name and a rel
 
 The listing and details show owner UID and group GID when supplied by the server. **Change owner and group** in the details dialog accepts numeric UID/GID values from 0 to 4294967295 for regular files and directories. Account names and recursive ownership changes are not supported. The server must support the no-follow `lsetstat@openssh.com` extension. Missing attributes, unsupported operations, and insufficient permissions are reported. Ownership changes through symbolic links are refused. If the entry changes during confirmation, refresh the listing and reopen the dialog.
 
-Below the remote listing, the available disk space for the authenticated user and total capacity are shown as exact byte counts. A server without capacity reporting support still provides a usable directory listing.
+Below the remote listing, the available disk space for the authenticated user and total capacity are shown in a unit that fits their size, such as MiB, GiB or TiB. A server without capacity reporting support still provides a usable directory listing.
 
 ## Change permissions for selected remote entries
 
@@ -113,7 +113,7 @@ Changes detected before or after reading end the comparison as a conflict. SFTP 
 
 The Transfer Manager is docked below the file list. Files and folders share one queue, with two concurrent transfers by default and a configurable limit from one to eight. Its compact state shows the active count, aggregate progress, and speed; expand it for per-file progress, speed, remaining time, and controls. Its action menu can pause, resume or cancel all transfers, and failed files in a batch can be retried independently.
 
-Regular file uploads and downloads support up to 512 GiB. By default a file travels over one SFTP connection. Raising the connection count in the Transfer Manager settings divides files of at least 100 MiB into 32 MiB ranges and transfers them over that many independent connections. A host that authenticates with a one-time code transfers over one connection whatever the setting. Upload ranges write to a remote temporary file; the engine records completed ranges, verifies the full contents, and atomically renames the file when complete. File downloads use HTTP Range to resume when the retained local prefix still matches the remote revision. Even with an empty queue, open **Transfer settings** to enter any allowed split threshold, stream count from one to 128, and chunk size; one stream disables splitting. The engine needs temporary free space roughly equal to the downloaded file so it can preserve a safe resumable snapshot.
+Regular file uploads and downloads support up to 512 GiB. By default a file travels over one SFTP connection. Raising the connection count under **Settings → SFTP** divides files of at least 100 MiB into 32 MiB ranges and transfers them over that many independent connections. A host that authenticates with a one-time code transfers over one connection whatever the setting. Upload ranges write to a remote temporary file; the engine records completed ranges, verifies the full contents, and atomically renames the file when complete. File downloads use HTTP Range to resume when the retained local prefix still matches the remote revision. Even with an empty queue, **Settings → SFTP** accepts any allowed split threshold, stream count from one to 128, and chunk size; one stream disables splitting. The engine needs temporary free space roughly equal to the downloaded file so it can preserve a safe resumable snapshot.
 
 The engine Transfer Manager owns the queue and persists it in `~/.ssh/sshc/transfers.json`. Queued, paused, and recoverable jobs are restored after an engine restart. Remote-to-remote transfers run entirely in the engine and continue even when the SFTP view or browser is closed.
 
@@ -121,4 +121,4 @@ The browser or WebView still handles local file I/O for uploads and downloads. T
 
 See [Transfer Manager](/en/sftp/transfers) for states, recovery, and cancellation.
 
-Transfer rows group the name, source → destination, size, speed, status, and actions. Paused, reconnecting, confirmation-needed, and failed jobs are counted separately from running transfers. Open a row's details for full paths, its saved exclusion rules, and failure information. **Transfer settings** opens a separate dialog grouping speed and recovery, queue and finished transfers, split transfers, and exclusions.
+Transfer rows group the name, source → destination, size, speed, status, and actions. Paused, reconnecting, confirmation-needed, and failed jobs are counted separately from running transfers. Open a row's details for full paths, its saved exclusion rules, and failure information. **Transfer settings** opens **Settings → SFTP**, grouping speed and recovery, queue and finished transfers, split transfers, and exclusions.

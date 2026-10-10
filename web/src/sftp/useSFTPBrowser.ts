@@ -144,7 +144,9 @@ export function useSFTPBrowser({
     }
   }
 
-  function selectHost(nextAlias: string) {
+  // Empties the pane for another host without reading it; the caller reads
+  // the directory it wants.
+  function resetForHost(nextAlias: string) {
     // Invalidate every request started for the previous host before React runs
     // the alias effect. Keeping its rows visible would also let an action for
     // host A be submitted with host B's alias during the hand-off render.
@@ -161,8 +163,14 @@ export function useSFTPBrowser({
     setPendingPath(null);
     onReset?.();
     latest.current = { alias: nextAlias, path: "" };
-    const next = sourceFor(nextAlias);
-    if (next !== null && !next.can.connect) void load("", { alias: nextAlias });
+  }
+
+  // Choosing a host is the request to use it, so an SSH host connects here
+  // without a further Connect. Only a restored tab waits for Connect: nobody
+  // chose its host on this visit.
+  function selectHost(nextAlias: string) {
+    resetForHost(nextAlias);
+    void load("", { alias: nextAlias });
   }
 
   useEffect(() => {
@@ -223,6 +231,7 @@ export function useSFTPBrowser({
     // result.
     generation: loadGeneration,
     selectHost,
+    resetForHost,
     connect: () => load(latest.current.path),
     retry: () => load(requestedPath.current),
     refresh: () => load(latest.current.path, { refresh: true }),
