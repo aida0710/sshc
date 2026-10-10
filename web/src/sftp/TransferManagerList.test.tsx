@@ -362,7 +362,7 @@ describe("the transfer queue", () => {
     expect(screen.queryByText(en["sftp.problem.failed"])).not.toBeInTheDocument();
   });
 
-  it("shows a remote job whose operation is in flight as running", () => {
+  it("keeps an in-flight remote job running even when its details are opened", async () => {
     manager.setJobs([job("remote", {
       direction: "remote",
       status: "running",
@@ -372,6 +372,9 @@ describe("the transfer queue", () => {
     render(<TransferManagerList />);
     expect(screen.queryByText("Check the destination")).not.toBeInTheDocument();
     expect(screen.getByText("Transferring…")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Show details for remote" }));
+    expect(screen.queryByText(en["sftp.problem.reconciliationRequired"])).not.toBeInTheDocument();
+    expect(screen.getByText("Transferring…")).toBeVisible();
   });
 
   it("keeps paused, reconnecting and attention counts visible while folded", () => {

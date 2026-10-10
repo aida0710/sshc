@@ -52,6 +52,9 @@ export function TransferJobRow({ job, waiting, processingStopped, maxReconnectAt
   const detailsId = useId();
   const hasSource = sftpTransferManager.hasUploadSource(job.id);
   const displayedStatus = getDisplayedTransferStatus(job, hasSource);
+  // The engine also uses reconciliation_required as an in-flight marker;
+  // explain it only after the displayed status asks for a destination check.
+  const hasProblem = job.problem !== "" && (job.problem !== "sftp_reconciliation_required" || displayedStatus === "reconcile");
   const sourceMissing = job.direction === "upload" && !hasSource &&
     (job.status === "queued" || job.status === "paused" || job.status === "reattach" || job.status === "needs_overwrite");
   const total = Math.max(job.totalBytes >= 0 ? job.totalBytes : job.transferredBytes, 1);
@@ -100,7 +103,7 @@ export function TransferJobRow({ job, waiting, processingStopped, maxReconnectAt
     {detailsOpen ? <div id={detailsId} className="space-y-2 bg-toolbar/30 px-3 py-3 text-xs">
       <TransferJobRoute job={job} />
       <TransferExclusionSummary patterns={job.excludePatterns ?? []} />
-      {job.problem !== "" ? <p className={displayedStatus === "failed" ? "text-danger" : "text-notice-ink"}>{sftpTransferProblemText(t, job.problem)}</p> : null}
+      {hasProblem ? <p className={displayedStatus === "failed" ? "text-danger" : "text-notice-ink"}>{sftpTransferProblemText(t, job.problem)}</p> : null}
     </div> : null}
   </li>;
 }
