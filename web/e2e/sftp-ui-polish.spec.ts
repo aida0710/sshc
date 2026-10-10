@@ -5,6 +5,9 @@ import type { TransferJob, TransferJobList } from "../src/sftp/api";
 import { expect, openApplication, openSection, test } from "./support/environment";
 import { openLocalSFTPDirectory } from "./support/sftp";
 
+// Phones keep touch controls when rotated beyond the portrait breakpoint.
+test.use({ hasTouch: true });
+
 function transferJob(id: string, overrides: Partial<TransferJob>): TransferJob {
   return {
     id: `fixture_${id}`, batchId: `batch-${id}`, batchName: `${id}.txt`, batchKind: "file", alias: "bastion",
@@ -126,6 +129,10 @@ test("adds a compact file tab and preserves both directories and selections with
   await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
   await expectCompactControls(page);
   await captureCompactFiles(page, "compact-sftp-local-tabs-390x640-en");
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expectCompactControls(page);
+  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", secondPath);
+  await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
 });
 
 test("restores two compact sources in one tab strip and preserves the host, path and selection", async ({ page, installation }) => {
@@ -177,4 +184,8 @@ test("restores two compact sources in one tab strip and preserves the host, path
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("sshc.sftp.panes.v1") ?? "[]"))).toHaveLength(2);
   await expectCompactControls(page);
   await captureCompactFiles(page, "compact-sftp-restored-tabs-390x640-en");
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expectCompactControls(page);
+  await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
+  await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
 });
