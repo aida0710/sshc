@@ -692,6 +692,7 @@ export const en = {
   "terminal.emptyHint":
     "Open one from the list on the left, or press Connect on a host.",
   "terminal.forwardLocal": "forwarding {listen} → {to}",
+  "terminal.forwardRemote": "remote forwarding {listen} → {to}",
   "terminal.forwardDynamic": "SOCKS5 proxy on {listen}",
   "terminal.forwardAgent": "forwarding the SSH agent to the remote host",
   "terminal.rowMenu": "Actions for {title}",
@@ -847,6 +848,7 @@ export const en = {
   "terminal.forwardStop": "Stop",
   "terminal.forwardStopping": "Stopping…",
   "terminal.forwardStopped": "The forwarding was stopped.",
+  "terminal.forwardRemoteAddress": "SSH server {listen} → engine {to}",
   "terminal.forwardNew": "Start port forwarding",
   "terminal.forwardSaveConnection": "Save to this connection",
   "terminal.forwardSaveHint":
@@ -872,6 +874,8 @@ export const en = {
   "terminal.forwardFailed": "The forwarding operation could not be completed.",
   "terminal.forwardProblem.addressInUse": "The local port is already in use.",
   "terminal.forwardProblem.permissionDenied": "Opening the local port is not permitted.",
+  "terminal.forwardProblem.remoteDenied": "The SSH server refused the listener. Check its forwarding policy and whether the remote port is already in use.",
+  "terminal.forwardProblem.remoteTimeout": "The SSH server did not answer in time, so the SSH connection was closed. Reconnect before trying again.",
   "terminal.forwardProblem.agentUnreachable": "No SSH agent is reachable from the sshc engine.",
   "terminal.forwardProblem.failed": "The forwarding could not be started.",
   "terminal.settingsHeading": "Terminal",
@@ -2650,9 +2654,12 @@ export const en = {
   "conn.advancedDirectives": "Directives",
   "conn.portForwarding": "Port forwarding",
   "conn.forwardLoopbackOnly":
-    "Listeners are bound to this device only (127.0.0.1), but other OS accounts on the same device may be able to use them. Remote forwarding is not supported.",
+    "Listeners use 127.0.0.1 on this device or the SSH server. Other OS accounts on the same machine may be able to use them.",
   "conn.forwardNoneSaved": "No port forwarding is saved for this connection.",
   "conn.forwardLocal": "Local tunnel",
+  "conn.forwardRemote": "Remote tunnel",
+  "conn.forwardRemoteListenPort": "SSH server port",
+  "conn.forwardRemoteHint": "Forward an SSH server port to a destination reachable from the sshc engine. The server must permit remote forwarding.",
   "conn.forwardDynamic": "SOCKS proxy",
   "conn.forwardType": "Type",
   "conn.forwardListenPort": "Local port",
@@ -2664,7 +2671,7 @@ export const en = {
   "conn.forwardAdd": "Add forwarding",
   "conn.forwardPendingSave":
     "This forwarding will be written when you save the changes.",
-  "conn.forwardInvalidPort": "Enter a local port from 1 to 65535.",
+  "conn.forwardInvalidPort": "Enter a port from 1 to 65535.",
   "conn.forwardInvalidDestination": "Enter the destination as host:port.",
   "conn.advancedNoFields": "This connection has no settings in this view.",
   "conn.advancedRawBlocksFields":

@@ -697,6 +697,7 @@ export const ja = {
   "terminal.emptyHint":
     "左の一覧から開くか、ホストの「接続」を押してください。",
   "terminal.forwardLocal": "{listen} → {to}を転送中",
+  "terminal.forwardRemote": "SSH接続先の{listen} → {to}を転送中",
   "terminal.forwardDynamic": "{listen}でSOCKS5プロキシ",
   "terminal.forwardAgent": "ssh-agentをリモートへ転送中",
   "terminal.rowMenu": "{title}の操作",
@@ -851,6 +852,7 @@ export const ja = {
   "terminal.forwardStop": "停止",
   "terminal.forwardStopping": "停止中…",
   "terminal.forwardStopped": "転送を停止しました。",
+  "terminal.forwardRemoteAddress": "SSH接続先 {listen} → エンジン側 {to}",
   "terminal.forwardNew": "ポート転送を開始",
   "terminal.forwardSaveConnection": "この接続設定にも保存する",
   "terminal.forwardSaveHint":
@@ -873,6 +875,8 @@ export const ja = {
   "terminal.forwardFailed": "ポート転送の操作を完了できませんでした。",
   "terminal.forwardProblem.addressInUse": "ローカルのポートはすでに使われています。",
   "terminal.forwardProblem.permissionDenied": "ローカルのポートを開く権限がありません。",
+  "terminal.forwardProblem.remoteDenied": "SSHサーバーが待ち受けを拒否しました。接続先の転送許可とポートの使用状況を確認してください。",
+  "terminal.forwardProblem.remoteTimeout": "SSHサーバーの応答待ちが時間切れになり、SSH接続を終了しました。再接続後にやり直してください。",
   "terminal.forwardProblem.agentUnreachable": "sshcエンジンからSSHエージェントに接続できません。",
   "terminal.forwardProblem.failed": "転送を開始できませんでした。",
   "terminal.settingsHeading": "Terminal",
@@ -2657,9 +2661,12 @@ export const ja = {
   "conn.advancedDirectives": "Directives",
   "conn.portForwarding": "ポート転送",
   "conn.forwardLoopbackOnly":
-    "待ち受けはこのマシン内（127.0.0.1）に限定しますが、同じマシンの別のOSユーザーから利用される可能性があります。Remote Forwardには対応しません。",
+    "待ち受けはローカルまたはSSH接続先の127.0.0.1に限定します。同じマシンの別のOSユーザーから利用される可能性があります。",
   "conn.forwardNoneSaved": "この接続にはポート転送が保存されていません。",
   "conn.forwardLocal": "Localトンネル",
+  "conn.forwardRemote": "逆向きトンネル",
+  "conn.forwardRemoteListenPort": "SSH接続先のポート",
+  "conn.forwardRemoteHint": "SSH接続先のポートから、sshcエンジンが到達できる転送先へつなぎます。接続先の転送許可が必要です。",
   "conn.forwardDynamic": "SOCKSプロキシ",
   "conn.forwardType": "種類",
   "conn.forwardListenPort": "ローカルポート",
@@ -2671,7 +2678,7 @@ export const ja = {
   "conn.forwardAdd": "転送を追加",
   "conn.forwardPendingSave":
     "変更を保存すると、この転送が設定へ書き込まれます。",
-  "conn.forwardInvalidPort": "1〜65535のローカルポートを入力してください。",
+  "conn.forwardInvalidPort": "1〜65535のポートを入力してください。",
   "conn.forwardInvalidDestination":
     "転送先をhost:portの形式で入力してください。",
   "conn.advancedNoFields": "現在の表示条件に一致する設定はありません。",

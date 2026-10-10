@@ -55,7 +55,7 @@ sshc never infers program state from ordinary shell output or reruns arbitrary c
 
 ## Port forwarding
 
-Manage Local forwarding and Dynamic SOCKS per SSH connection. Local forwarding has a local bind endpoint and a destination host and port. Dynamic forwarding opens a local SOCKS endpoint. Remote forwarding is intentionally not provided.
+Manage Local forwarding, Remote forwarding and Dynamic SOCKS per SSH connection. Local forwarding opens a port on the engine side and connects from the SSH server. Remote forwarding opens a port on the SSH server and connects from the engine. Dynamic forwarding opens a local SOCKS endpoint.
 
 See [Port forwarding](/en/terminal/port-forwarding) for setup details.
 

@@ -249,50 +249,54 @@ func (f *terminalFixture) connect(alias string) terminal.Process {
 }
 
 func TestTemporaryForwardRoutesStartListAndStopOneListener(t *testing.T) {
-	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
-	fixture.forwarding = true
-	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"bastion"}`)
-	if response.StatusCode != http.StatusCreated {
-		t.Fatalf("open = %d: %s", response.StatusCode, body)
-	}
-	var opened api.OpenTerminalSessionResponse
-	if err := json.Unmarshal([]byte(body), &opened); err != nil {
-		t.Fatal(err)
-	}
-	// Ready is observed asynchronously; creating the session does not guarantee
-	// that its connected state is visible before the forwarding request.
-	testwait.Until(t, func() bool {
-		session, ok := fixture.registry.Lookup(opened.Session.Id)
-		return ok && session.View().State == terminal.StateConnected
-	})
+	for _, kind := range []string{"local", "remote"} {
+		t.Run(kind, func(t *testing.T) {
+			fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+			fixture.forwarding = true
+			response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"bastion"}`)
+			if response.StatusCode != http.StatusCreated {
+				t.Fatalf("open = %d: %s", response.StatusCode, body)
+			}
+			var opened api.OpenTerminalSessionResponse
+			if err := json.Unmarshal([]byte(body), &opened); err != nil {
+				t.Fatal(err)
+			}
+			// Ready is observed asynchronously; creating the session does not guarantee
+			// that its connected state is visible before the forwarding request.
+			testwait.Until(t, func() bool {
+				session, ok := fixture.registry.Lookup(opened.Session.Id)
+				return ok && session.View().State == terminal.StateConnected
+			})
 
-	path := "/api/v1/terminal/sessions/" + opened.Session.Id + "/forwards"
-	response, body = fixture.do(t, http.MethodPost, path, `{"kind":"local","listenPort":18080,"destination":"db.internal:5432"}`)
-	if response.StatusCode != http.StatusCreated {
-		t.Fatalf("start = %d: %s", response.StatusCode, body)
-	}
-	var listed api.TerminalSessionList
-	if err := json.Unmarshal([]byte(body), &listed); err != nil {
-		t.Fatal(err)
-	}
-	if len(listed.Sessions) != 1 || listed.Sessions[0].Forwards == nil || len(*listed.Sessions[0].Forwards) != 1 {
-		t.Fatalf("sessions = %#v", listed.Sessions)
-	}
-	forward := (*listed.Sessions[0].Forwards)[0]
-	if forward.Id == "" || forward.Listen != "127.0.0.1:18080" || !forward.Temporary {
-		t.Fatalf("forward = %#v", forward)
-	}
+			path := "/api/v1/terminal/sessions/" + opened.Session.Id + "/forwards"
+			response, body = fixture.do(t, http.MethodPost, path, fmt.Sprintf(`{"kind":%q,"listenPort":18080,"destination":"db.internal:5432"}`, kind))
+			if response.StatusCode != http.StatusCreated {
+				t.Fatalf("start = %d: %s", response.StatusCode, body)
+			}
+			var listed api.TerminalSessionList
+			if err := json.Unmarshal([]byte(body), &listed); err != nil {
+				t.Fatal(err)
+			}
+			if len(listed.Sessions) != 1 || listed.Sessions[0].Forwards == nil || len(*listed.Sessions[0].Forwards) != 1 {
+				t.Fatalf("sessions = %#v", listed.Sessions)
+			}
+			forward := (*listed.Sessions[0].Forwards)[0]
+			if forward.Id == "" || forward.Kind != kind || forward.Listen != "127.0.0.1:18080" || !forward.Temporary {
+				t.Fatalf("forward = %#v", forward)
+			}
 
-	response, body = fixture.do(t, http.MethodDelete, path+"/"+forward.Id, "")
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("stop = %d: %s", response.StatusCode, body)
-	}
-	listed = api.TerminalSessionList{}
-	if err := json.Unmarshal([]byte(body), &listed); err != nil {
-		t.Fatal(err)
-	}
-	if listed.Sessions[0].Forwards != nil && len(*listed.Sessions[0].Forwards) != 0 {
-		t.Fatalf("forwards after stop = %#v", listed.Sessions[0].Forwards)
+			response, body = fixture.do(t, http.MethodDelete, path+"/"+forward.Id, "")
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("stop = %d: %s", response.StatusCode, body)
+			}
+			listed = api.TerminalSessionList{}
+			if err := json.Unmarshal([]byte(body), &listed); err != nil {
+				t.Fatal(err)
+			}
+			if listed.Sessions[0].Forwards != nil && len(*listed.Sessions[0].Forwards) != 0 {
+				t.Fatalf("forwards after stop = %#v", listed.Sessions[0].Forwards)
+			}
+		})
 	}
 }
 
@@ -332,7 +336,8 @@ func TestTemporaryForwardRouteRejectsInvalidAndLocalShellRequests(t *testing.T) 
 	id, _ := fixture.openShell(t)
 	path := "/api/v1/terminal/sessions/" + id + "/forwards"
 	for _, body := range []string{
-		`{"kind":"remote","listenPort":8080,"destination":"db:5432"}`,
+		`{"kind":"unknown","listenPort":8080,"destination":"db:5432"}`,
+		`{"kind":"remote","listenPort":8080}`,
 		`{"kind":"local","listenPort":0,"destination":"db:5432"}`,
 		`{"kind":"local","listenPort":8080}`,
 		`{"kind":"dynamic","listenPort":1080,"destination":"db:5432"}`,

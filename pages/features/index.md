@@ -15,7 +15,7 @@ sshcは、SSHとローカルシェルを扱うターミナルアプリです。S
 - [Workspace](./workspace)で最大4ペインを配置し、レイアウトの保存と一括入力を管理
 - [クイックコマンドとスニペット](/terminal/commands)を、実行前の確認、接続時の自動実行、複数の接続先への実行に利用
 - [タイトルと通知](/terminal/notifications)で、プログラムが送るペイン名や通知を表示。Claude CodeやCodexの通知にも対応
-- [ポート転送](/terminal/port-forwarding)はLocal forwardingとDynamic SOCKSに対応し、保存済みの設定と一時的な転送を使い分け
+- [ポート転送](/terminal/port-forwarding)はLocal forwarding、Remote forwarding、Dynamic SOCKSに対応し、保存済みの設定と一時的な転送を使い分け
 - Terminalのカラーパレット、フォント、背景を[設定](/reference/settings)で変更
 
 ## 接続管理

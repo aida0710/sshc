@@ -75,7 +75,7 @@ sshcが通常のシェル出力からプログラムの状態を推測したり�
 
 ## ポート転送
 
-SSH接続ごとにLocal forwardingとDynamic SOCKSを管理できます。Local forwardingではローカルの待ち受けアドレス／ポートと転送先のホスト／ポートを指定でき、Dynamic forwardingではローカルにSOCKSエンドポイントを開けます。Remote forwardingには対応していません。
+SSH接続ごとにLocal forwarding、Remote forwarding、Dynamic SOCKSを管理できます。Local forwardingはローカルのポートからSSH接続先へ、Remote forwardingはSSH接続先のポートからsshcエンジン側へ転送します。Dynamic forwardingではローカルにSOCKSエンドポイントを開けます。
 
 設定方法は、[ポート転送](/terminal/port-forwarding)を参照してください。
 

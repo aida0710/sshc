@@ -3515,7 +3515,7 @@ components:
       required: [id, kind, listen, to, problem, temporary]
       properties:
         id: { type: string, minLength: 1, maxLength: 64 }
-        kind: { type: string, pattern: "^(local|dynamic|agent)$" }
+        kind: { type: string, pattern: "^(local|remote|dynamic|agent)$" }
         listen: { type: string }
         to: { type: string }
         problem: { type: string }
@@ -3525,7 +3525,7 @@ components:
       additionalProperties: false
       required: [kind, listenPort]
       properties:
-        kind: { type: string, pattern: "^(local|dynamic)$" }
+        kind: { type: string, pattern: "^(local|remote|dynamic)$" }
         listenPort: { type: integer, minimum: 1, maximum: 65535 }
         destination: { type: string, maxLength: 512 }
     TerminalSession:

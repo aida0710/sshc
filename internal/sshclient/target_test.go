@@ -387,7 +387,6 @@ func TestUnhonouredKeywordsBecomeNoticesRatherThanRefusals(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"work": {
 			"hostname":      {"10.0.0.9"},
-			"remoteforward": {"8080 127.0.0.1:80"},
 			"controlmaster": {"auto"},
 			"forwardx11":    {"no"},
 		},
@@ -405,7 +404,7 @@ func TestUnhonouredKeywordsBecomeNoticesRatherThanRefusals(t *testing.T) {
 	for _, notice := range notices {
 		found[notice.Keyword] = true
 	}
-	if !found["remoteforward"] || !found["controlmaster"] {
+	if !found["controlmaster"] {
 		t.Errorf("notices = %#v", notices)
 	}
 	// no は機能を無効にする指定なので通知しない。
@@ -511,6 +510,7 @@ func TestForwardsAreCarriedRatherThanNoticed(t *testing.T) {
 			"hostname":       {"10.0.0.9"},
 			"localforward":   {"8080 10.0.0.5:80"},
 			"dynamicforward": {"1080"},
+			"remoteforward":  {"9080 127.0.0.1:80"},
 			"forwardagent":   {"yes"},
 		},
 	})
@@ -525,15 +525,18 @@ func TestForwardsAreCarriedRatherThanNoticed(t *testing.T) {
 	if !target.AgentForward {
 		t.Error("ForwardAgent yes did not reach the target")
 	}
-	if len(target.Forwards) != 2 {
+	if len(target.Forwards) != 3 {
 		t.Fatalf("forwards = %#v", target.Forwards)
 	}
 	// 並びは固定である。接続のたびに一覧が並び替わってはならない。
-	if target.Forwards[0].Kind != "dynamic" || target.Forwards[1].Kind != "local" {
+	if target.Forwards[0].Kind != "dynamic" || target.Forwards[1].Kind != "local" || target.Forwards[2].Kind != "remote" {
 		t.Fatalf("forwards = %#v, want a stable order", target.Forwards)
 	}
 	if target.Forwards[1].To != "10.0.0.5:80" || target.Forwards[1].ListenPort != "8080" {
 		t.Errorf("forward = %#v", target.Forwards[1])
+	}
+	if target.Forwards[2].To != "127.0.0.1:80" || target.Forwards[2].ListenPort != "9080" {
+		t.Errorf("remote forward = %#v", target.Forwards[2])
 	}
 }
 

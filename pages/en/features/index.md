@@ -15,7 +15,7 @@ sshc is a local terminal application for SSH and local shells. It combines SFTP,
 - Arrange up to four panes and manage saved layouts and broadcast input in [Workspaces](./workspace)
 - Use [Quick Commands and snippets](/en/terminal/commands) with confirmation before running, automatic runs on connect, and runs across several connections
 - Show pane names and notifications sent by programs with [titles and notifications](/en/terminal/notifications), including notifications from Claude Code and Codex
-- [Port forwarding](/en/terminal/port-forwarding) supports Local forwarding and Dynamic SOCKS, as saved settings or temporary forwards
+- [Port forwarding](/en/terminal/port-forwarding) supports Local forwarding, Remote forwarding and Dynamic SOCKS, as saved settings or temporary forwards
 - Change the terminal palette, font, and background in [Settings](/en/reference/settings)
 
 ## Connection management

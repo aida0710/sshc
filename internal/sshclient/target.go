@@ -16,6 +16,7 @@ import (
 
 	"sshc/internal/effective"
 	"sshc/internal/sshmatch"
+	"sshc/internal/terminal"
 	"sshc/internal/textencoding"
 )
 
@@ -41,7 +42,6 @@ type Notice struct {
 // 各メッセージには適用しない理由を含める。
 var unhonoured = map[string]string{
 	// 無い。
-	"remoteforward":   "sshc does not ask the remote to listen; that inverts the direction of trust and depends on the server's AllowTcpForwarding",
 	"forwardx11":      "sshc has no X server behind it; a browser terminal cannot show an X window",
 	"controlmaster":   "connection sharing has no meaning inside this process; sshc reuses the connection it already holds",
 	"controlpath":     "connection sharing has no meaning inside this process; sshc reuses the connection it already holds",
@@ -433,6 +433,7 @@ func parseForwards(values effective.Values) ([]ForwardSpec, []Notice) {
 
 	for keyword, parse := range map[string]func(string) (ForwardSpec, error){
 		"localforward":   ParseLocalForward,
+		"remoteforward":  ParseRemoteForward,
 		"dynamicforward": ParseDynamicForward,
 	} {
 		for _, entry := range values.All(keyword) {
@@ -450,8 +451,7 @@ func parseForwards(values effective.Values) ([]ForwardSpec, []Notice) {
 			if spec.Bound() {
 				notices = append(notices, Notice{
 					Keyword: keyword,
-					Detail: "sshc binds forwards to " + LoopbackHost + " only, so " + entry +
-						" listens on this machine and nowhere else",
+					Detail:  forwardBindNotice(spec, entry),
 				})
 			}
 			specs = append(specs, spec)
@@ -466,6 +466,14 @@ func parseForwards(values effective.Values) ([]ForwardSpec, []Notice) {
 		return specs[i].ListenPort < specs[j].ListenPort
 	})
 	return specs, notices
+}
+
+func forwardBindNotice(spec ForwardSpec, entry string) string {
+	if spec.Kind == terminal.ForwardRemote {
+		return "sshc requests " + LoopbackHost + " on the SSH server, so " + entry + " uses that listen address"
+	}
+	return "sshc binds forwards to " + LoopbackHost + " only, so " + entry +
+		" listens on this machine and nowhere else"
 }
 
 func noticesFor(values effective.Values) []Notice {

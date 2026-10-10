@@ -174,7 +174,7 @@ func (h TerminalHandlers) StartForward(c *echo.Context) error {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
 	var request api.StartTerminalForwardRequest
-	if err := decodeJSON(c, &request); err != nil || (request.Kind != "local" && request.Kind != "dynamic") {
+	if err := decodeJSON(c, &request); err != nil || (request.Kind != "local" && request.Kind != "remote" && request.Kind != "dynamic") {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	destination := ""
@@ -182,7 +182,7 @@ func (h TerminalHandlers) StartForward(c *echo.Context) error {
 		destination = *request.Destination
 	}
 	if request.ListenPort < 1 || request.ListenPort > 65535 || len(destination) > 512 ||
-		(request.Kind == "local" && destination == "") ||
+		(request.Kind != "dynamic" && destination == "") ||
 		(request.Kind == "dynamic" && destination != "") {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
@@ -220,6 +220,9 @@ func terminalForwardProblem(c *echo.Context, err error, bindReason string) error
 	case errors.Is(err, terminal.ErrNotConnected), errors.Is(err, terminal.ErrForwardUnavailable):
 		return problem(c, http.StatusConflict, "terminal_forward_unavailable")
 	default:
+		if bindReason == "" && errors.Is(err, context.DeadlineExceeded) {
+			bindReason = terminal.ForwardProblemRemoteTimeout
+		}
 		return problemWith(c, http.StatusConflict, problemPayload{
 			Code: "terminal_forward_bind_failed", Reason: bindReason, Detail: boundedProblemDetail(err.Error()),
 		})

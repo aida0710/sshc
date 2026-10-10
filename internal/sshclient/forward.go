@@ -16,11 +16,12 @@ import (
 	"sshc/internal/terminal"
 )
 
-// LoopbackHost は、転送が bind する唯一のアドレスである。
+// LoopbackHost は、転送が要求する待ち受けアドレスである。
 //
 // OpenSSH は `LocalForward 0.0.0.0:8080` や `GatewayPorts yes` で他の機械へ
-// 開けるが、このアプリケーションは開かない。常駐プロセスが持つHTTPサーバーや
-// vaultと同様に、外部へ意図せず公開される面を増やさないためである。
+// 開けるが、ローカルでは開かず、逆向き転送でもSSH接続先へこのアドレスだけを
+// 要求する。外部へ意図せず公開される面を増やさないためである。逆向き転送の
+// 待ち受け設定を適用するのはSSHサーバーで、送信元の検査はremoteForwardが行う。
 const LoopbackHost = "127.0.0.1"
 
 // ErrInvalidForward は、読めない転送の指定を報告する。
@@ -29,7 +30,7 @@ var ErrInvalidForward = errors.New("that is not a forwarding specification this 
 // ForwardSpec は、設定に書かれた転送ひとつである。
 type ForwardSpec struct {
 	Kind string
-	// ListenPort は、このマシンで開くポート。
+	// ListenPort は待ち受けポート。remote はSSH接続先で開く。
 	ListenPort string
 	// Requested は、設定が bind したいと書いたアドレス。ループバック以外なら
 	// 束ねたことを notice にする。
@@ -43,7 +44,7 @@ func (s ForwardSpec) Bound() bool {
 	return s.Requested != "" && !isLoopback(s.Requested)
 }
 
-// Address は、実際に開く場所である。
+// Address は、待ち受けを要求する場所である。
 func (s ForwardSpec) Address() string { return net.JoinHostPort(LoopbackHost, s.ListenPort) }
 
 // ParseLocalForward は `LocalForward` の値を読む。
@@ -120,8 +121,7 @@ type forwards struct {
 type managedForward struct {
 	view     terminal.Forward
 	listener net.Listener
-	// resource は、個別には止められないが接続の終わりに閉じる資源である。
-	// agent 転送がこちらの agent へ開いた unix socket がこれに当たる。
+	// resource owns an agent connection or a remote listener and its active sockets.
 	resource io.Closer
 }
 
@@ -186,7 +186,7 @@ func (f *forwards) open(client *ssh.Client, specs []ForwardSpec, trace *tracer) 
 type forwardOrigin int
 
 const (
-	// forwardFromConfig は、設定の LocalForward・DynamicForward から開く転送である。
+	// forwardFromConfig は、SSH設定に保存した転送である。
 	forwardFromConfig forwardOrigin = iota
 	// forwardTemporary は、利用者が接続中に求めた一時転送である。
 	forwardTemporary
@@ -217,13 +217,22 @@ func (f *forwards) startTemporary(client *ssh.Client, spec ForwardSpec) (termina
 // listen は、転送の listener を1つ開いて一覧に載せ、届く接続を流し始める。
 // 開けなかったときは、Problem に理由を入れた項目を一覧に載せずに返す。
 func (f *forwards) listen(client *ssh.Client, spec ForwardSpec, origin forwardOrigin) (terminal.Forward, error) {
-	listener, err := net.Listen("tcp", spec.Address())
+	var listener net.Listener
+	var err error
+	if spec.Kind == terminal.ForwardRemote {
+		listener, err = listenRemoteForward(client, spec.Address())
+	} else {
+		listener, err = net.Listen("tcp", spec.Address())
+	}
 	entry := terminal.Forward{
 		Kind: spec.Kind, Listen: spec.Address(), To: spec.To,
 		Temporary: origin == forwardTemporary,
 	}
 	if err != nil {
 		entry.Problem = listenProblem(err)
+		if spec.Kind == terminal.ForwardRemote {
+			entry.Problem = remoteListenProblem(err)
+		}
 		return entry, err
 	}
 
@@ -235,20 +244,34 @@ func (f *forwards) listen(client *ssh.Client, spec ForwardSpec, origin forwardOr
 	}
 	entry.ID = f.nextID()
 	entry.Listen = listener.Addr().String()
-	f.opened = append(f.opened, managedForward{view: entry, listener: listener})
+	managed := managedForward{view: entry, listener: listener}
+	var remote *remoteForward
+	if spec.Kind == terminal.ForwardRemote {
+		remote = newRemoteForward(listener, spec.To, client)
+		managed.listener = nil
+		managed.resource = remote
+	}
+	f.opened = append(f.opened, managed)
 	f.mutex.Unlock()
-	go accept(listener, client, spec)
+	if remote != nil {
+		go remote.accept()
+	} else {
+		go accept(listener, client, spec)
+	}
 	return entry, nil
 }
 
 func (f *forwards) stop(id string) error {
 	f.mutex.Lock()
 	index := -1
-	var listener net.Listener
+	var closer io.Closer
 	for at, entry := range f.opened {
 		if entry.view.ID == id {
 			index = at
-			listener = entry.listener
+			closer = entry.listener
+			if entry.view.Kind == terminal.ForwardRemote {
+				closer = entry.resource
+			}
 			break
 		}
 	}
@@ -256,19 +279,22 @@ func (f *forwards) stop(id string) error {
 		f.mutex.Unlock()
 		return terminal.ErrForwardNotFound
 	}
-	if listener == nil {
+	if closer == nil {
 		f.mutex.Unlock()
 		return terminal.ErrForwardUnavailable
 	}
 	f.opened = append(f.opened[:index], f.opened[index+1:]...)
 	f.mutex.Unlock()
-	return listener.Close()
+	return closer.Close()
 }
 
 // describe は、接続ログに書く転送の中身（待ち受けるアドレスと転送先）を返す。
 func describe(spec ForwardSpec) string {
 	if spec.Kind == terminal.ForwardDynamic {
 		return spec.Address() + "（SOCKS5プロキシ）"
+	}
+	if spec.Kind == terminal.ForwardRemote {
+		return "SSH接続先の" + spec.Address() + " → " + spec.To
 	}
 	return spec.Address() + " → " + spec.To
 }
@@ -359,7 +385,10 @@ func serve(local net.Conn, client *ssh.Client, spec ForwardSpec) {
 		return
 	}
 	defer func() { _ = remote.Close() }()
+	relayForward(local, remote)
+}
 
+func relayForward(local, remote net.Conn) {
 	// 片方向が終わっても、もう片方向の残りを届けてから閉じる。書き終えて
 	// から応答を待つクライアント（shutdown(SHUT_WR) する HTTP client など）は、
 	// 片方向の EOF で両方向を切ると応答を失う。
