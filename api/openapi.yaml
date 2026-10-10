@@ -3652,7 +3652,8 @@ components:
       properties:
         kind: { type: string, enum: [ssh, shell] }
         alias: { type: string, minLength: 1, maxLength: 64 }
-        # ssh kind only. An absolute POSIX directory selected by the SFTP UI.
+        # Absolute directory selected by SFTP: POSIX on the SSH server for ssh,
+        # native or forward-slashed on the engine machine for shell.
         cwd: { type: string, minLength: 1, maxLength: 4096 }
         cols: { type: integer, minimum: 1, maximum: 1000 }
         rows: { type: integer, minimum: 1, maximum: 1000 }

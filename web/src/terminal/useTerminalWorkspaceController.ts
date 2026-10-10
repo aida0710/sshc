@@ -139,10 +139,11 @@ export function useTerminalWorkspaceController({
   }, [terminalSessions.sessions, sessionOrder]);
 
   const openLocalShell = useCallback(
-    async (profileId?: string) => {
+    async (profileId?: string, cwd?: string) => {
       const opened = await terminalSessions.open({
         kind: "shell",
         ...(profileId === undefined ? {} : { profileId }),
+        ...(cwd === undefined ? {} : { cwd }),
       });
       if (opened !== null) showSession(opened.id);
     },

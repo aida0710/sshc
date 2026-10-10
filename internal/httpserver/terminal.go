@@ -274,10 +274,7 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 		size = candidate
 	}
 
-	spec, err := h.spec(kind, request.Alias, request.Cwd, size)
-	if kind == terminal.KindShell && request.ProfileId != nil {
-		spec, err = h.shellSpec(request.ProfileId, size)
-	}
+	spec, err := h.spec(request, size)
 	if err != nil {
 		return h.startProblem(c, err)
 	}
@@ -349,10 +346,11 @@ func (h TerminalHandlers) SetTitle(c *echo.Context) error {
 }
 
 // spec は、開こうとしているセッションひとつ分の起動一式を組み立てる。
-func (h TerminalHandlers) spec(kind terminal.Kind, alias, cwd *string, size terminal.Size) (terminal.Spec, error) {
-	if kind == terminal.KindShell {
-		return h.shellSpec(nil, size)
+func (h TerminalHandlers) spec(request api.OpenTerminalSessionRequest, size terminal.Size) (terminal.Spec, error) {
+	if request.Kind == api.OpenTerminalSessionRequestKindShell {
+		return h.shellSpec(request.ProfileId, request.Cwd, size)
 	}
+	alias, cwd := request.Alias, request.Cwd
 
 	if alias == nil {
 		return terminal.Spec{}, errMissingAlias
@@ -432,17 +430,24 @@ func quotePOSIXShell(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
-func (h TerminalHandlers) shellSpec(requested *string, size terminal.Size) (terminal.Spec, error) {
+func (h TerminalHandlers) shellSpec(requested, cwd *string, size terminal.Size) (terminal.Spec, error) {
 	profile, err := h.resolveShellProfile(requested)
 	if err != nil {
 		return terminal.Spec{}, err
+	}
+	directory := h.startDirectory()
+	if cwd != nil {
+		directory, err = terminal.ResolveLocalWorkingDirectory(*cwd)
+		if err != nil {
+			return terminal.Spec{}, err
+		}
 	}
 	return terminal.Spec{
 		Kind: terminal.KindShell, Title: shellTitle(profile.Path), Size: size,
 		Command: terminal.Command{
 			Path: profile.Path, Argv0: profile.Argv0,
 			Arguments: append([]string(nil), profile.Arguments...), Env: h.environment(),
-			Dir: h.startDirectory(),
+			Dir: directory,
 		},
 	}, nil
 }
@@ -543,6 +548,8 @@ func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 		// SFTP で開いているフォルダの名前は接続先が決める。制御文字を含む名前は
 		// cd の行に書けないので、そのフォルダでは開けないと伝える。
 		return problem(c, http.StatusBadRequest, "remote_working_directory_unsupported")
+	case errors.Is(err, terminal.ErrInvalidLocalWorkingDirectory):
+		return problem(c, http.StatusBadRequest, "local_working_directory_unavailable")
 	case errors.Is(err, platform.ErrUnknownShellProfile):
 		return problem(c, http.StatusBadRequest, "local_shell_profile_unavailable")
 	}

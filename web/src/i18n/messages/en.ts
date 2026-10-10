@@ -721,6 +721,7 @@ export const en = {
   "terminal.limitRefused": "No more sessions can be opened. Close one first.",
   "terminal.unresolvable":
     "The settings for this connection could not be resolved. Open Analysis to see why.",
+  "terminal.localWorkingDirectoryUnavailable": "The local shell cannot start in this folder. Check that the folder exists and you can access it.",
   "terminal.remoteWorkingDirectoryUnsupported":
     "A terminal cannot be opened in this folder because its path contains control characters.",
   "terminal.jumpDepthExceeded":

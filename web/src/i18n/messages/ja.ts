@@ -727,6 +727,7 @@ export const ja = {
     "これ以上セッションを開けません。どれかを閉じてください。",
   "terminal.unresolvable":
     "この接続の設定を読み込めませんでした。理由は「Analysis」で確認できます。",
+  "terminal.localWorkingDirectoryUnavailable": "このローカルフォルダでシェルを開けません。フォルダの存在とアクセス権を確認してください。",
   "terminal.remoteWorkingDirectoryUnsupported":
     "このフォルダではターミナルを開けません。フォルダのパスに制御文字が含まれています。",
   "terminal.jumpDepthExceeded": "ProxyJumpの階層が上限を超えています。",

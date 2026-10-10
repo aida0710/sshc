@@ -1,6 +1,6 @@
 import { usePresetSync } from "./keyconfig/presets";
 import { useBindings } from "./keyconfig/bindings";
-import { Suspense, useEffect, type CSSProperties, type MouseEvent } from "react";
+import { Suspense, useCallback, useEffect, type CSSProperties, type MouseEvent } from "react";
 import { type HealthResponse } from "./api/client";
 import { terminalSessionsApi } from "./api/terminalSessions";
 import { settingsApi } from "./api/settings";
@@ -23,6 +23,7 @@ import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
 import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
+import { localHostAlias } from "./sftp/localHost";
 import { useTransferUnloadWarning } from "./sftp/useTransferUnloadWarning";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
 import { CommandPalette } from "./shell/CommandPalette";
@@ -137,6 +138,14 @@ export function App({
     setLiveWorkspace,
     setSettings: setTerminalSettings,
   } = terminalWorkspace;
+
+  const openSFTPTerminal = useCallback(async (alias: string, cwd?: string) => {
+    if (alias === localHostAlias) {
+      await openLocalShell(undefined, cwd);
+      return;
+    }
+    await openSSHSession(alias, cwd);
+  }, [openLocalShell, openSSHSession]);
 
   useAppShortcuts({
     enabled: state === "ready",
@@ -388,6 +397,7 @@ export function App({
                         terminalSessions,
                         onShowSession: showSession,
                         onOpenSSHSession: openSSHSession,
+                        onOpenTerminal: openSFTPTerminal,
                         onOpenWorkspace: openWorkspace,
                         onTerminalSettingsChange: async (settings) => {
                           setTerminalSettings(settings);

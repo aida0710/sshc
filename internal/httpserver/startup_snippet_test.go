@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"sshc/internal/api"
 	"sshc/internal/secret"
 	"sshc/internal/snippets"
 	"sshc/internal/terminal"
@@ -120,7 +121,7 @@ func TestAHeldBackStartupSnippetIsHandedOverAsANoticeWithoutACommand(t *testing.
 		},
 	}
 	alias := "production"
-	spec, err := handlers.spec(terminal.KindSSH, &alias, nil, terminal.Size{Cols: 80, Rows: 24})
+	spec, err := handlers.spec(api.OpenTerminalSessionRequest{Kind: api.OpenTerminalSessionRequestKindSsh, Alias: &alias}, terminal.Size{Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatal(err)
 	}

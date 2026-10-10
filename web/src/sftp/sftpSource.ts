@@ -118,7 +118,7 @@ export function localJoin(parent: string, name: string): string {
 const localCapabilities: SFTPCapabilities = {
   symlink: false, ownership: false, space: false,
   connect: false, edit: true, createEntries: false, createDirectory: true, rename: true, moveEntries: false, chmod: false, delete: true, search: false,
-  details: true, browserUpload: false, download: false, dragOut: true, terminal: false,
+  details: true, browserUpload: false, download: false, dragOut: true, terminal: true,
 };
 
 export const localSource: SFTPSource = {

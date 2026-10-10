@@ -506,22 +506,22 @@ func TestLocalShellProfileUsesStoredDefaultAndOneShotOverride(t *testing.T) {
 		},
 		DefaultShellProfile: func() string { return "fish" },
 	}
-	stored, err := handlers.shellSpec(nil, terminal.Size{Cols: 80, Rows: 24})
+	stored, err := handlers.shellSpec(nil, nil, terminal.Size{Cols: 80, Rows: 24})
 	if err != nil || stored.Command.Path != "/usr/bin/fish" || stored.Command.Argv0 != "-fish" {
 		t.Fatalf("stored profile = %#v, %v", stored.Command, err)
 	}
 	oneShot := "zsh"
-	overridden, err := handlers.shellSpec(&oneShot, terminal.Size{Cols: 80, Rows: 24})
+	overridden, err := handlers.shellSpec(&oneShot, nil, terminal.Size{Cols: 80, Rows: 24})
 	if err != nil || overridden.Command.Path != "/bin/zsh" {
 		t.Fatalf("one-shot profile = %#v, %v", overridden.Command, err)
 	}
 	handlers.DefaultShellProfile = func() string { return "powershell" }
-	fallback, err := handlers.shellSpec(nil, terminal.Size{Cols: 80, Rows: 24})
+	fallback, err := handlers.shellSpec(nil, nil, terminal.Size{Cols: 80, Rows: 24})
 	if err != nil || fallback.Command.Path != "/bin/sh" {
 		t.Fatalf("cross-platform fallback = %#v, %v", fallback.Command, err)
 	}
 	unsafe := "/bin/sh -c id"
-	if _, err := handlers.shellSpec(&unsafe, terminal.Size{}); !errors.Is(err, platform.ErrUnknownShellProfile) {
+	if _, err := handlers.shellSpec(&unsafe, nil, terminal.Size{}); !errors.Is(err, platform.ErrUnknownShellProfile) {
 		t.Fatalf("unsafe profile = %v", err)
 	}
 }
@@ -539,7 +539,7 @@ func TestSSHStartupChangesToTheRequestedDirectoryAndThenRunsTheStartupSnippet(t 
 		},
 	}
 	alias, directory := "production", "/srv/it's"
-	spec, err := handlers.spec(terminal.KindSSH, &alias, &directory, terminal.Size{Cols: 80, Rows: 24})
+	spec, err := handlers.spec(api.OpenTerminalSessionRequest{Kind: api.OpenTerminalSessionRequestKindSsh, Alias: &alias, Cwd: &directory}, terminal.Size{Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -563,7 +563,7 @@ func TestSSHSpecOpenReturnsTheConnectedProcessWithEveryCapability(t *testing.T) 
 		},
 	}
 	alias := "production"
-	spec, err := handlers.spec(terminal.KindSSH, &alias, nil, terminal.Size{Cols: 80, Rows: 24})
+	spec, err := handlers.spec(api.OpenTerminalSessionRequest{Kind: api.OpenTerminalSessionRequestKindSsh, Alias: &alias}, terminal.Size{Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatal(err)
 	}

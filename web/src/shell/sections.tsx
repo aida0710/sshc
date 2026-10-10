@@ -247,7 +247,7 @@ function PaddedSection({
     onInspector,
     terminalSessions,
     onShowSession,
-    onOpenSSHSession,
+    onOpenTerminal,
     onOpenWorkspace,
     onTerminalSettingsChange,
   } = shell;
@@ -290,7 +290,7 @@ function PaddedSection({
         onTargetHandled={onSftpTargetHandled}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}
         onNavigateLocation={onNavigateLocation}
-        onOpenTerminal={onOpenSSHSession}
+        onOpenTerminal={onOpenTerminal}
       />
     );
   }
