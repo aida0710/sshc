@@ -1,7 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import { localHostAlias } from "./localHost";
 import type { ManagedTransferJob } from "./transferManager";
-import { getTransferJobRoute, type TransferEndpoint } from "./transferJobRoute";
+import { getTransferJobRoute, type TransferEndpoint } from "./transferJobRouteModel";
 
 export function TransferJobRoute({ job, compact = false }: { job: ManagedTransferJob; compact?: boolean }) {
   const t = useTranslate();
