@@ -28,17 +28,21 @@ jobs:
   go:
     name: Go native (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: ${{ matrix.timeoutMinutes }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-24.04
             name: Linux
+            timeoutMinutes: 30
           - os: macos-15
             name: macOS
+            timeoutMinutes: 30
           - os: windows-2025
             name: Windows
+            # 通常テストとrace検査の各20分に加え、準備の時間も確保する。
+            timeoutMinutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
