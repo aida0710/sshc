@@ -4,7 +4,7 @@ import type { MessageKey } from "../i18n/messages";
 import { Icon, type IconName } from "../ui/icons";
 import { formatBytes, formatDuration } from "../ui/format";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
-import { getDisplayedTransferStatus, type DisplayedTransferStatus } from "./transferQueueSummary";
+import { getDisplayedTransferStatus, type DisplayedTransferStatus } from "./transferQueueSummaryModel";
 import { TransferJobRoute } from "./TransferJobRoute";
 import { TransferExclusionSummary } from "./TransferExclusionSummary";
 import { sftpTransferProblemText } from "./sftpProblemText";
