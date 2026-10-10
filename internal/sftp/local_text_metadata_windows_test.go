@@ -2,10 +2,10 @@ package sftp
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -187,9 +187,44 @@ func TestWindowsLocalTextStagingIsPrivateBeforeTheFirstWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sddl := descriptor.String()
-	if !strings.Contains(sddl, "D:P") || !strings.Contains(sddl, user.User.Sid.String()) || !strings.Contains(sddl, "SY") || strings.Contains(sddl, "BU") || strings.Contains(sddl, "WD") {
-		t.Fatalf("initial staging security = %s", sddl)
+	control, _, err := descriptor.Control()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dacl, _, err := descriptor.DACL()
+	if err != nil {
+		t.Fatal(err)
+	}
+	system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if control&windows.SE_DACL_PROTECTED == 0 || dacl == nil || dacl.AceCount != 2 {
+		t.Fatalf("initial staging security = %s", descriptor.String())
+	}
+	// FILE_ALL_ACCESS from winnt.h includes the file-specific DELETE_CHILD bit.
+	const fileAllAccess = 0x001f01ff
+	seenUser, seenSystem := false, false
+	for index := uint32(0); index < uint32(dacl.AceCount); index++ {
+		var ace *windows.ACCESS_ALLOWED_ACE
+		if err := windows.GetAce(dacl, index, &ace); err != nil {
+			t.Fatal(err)
+		}
+		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
+		if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Header.AceFlags != 0 || ace.Mask != fileAllAccess {
+			t.Fatalf("unexpected staging ACE: %+v", ace)
+		}
+		switch {
+		case sid.Equals(user.User.Sid):
+			seenUser = true
+		case sid.Equals(system):
+			seenSystem = true
+		default:
+			t.Fatalf("staging grants access to %s", sid.String())
+		}
+	}
+	if !seenUser || !seenSystem {
+		t.Fatalf("initial staging security = %s", descriptor.String())
 	}
 }
 
@@ -201,22 +236,20 @@ func TestWindowsLocalTextPublicationUsesThePinnedParentAfterItsNameChanges(t *te
 		t.Fatal(err)
 	}
 	writeLocalMutationFile(t, filepath.Join(directory, "notes.txt"), "before")
-	parent, err := os.OpenRoot(directory)
+	baseRoot, err := os.OpenRoot(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer baseRoot.Close()
+	// Go's top-level OpenRoot handle omits delete sharing. A relative child
+	// Root permits the ancestor rename while retaining the directory identity.
+	parent, err := baseRoot.OpenRoot("original")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer parent.Close()
-	staged, err := openLocalTextStagingFile(parent, "staged.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer staged.publicationFile.Close()
-	if _, err := staged.file.WriteString("after"); err != nil {
-		t.Fatal(err)
-	}
-	if err := staged.file.Close(); err != nil {
-		t.Fatal(err)
-	}
+	// NTFS refuses directory renames while a descendant file is open.
+	// Change the parent name before creating the pinned publication handle.
 	if err := os.Rename(directory, retired); err != nil {
 		t.Fatal(err)
 	}
@@ -224,9 +257,21 @@ func TestWindowsLocalTextPublicationUsesThePinnedParentAfterItsNameChanges(t *te
 		t.Fatal(err)
 	}
 	writeLocalMutationFile(t, filepath.Join(directory, "notes.txt"), "replacement directory")
+	staged, err := openLocalTextStagingFile(parent, "staged.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer staged.cleanup(parent)
+	if _, err := staged.file.WriteString("after"); err != nil {
+		t.Fatal(err)
+	}
+	if err := staged.file.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if err := staged.publish(parent, "notes.txt"); err != nil {
 		t.Fatal(err)
 	}
+	staged.cleanup(parent)
 	assertLocalMutationFile(t, filepath.Join(retired, "notes.txt"), "after")
 	assertLocalMutationFile(t, filepath.Join(directory, "notes.txt"), "replacement directory")
 }
@@ -269,8 +314,6 @@ func TestWindowsLocalTextPublicationPinsTheStagedFileAndRefusesOtherDataWriters(
 	if err := staged.publish(parent, "notes.txt"); err != nil {
 		t.Fatal(err)
 	}
-	assertLocalMutationFile(t, filename, "after")
-	assertLocalMutationFile(t, filepath.Join(directory, staged.name), "replacement staging file")
 	staged.cleanup(parent)
 	assertLocalMutationFile(t, filename, "after")
 	assertLocalMutationFile(t, filepath.Join(directory, staged.name), "replacement staging file")
@@ -395,6 +438,150 @@ func TestWindowsLocalTextSaveKeepsMandatoryLabelsAndResourceAttributes(t *testin
 			retained := windowsLocalTextFixtureMetadata(t, filename)
 			if retained.revision != expected.revision {
 				t.Fatalf("saved %s = %s; want %s", fixture.name, retained.platformMetadata, expected.platformMetadata)
+			}
+		})
+	}
+}
+
+func TestWindowsLocalTextSaveDoesNotAddCurrentParentPermissions(t *testing.T) {
+	for _, policy := range []struct{ name, flags string }{
+		{name: "explicit", flags: ""},
+		{name: "automatic inheritance", flags: "AI"},
+	} {
+		t.Run(policy.name, func(t *testing.T) {
+			manager, directory := localMutationFixture(t)
+			filename := filepath.Join(directory, "notes.txt")
+			writeLocalMutationFile(t, filename, "before")
+			windowsLocalTextFixtureSecurity(t, filename, "")
+			windowsLocalTextFixtureSecurity(t, directory, "(A;OICI;FR;;;BU)")
+			parent, err := os.OpenRoot(directory)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer parent.Close()
+			handle, err := openLocalWindowsEntry(parent, "notes.txt", windows.WRITE_OWNER|windows.WRITE_DAC|windows.READ_CONTROL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			source := os.NewFile(uintptr(handle), filename)
+			defer source.Close()
+			user, err := windows.GetCurrentProcessToken().GetTokenUser()
+			if err != nil {
+				t.Fatal(err)
+			}
+			// A moved file can be unprotected and narrower than its current parent.
+			sddl := "O:" + user.User.Sid.String() + "G:BUD:" + policy.flags + "(A;;FA;;;" + user.User.Sid.String() + ")(A;;FA;;;SY)"
+			if err := applyWindowsLocalTextSecurity(source, sddl); err != nil {
+				t.Fatal(err)
+			}
+			source.Close()
+			expected := windowsLocalTextFixtureMetadata(t, filename)
+			descriptor, err := windows.SecurityDescriptorFromString(sddl)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var platform windowsLocalTextMetadata
+			if err := json.Unmarshal(expected.platformMetadata, &platform); err != nil {
+				t.Fatal(err)
+			}
+			if platform.SecurityDescriptor != descriptor.String() {
+				t.Fatalf("fixture ACL = %s; want %s", platform.SecurityDescriptor, descriptor.String())
+			}
+			opened, err := ReadLocalText(t.Context(), LocalTextReadOptions{Path: filename})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := manager.SaveLocalText(t.Context(), LocalTextSaveRequest{Path: filename, Contents: "after", ExpectedRevision: opened.Revision}); err != nil {
+				t.Fatal(err)
+			}
+			retained := windowsLocalTextFixtureMetadata(t, filename)
+			if retained.revision != expected.revision {
+				t.Fatalf("parent permissions added: %s; want %s", retained.platformMetadata, expected.platformMetadata)
+			}
+			assertLocalMutationFile(t, filename, "after")
+		})
+	}
+}
+
+func TestWindowsLocalTextSaveRefusesAnUnexpectedInheritedIntegrityLabel(t *testing.T) {
+	for _, policy := range []struct{ name, sddl string }{
+		{name: "source has no label", sddl: ""},
+		{name: "source has a different label", sddl: "S:(ML;;NW;;;ME)"},
+	} {
+		t.Run(policy.name, func(t *testing.T) {
+			manager, directory := localMutationFixture(t)
+			filename := filepath.Join(directory, "notes.txt")
+			writeLocalMutationFile(t, filename, "before")
+			if policy.sddl != "" {
+				descriptor, err := windows.SecurityDescriptorFromString(policy.sddl)
+				if err != nil {
+					t.Fatal(err)
+				}
+				sacl, _, err := descriptor.SACL()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := windows.SetNamedSecurityInfo(filename, windows.SE_FILE_OBJECT, windows.LABEL_SECURITY_INFORMATION, nil, nil, nil, sacl); err != nil {
+					t.Fatal(err)
+				}
+			}
+			expected := windowsLocalTextFixtureMetadata(t, filename)
+			opened, err := ReadLocalText(t.Context(), LocalTextReadOptions{Path: filename})
+			if err != nil {
+				t.Fatal(err)
+			}
+			name, err := windows.UTF16PtrFromString(directory)
+			if err != nil {
+				t.Fatal(err)
+			}
+			handle, err := windows.CreateFile(name, windows.WRITE_OWNER, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+				nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parentFile := os.NewFile(uintptr(handle), directory)
+			defer parentFile.Close()
+			label, err := windows.SecurityDescriptorFromString("S:(ML;OICI;NW;;;LW)")
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The native setter updates the parent without propagating to the existing
+			// source. A new sibling inherits the label, unlike the selected source.
+			if err := setWindowsLocalTextSecurityDescriptor(parentFile, windows.LABEL_SECURITY_INFORMATION, label); err != nil {
+				t.Fatal(err)
+			}
+			current := windowsLocalTextFixtureMetadata(t, filename)
+			if current.revision != expected.revision {
+				t.Fatalf("source fixture was changed: %s; want %s", current.platformMetadata, expected.platformMetadata)
+			}
+			parent, err := os.OpenRoot(directory)
+			if err != nil {
+				t.Fatal(err)
+			}
+			staged, err := openLocalTextStagingFile(parent, "verify-label.txt")
+			if err != nil {
+				t.Fatal(err)
+			}
+			stageMetadata, err := captureLocalTextMetadata(staged.file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			staged.cleanup(parent)
+			parent.Close()
+			if !bytes.Contains(stageMetadata.platformMetadata, []byte("ML;ID;NW;;;LW")) {
+				t.Fatalf("stage did not inherit low label: %s", stageMetadata.platformMetadata)
+			}
+			if _, err := manager.SaveLocalText(t.Context(), LocalTextSaveRequest{Path: filename, Contents: "after", ExpectedRevision: opened.Revision}); !errors.Is(err, ErrUnsupportedEntry) {
+				t.Fatalf("unexpected inherited label save = %v; want safe refusal", err)
+			}
+			retained := windowsLocalTextFixtureMetadata(t, filename)
+			if retained.revision != expected.revision {
+				t.Fatalf("source metadata changed after refusal: %s; want %s", retained.platformMetadata, expected.platformMetadata)
+			}
+			assertLocalMutationFile(t, filename, "before")
+			entries, err := os.ReadDir(directory)
+			if err != nil || len(entries) != 1 {
+				t.Fatalf("staging left after refusal = %v, %v", entries, err)
 			}
 		})
 	}
