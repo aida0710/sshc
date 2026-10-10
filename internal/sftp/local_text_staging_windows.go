@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"errors"
 	"os"
 	"runtime"
 	"unsafe"
@@ -47,9 +48,9 @@ func openLocalTextStagingFile(parent *os.Root, name string) (localTextStaging, e
 	var publicationHandle windows.Handle
 	process := windows.CurrentProcess()
 	if err := windows.DuplicateHandle(process, handle, process, &publicationHandle, 0, false, windows.DUPLICATE_SAME_ACCESS); err != nil {
+		cleanupError := markWindowsLocalTextStagingForDeletion(handle)
 		windows.CloseHandle(handle)
-		_ = parent.Remove(name)
-		return localTextStaging{}, err
+		return localTextStaging{}, errors.Join(err, cleanupError)
 	}
 	// Keep the same file object through the common close-before-publish step.
 	// Its share mode continues to refuse data writes; a renamed sibling still

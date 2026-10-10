@@ -200,5 +200,5 @@ func publishLocalText(ctx context.Context, publication localTextPublication) err
 		return err
 	}
 	// Rename publishes a complete sibling and never follows a destination link.
-	return publishLocalTextReplacement(target.parent, staged, target.name)
+	return staged.publish(target.parent, target.name)
 }

@@ -224,7 +224,7 @@ func TestWindowsLocalTextPublicationUsesThePinnedParentAfterItsNameChanges(t *te
 		t.Fatal(err)
 	}
 	writeLocalMutationFile(t, filepath.Join(directory, "notes.txt"), "replacement directory")
-	if err := publishLocalTextReplacement(parent, staged, "notes.txt"); err != nil {
+	if err := staged.publish(parent, "notes.txt"); err != nil {
 		t.Fatal(err)
 	}
 	assertLocalMutationFile(t, filepath.Join(retired, "notes.txt"), "after")
@@ -266,11 +266,51 @@ func TestWindowsLocalTextPublicationPinsTheStagedFileAndRefusesOtherDataWriters(
 		t.Fatal(err)
 	}
 	writeLocalMutationFile(t, filepath.Join(directory, staged.name), "replacement staging file")
-	if err := publishLocalTextReplacement(parent, staged, "notes.txt"); err != nil {
+	if err := staged.publish(parent, "notes.txt"); err != nil {
 		t.Fatal(err)
 	}
 	assertLocalMutationFile(t, filename, "after")
 	assertLocalMutationFile(t, filepath.Join(directory, staged.name), "replacement staging file")
+	staged.cleanup(parent)
+	assertLocalMutationFile(t, filename, "after")
+	assertLocalMutationFile(t, filepath.Join(directory, staged.name), "replacement staging file")
+}
+
+func TestWindowsLocalTextFailedPublicationCleansOnlyItsOwnMovedStagingFile(t *testing.T) {
+	directory := t.TempDir()
+	filename := filepath.Join(directory, "notes.txt")
+	writeLocalMutationFile(t, filename, "before")
+	parent, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer parent.Close()
+	staged, err := openLocalTextStagingFile(parent, "staged.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer staged.cleanup(parent)
+	if _, err := staged.file.WriteString("after"); err != nil {
+		t.Fatal(err)
+	}
+	if err := parent.Rename(staged.name, "moved.txt"); err != nil {
+		t.Fatal(err)
+	}
+	writeLocalMutationFile(t, filepath.Join(directory, staged.name), "replacement staging file")
+	if err := parent.Mkdir("blocked", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeLocalMutationFile(t, filepath.Join(directory, "blocked", "keep.txt"), "keep")
+	if err := staged.publish(parent, "blocked"); err == nil {
+		t.Fatal("publication replaced a nonempty directory")
+	}
+	staged.cleanup(parent)
+	assertLocalMutationFile(t, filename, "before")
+	assertLocalMutationFile(t, filepath.Join(directory, staged.name), "replacement staging file")
+	assertLocalMutationFile(t, filepath.Join(directory, "blocked", "keep.txt"), "keep")
+	if _, err := parent.Lstat("moved.txt"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("original moved staging file remains after cleanup: %v", err)
+	}
 }
 
 func TestWindowsLocalTextSavePreservesExtendedAttributes(t *testing.T) {
