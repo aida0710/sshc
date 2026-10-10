@@ -68,7 +68,7 @@ sshc help                    # すべてのコマンド
 
 - OpenSSHのコメント、順序、空白、`Include`を保った設定管理
 - 接続状態、検索、出力を引き継ぐ再接続、貼り付け前の確認、文字コード、クイックコマンドを備えたTerminal
-- フォルダ転送、中断からの再開、バックグラウンドの転送キュー、エディタを備えたSFTP
+- フォルダ転送、中断からの再開、バックグラウンドの転送キュー、エディタ、フォルダからのSSH・ローカルシェル起動を備えたSFTP
 - SSHとローカルシェルを最大4ペインに並べるWorkspace
 - パスワード、鍵のパスフレーズ、TOTPのセットアップキーをVaultに保存し、Terminal、SFTP、CLIで再利用する認証情報の管理
 - 選んだSSH接続だけを専用のVPN経由で接続する、接続ごとのVPN（WireGuard、L2TP/IPsec、OpenConnect、OpenVPN、IKEv2/IPsec。Dockerを使用）
