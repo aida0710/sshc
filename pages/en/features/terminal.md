@@ -43,7 +43,7 @@ OSC 52 lets remote software write to the device clipboard. It has a global defau
 
 Kitty keyboard mode follows requests from the remote application. A JIS option sends the yen key as backslash. Mobile adds a special-key row for Ctrl, Alt, Esc, Tab, and arrows.
 
-OSC 8 links and detected URLs open in the system browser. A detected remote path or the current working directory reported through OSC 7 can open SFTP at the same host and directory. SFTP can also open a new SSH Terminal at its displayed directory.
+OSC 8 links and detected URLs open in the system browser. A detected remote path or the current working directory reported through OSC 7 can open SFTP at the same host and directory. SFTP can also open a terminal at its displayed directory: an SSH session for a remote tab, or a local shell on the engine machine for a local tab.
 
 **New session** in the session list opens the same picker SFTP uses for its destination: **Local shell** at the top (one row per detected shell profile), then search, recent connections and groups for SSH hosts. Local shells use the same subsystem as SSH: search, Quick Commands, workspaces, and broadcast commands all apply. On macOS and Linux, sshc supplies the terminal information needed by line editors such as zsh and fish even when the engine was started as a background service.
 
@@ -55,7 +55,7 @@ sshc never infers program state from ordinary shell output or reruns arbitrary c
 
 ## Port forwarding
 
-Manage Local forwarding and Dynamic SOCKS per SSH connection. Local forwarding has a local bind endpoint and a destination host and port. Dynamic forwarding opens a local SOCKS endpoint. Remote forwarding is intentionally not provided.
+Manage Local forwarding, Remote forwarding and Dynamic SOCKS per SSH connection. Local forwarding opens a port on the engine side and connects from the SSH server. Remote forwarding opens a port on the SSH server and connects from the engine. Dynamic forwarding opens a local SOCKS endpoint.
 
 See [Port forwarding](/en/terminal/port-forwarding) for setup details.
 

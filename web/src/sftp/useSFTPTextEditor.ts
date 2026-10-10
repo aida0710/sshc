@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { localHostAlias } from "./localHost";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
@@ -30,6 +31,11 @@ type DiscardConfirmation = "close" | "reload";
 // or an overwrite of the revision read when the user asked to overwrite.
 // When the engine refuses either as a conflict, the message says which one.
 type WriteKind = "save" | "overwrite";
+
+const localConflictMessageKeys: Record<WriteKind, MessageKey> = {
+  save: "sftp.editorLocalConflict",
+  overwrite: "sftp.editorLocalOverwriteConflict",
+};
 
 const conflictMessageKeys: Record<WriteKind, MessageKey> = {
   save: "sftp.editorConflict",
@@ -69,6 +75,9 @@ export function useSFTPTextEditor({
   const [opened, setOpened] = useState<OpenedText | null>(null);
   const [contents, setContents] = useState("");
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const writing = useRef(false);
   const [problem, setProblem] = useState<EditorProblem | null>(null);
   const [confirming, setConfirming] = useState<DiscardConfirmation | null>(null);
   const [overwriteConfirmation, setOverwriteConfirmation] = useState<OverwriteConfirmation | null>(null);
@@ -93,6 +102,7 @@ export function useSFTPTextEditor({
 
   function close() {
     fileGeneration.retire();
+    setSaved(false);
     setOpened(null);
     setContents("");
     setBusy(false);
@@ -120,6 +130,7 @@ export function useSFTPTextEditor({
         reportFailure(t("sftp.search.changedBeforeOpen"));
         return;
       }
+      setSaved(false);
       setOpened({ alias, file, initialLine: position?.line ?? 1 });
       setContents(file.contents);
       setProblem(null);
@@ -150,10 +161,13 @@ export function useSFTPTextEditor({
   // Writes the editor's contents. The engine refuses the write when the
   // remote file is no longer `expectedRevision`.
   async function writeContents(kind: WriteKind, expectedRevision: string) {
-    if (opened === null) return;
+    if (opened === null || writing.current) return;
+    writing.current = true;
+    setSaving(true);
     const isCurrent = fileGeneration.observe();
     const { alias, file } = opened;
     setBusy(true);
+    setSaved(false);
     setProblem(null);
     try {
       const saved = await source.saveText(alias, file.entry.path, contents, expectedRevision);
@@ -162,12 +176,13 @@ export function useSFTPTextEditor({
       // this revision even if refreshing the listing fails.
       setOpened({ alias, file: saved, initialLine: opened.initialLine });
       setContents(saved.contents);
+      setSaved(true);
       await onSaved(alias, saved);
     } catch (error) {
       if (!isCurrent()) return;
       const refusedAsConflict = failureCode(error) === "sftp_conflict";
       setProblem({
-        message: refusedAsConflict ? t(conflictMessageKeys[kind]) : sftpProblemText(t, error),
+        message: refusedAsConflict ? t((alias === localHostAlias ? localConflictMessageKeys : conflictMessageKeys)[kind]) : sftpProblemText(t, error),
         // An overwrite starts from a conflict. When its write fails for another
         // reason, the editor still holds the revision the remote file has
         // moved on from, so Reload and Overwrite stay offered rather than
@@ -175,12 +190,14 @@ export function useSFTPTextEditor({
         conflict: refusedAsConflict || kind === "overwrite",
       });
     } finally {
+      writing.current = false;
+      setSaving(false);
       if (isCurrent()) setBusy(false);
     }
   }
 
   async function save() {
-    if (opened === null) return;
+    if (opened === null || busy || !dirty || overwriteConfirmation !== null) return;
     await writeContents("save", opened.file.revision);
   }
 
@@ -246,10 +263,13 @@ export function useSFTPTextEditor({
 
   return {
     opened: opened?.file ?? null,
+    local: opened?.alias === localHostAlias,
     initialLine: opened?.initialLine ?? 1,
     contents,
     setContents,
     dirty,
+    saved: saved && !dirty,
+    saving,
     busy,
     problem,
     confirming,

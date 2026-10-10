@@ -36,7 +36,7 @@ func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, 
 	if !ValidLocalChildName(rootName) {
 		return Transfer{}, ErrInvalidPath
 	}
-	walk := &archiveWalk{archive: zip.NewWriter(destination), remote: remote, service: s, budget: archiveBudget{entries: 1}}
+	walk := &archiveWalk{root: rootName, exclusions: s.archiveExclusions(), archive: zip.NewWriter(destination), remote: remote, service: s, budget: archiveBudget{entries: 1}}
 	if err := walk.addDirectory(ctx, archiveItem{remotePath: cleaned, archivePath: rootName, depth: 1}); err != nil {
 		_ = walk.archive.Close()
 		return Transfer{}, err
@@ -50,11 +50,13 @@ func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, 
 // archiveWalk is the state of writing one ZIP. The budget counts the whole
 // tree, not one folder.
 type archiveWalk struct {
-	service Service
-	archive *zip.Writer
-	remote  Remote
-	budget  archiveBudget
-	written int64
+	service    Service
+	archive    *zip.Writer
+	remote     Remote
+	budget     archiveBudget
+	written    int64
+	root       string
+	exclusions transferExclusions
 }
 
 // archiveItem is one entry to add: where it is on the remote and what it is
@@ -98,6 +100,9 @@ func (w *archiveWalk) addDirectory(ctx context.Context, directory archiveItem) e
 			remotePath:  path.Join(directory.remotePath, info.Name()),
 			archivePath: path.Join(directory.archivePath, info.Name()),
 			depth:       directory.depth + 1,
+		}
+		if w.exclusions.excludesChild(w.root, child.archivePath) {
+			continue
 		}
 		switch {
 		case info.IsDir():

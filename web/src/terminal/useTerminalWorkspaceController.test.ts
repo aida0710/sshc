@@ -41,6 +41,30 @@ function useController(list: TerminalSession[], refresh: () => Promise<void>, se
 }
 
 describe("useTerminalWorkspaceController", () => {
+  it("opens a local folder with the requested shell profile and keeps failures on the current screen", async () => {
+    const local: TerminalSession = { ...session("local"), kind: "shell" };
+    delete local.alias;
+    const opened: (TerminalSession | null)[] = [local, null];
+    const open = vi.fn(async () => opened.shift() ?? null);
+    const navigate = vi.fn();
+    const { result } = renderHook(() => useTerminalWorkspaceController({
+      api,
+      terminalSessions: { sessions: [local], refresh: vi.fn().mockResolvedValue(undefined), open } as unknown as TerminalSessionsState,
+      enabled: true,
+      section: "Files",
+      navigate,
+      closeNavigation: () => undefined,
+    }));
+
+    await act(() => result.current.openLocalShell("fish", "/home/engine/project's work"));
+    expect(open).toHaveBeenLastCalledWith({ kind: "shell", profileId: "fish", cwd: "/home/engine/project's work" });
+    expect(navigate).toHaveBeenCalledWith("Terminal");
+    navigate.mockClear();
+    await act(() => result.current.openLocalShell(undefined, "/missing"));
+    expect(open).toHaveBeenLastCalledWith({ kind: "shell", cwd: "/missing" });
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it("keeps a freshly opened session selected while the session list catches up", async () => {
     const refresh = vi.fn().mockResolvedValue(undefined);
     const listed = [session("s1"), session("s2")];

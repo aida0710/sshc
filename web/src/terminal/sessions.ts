@@ -255,6 +255,8 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.unresolvable";
     case "remote_working_directory_unsupported":
       return "terminal.remoteWorkingDirectoryUnsupported";
+    case "local_working_directory_unavailable":
+      return "terminal.localWorkingDirectoryUnavailable";
     case "jump_depth_exceeded":
       return "terminal.jumpDepthExceeded";
     case "host_key_unknown":

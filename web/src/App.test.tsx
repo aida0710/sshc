@@ -13,6 +13,8 @@ import { ApiError, apiClient } from "./api/client";
 import { announceVaultLocked } from "./secrets/vaultLockSignal";
 import type { PasswordVaultStatus } from "./api/vault";
 import { vaultStatus } from "./testing/vaultStatus";
+import { terminalSessionsApi, type TerminalSession } from "./api/terminalSessions";
+import { localHostAlias } from "./sftp/localHost";
 
 type BroadcastListener = (event: MessageEvent<unknown>) => void;
 
@@ -148,6 +150,20 @@ vi.mock("./keys/KeysScreen", () => ({
   ),
 }));
 vi.mock("./diagnostics/DiagnosticsPanel", () => ({ DiagnosticsPanel: () => <div>diagnostics panel</div> }));
+vi.mock("./sftp/SFTPWorkspace", () => ({
+  SFTPWorkspace: ({ onOpenTerminal }: { onOpenTerminal: (alias: string, cwd: string) => Promise<void> }) => <div>
+    <button type="button" onClick={() => void onOpenTerminal(localHostAlias, "C:/Users/engine/project's work")}>
+      open engine folder
+    </button>
+    <button type="button" onClick={() => void onOpenTerminal("gallery-web", "/srv/project's work")}>
+      open remote folder
+    </button>
+  </div>,
+}));
+vi.mock("./shell/TerminalScreen", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./shell/TerminalScreen")>(),
+  TerminalScreen: ({ activeSessionId }: { activeSessionId: string | null }) => <div>{`terminal session ${activeSessionId}`}</div>,
+}));
 vi.mock("./settings/SettingsPanel", () => ({
   SettingsPanel: ({ page = "All" }: { page?: string }) => {
     const [draft, setDraft] = useState("");
@@ -222,6 +238,25 @@ afterEach(() => {
 });
 
 describe("App", () => {
+  it.each([
+    { button: "open engine folder", kind: "shell", cwd: "C:/Users/engine/project's work" },
+    { button: "open remote folder", kind: "ssh", alias: "gallery-web", cwd: "/srv/project's work" },
+  ] as const)("opens $button in the matching terminal kind", async ({ button, kind, cwd, ...identity }) => {
+    const opened: TerminalSession = {
+      id: "folder-session", kind, title: "folder-session", ...identity,
+      startedAt: "2026-10-10T00:00:00Z", state: "connected", problem: "",
+    };
+    const open = vi.spyOn(terminalSessionsApi, "openTerminalSession").mockResolvedValue({ session: opened, streamTicket: "fixture" });
+    vi.spyOn(terminalSessionsApi, "terminalSessions").mockResolvedValue({ sessions: [opened], maxSessions: 50 });
+    const user = userEvent.setup();
+    render(<App bootstrap={vi.fn().mockResolvedValue({ csrfToken })} health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })} vault={() => Promise.resolve(vaultStatus())} />);
+    await user.click(await screen.findByRole("link", { name: "SFTP" }));
+    await user.click(await screen.findByRole("button", { name: button }));
+    expect(open).toHaveBeenCalledWith({ kind, cwd, ...identity });
+    expect(await screen.findByText("terminal session folder-session")).toBeVisible();
+    expect(window.location.pathname).toBe("/terminal");
+  });
+
   it("resolves OSC 52 with an SSH host override before the terminal default", () => {
     expect(resolveOSC52(undefined, true)).toBe(true);
     expect(resolveOSC52("deny", true)).toBe(false);

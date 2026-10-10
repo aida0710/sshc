@@ -169,13 +169,15 @@ test("one tap opens folders with immediate loading feedback and checkboxes enter
   }
   await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/workspace/projects");
   await expect(page.getByTestId("sftp-file-list")).not.toHaveAttribute("inert");
-  await page.getByRole("button", { name: "Back", exact: true }).tap();
+  await page.getByRole("button", { name: "Parent directory", exact: true }).tap();
   await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/workspace");
   const callsBeforeSelect = requested.length;
   await page.getByRole("checkbox", { name: "Select projects", exact: true }).check();
   await page.getByRole("button", { name: "archives", exact: true }).tap();
   await expect(page.getByRole("checkbox", { name: "Select archives", exact: true })).toBeChecked();
   expect(requested).toHaveLength(callsBeforeSelect);
+  await expect(page.getByRole("button", { name: "Actions for 2 selected items", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Clear selection", exact: true }).tap();
   await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/workspace");
 });
 

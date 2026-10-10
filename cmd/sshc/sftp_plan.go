@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"sshc/internal/api"
 	"sshc/internal/httpserver"
@@ -44,6 +45,7 @@ type sftpCLIPlan struct {
 	Directories []string
 	Files       []sftpCLIFile
 	Skipped     int
+	exclusions  sftpcore.TransferExclusionMatcher
 	// Entries left out of a recursive transfer and why: a link whose target
 	// is missing, or something that is neither a file nor a directory.
 	SkippedPaths []sftpCLISkip
@@ -187,6 +189,10 @@ func (budget *sftpCLIRecursiveBudget) include(entry api.SFTPEntry, depth int) er
 }
 
 func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocation) (sftpCLIPlan, error) {
+	matcher, err := sftpcore.NewTransferExclusionMatcher(called.ExcludePatterns)
+	if err != nil {
+		return sftpCLIPlan{}, err
+	}
 	if !path.IsAbs(called.Source) {
 		return sftpCLIPlan{}, errSFTPRemotePath
 	}
@@ -198,7 +204,7 @@ func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	if err != nil {
 		return sftpCLIPlan{}, err
 	}
-	plan := sftpCLIPlan{Action: "get", Alias: called.Alias, Source: source.Path, Destination: destination}
+	plan := sftpCLIPlan{Action: "get", Alias: called.Alias, Source: source.Path, Destination: destination, exclusions: matcher}
 	info, localErr := os.Lstat(destination)
 	localExists := localErr == nil
 	if localErr != nil && !errors.Is(localErr, fs.ErrNotExist) {
@@ -269,6 +275,14 @@ func walkRemoteGetPlan(
 		if entry.Path != path.Join(remoteRoot, entry.Name) {
 			return errEngineInvalidResponse
 		}
+		relative := strings.TrimPrefix(entry.Path, strings.TrimSuffix(plan.Source, "/")+"/")
+		if plan.exclusions.Excludes(relative) {
+			if err := budget.include(api.SFTPEntry{Type: api.Directory}, depth+1); err != nil {
+				return err
+			}
+			plan.skip(entry.Path, "matched a transfer exclusion rule")
+			continue
+		}
 		target := filepath.Join(localRoot, entry.Name)
 		switch sftpEntryOpensAs(entry) {
 		case api.Directory:
@@ -309,6 +323,10 @@ func walkRemoteGetPlan(
 }
 
 func buildSFTPPutPlan(ctx context.Context, engine *engineAPI, called sftpInvocation) (sftpCLIPlan, error) {
+	matcher, err := sftpcore.NewTransferExclusionMatcher(called.ExcludePatterns)
+	if err != nil {
+		return sftpCLIPlan{}, err
+	}
 	if !path.IsAbs(called.Destination) {
 		return sftpCLIPlan{}, errSFTPRemotePath
 	}
@@ -331,7 +349,7 @@ func buildSFTPPutPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	if remoteErr != nil && !sftpIsNotFound(remoteErr) {
 		return sftpCLIPlan{}, remoteErr
 	}
-	plan := sftpCLIPlan{Action: "put", Alias: called.Alias, Source: source, Destination: destination}
+	plan := sftpCLIPlan{Action: "put", Alias: called.Alias, Source: source, Destination: destination, exclusions: matcher}
 	if info.Mode().IsRegular() {
 		if remoteExists && sftpEntryOpensAs(remoteDestination) == api.Directory {
 			destination = path.Join(destination, filepath.Base(source))
@@ -409,6 +427,14 @@ func (walk *localPutWalk) directory(localDirectory, remoteDirectory string, dept
 	for _, entry := range entries {
 		localPath := filepath.Join(localDirectory, entry.Name())
 		remotePath := path.Join(remoteDirectory, entry.Name())
+		relative, err := filepath.Rel(walk.plan.Source, localPath)
+		if err != nil {
+			return err
+		}
+		if walk.plan.exclusions.Excludes(filepath.ToSlash(relative)) {
+			walk.plan.skip(localPath, "matched a transfer exclusion rule")
+			continue
+		}
 		info, err := os.Stat(localPath)
 		if err != nil {
 			if entry.Type()&os.ModeSymlink != 0 && errors.Is(err, fs.ErrNotExist) {

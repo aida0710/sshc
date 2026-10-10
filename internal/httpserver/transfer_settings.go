@@ -29,6 +29,7 @@ func storedTransferSettings(settings sshcSFTP.TransferSettings) application.File
 		SpeedLimitBytesPerSecond:   settings.SpeedLimitBytesPerSecond,
 		AutoReconnect:              settings.AutoReconnect,
 		MaxReconnectAttempts:       settings.MaxReconnectAttempts,
+		ExcludePatterns:            append([]string(nil), settings.ExcludePatterns...),
 	}
 }
 
@@ -46,5 +47,6 @@ func engineTransferSettings(stored application.FileTransferSettings) sshcSFTP.Tr
 		SpeedLimitBytesPerSecond: stored.SpeedLimitBytesPerSecond,
 		AutoReconnect:            stored.AutoReconnect,
 		MaxReconnectAttempts:     stored.MaxReconnectAttempts,
+		ExcludePatterns:          append([]string(nil), stored.ExcludePatterns...),
 	}
 }

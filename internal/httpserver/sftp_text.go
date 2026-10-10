@@ -34,7 +34,7 @@ func (h SFTPHandlers) Preview(c *echo.Context) error {
 
 func (h SFTPHandlers) SaveText(c *echo.Context) error {
 	var body sftpSaveTextRequest
-	if err := decodeJSON(c, &body); err != nil {
+	if err := decodeJSONWithin(c, MaxSFTPTextJSONBodyCeiling, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	file, err := h.Transfers.SaveText(c.Request().Context(), c.Param("alias"), c.QueryParam("path"), body.Contents, body.ExpectedRevision)

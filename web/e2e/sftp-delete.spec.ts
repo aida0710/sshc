@@ -1,3 +1,4 @@
+import { sftpHostPicker } from "./support/sftp";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { RemoteEntry } from "../src/sftp/api";
@@ -94,7 +95,7 @@ test("requires confirmation for engine-local deletion through the menu and keybo
   await openApplication(page, installation);
   await openSection(page, "SFTP");
   const pane = page.getByRole("tabpanel");
-  await pane.locator("button[data-value]:visible").click();
+  await (await sftpHostPicker(page, pane)).click();
   await page.getByRole("dialog").getByText("Local", { exact: true }).click();
   await pane.getByRole("button", { name: "Edit local path", exact: true }).click();
   const pathInput = pane.getByRole("textbox", { name: "Engine filesystem path", exact: true });

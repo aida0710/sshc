@@ -167,7 +167,7 @@ func validPersistedJob(job TransferJob) error {
 			return ErrInvalidTransfer
 		}
 	}
-	if !validReconnectAttempts(job.ReconnectAttempt) {
+	if !validReconnectAttempts(job.ReconnectAttempt) || !validTransferExclusionPatterns(job.ExcludePatterns) {
 		return ErrInvalidTransfer
 	}
 	if job.TransferredBytes < 0 || (job.TotalBytes >= 0 && job.TransferredBytes > job.TotalBytes) ||

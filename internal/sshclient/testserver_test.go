@@ -106,6 +106,8 @@ type serverOptions struct {
 	OnExec func(channel ssh.Channel)
 	// OnAgentChannel は、借りた agent へリモート側から話しかける。
 	OnAgentChannel func(conn net.Conn)
+	// OnGlobalRequest may handle forwarding requests for an end-to-end fixture.
+	OnGlobalRequest func(ssh.Conn, *ssh.Request) bool
 	// Banner は、認証の前にサーバーが送る文言である。
 	Banner string
 	// ECDSAHostKey は、ed25519 に加えて ECDSA のホスト鍵も持たせる。普通の
@@ -281,6 +283,9 @@ func (s *testServer) serve(conn net.Conn) {
 			s.mutex.Unlock()
 		}()
 		for request := range requests {
+			if s.options.OnGlobalRequest != nil && s.options.OnGlobalRequest(connection, request) {
+				continue
+			}
 			if request.Type == "keepalive@openssh.com" {
 				s.mutex.Lock()
 				s.keepAlives++

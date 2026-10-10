@@ -95,4 +95,25 @@ describe("SFTPHostPicker", () => {
     expect(onChange).toHaveBeenCalledWith(localHostAlias);
   });
 
+  it("opens from the tab request without a duplicate toolbar button and returns focus to the tab", async () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<><button type="button">Tab host</button><SFTPHostPicker aliases={["edge"]} value="edge" hideTrigger openRequest={0} onChange={onChange} loadRecent={async () => ({ connections: [] })} /></>);
+    expect(screen.queryByRole("button", { name: "Host" })).not.toBeInTheDocument();
+    const tabTrigger = screen.getByRole("button", { name: "Tab host" });
+    tabTrigger.focus();
+    rerender(<><button type="button">Tab host</button><SFTPHostPicker aliases={["edge"]} value="edge" hideTrigger openRequest={1} onChange={onChange} loadRecent={async () => ({ connections: [] })} /></>);
+    expect(await screen.findByRole("dialog", { name: "Choose a connection" })).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    expect(tabTrigger).toHaveFocus();
+  });
+
+  it("ignores host requests while unsaved changes disable navigation", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<SFTPHostPicker aliases={["edge"]} value="edge" hideTrigger disabled openRequest={0} onChange={onChange} />);
+    rerender(<SFTPHostPicker aliases={["edge"]} value="edge" hideTrigger disabled openRequest={1} onChange={onChange} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    rerender(<SFTPHostPicker aliases={["edge"]} value="edge" hideTrigger openRequest={1} onChange={onChange} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
 });

@@ -75,6 +75,7 @@ export class SFTPTransferManager {
   private speedLimitBytesPerSecond = 0;
   private autoReconnect = false;
   private maxReconnectAttempts = 0;
+  private excludePatterns: string[] = [];
   private largeFileThreshold = defaultLargeFileThreshold;
   private largeFileParallelism = defaultLargeFileParallelism;
   private largeFileChunkBytes = defaultLargeFileChunkBytes;
@@ -108,6 +109,7 @@ export class SFTPTransferManager {
   getSpeedLimitBytesPerSecond = (): number => this.speedLimitBytesPerSecond;
   getAutoReconnect = (): boolean => this.autoReconnect;
   getMaxReconnectAttempts = (): number => this.maxReconnectAttempts;
+  getExcludePatterns = (): readonly string[] => [...this.excludePatterns];
   getLargeFileThreshold = (): number => this.largeFileThreshold;
   getLargeFileParallelism = (): number => this.largeFileParallelism;
   getLargeFileChunkBytes = (): number => this.largeFileChunkBytes;
@@ -396,6 +398,7 @@ export class SFTPTransferManager {
     this.speedLimitBytesPerSecond = listed.speedLimitBytesPerSecond;
     this.autoReconnect = listed.autoReconnect;
     this.maxReconnectAttempts = listed.maxReconnectAttempts;
+    this.excludePatterns = [...(listed.excludePatterns ?? [])];
     for (const job of this.jobs) {
       if (job.status === "reconnecting" && (this.processingStopped || !this.autoReconnect || job.reconnectAttempt > this.maxReconnectAttempts)) this.controllers.get(job.id)?.abort();
     }

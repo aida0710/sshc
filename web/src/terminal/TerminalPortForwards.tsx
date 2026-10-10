@@ -3,6 +3,7 @@ import { ApiError } from "../api/client";
 import { configApi } from "../api/config";
 import { terminalSessionsApi, type TerminalForward, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
+import { forwardDirective, forwardHintKeys, validForwardDestination, validForwardPort, type PortForwardKind } from "../forwarding/portForwarding";
 import { describeForwardProblem, forwardProblemIsSpecific } from "./forwardProblem";
 import { terminalSubtitle } from "./terminalPresentation";
 import { clipboard } from "../ui/clipboard";
@@ -28,7 +29,7 @@ export function TerminalPortForwards({
 }) {
   const t = useTranslate();
   const [forwards, setForwards] = useState<TerminalForward[]>(session.forwards ?? []);
-  const [kind, setKind] = useState<"local" | "dynamic">("local");
+  const [kind, setKind] = useState<PortForwardKind>("local");
   const [listenPort, setListenPort] = useState("");
   const [destination, setDestination] = useState("");
   const [save, setSave] = useState(false);
@@ -40,11 +41,11 @@ export function TerminalPortForwards({
   useEffect(() => setForwards(session.forwards ?? []), [session.forwards]);
   const connected = session.state === "connected";
   const canSave = session.alias !== undefined && session.alias !== "";
-  const listenError = listenPort === "" || validPort(listenPort) ? "" : t("conn.forwardInvalidPort");
-  const destinationError = kind === "dynamic" || destination === "" || validDestination(destination)
+  const listenError = listenPort === "" || validForwardPort(listenPort) ? "" : t("conn.forwardInvalidPort");
+  const destinationError = kind === "dynamic" || destination === "" || validForwardDestination(destination)
     ? ""
     : t("conn.forwardInvalidDestination");
-  const canStart = connected && validPort(listenPort) && (kind === "dynamic" || validDestination(destination));
+  const canStart = connected && validForwardPort(listenPort) && (kind === "dynamic" || validForwardDestination(destination));
   const title = terminalSubtitle(session, t);
 
   async function start() {
@@ -56,13 +57,13 @@ export function TerminalPortForwards({
       const listed = await api.startTerminalForward(session.id, {
         kind,
         listenPort: Number(listenPort),
-        ...(kind === "local" ? { destination } : {}),
+        ...(kind !== "dynamic" ? { destination } : {}),
       });
       const current = listed.sessions.find((candidate) => candidate.id === session.id);
       setForwards(current?.forwards ?? []);
       if (save) {
         try {
-          await saveToConnection(kind, listenPort, destination, session, saveApi);
+          await saveToConnection({ kind, listenPort, destination, session, api: saveApi });
         } catch {
           setError(t("terminal.forwardSaveFailed"));
           setNotice(t("terminal.forwardStarted"));
@@ -134,7 +135,7 @@ export function TerminalPortForwards({
                         <span className="text-sm font-medium text-ink">{forwardLabel(t, forward)}</span>
                         <span className="rounded bg-tree px-1.5 py-0.5 text-[10px] text-ink-muted">{t(forward.temporary ? "terminal.forwardTemporary" : "terminal.forwardSaved")}</span>
                       </div>
-                      <p className="mt-1 break-all font-mono text-xs text-ink-muted">{forwardAddress(forward)}</p>
+                      <p className="mt-1 break-all font-mono text-xs text-ink-muted">{forwardAddress(forward, t)}</p>
                       {forward.temporary || forward.kind === "agent" ? null : <p className={`mt-1 ${hintText}`}>{t("terminal.forwardSavedStopHint")}</p>}
                       {forward.problem === "" ? null : <p role="alert" className="mt-1 text-xs text-danger">{describeForwardProblem(t, forward.problem)}</p>}
                       {forward.problem === "" ? null : <p className={`mt-1 ${hintText}`}>{t("terminal.forwardRetryHint")}</p>}
@@ -158,15 +159,16 @@ export function TerminalPortForwards({
             <Notice>{t("conn.forwardLoopbackOnly")}</Notice>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t("conn.forwardType")}>
-                <select className={control} value={kind} disabled={!connected || busy} onChange={(event) => setKind(event.currentTarget.value as "local" | "dynamic")}>
+                <select className={control} value={kind} disabled={!connected || busy} onChange={(event) => setKind(event.currentTarget.value as PortForwardKind)}>
                   <option value="local">{t("conn.forwardLocal")}</option>
+                  <option value="remote">{t("conn.forwardRemote")}</option>
                   <option value="dynamic">{t("conn.forwardDynamic")}</option>
                 </select>
               </Field>
-              <Field label={t("conn.forwardListenPort")} error={listenError}>
+              <Field label={t(kind === "remote" ? "conn.forwardRemoteListenPort" : "conn.forwardListenPort")} error={listenError}>
                 <input autoFocus inputMode="numeric" className={control} value={listenPort} disabled={!connected || busy} onChange={(event) => setListenPort(event.currentTarget.value)} />
               </Field>
-              {kind === "local" ? (
+              {kind !== "dynamic" ? (
                 <div className="sm:col-span-2">
                   <Field label={t("conn.forwardDestination")} error={destinationError}>
                     <input aria-label={t("conn.forwardDestination")} className={control} placeholder="127.0.0.1:5432" value={destination} disabled={!connected || busy} onChange={(event) => setDestination(event.currentTarget.value)} />
@@ -174,7 +176,7 @@ export function TerminalPortForwards({
                 </div>
               ) : null}
             </div>
-            <p className={hintText}>{t(kind === "local" ? "conn.forwardDestinationHint" : "conn.forwardDynamicHint")}</p>
+            <p className={hintText}>{t(forwardHintKeys[kind])}</p>
             <CheckboxField
               label={t("terminal.forwardSaveConnection")}
               hint={t(canSave ? "terminal.forwardSaveHint" : "terminal.forwardSaveUnavailable")}
@@ -194,13 +196,13 @@ export function TerminalPortForwards({
   );
 }
 
-async function saveToConnection(
-  kind: "local" | "dynamic",
-  listenPort: string,
-  destination: string,
-  session: TerminalSession,
-  api: SaveApi,
-) {
+async function saveToConnection({ kind, listenPort, destination, session, api }: {
+  kind: PortForwardKind;
+  listenPort: string;
+  destination: string;
+  session: TerminalSession;
+  api: SaveApi;
+}) {
   if (session.alias === undefined || session.alias === "") throw new Error("connection_not_saved");
   const overview = await api.overview();
   const matches = overview.hosts.filter((host) => host.identity.alias === session.alias);
@@ -215,19 +217,20 @@ async function saveToConnection(
     base: detail.file.contents,
     fields: [{
       action: "add",
-      keyword: kind === "local" ? "LocalForward" : "DynamicForward",
-      values: kind === "local" ? [listenPort, destination] : [listenPort],
+      ...forwardDirective(kind, listenPort, destination),
     }],
   });
 }
 
 function forwardLabel(t: ReturnType<typeof useTranslate>, forward: TerminalForward) {
+  if (forward.kind === "remote") return t("conn.forwardRemote");
   if (forward.kind === "dynamic") return t("conn.forwardDynamic");
   if (forward.kind === "agent") return t("terminal.forwardAgentLabel");
   return t("conn.forwardLocal");
 }
 
-function forwardAddress(forward: TerminalForward): string {
+function forwardAddress(forward: TerminalForward, t: ReturnType<typeof useTranslate>): string {
+  if (forward.kind === "remote") return t("terminal.forwardRemoteAddress", { listen: forward.listen, to: forward.to });
   if (forward.kind === "dynamic") return `socks5://${forward.listen}`;
   if (forward.kind === "agent") return forward.listen;
   return `${forward.listen} → ${forward.to}`;
@@ -260,17 +263,4 @@ function forwardError(t: ReturnType<typeof useTranslate>, caught: unknown): stri
     if (caught.code === "invalid_terminal_forward" || caught.code === "invalid_request") return t("terminal.forwardInvalid");
   }
   return t("terminal.forwardFailed");
-}
-
-function validPort(value: string): boolean {
-  const port = Number(value);
-  return /^\d+$/.test(value) && Number.isInteger(port) && port > 0 && port <= 65535;
-}
-
-function validDestination(value: string): boolean {
-  const bracketed = /^\[[^\]]+\]:(\d+)$/.exec(value);
-  if (bracketed !== null) return validPort(bracketed[1] ?? "");
-  const separator = value.lastIndexOf(":");
-  if (separator <= 0 || value.slice(0, separator).includes(":")) return false;
-  return validPort(value.slice(separator + 1));
 }

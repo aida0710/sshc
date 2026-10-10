@@ -9,14 +9,22 @@ type transferQueueSnapshot struct {
 	dataPlane  map[string]int
 }
 
+// Queue callers receive independent slices; editing a returned job cannot
+// change which entries a queued transfer will omit.
+func cloneTransferJob(job TransferJob) TransferJob {
+	if job.RemoteCheckpoint != nil {
+		checkpoint := *job.RemoteCheckpoint
+		job.RemoteCheckpoint = &checkpoint
+	}
+	job.ExcludePatterns = append([]string(nil), job.ExcludePatterns...)
+	job.DownloadParts = append([]DownloadPartProgress(nil), job.DownloadParts...)
+	job.UploadRanges = append([]UploadRange(nil), job.UploadRanges...)
+	return job
+}
+
 func cloneTransferJobRecord(record *transferJobRecord) transferJobRecord {
 	cloned := *record
-	if record.job.RemoteCheckpoint != nil {
-		checkpoint := *record.job.RemoteCheckpoint
-		cloned.job.RemoteCheckpoint = &checkpoint
-	}
-	cloned.job.DownloadParts = append([]DownloadPartProgress(nil), record.job.DownloadParts...)
-	cloned.job.UploadRanges = append([]UploadRange(nil), record.job.UploadRanges...)
+	cloned.job = cloneTransferJob(record.job)
 	return cloned
 }
 
@@ -59,8 +67,7 @@ func (m *TransferManager) ListJobs() ([]TransferJob, error) {
 	result := make([]TransferJob, 0, len(m.jobOrder))
 	for _, id := range m.jobOrder {
 		if record := m.jobs[id]; record != nil {
-			job := record.job
-			job.DownloadParts = append([]DownloadPartProgress(nil), job.DownloadParts...)
+			job := cloneTransferJob(record.job)
 			result = append(result, job)
 		}
 	}
