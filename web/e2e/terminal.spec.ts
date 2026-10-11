@@ -370,6 +370,32 @@ test("reviews a multiline paste before sending any terminal input", async ({ pag
   await expect(screen).toContainText("safe-paste-second", { timeout: 20_000 });
 });
 
+// Full-screen programs such as Claude Code redraw when the terminal loses
+// focus, which the review dialog itself causes. That output must not take
+// the review away from under the person reading it.
+test("keeps the paste review open while a program redraws on focus changes", async ({ page, context, installation }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+
+  await openSessionList(page);
+  await openLocalShell(page);
+  // Turns on focus reporting and prints once for every byte it reads, as a
+  // redraw would.
+  const screen = await typeIntoTerminal(page, "printf '\\033[?1004h'; while IFS= read -rsn1 key; do printf 'redraw-%d ' $((count += 1)); done");
+  await page.evaluate(() => navigator.clipboard.writeText("echo focus-paste-first\necho focus-paste-second\n"));
+
+  await terminalKeyboard(page).focus();
+  await page.keyboard.press("Control+Shift+V");
+
+  const dialog = page.getByRole("dialog", { name: /^Review paste to / });
+  await expect(dialog).toBeVisible();
+  // Opening the dialog took focus from the terminal, and the program answered.
+  await expect(screen).toContainText("redraw-", { timeout: 20_000 });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+});
+
 test("edits a multiline paste before sending the changed text", async ({ page, context, installation }) => {
   const inputFrames: string[] = [];
   page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {

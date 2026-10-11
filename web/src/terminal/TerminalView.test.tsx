@@ -314,14 +314,40 @@ describe("TerminalView", () => {
     expect(streams[0]!.stream.send).not.toHaveBeenCalled();
   });
 
-  it("invalidates a pending paste when terminal output changes its context", async () => {
+  it("keeps a pending paste while the program in the terminal redraws", async () => {
     renderView();
     await waitFor(() => expect(streams).toHaveLength(1));
     const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
     fireEvent.paste(host, { clipboardData: { getData: () => "echo one\necho two" } });
     expect(await screen.findByRole("dialog", { name: "Review paste to localhost" })).toBeVisible();
 
-    streams[0]!.handlers.onOutput(new TextEncoder().encode("[sshc] reconnected to a new shell\r\n"));
+    streams[0]!.handlers.onOutput(new TextEncoder().encode("\x1b[2J\x1b[H⠋ Thinking…"));
+
+    expect(screen.getByRole("dialog", { name: "Review paste to localhost" })).toBeVisible();
+    expect(streams[0]!.stream.send).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a pending paste when a reconnect replaces the shell", async () => {
+    renderView();
+    await waitFor(() => expect(streams).toHaveLength(1));
+    const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
+    fireEvent.paste(host, { clipboardData: { getData: () => "echo one\necho two" } });
+    expect(await screen.findByRole("dialog", { name: "Review paste to localhost" })).toBeVisible();
+
+    act(() => streams[0]!.handlers.onShellReplaced());
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Review paste to localhost" })).toBeNull());
+    expect(streams[0]!.stream.send).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a pending paste when the connection to the terminal drops", async () => {
+    renderView();
+    await waitFor(() => expect(streams).toHaveLength(1));
+    const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
+    fireEvent.paste(host, { clipboardData: { getData: () => "echo one\necho two" } });
+    expect(await screen.findByRole("dialog", { name: "Review paste to localhost" })).toBeVisible();
+
+    act(() => streams[0]!.handlers.onClose());
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Review paste to localhost" })).toBeNull());
     expect(streams[0]!.stream.send).not.toHaveBeenCalled();

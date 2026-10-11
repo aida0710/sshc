@@ -358,6 +358,8 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 	s.resetTerminalTitleLocked()
 	s.generation++
 	generation := s.generation
+	// 前のシェルは既に無い。ここから先の入力は新しいシェルへ届く。
+	s.announceShellReplacedLocked()
 	process := s.process
 	readier, asynchronous := process.(Readier)
 	if !asynchronous {
