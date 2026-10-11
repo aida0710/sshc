@@ -463,6 +463,35 @@ func newFastRegistry() (*terminal.Registry, *fakeStarter) {
 	return registry, starter
 }
 
+func TestAnAttachedStreamLearnsThatAReconnectReplacedTheShell(t *testing.T) {
+	spy := &openSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, stream, ok := session.AttachFrom(0)
+	if !ok {
+		t.Fatal("could not attach")
+	}
+	defer session.Detach(stream)
+	select {
+	case <-stream.ShellReplaced():
+		t.Fatal("the shell the stream attached to was announced as a replacement")
+	default:
+	}
+
+	spy.at(0).exit(transportLost)
+	testwait.Until(t, func() bool { return spy.count() >= 2 })
+	select {
+	case <-stream.ShellReplaced():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream was not told that a new shell replaced the old one")
+	}
+}
+
 func TestKeystrokesDuringAReconnectAreDropped(t *testing.T) {
 	spy := &openSpy{}
 	registry, _ := newRegistry(terminal.DefaultLimits())

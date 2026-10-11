@@ -294,13 +294,13 @@ export function TerminalView({
         view.write("\u0018");
         setTerminalNotice(t("terminal.replayTruncated"));
       },
+      // Output alone keeps a pending paste: full-screen programs redraw all
+      // the time, and on the focus change that opening the review causes.
       onOutput: (chunk) => {
-        // A confirmation belongs to the exact terminal context the user
-        // reviewed. Any output can be a new prompt or the reconnect
-        // notice for a replacement shell, so require a fresh paste.
-        setPendingPaste(null);
         view.write(decoder.decode(chunk, { stream: true }));
       },
+      // The paste was reviewed for the shell that is now gone.
+      onShellReplaced: () => setPendingPaste(null),
       onExit: () => {
         view.options.cursorBlink = false;
         setPendingPaste(null);

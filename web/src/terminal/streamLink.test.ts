@@ -26,6 +26,7 @@ function startLink(terminalStreamTicket: TicketIssuer = async () => ({ streamTic
     onReplay: vi.fn(),
     onOutput: vi.fn(),
     onExit,
+    onShellReplaced: vi.fn(),
     onClose: vi.fn(),
   });
   controller.connect();
