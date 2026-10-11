@@ -49,7 +49,6 @@ async function openMobileFiles(page: Page) {
   await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "SFTP", exact: true }).tap();
   await page.getByRole("button", { name: "Host", exact: true }).tap();
   await page.getByRole("dialog").getByText("bastion", { exact: true }).tap();
-  await page.getByRole("button", { name: "Connect", exact: true }).tap();
   await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/workspace");
   await expect(page.getByRole("button", { name: "projects", exact: true })).toBeVisible();
 }
@@ -231,7 +230,6 @@ test.describe("desktop pointer compatibility", () => {
     await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "SFTP", exact: true }).click();
     await page.getByRole("button", { name: "Host", exact: true }).click();
     await page.getByRole("dialog").getByText("bastion", { exact: true }).click();
-    await page.getByRole("button", { name: "Connect", exact: true }).click();
     const folder = page.getByRole("button", { name: "projects", exact: true });
     await expect(folder).toBeVisible();
     await folder.click();

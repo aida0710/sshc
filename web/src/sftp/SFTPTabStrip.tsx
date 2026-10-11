@@ -26,6 +26,18 @@ function tabLabels(tab: SFTPTab, unnamed: string, localName: string) {
   };
 }
 
+// On a mouse screen a tab is one line, the folder and its host side by side.
+// Touch keeps the heights a finger needs, and a compact screen stacks the
+// host under the folder inside its 44px tab.
+const tabLayout = {
+  compact: "min-h-11 flex-col justify-center",
+  regular: "min-h-7 items-center gap-1.5 [@media(pointer:coarse)]:min-h-10",
+};
+const controlSize = {
+  compact: "min-h-11 w-11",
+  regular: "min-h-7 w-7 [@media(pointer:coarse)]:min-h-10 [@media(pointer:coarse)]:w-8",
+};
+
 // Tabs share one width so changing hosts and directories does not reflow the
 // strip. Compact screens combine all file tabs here and keep touch controls
 // large; other screens allow movable tabs to split or join panes.
@@ -56,7 +68,8 @@ export function SFTPTabStrip({
   addDisabled?: boolean;
   trailing?: ReactNode;
   onSelect: (tabId: string) => void;
-  onClose: (tab: SFTPTab) => void;
+  // Shift on the close button asks to skip a confirmation.
+  onClose: (tab: SFTPTab, options: { skipConfirmation: boolean }) => void;
   onAdd: () => void;
   onChangeHost?: (tab: SFTPTab) => void;
   canChangeHost?: (tab: SFTPTab) => boolean;
@@ -66,6 +79,7 @@ export function SFTPTabStrip({
 }) {
   const t = useTranslate();
   const scroller = useRef<HTMLDivElement>(null);
+  const size = compact ? "compact" : "regular";
 
   useEffect(() => {
     const selected = scroller.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
@@ -120,10 +134,10 @@ export function SFTPTabStrip({
                 title={labels.title || labels.name}
                 onClick={() => onSelect(tab.id)}
                 onKeyDown={(event) => keyDown(event, tab, index)}
-                className={`flex min-w-0 flex-1 flex-col justify-center rounded px-2 py-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${compact ? "min-h-11" : "min-h-10"} ${selected ? "text-ink" : "text-ink-muted"}`}
+                className={`flex min-w-0 flex-1 rounded px-2 py-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${tabLayout[size]} ${selected ? "text-ink" : "text-ink-muted"}`}
               >
-                <span className="block w-full truncate text-sm font-medium leading-4">{labels.folder}</span>
-                {labels.host === "" ? null : <span className="mt-0.5 block w-full truncate text-[11px] leading-3.5 text-ink-muted">{labels.host}</span>}
+                <span className={`block min-w-0 truncate text-sm font-medium leading-4 ${compact ? "w-full" : ""}`}>{labels.folder}</span>
+                {labels.host === "" ? null : <span className={`block min-w-0 truncate text-[11px] leading-3.5 text-ink-muted ${compact ? "mt-0.5 w-full" : "max-w-[50%] shrink-0"}`}>{labels.host}</span>}
               </button>
               {selected && onChangeHost !== undefined ? (
                 <button
@@ -134,7 +148,7 @@ export function SFTPTabStrip({
                   title={t("sftp.chooseHostHeading")}
                   disabled={!canChangeHost(tab)}
                   onClick={() => onChangeHost(tab)}
-                  className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint ${compact ? "min-h-11 w-11" : "min-h-10 w-8"}`}
+                  className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint ${controlSize[size]}`}
                 >
                   <Icon name="chevronRight" className="size-3.5 rotate-90" />
                 </button>
@@ -143,8 +157,8 @@ export function SFTPTabStrip({
                 <button
                   type="button"
                   aria-label={t("sftp.closeTab", { name: labels.name })}
-                  onClick={() => onClose(tab)}
-                  className={`flex shrink-0 items-center justify-center rounded text-ink-faint hover:text-danger ${compact ? "min-h-11 w-11" : "min-h-10 w-8"}`}
+                  onClick={(event) => onClose(tab, { skipConfirmation: event.shiftKey })}
+                  className={`flex shrink-0 items-center justify-center rounded text-ink-faint hover:bg-hover hover:text-danger ${controlSize[size]}`}
                 >
                   <Icon name="close" className={compact ? "size-4" : "size-3"} />
                 </button>
@@ -158,7 +172,7 @@ export function SFTPTabStrip({
         aria-label={t("sftp.newTab")}
         disabled={addDisabled}
         onClick={onAdd}
-        className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint ${compact ? "min-h-11 w-11" : "min-h-10 w-8"}`}
+        className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint ${controlSize[size]}`}
       >
         <Icon name="plus" className={compact ? "size-5" : "size-4"} />
       </button>
