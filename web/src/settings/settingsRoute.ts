@@ -4,6 +4,7 @@ import type { IconName } from "../ui/icons";
 export const settingsPages = [
   "Engine",
   "Terminal",
+  "SFTP",
   "Shortcuts",
   "Notifications",
   "Connections",
@@ -27,6 +28,12 @@ export const settingsPageMeta: Record<
     label: "terminal.settingsHeading",
     description: "settings.terminalDescription",
     icon: "terminal",
+  },
+  SFTP: {
+    path: "/settings/sftp",
+    label: "sftp.settingsHeading",
+    description: "settings.sftpDescription",
+    icon: "files",
   },
   Shortcuts: {
     path: "/settings/shortcuts",

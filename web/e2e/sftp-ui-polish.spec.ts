@@ -48,16 +48,13 @@ test("keeps transfer states visible while settings are folded and identifies bot
   await expect(manager.getByText("bastion:/srv/get.txt → Local:/home/engine/get.txt", { exact: true })).toBeVisible();
   await manager.getByRole("button", { name: "Show details for put.txt", exact: true }).click();
   await expect(manager.getByText("Local:/home/engine/put.txt → bastion:/srv/put.txt", { exact: true })).toBeVisible();
+  await expect(manager.getByText("Needs attention: 1", { exact: true })).toBeVisible();
+  if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: join(process.env.SSHC_VISUAL_DIR, "transfer-states-and-routes-en.png"), animations: "disabled" });
   const settings = manager.getByRole("button", { name: "Transfer settings", exact: true });
   await settings.focus();
   await settings.press("Enter");
-  const settingsDialog = page.getByRole("dialog", { name: "Transfer settings", exact: true });
-  await expect(settingsDialog.getByRole("spinbutton", { name: "Speed limit", exact: true })).toBeVisible();
-  await settingsDialog.getByRole("button", { name: "Close transfer settings", exact: true }).click();
-  await expect(settingsDialog).toBeHidden();
-  await expect(settings).toBeFocused();
-  await expect(manager.getByText("Needs attention: 1", { exact: true })).toBeVisible();
-  if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: join(process.env.SSHC_VISUAL_DIR, "transfer-states-and-routes-en.png"), animations: "disabled" });
+  await expect(page).toHaveURL(/\/settings\/sftp$/);
+  await expect(page.getByRole("spinbutton", { name: "Speed limit", exact: true })).toBeVisible();
 });
 
 // Compact navigation and file controls must remain easy to tap on a phone.

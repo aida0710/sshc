@@ -32,16 +32,9 @@ const manager = vi.hoisted(() => {
       return () => listeners.delete(listener);
     },
     getSnapshot: () => jobs,
-    getMaxConcurrent: vi.fn(() => 2),
-    getClearCompletedAfter: vi.fn(() => 0),
     getProcessingStopped: vi.fn(() => false),
-    getSpeedLimitBytesPerSecond: vi.fn(() => 0),
-    getAutoReconnect: vi.fn(() => false),
     getMaxReconnectAttempts: vi.fn(() => 0),
     getExcludePatterns: vi.fn(() => [] as string[]),
-    getLargeFileThreshold: vi.fn(() => 100 << 20),
-    getLargeFileParallelism: vi.fn(() => 4),
-    getLargeFileChunkBytes: vi.fn(() => 32 << 20),
     hasUploadSource: vi.fn(() => true),
     applySettings: vi.fn(async () => undefined),
     move: vi.fn(async () => undefined),
@@ -100,16 +93,9 @@ describe("the transfer queue", () => {
     window.localStorage.clear();
     window.localStorage.setItem("sshc.sftp.queueView", JSON.stringify({ collapsed: false, height: 224 }));
     vi.clearAllMocks();
-    manager.getMaxConcurrent.mockReturnValue(2);
-    manager.getClearCompletedAfter.mockReturnValue(0);
     manager.getProcessingStopped.mockReturnValue(false);
-    manager.getSpeedLimitBytesPerSecond.mockReturnValue(0);
-    manager.getAutoReconnect.mockReturnValue(false);
     manager.getMaxReconnectAttempts.mockReturnValue(0);
     manager.getExcludePatterns.mockReturnValue([]);
-    manager.getLargeFileThreshold.mockReturnValue(100 << 20);
-    manager.getLargeFileParallelism.mockReturnValue(4);
-    manager.getLargeFileChunkBytes.mockReturnValue(32 << 20);
     manager.hasUploadSource.mockReturnValue(true);
     manager.setJobs([]);
   });
@@ -128,47 +114,20 @@ describe("the transfer queue", () => {
     expect(screen.getByText("Completed")).toBeVisible();
   });
 
-  it("opens grouped settings from a folded empty queue and returns focus after closing", async () => {
+  it("goes to Settings > SFTP from a folded empty queue without unfolding it", async () => {
     window.localStorage.setItem("sshc.sftp.queueView", JSON.stringify({ collapsed: true, height: 224 }));
-    render(<TransferManagerList />);
-    const trigger = screen.getByRole("button", { name: "Transfer settings" });
-    await userEvent.click(trigger);
-    expect(screen.getByRole("dialog", { name: "Transfer settings" })).toBeVisible();
-    expect(screen.getByRole("group", { name: "Speed and recovery" })).toBeVisible();
-    expect(screen.getByRole("group", { name: "Queue and finished transfers" })).toBeVisible();
-    expect(screen.getByRole("group", { name: "Split transfers" })).toBeVisible();
-    expect(screen.getByRole("textbox", { name: "Exclusion patterns (one per line)" })).toBeVisible();
-    await userEvent.keyboard("{Escape}");
+    const navigate = vi.fn();
+    render(<TransferManagerList onNavigateLocation={navigate} />);
+    await userEvent.click(screen.getByRole("button", { name: "Transfer settings" }));
+    expect(navigate).toHaveBeenCalledWith("/settings/sftp");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
-    expect(screen.getByRole("button", { name: "Expand Transfer Manager" })).toBeVisible();
+    expect(screen.queryByLabelText("Split at")).not.toBeInTheDocument();
     expect(JSON.parse(window.localStorage.getItem("sshc.sftp.queueView") ?? "{}")).toMatchObject({ collapsed: true, height: 224 });
   });
 
-  it("opens the saved settings only when requested before a transfer starts", async () => {
+  it("offers no settings button when it has nowhere to go", () => {
     render(<TransferManagerList />);
-    expect(screen.getByRole("button", { name: "Collapse Transfer Manager" })).toBeVisible();
-    expect(screen.queryByLabelText("Split at")).not.toBeInTheDocument();
-    const settingsButton = screen.getByRole("button", { name: "Transfer settings" });
-    settingsButton.focus();
-    await userEvent.keyboard("{Enter}");
-    expect(screen.getByRole("spinbutton", { name: "Split at" })).toHaveValue(100);
-    expect(screen.getByRole("spinbutton", { name: "Streams" })).toHaveValue(4);
-    expect(screen.getByRole("spinbutton", { name: "Chunk" })).toHaveValue(32);
-    expect(screen.getByRole("dialog", { name: "Transfer settings" })).toBeVisible();
-    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
-  });
-
-  it("commits an explicit KiB/s limit and enables a bounded recovery budget", async () => {
-    render(<TransferManagerList />);
-    await userEvent.click(screen.getByRole("button", { name: "Transfer settings" }));
-    const speed = screen.getByRole("spinbutton", { name: "Speed limit" });
-    fireEvent.change(speed, { target: { value: "2048" } });
-    fireEvent.blur(speed);
-    expect(manager.applySettings).toHaveBeenLastCalledWith(expect.objectContaining({ speedLimitBytesPerSecond: 2048 * 1024 }));
-    await userEvent.click(screen.getByRole("checkbox", { name: "Recover after connection loss" }));
-    expect(manager.applySettings).toHaveBeenLastCalledWith(expect.objectContaining({ autoReconnect: true, maxReconnectAttempts: 3 }));
-    expect(screen.getByText("KiB/s")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Transfer settings" })).not.toBeInTheDocument();
   });
 
   it("shows a reconnect wait with its budget and a manual pause action", () => {
@@ -212,42 +171,12 @@ describe("the transfer queue", () => {
     expect(screen.queryByRole("button", { name: /Move running/ })).not.toBeInTheDocument();
   });
 
-  it("sends the concurrency and auto-clear settings to the engine together", async () => {
-    manager.getClearCompletedAfter.mockReturnValue(300);
-    manager.setJobs([job("one")]);
-    render(<TransferManagerList />);
-    await userEvent.click(screen.getByRole("button", { name: "Transfer settings" }));
-
-    expect(screen.getByRole("combobox", { name: "Clear finished after" })).toHaveValue("300");
-
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "5");
-    expect(manager.applySettings).toHaveBeenCalledWith({ maxConcurrent: 5, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, excludePatterns: [] });
-
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Clear finished after" }), "0");
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, excludePatterns: [] });
-
-    const splitAt = screen.getByRole("spinbutton", { name: "Split at" });
-    fireEvent.change(splitAt, { target: { value: "73" } });
-    fireEvent.blur(splitAt);
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 73 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, excludePatterns: [] });
-
-    const streams = screen.getByRole("spinbutton", { name: "Streams" });
-    fireEvent.change(streams, { target: { value: "128" } });
-    fireEvent.blur(streams);
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 128, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, excludePatterns: [] });
-
-    const chunk = screen.getByRole("spinbutton", { name: "Chunk" });
-    fireEvent.change(chunk, { target: { value: "41" } });
-    fireEvent.blur(chunk);
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 41 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, excludePatterns: [] });
-  });
-
   it("stops the whole queue without touching what is already running", async () => {
     manager.setJobs([job("one")]);
     const { rerender } = render(<TransferManagerList />);
 
     await userEvent.click(screen.getByRole("button", { name: "Stop starting new transfers" }));
-    expect(manager.applySettings).toHaveBeenCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: true, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, excludePatterns: [] });
+    expect(manager.applySettings).toHaveBeenCalledWith({ processingStopped: true });
 
     manager.getProcessingStopped.mockReturnValue(true);
     rerender(<TransferManagerList />);
@@ -280,7 +209,8 @@ describe("the transfer queue", () => {
       addEventListener: vi.fn(), removeEventListener: vi.fn(),
     }));
     manager.setJobs([job("one")]);
-    const { container, unmount } = render(<TransferManagerList />);
+    const navigate = vi.fn();
+    const { container, unmount } = render(<TransferManagerList onNavigateLocation={navigate} />);
     try {
       const dock = screen.getByRole("button", { name: "Expand Transfer Manager" });
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -291,11 +221,6 @@ describe("the transfer queue", () => {
       expect(container.querySelector('[role="dialog"]')).toBeNull();
       expect(screen.queryByRole("separator")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Close Transfer Manager" })).toHaveFocus();
-      expect(screen.queryByLabelText("Split at")).not.toBeInTheDocument();
-      await userEvent.click(screen.getByRole("button", { name: "Transfer settings" }));
-      expect(screen.getByRole("spinbutton", { name: "Split at" })).toBeVisible();
-      await userEvent.click(screen.getByRole("button", { name: "Close transfer settings" }));
-      expect(screen.getByRole("button", { name: "Transfer settings" })).toHaveFocus();
       await userEvent.click(screen.getByRole("button", { name: "Transfer queue actions" }));
       expect(screen.getByRole("dialog", { name: "Transfer Manager" })).toBeVisible();
       await userEvent.click(screen.getByRole("menuitem", { name: "Pause all" }));
@@ -305,6 +230,10 @@ describe("the transfer queue", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(dock).toHaveFocus();
       expect(JSON.parse(window.localStorage.getItem("sshc.sftp.queueView") ?? "{}")).toMatchObject({ collapsed: false, height: 224 });
+      await userEvent.click(dock);
+      await userEvent.click(screen.getByRole("button", { name: "Transfer settings" }));
+      expect(navigate).toHaveBeenCalledWith("/settings/sftp");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     } finally {
       unmount(); window.matchMedia = originalMatchMedia;
     }

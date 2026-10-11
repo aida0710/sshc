@@ -5,6 +5,7 @@ import { useTranslate } from "../i18n/context";
 import { PageHeader } from "../ui/page";
 import { Card } from "../ui/surface";
 import { SessionSettingsSection, type SessionSettingsState } from "./SessionSettingsSection";
+import { SFTPSettingsSection } from "./SFTPSettingsSection";
 import { EngineSettingsSection } from "./EngineSettingsSection";
 import { MasterPasswordSection } from "./MasterPasswordSection";
 import { NotificationSettingsSection } from "./NotificationSettingsSection";
@@ -58,6 +59,7 @@ export function SettingsPanel({
         ) : null}
         {shows("Engine") ? <EngineSettingsSection api={api} showHeading={all} passwordless={passwordless} /> : null}
         {shows("Terminal") ? <TerminalSettingsSection api={api} showHeading={all} onSettingsChange={onTerminalSettingsChange} /> : null}
+        {shows("SFTP") ? <SFTPSettingsSection showHeading={all} /> : null}
         {shows("Notifications") ? <NotificationSettingsSection showHeading={all} /> : null}
         {terminalSessions !== undefined && shows("Connections") ? <SessionSettingsSection terminalSessions={terminalSessions} showHeading={all} /> : null}
         {shows("Password") ? <MasterPasswordSection api={api} showHeading={all} onVaultChanged={onVaultChanged} /> : null}

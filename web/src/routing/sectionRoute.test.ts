@@ -57,6 +57,7 @@ describe("section routes", () => {
   it.each([
     "/settings/engine",
     "/settings/terminal",
+    "/settings/sftp",
     "/settings/notifications",
     "/settings/connections",
     "/settings/password",
