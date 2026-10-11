@@ -820,6 +820,53 @@ func TestAutomaticReconnectCanBeStoppedFromTheAPI(t *testing.T) {
 	}
 }
 
+func TestTheStreamSaysWhenAReconnectReplacedTheShell(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	fixture.registry.ReconnectDelay = func(int) time.Duration { return 0 }
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"bastion"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("open = %d: %s", response.StatusCode, body)
+	}
+	var opened api.OpenTerminalSessionResponse
+	if err := json.Unmarshal([]byte(body), &opened); err != nil {
+		t.Fatal(err)
+	}
+	connection, _ := fixture.dial(t, fixture.newTicket(t, opened.Session.Id))
+	if connection == nil {
+		t.Fatal("the stream was unavailable")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	readReplayNotice(t, connection, ctx)
+
+	fixture.mutex.Lock()
+	first := fixture.ssh[0]
+	fixture.mutex.Unlock()
+	first.exit(terminal.ExitInfo{Code: terminal.ExitCodeUnknown, TransportLost: true})
+
+	// The notices about the lost connection arrive as output first; the
+	// replacement is a control message of its own.
+	for {
+		kind, payload, err := connection.Read(ctx)
+		if err != nil {
+			t.Fatalf("no replacement notice before the stream ended: %v", err)
+		}
+		if kind != websocket.MessageText {
+			continue
+		}
+		if string(payload) != `{"shellReplaced":{}}` {
+			t.Fatalf("control message = %s, want the shell replacement", payload)
+		}
+		break
+	}
+	fixture.mutex.Lock()
+	replacement := len(fixture.ssh)
+	fixture.mutex.Unlock()
+	if replacement < 2 {
+		t.Fatalf("the replacement was announced before a new shell was opened (%d shells)", replacement)
+	}
+}
+
 func TestExplicitReconnectRefusesALocalShell(t *testing.T) {
 	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
 	id, _ := fixture.openShell(t)

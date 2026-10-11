@@ -6,6 +6,8 @@ export type StreamHandlers = {
   onReplay: (replay: ReplayReport) => void;
   onOutput: (chunk: Uint8Array) => void;
   onExit: (exit: ExitReport) => void;
+  // A reconnect replaced the shell behind this stream with a new one.
+  onShellReplaced: () => void;
   onClose: () => void;
 };
 
@@ -58,6 +60,10 @@ export function openStream(ticket: string, handlers: StreamHandlers): TerminalSt
       const replay = (message as { replay?: unknown }).replay;
       if (validReplay(replay)) {
         handlers.onReplay(replay);
+        return;
+      }
+      if ((message as { shellReplaced?: unknown }).shellReplaced !== undefined) {
+        handlers.onShellReplaced();
         return;
       }
       const exit = (message as { exit?: ExitReport }).exit;
