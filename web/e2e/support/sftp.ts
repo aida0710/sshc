@@ -10,13 +10,11 @@ export async function sftpHostPicker(page: Page, pane: Locator): Promise<Locator
   return page.locator("[data-sftp-pane-tabs] button[data-value]:visible");
 }
 
-// Connects a pane to `alias` the way a user does: opens the host picker,
-// chooses the host and presses Connect. `pane` defaults to the only visible
-// pane.
+// Connects a pane to `alias` the way a user does: opens the host picker and
+// chooses the host, which connects. `pane` defaults to the only visible pane.
 export async function connectSFTPHost(page: Page, alias: string, pane: Locator = page.getByRole("tabpanel")): Promise<void> {
   await (await sftpHostPicker(page, pane)).click();
   await page.getByRole("dialog").getByText(alias, { exact: true }).click();
-  await pane.getByRole("button", { name: /^(Connect|接続)$/ }).click();
 }
 
 export async function openLocalSFTPDirectory({ page, pane, directory }: {

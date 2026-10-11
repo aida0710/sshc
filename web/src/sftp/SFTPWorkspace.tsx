@@ -21,6 +21,19 @@ import {
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
 } from "./sftpPanes";
 
+// Why closing a tab waits for a confirmation, and what the dialog names.
+type CloseTabIntent =
+  | { kind: "unsaved"; tabId: string; path: string }
+  | { kind: "connected"; tabId: string; alias: string };
+
+function withMembership(tabIds: ReadonlySet<string>, tabId: string, member: boolean): ReadonlySet<string> {
+  if (tabIds.has(tabId) === member) return tabIds;
+  const next = new Set(tabIds);
+  if (member) next.add(tabId);
+  else next.delete(tabId);
+  return next;
+}
+
 // One stable callback per tab, so a panel's effect that depends on it does not
 // re-run on every render of the workspace.
 function useCallbackPerTab<T>(handle: (tabId: string, value: T) => void) {
@@ -72,7 +85,8 @@ export function SFTPWorkspace({
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
   const [hostPickerRequests, setHostPickerRequests] = useState<Record<string, number>>({});
   const [dirtyTabs, setDirtyTabs] = useState<Map<string, string>>(() => new Map());
-  const [closeTabIntent, setCloseTabIntent] = useState<{ tabId: string; path: string } | null>(null);
+  const [connectedTabs, setConnectedTabs] = useState<ReadonlySet<string>>(() => new Set());
+  const [closeTabIntent, setCloseTabIntent] = useState<CloseTabIntent | null>(null);
   const workspaceRoot = useRef<HTMLElement | null>(null);
   const compactViewport = useCompactViewport(workspaceRoot);
   // Restoring is a one-shot per tab: once a panel has opened its remembered
@@ -117,11 +131,17 @@ export function SFTPWorkspace({
     });
   });
 
+  const connectionReporter = useCallbackPerTab<boolean>((tabId, connected) => {
+    setConnectedTabs((current) => withMembership(current, tabId, connected));
+  });
+
   function forgetTab(tabId: string) {
     restoring.current.delete(tabId);
     blockers.current.delete(tabId);
     blockerReporter.forget(tabId);
     dirtyReporter.forget(tabId);
+    connectionReporter.forget(tabId);
+    setConnectedTabs((current) => withMembership(current, tabId, false));
     setHostPickerRequests((current) => {
       if (!(tabId in current)) return current;
       const next = { ...current };
@@ -147,10 +167,16 @@ export function SFTPWorkspace({
     setPanes((current) => closeTab(current, tabId));
   }
 
-  function requestCloseTab(tab: SFTPTab) {
+  // Unsaved edits are always confirmed: they would be lost. A live connection
+  // is confirmed unless Shift was held, the quick way for someone who means it.
+  function requestCloseTab(tab: SFTPTab, { skipConfirmation }: { skipConfirmation: boolean }) {
     const dirtyPath = dirtyTabs.get(tab.id);
     if (dirtyPath !== undefined) {
-      setCloseTabIntent({ tabId: tab.id, path: dirtyPath });
+      setCloseTabIntent({ kind: "unsaved", tabId: tab.id, path: dirtyPath });
+      return;
+    }
+    if (connectedTabs.has(tab.id) && !skipConfirmation) {
+      setCloseTabIntent({ kind: "connected", tabId: tab.id, alias: tab.alias });
       return;
     }
     removeTab(tab.id);
@@ -311,6 +337,7 @@ export function SFTPWorkspace({
                     onQueueOpen={() => setOpenQueueRequest((current) => current + 1)}
                     {...(selected ? { onNavigationBlockerChange: blockerReporter.forTab(tab.id) } : {})}
                     onDirtyChange={dirtyReporter.forTab(tab.id)}
+                    onConnectionChange={connectionReporter.forTab(tab.id)}
                     {...(onNavigateLocation === undefined ? {} : { onNavigateLocation })}
                     {...(onOpenTerminal === undefined ? {} : { onOpenTerminal })}
                     {...(ownsTarget ? { onTargetHandled } : {})}
@@ -344,8 +371,8 @@ export function SFTPWorkspace({
       <div className="flex min-h-0 min-w-0 flex-1">
         {panes.map(renderPane)}
       </div>
-      <TransferManagerList openRequest={openQueueRequest} />
-      {closeTabIntent === null ? null : (
+      <TransferManagerList openRequest={openQueueRequest} onNavigateLocation={onNavigateLocation} />
+      {closeTabIntent?.kind === "unsaved" ? (
         <ConfirmDialog
           id="sftp-close-dirty-tab"
           heading={t("sftp.leaveHeading")}
@@ -353,13 +380,29 @@ export function SFTPWorkspace({
           confirmLabel={t("sftp.leaveDiscard")}
           cancelLabel={t("sftp.leaveStay")}
           onConfirm={() => {
-            const intent = closeTabIntent;
             setCloseTabIntent(null);
-            removeTab(intent.tabId);
+            removeTab(closeTabIntent.tabId);
           }}
           onCancel={() => setCloseTabIntent(null)}
         />
-      )}
+      ) : null}
+      {closeTabIntent?.kind === "connected" ? (
+        <ConfirmDialog
+          id="sftp-close-connected-tab"
+          heading={t("sftp.closeConnectedHeading", { host: closeTabIntent.alias })}
+          body={<>
+            <p className="text-sm text-ink-muted">{t("sftp.closeConnectedBody")}</p>
+            <p className="mt-2 text-xs text-ink-faint">{t("sftp.closeConnectedShiftHint")}</p>
+          </>}
+          confirmLabel={t("sftp.closeConnectedConfirm")}
+          cancelLabel={t("sftp.closeConnectedCancel")}
+          onConfirm={() => {
+            setCloseTabIntent(null);
+            removeTab(closeTabIntent.tabId);
+          }}
+          onCancel={() => setCloseTabIntent(null)}
+        />
+      ) : null}
       {compareTabsOpen ? <SFTPCompareTabsDialog tabs={comparisonTabs} currentTabId={focusedLocation?.id ?? ""}
         onCompare={(left, right) => { setCompareTabsOpen(false); setComparisonLocations({ left, right }); }}
         onDismiss={() => setCompareTabsOpen(false)} /> : null}

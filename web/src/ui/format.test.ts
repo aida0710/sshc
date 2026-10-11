@@ -20,6 +20,7 @@ describe("formatBytes", () => {
     [1536, "1.5 KiB"],
     [5 << 20, "5.0 MiB"],
     [(1 << 30) * 2.25, "2.3 GiB"],
+    [2 ** 50 * 3, "3.0 PiB"],
   ])("shows %d bytes as %s in binary units", (bytes, expected) => {
     expect(formatBytes(bytes, { locale: "en" })).toBe(expected);
   });

@@ -106,6 +106,7 @@ export function SFTPPanel({
   onSortChange = () => undefined,
   onNavigationBlockerChange,
   onDirtyChange,
+  onConnectionChange,
   onNavigateLocation,
   onOpenTerminal,
   onQueueOpen,
@@ -128,6 +129,8 @@ export function SFTPPanel({
   onSortChange?: (sort: SFTPSortState) => void;
   onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
   onDirtyChange?: ((path: string | null) => void) | undefined;
+  // Whether the pane holds a live SSH connection; the engine's own disk never does.
+  onConnectionChange?: ((connected: boolean) => void) | undefined;
   onNavigateLocation?: ((url: string) => void) | undefined;
   onOpenTerminal?: ((alias: string, path: string) => void | Promise<void>) | undefined;
   onQueueOpen?: () => void;
@@ -182,6 +185,11 @@ export function SFTPPanel({
   const { alias, path, connected, entries, problem, setProblem, pendingPath, listingFailed, source } = browser;
   const can = source?.can;
   const local = source?.local === true;
+  const holdsConnection = connected && !local;
+  useEffect(() => {
+    onConnectionChange?.(holdsConnection);
+    return () => onConnectionChange?.(false);
+  }, [holdsConnection, onConnectionChange]);
   const editor = useSFTPTextEditor({
     onProblem: setProblem,
     // The saved revision is what the listing must show next.
@@ -278,7 +286,7 @@ export function SFTPPanel({
       setProblem(t("sftp.linkTargetInvalid"));
       return;
     }
-    browser.selectHost(target.alias);
+    browser.resetForHost(target.alias);
     const directory = remoteParentOf(target.path);
     void load(directory, { alias: target.alias }).then(async (loaded) => {
       if (loaded === null) return;
@@ -716,7 +724,7 @@ export function SFTPPanel({
             )}
           </div>
           {can?.space && connected ? <SFTPFilesystemSpace alias={alias} path={path} refreshKey={entries} /> : null}
-          {showTransfers ? <TransferManagerList openRequest={transfers.openQueueRequest} /> : null}
+          {showTransfers ? <TransferManagerList openRequest={transfers.openQueueRequest} onNavigateLocation={onNavigateLocation} /> : null}
         </div>
       </div>
 

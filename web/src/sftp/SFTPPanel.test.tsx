@@ -47,7 +47,6 @@ async function chooseHost(alias: string) {
   await userEvent.click(screen.getByRole("button", { name: "Host" }));
   const label = await screen.findByText(alias, { selector: "span.font-medium" });
   await userEvent.click(label.closest("button")!);
-  await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 }
 
 describe("SFTPPanel uploads", () => {
@@ -151,7 +150,7 @@ describe("SFTPPanel uploads", () => {
     expect(await screen.findByText("VPN: tohoku")).toBeVisible();
   });
 
-  it("does not connect until the selected host is explicitly connected", async () => {
+  it("connects as soon as a host is chosen, without a further Connect", async () => {
     render(<SFTPPanel aliases={["edge"]} />);
 
     expect(screen.getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "");
@@ -160,12 +159,9 @@ describe("SFTPPanel uploads", () => {
     await userEvent.click(screen.getByRole("button", { name: "Host" }));
     const label = await screen.findByText("edge", { selector: "span.font-medium" });
     await userEvent.click(label.closest("button")!);
-    expect(api.list).not.toHaveBeenCalled();
-    expect(screen.getByText("edge is disconnected")).toBeVisible();
-
-    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
-    expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/remote");
+    expect(screen.queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
+    expect(await screen.findByTestId("sftp-current-path")).toHaveAttribute("data-path", "/remote");
   });
 
   it("opens a terminal at the displayed remote directory", async () => {
@@ -1093,7 +1089,7 @@ describe("SFTPPanel uploads", () => {
     api.list.mockResolvedValue({ path: "/", entries: [] });
     render(<SFTPPanel aliases={["edge"]} />);
 
-    expect(await screen.findByText("Choose Local or a saved SSH host. Connect after choosing an SSH host.")).toBeVisible();
+    expect(await screen.findByText("Choose Local or a saved SSH host. An SSH host connects when you choose it.")).toBeVisible();
     await chooseHost("edge");
 
     expect(await screen.findByText("This directory is empty.")).toBeVisible();

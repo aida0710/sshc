@@ -503,6 +503,7 @@ describe("App", () => {
       "OTP",
       "Engine",
       "Terminal",
+      "SFTP",
       "Notifications",
       "Open connections",
       "Master password",
@@ -550,6 +551,7 @@ describe("App", () => {
     for (const label of [
       "Engine",
       "Terminal",
+      "SFTP",
       "Notifications",
       "Open connections",
       "Master password",

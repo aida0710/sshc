@@ -5,7 +5,7 @@ description: 外観、Terminalの入力、通知、ローカルシェルに関�
 
 # 設定
 
-［Menu］から、［Engine］、［Terminal］、［Keyboard shortcuts］、［Notifications］、［Open connections］、［Master password］を直接開けます。テーマと表示言語は［Preferences］、接続先ごとの項目は［Connections］の［sshc］タブにあります。
+［Menu］から、［Engine］、［Terminal］、［SFTP］、［Keyboard shortcuts］、［Notifications］、［Open connections］、［Master password］を直接開けます。テーマと表示言語は［Preferences］、接続先ごとの項目は［Connections］の［sshc］タブにあります。
 
 ## Engine
 
@@ -77,6 +77,10 @@ OSC 52と文字コードは、接続先ごとに上書きできます。OSC 8リ
 ## ローカルシェル
 
 OS上で利用できる既定のシェルプロファイルと、開始ディレクトリを選べます。WindowsではPowerShell系、Unix系ではzsh、fish、bashなど、検出された候補が表示されます。SFTPのローカルフォルダから［ここでターミナルを開く］を選ぶと、同じ既定プロファイルを使い、表示中のフォルダを開始場所にします。通常の［新しいセッション］から開くローカルシェルは、ここで設定した開始ディレクトリを使います。
+
+## SFTP
+
+［Settings］→［SFTP］では、SFTPの転送の速度上限と通信断後の復旧、同時実行数、完了項目の自動消去、分割転送、転送の除外を設定します。SFTP画面の転送マネージャーにある［転送設定］からも、このページへ移動できます。設定はsshcエンジンに保存され、すべてのブラウザとCLIで共通です。詳細は[転送マネージャー](/sftp/transfers)を参照してください。
 
 ## 通知
 

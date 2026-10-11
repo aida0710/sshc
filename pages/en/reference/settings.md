@@ -5,7 +5,7 @@ description: Appearance, terminal, input, notifications, and local-shell setting
 
 # Settings
 
-Menu is organized into feature groups. Its Settings group links directly to Engine, Terminal, Keyboard shortcuts, Notifications, Open connections, and Master password. Preferences at the bottom of Menu controls the theme and display language. Connection-specific behavior lives in the connection's sshc tab.
+Menu is organized into feature groups. Its Settings group links directly to Engine, Terminal, SFTP, Keyboard shortcuts, Notifications, Open connections, and Master password. Preferences at the bottom of Menu controls the theme and display language. Connection-specific behavior lives in the connection's sshc tab.
 
 ## Keyboard shortcuts
 
@@ -64,6 +64,10 @@ Select **Change** to open the searchable background image library. The normal se
 The library limit defaults to 16 MiB and can be set from 1 to 1024 MiB. Lowering it never removes or recompresses existing images. Large or numerous images increase local storage, encrypted-sync transfer, and memory use.
 
 When an image is renamed, its extension follows the detected format and overall and per-connection references are updated in the same operation. An existing image is never overwritten. Deleting an image clears references to it in the same transaction.
+
+## SFTP
+
+**Settings → SFTP** holds the SFTP transfer settings: the speed limit and recovery after a lost connection, concurrency, clearing finished transfers, split transfers, and transfer exclusions. **Transfer settings** in the SFTP Transfer Manager opens the same page. The engine stores these settings, so every browser and the CLI share them. See [Transfer Manager](/en/sftp/transfers) for details.
 
 ## Local shell and notifications
 

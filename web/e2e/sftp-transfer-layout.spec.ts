@@ -58,16 +58,13 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 640 
     await details.click();
     await expect(card.getByText("nas:/backups/app-release.tar.gz → bastion:/srv/releases/app-release.tar.gz", { exact: true })).toBeVisible();
     await card.getByRole("button", { name: "Hide details for app-release.tar.gz", exact: true }).click();
-    const settings = manager.getByRole("button", { name: "Transfer settings", exact: true });
-    await settings.click();
-    const settingsDialog = page.getByRole("dialog", { name: "Transfer settings", exact: true });
-    await expect(settingsDialog.getByRole("group", { name: "Speed and recovery", exact: true })).toBeVisible();
-    await expect(settingsDialog.getByRole("spinbutton", { name: "Speed limit", exact: true })).toHaveValue("2048");
-    if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: join(process.env.SSHC_VISUAL_DIR, `transfer-settings-${viewport.width}x${viewport.height}-en.png`), animations: "disabled" });
-    await settingsDialog.getByRole("button", { name: "Close transfer settings", exact: true }).click();
-    await expect(settings).toBeFocused();
-    await expect(manager).toBeVisible();
     if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: join(process.env.SSHC_VISUAL_DIR, `transfer-layout-${viewport.width}x${viewport.height}-en.png`), animations: "disabled" });
+    await manager.getByRole("button", { name: "Transfer settings", exact: true }).click();
+    await expect(page).toHaveURL(/\/settings\/sftp$/);
+    await expect(manager).toBeHidden();
+    await expect(page.getByRole("group", { name: "Speed and recovery", exact: true })).toBeVisible();
+    await expect(page.getByRole("spinbutton", { name: "Speed limit", exact: true })).toHaveValue("2048");
+    if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: join(process.env.SSHC_VISUAL_DIR, `transfer-settings-${viewport.width}x${viewport.height}-en.png`), animations: "disabled" });
   });
 }
 

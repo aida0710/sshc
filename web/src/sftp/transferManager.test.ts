@@ -534,6 +534,19 @@ describe("SFTPTransferManager engine ownership", () => {
     await vi.waitFor(() => expect(manager.getSnapshot().every((job) => job.status === "completed")).toBe(true));
   });
 
+  it("sends a change to one setting together with the others the engine reported", async () => {
+    const api = engineAPI();
+    const manager = new SFTPTransferManager(api, 0);
+    await manager.reconcile();
+    await manager.applySettings({ speedLimitBytesPerSecond: 2048 });
+    expect(api.updateTransferSettings).toHaveBeenCalledWith(expect.objectContaining({
+      maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false,
+      largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20,
+      speedLimitBytesPerSecond: 2048,
+    }));
+    expect(manager.getSettings().speedLimitBytesPerSecond).toBe(2048);
+  });
+
   it("lets an engine-side copy that met an existing target be overwritten", async () => {
     const api = engineAPI();
     const manager = new SFTPTransferManager(api, 0);
