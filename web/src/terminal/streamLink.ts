@@ -75,6 +75,7 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
             options.onOutput(chunk);
             cursor = (cursor ?? 0) + chunk.byteLength;
           },
+          onShellReplaced: options.onShellReplaced,
           onExit: (exit) => {
             stopped = true;
             options.onLink({ phase: "live" });

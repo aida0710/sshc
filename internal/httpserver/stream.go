@@ -41,6 +41,12 @@ type replayMessage struct {
 	} `json:"replay"`
 }
 
+// shellReplacedMessage は、表示していたシェルが再接続で新しいシェルに替わったことを
+// 伝える。ブラウザは、前のシェルへ送るつもりで確認していた貼り付けを取り消す。
+type shellReplacedMessage struct {
+	ShellReplaced struct{} `json:"shellReplaced"`
+}
+
 const (
 	// maxKeystrokeFrame は、一度の打鍵として受け取る上限である。貼り付けは
 	// これより大きくなりうるので、ユーザーが打つ 1 文字ではなく 1 画面分を基準にする。
@@ -130,10 +136,8 @@ func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Con
 		if len(replay.Data) > 0 && !writeFrame(ctx, connection, websocket.MessageBinary, replay.Data) {
 			return
 		}
-		for chunk := range stream.Output() {
-			if !writeFrame(ctx, connection, websocket.MessageBinary, chunk) {
-				return
-			}
+		if !forwardOutput(ctx, connection, stream) {
+			return
 		}
 		// チャンネルが閉じたのが「落とされた」ためなら、終了は起きていない。
 		if stream.Dropped() {
@@ -182,6 +186,27 @@ func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Con
 	session.Detach(stream)
 	<-writerDone
 	_ = connection.CloseNow()
+}
+
+// forwardOutput は、出力とシェルの差し替えの知らせを、出力が閉じるまで送る。
+// 書き出しに失敗したら false を返す。
+func forwardOutput(ctx context.Context, connection *websocket.Conn, stream *terminal.Stream) bool {
+	for {
+		select {
+		case chunk, open := <-stream.Output():
+			if !open {
+				return true
+			}
+			if !writeFrame(ctx, connection, websocket.MessageBinary, chunk) {
+				return false
+			}
+		case <-stream.ShellReplaced():
+			encoded, err := json.Marshal(shellReplacedMessage{})
+			if err != nil || !writeFrame(ctx, connection, websocket.MessageText, encoded) {
+				return false
+			}
+		}
+	}
 }
 
 func clampDimension(value int) uint16 {

@@ -13,13 +13,28 @@ const streamDepth = 256
 
 // Stream は、ひとつのアタッチである。
 type Stream struct {
-	output  chan []byte
-	closed  sync.Once
-	dropped atomic.Bool
+	output chan []byte
+	// shellReplaced は、表示していたシェルが新しいシェルに替わったことを知らせる。
+	// 受け手が知りたいのは替わったかどうかだけなので、知らせは 1 つ溜まれば足りる。
+	shellReplaced chan struct{}
+	closed        sync.Once
+	dropped       atomic.Bool
 }
 
 // Output は、このアタッチへ配る出力である。アタッチが外れると閉じる。
 func (s *Stream) Output() <-chan []byte { return s.output }
+
+// ShellReplaced は、再接続でシェルが替わるたびに知らせる。ブラウザが前のシェルへ
+// 送るつもりで確認していた貼り付けを取り消すのに使う。
+func (s *Stream) ShellReplaced() <-chan struct{} { return s.shellReplaced }
+
+func (s *Stream) announceShellReplaced() {
+	select {
+	case s.shellReplaced <- struct{}{}:
+	default:
+		// 前の知らせがまだ読まれていない。それが既に「替わった」と伝えている。
+	}
+}
 
 // Dropped は、このアタッチが追いつけずに落とされたかを報告する。
 func (s *Stream) Dropped() bool { return s.dropped.Load() }
@@ -45,7 +60,7 @@ func (s *Session) AttachFrom(cursor uint64) (RingRead, *Stream, bool) {
 	if !ok {
 		return RingRead{}, nil, false
 	}
-	stream := &Stream{output: make(chan []byte, streamDepth)}
+	stream := &Stream{output: make(chan []byte, streamDepth), shellReplaced: make(chan struct{}, 1)}
 	if s.exited != nil {
 		// 終了済みのセッションにライブの出力は無い。読めるものを渡してから閉じる。
 		stream.close()
@@ -77,6 +92,13 @@ func (s *Session) closeStreamsLocked() {
 	for stream := range s.streams {
 		delete(s.streams, stream)
 		stream.close()
+	}
+}
+
+// announceShellReplacedLocked は、アタッチしているものへシェルが替わったことを知らせる。
+func (s *Session) announceShellReplacedLocked() {
+	for stream := range s.streams {
+		stream.announceShellReplaced()
 	}
 }
 
