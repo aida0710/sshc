@@ -137,13 +137,11 @@ try {
   console.log("PASS: WebターミナルでSSH接続とコマンド実行");
 
   await ui.getByRole("link", { name: "SFTP", exact: true }).click();
-  const pane = ui.getByRole("tabpanel");
   const fileTabs = ui.getByRole("tablist", { name: "左ペインのタブ", exact: true });
   await fileTabs.getByRole("button", { name: "ホスト", exact: true }).click();
   await ui.getByRole("dialog", { name: "接続先を選択", exact: true })
     .getByRole("button", { name: /^demo-a(?:\s|$)/ }).click();
-  await fileTabs.getByRole("tab", { name: "demo-a", selected: true, exact: true }).waitFor();
-  await pane.getByRole("button", { name: "接続", exact: true }).click();
+  // Choosing the host connects at once, so the tab goes straight to its first directory.
   await fileTabs.getByRole("tab", { name: "demo-a:root", selected: true, exact: true }).waitFor();
   await ui.getByRole("button", { name: "welcome.txt", exact: true }).dblclick();
   await ui.getByRole("dialog", { name: "welcome.txtの詳細" }).getByRole("button", { name: "ファイルを編集" }).click();
