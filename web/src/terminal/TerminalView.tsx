@@ -22,6 +22,7 @@ import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSe
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { recentBufferText } from "./buffer";
 import { attachOsc52Clipboard } from "./osc52";
+import { createTerminalOutput } from "./output";
 import { attachKittyKeyboardProtocol, encodeIntlYen } from "./kittyKeyboard";
 import { modifierOpensLink, osc8Link } from "./links";
 import { attachLinkProvider } from "./linkProvider";
@@ -236,9 +237,10 @@ export function TerminalView({
     };
 
     const kittyKeyboard = attachKittyKeyboardProtocol(view.parser);
+    const output = createTerminalOutput(view);
     const detachOsc52 = attachOsc52Clipboard({
       parser: view.parser,
-      enabled: () => osc52EnabledRef.current,
+      enabled: () => osc52EnabledRef.current && !output.isReplaying(),
       writeText: (text) => clipboard.writeText(text),
       copied: () => setTerminalNotice(t("terminal.osc52Copied")),
       refused: () => setProblem(t("terminal.clipboardRefused")),
@@ -261,7 +263,6 @@ export function TerminalView({
       select: selectLinkAt,
     });
 
-    let decoder = new TextDecoder();
     let sent = "";
     const syncSize = () => {
       // Restoring a hidden session must preserve its PTY size until this
@@ -286,19 +287,13 @@ export function TerminalView({
         fitAndSync();
       },
       onReplay: (replay) => {
+        output.beginReplay(replay);
         if (!replay.truncated) return;
-        decoder = new TextDecoder();
-        // The retained ring may begin in the middle of CSI or OSC.
-        // CAN makes xterm abandon that parser state without clearing
-        // the visible screen as a full terminal reset would.
-        view.write("\u0018");
         setTerminalNotice(t("terminal.replayTruncated"));
       },
       // Output alone keeps a pending paste: full-screen programs redraw all
       // the time, and on the focus change that opening the review causes.
-      onOutput: (chunk) => {
-        view.write(decoder.decode(chunk, { stream: true }));
-      },
+      onOutput: output.write,
       // The paste was reviewed for the shell that is now gone.
       onShellReplaced: () => setPendingPaste(null),
       onExit: () => {
@@ -386,6 +381,7 @@ export function TerminalView({
       detachOverlay();
       detachClipboard();
       detachOsc52();
+      output.dispose();
       osc7Directory.dispose();
       commandMarkers.dispose();
       kittyKeyboard.dispose();
