@@ -1,5 +1,39 @@
 import { expect, openApplication, openSection, test, openLocalShell } from "./support/environment";
-import { terminalKeyboard } from "./support/terminal";
+import { terminalKeyboard, waitForTerminalLayout } from "./support/terminal";
+
+test("does not repeat an old clipboard request when reopening a terminal session", async ({ page, context, installation }) => {
+  test.skip(process.platform === "win32", "printf escape sequences are POSIX shell syntax");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/);
+  await screen.getByRole("button", { name: "More terminal actions" }).click();
+  await screen.getByRole("menuitemcheckbox", { name: "OSC 52" }).click();
+
+  const copiedText = "copied-before-switch";
+  const copyCommand = `printf '\\033]52;c;${Buffer.from(copiedText).toString("base64")}\\a'`;
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type(copyCommand);
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(copiedText);
+  await expect(screen).toContainText("The remote application copied text to the system clipboard.");
+
+  await openLocalShell(page);
+  await expect(page.getByRole("list", { name: "Open sessions" }).getByRole("listitem")).toHaveCount(2);
+  await page.evaluate(() => navigator.clipboard.writeText("clipboard-after-switch"));
+  await page.getByRole("list", { name: "Open sessions" }).getByRole("listitem").first().getByRole("button").first().click();
+  await expect(screen).toContainText(copyCommand);
+  await waitForTerminalLayout(page);
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("clipboard-after-switch");
+  await expect(screen).not.toContainText("The remote application copied text to the system clipboard.");
+
+  // Sending the same text again is a new copy request and must still work.
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type(copyCommand);
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(copiedText);
+});
 
 // Programs rename panes with OSC 0/1/2 and raise notifications with
 // OSC 9/99/777. The engine records both, so the pane header, the session
