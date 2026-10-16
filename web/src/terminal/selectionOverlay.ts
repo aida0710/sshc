@@ -1,5 +1,6 @@
 import { viewportText, type ViewportBuffer } from "./buffer";
 import { measureCells, type MeasurableTerminal } from "./metrics";
+import type { ScreenPoint } from "./tappedLink";
 
 
 export const overlayClass = "sshc-select-overlay";
@@ -20,7 +21,13 @@ export function selectionHeldIn(node: HTMLElement): boolean {
   return node.contains(selection.anchorNode);
 }
 
-export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerminal): () => void {
+// onTap returns true when it handled the tap (for example by opening a link),
+// so the tap does not also focus the terminal and raise the keyboard.
+export function attachSelectionOverlay(
+  container: HTMLElement,
+  view: OverlayTerminal,
+  { onTap }: { onTap?: ((point: ScreenPoint) => boolean) | undefined } = {},
+): () => void {
   const overlay = container.ownerDocument.createElement("pre");
   overlay.className = `${overlayClass} absolute m-0 select-text overflow-hidden whitespace-pre text-transparent`;
   overlay.setAttribute("aria-hidden", "true");
@@ -95,6 +102,7 @@ export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerm
       paint();
       return;
     }
+    if (onTap?.({ clientX: touchedX, clientY: touchedY }) === true) return;
     // Android may keep the textarea focused after Back hides the IME. Refocus
     // only after a deliberate tap so that tapping can reopen that keyboard.
     view.blur();

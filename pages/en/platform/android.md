@@ -15,6 +15,7 @@ Install the signed APK from GitHub Releases. Android 13+ back navigation closes 
 - Connections switches between the list and editor. Rotating a phone keeps this single-pane layout.
 - Terminal scrolling continues with deceleration after a swipe. Touching again stops it; selection and leaving the screen also stop momentum. The system's reduced-motion preference is respected.
 - Ctrl, Esc, Tab, and arrows occupy one row of extra keys. Open “…” for Alt and symbols. The keys remain available in landscape and preserve terminal input focus.
+- Tap a URL or path shown in the terminal to open a menu for opening it in the browser, copying it, and other actions. Tapping anywhere else opens the keyboard. OSC 8 hyperlinks printed by programs cannot be opened by tapping.
 - Dialogs and action sheets stay within the visible area above the keyboard. Long content scrolls inside them. Android Back dismisses the topmost menu before its parent dialog.
 
 The top-left menu button opens a drawer with running terminals and Command Palette. Screen-edge gestures remain available for Android Back. Tap outside the drawer or use Back to close it.
@@ -27,7 +28,7 @@ Tap a name once to open a folder or preview a file. Use a checkbox or long press
 
 Transfer Manager stays in a single summary row with counts and progress. Tap it to open the detailed sheet without reducing the file list's height. **Transfer settings** opens **Settings → SFTP**. File properties also expand on demand, leaving more space for previews.
 
-SFTP uses Android's system file picker and Storage Access Framework. Transfer completion and failure can produce Android notifications. External URLs open in the system browser.
+SFTP uses Android's system file picker and Storage Access Framework. Uploads accept several files at once. The Android file picker cannot choose folders, so **Upload folder** is not shown. Transfer completion and failure can produce Android notifications. Notifications from programs in a terminal (OSC 9, 99, and 777) and long-running commands finishing also arrive as Android notifications while sshc is closed. External URLs open in the system browser.
 
 ## Development APK
 
@@ -35,7 +36,7 @@ The development build installs as **sshc Dev** (`com.github.aida0710.sshc.dev`) 
 
 ## Engine service and backups
 
-The engine runs as a foreground service with a persistent "sshc is running" notification. Tapping **Stop** in the notification, or swiping the app away from recent tasks, ends the engine and every SSH session. Android 15 and later cap how long a data-sync service may run; the engine stops when that cap is reached. The notification permission is requested once, when the first transfer finishes, and never again after it is declined.
+The engine runs as a foreground service with a persistent "sshc is running" notification. Tapping **Stop** in the notification, or swiping the app away from recent tasks, ends the engine and every SSH session. Android 15 and later cap how long a data-sync service may run; the engine stops when that cap is reached. The notification permission is requested automatically once, when the first transfer finishes. To allow it later, use **Enable notifications** under **Settings → Notifications**; if Android no longer asks, allow it in Android Settings → Apps → sshc → Notifications.
 
 App data (the vault, keys, settings, and browser registrations) is excluded entirely from Android Auto Backup and device-to-device transfer. To move to a new device, use encrypted Sync or set up the configuration and keys again there.
 

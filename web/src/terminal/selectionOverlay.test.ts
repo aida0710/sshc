@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { attachSelectionOverlay, overlayClass, selectionHeldIn } from "./selectionOverlay";
 
-function harness(lines: string[]) {
+function harness(lines: string[], onTap?: (point: { clientX: number; clientY: number }) => boolean) {
   const container = document.createElement("div");
   document.body.appendChild(container);
 
@@ -39,7 +39,7 @@ function harness(lines: string[]) {
     },
   };
 
-  const detach = attachSelectionOverlay(container, view);
+  const detach = attachSelectionOverlay(container, view, { onTap });
   const overlay = container.querySelector(`.${overlayClass}`) as HTMLElement;
   return { container, overlay, view, screen, detach, repaint: () => repaint() };
 }
@@ -130,6 +130,24 @@ describe("attachSelectionOverlay", () => {
     const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
     overlay.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
+    detach();
+  });
+
+  it("does not focus after a tap that opened a link", () => {
+    const onTap = vi.fn(() => true);
+    const { overlay, view, detach } = harness(["one"], onTap);
+    touch(overlay, "touchstart", [{ clientX: 12, clientY: 10 }]);
+    touch(overlay, "touchend");
+    expect(onTap).toHaveBeenCalledWith({ clientX: 12, clientY: 10 });
+    expect(view.focus).not.toHaveBeenCalled();
+    detach();
+  });
+
+  it("focuses after a tap with no link under it", () => {
+    const { overlay, view, detach } = harness(["one"], () => false);
+    touch(overlay, "touchstart", [{ clientX: 12, clientY: 10 }]);
+    touch(overlay, "touchend");
+    expect(view.focus).toHaveBeenCalled();
     detach();
   });
 

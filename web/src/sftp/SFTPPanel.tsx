@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import type { HostEntry } from "../api/config";
 import type { NavigationBlocker } from "../routing/useSectionRoute";
 import { useTranslate } from "../i18n/context";
+import { canChooseFolders } from "../android/native";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
@@ -184,6 +185,7 @@ export function SFTPPanel({
   });
   const { alias, path, connected, entries, problem, setProblem, pendingPath, listingFailed, source } = browser;
   const can = source?.can;
+  const folderUpload = can?.browserUpload === true && canChooseFolders();
   const local = source?.local === true;
   const holdsConnection = connected && !local;
   useEffect(() => {
@@ -420,6 +422,8 @@ export function SFTPPanel({
       ...(can?.symlink ? [{ key: "newSymlink", label: t("sftp.newSymlink"), disabled: busy || !connected, run: () => { setMenu(null); metadataActions.ask({ kind: "createSymlink" }); } }] : []),
       ...(can?.browserUpload ? [
         { key: "upload", label: t("sftp.upload"), disabled: busy || !connected, run: () => { setMenu(null); transfers.chooseFiles(); } },
+      ] : []),
+      ...(folderUpload ? [
         { key: "uploadFolder", label: t("sftp.uploadFolder"), disabled: busy || !connected, run: () => { setMenu(null); transfers.chooseFolder(); } },
       ] : []),
       ...(mobileInteraction ? [{ key: "back", label: t("sftp.back"), disabled: busy || dirty || !browser.canBack, run: () => { setMenu(null); void browser.back(); } }] : []),
@@ -617,13 +621,15 @@ export function SFTPPanel({
                   className="hidden"
                   onChange={(event) => transfers.uploadFromInput(event, (file) => file.name)}
                 />
-                <input
-                  ref={(element) => { transfers.folderUploadInput.current = element; element?.setAttribute("webkitdirectory", ""); }}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(event) => transfers.uploadFromInput(event, (file) => (file as File & { webkitRelativePath?: string }).webkitRelativePath ?? file.name)}
-                />
+                {folderUpload ? (
+                  <input
+                    ref={(element) => { transfers.folderUploadInput.current = element; element?.setAttribute("webkitdirectory", ""); }}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => transfers.uploadFromInput(event, (file) => (file as File & { webkitRelativePath?: string }).webkitRelativePath ?? file.name)}
+                  />
+                ) : null}
               </>
             ) : null}
             {!mobileInteraction && menu?.kind === "create" ? (
@@ -635,7 +641,7 @@ export function SFTPPanel({
                 {can?.symlink ? <MenuActionList actions={folderMenuActions().filter((action) => action.key === "newSymlink")} /> : null}
                 {can?.browserUpload ? <>
                   <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFiles(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.upload")}</button>
-                  <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFolder(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.uploadFolder")}</button>
+                  {folderUpload ? <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFolder(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.uploadFolder")}</button> : null}
                 </> : null}
               </div>
             ) : null}

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   browserNotificationPermission,
+  notificationsComeFromAndroid,
   requestBrowserNotificationPermission,
   showBrowserNotification,
 } from "./browserNotifications";
@@ -56,5 +57,28 @@ describe("browser notification permission", () => {
     expect(focus).toHaveBeenCalledOnce();
     expect(onClick).toHaveBeenCalledOnce();
     expect(instance!.close).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Android app notifications", () => {
+  function androidWindow(permission: string) {
+    const showNotification = vi.fn(() => "");
+    const target = Object.assign(new EventTarget(), {
+      sshcAndroid: { notificationPermission: () => permission, requestNotificationPermission: vi.fn(), showNotification },
+    }) as unknown as Window;
+    return { target, showNotification };
+  }
+
+  it("uses Android's notifications instead of the browser's", () => {
+    const { target, showNotification } = androidWindow("granted");
+    expect(notificationsComeFromAndroid(target)).toBe(true);
+    expect(browserNotificationPermission(target)).toBe("granted");
+    expect(showBrowserNotification({ title: "sshc", body: "x", tag: "t" }, target)).toBe(true);
+    expect(showNotification).toHaveBeenCalledWith("t", "sshc", "x");
+  });
+
+  it("returns Android's decided permission without asking again", async () => {
+    const { target } = androidWindow("denied");
+    expect(await requestBrowserNotificationPermission(target)).toBe("denied");
   });
 });

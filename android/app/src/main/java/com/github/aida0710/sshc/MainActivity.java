@@ -44,7 +44,9 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import mobile.Mobile;
 
@@ -82,7 +84,24 @@ public final class MainActivity extends ComponentActivity {
         public void setAppearance(String appearance) {
             runOnUiThread(() -> applySystemBarAppearance(appearance));
         }
+
+        @Override
+        public String notificationPermission() {
+            return currentNotificationPermission();
+        }
+
+        @Override
+        public void requestNotificationPermission() {
+            runOnUiThread(() -> requestNotificationPermissionForWeb());
+        }
+
+        @Override
+        public void showNotification(String tag, String title, String body) {
+            terminalNotifications.show(tag, title, body);
+        }
     });
+    private final TerminalNotifications terminalNotifications = new TerminalNotifications(this);
+    private boolean notificationPermissionRequestedByWeb;
 
     private final ServiceConnection connection = new ServiceConnection() {
         @Override
@@ -135,6 +154,18 @@ public final class MainActivity extends ComponentActivity {
         Intent intent = new Intent(this, EngineService.class);
         startForegroundService(intent);
         bound = bindService(intent, connection, Context.BIND_AUTO_CREATE);
+    }
+
+    /** ターミナルの通知から開いたとき、どの通知かを Web 画面へ伝えて該当のセッションを開かせる。 */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String tag = intent.getStringExtra(TerminalNotifications.EXTRA_TAG);
+        if (tag == null || webView == null || !NativeBridge.validNotificationTag(tag)) return;
+        String script = "window.dispatchEvent(new CustomEvent('sshc-android-notification-click',{detail:{tag:"
+                + JSONObject.quote(tag) + "}}));";
+        webView.evaluateJavascript(script, null);
     }
 
     /** OSによる前回の停止を次回起動時に一度だけ説明する。 */
@@ -258,9 +289,7 @@ public final class MainActivity extends ComponentActivity {
                 if (fileChooser != null) fileChooser.onReceiveValue(null);
                 fileChooser = callback;
                 try {
-                    Intent intent = params.createIntent();
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    startActivityForResult(intent, FILE_CHOOSER_REQUEST);
+                    startActivityForResult(fileChooserIntent(params), FILE_CHOOSER_REQUEST);
                 } catch (RuntimeException error) {
                     fileChooser = null;
                     callback.onReceiveValue(null);
@@ -280,7 +309,7 @@ public final class MainActivity extends ComponentActivity {
             ValueCallback<Uri[]> callback = fileChooser;
             fileChooser = null;
             if (callback != null) {
-                callback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+                callback.onReceiveValue(chosenFiles(resultCode, data));
             }
             return;
         }
@@ -309,6 +338,38 @@ public final class MainActivity extends ComponentActivity {
         super.onActivityResult(requestCode, resultCode, data);
     }
 
+    /**
+     * FileChooserParams.createIntent は accept=".conf,text/plain" で text/plain だけに絞り込み、
+     * application/octet-stream として登録される .conf を選べなくするため、選択画面への要求は自前で組み立てる。
+     */
+    private static Intent fileChooserIntent(WebChromeClient.FileChooserParams params) {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        List<String> mimeTypes = FileChooser.mimeTypes(params.getAcceptTypes());
+        if (!mimeTypes.isEmpty()) intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes.toArray(new String[0]));
+        if (params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) {
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        }
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        return intent;
+    }
+
+    /** 選択画面の結果を WebView へ返す形にする。取り消しと空の結果は null で知らせる。 */
+    private static Uri[] chosenFiles(int resultCode, Intent data) {
+        if (resultCode != RESULT_OK || data == null) return null;
+        List<Uri> clipItems = new ArrayList<>();
+        ClipData clipData = data.getClipData();
+        if (clipData != null) {
+            for (int index = 0; index < clipData.getItemCount(); index++) {
+                Uri uri = clipData.getItemAt(index).getUri();
+                if (uri != null) clipItems.add(uri);
+            }
+        }
+        List<Uri> chosen = FileChooser.chosen(data.getData(), clipItems);
+        return chosen.isEmpty() ? null : chosen.toArray(new Uri[0]);
+    }
+
     /** Storage Access Frameworkへ保存先だけを選ばせ、内容はbridge経由で順次書き込む。 */
     private void openSaveDestination(String requestId, String suggestedName, String mimeType) {
         if (pendingSaveRequest != null) {
@@ -335,6 +396,37 @@ public final class MainActivity extends ComponentActivity {
         if (webView == null) return;
         String script = "window.dispatchEvent(new CustomEvent('sshc-android-save',{detail:{requestId:"
                 + JSONObject.quote(requestId) + ",status:" + JSONObject.quote(status) + "}}));";
+        webView.evaluateJavascript(script, null);
+    }
+
+    /**
+     * ブラウザの Notification.permission と同じ 3 値にする。Android は「まだ聞いていない」と
+     * 「2 回断られてもう聞けない」を区別しないため、聞いたかどうかの記録と説明の要否で見分ける。
+     */
+    private String currentNotificationPermission() {
+        boolean enabled = getSystemService(NotificationManager.class).areNotificationsEnabled();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            return enabled ? "granted" : "denied";
+        }
+        boolean asked = getPreferences(Context.MODE_PRIVATE).getBoolean(NOTIFICATION_PERMISSION_ASKED, false);
+        return asked && !shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) ? "denied" : "default";
+    }
+
+    /** Web 画面の［通知を有効にする］から。聞く必要が無ければその場で今の状態を返す。 */
+    private void requestNotificationPermissionForWeb() {
+        if (!"default".equals(currentNotificationPermission())) {
+            reportNotificationPermission();
+            return;
+        }
+        notificationPermissionRequestedByWeb = true;
+        requestNotificationPermission();
+    }
+
+    private void reportNotificationPermission() {
+        if (webView == null) return;
+        String script = "window.dispatchEvent(new CustomEvent('sshc-android-notification-permission',{detail:{status:"
+                + JSONObject.quote(currentNotificationPermission()) + "}}));";
         webView.evaluateJavascript(script, null);
     }
 
@@ -382,7 +474,12 @@ public final class MainActivity extends ComponentActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != NOTIFICATION_PERMISSION_REQUEST || pendingTransferStatus == null) return;
+        if (requestCode != NOTIFICATION_PERMISSION_REQUEST) return;
+        if (notificationPermissionRequestedByWeb) {
+            notificationPermissionRequestedByWeb = false;
+            reportNotificationPermission();
+        }
+        if (pendingTransferStatus == null) return;
         String status = pendingTransferStatus;
         pendingTransferStatus = null;
         if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
