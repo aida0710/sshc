@@ -15,6 +15,7 @@ Install the signed APK from GitHub Releases. Android 13+ back navigation closes 
 - Connections switches between the list and editor. Rotating a phone keeps this single-pane layout.
 - Terminal scrolling continues with deceleration after a swipe. Touching again stops it; selection and leaving the screen also stop momentum. The system's reduced-motion preference is respected.
 - Ctrl, Esc, Tab, and arrows occupy one row of extra keys. Open “…” for Alt and symbols. The keys remain available in landscape and preserve terminal input focus.
+- Tap a URL or path shown in the terminal to open a menu for opening it in the browser, copying it, and other actions. Tapping anywhere else opens the keyboard. OSC 8 hyperlinks printed by programs cannot be opened by tapping.
 - Dialogs and action sheets stay within the visible area above the keyboard. Long content scrolls inside them. Android Back dismisses the topmost menu before its parent dialog.
 
 The top-left menu button opens a drawer with running terminals and Command Palette. Screen-edge gestures remain available for Android Back. Tap outside the drawer or use Back to close it.
@@ -27,7 +28,7 @@ Tap a name once to open a folder or preview a file. Use a checkbox or long press
 
 Transfer Manager stays in a single summary row with counts and progress. Tap it to open the detailed sheet without reducing the file list's height. **Transfer settings** opens **Settings → SFTP**. File properties also expand on demand, leaving more space for previews.
 
-SFTP uses Android's system file picker and Storage Access Framework. Transfer completion and failure can produce Android notifications. External URLs open in the system browser.
+SFTP uses Android's system file picker and Storage Access Framework. Uploads accept several files at once. The Android file picker cannot choose folders, so **Upload folder** is not shown. Transfer completion and failure can produce Android notifications. External URLs open in the system browser.
 
 ## Development APK
 
