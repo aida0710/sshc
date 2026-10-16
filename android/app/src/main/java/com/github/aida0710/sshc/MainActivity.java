@@ -260,9 +260,7 @@ public final class MainActivity extends ComponentActivity {
                 if (fileChooser != null) fileChooser.onReceiveValue(null);
                 fileChooser = callback;
                 try {
-                    Intent intent = params.createIntent();
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    startActivityForResult(intent, FILE_CHOOSER_REQUEST);
+                    startActivityForResult(fileChooserIntent(params), FILE_CHOOSER_REQUEST);
                 } catch (RuntimeException error) {
                     fileChooser = null;
                     callback.onReceiveValue(null);
@@ -311,6 +309,23 @@ public final class MainActivity extends ComponentActivity {
         super.onActivityResult(requestCode, resultCode, data);
     }
 
+    /**
+     * FileChooserParams.createIntent は accept=".conf,text/plain" で text/plain だけに絞り込み、
+     * application/octet-stream として登録される .conf を選べなくするため、選択画面への要求は自前で組み立てる。
+     */
+    private static Intent fileChooserIntent(WebChromeClient.FileChooserParams params) {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        List<String> mimeTypes = FileChooser.mimeTypes(params.getAcceptTypes());
+        if (!mimeTypes.isEmpty()) intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes.toArray(new String[0]));
+        if (params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) {
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        }
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        return intent;
+    }
+
     /** 選択画面の結果を WebView へ返す形にする。取り消しと空の結果は null で知らせる。 */
     private static Uri[] chosenFiles(int resultCode, Intent data) {
         if (resultCode != RESULT_OK || data == null) return null;
@@ -322,7 +337,7 @@ public final class MainActivity extends ComponentActivity {
                 if (uri != null) clipItems.add(uri);
             }
         }
-        List<Uri> chosen = FileChooserResult.chosen(data.getData(), clipItems);
+        List<Uri> chosen = FileChooser.chosen(data.getData(), clipItems);
         return chosen.isEmpty() ? null : chosen.toArray(new Uri[0]);
     }
 
