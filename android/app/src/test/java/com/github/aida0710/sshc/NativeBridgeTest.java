@@ -34,6 +34,53 @@ public final class NativeBridgeTest {
         public void setAppearance(String appearance) {
             this.appearance = appearance;
         }
+
+        String permission = "granted";
+        String notified;
+
+        @Override
+        public String notificationPermission() {
+            return permission;
+        }
+
+        @Override
+        public void requestNotificationPermission() {
+        }
+
+        @Override
+        public void showNotification(String tag, String title, String body) {
+            notified = tag + "|" + title + "|" + body;
+        }
+    }
+
+    @Test
+    public void 許可されていれば通知を渡す() {
+        Host host = new Host();
+        assertEquals("", new NativeBridge(host).showNotification("sshc-terminal-1", "build", "done\nok"));
+        assertEquals("sshc-terminal-1|build|done\nok", host.notified);
+    }
+
+    @Test
+    public void 許可されていなければ通知を渡さない() {
+        Host host = new Host();
+        host.permission = "default";
+        assertEquals("notifications_blocked", new NativeBridge(host).showNotification("sshc-terminal-1", "build", "done"));
+        assertEquals(null, host.notified);
+    }
+
+    @Test
+    public void 不正な_tag_の通知を断る() {
+        Host host = new Host();
+        assertEquals("invalid_notification", new NativeBridge(host).showNotification("../x", "build", "done"));
+        assertEquals("invalid_notification", new NativeBridge(host).showNotification(null, "build", "done"));
+        assertEquals(null, host.notified);
+    }
+
+    @Test
+    public void 通知の文字は制御文字を除き上限で切る() {
+        assertEquals("a b\nc", NativeBridge.limitText("a\u0007b\nc", 10));
+        assertEquals("abc", NativeBridge.limitText("abcdef", 3));
+        assertEquals("", NativeBridge.limitText(null, 3));
     }
 
     @Test

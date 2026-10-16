@@ -636,6 +636,12 @@ export const ja = {
     "sshcの通知がブロックされています。ターミナルとファイル転送の通知を使うには、ブラウザのサイト設定で通知を許可してください。",
   "terminal.browserNotificationsUnsupported":
     "このブラウザはWeb通知に対応していません。",
+  "terminal.androidNotificationsDefault":
+    "sshcを閉じているあいだに、ターミナル内のプログラムからの通知（コーディングエージェントの入力待ちなど）をAndroidの通知で受け取れます。",
+  "terminal.androidNotificationsGranted":
+    "Androidの通知は許可されています。sshcを閉じているあいだだけ通知します。",
+  "terminal.androidNotificationsDenied":
+    "sshcの通知がオフになっています。Androidの［設定］→［アプリ］→［sshc］→［通知］で許可してください。",
   "terminal.browserNotificationsEnable": "通知を有効にする",
   "terminal.browserNotificationsTest": "テスト通知を送る",
   "terminal.browserNotificationsEnabled": "通知は有効です",
@@ -643,7 +649,7 @@ export const ja = {
   "terminal.browserNotificationsRequestFailed":
     "通知の許可をリクエストできませんでした。",
   "terminal.browserNotificationsDeliveryFailed":
-    "通知は許可されていますが、ブラウザで表示できませんでした。",
+    "通知は許可されていますが、表示できませんでした。",
   "terminal.notificationSound": "通知音",
   "terminal.notificationSoundHint": "このタブがバックグラウンドにあるとき、ターミナル内のプログラムが通知（OSC 9／99／777）を送ると鳴ります。このブラウザにだけ保存されます。",
   "terminal.notificationPreviewSound": "通知音を再生",
