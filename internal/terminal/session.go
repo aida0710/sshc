@@ -32,6 +32,9 @@ type Session struct {
 	reconnectView *ReconnectView
 	generation    uint64
 	ready         *processReadiness
+	// controlStrings lets a replay that starts at the oldest retained byte skip
+	// the rest of a long control string (an inline image) cut by the buffer.
+	controlStrings controlStringIndex
 	// terminalTitle is the last OSC 0/1/2 title observed for the current
 	// process generation. The browser applies the same sequence itself; the
 	// engine records it so every client shows the same pane name.

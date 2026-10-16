@@ -36,6 +36,9 @@ func NewRing(capacity int) *Ring {
 
 func (r *Ring) CanReadFrom(cursor uint64) bool { return cursor <= r.written }
 
+// Oldest is the absolute position of the oldest retained byte.
+func (r *Ring) Oldest() uint64 { return r.written - uint64(r.size) }
+
 func (r *Ring) Write(p []byte) (int, error) {
 	written := len(p)
 	r.written += uint64(written)
@@ -74,7 +77,7 @@ func (r *Ring) ReadAvailableFrom(cursor uint64) (RingRead, bool) {
 }
 
 func (r *Ring) readFrom(cursor uint64, limit int, includeContext bool) (RingRead, bool) {
-	oldest := r.written - uint64(r.size)
+	oldest := r.Oldest()
 	if !r.CanReadFrom(cursor) {
 		return RingRead{}, false
 	}
