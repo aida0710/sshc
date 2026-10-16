@@ -18,7 +18,7 @@ import (
 // policy を緩めるにはサーバー側だけでなくここでも意図的な編集が
 // 要るようにし、迷い込んだ 'unsafe-inline' が気づかれず紛れ込めないようにする。
 const expectedContentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; " +
-	"frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+	"frame-ancestors 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data:; connect-src 'self'; trusted-types sshc-service-worker defaultWorkerFactory diffEditorWidget " +
 	"diffReview domLineBreaksComputer dompurify editorGhostText editorViewLayer richScreenReaderContent " +
 	"standaloneColorizer stickyScrollViewLayer tokenizeToString; require-trusted-types-for 'script'"
@@ -198,7 +198,9 @@ func TestEveryAPIResponseIsNoStoreAndCarriesTheExactPolicy(t *testing.T) {
 	// 持ち、その理由は internal/httpserver/security.go にある。したがって
 	// 禁じるのはディレクティブ単位である。スクリプト側にそれが現れたら、
 	// それは実測ではなく諦めである。
-	for _, forbidden := range []string{"unsafe-eval", "http:", "https:", "*"} {
+	// 'wasm-unsafe-eval' は WebAssembly のコンパイルだけを許す（画像表示の SIXEL の
+	// 解読器）。スクリプトの eval を許す 'unsafe-eval' は引用符ごと禁じる。
+	for _, forbidden := range []string{"'unsafe-eval'", "http:", "https:", "*"} {
 		if strings.Contains(policy, forbidden) {
 			t.Errorf("CSP contains %q", forbidden)
 		}

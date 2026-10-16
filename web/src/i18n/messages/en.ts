@@ -621,6 +621,9 @@ export const en = {
   "terminal.unreadNotification": "Unread notification",
   "terminal.notificationFallback": "A program in this terminal sent a notification.",
   "terminal.unreadWorkspace": "This workspace has an unread terminal notification",
+  "terminal.programProgress": "Program progress",
+  "terminal.programProgressError": "Program progress (error)",
+  "terminal.programProgressPaused": "Program progress (paused)",
   "terminal.browserNotificationsHeading": "Notifications",
   "terminal.browserNotificationsDefault":
     "Allow sshc to notify you when a program in a terminal asks for attention (for example a coding agent waiting for input) or a file transfer completes while this tab is in the background.",
