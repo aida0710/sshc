@@ -2,6 +2,7 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 import { Icon } from "../ui/icons";
 import { useTranslate } from "../i18n/context";
 import { showBrowserNotification } from "../ui/browserNotifications";
+import { notifiesTransfersNatively } from "../android/native";
 import { sftpTransferManager, type TransferNotice } from "./transferManager";
 import { sftpTransferProblemText } from "./sftpProblemText";
 
@@ -14,7 +15,7 @@ export function notifyBackgroundTransfers(
   for (const notice of notices) {
     if (delivered.has(notice.id)) continue;
     delivered.add(notice.id);
-    if (!hidden) continue;
+    if (!hidden || notifiesTransfersNatively()) continue;
     showBrowserNotification({
       title: "sshc",
       body: t(notice.status === "completed" ? "sftp.notice.completed" : "sftp.notice.failed", {

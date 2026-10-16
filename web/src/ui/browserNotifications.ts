@@ -2,7 +2,14 @@
 // of sight: a terminal program asking for attention, a long command
 // finishing, a background transfer ending. Browsers and native wrappers may
 // lack the API or revoke delivery at any moment, so every call degrades to
-// "not shown" instead of throwing.
+// "not shown" instead of throwing. Android's WebView has no Notification API,
+// so the Android app raises its own notifications through the bridge instead.
+
+import {
+  androidNotificationPermission,
+  requestAndroidNotificationPermission,
+  showAndroidNotification,
+} from "../android/native";
 
 export type BrowserNotification = {
   title: string;
@@ -23,13 +30,21 @@ function notificationAPI(target: Window): typeof Notification | null {
     : null;
 }
 
+// Whether notifications are Android's own, which the user allows in Android's
+// settings rather than in the browser's site settings.
+export function notificationsComeFromAndroid(target: Window = window): boolean {
+  return androidNotificationPermission(target) !== null;
+}
+
 export function browserNotificationPermission(target: Window = window): BrowserNotificationPermission {
-  return notificationAPI(target)?.permission ?? "unsupported";
+  return androidNotificationPermission(target) ?? notificationAPI(target)?.permission ?? "unsupported";
 }
 
 export async function requestBrowserNotificationPermission(
   target: Window = window,
 ): Promise<BrowserNotificationPermission> {
+  const android = androidNotificationPermission(target);
+  if (android !== null) return android === "default" ? requestAndroidNotificationPermission(target) : android;
   const api = notificationAPI(target);
   if (api === null) return "unsupported";
   if (api.permission !== "default") return api.permission;
@@ -37,6 +52,7 @@ export async function requestBrowserNotificationPermission(
 }
 
 export function showBrowserNotification(notification: BrowserNotification, target: Window = window): boolean {
+  if (androidNotificationPermission(target) !== null) return showAndroidNotification(notification, target);
   const api = notificationAPI(target);
   if (api === null || api.permission !== "granted") return false;
   try {

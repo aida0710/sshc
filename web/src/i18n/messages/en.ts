@@ -630,6 +630,12 @@ export const en = {
     "Notifications are blocked for sshc. Allow them in this site's browser settings to enable terminal and file transfer notifications.",
   "terminal.browserNotificationsUnsupported":
     "This browser does not support web notifications.",
+  "terminal.androidNotificationsDefault":
+    "Get Android notifications while sshc is closed when a program in a terminal asks for attention (for example a coding agent waiting for input).",
+  "terminal.androidNotificationsGranted":
+    "Android notifications are allowed. sshc only sends them while it is closed.",
+  "terminal.androidNotificationsDenied":
+    "Notifications are turned off for sshc. Allow them in Android Settings → Apps → sshc → Notifications.",
   "terminal.browserNotificationsEnable": "Enable notifications",
   "terminal.browserNotificationsTest": "Send test notification",
   "terminal.browserNotificationsEnabled": "Notifications enabled",
@@ -637,7 +643,7 @@ export const en = {
   "terminal.browserNotificationsRequestFailed":
     "Notification permission could not be requested.",
   "terminal.browserNotificationsDeliveryFailed":
-    "The browser allowed notifications but could not display one.",
+    "Notifications are allowed but one could not be displayed.",
   "terminal.notificationSound": "Notification sound",
   "terminal.notificationSoundHint": "Played when a terminal program sends a notification (OSC 9, 99 or 777) while this tab is in the background. Stored only in this browser.",
   "terminal.notificationPreviewSound": "Play the notification sound",
