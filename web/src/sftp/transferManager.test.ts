@@ -214,6 +214,15 @@ describe("SFTPTransferManager engine ownership", () => {
     expect(manager.hasBrowserTransfers()).toBe(false);
   });
 
+  it("sends an upload whose file has no modification time as not known", async () => {
+    // Android WebView gives a file picked through a content URI this time.
+    const file = new File(["a"], "picked.txt", { lastModified: -11644473600000 });
+    const api = engineAPI();
+    const manager = new SFTPTransferManager(api, 0);
+    await manager.addUploads([{ alias: "edge", remotePath: "/picked.txt", localName: "picked.txt", file }]);
+    expect(api.createTransfer).toHaveBeenCalledWith(expect.objectContaining({ lastModified: 0 }));
+  });
+
   it("counts a download as this page's transfer only while the page runs it", async () => {
     let finishStream = () => {};
     const api = engineAPI({

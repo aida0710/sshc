@@ -21,6 +21,14 @@ const defaultLargeFileChunkBytes = 32 << 20;
 // How long a job waits after the engine refused to start it.
 const retryDelayMs = 500;
 
+// The engine reads lastModified 0 as "not known" and leaves the remote time
+// alone. Android WebView reports a file picked through a content URI without
+// a modification time as -11644473600000 (the 1601 epoch), which the API
+// rejects, so a time that is not positive is sent as not known.
+function uploadLastModified(file: File): number {
+  return Number.isSafeInteger(file.lastModified) && file.lastModified > 0 ? file.lastModified : 0;
+}
+
 export type UploadSelection = {
   alias: string;
   remotePath: string;
@@ -197,7 +205,7 @@ export class SFTPTransferManager {
       const job = await this.api.createTransfer({
         id, batchId, batchName, batchKind, alias: selection.alias, direction: "upload", kind: "file",
         name: selection.localName, remotePath: selection.remotePath, totalBytes: selection.file.size,
-        lastModified: selection.file.lastModified,
+        lastModified: uploadLastModified(selection.file),
         largeFileThresholdBytes: this.largeFileThreshold,
         largeFileParallelism: this.largeFileParallelism,
         largeFileChunkBytes: this.largeFileChunkBytes,
@@ -431,7 +439,7 @@ export class SFTPTransferManager {
     return this.jobs.find((job) => job.direction === "upload" && !this.uploads.has(job.id) &&
       ["queued", "running", "paused", "reattach", "failed", "needs_overwrite"].includes(job.status) &&
       job.alias === selection.alias && job.remotePath === selection.remotePath &&
-      job.totalBytes === selection.file.size && job.lastModified === selection.file.lastModified);
+      job.totalBytes === selection.file.size && job.lastModified === uploadLastModified(selection.file));
   }
 
   private async reattachUpload(existing: ManagedTransferJob, file: File): Promise<void> {

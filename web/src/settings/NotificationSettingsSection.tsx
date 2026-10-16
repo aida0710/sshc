@@ -11,6 +11,7 @@ import {
 } from "../terminal/notificationSound";
 import {
   browserNotificationPermission,
+  notificationsComeFromAndroid,
   requestBrowserNotificationPermission,
   showBrowserNotification,
   type BrowserNotificationPermission,
@@ -26,6 +27,18 @@ const soundLabelKeys: Record<NotificationSoundPreset, MessageKey> = {
   bell: "terminal.notificationSound.bell",
   pulse: "terminal.notificationSound.pulse",
 };
+
+function permissionMessage(permission: BrowserNotificationPermission, android: boolean): MessageKey {
+  if (permission === "unsupported") return "terminal.browserNotificationsUnsupported";
+  if (android) {
+    return permission === "granted"
+      ? "terminal.androidNotificationsGranted"
+      : permission === "denied" ? "terminal.androidNotificationsDenied" : "terminal.androidNotificationsDefault";
+  }
+  return permission === "granted"
+    ? "terminal.browserNotificationsGranted"
+    : permission === "denied" ? "terminal.browserNotificationsDenied" : "terminal.browserNotificationsDefault";
+}
 
 // Browser notifications for finished commands: the permission the browser
 // granted, and the sound this browser plays. Neither reaches the engine.
@@ -78,15 +91,7 @@ export function NotificationSettingsSection({ showHeading }: { showHeading: bool
     >
       <div className="grid max-w-2xl gap-5">
         <p className="text-sm leading-6 text-ink-muted">
-          {t(
-            permission === "granted"
-              ? "terminal.browserNotificationsGranted"
-              : permission === "denied"
-                ? "terminal.browserNotificationsDenied"
-                : permission === "unsupported"
-                  ? "terminal.browserNotificationsUnsupported"
-                  : "terminal.browserNotificationsDefault",
-          )}
+          {t(permissionMessage(permission, notificationsComeFromAndroid()))}
         </p>
         {permission === "default" || permission === "granted" || request.error !== "" ? (
           <ActionArea status={request.error === ""

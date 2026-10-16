@@ -15,6 +15,7 @@
     <string name="failure_retry">もう一度試す</string>
     <string name="failure_retrying">起動中…</string>
     <string name="file_picker_unavailable">このデバイスではファイル選択画面を開けません。</string>
+    <string name="terminal_channel">ターミナル</string>
     <string name="transfer_channel">SFTP転送</string>
     <string name="transfer_completed">SFTP転送が完了しました。</string>
     <string name="transfer_failed">SFTP転送に失敗しました。詳細はsshcを開いて確認してください。</string>
