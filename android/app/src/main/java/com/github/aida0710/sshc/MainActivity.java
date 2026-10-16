@@ -44,7 +44,9 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import mobile.Mobile;
 
@@ -280,7 +282,7 @@ public final class MainActivity extends ComponentActivity {
             ValueCallback<Uri[]> callback = fileChooser;
             fileChooser = null;
             if (callback != null) {
-                callback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+                callback.onReceiveValue(chosenFiles(resultCode, data));
             }
             return;
         }
@@ -307,6 +309,21 @@ public final class MainActivity extends ComponentActivity {
             return;
         }
         super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    /** 選択画面の結果を WebView へ返す形にする。取り消しと空の結果は null で知らせる。 */
+    private static Uri[] chosenFiles(int resultCode, Intent data) {
+        if (resultCode != RESULT_OK || data == null) return null;
+        List<Uri> clipItems = new ArrayList<>();
+        ClipData clipData = data.getClipData();
+        if (clipData != null) {
+            for (int index = 0; index < clipData.getItemCount(); index++) {
+                Uri uri = clipData.getItemAt(index).getUri();
+                if (uri != null) clipItems.add(uri);
+            }
+        }
+        List<Uri> chosen = FileChooserResult.chosen(data.getData(), clipItems);
+        return chosen.isEmpty() ? null : chosen.toArray(new Uri[0]);
     }
 
     /** Storage Access Frameworkへ保存先だけを選ばせ、内容はbridge経由で順次書き込む。 */
