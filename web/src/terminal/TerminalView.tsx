@@ -14,6 +14,7 @@ import { useBackgroundImage } from "./backgroundImage";
 import { clipboard } from "../ui/clipboard";
 import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
+import { linkAtPoint, type ScreenPoint } from "./tappedLink";
 import { prefersNativeSelection } from "./nativeSelection";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
 import { attachTouchScroll } from "./touchScroll";
@@ -179,8 +180,8 @@ export function TerminalView({
     if (container === null) return;
 
     const coarse = prefersNativeSelection((query) => window.matchMedia(query));
-    const selectLinkAt = (link: TerminalLinkSelection["link"], event: MouseEvent) =>
-      setLinkSelection({ link, x: event.clientX + linkPopoverOffsetPx, y: event.clientY + linkPopoverOffsetPx });
+    const selectLinkAt = (link: TerminalLinkSelection["link"], point: ScreenPoint) =>
+      setLinkSelection({ link, x: point.clientX + linkPopoverOffsetPx, y: point.clientY + linkPopoverOffsetPx });
 
     let view: Terminal;
     view = new Terminal({
@@ -330,7 +331,16 @@ export function TerminalView({
       ? attachImeKeys({ container, textarea: view.textarea ?? container })
       : () => {};
 
-    const detachOverlay = coarse ? attachSelectionOverlay(container, view) : () => {};
+    const detachOverlay = coarse
+      ? attachSelectionOverlay(container, view, {
+        onTap: (point) => {
+          const link = linkAtPoint(view, point, session.kind === "ssh");
+          if (link === null) return false;
+          selectLinkAt(link, point);
+          return true;
+        },
+      })
+      : () => {};
 
     const typed = (data: string) => {
       const { ctrl, alt } = armed.current;
