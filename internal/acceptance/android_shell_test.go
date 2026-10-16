@@ -203,6 +203,9 @@ func TestTheAndroidShellBridgesDeviceSpecificWebFeatures(t *testing.T) {
 		"setSystemBarsAppearance(",
 		"saveWithAndroid(",
 		"notifyAndroidTransfer(",
+		"showAndroidNotification(",
+		"terminalNotifications.show(",
+		"sshc-android-notification-click",
 	} {
 		if !strings.Contains(manifest+activity+bridge+web, required) {
 			t.Errorf("Android固有機能のbridgeに %q が無い", required)

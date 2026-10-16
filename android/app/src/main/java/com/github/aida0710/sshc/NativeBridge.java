@@ -12,7 +12,15 @@ final class NativeBridge {
         void chooseSaveDestination(String requestId, String suggestedName, String mimeType);
         void notifyTransfer(String status);
         void setAppearance(String appearance);
+        /** "granted"、"denied"、"default" のいずれか。 */
+        String notificationPermission();
+        void requestNotificationPermission();
+        void showNotification(String tag, String title, String body);
     }
+
+    // 通知に載せる文字数の上限。プログラムが送る本文を際限なく Android へ渡さない。
+    static final int MAX_NOTIFICATION_TITLE = 200;
+    static final int MAX_NOTIFICATION_BODY = 2000;
 
     private final Host host;
     private String saveRequestId;
@@ -77,6 +85,27 @@ final class NativeBridge {
         if ("light".equals(appearance) || "dark".equals(appearance)) host.setAppearance(appearance);
     }
 
+    /** Android の通知の許可の状態。ブラウザの Notification.permission と同じ 3 つの値を返す。 */
+    @JavascriptInterface
+    public String notificationPermission() {
+        return host.notificationPermission();
+    }
+
+    /** 通知の許可を求める。結果は sshc-android-notification-permission イベントで Web 画面へ返る。 */
+    @JavascriptInterface
+    public void requestNotificationPermission() {
+        host.requestNotificationPermission();
+    }
+
+    /** 空文字は表示した、それ以外は安定した失敗 code。同じ tag の通知は置き換わる。 */
+    @JavascriptInterface
+    public String showNotification(String tag, String title, String body) {
+        if (!validNotificationTag(tag)) return "invalid_notification";
+        if (!"granted".equals(host.notificationPermission())) return "notifications_blocked";
+        host.showNotification(tag, limitText(title, MAX_NOTIFICATION_TITLE), limitText(body, MAX_NOTIFICATION_BODY));
+        return "";
+    }
+
     synchronized boolean openSave(String requestId, OutputStream output) {
         if (!validRequestId(requestId) || output == null || saveOutput != null) return false;
         saveRequestId = requestId;
@@ -101,6 +130,16 @@ final class NativeBridge {
 
     static boolean validRequestId(String value) {
         return value != null && value.matches("[A-Za-z0-9_-]{8,96}");
+    }
+
+    static boolean validNotificationTag(String value) {
+        return value != null && value.matches("[A-Za-z0-9_-]{1,128}");
+    }
+
+    static String limitText(String value, int limit) {
+        if (value == null) return "";
+        String visible = value.replaceAll("[\\p{Cntrl}&&[^\n]]", " ").trim();
+        return visible.length() <= limit ? visible : visible.substring(0, limit);
     }
 
     static String safeFileName(String value) {

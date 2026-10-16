@@ -84,7 +84,24 @@ public final class MainActivity extends ComponentActivity {
         public void setAppearance(String appearance) {
             runOnUiThread(() -> applySystemBarAppearance(appearance));
         }
+
+        @Override
+        public String notificationPermission() {
+            return currentNotificationPermission();
+        }
+
+        @Override
+        public void requestNotificationPermission() {
+            runOnUiThread(() -> requestNotificationPermissionForWeb());
+        }
+
+        @Override
+        public void showNotification(String tag, String title, String body) {
+            terminalNotifications.show(tag, title, body);
+        }
     });
+    private final TerminalNotifications terminalNotifications = new TerminalNotifications(this);
+    private boolean notificationPermissionRequestedByWeb;
 
     private final ServiceConnection connection = new ServiceConnection() {
         @Override
@@ -137,6 +154,18 @@ public final class MainActivity extends ComponentActivity {
         Intent intent = new Intent(this, EngineService.class);
         startForegroundService(intent);
         bound = bindService(intent, connection, Context.BIND_AUTO_CREATE);
+    }
+
+    /** ターミナルの通知から開いたとき、どの通知かを Web 画面へ伝えて該当のセッションを開かせる。 */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String tag = intent.getStringExtra(TerminalNotifications.EXTRA_TAG);
+        if (tag == null || webView == null || !NativeBridge.validNotificationTag(tag)) return;
+        String script = "window.dispatchEvent(new CustomEvent('sshc-android-notification-click',{detail:{tag:"
+                + JSONObject.quote(tag) + "}}));";
+        webView.evaluateJavascript(script, null);
     }
 
     /** OSによる前回の停止を次回起動時に一度だけ説明する。 */
@@ -370,6 +399,37 @@ public final class MainActivity extends ComponentActivity {
         webView.evaluateJavascript(script, null);
     }
 
+    /**
+     * ブラウザの Notification.permission と同じ 3 値にする。Android は「まだ聞いていない」と
+     * 「2 回断られてもう聞けない」を区別しないため、聞いたかどうかの記録と説明の要否で見分ける。
+     */
+    private String currentNotificationPermission() {
+        boolean enabled = getSystemService(NotificationManager.class).areNotificationsEnabled();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            return enabled ? "granted" : "denied";
+        }
+        boolean asked = getPreferences(Context.MODE_PRIVATE).getBoolean(NOTIFICATION_PERMISSION_ASKED, false);
+        return asked && !shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) ? "denied" : "default";
+    }
+
+    /** Web 画面の［通知を有効にする］から。聞く必要が無ければその場で今の状態を返す。 */
+    private void requestNotificationPermissionForWeb() {
+        if (!"default".equals(currentNotificationPermission())) {
+            reportNotificationPermission();
+            return;
+        }
+        notificationPermissionRequestedByWeb = true;
+        requestNotificationPermission();
+    }
+
+    private void reportNotificationPermission() {
+        if (webView == null) return;
+        String script = "window.dispatchEvent(new CustomEvent('sshc-android-notification-permission',{detail:{status:"
+                + JSONObject.quote(currentNotificationPermission()) + "}}));";
+        webView.evaluateJavascript(script, null);
+    }
+
     private void requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -414,7 +474,12 @@ public final class MainActivity extends ComponentActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != NOTIFICATION_PERMISSION_REQUEST || pendingTransferStatus == null) return;
+        if (requestCode != NOTIFICATION_PERMISSION_REQUEST) return;
+        if (notificationPermissionRequestedByWeb) {
+            notificationPermissionRequestedByWeb = false;
+            reportNotificationPermission();
+        }
+        if (pendingTransferStatus == null) return;
         String status = pendingTransferStatus;
         pendingTransferStatus = null;
         if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
