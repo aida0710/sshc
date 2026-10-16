@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { notifyAndroidTransfer, saveWithAndroid, setAndroidAppearance } from "./native";
+import { canChooseFolders, notifyAndroidTransfer, saveWithAndroid, setAndroidAppearance } from "./native";
 
 afterEach(() => {
   delete window.sshcAndroid;
@@ -8,6 +8,19 @@ afterEach(() => {
 describe("Android native bridge", () => {
   it("Android以外では通常のdownloadへ委ねる", async () => {
     await expect(saveWithAndroid(new Blob(["sshc"]), "file.txt")).resolves.toBe(false);
+  });
+
+  it("Android版ではフォルダを選ばせない", () => {
+    expect(canChooseFolders()).toBe(true);
+    window.sshcAndroid = {
+      chooseSave: vi.fn(() => ""),
+      writeSaveChunk: vi.fn(() => ""),
+      finishSave: vi.fn(() => ""),
+      cancelSave: vi.fn(),
+      notifyTransfer: vi.fn(),
+      setAppearance: vi.fn(),
+    };
+    expect(canChooseFolders()).toBe(false);
   });
 
   it("選択した保存先へ分割した内容を書き込む", async () => {

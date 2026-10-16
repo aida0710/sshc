@@ -27,6 +27,11 @@ function base64(bytes: Uint8Array): string {
   return globalThis.btoa(binary);
 }
 
+/** Androidの WebView は webkitdirectory の input でもフォルダを選ばせず、選んだファイルも渡さない。 */
+export function canChooseFolders(): boolean {
+  return window.sshcAndroid === undefined;
+}
+
 /** Android版ではStorage Access Frameworkへ保存する。Web版ならfalseを返して通常downloadへ委ねる。 */
 export async function saveWithAndroid(blob: Blob, suggestedName: string): Promise<boolean> {
   const bridge = window.sshcAndroid;
