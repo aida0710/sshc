@@ -151,6 +151,7 @@ const startOfFileKey = "Control+Home";
 const findKey = "Control+F";
 const replaceKey = "Control+H";
 const goToLineKey = "Control+G";
+const goToBracketKey = "Control+Shift+Backslash";
 const toggleCommentKey = "Control+/";
 const suggestKey = "Control+Space";
 const toggleTabMovesFocusKey = "Control+M";
@@ -386,10 +387,17 @@ test("finds and replaces text in the editor with Ctrl+F and Ctrl+H, and Escape c
   expect(problems).toEqual(noPageProblems);
 });
 
-test("finds and replaces text the same way after the JSON support has loaded, and the page throws no error", async ({ page, installation }) => {
+test("finds and replaces JSON after a plain text editor initialized Monaco, without page errors", async ({ page, installation }) => {
   const problems = watchForPageProblems(page);
   const settings = [`{`, `  "first": "${searchedWord}",`, `  "second": "${searchedWord}",`, `  "third": "${searchedWord}",`, `  "port": `, `}`, ``];
-  await openSFTPOnBastion(page, installation, { "/srv/settings.json": remoteFile(settings.join("\n")) });
+  await openSFTPOnBastion(page, installation, {
+    "/srv/notes.txt": remoteFile("Open plain text before JSON.\n"),
+    "/srv/settings.json": remoteFile(settings.join("\n")),
+  });
+
+  const plainTextEditor = await openInEditor(page, "/srv/notes.txt", englishLabels);
+  await expect(plainTextEditor.locator(".view-lines")).toContainText("Open plain text before JSON.");
+  await plainTextEditor.getByRole("button", { name: englishLabels.close, exact: true }).click();
 
   // The JSON support imports every editor feature too. A feature that only the
   // JSON support registered would start only in the editors created after the
@@ -403,6 +411,26 @@ test("finds and replaces text the same way after the JSON support has loaded, an
   editor = await openInEditor(page, "/srv/settings.json", englishLabels);
   await findAndReplaceAll(page, editor, "omega");
 
+  expect(problems).toEqual(noPageProblems);
+});
+
+test("highlights matching brackets and jumps to the closing bracket before saving", async ({ page, installation }) => {
+  const problems = watchForPageProblems(page);
+  const script = remoteFile("const settings = {\n  enabled: true,\n};\n");
+  await openSFTPOnBastion(page, installation, { "/srv/settings.js": script });
+
+  const editor = await openInEditor(page, "/srv/settings.js", englishLabels);
+  await expect(editor.locator(".view-lines")).toContainText("enabled: true");
+  await editorContent(editor).focus();
+  await page.keyboard.press(startOfFileKey);
+  await page.keyboard.press("End");
+  await expect(editor.locator(".bracket-match")).toHaveCount(2);
+  await page.keyboard.press(goToBracketKey);
+  // No line break here: Monaco would indent the closing bracket after one.
+  await page.keyboard.insertText("/* end */");
+  await editor.getByRole("button", { name: englishLabels.save, exact: true }).click();
+  await expect(editor.getByRole("status")).toHaveText("Saved");
+  expect(script.contents).toBe("const settings = {\n  enabled: true,\n/* end */};\n");
   expect(problems).toEqual(noPageProblems);
 });
 
