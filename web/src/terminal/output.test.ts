@@ -16,6 +16,8 @@ function harness() {
   const output = createTerminalOutput(terminal);
   const writeText = vi.fn(async () => undefined);
   const copied = vi.fn();
+  const imageSequences = vi.fn(() => true);
+  const imageHandler = terminal.parser.registerOscHandler(1337, imageSequences);
   const detachClipboard = attachOsc52Clipboard({
     parser: terminal.parser,
     enabled: () => !output.isReplaying(),
@@ -23,6 +25,7 @@ function harness() {
     copied,
   });
   cleanups.push(() => {
+    imageHandler.dispose();
     detachClipboard();
     output.dispose();
     terminal.dispose();
@@ -31,6 +34,7 @@ function harness() {
     output,
     writeText,
     copied,
+    imageSequences,
     async expectLine(text: string) {
       await vi.waitFor(() => expect(terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(text));
     },
@@ -42,6 +46,28 @@ afterEach(() => {
 });
 
 describe("terminal output replay", () => {
+  for (const [name, terminator] of [["BEL", "\u0007"], ["ST", "\u001b\\"]] as const) {
+    for (const size of ["", ";size=1"]) {
+      it(`preserves an image ${size ? "with" : "without"} size ending in ${name} across every byte boundary during replay and live output`, async () => {
+        const subject = harness();
+        const image = `File=inline=1${size}:YQ==`;
+        const history = encoder.encode(`履歴\u001b]1337;${image}${terminator}${copyRequest("old text")}`);
+        subject.output.beginReplay({ start: 0, next: history.byteLength, end: history.byteLength, truncated: false });
+        const live = encoder.encode(`続き😀\u001b]1337;${image}${terminator}${copyRequest("new text")}`);
+
+        // One byte at a time splits both UTF-8 characters and every OSC delimiter.
+        for (const bytes of [history, live]) {
+          for (const byte of bytes) subject.output.write(new Uint8Array([byte]));
+        }
+        await subject.expectLine("履歴続き😀");
+
+        expect(subject.imageSequences.mock.calls).toEqual([[image], [image]]);
+        expect(subject.writeText).toHaveBeenCalledTimes(1);
+        expect(subject.writeText).toHaveBeenCalledWith("new text");
+      });
+    }
+  }
+
   it("restores old output without copying and accepts the same text from a new live request", async () => {
     const subject = harness();
     const replay = encoder.encode(`history${copyRequest("copied text")}`);

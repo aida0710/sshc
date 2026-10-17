@@ -90,6 +90,31 @@ test("draws iTerm2, SIXEL and kitty images and keeps them out of the text after 
   await expect(screen).not.toContainText("iVBORw0KGgo");
 });
 
+for (const [name, terminator] of [["BEL", "\x07"], ["ST", "\x1b\\"]] as const) {
+  test(`draws an iTerm2 image without size terminated by ${name}, including after reopening`, async ({ page, installation }) => {
+    test.skip(process.platform === "win32", "cat is POSIX shell syntax here");
+    const image = samplePNG();
+    const sequence = `\x1b]1337;File=name=c2FtcGxlLnBuZw==;inline=1:${image.toString("base64")}${terminator}`;
+    await writeFile(join(installation.home, "iterm-without-size.txt"), `${sequence}\n`);
+    await openApplication(page, installation);
+    await openLocalShell(page);
+    const screen = page.getByRole("region", { name: /^Terminal for / });
+    await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+
+    await runInShell(page, "cd ~ && cat iterm-without-size.txt");
+    // More than half of the sample must be drawn, allowing for cell clipping.
+    const minimumImagePixels = 48 * 24 / 2;
+    await expect.poll(() => drawnImagePixels(page)).toBeGreaterThan(minimumImagePixels);
+    await expect(screen).not.toContainText("iVBORw0KGgo");
+
+    await openLocalShell(page);
+    await page.getByRole("list", { name: "Open sessions" }).getByRole("listitem").first().getByRole("button").first().click();
+    await expect(screen).toContainText("cat iterm-without-size.txt");
+    await expect.poll(() => drawnImagePixels(page)).toBeGreaterThan(minimumImagePixels);
+    await expect(screen).not.toContainText("iVBORw0KGgo");
+  });
+}
+
 test("answers the kitty graphics query Claude Code sends to detect image support", async ({ page, installation }) => {
   test.skip(process.platform === "win32", "read is POSIX shell syntax");
   // The reply (ESC _ G i=31;OK ESC \\) arrives as terminal input. `read` stops
