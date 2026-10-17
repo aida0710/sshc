@@ -21,10 +21,13 @@ import android.os.IBinder;
 import android.util.Log;
 import android.webkit.ConsoleMessage;
 import android.webkit.RenderProcessGoneDetail;
+import android.webkit.ServiceWorkerClient;
+import android.webkit.ServiceWorkerController;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
@@ -56,6 +59,7 @@ public final class MainActivity extends ComponentActivity {
     private static final int FILE_CHOOSER_REQUEST = 20;
     private static final int SAVE_DESTINATION_REQUEST = 21;
     private static final int NOTIFICATION_PERMISSION_REQUEST = 22;
+    private static final int FOLDER_CHOOSER_REQUEST = 23;
     private static final String TRANSFER_CHANNEL = "transfers";
     private static final String NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked";
 
@@ -104,7 +108,32 @@ public final class MainActivity extends ComponentActivity {
         public String takeOpenedNotification() {
             return takeOpenedNotificationTag();
         }
+
+        @Override
+        public void chooseFolder(String requestId) {
+            runOnUiThread(() -> openFolderChooser(requestId));
+        }
+
+        @Override
+        public String takeChosenFolder(String requestId) {
+            synchronized (folderLock) {
+                if (!requestId.equals(folderRequest) || folderListing == null) return "";
+                String listing = folderListing;
+                folderListing = null;
+                return listing;
+            }
+        }
+
+        @Override
+        public void releaseChosenFolder() {
+            chosenFolder.release();
+        }
     });
+    // 選んだフォルダの一覧と、それを受け取る request ID。bridge は UI スレッドの外から呼ぶので folderLock の中で読み書きする。
+    private final Object folderLock = new Object();
+    private String folderRequest;
+    private String folderListing;
+    private ChosenFolder chosenFolder;
     private final TerminalNotifications terminalNotifications = new TerminalNotifications(this);
     private boolean notificationPermissionRequestedByWeb;
     // 押された通知の tag。Web 画面が takeOpenedNotification で受け取るまで持つ。bridge の呼び出しは
@@ -157,6 +186,15 @@ public final class MainActivity extends ComponentActivity {
         showPreviousRuntimeNotice();
         // 閉じていたアプリを通知から開いた場合。Web 画面は起動したときに受け取りに来る。
         rememberOpenedNotification(getIntent());
+        chosenFolder = new ChosenFolder(getContentResolver());
+        // service worker が扱う画面では、その通信は WebViewClient を通らない。選んだフォルダのファイルの
+        // URL にはどちらの経路からでも答える。
+        ServiceWorkerController.getInstance().setServiceWorkerClient(new ServiceWorkerClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebResourceRequest request) {
+                return chosenFolderFile(request.getUrl());
+            }
+        });
         // WindowInsets を子 View の listener で処理する。
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
@@ -279,6 +317,11 @@ public final class MainActivity extends ComponentActivity {
             }
 
             @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                return chosenFolderFile(request.getUrl());
+            }
+
+            @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 // fragment に資格情報を含む可能性があるため、URL はログへ出さない。
                 Log.e(TAG, "web resource failed: mainFrame=" + request.isForMainFrame()
@@ -339,6 +382,15 @@ public final class MainActivity extends ComponentActivity {
             }
             return;
         }
+        if (requestCode == FOLDER_CHOOSER_REQUEST) {
+            Uri tree = resultCode == RESULT_OK && data != null ? data.getData() : null;
+            if (tree == null) {
+                reportChosenFolder("cancelled");
+            } else {
+                listChosenFolder(tree);
+            }
+            return;
+        }
         if (requestCode == SAVE_DESTINATION_REQUEST) {
             String requestId = pendingSaveRequest;
             pendingSaveRequest = null;
@@ -394,6 +446,59 @@ public final class MainActivity extends ComponentActivity {
         }
         List<Uri> chosen = FileChooser.chosen(data.getData(), clipItems);
         return chosen.isEmpty() ? null : chosen.toArray(new Uri[0]);
+    }
+
+    /** フォルダの選択画面を開く。選び終えたら listChosenFolder が中身を一覧にする。 */
+    private void openFolderChooser(String requestId) {
+        synchronized (folderLock) {
+            folderRequest = requestId;
+            folderListing = null;
+        }
+        try {
+            startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), FOLDER_CHOOSER_REQUEST);
+        } catch (RuntimeException error) {
+            reportChosenFolder("failed");
+            Toast.makeText(this, R.string.file_picker_unavailable, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** 大きなフォルダでも画面を止めないよう、一覧は別のスレッドで作る。 */
+    private void listChosenFolder(Uri tree) {
+        new Thread(() -> {
+            String status = "ready";
+            try {
+                String listing = chosenFolder.list(tree);
+                synchronized (folderLock) {
+                    folderListing = listing;
+                }
+            } catch (ChosenFolder.TooManyFiles error) {
+                status = "too_many";
+            } catch (org.json.JSONException | RuntimeException error) {
+                Log.w(TAG, "could not list the chosen folder");
+                status = "failed";
+            }
+            String reported = status;
+            runOnUiThread(() -> reportChosenFolder(reported));
+        }, "sshc-chosen-folder").start();
+    }
+
+    private void reportChosenFolder(String status) {
+        String requestId;
+        synchronized (folderLock) {
+            requestId = folderRequest;
+        }
+        if (webView == null || requestId == null) return;
+        String script = "window.dispatchEvent(new CustomEvent('sshc-android-folder',{detail:{requestId:"
+                + JSONObject.quote(requestId) + ",status:" + JSONObject.quote(status) + "}}));";
+        webView.evaluateJavascript(script, null);
+    }
+
+    /** engine の origin の、選んだフォルダのファイルの URL にだけ答える。 */
+    private WebResourceResponse chosenFolderFile(Uri url) {
+        Uri origin = engineOrigin;
+        if (origin == null || chosenFolder == null || !origin.getScheme().equals(url.getScheme())
+                || !origin.getHost().equals(url.getHost()) || origin.getPort() != url.getPort()) return null;
+        return chosenFolder.open(url);
     }
 
     /** Storage Access Frameworkへ保存先だけを選ばせ、内容はbridge経由で順次書き込む。 */

@@ -28,7 +28,7 @@ Tap a name once to open a folder or preview a file. Use a checkbox or long press
 
 Transfer Manager stays in a single summary row with counts and progress. Tap it to open the detailed sheet without reducing the file list's height. **Transfer settings** opens **Settings → SFTP**. File properties also expand on demand, leaving more space for previews.
 
-SFTP uses Android's system file picker and Storage Access Framework. Uploads accept several files at once. The Android file picker cannot choose folders, so **Upload folder** is not shown. Transfer completion and failure can produce Android notifications. Notifications from programs in a terminal (OSC 9, 99, and 777) and long-running commands finishing also arrive as Android notifications while sshc is closed. External URLs open in the system browser.
+SFTP uses Android's system file picker and Storage Access Framework. Uploads accept several files at once. **Upload folder** sends a folder chosen in the Android folder picker, with its subfolders and files. One upload can hold up to the transfer limit of 200 files. Transfer completion and failure can produce Android notifications. Notifications from programs in a terminal (OSC 9, 99, and 777) and long-running commands finishing also arrive as Android notifications while sshc is closed. External URLs open in the system browser.
 
 ## Development APK
 
