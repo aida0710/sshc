@@ -7,7 +7,7 @@ const SCREEN = ".xterm-screen";
 const KEYBOARD = ".xterm-helper-textarea";
 const SELECTION = ".xterm-selection div";
 const VIEWPORT = ".xterm-viewport";
-const SCROLLBAR_SLIDER = ".xterm-scrollable-element > .scrollbar.vertical > .slider";
+const SCROLLBAR_SLIDER = ".xterm-scrollable-element > .xterm-scrollbar.xterm-vertical > .xterm-slider";
 // These fit tests use 13px fonts: allow the 16px padding and one rounded row.
 export const maxTerminalUnusedHeightPx = 40;
 export async function waitForTerminalLayout(page: Page): Promise<void> {
@@ -137,16 +137,18 @@ export function surfaceBackgroundImage(page: Page): Promise<string> {
   });
 }
 
-// Counts drawn pixels on the inline image layer, so a missing or blank image
-// reads as zero.
+// Counts drawn pixels on the inline image layers (one above the text and, for
+// kitty images placed under it, one below), so a missing or blank image reads
+// as zero.
 export function drawnImagePixels(page: Page): Promise<number> {
   return page.evaluate(() => {
-    const layer = document.querySelector<HTMLCanvasElement>("canvas.xterm-image-layer");
-    const context = layer?.getContext("2d");
-    if (layer === null || layer === undefined || context === null || context === undefined) return 0;
-    const pixels = context.getImageData(0, 0, layer.width, layer.height).data;
     let drawn = 0;
-    for (let index = 3; index < pixels.length; index += 4) if ((pixels[index] ?? 0) > 0) drawn += 1;
+    for (const layer of document.querySelectorAll<HTMLCanvasElement>("canvas[class*='xterm-image-layer']")) {
+      const context = layer.getContext("2d");
+      if (context === null || layer.width === 0 || layer.height === 0) continue;
+      const pixels = context.getImageData(0, 0, layer.width, layer.height).data;
+      for (let index = 3; index < pixels.length; index += 4) if ((pixels[index] ?? 0) > 0) drawn += 1;
+    }
     return drawn;
   });
 }
