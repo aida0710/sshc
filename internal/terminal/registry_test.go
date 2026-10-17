@@ -410,6 +410,31 @@ func TestAttachReplaysTheBufferAndThenFollowsTheLiveOutput(t *testing.T) {
 	}
 }
 
+func TestAReplayCutInsideAnInlineImageStartsAfterTheImage(t *testing.T) {
+	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: terminal.MinScrollback})
+	session := openShell(t, registry)
+	process := starter.last()
+
+	// The image is longer than the scrollback, so the oldest retained byte is
+	// inside its base64. Replaying from there would print the base64 as text.
+	// It stays below the 32 KiB the fake process hands over per read.
+	image := "\x1b]1337;File=inline=1:" + strings.Repeat("QUFB", terminal.MinScrollback*3/8) + "\a"
+	process.feed("before\n" + image + "after\n")
+	testwait.Until(t, func() bool { return strings.HasSuffix(string(snapshotOf(session)), "after\n") })
+
+	replay, _ := attach(t, session)
+	if string(replay) != "after\n" {
+		t.Fatalf("replay = %q, want only the output after the image", truncateForLog(replay))
+	}
+}
+
+func truncateForLog(value []byte) string {
+	if len(value) <= 80 {
+		return string(value)
+	}
+	return string(value[:40]) + "…" + string(value[len(value)-40:])
+}
+
 func TestAttachFromReplaysOnlyMissingBytesAndReportsARingGap(t *testing.T) {
 	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: terminal.MinScrollback})
 	session := openShell(t, registry)
