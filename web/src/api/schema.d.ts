@@ -2699,11 +2699,22 @@ export interface components {
             problem: string;
             reconnect?: components["schemas"]["TerminalReconnect"];
             progress?: components["schemas"]["TerminalConnectionProgress"];
+            programProgress?: components["schemas"]["TerminalProgramProgress"];
             exited?: components["schemas"]["TerminalExit"];
             forwards?: components["schemas"]["TerminalForward"][];
             presentation?: components["schemas"]["TerminalPresentation"];
             notificationVersion?: number;
             lastNotification?: components["schemas"]["TerminalNotification"];
+        };
+        TerminalProgramProgress: components["schemas"]["TerminalDeterminateProgress"] | components["schemas"]["TerminalIndeterminateProgress"];
+        TerminalDeterminateProgress: {
+            /** @enum {string} */
+            state: "normal" | "error" | "paused";
+            percent: number;
+        };
+        TerminalIndeterminateProgress: {
+            /** @enum {string} */
+            state: "indeterminate";
         };
         TerminalPresentation: {
             displayTitle: string;
