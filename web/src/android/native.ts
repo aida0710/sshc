@@ -1,6 +1,6 @@
 import { newIdentifier } from "../ui/randomIdentifier";
 
-type AndroidBridge = {
+export type AndroidBridge = {
   chooseSave(requestId: string, suggestedName: string, mimeType: string): string;
   writeSaveChunk(requestId: string, encoded: string): string;
   finishSave(requestId: string): string;
@@ -11,6 +11,9 @@ type AndroidBridge = {
   requestNotificationPermission(): void;
   showNotification(tag: string, title: string, body: string): string;
   takeOpenedNotification(): string;
+  chooseFolder(requestId: string): string;
+  takeChosenFolder(requestId: string): string;
+  releaseChosenFolder(): void;
 };
 
 type AndroidWindow = Window & { sshcAndroid?: AndroidBridge };
@@ -33,11 +36,6 @@ function base64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.byteLength)));
   }
   return globalThis.btoa(binary);
-}
-
-/** Androidの WebView は webkitdirectory の input でもフォルダを選ばせず、選んだファイルも渡さない。 */
-export function canChooseFolders(): boolean {
-  return window.sshcAndroid === undefined;
 }
 
 /** Android版は転送の結果を transferLedger が notifyAndroidTransfer で知らせる。 */

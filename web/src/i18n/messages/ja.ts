@@ -193,6 +193,8 @@ export const ja = {
   "sftp.problem.conflict": "操作中にリモートのファイルが変更されました。もう一度実行してください。",
   "sftp.problem.exists": "同じ名前の項目がすでにあります。",
   "sftp.problem.transferLimit": "転送の数が上限に達しています。いくつかの転送が終わってから、もう一度実行してください。",
+  "sftp.problem.androidFolderTooMany": "選んだフォルダのファイルが多すぎるため、読み込めませんでした。",
+  "sftp.problem.androidFolderFailed": "選んだフォルダを読み込めませんでした。",
   "sftp.problem.transferState": "転送の状態が変わりました。転送一覧を確認してください。",
   "sftp.problem.transferNotFound": "転送が見つかりませんでした。一覧から削除された可能性があります。",
   "sftp.problem.transferTooLarge": "ファイルが転送できるサイズを超えています。",

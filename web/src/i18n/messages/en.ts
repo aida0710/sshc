@@ -190,6 +190,8 @@ export const en = {
   "sftp.problem.conflict": "The remote file changed during the operation. Try again.",
   "sftp.problem.exists": "An entry with the same name already exists.",
   "sftp.problem.transferLimit": "The transfer limit has been reached. Try again after some transfers finish.",
+  "sftp.problem.androidFolderTooMany": "The chosen folder holds too many files to read.",
+  "sftp.problem.androidFolderFailed": "The chosen folder could not be read.",
   "sftp.problem.transferState": "The transfer state changed. Check the transfer list.",
   "sftp.problem.transferNotFound": "The transfer was not found. It may have been removed from the list.",
   "sftp.problem.transferTooLarge": "The file exceeds the size that can be transferred.",

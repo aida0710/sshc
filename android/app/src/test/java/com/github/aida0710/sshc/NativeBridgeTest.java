@@ -60,6 +60,22 @@ public final class NativeBridgeTest {
             opened = "";
             return tag;
         }
+
+        String folderRequest;
+
+        @Override
+        public void chooseFolder(String requestId) {
+            folderRequest = requestId;
+        }
+
+        @Override
+        public String takeChosenFolder(String requestId) {
+            return requestId.equals(folderRequest) ? "{}" : "";
+        }
+
+        @Override
+        public void releaseChosenFolder() {
+        }
     }
 
     @Test
@@ -69,6 +85,16 @@ public final class NativeBridgeTest {
         NativeBridge bridge = new NativeBridge(host);
         assertEquals("sshc-terminal-1", bridge.takeOpenedNotification());
         assertEquals("", bridge.takeOpenedNotification());
+    }
+
+    @Test
+    public void フォルダの選択は正しい_request_ID_だけを受け付ける() {
+        Host host = new Host();
+        NativeBridge bridge = new NativeBridge(host);
+        assertEquals("invalid_request", bridge.chooseFolder("../x"));
+        assertEquals("", bridge.chooseFolder("folder-request-1"));
+        assertEquals("{}", bridge.takeChosenFolder("folder-request-1"));
+        assertEquals("", bridge.takeChosenFolder("../x"));
     }
 
     @Test

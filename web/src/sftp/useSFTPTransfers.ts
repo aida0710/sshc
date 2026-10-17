@@ -6,7 +6,8 @@ import { sftpApi, type RemoteEntry } from "./api";
 import { localHostAlias } from "./localHost";
 import { localJoin, localParentOf, remoteParentOf, sourceFor } from "./sftpSource";
 import { entryKind, movable } from "./entryKind";
-import { sftpTransferManager } from "./transferManager";
+import { maxTransferJobs, sftpTransferManager } from "./transferManager";
+import { canChooseAndroidFolder, chooseAndroidFolder, loadChosenFolderFiles, type ChosenFolder } from "../android/chosenFolder";
 import { directoryPaths, remoteEntriesMime, safeRelativePath, type LocalTransferFile, type RemoteDragPayload } from "./transfers";
 import { browserUploadExcluded, createTransferExclusions } from "./transferExclusions";
 import { payloadFor, registerDrag, releaseDrag } from "./dragRegistry";
@@ -174,6 +175,26 @@ export function useSFTPTransfers({
       report(error);
     } finally {
       admission?.release();
+      setQueuing(false);
+    }
+  }
+
+  // The Android app picks the folder itself (its WebView's file input cannot)
+  // and the chosen files then upload like a folder picked in a browser.
+  async function uploadAndroidFolder() {
+    let chosen: ChosenFolder | null = null;
+    setQueuing(true);
+    try {
+      chosen = await chooseAndroidFolder();
+      if (chosen === null) return;
+      // Reading the files first would be wasted when the queue cannot take them.
+      if (chosen.files.length > maxTransferJobs) throw new Error("sftp_transfer_limit");
+      const files = await loadChosenFolderFiles(chosen.files);
+      await uploadFiles(files, { directories: chosen.directories });
+    } catch (error) {
+      report(error);
+    } finally {
+      chosen?.release();
       setQueuing(false);
     }
   }
@@ -369,7 +390,10 @@ export function useSFTPTransfers({
     folderUploadInput,
     uploadFromInput,
     chooseFiles: () => uploadInput.current?.click(),
-    chooseFolder: () => folderUploadInput.current?.click(),
+    chooseFolder: () => {
+      if (canChooseAndroidFolder()) void uploadAndroidFolder();
+      else folderUploadInput.current?.click();
+    },
     transferOut,
     // Whether "send to the other pane" has somewhere to go.
     canTransferOut: local ? counterpartRemote : true,

@@ -1,0 +1,1 @@
+import{m as e}from"./context-B3W6e_Tv.js";import{M as t}from"./index-e5v9AhEk.js";var n=e();function r({dirty:e,blocker:r,onNavigationBlockerChange:i}){(0,n.useEffect)(()=>{if(!e){i?.(null);return}return i?.(r),()=>i?.(null)},[r,e,i]),t(e)}export{r as t};
