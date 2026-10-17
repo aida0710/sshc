@@ -18,6 +18,10 @@ final class NativeBridge {
         void showNotification(String tag, String title, String body);
         /** 押されたまま Web 画面が受け取っていない通知の tag。無ければ空文字。 */
         String takeOpenedNotification();
+        void chooseFolder(String requestId);
+        /** 選んだフォルダの一覧（JSON）。無ければ空文字。 */
+        String takeChosenFolder(String requestId);
+        void releaseChosenFolder();
     }
 
     // 通知に載せる文字数の上限。プログラムが送る本文を際限なく Android へ渡さない。
@@ -101,6 +105,29 @@ final class NativeBridge {
     @JavascriptInterface
     public String takeOpenedNotification() {
         return host.takeOpenedNotification();
+    }
+
+    /**
+     * Android のフォルダの選択画面を開く。空文字は受付済み、それ以外は安定した失敗 code。
+     * 結果は sshc-android-folder イベントで知らせ、一覧は takeChosenFolder で受け取る。
+     */
+    @JavascriptInterface
+    public String chooseFolder(String requestId) {
+        if (!validRequestId(requestId)) return "invalid_request";
+        host.chooseFolder(requestId);
+        return "";
+    }
+
+    @JavascriptInterface
+    public String takeChosenFolder(String requestId) {
+        if (!validRequestId(requestId)) return "";
+        return host.takeChosenFolder(requestId);
+    }
+
+    /** 選んだフォルダのファイルを読み終えたら、渡すのをやめる。 */
+    @JavascriptInterface
+    public void releaseChosenFolder() {
+        host.releaseChosenFolder();
     }
 
     /** 通知の許可を求める。結果は sshc-android-notification-permission イベントで Web 画面へ返る。 */
