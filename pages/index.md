@@ -1,7 +1,7 @@
 ---
 layout: home
 title: sshc
-description: SSHとローカルシェルを扱うターミナルアプリ。OpenSSH設定をそのまま使い、SFTP、認証情報の再利用、AIエージェント向けCLI、接続ごとのVPN、暗号化同期に対応。
+description: SSHとローカルシェルを扱うターミナルアプリ。OpenSSH設定をそのまま使い、SFTP、認証情報の再利用、AIエージェント向けCLI、接続ごとのVPN、エンドツーエンド暗号化（E2EE）の同期に対応。
 sidebar: false
 outline: false
 ---
@@ -10,7 +10,7 @@ outline: false
   <section class="sshc-hero">
     <div>
       <h1 class="sshc-title">sshc</h1>
-      <p class="sshc-lead">sshcは、SSHとローカルシェルを扱うターミナルアプリです。<br>今あるOpenSSH設定をそのまま使えます。SFTP、認証情報の再利用、AIエージェント向けCLI、接続ごとのVPNに加え、利用者が用意したS3互換ストレージを介した暗号化同期にも対応しています。</p>
+      <p class="sshc-lead">sshcは、SSHとローカルシェルを扱うターミナルアプリです。<br>今あるOpenSSH設定をそのまま使えます。SFTP、認証情報の再利用、AIエージェント向けCLI、接続ごとのVPNに加え、利用者が用意したS3互換ストレージを介した、エンドツーエンド暗号化（E2EE）の同期にも対応しています。</p>
       <p class="sshc-platforms"><span>対応OS</span>macOS / Windows / Linux / Android</p>
       <div class="sshc-actions">
         <a class="sshc-action primary" href="./guide/install">インストール</a>
@@ -35,7 +35,7 @@ outline: false
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/otp-desktop-ja.png" alt="現在のコードと割り当て先を表示したOTP画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">04</span><h3>ワンタイムパスワード</h3><p>TOTPのセットアップキーをVaultに保存すると、現在のコードを確認できます。接続先に割り当てておけば、サーバーが求めたときにコードを自動で入力します。</p></div></article>
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/cli-desktop.png" alt="sshcの非対話CLIを実行したTerminal画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">05</span><h3>AIエージェントから使えるCLI</h3><p>CodexなどのAIエージェントからsshcを直接実行できます。接続にはVaultに保存した認証情報を使っています。</p></div></article>
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/sftp-desktop.png" alt="リモートファイルを操作するSFTP画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">06</span><h3>SFTP</h3><p>リモートファイルの編集、フォルダ転送、2つの接続先の比較と直接コピーを、Terminalと行き来しながら操作できます。</p></div></article>
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/sync-desktop-ja.png" alt="暗号化スナップショットを管理するSync画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">07</span><h3>暗号化同期</h3><p>接続設定、認証情報、スニペット、同期対象のSSH鍵をこのマシン上で暗号化し、利用者が用意したS3互換ストレージを介して同期できます。ストレージ事業者は、暗号化された内容を平文では取得できません。</p></div></article>
+      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/sync-desktop-ja.png" alt="暗号化スナップショットを管理するSync画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">07</span><h3>E2EEの暗号化同期</h3><p>接続設定、認証情報、スニペット、同期対象のSSH鍵をこのマシン上で暗号化し、利用者が用意したS3互換ストレージを介して同期できます。復号できるのは、同じ同期キーを設定したマシンだけです。ストレージ事業者もsshcの開発者も、内容を平文では取得できません。</p></div></article>
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/vpn-desktop-ja.png" alt="VPNプロファイルと使用する接続を並べたVPN画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">08</span><h3>接続ごとのVPN</h3><p>選んだ接続だけを、その接続専用のVPN経由で接続します。このマシンのルーティングとDNSは変更しません。WireGuard、OpenVPN、IKEv2/IPsecなどに対応しています。</p></div></article>
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/android-features.png" alt="AndroidアプリのHome画面とConnections画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">09</span><h3>Androidアプリ</h3><p>同じ画面をAndroidでも使えます。SSH、SFTP、ローカルシェルを、下部のナビゲーションと補助キーで操作できます。</p></div></article>
     </div>
