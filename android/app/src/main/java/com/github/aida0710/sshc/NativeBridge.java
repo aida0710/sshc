@@ -16,6 +16,8 @@ final class NativeBridge {
         String notificationPermission();
         void requestNotificationPermission();
         void showNotification(String tag, String title, String body);
+        /** 押されたまま Web 画面が受け取っていない通知の tag。無ければ空文字。 */
+        String takeOpenedNotification();
     }
 
     // 通知に載せる文字数の上限。プログラムが送る本文を際限なく Android へ渡さない。
@@ -89,6 +91,16 @@ final class NativeBridge {
     @JavascriptInterface
     public String notificationPermission() {
         return host.notificationPermission();
+    }
+
+    /**
+     * 押された通知の tag を 1 度だけ返す。Web 画面は起動したときと
+     * sshc-android-notification-opened イベントを受けたときに呼ぶ。
+     * 画面を読み込み直しても、アプリを開き直しても、押された通知を取りこぼさない。
+     */
+    @JavascriptInterface
+    public String takeOpenedNotification() {
+        return host.takeOpenedNotification();
     }
 
     /** 通知の許可を求める。結果は sshc-android-notification-permission イベントで Web 画面へ返る。 */

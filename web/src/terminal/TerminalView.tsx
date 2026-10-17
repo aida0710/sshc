@@ -40,6 +40,7 @@ import { attachInlineImages } from "./inlineImages";
 import { applyUnicode11Widths } from "./unicodeWidths";
 import { attachCommandMarkers } from "./commandMarkers";
 import { showBrowserNotification } from "../ui/browserNotifications";
+import { longCommandNotificationTag } from "./notificationTags";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
 import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
@@ -269,7 +270,7 @@ export function TerminalView({
           subject: terminalDisplayTitle(session),
           seconds: String(Math.round(durationMilliseconds / 1000)),
         }),
-        tag: `sshc-command-${session.id}`,
+        tag: longCommandNotificationTag(session.id),
       });
     });
     const terminalLinks = attachLinkProvider(view, {
