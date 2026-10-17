@@ -9,7 +9,7 @@ sshc treats `~/.ssh/config` as the source of truth. It follows `Include` files a
 
 ## Config Editor
 
-The editor shows loaded files and their Include relationships. UTF-8 text is written to a temporary file before replacement. Outside sshc-managed group markers, comments, blank lines, directive order, and unrelated blocks are preserved whenever possible.
+The editor shows loaded files and their Include relationships. UTF-8 text is written to a temporary file before replacement. Outside sshc-managed group markers, comments, blank lines, directive order, and unrelated blocks are preserved whenever possible. Do not edit the region between the line starting with `# >>> sshc groups` and `# <<< sshc groups` directly: its contents are replaced on the next save.
 
 ## Four connection tabs
 

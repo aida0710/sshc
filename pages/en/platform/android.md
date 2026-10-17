@@ -18,7 +18,7 @@ Install the signed APK from GitHub Releases. Android 13+ back navigation closes 
 - Tap a URL or path shown in the terminal to open a menu for opening it in the browser, copying it, and other actions. Tapping anywhere else opens the keyboard. OSC 8 hyperlinks printed by programs cannot be opened by tapping.
 - Dialogs and action sheets stay within the visible area above the keyboard. Long content scrolls inside them. Android Back dismisses the topmost menu before its parent dialog.
 
-The top-left menu button opens a drawer with running terminals and Command Palette. Screen-edge gestures remain available for Android Back. Tap outside the drawer or use Back to close it.
+The top-left menu button opens a drawer with running terminals and **Search everything**, which opens Command Palette. Screen-edge gestures remain available for Android Back. Tap outside the drawer or use Back to close it.
 
 ## SFTP on a phone
 
@@ -28,7 +28,9 @@ Tap a name once to open a folder or preview a file. Use a checkbox or long press
 
 Transfer Manager stays in a single summary row with counts and progress. Tap it to open the detailed sheet without reducing the file list's height. **Transfer settings** opens **Settings → SFTP**. File properties also expand on demand, leaving more space for previews.
 
-SFTP uses Android's system file picker and Storage Access Framework. Uploads accept several files at once. **Upload folder** sends a folder chosen in the Android folder picker, with its subfolders and files. One upload can hold up to the transfer limit of 200 files. Transfer completion and failure can produce Android notifications. Notifications from programs in a terminal (OSC 9, 99, and 777) and long-running commands finishing also arrive as Android notifications while sshc is closed. External URLs open in the system browser.
+SFTP uses Android's system file picker and Storage Access Framework. Uploads accept several files at once. **Upload folder** sends a folder chosen in the Android folder picker, with its subfolders and files. Counting the selected folder as level 1, the contents of folders deeper than 64 levels are skipped. The transfer queue is limited to 200 entries, including existing transfers and files awaiting addition. Even a selection of 200 files or fewer is refused if the combined total exceeds the limit.
+
+Transfer completion and failure can produce Android notifications. Notifications from programs in a terminal (OSC 9, 99, and 777) and long-running commands finishing also arrive as Android notifications while sshc is closed. External URLs open in the system browser.
 
 ## Development APK
 
@@ -46,4 +48,4 @@ The local shell runs in the app's private directory with Android sandbox permiss
 
 ## Startup failure
 
-The failure screen lists six items: Version, Code, Detail, Android SDK, device, and ABI. **Copy diagnostics** copies them together and **Try again** restarts the launch. The path of the folder that holds the SSH settings, or the local port result, appears inside Code and Detail when it is relevant. Reports exclude private keys, passwords, tokens, and bucket secrets.
+The failure screen lists six items: Version, Code, Detail, Android SDK, device, and ABI. **Copy diagnostic details** copies them together and **Try again** restarts the launch. The path of the folder that holds the SSH settings, or the local port result, appears inside Code and Detail when it is relevant. Reports exclude private keys, passwords, tokens, and bucket secrets.
