@@ -11,6 +11,7 @@ sshcのTerminalは、ターミナル内で動くプログラムが送る標準�
 |---|---|---|
 | ペイン名を変える | OSC 0、OSC 1、OSC 2 | zsh／bashのプロンプト設定、vim、tmux、Claude Code、Codex |
 | 通知を出す | OSC 9（iTerm2形式）、OSC 99（kitty形式）、OSC 777（rxvt／tmux形式） | Claude Code、Codex、`cmux notify`のような通知コマンド |
+| 進み具合を出す | OSC 9;4（ConEmu形式） | `cargo`、`winget`など、Windows TerminalやGhosttyの進捗表示に対応したコマンド |
 
 ## ペイン名
 
@@ -42,6 +43,19 @@ printf '\e]0;hello\a'
 ```sh
 printf '\e]9;Task complete\a'
 printf '\e]777;notify;Build finished;main.go compiled\a'
+```
+
+## 進み具合
+
+プログラムが`ESC ] 9 ; 4 ; 状態 ; 百分率 BEL`で進み具合を送ると、ペインの見出しの下端に細い線で表示します。
+
+- 状態は1が通常、2がエラー（赤）、3が終わりの分からない処理（左右に動く線）、4が一時停止（黄）、0が消去です。エラーと一時停止で百分率を省くと、直前の値を使います。
+- シェルがOSC 133でコマンドの終了を知らせたときと、セッションが新しいシェルに替わったときにも消します。
+
+試すには、ペイン内で次を実行します。
+
+```sh
+printf '\e]9;4;1;40\a'; sleep 3; printf '\e]9;4;0\a'
 ```
 
 ## Claude Codeで通知を受け取る

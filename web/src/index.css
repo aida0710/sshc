@@ -226,6 +226,15 @@
   background-size: 240% 100%;
 }
 
+@keyframes sshc-progress-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
 @keyframes sshc-skeleton-shimmer {
   from {
     background-position: 100% 0;

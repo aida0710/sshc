@@ -33,6 +33,11 @@ import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 import { TerminalPortForwards } from "./TerminalPortForwards";
 import { attachWebglRenderer } from "./webgl";
 import { attachOSC7Directory } from "./osc7";
+import { attachOSC9Directory } from "./osc9Directory";
+import { attachOSC9Progress, noTerminalProgress, type TerminalProgress } from "./osc9Progress";
+import { TerminalProgressBar } from "./TerminalProgressBar";
+import { attachInlineImages } from "./inlineImages";
+import { applyUnicode11Widths } from "./unicodeWidths";
 import { attachCommandMarkers } from "./commandMarkers";
 import { showBrowserNotification } from "../ui/browserNotifications";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
@@ -148,6 +153,7 @@ export function TerminalView({
   } | null>(null);
   const sendPaste = useRef<(text: string) => void>(() => {});
   const [currentDirectory, setCurrentDirectory] = useState("");
+  const [programProgress, setProgramProgress] = useState<TerminalProgress>(noTerminalProgress);
 
   const [quickCommandsOpen, setQuickCommandsOpen] = useState(false);
   const [quickCommandSelection, setQuickCommandSelection] = useState("");
@@ -166,6 +172,7 @@ export function TerminalView({
   useEffect(() => {
     setOsc52Enabled(initialOsc52Enabled);
     setCurrentDirectory("");
+    setProgramProgress(noTerminalProgress);
     setPendingPaste(null);
   }, [initialOsc52Enabled, session.id, session.state]);
 
@@ -209,11 +216,13 @@ export function TerminalView({
         },
       },
     });
+    applyUnicode11Widths(view);
     const fit = new FitAddon();
     const searchAddon = new SearchAddon({ highlightLimit: 1000 });
     view.loadAddon(fit);
     view.loadAddon(searchAddon);
     view.open(container);
+    const inlineImages = attachInlineImages(view);
     let webgl: { dispose(): void } | null = null;
     let terminalDisposed = false;
     void attachWebglRenderer(view, {
@@ -247,7 +256,12 @@ export function TerminalView({
       refused: () => setProblem(t("terminal.clipboardRefused")),
     });
     const osc7Directory = attachOSC7Directory(view.parser, setCurrentDirectory);
+    const osc9Directory = attachOSC9Directory(view.parser, setCurrentDirectory);
+    const osc9Progress = attachOSC9Progress(view.parser, setProgramProgress);
     const commandMarkers = attachCommandMarkers(view, ({ durationMilliseconds }) => {
+      // A program that quit without clearing its OSC 9;4 progress leaves no
+      // bar behind once the shell reports the command finished.
+      setProgramProgress(noTerminalProgress);
       if (durationMilliseconds < longCommandNotifyMs || !document.hidden) return;
       showBrowserNotification({
         title: "sshc",
@@ -393,6 +407,9 @@ export function TerminalView({
       detachOsc52();
       output.dispose();
       osc7Directory.dispose();
+      osc9Directory.dispose();
+      osc9Progress.dispose();
+      inlineImages.dispose();
       commandMarkers.dispose();
       kittyKeyboard.dispose();
       terminalLinks.dispose();
@@ -508,6 +525,7 @@ export function TerminalView({
             onClose={() => setOverflowOpen(false)}
           />
         ) : null}
+        <TerminalProgressBar progress={programProgress} />
       </div>
       <TerminalStatusBanners
         session={session}

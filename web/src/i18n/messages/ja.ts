@@ -627,6 +627,9 @@ export const ja = {
   "terminal.unreadNotification": "未読の通知",
   "terminal.notificationFallback": "このターミナルのプログラムから通知がありました。",
   "terminal.unreadWorkspace": "このワークスペースに未読のターミナル通知があります",
+  "terminal.programProgress": "プログラムの進み具合",
+  "terminal.programProgressError": "プログラムの進み具合（エラー）",
+  "terminal.programProgressPaused": "プログラムの進み具合（一時停止）",
   "terminal.browserNotificationsHeading": "Notifications",
   "terminal.browserNotificationsDefault":
     "このタブがバックグラウンドにあるとき、ターミナル内のプログラムからの通知（コーディングエージェントの入力待ちなど）やファイル転送の完了をsshcから通知できます。",
