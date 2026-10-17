@@ -190,7 +190,7 @@
   }
 
   /* xterm 6 draws its own scrollbar instead of using the viewport's native one. */
-  .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical > .xterm-slider {
     left: 4px !important;
     width: 6px !important;
     border-radius: 999px;
@@ -204,8 +204,10 @@
 }
 
 /* xterm's legacy viewport spans the padding and defaults to black, making
-   the margin look like a frame even when the renderer uses another color. */
-[data-terminal-host] > .xterm .xterm-viewport {
+   the margin look like a frame even when the renderer uses another color.
+   xterm 6.1 sets that black through .xterm:not(.allow-transparency), so this
+   rule repeats the :not() to stay the more specific one. */
+[data-terminal-host] > .xterm:not(.allow-transparency) .xterm-viewport {
   background-color: var(--ui-term-bg);
 }
 
