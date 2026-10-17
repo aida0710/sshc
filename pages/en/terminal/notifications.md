@@ -47,7 +47,7 @@ printf '\e]777;notify;Build finished;main.go compiled\a'
 
 ## Progress
 
-When a program reports progress with `ESC ] 9 ; 4 ; state ; percent BEL`, sshc draws a thin line along the bottom edge of the pane header.
+When a program reports progress with `ESC ] 9 ; 4 ; state ; percent BEL`, sshc draws a thin line along the bottom edge of the pane header and its entry in the session list. The list keeps showing progress while you view another session.
 
 - State 1 is normal, 2 is an error (red), 3 is work of unknown length (a line moving back and forth), 4 is paused (yellow), and 0 clears it. Error and paused keep the previous percent when it is omitted.
 - The line also clears when the shell reports through OSC 133 that the command finished, and when the session switches to a new shell.

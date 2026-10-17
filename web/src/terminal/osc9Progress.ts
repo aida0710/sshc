@@ -1,3 +1,5 @@
+import type { components } from "../api/schema";
+
 type Disposable = { dispose(): void };
 type OSCParser = { registerOscHandler(identifier: number, handler: (data: string) => boolean): Disposable };
 
@@ -5,8 +7,7 @@ type OSCParser = { registerOscHandler(identifier: number, handler: (data: string
 // Ghostty and WezTerm also show. "none" means nothing to show.
 export type TerminalProgress =
   | { state: "none" }
-  | { state: "indeterminate" }
-  | { state: "normal" | "error" | "paused"; percent: number };
+  | components["schemas"]["TerminalProgramProgress"];
 
 export const noTerminalProgress: TerminalProgress = { state: "none" };
 

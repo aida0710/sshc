@@ -38,7 +38,7 @@ const (
 	// maxKittyPendingIdentifiers * 2 * maxKittyChunkBytes (title and body).
 	maxKittyPendingIdentifiers = 8
 	// maxOSCNumberDigits bounds the number read before ';'. Every number this
-	// observer handles (0, 1, 2, 9, 99, 777) fits; a longer one is skipped to the
+	// observer handles (0, 1, 2, 9, 99, 133, 777) fits; a longer one is skipped to the
 	// end of its sequence without buffering a payload.
 	maxOSCNumberDigits = 4
 )
@@ -55,17 +55,19 @@ const (
 	oscDiscardEscape
 )
 
-// oscObserver watches the output stream for the standard title and
-// notification sequences. It never removes bytes: the browser terminal still
-// receives everything and applies titles itself. The engine only records what
+// oscObserver watches the output stream for titles, notifications and program
+// progress. It never removes bytes: the browser terminal still receives
+// everything and applies these sequences itself. The engine only records what
 // it saw so the session list, other tabs and headless clients can show it.
 type oscObserver struct {
-	state    oscState
-	number   []byte
-	payload  []byte
-	chunks   map[string]*kittyNotification
-	onTitle  func(title string)
-	onNotify func(title, body string)
+	state           oscState
+	number          []byte
+	payload         []byte
+	chunks          map[string]*kittyNotification
+	onTitle         func(title string)
+	onNotify        func(title, body string)
+	onProgress      func(*ProgramProgress)
+	programProgress *ProgramProgress
 }
 
 type kittyNotification struct {
@@ -73,8 +75,8 @@ type kittyNotification struct {
 	body  string
 }
 
-func newOSCObserver(onTitle func(string), onNotify func(title, body string)) *oscObserver {
-	return &oscObserver{onTitle: onTitle, onNotify: onNotify}
+func newOSCObserver(onTitle func(string), onNotify func(title, body string), onProgress func(*ProgramProgress)) *oscObserver {
+	return &oscObserver{onTitle: onTitle, onNotify: onNotify, onProgress: onProgress}
 }
 
 // Observe scans one chunk. Sequences may span chunk boundaries.
@@ -175,11 +177,27 @@ func (o *oscObserver) complete() {
 			o.onTitle(cleanDisplayText(payload, MaxTitle))
 		}
 	case "9":
-		o.notifyITerm(payload)
+		if strings.HasPrefix(payload, "4;") {
+			o.reportProgramProgress(nextProgramProgress(o.programProgress, payload))
+		} else {
+			o.notifyITerm(payload)
+		}
 	case "99":
 		o.notifyKitty(payload)
+	case "133":
+		kind, _, _ := strings.Cut(payload, ";")
+		if kind == "D" {
+			o.reportProgramProgress(nil)
+		}
 	case "777":
 		o.notifyRxvt(payload)
+	}
+}
+
+func (o *oscObserver) reportProgramProgress(progress *ProgramProgress) {
+	o.programProgress = progress
+	if o.onProgress != nil {
+		o.onProgress(progress)
 	}
 }
 
