@@ -23,6 +23,8 @@ const sftpProblemMessages: CodeMessages = {
   sftp_conflict: "sftp.problem.conflict",
   sftp_exists: "sftp.problem.exists",
   sftp_transfer_limit: "sftp.problem.transferLimit",
+  android_folder_too_many: "sftp.problem.androidFolderTooMany",
+  android_folder_failed: "sftp.problem.androidFolderFailed",
   sftp_transfer_state: "sftp.problem.transferState",
   sftp_transfer_not_found: "sftp.problem.transferNotFound",
   sftp_transfer_too_large: "sftp.problem.transferTooLarge",

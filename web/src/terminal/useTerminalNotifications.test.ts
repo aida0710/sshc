@@ -4,6 +4,7 @@ import type { TerminalSession } from "../api/terminalSessions";
 import { en } from "../i18n/messages";
 import type { Translate } from "../i18n/context";
 import { useTerminalNotifications } from "./useTerminalNotifications";
+import { fakeAndroidBridge } from "../android/fakeAndroidBridge";
 
 const initial: TerminalSession = {
   id: "one", kind: "ssh", alias: "osaka", title: "API認証の修正",
@@ -42,12 +43,9 @@ describe("useTerminalNotifications", () => {
 
     it("opens the session of a notification tapped before the session list loaded", async () => {
       let pending = "sshc-terminal-one";
-      window.sshcAndroid = {
-        chooseSave: vi.fn(() => ""), writeSaveChunk: vi.fn(() => ""), finishSave: vi.fn(() => ""), cancelSave: vi.fn(),
-        notifyTransfer: vi.fn(), setAppearance: vi.fn(), notificationPermission: vi.fn(() => "granted"),
-        requestNotificationPermission: vi.fn(), showNotification: vi.fn(() => ""),
+      window.sshcAndroid = fakeAndroidBridge({
         takeOpenedNotification: () => { const tag = pending; pending = ""; return tag; },
-      };
+      });
       const open = vi.fn();
       const { rerender } = renderHook(
         ({ current }: { current: TerminalSession[] }) => useTerminalNotifications(current, null, translate, open),

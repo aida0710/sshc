@@ -12,7 +12,8 @@ import { newIdentifier } from "../ui/randomIdentifier";
 
 export type { ManagedTransferJob, TransferNotice } from "./transferLedger";
 
-const maxTransferJobs = 200;
+// The engine keeps at most this many transfer jobs at once.
+export const maxTransferJobs = 200;
 const defaultLargeFileThreshold = 100 << 20;
 // One connection unless the engine settings say otherwise; see the engine's
 // DefaultLargeFileParallelism for why.
