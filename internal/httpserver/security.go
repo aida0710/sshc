@@ -23,6 +23,11 @@ const (
 	// setAttribute("style", …) を書く。nonce を渡す口は無い。したがって
 	// 埋め込みターミナルを持つには、インラインのスタイルを許すしかない。
 	//
+	// script-src に足した 'wasm-unsafe-eval' は、ターミナルの画像表示（@xterm/addon-image）の
+	// SIXEL の解読器が WebAssembly だからである。これが許すのは WebAssembly の
+	// コンパイルだけで、eval や new Function や文字列のスクリプトは今までどおり止まる。
+	// 解読器のバイト列は 'self' から読んだ配布物の中にあり、外から持ち込めない。
+	//
 	// xterm.js のために緩めたのはここだけである。script-src は 'self' のままで、
 	// require-trusted-types-for 'script' もそのままである。xterm.js の配布物には
 	// innerHTML も document.write も new Function も eval も無いので（5.5.0 と
@@ -35,7 +40,7 @@ const (
 	// エスケープし、dangerouslySetInnerHTML はどこにも無く、スクリプトは
 	// 依然として止まる。docs/design.md の「更新の境界」にある CSP の記述にも
 	// 同じことが書いてある。
-	contentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; " +
+	contentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; " +
 		"trusted-types " + serviceWorkerTrustedTypesPolicy + " " + monacoTrustedTypesPolicies + "; require-trusted-types-for 'script'"
 
 	// serviceWorkerTrustedTypesPolicy は、main.tsx が service worker の URL を

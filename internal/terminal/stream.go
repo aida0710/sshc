@@ -60,6 +60,9 @@ func (s *Session) AttachFrom(cursor uint64) (RingRead, *Stream, bool) {
 	if !ok {
 		return RingRead{}, nil, false
 	}
+	if replay.Truncated {
+		replay = skipCutControlString(replay, s.controlStrings.SafeStart(replay.Start))
+	}
 	stream := &Stream{output: make(chan []byte, streamDepth), shellReplaced: make(chan struct{}, 1)}
 	if s.exited != nil {
 		// 終了済みのセッションにライブの出力は無い。読めるものを渡してから閉じる。
@@ -68,6 +71,21 @@ func (s *Session) AttachFrom(cursor uint64) (RingRead, *Stream, bool) {
 	}
 	s.streams[stream] = true
 	return replay, stream, true
+}
+
+// skipCutControlString starts a truncated replay at start instead, so the
+// browser does not print the tail of a control string the buffer cut in half.
+func skipCutControlString(replay RingRead, start uint64) RingRead {
+	skipped := start - replay.Start
+	if skipped == 0 {
+		return replay
+	}
+	if skipped > uint64(len(replay.Data)) {
+		skipped = uint64(len(replay.Data))
+	}
+	replay.Data = replay.Data[skipped:]
+	replay.Start += skipped
+	return replay
 }
 
 // Detach は接続を解除する。セッション自体は継続する。
@@ -107,6 +125,8 @@ func (s *Session) publish(chunk []byte) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	_, _ = s.buffer.Write(chunk)
+	s.controlStrings.Write(chunk)
+	s.controlStrings.Forget(s.buffer.Oldest())
 	for stream := range s.streams {
 		// 複製するのは、この配列を次の読み取りが上書きするからである。
 		copied := make([]byte, len(chunk))

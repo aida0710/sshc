@@ -43,13 +43,19 @@ OSC 52 lets remote software write to the device clipboard. It has a global defau
 
 Kitty keyboard mode follows requests from the remote application. A JIS option sends the yen key as backslash. Mobile adds a special-key row for Ctrl, Alt, Esc, Tab, and arrows.
 
-OSC 8 links and detected URLs open in the system browser. A detected remote path or the current working directory reported through OSC 7 can open SFTP at the same host and directory. SFTP can also open a terminal at its displayed directory: an SSH session for a remote tab, or a local shell on the engine machine for a local tab.
+OSC 8 links and detected URLs open in the system browser. A detected remote path or the current working directory reported through OSC 7 (OSC 9;9 from PowerShell or cmd on Windows) can open SFTP at the same host and directory. SFTP can also open a terminal at its displayed directory: an SSH session for a remote tab, or a local shell on the engine machine for a local tab.
 
 **New session** in the session list opens the same picker SFTP uses for its destination: **Local shell** at the top (one row per detected shell profile), then search, recent connections and groups for SSH hosts. Local shells use the same subsystem as SSH: search, Quick Commands, workspaces, and broadcast commands all apply. On macOS and Linux, sshc supplies the terminal information needed by line editors such as zsh and fish even when the engine was started as a background service.
 
+## Images and character widths
+
+SIXEL and iTerm2 inline images (OSC 1337 File=) are drawn inside the terminal. Try them with `chafa`, `img2sixel`, `timg`, or `imgcat`. The iTerm2 form accepts PNG, JPEG, and GIF and does not animate. An image sent without its size (`size=`) is not shown; `imgcat` and similar tools send it. The kitty graphics protocol is not supported. Each terminal keeps up to 32 MiB of images and drops the oldest beyond that. Reopening a session redraws images from the retained output; an image the engine could only keep part of is skipped instead of printed as text.
+
+Character widths follow Unicode 11. An emoji takes two cells, so programs that print emoji (Claude Code, for example) stay aligned with the text after them.
+
 ## Titles and notifications
 
-Titles set by shells and programs through OSC 0/1/2 become the pane header and the session list name. Notifications sent through OSC 9/99/777 become unread marks, and browser notifications with a sound while the sshc tab is in the background. See [Titles and notifications](/en/terminal/notifications) for details, including the Claude Code and Codex settings.
+Titles set by shells and programs through OSC 0/1/2 become the pane header and the session list name. Notifications sent through OSC 9/99/777 become unread marks, and browser notifications with a sound while the sshc tab is in the background. Progress reported through OSC 9;4 appears as a thin line along the bottom edge of the pane header. See [Titles and notifications](/en/terminal/notifications) for details, including the Claude Code and Codex settings.
 
 sshc never infers program state from ordinary shell output or reruns arbitrary commands on its own.
 

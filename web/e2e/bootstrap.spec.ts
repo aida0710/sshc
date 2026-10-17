@@ -60,7 +60,7 @@ test("enforces the content security policy in the browser, not only in the heade
   const response = await openApplication(page, installation);
   expect(response?.headers()["content-security-policy"]).toBe(
     "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; " +
-      "form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+      "form-action 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; " +
       "img-src 'self' data:; connect-src 'self'; trusted-types sshc-service-worker defaultWorkerFactory " +
       "diffEditorWidget diffReview domLineBreaksComputer dompurify editorGhostText editorViewLayer " +
       "richScreenReaderContent standaloneColorizer stickyScrollViewLayer tokenizeToString; " +

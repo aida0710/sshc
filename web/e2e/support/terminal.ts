@@ -136,3 +136,39 @@ export function surfaceBackgroundImage(page: Page): Promise<string> {
     return getComputedStyle(box).backgroundImage;
   });
 }
+
+// Counts drawn pixels on the inline image layer, so a missing or blank image
+// reads as zero.
+export function drawnImagePixels(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const layer = document.querySelector<HTMLCanvasElement>("canvas.xterm-image-layer");
+    const context = layer?.getContext("2d");
+    if (layer === null || layer === undefined || context === null || context === undefined) return 0;
+    const pixels = context.getImageData(0, 0, layer.width, layer.height).data;
+    let drawn = 0;
+    for (let index = 3; index < pixels.length; index += 4) if ((pixels[index] ?? 0) > 0) drawn += 1;
+    return drawn;
+  });
+}
+
+// The left edge in pixels of the first `character` on each drawn row, for the
+// first `rows` rows that contain it. Only the DOM renderer draws rows as text.
+export function drawnCharacterColumns(page: Page, character: string, rows: number): Promise<number[]> {
+  return page.evaluate(({ character, rows }) => {
+    const lefts: number[] = [];
+    for (const row of document.querySelectorAll(".xterm-rows > div")) {
+      const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        const at = node.textContent?.indexOf(character) ?? -1;
+        if (at < 0) continue;
+        const range = document.createRange();
+        range.setStart(node, at);
+        range.setEnd(node, at + character.length);
+        lefts.push(Math.round(range.getBoundingClientRect().left));
+        break;
+      }
+      if (lefts.length === rows) break;
+    }
+    return lefts;
+  }, { character, rows });
+}
