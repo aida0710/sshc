@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import { showBrowserNotification } from "../ui/browserNotifications";
+import { subscribeAndroidNotificationOpened } from "../android/native";
+import { programNotificationTag, sessionIdFromNotificationTag } from "./notificationTags";
 import { playNotificationSound, primeNotificationSound } from "./notificationSound";
 import { nextTerminalNotification, type UnreadSessions } from "./terminalNotifications";
 
@@ -18,8 +20,19 @@ export function useTerminalNotifications(
   const activeSession = useRef(activeSessionId);
   const openSession = useRef(onOpenSession);
   const [unread, setUnread] = useState<Set<string>>(() => new Set());
+  // A tapped Android notification can arrive before the session list has
+  // loaded (the app was closed or the page reloaded); it opens once it can.
+  const [tappedSessionId, setTappedSessionId] = useState<string | null>(null);
   activeSession.current = activeSessionId;
   openSession.current = onOpenSession;
+
+  useEffect(() => subscribeAndroidNotificationOpened((tag) => setTappedSessionId(sessionIdFromNotificationTag(tag))), []);
+
+  useEffect(() => {
+    if (tappedSessionId === null || !sessions.some((session) => session.id === tappedSessionId)) return;
+    setTappedSessionId(null);
+    openSession.current(tappedSessionId);
+  }, [sessions, tappedSessionId]);
 
   useEffect(() => {
     const prime = () => {
@@ -82,7 +95,7 @@ export function useTerminalNotifications(
       showBrowserNotification({
         title: notification.title,
         body: notification.body,
-        tag: `sshc-terminal-${session.id}`,
+        tag: programNotificationTag(session.id),
         onClick: () => openSession.current(session.id),
       });
     }

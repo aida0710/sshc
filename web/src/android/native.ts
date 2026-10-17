@@ -10,16 +10,12 @@ type AndroidBridge = {
   notificationPermission(): string;
   requestNotificationPermission(): void;
   showNotification(tag: string, title: string, body: string): string;
+  takeOpenedNotification(): string;
 };
 
 type AndroidWindow = Window & { sshcAndroid?: AndroidBridge };
 type AndroidNotificationPermission = "granted" | "denied" | "default";
-type NotificationClickEvent = CustomEvent<{ tag?: unknown }>;
 type NotificationPermissionEvent = CustomEvent<{ status?: unknown }>;
-
-// 通知を押してアプリへ戻ったときに呼ぶ処理。tag ごとに最後の通知の分だけ持つ。
-const notificationClicks = new Map<string, () => void>();
-const listeningForClicks = new WeakSet<Window>();
 
 declare global {
   interface Window {
@@ -75,32 +71,46 @@ export function requestAndroidNotificationPermission(target: Window = window): P
   });
 }
 
-/** Android の通知を出す。出せたら true。押されたら onClick を呼ぶ。 */
+/**
+ * Android の通知を出す。出せたら true。押されたときの処理は持たない。通知を押して
+ * 開いたときには画面を読み込み直していることがあるので、押された通知は
+ * subscribeAndroidNotificationOpened が tag で知らせる。
+ */
 export function showAndroidNotification(
-  { title, body, tag, onClick }: { title: string; body: string; tag: string; onClick?: (() => void) | undefined },
+  { title, body, tag }: { title: string; body: string; tag: string },
   target: Window = window,
 ): boolean {
   const bridge = (target as AndroidWindow).sshcAndroid;
   if (bridge === undefined) return false;
   try {
-    if (bridge.showNotification(tag, title, body) !== "") return false;
+    return bridge.showNotification(tag, title, body) === "";
   } catch {
     // renderer の再起動と同時に bridge が消えても、通知が出なかったことにする。
     return false;
   }
-  if (onClick === undefined) notificationClicks.delete(tag);
-  else notificationClicks.set(tag, onClick);
-  if (!listeningForClicks.has(target)) {
-    listeningForClicks.add(target);
-    target.addEventListener("sshc-android-notification-click", (event: Event) => {
-      const clicked = (event as NotificationClickEvent).detail?.tag;
-      if (typeof clicked !== "string") return;
-      const handler = notificationClicks.get(clicked);
-      notificationClicks.delete(clicked);
-      handler?.();
-    });
-  }
-  return true;
+}
+
+/**
+ * 押された通知の tag を知らせる。登録したとき（閉じていたアプリや読み込み直した画面を
+ * 通知から開いた場合）と、開いている画面で通知が押されたときに呼ぶ。Android は押された tag を
+ * 1 度しか渡さないので、登録するのは 1 か所だけにする。Android版でなければ何もしない。
+ */
+export function subscribeAndroidNotificationOpened(opened: (tag: string) => void, target: Window = window): () => void {
+  const bridge = (target as AndroidWindow).sshcAndroid;
+  if (bridge === undefined) return () => {};
+  const takeOpened = () => {
+    let tag = "";
+    try {
+      tag = bridge.takeOpenedNotification();
+    } catch {
+      // renderer の再起動と同時に bridge が消えた。次に読み込んだ画面が受け取る。
+      return;
+    }
+    if (tag !== "") opened(tag);
+  };
+  target.addEventListener("sshc-android-notification-opened", takeOpened);
+  takeOpened();
+  return () => target.removeEventListener("sshc-android-notification-opened", takeOpened);
 }
 
 /** Android版ではStorage Access Frameworkへ保存する。Web版ならfalseを返して通常downloadへ委ねる。 */

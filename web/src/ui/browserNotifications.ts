@@ -16,6 +16,9 @@ export type BrowserNotification = {
   body: string;
   // Notifications with the same tag replace each other instead of piling up.
   tag: string;
+  // Browser notifications only. The Android app may reload the page before a
+  // notification is tapped, so it reports the tapped tag instead
+  // (subscribeAndroidNotificationOpened).
   onClick?: () => void;
 };
 
