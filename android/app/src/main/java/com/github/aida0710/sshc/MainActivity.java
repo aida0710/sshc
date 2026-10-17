@@ -99,9 +99,18 @@ public final class MainActivity extends ComponentActivity {
         public void showNotification(String tag, String title, String body) {
             terminalNotifications.show(tag, title, body);
         }
+
+        @Override
+        public String takeOpenedNotification() {
+            return takeOpenedNotificationTag();
+        }
     });
     private final TerminalNotifications terminalNotifications = new TerminalNotifications(this);
     private boolean notificationPermissionRequestedByWeb;
+    // 押された通知の tag。Web 画面が takeOpenedNotification で受け取るまで持つ。bridge の呼び出しは
+    // UI スレッドの外から来るので、読み書きは openedNotificationLock の中で行う。
+    private final Object openedNotificationLock = new Object();
+    private String openedNotificationTag = "";
 
     private final ServiceConnection connection = new ServiceConnection() {
         @Override
@@ -146,6 +155,8 @@ public final class MainActivity extends ComponentActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         showPreviousRuntimeNotice();
+        // 閉じていたアプリを通知から開いた場合。Web 画面は起動したときに受け取りに来る。
+        rememberOpenedNotification(getIntent());
         // WindowInsets を子 View の listener で処理する。
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
@@ -156,16 +167,31 @@ public final class MainActivity extends ComponentActivity {
         bound = bindService(intent, connection, Context.BIND_AUTO_CREATE);
     }
 
-    /** ターミナルの通知から開いたとき、どの通知かを Web 画面へ伝えて該当のセッションを開かせる。 */
+    /** ターミナルの通知から開いたとき、どの通知かを覚え、Web 画面へ受け取りに来るよう知らせる。 */
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        if (!rememberOpenedNotification(intent) || webView == null) return;
+        webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('sshc-android-notification-opened'));", null);
+    }
+
+    /** 通知から開いた Intent なら tag を覚えて true を返す。 */
+    private boolean rememberOpenedNotification(Intent intent) {
         String tag = intent.getStringExtra(TerminalNotifications.EXTRA_TAG);
-        if (tag == null || webView == null || !NativeBridge.validNotificationTag(tag)) return;
-        String script = "window.dispatchEvent(new CustomEvent('sshc-android-notification-click',{detail:{tag:"
-                + JSONObject.quote(tag) + "}}));";
-        webView.evaluateJavascript(script, null);
+        if (tag == null || !NativeBridge.validNotificationTag(tag)) return false;
+        synchronized (openedNotificationLock) {
+            openedNotificationTag = tag;
+        }
+        return true;
+    }
+
+    private String takeOpenedNotificationTag() {
+        synchronized (openedNotificationLock) {
+            String tag = openedNotificationTag;
+            openedNotificationTag = "";
+            return tag;
+        }
     }
 
     /** OSによる前回の停止を次回起動時に一度だけ説明する。 */

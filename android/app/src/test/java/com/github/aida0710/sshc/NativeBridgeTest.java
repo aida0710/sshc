@@ -51,6 +51,24 @@ public final class NativeBridgeTest {
         public void showNotification(String tag, String title, String body) {
             notified = tag + "|" + title + "|" + body;
         }
+
+        String opened = "";
+
+        @Override
+        public String takeOpenedNotification() {
+            String tag = opened;
+            opened = "";
+            return tag;
+        }
+    }
+
+    @Test
+    public void 押された通知の_tag_を渡す() {
+        Host host = new Host();
+        host.opened = "sshc-terminal-1";
+        NativeBridge bridge = new NativeBridge(host);
+        assertEquals("sshc-terminal-1", bridge.takeOpenedNotification());
+        assertEquals("", bridge.takeOpenedNotification());
     }
 
     @Test

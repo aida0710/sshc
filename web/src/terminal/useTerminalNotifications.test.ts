@@ -1,5 +1,5 @@
 import { renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
 import { en } from "../i18n/messages";
 import type { Translate } from "../i18n/context";
@@ -33,5 +33,32 @@ describe("useTerminalNotifications", () => {
 
     rerender({ current: [initial], active: "one" });
     await waitFor(() => expect(result.current.has("one")).toBe(false));
+  });
+
+  describe("in the Android app", () => {
+    afterEach(() => {
+      delete window.sshcAndroid;
+    });
+
+    it("opens the session of a notification tapped before the session list loaded", async () => {
+      let pending = "sshc-terminal-one";
+      window.sshcAndroid = {
+        chooseSave: vi.fn(() => ""), writeSaveChunk: vi.fn(() => ""), finishSave: vi.fn(() => ""), cancelSave: vi.fn(),
+        notifyTransfer: vi.fn(), setAppearance: vi.fn(), notificationPermission: vi.fn(() => "granted"),
+        requestNotificationPermission: vi.fn(), showNotification: vi.fn(() => ""),
+        takeOpenedNotification: () => { const tag = pending; pending = ""; return tag; },
+      };
+      const open = vi.fn();
+      const { rerender } = renderHook(
+        ({ current }: { current: TerminalSession[] }) => useTerminalNotifications(current, null, translate, open),
+        { initialProps: { current: [] as TerminalSession[] } },
+      );
+      expect(open).not.toHaveBeenCalled();
+
+      rerender({ current: [initial] });
+      await waitFor(() => expect(open).toHaveBeenCalledExactlyOnceWith("one"));
+      rerender({ current: [{ ...initial }] });
+      expect(open).toHaveBeenCalledOnce();
+    });
   });
 });
