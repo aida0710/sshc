@@ -41,6 +41,7 @@ type Session struct {
 	terminalTitle       string
 	notificationVersion uint64
 	lastNotification    *Notification
+	programProgress     *ProgramProgress
 
 	connectedCallback func()
 	connectedOnce     sync.Once
@@ -90,6 +91,8 @@ type View struct {
 	Reconnect *ReconnectView
 	// Progress is present while an SSH process is connecting or reconnecting.
 	Progress *ConnectionProgress
+	// ProgramProgress is the current program's OSC 9;4 report, independent of SSH connection progress.
+	ProgramProgress *ProgramProgress
 	// Forwards は、このセッションが開いている転送である。
 	Forwards     []Forward
 	Presentation Presentation
@@ -174,6 +177,10 @@ func (s *Session) View() View {
 	if s.lastNotification != nil {
 		notification := *s.lastNotification
 		view.LastNotification = &notification
+	}
+	if s.programProgress != nil {
+		progress := *s.programProgress
+		view.ProgramProgress = &progress
 	}
 	if s.reconnectView != nil {
 		status := *s.reconnectView
@@ -359,6 +366,7 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 	// A replacement shell announces its own title; the previous one must not
 	// linger on the pane while it starts.
 	s.resetTerminalTitleLocked()
+	s.programProgress = nil
 	s.generation++
 	generation := s.generation
 	// 前のシェルは既に無い。ここから先の入力は新しいシェルへ届く。
@@ -439,6 +447,7 @@ func (s *Session) pump(now func() time.Time) {
 		observer := newOSCObserver(
 			func(title string) { s.acceptTitle(generation, title) },
 			func(title, body string) { s.acceptNotification(generation, title, body, now()) },
+			func(progress *ProgramProgress) { s.acceptProgramProgress(generation, progress) },
 		)
 		buffer := make([]byte, readChunk)
 		for {

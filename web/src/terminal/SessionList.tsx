@@ -17,6 +17,7 @@ import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { useShiftKeyHeld } from "../ui/useShiftKeyHeld";
 import { Notice } from "../ui/surface";
+import { TerminalProgressBar } from "./TerminalProgressBar";
 
 type SessionListProps = {
   sessions: TerminalSession[];
@@ -253,6 +254,7 @@ export function SessionList({
                   }`}
                 >
 
+                  {session.programProgress !== undefined ? <TerminalProgressBar progress={session.programProgress} /> : null}
                   {renaming === session.id ? (
                     <>
                       {marker}

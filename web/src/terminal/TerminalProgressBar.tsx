@@ -7,8 +7,8 @@ const barColors = {
   paused: "bg-notice-ink",
 } as const;
 
-// A thin bar along the bottom edge of the pane header, like a browser's page
-// load bar, for progress a program reports through OSC 9;4.
+// Shared by pane headers and session rows so OSC 9;4 reports have the same
+// appearance and accessible name wherever the session is shown.
 export function TerminalProgressBar({ progress }: { progress: TerminalProgress }) {
   const t = useTranslate();
   if (progress.state === "none") return null;

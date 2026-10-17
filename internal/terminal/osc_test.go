@@ -16,6 +16,7 @@ func newTestObserver() (*oscObserver, *observed) {
 	observer := newOSCObserver(
 		func(title string) { seen.titles = append(seen.titles, title) },
 		func(title, body string) { seen.notifications = append(seen.notifications, [2]string{title, body}) },
+		nil,
 	)
 	return observer, seen
 }
