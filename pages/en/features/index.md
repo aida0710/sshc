@@ -33,7 +33,7 @@ sshc is a local terminal application for SSH and local shells. It combines SFTP,
 ## SSH keys and known hosts
 
 - Generate, rename, move between groups, edit passphrases of, copy the public part of, and add to ssh-agent your [SSH keys](/en/connections/keys)
-- Add a public key from `~/.ssh` to `authorized_keys` on one or more connections with **Remote Keys**
+- Add a public key from `~/.ssh` to `authorized_keys` on one or more connections with **Install Key on Server**
 - Sort and review known hosts, confirm unknown host keys when connecting, and never overwrite a changed saved key automatically
 
 ## Credentials
@@ -79,7 +79,7 @@ The [Android app](/en/platform/android) uses the same interface for SSH, SFTP, a
 
 ## Updates and settings
 
-- Installations made with `install.sh` on macOS and Linux can update to a new stable release from the Web UI. Homebrew installations use `sshc update`
+- Verified Homebrew and `install.sh` installations on macOS and Linux can update to a new stable release from the Web UI when the installation directory is writable. See [Update from the web UI](/en/guide/install#update-from-the-web-ui)
 - Choose the app theme (system, light, or dark), the display language (日本語 or English), keyboard shortcuts, and vault auto-lock in [Settings](/en/reference/settings)
 
 ## Public demo

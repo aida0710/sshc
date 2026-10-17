@@ -39,7 +39,7 @@ On reconnect, sshc replays only bytes after the browser's last rendered position
 
 Normal text-selection copying stays inside the browser and does not require OSC 52. Configure automatic copy-on-select and right-click paste under **Settings → Terminal**. A paste containing line breaks, a final Enter, or terminal control characters is not sent immediately. sshc shows the target, logical line count, and a bounded preview with control characters made visible. Edit the text in the review dialog; the line count and warnings update with it. You can cancel, paste the edited text, or remove exactly one final Enter first. Neither the preview nor the original paste is stored. The review stays open while the terminal display changes, and is withdrawn when a reconnect replaces the shell.
 
-OSC 52 lets remote software write to the device clipboard. It has a global default and a per-SSH-host allow/deny override, so enable it only for hosts you trust.
+OSC 52 lets remote software write to the device clipboard. It has a global default and a per-SSH-host allow/deny override, so enable it only for hosts you trust. Replaying past output does not repeat OSC 52 copies or copy notifications. New copy requests are processed even when they contain the same text.
 
 Kitty keyboard mode follows requests from the remote application. A JIS option sends the yen key as backslash. Mobile adds a special-key row for Ctrl, Alt, Esc, Tab, and arrows.
 
@@ -55,7 +55,7 @@ Character widths follow Unicode 11. An emoji takes two cells, so programs that p
 
 ## Titles and notifications
 
-Titles set by shells and programs through OSC 0/1/2 become the pane header and the session list name. Notifications sent through OSC 9/99/777 become unread marks, and browser notifications with a sound while the sshc tab is in the background. Progress reported through OSC 9;4 appears as a thin line along the bottom edge of the pane header. See [Titles and notifications](/en/terminal/notifications) for details, including the Claude Code and Codex settings.
+Titles set by shells and programs through OSC 0/1/2 become the pane header and the session list name. Notifications sent through OSC 9/99/777 become unread marks, and browser notifications with a sound while the sshc tab is in the background. Progress reported through OSC 9;4 appears as a thin line along the bottom edge of the pane header and its entry in the session list. The list shows progress even while you are viewing another session. See [Titles and notifications](/en/terminal/notifications) for details, including the Claude Code and Codex settings.
 
 sshc never infers program state from ordinary shell output or reruns arbitrary commands on its own.
 
