@@ -66,7 +66,7 @@ When SSH configuration contains `ProxyCommand`, sshc runs that command locally w
 
 ## Sync
 
-Connection settings, Vault credentials, Snippets, and the SSH keys in scope are encrypted on this device with a dedicated sync encryption key before upload; the storage provider and anyone holding the S3 credentials cannot read them in plaintext. The bucket name, S3 object names, object sizes, and modification times are not encrypted.
+Sync is end-to-end encrypted (E2EE): only devices configured with the same encryption key can decrypt it. Encryption uses AES-256-GCM, with the cipher key derived from the sync encryption key by Argon2id. Connection settings, Vault credentials, Snippets, and the SSH keys in scope are encrypted on this device with a dedicated sync encryption key before upload; the storage provider and anyone holding the S3 credentials cannot read them in plaintext. The bucket name, S3 object names, object sizes, and modification times are not encrypted.
 
 Anyone with the ciphertext can try guessing the encryption key offline. Use the random key sshc generates rather than a short typed string.
 

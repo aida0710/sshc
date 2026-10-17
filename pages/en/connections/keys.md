@@ -32,7 +32,7 @@ Encrypted sync does not pick only the keys referenced by `IdentityFile`: every r
 
 ## Install a public key
 
-Under **Remote Keys**, pick one public key from `~/.ssh` and add it to the `authorized_keys` of one or more hosts. Before connecting, sshc shows the public key, the login user, and the destination file for each host, and resolves only those targets, so warnings from an unrelated alias-specific `ProxyCommand` are not mixed into the operation.
+Under **Install Key on Server**, pick one public key from `~/.ssh` and add it to the `authorized_keys` of one or more hosts. Before connecting, sshc shows the public key, the login user, and the destination file for each host, and resolves only those targets, so warnings from an unrelated alias-specific `ProxyCommand` are not mixed into the operation.
 
 ## Known hosts
 
