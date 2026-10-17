@@ -46,12 +46,15 @@ async function runInShell(page: Page, command: string) {
   await page.keyboard.press("Enter");
 }
 
-test("draws iTerm2 and SIXEL images and keeps them out of the text after reopening", async ({ page, installation }) => {
+test("draws iTerm2, SIXEL and kitty images and keeps them out of the text after reopening", async ({ page, installation }) => {
   test.skip(process.platform === "win32", "cat and printf are POSIX shell syntax here");
   const iterm = `\x1b]1337;File=name=c2FtcGxlLnBuZw==;inline=1;size=${samplePNG().length}:${samplePNG().toString("base64")}\x07`;
   const sixel = "\x1bP0;0;0q\"1;1;40;12#1;2;0;80;0#1!40~-!40~\x1b\\";
+  // The transmit-and-display form Claude Code sends for an image it has as data.
+  const kitty = `\x1b_Ga=T,t=d,f=100,q=2;${samplePNG().toString("base64")}\x1b\\`;
   await writeFile(join(installation.home, "iterm-image.txt"), `${iterm}\n`);
   await writeFile(join(installation.home, "sixel-image.txt"), `${sixel}\n`);
+  await writeFile(join(installation.home, "kitty-image.txt"), `${kitty}\n`);
   await openApplication(page, installation);
   await page.evaluate(() => {
     (window as Window & { cspViolations?: string[] }).cspViolations = [];
@@ -68,8 +71,12 @@ test("draws iTerm2 and SIXEL images and keeps them out of the text after reopeni
   const afterIterm = await drawnImagePixels(page);
   await runInShell(page, "cat sixel-image.txt");
   await expect.poll(() => drawnImagePixels(page)).toBeGreaterThan(afterIterm);
+  const afterSixel = await drawnImagePixels(page);
+  await runInShell(page, "cat kitty-image.txt");
+  await expect.poll(() => drawnImagePixels(page)).toBeGreaterThan(afterSixel);
   expect(await page.evaluate(() => (window as Window & { cspViolations?: string[] }).cspViolations)).toEqual([]);
   await expect(screen).not.toContainText("iVBORw0KGgo");
+  await expect(screen).not.toContainText("a=T,t=d");
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/terminal-images.png` });
   }
@@ -78,9 +85,28 @@ test("draws iTerm2 and SIXEL images and keeps them out of the text after reopeni
   // terminal: the images come back and their data never shows as text.
   await openLocalShell(page);
   await page.getByRole("list", { name: "Open sessions" }).getByRole("listitem").first().getByRole("button").first().click();
-  await expect(screen).toContainText("cat sixel-image.txt");
+  await expect(screen).toContainText("cat kitty-image.txt");
   await expect.poll(() => drawnImagePixels(page)).toBeGreaterThan(afterIterm);
   await expect(screen).not.toContainText("iVBORw0KGgo");
+});
+
+test("answers the kitty graphics query Claude Code sends to detect image support", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "read is POSIX shell syntax");
+  // The reply (ESC _ G i=31;OK ESC \\) arrives as terminal input. `read` stops
+  // at the backslash of its ST, and the script prints it without the ESCs.
+  await writeFile(join(installation.home, "kitty-query.sh"), [
+    String.raw`printf '\033_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\033\\'`,
+    String.raw`IFS= read -r -s -t 2 -d '\' reply`,
+    "reply=${reply//$'\\033'/}",
+    "printf 'reply:%s\\n' \"${reply#_G}\"",
+    "",
+  ].join("\n"));
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await runInShell(page, "cd ~ && bash kitty-query.sh");
+  await expect(screen).toContainText("reply:i=31;OK");
 });
 
 test("shows OSC 9;4 progress under the pane header and clears it", async ({ page, installation }) => {

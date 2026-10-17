@@ -30,8 +30,8 @@ const (
 	//
 	// xterm.js のために緩めたのはここだけである。script-src は 'self' のままで、
 	// require-trusted-types-for 'script' もそのままである。xterm.js の配布物には
-	// innerHTML も document.write も new Function も eval も無いので（5.5.0 と
-	// 6.0.0 の両方で 0 件）、xterm.js のためにスクリプト側は一文字も緩めていない。
+	// innerHTML も document.write も new Function も eval も無いので（5.5.0、
+	// 6.0.0、6.1.0-beta.315 のどれも 0 件）、xterm.js のためにスクリプト側は一文字も緩めていない。
 	// trusted-types に並べた policy の名前は、下の serviceWorkerTrustedTypesPolicy と
 	// monacoTrustedTypesPolicies に理由を書いてある。
 	//
