@@ -32,6 +32,33 @@ describe("terminalSessionsApi terminal sessions", () => {
     problem: "",
   };
 
+  it.each([
+    { state: "normal", percent: 0 },
+    { state: "normal", percent: 100 },
+    { state: "error", percent: 40 },
+    { state: "paused", percent: 40 },
+    { state: "indeterminate" },
+  ])("returns a session's program progress unchanged: %j", async (programProgress) => {
+    const listing = { sessions: [{ ...session, programProgress }], maxSessions: 50 };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(listing)));
+
+    await expect(terminalSessionsApi.terminalSessions()).resolves.toEqual(listing);
+  });
+
+  it.each([
+    { state: "normal" },
+    { state: "normal", percent: 101 },
+    { state: "indeterminate", percent: 40 },
+    { state: "none" },
+    null,
+  ])("rejects malformed program progress: %j", async (programProgress) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      sessions: [{ ...session, programProgress }], maxSessions: 50,
+    })));
+
+    await expect(terminalSessionsApi.terminalSessions()).rejects.toThrow("invalid_response");
+  });
+
   it("opens a session and returns the single-use stream ticket", async () => {
     const fetcher = vi
       .fn()

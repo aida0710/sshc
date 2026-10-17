@@ -398,6 +398,42 @@ func (e TerminalControlResponseState) Valid() bool {
 	}
 }
 
+// Defines values for TerminalDeterminateProgressState.
+const (
+	Error  TerminalDeterminateProgressState = "error"
+	Normal TerminalDeterminateProgressState = "normal"
+	Paused TerminalDeterminateProgressState = "paused"
+)
+
+// Valid indicates whether the value is a known member of the TerminalDeterminateProgressState enum.
+func (e TerminalDeterminateProgressState) Valid() bool {
+	switch e {
+	case Error:
+		return true
+	case Normal:
+		return true
+	case Paused:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TerminalIndeterminateProgressState.
+const (
+	Indeterminate TerminalIndeterminateProgressState = "indeterminate"
+)
+
+// Valid indicates whether the value is a known member of the TerminalIndeterminateProgressState enum.
+func (e TerminalIndeterminateProgressState) Valid() bool {
+	switch e {
+	case Indeterminate:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TerminalPresentationTitleSource.
 const (
 	Connection TerminalPresentationTitleSource = "connection"
@@ -1956,6 +1992,15 @@ type TerminalControlResponse struct {
 // TerminalControlResponseState defines model for TerminalControlResponse.State.
 type TerminalControlResponseState string
 
+// TerminalDeterminateProgress defines model for TerminalDeterminateProgress.
+type TerminalDeterminateProgress struct {
+	Percent int                              `json:"percent"`
+	State   TerminalDeterminateProgressState `json:"state"`
+}
+
+// TerminalDeterminateProgressState defines model for TerminalDeterminateProgress.State.
+type TerminalDeterminateProgressState string
+
 // TerminalExit defines model for TerminalExit.
 type TerminalExit struct {
 	At     string `json:"at"`
@@ -1973,6 +2018,14 @@ type TerminalForward struct {
 	To        string `json:"to"`
 }
 
+// TerminalIndeterminateProgress defines model for TerminalIndeterminateProgress.
+type TerminalIndeterminateProgress struct {
+	State TerminalIndeterminateProgressState `json:"state"`
+}
+
+// TerminalIndeterminateProgressState defines model for TerminalIndeterminateProgress.State.
+type TerminalIndeterminateProgressState string
+
 // TerminalNotification defines model for TerminalNotification.
 type TerminalNotification struct {
 	Body       string    `json:"body"`
@@ -1989,6 +2042,9 @@ type TerminalPresentation struct {
 
 // TerminalPresentationTitleSource defines model for TerminalPresentation.TitleSource.
 type TerminalPresentationTitleSource string
+
+// TerminalProgramProgress defines model for TerminalProgramProgress.
+type TerminalProgramProgress = json.RawMessage
 
 // TerminalReconnect defines model for TerminalReconnect.
 type TerminalReconnect struct {
@@ -2009,6 +2065,7 @@ type TerminalSession struct {
 	NotificationVersion *int                        `json:"notificationVersion,omitempty"`
 	Presentation        *TerminalPresentation       `json:"presentation,omitempty"`
 	Problem             string                      `json:"problem"`
+	ProgramProgress     *TerminalProgramProgress    `json:"programProgress,omitempty"`
 	Progress            *TerminalConnectionProgress `json:"progress,omitempty"`
 	Reconnect           *TerminalReconnect          `json:"reconnect,omitempty"`
 	StartedAt           string                      `json:"startedAt"`

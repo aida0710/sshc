@@ -3551,6 +3551,8 @@ components:
         problem: { type: string }
         reconnect: { $ref: "#/components/schemas/TerminalReconnect" }
         progress: { $ref: "#/components/schemas/TerminalConnectionProgress" }
+        # プログラムの OSC 9;4。消去時は省略する。SSH 接続の段階とは独立。
+        programProgress: { $ref: "#/components/schemas/TerminalProgramProgress" }
         exited: { $ref: "#/components/schemas/TerminalExit" }
         # 現在開いている転送。
         forwards: { type: array, items: { $ref: "#/components/schemas/TerminalForward" } }
@@ -3559,6 +3561,25 @@ components:
         # 求めるたびに増える。画面はこれを前回と比べて新しい通知を知る。
         notificationVersion: { type: integer, minimum: 0 }
         lastNotification: { $ref: "#/components/schemas/TerminalNotification" }
+    TerminalProgramProgress:
+      # 他の union と同じく、Go の補助関数用の実行時依存を増やさない。
+      x-go-type: json.RawMessage
+      oneOf:
+        - $ref: "#/components/schemas/TerminalDeterminateProgress"
+        - $ref: "#/components/schemas/TerminalIndeterminateProgress"
+    TerminalDeterminateProgress:
+      type: object
+      additionalProperties: false
+      required: [state, percent]
+      properties:
+        state: { type: string, enum: [normal, error, paused] }
+        percent: { type: integer, minimum: 0, maximum: 100 }
+    TerminalIndeterminateProgress:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state: { type: string, enum: [indeterminate] }
     TerminalPresentation:
       type: object
       additionalProperties: false

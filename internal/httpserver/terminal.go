@@ -143,6 +143,19 @@ func describeSession(view terminal.View) api.TerminalSession {
 			User: view.Progress.User, Hop: view.Progress.Hop, Hops: view.Progress.Hops,
 		}
 	}
+	if view.ProgramProgress != nil {
+		var progress any
+		if view.ProgramProgress.State == terminal.ProgramProgressIndeterminate {
+			progress = api.TerminalIndeterminateProgress{State: api.Indeterminate}
+		} else {
+			progress = api.TerminalDeterminateProgress{
+				State: api.TerminalDeterminateProgressState(view.ProgramProgress.State), Percent: view.ProgramProgress.Percent,
+			}
+		}
+		// Both variants contain only strings and integers; JSON encoding cannot fail.
+		described.ProgramProgress = new(json.RawMessage)
+		*described.ProgramProgress, _ = json.Marshal(progress)
+	}
 	if view.Alias != "" {
 		alias := view.Alias
 		described.Alias = &alias

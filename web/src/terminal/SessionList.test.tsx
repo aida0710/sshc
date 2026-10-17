@@ -32,11 +32,51 @@ function renderList(overrides: Partial<Parameters<typeof SessionList>[0]> = {}) 
     onOpenShell: vi.fn(),
     ...overrides,
   };
-  render(<SessionList {...props} />);
-  return props;
+  const { rerender } = render(<SessionList {...props} />);
+  return { ...props, rerender };
 }
 
 describe("SessionList", () => {
+  it("shows program progress for an unselected session and keeps connection progress separate", () => {
+    const background = { ...live, programProgress: { state: "normal" as const, percent: 40 } };
+    renderList({ sessions: [background, shell], selected: shell.id });
+
+    const rows = screen.getAllByRole("listitem");
+    const progress = within(rows[0]!).getByRole("progressbar", { name: "Program progress" });
+    expect(progress).toHaveAttribute("aria-valuenow", "40");
+    expect(progress.firstElementChild).toHaveStyle({ width: "40%" });
+    expect(within(rows[1]!).queryByRole("progressbar")).toBeNull();
+    expect(rows[0]).toHaveTextContent("connected · bastion");
+  });
+
+  it.each([
+    ["error", "Program progress (error)", "bg-danger"],
+    ["paused", "Program progress (paused)", "bg-notice-ink"],
+  ] as const)("shows %s program progress with its accessible name and color", (state, name, color) => {
+    const background = { ...live, programProgress: { state, percent: 60 } };
+    renderList({ sessions: [background] });
+
+    const progress = screen.getByRole("progressbar", { name });
+    expect(progress).toHaveAttribute("aria-valuenow", "60");
+    expect(progress.firstElementChild).toHaveClass(color);
+  });
+
+  it("shows indeterminate progress without claiming a percentage", () => {
+    const background = { ...live, programProgress: { state: "indeterminate" as const } };
+    renderList({ sessions: [background] });
+
+    expect(screen.getByRole("progressbar", { name: "Program progress" })).not.toHaveAttribute("aria-valuenow");
+  });
+
+  it("removes the bar when the engine clears program progress", () => {
+    const background = { ...live, programProgress: { state: "normal" as const, percent: 0 } };
+    const { rerender, ...props } = renderList({ sessions: [background] });
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
+
+    rerender(<SessionList {...props} sessions={[live]} />);
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
   it("keeps every session in one flat list and says the state in words", () => {
     renderList();
 
@@ -67,6 +107,7 @@ describe("SessionList", () => {
     }] });
 
     expect(screen.getByText("authenticating with mdx-jamstec-1 · 1/2 · bastion")).toBeVisible();
+    expect(screen.queryByRole("progressbar")).toBeNull();
   });
 
   it("selects a session from anywhere in its main row content", async () => {

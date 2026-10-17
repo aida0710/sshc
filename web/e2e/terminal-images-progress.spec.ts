@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
 import type { Page } from "@playwright/test";
@@ -151,6 +151,57 @@ test("shows OSC 9;4 progress under the pane header and clears it", async ({ page
   await expect(screen.getByRole("progressbar", { name: "Program progress (error)" })).toHaveAttribute("aria-valuenow", "40");
   await runInShell(page, "printf '\\033]9;4;0\\a'");
   await expect(screen.getByRole("progressbar")).toHaveCount(0);
+});
+
+test("shows a background session's program progress in Open sessions while another session is displayed", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "the progress reporter is a POSIX shell loop");
+  // Four reports, each waiting for the 2 s session list poll, plus two shells.
+  test.setTimeout(60_000);
+  const nextReport = join(installation.home, "next-progress-report");
+  // The reporter prints a report only when the test writes one, so the output
+  // arrives after this session's TerminalView is gone. A plain file (not a
+  // FIFO) keeps a write from blocking if the shell has already stopped.
+  await writeFile(join(installation.home, "program-progress.sh"), [
+    "printf 'progress reporter ready\\n'",
+    "while :; do",
+    '  if [ -f "$HOME/next-progress-report" ]; then',
+    '    report=$(cat "$HOME/next-progress-report"); rm -f "$HOME/next-progress-report"',
+    String.raw`    printf '\033]9;4;%s\a' "$report"`,
+    "  fi",
+    "  sleep 0.1",
+    "done",
+    "",
+  ].join("\n"));
+  const report = async (value: string) => {
+    await writeFile(nextReport, value);
+    await expect.poll(() => access(nextReport).then(() => true, () => false)).toBe(false);
+  };
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await runInShell(page, "sh ~/program-progress.sh");
+  await expect(screen).toContainText("progress reporter ready");
+
+  await openLocalShell(page);
+  await expect(screen).not.toContainText("progress reporter ready");
+  const rows = page.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(1).getByRole("button").first()).toHaveAttribute("aria-current", "true");
+  const background = rows.first();
+  await report("1;40");
+  await expect(background.getByRole("progressbar", { name: "Program progress" })).toHaveAttribute("aria-valuenow", "40");
+  await expect(screen.getByRole("progressbar")).toHaveCount(0);
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/session-list-progress.png` });
+  }
+
+  await report("2");
+  await expect(background.getByRole("progressbar", { name: "Program progress (error)" })).toHaveAttribute("aria-valuenow", "40");
+  await report("3");
+  await expect(background.getByRole("progressbar", { name: "Program progress" })).not.toHaveAttribute("aria-valuenow");
+  await report("0");
+  await expect(background.getByRole("progressbar")).toHaveCount(0);
 });
 
 test("counts an emoji as two cells so the rest of the line stays aligned", async ({ page, installation }) => {
