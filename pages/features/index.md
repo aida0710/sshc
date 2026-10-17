@@ -79,7 +79,7 @@ sshcは、SSHとローカルシェルを扱うターミナルアプリです。S
 
 ## 更新と設定
 
-- macOSとLinuxの`install.sh`で導入した場合は、新しい安定版をWeb画面から更新可能。Homebrew版は`sshc update`を使用
+- macOSとLinuxのHomebrew版と`install.sh`版は、導入方法を確認でき、インストール先への書き込み権限がある場合に、新しい安定版へWeb画面から更新できます（[更新手順](/guide/install#web画面から更新する)）
 - アプリのテーマ（システム／ライト／ダーク）、表示言語（日本語／English）、キーボードショートカット、Vaultの自動ロックを[設定](/reference/settings)で変更
 
 ## 公開デモ
