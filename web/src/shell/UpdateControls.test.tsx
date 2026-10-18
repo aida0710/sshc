@@ -1,8 +1,9 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { UpdateApi, UpdateStatus } from "../api/update";
+import { sessionStorageKeys } from "../ui/browserStorageKeys";
 import { UpdateBadge } from "./UpdateBadge";
 
 const available: UpdateStatus = { current: "v1.0.0", latest: "v1.1.0", available: true, canUpdate: true, manager: "install.sh" };
@@ -15,6 +16,8 @@ function updater(): UpdateApi {
 }
 
 describe("Web self update", () => {
+  afterEach(() => sessionStorage.clear());
+
   it("shows terminal and transfer disconnection before consuming the preview token", async () => {
     const api = updater();
     render(<UpdateBadge api={api} />);
@@ -73,6 +76,7 @@ describe("Web self update", () => {
   });
 
   it("reports the installed Homebrew version when it is newer than the preview", async () => {
+    sessionStorage.setItem(sessionStorageKeys.updateResultToCheck, "job-one");
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.2.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", installedVersion: "v1.2.0", state: "succeeded", problem: "" } });
     render(<UpdateBadge api={api} />);
@@ -80,12 +84,38 @@ describe("Web self update", () => {
     expect(screen.getByText("Version v1.2.0")).toBeVisible();
   });
 
-  it("reports the new engine version and persisted successful result", async () => {
+  it("shows the success to the page that watched the update finish", async () => {
     const api = updater();
-    vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.1.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "succeeded", problem: "" } });
+    vi.mocked(api.updateStatus)
+      .mockResolvedValueOnce({ current: "v1.0.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "restarting", problem: "" } })
+      .mockResolvedValue({ current: "v1.1.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "succeeded", problem: "" } });
     render(<UpdateBadge api={api} />);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Updated to v1.1.0"));
+  });
+
+  it("shows the success once after the reload button and not on later loads", async () => {
+    const succeeded: UpdateStatus = { current: "v1.1.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "succeeded", problem: "" } };
+    const api = updater();
+    vi.mocked(api.updateStatus).mockResolvedValue(succeeded);
+    sessionStorage.setItem(sessionStorageKeys.updateResultToCheck, "job-one");
+    const reloaded = render(<UpdateBadge api={api} />);
     expect(await screen.findByRole("status")).toHaveTextContent("Updated to v1.1.0");
-    expect(screen.getByText("Version v1.1.0")).toBeVisible();
+    expect(sessionStorage.getItem(sessionStorageKeys.updateResultToCheck)).toBeNull();
+    reloaded.unmount();
+
+    render(<UpdateBadge api={api} />);
+    await screen.findByText("Version v1.1.0");
+    await waitFor(() => expect(api.updateStatus).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("does not keep showing an earlier success after sshc was updated another way", async () => {
+    const api = updater();
+    vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.3.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "succeeded", problem: "" } });
+    render(<UpdateBadge api={api} />);
+    await screen.findByText("Version v1.3.0");
+    await waitFor(() => expect(api.updateStatus).toHaveBeenCalled());
+    expect(screen.queryByText(/Updated to/)).not.toBeInTheDocument();
   });
 
   it("asks to refresh Homebrew when the installation did not update", async () => {
