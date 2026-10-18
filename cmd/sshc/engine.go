@@ -46,7 +46,8 @@ type engineOptions struct {
 	// Port は 0 なら「決めていない」。保存された設定より強い。
 	Port int
 	// Replace は、走っている engine を訊かずに止めてよいという合図である。
-	Replace bool
+	Replace    bool
+	Background bool
 }
 
 func runEngine(
@@ -67,6 +68,13 @@ func runEngineWithDependencies(
 	stdout, stderr io.Writer,
 	dependencies engineDependencies,
 ) int {
+	if options.Background {
+		if err := releaseEngineConsole(); err != nil {
+			fmt.Fprintf(stderr, "sshc: detach engine console: %v\n", err)
+			return exitFailure
+		}
+		return runBackgroundEngine(ctx, backgroundEngineRun{paths: paths, options: options, dependencies: dependencies})
+	}
 	logger := slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	signalCtx, stopSignals := notifySignals(ctx)

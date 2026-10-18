@@ -161,7 +161,21 @@ sshc vault unlock
 
 タスクスケジューラへ登録する場合は、対話的なログオン時に通常のユーザー権限で実行してください。エンジンは実行ユーザーの `~/.ssh` を使用するため、別のユーザーや SYSTEM として起動すると異なる SSH 設定を参照します。
 
-sshc は Windows サービスをインストールしません。Windows サービスには対話型のターミナルがなく、vault をターミナルから解除する運用と一致しないためです。
+ログオン時に起動するには、PowerShellのインストーラーで導入し、動作中のsshcエンジンを停止してから登録します。
+
+```powershell
+sshc stop
+sshc service install
+sshc service status
+# 稼働中のタスクを再起動する
+sshc service restart
+# sshcエンジンを停止して登録を削除する
+sshc service disable
+```
+
+タスクスケジューラのルートへ`sshc`という名前で登録します。現在のユーザーのSIDを指定し、ログオン時に`InteractiveToken`・`LeastPrivilege`で`sshc.exe engine --background`を起動します。管理者権限は不要です。sshcエンジンは`FreeConsole`でコンソールを手放すため、窓が閉じても動作を続けます。ログは`%USERPROFILE%\.ssh\sshc\logs\engine.log`へ追記します。Vaultはブラウザや別のターミナルから解除できます。
+
+`restart`と`disable`はsshcエンジンに正常終了を要求し、終了を待ちます。同名の手作りのタスクは変更しません。`install.ps1`の導入記録とexeのSHA-256が一致しない場合は登録を拒否します。Windowsでの`sshc update`とWeb更新には、まだ対応していません。
 
 ## 終了コード
 

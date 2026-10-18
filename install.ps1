@@ -107,6 +107,30 @@ function Publish-Executable([string]$Source, [string]$Target) {
     }
 }
 
+# The receipt binds service registration to the bytes installed at this stable path.
+# Like install.sh, prereleases do not receive a managed-installation receipt.
+function Publish-InstallReceipt([string]$Target, [string]$Version) {
+    if ($Version -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { return }
+    $directory = Split-Path -Parent $Target
+    $receipt = Join-Path $directory '.sshc-install-receipt.json'
+    $staged = Join-Path $directory ('.sshc.receipt.' + [System.Guid]::NewGuid().ToString('N'))
+    try {
+        $metadata = [ordered]@{
+            schemaVersion = 1
+            manager = 'install.ps1'
+            repository = $Repository
+            version = $Version
+            sha256 = (Get-FileHash -LiteralPath $Target -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($staged, ($metadata | ConvertTo-Json -Compress), $utf8)
+        [System.IO.File]::Move($staged, $receipt)
+    }
+    finally {
+        Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Add-UserPath([string]$Directory) {
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     $entries = if ([string]::IsNullOrWhiteSpace($userPath)) { @() } else { @($userPath -split ';') }
@@ -185,11 +209,18 @@ try {
         Stop-Install "the downloaded executable reports $incomingTag, expected $tag"
     }
 
+    # Invalidate the previous receipt before replacing the executable. An interrupted
+    # installation remains unmanaged instead of retaining a receipt for different bytes.
+    $receipt = Join-Path $installDirectory '.sshc-install-receipt.json'
+    Test-ReparsePoint $receipt 'the install receipt'
+    if (Test-Path -LiteralPath $receipt) { Remove-Item -LiteralPath $receipt -Force }
     Publish-Executable $download $target
     $installedLine = (& $target version | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $installedLine -cne $versionLine) {
         Stop-Install "the installed executable did not report the verified version"
     }
+
+    Publish-InstallReceipt $target $incomingTag
 
     if ($env:SSHC_ADD_TO_PATH -ne '0') {
         Add-UserPath $installDirectory

@@ -60,19 +60,20 @@ var allowedToStartPrograms = []string{
 	// Homebrewへ固定argvでformulaの場所を尋ねるだけである。
 	"cmd/sshc/installation_commands.go",
 	// 引数なしの sshc と sshc open は、engine が停止中なら、実行中の sshc 自身
-	// （os.Executable）を固定argv「engine」で切り離して起動する。利用者の入力を
+	// （os.Executable）を固定argv「engine --background」で切り離して起動する。利用者の入力を
 	// programや引数へ渡さず、出力は本人だけが読めるengineのログへ向ける。
 	"cmd/sshc/engine_background.go",
 	// Web更新の再起動helperは、照合済みのsshcへ固定argvだけを渡す。
 	// engineのHTTP停止に巻き込まれず、管理サービスまたは確認したengineだけを再起動する。
 	"cmd/sshc/web_update_restart.go",
-	// service command（Linux は systemctl、macOS は launchctl）はここの runner だけから
+	// service command（Linux は systemctl、macOS は launchctl、Windows は schtasks.exe）はここの runner だけから
 	// 起動する。tool は既知のpathまたはPATHから実行可能な絶対pathへ一度解決し、
 	// 固定argvで呼ぶ。利用者の入力をprogramや引数へ渡さず、sshc管理marker付きの
 	// unit／plistだけを作成、確認、削除し、update連携も実行pathが一致するactiveな
 	// 管理unitの再起動だけに限定する。argv を組むのは service_linux.go と
-	// service_launchd_unix.go である。
-	"cmd/sshc/service_unix.go",
+	// service_launchd_unix.go と service_task.go である。WindowsはSystem32のschtasks.exeだけを
+	// 使い、SIDとmarkerを照合したタスクへ固定argvで操作する。
+	"cmd/sshc/service_runtime.go",
 	// ローカルシェルには擬似端末が要る。インターフェースは出力を集めて返すものなので、
 	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
 	"internal/terminal/pty_unix.go",

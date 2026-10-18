@@ -227,7 +227,7 @@ func TestWebUpdateRestartUsesTheManagedServiceOrStopsOnlyTheConfirmedForegroundE
 				},
 				startProcess: func(executable string, arguments, environment []string) error {
 					starts++
-					if executable != job.Plan.Installation.Executable || !reflect.DeepEqual(arguments, []string{"engine", "--port", engineURL.Port()}) {
+					if executable != job.Plan.Installation.Executable || !reflect.DeepEqual(arguments, []string{"engine", "--background", "--port", engineURL.Port()}) {
 						t.Errorf("unexpected argv = %s %v", executable, arguments)
 					}
 					for _, entry := range environment {

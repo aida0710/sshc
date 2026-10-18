@@ -34,6 +34,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/a
 
 `%LOCALAPPDATA%\Programs\sshc`へインストールされ、ユーザーの`PATH`へ追加されます。更新にも同じコマンドを使えます。
 
+### ログオン時に起動する
+
+PowerShellのインストーラーで導入したsshcは、タスクスケジューラへ登録できます。管理者権限は不要です。起動中のsshcエンジンを`sshc stop`で停止してから実行してください。
+
+```powershell
+sshc service install
+sshc service status
+```
+
+`install`は実行ファイルのパスを表示して確認を求めます。確認後、タスクスケジューラのルートに`sshc`という名前のタスクを登録し、その場で起動します。以後は、このユーザーがWindowsへログオンすると起動します。コンソールの窓は起動直後に閉じ、sshcエンジンは動き続けます。ログは`%USERPROFILE%\.ssh\sshc\logs\engine.log`へ追記します。
+
+`sshc service status`はタスクの状態（Ready／Running／Disabled）とsshcエンジンの応答を表示します。稼働中のタスクは`sshc service restart`で再起動できます。`sshc service disable`はsshcエンジンの終了を待ち、タスクを削除します。変更操作の確認を省略する場合は`--yes`を付けてください。
+
+同名の手作りのタスクは上書きも削除もしません。ダウンロードしたexeの直接実行やソースビルドは登録できません。インストーラーがexeの隣に置く`.sshc-install-receipt.json`で導入元とSHA-256を確認します。Windowsでの`sshc update`と画面からの更新には、まだ対応していません。
+
 ## Android
 
 [GitHub Releases](https://github.com/aida0710/sshc/releases)から`sshc-android-v<version>.apk`をダウンロードできます。APKはReleaseワークフローで署名フィンガープリントとチェックサムを検査してから公開しています。
@@ -109,7 +124,7 @@ launchdがsshcエンジンを再起動するのは、sshcエンジンが異常�
 
 ## 登録済みサービスを再起動する
 
-LinuxとmacOSでは、稼働中のユーザーサービスを次のコマンドで再起動できます。
+Linux・macOS・Windowsでは、稼働中のユーザーサービスを次のコマンドで再起動できます。
 
 ```sh
 sshc service restart
@@ -117,7 +132,7 @@ sshc service restart
 
 サービス定義の場所と実行ファイルのパスを表示して、再起動するか確認します。再起動すると接続中のセッションと転送が終了します。自動化で確認を省略する場合は`sshc service restart --yes`を使用してください。
 
-このコマンドで使えるのは、Homebrewまたはreceiptに対応した`install.sh`で導入され、この導入の安定パスと現在の定義が一致するサービスです。次の場合は再起動せず、終了コード1で終わります。
+このコマンドで使えるのは、Homebrew、導入記録のある`install.sh`、Windowsの`install.ps1`で導入され、この導入の安定パスと現在の定義が一致するサービスです。次の場合は再起動せず、終了コード1で終わります。
 
 | 状態 | 対処 |
 | --- | --- |
@@ -126,7 +141,7 @@ sshc service restart
 | 古い定義 | `sshc service install`で現在の定義へ更新する |
 | 別の実行ファイルを指す定義 | 登録した導入から実行する。現在の導入へ切り替える場合は`sshc service install`を使う |
 
-確認待ちの間に定義や稼働状態が変わった場合も、成功扱いにはしません。`sshc service status`で状態を確認してから再実行してください。再起動後はサービスのPIDとsshcエンジンの起動情報、status APIを照合します。パスワードを設定したVaultはロックされるため、`sshc vault unlock`を実行してください。パスワードなしのVaultは自動でロックを解除します。
+確認待ちの間に定義や稼働状態が変わった場合も、成功扱いにはしません。`sshc service status`で状態を確認してから再実行してください。再起動後はsshcエンジンの起動情報と応答を照合します。Linux・macOSではサービスのPIDを、Windowsでは起動情報のPIDから取得した実行ファイルを確認します。パスワードを設定したVaultはロックされるため、`sshc vault unlock`を実行してください。パスワードなしのVaultは自動でロックを解除します。
 
 ## 更新
 
@@ -161,7 +176,7 @@ Windowsでは、PowerShellで次を実行します。`SSHC_INSTALL_DIR`で配置
 
 ```powershell
 $dir = Join-Path $env:LOCALAPPDATA 'Programs\sshc'
-Remove-Item -LiteralPath (Join-Path $dir 'sshc.exe')
+Remove-Item -LiteralPath (Join-Path $dir 'sshc.exe'), (Join-Path $dir '.sshc-install-receipt.json')
 $entries = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';' |
   Where-Object { $_ -and [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ine $dir }
 [Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')

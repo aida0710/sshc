@@ -149,3 +149,7 @@ func TestServiceReadinessDoesNotSendTheSecretToAnUnprovenEngine(t *testing.T) {
 		t.Fatal("the handoff secret was sent before the engine proved it")
 	}
 }
+
+func (manager *fakeRestartableService) restartDefinition(context.Context) serviceRestartDefinition {
+	return manager.definitionFile()
+}

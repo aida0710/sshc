@@ -32,6 +32,7 @@ When sshc cannot parse the arguments, for example because an argument is missing
 sshc engine
 sshc engine --port 60001
 sshc engine --replace
+sshc engine --background
 sshc
 sshc open
 sshc open --no-browser
@@ -52,17 +53,17 @@ sshc update
 
 `sshc` without arguments and `sshc open` start the engine in the background if needed, wait until it is ready, print a one-time URL and open it in the browser. `sshc open --no-browser` performs the same startup but only prints the URL, for headless machines or use over SSH.
 
-`sshc stop` asks the running engine to stop and waits for it to exit. Open terminals and transfers close. If no engine is running, it exits successfully. On Linux and macOS, an enabled service starts the engine again at the next login; use `sshc service disable` to keep it stopped.
+`sshc stop` asks the running engine to stop and waits for it to exit. Open terminals and transfers close. If no engine is running, it exits successfully. On Linux, macOS, and Windows, an enabled service starts the engine again at the next login; use `sshc service disable` to keep it stopped.
 
 Background output is appended to `~/.ssh/sshc/logs/engine.log` (`%USERPROFILE%\.ssh\sshc\logs\engine.log` on Windows). If it exceeds 5 MiB before startup, it replaces `engine.log.1`. The directory and files are private to the user and excluded from encrypted sync. If the engine exits before it is ready, the CLI reports its exit code and the last 20 log lines.
 
-`sshc engine` runs in the foreground. `sshc engine --port <n>` (1024–65535) pins the listening port. `sshc version` (`-v`, `--version`) prints this binary's version, and `sshc vault status` prints the same table as `sshc status` with the vault state.
+`sshc engine` runs in the foreground. `--background` is used by services and background starts: it releases the console on Windows and appends stdout, stderr, and logs to the log file above. `sshc engine --port <n>` (1024–65535) pins the listening port. `sshc version` (`-v`, `--version`) prints this binary's version, and `sshc vault status` prints the same table as `sshc status` with the vault state.
 
 Interactive secrets such as the Vault master password display one `*` per typed character instead of the value. Backspace and `Ctrl+U` update the mask, and the plaintext is never written to Terminal scrollback.
 
-`sshc service` manages a systemd user service on Linux or a launchd user agent on macOS. `install` registers a stable Homebrew or `install.sh` path, `restart` restarts an active service whose definition matches this installation, and `disable` removes only a definition created by sshc. `install`, `restart`, `disable`, and `update` show the planned changes and ask for confirmation. Use `-y` or `--yes` only when automation must skip the prompt.
+`sshc service` manages a systemd user service on Linux, a launchd user agent on macOS, or a logon task on Windows. `install` registers a stable Homebrew, `install.sh`, or Windows `install.ps1` path, `restart` restarts an active service whose definition matches this installation, and `disable` removes only a definition created by sshc. `install`, `restart`, `disable`, and `update` show the planned changes and ask for confirmation. Use `-y` or `--yes` only when automation must skip the prompt.
 
-`sshc service restart` refuses inactive, absent, unmanaged, outdated, or other-executable services with exit code 1. Restarting ends existing sessions and transfers. Success requires the service PID, engine handoff, and status API to agree. See [Installation](/en/guide/install) for recovery steps.
+`sshc service restart` refuses inactive, absent, unmanaged, outdated, or other-executable services with exit code 1. Restarting ends existing sessions and transfers. Success requires a verified engine handoff and status response. Linux and macOS also check the service PID; Windows checks that the handoff PID runs the registered executable. See [Installation](/en/guide/install) for recovery steps.
 
 `sshc vault change-password` validates the current password as soon as you press Enter, before asking for a new password. Passwordless Vaults skip the current-password prompt. Leave both the new password and confirmation empty to remove password protection. `sshc vault lock` keeps a passwordless Vault unlocked; set a master password to enable locking. After upgrading the CLI, restart the engine to apply these changes.
 
