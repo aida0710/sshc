@@ -6,31 +6,26 @@ import (
 	"os"
 	"path/filepath"
 
-	"golang.org/x/sys/windows"
 	"sshc/internal/platform/windowsacl"
 )
 
+// openPrivateAppend は、ログを本人だけが読める権限で作ってから、追記だけの権限で開き直す。
+// 作るときのハンドルは権限を締めるために DELETE なども持つので、それを子へ渡すと、
+// エンジンが動いているあいだほかのプログラムがログを読めなくなる。
 func openPrivateAppend(path string) (*os.File, error) {
 	directory, err := windowsacl.OpenPrivateDirectory(filepath.Dir(path))
 	if err != nil {
 		return nil, err
 	}
 	defer directory.Close()
-	file, err := windowsacl.OpenOrCreateFileAt(directory, filepath.Base(path))
+	created, err := windowsacl.OpenOrCreateFileAt(directory, filepath.Base(path))
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-	// Removing FILE_WRITE_DATA makes each inherited write append atomically,
-	// including writes from two engines racing to acquire engine.lock.
-	var appendHandle windows.Handle
-	process := windows.CurrentProcess()
-	err = windows.DuplicateHandle(process, windows.Handle(file.Fd()), process, &appendHandle,
-		windows.FILE_APPEND_DATA|windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE, false, 0)
-	if err != nil {
+	if err := created.Close(); err != nil {
 		return nil, err
 	}
-	return os.NewFile(uintptr(appendHandle), path), nil
+	return windowsacl.OpenAuthenticatedFileForAppend(path)
 }
 
 func openPrivateRead(path string) (*os.File, error) {
