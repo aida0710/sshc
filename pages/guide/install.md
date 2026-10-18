@@ -32,7 +32,13 @@ Windows PowerShellからインストールできます。管理者権限は不�
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/aida0710/sshc/releases/latest/download/install.ps1 | iex"
 ```
 
-`%LOCALAPPDATA%\Programs\sshc`へインストールされ、ユーザーの`PATH`へ追加されます。更新にも同じコマンドを使えます。
+`%LOCALAPPDATA%\Programs\sshc`へインストールされ、ユーザーの`PATH`の先頭へ追加されます。新しいターミナルで`sshc version`を実行して確認してください。別の`sshc.exe`が優先される場合は、インストーラーが場所を表示します。
+
+### 更新する
+
+`install.ps1`で導入したsshcは、`sshc update`とWeb画面の更新ボタンで更新できます。導入記録と実行ファイルのSHA-256が一致する場合だけ更新します。上記のインストール用コマンドを再実行しても更新できます。
+
+更新前に動いていたsshcエンジンは、更新後に起動し直します。有効なタスクがあればタスクから起動し、それ以外はバックグラウンドで起動します。停止中だった場合は起動しません。再起動で接続中のセッションと転送は終了し、パスワードを設定したVaultはロックされます。
 
 ### ログオン時に起動する
 
@@ -47,7 +53,7 @@ sshc service status
 
 `sshc service status`はタスクの状態（Ready／Running／Disabled）とsshcエンジンの応答を表示します。稼働中のタスクは`sshc service restart`で再起動できます。`sshc service disable`はsshcエンジンの終了を待ち、タスクを削除します。変更操作の確認を省略する場合は`--yes`を付けてください。
 
-同名の手作りのタスクは上書きも削除もしません。ダウンロードしたexeの直接実行やソースビルドは登録できません。インストーラーがexeの隣に置く`.sshc-install-receipt.json`で導入元とSHA-256を確認します。Windowsでの`sshc update`と画面からの更新には、まだ対応していません。
+同名の手作りのタスクは上書きも削除もしません。ダウンロードしたexeの直接実行やソースビルドは登録できません。インストーラーがexeの隣に置く`.sshc-install-receipt.json`で導入元とSHA-256を確認します。この導入記録は更新時にも確認します。
 
 ## Android
 
@@ -145,42 +151,42 @@ sshc service restart
 
 ## 更新
 
-- Homebrew／`install.sh`: `sshc update`
-- Windows: インストール用のPowerShellコマンドを再実行
+- Homebrew／`install.sh`／Windowsの`install.ps1`: `sshc update`
 - Android: GitHub Releasesから新しいAPKをインストール
 
 ### Web画面から更新する
 
-macOS・LinuxのHomebrew版と`install.sh`版では、新しい安定版があると、画面のバージョン表示欄の下にお知らせと更新ボタンが出ます。バージョンの横の印で折りたためます。折りたたんだお知らせは、さらに新しい安定版が出るまで閉じたままです。確認画面で現在のバージョン、更新先、導入方法を確認してから実行してください。更新にはインストール先への書き込み権限が必要です。Homebrew版は`brew upgrade`で更新し、実際に入ったバージョンを確認します。実行時のHomebrewの定義に従うため、確認画面より新しいバージョンが入る場合があります。`install.sh`版は確認したバージョンへ更新します。手動配置・開発ビルド・Windows・Androidでは、画面に表示される案内に従って更新します。
+macOS・LinuxのHomebrew版と`install.sh`版、Windowsの`install.ps1`版では、新しい安定版があると、画面のバージョン表示欄の下にお知らせと更新ボタンが出ます。バージョンの横の印で折りたためます。折りたたんだお知らせは、さらに新しい安定版が出るまで閉じたままです。確認画面で現在のバージョン、更新先、導入方法を確認してから実行してください。更新にはインストール先への書き込み権限が必要です。Homebrew版は`brew upgrade`で更新し、実際に入ったバージョンを確認します。実行時のHomebrewの定義に従うため、確認画面より新しいバージョンが入る場合があります。`install.sh`版と`install.ps1`版は確認したバージョンへ更新します。手動配置・開発ビルド・Androidでは、画面に表示される案内に従って更新します。
 
 更新後はsshcエンジンが再起動し、接続中のセッションと転送が終了します。パスワードを設定したVaultは、再起動後にロックを解除してください。更新中の進行状況と結果はダイアログで表示し、結果は1回の更新につき1回だけ表示します。重複した更新は受け付けません。インストールが成功して再起動だけに失敗した場合は、再インストールせず、案内に従って再起動してから画面を再読み込みしてください。
 
 ### CLIから更新する
 
+Windowsでは、[Windowsの更新](#更新する)で説明したとおり、インストーラーがsshcエンジンの停止と再起動を行います。以下はmacOS・Linuxの動作です。
+
 `sshc service install`で管理しているサービスが動作中で、サービス定義に記録された実行ファイルが今回の更新対象と一致する場合だけ、`sshc update`が更新後にサービスを再起動します。パスワードを設定したVaultは再起動でロックされるため、`sshc vault unlock`を実行してください。パスワードなしのVaultは、sshcエンジンの起動時に自動でロックを解除します。更新は成功したものの再起動だけに失敗した場合は、表示に従って`sshc service install`を再実行できます。`install.sh`を直接実行して更新した場合は、サービスを自動では再起動しないため、稼働中なら`sshc service restart`を実行してください。停止中や古い定義の場合は`sshc service install`を使います。サービス管理外のsshcエンジンは`sshc engine --replace`で再起動します。
 
 ## アンインストール
 
-常駐させているsshcエンジンを先に止め、サービスの登録を削除してから、実行ファイルを削除します。サービスに登録したまま実行ファイルだけを削除すると、macOSのlaunchdは5秒ごとにsshcエンジンの起動を試みて失敗し続けます。Linuxのsystemdでも、ログインのたびに起動に失敗します。
+Windowsでは、下記の削除操作で停止とサービス登録の削除をまとめて行います。macOS・Linuxでは、常駐させているsshcエンジンを先に止め、サービスの登録を削除してから、実行ファイルを削除します。サービスに登録したまま実行ファイルだけを削除すると、macOSのlaunchdは5秒ごとにsshcエンジンの起動を試みて失敗し続けます。Linuxのsystemdでも、ログインのたびに起動に失敗します。
 
 1. `sshc service install`で登録している場合は、`sshc service disable`を実行します。sshcが作成したサービス定義だけを停止、無効化、削除します。サービス以外で起動したsshcエンジンは`sshc stop`で停止します。
 2. 導入方法に合わせて実行ファイルを削除します。
    - Homebrew: `brew uninstall aida0710/tap/sshc`
    - `install.sh`: 配置先の`sshc`と、同じディレクトリにあるreceipt（`.sshc-install-receipt.json`）を削除します。配置先は通常`~/.local/bin`で、rootで実行した場合は`/usr/local/bin`、`SSHC_INSTALL_DIR`を指定した場合はそのディレクトリです。
    - `make install`: `make uninstall`で`~/.local/bin/sshc`を削除します。
-   - Windows: 動いているsshcエンジンを停止してから、下のコマンドで`sshc.exe`を削除し、ユーザー`PATH`から配置先を外します。
+   - Windows: 下記の「インストール済みアプリ」または`uninstall.ps1`で削除します。停止とサービスの削除も自動で行います。
    - Android: ほかのアプリと同じ手順でアンインストールします。
 3. 接続ごとのVPNを使った場合は、sshcが作成したコンテナイメージ`sshc-vpn`が残ります。VPNのコンテナはsshcエンジンの停止時に削除されます。イメージが不要なら、`docker image ls sshc-vpn`で確認してから`docker image rm`で削除してください。
 
-Windowsでは、PowerShellで次を実行します。`SSHC_INSTALL_DIR`で配置先を変えた場合は、`$dir`にそのディレクトリを指定してください。
+Windowsでは、設定の「アプリ」→「インストール済みアプリ」からsshcを選んでアンインストールできます。PowerShellから削除する場合は次を実行します。`SSHC_INSTALL_DIR`で配置先を変えた場合は、`$dir`にそのディレクトリを指定してください。
 
 ```powershell
 $dir = Join-Path $env:LOCALAPPDATA 'Programs\sshc'
-Remove-Item -LiteralPath (Join-Path $dir 'sshc.exe'), (Join-Path $dir '.sshc-install-receipt.json')
-$entries = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';' |
-  Where-Object { $_ -and [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ine $dir }
-[Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
+powershell -NoProfile -ExecutionPolicy Bypass -File "$dir\uninstall.ps1"
 ```
+
+削除用の`uninstall.ps1`は導入先に保存されるため、通信は不要です。sshcエンジンを停止し、sshcが作成したタスク、実行ファイル、導入記録、backup、ユーザーの`PATH`への追加、アプリ登録を削除します。途中で失敗した場合はそこで停止し、残ったファイルと未実行の手順を表示します。原因を解消してから`uninstall.ps1`を再実行してください。`%USERPROFILE%\.ssh\sshc`のデータと、`~/.ssh`の設定・鍵は残します。
 
 `sshc service disable`を実行する前に実行ファイルを削除した場合は、次のコマンドでサービス定義を削除します。
 

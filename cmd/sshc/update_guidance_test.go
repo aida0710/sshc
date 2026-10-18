@@ -7,23 +7,18 @@ import (
 	"testing"
 )
 
-func TestWindowsUpdateNoticesGiveTheInstallerCommandOnItsOwnLine(t *testing.T) {
-	commandLine := "\n  " + windowsInstallerCommand + "\n"
-	for name, notice := range map[string]string{
-		"available update": availableUpdateNotice("v0.14.0", "windows"),
-		"unmanaged":        unmanagedInstallationNotice(`C:\sshc\sshc.exe`, "windows"),
-	} {
-		if !strings.Contains(notice, commandLine) {
-			t.Errorf("%s notice does not put the installer command on its own line:\n%s", name, notice)
-		}
-		if strings.Contains(notice, "`sshc update`") {
-			t.Errorf("%s notice tells Windows to run sshc update, which refuses there:\n%s", name, notice)
-		}
+func TestWindowsUpdateNoticesUseUpdateAndExplainUnmanagedInstallations(t *testing.T) {
+	if notice := availableUpdateNotice("v0.14.0"); notice != "sshc: v0.14.0 is available; run `sshc update`\n" {
+		t.Fatalf("notice=%q", notice)
+	}
+	notice := unmanagedInstallationNotice(`C:\sshc\sshc.exe`, "windows")
+	if !strings.Contains(notice, "not managed by sshc's install.ps1") || !strings.Contains(notice, "\n  "+windowsInstallerCommand+"\n") {
+		t.Fatalf("notice=%q", notice)
 	}
 }
 
 func TestUpdateNoticesOutsideWindowsKeepToSshcUpdate(t *testing.T) {
-	if notice := availableUpdateNotice("v0.14.0", "darwin"); notice != "sshc: v0.14.0 is available; run `sshc update`\n" {
+	if notice := availableUpdateNotice("v0.14.0"); notice != "sshc: v0.14.0 is available; run `sshc update`\n" {
 		t.Errorf("available update notice = %q", notice)
 	}
 	notice := unmanagedInstallationNotice("/usr/local/bin/sshc", "linux")

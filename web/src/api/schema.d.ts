@@ -923,7 +923,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Checks Homebrew ownership or the install.sh receipt, permissions and latest stable release. This never runs an installer. Confirmation expires after two minutes. */
+        /** @description Checks Homebrew ownership or the install.sh/install.ps1 receipt, permissions and latest stable release. This never runs an installer. Confirmation expires after two minutes. */
         post: operations["previewSelfUpdate"];
         delete?: never;
         options?: never;
@@ -2372,7 +2372,7 @@ export interface components {
             available: boolean;
             pageUrl?: string;
             /** @enum {string} */
-            manager?: "homebrew" | "install.sh";
+            manager?: "homebrew" | "install.sh" | "install.ps1";
             canUpdate?: boolean;
             /** @description Stable reason code explaining why automatic updates are unavailable */
             reason?: string;
@@ -2385,7 +2385,7 @@ export interface components {
             current: string;
             target: string;
             /** @enum {string} */
-            manager: "homebrew" | "install.sh";
+            manager: "homebrew" | "install.sh" | "install.ps1";
             actionToken: string;
             actionExpiresAt: string;
         };

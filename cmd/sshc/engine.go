@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"golang.org/x/term"
@@ -251,7 +250,7 @@ func reportAvailableUpdate(ctx context.Context, checker *releasecheck.Checker, c
 	if !releasecheck.Newer(current, latest.Version) || checkCtx.Err() != nil {
 		return
 	}
-	if _, err := fmt.Fprint(out, availableUpdateNotice(latest.Version, runtime.GOOS)); err != nil && logger != nil {
+	if _, err := fmt.Fprint(out, availableUpdateNotice(latest.Version)); err != nil && logger != nil {
 		logger.Debug("announce an sshc update", "error", err)
 	}
 }

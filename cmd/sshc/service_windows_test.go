@@ -28,23 +28,6 @@ func TestWindowsServiceRejectsUnmanagedExecutablesWithThePowerShellCommand(t *te
 	}
 }
 
-func TestWindowsUpdatesStayDisabledEvenWithAPowerShellReceipt(t *testing.T) {
-	dependencies := updateDependencies{
-		executable: func() (string, error) {
-			t.Fatal("update inspected installation before rejecting Windows")
-			return "", nil
-		},
-		detect: func(string) (installation, error) { return installation{manager: managerPowerShell}, nil },
-	}
-	var stderr bytes.Buffer
-	if code := runUpdate(context.Background(), updateRun{yes: true, stdout: io.Discard, stderr: &stderr, dependencies: dependencies}); code != exitFailure || !strings.Contains(stderr.String(), "cannot be updated automatically on Windows") {
-		t.Fatalf("exit=%d stderr=%s", code, stderr.String())
-	}
-	if _, err := inspectWebUpdateInstallation(context.Background(), dependencies); err == nil || !strings.Contains(err.Error(), "update_windows_unsupported") {
-		t.Fatalf("web update=%v", err)
-	}
-}
-
 func TestWindowsReadinessRequiresTheRegisteredProcessExecutable(t *testing.T) {
 	executable, err := os.Executable()
 	if err != nil {

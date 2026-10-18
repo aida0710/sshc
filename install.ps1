@@ -8,15 +8,18 @@
 #   SSHC_INSTALL_DIR  destination (default: %LOCALAPPDATA%\Programs\sshc)
 #   SSHC_ADD_TO_PATH  set to 0 to leave the user PATH unchanged (default: 1)
 
+& {
 [CmdletBinding()]
-param()
+param([switch]$Uninstall)
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
-
-# Windows PowerShell 5.1 may otherwise negotiate a protocol GitHub rejects.
-[Net.ServicePointManager]::SecurityProtocol =
-    [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+# Native failures are checked explicitly, including expected status/gh failures.
+$PSNativeCommandUseErrorActionPreference = $false
+$installerBody = $MyInvocation.MyCommand.ScriptBlock.ToString()
+$uninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\sshc'
+$uninstallerName = 'uninstall.ps1'
+$receiptFileName = '.sshc-install-receipt.json'
 
 $Repository = 'aida0710/sshc'
 
@@ -52,13 +55,17 @@ function Copy-ReleaseFile([string]$Name, [string]$Destination, [string]$BaseUrl)
         return
     }
     $uri = "$BaseUrl/$Name"
+    $previousSecurityProtocol = [Net.ServicePointManager]::SecurityProtocol
     try {
+        # Windows PowerShell 5.1 may otherwise negotiate a protocol GitHub rejects.
+        [Net.ServicePointManager]::SecurityProtocol = $previousSecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -Uri $uri -OutFile $Destination -UseBasicParsing -TimeoutSec 180 `
             -Headers @{ 'User-Agent' = 'sshc-install.ps1' }
     }
     catch {
         Stop-Install "could not download $uri ($($_.Exception.Message))"
     }
+    finally { [Net.ServicePointManager]::SecurityProtocol = $previousSecurityProtocol }
 }
 
 function Read-PublishedChecksum([string]$ChecksumPath, [string]$AssetName) {
@@ -82,29 +89,36 @@ function Test-ReparsePoint([string]$Path, [string]$Description) {
     }
 }
 
+function Remove-Backups([string]$Directory, [switch]$Required) {
+    foreach ($backup in @(Get-ChildItem -LiteralPath $Directory -Filter '.sshc.backup.*.exe' -File -Force)) {
+        try { Remove-Item -LiteralPath $backup.FullName -Force }
+        catch {
+            if ($Required) { throw }
+            Write-Note "backup is still in use: $($backup.FullName); it will be removed on the next install"
+        }
+    }
+}
+
 function Publish-Executable([string]$Source, [string]$Target) {
     $directory = Split-Path -Parent $Target
     $staged = Join-Path $directory ('.sshc.install.' + [System.Guid]::NewGuid().ToString('N') + '.exe')
     $backup = Join-Path $directory ('.sshc.backup.' + [System.Guid]::NewGuid().ToString('N') + '.exe')
     try {
         [System.IO.File]::Copy($Source, $staged, $false)
-        if ([System.IO.File]::Exists($Target)) {
-            try {
-                [System.IO.File]::Replace($staged, $Target, $backup, $true)
-            }
-            catch {
-                Stop-Install "could not replace $Target. Stop the running sshc engine and try again. The previous executable was left unchanged. ($($_.Exception.Message))"
-            }
-            Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
-        }
-        else {
-            [System.IO.File]::Move($staged, $Target)
+        # Windows permits renaming a loaded image, but cannot overwrite/delete it.
+        # Keep sshc update (or the web engine) alive on the renamed image until it exits.
+        if ([System.IO.File]::Exists($Target)) { [System.IO.File]::Move($Target, $backup) }
+        try { [System.IO.File]::Move($staged, $Target) }
+        catch {
+            if ([System.IO.File]::Exists($backup)) { [System.IO.File]::Move($backup, $Target) }
+            Stop-Install "could not publish $Target; the previous executable was restored. ($($_.Exception.Message))"
         }
     }
     finally {
-        Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+        if ([System.IO.File]::Exists($staged)) { Remove-Item -LiteralPath $staged -Force }
+        # Never delete the backup from a failure path: it may be the only surviving executable.
     }
+    Remove-Backups $directory
 }
 
 # The receipt binds service registration to the bytes installed at this stable path.
@@ -112,7 +126,7 @@ function Publish-Executable([string]$Source, [string]$Target) {
 function Publish-InstallReceipt([string]$Target, [string]$Version) {
     if ($Version -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { return }
     $directory = Split-Path -Parent $Target
-    $receipt = Join-Path $directory '.sshc-install-receipt.json'
+    $receipt = Join-Path $directory $receiptFileName
     $staged = Join-Path $directory ('.sshc.receipt.' + [System.Guid]::NewGuid().ToString('N'))
     try {
         $metadata = [ordered]@{
@@ -131,25 +145,332 @@ function Publish-InstallReceipt([string]$Target, [string]$Version) {
     }
 }
 
-function Add-UserPath([string]$Directory) {
-    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $entries = if ([string]::IsNullOrWhiteSpace($userPath)) { @() } else { @($userPath -split ';') }
-    $wanted = [Environment]::ExpandEnvironmentVariables($Directory).TrimEnd('\')
-    $present = $false
-    foreach ($entry in $entries) {
-        $expanded = [Environment]::ExpandEnvironmentVariables($entry.Trim()).TrimEnd('\')
-        if ($expanded -ieq $wanted) { $present = $true; break }
+function Test-SamePath([string]$Left, [string]$Right) {
+    return [Environment]::ExpandEnvironmentVariables($Left.Trim()).TrimEnd('\') -ieq
+        [Environment]::ExpandEnvironmentVariables($Right.Trim()).TrimEnd('\')
+}
+
+function Send-EnvironmentChange {
+    if (-not ('SshcInstaller.EnvironmentNotification' -as [type])) {
+        Add-Type -Namespace SshcInstaller -Name EnvironmentNotification -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+public static extern System.IntPtr SendMessageTimeout(System.IntPtr window, uint message, System.UIntPtr wParam, string lParam, uint flags, uint timeout, out System.UIntPtr result);
+'@
     }
-    if (-not $present) {
-        $next = @($entries | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) + $Directory
-        [Environment]::SetEnvironmentVariable('Path', ($next -join ';'), 'User')
-        Write-Note "added $Directory to your user PATH; open a new terminal to use it"
+    # Broadcast to top-level windows; bound each hung recipient instead of blocking installation.
+    $broadcastWindow = [IntPtr]0xffff
+    $settingChange = 0x001a
+    $abortIfHung = 0x0002
+    $notificationTimeoutMilliseconds = 5000
+    $notificationResult = [UIntPtr]::Zero
+    $sent = [SshcInstaller.EnvironmentNotification]::SendMessageTimeout($broadcastWindow, $settingChange,
+        [UIntPtr]::Zero, 'Environment', $abortIfHung, $notificationTimeoutMilliseconds, [ref]$notificationResult)
+    if ($sent -eq [IntPtr]::Zero) {
+        Write-Note 'PATH was saved, but some windows did not acknowledge it; sign out and back in if a new terminal still uses the old PATH'
     }
-    if (-not (($env:Path -split ';') | Where-Object {
-        [Environment]::ExpandEnvironmentVariables($_.Trim()).TrimEnd('\') -ieq $wanted
-    })) {
-        $env:Path = "$Directory;$env:Path"
+}
+
+function Update-UserPath([string]$Directory, [switch]$Remove) {
+    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+    try {
+        $raw = $key.GetValue('Path', $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        $kind = [Microsoft.Win32.RegistryValueKind]::ExpandString
+        if ($null -ne $raw) { $kind = $key.GetValueKind('Path') }
+        if ($kind -ne [Microsoft.Win32.RegistryValueKind]::String -and
+            $kind -ne [Microsoft.Win32.RegistryValueKind]::ExpandString) { Stop-Install 'user PATH is not a string' }
+        $entries = @()
+        if ($null -ne $raw -and $raw -ne '') { $entries = @($raw -split ';') }
+        $remaining = @($entries | Where-Object { -not (Test-SamePath $_ $Directory) })
+        $next = if ($Remove) { $remaining -join ';' } else { (@($Directory) + $remaining) -join ';' }
+        # Reinstalling finds the directory already first; leave the value and say nothing.
+        if ($next -ceq [string]$raw) { return }
+        if ($null -ne $raw -or -not $Remove) { $key.SetValue('Path', $next, $kind) }
     }
+    finally { $key.Dispose() }
+    Send-EnvironmentChange
+    # Do not prepend to the current process: it would hide a machine PATH entry
+    # that still takes priority when Windows constructs a fresh user's environment.
+    Write-Note 'user PATH updated; open a new terminal to use it'
+}
+
+function Show-ShadowedExecutable([string]$Target) {
+    $commands = @(Get-Command sshc -All -CommandType Application -ErrorAction SilentlyContinue)
+    if ($commands.Count -gt 0 -and -not (Test-SamePath $commands[0].Path $Target)) {
+        Write-Output 'sshc: another sshc comes first on your PATH'
+        Write-Note "typing sshc runs $($commands[0].Path), not $Target; check your PATH in a new terminal"
+    }
+    # A machine entry precedes the user PATH even after a fresh login.
+    $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    foreach ($entry in @($machinePath -split ';')) {
+        if ([string]::IsNullOrWhiteSpace($entry)) { continue }
+        $candidate = Join-Path ([Environment]::ExpandEnvironmentVariables($entry.Trim())) 'sshc.exe'
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+        if (-not (Test-SamePath $candidate $Target)) {
+            Write-Output 'sshc: another sshc comes first on your PATH'
+            Write-Note "the machine PATH selects $candidate before the user PATH entry for $Target"
+        }
+        break
+    }
+}
+
+function Confirm-ReleaseAttestation([string[]]$Paths, [string]$Tag) {
+    $github = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -eq $github) {
+        Write-Note 'GitHub CLI (gh) is not installed, so the release attestation was not checked; only the checksum was'
+        return
+    }
+    & $github.Path attestation verify --help *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Note 'GitHub CLI (gh) cannot verify attestations (gh 2.49.0 or later is needed), so the release attestation was not checked; only the checksum was'
+        return
+    }
+    & $github.Path auth status --hostname github.com *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Note 'GitHub CLI (gh) is not signed in to github.com, so the release attestation was not checked; only the checksum was'
+        return
+    }
+    $signedTag = if ($Tag -eq 'latest') { 'v[^/]+' } else { [regex]::Escape($Tag) }
+    $signer = '^https://github\.com/' + [regex]::Escape($Repository) + '/\.github/workflows/release\.yml@refs/(tags/' + $signedTag + '|heads/main)$'
+    foreach ($path in $Paths) {
+        & $github.Path attestation verify $path --repo $Repository --cert-identity-regex $signer --deny-self-hosted-runners
+        if ($LASTEXITCODE -ne 0) {
+            Stop-Install "gh attestation verify did not confirm that the Release workflow of $Repository signed the download, so nothing was installed: $path"
+        }
+    }
+    Write-Note "attestation matches the Release workflow of $Repository"
+}
+
+function Get-InstalledEngine([string]$Target) {
+    if (-not (Test-Path -LiteralPath $Target -PathType Leaf)) { return $null }
+    $statusText = (& $Target status --json | Out-String)
+    $statusExit = $LASTEXITCODE
+    $status = $statusText | ConvertFrom-Json
+    if ($statusExit -ne 0) {
+        if ($status.failure.kind -eq 'engine_not_running') { return $null }
+        Stop-Install "could not inspect the existing engine: $statusText"
+    }
+    # status proves the handoff first. Its PID is then checked against the actual
+    # executable, so installing a second copy does not stop another installation.
+    $display = (& $Target status | Out-String)
+    if ($LASTEXITCODE -ne 0 -or $display -notmatch '(?m)^engine\s+running \(pid ([0-9]+)\)') {
+        Stop-Install 'could not identify the existing engine process'
+    }
+    $engine = Get-Process -Id ([int]$Matches[1]) -ErrorAction Stop
+    if (-not (Test-SamePath $engine.Path $Target)) {
+        Write-Warning "the running engine uses $($engine.Path); it was left running"
+        $engine.Dispose()
+        return $null
+    }
+    $null = $engine.Handle
+    return $engine
+}
+
+# Invoke-EngineStop runs `sshc stop` and shows its standard error only when it fails.
+# On success stop reminds that the logon task starts the engine again, which does not
+# apply here: the installer starts the engine again itself, and uninstalling removes
+# the task first. Start-Process keeps standard error away from PowerShell 5.1, which
+# would otherwise turn each line into a terminating error under ErrorActionPreference Stop.
+function Invoke-EngineStop([string]$Target) {
+    $errorFile = [System.IO.Path]::GetTempFileName()
+    try {
+        $process = Start-Process -FilePath $Target -ArgumentList 'stop' -NoNewWindow -Wait -PassThru -RedirectStandardError $errorFile
+        if ($process.ExitCode -ne 0) {
+            Get-Content -LiteralPath $errorFile | ForEach-Object { Write-Host $_ }
+        }
+        return $process.ExitCode
+    }
+    finally { Remove-Item -LiteralPath $errorFile -Force -ErrorAction SilentlyContinue }
+}
+
+function Stop-InstalledEngine([string]$Target, $Engine) {
+    if ($null -eq $Engine -or $Engine.HasExited) { return }
+    if ((Invoke-EngineStop $Target) -ne 0) { Stop-Install 'could not stop the existing engine; no files were replaced' }
+    # stop waits for the engine lock; wait for the OS process too before deleting its image.
+    # Include VPN shutdown and process cleanup in the deadline; no fixed sleep guesses at exit.
+    $engineExitTimeoutMilliseconds = 45000
+    if (-not $Engine.WaitForExit($engineExitTimeoutMilliseconds)) { Stop-Install 'the engine did not exit after stop' }
+}
+
+function Get-SshcTask {
+    $scheduler = New-Object -ComObject 'Schedule.Service'
+    $scheduler.Connect()
+    try { return $scheduler.GetFolder('\').GetTask('sshc') }
+    catch {
+        $exception = $_.Exception
+        while ($null -ne $exception.InnerException) { $exception = $exception.InnerException }
+        # HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) means the task is absent.
+        $taskNotFound = -2147024894
+        if ($exception.HResult -eq $taskNotFound) { return $null }
+        throw
+    }
+}
+
+function Get-EnabledService([string]$Target) {
+    $serviceStatus = (& $Target service status | Out-String)
+    if ($LASTEXITCODE -ne 0) { Stop-Install "could not inspect the sshc service: $serviceStatus" }
+    if ($serviceStatus -match 'service is not installed') { return $null }
+    $task = Get-SshcTask
+    if ($null -eq $task) { Stop-Install 'the sshc task changed during inspection' }
+    if (-not (Test-SamePath $task.Definition.Actions.Item(1).Path $Target)) {
+        Stop-Install 'the sshc task belongs to a different installation; it was left unchanged'
+    }
+    if (-not $task.Enabled) { return $null }
+    return [pscustomobject]@{ Task = $task; Definition = $task.Xml }
+}
+
+function Start-InstalledEngine([string]$Target, $Service) {
+    if ($null -eq $Service) {
+        & $Target open --no-browser
+        if ($LASTEXITCODE -ne 0) { Stop-Install 'installation succeeded, but the engine did not restart; run sshc to retry' }
+        Write-Output 'sshc: engine restarted'
+        return
+    }
+    # Task Scheduler updates its state after process exit. Poll the actual state
+    # and then the proved status response, rather than assuming a sleep is enough.
+    $serviceReadyTimeoutSeconds = 20
+    $servicePollMilliseconds = 100
+    $deadline = [DateTime]::UtcNow.AddSeconds($serviceReadyTimeoutSeconds)
+    # Task Scheduler's TASK_STATE_RUNNING and TASK_STATE_QUEUED values are locale independent.
+    $taskRunningState = 4
+    $taskQueuedState = 2
+    while ($Service.Task.State -eq $taskRunningState -or $Service.Task.State -eq $taskQueuedState) {
+        if ([DateTime]::UtcNow -ge $deadline) { Stop-Install 'the sshc task did not finish stopping' }
+        Start-Sleep -Milliseconds $servicePollMilliseconds
+    }
+    if ($Service.Task.Xml -cne $Service.Definition) { Stop-Install 'the sshc task changed during installation; it was not started' }
+    $Service.Task.Run($null) | Out-Null
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $status = (& $Target status --json | Out-String) | ConvertFrom-Json
+        if ($LASTEXITCODE -eq 0 -and $status.success) {
+            $engine = Get-InstalledEngine $Target
+            if ($null -eq $engine) { Stop-Install 'the running engine belongs to another installation' }
+            $engine.Dispose()
+            Write-Output 'sshc: engine restarted through the sshc task'
+            return
+        }
+        Start-Sleep -Milliseconds $servicePollMilliseconds
+    }
+    Stop-Install 'installation succeeded, but the sshc task did not become ready; run sshc service status'
+}
+
+function Register-Uninstaller([string]$Directory, [string]$Version) {
+    $uninstaller = Join-Path $Directory $uninstallerName
+    Test-ReparsePoint $uninstaller 'the uninstaller'
+    # Store this same implementation locally: uninstall works offline, including irm | iex installs.
+    [System.IO.File]::WriteAllText($uninstaller, "& {`n$installerBody`n} -Uninstall`n", (New-Object System.Text.UTF8Encoding($true)))
+    $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $command = '"' + $powershell + '" -NoProfile -ExecutionPolicy Bypass -File "' + $uninstaller + '"'
+    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($uninstallKey)
+    try {
+        $values = @{
+            DisplayName = 'sshc'; DisplayVersion = $Version; Publisher = 'aida0710'
+            InstallLocation = $Directory; DisplayIcon = (Join-Path $Directory 'sshc.exe')
+            UninstallString = $command; QuietUninstallString = $command
+        }
+        foreach ($name in $values.Keys) { $key.SetValue($name, $values[$name], [Microsoft.Win32.RegistryValueKind]::String) }
+        foreach ($name in @('NoModify', 'NoRepair')) { $key.SetValue($name, 1, [Microsoft.Win32.RegistryValueKind]::DWord) }
+    }
+    finally { $key.Dispose() }
+}
+
+function Remove-AppRegistration([string]$Directory) {
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($uninstallKey)
+    if ($null -eq $key) { return }
+    try { $location = [string]$key.GetValue('InstallLocation', '') }
+    finally { $key.Dispose() }
+    if (-not (Test-SamePath $location $Directory)) {
+        Write-Note "Installed apps refers to $location; that registration was left unchanged"
+        return
+    }
+    [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($uninstallKey, $false)
+}
+
+function Show-UninstallRemainder([string]$Directory) {
+    Write-Note "remaining files in ${Directory}:"
+    Get-ChildItem -LiteralPath $Directory -Force | ForEach-Object { Write-Note $_.FullName }
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
+    try { $path = [string]$key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) }
+    finally { $key.Dispose() }
+    $pathRemains = @($path -split ';' | Where-Object { Test-SamePath $_ $Directory }).Count -gt 0
+    Write-Note "user PATH entry remains: $pathRemains"
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($uninstallKey)
+    if ($null -eq $key) { Write-Note 'Installed apps registration remains: False' }
+    else {
+        try { Write-Note "Installed apps registration remains: $($key.GetValue('InstallLocation', 'unknown location'))" }
+        finally { $key.Dispose() }
+    }
+    $task = Get-SshcTask
+    Write-Note "sshc task remains: $($null -ne $task)"
+}
+
+function Remove-Installation([string]$Directory) {
+    $target = Join-Path $Directory 'sshc.exe'
+    $engine = $null
+    $step = 'stop the engine and disable the service'
+    try {
+        if (Test-Path -LiteralPath $target -PathType Leaf) {
+            Test-ReparsePoint $target 'the installed executable'
+            $engine = Get-InstalledEngine $target
+            $task = Get-SshcTask
+            if ($null -ne $task -and -not (Test-SamePath $task.Definition.Actions.Item(1).Path $target)) {
+                Stop-Install 'the sshc task belongs to a different installation; it was left unchanged'
+            }
+            # Disabling the task first also stops an engine it runs, so no stop reminder
+            # about the task is shown for a task that is about to be removed.
+            if ($null -ne $task) {
+                & $target service disable --yes
+                if ($LASTEXITCODE -ne 0) { Stop-Install 'could not disable the sshc service' }
+            }
+            Stop-InstalledEngine $target $engine
+        }
+        else {
+            $task = Get-SshcTask
+            if ($null -ne $task -and (Test-SamePath $task.Definition.Actions.Item(1).Path $target)) {
+                Stop-Install 'sshc.exe is missing but its task remains; install sshc again before uninstalling'
+            }
+        }
+        $step = 'remove the executable, receipt and backups'
+        Remove-Backups $Directory -Required
+        foreach ($name in @('sshc.exe', $receiptFileName)) {
+            $path = Join-Path $Directory $name
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+        }
+        $step = 'remove the user PATH entry'
+        Update-UserPath $Directory -Remove
+        $step = 'remove the Installed apps registration'
+        Remove-AppRegistration $Directory
+        $step = 'remove the uninstaller'
+        $uninstaller = Join-Path $Directory $uninstallerName
+        if (Test-Path -LiteralPath $uninstaller) { Remove-Item -LiteralPath $uninstaller -Force }
+        Write-Output 'sshc: uninstalled'
+    }
+    catch {
+        Write-Output "sshc: uninstall stopped while trying to $step"
+        try { Show-UninstallRemainder $Directory }
+        catch { Write-Note "could not inspect all remaining items: $($_.Exception.Message)" }
+        Write-Note 'later steps were not performed; resolve the error and run uninstall.ps1 again'
+        throw
+    }
+    finally {
+        if ($null -ne $engine) { $engine.Dispose() }
+        $profileDirectory = $env:USERPROFILE
+        Write-Note "data was kept in $profileDirectory\.ssh\sshc; SSH settings and keys were kept in $profileDirectory\.ssh"
+    }
+}
+
+$installDirectory = if ($Uninstall) {
+    $PSScriptRoot
+} elseif (-not [string]::IsNullOrWhiteSpace($env:SSHC_INSTALL_DIR)) {
+    [System.IO.Path]::GetFullPath($env:SSHC_INSTALL_DIR)
+} else {
+    $local = [Environment]::GetFolderPath([System.Environment+SpecialFolder]::LocalApplicationData)
+    if ([string]::IsNullOrWhiteSpace($local)) { Stop-Install 'LOCALAPPDATA is unavailable' }
+    Join-Path $local 'Programs\sshc'
+}
+if ($Uninstall) {
+    Test-ReparsePoint $installDirectory 'the install directory'
+    Remove-Installation $installDirectory
+    return
 }
 
 $architecture = Get-ReleaseArchitecture
@@ -161,13 +482,6 @@ $baseUrl = if ($tag -eq 'latest') {
     "https://github.com/$Repository/releases/download/$tag"
 }
 
-$installDirectory = if (-not [string]::IsNullOrWhiteSpace($env:SSHC_INSTALL_DIR)) {
-    [System.IO.Path]::GetFullPath($env:SSHC_INSTALL_DIR)
-} else {
-    $local = [Environment]::GetFolderPath([System.Environment+SpecialFolder]::LocalApplicationData)
-    if ([string]::IsNullOrWhiteSpace($local)) { Stop-Install 'LOCALAPPDATA is unavailable' }
-    Join-Path $local 'Programs\sshc'
-}
 $target = Join-Path $installDirectory 'sshc.exe'
 
 Write-Output "sshc: installing $asset ($tag)"
@@ -183,6 +497,7 @@ if (Test-Path -LiteralPath $target -PathType Container) {
 
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ('sshc-install-' + [System.Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work | Out-Null
+$engine = $null
 try {
     $download = Join-Path $work $asset
     $checksumFile = Join-Path $work 'checksums.txt'
@@ -195,6 +510,7 @@ try {
         Stop-Install "the download does not match its published checksum`n  expected $expected`n  got      $actual"
     }
     Write-Note 'checksum matches'
+    Confirm-ReleaseAttestation @($download, $checksumFile) $tag
 
     $versionLine = (& $download version | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $versionLine -notmatch '^sshc (v[^ ]+) windows/(amd64|arm64)$') {
@@ -209,9 +525,20 @@ try {
         Stop-Install "the downloaded executable reports $incomingTag, expected $tag"
     }
 
+    Remove-Backups $installDirectory
+    $service = $null
+    # The web engine must save its update result before the detached helper stops it.
+    if ($env:SSHC_INSTALL_CALLER -ne 'web-update') {
+        $engine = Get-InstalledEngine $target
+        if ($null -ne $engine) {
+            $service = Get-EnabledService $target
+            Stop-InstalledEngine $target $engine
+        }
+    }
+
     # Invalidate the previous receipt before replacing the executable. An interrupted
     # installation remains unmanaged instead of retaining a receipt for different bytes.
-    $receipt = Join-Path $installDirectory '.sshc-install-receipt.json'
+    $receipt = Join-Path $installDirectory $receiptFileName
     Test-ReparsePoint $receipt 'the install receipt'
     if (Test-Path -LiteralPath $receipt) { Remove-Item -LiteralPath $receipt -Force }
     Publish-Executable $download $target
@@ -221,16 +548,26 @@ try {
     }
 
     Publish-InstallReceipt $target $incomingTag
+    Register-Uninstaller $installDirectory $incomingTag
 
     if ($env:SSHC_ADD_TO_PATH -ne '0') {
-        Add-UserPath $installDirectory
+        Update-UserPath $installDirectory
     }
     elseif ($env:SSHC_INSTALL_TESTING -ne '1') {
         Write-Note "PATH was not changed; add $installDirectory before running sshc"
     }
 
+    Show-ShadowedExecutable $target
     Write-Output "sshc: installed $installedLine"
+    if ($null -ne $engine) { Start-InstalledEngine $target $service }
+}
+catch {
+    Write-Note "installation stopped; inspect $installDirectory for the executable, receipt, uninstaller and backups"
+    Write-Note 'if the engine was stopped, run sshc after resolving the error to start it again'
+    throw
 }
 finally {
+    if ($null -ne $engine) { $engine.Dispose() }
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+}
 }

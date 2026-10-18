@@ -532,14 +532,17 @@ func (e UpdateJobState) Valid() bool {
 
 // Defines values for UpdatePreviewManager.
 const (
-	UpdatePreviewManagerHomebrew  UpdatePreviewManager = "homebrew"
-	UpdatePreviewManagerInstallSh UpdatePreviewManager = "install.sh"
+	UpdatePreviewManagerHomebrew   UpdatePreviewManager = "homebrew"
+	UpdatePreviewManagerInstallPs1 UpdatePreviewManager = "install.ps1"
+	UpdatePreviewManagerInstallSh  UpdatePreviewManager = "install.sh"
 )
 
 // Valid indicates whether the value is a known member of the UpdatePreviewManager enum.
 func (e UpdatePreviewManager) Valid() bool {
 	switch e {
 	case UpdatePreviewManagerHomebrew:
+		return true
+	case UpdatePreviewManagerInstallPs1:
 		return true
 	case UpdatePreviewManagerInstallSh:
 		return true
@@ -550,14 +553,17 @@ func (e UpdatePreviewManager) Valid() bool {
 
 // Defines values for UpdateStatusManager.
 const (
-	UpdateStatusManagerHomebrew  UpdateStatusManager = "homebrew"
-	UpdateStatusManagerInstallSh UpdateStatusManager = "install.sh"
+	UpdateStatusManagerHomebrew   UpdateStatusManager = "homebrew"
+	UpdateStatusManagerInstallPs1 UpdateStatusManager = "install.ps1"
+	UpdateStatusManagerInstallSh  UpdateStatusManager = "install.sh"
 )
 
 // Valid indicates whether the value is a known member of the UpdateStatusManager enum.
 func (e UpdateStatusManager) Valid() bool {
 	switch e {
 	case UpdateStatusManagerHomebrew:
+		return true
+	case UpdateStatusManagerInstallPs1:
 		return true
 	case UpdateStatusManagerInstallSh:
 		return true

@@ -32,7 +32,13 @@ Run this from Windows PowerShell. Administrator privileges are not required.
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/aida0710/sshc/releases/latest/download/install.ps1 | iex"
 ```
 
-It installs to `%LOCALAPPDATA%\Programs\sshc` and updates the user `PATH`. Run the same command again to update to the latest stable release.
+It installs to `%LOCALAPPDATA%\Programs\sshc` and prepends that directory to the user `PATH`. Open a new terminal and run `sshc version`. The installer warns if another `sshc.exe` takes precedence.
+
+### Update
+
+Use `sshc update` or the web UI update button for installations made by `install.ps1`. Updates require an installation receipt whose SHA-256 matches the executable. Running the installation command again also updates sshc.
+
+An engine that was running before installation restarts afterwards: through the enabled sshc task if present, or in the background otherwise. A stopped engine stays stopped. Restarting ends connected sessions and transfers and locks a password-protected vault.
 
 ### Start at logon
 
@@ -47,7 +53,7 @@ sshc service status
 
 `sshc service status` reports the task state (Ready, Running, or Disabled) and whether the engine responds. Use `sshc service restart` to restart an active task. `sshc service disable` waits for the engine to shut down and deletes the task. Add `--yes` to skip confirmation for changes.
 
-A manually created task with the same name is never overwritten or deleted. Executables run directly from Downloads and source builds cannot be registered. The installer writes `.sshc-install-receipt.json` beside the executable to verify its origin and SHA-256. `sshc update` and updates from the web UI remain unsupported on Windows.
+A manually created task with the same name is never overwritten or deleted. Executables run directly from Downloads and source builds cannot be registered. The installer writes `.sshc-install-receipt.json` beside the executable to verify its origin and SHA-256. Updates verify the same receipt.
 
 ## Android
 
@@ -143,42 +149,42 @@ A state or definition change while waiting for confirmation also prevents succes
 
 ## Update
 
-- Homebrew or `install.sh`: `sshc update`
-- Windows: run the PowerShell installer again
+- Homebrew, `install.sh`, or Windows `install.ps1`: `sshc update`
 - Android: install the newer APK from GitHub Releases
 
 ### Update from the web UI
 
-On macOS and Linux, verified Homebrew and `install.sh` installations show a notice and an update button under the version when a newer stable release is available. Fold them with the mark beside the version; a folded notice stays closed until a newer stable release appears. Review the current version, target version, and installation method before confirming. The installation directory must be writable. Homebrew runs `brew upgrade` and checks the version actually installed. Its formula can advance after confirmation, so a newer version may be installed. The `install.sh` installer uses the confirmed version. Manual installations, development builds, Windows, and Android show guidance for updating through their installation method.
+Verified Homebrew and `install.sh` installations on macOS and Linux, and `install.ps1` installations on Windows, show a notice and an update button under the version when a newer stable release is available. Fold them with the mark beside the version; a folded notice stays closed until a newer stable release appears. Review the current version, target version, and installation method before confirming. The installation directory must be writable. Homebrew runs `brew upgrade` and checks the version actually installed. Its formula can advance after confirmation, so a newer version may be installed. The `install.sh` and `install.ps1` installers use the confirmed version. Manual installations, development builds, and Android show guidance for updating through their installation method.
 
 The engine restarts after installation, ending connected sessions and transfers. Unlock a password-protected vault again after the restart. A dialog shows the progress and the result, which appears once per update. Duplicate updates are refused. If installation succeeds but restarting fails, follow the restart guidance and reload the page without reinstalling.
 
 ### Update from the CLI
 
+On Windows, the installer stops and restarts the engine as described above. The following applies to macOS and Linux.
+
 When an active service was created by `sshc service install` and its executable matches the installation being updated, `sshc update` restarts it automatically. The restart locks a password-protected vault, so run `sshc vault unlock` again; a passwordless vault unlocks itself when the engine starts. If the update succeeds but only the restart fails, follow the message and run `sshc service install` again. Running `install.sh` directly does not restart the service, so run `sshc service restart` afterwards if it is active. Use `sshc service install` for an inactive service or an outdated definition. Restart engines outside service management with `sshc engine --replace`.
 
 ## Uninstall
 
-Stop the engine and remove its service registration before deleting the executable. If only the executable is deleted while the service is still registered, launchd on macOS keeps trying to start the engine every five seconds, and systemd on Linux fails to start it at every login.
+On Windows, the uninstall action below also stops the engine and removes its service registration. On macOS and Linux, stop the engine and remove its service registration before deleting the executable. If only the executable is deleted while the service is still registered, launchd on macOS keeps trying to start the engine every five seconds, and systemd on Linux fails to start it at every login.
 
 1. If you registered a service with `sshc service install`, run `sshc service disable`. It stops, disables, and removes only the service definition that sshc created. Use `sshc stop` for an engine started outside a service.
 2. Delete the executable for the way you installed it.
    - Homebrew: `brew uninstall aida0710/tap/sshc`
    - `install.sh`: delete `sshc` and the receipt `.sshc-install-receipt.json` in the same directory. The directory is normally `~/.local/bin`, `/usr/local/bin` when the script ran as root, or the directory given in `SSHC_INSTALL_DIR`.
    - `make install`: `make uninstall` deletes `~/.local/bin/sshc`.
-   - Windows: stop the running engine, then run the commands below to delete `sshc.exe` and remove its directory from the user `PATH`.
+   - Windows: use Installed apps or `uninstall.ps1` as described below; it also stops the engine and removes its task.
    - Android: uninstall it like any other app.
 3. If you used per-connection VPN, the container image `sshc-vpn` built by sshc remains. VPN containers are removed when the engine stops. To delete the image, check it with `docker image ls sshc-vpn` and remove it with `docker image rm`.
 
-On Windows, run the following in PowerShell. If you changed the directory with `SSHC_INSTALL_DIR`, set `$dir` to that directory.
+On Windows, open Settings → Apps → Installed apps and uninstall sshc. Alternatively, run the following in PowerShell. If you changed the directory with `SSHC_INSTALL_DIR`, set `$dir` to that directory.
 
 ```powershell
 $dir = Join-Path $env:LOCALAPPDATA 'Programs\sshc'
-Remove-Item -LiteralPath (Join-Path $dir 'sshc.exe'), (Join-Path $dir '.sshc-install-receipt.json')
-$entries = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';' |
-  Where-Object { $_ -and [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ine $dir }
-[Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
+powershell -NoProfile -ExecutionPolicy Bypass -File "$dir\uninstall.ps1"
 ```
+
+The local `uninstall.ps1` works offline. It stops the engine and removes the task created by sshc, the executable, receipt, backups, user PATH entry, and app registration. On failure it stops, shows remaining files and the steps not performed, and leaves the uninstaller available to retry after resolving the error. Data in `%USERPROFILE%\.ssh\sshc`, SSH settings, and keys in `~/.ssh` are preserved.
 
 If the executable was deleted before running `sshc service disable`, remove the service definition with these commands.
 

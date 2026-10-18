@@ -1200,7 +1200,7 @@ paths:
   /api/v1/update/preview:
     post:
       operationId: previewSelfUpdate
-      description: Checks Homebrew ownership or the install.sh receipt, permissions and latest stable release. This never runs an installer. Confirmation expires after two minutes.
+      description: Checks Homebrew ownership or the install.sh/install.ps1 receipt, permissions and latest stable release. This never runs an installer. Confirmation expires after two minutes.
       requestBody:
         required: true
         content:
@@ -3042,7 +3042,7 @@ components:
         latest: { type: string }
         available: { type: boolean }
         pageUrl: { type: string }
-        manager: { type: string, enum: [homebrew, install.sh] }
+        manager: { type: string, enum: [homebrew, install.sh, install.ps1] }
         canUpdate: { type: boolean }
         reason: { type: string, description: Stable reason code explaining why automatic updates are unavailable }
         job: { $ref: "#/components/schemas/UpdateJob" }
@@ -3059,7 +3059,7 @@ components:
       properties:
         current: { type: string }
         target: { type: string }
-        manager: { type: string, enum: [homebrew, install.sh] }
+        manager: { type: string, enum: [homebrew, install.sh, install.ps1] }
         actionToken: { type: string }
         actionExpiresAt: { type: string }
     UpdateJob:

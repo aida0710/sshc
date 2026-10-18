@@ -4,7 +4,8 @@ package main
 
 import "os/exec"
 
-// WindowsはHomebrew／install.shの更新対象外であり、子process設定は使用しない。
+// The installer starts engines through the detached launcher or Task Scheduler.
+// CommandContext cancellation only stops the foreground PowerShell invocation.
 func configureUpdateCommand(_ *exec.Cmd) (killLeftovers func()) {
 	return func() {}
 }
