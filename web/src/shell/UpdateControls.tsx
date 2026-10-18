@@ -4,6 +4,7 @@ import type { UpdateApi, UpdateJob, UpdatePreview, UpdateStatus } from "../api/u
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { updateJobMessage, updateMessage } from "./updateMessage";
+import { rememberUpdateResultToCheck } from "./updateResultToCheck";
 import { isUpdateActive } from "./useUpdateStatus";
 
 type UpdateControlsProps = {
@@ -61,7 +62,10 @@ export function UpdateControls({ status, api, onStart }: UpdateControlsProps) {
             <button
               type="button"
               className="underline underline-offset-2"
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                rememberUpdateResultToCheck(job.id);
+                window.location.reload();
+              }}
             >
               {t("update.reload")}
             </button>
