@@ -32,6 +32,7 @@ CodexなどのAIエージェントからも直接実行できます。非対話S
 sshc engine
 sshc engine --port 60001
 sshc engine --replace
+sshc engine --background
 sshc
 sshc open
 sshc open --no-browser
@@ -52,17 +53,17 @@ sshc update
 
 引数なしの`sshc`と`sshc open`は、sshcエンジンが停止中ならバックグラウンドで起動します。準備ができてから、一度限りのURLを表示してブラウザで開きます。`sshc open --no-browser`も必要なら起動しますが、URLの表示だけで終了します。画面のないマシンやSSH経由で使う場合に指定してください。
 
-`sshc stop`は、起動中のsshcエンジンへ停止を要求し、終了するまで待ちます。開いているターミナルや転送も終了します。停止中なら終了コード0で終了します。Linux・macOSでログイン時の自動起動を有効にしている場合は、次のログインで再び起動します。停止したままにするには`sshc service disable`を実行してください。
+`sshc stop`は、起動中のsshcエンジンへ停止を要求し、終了するまで待ちます。開いているターミナルや転送も終了します。停止中なら終了コード0で終了します。Linux・macOS・Windowsでログイン時の自動起動を有効にしている場合は、次のログインで再び起動します。停止したままにするには`sshc service disable`を実行してください。
 
 バックグラウンド起動のログは`~/.ssh/sshc/logs/engine.log`（Windowsは`%USERPROFILE%\.ssh\sshc\logs\engine.log`）へ追記します。起動前に5MiBを超えていた場合は`engine.log.1`へ移し、以前の`.1`を置き換えます。フォルダとファイルは本人だけが読める権限で作り、暗号化同期から除外します。準備ができる前に終了した場合は、終了コードとログの末尾20行を表示します。
 
-`sshc engine`はフォアグラウンドで動作します。`sshc engine --port <n>`（1024〜65535）は待ち受けポートを固定します。`sshc version`（`-v`、`--version`）はこのバイナリのバージョンを表示し、`sshc vault status`は`sshc status`と同じ表にVaultの状態を含めて表示します。
+`sshc engine`はフォアグラウンドで動作します。`--background`はサービスやバックグラウンド起動から使うオプションです。標準出力・標準エラーとログを上記のファイルへ追記します。Windowsではコンソールを手放します。`sshc engine --port <n>`（1024〜65535）は待ち受けポートを固定します。`sshc version`（`-v`、`--version`）はこのバイナリのバージョンを表示し、`sshc vault status`は`sshc status`と同じ表にVaultの状態を含めて表示します。
 
 Vaultのマスターパスワードなどを対話入力すると、入力した値の代わりに`*`を表示します。入力値がTerminalのスクロールバックへ平文で残ることはありません。
 
-`sshc service`はLinuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェントを管理します。`install`はHomebrewまたは`install.sh`で導入された安定パスを登録し、`restart`はこの導入と定義が一致する稼働中のサービスを再起動します。`disable`はsshcが作成した定義だけを削除します。`install`、`restart`、`disable`、`update`は変更内容を表示してから確認を求めます。自動化で確認を省略する場合だけ`-y`または`--yes`を付けてください。
+`sshc service`はLinuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェント、Windowsではログオン時のタスクを管理します。`install`はHomebrew、`install.sh`、Windowsの`install.ps1`で導入された安定パスを登録し、`restart`はこの導入と定義が一致する稼働中のサービスを再起動します。`disable`はsshcが作成した定義だけを削除します。`install`、`restart`、`disable`、`update`は変更内容を表示してから確認を求めます。自動化で確認を省略する場合だけ`-y`または`--yes`を付けてください。
 
-`sshc service restart`は、停止中・未登録・管理外・古い定義・別の実行ファイルを指すサービスを拒否し、終了コード1で終わります。接続中のセッションと転送は再起動で終了します。再起動後のPID、sshcエンジンの起動情報、status APIを照合してから成功と表示します。詳しい対処は[インストール](/guide/install)を参照してください。
+`sshc service restart`は、停止中・未登録・管理外・古い定義・別の実行ファイルを指すサービスを拒否し、終了コード1で終わります。接続中のセッションと転送は再起動で終了します。再起動後のsshcエンジンの起動情報と応答を照合してから成功と表示します。Windowsでは、起動情報のPIDの実行ファイルが登録先と一致することも確認します。詳しい対処は[インストール](/guide/install)を参照してください。
 
 `sshc vault change-password`は、現在のパスワードを入力してEnterを押すと、検証後に新しいパスワードの入力を求めます。パスワードなしのVaultでは、現在のパスワードの入力を省きます。新しいパスワードと確認を両方空欄にすると、パスワード保護を外せます。パスワードなしのVaultでは、`sshc vault lock`を実行してもロックされません。ロックを使う場合はマスターパスワードを設定してください。CLI更新後はsshcエンジンも再起動して変更を反映してください。
 

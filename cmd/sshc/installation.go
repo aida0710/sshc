@@ -16,12 +16,12 @@ import (
 	"sshc/internal/strictjson"
 )
 
-// sshc を入れる方法（Homebrew と install.sh）が、どこから何を入れるか。
+// sshcを入れる方法（Homebrew、install.sh、install.ps1）が、どこから何を入れるか。
 const (
 	homebrewTap       = "aida0710/tap"
 	homebrewFormula   = homebrewTap + "/sshc"
 	installRepository = "aida0710/sshc"
-	// receiptFileName は、install.sh が実行ファイルの隣に置く、入れた版の記録である。
+	// receiptFileNameは、インストーラーが実行ファイルの隣に置く、入れた版の記録である。
 	receiptFileName = ".sshc-install-receipt.json"
 )
 
@@ -31,6 +31,7 @@ const (
 	managerUnknown installManager = iota
 	managerHomebrew
 	managerShell
+	managerPowerShell
 )
 
 type installation struct {
@@ -48,9 +49,13 @@ type installReceipt struct {
 }
 
 // detectInstallation は、実行ファイルを入れた管理元を判定する。Homebrew の Cellar の
-// 中にあるか、install.sh の記録と中身が一致するときだけ管理元が分かったとみなし、
-// それ以外（source からの build、手で置いたもの、Windows）は managerUnknown にする。
+// 中にあるか、インストーラーの記録と中身が一致するときだけ管理元が分かったとみなし、
+// それ以外（source からの build、手で置いたもの）は managerUnknown にする。
 func detectInstallation(executable string) (installation, error) {
+	return detectInstallationForOS(executable, runtime.GOOS)
+}
+
+func detectInstallationForOS(executable, goos string) (installation, error) {
 	absolute, err := filepath.Abs(executable)
 	if err != nil {
 		return installation{}, err
@@ -59,19 +64,19 @@ func detectInstallation(executable string) (installation, error) {
 	if err != nil {
 		return installation{}, err
 	}
-	if runtime.GOOS != "windows" {
-		if brew, ok := homebrewForExecutable(resolved); ok {
-			return installation{manager: managerHomebrew, executable: resolved, brew: brew}, nil
-		}
-		if filepath.Base(resolved) != "sshc" {
-			return installation{manager: managerUnknown, executable: resolved}, nil
-		}
-		matched, receiptErr := shellReceiptMatches(resolved)
-		if receiptErr != nil {
-			return installation{}, receiptErr
+	manager, installer, name := managerShell, "install.sh", "sshc"
+	if goos == "windows" {
+		manager, installer, name = managerPowerShell, "install.ps1", "sshc.exe"
+	} else if brew, ok := homebrewForExecutable(resolved); ok {
+		return installation{manager: managerHomebrew, executable: resolved, brew: brew}, nil
+	}
+	if filepath.Base(resolved) == name || goos == "windows" && strings.EqualFold(filepath.Base(resolved), name) {
+		matched, err := installerReceiptMatches(resolved, installer)
+		if err != nil {
+			return installation{}, err
 		}
 		if matched {
-			return installation{manager: managerShell, executable: resolved}, nil
+			return installation{manager: manager, executable: resolved}, nil
 		}
 	}
 	return installation{manager: managerUnknown, executable: resolved}, nil
@@ -96,7 +101,7 @@ func homebrewForExecutable(executable string) (string, bool) {
 	return "", false
 }
 
-func shellReceiptMatches(executable string) (bool, error) {
+func installerReceiptMatches(executable, installer string) (bool, error) {
 	path := filepath.Join(filepath.Dir(executable), receiptFileName)
 	linkInfo, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -130,8 +135,8 @@ func shellReceiptMatches(executable string) (bool, error) {
 	} else if err != nil {
 		return false, fmt.Errorf("read %s: %w", path, err)
 	}
-	if receipt.SchemaVersion != 1 || receipt.Manager != "install.sh" || receipt.Repository != installRepository {
-		return false, fmt.Errorf("%s does not describe an sshc install.sh installation", path)
+	if receipt.SchemaVersion != 1 || receipt.Manager != installer || receipt.Repository != installRepository {
+		return false, fmt.Errorf("%s does not describe an sshc %s installation", path, installer)
 	}
 	if _, ok := releasecheck.StableTag(receipt.Version); !ok || len(receipt.SHA256) != sha256.Size*2 {
 		return false, fmt.Errorf("%s contains invalid release metadata", path)
@@ -144,7 +149,7 @@ func shellReceiptMatches(executable string) (bool, error) {
 		return false, err
 	}
 	if !strings.EqualFold(receipt.SHA256, digest) {
-		return false, fmt.Errorf("%s does not match the installed executable; install sshc again with install.sh, or remove the receipt if you replaced the executable yourself", path)
+		return false, fmt.Errorf("%s does not match the installed executable; install sshc again with %s, or remove the receipt if you replaced the executable yourself", path, installer)
 	}
 	return true, nil
 }
@@ -168,9 +173,12 @@ func managedInstallationExecutable(ctx context.Context, found installation, comm
 	switch found.manager {
 	case managerHomebrew:
 		return homebrewManagedExecutable(ctx, found, commands)
-	case managerShell:
+	case managerShell, managerPowerShell:
 		return found.executable, nil
 	default:
+		if runtime.GOOS == "windows" {
+			return "", fmt.Errorf("%s is not managed by sshc's PowerShell installer; install it first with: %s", found.executable, windowsInstallerCommand)
+		}
 		return "", fmt.Errorf("%s is not managed by Homebrew or sshc's install.sh", found.executable)
 	}
 }

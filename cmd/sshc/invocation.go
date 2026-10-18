@@ -45,7 +45,8 @@ type invocation struct {
 	// Port は `sshc engine --port N` の待受ポートで、0 は未指定を表す。
 	Port int
 	// Replace は既存の engine を確認なしで停止して置き換える。
-	Replace bool
+	Replace    bool
+	Background bool
 	// JSON は `sshc status --json` の機械可読出力を選択する。
 	JSON bool
 	// NoBrowser prints the one-time UI URL without launching a browser.
@@ -276,7 +277,7 @@ func parseSSHInvocation(args []string) (invocation, error) {
 }
 
 var engineCommandOptions = commandOptions{command: "engine", options: []commandOption{
-	switchOption("--replace"), valueOption("--port"),
+	switchOption("--replace"), switchOption("--background"), valueOption("--port"),
 }}
 
 // enginePortBounds は、`sshc engine --port` が受ける範囲である。範囲は engine の設定の
@@ -294,7 +295,7 @@ func parseEngineFlags(args []string) (invocation, error) {
 	if err != nil {
 		return invalidInvocation(err.Error())
 	}
-	return invocation{Kind: invocationEngine, Port: port, Replace: arguments.has("--replace")}, nil
+	return invocation{Kind: invocationEngine, Port: port, Replace: arguments.has("--replace"), Background: arguments.has("--background")}, nil
 }
 
 func noArguments(kind invocationKind, command string, args []string) (invocation, error) {

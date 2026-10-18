@@ -167,6 +167,16 @@ func (run serviceRun) status(ctx context.Context, manager engineServiceManager) 
 		fmt.Fprintln(run.stderr, "sshc: inspect service: unknown service state")
 		return exitFailure
 	}
+	if detailed, ok := manager.(interface {
+		StatusDetail(context.Context) (string, error)
+	}); ok {
+		detail, err := detailed.StatusDetail(ctx)
+		if err != nil {
+			fmt.Fprintf(run.stderr, "sshc: inspect service: %v\n", err)
+			return exitFailure
+		}
+		fmt.Fprintf(run.stdout, "sshc: %s\n", detail)
+	}
 	outdated, err := manager.IsDefinitionOutdated()
 	if err != nil {
 		fmt.Fprintf(run.stderr, "sshc: inspect service: %v\n", err)

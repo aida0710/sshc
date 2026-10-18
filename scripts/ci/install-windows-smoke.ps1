@@ -36,6 +36,18 @@ try {
     $want = "sshc $ExpectedVersion windows/$goarch"
     if ($version -cne $want) { throw "installed version is $version, want $want" }
 
+    $receiptPath = Join-Path $installed '.sshc-install-receipt.json'
+    $receiptBefore = [System.IO.File]::ReadAllText($receiptPath)
+    $receipt = $receiptBefore | ConvertFrom-Json
+    $installedDigest = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($receipt.schemaVersion -ne 1 -or $receipt.manager -cne 'install.ps1' -or
+        $receipt.repository -cne 'aida0710/sshc' -or $receipt.version -cne $ExpectedVersion -or
+        $receipt.sha256 -cne $installedDigest) { throw 'installer receipt does not identify the installed executable' }
+
+    # Reinstallation exercises replacement and receipt invalidation/publication.
+    & (Join-Path $root 'install.ps1')
+    if ([System.IO.File]::ReadAllText($receiptPath) -cne $receiptBefore) { throw 'reinstall changed the verified receipt' }
+
     # A bad checksum must not change the existing executable.
     $before = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
     $checksumPath = Join-Path $fixture 'checksums.txt'
@@ -50,9 +62,10 @@ try {
     if (-not $failed) { throw 'installer accepted a mismatched checksum' }
     $after = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
     if ($after -cne $before) { throw 'failed installation changed the existing executable' }
+    if ([System.IO.File]::ReadAllText($receiptPath) -cne $receiptBefore) { throw 'failed installation changed the receipt' }
 
     Get-ChildItem -LiteralPath $installed -Force | ForEach-Object {
-        if ($_.Name -like '.sshc.install.*' -or $_.Name -like '.sshc.backup.*') {
+        if ($_.Name -like '.sshc.install.*' -or $_.Name -like '.sshc.backup.*' -or $_.Name -like '.sshc.receipt.*') {
             throw "installer left staging file $($_.Name)"
         }
     }

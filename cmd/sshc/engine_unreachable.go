@@ -22,6 +22,9 @@ func engineNotRespondingAdvice(goos string) string {
 	if goos == "linux" || goos == "darwin" {
 		advice += "; if you suspended sshc engine with Ctrl+Z, resume it with fg; if the sshc service runs it, restart it with sshc service install"
 	}
+	if goos == "windows" {
+		advice += "; if the sshc service runs it, use sshc service status to inspect it and sshc service restart to restart it"
+	}
 	return advice
 }
 

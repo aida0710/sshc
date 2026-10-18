@@ -8,7 +8,7 @@ import "fmt"
 const windowsInstallerCommand = `powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/aida0710/sshc/releases/latest/download/install.ps1 | iex"`
 
 // windowsUpdateInstruction は、Windows で sshc を新しい版にする操作である。
-// Windows では sshc update が導入元を見分けない（detectInstallation）ので、
+// Windowsでは導入記録の有無によらず自動更新をまだ行わないので、
 // install.ps1 の再実行を案内する。コマンドは、そのまま写せるよう 1 行に置く。
 const windowsUpdateInstruction = "run the PowerShell installer again:\n  " + windowsInstallerCommand
 

@@ -16,7 +16,7 @@ import (
 // scanning on Windows, so allow more time than a managed service restart.
 const backgroundReadyTimeout = 20 * time.Second
 
-type backgroundEngineStarter func(string) (*detachedProcess, error)
+type backgroundEngineStarter func() (*detachedProcess, error)
 
 func isEngineRunning(stateDir string) (bool, error) {
 	release, err := lockEngineStart(stateDir)
@@ -46,7 +46,7 @@ func ensureBackgroundEngine(ctx context.Context, environment commandEnvironment,
 			return found, nil
 		}
 	} else {
-		process, err := start(environment.stateDir)
+		process, err := start()
 		if err != nil {
 			return handoff.Handoff{}, err
 		}
@@ -69,12 +69,12 @@ func ensureBackgroundEngine(ctx context.Context, environment commandEnvironment,
 	return found, err
 }
 
-func startBackgroundEngine(stateDir string) (*detachedProcess, error) {
+func startBackgroundEngine() (*detachedProcess, error) {
 	executable, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
-	return startLoggedEngine(stateDir, engineProcessCommand{executable: executable, arguments: []string{"engine"}, environment: os.Environ()})
+	return startLoggedEngine(engineProcessCommand{executable: executable, arguments: []string{"engine", "--background"}, environment: os.Environ()})
 }
 
 type engineProcessCommand struct {
@@ -83,17 +83,11 @@ type engineProcessCommand struct {
 	environment []string
 }
 
-func startLoggedEngine(stateDir string, invocation engineProcessCommand) (*detachedProcess, error) {
-	log, err := enginelog.Open(stateDir, version)
-	if err != nil {
-		return nil, err
-	}
-	defer log.Close()
-	// nil stdin is the null device; *os.File outputs inherit handles, not pipes.
+func startLoggedEngine(invocation engineProcessCommand) (*detachedProcess, error) {
+	// The engine opens its own log; the launcher inherits no log handles.
 	return startDetachedProcess(func() *exec.Cmd {
 		command := exec.Command(invocation.executable, invocation.arguments...)
 		command.Env = invocation.environment
-		command.Stdout, command.Stderr = log, log
 		return command
 	})
 }

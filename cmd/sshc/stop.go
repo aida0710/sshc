@@ -31,7 +31,7 @@ func runStop(ctx context.Context, environment commandEnvironment) int {
 }
 
 func reportServiceLoginReminder(ctx context.Context, environment commandEnvironment, managerForHome func(string) (engineServiceManager, error)) {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
 		return
 	}
 	manager, err := managerForHome(environment.home)

@@ -30,7 +30,7 @@ const rotationTimeout = 5 * time.Second
 
 func Path(stateDir string) string { return filepath.Join(stateDir, DirectoryName, FileName) }
 
-// Open serializes rotation and writes a startup marker before the child inherits the file.
+// Open serializes rotation and writes a startup marker before the engine writes to the file.
 func Open(stateDir, version string) (*os.File, error) {
 	path := Path(stateDir)
 	release, err := filelock.AcquireWithin(path+".lock", rotationTimeout)

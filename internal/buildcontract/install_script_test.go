@@ -283,3 +283,18 @@ func TestTheUninstallInstructionsNameWhatTheInstallersLeave(t *testing.T) {
 		}
 	}
 }
+
+func TestWindowsInstallerPublishesADigestReceiptOnlyAfterTheExecutable(t *testing.T) {
+	script := readWindowsInstallScript(t)
+	for _, fragment := range []string{"'.sshc-install-receipt.json'", "schemaVersion = 1", "manager = 'install.ps1'", "repository = $Repository", "version = $Version", "Get-FileHash -LiteralPath $Target -Algorithm SHA256", "[System.IO.File]::WriteAllText($staged", "[System.IO.File]::Move($staged, $receipt)", "UTF8Encoding($false)"} {
+		if !strings.Contains(script, fragment) {
+			t.Errorf("receipt contract lacks %q", fragment)
+		}
+	}
+	invalidation := strings.Index(script, "Remove-Item -LiteralPath $receipt -Force")
+	executable := strings.Index(script, "Publish-Executable $download $target")
+	receipt := strings.Index(script, "Publish-InstallReceipt $target $incomingTag")
+	if invalidation < 0 || executable <= invalidation || receipt <= executable {
+		t.Fatal("receipt publication is not ordered around executable publication")
+	}
+}

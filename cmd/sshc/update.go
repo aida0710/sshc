@@ -103,6 +103,14 @@ type updatePlan struct {
 // runUpdate は、管理元と最新の版を確かめ、確認のあとで新しい版を入れ、管理された
 // service が動いていれば再起動する。各段は、続けられなければ終える終了コードを返す。
 func runUpdate(ctx context.Context, run updateRun) int {
+	if runtime.GOOS == "windows" {
+		fmt.Fprint(run.stderr, unmanagedInstallationNotice("sshc", "windows"))
+		return exitFailure
+	}
+	return runUpdatePlan(ctx, run)
+}
+
+func runUpdatePlan(ctx context.Context, run updateRun) int {
 	found, code := run.findInstallation()
 	if code != 0 {
 		return code
@@ -302,7 +310,7 @@ func (installer updateInstaller) runTaggedInstaller(ctx context.Context, found i
 	if err := installer.runInstallerScript(ctx, script, taggedInstallerEnvironment(found, tag)); err != nil {
 		return err
 	}
-	matched, err := shellReceiptMatches(found.executable)
+	matched, err := installerReceiptMatches(found.executable, "install.sh")
 	if err != nil {
 		return fmt.Errorf("verify the updated install receipt: %w", err)
 	}
