@@ -55,7 +55,7 @@ func runWebUpdateRestart(paths userPaths, id string) int {
 	if err == nil {
 		err = restartWebUpdateEngine(ctx, webUpdateRestartRun{paths: paths, job: job, restartService: dependencies.restartService,
 			startProcess: func(executable string, arguments, environment []string) error {
-				process, err := startLoggedEngine(paths.stateDir, engineProcessCommand{executable: executable, arguments: arguments, environment: environment})
+				process, err := startLoggedEngine(engineProcessCommand{executable: executable, arguments: arguments, environment: environment})
 				if err == nil {
 					process.release()
 				}
@@ -128,5 +128,5 @@ func restartWebUpdateEngine(ctx context.Context, run webUpdateRestartRun) error 
 	}
 	environment := replaceEnvironment(os.Environ(), map[string]string{webUpdateRestartEnvironment: ""})
 	// Keep this browser's origin even when --port overrode the saved engine settings.
-	return run.startProcess(job.Plan.Installation.Executable, []string{"engine", "--port", engineURL.Port()}, environment)
+	return run.startProcess(job.Plan.Installation.Executable, []string{"engine", "--background", "--port", engineURL.Port()}, environment)
 }

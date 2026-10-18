@@ -1,5 +1,3 @@
-//go:build !windows
-
 package main
 
 import (
@@ -9,13 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"unicode"
 
+	"sshc/internal/app"
 	"sshc/internal/filelock"
 )
 
-// systemd（Linux）と launchd（macOS）の service 管理が共有する骨格。ツールの探索、
+// systemd、launchd、Windowsのタスクが共有するサービス管理。ツールの探索、
 // コマンドの実行、操作の排他、engine の準備完了待ちは同じであり、違うのは
 // ツール名と、その OS の定義ファイルとコマンド語彙だけである。
 
@@ -61,13 +61,18 @@ func acquireServiceOperationLock(lock func() (func() error, error)) (func() erro
 	return lock()
 }
 
-// restartableService は、restartServiceIfActive が OS ごとの manager に求める操作である。
+// serviceRestartDefinition keeps file and scheduler definitions behind the same checks.
+type serviceRestartDefinition interface {
+	matches(string) (bool, error)
+	ensureStillMatches(string, string) error
+}
+
 type restartableService interface {
-	definitionFile() serviceDefinitionFile
+	restartDefinition(context.Context) serviceRestartDefinition
 	acquireOperationLock() (func() error, error)
 	Status(context.Context) (serviceState, error)
 	// restartRunning は、動いている service だけを再起動する（systemctl try-restart、
-	// launchctl kickstart -k）。
+	// launchctl kickstart -k、Windowsでは正常終了を待ってschtasks /Run）。
 	restartRunning(context.Context) error
 	waitUntilReady(context.Context) error
 }
@@ -80,7 +85,7 @@ func restartServiceIfActive(ctx context.Context, service restartableService, exe
 		return false, err
 	}
 	defer func() { result = errors.Join(result, release()) }()
-	definition := service.definitionFile()
+	definition := service.restartDefinition(ctx)
 	matches, err := definition.matches(executable)
 	if err != nil || !matches {
 		return false, err
@@ -115,6 +120,13 @@ func restartServiceIfActive(ctx context.Context, service restartableService, exe
 // serviceOperationLock は、install／disable／restart を同じ home で直列化する。
 func serviceOperationLock(home string) func() (func() error, error) {
 	path := filepath.Join(home, ".config", "sshc", "service.mutation.lock")
+	if runtime.GOOS == "windows" {
+		stateDir, err := app.StateDir(home)
+		if err != nil {
+			return func() (func() error, error) { return nil, err }
+		}
+		path = filepath.Join(stateDir, "service.mutation.lock")
+	}
 	return func() (func() error, error) {
 		release, err := filelock.TryAcquire(path)
 		if errors.Is(err, filelock.ErrHeld) {

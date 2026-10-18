@@ -108,7 +108,7 @@ _sshc_completion() {
 
   case "$command" in
     engine)
-      _sshc_complete_words "--port --replace --help"
+      _sshc_complete_words "--port --replace --background --help"
       ;;
     completion)
       if (( COMP_CWORD == 2 )); then _sshc_complete_words "bash zsh fish --help"; fi
@@ -268,7 +268,7 @@ _sshc() {
   esac
 
   case "$command" in
-    engine) _sshc_values '--port --replace --help' ;;
+    engine) _sshc_values '--port --replace --background --help' ;;
     completion) (( CURRENT == 3 )) && _sshc_values 'bash zsh fish --help' ;;
     ssh)
       if (( CURRENT == 3 )); then
@@ -495,7 +495,7 @@ complete -c sshc -f -n '__sshc_command vpn; and test (count (commandline -opc)) 
 complete -c sshc -f -n '__sshc_prefix help' -a '{{HELP_TOPICS}}'
 {{HELP_ACTIONS}}
 
-complete -c sshc -f -n '__sshc_command engine' -a '--port --replace --help'
+complete -c sshc -f -n '__sshc_command engine' -a '--port --replace --background --help'
 complete -c sshc -f -n '__sshc_command info; and __sshc_min_words 3' -a '--json'
 complete -c sshc -f -n '__sshc_command open' -a '--no-browser --help'
 complete -c sshc -f -n '__sshc_command status' -a '--json --help'

@@ -48,12 +48,27 @@ func TestOpenAndStopHaveMatchingParsingHelpAndCompletion(t *testing.T) {
 
 func TestWindowsUnreachableAdviceDoesNotMentionUnixCommands(t *testing.T) {
 	advice := engineNotRespondingAdvice("windows")
-	if strings.Contains(advice, "fg") || strings.Contains(advice, "sshc service") {
+	if strings.Contains(advice, "fg") || !strings.Contains(advice, "sshc service restart") {
 		t.Fatalf("Windows advice = %q", advice)
 	}
 	for _, goos := range []string{"linux", "darwin"} {
 		if !strings.Contains(engineNotRespondingAdvice(goos), "fg") {
 			t.Fatalf("%s advice omitted suspended engine recovery", goos)
 		}
+	}
+}
+
+func TestEngineBackgroundFlagIsParsedAndDocumented(t *testing.T) {
+	called, err := parseInvocation([]string{"sshc", "engine", "--background", "--port", "54448"})
+	if err != nil || !called.Background || called.Port != 54448 {
+		t.Fatalf("invocation=%+v err=%v", called, err)
+	}
+	if _, err := parseInvocation([]string{"sshc", "engine", "--background", "--background"}); err == nil {
+		t.Fatal("duplicate background accepted")
+	}
+	var help strings.Builder
+	usageFor(&help, "engine")
+	if !strings.Contains(help.String(), "--background") || !strings.Contains(help.String(), "services") {
+		t.Fatalf("help=%q", help.String())
 	}
 }

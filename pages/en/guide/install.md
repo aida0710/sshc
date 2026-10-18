@@ -34,6 +34,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/a
 
 It installs to `%LOCALAPPDATA%\Programs\sshc` and updates the user `PATH`. Run the same command again to update to the latest stable release.
 
+### Start at logon
+
+An installation made by the PowerShell installer can register a Task Scheduler task without administrator privileges. Stop any running engine with `sshc stop` first.
+
+```powershell
+sshc service install
+sshc service status
+```
+
+`install` shows the executable path and asks for confirmation. It registers a task named `sshc` in the root Task Scheduler folder and starts it immediately. The task also starts whenever this user logs on to Windows. The console window closes just after startup while the engine keeps running. Logs are appended to `%USERPROFILE%\.ssh\sshc\logs\engine.log`.
+
+`sshc service status` reports the task state (Ready, Running, or Disabled) and whether the engine responds. Use `sshc service restart` to restart an active task. `sshc service disable` waits for the engine to shut down and deletes the task. Add `--yes` to skip confirmation for changes.
+
+A manually created task with the same name is never overwritten or deleted. Executables run directly from Downloads and source builds cannot be registered. The installer writes `.sshc-install-receipt.json` beside the executable to verify its origin and SHA-256. `sshc update` and updates from the web UI remain unsupported on Windows.
+
 ## Android
 
 Download `sshc-android-v<version>.apk` from [GitHub Releases](https://github.com/aida0710/sshc/releases). The release workflow verifies the signing fingerprint and checksum before publishing it.
@@ -107,7 +122,7 @@ A plist registered by an older sshc keeps the previous definition, which restart
 
 ## Restart a registered service
 
-On Linux and macOS, restart an active user service with:
+On Linux, macOS, and Windows, restart an active user service with:
 
 ```sh
 sshc service restart
@@ -115,7 +130,7 @@ sshc service restart
 
 The command shows the definition and executable paths before asking for confirmation. Restarting ends existing sessions and transfers. Use `sshc service restart --yes` when automation must skip the prompt.
 
-The service must use the stable path of this verified Homebrew or receipt-based `install.sh` installation and match the current service definition. The following cases are refused with exit code 1:
+The service must use the stable path of this verified Homebrew, `install.sh`, or Windows `install.ps1` installation and match the current service definition. The following cases are refused with exit code 1:
 
 | State | Recovery |
 | --- | --- |
@@ -124,7 +139,7 @@ The service must use the stable path of this verified Homebrew or receipt-based 
 | Outdated definition | Run `sshc service install` to update the definition |
 | Definition uses another executable | Run the command from the registered installation, or use `sshc service install` to switch to this installation |
 
-A state or definition change while waiting for confirmation also prevents success. Check `sshc service status` before retrying. After restarting, the service PID must match the engine handoff and status API. A password-protected vault becomes locked, so run `sshc vault unlock`; a passwordless vault unlocks itself.
+A state or definition change while waiting for confirmation also prevents success. Check `sshc service status` before retrying. After restarting, sshc verifies the engine handoff and status response. Linux and macOS check the service PID; Windows checks the executable running at the handoff PID. A password-protected vault becomes locked, so run `sshc vault unlock`; a passwordless vault unlocks itself.
 
 ## Update
 
@@ -159,7 +174,7 @@ On Windows, run the following in PowerShell. If you changed the directory with `
 
 ```powershell
 $dir = Join-Path $env:LOCALAPPDATA 'Programs\sshc'
-Remove-Item -LiteralPath (Join-Path $dir 'sshc.exe')
+Remove-Item -LiteralPath (Join-Path $dir 'sshc.exe'), (Join-Path $dir '.sshc-install-receipt.json')
 $entries = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';' |
   Where-Object { $_ -and [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ine $dir }
 [Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')

@@ -313,3 +313,7 @@ func (manager *launchdServiceManager) failureDetail(ctx context.Context) string 
 	}
 	return ""
 }
+
+func (manager *launchdServiceManager) restartDefinition(context.Context) serviceRestartDefinition {
+	return manager.definitionFile()
+}
