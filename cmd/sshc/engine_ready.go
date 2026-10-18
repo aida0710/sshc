@@ -45,6 +45,7 @@ func waitForReadyEngine(ctx context.Context, stateDir string, readiness engineRe
 	}
 	readyCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	readyDeadline, _ := readyCtx.Deadline()
 	ticker := time.NewTicker(engineReadyPollInterval)
 	defer ticker.Stop()
 	client := noRedirectClient(readiness.client)
@@ -67,6 +68,11 @@ func waitForReadyEngine(ctx context.Context, stateDir string, readiness engineRe
 		case <-readyCtx.Done():
 			if ctx.Err() != nil {
 				return handoff.Handoff{}, ctx.Err()
+			}
+			// The caller's deadline bounded this wait when it is no later than ours. Its
+			// timer can fire a moment after ours, so report the caller's deadline either way.
+			if callerDeadline, ok := ctx.Deadline(); ok && !callerDeadline.After(readyDeadline) {
+				return handoff.Handoff{}, context.DeadlineExceeded
 			}
 			if childFailure != nil {
 				return handoff.Handoff{}, errors.Join(childFailure, err)
