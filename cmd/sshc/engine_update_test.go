@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"runtime"
 	"testing"
 
 	"sshc/internal/releasecheck"
@@ -27,7 +26,7 @@ func TestEngineStartupReportsOnlyANewerRelease(t *testing.T) {
 	var out bytes.Buffer
 	reportAvailableUpdate(context.Background(), checker, "v0.13.6", &out,
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if got, want := out.String(), availableUpdateNotice("v0.14.0", runtime.GOOS); got != want {
+	if got, want := out.String(), availableUpdateNotice("v0.14.0"); got != want {
 		t.Fatalf("startup update notice = %q, want %q", got, want)
 	}
 

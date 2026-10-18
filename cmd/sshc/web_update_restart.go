@@ -54,6 +54,8 @@ func runWebUpdateRestart(paths userPaths, id string) int {
 	err = verifyWebUpdateRestartInstallation(ctx, job, dependencies)
 	if err == nil {
 		err = restartWebUpdateEngine(ctx, webUpdateRestartRun{paths: paths, job: job, restartService: dependencies.restartService,
+			startService: webUpdateServiceStarter(),
+			client:       &http.Client{Timeout: connectTimeout},
 			startProcess: func(executable string, arguments, environment []string) error {
 				process, err := startLoggedEngine(engineProcessCommand{executable: executable, arguments: arguments, environment: environment})
 				if err == nil {
@@ -97,15 +99,17 @@ func verifyWebUpdateRestartInstallation(ctx context.Context, job selfupdate.Job,
 }
 
 type webUpdateRestartRun struct {
+	client         *http.Client
 	paths          userPaths
 	job            selfupdate.Job
 	restartService func(context.Context, string) (bool, error)
+	startService   func(context.Context, string) (bool, error)
 	startProcess   func(string, []string, []string) error
 }
 
 func restartWebUpdateEngine(ctx context.Context, run webUpdateRestartRun) error {
 	paths, job := run.paths, run.job
-	client := &http.Client{Timeout: connectTimeout}
+	client := run.client
 	found, err := verifiedHandoff(ctx, paths.stateDir, client)
 	if err != nil {
 		return err
@@ -113,9 +117,11 @@ func restartWebUpdateEngine(ctx context.Context, run webUpdateRestartRun) error 
 	if found.PID != job.OwnerPID {
 		return selfupdate.ErrChanged
 	}
-	restarted, err := run.restartService(ctx, job.Plan.Installation.Executable)
-	if err != nil || restarted {
-		return err
+	if run.startService == nil {
+		restarted, err := run.restartService(ctx, job.Plan.Installation.Executable)
+		if err != nil || restarted {
+			return err
+		}
 	}
 	engineURL, err := url.Parse(found.URL)
 	if err != nil || engineURL.Port() == "" {
@@ -125,6 +131,12 @@ func restartWebUpdateEngine(ctx context.Context, run webUpdateRestartRun) error 
 	// stopped just because it shares the state directory.
 	if err := stopRunningEngine(ctx, paths.stateDir, found, client, lockEngineStart); err != nil {
 		return err
+	}
+	if run.startService != nil {
+		started, err := run.startService(ctx, job.Plan.Installation.Executable)
+		if err != nil || started {
+			return err
+		}
 	}
 	environment := replaceEnvironment(os.Environ(), map[string]string{webUpdateRestartEnvironment: ""})
 	// Keep this browser's origin even when --port overrode the saved engine settings.

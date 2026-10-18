@@ -34,6 +34,13 @@ const (
 	managerPowerShell
 )
 
+func (manager installManager) installerName() string {
+	if manager == managerPowerShell {
+		return "install.ps1"
+	}
+	return "install.sh"
+}
+
 type installation struct {
 	manager    installManager
 	executable string

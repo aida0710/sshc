@@ -29,6 +29,8 @@ Windows PowerShell:
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/aida0710/sshc/releases/latest/download/install.ps1 | iex"
 ```
 
+Windowsではユーザーの`PATH`の先頭へ追加し、「インストール済みアプリ」へ登録します。`install.ps1`で導入した場合は、`sshc update`とWeb画面から更新できます。削除は「インストール済みアプリ」から行い、`%USERPROFILE%\.ssh\sshc`のデータとSSH設定・鍵は残します。
+
 Android APKと各OS向けのバイナリは[GitHub Releases](https://github.com/aida0710/sshc/releases)から取得できます。詳しい検証方法と更新手順は[インストールガイド](https://aida0710.github.io/sshc/guide/install)を参照してください。
 
 ## 起動
