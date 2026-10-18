@@ -33,4 +33,6 @@ export const localStorageKeys = {
 export const sessionStorageKeys = {
   sessionCSRF: "sshc.session.csrf",
   liveWorkspace: "sshc.terminal.live-workspace.v1",
+  // The update job whose result the reload button asked the reloaded page to show.
+  updateResultToCheck: "sshc.update.result-to-check.v1",
 } as const;
