@@ -43,26 +43,26 @@ say "$version_line"
 }
 
 # 実環境を変更せず、info と engine が同じ一時 HOME だけを見るようにする。
-home=$(mktemp -d)
-export HOME="$home"
-mkdir -p "$home/.ssh"
-cat >"$home/.ssh/config" <<'EOF'
+smokeHome=$(mktemp -d)
+run_sshc() { env HOME="$smokeHome" "$binary" "$@"; }
+mkdir -p "$smokeHome/.ssh"
+cat >"$smokeHome/.ssh/config" <<'EOF'
 Host smoke-info
   HostName 192.0.2.10
   User smoke-user
   Port 22
 EOF
-enginePID=""
 cleanup() {
-	if [ -n "$enginePID" ]; then
-		kill "$enginePID" 2>/dev/null || true
+	if run_sshc stop; then
+		rm -rf -- "$smokeHome"
+	else
+		echo "could not stop the smoke engine; state retained at $smokeHome" >&2
 	fi
-	rm -rf -- "$home"
 }
 trap cleanup EXIT
 
 # ② info が engine なしで実効接続先を安定した JSON として返すことを確認する。
-info=$("$binary" info smoke-info --json)
+info=$(run_sshc info smoke-info --json)
 printf '%s\n' "$info" | jq -e '
   .schemaVersion == 1 and
   .success == true and
@@ -76,7 +76,7 @@ say "info resolved smoke-info without an engine"
 
 # ③ engine が停止中の場合に復旧手順が表示されることを確認する。
 set +e
-absent=$("$binary" status 2>&1)
+absent=$(run_sshc status 2>&1)
 absent_code=$?
 set -e
 [ "$absent_code" -ne 0 ] || { echo "status succeeded with no engine" >&2; exit 1; }
@@ -86,17 +86,11 @@ case "$absent" in
 esac
 
 # ④ 起動、応答、正常終了を確認する。
-"$binary" engine >"$home/engine.log" 2>&1 &
-enginePID=$!
+entrance=$(run_sshc open --no-browser)
+handoff="$smokeHome/.ssh/sshc/cli"
+[ -f "$handoff" ] || { echo "the engine never published a handoff" >&2; exit 1; }
 
-handoff="$home/.ssh/sshc/cli"
-for _ in $(seq 1 100); do
-	[ -f "$handoff" ] && break
-	sleep 0.2
-done
-[ -f "$handoff" ] || { echo "the engine never published a handoff" >&2; cat "$home/engine.log" >&2; exit 1; }
-
-status=$("$binary" status)
+status=$(run_sshc status)
 say "$(printf '%s' "$status" | tr '\n' ';')"
 case "$status" in
 	*"running (pid"*) ;;
@@ -104,14 +98,15 @@ case "$status" in
 esac
 
 # ⑤ 埋め込み UI を HTTP 経由で取得できることを確認する。
-entrance=$("$binary" open)
 page=$(curl --silent --show-error --fail --max-time 10 "$entrance")
 case "$page" in
 	*'<div id="root">'*) say "the bundled UI answered" ;;
 	*) echo "the entrance did not return the app shell" >&2; exit 1 ;;
 esac
 
-kill "$enginePID"
-wait "$enginePID" 2>/dev/null || true
-enginePID=""
+run_sshc stop
+if run_sshc status >/dev/null 2>&1; then
+	echo "the engine is still running after stop" >&2
+	exit 1
+fi
 echo "cli-smoke: ok"

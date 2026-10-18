@@ -126,8 +126,10 @@ func stopRunningEngine(
 		release, err := acquire(stateDir)
 		if err == nil {
 			// 空いた。すぐ手放す。本番の取得はこのあと通常の道で行う。
-			_ = release()
-			return nil
+			return release()
+		}
+		if !errors.Is(err, errEngineRunning) {
+			return err
 		}
 		select {
 		case <-ctx.Done():

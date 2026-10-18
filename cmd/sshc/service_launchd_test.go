@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"sshc/internal/handoff"
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/storage"
 )
 
@@ -277,6 +278,22 @@ func TestLaunchdPlistRejectsUnsafePaths(t *testing.T) {
 	for _, executable := range []string{"relative/sshc", "/opt/sshc\n/bin", "/opt/sshc\x00"} {
 		if _, err := launchdPlist(executable, "/Users/test"); err == nil {
 			t.Errorf("launchdPlist(%q) accepted an unsafe path", executable)
+		}
+	}
+}
+
+func TestLaunchdLoginReminderRespectsTheDisabledOverride(t *testing.T) {
+	for _, disabled := range []bool{false, true} {
+		runner := &fakeLaunchdCommandRunner{results: []serviceCommandResult{{Output: []byte(fmt.Sprintf("disabled services = {\n\t\"%s\" => %t\n}\n", launchdServiceLabel, disabled))}}}
+		manager := testLaunchdServiceManager(t, runner)
+		contents, err := launchdPlist("/opt/sshc", manager.home)
+		if err != nil {
+			t.Fatal(err)
+		}
+		acltest.WritePrivateFile(t, manager.plistPath(), []byte(contents))
+		starts, err := manager.StartsAtLogin(context.Background())
+		if err != nil || starts == disabled {
+			t.Fatalf("disabled = %v: starts = %v, err = %v", disabled, starts, err)
 		}
 	}
 }

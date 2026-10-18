@@ -34,6 +34,10 @@ func (manager *fakeServiceManager) Status(context.Context) (serviceState, error)
 	return manager.state, manager.err
 }
 
+func (manager *fakeServiceManager) StartsAtLogin(context.Context) (bool, error) {
+	return manager.state == serviceActive || manager.state == serviceInactive, manager.err
+}
+
 func (manager *fakeServiceManager) RestartPlan(executable string) (string, error) {
 	return "restart service using " + executable, manager.restartPlanErr
 }

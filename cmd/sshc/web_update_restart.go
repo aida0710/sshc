@@ -22,15 +22,15 @@ func launchWebUpdateRestart(executable, id string) error {
 }
 
 func startDetachedUpdateProcess(executable string, arguments, environment []string) error {
-	command := exec.Command(executable, arguments...)
-	command.Env = environment
-	configureDetachedUpdateProcess(command)
-	if err := command.Start(); err != nil {
+	process, err := startDetachedProcess(func() *exec.Cmd {
+		command := exec.Command(executable, arguments...)
+		command.Env = environment
+		return command
+	})
+	if err != nil {
 		return err
 	}
-	// Reap while the parent lives. A restart can end the parent first, in which
-	// case the OS adopts the helper. It inherits no HTTP sockets or output pipes.
-	go func() { _ = command.Wait() }()
+	process.release()
 	return nil
 }
 
@@ -53,7 +53,15 @@ func runWebUpdateRestart(paths userPaths, id string) int {
 	dependencies := defaultUpdateDependencies()
 	err = verifyWebUpdateRestartInstallation(ctx, job, dependencies)
 	if err == nil {
-		err = restartWebUpdateEngine(ctx, webUpdateRestartRun{paths: paths, job: job, restartService: dependencies.restartService, startProcess: startDetachedUpdateProcess})
+		err = restartWebUpdateEngine(ctx, webUpdateRestartRun{paths: paths, job: job, restartService: dependencies.restartService,
+			startProcess: func(executable string, arguments, environment []string) error {
+				process, err := startLoggedEngine(paths.stateDir, engineProcessCommand{executable: executable, arguments: arguments, environment: environment})
+				if err == nil {
+					process.release()
+				}
+				return err
+			},
+		})
 	}
 	if err != nil {
 		_, _ = store.Change(func(stored *selfupdate.Job) error {

@@ -34,6 +34,8 @@ sshc engine --port 60001
 sshc engine --replace
 sshc
 sshc open
+sshc open --no-browser
+sshc stop
 sshc status --json
 sshc version
 sshc vault status
@@ -48,7 +50,13 @@ sshc service disable
 sshc update
 ```
 
-引数なしの`sshc`は起動中のsshcエンジンから1回限りのURLを取得してブラウザで開き、`sshc open`はURLを表示するだけでブラウザを起動しません。`sshc engine --port <n>`（1024〜65535）は待ち受けポートを固定します。`sshc version`（`-v`、`--version`）はこのバイナリのバージョンを表示し、`sshc vault status`は`sshc status`と同じ表にVaultの状態を含めて表示します。
+引数なしの`sshc`と`sshc open`は、sshcエンジンが停止中ならバックグラウンドで起動します。準備ができてから、一度限りのURLを表示してブラウザで開きます。`sshc open --no-browser`も必要なら起動しますが、URLの表示だけで終了します。画面のないマシンやSSH経由で使う場合に指定してください。
+
+`sshc stop`は、起動中のsshcエンジンへ停止を要求し、終了するまで待ちます。開いているターミナルや転送も終了します。停止中なら終了コード0で終了します。Linux・macOSでログイン時の自動起動を有効にしている場合は、次のログインで再び起動します。停止したままにするには`sshc service disable`を実行してください。
+
+バックグラウンド起動のログは`~/.ssh/sshc/logs/engine.log`（Windowsは`%USERPROFILE%\.ssh\sshc\logs\engine.log`）へ追記します。起動前に5MiBを超えていた場合は`engine.log.1`へ移し、以前の`.1`を置き換えます。フォルダとファイルは本人だけが読める権限で作り、暗号化同期から除外します。準備ができる前に終了した場合は、終了コードとログの末尾20行を表示します。
+
+`sshc engine`はフォアグラウンドで動作します。`sshc engine --port <n>`（1024〜65535）は待ち受けポートを固定します。`sshc version`（`-v`、`--version`）はこのバイナリのバージョンを表示し、`sshc vault status`は`sshc status`と同じ表にVaultの状態を含めて表示します。
 
 Vaultのマスターパスワードなどを対話入力すると、入力した値の代わりに`*`を表示します。入力値がTerminalのスクロールバックへ平文で残ることはありません。
 

@@ -43,20 +43,16 @@ See [Android](/en/platform/android) for mobile startup and file picker behavior.
 ## Start
 
 ```sh
-sshc engine
-```
-
-When started in an interactive terminal, the first browser enrolment opens automatically. After service startup, if it does not open, or when adding another browser, open the UI from another terminal.
-
-```sh
 sshc
 ```
 
-The engine stays in the foreground. Use tmux, systemd, launchd or another OS process manager if you want it to stay running.
+`sshc` and `sshc open` start the engine in the background if needed, wait until it is ready, print a one-time URL and open it in your browser. The engine keeps running after you close the terminal, including on Windows. To print the URL without opening a browser, use `sshc open --no-browser`.
+
+Stop the engine with `sshc stop`. To run it in the foreground, use `sshc engine`. Background output is appended to `~/.ssh/sshc/logs/engine.log` (`%USERPROFILE%\.ssh\sshc\logs\engine.log` on Windows). This log is excluded from encrypted sync.
 
 Desktop first uses `http://127.0.0.1:54447/`. If another user or application already owns that port, sshc selects an available port once and stores it as this device's stable URL. Check the current URL with `sshc status`. Run `sshc` to open a one-time URL and enrol that browser. Afterwards, the same browser profile can use a bookmark or an installed web app directly, including after an engine restart on the same port. If the saved port is unavailable and the URL changes, sshc revokes the previous browser registration. Run `sshc` once against the current engine to enrol it again. Use the same command to add another browser or profile.
 
-Chrome and Edge can install sshc from their **Install app** action. The web app does not start the engine; run `sshc engine` or keep the OS service running first.
+Chrome and Edge can install sshc from their **Install app** action. The web app does not start the engine; run `sshc` or keep the OS service running first.
 
 On first launch you can set a vault master password, or continue without one.
 
@@ -64,7 +60,7 @@ On first launch you can set a vault master password, or continue without one.
 
 On Linux systems using systemd, install sshc as a user service without sudo.
 
-Stop any `sshc engine` running in the foreground or under tmux first. The systemd engine cannot start while another engine holds the lock.
+Stop any running engine with `sshc stop` first. The systemd engine cannot start while another engine holds the lock.
 
 ```sh
 sshc service install
@@ -95,7 +91,7 @@ Run `sshc service disable` to stop and remove the service. It asks for confirmat
 
 ## Keep the engine running on macOS
 
-On macOS, install sshc as a launchd user agent without sudo. Stop an engine running in the foreground or under tmux first.
+On macOS, install sshc as a launchd user agent without sudo. Stop any running engine with `sshc stop` first.
 
 ```sh
 sshc service install
@@ -150,7 +146,7 @@ When an active service was created by `sshc service install` and its executable 
 
 Stop the engine and remove its service registration before deleting the executable. If only the executable is deleted while the service is still registered, launchd on macOS keeps trying to start the engine every five seconds, and systemd on Linux fails to start it at every login.
 
-1. If you registered a service with `sshc service install`, run `sshc service disable`. It stops, disables, and removes only the service definition that sshc created. Stop an engine running in the foreground or under tmux yourself.
+1. If you registered a service with `sshc service install`, run `sshc service disable`. It stops, disables, and removes only the service definition that sshc created. Use `sshc stop` for an engine started outside a service.
 2. Delete the executable for the way you installed it.
    - Homebrew: `brew uninstall aida0710/tap/sshc`
    - `install.sh`: delete `sshc` and the receipt `.sshc-install-receipt.json` in the same directory. The directory is normally `~/.local/bin`, `/usr/local/bin` when the script ran as root, or the directory given in `SSHC_INSTALL_DIR`.
