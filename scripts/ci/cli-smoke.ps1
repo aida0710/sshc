@@ -29,14 +29,18 @@ if ($versionLine -ne $want) {
 }
 
 # 実環境を変更せず、info と engine が同じ一時 HOME だけを見るようにする。
-$home_ = Join-Path ([System.IO.Path]::GetTempPath()) ("sshc-smoke-" + [System.Guid]::NewGuid())
-$sshDir = Join-Path $home_ ".ssh"
+$smokeHome = Join-Path ([System.IO.Path]::GetTempPath()) ("sshc-smoke-" + [System.Guid]::NewGuid())
+$sshDir = Join-Path $smokeHome ".ssh"
 New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
-$env:USERPROFILE = $home_
-$env:HOME = $home_
+$originalUserProfile = $env:USERPROFILE
+$originalHome = $env:HOME
+$env:USERPROFILE = $smokeHome
+$env:HOME = $smokeHome
 $config = "Host smoke-info`n  HostName 192.0.2.10`n  User smoke-user`n  Port 22`n"
 [System.IO.File]::WriteAllText((Join-Path $sshDir "config"), $config, [System.Text.UTF8Encoding]::new($false))
 
+# The engine has already released its lock; allow time for the OS to finish process exit.
+$engineExitTimeoutMilliseconds = 10000
 $engine = $null
 
 try {
@@ -62,19 +66,12 @@ try {
     Write-Host "  no engine: $($absent.Trim())"
 
     # ④ 起動、応答、正常終了を確認する。
-    $log = Join-Path $home_ "engine.log"
-    $engine = Start-Process -FilePath $binary -ArgumentList "engine" -PassThru -NoNewWindow `
-        -RedirectStandardOutput $log -RedirectStandardError "$log.err"
-    $handoff = Join-Path $home_ ".ssh\sshc\cli"
-    $ready = $false
-    foreach ($attempt in 1..100) {
-        if (Test-Path $handoff) { $ready = $true; break }
-        Start-Sleep -Milliseconds 200
-    }
-    if (-not $ready) {
-        Get-Content $log, "$log.err" -ErrorAction SilentlyContinue | Out-Host
-        throw "the engine never published a handoff"
-    }
+    $entrance = (& $binary open --no-browser).Trim()
+    $handoff = Join-Path $smokeHome ".ssh\sshc\cli"
+    if (-not (Test-Path $handoff)) { throw "the engine never published a handoff" }
+    $enginePID = (Get-Content $handoff -Raw | ConvertFrom-Json).pid
+    $engine = Get-Process -Id $enginePID
+    if ($engine.MainWindowHandle -ne [IntPtr]::Zero) { throw "the background engine has a visible window" }
 
     $status = (& $binary status | Out-String)
     Write-Host "  $(($status -split "`n" | ForEach-Object { $_.Trim() }) -join '; ')"
@@ -83,16 +80,24 @@ try {
     }
 
     # ⑤ 埋め込み UI を HTTP 経由で取得できることを確認する。
-    $entrance = (& $binary open).Trim()
     $page = (Invoke-WebRequest -Uri $entrance -TimeoutSec 10 -UseBasicParsing).Content
     if ($page -notlike '*<div id="root">*') {
         throw "the entrance did not return the app shell"
     }
     Write-Host "  the bundled UI answered"
+    & $binary stop
+    if (-not $engine.WaitForExit($engineExitTimeoutMilliseconds)) { throw "the engine did not exit after stop" }
+    & $binary stop
 }
 finally {
-    if ($null -ne $engine -and -not $engine.HasExited) { Stop-Process -Id $engine.Id -Force }
-    Remove-Item -Recurse -Force $home_ -ErrorAction SilentlyContinue
+    try {
+        & $binary stop
+        Remove-Item -Recurse -Force $smokeHome -ErrorAction SilentlyContinue
+    }
+    finally {
+        $env:USERPROFILE = $originalUserProfile
+        $env:HOME = $originalHome
+    }
 }
 
 Write-Host "cli-smoke: ok"

@@ -6,28 +6,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 	"unicode"
 
-	"sshc/internal/app"
 	"sshc/internal/filelock"
 )
 
 // systemd（Linux）と launchd（macOS）の service 管理が共有する骨格。ツールの探索、
 // コマンドの実行、操作の排他、engine の準備完了待ちは同じであり、違うのは
 // ツール名と、その OS の定義ファイルとコマンド語彙だけである。
-
-// serviceReadyPollInterval と serviceReadyProbeTimeout は、再起動した engine の
-// handoff と status を確かめる周期と 1 回の HTTP 確認の上限である。
-const (
-	serviceReadyPollInterval = 50 * time.Millisecond
-	serviceReadyProbeTimeout = 250 * time.Millisecond
-)
 
 type serviceCommandResult struct {
 	ExitCode int
@@ -186,54 +176,4 @@ func serviceToolExitError(tool string, arguments []string, result serviceCommand
 		return fmt.Errorf("%s %s exited with status %d", tool, strings.Join(arguments, " "), result.ExitCode)
 	}
 	return fmt.Errorf("%s %s exited with status %d: %s", tool, strings.Join(arguments, " "), result.ExitCode, detail)
-}
-
-// engineReadiness は、OS ごとの「service の main PID は何か」と「失敗の説明」を
-// 準備完了待ちへ渡す。
-type engineReadiness struct {
-	// mainPID は service の main process の PID を返す。まだ無ければ 0。
-	mainPID func(context.Context) int
-	// failureDetail は、間に合わなかったときにツールが報告する状態を返す。
-	failureDetail func(context.Context) string
-}
-
-// waitForEngineReady は、service の main PID が handoff の PID と一致し、その engine が
-// 自分の handoff どおりの status を返すまで待つ。手で起動した engine が同じ home に
-// 居れば handoff は別の PID を指すので、そのことを案内して失敗する。
-//
-// status を尋ねる前に、handoff の URL に居るのが秘密を持つ engine であることを
-// challenge で確かめる。ほかの CLI の要求と同じく、確かめる前は秘密を送らない。
-func waitForEngineReady(ctx context.Context, home string, readiness engineReadiness) error {
-	readyCtx, cancel := context.WithTimeout(ctx, serviceReadyTimeout)
-	defer cancel()
-	ticker := time.NewTicker(serviceReadyPollInterval)
-	defer ticker.Stop()
-	client := &http.Client{Timeout: serviceReadyProbeTimeout}
-	stateDir, err := app.StateDir(home)
-	if err != nil {
-		return err
-	}
-
-	for {
-		if pid := readiness.mainPID(readyCtx); pid > 0 {
-			document, readErr := verifiedHandoff(readyCtx, stateDir, client)
-			if readErr == nil && document.PID == pid {
-				if _, statusErr := requestStatus(readyCtx, document, client); statusErr == nil {
-					return nil
-				}
-			}
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-readyCtx.Done():
-			detail := readiness.failureDetail(ctx)
-			if detail == "" {
-				detail = "engine readiness was not published"
-			}
-			return fmt.Errorf("%s; stop any manually running `sshc engine` and retry", detail)
-		case <-ticker.C:
-		}
-	}
 }

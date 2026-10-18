@@ -249,10 +249,10 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
 ## 画面の境界
 
 - `sshc engine` が UI を HTTP で配信し、`sshc` がアクセス URL を 1 件発行してブラウザへ渡します。UI の配信元は engine だけで、別のコピーは持ちません。
-- `sshc engine` は foreground で実行し、自動では detach しません。継続実行には tmux、screen、systemd など OS 上の process supervisor を使用します。起動したターミナルを閉じると engine も終了します。
-- 引数なしの `sshc` は engine を起動せず、実行中の engine からアクセス URL を取得して表示します。engine が動作していない場合は `sshc engine` の実行方法を表示し、exit code 1 で終了します。`~/.ssh/sshc/engine.lock` を engine の起動から終了まで保持し、2 個目の engine の起動を防ぎます。状態確認後に起動する方式では同時実行時に競合するため、排他 lock を使用します。
+- `sshc engine`はフォアグラウンドで動作し、起動したターミナルを閉じると終了します。引数なしの`sshc`と`sshc open`は、停止中ならsshcエンジンをバックグラウンドで起動し、準備ができてからアクセスURLを取得します。
+- `engine.lock`はsshcエンジンが起動から終了まで保持します。CLIはロックを取得できるかで起動の要否を決め、取得できたらすぐ解放します。同時に起動を試みた場合も、子プロセス自身が同じロックを取得するため、動作するsshcエンジンは1つです。
 - アクセス URL は要求ごとに新しく発行します。engine 起動時には表示もログ出力もしません。起動時に発行すると、engine の実行中ずっと有効なワンタイムの認証情報がターミナルの scrollback やログに残るためです。例外として、このマシンにブラウザ登録が 1 件も無く、かつ対話型のターミナルから起動した場合だけ、engine は起動時の bootstrap URL で既定のブラウザを開きます（URL は表示しません）。2 台目以降のブラウザは `sshc`／`sshc open` で登録します。
-- `sshc` は URL を標準出力に表示した後、GUI が利用できる場合は既定のブラウザで開きます。GUI がない場合も URL の表示には成功します。`sshc open` はブラウザを起動せず URL だけを表示し、スクリプトや文書化した手順から利用できます。
+- `sshc`と`sshc open`はURLを標準出力に表示した後、既定のブラウザで開きます。GUIがない場合もURLの表示には成功します。スクリプトや画面のないマシンでは、`sshc open --no-browser`でURLだけを取得できます。
 - 設定画面の「Open connections」から、すべてのコンソール、ポート転送、リモートへ転送した agent を終了できます。engine 自体は停止しません。再接続できる操作のため、確認ダイアログは表示しません。
 - engine は実行中のターミナルから Ctrl-C、SIGTERM、またはターミナルを閉じたときの SIGHUP で停止します。開いているコンソール、転送、vault を終了した後に lock と handoff を消します。
 - **cookie はポートに紐づきません。** 同じ `127.0.0.1` の別ポートに居るサーバーがこの session の cookie を受け取りうるので、読み取りにも CSRF トークンを要求します。トークンは port-origin ごとの `sessionStorage` にあり、そこへは渡りません。
@@ -275,15 +275,18 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
 
 - `make install` は `~/.local/bin/sshc` へ atomic にインストールし、sudo は不要です。`make uninstall` はこのバイナリだけを削除します。
 - `sshc`が実行中のengineへの接続を拒否するのは、handoffの`schemaVersion`か`protocolVersion`が違う場合だけです。このときは`sshc`自身の実行ファイルパスを表示し、どちらが古いかは判定しません。リリースのバージョン（handoffの`version`）が違うだけなら通常どおり接続するため、更新後はengineを再起動します。engineのバージョンは`sshc status`が表示します。
-- engine の継続実行は OS の process supervisor に委ねます。`sshc engine` は foreground で動作するため、`tmux`、`systemd` user unit、`launchd` などを使用できます。具体例は [docs/headless-examples.md](headless-examples.md) を参照してください。`sshc service install`はLinuxでは`~/.config/systemd/user/sshc.service`、macOSでは`~/Library/LaunchAgents/io.github.aida0710.sshc.plist`を作成し、`status`と`disable`を含めてsshc管理marker付き定義だけを管理します。同名の手書き定義は上書きも削除もしません。変更操作は対象と実行ファイルを表示して確認を求め、user単位のOS file lockで直列化し、削除前に内容を再検証します。Windows service、scheduled task、desktop login itemは作成しません。
+- ログイン時の自動起動はOSのprocess supervisorで管理します。`sshc engine` は foreground で動作するため、`tmux`、`systemd` user unit、`launchd` などを使用できます。具体例は [docs/headless-examples.md](headless-examples.md) を参照してください。`sshc service install`はLinuxでは`~/.config/systemd/user/sshc.service`、macOSでは`~/Library/LaunchAgents/io.github.aida0710.sshc.plist`を作成し、`status`と`disable`を含めてsshc管理marker付き定義だけを管理します。同名の手書き定義は上書きも削除もしません。変更操作は対象と実行ファイルを表示して確認を求め、user単位のOS file lockで直列化し、削除前に内容を再検証します。Windows service、scheduled task、desktop login itemは作成しません。
 
-  常駐対象は `sshc engine` のforeground processです。引数なしの`sshc`はengineを起動しないため、サービス定義の実行入口には使用しません。登録するbinaryは管理元を確認できたHomebrewのformula安定パス、またはreceipt対応`install.sh`の配置先に限ります。install／restartの成功はsystemdまたはlaunchdのPID、handoff PID、status APIで確認します。`sshc update`は管理定義の全内容が更新前に照合した実行パスから生成される内容と一致し、activeのときだけ再起動し、停止中の定義、手書き定義、別導入の定義には触れません。
+  サービスが管理するのは`sshc engine`のフォアグラウンドプロセスです。引数なしの`sshc`はバックグラウンド起動後に終了するため、サービス定義の実行入口には使用しません。登録するbinaryは管理元を確認できたHomebrewのformula安定パス、またはreceipt対応`install.sh`の配置先に限ります。install／restartの成功はsystemdまたはlaunchdのPID、handoff PID、status APIで確認します。`sshc update`は管理定義の全内容が更新前に照合した実行パスから生成される内容と一致し、activeのときだけ再起動し、停止中の定義、手書き定義、別導入の定義には触れません。
+- 引数なしの`sshc`と`sshc open`は、`engine.lock`を取得できる場合に`os.Executable()`の`engine`をバックグラウンドで起動します。ロックが使用中なら起動中のsshcエンジンを待ちます。準備待ちは最大20秒で、起動したPIDとhandoffのPID、challenge、statusを確認します。同時起動で子プロセスがロックを取得できず終了した場合も、先に起動したsshcエンジンの応答を確認できれば成功します。Vaultはロック中でも起動できます。
+- 準備ができると一度限りのURLを表示してブラウザで開きます。`sshc open --no-browser`はブラウザを開きません。`sshc stop`は停止を要求し、`engine.lock`が解放されるまで待ちます。
+- バックグラウンドのプロセスはUnixではSetsid、WindowsではCREATE_NEW_PROCESS_GROUPとDETACHED_PROCESSでターミナルから切り離します。WindowsではCREATE_BREAKAWAY_FROM_JOBも試し、ERROR_ACCESS_DENIEDのときだけ外して再実行します。標準入力はnullデバイス、標準出力と標準エラーは状態ディレクトリの`logs/engine.log`です。Web更新後の再起動も同じログを使います。起動前に5MiBを超えていたログは`engine.log.1`へ移し、ログのフォルダ全体を暗号化同期から除外します。
 - `sshc ssh --list` は `~/.ssh/config` と到達可能な `Include` を読み、具体的な接続先 alias を辞書順で 1 行ずつ表示します。`Host *`、ワイルドカード、否定パターンは接続先名ではないため表示せず、重複 alias は 1 回だけ表示します。この一覧は shell 補完の候補にもなるため、`validate.Alias` が拒む alias（shell メタ文字、空白、先頭の `-` を含むもの）は stdout に出さず、落とした理由を stderr に引用付きで表示します。設定の読み取り時に `ssh` や `Match exec` は実行しません。
 - 引数なしの `sshc ssh` は現在のターミナルに検索 TUI を表示します。alias、設定から計算した `HostName`・`User`・`Port`、metadata のタグで絞り込み、alias順に表示します。上下キーで選択し、Enter で同じターミナルから接続します。Web UI は起動せず、`sshc ssh <接続先>` と同じ保存済み鍵パスフレーズの経路を使用します。設定ファイルが存在するが読み取れない場合は、接続先 0 件として扱わず読み取りエラーを表示します。
 - TUI の入力はターミナルからの read 単位で解釈します。`Esc` は単独キーであると同時に矢印キー列の先頭でもあるため、read の末尾にある場合だけ単独キーとして扱います。未対応の escape sequence は終端まで読み捨て、`Delete` や `Ctrl-矢印` の後続バイトが検索文字列に入らないようにします。行はターミナルの幅で切り、表示できない件数を `N more` として表示します。
 - サブコマンドの一覧は `sshc -h` に出ます。`sshc ssh --help`、`sshc serial --help`、`sshc telnet --help` はそのコマンドの使い方だけを出します。SSH alias は必ず `sshc ssh` の後で解釈するため、`serial`、`telnet`、`status` などのトップレベルコマンド名と同じaliasにも接続できます。transportを省略した `sshc <alias>` は受け付けません。
 - `sshc ssh <接続先>` は外部の `ssh` を起動せず、現在のターミナルからプロセス内 SSH client で接続します。engine は `~/.ssh/sshc/cli`（0600）に URL と起動ごとのシークレットを保存し、CLI はこの情報を使って保存済みの認証情報を取得します。応答には単回トークンではなく、その接続に必要な認証情報を直接含めます。engine は ProxyJump の接続チェーンを解決し、各 alias が使用する鍵パスフレーズ、アカウントパスワード、TOTP provisioning dataだけを返します。CLIはchallengeを受けた時点でTOTPを生成します。`Match exec` や `CanonicalizeHostname` により外部実行または DNS なしでは鍵を決定できない場合は返しません。接続チェーンに含まれない認証情報も返しません。保存値で処理できないプロンプトはターミナルに表示します。このファイルを読み取れる主体は既にvault暗号文、秘密鍵、任意aliasの保存済みの認証情報へアクセスできる同一OSユーザーであり、TOTP追加でlocalhostの信頼境界は広げません。強制終了後にファイルが残っても参照先ポートには接続できず、シークレットは次回起動時に再生成されます。
-- engine が動作していない場合は `sshc engine` の起動方法を表示して終了します。CLI 自身は engine を起動しません。保存済みの認証情報を使わずに接続する場合は、`ssh <接続先>` を利用できます。
+- `sshc ssh`でsshcエンジンが動作していない場合は、`sshc`でバックグラウンド起動する方法を表示して終了します。SSH接続のコマンドからは自動起動しません。保存済みの認証情報を使わずに接続する場合は、`ssh <接続先>` を利用できます。
 - vault がロックされている場合、対話式の `sshc ssh <接続先>` はロックの解除を待ちます。UI または別のターミナルの `sshc vault unlock` で同じ engine のロックを解除すると、待機中の接続が続行します。この接続コマンド自体はマスターパスワードを要求しません。`--non-interactive` は待機せずエラーを返します。以前使用していた `/cli/unlock` route は削除済みで、`TestLegacyCLIUnlockRouteIsNotRegistered` が 404 を検査します。desktop は UI を 1 回 foreground にして無期限に待機し、headless は待機しません。
 - UI の「接続」は外部ターミナルを起動せず、engine 内の SSH client を使用します。入出力のバイト列を WebSocket で UI へ送り、xterm.js で描画します。ローカルシェルは PTY を確保し、同じ WebSocket 経路を使用します。
 - 埋め込みターミナルへの移行により、macOS では Terminal.app、iTerm2、kitty、Ghostty、WezTerm など利用者のターミナル設定をそのまま利用できなくなりました。外部ターミナルを選択する設定と `internal/platform/macos/terminal.go` の AppleScript・bundle ID 一覧は削除しました。一方、外部ターミナル起動に対応していなかった Linux でも UI 内から接続でき、接続直後のエラーを終了済みコンソールで確認できます。

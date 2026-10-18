@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 )
 
 // errEngineNotResponding は、handoff の port で接続は受け付けたが、上限までに
@@ -14,9 +15,15 @@ import (
 // 原因に辿り着けない。fg は Unix のターミナルで止めた場合だけ、`sshc service install`
 // は service（systemd・launchd）で動かしている場合だけに当てはまるので、条件を付けて
 // 案内する。
-var errEngineNotResponding = errors.New("the process at the engine address did not respond; " +
-	"if you suspended sshc engine with Ctrl+Z, resume it with fg; " +
-	"if the sshc service runs it, restart it with sshc service install")
+var errEngineNotResponding = errors.New(engineNotRespondingAdvice(runtime.GOOS))
+
+func engineNotRespondingAdvice(goos string) string {
+	advice := "the process at the engine address did not respond"
+	if goos == "linux" || goos == "darwin" {
+		advice += "; if you suspended sshc engine with Ctrl+Z, resume it with fg; if the sshc service runs it, restart it with sshc service install"
+	}
+	return advice
+}
 
 // explainEngineUnreachable は、engine に届かなかった err を、利用者が次にする
 // ことで分けた誤りに直す。
@@ -26,9 +33,12 @@ var errEngineNotResponding = errors.New("the process at the engine address did n
 //   - handoff が無い、または port で誰も受け付けていなければ engineNotRunning にする。
 //   - 版の不一致、証明の失敗、identity の不一致、不正な応答は、それぞれの案内のまま返す。
 func explainEngineUnreachable(ctx context.Context, err error) error {
+	var startupFailure *engineExitedError
 	switch {
 	case errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled):
 		return errInterrupted
+	case errors.As(err, &startupFailure):
+		return err
 	case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
 		return errEngineNotResponding
 	case isEngineNotRunning(err):

@@ -329,12 +329,6 @@ func TestHomebrewUpgradeBlamesTheTapOnlyWhenTheOldVersionStays(t *testing.T) {
 	}
 }
 
-type installerTransport func(*http.Request) (*http.Response, error)
-
-func (transport installerTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	return transport(request)
-}
-
 func TestTaggedInstallerUsesTheExactReleaseAndInstallDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("install.sh is not supported on Windows")
@@ -344,7 +338,7 @@ func TestTaggedInstallerUsesTheExactReleaseAndInstallDirectory(t *testing.T) {
 	if err := os.WriteFile(executable, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	client := &http.Client{Transport: installerTransport(func(request *http.Request) (*http.Response, error) {
+	client := &http.Client{Transport: testHTTPTransport(func(request *http.Request) (*http.Response, error) {
 		if got := request.URL.String(); got != "https://raw.githubusercontent.com/aida0710/sshc/v0.14.0/install.sh" {
 			t.Fatalf("installer URL = %s", got)
 		}

@@ -69,9 +69,10 @@ func main() {
 func dispatchInvocation(called invocation, paths userPaths, client *http.Client) int {
 	ctx := context.Background()
 	switch called.Kind {
-	case invocationOpenInBrowser:
-		// 引数なしでは engine の UI URL を取得し、ブラウザで開く。engine は起動しない。
-		return runOpen(ctx, systemCommandEnvironment(paths, client), true)
+	case invocationOpenInBrowser, invocationOpen:
+		openCtx, stopSignals := notifySignals(ctx)
+		defer stopSignals()
+		return runOpen(openCtx, systemCommandEnvironment(paths, client), !called.NoBrowser)
 	case invocationEngine:
 		// engine は stdin を読み取らない。
 		return runEngine(ctx, paths,
@@ -112,8 +113,10 @@ func dispatchInvocation(called invocation, paths userPaths, client *http.Client)
 		return runList(paths.home, os.Stdout, os.Stderr)
 	case invocationInfo:
 		return runInfo(called.Args[0], paths.home, called.JSON, os.Stdout, os.Stderr)
-	case invocationOpen:
-		return runOpen(ctx, systemCommandEnvironment(paths, client), false)
+	case invocationStop:
+		stopCtx, stopSignals := notifySignals(ctx)
+		defer stopSignals()
+		return runStop(stopCtx, systemCommandEnvironment(paths, client))
 	case invocationStatus:
 		return runStatus(ctx, systemCommandEnvironment(paths, client), called.JSON)
 	case invocationUpdate:

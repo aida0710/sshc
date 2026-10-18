@@ -43,22 +43,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/a
 ## 初回起動
 
 ```sh
-sshc engine
-```
-
-対話ターミナルで起動した場合、初めて使うブラウザでは登録用の画面が自動で開きます。サービスとして起動したとき、画面が自動で開かなかったとき、別のブラウザを追加するときは、別のターミナルで次を実行してください。
-
-```sh
 sshc
 ```
 
-`sshc engine`で起動するsshcエンジンは、フォアグラウンドプロセスです。常駐には、tmux、systemd、launchdなど、OSのプロセス管理機能を利用できます。
+`sshc`と`sshc open`は、sshcエンジンが停止中ならバックグラウンドで起動します。準備ができると一度限りのURLを表示し、ブラウザで開きます。Windowsを含め、ターミナルを閉じてもsshcエンジンは動き続けます。ブラウザを開かずURLだけを表示する場合は、`sshc open --no-browser`を使います。
+
+停止するには`sshc stop`を実行します。このターミナルで動かす場合は`sshc engine`を使ってください。バックグラウンド起動のログは`~/.ssh/sshc/logs/engine.log`（Windowsは`%USERPROFILE%\.ssh\sshc\logs\engine.log`）へ追記します。このログは暗号化同期の対象外です。
 
 デスクトップ版は、最初に`http://127.0.0.1:54447/`で待ち受けます。既定のポートを別のプロセスが使用している場合は、空いているポートを1つ選び、このマシン固有のURLとして保存します。現在のURLは`sshc status`で確認できます。
 
 Web UI自体は、この固定URLから開けます。初めて使うブラウザを登録するときだけ、`sshc`コマンドが一度限りの登録URLを開きます。一度登録したブラウザから同じポートへ接続した場合は、sshcエンジンを再起動した後も通常は再登録を求められません。保存したポートを使用できずURLが変わった場合は、以前のブラウザ登録が失効します。現在のsshcエンジンに対して、もう一度`sshc`を実行してください。別のブラウザやブラウザプロファイルを追加する場合も同じです。
 
-ChromeやEdgeでは、ブラウザの「アプリをインストール」からsshcをWebアプリとして追加できます。Webアプリはsshcエンジンを起動するものではありません。先に`sshc engine`またはOSのサービスでsshcエンジンを動かしてください。
+ChromeやEdgeでは、ブラウザの「アプリをインストール」からsshcをWebアプリとして追加できます。Webアプリはsshcエンジンを起動するものではありません。先に`sshc`を実行するか、OSのサービスでsshcエンジンを動かしてください。
 
 初回起動時にVaultのマスターパスワードを設定できます。
 
@@ -66,7 +62,7 @@ ChromeやEdgeでは、ブラウザの「アプリをインストール」からs
 
 systemdを使用しているLinuxでは、ユーザーサービスをインストールできます。sudoは不要です。
 
-フォアグラウンドやtmuxで起動している`sshc engine`がある場合は、先にそのプロセスを停止してください。同じユーザーのsshcエンジンは同時に1つしか起動できないため、既存のsshcエンジンが動いているとsystemd側の起動に失敗します。
+起動中のsshcエンジンがある場合は、先に`sshc stop`で停止してください。同じユーザーのsshcエンジンは同時に1つしか起動できないため、既存のsshcエンジンが動いているとsystemd側の起動に失敗します。
 
 ```sh
 sshc service install
@@ -97,7 +93,7 @@ loginctl enable-linger "$USER"
 
 ## macOSで常駐させる
 
-macOSでは、ユーザーエージェントとしてlaunchdへ登録できます。sudoは不要です。フォアグラウンドやtmuxで起動しているsshcエンジンを停止してから実行してください。
+macOSでは、ユーザーエージェントとしてlaunchdへ登録できます。sudoは不要です。起動中のsshcエンジンを`sshc stop`で停止してから実行してください。
 
 ```sh
 sshc service install
@@ -152,7 +148,7 @@ macOS・LinuxのHomebrew版と`install.sh`版では、新しい安定版があ�
 
 常駐させているsshcエンジンを先に止め、サービスの登録を削除してから、実行ファイルを削除します。サービスに登録したまま実行ファイルだけを削除すると、macOSのlaunchdは5秒ごとにsshcエンジンの起動を試みて失敗し続けます。Linuxのsystemdでも、ログインのたびに起動に失敗します。
 
-1. `sshc service install`で登録している場合は、`sshc service disable`を実行します。sshcが作成したサービス定義だけを停止、無効化、削除します。フォアグラウンドやtmuxで起動したsshcエンジンは、そのプロセスを停止します。
+1. `sshc service install`で登録している場合は、`sshc service disable`を実行します。sshcが作成したサービス定義だけを停止、無効化、削除します。サービス以外で起動したsshcエンジンは`sshc stop`で停止します。
 2. 導入方法に合わせて実行ファイルを削除します。
    - Homebrew: `brew uninstall aida0710/tap/sshc`
    - `install.sh`: 配置先の`sshc`と、同じディレクトリにあるreceipt（`.sshc-install-receipt.json`）を削除します。配置先は通常`~/.local/bin`で、rootで実行した場合は`/usr/local/bin`、`SSHC_INSTALL_DIR`を指定した場合はそのディレクトリです。
