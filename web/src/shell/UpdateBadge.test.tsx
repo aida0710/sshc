@@ -40,7 +40,7 @@ describe("UpdateBadge", () => {
 
     const link = await screen.findByRole("link", { name: /0\.2\.0 is available/ });
     expect(link).toHaveAttribute("href", "https://example.invalid/releases/v0.2.0");
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
   });
 
   it("keeps the engine version visible when the remote check cannot run", async () => {

@@ -138,9 +138,9 @@ A state or definition change while waiting for confirmation also prevents succes
 
 ### Update from the web UI
 
-On macOS and Linux, verified Homebrew and `install.sh` installations show an update button beside the version when a newer stable release is available. Review the current version, target version, and installation method before confirming. The installation directory must be writable. Homebrew runs `brew upgrade` and checks the version actually installed. Its formula can advance after confirmation, so a newer version may be installed. The `install.sh` installer uses the confirmed version. Manual installations, development builds, Windows, and Android show guidance for updating through their installation method.
+On macOS and Linux, verified Homebrew and `install.sh` installations show a notice and an update button under the version when a newer stable release is available. Fold them with the mark beside the version; a folded notice stays closed until a newer stable release appears. Review the current version, target version, and installation method before confirming. The installation directory must be writable. Homebrew runs `brew upgrade` and checks the version actually installed. Its formula can advance after confirmation, so a newer version may be installed. The `install.sh` installer uses the confirmed version. Manual installations, development builds, Windows, and Android show guidance for updating through their installation method.
 
-The engine restarts after installation, ending connected sessions and transfers. Unlock a password-protected vault again after the restart. The UI shows progress and refuses duplicate updates. If installation succeeds but restarting fails, follow the restart guidance and reload the page without reinstalling.
+The engine restarts after installation, ending connected sessions and transfers. Unlock a password-protected vault again after the restart. A dialog shows the progress and the result, which appears once per update. Duplicate updates are refused. If installation succeeds but restarting fails, follow the restart guidance and reload the page without reinstalling.
 
 ### Update from the CLI
 

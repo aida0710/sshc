@@ -3,8 +3,7 @@ import { failureCode } from "../api/client";
 import type { UpdateApi, UpdateJob, UpdatePreview, UpdateStatus } from "../api/update";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { updateJobMessage, updateMessage } from "./updateMessage";
-import { rememberUpdateResultToCheck } from "./updateResultToCheck";
+import { updateMessage } from "./updateMessage";
 import { isUpdateActive } from "./useUpdateStatus";
 
 type UpdateControlsProps = {
@@ -55,23 +54,6 @@ export function UpdateControls({ status, api, onStart }: UpdateControlsProps) {
 
   return (
     <>
-      {job === undefined ? null : (
-        <div role="status" className="mt-2 space-y-1">
-          <p>{t(updateJobMessage(job), { version: job.installedVersion ?? job.target })}</p>
-          {job.state === "restarting" || job.state === "restart_required" ? (
-            <button
-              type="button"
-              className="underline underline-offset-2"
-              onClick={() => {
-                rememberUpdateResultToCheck(job.id);
-                window.location.reload();
-              }}
-            >
-              {t("update.reload")}
-            </button>
-          ) : null}
-        </div>
-      )}
       {status.canUpdate !== true || isUpdateActive(job) ? null : (
         <button
           ref={buttonRef}

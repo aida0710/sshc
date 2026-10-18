@@ -27,12 +27,14 @@ export const localStorageKeys = {
   shortcutBindings: "sshc.shortcuts.v1",
   shortcutPresetSelection: "sshc.shortcuts.selected.v1",
   notificationSound: "sshc.terminal-notification-sound.v1",
+  // The update job whose result dialog this browser has shown, so it opens once.
+  updateShownResult: "sshc.update.shown-result.v1",
+  // The release whose notice under the version was folded; a newer one unfolds it.
+  updateFoldedRelease: "sshc.update.folded-release.v1",
 } as const;
 
 // sessionStorage belongs to one tab and ends with it.
 export const sessionStorageKeys = {
   sessionCSRF: "sshc.session.csrf",
   liveWorkspace: "sshc.terminal.live-workspace.v1",
-  // The update job whose result the reload button asked the reloaded page to show.
-  updateResultToCheck: "sshc.update.result-to-check.v1",
 } as const;

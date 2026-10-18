@@ -1242,6 +1242,8 @@ export const ja = {
   "update.restarting": "インストールが完了しました。sshcを再起動しています…",
   "update.succeeded": "{version}へ更新しました。",
   "update.reload": "再読み込みして結果を確認",
+  "update.resultTitle": "sshcの更新",
+  "update.close": "閉じる",
   "update.unmanaged": "Homebrewまたはsshcのinstall.shで管理された導入ではありません。導入した方法で更新してください。",
   "update.developmentBuild": "開発ビルドはブラウザから更新できません。ソースからビルドしてインストールし直してください。",
   "update.windowsUnsupported": "WindowsではPowerShellのインストーラを再実行して更新してください。",
