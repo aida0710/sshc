@@ -44,13 +44,13 @@ func webUpdateInstallationFixture(t *testing.T) updateDependencies {
 }
 
 func TestWebUpdateUsesTheInstallationManagerAndKeepsTheInstalledVersion(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "android" {
+	if runtime.GOOS == "android" {
 		t.Skip("platform has no automatic installer")
 	}
 	for _, scenario := range []struct {
 		name    string
 		manager installManager
-	}{{name: "Homebrew", manager: managerHomebrew}, {name: "install.sh", manager: managerShell}} {
+	}{{name: "Homebrew", manager: managerHomebrew}, {name: "install.sh", manager: managerShell}, {name: "install.ps1", manager: managerPowerShell}} {
 		t.Run(scenario.name, func(t *testing.T) {
 			manager := scenario.manager
 			installationDependencies := webUpdateInstallationFixture(t)
@@ -61,10 +61,20 @@ func TestWebUpdateUsesTheInstallationManagerAndKeepsTheInstalledVersion(t *testi
 			var installs atomic.Int32
 			installationDependencies.install = func(_ context.Context, found installation, release releasecheck.Release, _, _ io.Writer) error {
 				installs.Add(1)
-				if found.manager != managerShell || release.Version != "v1.1.0" {
+				if found.manager != manager || release.Version != "v1.1.0" {
 					t.Errorf("unexpected installation = %+v, release=%+v", found, release)
 				}
 				return nil
+			}
+			install := installationDependencies.install
+			installationDependencies.installWeb = func(ctx context.Context, found installation, release releasecheck.Release) error {
+				return install(ctx, found, release, io.Discard, io.Discard)
+			}
+			if manager == managerPowerShell {
+				installationDependencies.install = func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error {
+					t.Fatal("web update used the CLI installer that stops its caller")
+					return nil
+				}
 			}
 			installationDependencies.upgradeHomebrew = func(_ context.Context, found installation) (string, error) {
 				installs.Add(1)
@@ -112,7 +122,7 @@ func TestWebUpdateUsesTheInstallationManagerAndKeepsTheInstalledVersion(t *testi
 const webUpdateCompletionTimeout = 3 * time.Second
 
 func TestWebUpdateRefusesAChangedManagerImmediatelyBeforeInstallation(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "android" {
+	if runtime.GOOS == "android" {
 		t.Skip("platform has no automatic installer")
 	}
 	dependencies := webUpdateInstallationFixture(t)
@@ -190,10 +200,10 @@ func TestWebUpdateInspectionRequiresAMatchingReceiptAndWritableDirectory(t *test
 }
 
 func TestWebUpdateRestartUsesTheManagedServiceOrStopsOnlyTheConfirmedForegroundEngine(t *testing.T) {
-	for _, scenario := range []string{"managed", "foreground", "changed engine", "service failure"} {
+	for _, scenario := range []string{"managed", "foreground", "changed engine", "service failure", "Windows task", "Windows background", "Windows task failure", "Windows changed engine"} {
 		t.Run(scenario, func(t *testing.T) {
 			var stopped atomic.Int32
-			server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+			client := backgroundTestClient(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 				if request.URL.Path != httpserver.StopPath || request.Header.Get(handoff.HeaderName) != testHandoff("").Secret {
 					t.Error("unexpected engine request")
 					response.WriteHeader(http.StatusForbidden)
@@ -202,19 +212,18 @@ func TestWebUpdateRestartUsesTheManagedServiceOrStopsOnlyTheConfirmedForegroundE
 				stopped.Add(1)
 				response.WriteHeader(http.StatusAccepted)
 			}))
-			defer server.Close()
-			engineURL, err := url.Parse(server.URL)
+			engineURL, err := url.Parse(backgroundTestURL)
 			if err != nil {
 				t.Fatal(err)
 			}
 			stateDirectory := t.TempDir()
-			writeTestHandoff(t, stateDirectory, server.URL)
+			writeTestHandoff(t, stateDirectory, backgroundTestURL)
 			job := selfupdate.Job{OwnerPID: testHandoff("").PID, Plan: selfupdate.Plan{Installation: selfupdate.Installation{Executable: "/fixture/updated/sshc"}}}
-			if scenario == "changed engine" {
+			if strings.Contains(scenario, "changed engine") {
 				job.OwnerPID++
 			}
 			starts, serviceCalls := 0, 0
-			run := webUpdateRestartRun{paths: userPaths{stateDir: stateDirectory}, job: job,
+			run := webUpdateRestartRun{client: client, paths: userPaths{stateDir: stateDirectory}, job: job,
 				restartService: func(_ context.Context, executable string) (bool, error) {
 					serviceCalls++
 					if executable != job.Plan.Installation.Executable {
@@ -237,15 +246,39 @@ func TestWebUpdateRestartUsesTheManagedServiceOrStopsOnlyTheConfirmedForegroundE
 					}
 					return nil
 				}}
+			if strings.HasPrefix(scenario, "Windows") {
+				run.startService = func(_ context.Context, executable string) (bool, error) {
+					serviceCalls++
+					if stopped.Load() != 1 || executable != job.Plan.Installation.Executable {
+						t.Fatal("task started before stopping the confirmed engine")
+					}
+					if scenario == "Windows task failure" {
+						return false, errors.New("task failed")
+					}
+					return scenario == "Windows task", nil
+				}
+				run.restartService = func(context.Context, string) (bool, error) {
+					t.Fatal("Windows tried to verify the renamed old image against the new task executable")
+					return false, nil
+				}
+			}
 			err = restartWebUpdateEngine(context.Background(), run)
 			switch scenario {
 			case "managed":
 				if err != nil || starts != 0 || stopped.Load() != 0 || serviceCalls != 1 {
 					t.Fatalf("managed restart err=%v starts=%d stops=%d", err, starts, stopped.Load())
 				}
-			case "foreground":
+			case "foreground", "Windows background":
 				if err != nil || starts != 1 || stopped.Load() != 1 {
 					t.Fatalf("foreground err=%v starts=%d stops=%d", err, starts, stopped.Load())
+				}
+			case "Windows task":
+				if err != nil || starts != 0 || stopped.Load() != 1 || serviceCalls != 1 {
+					t.Fatalf("task restart err=%v starts=%d stops=%d service=%d", err, starts, stopped.Load(), serviceCalls)
+				}
+			case "Windows task failure":
+				if err == nil || starts != 0 || stopped.Load() != 1 {
+					t.Fatalf("failed task err=%v starts=%d stops=%d", err, starts, stopped.Load())
 				}
 			default:
 				if err == nil || starts != 0 || stopped.Load() != 0 {

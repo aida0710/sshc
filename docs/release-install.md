@@ -74,10 +74,10 @@ sshc update
 
 - Homebrew版は、`brew --prefix --installed aida0710/tap/sshc`の`bin/sshc`と実行中ファイルが同一であることを確認し、`brew upgrade --formula --no-ask aida0710/tap/sshc`を実行します。Homebrewがtapを更新しなかったために新しいバージョンが入らなかった場合（`HOMEBREW_NO_AUTO_UPDATE`を設定している場合など）は、`brew update`を実行してから`sshc update`を再実行するよう表示します。
 - `install.sh`版は、SHA-256を記録したreceiptを確認し、GitHubの最新の安定バージョンのタグに固定した`install.sh`を実行します。`install.sh`は公開された`checksums.txt`でバイナリを検証し、同じディレクトリの中で名前を変更して置き換えます。Ctrl-Cなどで取り消すと、`install.sh`に一時ファイルを削除させてから停止します。
-- Windows（`install.ps1`版を含む）では`sshc update`は使えず、終了コード1で終わります。そのときに、インストール時と同じPowerShellコマンドを表示します。このコマンドを手で再実行して更新してください。エンジンが起動時に新しいバージョンを知らせるときも、Windowsではこのコマンドを表示します。
-- Windows以外の手動配置、ソースビルド、判定不能な導入は変更せず、元の導入方法で更新するよう表示します。
+- Windowsの`install.ps1`版は、receiptとSHA-256を確認し、公開済みのタグの`install.ps1`を取得します。スクリプトも同じReleaseの`checksums.txt`と照合し、対象タグを`SSHC_VERSION`へ設定してPowerShellで実行します。Web画面からも確認後に更新できます。
+- 手動配置、ソースビルド、判定不能な導入は変更しません。Windowsでは`install.ps1`での導入方法を、それ以外では元の導入方法での更新を案内します。
 
-`sshc service install`で作成したユーザーサービスが動作中で、登録した実行パスが今回の更新対象と一致する場合だけ、更新後に再起動します。Linuxではsystemdの`try-restart`、macOSではlaunchdの`kickstart -k`を使用します。パスワードを設定したVaultは再起動でロックされるため、ターミナルから`sshc vault unlock`を実行してください。パスワードなしのVaultは、エンジンの起動時に自動でロックを解除します。バイナリの更新後に再起動だけが失敗した場合は、表示される`sshc service install`を実行して復旧できます。停止中のサービス、sshc管理外の定義、別のsshc導入を指す定義、サービス管理外のエンジンは、自動では起動も再起動もしません。
+macOS・Linuxでは、`sshc service install`で作成したユーザーサービスが動作中で、登録した実行パスが今回の更新対象と一致する場合だけ、更新後に再起動します。Linuxではsystemdの`try-restart`、macOSではlaunchdの`kickstart -k`を使用します。パスワードを設定したVaultは再起動でロックされるため、ターミナルから`sshc vault unlock`を実行してください。パスワードなしのVaultは、エンジンの起動時に自動でロックを解除します。バイナリの更新後に再起動だけが失敗した場合は、表示される`sshc service install`を実行して復旧できます。停止中のサービス、sshc管理外の定義、別のsshc導入を指す定義、サービス管理外のエンジンは、自動では起動も再起動もしません。
 
 ### エンジンの再起動
 
@@ -86,7 +86,7 @@ sshc update
 - `sshc service install`で登録したサービス: `sshc update`で更新した場合は、上のとおり自動で再起動します。`install.sh`を直接実行した場合など、稼働中のサービスを手動で再起動するときは`sshc service restart`を実行します。停止中や古い定義の場合は`sshc service install`を使用します
 - それ以外のエンジン（フォアグラウンドやtmuxで起動したもの）: `sshc engine --replace`で、更新後のバイナリから起動し直します
 
-`sshc service restart`はLinuxとmacOSで利用できます。この導入の安定パスと現在のサービス定義が一致する場合だけ、稼働中のサービスを再起動します。接続中のセッションと転送が終了するため、対象を表示して確認を求めます。確認を省略する場合は`-y`または`--yes`を指定します。未登録・停止中・管理外・古い定義・別の実行ファイルを指すサービスは拒否し、終了コード1で終わります。定義の書き換えや再登録は行いません。
+`sshc service restart`はLinux、macOS、Windowsで利用できます。この導入の安定パスと現在のサービス定義が一致する場合だけ、稼働中のサービスを再起動します。接続中のセッションと転送が終了するため、対象を表示して確認を求めます。確認を省略する場合は`-y`または`--yes`を指定します。未登録・停止中・管理外・古い定義・別の実行ファイルを指すサービスは拒否し、終了コード1で終わります。定義の書き換えや再登録は行いません。
 
 ## Windows
 
@@ -96,9 +96,13 @@ Windows PowerShellから、GitHub Releaseに添付されたスクリプトを実
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/aida0710/sshc/releases/latest/download/install.ps1 | iex"
 ```
 
-スクリプトはx64／Arm64を判定し、対応するバイナリと`checksums.txt`を同じGitHub Releaseから取得します。SHA-256が一致し、バイナリ自身が想定したWindows版・CPU・バージョンを報告した場合だけ、`%LOCALAPPDATA%\Programs\sshc\sshc.exe`を置き換えます。管理者権限は要求せず、ユーザー`PATH`へ配置先を重複なく追加します。新しいターミナルから`sshc version`で確認できます。
+スクリプトはx64／Arm64を判定し、対応するバイナリと`checksums.txt`を同じGitHub Releaseから取得します。SHA-256が一致し、バイナリ自身が想定したWindows版・CPU・バージョンを報告した場合だけ、`%LOCALAPPDATA%\Programs\sshc\sshc.exe`を置き換えます。管理者権限は要求せず、ユーザー`PATH`の先頭へ配置先を重複なく追加します。レジストリの値の種類と`%VAR%`表記は保持し、環境変数の変更をWindowsへ通知します。新しいターミナルから`sshc version`で確認できます。
 
-既存の`sshc.exe`を使用中で置換できない場合は、動作中のエンジンを停止してから同じコマンドを再実行してください。検証や置換に失敗した場合、既存の実行ファイルは変更しません。配置先は`SSHC_INSTALL_DIR`で変更でき、`SSHC_ADD_TO_PATH=0`なら`PATH`を変更しません。
+GitHub CLIでattestationを検証できる場合は、exeと`checksums.txt`の両方についてReleaseワークフローの署名を確認します。`gh`がない、古い、未ログインの場合の案内は`install.sh`と同じです。検証を実行して失敗した場合は配置しません。
+
+動いているエンジンがこの配置先のexeを使用していれば、停止してから入れ替えます。更新後は、有効なsshcタスクがあればタスクを起動し、それ以外は`sshc open --no-browser`で起動します。Web更新では結果を保存するまで呼び出し元を動かし、切り離したヘルパーが停止と再起動を行います。
+
+使用中のexeは同じフォルダのbackupへ名前を変更してから、新しいexeを配置します。配置に失敗したらbackupを元へ戻します。まだ使用中で削除できないbackupは場所を表示し、次回の実行で削除します。途中で失敗した場合は、表示されたファイルとエンジンの状態を確認して再実行してください。配置先は`SSHC_INSTALL_DIR`で変更でき、`SSHC_ADD_TO_PATH=0`なら`PATH`を変更しません。
 
 再現可能な導入では、スクリプトと成果物を同じタグへ固定します。
 
@@ -109,7 +113,7 @@ irm https://github.com/aida0710/sshc/releases/download/v0.48.0/install.ps1 | iex
 
 手動で配置する場合は、[GitHub Releases](https://github.com/aida0710/sshc/releases)からx64では`sshc-windows-amd64.exe`、Arm64では`sshc-windows-arm64.exe`を取得し、`checksums.txt`と照合してから`sshc.exe`へ名前を変更します。
 
-`install.ps1`はシステム領域やシステム`PATH`を変更しません。Windowsの「インストール済みアプリ」へ登録するMSI／MSIX／EXEのインストーラーではありません。
+`install.ps1`はHKCUへアプリ情報を登録し、Windowsの「インストール済みアプリ」から削除できます。システム領域とシステム`PATH`は変更しません。削除には導入先の`uninstall.ps1`を使います。通信や環境変数の設定なしで削除できるよう、導入時に同じ処理をローカルへ保存しています。
 
 ## Android
 
@@ -141,26 +145,25 @@ sshc vault unlock
 
 ## アンインストール
 
-常駐させているエンジンを先に止め、サービスの登録を削除してから、実行ファイルを削除します。サービスに登録したまま実行ファイルだけを削除すると、macOSのlaunchdは5秒ごとにエンジンの起動を試みて失敗し続けます。Linuxのsystemdでも、ログインのたびに起動に失敗します。
+Windowsでは、下記の削除操作で停止とサービス登録の削除をまとめて行います。macOS・Linuxでは、常駐させているエンジンを先に止め、サービスの登録を削除してから、実行ファイルを削除します。サービスに登録したまま実行ファイルだけを削除すると、macOSのlaunchdは5秒ごとにエンジンの起動を試みて失敗し続けます。Linuxのsystemdでも、ログインのたびに起動に失敗します。
 
 1. `sshc service install`で登録している場合は、`sshc service disable`を実行します。sshcが作成したサービス定義だけを停止、無効化、削除します。フォアグラウンドやtmuxで起動したエンジンは、そのプロセスを停止します。
 2. 導入方法に合わせて実行ファイルを削除します。
    - Homebrew: `brew uninstall aida0710/tap/sshc`
    - `install.sh`: 配置先の`sshc`と、同じディレクトリにあるreceipt（`.sshc-install-receipt.json`）を削除します。配置先は通常`~/.local/bin`で、rootで実行した場合は`/usr/local/bin`、`SSHC_INSTALL_DIR`を指定した場合はそのディレクトリです。
    - `make install`: `make uninstall`で`~/.local/bin/sshc`を削除します。
-   - Windows: 動いているエンジンを停止してから、下のコマンドで`sshc.exe`を削除し、ユーザー`PATH`から配置先を外します。
+   - Windows: 下記の「インストール済みアプリ」または`uninstall.ps1`で削除します。停止とサービスの削除も自動で行います。
    - Android: ほかのアプリと同じ手順でアンインストールします。
 3. 接続ごとのVPNを使った場合は、sshcが作成したコンテナイメージ`sshc-vpn`が残ります。VPNのコンテナはエンジンの停止時に削除されます。イメージが不要なら、`docker image ls sshc-vpn`で確認してから`docker image rm`で削除してください。
 
-Windowsでは、PowerShellで次を実行します。`SSHC_INSTALL_DIR`で配置先を変えた場合は、`$dir`にそのディレクトリを指定してください。
+Windowsでは、設定の「アプリ」→「インストール済みアプリ」からsshcを選んでアンインストールできます。PowerShellから削除する場合は次を実行します。`SSHC_INSTALL_DIR`で配置先を変えた場合は、`$dir`にそのディレクトリを指定してください。
 
 ```powershell
 $dir = Join-Path $env:LOCALAPPDATA 'Programs\sshc'
-Remove-Item -LiteralPath (Join-Path $dir 'sshc.exe')
-$entries = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';' |
-  Where-Object { $_ -and [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ine $dir }
-[Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
+powershell -NoProfile -ExecutionPolicy Bypass -File "$dir\uninstall.ps1"
 ```
+
+削除用の`uninstall.ps1`は導入先に保存されるため、通信は不要です。sshcエンジンを停止し、sshcが作成したタスク、実行ファイル、導入記録、backup、ユーザーの`PATH`への追加、アプリ登録を削除します。途中で失敗した場合はそこで停止し、残ったファイルと未実行の手順を表示します。原因を解消してから`uninstall.ps1`を再実行してください。`%USERPROFILE%\.ssh\sshc`のデータと、`~/.ssh`の設定・鍵は残します。
 
 `sshc service disable`を実行する前に実行ファイルを削除した場合は、次のコマンドでサービス定義を削除します。
 

@@ -419,3 +419,51 @@ func TestTheDefinitionReturnedByTaskSchedulerMatchesTheRegisteredOne(t *testing.
 		}())
 	}
 }
+
+func TestWebUpdateStartsOnlyTheEnabledTaskForItsInstallation(t *testing.T) {
+	for _, scenario := range []string{"enabled", "absent", "disabled", "other executable", "unmanaged", "readiness failure"} {
+		t.Run(scenario, func(t *testing.T) {
+			manager, scheduler := newTestTaskManager(t)
+			definition, err := serviceTaskXML(testTaskExecutable, testTaskSID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "unmanaged" {
+				definition = strings.ReplaceAll(definition, serviceTaskMarker, "unmanaged")
+			}
+			parsed, err := parseServiceTask(definition)
+			if err != nil {
+				t.Fatal(err)
+			}
+			scheduler.snapshot = serviceTaskSnapshot{exists: scenario != "absent", state: taskReady, definition: parsed}
+			if scenario == "disabled" {
+				scheduler.snapshot.state = taskDisabled
+			}
+			executable := testTaskExecutable
+			if scenario == "other executable" {
+				executable = `C:\other\sshc.exe`
+			}
+			if scenario == "readiness failure" {
+				scheduler.readyError = errors.New("not ready")
+			}
+			started, err := manager.startIfEnabled(context.Background(), executable)
+			switch scenario {
+			case "enabled":
+				if !started || err != nil || !reflect.DeepEqual(scheduler.events, []string{"/Run", "ready"}) {
+					t.Fatalf("started=%v err=%v events=%v", started, err, scheduler.events)
+				}
+			case "absent", "disabled":
+				if started || err != nil || len(scheduler.events) != 0 {
+					t.Fatalf("started=%v err=%v events=%v", started, err, scheduler.events)
+				}
+			default:
+				if started || err == nil {
+					t.Fatalf("started=%v err=%v", started, err)
+				}
+				if scenario != "readiness failure" && len(scheduler.events) != 0 {
+					t.Fatalf("changed another task: %v", scheduler.events)
+				}
+			}
+		})
+	}
+}

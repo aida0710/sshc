@@ -224,7 +224,7 @@ jobs:
         run: ./scripts/ci/cli-smoke.ps1 -DistDir dist -ExpectedVersion "$env:RELEASE_TAG"
 
       # 公開するinstall.ps1そのものに、実際の成果物の選択、checksum検証、
-      # 安全な置換を通させる。テスト中はPATHを変更しない。
+      # 安全な置換を通させる。PATHとアプリ登録は一時的な値で検査し、最後に戻す。
       - name: Smoke the Windows installer
         shell: powershell
         run: ./scripts/ci/install-windows-smoke.ps1 -DistDir dist -ExpectedVersion "$env:RELEASE_TAG"

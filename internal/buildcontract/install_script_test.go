@@ -77,10 +77,16 @@ func TestTheWindowsInstallerVerifiesAndSafelyPublishesEveryWindowsArtifact(t *te
 		"checksums.txt",
 		"Get-FileHash",
 		"SHA256",
-		"File]::Replace",
-		"previous executable was left unchanged",
+		"File]::Move($Target, $backup)",
+		"previous executable was restored",
 		"LocalApplicationData",
-		"SetEnvironmentVariable('Path'",
+		"DoNotExpandEnvironmentNames",
+		"GetValueKind('Path')",
+		"SendMessageTimeout",
+		"Confirm-ReleaseAttestation @($download, $checksumFile) $tag",
+		"QuietUninstallString",
+		"service disable --yes",
+		"Update-UserPath $Directory -Remove",
 	} {
 		if !strings.Contains(script, required) {
 			t.Errorf("install.ps1 contract lacks %q", required)
@@ -296,5 +302,33 @@ func TestWindowsInstallerPublishesADigestReceiptOnlyAfterTheExecutable(t *testin
 	receipt := strings.Index(script, "Publish-InstallReceipt $target $incomingTag")
 	if invalidation < 0 || executable <= invalidation || receipt <= executable {
 		t.Fatal("receipt publication is not ordered around executable publication")
+	}
+}
+
+func TestWindowsInstallerScopesCallerStateAndResumesOnlyItsOwnEngine(t *testing.T) {
+	script := readWindowsInstallScript(t)
+	for _, fragment := range []string{
+		"& {\n[CmdletBinding()]", "param([switch]$Uninstall)",
+		"[System.IO.File]::Move($Target, $backup)", "[System.IO.File]::Move($backup, $Target)",
+		"Test-SamePath $engine.Path $Target", "Stop-InstalledEngine $target $engine",
+		"$env:SSHC_INSTALL_CALLER -ne 'web-update'", "Start-InstalledEngine $target $service",
+		"Show-UninstallRemainder $Directory", "Remove-Backups $Directory -Required",
+		"later steps were not performed", "data was kept in", "} -Uninstall`n",
+	} {
+		if !strings.Contains(script, fragment) {
+			t.Errorf("Windows lifecycle contract lacks %q", fragment)
+		}
+	}
+	for _, fragment := range []string{"File]::Replace", "SetEnvironmentVariable('Path'", "Remove-Item -LiteralPath $Directory -Recurse"} {
+		if strings.Contains(script, fragment) {
+			t.Errorf("Windows installer uses unsafe operation %q", fragment)
+		}
+	}
+	stop := strings.LastIndex(script, "Stop-InstalledEngine $target $engine")
+	publish := strings.Index(script, "Publish-Executable $download $target")
+	receipt := strings.Index(script, "Publish-InstallReceipt $target $incomingTag")
+	restart := strings.Index(script, "Start-InstalledEngine $target $service")
+	if stop < 0 || stop >= publish || publish >= receipt || receipt >= restart {
+		t.Fatal("Windows installer does not stop, publish, receipt and restart in order")
 	}
 }

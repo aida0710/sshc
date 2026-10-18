@@ -31,6 +31,19 @@ describe("Web self update", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
+  it("reviews the PowerShell installation before updating Windows", async () => {
+    const api = updater();
+    vi.mocked(api.updateStatus).mockResolvedValue({ ...available, manager: "install.ps1" });
+    vi.mocked(api.previewUpdate).mockResolvedValue({ current: "v1.0.0", target: "v1.1.0", manager: "install.ps1", actionToken: "windows-plan", actionExpiresAt: "2026-10-19T09:00:00Z" });
+    render(<UpdateBadge api={api} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Update sshc" }));
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(dialog).toHaveTextContent("install.ps1"));
+    expect(api.startUpdate).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Update sshc" }));
+    expect(api.startUpdate).toHaveBeenCalledExactlyOnceWith("v1.1.0", "windows-plan");
+  });
+
   it("does not start an update after cancellation", async () => {
     const api = updater();
     render(<UpdateBadge api={api} />);
@@ -150,7 +163,7 @@ describe("Web self update", () => {
     expect(api.startUpdate).not.toHaveBeenCalled();
   });
 
-  it.each(["update_unmanaged", "update_permission_denied", "update_development_build", "update_windows_unsupported", "update_android_unsupported"])("explains %s under the version and offers no automatic update", async (reason) => {
+  it.each(["update_unmanaged", "update_permission_denied", "update_development_build", "update_android_unsupported"])("explains %s under the version and offers no automatic update", async (reason) => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, available: false, canUpdate: false, reason });
     render(<UpdateBadge api={api} />);

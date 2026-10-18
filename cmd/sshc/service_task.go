@@ -167,6 +167,36 @@ func (manager *taskServiceManager) RestartPlan(executable string) (string, error
 func (manager *taskServiceManager) RestartIfActive(ctx context.Context, executable string) (bool, error) {
 	return restartServiceIfActive(ctx, manager, executable)
 }
+
+// startIfEnabled resumes an existing task after the web helper stopped its engine.
+// It never rewrites a definition or enables a disabled task.
+func (manager *taskServiceManager) startIfEnabled(ctx context.Context, executable string) (started bool, result error) {
+	release, err := manager.acquireOperationLock()
+	if err != nil {
+		return false, err
+	}
+	defer func() { result = errors.Join(result, release()) }()
+	snapshot, err := manager.readTask(ctx)
+	if err != nil || !snapshot.exists {
+		return false, err
+	}
+	if !snapshot.definition.managedBy(manager.sid) {
+		return false, errUnmanagedServiceUnit
+	}
+	if snapshot.state == taskDisabled || snapshot.definition.at("Settings", "Enabled").Text == "false" {
+		return false, nil
+	}
+	if !snapshot.definition.matches(executable, manager.sid) {
+		return false, errServiceExecutableMismatch
+	}
+	if err := manager.startStoppedTask(ctx, snapshot); err != nil {
+		return false, err
+	}
+	if err := manager.waitUntilReady(ctx); err != nil {
+		return false, err
+	}
+	return true, manager.taskDefinition(ctx).ensureStillMatches(executable, "starting")
+}
 func (manager *taskServiceManager) restartRunning(ctx context.Context) error {
 	snapshot, err := manager.managedTask(ctx)
 	if err != nil {
@@ -178,6 +208,11 @@ func (manager *taskServiceManager) restartRunning(ctx context.Context) error {
 	if err := manager.stopEngine(ctx, snapshot.definition.executable()); err != nil {
 		return err
 	}
+	return manager.startStoppedTask(ctx, snapshot)
+}
+
+// Wait for Scheduler to observe process exit, then recheck the definition before starting it.
+func (manager *taskServiceManager) startStoppedTask(ctx context.Context, snapshot serviceTaskSnapshot) error {
 	if err := manager.waitTaskStopped(ctx); err != nil {
 		return err
 	}
