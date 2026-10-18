@@ -348,6 +348,20 @@ func TestAMissingImageIsNotPulledFromARegistry(t *testing.T) {
 	}
 }
 
+// コンテナのログは json-file で 1MiB・ファイル1つに絞る。ログの仕組みを指定しないと、
+// Docker Desktop（Windows、既定が圧縮付きの local）では max-file=1 と両立せず、
+// コンテナを起動できなかった。
+func TestContainerLogsUseTheJSONFileDriverOnEveryDocker(t *testing.T) {
+	arguments := strings.Join(runArguments(containerRun{
+		name: "sshc-vpn-lab", image: "sshc-vpn:test", profile: validProfile(), owner: 1000,
+		workspace: "000000000000", routeDirectory: "/tmp/lab", backend: backends[WireGuard],
+	}), " ")
+
+	if !strings.Contains(arguments, " --log-driver json-file --log-opt max-size=1m --log-opt max-file=1 ") {
+		t.Fatalf("arguments = %v", arguments)
+	}
+}
+
 // シークレットの長さは、API と同じ上限で確かめる。長すぎる値は、足りない
 // シークレットではなく、使えない値として断る。
 func TestAnOverlongSecretIsRefusedAsAnInvalidValue(t *testing.T) {
