@@ -21,6 +21,7 @@ const (
 type engineReadiness struct {
 	// A nil mainPID accepts any verified engine; zero means the manager has no PID yet.
 	mainPID       func(context.Context) int
+	verifyProcess func(int) error
 	failureDetail func(context.Context) string
 	timeout       time.Duration
 	process       *detachedProcess
@@ -120,6 +121,11 @@ func (readiness engineReadiness) probe(ctx context.Context, stateDir string, cli
 	}
 	if pid > 0 && found.PID != pid {
 		return handoff.Handoff{}, errEngineIdentityMismatch
+	}
+	if readiness.verifyProcess != nil {
+		if err := readiness.verifyProcess(found.PID); err != nil {
+			return handoff.Handoff{}, err
+		}
 	}
 	_, err = requestStatus(ctx, found, client)
 	return found, err

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -96,5 +97,41 @@ func TestHomebrewCandidateRequiresItsOwnExecutable(t *testing.T) {
 	}
 	if !os.SameFile(foundInfo, wantInfo) {
 		t.Fatalf("detected brew %q is not the fixture %q", found.brew, brew)
+	}
+}
+
+func TestPowerShellReceiptBindsTheWindowsServiceExecutableToItsDigest(t *testing.T) {
+	directory := t.TempDir()
+	executable := filepath.Join(directory, "sshc.exe")
+	contents := []byte("published Windows executable")
+	if err := os.WriteFile(executable, contents, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(contents)
+	receipt := fmt.Sprintf(`{"schemaVersion":1,"manager":"install.ps1","repository":"aida0710/sshc","version":"v1.2.3","sha256":"%x"}`, digest)
+	path := filepath.Join(directory, receiptFileName)
+	if err := os.WriteFile(path, []byte(receipt), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	found, err := detectInstallationForOS(executable, "windows")
+	if err != nil || found.manager != managerPowerShell {
+		t.Fatalf("detect=%+v err=%v", found, err)
+	}
+	managed, err := managedInstallationExecutable(context.Background(), found, nil)
+	if err != nil || managed != found.executable {
+		t.Fatalf("managed=%q err=%v", managed, err)
+	}
+	if err := os.WriteFile(executable, []byte("replaced manually"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := detectInstallationForOS(executable, "windows"); err == nil || !strings.Contains(err.Error(), "install.ps1") {
+		t.Fatalf("digest mismatch=%v", err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	found, err = detectInstallationForOS(executable, "windows")
+	if err != nil || found.manager != managerUnknown {
+		t.Fatalf("without receipt=%+v err=%v", found, err)
 	}
 }

@@ -53,7 +53,7 @@ func TestAnAvailableLockStartsAnEngineWithALockedVaultEvenWithAStaleHandoff(t *t
 	writeTestHandoff(t, stateDir, backgroundTestURL)
 	var stderr strings.Builder
 	started, released := false, false
-	found, err := ensureBackgroundEngine(context.Background(), commandEnvironment{stateDir: stateDir, client: client, stderr: &stderr}, func(string) (*detachedProcess, error) {
+	found, err := ensureBackgroundEngine(context.Background(), commandEnvironment{stateDir: stateDir, client: client, stderr: &stderr}, func() (*detachedProcess, error) {
 		started = true
 		holdTestEngineLock(t, stateDir)
 		writeTestHandoff(t, stateDir, backgroundTestURL)
@@ -81,7 +81,7 @@ func TestAHeldLockWaitsForTheEngineToPublishItsHandoff(t *testing.T) {
 		return readyClient.Transport.RoundTrip(request)
 	})}
 	writeTestHandoff(t, stateDir, backgroundTestURL)
-	found, err := ensureBackgroundEngine(context.Background(), commandEnvironment{stateDir: stateDir, client: client, stderr: io.Discard}, func(string) (*detachedProcess, error) {
+	found, err := ensureBackgroundEngine(context.Background(), commandEnvironment{stateDir: stateDir, client: client, stderr: io.Discard}, func() (*detachedProcess, error) {
 		t.Fatal("started a second engine while the lock was held")
 		return nil, nil
 	})
@@ -102,7 +102,7 @@ func TestAnEngineThatExitsBeforeReadinessReportsItsCodeAndLogTail(t *testing.T) 
 	file.Close()
 	exited := make(chan processExit, 1)
 	exited <- processExit{code: 7}
-	_, err = ensureBackgroundEngine(context.Background(), commandEnvironment{stateDir: stateDir, stderr: io.Discard}, func(string) (*detachedProcess, error) {
+	_, err = ensureBackgroundEngine(context.Background(), commandEnvironment{stateDir: stateDir, stderr: io.Discard}, func() (*detachedProcess, error) {
 		return &detachedProcess{pid: 123, exited: exited, release: func() {}}, nil
 	})
 	var failure *engineExitedError
@@ -118,7 +118,7 @@ func TestAChildThatLosesTheLockUsesTheWinningEnginesHandoff(t *testing.T) {
 	stateDir := t.TempDir()
 	exited := make(chan processExit, 1)
 	exited <- processExit{code: 1}
-	found, err := ensureBackgroundEngine(context.Background(), commandEnvironment{stateDir: stateDir, client: client, stderr: io.Discard}, func(string) (*detachedProcess, error) {
+	found, err := ensureBackgroundEngine(context.Background(), commandEnvironment{stateDir: stateDir, client: client, stderr: io.Discard}, func() (*detachedProcess, error) {
 		holdTestEngineLock(t, stateDir)
 		writeTestHandoff(t, stateDir, backgroundTestURL)
 		return &detachedProcess{pid: testHandoff(backgroundTestURL).PID + 1, exited: exited, release: func() {}}, nil
@@ -154,7 +154,7 @@ func TestReadinessHonorsCancellationWhileTheLockHasNoHandoff(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), engineReadyPollInterval)
 	defer cancel()
 	started := time.Now()
-	_, err := ensureBackgroundEngine(ctx, commandEnvironment{stateDir: stateDir, stderr: io.Discard}, func(string) (*detachedProcess, error) {
+	_, err := ensureBackgroundEngine(ctx, commandEnvironment{stateDir: stateDir, stderr: io.Discard}, func() (*detachedProcess, error) {
 		t.Fatal("unexpected start")
 		return nil, nil
 	})
@@ -213,5 +213,24 @@ func TestOpenUsesTheRunningEngineAndPrintsItsOneTimeURL(t *testing.T) {
 	code := runOpen(context.Background(), commandEnvironment{stateDir: stateDir, client: client, stdout: &stdout, stderr: &stderr}, false)
 	if code != 0 || stdout.String() != backgroundTestURL+"/#bootstrap=once\n" || stderr.Len() != 0 {
 		t.Fatalf("exit = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestReadinessRejectsARespondingEngineWhoseExecutableCannotBeVerified(t *testing.T) {
+	stateDir := t.TempDir()
+	writeTestHandoff(t, stateDir, backgroundTestURL)
+	client := backgroundTestClient(func(response http.ResponseWriter, _ *http.Request) { io.WriteString(response, validEngineStatus()) })
+	for _, failure := range []error{errEngineIdentityMismatch, errors.New("cannot inspect executable")} {
+		checked := false
+		readiness := engineReadiness{verifyProcess: func(pid int) error {
+			checked = true
+			if pid != testHandoff(backgroundTestURL).PID {
+				t.Fatalf("checked PID %d", pid)
+			}
+			return failure
+		}}
+		if _, err := readiness.probe(context.Background(), stateDir, client); !errors.Is(err, failure) || !checked {
+			t.Fatalf("probe=%v checked=%v", err, checked)
+		}
 	}
 }

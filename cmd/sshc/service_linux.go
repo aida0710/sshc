@@ -303,3 +303,7 @@ func systemdUnit(executable string) (string, error) {
 		"[Install]\n" +
 		"WantedBy=default.target\n", nil
 }
+
+func (manager *linuxServiceManager) restartDefinition(context.Context) serviceRestartDefinition {
+	return manager.definitionFile()
+}

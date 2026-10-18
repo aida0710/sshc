@@ -41,7 +41,9 @@ sshc
 
 ログは`~/.ssh/sshc/logs/engine.log`（Windowsは`%USERPROFILE%\.ssh\sshc\logs\engine.log`）へ追記します。このログは暗号化同期の対象外です。
 
-このターミナルで動かす場合は`sshc engine`を使います。ログイン時に自動起動するには、Linux・macOSで`sshc service install`を実行してください。
+このターミナルで動かす場合は`sshc engine`を使います。ログイン時に自動起動するには、Linux・macOS・Windowsで`sshc service install`を実行してください。
+
+WindowsではPowerShellのインストーラーで導入した実行ファイルを使い、タスクスケジューラに`sshc`という名前で登録します。管理者権限は不要です。状態の確認は`sshc service status`、再起動は`sshc service restart`、登録の削除は`sshc service disable`で行います。
 
 初回はWeb UIまたはCLIでVaultを作成し、ロックを解除します。
 

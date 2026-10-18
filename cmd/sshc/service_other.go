@@ -1,9 +1,9 @@
-//go:build !linux && !darwin
+//go:build !linux && !darwin && !windows
 
 package main
 
 import "errors"
 
 func newPlatformServiceManager(string) (engineServiceManager, error) {
-	return nil, errors.New("managed user services are supported only on Linux and macOS")
+	return nil, errors.New("managed user services are supported only on Linux, macOS, and Windows")
 }

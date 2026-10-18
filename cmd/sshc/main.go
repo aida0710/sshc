@@ -76,7 +76,7 @@ func dispatchInvocation(called invocation, paths userPaths, client *http.Client)
 	case invocationEngine:
 		// engine は stdin を読み取らない。
 		return runEngine(ctx, paths,
-			engineOptions{Port: called.Port, Replace: called.Replace},
+			engineOptions{Port: called.Port, Replace: called.Replace, Background: called.Background},
 			os.Stdin, os.Stdout, os.Stderr)
 	case invocationConnect:
 		// SIGTERM と SIGHUP も取り消しにする。既定のまま落ちると、raw にした

@@ -51,13 +51,13 @@ func TestStopAsksTheEngineToExitAndWaitsForItsLock(t *testing.T) {
 	}
 }
 
-func TestStopMentionsLoginOnlyForAnInstalledServiceOnUnix(t *testing.T) {
+func TestStopMentionsLoginOnlyForAnInstalledServiceOnSupportedPlatforms(t *testing.T) {
 	for _, state := range []serviceState{serviceAbsent, serviceUnmanaged, serviceInactive, serviceActive} {
 		var stderr strings.Builder
 		reportServiceLoginReminder(context.Background(), commandEnvironment{stderr: &stderr}, func(string) (engineServiceManager, error) {
 			return &fakeServiceManager{state: state}, nil
 		})
-		wantReminder := (runtime.GOOS == "linux" || runtime.GOOS == "darwin") && (state == serviceActive || state == serviceInactive)
+		wantReminder := (runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "windows") && (state == serviceActive || state == serviceInactive)
 		if strings.Contains(stderr.String(), "sshc service disable") != wantReminder {
 			t.Fatalf("state = %v, stderr = %q", state, stderr.String())
 		}
