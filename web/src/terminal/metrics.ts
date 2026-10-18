@@ -24,6 +24,14 @@ function surface(view: MeasurableTerminal): HTMLElement | null {
   return view.element?.querySelector<HTMLElement>(".xterm-screen") ?? null;
 }
 
+// A fit can run before the renderer has measured a newly applied font. It then keeps
+// the previous rows while the drawn rows have already grown past the host, and no
+// later resize notification would correct it. Such a fit is retried on the next
+// frames, up to this many times, so that a host too small for one row cannot loop.
+const maxOverflowRefits = 3;
+// Fractional device pixels can put the last row a fraction of a pixel past the host.
+const overflowTolerancePx = 1;
+
 export function observeTerminalSize(
   view: MeasurableTerminal,
   host: HTMLElement,
@@ -35,20 +43,37 @@ export function observeTerminalSize(
     const screenBox = screen?.getBoundingClientRect();
     return [hostBox.width, hostBox.height, screenBox?.width, screenBox?.height].join(":");
   };
+  const overflowsHost = () => {
+    const hostBox = host.getBoundingClientRect();
+    const screenBox = screen?.getBoundingClientRect();
+    if (screenBox === undefined || hostBox.width <= 0 || hostBox.height <= 0) return false;
+    return screenBox.bottom > hostBox.bottom + overflowTolerancePx || screenBox.right > hostBox.right + overflowTolerancePx;
+  };
   let fittedSize = sizeKey();
+  let overflowRefits = 0;
   let frame: number | null = null;
-  const observer = new ResizeObserver(() => {
-    if (frame !== null || sizeKey() === fittedSize) return;
+  const queueFit = () => {
     // Fitting changes the screen itself. Wait for the next frame so observing
     // its size cannot cause a ResizeObserver delivery loop.
-    frame = window.requestAnimationFrame(() => {
-      frame = null;
-      if (sizeKey() === fittedSize) return;
-      onResize();
-      // Ignore the size change caused by this fit. Fractional pixel rounding
-      // can otherwise make FitAddon alternate between two row counts forever.
-      fittedSize = sizeKey();
-    });
+    if (frame === null) frame = window.requestAnimationFrame(settle);
+  };
+  function settle() {
+    frame = null;
+    if (sizeKey() !== fittedSize) {
+      overflowRefits = 0;
+    } else {
+      if (!overflowsHost() || overflowRefits >= maxOverflowRefits) return;
+      overflowRefits += 1;
+    }
+    onResize();
+    // Ignore the size change caused by this fit. Fractional pixel rounding
+    // can otherwise make FitAddon alternate between two row counts forever.
+    fittedSize = sizeKey();
+    if (overflowsHost()) queueFit();
+  }
+  const observer = new ResizeObserver(() => {
+    if (frame !== null || (sizeKey() === fittedSize && !overflowsHost())) return;
+    queueFit();
   });
   observer.observe(host);
   // Renderer fallback, font loading and DPI changes can change the cell size

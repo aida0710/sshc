@@ -163,6 +163,67 @@ describe("observeTerminalSize", () => {
     });
   });
 
+  it("fits again on the next frame while the drawn rows still overflow the host after a fit", () => {
+    withResizeHarness((harness) => {
+      const host = document.createElement("div");
+      host.getBoundingClientRect = () => rect(1500, 839, 0, 32);
+      let screenRect = rect(1480, 816, 0, 40);
+      const view = terminal({ rows: 48 });
+      view.screen.getBoundingClientRect = () => screenRect;
+      // The first fit runs before the renderer has measured the new font and keeps
+      // the old rows; the next one sees the measured cells and fits them.
+      let fits = 0;
+      const fit = vi.fn(() => { fits += 1; if (fits === 2) screenRect = rect(1480, 816, 0, 40); });
+      const stop = observeTerminalSize(view, host, fit);
+      try {
+        screenRect = rect(1480, 918, 0, 40);
+        harness.notify();
+        harness.flush();
+        expect(fit).toHaveBeenCalledTimes(1);
+        expect(harness.pending()).toBe(1);
+        harness.flush();
+        expect(fit).toHaveBeenCalledTimes(2);
+        expect(harness.pending()).toBe(0);
+      } finally { stop(); }
+    });
+  });
+
+  it("fits a terminal whose rows overflow the host even when its size was already recorded", () => {
+    withResizeHarness((harness) => {
+      const host = document.createElement("div");
+      host.getBoundingClientRect = () => rect(1500, 839, 0, 32);
+      const view = terminal({ rows: 54, screen: rect(1480, 918, 0, 40) });
+      const fit = vi.fn();
+      const stop = observeTerminalSize(view, host, fit);
+      try {
+        harness.notify();
+        harness.flush();
+        expect(fit).toHaveBeenCalledTimes(1);
+      } finally { stop(); }
+    });
+  });
+
+  it("stops retrying a host too small for one row after a few frames", () => {
+    withResizeHarness((harness) => {
+      const host = document.createElement("div");
+      let hostRect = rect(800, 10);
+      host.getBoundingClientRect = () => hostRect;
+      const view = terminal({ rows: 1, screen: rect(780, 15) });
+      const fit = vi.fn();
+      const stop = observeTerminalSize(view, host, fit);
+      try {
+        hostRect = rect(800, 9);
+        harness.notify();
+        for (let frame = 0; frame < 10; frame++) harness.flush();
+        expect(fit).toHaveBeenCalledTimes(4);
+        expect(harness.pending()).toBe(0);
+        harness.notify();
+        harness.flush();
+        expect(fit).toHaveBeenCalledTimes(4);
+      } finally { stop(); }
+    });
+  });
+
   it("disconnects and cancels a pending fit when disposed", () => {
     withResizeHarness((harness) => {
       const host = document.createElement("div");
