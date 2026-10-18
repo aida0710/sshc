@@ -334,7 +334,7 @@ export function TerminalView({
     };
     // Keyboard/orientation changes must resize the PTY even while text is
     // selected; the selection overlay releases its handles when its shape changes.
-    fitAndSync();
+    // observeTerminalSize makes the first fit, once the rest of the terminal is attached.
     refit.current = fitAndSync;
 
     const detachTouchScroll = attachTouchScroll(container, view, () => cellHeight(view, container), {

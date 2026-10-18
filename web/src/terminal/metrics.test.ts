@@ -20,7 +20,22 @@ function terminal(options: { screen?: DOMRect; rows: number; letterSpacing?: str
     const box = options.screen;
     screen.getBoundingClientRect = () => box;
   }
-  return { element, rows: options.rows, screen };
+  type CellListener = (dimensions: { css: { cell: { width: number; height: number } } }) => void;
+  const cellListeners = new Set<CellListener>();
+  return {
+    element,
+    rows: options.rows,
+    screen,
+    onDimensionsChange(listener: CellListener) {
+      cellListeners.add(listener);
+      return { dispose: () => cellListeners.delete(listener) };
+    },
+    // Reports the render dimensions xterm measured, as it does after a font, DPI or row change.
+    measured(cell: { width: number; height: number }) {
+      cellListeners.forEach((listener) => listener({ css: { cell } }));
+    },
+    cellListenerCount: () => cellListeners.size,
+  };
 }
 
 function rect(width: number, height: number, left = 0, top = 0): DOMRect {
@@ -92,6 +107,8 @@ describe("observeTerminalSize", () => {
       view.screen.getBoundingClientRect = () => screenRect;
       const fit = vi.fn();
       const stop = observeTerminalSize(view, host, fit);
+      expect(fit).toHaveBeenCalledOnce();
+      fit.mockClear();
       try {
         expect(harness.observed).toEqual(new Set([host, view.screen]));
         hostRect = rect(800, 400);
@@ -116,8 +133,10 @@ describe("observeTerminalSize", () => {
       view.screen.getBoundingClientRect = () => rect(780, screenHeight);
       // At fractional DPI, DOM rows can round to 15px for one row and 31px
       // for two. Refitting the fit's own resize would oscillate indefinitely.
-      const fit = vi.fn(() => { screenHeight = screenHeight === 15 ? 31 : 15; });
+      const fit = vi.fn();
       const stop = observeTerminalSize(view, host, fit);
+      fit.mockClear();
+      fit.mockImplementation(() => { screenHeight = screenHeight === 15 ? 31 : 15; });
       try {
         screenHeight = 31;
         harness.notify();
@@ -152,12 +171,70 @@ describe("observeTerminalSize", () => {
       const view = terminal({ rows: 30, screen: rect(780, 480) });
       const fit = vi.fn();
       const stop = observeTerminalSize(view, host, fit);
+      expect(fit).toHaveBeenCalledOnce();
+      fit.mockClear();
       try {
         hostHeight = 400;
         harness.notify();
         expect(harness.pending()).toBe(1);
         hostHeight = 500;
         harness.flush();
+        expect(fit).not.toHaveBeenCalled();
+      } finally { stop(); }
+    });
+  });
+
+  it("fits when it starts rather than taking the current size as fitted", () => {
+    withResizeHarness((harness) => {
+      const host = document.createElement("div");
+      host.getBoundingClientRect = () => rect(1500, 839);
+      // The caller fitted while the layout was different; these rows no longer fit.
+      const view = terminal({ rows: 54, screen: rect(1480, 918) });
+      const fit = vi.fn();
+      const stop = observeTerminalSize(view, host, fit);
+      try {
+        expect(fit).toHaveBeenCalledOnce();
+        expect(harness.pending()).toBe(0);
+      } finally { stop(); }
+    });
+  });
+
+  it("fits again when xterm measures new cells even though no box has changed yet", () => {
+    withResizeHarness((harness) => {
+      const host = document.createElement("div");
+      host.getBoundingClientRect = () => rect(1500, 839);
+      const view = terminal({ rows: 54, screen: rect(1480, 918) });
+      const fit = vi.fn();
+      const stop = observeTerminalSize(view, host, fit);
+      fit.mockClear();
+      try {
+        // The first fit used the fallback font's 15px cells; JetBrains Mono's are 17px.
+        view.measured({ width: 8, height: 15 });
+        harness.flush();
+        expect(fit).toHaveBeenCalledOnce();
+        view.measured({ width: 8, height: 17 });
+        harness.notify();
+        expect(harness.pending()).toBe(1);
+        harness.flush();
+        expect(fit).toHaveBeenCalledTimes(2);
+      } finally { stop(); }
+    });
+  });
+
+  it("does not fit again when only the rows change and the cells stay the same", () => {
+    withResizeHarness((harness) => {
+      const host = document.createElement("div");
+      host.getBoundingClientRect = () => rect(1500, 839);
+      const view = terminal({ rows: 48, screen: rect(1480, 816) });
+      const fit = vi.fn();
+      const stop = observeTerminalSize(view, host, fit);
+      try {
+        view.measured({ width: 8, height: 17 });
+        harness.flush();
+        fit.mockClear();
+        // A fit changes the rows and with them the canvas, which xterm also reports.
+        view.measured({ width: 8, height: 17 });
+        expect(harness.pending()).toBe(0);
         expect(fit).not.toHaveBeenCalled();
       } finally { stop(); }
     });
@@ -171,10 +248,13 @@ describe("observeTerminalSize", () => {
       const view = terminal({ rows: 30, screen: rect(780, 480) });
       const fit = vi.fn();
       const stop = observeTerminalSize(view, host, fit);
+      expect(fit).toHaveBeenCalledOnce();
+      fit.mockClear();
       hostHeight = 400;
       harness.notify();
       expect(harness.pending()).toBe(1);
       stop();
+      expect(view.cellListenerCount()).toBe(0);
       expect(harness.disconnect).toHaveBeenCalledOnce();
       expect(harness.cancel).toHaveBeenCalledOnce();
       expect(harness.observed.size).toBe(0);

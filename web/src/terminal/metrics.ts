@@ -24,8 +24,15 @@ function surface(view: MeasurableTerminal): HTMLElement | null {
   return view.element?.querySelector<HTMLElement>(".xterm-screen") ?? null;
 }
 
+// The part of xterm's render dimensions that a font or DPI change alters.
+type CellDimensions = { readonly css: { readonly cell: { readonly width: number; readonly height: number } } };
+
+export type ObservableTerminal = MeasurableTerminal & {
+  onDimensionsChange(listener: (dimensions: CellDimensions) => void): { dispose(): void };
+};
+
 export function observeTerminalSize(
-  view: MeasurableTerminal,
+  view: ObservableTerminal,
   host: HTMLElement,
   onResize: () => void,
 ): () => void {
@@ -35,27 +42,47 @@ export function observeTerminalSize(
     const screenBox = screen?.getBoundingClientRect();
     return [hostBox.width, hostBox.height, screenBox?.width, screenBox?.height].join(":");
   };
+  // Only a size fitted here counts as fitted. Recording the current size without
+  // fitting would ignore a layout that changed after the caller last fitted.
+  onResize();
   let fittedSize = sizeKey();
+  let cellSize = "";
+  let cellsChanged = false;
   let frame: number | null = null;
-  const observer = new ResizeObserver(() => {
-    if (frame !== null || sizeKey() === fittedSize) return;
+  const queueFit = () => {
     // Fitting changes the screen itself. Wait for the next frame so observing
     // its size cannot cause a ResizeObserver delivery loop.
+    if (frame !== null) return;
     frame = window.requestAnimationFrame(() => {
       frame = null;
-      if (sizeKey() === fittedSize) return;
+      if (!cellsChanged && sizeKey() === fittedSize) return;
+      cellsChanged = false;
       onResize();
       // Ignore the size change caused by this fit. Fractional pixel rounding
       // can otherwise make FitAddon alternate between two row counts forever.
       fittedSize = sizeKey();
     });
+  };
+  const observer = new ResizeObserver(() => {
+    if (sizeKey() !== fittedSize) queueFit();
   });
   observer.observe(host);
   // Renderer fallback, font loading and DPI changes can change the cell size
   // without resizing the host. All rows must still fit in the visible pane.
   if (screen !== null) observer.observe(screen);
+  // A fit made before xterm measured a newly applied font keeps the old rows, and the
+  // screen box it leaves behind may never change again. Fit again once xterm reports
+  // the cells it measured; its own row changes alter only the canvas, not the cells.
+  const cellListener = view.onDimensionsChange(({ css }) => {
+    const measured = `${css.cell.width}:${css.cell.height}`;
+    if (measured === cellSize) return;
+    cellSize = measured;
+    cellsChanged = true;
+    queueFit();
+  });
   return () => {
     observer.disconnect();
+    cellListener.dispose();
     if (frame !== null) window.cancelAnimationFrame(frame);
   };
 }
