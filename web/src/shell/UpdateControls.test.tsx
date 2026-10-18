@@ -1,9 +1,8 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { UpdateApi, UpdateStatus } from "../api/update";
-import { sessionStorageKeys } from "../ui/browserStorageKeys";
 import { UpdateBadge } from "./UpdateBadge";
 
 const available: UpdateStatus = { current: "v1.0.0", latest: "v1.1.0", available: true, canUpdate: true, manager: "install.sh" };
@@ -16,7 +15,7 @@ function updater(): UpdateApi {
 }
 
 describe("Web self update", () => {
-  afterEach(() => sessionStorage.clear());
+  afterEach(() => localStorage.clear());
 
   it("shows terminal and transfer disconnection before consuming the preview token", async () => {
     const api = updater();
@@ -57,7 +56,7 @@ describe("Web self update", () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, canUpdate: false, reason: "update_restart_failed", job: { id: "job-one", target: "v1.1.0", state: "restart_required", problem: "update_restart_failed" } });
     render(<UpdateBadge api={api} />);
-    expect(await screen.findByRole("status")).toHaveTextContent("sshc engine --replace");
+    expect(await within(await screen.findByRole("dialog", { name: "sshc update" })).findByRole("status")).toHaveTextContent("sshc engine --replace");
     expect(screen.getByRole("button", { name: "Reload and check result" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
   });
@@ -76,60 +75,84 @@ describe("Web self update", () => {
   });
 
   it("reports the installed Homebrew version when it is newer than the preview", async () => {
-    sessionStorage.setItem(sessionStorageKeys.updateResultToCheck, "job-one");
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.2.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", installedVersion: "v1.2.0", state: "succeeded", problem: "" } });
     render(<UpdateBadge api={api} />);
-    expect(await screen.findByRole("status")).toHaveTextContent("Updated to v1.2.0");
+    expect(await within(await screen.findByRole("dialog", { name: "sshc update" })).findByRole("status")).toHaveTextContent("Updated to v1.2.0");
     expect(screen.getByText("Version v1.2.0")).toBeVisible();
   });
 
-  it("shows the success to the page that watched the update finish", async () => {
+  it("follows a started update in a dialog until its result", async () => {
     const api = updater();
     vi.mocked(api.updateStatus)
       .mockResolvedValueOnce({ current: "v1.0.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "restarting", problem: "" } })
+      .mockResolvedValueOnce({ current: "v1.0.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "restarting", problem: "" } })
       .mockResolvedValue({ current: "v1.1.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "succeeded", problem: "" } });
     render(<UpdateBadge api={api} />);
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Updated to v1.1.0"));
+    const dialog = await screen.findByRole("dialog", { name: "sshc update" });
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Restarting sshc");
+    await waitFor(() => expect(within(dialog).getByRole("status")).toHaveTextContent("Updated to v1.1.0"), { timeout: 4000 });
   });
 
-  it("shows the success once after the reload button and not on later loads", async () => {
-    const succeeded: UpdateStatus = { current: "v1.1.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "succeeded", problem: "" } };
+  it("shows an update result once and not on later loads", async () => {
     const api = updater();
-    vi.mocked(api.updateStatus).mockResolvedValue(succeeded);
-    sessionStorage.setItem(sessionStorageKeys.updateResultToCheck, "job-one");
-    const reloaded = render(<UpdateBadge api={api} />);
-    expect(await screen.findByRole("status")).toHaveTextContent("Updated to v1.1.0");
-    expect(sessionStorage.getItem(sessionStorageKeys.updateResultToCheck)).toBeNull();
-    reloaded.unmount();
+    vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.1.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "succeeded", problem: "" } });
+    const first = render(<UpdateBadge api={api} />);
+    const dialog = await screen.findByRole("dialog", { name: "sshc update" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Updated to/)).not.toBeInTheDocument();
+    first.unmount();
 
     render(<UpdateBadge api={api} />);
     await screen.findByText("Version v1.1.0");
     await waitFor(() => expect(api.updateStatus).toHaveBeenCalledTimes(2));
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("does not keep showing an earlier success after sshc was updated another way", async () => {
+  it("does not show an earlier success after sshc was updated another way", async () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.3.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "succeeded", problem: "" } });
     render(<UpdateBadge api={api} />);
     await screen.findByText("Version v1.3.0");
     await waitFor(() => expect(api.updateStatus).toHaveBeenCalled());
-    expect(screen.queryByText(/Updated to/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("folds the notice of a release under the version until a newer release", async () => {
+    const api = updater();
+    vi.mocked(api.updateStatus).mockResolvedValue({ ...available, pageUrl: "https://github.com/aida0710/sshc/releases/tag/v1.1.0" });
+    const first = render(<UpdateBadge api={api} />);
+    const version = await screen.findByRole("button", { name: "Version v1.0.0" });
+    expect(version).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: /v1.1.0 is available/ })).toBeVisible();
+    await userEvent.click(version);
+    expect(screen.queryByRole("link", { name: /v1.1.0 is available/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
+    first.unmount();
+
+    render(<UpdateBadge api={api} />);
+    expect(await screen.findByRole("button", { name: "Version v1.0.0" })).toHaveAttribute("aria-expanded", "false");
+    cleanup();
+
+    vi.mocked(api.updateStatus).mockResolvedValue({ ...available, latest: "v1.2.0", pageUrl: "https://github.com/aida0710/sshc/releases/tag/v1.2.0" });
+    render(<UpdateBadge api={api} />);
+    expect(await screen.findByRole("button", { name: "Version v1.0.0" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: /v1.2.0 is available/ })).toBeVisible();
   });
 
   it("asks to refresh Homebrew when the installation did not update", async () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, manager: "homebrew", job: { id: "job-one", target: "v1.1.0", state: "failed", problem: "update_homebrew_not_updated" } });
     render(<UpdateBadge api={api} />);
-    expect(await screen.findByRole("status")).toHaveTextContent("brew update");
+    expect(await within(await screen.findByRole("dialog", { name: "sshc update" })).findByRole("status")).toHaveTextContent("brew update");
     expect(screen.getByText("Version v1.0.0")).toBeVisible();
     expect(api.startUpdate).not.toHaveBeenCalled();
   });
 
   it.each(["update_unmanaged", "update_permission_denied", "update_development_build", "update_windows_unsupported", "update_android_unsupported"])("explains %s under the version and offers no automatic update", async (reason) => {
     const api = updater();
-    vi.mocked(api.updateStatus).mockResolvedValue({ ...available, canUpdate: false, reason });
+    vi.mocked(api.updateStatus).mockResolvedValue({ ...available, available: false, canUpdate: false, reason });
     render(<UpdateBadge api={api} />);
     const version = await screen.findByRole("button", { name: "Version v1.0.0" });
     const explanation = document.getElementById(version.getAttribute("aria-controls") ?? "");
