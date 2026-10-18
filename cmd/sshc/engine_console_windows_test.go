@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"os/exec"
+	"syscall"
 	"testing"
 
 	"golang.org/x/sys/windows"
@@ -15,12 +16,10 @@ func TestBackgroundEngineReleasesAnAttachedWindowsConsole(t *testing.T) {
 	if os.Getenv(childEnvironment) == "1" {
 		kernel := windows.NewLazySystemDLL("kernel32.dll")
 		window := kernel.NewProc("GetConsoleWindow")
+		// The parent asked Windows for a new console, so one must be attached here.
 		attached, _, _ := window.Call()
 		if attached == 0 {
-			allocated, _, _ := kernel.NewProc("AllocConsole").Call()
-			if allocated == 0 {
-				os.Exit(21)
-			}
+			os.Exit(21)
 		}
 		if err := releaseEngineConsole(); err != nil {
 			os.Exit(22)
@@ -37,6 +36,9 @@ func TestBackgroundEngineReleasesAnAttachedWindowsConsole(t *testing.T) {
 	}
 	command := exec.Command(os.Args[0], "-test.run=^TestBackgroundEngineReleasesAnAttachedWindowsConsole$")
 	command.Env = append(os.Environ(), childEnvironment+"=1")
+	// A service session such as CI cannot allocate a console from inside the process,
+	// but Windows still creates one for a child started with CREATE_NEW_CONSOLE.
+	command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("console helper: %v, %s", err, output)
 	}
