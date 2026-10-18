@@ -37,8 +37,7 @@ const (
 // そのコンテナがどの設定で経路を張ったのかを確かめられないからである。その後は、
 // 誰も通っていない経路を畳み続ける。
 func superviseVPNRoutes(ctx context.Context, routes *vpn.Manager, logger *slog.Logger) {
-	if err := routes.DiscardOrphans(ctx); err != nil && logger != nil &&
-		!errors.Is(err, vpn.ErrDockerMissing) {
+	if err := routes.DiscardOrphans(ctx); logger != nil && orphanDiscardNeedsAttention(err) {
 		logger.Warn("discard vpn routes left by a previous engine", "error", err)
 	}
 	ticker := time.NewTicker(vpnSweepInterval)
@@ -51,6 +50,15 @@ func superviseVPNRoutes(ctx context.Context, routes *vpn.Manager, logger *slog.L
 			routes.StopIdle(ctx, vpnIdleTimeout)
 		}
 	}
+}
+
+// orphanDiscardNeedsAttention は、前回の経路を回収できなかったことを利用者に知らせるかを返す。
+//
+// Docker が入っていない、または動いていないマシンでは、前回のコンテナも動いていないので
+// 回収するものが無い。VPN を使わない利用者に、起動のたびに警告を出さない。止まっている
+// コンテナは、Docker が動いている状態で engine を次に起動したときに回収する。
+func orphanDiscardNeedsAttention(err error) bool {
+	return err != nil && !errors.Is(err, vpn.ErrDockerMissing) && !errors.Is(err, vpn.ErrDockerNotRunning)
 }
 
 // vpnRoute は、プロファイル名から設定と秘密を集め、その経路で接続先へ繋ぐ。
