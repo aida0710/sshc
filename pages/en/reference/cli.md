@@ -34,6 +34,8 @@ sshc engine --port 60001
 sshc engine --replace
 sshc
 sshc open
+sshc open --no-browser
+sshc stop
 sshc status --json
 sshc version
 sshc vault status
@@ -48,7 +50,13 @@ sshc service disable
 sshc update
 ```
 
-`sshc` without arguments fetches a one-time URL from the running engine and opens it in the browser; `sshc open` only prints the URL. `sshc engine --port <n>` (1024–65535) pins the listening port. `sshc version` (`-v`, `--version`) prints this binary's version, and `sshc vault status` prints the same table as `sshc status` with the vault state.
+`sshc` without arguments and `sshc open` start the engine in the background if needed, wait until it is ready, print a one-time URL and open it in the browser. `sshc open --no-browser` performs the same startup but only prints the URL, for headless machines or use over SSH.
+
+`sshc stop` asks the running engine to stop and waits for it to exit. Open terminals and transfers close. If no engine is running, it exits successfully. On Linux and macOS, an enabled service starts the engine again at the next login; use `sshc service disable` to keep it stopped.
+
+Background output is appended to `~/.ssh/sshc/logs/engine.log` (`%USERPROFILE%\.ssh\sshc\logs\engine.log` on Windows). If it exceeds 5 MiB before startup, it replaces `engine.log.1`. The directory and files are private to the user and excluded from encrypted sync. If the engine exits before it is ready, the CLI reports its exit code and the last 20 log lines.
+
+`sshc engine` runs in the foreground. `sshc engine --port <n>` (1024–65535) pins the listening port. `sshc version` (`-v`, `--version`) prints this binary's version, and `sshc vault status` prints the same table as `sshc status` with the vault state.
 
 Interactive secrets such as the Vault master password display one `*` per typed character instead of the value. Backspace and `Ctrl+U` update the mask, and the plaintext is never written to Terminal scrollback.
 

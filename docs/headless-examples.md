@@ -1,12 +1,12 @@
 # エンジンを常駐させる
 
-`sshc engine` はフォアグラウンドで動作し、起動したターミナルまたはプロセス管理ツールが終了すると停止します。sshc 自身はデーモン化しません。
+`sshc open --no-browser`は、sshcエンジンが停止中ならバックグラウンドで起動し、準備ができると一度限りのUI URLを表示します。ターミナルを閉じても動き続けます。停止するには`sshc stop`を実行してください。このターミナルで動かす場合は`sshc engine`を使います。
 
 マスターパスワードをunitファイル、環境変数、コマンドライン引数へ保存しないでください。エンジンの起動後、別のターミナルからVaultのロックを解除します。パスワードなしのVaultは、エンジンの起動時に自動でロックを解除するため、この操作は不要です。
 
 ```sh
-sshc engine                       # Ctrl+C で終了コード 130、SIGTERM で 0
-sshc vault unlock                 # 別のターミナルから実行
+sshc open --no-browser            # バックグラウンドで起動し、URLを表示
+sshc vault unlock                 # パスワード付きVaultのロックを解除
 sshc ssh <接続先>                 # 保存済みの認証情報を利用して接続
 sshc ssh <接続先> --non-interactive -- <コマンド...>
                                   # ターミナルを開かずにコマンドを実行
@@ -70,7 +70,7 @@ sshc vpn down tohoku
 
 ## systemd（ユーザーサービス）
 
-foregroundやtmuxで起動中の`sshc engine`があれば、先にそのprocessを停止します。engine lockを保持したままではsystemd側のengineを起動できません。
+起動中のsshcエンジンがあれば、先に`sshc stop`で停止します。engine lockを保持したままではsystemd側のengineを起動できません。
 
 ```sh
 sshc service install
@@ -105,7 +105,7 @@ loginctl enable-linger "$USER"
 
 ## launchd（macOSユーザーエージェント）
 
-foregroundやtmuxで起動中の`sshc engine`があれば、先にそのprocessを停止します。
+起動中のsshcエンジンがあれば、先に`sshc stop`で停止します。
 
 ```sh
 sshc service install

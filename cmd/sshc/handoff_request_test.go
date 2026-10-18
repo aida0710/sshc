@@ -47,6 +47,7 @@ func TestHandoffRequestsDoNotFollowRedirects(t *testing.T) {
 			defer server.Close()
 			stateDir := t.TempDir()
 			writeTestHandoff(t, stateDir, server.URL)
+			holdTestEngineLock(t, stateDir)
 
 			if failed := test.call(stateDir, testHandoff(server.URL), server.Client()); !failed {
 				t.Fatal("a redirect was accepted as the engine's answer")
@@ -146,6 +147,7 @@ func TestSSHAndOpenNameTheCodeTheEngineRefusedWith(t *testing.T) {
 
 							stateDir := t.TempDir()
 							writeTestHandoff(t, stateDir, server.URL)
+							holdTestEngineLock(t, stateDir)
 							var stderr strings.Builder
 							code := command.run(context.Background(), commandEnvironment{
 								home: t.TempDir(), stateDir: stateDir, client: server.Client(), stdout: io.Discard, stderr: &stderr,

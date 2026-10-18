@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"sshc/internal/browserauth"
+	"sshc/internal/enginelog"
 	"sshc/internal/handoff"
 	"sshc/internal/keys"
 	"sshc/internal/recent"
@@ -25,6 +26,8 @@ import (
 // パスは持ち主のパッケージの定数から組み立て、持ち主が名前を変えても除外が外れない
 // ようにする。
 var neverTravels = slices.Concat([]string{
+	// Background engine diagnostics belong only to this machine.
+	path.Join(storage.StateDirectoryName, enginelog.DirectoryName),
 	// パスワードなしの Vault を開く、このマシンだけの鍵。
 	secret.LocalKeyPath,
 	// オブジェクトストアの資格情報。暗号化されてはいるが、自分のバケットへの鍵を運ぶ

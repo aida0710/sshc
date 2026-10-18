@@ -12,12 +12,9 @@ import (
 // unreachableEngineCommand は、engine に届かないときの案内を確かめるコマンドの呼び方。
 type unreachableEngineCommand func(ctx context.Context, stateDir string, client *http.Client, stderr io.Writer) int
 
-// sshc open、sshc status、sshc vault は、sshc ssh と同じく、engine に届かない理由
+// sshc status、sshc vault は、sshc ssh と同じく、engine に届かない理由
 // ごとに利用者が次にすることを案内する。
 var unreachableEngineCommands = map[string]unreachableEngineCommand{
-	"open": func(ctx context.Context, stateDir string, client *http.Client, stderr io.Writer) int {
-		return runOpen(ctx, commandEnvironment{stateDir: stateDir, client: client, stdout: io.Discard, stderr: stderr}, false)
-	},
 	"status": func(ctx context.Context, stateDir string, client *http.Client, stderr io.Writer) int {
 		return runStatus(ctx, commandEnvironment{stateDir: stateDir, client: client, stdout: io.Discard, stderr: stderr}, false)
 	},
@@ -60,8 +57,8 @@ func TestAStaleHandoffWithNothingListeningIsReportedAsNotRunning(t *testing.T) {
 
 			code := run(context.Background(), stateDir, &http.Client{}, &stderr)
 
-			if code != 1 || !strings.Contains(stderr.String(), "sshc is not running; run sshc engine") {
-				t.Fatalf("exit = %d, stderr = %q; want 1 and the advice to run sshc engine", code, stderr.String())
+			if code != 1 || !strings.Contains(stderr.String(), "sshc is not running; run sshc to start it in the background") {
+				t.Fatalf("exit = %d, stderr = %q; want 1 and the advice to run sshc", code, stderr.String())
 			}
 		})
 	}

@@ -59,6 +59,10 @@ var allowedToStartPrograms = []string{
 	// tagのscriptへ委ねる。どちらにも該当しない実行ファイルからは起動しない。serviceは
 	// Homebrewへ固定argvでformulaの場所を尋ねるだけである。
 	"cmd/sshc/installation_commands.go",
+	// 引数なしの sshc と sshc open は、engine が停止中なら、実行中の sshc 自身
+	// （os.Executable）を固定argv「engine」で切り離して起動する。利用者の入力を
+	// programや引数へ渡さず、出力は本人だけが読めるengineのログへ向ける。
+	"cmd/sshc/engine_background.go",
 	// Web更新の再起動helperは、照合済みのsshcへ固定argvだけを渡す。
 	// engineのHTTP停止に巻き込まれず、管理サービスまたは確認したengineだけを再起動する。
 	"cmd/sshc/web_update_restart.go",

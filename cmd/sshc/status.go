@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"io/fs"
@@ -116,6 +117,9 @@ func verifiedHandoff(ctx context.Context, stateDir string, client *http.Client) 
 	// 呼び出し側の上限のまま確かめる。応答しない process の前で、status や ssh が
 	// 長いコマンド用の上限まで待たないようにする。
 	if err := proveEngine(ctx, found, noRedirectClient(client)); err != nil {
+		if errors.Is(err, errEngineUnproven) {
+			return handoff.Handoff{}, fmt.Errorf("%w; if an sshc engine was killed without exiting, remove the stale handoff at %s and run sshc again", err, filepath.Join(stateDir, handoff.FileName))
+		}
 		return handoff.Handoff{}, err
 	}
 	return found, nil
@@ -174,7 +178,7 @@ func readHandoff(stateDir string) (handoff.Handoff, error) {
 type engineNotRunning struct{ cause error }
 
 func (e engineNotRunning) Error() string {
-	return "sshc is not running; run sshc engine in another terminal and keep it open"
+	return "sshc is not running; run sshc to start it in the background (or sshc engine to run it in this terminal)"
 }
 
 func (e engineNotRunning) Unwrap() error { return e.cause }

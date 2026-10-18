@@ -140,7 +140,7 @@ const (
 
 // Ctrl-Z で止めた engine のように、接続は受け付けるが応答しない process が
 // handoff の port にいても、呼び出し側の上限で諦める。長いコマンド用の上限まで待たない。
-func TestStatusAndOpenGiveUpOnASilentEngineWithinTheCallersTimeout(t *testing.T) {
+func TestStatusGivesUpOnASilentEngineWithinTheCallersTimeout(t *testing.T) {
 	silent, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +152,6 @@ func TestStatusAndOpenGiveUpOnASilentEngineWithinTheCallersTimeout(t *testing.T)
 	environment := commandEnvironment{stateDir: stateDir, client: client, stdout: io.Discard, stderr: io.Discard}
 	commands := map[string]func() int{
 		"status": func() int { return runStatus(context.Background(), environment, false) },
-		"open":   func() int { return runOpen(context.Background(), environment, false) },
 	}
 
 	for name, run := range commands {

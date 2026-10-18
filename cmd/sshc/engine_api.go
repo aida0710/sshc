@@ -25,8 +25,7 @@ const (
 
 var (
 	errEngineIdentityMismatch = errors.New("running engine identity does not match its handoff")
-	errEngineUnproven         = errors.New("the process at the engine address did not prove it holds the handoff secret; " +
-		"if an sshc engine was killed without exiting, remove the stale handoff under ~/.ssh/sshc/cli and start it again")
+	errEngineUnproven         = errors.New("the process at the engine address did not prove it holds the handoff secret")
 	errEngineVaultMissing     = errors.New("the running engine has no vault")
 	errEngineVaultLocked      = errors.New("the running engine vault is locked")
 	errEngineInvalidResponse  = errors.New("the running engine returned an invalid response")

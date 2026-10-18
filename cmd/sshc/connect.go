@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"sshc/internal/app"
@@ -32,40 +31,6 @@ type connectAnswer struct {
 	TOTPBindings     map[string]string `json:"totpBindings"`
 	StaleTOTPs       []string          `json:"staleTotps"`
 	Warnings         []string          `json:"warnings"`
-}
-
-// runOpen は engine から一度限りの UI URL を取得して出力する。
-// open が true の場合だけ URL をブラウザへ渡す。
-func runOpen(ctx context.Context, environment commandEnvironment, open bool) int {
-	stateDir, client, stdout, stderr := environment.stateDir, environment.client, environment.stdout, environment.stderr
-	found, err := verifiedHandoff(ctx, stateDir, client)
-	if err != nil {
-		return reportEngineUnreachable(ctx, err, stderr)
-	}
-	var answer struct {
-		URL string `json:"url"`
-	}
-	err = newHandoffEndpoint(found, client).exchange(ctx,
-		handoffCall{method: http.MethodPost, path: httpserver.OpenPath, body: strings.NewReader("{}")},
-		handoffAnswer{status: http.StatusOK, into: &answer})
-	refusal, refused := engineRefusal(err)
-	switch {
-	case isTransportProblem(err):
-		fmt.Fprintln(stderr, "sshc: the running engine did not respond")
-		return exitFailure
-	case refused:
-		fmt.Fprintf(stderr, "sshc: %v\n", refusedRequestError(refusal))
-		return exitFailure
-	case err != nil || answer.URL == "":
-		fmt.Fprintln(stderr, "sshc: the engine response did not include a UI URL")
-		return exitFailure
-	}
-	fmt.Fprintln(stdout, answer.URL)
-	if open {
-		// URL は既に出力済みなので、ブラウザ起動の失敗は終了コードに反映しない。
-		openInBrowser(answer.URL)
-	}
-	return 0
 }
 
 // runConnect は engine から保存済み認証情報を取得し、プロセス内で SSH 接続する。

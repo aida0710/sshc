@@ -127,6 +127,23 @@ func (manager *launchdServiceManager) Status(ctx context.Context) (serviceState,
 	return serviceInactive, nil
 }
 
+func (manager *launchdServiceManager) StartsAtLogin(ctx context.Context) (bool, error) {
+	snapshot, err := manager.definitionFile().readSnapshot()
+	if err != nil || snapshot.state != serviceInactive {
+		return false, err
+	}
+	answer, err := manager.runner.Run(ctx, "print-disabled", manager.domain())
+	if err != nil {
+		return false, err
+	}
+	if answer.ExitCode != 0 {
+		return false, serviceToolExitError("launchctl", []string{"print-disabled", manager.domain()}, answer)
+	}
+	// LaunchAgents are loaded at login unless an explicit disabled override exists.
+	disabled := regexp.MustCompile(`(?m)^\s*"` + regexp.QuoteMeta(launchdServiceLabel) + `"\s*=>\s*true\s*$`)
+	return !disabled.Match(answer.Output), nil
+}
+
 func (manager *launchdServiceManager) RestartPlan(executable string) (string, error) {
 	return manager.definitionFile().restartPlan(executable)
 }

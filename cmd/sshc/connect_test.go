@@ -51,6 +51,7 @@ func TestRunOpenPrintsTheURLFromTheEngine(t *testing.T) {
 	defer server.Close()
 	stateDir := t.TempDir()
 	writeTestHandoff(t, stateDir, server.URL)
+	holdTestEngineLock(t, stateDir)
 
 	var stdout, stderr bytes.Buffer
 	environment := commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr}

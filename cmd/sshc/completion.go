@@ -177,6 +177,9 @@ _sshc_completion() {
     telnet)
       _sshc_complete_words "{{TELNET_OPTIONS}}"
       ;;
+    open)
+      _sshc_complete_words "--no-browser --help"
+      ;;
     status)
       _sshc_complete_words "--json --help"
       ;;
@@ -325,6 +328,7 @@ _sshc() {
       ;;
     serial) _sshc_values '{{SERIAL_OPTIONS}}' ;;
     telnet) _sshc_values '{{TELNET_OPTIONS}}' ;;
+    open) _sshc_values '--no-browser --help' ;;
     status) _sshc_values '--json --help' ;;
     update) _sshc_values '-y --yes --help' ;;
     service)
@@ -493,6 +497,7 @@ complete -c sshc -f -n '__sshc_prefix help' -a '{{HELP_TOPICS}}'
 
 complete -c sshc -f -n '__sshc_command engine' -a '--port --replace --help'
 complete -c sshc -f -n '__sshc_command info; and __sshc_min_words 3' -a '--json'
+complete -c sshc -f -n '__sshc_command open' -a '--no-browser --help'
 complete -c sshc -f -n '__sshc_command status' -a '--json --help'
 complete -c sshc -f -n '__sshc_command update' -a '-y --yes --help'
 complete -c sshc -f -n '__sshc_action sftp settings' -a '{{SFTP_SETTINGS_OPTIONS}}'

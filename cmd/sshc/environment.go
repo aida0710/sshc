@@ -18,7 +18,7 @@ type userPaths struct {
 // handoff の置き場、engine への HTTP client、標準入出力、password を画面に出さずに
 // 読む端末、変更を進めてよいかの確認。
 type commandEnvironment struct {
-	// home は SSH 設定のワークスペース。connect と run だけが読む。
+	// home はSSH設定とサービス定義の保存先。
 	home     string
 	stateDir string
 	client   *http.Client

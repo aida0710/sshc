@@ -19,6 +19,7 @@ const (
 	invocationChoose
 	invocationList
 	invocationOpen
+	invocationStop
 	invocationStatus
 	invocationVault
 	invocationUpdate
@@ -47,6 +48,8 @@ type invocation struct {
 	Replace bool
 	// JSON は `sshc status --json` の機械可読出力を選択する。
 	JSON bool
+	// NoBrowser prints the one-time UI URL without launching a browser.
+	NoBrowser bool
 	// Yes は変更内容の確認を省略する。
 	Yes       bool
 	Transport *transportInvocation
@@ -104,7 +107,15 @@ func parseInvocation(argv []string) (invocation, error) {
 		if helpRequested(args) {
 			return helpInvocation(canonicalCLICommand(cliCommandOpen)), nil
 		}
+		if len(args) == 1 && args[0] == "--no-browser" {
+			return invocation{Kind: invocationOpen, NoBrowser: true}, nil
+		}
 		return noArguments(invocationOpen, word, args)
+	case cliCommandStop:
+		if helpRequested(args) {
+			return helpInvocation(canonicalCLICommand(cliCommandStop)), nil
+		}
+		return noArguments(invocationStop, word, args)
 	case cliCommandStatus:
 		if helpRequested(args) {
 			return helpInvocation(canonicalCLICommand(cliCommandStatus)), nil

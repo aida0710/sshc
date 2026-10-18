@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"sshc/internal/handoff"
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/storage"
 )
 
@@ -386,5 +387,21 @@ func TestResolveSystemctlFallsBackToThePathLookup(t *testing.T) {
 	}, os.Stat)
 	if err != nil || got != found {
 		t.Fatalf("resolve = %q, %v", got, err)
+	}
+}
+
+func TestLinuxLoginReminderRequiresPersistentEnablement(t *testing.T) {
+	for _, enabled := range []string{"enabled", "enabled-runtime", "disabled"} {
+		runner := &fakeServiceCommandRunner{results: []serviceCommandResult{{Output: []byte(enabled)}}}
+		manager := testLinuxServiceManager(t, runner)
+		contents, err := systemdUnit("/opt/sshc")
+		if err != nil {
+			t.Fatal(err)
+		}
+		acltest.WritePrivateFile(t, manager.unitPath(), []byte(contents))
+		starts, err := manager.StartsAtLogin(context.Background())
+		if err != nil || starts != (enabled == "enabled") {
+			t.Fatalf("%s: starts = %v, err = %v", enabled, starts, err)
+		}
 	}
 }
