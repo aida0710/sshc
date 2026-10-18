@@ -136,7 +136,7 @@ func TestServiceReadinessDoesNotSendTheSecretToAnUnprovenEngine(t *testing.T) {
 	home := t.TempDir()
 	writeTestHandoff(t, mustStateDir(t, home), server.URL)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*serviceReadyPollInterval)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*engineReadyPollInterval)
 	defer cancel()
 	err := waitForEngineReady(ctx, home, engineReadiness{
 		mainPID:       func(context.Context) int { return testHandoff("").PID },

@@ -158,6 +158,19 @@ func (manager *linuxServiceManager) Status(ctx context.Context) (serviceState, e
 	}
 }
 
+func (manager *linuxServiceManager) StartsAtLogin(ctx context.Context) (bool, error) {
+	snapshot, err := manager.definitionFile().readSnapshot()
+	if err != nil || snapshot.state != serviceInactive {
+		return false, err
+	}
+	answer, err := manager.runner.Run(ctx, "--user", "is-enabled", serviceUnitName)
+	if err != nil {
+		return false, err
+	}
+	// A runtime-only enablement disappears at logout; a unit file alone is not enabled.
+	return answer.ExitCode == 0 && strings.TrimSpace(string(answer.Output)) == "enabled", nil
+}
+
 func (manager *linuxServiceManager) RestartPlan(executable string) (string, error) {
 	return manager.definitionFile().restartPlan(executable)
 }

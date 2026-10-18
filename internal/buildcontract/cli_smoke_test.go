@@ -68,6 +68,8 @@ func TestBothSmokeScriptsAskTheSameQuestions(t *testing.T) {
 	}{
 		{"バージョンを名乗れること", `"sshc $expected $goos/$goarch"`, `"sshc $ExpectedVersion $goos/$goarch"`},
 		{"engine が居ないときに次の一手を言えること", `"sshc engine"`, `"*sshc engine*"`},
+		{"openがバックグラウンドで起動すること", `open --no-browser`, `open --no-browser`},
+		{"stopで正常終了すること", `run_sshc stop`, `& $binary stop`},
 		{"起動時に handoff を作成すること", `.ssh/sshc/cli`, `.ssh\sshc\cli`},
 		{"status が走っている engine を報告すること", `"running (pid"`, `"*running (pid*"`},
 		{"アクセス URLが画面を返すこと", `<div id="root">`, `<div id="root">`},

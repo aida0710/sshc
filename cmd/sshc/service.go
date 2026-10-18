@@ -34,6 +34,7 @@ type engineServiceManager interface {
 	InstallPlan(string) (string, error)
 	Install(context.Context, string) error
 	Status(context.Context) (serviceState, error)
+	StartsAtLogin(context.Context) (bool, error)
 	RestartPlan(string) (string, error)
 	RestartIfActive(context.Context, string) (bool, error)
 	// IsDefinitionOutdated は、sshc が書いた定義が以前の版の形のままかを返す。

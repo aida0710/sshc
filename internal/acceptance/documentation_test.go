@@ -123,8 +123,11 @@ func TestTheReadmeSaysWhoOwnsTheEngine(t *testing.T) {
 		}
 	}
 
-	if !strings.Contains(readme, "引数なしの`sshc`はsshcエンジンを起動しません") {
-		t.Error("README does not say that bare sshc starts no engine")
+	if !strings.Contains(readme, "引数なしの`sshc`と`sshc open`は、sshcエンジンが停止中ならバックグラウンドで起動し") {
+		t.Error("README does not say that bare sshc starts the engine in the background")
+	}
+	if !strings.Contains(readme, "`sshc stop`") {
+		t.Error("README does not say how to stop the background engine")
 	}
 }
 
@@ -151,19 +154,17 @@ func TestTheReadmeStatesTheVaultRules(t *testing.T) {
 	}
 }
 
-// engine はフォアグラウンドで動作するため、プロセス管理方法を明記する。
-func TestTheReadmeSaysHowToKeepTheEngineAlive(t *testing.T) {
+// 裏で起動した engine はログインし直すと残らないので、ログイン時の起動方法を明記する。
+func TestTheReadmeSaysHowToStartTheEngineAtLogin(t *testing.T) {
 	readme := repositoryFile(t, "README.md")
 
-	if !strings.Contains(readme, "自動起動はOSのプロセス管理機能で設定します") {
-		t.Error("README does not say autostart belongs to the operating system")
-	}
-	for _, how := range []string{"tmux", "systemd", "launchd"} {
-		if !strings.Contains(readme, how) {
-			t.Errorf("README does not say how to keep the engine alive: %q missing", how)
+	for phrase, why := range map[string]string{
+		"ターミナルを閉じても動き続けます":     "that the background engine outlives the terminal",
+		"sshc service install": "how to start the engine at login",
+		"sshc engine":          "how to keep the engine in the current terminal",
+	} {
+		if !strings.Contains(readme, phrase) {
+			t.Errorf("README never mentions %q (%s)", phrase, why)
 		}
-	}
-	if !strings.Contains(readme, "デーモン化しません") {
-		t.Error("README does not say the engine never detaches")
 	}
 }

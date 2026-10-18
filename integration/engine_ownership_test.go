@@ -10,26 +10,49 @@ import (
 	"sshc/internal/handoff"
 )
 
-// 裸の `sshc` は engine を起動しない。誰が engine の寿命を持つかはユーザーが
-// 決めることで、端末で打たれた一語がそれを横取りしてはならない。この性質は
-// プロセスの外からしか確かめられない。ロックはこのプロセスの中には無い。
-func TestBareInvocationTakesNoEngineLock(t *testing.T) {
+// 引数なしの `sshc` と `sshc open` は、engine が停止中なら裏で起動する。CLI は準備が
+// できたら終わり、engine は残る。止めるのは `sshc stop` である。この性質はプロセスの
+// 外からしか確かめられない。engine は CLI とは別のプロセスで動いている。
+func TestOpenStartsAnEngineThatOutlivesTheCommandUntilStopped(t *testing.T) {
 	home := isolatedHome(t)
 
-	process := start(t, home)
-	code := process.wait(t, 20*time.Second)
+	opened := start(t, home, "open", "--no-browser")
+	if code := opened.wait(t, 40*time.Second); code != 0 {
+		t.Fatalf("sshc open exited %d\n%s", code, opened.Stderr.String())
+	}
+	if !strings.Contains(opened.Stdout.String(), "#bootstrap=") {
+		t.Errorf("stdout = %q, want a one-time UI URL", opened.Stdout.String())
+	}
+	if !strings.Contains(opened.Stderr.String(), "started the sshc engine in the background") {
+		t.Errorf("stderr = %q, want it to say the engine was started", opened.Stderr.String())
+	}
+	if _, err := os.Stat(handoffPath(home)); err != nil {
+		t.Fatalf("the background engine published no handoff after sshc open exited: %v", err)
+	}
 
-	if code == 0 {
-		t.Errorf("exit = 0; nothing could have been activated in an empty home")
+	reopened := start(t, home, "open", "--no-browser")
+	if code := reopened.wait(t, 20*time.Second); code != 0 {
+		t.Fatalf("second sshc open exited %d\n%s", code, reopened.Stderr.String())
 	}
-	if _, err := os.Stat(lockPath(home)); !os.IsNotExist(err) {
-		t.Errorf("bare sshc created %s; it must not own an engine", lockPath(home))
+	if strings.Contains(reopened.Stderr.String(), "started the sshc engine") {
+		t.Errorf("second sshc open started another engine: %q", reopened.Stderr.String())
 	}
-	if _, err := os.Stat(handoffPath(home)); !os.IsNotExist(err) {
-		t.Errorf("bare sshc published a handoff; it started an engine")
+
+	stopped := start(t, home, "stop")
+	if code := stopped.wait(t, 40*time.Second); code != 0 {
+		t.Fatalf("sshc stop exited %d\n%s", code, stopped.Stderr.String())
 	}
-	if !strings.Contains(process.Stderr.String(), "not running") {
-		t.Errorf("stderr = %q, want it to say nothing is running", process.Stderr.String())
+	waitFor(t, 20*time.Second, "the stopped engine to remove its handoff", func() bool {
+		_, err := os.Stat(handoffPath(home))
+		return os.IsNotExist(err)
+	})
+
+	again := start(t, home, "stop")
+	if code := again.wait(t, 20*time.Second); code != 0 {
+		t.Fatalf("sshc stop without an engine exited %d\n%s", code, again.Stderr.String())
+	}
+	if !strings.Contains(again.Stdout.String(), "no sshc engine is running") {
+		t.Errorf("stdout = %q, want it to say no engine is running", again.Stdout.String())
 	}
 }
 

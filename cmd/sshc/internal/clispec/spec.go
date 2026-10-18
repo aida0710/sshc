@@ -106,7 +106,8 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
             --timeout D --settle D --max-bytes N --line-ending MODE
             --require-output --json
 `},
-	{Name: "open", Route: "open", Help: "usage:\n  sshc open\n\nPrint a one-time UI URL for the running engine.\n"},
+	{Name: "open", Route: "open", Help: "usage:\n  sshc open [--no-browser]\n\nStart the engine in the background if needed, print a one-time UI URL and open it in your browser.\n  --no-browser  print the URL without opening a browser\n"},
+	{Name: "stop", Route: "stop", Help: "usage:\n  sshc stop\n\nAsk the running engine to stop and wait for it to exit.\n"},
 	{Name: "status", Route: "status", Help: "usage:\n  sshc status [--json]\n\nPrint what the running engine is doing.\n"},
 	{Name: "update", Route: "update", Help: "usage:\n  sshc update [-y|--yes]\n\nUpdate an installation managed by Homebrew or install.sh. The command shows the plan and asks before changing the installation; -y or --yes skips the prompt.\n"},
 	{Name: "service", Route: "service", Help: "usage:\n  sshc service install [-y|--yes]\n  sshc service status\n  sshc service restart [-y|--yes]\n  sshc service disable [-y|--yes]\n\nManage the sshc engine as a systemd user service on Linux or a launchd user agent on macOS. Mutating actions show the plan and ask for confirmation; -y or --yes skips the prompt.\n", Actions: []Action{
@@ -163,7 +164,7 @@ var Values = map[string][]string{
 }
 
 const GlobalHelp = `usage:
-  sshc                 open the UI for the running engine
+  sshc                 start the engine in the background if needed and open the UI
   sshc engine          start the engine in the foreground
                        --port <n>  listen there instead of the preferred port 54447
                        --replace   stop the running engine first, without asking
@@ -221,7 +222,10 @@ const GlobalHelp = `usage:
                                    --timeout D --settle D --max-bytes N --line-ending MODE
                                    --require-output --json
                        encodings: utf-8, shift_jis, euc-jp, iso-2022-jp
-  sshc open            print a one-time UI URL
+  sshc open [--no-browser]
+                       start the engine in the background if needed, print a one-time UI URL and open it
+                       --no-browser  print the URL without opening a browser
+  sshc stop            stop the running engine and wait for it to exit
   sshc status          print what the running engine is doing
                        --json      print it as JSON, for the shell
   sshc update [-y]     update an installation managed by Homebrew or install.sh

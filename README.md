@@ -34,11 +34,14 @@ Android APKと各OS向けのバイナリは[GitHub Releases](https://github.com/
 ## 起動
 
 ```sh
-sshc engine
 sshc
 ```
 
-`sshc engine`はフォアグラウンドで動作し、デーモン化しません。引数なしの`sshc`はsshcエンジンを起動しません。自動起動はOSのプロセス管理機能で設定します。Linuxでは`sshc service install`でsystemdユーザーサービス、macOSではlaunchdユーザーエージェントへ登録できます。その他の環境ではtmuxなどを利用できます。
+引数なしの`sshc`と`sshc open`は、sshcエンジンが停止中ならバックグラウンドで起動し、準備ができてから一度限りのURLを表示してブラウザで開きます。ターミナルを閉じても動き続けます。画面のないマシンでは`sshc open --no-browser`でURLだけを表示できます。停止するには`sshc stop`を実行します。
+
+ログは`~/.ssh/sshc/logs/engine.log`（Windowsは`%USERPROFILE%\.ssh\sshc\logs\engine.log`）へ追記します。このログは暗号化同期の対象外です。
+
+このターミナルで動かす場合は`sshc engine`を使います。ログイン時に自動起動するには、Linux・macOSで`sshc service install`を実行してください。
 
 初回はWeb UIまたはCLIでVaultを作成し、ロックを解除します。
 
@@ -57,6 +60,8 @@ sshc ssh                     # 接続先を選択
 sshc ssh <接続先>            # 対話SSH
 sshc ssh <接続先> --non-interactive -- <コマンド>
 sshc info <接続先> --json    # sshcエンジンなしで実際に使われる設定を表示
+sshc open --no-browser       # 必要なら起動し、URLだけを表示
+sshc stop                    # sshcエンジンを停止
 sshc status --json           # sshcエンジンの状態
 sshc sync                    # 同期状態
 sshc sftp get <接続先> /remote/file ./local-file
