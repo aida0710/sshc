@@ -1241,6 +1241,8 @@ export const en = {
   "update.restarting": "Installed. Restarting sshc…",
   "update.succeeded": "Updated to {version}.",
   "update.reload": "Reload and check result",
+  "update.resultTitle": "sshc update",
+  "update.close": "Close",
   "update.unmanaged": "This installation is not managed by Homebrew or sshc’s install.sh. Update it using the method that installed it.",
   "update.developmentBuild": "Development builds cannot update from the browser. Build and install the source again.",
   "update.windowsUnsupported": "On Windows, run the PowerShell installer again to update sshc.",
