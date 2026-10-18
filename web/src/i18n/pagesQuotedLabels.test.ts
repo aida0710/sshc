@@ -9,6 +9,8 @@ import { ja } from "./messages";
 const quotesOutsideTheCatalogue = new Map<string, string>([
   ["…", "メニューを開くボタンの記号"],
   ["動きを減らす", "Androidの設定の名前"],
+  ["アプリ", "Windowsの設定の項目名"],
+  ["インストール済みアプリ", "Windowsの設定でアプリを削除する一覧の名前"],
   ["アプリをインストール", "ChromeとEdgeのメニューの名前"],
   ["名前 → リンク先", "SFTPの一覧の表示形式の例。SFTPEntryList.tsxが組み立てる"],
   ["sshcエンジンの記録", "VPNのログの見出し。internal/vpn/status.goが書く"],

@@ -74,7 +74,7 @@ export function UpdateControls({ status, api, onStart }: UpdateControlsProps) {
               <p>{preview === null ? t("update.preparing") : t(preview.manager === "homebrew" ? "update.confirmHomebrewVersion" : "update.confirmVersion", {
                 current: preview.current,
                 target: preview.target,
-                manager: preview.manager === "homebrew" ? "Homebrew" : "install.sh",
+                manager: preview.manager === "homebrew" ? "Homebrew" : preview.manager,
               })}</p>
               <p>{t("update.disconnectWarning")}</p>
               <p>{t("update.vaultWarning")}</p>

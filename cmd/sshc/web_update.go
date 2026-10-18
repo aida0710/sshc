@@ -44,14 +44,22 @@ func installWebUpdate(ctx context.Context, plan selfupdate.Plan, dependencies up
 		return "", selfupdate.ErrChanged
 	}
 	installedVersion := plan.Target
-	if inspected.found.manager == managerHomebrew {
+	switch inspected.found.manager {
+	case managerHomebrew:
 		if dependencies.upgradeHomebrew == nil {
 			return "", selfupdate.ErrUnavailable
 		}
 		installedVersion, err = dependencies.upgradeHomebrew(ctx, inspected.found)
-	} else {
+	case managerPowerShell:
+		// Keep the web engine alive until the durable result authorizes its helper.
+		if dependencies.installWeb == nil {
+			return "", selfupdate.ErrUnavailable
+		}
+		err = dependencies.installWeb(ctx, inspected.found, releasecheck.Release{Version: plan.Target})
+	default:
 		err = dependencies.install(ctx, inspected.found, releasecheck.Release{Version: plan.Target}, io.Discard, io.Discard)
 	}
+
 	if errors.Is(err, os.ErrPermission) {
 		return "", selfupdate.ErrPermission
 	}
@@ -69,7 +77,7 @@ type inspectedWebInstallation struct {
 }
 
 func inspectWebUpdateInstallation(ctx context.Context, dependencies updateDependencies) (inspectedWebInstallation, error) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "android" {
+	if runtime.GOOS == "android" {
 		return inspectedWebInstallation{}, selfupdate.Failure("update_" + runtime.GOOS + "_unsupported")
 	}
 	executable, err := dependencies.executable()
@@ -97,7 +105,7 @@ func inspectWebUpdateInstallation(ctx context.Context, dependencies updateDepend
 	if err != nil {
 		return inspectedWebInstallation{}, selfupdate.ErrUnavailable
 	}
-	manager := "install.sh"
+	manager := found.manager.installerName()
 	if found.manager == managerHomebrew {
 		manager = "homebrew"
 	}
@@ -107,7 +115,7 @@ func inspectWebUpdateInstallation(ctx context.Context, dependencies updateDepend
 }
 
 func requireWebUpdateManager(found installation) error {
-	if found.manager != managerShell && found.manager != managerHomebrew {
+	if found.manager != managerShell && found.manager != managerHomebrew && found.manager != managerPowerShell {
 		return selfupdate.Failure("update_unmanaged")
 	}
 	return nil

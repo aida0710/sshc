@@ -5,7 +5,6 @@ import { isUpdateActive } from "./useUpdateStatus";
 const updateMessages: Readonly<Record<string, MessageKey>> = {
   update_unmanaged: "update.unmanaged",
   update_development_build: "update.developmentBuild",
-  update_windows_unsupported: "update.windowsUnsupported",
   update_android_unsupported: "update.androidUnsupported",
   update_permission_denied: "update.permissionDenied",
   update_in_progress: "update.inProgress",

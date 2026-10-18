@@ -23,7 +23,7 @@ import (
 func TestRunUpdateRefusesAnUnmanagedExecutableBeforeNetworkAccess(t *testing.T) {
 	latestCalled := false
 	var stderr bytes.Buffer
-	code := runUpdatePlan(context.Background(), updateRun{current: "dev", yes: true, stdout: io.Discard, stderr: &stderr, dependencies: updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "dev", yes: true, stdout: io.Discard, stderr: &stderr, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/tmp/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerUnknown}, nil
@@ -41,7 +41,7 @@ func TestRunUpdateRefusesAnUnmanagedExecutableBeforeNetworkAccess(t *testing.T) 
 func TestRunUpdateSkipsTheInstallerWhenAlreadyCurrent(t *testing.T) {
 	installed := false
 	var stdout bytes.Buffer
-	code := runUpdatePlan(context.Background(), updateRun{current: "0.14.0", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "0.14.0", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerHomebrew}, nil
@@ -62,7 +62,7 @@ func TestRunUpdateSkipsTheInstallerWhenAlreadyCurrent(t *testing.T) {
 func TestRunUpdateDelegatesANewerStableRelease(t *testing.T) {
 	var got releasecheck.Release
 	var stdout bytes.Buffer
-	code := runUpdatePlan(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
@@ -83,7 +83,7 @@ func TestRunUpdateDelegatesANewerStableRelease(t *testing.T) {
 func TestRunUpdateRestartsAnActiveManagedService(t *testing.T) {
 	restarted := false
 	var stdout bytes.Buffer
-	code := runUpdatePlan(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
@@ -115,7 +115,7 @@ func TestRunUpdateRestartsAnActiveManagedService(t *testing.T) {
 
 func TestRunUpdateReportsAPartialSuccessWhenManagedServiceRestartFails(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := runUpdatePlan(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: &stderr, dependencies: updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: &stderr, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
@@ -142,7 +142,7 @@ func TestRunUpdateReportsAPartialSuccessWhenManagedServiceRestartFails(t *testin
 
 func TestRunUpdateTellsToReinstallAServiceDefinitionFromAnOlderVersion(t *testing.T) {
 	var stdout bytes.Buffer
-	code := runUpdatePlan(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect:     func(string) (installation, error) { return installation{manager: managerShell}, nil },
 		latest: func(context.Context) (releasecheck.Release, error) {
@@ -162,7 +162,7 @@ func TestRunUpdateTellsToReinstallAServiceDefinitionFromAnOlderVersion(t *testin
 
 func TestRunUpdateTellsHomebrewUsersToRefreshTheTapWhenTheOldVersionStays(t *testing.T) {
 	var stderr bytes.Buffer
-	code := runUpdatePlan(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: io.Discard, stderr: &stderr, dependencies: updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: io.Discard, stderr: &stderr, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerHomebrew}, nil
@@ -181,7 +181,7 @@ func TestRunUpdateTellsHomebrewUsersToRefreshTheTapWhenTheOldVersionStays(t *tes
 
 func TestRunUpdateRejectsAnInvalidRemoteTag(t *testing.T) {
 	var stderr bytes.Buffer
-	code := runUpdatePlan(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: io.Discard, stderr: &stderr, dependencies: updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: io.Discard, stderr: &stderr, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
@@ -199,7 +199,7 @@ func TestRunUpdateConfirmsBeforeInstallingANewerRelease(t *testing.T) {
 	installed := false
 	confirmed := 0
 	var stdout bytes.Buffer
-	code := runUpdatePlan(context.Background(), updateRun{current: "v0.13.6", yes: false, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: false, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell, executable: "/managed/sshc"}, nil
@@ -425,7 +425,7 @@ func TestTaggedInstallerClientDoesNotFollowARedirectOffRawGitHub(t *testing.T) {
 func TestUpdateDoesNotAskToUnlockAPasswordlessVaultAfterRestartingTheService(t *testing.T) {
 	status := &fixedEngineStatus{answer: passwordlessVault}
 	var stdout bytes.Buffer
-	code := runUpdatePlan(context.Background(), updateRun{current: "v0.13.6", yes: true, home: "/home/test", stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, home: "/home/test", stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect:     func(string) (installation, error) { return installation{manager: managerShell}, nil },
 		latest: func(context.Context) (releasecheck.Release, error) {
