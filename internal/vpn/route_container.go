@@ -223,6 +223,10 @@ func runArguments(run containerRun) []string {
 		// 設定と秘密が触れるのはこのtmpfsだけである。コンテナを止めれば消える。
 		"--tmpfs", agentRuntimeDirectory + ":rw,nosuid,nodev,size=8m,mode=700",
 		"--volume", run.routeDirectory + ":" + sharedMountPath,
+		// ログの仕組みを明示する。Docker Desktop の既定は圧縮付きの local で、
+		// max-file=1 と組み合わせるとコンテナの起動そのものを断る。json-file なら
+		// どの Docker でも「1MiB まで、ファイル1つ」の意味になる。
+		"--log-driver", "json-file",
 		"--log-opt", "max-size=1m", "--log-opt", "max-file=1",
 	}
 	// デバイスを要らない backend（ikev2）には何も渡さない。
