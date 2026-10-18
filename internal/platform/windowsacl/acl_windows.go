@@ -172,6 +172,18 @@ func OpenAuthenticatedFileForRead(path string) (*os.File, error) {
 // 要る権限である。
 const authenticatedFileReadAccess = uint32(windows.FILE_READ_DATA | windows.FILE_READ_ATTRIBUTES | windows.READ_CONTROL)
 
+// OpenAuthenticatedFileForAppend は、所有者と DACL を検証したうえで、追記だけの権限で開く。
+//
+// 共有の判定は、開いたときに得た権限で行われる。DELETE や上書きの権限を持たずに開くので、
+// このハンドルが開いているあいだも、ほかのプログラム（メモ帳、type、Get-Content）が
+// 削除の共有を許さない普通の読み方でファイルを読める。追記だけなので、同じファイルへの
+// 複数の書き手の行も混ざらずに末尾へ足される。
+func OpenAuthenticatedFileForAppend(path string) (*os.File, error) {
+	return openAuthenticatedFile(path, authenticatedFileAppendAccess)
+}
+
+const authenticatedFileAppendAccess = uint32(windows.FILE_APPEND_DATA | windows.FILE_READ_ATTRIBUTES | windows.READ_CONTROL | windows.SYNCHRONIZE)
+
 func openAuthenticatedFile(path string, access uint32) (*os.File, error) {
 	file, err := openFileNoReparse(path, access)
 	if err != nil {
