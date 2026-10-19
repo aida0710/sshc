@@ -32,6 +32,7 @@ const labels = {
   VPN: "section.vpn",
   History: "section.history",
   License: "section.license",
+  About: "section.about",
 } as const;
 
 function renderPalette(overrides: Partial<ComponentProps<typeof CommandPalette>> = {}) {

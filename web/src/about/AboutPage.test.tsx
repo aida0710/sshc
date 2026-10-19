@@ -1,0 +1,100 @@
+import { act, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import type { About } from "../api/about";
+import type { UpdateApi, UpdateStatus } from "../api/update";
+import { AboutPage } from "./AboutPage";
+import { UpdateBadge } from "../shell/UpdateBadge";
+
+const about: About = {
+  version: "v1.0.0", revision: "abcdef0123456789abcdef0123456789abcdef0123",
+  commitTime: "2026-10-17T01:00:00Z", modified: false,
+  goVersion: "go1.26.9", os: "linux", arch: "amd64", manager: "homebrew", executable: "/opt/homebrew/bin/sshc",
+};
+const status: UpdateStatus = {
+  current: "v1.0.0", latest: "v1.2.0", available: true, canUpdate: true, manager: "homebrew",
+  checkedAt: "2026-10-19T01:00:00Z", publishedAt: "2026-10-18T01:00:00Z",
+  releases: [
+    { version: "v1.2.0", pageUrl: "https://github.com/aida0710/sshc/releases/tag/v1.2.0", body: "# Notes\n<script>alert('test')</script>\n  <img src=x onerror=alert(1)>", publishedAt: "2026-10-18T01:00:00Z" },
+    { version: "v1.1.0", pageUrl: "https://github.com/aida0710/sshc/releases/tag/v1.1.0", body: "Intermediate release" },
+    { version: "v1.0.0", pageUrl: "https://github.com/aida0710/sshc/releases/tag/v1.0.0", body: "Current release notes" },
+  ],
+};
+function updates(initial: UpdateStatus = status): UpdateApi {
+  return { updateStatus: vi.fn().mockResolvedValue(initial), checkUpdate: vi.fn().mockResolvedValue(initial), previewUpdate: vi.fn(), startUpdate: vi.fn() };
+}
+const api = { about: vi.fn().mockResolvedValue(about) };
+
+describe("AboutPage", () => {
+  it("shows the running build, update information and release bodies as plain text", async () => {
+    const { container } = render(<AboutPage api={api} updates={updates()} />);
+    expect(await screen.findByText("/opt/homebrew/bin/sshc")).toBeVisible();
+    expect(screen.getByRole("link", { name: "abcdef0" })).toHaveAttribute("href", `https://github.com/aida0710/sshc/commit/${about.revision}`);
+    expect(screen.getByText("Homebrew")).toBeVisible();
+    expect(screen.getByText("linux / amd64")).toBeVisible();
+    expect(screen.getByText("go1.26.9")).toBeVisible();
+    expect(screen.getByText("sshc v1.2.0 is available.")).toBeVisible();
+    expect(screen.getByText("Last checked")).toBeVisible();
+    const notes = container.querySelectorAll("details");
+    expect(notes).toHaveLength(3);
+    expect(notes[0]).toHaveAttribute("open");
+    expect(notes[1]).not.toHaveAttribute("open");
+    expect(notes[2]).not.toHaveAttribute("open");
+    expect(within(notes[2] as HTMLElement).getByText("Current version")).toBeVisible();
+    const body = notes[0]?.querySelector(".whitespace-pre-wrap");
+    expect(body?.textContent).toBe(status.releases?.[0]?.body);
+    expect(body?.querySelector("script, img, h1")).toBeNull();
+    expect(within(notes[0] as HTMLElement).getByRole("link", { name: "View on GitHub" })).toHaveAttribute("href", status.releases?.[0]?.pageUrl);
+  });
+
+  it("refreshes on demand and shares the result with the sidebar", async () => {
+    const update = updates({ current: "v1.0.0", available: false });
+    let finish: (status: UpdateStatus) => void = () => {};
+    vi.mocked(update.checkUpdate).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    render(<><UpdateBadge api={update} /><AboutPage api={api} updates={update} /></>);
+    const check = await screen.findByRole("button", { name: "Check for updates" });
+    await userEvent.click(check);
+    expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
+    await act(async () => finish({ ...status, pageUrl: status.releases?.[0]?.pageUrl ?? "" }));
+    expect(update.checkUpdate).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("link", { name: /v1.2.0 is available/ })).toBeVisible();
+    expect(check).toBeEnabled();
+  });
+
+  it("shows missing build information and the existing installation guidance", async () => {
+    const missing: About = { ...about, revision: "", executable: "", manager: "unknown" };
+    delete missing.commitTime;
+    delete missing.modified;
+    render(<AboutPage api={{ about: vi.fn().mockResolvedValue(missing) }} updates={updates({ current: "v1.0.0", latest: "v1.0.0", available: false, canUpdate: false, reason: "update_unmanaged" })} />);
+    expect(await screen.findByText("Unmanaged")).toBeVisible();
+    expect(screen.getAllByText("Unknown").length).toBeGreaterThan(2);
+    expect(screen.getByText("No newer version is available.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Update it using the method that installed it/i)).toBeVisible();
+  });
+
+  it("keeps release notes visible after a failed check and permits another check", async () => {
+    const update = updates();
+    vi.mocked(update.checkUpdate).mockResolvedValue({ ...status, checkError: "upstream unavailable" });
+    render(<AboutPage api={api} updates={update} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
+    expect(await screen.findByText("upstream unavailable")).toBeVisible();
+    expect(screen.getByText("Intermediate release")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check for updates" })).toBeEnabled();
+  });
+
+  it("uses the existing update confirmation and sends progress to the sidebar dialog", async () => {
+    const update = updates();
+    vi.mocked(update.previewUpdate).mockResolvedValue({ current: "v1.0.0", target: "v1.2.0", manager: "homebrew", actionToken: "confirmation", actionExpiresAt: "2026-10-19T02:00:00Z" });
+    vi.mocked(update.startUpdate).mockResolvedValue({ id: "about-job", target: "v1.2.0", state: "installing", problem: "" });
+    render(<><UpdateBadge api={update} /><AboutPage api={api} updates={update} /></>);
+    const page = screen.getByRole("region", { name: "About sshc" });
+    await userEvent.click(await within(page).findByRole("button", { name: "Update sshc" }));
+    const dialog = await screen.findByRole("dialog", { name: "Update sshc?" });
+    expect(update.startUpdate).not.toHaveBeenCalled();
+    vi.mocked(update.updateStatus).mockResolvedValue({ ...status, canUpdate: false, job: { id: "about-job", target: "v1.2.0", state: "installing", problem: "" } });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Update sshc" }));
+    await waitFor(() => expect(update.startUpdate).toHaveBeenCalledWith("v1.2.0", "confirmation"));
+    expect(await screen.findByRole("dialog", { name: "sshc update" })).toBeVisible();
+  });
+});

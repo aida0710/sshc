@@ -18,6 +18,7 @@ import (
 	"sshc/internal/app"
 	"sshc/internal/handoff"
 	"sshc/internal/releasecheck"
+	"sshc/internal/releasewatch"
 	"sshc/internal/ui"
 )
 
@@ -147,10 +148,12 @@ func runEngineApp(
 	}()
 
 	parts := newPlatformParts()
-	updates := &releasecheck.Checker{
+	checker := &releasecheck.Checker{
 		API:  latestReleaseAPI,
 		HTTP: &http.Client{Timeout: releaseCheckTimeout},
 	}
+	updates := releasewatch.New(runCtx, func(ctx context.Context) (releasecheck.Catalog, error) { return checker.Catalog(ctx, version) })
+	defer updates.Stop()
 	announce := announceReadiness(stdout)
 	spoolRoot, err := sftpDownloadSpoolRoot()
 	if err != nil {
@@ -179,11 +182,12 @@ func runEngineApp(
 					}
 				}
 			}
-			reportAvailableUpdate(runCtx, updates, version, stdout, logger)
+			reportAvailableUpdate(runCtx, updateReportOptions{Watcher: updates, Current: version, Output: stdout, Logger: logger})
 			return nil
 		},
 		// 起動通知とWeb UIの手動確認は同じrelease判定を使用する。
 		Updates:         updates,
+		About:           runningBuildInfo(version),
 		SelfUpdate:      newWebUpdater(runCtx, userPaths{home: home, stateDir: stateDirectory}, version),
 		Listen:          net.Listen,
 		UI:              assets,
@@ -235,23 +239,31 @@ const (
 	startupUpdateCheckTimeout = releaseCheckTimeout
 )
 
+type updateReportOptions struct {
+	Watcher *releasewatch.Watcher
+	Current string
+	Output  io.Writer
+	Logger  *slog.Logger
+}
+
 // reportAvailableUpdate はengineが受付を始めた直後に一度だけ確認し、新しいバージョンがある
 // 場合だけ通知する。ネットワーク障害や出力失敗はengineの成否へ影響させない。
-func reportAvailableUpdate(ctx context.Context, checker *releasecheck.Checker, current string, out io.Writer, logger *slog.Logger) {
+func reportAvailableUpdate(ctx context.Context, options updateReportOptions) {
 	checkCtx, cancel := context.WithTimeout(ctx, startupUpdateCheckTimeout)
 	defer cancel()
-	latest, err := checker.Latest(checkCtx)
-	if err != nil {
-		if logger != nil {
-			logger.Debug("check for an sshc update", "error", err)
+	snapshot, err := options.Watcher.Load(checkCtx)
+	if err != nil || snapshot.Failure != "" {
+		if options.Logger != nil {
+			options.Logger.Debug("check for an sshc update", "error", err, "failure", snapshot.Failure)
 		}
 		return
 	}
-	if !releasecheck.Newer(current, latest.Version) || checkCtx.Err() != nil {
+	latest := snapshot.Latest
+	if !releasecheck.Newer(options.Current, latest.Version) || checkCtx.Err() != nil {
 		return
 	}
-	if _, err := fmt.Fprint(out, availableUpdateNotice(latest.Version)); err != nil && logger != nil {
-		logger.Debug("announce an sshc update", "error", err)
+	if _, err := fmt.Fprint(options.Output, availableUpdateNotice(latest.Version)); err != nil && options.Logger != nil {
+		options.Logger.Debug("announce an sshc update", "error", err)
 	}
 }
 

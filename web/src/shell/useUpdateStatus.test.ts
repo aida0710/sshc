@@ -9,7 +9,7 @@ it("retains update progress across a restart outage and stops polling after conf
   vi.useFakeTimers();
   const idle: UpdateStatus = { current: "v1.0.0", available: true, canUpdate: true };
   const api: UpdateApi = {
-    updateStatus: vi.fn().mockResolvedValue(idle),
+    checkUpdate: vi.fn(), updateStatus: vi.fn().mockResolvedValue(idle),
     previewUpdate: vi.fn(),
     startUpdate: vi.fn(),
   };

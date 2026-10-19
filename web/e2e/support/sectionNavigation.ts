@@ -32,6 +32,7 @@ const navigationBySection: Record<Section, SectionNavigation> = {
   VPN: { navigation: "VPN", heading: "VPN" },
   History: { navigation: "History", heading: "History" },
   License: { navigation: "License", heading: "License" },
+  About: { navigation: "About sshc", heading: "About sshc" },
 };
 
 export const everySection: readonly SectionNavigation[] = sections.map((section) => navigationBySection[section]);

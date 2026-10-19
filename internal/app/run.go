@@ -17,12 +17,13 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/browserauth"
+	"sshc/internal/buildinfo"
 	"sshc/internal/configresolver"
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/keys"
 	"sshc/internal/platform"
-	"sshc/internal/releasecheck"
+	"sshc/internal/releasewatch"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
 	"sshc/internal/selfupdate"
@@ -66,8 +67,9 @@ type Dependencies struct {
 	ScanHostKeys func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error)
 	Probe        func(ctx context.Context, alias string) (sshclient.Probe, error)
 	RemoteRun    func(ctx context.Context, target sshclient.Target, command sshclient.Command) (sshclient.Output, error)
-	Updates      *releasecheck.Checker
+	Updates      *releasewatch.Watcher
 	SelfUpdate   *selfupdate.Service
+	About        *buildinfo.Info
 	// Lookup は親の環境を読み、利用者のログインシェルを見つけるために使う。
 	Lookup func(string) (string, bool)
 	// TerminalStarter は PTY を確保する。nil の場合は既定実装を使用する。
@@ -139,20 +141,22 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 
 // runtime は、build が組み立てたもののうち、寿命の管理に要るものである。
 type runtime struct {
-	server      *httpserver.Server
-	bootstrap   string
-	document    handoff.Handoff
-	stateDir    string
-	terminals   *terminal.Registry
-	vault       *secret.Service
-	autoSync    *remotesync.Auto
-	autoCancel  context.CancelFunc
-	autoDone    chan struct{}
-	browserAuth *browserauth.Store
-	sftpPool    *sshcSFTP.RemotePool
-	vpn         *vpn.Manager
-	vpnCancel   context.CancelFunc
-	vpnDone     chan struct{}
+	server        *httpserver.Server
+	bootstrap     string
+	document      handoff.Handoff
+	stateDir      string
+	terminals     *terminal.Registry
+	vault         *secret.Service
+	autoSync      *remotesync.Auto
+	autoCancel    context.CancelFunc
+	autoDone      chan struct{}
+	browserAuth   *browserauth.Store
+	sftpPool      *sshcSFTP.RemotePool
+	vpn           *vpn.Manager
+	vpnCancel     context.CancelFunc
+	vpnDone       chan struct{}
+	releaseCancel context.CancelFunc
+	releaseDone   chan struct{}
 }
 
 func build(dependencies Dependencies, version string) (runtime, error) {
@@ -220,6 +224,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		Listener:   listener,
 		CLISecret:  cliSecret,
 		Updates:    dependencies.Updates,
+		About:      dependencies.About,
 		SelfUpdate: dependencies.SelfUpdate,
 		ConnectWarnings: func(alias string) []string {
 			if err := validate.Alias(alias); err != nil {
@@ -352,6 +357,12 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	go func() { serveErrors <- built.server.Serve() }()
 
 	built.startAutoSync(asked)
+	if dependencies.Updates != nil {
+		watching, cancel := context.WithCancel(asked)
+		built.releaseCancel = cancel
+		built.releaseDone = make(chan struct{})
+		go func() { defer close(built.releaseDone); dependencies.Updates.Run(watching) }()
+	}
 
 	// すべての経路で HTTP サーバーの停止完了を待つ。
 	stop := func(reason error) error {
@@ -414,6 +425,9 @@ func (r runtime) unwind(dependencies Dependencies) error {
 	if r.autoCancel != nil {
 		r.autoCancel()
 	}
+	if r.releaseCancel != nil {
+		r.releaseCancel()
+	}
 
 	r.server.BeginStopping()
 
@@ -426,6 +440,9 @@ func (r runtime) unwind(dependencies Dependencies) error {
 	r.server.BeginShutdown()
 
 	barrierCount := 2
+	if r.releaseDone != nil {
+		barrierCount++
+	}
 	if r.autoDone != nil {
 		barrierCount++
 	}
@@ -435,6 +452,13 @@ func (r runtime) unwind(dependencies Dependencies) error {
 	barriers := make(chan error, barrierCount)
 	go func() { barriers <- r.terminals.Wait() }()
 	go func() { barriers <- r.server.Wait() }()
+	if r.releaseDone != nil {
+		go func() {
+			dependencies.Updates.Stop()
+			<-r.releaseDone
+			barriers <- nil
+		}()
+	}
 	if dependencies.SelfUpdate != nil {
 		go func() { barriers <- dependencies.SelfUpdate.Stop() }()
 	}

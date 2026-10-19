@@ -9,6 +9,7 @@ export type UpdatePreview = components["schemas"]["UpdatePreview"];
 
 export type UpdateApi = {
   updateStatus(): Promise<UpdateStatus>;
+  checkUpdate(): Promise<UpdateStatus>;
   previewUpdate(target: string): Promise<UpdatePreview>;
   startUpdate(target: string, actionToken: string): Promise<UpdateJob>;
 };
@@ -18,6 +19,11 @@ export const updateApi: UpdateApi = {
     const status = await apiClient.read("/api/v1/update", {
       locallyHandledCodes: ["network_request_failed", "update_state_failed"],
     });
+    return validateOpenAPISchema<UpdateStatus>("UpdateStatus", status);
+  },
+  async checkUpdate() {
+    // The endpoint takes no request body; a JSON body would fail the OpenAPI request check.
+    const status = await apiClient.mutate<UpdateStatus>("/api/v1/update/check", { method: "POST" }, { locallyHandledCodes: ["update_state_failed", "network_request_failed"] });
     return validateOpenAPISchema<UpdateStatus>("UpdateStatus", status);
   },
   previewUpdate(target) {

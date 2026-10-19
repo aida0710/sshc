@@ -90,7 +90,9 @@ test("folds update guidance for an unmanaged installation under the navigation v
   await openApplication(page, installation);
 
   const navigation = page.getByRole("navigation", { name: "Primary" });
-  const version = navigation.getByRole("button", { name: "Version v1.0.0" });
+  // The version opens About; the chevron beside it folds the guidance.
+  await expect(navigation.getByRole("link", { name: "Version v1.0.0" })).toHaveAttribute("href", /\/about$/);
+  const version = navigation.getByRole("button", { name: "Toggle update notice" });
   const guidance = navigation.getByText(/not managed by Homebrew/);
   await expect(version).toHaveAttribute("aria-expanded", "false");
   await expect(guidance).toBeHidden();

@@ -105,6 +105,23 @@ export function MenuPanel({
             </ul>
           </section>
         ))}
+        <section aria-labelledby="menu-others" className="grid gap-x-8 lg:col-span-2 lg:grid-cols-2 xl:col-span-3 xl:grid-cols-3">
+          <h3 id="menu-others" className="col-span-full px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">{t("menu.others")}</h3>
+          <ul className="mt-2 overflow-hidden rounded border border-line bg-card">
+            {(["License", "About"] as const).map((section) => {
+              const label = section === "License" ? "section.license" : "section.about";
+              return <li key={section} className="border-t border-line first:border-t-0">
+                <a href={sectionPath(section)} onClick={(event) => follow(event, sectionPath(section))}
+                  aria-label={t("menu.open", { section: t(label) })}
+                  className="flex min-h-14 items-center gap-3 px-3 py-2.5 hover:bg-hover">
+                  <span className="grid size-8 shrink-0 place-items-center rounded bg-control text-ink-muted"><Icon name={section === "License" ? "license" : "info"} className="size-4" /></span>
+                  <span className="flex-1 text-sm font-medium text-ink">{t(label)}</span>
+                  <Icon name="chevronRight" className="size-4 text-ink-faint" />
+                </a>
+              </li>;
+            })}
+          </ul>
+        </section>
         <section aria-labelledby="menu-display-settings">
           <h3
             id="menu-display-settings"
@@ -144,18 +161,6 @@ export function MenuPanel({
               </select>
             </label>
           </div>
-        </section>
-        <section aria-labelledby="menu-others" className="grid gap-x-8 lg:col-span-2 lg:grid-cols-2 xl:col-span-3 xl:grid-cols-3">
-          <h3 id="menu-others" className="col-span-full px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">{t("menu.others")}</h3>
-          <ul className="mt-2 overflow-hidden rounded border border-line bg-card">
-            <li><a href={sectionPath("License")} onClick={(event) => follow(event, sectionPath("License"))}
-              aria-label={t("menu.open", { section: t("section.license") })}
-              className="flex min-h-14 items-center gap-3 px-3 py-2.5 hover:bg-hover">
-              <span className="grid size-8 shrink-0 place-items-center rounded bg-control text-ink-muted"><Icon name="license" className="size-4" /></span>
-              <span className="flex-1 text-sm font-medium text-ink">{t("section.license")}</span>
-              <Icon name="chevronRight" className="size-4 text-ink-faint" />
-            </a></li>
-          </ul>
         </section>
         <section aria-labelledby="menu-sign-out" className="lg:col-span-2 xl:col-span-3">
           <h3 id="menu-sign-out" className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">{t("menu.signOutHeading")}</h3>
