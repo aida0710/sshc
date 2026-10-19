@@ -15,6 +15,8 @@ import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 import { ConnectionActions } from "./ConnectionActions";
 import { hostMatchesQuery, normalizeHostQuery } from "../connections/hostSearch";
+import { connectionAddress } from "../connections/connectionAddress";
+import { revealOnHover } from "../ui/ActionMenu";
 import { formatDateTime } from "../ui/format";
 
 type QuickConnectBrowserProps = {
@@ -35,14 +37,8 @@ function rememberView(view: QuickConnectView) {
   writeStoredValue(localStorageKeys.quickConnectView, view);
 }
 
-function destination(hostName: string, user: string, port: string): string {
-  const host = hostName.includes(":") && !hostName.startsWith("[") ? `[${hostName}]` : hostName;
-  if (host === "") return "";
-  return `${user === "" ? "" : `${user}@`}${host}${port === "" ? "" : `:${port}`}`;
-}
-
 function connectionDestination(server: BrowserServer): string {
-  return destination(server.host.hostName ?? server.identity.alias, server.host.user ?? "", server.host.port ?? "22");
+  return connectionAddress({ hostName: server.host.hostName ?? server.identity.alias, user: server.host.user ?? "", port: server.host.port ?? "" });
 }
 
 function includesQuery(server: BrowserServer, query: string): boolean {
@@ -125,7 +121,7 @@ export function QuickConnectBrowser({
       <li
         key={identityKey(server.identity)}
         aria-busy={opening}
-        className={`relative min-w-0 rounded-lg border transition-colors ${
+        className={`group/row relative min-w-0 rounded-lg border transition-colors ${
           selected || opening ? "border-accent bg-select-fill" : "border-line bg-card hover:border-control-line hover:bg-hover"
         }`}
       >
@@ -178,7 +174,7 @@ export function QuickConnectBrowser({
             </span>
           </span>
         </button>
-        <div className="pointer-events-none absolute right-2 top-2">
+        <div className={`pointer-events-none absolute right-2 top-2 ${revealOnHover}`}>
           <ConnectionActions
             alias={alias}
             path={server.identity.path}
@@ -202,7 +198,7 @@ export function QuickConnectBrowser({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
-            placeholder={t("home.searchPlaceholder")}
+            placeholder={t("hostSearch.placeholder")}
             className={`${control} min-h-10 w-full pl-9 md:min-h-0`}
           />
         </label>
@@ -273,7 +269,7 @@ export function QuickConnectBrowser({
         </section>
       )}
 
-      <h3 className="text-xs font-semibold text-ink">{t("home.connectionCount", { count: servers.length })}</h3>
+      <h3 className="text-xs font-semibold text-ink">{t("tree.resultCount", { visible: servers.length, total: index.servers.length })}</h3>
 
       {servers.length === 0 ? (
         <p className="border-y border-line bg-surface-subtle p-4 text-sm text-ink-muted">

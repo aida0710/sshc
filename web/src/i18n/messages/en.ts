@@ -1382,13 +1382,11 @@ export const en = {
   "connection.lastConnected": "Last connected {at}",
   "home.connectionList": "Available connections",
   "home.search": "Search connections",
-  "home.searchPlaceholder": "Search hosts, groups or tags",
   "home.viewMode": "Connection layout",
   "home.panelView": "Panels",
   "home.listView": "List",
   "home.groupFilter": "Filter connections by group",
   "home.allGroups": "All",
-  "home.connectionCount": "Connections {count}",
   "home.groupBreadcrumb": "Selected group",
   "home.openGroup": "Open {name}, {count} connections",
   "home.connectGesture":
@@ -2440,8 +2438,7 @@ export const en = {
   "tree.byGroups": "Groups",
   "tree.groupSection": "{name} group, {count} connections",
   "tree.filter": "Filter connections",
-  "tree.filterPlaceholderExpanded":
-    "Search name, destination, user, group or tag",
+  "hostSearch.placeholder": "Filter by name or address",
   "tree.allConnections": "All",
   "tree.resultsLabel": "Connection results",
   "tree.resultCount": "{visible} of {total}",
