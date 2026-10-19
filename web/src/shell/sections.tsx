@@ -6,6 +6,8 @@ import type { IconName } from "../ui/icons";
 import type { MessageKey } from "../i18n/messages";
 import type { SFTPTarget } from "../sftp/SFTPPanel";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { SectionBar } from "../ui/SectionBar";
+import { useTranslate } from "../i18n/context";
 import { MenuPanel, type MenuGroup } from "./MenuPanel";
 import type { Declared, Handoff, Navigation, Shell } from "./sectionProps";
 
@@ -205,6 +207,7 @@ export type SectionViewProps = {
 };
 
 export function SectionView(props: SectionViewProps) {
+  const t = useTranslate();
   const compactFiles = useMediaQuery(mobileViewportQuery);
   if (props.section === "Terminal") {
     return null;
@@ -225,11 +228,29 @@ export function SectionView(props: SectionViewProps) {
       />
     );
   }
+  // Home・Connections・SFTP は、上に共通の細い帯（SectionBar）を置き、その下を画面いっぱいに使う。
+  if (props.section === "Home") {
+    return (
+      <OverviewPanel
+        onNavigate={props.navigation.onNavigate}
+        onNavigateLocation={props.navigation.onNavigateLocation}
+        onSessionOpened={props.shell.onShowSession}
+        onOpenWorkspace={props.shell.onOpenWorkspace}
+      />
+    );
+  }
+  if (props.section === "Files") {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <SectionBar title={t(sectionLabels.Files)} />
+        <div className={`min-h-0 flex-1 overflow-hidden ${compactFiles ? "p-1" : "p-2 md:px-5 md:pb-5 md:pt-3"}`}>
+          <PaddedSection {...props} />
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className={props.section === "Files"
-      ? `h-full overflow-hidden ${compactFiles ? "p-1" : "p-2 md:px-5 md:pb-5 md:pt-3"}`
-      : "h-full overflow-y-auto p-4 md:p-5"}
-    >
+    <div className="h-full overflow-y-auto p-4 md:p-5">
       {<PaddedSection {...props} />}
     </div>
   );
@@ -244,28 +265,16 @@ function PaddedSection({
   sftpTarget,
   onSftpTargetHandled,
 }: SectionViewProps) {
-  const { fileTarget, onNavigate, onNavigateLocation } = navigation;
+  const { fileTarget, onNavigateLocation } = navigation;
   const {
     onLock,
     onVaultChanged,
     passwordless,
     onInspector,
     terminalSessions,
-    onShowSession,
     onOpenTerminal,
-    onOpenWorkspace,
     onTerminalSettingsChange,
   } = shell;
-  if (section === "Home") {
-    return (
-      <OverviewPanel
-        onNavigate={onNavigate}
-        onNavigateLocation={onNavigateLocation}
-        onSessionOpened={onShowSession}
-        onOpenWorkspace={onOpenWorkspace}
-      />
-    );
-  }
   if (section === "About") return <AboutPage />;
   if (section === "License") return <LicensePage />;
   if (section === "Menu") {

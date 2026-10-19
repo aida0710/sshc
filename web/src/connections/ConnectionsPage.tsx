@@ -25,6 +25,7 @@ import { OrphanPanel } from "./OrphanPanel";
 import { useTranslate } from "../i18n/context";
 import type { InspectorContent } from "../ui/Inspector";
 import { Button, Notice } from "../ui/surface";
+import { SectionBar } from "../ui/SectionBar";
 import { useUnsavedDraftGuard } from "../routing/useUnsavedDraftGuard";
 import type {
   BrowserLocation,
@@ -359,20 +360,15 @@ export function ConnectionsPage({
   return (
     <>
     <div className="flex h-full min-h-0 flex-col bg-canvas">
-      <header
-        data-connections-header
-        className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-card px-3 py-3 md:px-4"
-      >
-        <div className="flex min-w-0 items-baseline gap-2">
-          <h1 className="truncate text-sm font-semibold tracking-tight text-ink">{t("conn.heading")}</h1>
-          <p className="shrink-0 text-xs text-ink-muted">
-            {t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
-          </p>
-        </div>
-        <Button kind="primary" className="shrink-0" onClick={beginCreation}>
-          {t("conn.new")}
-        </Button>
-      </header>
+      <SectionBar
+        title={t("conn.heading")}
+        meta={t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
+        actions={(
+          <Button kind="primary" className="shrink-0" onClick={beginCreation}>
+            {t("conn.new")}
+          </Button>
+        )}
+      />
       <div
         style={{ "--list-width": `${listWidth}px` } as CSSProperties}
         className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] ${compact ? "" : "md:grid-cols-[minmax(16rem,var(--list-width))_minmax(0,1fr)]"}`}

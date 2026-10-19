@@ -5,6 +5,7 @@ import type { NavigationBlocker } from "../routing/useSectionRoute";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
+import { EmptyState } from "../ui/EmptyState";
 import { PanelState } from "../ui/PanelState";
 import { Button, Notice } from "../ui/surface";
 import { nextSort } from "../ui/tableSort";
@@ -662,7 +663,7 @@ export function SFTPPanel({
           {connected && pendingPath !== null ? <div role="status" className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-card/80 p-4 backdrop-blur-[1px]"><span className="flex min-w-0 items-center gap-3 rounded-lg bg-toolbar px-4 py-3 text-sm"><span aria-hidden="true" className="size-4 shrink-0 animate-spin rounded-full border-2 border-accent border-t-transparent motion-reduce:animate-none" /><span className="min-w-0"><span className="block">{loadingLabel}</span><span className="block truncate font-mono text-xs text-ink-muted">{pendingPath || t("sftp.homeDirectory")}</span></span></span></div> : null}
           <div data-testid="sftp-file-list" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" inert={connected && busy} onKeyDown={list.handleListKeys}>
             {alias === "" || can === undefined ? (
-              <PanelState tone="empty" title={t("sftp.chooseHost")} detail={t("sftp.chooseHostHint")} />
+              <div className="flex h-full p-4"><EmptyState icon="files" title={t("sftp.chooseHost")} detail={t("sftp.chooseHostHint")} /></div>
             ) : !connected && busy ? (
               <PanelState tone="loading" title={can.connect ? t("sftp.connecting", { alias }) : loadingLabel} />
             ) : !connected && problem !== "" ? (
