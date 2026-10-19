@@ -449,6 +449,81 @@ func TestSaveGroupsWritesConfigurationAndMetadataInOneTransaction(t *testing.T) 
 	}
 }
 
+// グループの共通設定は、groups.sshc.conf にメンバーの alias を並べた Host 行として書かれる。
+// その行は接続先ではないので、一覧にもう 1 件として出さず、alias の重複としても知らせない。
+// メンバーは、その行の値を今までどおり受け取る。
+func TestSavingGroupSettingsKeepsEachMemberAsOneConnection(t *testing.T) {
+	service, workspace := newTestService(t)
+	if err := os.Remove(filepath.Join(workspace.Root(), "conf.d", "10-home.conf")); err != nil {
+		t.Fatal(err)
+	}
+	database := writeGroupFile(t, workspace, "production", "db.conf", "Host db-primary\n\tHostName 203.0.113.20\n")
+	writeGroupFile(t, workspace, "production", "web.conf", "Host web-01\n\tHostName 203.0.113.30\n")
+	settings := []Setting{
+		{Keyword: "User", Values: []string{"ops"}},
+		{Keyword: "ProxyJump", Values: []string{"bastion"}},
+	}
+	if _, err := service.Save(EditRequest{
+		Kind: EditGroups, Groups: []GroupMetadata{{Name: "production", Settings: settings}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// 2 回目の保存は、groups.sshc.conf が既にある状態でメンバーを数え直す。
+	settings = append(settings, Setting{Keyword: "Port", Values: []string{"2222"}})
+	if _, err := service.Save(EditRequest{
+		Kind:       EditGroups,
+		GroupsBase: loadMetadata(t, service).Groups,
+		Groups:     []GroupMetadata{{Name: "production", Settings: settings}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if groups := readFile(t, workspace, DefaultGroupsFile); !strings.Contains(groups, "Host db-primary web-01\n") {
+		t.Fatalf("groups file = %q, want the members' Host line", groups)
+	}
+
+	overview, err := service.Overview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[string]int{}
+	for _, host := range overview.Hosts {
+		listed[host.Identity.Alias]++
+		if host.File.Path == DefaultGroupsFile {
+			t.Errorf("the group settings file is listed as a connection: %#v", host)
+		}
+		if host.Identity.Alias == "db-primary" && host.User != "ops" {
+			t.Errorf("db-primary user = %q, want ops from the group settings", host.User)
+		}
+	}
+	if listed["db-primary"] != 1 || listed["web-01"] != 1 {
+		t.Fatalf("listed connections = %v, want db-primary and web-01 once each", listed)
+	}
+	for _, notice := range overview.Notices {
+		if notice.Code == NoticeDuplicateAlias {
+			t.Errorf("overview notices = %#v, want no duplicate_alias", overview.Notices)
+		}
+	}
+
+	detail, err := service.HostDetail(database, "db-primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, notice := range detail.Effective.Notices {
+		if notice.Code == NoticeDuplicateAlias {
+			t.Errorf("effective notices = %#v, want no duplicate_alias", detail.Effective.Notices)
+		}
+	}
+	inherited := map[string]string{}
+	for _, entry := range detail.Effective.Entries {
+		if entry.Source.Path == DefaultGroupsFile {
+			inherited[entry.Keyword] = strings.Join(entry.Values, " ")
+		}
+	}
+	if inherited["User"] != "ops" || inherited["ProxyJump"] != "bastion" || inherited["Port"] != "2222" {
+		t.Fatalf("values from the group settings = %v", inherited)
+	}
+}
+
 // 書けないグループ設定を通すと、生成ファイルからそのグループが外れ、同じグループの
 // ほかの設定まで接続に効かなくなる。接続の編集と同じく、保存の前に断る。
 func TestSavingGroupsRefusesAProxyCommandWithAQuoteThatIsNotClosed(t *testing.T) {

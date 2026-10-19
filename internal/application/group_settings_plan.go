@@ -60,7 +60,7 @@ func (s *Service) refreshGroupSettings(prepared *planned, metadata Metadata) (*c
 	if !exists && prepared.operation != "config.groups" && !hasGroupSettings(metadata) {
 		return graph, nil
 	}
-	hosts, _ := ProjectHosts(graph, s.workspace.Root())
+	hosts, _ := ProjectHosts(graph, s.workspace.Root(), metadata.GroupsPath())
 	contents, notices := CompileGroups(DeclaredGroups(entry.File), metadata, hosts, dominantEnding(entry.File))
 	prepared.preview.Notices = append(prepared.preview.Notices, notices...)
 	if bytes.Equal(previous, contents) {
