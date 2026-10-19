@@ -73,6 +73,8 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
           <div className="flex flex-wrap items-baseline gap-4">
             <Button disabled={checking} onClick={() => { void checkUpdate(); }}>{t(checking ? "about.checking" : "about.check")}</Button>
             {status === null ? null : <UpdateControls status={status} api={updates} onStart={(job) => setStatus({ ...status, canUpdate: false, job })} />}
+            {/* The sidebar's progress dialog stays closed here, so its reload button is offered on the page. */}
+            {status?.job?.state === "restarting" ? <Button onClick={() => window.location.reload()}>{t("update.reload")}</Button> : null}
           </div>
           <UpdateActivityLog entries={activity.entries} />
         </div>

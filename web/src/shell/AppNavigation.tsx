@@ -179,6 +179,7 @@ export function AppNavigation({
         </p>
         <UpdateBadge
           onNavigate={(event) => onNavigate(event, "About")}
+          showsProgressDialog={section !== "About"}
           current={version}
           enabled={state === "ready" || state === "locked"}
           indicator={(
