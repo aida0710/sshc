@@ -149,8 +149,17 @@ func TestComputeEffectiveReportsAnAliasClaimedByTwoFiles(t *testing.T) {
 	effective := ComputeEffective(graph, testRoot, "nas", testFacts())
 	found := false
 	for _, notice := range effective.Notices {
-		if notice.Code == NoticeDuplicateAlias {
-			found = true
+		if notice.Code != NoticeDuplicateAlias {
+			continue
+		}
+		found = true
+		// Include が先にあるので、OpenSSH は conf.d のブロックを先に読み、config のブロックが重複になる。
+		want := Notice{
+			Code: NoticeDuplicateAlias, Path: "config", Line: 3, Detail: "nas",
+			Related: NoticeLocation{Path: "conf.d/10-home.conf", Line: 1},
+		}
+		if notice != want {
+			t.Errorf("duplicate notice = %#v, want %#v", notice, want)
 		}
 	}
 	if !found {

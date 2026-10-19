@@ -49,6 +49,7 @@ describe("the catalogue", () => {
         "groups.metricConnections",
         "groups.pageTitle",
         "history.pageTitle",
+        "home.heading",
         "host.tabJump",
         "host.tabRaw",
         "keys.agentHeading",

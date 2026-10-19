@@ -1,40 +1,9 @@
-import type { ConflictReport, DiffLine, FileDiff, Notice, SavePreview } from "../api/config";
+import type { ConflictReport, DiffLine, FileDiff, SavePreview } from "../api/config";
 import type { Problem } from "../api/client";
 import { useTranslate } from "../i18n/context";
-import type { MessageKey } from "../i18n/messages";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { Notice as Band } from "../ui/surface";
-
-const noticeKeys: Record<string, MessageKey> = {
-  complex_external_rule: "notice.complex_external_rule",
-  duplicate_alias: "notice.duplicate_alias",
-  proxy_ignored: "notice.proxy_ignored",
-  wildcard_shadow: "notice.wildcard_shadow",
-  negated_pattern: "notice.negated_pattern",
-  unnamed_host_block: "notice.unnamed_host_block",
-  match_block: "notice.match_block",
-  dangerous_directive: "notice.dangerous_directive",
-  unstructured_line: "notice.unstructured_line",
-  external_file: "notice.external_file",
-  orphan_metadata: "notice.orphan_metadata",
-  group_cycle: "notice.group_cycle",
-  group_member_missing: "notice.group_member_missing",
-  explained_values_only: "notice.explained_values_only",
-  match_exec_refused: "notice.match_exec_refused",
-  match_final_refused: "notice.match_final_refused",
-  canonicalise_refused: "notice.canonicalise_refused",
-  unknown_token_refused: "notice.unknown_token_refused",
-  destination_not_included: "notice.destination_not_included",
-  include_no_longer_matches: "notice.include_no_longer_matches",
-  include_not_rewritten: "notice.include_not_rewritten",
-  include_now_unreached: "notice.include_now_unreached",
-  group_file_unreached: "notice.group_file_unreached",
-  group_directory_leftover: "notice.group_directory_leftover",
-  group_not_declared: "notice.group_not_declared",
-  group_directory_missing: "notice.group_directory_missing",
-  group_empty: "notice.group_empty",
-  generated_region_damaged: "notice.generated_region_damaged",
-};
+import { NoticeList } from "./NoticeList";
 
 function DiffView({ lines }: { lines: DiffLine[] }) {
   return (
@@ -66,21 +35,6 @@ function FileDiffView({ diff }: { diff: FileDiff }) {
       ) : null}
       <DiffView lines={diff.lines} />
     </section>
-  );
-}
-
-export function NoticeList({ notices }: { notices: Notice[] }) {
-  const t = useTranslate();
-  if (notices.length === 0) return null;
-  return (
-    <ul className="flex flex-col gap-1">
-      {notices.map((notice, index) => (
-        <li key={`${notice.code}-${notice.path ?? ""}-${notice.line ?? 0}-${index}`} className="text-xs text-notice-ink">
-          {notice.code in noticeKeys ? t(noticeKeys[notice.code]!) : notice.code}
-          {notice.path === undefined ? "" : ` (${notice.path}${notice.line === undefined ? "" : `:${notice.line}`})`}
-        </li>
-      ))}
-    </ul>
   );
 }
 

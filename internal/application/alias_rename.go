@@ -44,7 +44,7 @@ func (s *Service) SaveWithSecrets(request EditRequest) (SaveResult, error) {
 	switch request.Kind {
 	case EditRename:
 		return s.saveAliasRename(vault, request)
-	case EditFileRaw, EditBlockRaw:
+	case EditFileRaw, EditBlockRaw, EditDeleteHosts:
 		return s.saveAliasRemoval(vault, request)
 	default:
 		return s.Save(request)

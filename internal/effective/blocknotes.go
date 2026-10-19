@@ -11,6 +11,8 @@ type hostBlockNotes struct {
 	alias string
 	// declaring は、ここまでに alias をそのまま名指ししたブロックの数である。
 	declaring int
+	// first は、alias を最初に名指ししたブロックの見出しである。重複の印に、先に読まれる方として添える。
+	first blockHeader
 }
 
 // observe は、alias に一致した Host ブロックひとつについての印を返す。
@@ -24,8 +26,13 @@ func (notes *hostBlockNotes) observe(header blockHeader, kind string) []Complexi
 	// ワイルドカードで一致したという別の話である。
 	if DeclaresExactly(header.block.Patterns, notes.alias) {
 		notes.declaring++
-		if notes.declaring > 1 {
-			observed = append(observed, at(ComplexityDuplicateAlias, "more than one Host block claims this alias"))
+		if notes.declaring == 1 {
+			notes.first = header
+		} else {
+			// Detail は重複している alias そのものにする。画面はそれを「何が重複しているか」として出す。
+			duplicate := at(ComplexityDuplicateAlias, notes.alias)
+			duplicate.RelatedPath, duplicate.RelatedLine = notes.first.path, notes.first.number()
+			observed = append(observed, duplicate)
 		}
 	}
 	if kind == SourceWildcard {

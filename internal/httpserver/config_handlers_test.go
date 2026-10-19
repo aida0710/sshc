@@ -582,6 +582,7 @@ func TestEveryEditKindTheApplicationAcceptsPassesValidation(t *testing.T) {
 		application.EditFileRename, application.EditFileDelete,
 		application.EditDirectoryCreate, application.EditDirectoryDelete,
 		application.EditGroups, application.EditMetadata,
+		application.EditMoveHosts, application.EditDeleteHosts,
 	} {
 		request := application.EditRequest{Kind: kind, Path: "conf.d/10-home.conf"}
 		// 各 kind が path 以外に必要とする形だけを見る。したがって以下の失敗は、
@@ -598,6 +599,10 @@ func TestEveryEditKindTheApplicationAcceptsPassesValidation(t *testing.T) {
 			request.Alias, request.NewAlias = "nas", "nas2"
 		case application.EditMove:
 			request.Alias, request.DestinationGroup = "nas", "work"
+		case application.EditMoveHosts, application.EditDeleteHosts:
+			request.Hosts = []application.HostEdit{{Path: "config", Alias: "nas"}}
+			request.Bases = []application.FileBase{{Path: "config", Base: "Host nas\n"}}
+			request.DestinationGroup = "work"
 		case application.EditComment:
 			request.Alias = "nas"
 		case application.EditFileRename:

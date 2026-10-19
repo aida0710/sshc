@@ -79,7 +79,7 @@ describe("OverviewPanel", () => {
 
     const browser = await screen.findByRole("region", { name: "Quick connect" });
     await within(browser).findByRole("searchbox", { name: "Search connections" });
-    expect(screen.getByRole("heading", { name: "Your connections" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Home" })).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Quick connect" })).not.toBeInTheDocument();
     const attention = screen.getByRole("region", { name: "Needs attention" });
     expect(browser.compareDocumentPosition(attention) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);

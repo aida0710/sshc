@@ -34,7 +34,7 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
 
   await openApplication(page, installation);
 
-  await expect(page.getByRole("heading", { name: "Your connections" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
   const launcher = page.getByRole("list", { name: "Available connections" });
   const bastion = launcher.getByRole("listitem").filter({ hasText: "bastion" });

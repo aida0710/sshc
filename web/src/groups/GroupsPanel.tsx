@@ -3,7 +3,8 @@ import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { toProblem } from "../api/guards";
 import type { Problem } from "../api/client";
 import { configApi, type EditRequest, type GroupMetadata, type Metadata, type Overview, type SavePreview } from "../api/config";
-import { NoticeList, SavePreviewPanel } from "../connections/SavePreview";
+import { SavePreviewPanel } from "../connections/SavePreview";
+import { NoticeList } from "../connections/NoticeList";
 import { formatDirectiveValues, parseDirectiveValues } from "../rules/rules";
 import {
   Field,
