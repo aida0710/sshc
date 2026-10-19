@@ -91,6 +91,8 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	configService.SetKeyPassphraseVerifier(keyService)
 	diagnosticsService := diagnostics.NewService(workspace, nil, application.LocalFactsFor(dependencies.Home))
 	diagnosticsService.Resolver.GeneratedRegion = application.GeneratedRegion
+	// グループの共通設定の Host 行を、メンバーの alias の重複として知らせない。
+	diagnosticsService.Resolver.GroupsFile = configService.AbsoluteGroupsPath
 	diagnosticsService.VPNBinding = configService.ConnectionVPN
 	collectHostKeys := dependencies.ScanHostKeys
 	if collectHostKeys == nil {
