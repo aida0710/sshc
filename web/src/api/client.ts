@@ -247,7 +247,7 @@ export const apiClient = {
     try {
       response = await requestWithSession(path, init, csrfToken);
     } catch (error) {
-      notifyNetworkFailure(method, path);
+      if (!options.locallyHandledCodes?.includes("network_request_failed")) notifyNetworkFailure(method, path);
       throw error;
     }
     if (!response.ok) {

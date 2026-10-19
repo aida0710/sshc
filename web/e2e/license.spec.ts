@@ -7,13 +7,16 @@ test("opens License from Others at the bottom of Menu and reads notices without 
   await openSection(page, "Menu");
   const others = page.getByRole("region", { name: "Others" });
   await expect(others).toBeVisible();
-  // Others はリンクの節の最後にある。その後ろは、サインアウトの節だけである。
+  // Others はリンクの節の最後にある。その後ろは Preferences と、一番下のサインアウトの節だけである。
   expect(
     await others.evaluate((node) => {
-      const next = node.nextElementSibling;
-      return next !== null && next === node.parentElement?.lastElementChild ? next.querySelector("h3")?.textContent : null;
+      const following: (string | null | undefined)[] = [];
+      for (let next = node.nextElementSibling; next !== null; next = next.nextElementSibling) {
+        following.push(next.querySelector("h3")?.textContent);
+      }
+      return following;
     }),
-  ).toBe("Sign out");
+  ).toEqual(["Preferences", "Sign out"]);
   await others.getByRole("link", { name: "Open License" }).click();
   await expect(page).toHaveURL(/\/license$/);
   await page.getByRole("searchbox").fill("Devicon");

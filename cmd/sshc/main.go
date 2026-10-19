@@ -15,6 +15,14 @@ import (
 
 var version = "dev"
 
+// revision と commitTime は、Go がコミットとコミット日時（vcs.revision・vcs.time）を
+// 記録できないビルドだけが -ldflags -X で渡す。Homebrew はタグのソースアーカイブ
+// （.git なし）からビルドするので、formula がタグのコミットを渡す。
+var (
+	revision   string
+	commitTime string
+)
+
 // printVersion は version、OS、architecture を 1 行で出力する。
 func printVersion(out io.Writer) {
 	fmt.Fprintf(out, "sshc %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)

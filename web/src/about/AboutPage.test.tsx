@@ -55,20 +55,45 @@ describe("AboutPage", () => {
     const check = await screen.findByRole("button", { name: "Check for updates" });
     await userEvent.click(check);
     expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
+    const log = screen.getByRole("log", { name: "Check and update progress" });
+    expect(within(log).getAllByRole("listitem").map((line) => line.textContent)).toEqual([expect.stringContaining("Checking GitHub for the latest release…")]);
     await act(async () => finish({ ...status, pageUrl: status.releases?.[0]?.pageUrl ?? "" }));
     expect(update.checkUpdate).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole("link", { name: /v1.2.0 is available/ })).toBeVisible();
+    expect(within(log).getByText("The latest release on GitHub is v1.2.0.")).toBeVisible();
     expect(check).toBeEnabled();
   });
 
-  it("shows missing build information and the existing installation guidance", async () => {
+  it("adds a line for every check, so a repeated check with the same result is still visible", async () => {
+    const update = updates({ ...status, latest: "v1.0.0", available: false, canUpdate: false });
+    render(<AboutPage api={api} updates={update} />);
+    expect(await screen.findByText("The running v1.0.0 is the latest version.")).toBeVisible();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
+    const check = screen.getByRole("button", { name: "Check for updates" });
+    await userEvent.click(check);
+    await waitFor(() => expect(check).toBeEnabled());
+    await userEvent.click(check);
+    await waitFor(() => expect(check).toBeEnabled());
+    const lines = within(screen.getByRole("log")).getAllByRole("listitem");
+    expect(lines.map((line) => line.querySelector("span")?.textContent)).toEqual([
+      "Checking GitHub for the latest release…", "The latest release on GitHub is v1.0.0.",
+      "Checking GitHub for the latest release…", "The latest release on GitHub is v1.0.0.",
+    ]);
+    expect(lines[0]?.querySelector("time")).toHaveAttribute("datetime");
+  });
+
+  it("leaves out the build rows it cannot fill, as for a Homebrew build without .git, and keeps the installation guidance", async () => {
     const missing: About = { ...about, revision: "", executable: "", manager: "unknown" };
     delete missing.commitTime;
     delete missing.modified;
     render(<AboutPage api={{ about: vi.fn().mockResolvedValue(missing) }} updates={updates({ current: "v1.0.0", latest: "v1.0.0", available: false, canUpdate: false, reason: "update_unmanaged" })} />);
     expect(await screen.findByText("Unmanaged")).toBeVisible();
-    expect(screen.getAllByText("Unknown").length).toBeGreaterThan(2);
-    expect(screen.getByText("No newer version is available.")).toBeVisible();
+    for (const label of ["Commit", "Commit date", "Uncommitted changes at build time", "Executable"]) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText("Unknown")).not.toBeInTheDocument();
+    expect(screen.getByText("Version")).toBeVisible();
+    expect(screen.getByText("The running v1.0.0 is the latest version.")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
     expect(screen.getByText(/Update it using the method that installed it/i)).toBeVisible();
   });
@@ -79,8 +104,26 @@ describe("AboutPage", () => {
     render(<AboutPage api={api} updates={update} />);
     await userEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
     expect(await screen.findByText("upstream unavailable")).toBeVisible();
+    expect(within(screen.getByRole("log")).getByText("Could not check GitHub for the latest release.")).toBeVisible();
+    // The reason is shown once, in the notice; the log only says when the check failed.
+    expect(screen.getAllByText("upstream unavailable")).toHaveLength(1);
     expect(screen.getByText("Intermediate release")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check for updates" })).toBeEnabled();
+  });
+
+  it("says when the sshc engine did not answer the check", async () => {
+    const update = updates();
+    vi.mocked(update.checkUpdate).mockRejectedValue(new Error("offline"));
+    render(<AboutPage api={api} updates={update} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
+    expect(await within(screen.getByRole("log")).findByText("Could not check for the latest release. The sshc engine did not return a result.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Check for updates" })).toBeEnabled();
+  });
+
+  it("does not log an update that had finished before the page opened", async () => {
+    render(<AboutPage api={api} updates={updates({ ...status, job: { id: "old-job", target: "v1.0.0", installedVersion: "v1.0.0", state: "succeeded", problem: "" } })} />);
+    expect(await screen.findByText("sshc v1.2.0 is available.")).toBeVisible();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
   });
 
   it("uses the existing update confirmation and sends progress to the sidebar dialog", async () => {
@@ -96,5 +139,6 @@ describe("AboutPage", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Update sshc" }));
     await waitFor(() => expect(update.startUpdate).toHaveBeenCalledWith("v1.2.0", "confirmation"));
     expect(await screen.findByRole("dialog", { name: "sshc update" })).toBeVisible();
+    expect(within(within(page).getByRole("log")).getByText("Updating to v1.2.0…")).toBeVisible();
   });
 });
