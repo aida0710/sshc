@@ -241,14 +241,53 @@ function Confirm-ReleaseAttestation([string[]]$Paths, [string]$Tag) {
     Write-Note "attestation matches the Release workflow of $Repository"
 }
 
+# Read-StatusFailureKind returns failure.kind from the output of `sshc status --json`, or ''
+# when the output carries none. sshc v0.32.0 and earlier print nothing on standard output
+# when status fails, and StrictMode stops at a property that is not there.
+function Read-StatusFailureKind([string]$StatusText) {
+    if ([string]::IsNullOrWhiteSpace($StatusText)) { return '' }
+    try { $status = $StatusText | ConvertFrom-Json } catch { return '' }
+    if ($null -eq $status) { return '' }
+    $failure = $status.PSObject.Properties['failure']
+    if ($null -eq $failure -or $null -eq $failure.Value) { return '' }
+    $kind = $failure.Value.PSObject.Properties['kind']
+    if ($null -eq $kind -or $null -eq $kind.Value) { return '' }
+    return [string]$kind.Value
+}
+
+# Find-TargetProcess returns a running process whose image is $Target, or $null.
+function Find-TargetProcess([string]$Target) {
+    $found = $null
+    $imageName = [System.IO.Path]::GetFileNameWithoutExtension($Target)
+    foreach ($process in @(Get-Process -Name $imageName -ErrorAction SilentlyContinue)) {
+        $path = $null
+        # Path cannot be read for elevated processes or those of other users; neither is this installation's engine.
+        try { $path = $process.Path } catch { }
+        if ($null -eq $found -and -not [string]::IsNullOrEmpty($path) -and (Test-SamePath $path $Target)) { $found = $process }
+        else { $process.Dispose() }
+    }
+    if ($null -ne $found) { $null = $found.Handle }
+    return $found
+}
+
 function Get-InstalledEngine([string]$Target) {
     if (-not (Test-Path -LiteralPath $Target -PathType Leaf)) { return $null }
     $statusText = (& $Target status --json | Out-String)
     $statusExit = $LASTEXITCODE
-    $status = $statusText | ConvertFrom-Json
     if ($statusExit -ne 0) {
-        if ($status.failure.kind -eq 'engine_not_running') { return $null }
-        Stop-Install "could not inspect the existing engine: $statusText"
+        $failureKind = Read-StatusFailureKind $statusText
+        if ($failureKind -eq 'engine_not_running') { return $null }
+        if ($failureKind -ne '') { Stop-Install "could not inspect the existing engine: $statusText" }
+        # An older sshc that cannot report its engine leaves only its processes as evidence.
+        # One running from $Target is asked to stop like any other engine of this installation.
+        $process = Find-TargetProcess $Target
+        # Write-Host, unlike Write-Note, keeps these lines out of the returned value.
+        if ($null -eq $process) {
+            Write-Host '  the installed sshc did not report its engine, and no process runs from it'
+            return $null
+        }
+        Write-Host "  the installed sshc did not report its engine; stopping pid $($process.Id), which runs from it"
+        return $process
     }
     # status proves the handoff first. Its PID is then checked against the actual
     # executable, so installing a second copy does not stop another installation.
@@ -285,7 +324,9 @@ function Invoke-EngineStop([string]$Target) {
 
 function Stop-InstalledEngine([string]$Target, $Engine) {
     if ($null -eq $Engine -or $Engine.HasExited) { return }
-    if ((Invoke-EngineStop $Target) -ne 0) { Stop-Install 'could not stop the existing engine; no files were replaced' }
+    if ((Invoke-EngineStop $Target) -ne 0) {
+        Stop-Install "could not stop the existing engine (pid $($Engine.Id)); no files were replaced"
+    }
     # stop waits for the engine lock; wait for the OS process too before deleting its image.
     # Include VPN shutdown and process cleanup in the deadline; no fixed sleep guesses at exit.
     $engineExitTimeoutMilliseconds = 45000

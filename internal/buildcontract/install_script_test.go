@@ -332,3 +332,23 @@ func TestWindowsInstallerScopesCallerStateAndResumesOnlyItsOwnEngine(t *testing.
 		t.Fatal("Windows installer does not stop, publish, receipt and restart in order")
 	}
 }
+
+// sshc v0.32.0 以前は status に失敗すると標準出力に何も出さない。StrictMode の下で
+// $status.failure を読むと、実行ファイルを置き換える前にインストーラーが止まっていた。
+func TestWindowsInstallerReplacesAnOlderSshcThatCannotReportItsEngine(t *testing.T) {
+	script := readWindowsInstallScript(t)
+	if strings.Contains(script, "$status.failure") {
+		t.Error("Windows installer reads failure from status output that may not carry it")
+	}
+	for _, fragment := range []string{
+		"$failureKind = Read-StatusFailureKind $statusText",
+		"$status.PSObject.Properties['failure']",
+		"if ($failureKind -ne '') { Stop-Install",
+		"$process = Find-TargetProcess $Target",
+		"Test-SamePath $path $Target",
+	} {
+		if !strings.Contains(script, fragment) {
+			t.Errorf("Windows installer lacks %q for an older sshc", fragment)
+		}
+	}
+}
