@@ -194,10 +194,10 @@ test("survives a reload", async ({ page, installation }) => {
 
   await expect(page).toHaveURL(/\/connections\/servers$/);
   await expect(
-    page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }),
+    page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
   await page.getByLabel("Port", { exact: true }).fill("2255");
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
   expect(await installation.read("config")).toContain("Port 2255");

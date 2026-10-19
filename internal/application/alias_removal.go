@@ -42,9 +42,12 @@ func (s *Service) saveAliasRemoval(vault *secret.Service, request EditRequest) (
 }
 
 // aliasesRemovedBy returns the concrete aliases whose Host declaration a
-// file_raw or block_raw save removes from the edited file. An alias the file
-// still declares, even in another block, keeps its assignments.
+// file_raw, block_raw or delete_hosts save removes from the edited file. An
+// alias the file still declares, even in another block, keeps its assignments.
 func aliasesRemovedBy(request EditRequest) ([]string, error) {
+	if request.Kind == EditDeleteHosts {
+		return aliasesRemovedByHostDeletes(request)
+	}
 	before := config.Parse([]byte(request.Base))
 	var after *config.File
 	switch request.Kind {
@@ -70,6 +73,34 @@ func aliasesRemovedBy(request EditRequest) ([]string, error) {
 	for _, alias := range declaredAliases(before.Lines) {
 		if !remaining[alias] {
 			removed = append(removed, alias)
+		}
+	}
+	return removed, nil
+}
+
+// aliasesRemovedByHostDeletes は、delete_hosts がファイルごとに消す alias を返す。
+// 消したあとも同じファイルのほかのブロックが宣言している alias は含めない。
+func aliasesRemovedByHostDeletes(request EditRequest) ([]string, error) {
+	deleted := make(map[string][]string)
+	for _, host := range request.Hosts {
+		deleted[host.Path] = append(deleted[host.Path], host.Alias)
+	}
+	var removed []string
+	for _, base := range request.Bases {
+		after := config.Parse([]byte(base.Base))
+		for _, alias := range deleted[base.Path] {
+			if _, err := ExtractHostBlock(after, alias); err != nil {
+				return nil, err
+			}
+		}
+		remaining := make(map[string]bool)
+		for _, alias := range declaredAliases(after.Lines) {
+			remaining[alias] = true
+		}
+		for _, alias := range declaredAliases(config.Parse([]byte(base.Base)).Lines) {
+			if !remaining[alias] {
+				removed = append(removed, alias)
+			}
 		}
 	}
 	return removed, nil

@@ -12,7 +12,7 @@ export type SectionNavigation = Readonly<{
 // until it is added here. The tests that walk every section then include it
 // without editing a list of their own.
 const navigationBySection: Record<Section, SectionNavigation> = {
-  Home: { navigation: "Home", heading: "Your connections" },
+  Home: { navigation: "Home", heading: "Home" },
   Menu: { navigation: "Menu", heading: "Menu" },
   Connections: { navigation: "Connections", heading: "Connections" },
   Terminal: { navigation: "Terminal", heading: "No session is open" },

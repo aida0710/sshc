@@ -93,7 +93,7 @@ test("does not start the automatic reconnect loop when the first connection fail
   );
   await openApplication(page, installation);
   await openSection(page, "Connections");
-  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "refused" }).click();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "refused", exact: true }).click();
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   const screen = page.getByRole("region", { name: /^Terminal for / });

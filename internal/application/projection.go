@@ -115,7 +115,8 @@ func PrimaryAlias(patterns []config.Pattern) string {
 func ProjectHosts(graph *config.Graph, root string) ([]HostEntry, []Notice) {
 	var hosts []HostEntry
 	var notices []Notice
-	seen := map[string]bool{}
+	// firstDeclared は、alias ごとに最初にそれを宣言した Host ブロックの場所である。
+	firstDeclared := map[string]NoticeLocation{}
 
 	WalkDirectives(graph, func(visit Visit) bool {
 		if visit.Block.Kind != config.BlockHost || visit.Block.Header != visit.Index {
@@ -168,16 +169,18 @@ func ProjectHosts(graph *config.Graph, root string) ([]HostEntry, []Notice) {
 			entry.Identity = HostIdentity{Path: entry.File.Path, Alias: alias}
 		}
 		// alias だけを key にし、それが置かれているファイルは key にしない。
-		if seen[alias] {
+		if first, seen := firstDeclared[alias]; seen {
 			entry.Duplicate = true
 			notices = appendNotice(notices, Notice{
-				Code: NoticeDuplicateAlias, Path: entry.File.Path, Line: entry.Line, Detail: alias,
+				Code: NoticeDuplicateAlias, Path: entry.File.Path, Line: entry.Line, Detail: alias, Related: first,
 			})
 			notices = appendNotice(notices, Notice{
 				Code: NoticeComplexExternalRule, Path: entry.File.Path, Line: entry.Line, Detail: alias,
 			})
 		}
-		seen[alias] = true
+		if _, seen := firstDeclared[alias]; !seen {
+			firstDeclared[alias] = NoticeLocation{Path: entry.File.Path, Line: entry.Line}
+		}
 		hosts = append(hosts, entry)
 		return true
 	})

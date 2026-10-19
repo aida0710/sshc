@@ -26,7 +26,7 @@ test("gives one named secret to two hosts and writes neither name into the file"
 
   for (const alias of ["bastion", "nas"]) {
     await openSection(page, "Connections");
-    await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: alias }).click();
+    await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: alias, exact: true }).click();
     await expect(page.getByRole("heading", { name: alias, exact: true })).toBeVisible();
 
     const panel = page.getByRole("region", { name: "Authentication" });
@@ -81,7 +81,7 @@ test("never offers a key passphrase where a host password is chosen", async ({ p
   }
 
   await openSection(page, "Connections");
-  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
 
   const panel = page.getByRole("region", { name: "Authentication" });
   await panel.getByLabel("Stored password action").selectOption("saved_password");
@@ -115,7 +115,7 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
   await expect(token.getByText("Next")).toBeVisible();
 
   await openSection(page, "Connections");
-  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
   const authentication = page.getByRole("region", { name: "Authentication" });
   await authentication.getByLabel("One-time password action").selectOption("saved_totp");
   await authentication.getByLabel("Saved TOTP").selectOption("production-otp");
@@ -308,7 +308,7 @@ test("lists saved one-time passwords with their current codes in both languages"
   }
 
   await openSection(page, "Connections");
-  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
   const authentication = page.getByRole("region", { name: "Authentication" });
   await authentication.getByLabel("One-time password action").selectOption("saved_totp");
   await authentication.getByLabel("Saved TOTP").selectOption("bastion-otp");

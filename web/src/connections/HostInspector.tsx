@@ -14,7 +14,7 @@ import {
   withOptionalChoice,
 } from "./hostMetadataDraft";
 import { HostVPNProfileField } from "./HostVPNProfileField";
-import { NoticeList } from "./SavePreview";
+import { NoticeList } from "./NoticeList";
 import { useDraftSave } from "./useDraftSave";
 import { useReportDirty } from "./useReportDirty";
 import { AppearancePicker } from "../terminal/AppearancePicker";

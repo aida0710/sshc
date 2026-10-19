@@ -22,7 +22,7 @@ test("declares a group in the entry file and moves a connection into it", async 
   await openSection(page, "Connections");
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "nas" })
+    .getByRole("button", { name: "nas", exact: true })
     .click();
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
 
@@ -66,7 +66,7 @@ test("renames a group and carries its files, its Include line and its keys", asy
   await openSection(page, "Connections");
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "nas" })
+    .getByRole("button", { name: "nas", exact: true })
     .click();
   await page.getByRole("button", { name: "Manage connection" }).click();
   await page.getByLabel("Primary group").selectOption("work");
@@ -91,7 +91,7 @@ test("refuses to move a connection into a group nothing declares", async ({
   await openSection(page, "Connections");
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "nas" })
+    .getByRole("button", { name: "nas", exact: true })
     .click();
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
 

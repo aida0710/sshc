@@ -110,7 +110,11 @@ func (s *Service) Save(request EditRequest) (SaveResult, error) {
 			return SaveResult{}, err
 		}
 	}
-	result, err := s.commitPlannedRequest(prepared, s.requestFor(prepared))
+	commit := s.commitPlannedRequest
+	if request.Kind == EditMoveHosts || request.Kind == EditDeleteHosts {
+		commit = s.commitAtomicPlannedRequest
+	}
+	result, err := commit(prepared, s.requestFor(prepared))
 	if err != nil {
 		return SaveResult{}, err
 	}
@@ -155,6 +159,9 @@ func (s *Service) plan(request EditRequest) (planned, error) {
 	if err != nil || request.Kind == EditGroups || request.Kind == EditMetadata {
 		return prepared, err
 	}
+	if request.Kind == EditMoveHosts && len(prepared.changes) == 0 {
+		return prepared, nil
+	}
 	metadata, err := s.plannedMetadata(prepared)
 	if err != nil {
 		return planned{}, err
@@ -184,6 +191,8 @@ func (s *Service) planEdit(graph *config.Graph, request EditRequest) (planned, e
 		return s.planMetadataEdit(graph, request)
 	case EditMove:
 		return s.planMoveHost(graph, request)
+	case EditMoveHosts, EditDeleteHosts:
+		return s.planHostEdits(graph, request)
 	case EditFileRename:
 		return s.planFileRename(graph, request)
 	case EditDirectoryCreate:

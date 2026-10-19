@@ -50,7 +50,7 @@ test("restores a selected connection and editor tab from its URL", async ({
 
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "bastion" })
+    .getByRole("button", { name: "bastion", exact: true })
     .click();
   let current = new URL(page.url());
   expect(current.pathname).toBe("/connections/servers");
@@ -99,7 +99,7 @@ test("keeps the back destination after rejecting navigation with an unsaved draf
   await expect.poll(historyPoint).toBe(1);
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "bastion" })
+    .getByRole("button", { name: "bastion", exact: true })
     .click();
   await expect.poll(historyPoint).toBe(2);
 
@@ -126,7 +126,7 @@ test("keeps the back destination after rejecting navigation with an unsaved draf
   await page.goBack();
   await expect.poll(historyPoint).toBe(0);
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "Your connections", level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", level: 2 })).toBeVisible();
 });
 
 test("opens every canonical connection panel URL without starting an operation", async ({
@@ -213,5 +213,5 @@ test("keeps an unknown URL until the person chooses Home", async ({ page, instal
 
   await page.getByRole("link", { name: "Go to Home" }).click();
   expect(new URL(page.url()).pathname).toBe("/");
-  await expect(page.getByRole("heading", { name: "Your connections", level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", level: 2 })).toBeVisible();
 });
