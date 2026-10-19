@@ -27,7 +27,11 @@ test("confirms Homebrew updates and shows the installed version once after resta
     await navigation.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/update-notice-folded.png` });
     await navigation.getByRole("button", { name: "Toggle update notice" }).click();
   }
-  await page.getByRole("button", { name: "Update sshc", exact: true }).click();
+  // The sidebar only leads to About; the update is confirmed and followed there.
+  await navigation.getByRole("link", { name: "Update in About sshc" }).click();
+  await expect(page).toHaveURL(/\/about$/);
+  const about = page.getByRole("region", { name: "About sshc", exact: true });
+  await about.getByRole("button", { name: "Update sshc", exact: true }).click();
   const confirmation = page.getByRole("dialog", { name: "Update sshc?" });
   await expect(confirmation).toContainText("Homebrew");
   await expect(confirmation).toContainText("A newer version may be installed");
@@ -39,6 +43,7 @@ test("confirms Homebrew updates and shows the installed version once after resta
   }
   await confirmation.getByRole("button", { name: "Update sshc", exact: true }).click();
   await expect(confirmation).toBeHidden();
+  await expect(about.getByRole("log").getByRole("listitem")).toHaveText([/Updating to v1\.1\.0…/, /Updated to v1\.2\.0\./]);
   const result = page.getByRole("dialog", { name: "sshc update" });
   await expect(result).toContainText("Updated to v1.2.0.");
   if (process.env.SSHC_VISUAL_DIR !== undefined) {

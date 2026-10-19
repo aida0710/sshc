@@ -3,6 +3,7 @@ import { failureCode } from "../api/client";
 import type { UpdateApi, UpdateJob, UpdatePreview, UpdateStatus } from "../api/update";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { Button } from "../ui/surface";
 import { updateMessage } from "./updateMessage";
 import { isUpdateActive } from "./useUpdateStatus";
 
@@ -55,15 +56,9 @@ export function UpdateControls({ status, api, onStart }: UpdateControlsProps) {
   return (
     <>
       {status.canUpdate !== true || isUpdateActive(job) ? null : (
-        <button
-          ref={buttonRef}
-          type="button"
-          className="mt-2 text-ink underline underline-offset-2"
-          disabled={loading}
-          onClick={() => { void review(); }}
-        >
+        <Button ref={buttonRef} kind="primary" disabled={loading} onClick={() => { void review(); }}>
           {t("update.install")}
-        </button>
+        </Button>
       )}
       {!open ? null : (
         <ConfirmDialog

@@ -1268,6 +1268,7 @@ export const ja = {
   "update.resultUnknown": "更新開始の応答を確認できませんでした。もう一度開始する前に、再読み込みして更新結果を確認してください。",
   "update.cancel": "キャンセル",
   "update.install": "sshcを更新",
+  "update.openAbout": "About sshcで更新",
   "update.confirmTitle": "sshcを更新しますか？",
   "update.confirmVersion": "{manager}で{current}から{target}へ更新します。",
   "update.confirmHomebrewVersion": "Homebrewで{current}を更新します（更新先の目安: {target}）。さらに新しいバージョンが入る場合があります。",
