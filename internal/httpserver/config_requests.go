@@ -153,6 +153,10 @@ func validateEditRequest(request application.EditRequest) error {
 			return err
 		}
 	case application.EditGroups:
+	case application.EditMoveHosts, application.EditDeleteHosts:
+		if err := validateHostEdits(request.Hosts, request.Bases); err != nil {
+			return err
+		}
 	default:
 		return errInvalidEdit
 	}
@@ -204,6 +208,8 @@ func validateEditRequest(request application.EditRequest) error {
 		if err := validateHostBlockAlias(request.Alias); err != nil {
 			return err
 		}
+		fallthrough
+	case application.EditMoveHosts:
 		// move は移動先を二通りのいずれかで指定する。path をサービスが導出する
 		// group か、path そのものかである。両方を指定することはそこで拒否される。
 		// 両者が食い違い得るし、このアプリケーションはどちらかを選んだりしないからだ。
@@ -365,6 +371,7 @@ func serviceProblem(c *echo.Context, err error) error {
 		errors.Is(err, application.ErrMetadataTerminal), errors.Is(err, application.ErrMetadataEncoding),
 		errors.Is(err, application.ErrEngineSettings), errors.Is(err, application.ErrMetadataDuplicateHost),
 		errors.Is(err, application.ErrSameFileMove), errors.Is(err, application.ErrAmbiguousDestination),
+		errors.Is(err, application.ErrInvalidHostSelection),
 		errors.Is(err, application.ErrInvalidGroupName), errors.Is(err, application.ErrGroupSelfNesting),
 		errors.Is(err, application.ErrKeyRelocateUnchanged),
 		errors.Is(err, errInvalidBody), errors.Is(err, errInvalidPath),

@@ -6,7 +6,7 @@ async function openBastion(page: Page, url: string) {
   await openSection(page, "Connections");
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "bastion" })
+    .getByRole("button", { name: "bastion", exact: true })
     .click();
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
 }
@@ -50,18 +50,18 @@ test("separates classification, filtered results, and connection detail without 
   expect(headerHeight).toBeLessThanOrEqual(60);
 
   await browser.getByRole("button", { name: "home", exact: true }).click();
-  await expect(results.getByRole("button", { name: "nas" })).toBeVisible();
-  await expect(results.getByRole("button", { name: "eu-api" })).toBeVisible();
-  await expect(results.getByRole("button", { name: "bastion" })).toHaveCount(0);
+  await expect(results.getByRole("button", { name: "nas", exact: true })).toBeVisible();
+  await expect(results.getByRole("button", { name: "eu-api", exact: true })).toBeVisible();
+  await expect(results.getByRole("button", { name: "bastion", exact: true })).toHaveCount(0);
   await browser.getByRole("button", { name: "home/eu", exact: true }).click();
   await expect(results.getByRole("region", { name: "home/eu group, 1 connections" })).toBeVisible();
-  await expect(results.getByRole("button", { name: "nas" })).toHaveCount(0);
+  await expect(results.getByRole("button", { name: "nas", exact: true })).toHaveCount(0);
 
   await browser.getByRole("button", { name: "All", exact: true }).click();
   await browser.getByRole("searchbox", { name: "Filter connections" }).fill("198.51.100.20");
-  await expect(results.getByRole("button", { name: "nas" })).toBeVisible();
+  await expect(results.getByRole("button", { name: "nas", exact: true })).toBeVisible();
   await browser.getByRole("searchbox", { name: "Filter connections" }).fill("");
-  await results.getByRole("button", { name: "bastion" }).click();
+  await results.getByRole("button", { name: "bastion", exact: true }).click();
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
   await expect(browser).toBeVisible();
 
@@ -136,7 +136,7 @@ test("keeps the selected connection open when its tree item is clicked again", a
 
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "bastion" })
+    .getByRole("button", { name: "bastion", exact: true })
     .click();
 
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
@@ -316,7 +316,7 @@ test("keeps a Basic draft while changing group scope and asks before a connectio
   expect(new URL(page.url()).pathname).toBe("/connections/servers");
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
 
-  await browser.getByRole("button", { name: "nas" }).click();
+  await browser.getByRole("button", { name: "nas", exact: true }).click();
   const firstDiscard = page.getByRole("dialog", { name: "Discard changes" });
   await expect(firstDiscard).toBeVisible();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
@@ -326,7 +326,7 @@ test("keeps a Basic draft while changing group scope and asks before a connectio
   await expect(page.getByRole("heading", { name: "bastion", exact: true })).toBeVisible();
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
 
-  await browser.getByRole("button", { name: "nas" }).click();
+  await browser.getByRole("button", { name: "nas", exact: true }).click();
   const secondDiscard = page.getByRole("dialog", { name: "Discard changes" });
   await secondDiscard.getByRole("button", { name: "Discard changes" }).click();
   await expect(page.getByRole("heading", { name: "nas", exact: true })).toBeVisible();
@@ -373,7 +373,7 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   await openSection(page, "Connections");
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "bastion" })
+    .getByRole("button", { name: "bastion", exact: true })
     .click();
   const keyChoice = page.getByLabel("SSH private key");
   const ownedId = await keyChoice.locator("option", { hasText: "id_connection_owned" }).getAttribute("value");
@@ -411,7 +411,7 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   await openSection(page, "Connections");
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "bastion" })
+    .getByRole("button", { name: "bastion", exact: true })
     .click();
   await expect(page.getByText("A passphrase is saved only for this key.")).not.toBeVisible();
   await page.getByText("Save or change key passphrase").click();
@@ -446,7 +446,7 @@ test("opens a connection inside the application, with nothing to choose and noth
   await expect(page.getByLabel("Open connections with")).toHaveCount(0);
 
   await openSection(page, "Connections");
-  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
   await expect(page.getByLabel("Open with")).toHaveCount(0);
   const connect = page.getByRole("button", { name: "Connect", exact: true });
   await expect(connect).toBeEnabled();
@@ -619,7 +619,7 @@ test("moves to another connection right after the sshc settings are saved, witho
     await route.continue();
   });
   expect(await clickAndAwait(page, "Save sshc-only settings", "/api/v1/config/save")).toBe(200);
-  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas" }).click();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas", exact: true }).click();
   finishReload();
 
   await expect(page.getByRole("heading", { name: "nas" })).toBeVisible();
@@ -730,7 +730,7 @@ test("takes a comment with the connection it describes when the block moves", as
   );
   await openApplication(page, installation);
   await openSection(page, "Connections");
-  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas" }).click();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas", exact: true }).click();
   await page.getByRole("button", { name: "Manage connection" }).click();
   const management = page.getByRole("region", { name: "Manage connection" });
   await expect(management.getByLabel("Comment", { exact: true })).toHaveValue("the file server");
@@ -754,7 +754,7 @@ test("takes a comment with the connection when the block is deleted", async ({
   );
   await openApplication(page, installation);
   await openSection(page, "Connections");
-  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas" }).click();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas", exact: true }).click();
 
   await page.getByRole("button", { name: "Manage connection" }).click();
   await page.getByRole("button", { name: "Delete connection" }).click();
@@ -779,7 +779,7 @@ test("shows an empty group in the management tree and moves an ungrouped connect
   const browser = page.getByRole("navigation", { name: "Connections" });
   await expect(browser.getByRole("button", { name: "work", exact: true })).toBeVisible();
 
-  await browser.getByRole("button", { name: "bastion" }).click();
+  await browser.getByRole("button", { name: "bastion", exact: true }).click();
   await page.getByRole("button", { name: "Manage connection" }).click();
   await page.getByLabel("Primary group").selectOption("work");
   expect(await clickAndAwait(page, "Move to this group", "/api/v1/config/save")).toBe(200);
@@ -790,7 +790,7 @@ test("shows an empty group in the management tree and moves an ungrouped connect
   expect(await installation.read("config")).not.toContain("Host bastion\n");
 
   await expect(browser.getByRole("button", { name: "work", exact: true })).toBeVisible();
-  await expect(browser.getByRole("button", { name: "bastion" })).toHaveAttribute("aria-current", "true");
+  await expect(browser.getByRole("button", { name: "bastion", exact: true })).toHaveAttribute("aria-current", "true");
 });
 
 test("keeps sshc-only settings in the connection editor instead of a side inspector", async ({

@@ -113,3 +113,24 @@ func TestRawEditThatKeepsTheHostDeclarationKeepsItsStartup(t *testing.T) {
 		t.Fatal("editing edge without removing it dropped its startup snippet")
 	}
 }
+
+func TestDeletingSeveralHostsDropsTheirStartupsAndKeepsTheRest(t *testing.T) {
+	const before = "Host edge\n\tHostName edge.example\n\nHost core\n\tHostName core.example\n\nHost other\n\tHostName other.example\n"
+	harness := newStartupRemovalHarness(t, before, "edge", "core", "other")
+
+	if _, err := harness.service.SaveWithSecrets(EditRequest{
+		Kind:  EditDeleteHosts,
+		Hosts: []HostEdit{{Path: "config", Alias: "edge"}, {Path: "config", Alias: "core"}},
+		Bases: []FileBase{{Path: "config", Base: before}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, alias := range []string{"edge", "core"} {
+		if harness.hasStartup(t, alias) {
+			t.Fatalf("deleting %s kept its startup snippet", alias)
+		}
+	}
+	if !harness.hasStartup(t, "other") {
+		t.Fatal("deleting two hosts dropped the startup snippet of the one left")
+	}
+}

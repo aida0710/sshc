@@ -621,7 +621,7 @@ test("moves to its own screen and leaves the connection detail alone", async ({ 
 
   await openSection(page, "Connections");
   const tree = page.getByRole("navigation", { name: "Connections" });
-  await tree.getByRole("button", { name: "detail-host" }).click();
+  await tree.getByRole("button", { name: "detail-host", exact: true }).click();
   const detail = page.getByRole("heading", { name: "detail-host" });
   await expect(detail).toBeVisible();
 
@@ -646,7 +646,7 @@ test("shows why a connection failed in the terminal itself", async ({ page, inst
 
   await openSection(page, "Connections");
   const nav = page.getByRole("navigation", { name: "Connections" });
-  await nav.getByRole("button", { name: "refused" }).click();
+  await nav.getByRole("button", { name: "refused", exact: true }).click();
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   const screen = page.getByRole("region", { name: /^Terminal for / });

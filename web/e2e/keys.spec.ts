@@ -13,7 +13,7 @@ test("hands a generated private key to one connection exactly once", async ({
   await page.getByRole("button", { name: "Assign to a connection" }).click();
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "bastion" })
+    .getByRole("button", { name: "bastion", exact: true })
     .click();
   const key = page.getByLabel("SSH private key");
   await expect(key.getByRole("option", { name: /id_handoff_connection/ })).toHaveJSProperty(
@@ -26,7 +26,7 @@ test("hands a generated private key to one connection exactly once", async ({
 
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "nas" })
+    .getByRole("button", { name: "nas", exact: true })
     .click();
   await expect(page.getByLabel("SSH private key")).toHaveValue("");
   await expect(page.getByText(/staged for this connection/)).toHaveCount(0);

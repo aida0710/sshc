@@ -58,13 +58,13 @@ export function useConnectionSave({
     setPreview(result.preview);
     setProblem(null);
     const selectedBeforeSave = selection;
-    const renamedSelection =
-      request.kind === "rename" && selectedBeforeSave !== null
-        ? {
-            path: selectedBeforeSave.path,
-            alias: request.newAlias ?? selectedBeforeSave.alias,
-          }
-        : null;
+    // 開いている接続先の名前を変えたときだけ、選択を新しい名前へ追わせる。一覧の「…」でほかの接続先の
+    // 名前を変えたときは、開いている接続先はそのままで、下で読み直す。
+    const renamesSelection = request.kind === "rename" && selectedBeforeSave !== null &&
+      request.path === selectedBeforeSave.path && request.alias === selectedBeforeSave.alias;
+    const renamedSelection = renamesSelection
+      ? { path: selectedBeforeSave.path, alias: request.newAlias ?? selectedBeforeSave.alias }
+      : null;
     if (renamedSelection !== null) followCommittedIdentity(renamedSelection);
 
     const nextOverview = await reload();

@@ -3,7 +3,7 @@ import { clickAndAwait, expect, openApplication, openSection, test } from "./sup
 test("stores a password for a host and never shows it again", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSection(page, "Connections");
-  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
 
   const panel = page.getByRole("region", { name: "Authentication" });
   await expect(panel).toBeVisible();
@@ -31,7 +31,7 @@ test("selecting a key removes the stored password assignment and returning to ag
 }) => {
   await openApplication(page, installation);
   await openSection(page, "Connections");
-  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
 
   let panel = page.getByRole("region", { name: "Authentication" });
   await panel.getByLabel("Stored password action").selectOption("dedicated_password");
@@ -44,7 +44,7 @@ test("selecting a key removes the stored password assignment and returning to ag
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
 
   await openSection(page, "Connections");
-  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
   panel = page.getByRole("region", { name: "Authentication" });
   const keyChoice = panel.getByLabel("SSH private key");
   const keyId = await keyChoice.getByRole("option", { name: /id_exclusive_auth/ }).getAttribute("value");
