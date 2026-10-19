@@ -13,9 +13,12 @@ import (
 )
 
 const (
-	serviceTaskName      = "sshc"
-	serviceTaskMarker    = "Managed by sshc: starts the sshc engine at logon."
-	serviceTaskNamespace = "http://schemas.microsoft.com/windows/2004/02/mit/task"
+	// serviceTaskNamePrefix starts the per-user task name. Task Scheduler keeps one root
+	// folder per machine, so per-user software appends the user's SID, as OneDrive does
+	// ("OneDrive Startup Task-S-1-5-21-…"). A SID, unlike a user name, never changes.
+	serviceTaskNamePrefix = "sshc Startup Task-"
+	serviceTaskMarker     = "Managed by sshc: starts the sshc engine at logon."
+	serviceTaskNamespace  = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 	// Give transient startup failures time to clear, but stop retrying persistent failures.
 	serviceTaskRestartInterval = "PT1M"
 	serviceTaskRestartCount    = 3
@@ -61,6 +64,9 @@ func parseServiceTask(contents string) (taskElement, error) {
 	}
 	return task, nil
 }
+
+// serviceTaskName is the name of the logon task of the user with this SID.
+func serviceTaskName(sid string) string { return serviceTaskNamePrefix + sid }
 
 func taskExecutablePath(executable string) string { return strings.ReplaceAll(executable, `\`, "/") }
 func validTaskExecutable(executable string) bool {

@@ -295,7 +295,9 @@ function Stop-InstalledEngine([string]$Target, $Engine) {
 function Get-SshcTask {
     $scheduler = New-Object -ComObject 'Schedule.Service'
     $scheduler.Connect()
-    try { return $scheduler.GetFolder('\').GetTask('sshc') }
+    # Task Scheduler names are per machine; per-user software appends the user's SID (as OneDrive does).
+    $taskName = 'sshc Startup Task-' + [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    try { return $scheduler.GetFolder('\').GetTask($taskName) }
     catch {
         $exception = $_.Exception
         while ($null -ne $exception.InnerException) { $exception = $exception.InnerException }

@@ -28,12 +28,20 @@ type serviceTaskSnapshot struct {
 type taskServiceManager struct {
 	sid              string
 	runner           serviceCommandRunner
-	readTask         func(context.Context) (serviceTaskSnapshot, error)
+	readTask         func(context.Context, string) (serviceTaskSnapshot, error)
 	engineRunning    func() (bool, error)
 	engineResponding func(context.Context, string) error
 	stopEngine       func(context.Context, string) error
 	waitReady        func(context.Context, string) error
 	lock             func() (func() error, error)
+}
+
+// taskName is this user's logon task; see serviceTaskNamePrefix.
+func (manager *taskServiceManager) taskName() string { return serviceTaskName(manager.sid) }
+
+// currentTask reads this user's logon task.
+func (manager *taskServiceManager) currentTask(ctx context.Context) (serviceTaskSnapshot, error) {
+	return manager.readTask(ctx, manager.taskName())
 }
 
 func (manager *taskServiceManager) InstallPlan(executable string) (string, error) {
@@ -55,7 +63,7 @@ func (manager *taskServiceManager) Install(ctx context.Context, executable strin
 		return err
 	}
 	defer func() { result = errors.Join(result, release()) }()
-	snapshot, err := manager.readTask(ctx)
+	snapshot, err := manager.currentTask(ctx)
 	if err != nil {
 		return err
 	}
@@ -85,7 +93,7 @@ func (manager *taskServiceManager) Install(ctx context.Context, executable strin
 	if err := manager.ensureUnchanged(ctx, snapshot); err != nil {
 		return err
 	}
-	arguments := []string{"/Create", "/TN", serviceTaskName, "/XML", staged.Name()}
+	arguments := []string{"/Create", "/TN", manager.taskName(), "/XML", staged.Name()}
 	// /F is allowed only after recognizing and rechecking an existing managed task.
 	// A concurrently created task must cause creation to fail instead of being replaced.
 	if snapshot.exists {
@@ -107,7 +115,7 @@ func (manager *taskServiceManager) Install(ctx context.Context, executable strin
 }
 
 func (manager *taskServiceManager) Status(ctx context.Context) (serviceState, error) {
-	snapshot, err := manager.readTask(ctx)
+	snapshot, err := manager.currentTask(ctx)
 	if err != nil || !snapshot.exists {
 		return serviceAbsent, err
 	}
@@ -132,7 +140,7 @@ func (manager *taskServiceManager) StatusDetail(ctx context.Context) (string, er
 	return fmt.Sprintf("Task Scheduler: %s; engine: %s", states[snapshot.state], response), nil
 }
 func (manager *taskServiceManager) StartsAtLogin(ctx context.Context) (bool, error) {
-	snapshot, err := manager.readTask(ctx)
+	snapshot, err := manager.currentTask(ctx)
 	if err != nil || !snapshot.exists || !snapshot.definition.managedBy(manager.sid) {
 		return false, err
 	}
@@ -143,7 +151,7 @@ func (manager *taskServiceManager) StartsAtLogin(ctx context.Context) (bool, err
 func (manager *taskServiceManager) IsDefinitionOutdated() (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), serviceReadyTimeout)
 	defer cancel()
-	snapshot, err := manager.readTask(ctx)
+	snapshot, err := manager.currentTask(ctx)
 	if err != nil || !snapshot.exists || !snapshot.definition.managedBy(manager.sid) {
 		return false, err
 	}
@@ -176,7 +184,7 @@ func (manager *taskServiceManager) startIfEnabled(ctx context.Context, executabl
 		return false, err
 	}
 	defer func() { result = errors.Join(result, release()) }()
-	snapshot, err := manager.readTask(ctx)
+	snapshot, err := manager.currentTask(ctx)
 	if err != nil || !snapshot.exists {
 		return false, err
 	}
@@ -237,7 +245,7 @@ func (manager *taskServiceManager) Disable(ctx context.Context) (removed bool, r
 		return false, err
 	}
 	defer func() { result = errors.Join(result, release()) }()
-	snapshot, err := manager.readTask(ctx)
+	snapshot, err := manager.currentTask(ctx)
 	if err != nil || !snapshot.exists {
 		return false, err
 	}
@@ -255,13 +263,13 @@ func (manager *taskServiceManager) Disable(ctx context.Context) (removed bool, r
 	if err := manager.ensureUnchanged(ctx, snapshot); err != nil {
 		return false, err
 	}
-	if err := manager.run(ctx, "/Delete", "/TN", serviceTaskName, "/F"); err != nil {
+	if err := manager.run(ctx, "/Delete", "/TN", manager.taskName(), "/F"); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 func (manager *taskServiceManager) ensureUnchanged(ctx context.Context, expected serviceTaskSnapshot) error {
-	actual, err := manager.readTask(ctx)
+	actual, err := manager.currentTask(ctx)
 	if err != nil {
 		return err
 	}
@@ -280,11 +288,23 @@ func (manager *taskServiceManager) run(ctx context.Context, arguments ...string)
 	}
 	return nil
 }
+
+// errLogonTaskWaitsForDesktop reports a registered task that Windows did not start. The
+// task runs with the user's interactive token, which exists only while the user is signed
+// in to the Windows desktop; from an SSH or other non-desktop session it cannot start now.
+var errLogonTaskWaitsForDesktop = errors.New("the logon task is registered, but Windows did not start it: " +
+	"it runs only while you are signed in to the Windows desktop. It starts at your next desktop logon; " +
+	"to start the engine now, run `sshc` in the desktop session")
+
 func (manager *taskServiceManager) startTask(ctx context.Context) error {
-	if err := manager.run(ctx, "/Run", "/TN", serviceTaskName); err != nil {
+	if err := manager.run(ctx, "/Run", "/TN", manager.taskName()); err != nil {
 		return err
 	}
-	return manager.waitTaskState(ctx, true)
+	err := manager.waitTaskState(ctx, true)
+	if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+		return errLogonTaskWaitsForDesktop
+	}
+	return err
 }
 func (manager *taskServiceManager) waitTaskStopped(ctx context.Context) error {
 	return manager.waitTaskState(ctx, false)
@@ -311,7 +331,7 @@ func (manager *taskServiceManager) waitTaskState(ctx context.Context, running bo
 }
 
 func (manager *taskServiceManager) managedTask(ctx context.Context) (serviceTaskSnapshot, error) {
-	snapshot, err := manager.readTask(ctx)
+	snapshot, err := manager.currentTask(ctx)
 	if err != nil {
 		return snapshot, err
 	}
