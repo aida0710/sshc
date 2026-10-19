@@ -173,7 +173,7 @@ sshc service restart
 sshc service disable
 ```
 
-タスクスケジューラのルートへ`sshc`という名前で登録します。現在のユーザーのSIDを指定し、ログオン時に`InteractiveToken`・`LeastPrivilege`で`sshc.exe engine --background`を起動します。管理者権限は不要です。sshcエンジンは`FreeConsole`でコンソールを手放すため、窓が閉じても動作を続けます。ログは`%USERPROFILE%\.ssh\sshc\logs\engine.log`へ追記します。Vaultはブラウザや別のターミナルから解除できます。
+タスクスケジューラのルートへ`sshc Startup Task-<ユーザーのSID>`という名前で登録します。ルートのフォルダはマシンで1つなので、OneDriveなどユーザーごとに入るソフトと同じく、名前の末尾にSIDを付けてユーザーごとに分けます。現在のユーザーのSIDを指定し、ログオン時に`InteractiveToken`・`LeastPrivilege`で`sshc.exe engine --background`を起動します。管理者権限は不要です。sshcエンジンは`FreeConsole`でコンソールを手放すため、窓が閉じても動作を続けます。ログは`%USERPROFILE%\.ssh\sshc\logs\engine.log`へ追記します。Vaultはブラウザや別のターミナルから解除できます。
 
 `restart`と`disable`はsshcエンジンに正常終了を要求し、終了を待ちます。同名の手作りのタスクは変更しません。`install.ps1`の導入記録とexeのSHA-256が一致しない場合は登録を拒否します。導入記録を確認できる場合は、Windowsでも`sshc update`とWeb画面から更新できます。更新前に動いていたエンジンは、更新後に起動し直します。
 

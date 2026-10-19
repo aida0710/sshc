@@ -14,6 +14,10 @@ import (
 )
 
 const testTaskSID = "S-1-5-21-123-456-789-1001"
+
+// testTaskName is the task of testTaskSID: Task Scheduler names are per machine, so the
+// SID keeps one user's task apart from another's, as OneDrive's task names do.
+const testTaskName = "sshc Startup Task-" + testTaskSID
 const testTaskExecutable = `C:\Users\tester\Programs\sshc\sshc.exe`
 
 type fakeTaskScheduler struct {
@@ -24,6 +28,9 @@ type fakeTaskScheduler struct {
 	readyError    error
 	stopError     error
 	afterStop     func()
+	// outsideDesktop models a user who is not signed in to the Windows desktop: Task
+	// Scheduler accepts /Run but cannot start a task that needs the interactive token.
+	outsideDesktop bool
 }
 
 func (scheduler *fakeTaskScheduler) Run(_ context.Context, arguments ...string) (serviceCommandResult, error) {
@@ -37,7 +44,7 @@ func (scheduler *fakeTaskScheduler) Run(_ context.Context, arguments ...string) 
 		if len(arguments) != expectedLength || scheduler.snapshot.exists && arguments[5] != "/F" {
 			scheduler.t.Fatalf("unsafe overwrite flags: %q", arguments)
 		}
-		if arguments[1] != "/TN" || arguments[2] != "sshc" || arguments[3] != "/XML" {
+		if arguments[1] != "/TN" || arguments[2] != testTaskName || arguments[3] != "/XML" {
 			scheduler.t.Fatalf("create arguments: %q", arguments)
 		}
 		contents, err := os.ReadFile(arguments[4])
@@ -57,13 +64,16 @@ func (scheduler *fakeTaskScheduler) Run(_ context.Context, arguments ...string) 
 		}
 		scheduler.snapshot = serviceTaskSnapshot{exists: true, state: taskReady, definition: task}
 	case "/Run":
-		if !reflect.DeepEqual(arguments, []string{"/Run", "/TN", "sshc"}) {
+		if !reflect.DeepEqual(arguments, []string{"/Run", "/TN", testTaskName}) {
 			scheduler.t.Fatalf("run arguments: %q", arguments)
+		}
+		if scheduler.outsideDesktop {
+			break
 		}
 		scheduler.snapshot.state = taskRunning
 		scheduler.runningEngine = true
 	case "/Delete":
-		if !reflect.DeepEqual(arguments, []string{"/Delete", "/TN", "sshc", "/F"}) {
+		if !reflect.DeepEqual(arguments, []string{"/Delete", "/TN", testTaskName, "/F"}) {
 			scheduler.t.Fatalf("delete arguments: %q", arguments)
 		}
 		scheduler.snapshot = serviceTaskSnapshot{}
@@ -77,7 +87,12 @@ func newTestTaskManager(t *testing.T) (*taskServiceManager, *fakeTaskScheduler) 
 	scheduler := &fakeTaskScheduler{t: t}
 	manager := &taskServiceManager{
 		sid: testTaskSID, runner: scheduler,
-		readTask:         func(context.Context) (serviceTaskSnapshot, error) { return scheduler.snapshot, nil },
+		readTask: func(_ context.Context, name string) (serviceTaskSnapshot, error) {
+			if name != testTaskName {
+				t.Fatalf("read another task: %q", name)
+			}
+			return scheduler.snapshot, nil
+		},
 		engineRunning:    func() (bool, error) { return scheduler.runningEngine, nil },
 		engineResponding: func(context.Context, string) error { return scheduler.readyError },
 		stopEngine: func(_ context.Context, executable string) error {
@@ -228,6 +243,18 @@ func TestLogonTaskInstallRefusesAnAlreadyRunningEngine(t *testing.T) {
 	}
 }
 
+// Windows 11 の仮想マシンで、SSH でしか入っていないユーザー（画面にログオンしていない）が
+// sshc service install を実行すると、タスクは登録されたが起動せず、待ち合わせの期限切れ
+// （deadline exceeded）だけが出た。何が起きたかと、いつ起動するかを伝える。
+func TestLogonTaskInstallExplainsThatItStartsAtTheNextDesktopLogon(t *testing.T) {
+	manager, scheduler := newTestTaskManager(t)
+	scheduler.outsideDesktop = true
+	err := manager.Install(context.Background(), testTaskExecutable)
+	if !errors.Is(err, errLogonTaskWaitsForDesktop) || !scheduler.snapshot.exists {
+		t.Fatalf("err=%v registered=%v", err, scheduler.snapshot.exists)
+	}
+}
+
 func TestLogonTaskReportsReadyRunningAndDisabledAlongsideEngineHealth(t *testing.T) {
 	for _, state := range []scheduledTaskState{taskReady, taskRunning, taskDisabled} {
 		manager, scheduler := newTestTaskManager(t)
@@ -342,7 +369,7 @@ func TestLogonTaskReinstallUpdatesOnlyAManagedDefinition(t *testing.T) {
 func TestLogonTaskQueryErrorsAndCancellationNeverAuthorizeAChange(t *testing.T) {
 	manager, scheduler := newTestTaskManager(t)
 	failure := errors.New("Task Scheduler access denied")
-	manager.readTask = func(context.Context) (serviceTaskSnapshot, error) { return serviceTaskSnapshot{}, failure }
+	manager.readTask = func(context.Context, string) (serviceTaskSnapshot, error) { return serviceTaskSnapshot{}, failure }
 	if err := manager.Install(context.Background(), testTaskExecutable); !errors.Is(err, failure) {
 		t.Fatalf("install=%v", err)
 	}
@@ -356,7 +383,7 @@ func TestLogonTaskQueryErrorsAndCancellationNeverAuthorizeAChange(t *testing.T) 
 		t.Fatalf("changed task after a failed query: %q", scheduler.events)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	manager.readTask = func(context.Context) (serviceTaskSnapshot, error) {
+	manager.readTask = func(context.Context, string) (serviceTaskSnapshot, error) {
 		cancel()
 		return serviceTaskSnapshot{exists: true, state: taskQueued, definition: testTaskDefinition(t)}, nil
 	}
@@ -369,7 +396,7 @@ func TestLogonTaskRestartDoesNotStartATaskThatStoppedAfterTheActiveCheck(t *test
 	manager, scheduler := newTestTaskManager(t)
 	scheduler.snapshot = serviceTaskSnapshot{exists: true, state: taskRunning, definition: testTaskDefinition(t)}
 	reads := 0
-	manager.readTask = func(context.Context) (serviceTaskSnapshot, error) {
+	manager.readTask = func(context.Context, string) (serviceTaskSnapshot, error) {
 		reads++
 		// The shared restart path checks the definition, active state, then definition.
 		// The task exits just before the mutation's own state check.
