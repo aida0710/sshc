@@ -34,7 +34,7 @@ func TestProjectHostsListsEveryBlockWithItsRealNature(t *testing.T) {
 		"conf.d/10-home.conf": "Host nas\n\tUser aida\nHost nas\n\tUser duplicate\n",
 	})
 
-	hosts, notices := ProjectHosts(graph, testRoot, DefaultGroupsFile)
+	hosts, notices := ProjectHosts(graph, testRoot)
 	if len(hosts) != 5 {
 		t.Fatalf("hosts = %#v", hosts)
 	}
@@ -119,7 +119,7 @@ func TestProjectHostsFlagsAnAliasDeclaredInAnotherFile(t *testing.T) {
 		"conf.d/10-home.conf": "Host nas\n\tUser someone-else\n",
 	})
 
-	hosts, notices := ProjectHosts(graph, testRoot, DefaultGroupsFile)
+	hosts, notices := ProjectHosts(graph, testRoot)
 	claiming := []HostEntry{}
 	for _, host := range hosts {
 		if host.Identity.Alias == "nas" {
@@ -162,7 +162,7 @@ func TestProjectHostsLeavesOutTheGroupSettingsFile(t *testing.T) {
 		DefaultGroupsFile:                "Host db-primary\n\tUser ops\n",
 	})
 
-	hosts, notices := ProjectHosts(graph, testRoot, DefaultGroupsFile)
+	hosts, notices := ProjectHosts(graph, testRoot)
 	if len(hosts) != 1 || hosts[0].File.Path != "connections/production/db.conf" || hosts[0].Duplicate {
 		t.Fatalf("hosts = %#v, want only the connection in its group directory", hosts)
 	}
@@ -244,7 +244,7 @@ func TestHostEntryGroupComesFromTheDirectoryNotFromMetadata(t *testing.T) {
 		"connections/work/web.conf": "Host web-1\n\tHostName 203.0.113.10\n",
 		"connections/loose.conf":    "Host loose\n\tHostName 203.0.113.11\n",
 	})
-	hosts, _ := ProjectHosts(graph, testRoot, DefaultGroupsFile)
+	hosts, _ := ProjectHosts(graph, testRoot)
 
 	byAlias := map[string]HostEntry{}
 	for _, host := range hosts {
