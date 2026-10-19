@@ -66,6 +66,9 @@ type Node struct {
 	File     *File
 	Includes []Edge
 	Loads    int
+	// GroupsFile は、このファイルが Resolver.GroupsFile の指す groups file であることを
+	// 示す。
+	GroupsFile bool
 }
 
 // Graph は、ひとつのエントリファイルから到達できる Include 構造。
@@ -98,7 +101,24 @@ func (r Resolver) Resolve(rootPath string) (*Graph, error) {
 		identities: make(map[string]*Node),
 	}
 	r.walk(graph, graph.Root, nil, 0)
+	r.markGroupsFile(graph)
 	return graph, nil
+}
+
+// markGroupsFile は、Resolver.GroupsFile の指すファイルが読まれていれば、その Node に
+// 印を付ける。同じファイルを別の表記で読んだ Include も同じ Node に結び直されているので、
+// 表記ではなく identity で引く。
+func (r Resolver) markGroupsFile(graph *Graph) {
+	if r.GroupsFile == nil {
+		return
+	}
+	path := r.GroupsFile()
+	if path == "" {
+		return
+	}
+	if node := graph.identities[nativepath.Identity(r.canonical(path))]; node != nil {
+		node.GroupsFile = true
+	}
 }
 
 func (g *Graph) diagnose(severity Severity, code, filePath string, line int, detail string) {

@@ -29,6 +29,8 @@ type blockHeader struct {
 	// （SSHCONF_NEVERMATCH）。それでも Match exec のコマンドは実行するので、
 	// 見出しそのものは知らせる。
 	neverMatch bool
+	// inGroupsFile は、このブロックが groups file（config.Node.GroupsFile）にあることを示す。
+	inGroupsFile bool
 }
 
 // number は見出しの行番号（1 始まり）である。
@@ -125,6 +127,7 @@ func (w *loadOrderWalker) readFile(filePath string, inherited blockState, neverM
 func (w *loadOrderWalker) enterBlock(current readingFile, block config.Block) blockState {
 	header := blockHeader{
 		path: current.path, block: block, condition: current.node.File.Condition(block), neverMatch: current.neverMatch,
+		inGroupsFile: current.node.GroupsFile,
 	}
 	kind, applies := w.visitor.enterBlock(header)
 	return blockState{applies: applies && !current.neverMatch, kind: kind, condition: header.condition}

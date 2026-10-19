@@ -71,6 +71,31 @@ func requireDiagnostic(t *testing.T, graph *Graph, code string) Diagnostic {
 	return Diagnostic{}
 }
 
+// 印を付けるのは Resolver.GroupsFile の指すファイルだけである。internal/effective は
+// この印を見て、そのファイルの Host 行を alias の宣言として数えない。
+func TestResolveMarksOnlyTheGroupsFile(t *testing.T) {
+	groupsFile := filepath.Join(testRoot, "groups.sshc.conf")
+	resolver := resolverFor(map[string]string{
+		testConfig: "Include connections/production/*.conf\nInclude groups.sshc.conf\n",
+		filepath.Join(testRoot, "connections", "production", "db.conf"): "Host db-primary\n",
+		groupsFile: "Host db-primary\n\tUser ops\n",
+	})
+	resolver.GroupsFile = func() string { return groupsFile }
+
+	graph, err := resolver.Resolve(testConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(graph.Nodes) != 3 {
+		t.Fatalf("nodes = %v, want the entry file, the connection and the groups file", graph.Order)
+	}
+	for path, node := range graph.Nodes {
+		if node.GroupsFile != (path == groupsFile) {
+			t.Errorf("%s: GroupsFile = %v", path, node.GroupsFile)
+		}
+	}
+}
+
 func TestResolveLoadsIncludedFilesInLexicalGlobOrder(t *testing.T) {
 	graph, err := resolverFor(map[string]string{
 		testConfig: "Include conf.d/*.conf\nHost direct\n",
