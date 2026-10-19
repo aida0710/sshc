@@ -14,7 +14,7 @@ type AboutHandlers struct {
 
 func registerAboutRoute(engine *echo.Echo, version string, buildInfo *buildinfo.Info) {
 	if buildInfo == nil {
-		current := buildinfo.Read(version)
+		current := buildinfo.Read(buildinfo.Stamp{Version: version})
 		buildInfo = &current
 	}
 	response := api.About{Version: buildInfo.Version, Revision: buildInfo.Revision, CommitTime: buildInfo.CommitTime,

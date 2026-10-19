@@ -25,3 +25,28 @@ func TestMissingOrInvalidVCSInformationRemainsUnknown(t *testing.T) {
 		}
 	}
 }
+
+func TestStampFillsOnlyWhatGoDidNotRecord(t *testing.T) {
+	stamp := Stamp{Version: "v1.2.0", Revision: "0123456789abcdef0123456789abcdef01234567", CommitTime: "2026-10-19T08:20:00Z"}
+
+	homebrew := fromBuildInfo(&debug.BuildInfo{})
+	stamp.fillMissing(&homebrew)
+	if homebrew.Revision != stamp.Revision || homebrew.CommitTime == nil || homebrew.CommitTime.Format(time.RFC3339) != stamp.CommitTime || homebrew.Modified != nil {
+		t.Fatalf("a build without .git = %+v", homebrew)
+	}
+
+	checkout := fromBuildInfo(&debug.BuildInfo{Settings: []debug.BuildSetting{
+		{Key: "vcs.revision", Value: "fedcba9876543210"},
+		{Key: "vcs.time", Value: "2026-10-20T00:00:00Z"},
+	}})
+	stamp.fillMissing(&checkout)
+	if checkout.Revision != "fedcba9876543210" || checkout.CommitTime.Format(time.RFC3339) != "2026-10-20T00:00:00Z" {
+		t.Fatalf("a build from a checkout = %+v", checkout)
+	}
+
+	unstamped := fromBuildInfo(&debug.BuildInfo{})
+	Stamp{CommitTime: "invalid"}.fillMissing(&unstamped)
+	if unstamped.Revision != "" || unstamped.CommitTime != nil {
+		t.Fatalf("an empty or invalid stamp = %+v", unstamped)
+	}
+}

@@ -44,6 +44,12 @@ export function formatDateTime(value: string, locale?: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(moment);
 }
 
+// A moment seen while the page is open, to the second: steps of one operation
+// usually fall within the same minute and would otherwise read alike.
+export function formatTimeOfDay(moment: Date, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, { timeStyle: "medium" }).format(moment);
+}
+
 const secondsPerMinute = 60;
 const minutesPerHour = 60;
 

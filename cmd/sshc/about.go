@@ -2,8 +2,8 @@ package main
 
 import "sshc/internal/buildinfo"
 
-func runningBuildInfo(version string) *buildinfo.Info {
-	buildInfo := buildinfo.Read(version)
+func runningBuildInfo(stamp buildinfo.Stamp) *buildinfo.Info {
+	buildInfo := buildinfo.Read(stamp)
 	found, err := detectInstallation(buildInfo.Executable)
 	if err != nil {
 		return &buildInfo

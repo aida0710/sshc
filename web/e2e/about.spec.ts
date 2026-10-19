@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, openApplication, test } from "./support/environment";
 
 test("opens About from the menu and version link, reads plain release notes and checks for updates", async ({ page, installation }) => {
@@ -26,6 +27,7 @@ test("opens About from the menu and version link, reads plain release notes and 
   const about = page.getByRole("region", { name: "About sshc", exact: true });
   await expect(about.getByText("/fixture/sshc")).toBeVisible();
   await expect(about.getByRole("link", { name: "abcdef0" })).toHaveAttribute("href", /\/commit\/abcdef/);
+  await expect(about.getByRole("heading", { level: 3 })).toHaveText(["Updates", "Release notes"]);
   await expect(about.locator("details").first()).toHaveAttribute("open", "");
   await expect(about.getByText("# Notes", { exact: false })).toContainText("<script>window.aboutInjected = true</script>");
   await expect(about.locator("script")).toHaveCount(0);
@@ -35,6 +37,13 @@ test("opens About from the menu and version link, reads plain release notes and 
   await about.getByRole("button", { name: "Check for updates" }).click();
   await expect(about.getByText("New release notes")).toBeVisible();
   expect(checked).toBe(true);
+  // Each check leaves the time it started and what it found, even when nothing else on the page changes.
+  const progress = about.getByRole("log", { name: "Check and update progress" });
+  await expect(progress.getByRole("listitem")).toHaveText([/Checking GitHub for the latest release…/, /The latest release on GitHub is v1\.2\.0\./]);
+  await expect(progress.locator("time").first()).toHaveAttribute("datetime", /^\d{4}-\d{2}-\d{2}T/);
+  // The primary-page accessibility check never presses the button, so the log is checked here.
+  const audit = await new AxeBuilder({ page }).include("main").withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+  expect(audit.violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical").map((violation) => violation.id)).toEqual([]);
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Menu", exact: true }).click();
   await page.getByRole("link", { name: "Open About sshc" }).click();
   await expect(about).toBeVisible();
