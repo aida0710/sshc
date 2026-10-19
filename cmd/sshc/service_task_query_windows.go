@@ -83,7 +83,7 @@ func connectTaskService(service *taskCOMObject) error {
 	return taskCOMError("Connect", code)
 }
 
-func readWindowsServiceTask(ctx context.Context) (serviceTaskSnapshot, error) {
+func readWindowsServiceTask(ctx context.Context, taskName string) (serviceTaskSnapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return serviceTaskSnapshot{}, err
 	}
@@ -116,7 +116,7 @@ func readWindowsServiceTask(ctx context.Context) (serviceTaskSnapshot, error) {
 		return serviceTaskSnapshot{}, err
 	}
 	defer folder.release()
-	name, err := taskBSTR(serviceTaskName)
+	name, err := taskBSTR(taskName)
 	if err != nil {
 		return serviceTaskSnapshot{}, err
 	}

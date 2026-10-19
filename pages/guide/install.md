@@ -49,7 +49,7 @@ sshc service install
 sshc service status
 ```
 
-`install`は実行ファイルのパスを表示して確認を求めます。確認後、タスクスケジューラのルートに`sshc`という名前のタスクを登録し、その場で起動します。以後は、このユーザーがWindowsへログオンすると起動します。コンソールの窓は起動直後に閉じ、sshcエンジンは動き続けます。ログは`%USERPROFILE%\.ssh\sshc\logs\engine.log`へ追記します。
+`install`は実行ファイルのパスを表示して確認を求めます。確認後、タスクスケジューラのルートに`sshc Startup Task-<ユーザーのSID>`という名前のタスクを登録し、その場で起動します。以後は、このユーザーがWindowsへログオンすると起動します。コンソールの窓は起動直後に閉じ、sshcエンジンは動き続けます。ログは`%USERPROFILE%\.ssh\sshc\logs\engine.log`へ追記します。
 
 `sshc service status`はタスクの状態（Ready／Running／Disabled）とsshcエンジンの応答を表示します。稼働中のタスクは`sshc service restart`で再起動できます。`sshc service disable`はsshcエンジンの終了を待ち、タスクを削除します。変更操作の確認を省略する場合は`--yes`を付けてください。
 

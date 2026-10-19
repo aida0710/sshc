@@ -37,10 +37,10 @@ if ($registrationExisted) {
     $registration.Dispose()
 }
 
-# The real task name is global to the account. Never touch a user's existing task.
+# The task name carries the user's SID. Never touch this account's existing task.
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
-if (@($scheduler.GetFolder('\').GetTasks(1) | Where-Object { $_.Name -eq 'sshc' }).Count -ne 0) {
+if (@($scheduler.GetFolder('\').GetTasks(1) | Where-Object { $_.Name -eq ('sshc Startup Task-' + [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value) }).Count -ne 0) {
     $environmentKey.Dispose()
     throw 'run this smoke test in an account without an existing sshc task'
 }

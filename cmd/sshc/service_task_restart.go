@@ -18,7 +18,7 @@ func (manager *taskServiceManager) restartDefinition(ctx context.Context) servic
 	return manager.taskDefinition(ctx)
 }
 func (definition taskRestartDefinition) matches(executable string) (bool, error) {
-	snapshot, err := definition.manager.readTask(definition.ctx)
+	snapshot, err := definition.manager.currentTask(definition.ctx)
 	return err == nil && snapshot.exists && snapshot.definition.managedBy(definition.manager.sid) && snapshot.definition.matches(executable, definition.manager.sid), err
 }
 func (definition taskRestartDefinition) ensureStillMatches(executable, activity string) error {
