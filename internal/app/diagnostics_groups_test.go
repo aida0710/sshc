@@ -51,7 +51,10 @@ func TestTheEngineDiagnosticsDoNotCountGroupSettingsAsADuplicateAlias(t *testing
 	}); err != nil {
 		t.Fatal(err)
 	}
-	groupsFile := filepath.Join(root, application.DefaultGroupsFile)
+	// 期待するパスは、engine が解決したルートで組み立てる。macOS の一時ディレクトリは
+	// /var から /private/var へのリンクを通り、Windows では短い名前（RUNNER~1）で渡る。
+	entryFile := services.diagnostics.ConfigPath()
+	groupsFile := filepath.Join(filepath.Dir(entryFile), application.DefaultGroupsFile)
 
 	member := inspect(t, services.diagnostics, "db-primary")
 	if duplicates := duplicateAliasNotes(member.Projection.Complexities); len(duplicates) != 0 {
@@ -67,7 +70,7 @@ func TestTheEngineDiagnosticsDoNotCountGroupSettingsAsADuplicateAlias(t *testing
 	}
 
 	duplicated := duplicateAliasNotes(inspect(t, services.diagnostics, "web-01").Projection.Complexities)
-	if len(duplicated) != 1 || duplicated[0].Path != filepath.Join(root, "config") {
+	if len(duplicated) != 1 || duplicated[0].Path != entryFile {
 		t.Errorf("web-01 duplicate_alias = %#v, want the block the user wrote in config", duplicated)
 	}
 }
