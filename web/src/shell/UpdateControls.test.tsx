@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { UpdateApi, UpdateStatus } from "../api/update";
 import { UpdateBadge } from "./UpdateBadge";
+import { UpdateControls } from "./UpdateControls";
 
 const available: UpdateStatus = { current: "v1.0.0", latest: "v1.1.0", available: true, canUpdate: true, manager: "install.sh" };
 function updater(): UpdateApi {
@@ -14,12 +15,17 @@ function updater(): UpdateApi {
   };
 }
 
+// The update is confirmed on About; these tests give the controls the status the page loaded.
+async function renderControls(api: UpdateApi) {
+  render(<UpdateControls status={await api.updateStatus()} api={api} onStart={vi.fn()} />);
+}
+
 describe("Web self update", () => {
   afterEach(() => localStorage.clear());
 
   it("shows terminal and transfer disconnection before consuming the preview token", async () => {
     const api = updater();
-    render(<UpdateBadge api={api} />);
+    await renderControls(api);
     await userEvent.click(await screen.findByRole("button", { name: "Update sshc" }));
     const dialog = await screen.findByRole("dialog", { name: "Update sshc?" });
     expect(dialog).toHaveTextContent("disconnects all terminals and file transfers");
@@ -35,7 +41,7 @@ describe("Web self update", () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, manager: "install.ps1" });
     vi.mocked(api.previewUpdate).mockResolvedValue({ current: "v1.0.0", target: "v1.1.0", manager: "install.ps1", actionToken: "windows-plan", actionExpiresAt: "2026-10-19T09:00:00Z" });
-    render(<UpdateBadge api={api} />);
+    await renderControls(api);
     await userEvent.click(await screen.findByRole("button", { name: "Update sshc" }));
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(dialog).toHaveTextContent("install.ps1"));
@@ -46,7 +52,7 @@ describe("Web self update", () => {
 
   it("does not start an update after cancellation", async () => {
     const api = updater();
-    render(<UpdateBadge api={api} />);
+    await renderControls(api);
     await userEvent.click(await screen.findByRole("button", { name: "Update sshc" }));
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel" }));
     expect(api.startUpdate).not.toHaveBeenCalled();
@@ -55,7 +61,7 @@ describe("Web self update", () => {
   it("requires a new review after the one-time confirmation expires", async () => {
     const api = updater();
     vi.mocked(api.startUpdate).mockRejectedValue(new ApiError("action_token_expired", 403, null));
-    render(<UpdateBadge api={api} />);
+    await renderControls(api);
     await userEvent.click(await screen.findByRole("button", { name: "Update sshc" }));
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "Update sshc" })).toBeEnabled());
@@ -78,7 +84,7 @@ describe("Web self update", () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, manager: "homebrew" });
     vi.mocked(api.previewUpdate).mockResolvedValue({ current: "v1.0.0", target: "v1.1.0", manager: "homebrew", actionToken: "confirmed-plan", actionExpiresAt: "2026-10-10T09:00:00Z" });
-    render(<UpdateBadge api={api} />);
+    await renderControls(api);
     await userEvent.click(await screen.findByRole("button", { name: "Update sshc" }));
     const dialog = await screen.findByRole("dialog");
     await within(dialog).findByText(/A newer version may be installed/);

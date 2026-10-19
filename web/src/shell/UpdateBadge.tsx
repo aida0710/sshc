@@ -4,8 +4,7 @@ import { updateApi, type UpdateApi } from "../api/update";
 import { useTranslate } from "../i18n/context";
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
 import { localStorageKeys } from "../ui/browserStorageKeys";
-import { useUpdateStatus } from "./useUpdateStatus";
-import { UpdateControls } from "./UpdateControls";
+import { isUpdateActive, useUpdateStatus } from "./useUpdateStatus";
 import { UpdateResultDialog } from "./UpdateResultDialog";
 import { isSafeHttpURL } from "../terminal/links";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
@@ -17,15 +16,18 @@ type UpdateBadgeProps = {
   current?: string;
   indicator?: ReactNode;
   enabled?: boolean;
+  // About lists an update's progress itself; while it is open, only the result opens a dialog.
+  showsProgressDialog?: boolean;
   onNavigate?: (event: MouseEvent<HTMLAnchorElement>) => void;
 };
 
 // UpdateBadge shows the version, and under it only what concerns the next release:
 // that one is available, or why this installation cannot update from the Web. That
-// part has its own disclosure button beside the version link. An update's progress and result open in a dialog.
-export function UpdateBadge({ api = updateApi, current = "", indicator, enabled = true, onNavigate }: UpdateBadgeProps) {
+// part has its own disclosure button beside the version link. An update is confirmed
+// and followed on About, so the notice links there; its result opens in a dialog.
+export function UpdateBadge({ api = updateApi, current = "", indicator, enabled = true, showsProgressDialog = true, onNavigate }: UpdateBadgeProps) {
   const t = useTranslate();
-  const { status, setStatus } = useUpdateStatus(api, enabled);
+  const { status } = useUpdateStatus(api, enabled);
   const [shownResultId] = useState(readShownUpdateResult);
   const [closedDialogKey, setClosedDialogKey] = useState<string | null>(null);
   const [foldedRelease, setFoldedRelease] = useState(() => readStoredValue(localStorageKeys.updateFoldedRelease));
@@ -62,7 +64,9 @@ export function UpdateBadge({ api = updateApi, current = "", indicator, enabled 
   }
 
   const dialogJob = status === null ? undefined : updateJobToShow(status, shownResultId);
-  const openDialogJob = dialogJob !== undefined && updateDialogKey(dialogJob) !== closedDialogKey ? dialogJob : undefined;
+  const isProgressOnPage = !showsProgressDialog && isUpdateActive(dialogJob);
+  const openDialogJob = dialogJob !== undefined && !isProgressOnPage && updateDialogKey(dialogJob) !== closedDialogKey ? dialogJob : undefined;
+  const offersUpdate = status?.canUpdate === true && !isUpdateActive(status.job);
 
   return (
     <div className="border-t border-line px-2 py-2 text-xs text-ink-muted">
@@ -85,10 +89,10 @@ export function UpdateBadge({ api = updateApi, current = "", indicator, enabled 
             </a>
           </p>
         )}
-        {status === null ? null : (
-          <div className={indicator === undefined ? "" : "pl-3.5"}>
-            <UpdateControls status={status} api={api} onStart={(job) => setStatus({ ...status, canUpdate: false, job })} />
-          </div>
+        {!offersUpdate ? null : (
+          <p className={detailIndent}>
+            <a href={sectionPath("About")} onClick={followAbout} className="text-ink underline underline-offset-2">{t("update.openAbout")}</a>
+          </p>
         )}
       </div>
       {openDialogJob === undefined ? null : (

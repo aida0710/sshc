@@ -14,8 +14,31 @@ describe("UpdateBadge", () => {
     const { rerender } = render(<UpdateBadge api={api} current="v1.0.0" enabled={false} />);
     expect(api.updateStatus).not.toHaveBeenCalled();
     rerender(<UpdateBadge api={api} current="v1.0.0" enabled />);
-    expect(await screen.findByRole("button", { name: "Update sshc" })).toBeVisible();
+    expect(await screen.findByRole("link", { name: "Update in About sshc" })).toBeVisible();
     expect(api.updateStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends an update to About, where it is confirmed and followed, instead of confirming it in the sidebar", async () => {
+    const onNavigate = vi.fn((event: { preventDefault(): void }) => event.preventDefault());
+    const api = buildApi({ current: "v1.0.0", latest: "v1.1.0", available: true, canUpdate: true });
+    render(<UpdateBadge api={api} onNavigate={onNavigate} />);
+    const link = await screen.findByRole("link", { name: "Update in About sshc" });
+    expect(link).toHaveAttribute("href", "/about");
+    link.click();
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(api.previewUpdate).not.toHaveBeenCalled();
+  });
+
+  it("leaves an update's progress to About while it is open, but still shows the result once", async () => {
+    const running: UpdateStatus = { current: "v1.0.0", latest: "v1.1.0", available: true, job: { id: "job", target: "v1.1.0", state: "installing", problem: "" } };
+    const api = buildApi(running);
+    const { rerender } = render(<UpdateBadge api={api} showsProgressDialog={false} />);
+    await waitFor(() => expect(api.updateStatus).toHaveBeenCalled());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    rerender(<UpdateBadge api={api} />);
+    expect(await screen.findByRole("dialog", { name: "sshc update" })).toHaveTextContent("Updating to v1.1.0…");
   });
   it("shows the version and offers nothing when there is nothing newer", async () => {
     render(<UpdateBadge api={buildApi({ current: "0.1.0", available: false })} />);
