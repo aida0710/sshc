@@ -19,6 +19,7 @@ export const sections = [
   "VPN",
   "History",
   "License",
+  "About",
 ] as const;
 
 export type Section = (typeof sections)[number];
@@ -44,6 +45,7 @@ const paths: Record<Section, string> = {
   VPN: "/vpn",
   History: "/history",
   License: "/license",
+  About: "/about",
 };
 
 export type SectionRoute =

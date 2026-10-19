@@ -1,8 +1,7 @@
 // Package releasecheck は、プロジェクトの GitHub リリースを調べ、より新しいものが
 // あるかを伝える。
 //
-// 新しいバージョンとリリース情報の URL のみを返す。このpackage自身は更新の
-// downloadやbinary置換を行わず、呼び出し側が既存のinstall managerへ委ねる。
+// リリース情報を返し、更新の実行は既存のinstall managerへ委ねる。
 package releasecheck
 
 import (
@@ -13,19 +12,23 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"golang.org/x/mod/semver"
 )
+
+// maxLatestResponseBytes bounds the single-release JSON response before decoding.
+const maxLatestResponseBytes = 1 << 20
 
 // ErrNoRelease は、プロジェクトがまだ何も公開していないことを報告する。
 var ErrNoRelease = errors.New("no release has been published")
 
 // Release は、プロジェクトが公開したもの。
 type Release struct {
-	Version string
-	// PageURL は、何が変わったかをユーザーが読み、どうするかを決める場所。これが提供する
-	// もののすべてである。
-	PageURL string
+	Version     string
+	PageURL     string
+	PublishedAt time.Time
+	Body        string
 }
 
 // Checker は、最新リリースが何かを GitHub に尋ねる。
@@ -36,9 +39,12 @@ type Checker struct {
 }
 
 type githubRelease struct {
-	TagName string `json:"tag_name"`
-	HTMLURL string `json:"html_url"`
-	Draft   bool   `json:"draft"`
+	TagName     string    `json:"tag_name"`
+	HTMLURL     string    `json:"html_url"`
+	Draft       bool      `json:"draft"`
+	Prerelease  bool      `json:"prerelease"`
+	PublishedAt time.Time `json:"published_at"`
+	Body        string    `json:"body"`
 }
 
 func (c Checker) client() *http.Client {
@@ -68,13 +74,13 @@ func (c Checker) Latest(ctx context.Context) (Release, error) {
 	}
 
 	var decoded githubRelease
-	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&decoded); err != nil {
+	if err := json.NewDecoder(io.LimitReader(response.Body, maxLatestResponseBytes)).Decode(&decoded); err != nil {
 		return Release{}, err
 	}
-	if decoded.Draft || decoded.TagName == "" {
+	if _, stable := StableTag(decoded.TagName); decoded.Draft || decoded.Prerelease || !stable {
 		return Release{}, ErrNoRelease
 	}
-	return Release{Version: decoded.TagName, PageURL: decoded.HTMLURL}, nil
+	return decoded.release(), nil
 }
 
 // Newer は、candidate が current より後のバージョンかを報告する。

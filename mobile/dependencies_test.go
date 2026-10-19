@@ -111,6 +111,7 @@ var androidFieldIntent = map[string]string{
 	"TerminalStarter":   "default: 本物の PTY を確保する。Android では /system/bin/sh",
 	"DockerEnvironment": "default: Environ から求めた環境。Android に docker は無く、VPN の一覧は「使用できない」を返す",
 	"SessionNow":        "default: time.Now",
+	"About":             "default: 実行中のGo build infoを読み、導入方法は管理元不明として表示する",
 	"ShutdownTimeout":   "default: app が決める既定値",
 }
 

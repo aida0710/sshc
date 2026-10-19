@@ -8,6 +8,30 @@ import (
 	"time"
 )
 
+// Defines values for AboutManager.
+const (
+	AboutManagerHomebrew   AboutManager = "homebrew"
+	AboutManagerInstallPs1 AboutManager = "install.ps1"
+	AboutManagerInstallSh  AboutManager = "install.sh"
+	AboutManagerUnknown    AboutManager = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the AboutManager enum.
+func (e AboutManager) Valid() bool {
+	switch e {
+	case AboutManagerHomebrew:
+		return true
+	case AboutManagerInstallPs1:
+		return true
+	case AboutManagerInstallSh:
+		return true
+	case AboutManagerUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AutoSyncPhase.
 const (
 	AutoSyncPhaseBlocked AutoSyncPhase = "blocked"
@@ -553,19 +577,19 @@ func (e UpdatePreviewManager) Valid() bool {
 
 // Defines values for UpdateStatusManager.
 const (
-	UpdateStatusManagerHomebrew   UpdateStatusManager = "homebrew"
-	UpdateStatusManagerInstallPs1 UpdateStatusManager = "install.ps1"
-	UpdateStatusManagerInstallSh  UpdateStatusManager = "install.sh"
+	Homebrew   UpdateStatusManager = "homebrew"
+	InstallPs1 UpdateStatusManager = "install.ps1"
+	InstallSh  UpdateStatusManager = "install.sh"
 )
 
 // Valid indicates whether the value is a known member of the UpdateStatusManager enum.
 func (e UpdateStatusManager) Valid() bool {
 	switch e {
-	case UpdateStatusManagerHomebrew:
+	case Homebrew:
 		return true
-	case UpdateStatusManagerInstallPs1:
+	case InstallPs1:
 		return true
-	case UpdateStatusManagerInstallSh:
+	case InstallSh:
 		return true
 	default:
 		return false
@@ -607,6 +631,24 @@ func (e VaultAutoLockSettingsUnit) Valid() bool {
 		return false
 	}
 }
+
+// About defines model for About.
+type About struct {
+	Arch string `json:"arch"`
+
+	// CommitTime VCS commit time recorded by Go; not the compilation time.
+	CommitTime *time.Time   `json:"commitTime,omitempty"`
+	Executable string       `json:"executable"`
+	GoVersion  string       `json:"goVersion"`
+	Manager    AboutManager `json:"manager"`
+	Modified   *bool        `json:"modified,omitempty"`
+	Os         string       `json:"os"`
+	Revision   string       `json:"revision"`
+	Version    string       `json:"version"`
+}
+
+// AboutManager defines model for About.Manager.
+type AboutManager string
 
 // AgentIdentitiesResponse defines model for AgentIdentitiesResponse.
 type AgentIdentitiesResponse struct {
@@ -1316,6 +1358,15 @@ type RegisterKeyResponse struct {
 	Identities      []AgentIdentity `json:"identities"`
 	LifetimeSeconds int             `json:"lifetimeSeconds"`
 	RelativePath    string          `json:"relativePath"`
+}
+
+// ReleaseNotes defines model for ReleaseNotes.
+type ReleaseNotes struct {
+	// Body Original Markdown displayed as plain text; bounded to 64 KiB of UTF-8.
+	Body        string     `json:"body"`
+	PageUrl     string     `json:"pageUrl"`
+	PublishedAt *time.Time `json:"publishedAt,omitempty"`
+	Version     string     `json:"version"`
 }
 
 // RelocateKeyRequest defines model for RelocateKeyRequest.
@@ -2239,16 +2290,24 @@ type UpdateRequest struct {
 
 // UpdateStatus defines model for UpdateStatus.
 type UpdateStatus struct {
-	Available bool                 `json:"available"`
-	CanUpdate *bool                `json:"canUpdate,omitempty"`
-	Current   string               `json:"current"`
-	Job       *UpdateJob           `json:"job,omitempty"`
-	Latest    *string              `json:"latest,omitempty"`
-	Manager   *UpdateStatusManager `json:"manager,omitempty"`
-	PageUrl   *string              `json:"pageUrl,omitempty"`
+	Available bool  `json:"available"`
+	CanUpdate *bool `json:"canUpdate,omitempty"`
+
+	// CheckError Failure of the last check; previous successful release information is retained.
+	CheckError *string `json:"checkError,omitempty"`
+
+	// CheckedAt Completion time of the last check
+	CheckedAt   *time.Time           `json:"checkedAt,omitempty"`
+	Current     string               `json:"current"`
+	Job         *UpdateJob           `json:"job,omitempty"`
+	Latest      *string              `json:"latest,omitempty"`
+	Manager     *UpdateStatusManager `json:"manager,omitempty"`
+	PageUrl     *string              `json:"pageUrl,omitempty"`
+	PublishedAt *time.Time           `json:"publishedAt,omitempty"`
 
 	// Reason Stable reason code explaining why automatic updates are unavailable
-	Reason *string `json:"reason,omitempty"`
+	Reason   *string         `json:"reason,omitempty"`
+	Releases *[]ReleaseNotes `json:"releases,omitempty"`
 }
 
 // UpdateStatusManager defines model for UpdateStatus.Manager.

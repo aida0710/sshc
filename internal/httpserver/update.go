@@ -9,6 +9,7 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/releasecheck"
+	"sshc/internal/releasewatch"
 	"sshc/internal/selfupdate"
 	"sshc/internal/session"
 )
@@ -21,18 +22,27 @@ const maxUpdateRequestBody = 1024
 
 type UpdateHandlers struct {
 	Current string
-	Checker *releasecheck.Checker
+	Watcher *releasewatch.Watcher
 	Service *selfupdate.Service
 	Actions ActionHandlers
 }
 
 func registerUpdateRoutes(engine *echo.Echo, handlers *UpdateHandlers) {
-	engine.GET("/api/v1/update", handlers.Check)
+	engine.GET("/api/v1/update", handlers.Status)
+	engine.POST("/api/v1/update/check", handlers.Refresh)
 	engine.POST("/api/v1/update/preview", handlers.Preview)
 	engine.POST("/api/v1/update", handlers.Start)
 }
 
-func (h *UpdateHandlers) Check(c *echo.Context) error {
+func (h *UpdateHandlers) Status(c *echo.Context) error {
+	return h.status(c, false)
+}
+
+func (h *UpdateHandlers) Refresh(c *echo.Context) error {
+	return h.status(c, true)
+}
+
+func (h *UpdateHandlers) status(c *echo.Context, refresh bool) error {
 	status := api.UpdateStatus{Current: h.Current, Available: false}
 	canUpdate := false
 	updating := false
@@ -73,17 +83,49 @@ func (h *UpdateHandlers) Check(c *echo.Context) error {
 	}
 	status.Reason = &reason
 	// Progress is device-local; polling an active job must not depend on GitHub.
-	if h.Checker != nil && !updating {
-		latest, err := h.Checker.Latest(c.Request().Context())
-		if err == nil {
-			status.Latest, status.PageUrl = &latest.Version, &latest.PageURL
-			status.Available = releasecheck.Newer(h.Current, latest.Version)
-		} else if !errors.Is(err, releasecheck.ErrNoRelease) && status.Job == nil {
-			return problem(c, http.StatusBadGateway, "update_check_failed")
+	if h.Watcher != nil {
+		snapshot := h.Watcher.Cached()
+		if !updating || refresh {
+			load := h.Watcher.Load
+			if refresh {
+				load = h.Watcher.Check
+			}
+			loaded, err := load(c.Request().Context())
+			if err != nil {
+				return err
+			}
+			snapshot = loaded
 		}
+		applyReleaseSnapshot(&status, snapshot)
 	}
 	canUpdate = canUpdate && status.Available
 	return c.JSON(http.StatusOK, status)
+}
+
+func applyReleaseSnapshot(status *api.UpdateStatus, snapshot releasewatch.Snapshot) {
+	if !snapshot.CheckedAt.IsZero() {
+		status.CheckedAt = &snapshot.CheckedAt
+	}
+	if snapshot.Failure != "" {
+		status.CheckError = &snapshot.Failure
+	}
+	latest := snapshot.Latest
+	if latest.Version != "" {
+		status.Latest, status.PageUrl = &latest.Version, &latest.PageURL
+		status.Available = releasecheck.Newer(status.Current, latest.Version)
+		if !latest.PublishedAt.IsZero() {
+			status.PublishedAt = &latest.PublishedAt
+		}
+	}
+	notes := make([]api.ReleaseNotes, 0, len(snapshot.Releases))
+	for _, release := range snapshot.Releases {
+		note := api.ReleaseNotes{Version: release.Version, PageUrl: release.PageURL, Body: release.Body}
+		if !release.PublishedAt.IsZero() {
+			note.PublishedAt = &release.PublishedAt
+		}
+		notes = append(notes, note)
+	}
+	status.Releases = &notes
 }
 
 func (h *UpdateHandlers) prepare(c *echo.Context) (selfupdate.Plan, error) {
