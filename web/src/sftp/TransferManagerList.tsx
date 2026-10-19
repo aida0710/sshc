@@ -153,7 +153,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation }: {
   });
   useMenuKeyboard({ open: menuOpen, menuRef: menuPanel, onClose: () => setMenuOpen(false) });
   const content = (
-    <section className={compactViewport ? "flex min-h-0 flex-1 flex-col text-sm" : "relative mt-3 shrink-0 overflow-visible rounded-md border border-line/60 bg-toolbar/30 text-xs md:mt-2"} aria-labelledby={headingId}>
+    <section className={compactViewport ? "flex min-h-0 flex-1 flex-col text-sm" : "relative shrink-0 overflow-visible border-t border-line bg-toolbar/30 text-xs"} aria-labelledby={headingId}>
       {compactViewport || collapsed || jobs.length === 0 ? null : (
         <div
           role="separator"
@@ -235,7 +235,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation }: {
         aria-haspopup="dialog"
         aria-expanded={sheetOpen}
         onClick={() => setSheetOpen(true)}
-        className="relative mt-1 flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-line/60 bg-toolbar/50 px-3 py-1 text-left text-xs active:bg-select-fill"
+        className="relative flex min-h-11 shrink-0 items-center gap-2 border-t border-line bg-toolbar/50 px-3 py-1 text-left text-xs active:bg-select-fill"
       >
         <Icon name="chevronRight" className="size-3 -rotate-90 text-ink-muted" />
         <span className="sr-only">{t("sftp.manager.heading")}</span>
