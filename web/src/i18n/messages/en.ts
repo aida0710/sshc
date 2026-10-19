@@ -1267,6 +1267,7 @@ export const en = {
   "update.resultUnknown": "The start request was interrupted. Reload and check the update result before starting another update.",
   "update.cancel": "Cancel",
   "update.install": "Update sshc",
+  "update.openAbout": "Update in About sshc",
   "update.confirmTitle": "Update sshc?",
   "update.confirmVersion": "Update {current} to {target} using {manager}.",
   "update.confirmHomebrewVersion": "Update {current} using Homebrew (expected version: {target}). A newer version may be installed.",

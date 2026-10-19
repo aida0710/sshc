@@ -126,11 +126,11 @@ describe("AboutPage", () => {
     expect(screen.queryByRole("log")).not.toBeInTheDocument();
   });
 
-  it("uses the existing update confirmation and sends progress to the sidebar dialog", async () => {
+  it("confirms the update on the page and lists its progress there instead of in the sidebar dialog", async () => {
     const update = updates();
     vi.mocked(update.previewUpdate).mockResolvedValue({ current: "v1.0.0", target: "v1.2.0", manager: "homebrew", actionToken: "confirmation", actionExpiresAt: "2026-10-19T02:00:00Z" });
     vi.mocked(update.startUpdate).mockResolvedValue({ id: "about-job", target: "v1.2.0", state: "installing", problem: "" });
-    render(<><UpdateBadge api={update} /><AboutPage api={api} updates={update} /></>);
+    render(<><UpdateBadge api={update} showsProgressDialog={false} /><AboutPage api={api} updates={update} /></>);
     const page = screen.getByRole("region", { name: "About sshc" });
     await userEvent.click(await within(page).findByRole("button", { name: "Update sshc" }));
     const dialog = await screen.findByRole("dialog", { name: "Update sshc?" });
@@ -138,7 +138,12 @@ describe("AboutPage", () => {
     vi.mocked(update.updateStatus).mockResolvedValue({ ...status, canUpdate: false, job: { id: "about-job", target: "v1.2.0", state: "installing", problem: "" } });
     await userEvent.click(within(dialog).getByRole("button", { name: "Update sshc" }));
     await waitFor(() => expect(update.startUpdate).toHaveBeenCalledWith("v1.2.0", "confirmation"));
-    expect(await screen.findByRole("dialog", { name: "sshc update" })).toBeVisible();
-    expect(within(within(page).getByRole("log")).getByText("Updating to v1.2.0…")).toBeVisible();
+    expect(await within(await within(page).findByRole("log")).findByText("Updating to v1.2.0…")).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "sshc update" })).not.toBeInTheDocument();
+  });
+
+  it("offers the reload that the sidebar dialog would have offered while sshc restarts", async () => {
+    render(<AboutPage api={api} updates={updates({ ...status, canUpdate: false, job: { id: "job", target: "v1.2.0", installedVersion: "v1.2.0", state: "restarting", problem: "" } })} />);
+    expect(await screen.findByRole("button", { name: "Reload and check result" })).toBeVisible();
   });
 });
