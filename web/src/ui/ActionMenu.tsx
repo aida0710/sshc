@@ -5,6 +5,10 @@ import { useAnchoredMenu } from "./useAnchoredMenu";
 import { useDismissibleLayer } from "./useDismissibleLayer";
 import { useMenuKeyboard } from "./useMenuKeyboard";
 
+// revealOnHover は、行やカードの「…」を、マウスでは乗せたとき（とキーボードで触れたとき）だけ出し、
+// タッチでは常に出すための class である。行やカードの側に group/row を付けて使う。
+export const revealOnHover = "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100";
+
 export type ActionMenuItem = {
   label: string;
   onSelect: () => void;

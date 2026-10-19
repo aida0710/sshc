@@ -7,6 +7,7 @@ import { terminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { Button, Card, Notice } from "../ui/surface";
+import { SectionBar } from "../ui/SectionBar";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
 import { workspaceApi, type SavedWorkspace } from "../features/workspaces/api";
 import { storedPaneCount } from "../features/workspaces/layout";
@@ -110,13 +111,17 @@ export function OverviewPanel({
   const attention = configurationAttention + recoveryAttention;
 
   return (
-    <section aria-labelledby="home-heading" className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
-        <h2 id="home-heading" className="text-xl font-semibold tracking-tight">{t("home.heading")}</h2>
+    <div className="flex h-full min-h-0 flex-col bg-canvas">
+    <SectionBar
+      title={t("home.heading")}
+      {...(overview === null ? {} : { meta: t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length }) })}
+      actions={(
         <Button className="min-h-10 md:min-h-0" onClick={() => onNavigate("Connections")}>
           {t("home.manageConnections")}
         </Button>
-      </div>
+      )}
+    />
+    <section aria-label={t("home.heading")} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-5">
 
       {problem === "" ? null : <Notice tone="danger">{problem}</Notice>}
       {loading || overview === null || !listsFailed ? null : (
@@ -201,5 +206,6 @@ export function OverviewPanel({
         <Button onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
       </section>
     </section>
+    </div>
   );
 }
