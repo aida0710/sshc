@@ -10,7 +10,7 @@ test("records a change in history and restores the previous bytes", async ({
   await openSection(page, "Connections");
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "bastion" })
+    .getByRole("button", { name: "bastion", exact: true })
     .click();
   await page.getByLabel("Port", { exact: true }).fill("2233");
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);

@@ -17,7 +17,19 @@ Home Quick Connect prioritizes recently connected hosts, then sorts unused entri
 
 ## Groups
 
-Groups are directory-like categories. Drag them to nest or reorder them. Group changes are previewed before they update the managed `Include` structure.
+Groups are directory-like categories. Create one with New group at the top of the group column, and use the … next to a group for New group inside, Rename, Edit, and Delete…. On a computer, right-clicking a group opens the same menu. Deleting a group asks where its connections go. Drag groups to nest them. Changes update the managed `Include` structure.
+
+Selecting a group while no connection is open shows the group's editor on the right. User name, Port, Key, and Jump host become defaults for the connections in that group; a value set on a connection itself wins.
+
+On narrow screens, the group button above the list opens the group list with the same … menus.
+
+## Act on several connections
+
+Shift-click chooses a range in the list; Ctrl-click (⌘-click on a Mac) adds or removes one connection. With two or more chosen, a bar above the list moves them to a group or deletes them, and dragging any chosen connection onto a group moves them all. Escape clears the choice.
+
+On narrow screens, press Select above the list or long-press a connection, then use the bar at the bottom.
+
+A move or delete of several connections is saved as one change. If any of the affected files changed elsewhere, nothing is written.
 
 ## Create, duplicate, and rename
 

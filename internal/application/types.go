@@ -15,6 +15,8 @@ const (
 	EditGroups          EditKind = "groups"
 	EditMetadata        EditKind = "metadata"
 	EditMove            EditKind = "move"
+	EditMoveHosts       EditKind = "move_hosts"
+	EditDeleteHosts     EditKind = "delete_hosts"
 	EditComment         EditKind = "comment"
 	EditFileRename      EditKind = "file_rename"
 	EditFileDelete      EditKind = "file_delete"
@@ -32,6 +34,7 @@ type EditRequest struct {
 	Fields   []FieldEdit `json:"fields,omitempty"`
 	Raw      string      `json:"raw,omitempty"`
 	Comment  string      `json:"comment,omitempty"`
+	Hosts    []HostEdit  `json:"hosts,omitempty"`
 	// HostMetadata と HostMetadataBase は kind "metadata" の、Path と Alias が指す
 	// 接続 1 件の新しい metadata と、画面が読み込んだときのその metadata である。
 	// HostMetadata が nil なら entry を消し、HostMetadataBase が nil なら画面は
@@ -46,6 +49,13 @@ type EditRequest struct {
 	// DestinationPath と DestinationBase は、move の 2 番目のファイルを記述する。
 	DestinationPath string `json:"destinationPath,omitempty"`
 	DestinationBase string `json:"destinationBase,omitempty"`
+}
+
+// HostEdit は、一括操作の対象と、画面が読み込んだファイル全体を表す。
+type HostEdit struct {
+	Path  string `json:"path"`
+	Alias string `json:"alias"`
+	Base  string `json:"base"`
 }
 
 // SavePreview は、save が書き込むであろうものそのものである。

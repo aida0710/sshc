@@ -5374,6 +5374,14 @@ components:
         line: { type: integer }
         keyword: { type: string }
         values: { type: array, items: { type: string } }
+    HostEdit:
+      type: object
+      additionalProperties: false
+      required: [path, alias, base]
+      properties:
+        path: { type: string }
+        alias: { type: string }
+        base: { type: string }
     # kind "metadata" と "groups" は metadata.json の一部分だけを送る。サーバーは
     # いまのディスクの metadata にその部分だけを合わせ、ほかの節（VPN プロファイル、
     # ターミナル設定、ショートカットなど）は保つ。送った base がディスクと違えば、
@@ -5394,6 +5402,12 @@ components:
         base: { type: string }
         alias: { type: string }
         newAlias: { type: string }
+        hosts:
+          type: array
+          minItems: 1
+          maxItems: 256
+          description: Targets for move_hosts or delete_hosts. Entries sharing a path must have identical base contents.
+          items: { $ref: "#/components/schemas/HostEdit" }
         fields: { type: array, items: { $ref: "#/components/schemas/FieldEdit" } }
         raw: { type: string }
         comment: { type: string }

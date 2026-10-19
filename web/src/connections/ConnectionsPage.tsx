@@ -44,9 +44,14 @@ import { useConnectionSelection } from "./useConnectionSelection";
 import { useSelectedConnection } from "./useSelectedConnection";
 import { useConnectionSave } from "./useConnectionSave";
 import { useConnectionManagement } from "./useConnectionManagement";
+import { useGroupOperations } from "./useGroupOperations";
+import { useConnectionListActions } from "./useConnectionListActions";
+import { ConnectionListDialogs } from "./ConnectionListDialogs";
+import { SelectionBar } from "./SelectionBar";
+import { GroupEditor } from "./GroupEditor";
 
-// Wide enough for an alias, host and status on one row; the editor keeps the rest.
-const connectionListWidth: StoredColumnWidth = { key: localStorageKeys.connectionListWidth, fallback: 400, minimum: 256, maximum: 720 };
+// Wide enough for the group column plus an alias, host and status on one row; the editor keeps the rest.
+const connectionListWidth: StoredColumnWidth = { key: localStorageKeys.connectionListWidth, fallback: 560, minimum: 256, maximum: 720 };
 
 const groupNoticeCodes = new Set([
   "group_not_declared",
@@ -81,6 +86,8 @@ type ConnectionsPageProps = {
 
 type DiscardIntent =
   | { kind: "create" }
+  // グループの絞り込みや編集欄の切り替えなど、確かめたあとに続ける操作。
+  | { kind: "proceed"; proceed: () => void }
   | { kind: "select"; host: HostEntry }
   | { kind: "navigate"; location: BrowserLocation };
 
@@ -113,6 +120,10 @@ export function ConnectionsPage({
   } = feedback;
   const editorDirtyRef = useRef(editorDirty);
   editorDirtyRef.current = editorDirty;
+  // グループの編集欄に保存していない変更があるか。
+  const [groupDraftDirty, setGroupDraftDirty] = useState(false);
+  const groupDraftDirtyRef = useRef(groupDraftDirty);
+  groupDraftDirtyRef.current = groupDraftDirty;
   const {
     creatingConnection: creating, setCreatingConnection: setCreating,
     launching, setLaunching,
@@ -188,8 +199,49 @@ export function ConnectionsPage({
     clearTarget,
   });
 
+  const groups = useGroupOperations({ overview, feedback, reload });
+  const listActions = useConnectionListActions({
+    overview,
+    compact,
+    selection,
+    movesDisabled,
+    clearTarget: () => void clearTarget(),
+    confirmBeforeLeaving,
+    onOpenSSHSession,
+    moveConnections: management.moveConnections,
+    deleteConnections: management.deleteConnections,
+    duplicateConnection: management.duplicateConnection,
+  });
+  const { checked, checkedHosts, clearChecked, selectionMode, groupEditorName } = listActions;
+  const detailOpen = selection !== null || (compact && listActions.editingGroup !== null);
+  // 宣言だけあって metadata に設定が無いグループは、名前だけの設定から編集を始める。
+  const editedGroup = groupEditorName === null
+    ? null
+    : (overview?.metadata.groups ?? []).find((group) => group.name === groupEditorName) ?? { name: groupEditorName };
+
+  // 選んだ接続先への操作の帯。広い画面では一覧の上、スマホでは一覧の下に置く。
+  function selectionBar(placement: "top" | "bottom") {
+    return (
+      <SelectionBar
+        count={checked.keys.size}
+        placement={placement}
+        onMove={() => listActions.chooseMoveTarget(checkedHosts)}
+        onDelete={() => listActions.confirmDeleting(checkedHosts)}
+        onClear={clearChecked}
+      />
+    );
+  }
+
+  function confirmBeforeLeaving(proceed: () => void, { connectionDraft }: { connectionDraft: boolean }) {
+    if (groupDraftDirtyRef.current || (connectionDraft && editorDirtyRef.current)) {
+      setDiscardIntent({ kind: "proceed", proceed });
+      return;
+    }
+    proceed();
+  }
+
   function beginCreation() {
-    if (editorDirty) {
+    if (editorDirty || groupDraftDirty) {
       setDiscardIntent({ kind: "create" });
       return;
     }
@@ -203,13 +255,20 @@ export function ConnectionsPage({
     setDiscardIntent(null);
     editorDirtyRef.current = false;
     setEditorDirty(false);
+    groupDraftDirtyRef.current = false;
+    setGroupDraftDirty(false);
     draftDiscardRef.current?.();
+    if (intent.kind === "proceed") {
+      intent.proceed();
+      return;
+    }
     if (intent.kind === "create") {
       onCreationDraftChange?.(null);
       setCreating(true);
       return;
     }
     if (intent.kind === "select") {
+      listActions.closeGroupEditor();
       selectHost(intent.host);
       return;
     }
@@ -228,7 +287,7 @@ export function ConnectionsPage({
 
   // 同じ接続への移動（保存後の URL の置き換えなど）は、下書きを捨てないので通す。
   const leaveEditorBlocker = useCallback<NavigationBlocker>((next) => {
-    if (!editorDirtyRef.current) return true;
+    if (!editorDirtyRef.current && !groupDraftDirtyRef.current) return true;
     const parsed = parseConnectionLocation(next);
     if (parsed.kind === "valid" && selection !== null) {
       const target = parsed.target;
@@ -239,7 +298,7 @@ export function ConnectionsPage({
     setDiscardIntent({ kind: "navigate", location: next });
     return false;
   }, [selection]);
-  useUnsavedDraftGuard({ dirty: editorDirty, blocker: leaveEditorBlocker, onNavigationBlockerChange });
+  useUnsavedDraftGuard({ dirty: editorDirty || groupDraftDirty, blocker: leaveEditorBlocker, onNavigationBlockerChange });
 
   useEffect(() => {
     onInspector(null);
@@ -247,10 +306,11 @@ export function ConnectionsPage({
   }, [onInspector]);
 
   function onSelect(host: HostEntry) {
-    if (editorDirty && !isCurrentSelection(host.identity)) {
+    if ((editorDirty && !isCurrentSelection(host.identity)) || groupDraftDirty) {
       setDiscardIntent({ kind: "select", host });
       return;
     }
+    listActions.closeGroupEditor();
     selectHost(host);
   }
 
@@ -323,16 +383,41 @@ export function ConnectionsPage({
           invalidLocation={invalidLocation}
           onDismissInvalidLocation={dismissInvalidLocation}
           onSelect={onSelect}
-          onDrop={(payload, target) => void management.dropOnTree(payload, target)}
+          onDrop={(payload, target) => {
+            void management.dropOnTree(payload, target).then(() => {
+              if (payload.kind === "connections") clearChecked();
+            });
+          }}
           movesDisabled={movesDisabled}
+          detailOpen={detailOpen}
+          treeOptions={{
+            scope: listActions.scope,
+            onScopeChange: listActions.changeScope,
+            checked,
+            onCheckedChange: listActions.setChecked,
+            multiSelectDisabled: editorDirty,
+            selectionMode,
+            onSelectionModeChange: listActions.setSelectionMode,
+            groupActions: (name) => listActions.groupActionItems(name),
+            connectionActions: listActions.connectionActionItems,
+            onCreateGroup: () => listActions.openCreateGroup(""),
+            topBar: !compact && checked.keys.size >= 2 ? selectionBar("top") : null,
+            bottomBar: compact && selectionMode ? selectionBar("bottom") : null,
+          }}
         />
         <div
           className={`min-h-0 flex-col gap-4 overflow-y-auto bg-card p-4 lg:p-5 ${compact ? "" : "md:flex"} ${
-            selection === null ? "hidden" : "flex"
+            detailOpen ? "flex" : "hidden"
           }`}
         >
 
-        <Button className={`w-fit ${compact ? "" : "md:hidden"}`} onClick={() => clearTarget()}>
+        <Button
+          className={`w-fit ${compact ? "" : "md:hidden"}`}
+          onClick={() => confirmBeforeLeaving(() => {
+            listActions.closeGroupEditor();
+            clearTarget();
+          }, { connectionDraft: false })}
+        >
           {t("conn.allConnections")}
         </Button>
 
@@ -347,7 +432,20 @@ export function ConnectionsPage({
           onSave={(base, next) => void save.submit(hostMetadataEditRequest(base, next))}
         />
         {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
-        {detail === null && missingSelection && selection !== null ? (
+        {editedGroup !== null && selection === null ? (
+          <>
+            {problem === null ? null : <Notice tone="danger">{saveProblemMessage(problem, t)}</Notice>}
+            {/* 保存して読み直した設定で下書きを作り直すため、key に保存済みの設定を含める。 */}
+            <GroupEditor
+              key={`group:${JSON.stringify(editedGroup)}`}
+              group={editedGroup}
+              memberCount={listActions.groupListings.find((group) => group.name === editedGroup.name)?.count ?? 0}
+              actions={listActions.groupActionItems(editedGroup.name, { inEditor: true })}
+              onSave={groups.saveGroup}
+              onDirtyChange={setGroupDraftDirty}
+            />
+          </>
+        ) : detail === null && missingSelection && selection !== null ? (
           <MissingConnection onBackToList={() => clearTarget({ replace: true })} />
         ) : detail === null || savedState === null ? (
           <>
@@ -437,11 +535,18 @@ export function ConnectionsPage({
         onCreated={(result) => void onConnectionCreated(result)}
       />
     ) : null}
+    <ConnectionListDialogs
+      actions={listActions}
+      createGroup={groups.createGroup}
+      renameGroup={groups.renameGroup}
+      deleteGroup={groups.deleteGroup}
+      renameConnection={management.renameConnection}
+    />
     {discardIntent === null ? null : (
       <ConfirmDialog
         id="connection-discard-heading"
         heading={t("conn.discardChanges")}
-        body={<p className="text-sm text-ink-muted">{t("conn.discardPrompt")}</p>}
+        body={<p className="text-sm text-ink-muted">{t(groupDraftDirty ? "groupEditor.discardPrompt" : "conn.discardPrompt")}</p>}
         confirmLabel={t("conn.discardChanges")}
         cancelLabel={t("conn.keepEditing")}
         onConfirm={confirmDiscard}

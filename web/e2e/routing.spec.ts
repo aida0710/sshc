@@ -50,7 +50,7 @@ test("restores a selected connection and editor tab from its URL", async ({
 
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "bastion" })
+    .getByRole("button", { name: "bastion", exact: true })
     .click();
   let current = new URL(page.url());
   expect(current.pathname).toBe("/connections/servers");
@@ -99,7 +99,7 @@ test("keeps the back destination after rejecting navigation with an unsaved draf
   await expect.poll(historyPoint).toBe(1);
   await page
     .getByRole("navigation", { name: "Connections" })
-    .getByRole("button", { name: "bastion" })
+    .getByRole("button", { name: "bastion", exact: true })
     .click();
   await expect.poll(historyPoint).toBe(2);
 

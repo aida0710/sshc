@@ -142,7 +142,7 @@ test("keeps the navigation heading and primary navigation still while a panel sc
   await openApplication(page, installation);
   await openSection(page, "Connections");
   await expect(
-    page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "lab-00" }),
+    page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "lab-00", exact: true }),
   ).toBeVisible();
 
   const heading = page.locator("[data-navigation-heading]");
@@ -173,7 +173,7 @@ test("keeps the navigation heading and primary navigation still while a panel sc
   await expect(page.getByRole("link", { name: "Menu", exact: true })).toBeInViewport();
 
   await expect(
-    page.getByRole("region", { name: "Connection results" }).getByRole("button", { name: "lab-39" }),
+    page.getByRole("region", { name: "Connection results" }).getByRole("button", { name: "lab-39", exact: true }),
   ).toBeInViewport();
 });
 

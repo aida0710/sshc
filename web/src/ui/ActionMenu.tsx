@@ -19,14 +19,23 @@ type ActionMenuProps = {
   // Where the button sits decides its size and background.
   triggerClassName: string;
   iconClassName?: string;
+  // 右クリックでも開くときは、開閉を呼び手が持つ。渡さなければこの部品が持つ。
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 // A "…" button that opens the actions for one item as a menu. The menu follows
 // the temporary layer contract of useDismissibleLayer and the keys of
 // useMenuKeyboard, and is portaled so that a card's rounded corners or a
 // scrolling list do not clip it.
-export function ActionMenu({ label, items, triggerClassName, iconClassName = "size-4" }: ActionMenuProps) {
-  const [open, setOpen] = useState(false);
+export function ActionMenu({ label, items, triggerClassName, iconClassName = "size-4", open: controlledOpen, onOpenChange }: ActionMenuProps) {
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = controlledOpen ?? ownOpen;
+  const setOpen = (next: boolean | ((current: boolean) => boolean)) => {
+    const value = typeof next === "function" ? next(open) : next;
+    if (onOpenChange !== undefined) onOpenChange(value);
+    else setOwnOpen(value);
+  };
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);

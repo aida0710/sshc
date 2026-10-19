@@ -1,4 +1,4 @@
-import { Fragment, useId, useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useMemo, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import type { HostEntry, HostMetadata, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
@@ -9,14 +9,20 @@ import { useStoredColumnWidth, type StoredColumnWidth } from "../ui/useStoredCol
 import { localStorageKeys } from "../ui/browserStorageKeys";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
-import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
+import { useLongPress } from "../ui/useLongPress";
+import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { duplicateAliasesOf, hostMetadataByIdentity, identityKey } from "./connectionBrowser";
 import { canDrop, dragMimeType, type DragPayload } from "./dragdrop";
+import { applySelectionGesture, emptyMultiSelection, keepVisible, type MultiSelection } from "./multiSelection";
+import { GroupSheet } from "./GroupSheet";
+import { ConnectionRow, revealOnHover } from "./ConnectionRow";
+import { listGroups, ungroupedCount } from "./groupListing";
 
 export type HostSelection = { path: string; alias: string };
 
 type DecoratedHost = {
   host: HostEntry;
+  key: string;
   projectionIdentity: string;
   projectionOrder: number;
   group: string;
@@ -43,19 +49,35 @@ type ResultSection = {
   items: DecoratedHost[];
 };
 
-type ConnectionTreeProps = {
+export type Scope =
+  | { kind: "all" }
+  | { kind: "group"; name: string }
+  | { kind: "ungrouped" };
+
+export type ConnectionTreeProps = {
   overview: Overview;
   selected: HostSelection | null;
   onSelect: (host: HostEntry) => void;
   onDrop: (payload: DragPayload, target: string) => void;
   movesDisabled?: boolean;
+  // 以下は複数選択とグループの操作。渡さなければ今までどおり1件ずつ選ぶ一覧になる。
+  scope?: Scope;
+  onScopeChange?: (scope: Scope) => void;
+  checked?: MultiSelection;
+  onCheckedChange?: (next: MultiSelection) => void;
+  // 編集中の下書きがあるあいだは、Shift と Ctrl で選ばせない（選ぶとエディタが入れ替わるため）。
+  multiSelectDisabled?: boolean;
+  compact?: boolean;
+  selectionMode?: boolean;
+  onSelectionModeChange?: (on: boolean) => void;
+  groupActions?: (name: string) => ActionMenuItem[];
+  connectionActions?: (host: HostEntry) => ActionMenuItem[];
+  onCreateGroup?: () => void;
+  topBar?: ReactNode;
+  bottomBar?: ReactNode;
 };
 
 type SortOrder = "configured" | "name";
-type Scope =
-  | { kind: "all" }
-  | { kind: "group"; name: string }
-  | { kind: "ungrouped" };
 
 function labelFor(host: HostEntry): string {
   return host.identity.alias === "" ? `Host ${host.patterns.join(" ")}` : host.identity.alias;
@@ -74,13 +96,6 @@ function belongsToGroup(item: DecoratedHost, group: string): boolean {
   return item.group === group || item.group.startsWith(`${group}/`);
 }
 
-function targetFor(host: HostEntry): string {
-  if ((host.hostName ?? "") === "") return host.file.path ?? host.file.absolute;
-  const account = (host.user ?? "") === "" ? "" : `${host.user}@`;
-  const port = (host.port ?? "") === "" || host.port === "22" ? "" : `:${host.port}`;
-  return `${account}${host.hostName}${port}`;
-}
-
 function hostBlockIdentity(host: HostEntry): string {
   return JSON.stringify([
     host.file.absolute,
@@ -90,8 +105,9 @@ function hostBlockIdentity(host: HostEntry): string {
   ]);
 }
 
-// Fits the longest common group name without stealing the list's room.
-const connectionGroupsWidth: StoredColumnWidth = { key: localStorageKeys.connectionGroupsWidth, fallback: 144, minimum: 112, maximum: 400 };
+// Fits a nested group name next to its "…" button without stealing the list's room.
+const connectionGroupsWidth: StoredColumnWidth = { key: localStorageKeys.connectionGroupsWidth, fallback: 184, minimum: 112, maximum: 400 };
+
 
 export function ConnectionTree({
   overview,
@@ -99,15 +115,34 @@ export function ConnectionTree({
   onSelect,
   onDrop,
   movesDisabled = false,
+  scope: controlledScope,
+  onScopeChange,
+  checked = emptyMultiSelection,
+  onCheckedChange,
+  multiSelectDisabled = false,
+  compact = false,
+  selectionMode = false,
+  onSelectionModeChange,
+  groupActions,
+  connectionActions,
+  onCreateGroup,
+  topBar = null,
+  bottomBar = null,
 }: ConnectionTreeProps) {
   const t = useTranslate();
   const [groupsWidth, setGroupsWidth] = useStoredColumnWidth(connectionGroupsWidth);
   const descriptionIdPrefix = useId();
-  const [scope, setScope] = useState<Scope>({ kind: "all" });
+  const [ownScope, setOwnScope] = useState<Scope>({ kind: "all" });
+  const scope = controlledScope ?? ownScope;
+  const setScope = onScopeChange ?? setOwnScope;
   const [query, setQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<SortOrder>("name");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [dragging, setDragging] = useState<DragPayload | null>(null);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [groupSheetOpen, setGroupSheetOpen] = useState(false);
+  const longPress = useLongPress();
+  const multiSelectable = onCheckedChange !== undefined;
 
   const groupNames = useMemo(() => overview.groups.map((group) => group.name), [overview.groups]);
   const decorated = useMemo<DecoratedHost[]>(() => {
@@ -122,6 +157,7 @@ export function ConnectionTree({
       const display = metadata.get(identityKey(host.identity));
       return [{
         host,
+        key: identityKey(host.identity),
         // Include traversal may project the same physical Host block more than once.
         // Retain that occurrence in the render identity so display sorting/filtering
         // cannot collapse React siblings back onto the file-and-line identity.
@@ -219,20 +255,44 @@ export function ConnectionTree({
     return sections;
   }, [orderedGroups, scope, visible]);
 
-  const scopeValue = scope.kind === "all" ? "all" : scope.kind === "ungrouped" ? "ungrouped" : `group:${scope.name}`;
+  // 範囲選択は、見出しで区切られた画面の上から下への順で数える。
+  const visibleOrder = useMemo(() => resultSections.flatMap((section) => section.items.map((item) => item.key)), [resultSections]);
 
-  function selectScope(value: string) {
-    if (value === "all") setScope({ kind: "all" });
-    else if (value === "ungrouped") setScope({ kind: "ungrouped" });
-    else setScope({ kind: "group", name: value.slice("group:".length) });
-    setDragging(null);
-  }
+  useEffect(() => {
+    if (onCheckedChange === undefined) return;
+    const pruned = keepVisible(checked, new Set(visibleOrder));
+    if (pruned !== checked) onCheckedChange(pruned);
+  }, [checked, onCheckedChange, visibleOrder]);
+
+  useEffect(() => {
+    if (onCheckedChange === undefined || checked.keys.size === 0) return;
+    const clearOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      onCheckedChange(emptyMultiSelection);
+      onSelectionModeChange?.(false);
+    };
+    window.addEventListener("keydown", clearOnEscape);
+    return () => window.removeEventListener("keydown", clearOnEscape);
+  }, [checked.keys.size, onCheckedChange, onSelectionModeChange]);
+
+  const scopeLabel = scope.kind === "all" ? t("tree.allConnections") : scope.kind === "ungrouped" ? t("tree.ungrouped") : scope.name;
+  const openedKey = selected === null ? null : identityKey(selected);
 
   function startDrag(event: DragEvent, payload: DragPayload) {
     if (movesDisabled) return;
     event.dataTransfer.setData(dragMimeType, JSON.stringify(payload));
     event.dataTransfer.effectAllowed = "move";
     setDragging(payload);
+  }
+
+  function dragPayloadFor(item: DecoratedHost): DragPayload {
+    if (checked.keys.size >= 2 && checked.keys.has(item.key)) {
+      const items = decorated
+        .filter((candidate) => checked.keys.has(candidate.key))
+        .map((candidate) => ({ path: candidate.host.identity.path, alias: candidate.host.identity.alias, group: candidate.group }));
+      return { kind: "connections", items };
+    }
+    return { kind: "connection", path: item.host.identity.path, alias: item.host.identity.alias, group: item.group };
   }
 
   function accepts(target: string): boolean {
@@ -257,6 +317,35 @@ export function ConnectionTree({
     };
   }
 
+  function toggleChecked(item: DecoratedHost) {
+    if (onCheckedChange === undefined) return;
+    onCheckedChange(applySelectionGesture({ current: checked, clicked: item.key, opened: null, visibleOrder, gesture: "toggle" }));
+  }
+
+  function clickRow(event: MouseEvent, item: DecoratedHost) {
+    if (longPress.consumeClick()) return;
+    if (selectionMode) {
+      toggleChecked(item);
+      return;
+    }
+    const gesture = event.shiftKey ? "range" : event.metaKey || event.ctrlKey ? "toggle" : null;
+    if (gesture !== null && multiSelectable && !multiSelectDisabled) {
+      onCheckedChange?.(applySelectionGesture({ current: checked, clicked: item.key, opened: openedKey, visibleOrder, gesture }));
+      return;
+    }
+    // ふつうのクリックは1件だけを開き、それを次の Shift の基点にする。
+    onCheckedChange?.({ keys: new Set(), anchor: item.key });
+    onSelect(item.host);
+  }
+
+  function beginLongPress(event: PointerEvent, item: DecoratedHost) {
+    if (!multiSelectable || onSelectionModeChange === undefined) return;
+    longPress.start(event, () => {
+      onSelectionModeChange(true);
+      if (!checked.keys.has(item.key)) toggleChecked(item);
+    });
+  }
+
   function facetClass(active: boolean): string {
     return `flex min-h-10 w-auto items-center gap-2 rounded-r-md border-l-2 px-2 py-1.5 text-left text-xs transition-colors md:min-h-0 md:w-full ${
       active ? "border-accent bg-select-fill font-medium text-accent" : "border-transparent text-ink-muted hover:bg-hover hover:text-ink"
@@ -270,11 +359,17 @@ export function ConnectionTree({
     const shut = collapsed.has(node.name);
     const active = scope.kind === "group" && scope.name === node.name;
     const padding = { "--sshc-facet-depth": depth } as CSSProperties;
+    const menuKey = `group:${node.name}`;
+    const items = groupActions?.(node.name) ?? [];
     return (
       <div key={node.name} className="min-w-max md:min-w-0">
         <div
-          className={`flex items-center rounded-md ${accepts(node.name) ? "bg-select-fill outline outline-1 outline-accent" : ""}`}
+          className={`group/row flex items-center rounded-md ${accepts(node.name) ? "bg-select-fill outline outline-1 outline-accent" : ""}`}
           style={padding}
+          onContextMenu={items.length === 0 ? undefined : (event) => {
+            event.preventDefault();
+            setOpenMenu(menuKey);
+          }}
           {...dropHandlers(node.name)}
         >
           {node.children.length === 0 ? (
@@ -307,8 +402,20 @@ export function ConnectionTree({
           >
             <Icon name="groups" className="size-4" />
             <span className="min-w-0 flex-1 truncate">{node.label}</span>
-            <span className="shrink-0 text-[0.68rem] text-ink-faint">{node.descendantCount}</span>
+            <span className={`shrink-0 text-[0.68rem] text-ink-faint ${items.length === 0 ? "" : "group-hover/row:hidden group-focus-within/row:hidden"} ${openMenu === menuKey ? "hidden" : ""}`}>{node.descendantCount}</span>
           </button>
+          {items.length === 0 ? null : (
+            <div className={`-ms-7 ${openMenu === menuKey ? "opacity-100" : revealOnHover}`}>
+              <ActionMenu
+                label={t("tree.groupActions", { name: node.name })}
+                items={items}
+                open={openMenu === menuKey}
+                onOpenChange={(open) => setOpenMenu(open ? menuKey : null)}
+                triggerClassName="flex size-6 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink"
+                iconClassName="size-3.5"
+              />
+            </div>
+          )}
         </div>
         {shut ? null : node.children.map((child) => renderGroupFacet(child, depth + 1))}
       </div>
@@ -318,7 +425,7 @@ export function ConnectionTree({
   function renderFacets() {
     const allActive = scope.kind === "all";
     const ungroupedActive = scope.kind === "ungrouped";
-    const ungroupedCount = decorated.filter((item) => item.group === "").length;
+    const ungrouped = decorated.filter((item) => item.group === "").length;
     return (
       <>
         <button type="button" aria-label={t("tree.allConnections")} aria-pressed={allActive} onClick={() => setScope({ kind: "all" })} className={facetClass(allActive)}>
@@ -331,7 +438,7 @@ export function ConnectionTree({
           <button type="button" aria-label={t("tree.ungrouped")} aria-pressed={ungroupedActive} onClick={() => setScope({ kind: "ungrouped" })} className={`${facetClass(ungroupedActive)} min-w-max md:min-w-0`}>
             <Icon name="groups" className="size-4" />
             <span className="min-w-0 flex-1 truncate">{t("tree.ungrouped")}</span>
-            <span className="text-[0.68rem] text-ink-faint">{ungroupedCount}</span>
+            <span className="text-[0.68rem] text-ink-faint">{ungrouped}</span>
           </button>
         </div>
       </>
@@ -340,41 +447,30 @@ export function ConnectionTree({
 
   function renderItem(item: DecoratedHost) {
     const host = item.host;
-    const active = selected?.path === host.identity.path && selected.alias === host.identity.alias;
-    const descriptionId = `${descriptionIdPrefix}-connection-${item.projectionOrder}`;
+    const menuKey = `connection:${item.key}`;
     return (
-      <li key={item.projectionIdentity} className="border-b border-hairline last:border-b-0">
-        <button
-          type="button"
-          aria-label={host.identity.alias}
-          aria-current={active ? "true" : undefined}
-          aria-describedby={descriptionId}
-          draggable={!movesDisabled}
-          onClick={() => onSelect(host)}
-          onDragStart={(event) => startDrag(event, { kind: "connection", path: host.identity.path, alias: host.identity.alias, group: item.group })}
-          onDragEnd={() => setDragging(null)}
-          className={`min-h-14 w-full border-l-[3px] px-3 py-2.5 text-left text-sm transition-colors ${active ? "border-accent bg-select-fill text-ink" : "border-transparent text-ink-muted hover:bg-hover hover:text-ink"}`}
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            <OperatingSystemIcon os={item.os} colour={item.colour} compact />
-            <span className="min-w-0 flex-1">
-              <span className="flex min-w-0 items-center gap-1.5">
-                <span className={`truncate ${active ? "font-semibold" : "font-medium"}`}>{host.identity.alias}</span>
-                {item.duplicateAlias ? <Icon name="warning" className="size-3.5 text-notice-ink" /> : null}
-              </span>
-              <span className={`mt-0.5 block truncate font-mono text-xs leading-4 ${active ? "text-ink-muted" : "text-ink-faint"}`}>{targetFor(host)}</span>
-              {item.tags.length === 0 ? null : (
-                <span aria-hidden="true" className="mt-1 flex flex-wrap gap-1">
-                  {item.tags.map((tag) => <span key={tag} className="rounded bg-toolbar px-1 text-[0.65rem] text-ink-muted">{tag}</span>)}
-                </span>
-              )}
-            </span>
-          </span>
-        </button>
-        <span id={descriptionId} className="sr-only">
-          {[item.duplicateAlias ? t("tree.duplicateAlias") : "", targetFor(host), host.file.path ?? host.file.absolute].filter(Boolean).join(", ")}
-        </span>
-      </li>
+      <ConnectionRow
+        key={item.projectionIdentity}
+        host={host}
+        os={item.os}
+        colour={item.colour}
+        tags={item.tags}
+        duplicateAlias={item.duplicateAlias}
+        descriptionId={`${descriptionIdPrefix}-connection-${item.projectionOrder}`}
+        opened={selected?.path === host.identity.path && selected.alias === host.identity.alias}
+        chosen={checked.keys.has(item.key)}
+        choosing={checked.keys.size >= 2 || selectionMode}
+        showCheckbox={selectionMode}
+        draggable={!movesDisabled && !selectionMode}
+        menuItems={selectionMode ? [] : connectionActions?.(host) ?? []}
+        menuOpen={openMenu === menuKey}
+        onMenuOpenChange={(open) => setOpenMenu(open ? menuKey : null)}
+        onClick={(event) => clickRow(event, item)}
+        onPointerDown={(event) => beginLongPress(event, item)}
+        onPointerEnd={longPress.cancel}
+        onDragStart={(event) => startDrag(event, dragPayloadFor(item))}
+        onDragEnd={() => setDragging(null)}
+      />
     );
   }
 
@@ -399,9 +495,22 @@ export function ConnectionTree({
       className="grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-[var(--groups-width)_minmax(0,1fr)] md:grid-rows-1"
     >
       <aside className="relative hidden min-h-0 flex-col border-r border-line bg-tree lg:flex">
-        <p className="shrink-0 px-3 pb-1 pt-3 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">
-          {t("tree.byGroups")}
-        </p>
+        <div className="flex shrink-0 items-center justify-between gap-1 px-3 pb-1 pt-2">
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">
+            {t("tree.byGroups")}
+          </p>
+          {onCreateGroup === undefined ? null : (
+            <button
+              type="button"
+              aria-label={t("tree.newGroup")}
+              title={t("tree.newGroup")}
+              onClick={onCreateGroup}
+              className="flex size-6 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink"
+            >
+              <Icon name="plus" className="size-4" />
+            </button>
+          )}
+        </div>
         <div data-connection-facets className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto px-3 pb-3">
           {renderFacets()}
         </div>
@@ -417,21 +526,15 @@ export function ConnectionTree({
 
       <section className="flex min-h-0 flex-col bg-card" aria-label={t("tree.resultsLabel")}>
         <header className="shrink-0 border-b border-line bg-card p-3">
-          <label className="mb-2 flex min-w-0 items-center gap-2 lg:hidden">
-            <span className="shrink-0 text-xs font-medium text-ink-muted">{t("tree.byGroups")}</span>
-            <select
-              aria-label={t("tree.groupFilter")}
-              value={scopeValue}
-              onChange={(event) => selectScope(event.currentTarget.value)}
-              className={`${control} min-h-10 min-w-0 flex-1 py-2`}
-            >
-              <option value="all">{t("tree.allConnections")} · {decorated.length}</option>
-              {orderedGroups.map((group) => (
-                <option key={group.name} value={`group:${group.name}`}>{group.name} · {group.descendantCount}</option>
-              ))}
-              <option value="ungrouped">{t("tree.ungrouped")} · {decorated.filter((item) => item.group === "").length}</option>
-            </select>
-          </label>
+          <button
+            type="button"
+            onClick={() => setGroupSheetOpen(true)}
+            className={`${control} mb-2 flex min-h-10 items-center gap-2 py-2 text-left lg:hidden`}
+          >
+            <Icon name="groups" className="size-4 text-ink-faint" />
+            <span className="min-w-0 flex-1 truncate">{t("tree.groupButton", { name: scopeLabel })}</span>
+            <DisclosureChevron expanded={false} className="size-3.5 rotate-90" />
+          </button>
           <div>
             <label className="relative block min-w-0" htmlFor="connection-filter">
               <span className="sr-only">{t("tree.filter")}</span>
@@ -441,18 +544,56 @@ export function ConnectionTree({
           </div>
           <div className="mt-2 flex items-center justify-between gap-3 text-xs text-ink-faint">
             <span role="status">{t("tree.resultCount", { visible: visible.length, total: decorated.length })}</span>
-            <label className="flex items-center gap-2">
-              <span className="sr-only">{t("tree.sortLabel")}</span>
-              <select value={sortOrder} onChange={(event) => setSortOrder(event.currentTarget.value as SortOrder)} className="rounded border-0 bg-transparent py-0.5 text-xs text-ink-muted">
-                <option value="configured">{t("tree.sortConfigured")}</option>
-                <option value="name">{t("tree.sortName")}</option>
-              </select>
-            </label>
+            <span className="flex items-center gap-2">
+              {compact && onSelectionModeChange !== undefined ? (
+                <button
+                  type="button"
+                  aria-pressed={selectionMode}
+                  onClick={() => {
+                    if (selectionMode) onCheckedChange?.(emptyMultiSelection);
+                    onSelectionModeChange(!selectionMode);
+                  }}
+                  className="min-h-9 rounded-md px-2 text-xs font-medium text-accent hover:bg-hover"
+                >
+                  {selectionMode ? t("tree.selectDone") : t("tree.select")}
+                </button>
+              ) : null}
+              <label className="flex items-center gap-2">
+                <span className="sr-only">{t("tree.sortLabel")}</span>
+                <select value={sortOrder} onChange={(event) => setSortOrder(event.currentTarget.value as SortOrder)} className="rounded border-0 bg-transparent py-0.5 text-xs text-ink-muted">
+                  <option value="configured">{t("tree.sortConfigured")}</option>
+                  <option value="name">{t("tree.sortName")}</option>
+                </select>
+              </label>
+            </span>
           </div>
           {!movesDisabled ? <p className="sr-only">{t("tree.dragGroupHint")}</p> : null}
         </header>
+        {topBar}
         {visible.length === 0 ? <p role="status" className="p-5 text-sm text-ink-muted">{t("tree.noMatch")}</p> : <div data-connection-results className="min-h-0 flex-1 overflow-y-auto">{resultSections.map(renderResultSection)}</div>}
+        {bottomBar}
       </section>
+      {groupSheetOpen ? (
+        <GroupSheet
+          groups={listGroups(overview)}
+          total={decorated.length}
+          ungrouped={ungroupedCount(overview)}
+          active={scope}
+          onChoose={setScope}
+          onCreate={onCreateGroup === undefined ? null : () => {
+            setGroupSheetOpen(false);
+            onCreateGroup();
+          }}
+          groupActions={(name) => (groupActions?.(name) ?? []).map((item) => ({
+            ...item,
+            onSelect: () => {
+              setGroupSheetOpen(false);
+              item.onSelect();
+            },
+          }))}
+          onClose={() => setGroupSheetOpen(false)}
+        />
+      ) : null}
     </nav>
   );
 }

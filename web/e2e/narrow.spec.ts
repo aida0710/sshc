@@ -124,7 +124,7 @@ test("moves from the compact connection browser to detail at 360 pixels", async 
   await openApplication(page, installation);
   await openSectionThroughDrawer(page, "Connections");
   const browser = page.getByRole("navigation", { name: "Connections" });
-  await expect(browser.getByRole("combobox", { name: "Filter by group" })).toBeVisible();
+  await expect(browser.getByRole("button", { name: "Group: All" })).toBeVisible();
   await expect(browser.getByRole("group", { name: "Arrange connections by" })).toHaveCount(0);
   await expect(browser.getByRole("region", { name: "home/eu group, 1 connections" })).toBeVisible();
   await expectNoHorizontalOverflow(page, "Connections browser");
@@ -136,7 +136,7 @@ test("moves from the compact connection browser to detail at 360 pixels", async 
     });
   }
 
-  await browser.getByRole("button", { name: "bastion" }).click();
+  await browser.getByRole("button", { name: "bastion", exact: true }).click();
   await expect(browser).toBeHidden();
   await expect(page.getByRole("heading", { name: "bastion", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "All connections" })).toBeVisible();
@@ -800,9 +800,9 @@ test("lets the connection detail replace the list and hands back a way out", asy
   await openSectionThroughDrawer(page, "Connections");
 
   const tree = page.getByRole("navigation", { name: "Connections" });
-  await expect(tree.getByRole("button", { name: "alpha" })).toBeVisible();
+  await expect(tree.getByRole("button", { name: "alpha", exact: true })).toBeVisible();
 
-  await tree.getByRole("button", { name: "alpha" }).click();
+  await tree.getByRole("button", { name: "alpha", exact: true }).click();
 
   await expect(tree).toBeHidden();
   const back = page.getByRole("button", { name: "All connections" });

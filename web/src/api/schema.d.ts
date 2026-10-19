@@ -3827,12 +3827,19 @@ export interface components {
             keyword?: string;
             values?: string[];
         };
+        HostEdit: {
+            path: string;
+            alias: string;
+            base: string;
+        };
         EditRequest: {
             kind: string;
             path?: string;
             base?: string;
             alias?: string;
             newAlias?: string;
+            /** @description Targets for move_hosts or delete_hosts. Entries sharing a path must have identical base contents. */
+            hosts?: components["schemas"]["HostEdit"][];
             fields?: components["schemas"]["FieldEdit"][];
             raw?: string;
             comment?: string;

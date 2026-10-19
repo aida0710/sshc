@@ -1,9 +1,11 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { HostEntry, Overview } from "../api/config";
-import { ConnectionTree } from "./ConnectionTree";
+import { ConnectionTree, type HostSelection } from "./ConnectionTree";
 import { dragMimeType, type DragPayload } from "./dragdrop";
+import { emptyMultiSelection } from "./multiSelection";
 
 function host(path: string, alias: string, group?: string): HostEntry {
   return {
@@ -68,9 +70,9 @@ describe("ConnectionTree", () => {
     expect(within(tree).getByRole("button", { name: "home/eu" })).toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: "empty" })).toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: "Ungrouped" })).toBeInTheDocument();
-    expect(within(tree).getByRole("button", { name: /nas/ })).toBeInTheDocument();
-    expect(within(tree).getByRole("button", { name: /eu-api/ })).toBeInTheDocument();
-    expect(within(tree).getByRole("button", { name: /bastion/ })).toBeInTheDocument();
+    expect(within(tree).getByRole("button", { name: "nas" })).toBeInTheDocument();
+    expect(within(tree).getByRole("button", { name: "eu-api" })).toBeInTheDocument();
+    expect(within(tree).getByRole("button", { name: "bastion" })).toBeInTheDocument();
     expect(within(tree).getByRole("region", { name: "home group, 1 connections" })).toBeInTheDocument();
     expect(within(tree).getByRole("region", { name: "home/eu group, 1 connections" })).toBeInTheDocument();
     expect(within(tree).getByRole("region", { name: "Ungrouped group, 1 connections" })).toBeInTheDocument();
@@ -83,10 +85,10 @@ describe("ConnectionTree", () => {
     );
 
     const handle = screen.getByRole("separator", { name: "Resize the groups column" });
-    expect(handle).toHaveAttribute("aria-valuenow", "144");
+    expect(handle).toHaveAttribute("aria-valuenow", "184");
     fireEvent.keyDown(handle, { key: "ArrowRight", shiftKey: true });
-    expect(handle).toHaveAttribute("aria-valuenow", "176");
-    expect(window.localStorage.getItem("sshc.connections.groups-width.v1")).toBe("176");
+    expect(handle).toHaveAttribute("aria-valuenow", "216");
+    expect(window.localStorage.getItem("sshc.connections.groups-width.v1")).toBe("216");
     fireEvent.keyDown(handle, { key: "Home" });
     expect(handle).toHaveAttribute("aria-valuenow", "112");
   });
@@ -123,12 +125,12 @@ describe("ConnectionTree", () => {
       <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
     );
 
-    const nas = screen.getByRole("button", { name: /nas/ });
+    const nas = screen.getByRole("button", { name: "nas" });
     expect(within(nas).getByText("storage")).toBeInTheDocument();
 
     await userEvent.type(screen.getByRole("searchbox", { name: "Filter connections" }), "bast");
-    expect(screen.getByRole("button", { name: /bastion/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /nas/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "bastion" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "nas" })).not.toBeInTheDocument();
   });
 
   it("keeps repeated projections of one Host block as distinct accessible items", () => {
@@ -181,7 +183,8 @@ describe("ConnectionTree", () => {
     expect(screen.queryByRole("region", { name: /^home group/ })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "home/eu group, 1 connections" })).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Filter by group" }), "all");
+    await user.click(screen.getByRole("button", { name: "Group: home/eu" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Groups" })).getByRole("button", { name: /^All/ }));
     await user.type(screen.getByRole("searchbox", { name: "Filter connections" }), "nas.example");
     expect(screen.getByRole("button", { name: "nas" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "bastion" })).not.toBeInTheDocument();
@@ -198,7 +201,7 @@ describe("ConnectionTree", () => {
     const harness = render(
       <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={onDrop} />,
     );
-    const source = screen.getByRole("button", { name: /nas/ });
+    const source = screen.getByRole("button", { name: "nas" });
     const target = screen.getByRole("button", { name: "empty" });
     const dataTransfer = transfer(payload);
     fireEvent.dragStart(source, { dataTransfer });
@@ -210,10 +213,87 @@ describe("ConnectionTree", () => {
     harness.rerender(
       <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={onDrop} movesDisabled />,
     );
-    const disabledSource = screen.getByRole("button", { name: /nas/ });
+    const disabledSource = screen.getByRole("button", { name: "nas" });
     expect(disabledSource).not.toHaveAttribute("draggable", "true");
     fireEvent.dragStart(disabledSource, { dataTransfer });
     fireEvent.drop(screen.getByRole("button", { name: "empty" }), { dataTransfer });
     expect(onDrop).not.toHaveBeenCalled();
+  });
+
+  describe("choosing several connections", () => {
+    function ChoosingTree({ onDrop = vi.fn(), multiSelectDisabled = false }: { onDrop?: (payload: DragPayload, target: string) => void; multiSelectDisabled?: boolean }) {
+      const [selected, setSelected] = useState<HostSelection | null>(null);
+      const [checked, setChecked] = useState(emptyMultiSelection);
+      return (
+        <ConnectionTree
+          overview={overview}
+          selected={selected}
+          onSelect={(chosen) => setSelected(chosen.identity)}
+          onDrop={onDrop}
+          checked={checked}
+          onCheckedChange={setChecked}
+          multiSelectDisabled={multiSelectDisabled}
+        />
+      );
+    }
+
+    function chosen(): string[] {
+      return screen.getAllByRole("button", { pressed: true }).map((button) => button.getAttribute("aria-label") ?? "")
+        .filter((name) => ["nas", "eu-api", "bastion"].includes(name));
+    }
+
+    it("chooses everything between the open connection and a Shift click, in screen order", () => {
+      render(<ChoosingTree />);
+      fireEvent.click(screen.getByRole("button", { name: "nas" }));
+      fireEvent.click(screen.getByRole("button", { name: "bastion" }), { shiftKey: true });
+      expect(chosen()).toEqual(["nas", "eu-api", "bastion"]);
+    });
+
+    it("adds one connection at a time with Ctrl and clears the choice with Escape", () => {
+      render(<ChoosingTree />);
+      fireEvent.click(screen.getByRole("button", { name: "nas" }));
+      fireEvent.click(screen.getByRole("button", { name: "bastion" }), { ctrlKey: true });
+      expect(chosen()).toEqual(["nas", "bastion"]);
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(screen.queryAllByRole("button", { pressed: true }).filter((button) => button.getAttribute("aria-label") === "nas")).toEqual([]);
+      expect(screen.getByRole("button", { name: "nas" })).toHaveAttribute("aria-current", "true");
+    });
+
+    it("opens the clicked connection instead while the open one has unsaved edits", () => {
+      render(<ChoosingTree multiSelectDisabled />);
+      fireEvent.click(screen.getByRole("button", { name: "nas" }));
+      fireEvent.click(screen.getByRole("button", { name: "bastion" }), { shiftKey: true });
+      expect(screen.getByRole("button", { name: "bastion" })).toHaveAttribute("aria-current", "true");
+      expect(chosen()).toEqual([]);
+    });
+
+    it("forgets a chosen connection once the search hides it", async () => {
+      render(<ChoosingTree />);
+      fireEvent.click(screen.getByRole("button", { name: "nas" }));
+      fireEvent.click(screen.getByRole("button", { name: "bastion" }), { ctrlKey: true });
+      await userEvent.type(screen.getByRole("searchbox"), "bastion");
+      await userEvent.clear(screen.getByRole("searchbox"));
+      fireEvent.click(screen.getByRole("button", { name: "eu-api" }), { ctrlKey: true });
+      expect(chosen()).toEqual(["eu-api", "bastion"]);
+    });
+
+    it("drags every chosen connection onto a group together", () => {
+      const onDrop = vi.fn();
+      render(<ChoosingTree onDrop={onDrop} />);
+      fireEvent.click(screen.getByRole("button", { name: "nas" }));
+      fireEvent.click(screen.getByRole("button", { name: "bastion" }), { ctrlKey: true });
+      const dataTransfer = transfer({ kind: "connection", path: "", alias: "", group: "" });
+      fireEvent.dragStart(screen.getByRole("button", { name: "bastion" }), { dataTransfer });
+      const target = screen.getByRole("button", { name: "empty" });
+      fireEvent.dragOver(target, { dataTransfer });
+      fireEvent.drop(target, { dataTransfer });
+      expect(onDrop).toHaveBeenCalledWith({
+        kind: "connections",
+        items: [
+          { path: homeNas.identity.path, alias: "nas", group: "home" },
+          { path: "config", alias: "bastion", group: "" },
+        ],
+      }, "empty");
+    });
   });
 });
