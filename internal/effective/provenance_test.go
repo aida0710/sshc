@@ -164,6 +164,43 @@ func TestCumulativeNamesOnlyTheKeywordsOpenSSHAccumulates(t *testing.T) {
 	}
 }
 
+// groups file の Host 行は、sshc がメンバーへグループの共通設定を足すために書いたもので、
+// alias の 2 つ目の宣言ではない。Project と Resolve のどちらもそれを重複として数えず、
+// 値の出所には並べる。利用者が書いた本当の重複は、今までどおり数える。
+func TestTheGroupsFileDoesNotCountAsDeclaringTheAlias(t *testing.T) {
+	groupsFile := filepath.Join(testRoot, "groups.sshc.conf")
+	resolver := resolverFor(map[string]string{
+		testConfig: "Include connections/production/*.conf\nInclude groups.sshc.conf\n" +
+			"Host web-01\n\tUser someone-else\n",
+		filepath.Join(testRoot, "connections", "production", "db.conf"):  "Host db-primary\n\tHostName 203.0.113.20\n",
+		filepath.Join(testRoot, "connections", "production", "web.conf"): "Host web-01\n\tHostName 203.0.113.30\n",
+		groupsFile: "Host db-primary web-01\n\tUser ops\n",
+	})
+	resolver.GroupsFile = func() string { return groupsFile }
+	graph := resolveWith(t, resolver)
+
+	member := effective.Project(graph, "db-primary")
+	if duplicate, reported := codesOf(member.Complexities)[effective.ComplexityDuplicateAlias]; reported {
+		t.Errorf("Project reported the groups file as a duplicate: %#v", duplicate)
+	}
+	if user, ok := effective.WinningSource(member, "user"); !ok || user.Value != "ops" || user.Path != groupsFile {
+		t.Errorf("user source = %#v, want ops from the groups file", user)
+	}
+	if duplicate, reported := codesOf(effective.Resolve(graph, "db-primary", resolveFacts()).Notes)[effective.ComplexityDuplicateAlias]; reported {
+		t.Errorf("Resolve reported the groups file as a duplicate: %#v", duplicate)
+	}
+
+	var duplicates []effective.Complexity
+	for _, complexity := range effective.Project(graph, "web-01").Complexities {
+		if complexity.Code == effective.ComplexityDuplicateAlias {
+			duplicates = append(duplicates, complexity)
+		}
+	}
+	if len(duplicates) != 1 || duplicates[0].Path != testConfig {
+		t.Errorf("web-01 duplicates = %#v, want only the block the user wrote in config", duplicates)
+	}
+}
+
 func TestProjectCountsOnlyBlocksThatNameTheAliasAsDuplicates(t *testing.T) {
 	graph := graphFor(t, map[string]string{
 		testConfig: "Host db\n\tUser ops\nHost *\n\tPort 2022\n",

@@ -61,6 +61,17 @@ type Resolver struct {
 	// 領域の書式を知っているのは application 層なので、ここでは尋ねる。省略可能で、
 	// これを持たないリゾルバは、範囲の内外を問わず報告する。
 	GeneratedRegion func(*File) (start, end int, ok bool)
+	// GroupsFile は、このアプリケーションがグループの共通設定を書くファイル（groups
+	// file）の絶対パスを返す。無ければ空を返す。Resolve ごとに一度呼び、そのファイルの
+	// Node に GroupsFile の印を付ける。
+	//
+	// groups file は、ほかのファイルで宣言された接続先へ値を足すために、メンバーの
+	// alias を並べた Host 行を置く。OpenSSH から見れば同じ alias の 2 つ目のブロック
+	// なので、internal/effective はこの印を見て、alias の宣言として数えない。
+	//
+	// ファイルの場所を知っているのは application 層の metadata なので、Resolve の
+	// たびに尋ねる。省略可能で、これを持たないリゾルバはどのファイルにも印を付けない。
+	GroupsFile func() string
 }
 
 // generatedLines は、報告を控える行番号の集合を返す。file ごとに一度だけ呼ぶ。
