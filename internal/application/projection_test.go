@@ -34,7 +34,7 @@ func TestProjectHostsListsEveryBlockWithItsRealNature(t *testing.T) {
 		"conf.d/10-home.conf": "Host nas\n\tUser aida\nHost nas\n\tUser duplicate\n",
 	})
 
-	hosts, notices := ProjectHosts(graph, testRoot)
+	hosts, notices := ProjectHosts(graph, testRoot, DefaultGroupsFile)
 	if len(hosts) != 5 {
 		t.Fatalf("hosts = %#v", hosts)
 	}
@@ -119,7 +119,7 @@ func TestProjectHostsFlagsAnAliasDeclaredInAnotherFile(t *testing.T) {
 		"conf.d/10-home.conf": "Host nas\n\tUser someone-else\n",
 	})
 
-	hosts, notices := ProjectHosts(graph, testRoot)
+	hosts, notices := ProjectHosts(graph, testRoot, DefaultGroupsFile)
 	claiming := []HostEntry{}
 	for _, host := range hosts {
 		if host.Identity.Alias == "nas" {
@@ -151,6 +151,25 @@ func TestProjectHostsFlagsAnAliasDeclaredInAnotherFile(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("notices = %#v, want a duplicate_alias for nas", notices)
+	}
+}
+
+func TestProjectHostsLeavesOutTheGroupSettingsFile(t *testing.T) {
+	graph := newTestGraph(t, map[string]string{
+		"config": RegionStartMarker + "\nInclude connections/production/*.conf\nInclude " +
+			DefaultGroupsFile + "\n" + RegionEndMarker + "\n",
+		"connections/production/db.conf": "Host db-primary\n\tHostName 203.0.113.20\n",
+		DefaultGroupsFile:                "Host db-primary\n\tUser ops\n",
+	})
+
+	hosts, notices := ProjectHosts(graph, testRoot, DefaultGroupsFile)
+	if len(hosts) != 1 || hosts[0].File.Path != "connections/production/db.conf" || hosts[0].Duplicate {
+		t.Fatalf("hosts = %#v, want only the connection in its group directory", hosts)
+	}
+	for _, notice := range notices {
+		if notice.Code == NoticeDuplicateAlias {
+			t.Errorf("notices = %#v, want no duplicate_alias", notices)
+		}
 	}
 }
 
@@ -225,7 +244,7 @@ func TestHostEntryGroupComesFromTheDirectoryNotFromMetadata(t *testing.T) {
 		"connections/work/web.conf": "Host web-1\n\tHostName 203.0.113.10\n",
 		"connections/loose.conf":    "Host loose\n\tHostName 203.0.113.11\n",
 	})
-	hosts, _ := ProjectHosts(graph, testRoot)
+	hosts, _ := ProjectHosts(graph, testRoot, DefaultGroupsFile)
 
 	byAlias := map[string]HostEntry{}
 	for _, host := range hosts {

@@ -34,6 +34,38 @@ test("declares a group in the entry file and moves a connection into it", async 
   expect(await installation.read("conf.d/10-home.conf")).toBe("");
 });
 
+test("lists a group member once after the group's settings are saved", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Groups");
+  await page.getByLabel("New group name").fill("work");
+  await page.getByRole("button", { name: "Add group" }).click();
+  expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
+
+  await openSection(page, "Connections");
+  const connections = page.getByRole("navigation", { name: "Connections" });
+  await connections.getByRole("button", { name: "nas", exact: true }).click();
+  await page.getByRole("button", { name: "Manage connection" }).click();
+  await page.getByLabel("Primary group").selectOption("work");
+  expect(await clickAndAwait(page, "Move to this group", "/api/v1/config/save")).toBe(200);
+
+  await openSection(page, "Groups");
+  await page.getByRole("heading", { name: "work", exact: true }).click();
+  await page.getByLabel("Directive", { exact: true }).fill("ServerAliveInterval");
+  await page.getByLabel("Value", { exact: true }).fill("15");
+  await page.getByRole("button", { name: "Add setting" }).click();
+  expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
+  // groups.sshc.conf の Host 行は nas の alias を宣言するが、接続先ではない。
+  expect(await installation.read("groups.sshc.conf")).toContain("Host nas\n\tServerAliveInterval 15\n");
+
+  await openSection(page, "Connections");
+  const nas = connections.getByRole("button", { name: "nas", exact: true });
+  await expect(nas).toHaveCount(1);
+  await expect(nas).not.toHaveAccessibleDescription(/duplicate alias/);
+  await nas.click();
+  await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
+  await expect(page.getByText("Another block declares the same alias.")).toHaveCount(0);
+});
+
 test("gives a nested group its own Include line, deepest first", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSection(page, "Groups");

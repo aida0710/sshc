@@ -79,6 +79,24 @@ func ComputeEffective(graph *config.Graph, root, alias string, facts effective.L
 	return computed
 }
 
+// withoutGroupSettingsDuplicates は、groupsFile（metadata の GroupsPath()）の Host ブロックを
+// 指す duplicate_alias を notices から除く。
+//
+// グループの共通設定は、メンバーの alias を並べた Host 行として groupsFile に書かれる。
+// OpenSSH から見れば同じ alias を宣言する 2 つ目のブロックなので、internal/effective は
+// 重複として印を付ける。しかしその行は sshc がメンバーに値を足すために置いたもので、
+// 利用者が直す重複ではない。値の出所（Entries）からは除かない。
+func withoutGroupSettingsDuplicates(notices []Notice, root, groupsFile string) []Notice {
+	var kept []Notice
+	for _, notice := range notices {
+		if notice.Code == NoticeDuplicateAlias && NewFileRef(root, notice.Path).Path == groupsFile {
+			continue
+		}
+		kept = append(kept, notice)
+	}
+	return kept
+}
+
 // LocalFactsFor は、トークン展開と既定の GlobalKnownHostsFile に要るこのプロセスの
 // 事実を読む。
 //
