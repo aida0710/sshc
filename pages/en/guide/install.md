@@ -49,7 +49,7 @@ sshc service install
 sshc service status
 ```
 
-`install` shows the executable path and asks for confirmation. It registers a task named `sshc` in the root Task Scheduler folder and starts it immediately. The task also starts whenever this user logs on to Windows. The console window closes just after startup while the engine keeps running. Logs are appended to `%USERPROFILE%\.ssh\sshc\logs\engine.log`.
+`install` shows the executable path and asks for confirmation. It registers a task named `sshc Startup Task-<user SID>` in the root Task Scheduler folder and starts it immediately. The task also starts whenever this user logs on to Windows. The console window closes just after startup while the engine keeps running. Logs are appended to `%USERPROFILE%\.ssh\sshc\logs\engine.log`.
 
 `sshc service status` reports the task state (Ready, Running, or Disabled) and whether the engine responds. Use `sshc service restart` to restart an active task. `sshc service disable` waits for the engine to shut down and deletes the task. Add `--yes` to skip confirmation for changes.
 
