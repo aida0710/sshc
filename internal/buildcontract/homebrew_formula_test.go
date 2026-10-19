@@ -1,6 +1,9 @@
 package buildcontract
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -76,6 +79,111 @@ func TestTheFormulaStampsTheTagNameLikeTheReleaseBuilds(t *testing.T) {
 			t.Errorf("%s: formula に %q が無い", required.why, required.text)
 		}
 	}
+}
+
+// Homebrew 版も、About sshc にコミットとコミット日時を出す。
+//
+// formula はタグのソースアーカイブ（.git なし）からビルドするので、Go は vcs.revision・
+// vcs.time を記録できない。v0.49.0 の About sshc は、コミット・コミット日時・未コミットの
+// 変更が 3 行とも「不明」だった。release workflow がタグのコミットとその日時を formula へ
+// 書き込み、formula が -X で渡す。HEAD のビルドは git の作業木から Go が記録する。
+func TestTheFormulaPassesTheTaggedCommitThatTheArchiveLacks(t *testing.T) {
+	formula := readFormula(t)
+	for _, required := range []struct{ text, why string }{
+		{"\n  SOURCE_REVISION = ", "release workflow の sed が書き換える SOURCE_REVISION の行が無い"},
+		{"\n  SOURCE_COMMIT_TIME = ", "release workflow の sed が書き換える SOURCE_COMMIT_TIME の行が無い"},
+		{`-X main.revision=#{SOURCE_REVISION}`, "go build がタグのコミットを渡していない"},
+		{`-X main.commitTime=#{SOURCE_COMMIT_TIME}`, "go build がコミット日時を渡していない"},
+		{`unless version.head?`, "HEAD のビルドにも直前のタグのコミットを渡してしまう"},
+	} {
+		if !strings.Contains(formula, required.text) {
+			t.Errorf("%s: formula に %q が無い", required.why, required.text)
+		}
+	}
+
+	_, workflow := readReleaseWorkflow(t)
+	for _, required := range []string{
+		`RELEASE_SHA: ${{ needs.verify-source.outputs.release-sha }}`,
+		`-e "s#^  SOURCE_REVISION = .*#  SOURCE_REVISION = \"$RELEASE_SHA\".freeze#"`,
+		`-e "s#^  SOURCE_COMMIT_TIME = .*#  SOURCE_COMMIT_TIME = \"$commit_time\".freeze#"`,
+		`the commit was not written into the formula`,
+		`the commit time was not written into the formula`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("release workflow がタグのコミットを formula へ書き込んでいない: %q が無い", required)
+		}
+	}
+}
+
+// formula が -X で名指す変数は、cmd/sshc に string の変数として実在しなければならない。
+//
+// go build は、存在しない変数への -X を何も言わずに無視する。名前を変えたり消したりすると、
+// Homebrew 版だけがバージョンやコミットを失い、気付くのは利用者が About sshc を開いたときになる。
+func TestTheFormulaStampsVariablesThatExist(t *testing.T) {
+	stamped := regexp.MustCompile(`-X main\.(\w+)=`).FindAllStringSubmatch(readFormula(t), -1)
+	if len(stamped) == 0 {
+		t.Fatal("formula に -X main.<変数>= が無い")
+	}
+	declared := mainPackageStringVariables(t)
+	for _, match := range stamped {
+		if !declared[match[1]] {
+			t.Errorf("formula は -X main.%s を渡すが、cmd/sshc にその名前の string の変数が無い", match[1])
+		}
+	}
+}
+
+// mainPackageStringVariables は、cmd/sshc の package レベルで string として宣言された変数の名前を返す。
+func mainPackageStringVariables(t *testing.T) map[string]bool {
+	t.Helper()
+	files := token.NewFileSet()
+	directory := filepath.Join("..", "..", "cmd", "sshc")
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := map[string]bool{}
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(files, filepath.Join(directory, entry.Name()), nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, declaration := range file.Decls {
+			general, ok := declaration.(*ast.GenDecl)
+			if !ok || general.Tok != token.VAR {
+				continue
+			}
+			for _, spec := range general.Specs {
+				value := spec.(*ast.ValueSpec)
+				if !isStringVariable(value) {
+					continue
+				}
+				for _, name := range value.Names {
+					declared[name.Name] = true
+				}
+			}
+		}
+	}
+	return declared
+}
+
+// isStringVariable は、-X が書き換えられる形（型が string、または string の定数で初期化）かを返す。
+func isStringVariable(value *ast.ValueSpec) bool {
+	if identifier, ok := value.Type.(*ast.Ident); ok {
+		return identifier.Name == "string"
+	}
+	if value.Type != nil || len(value.Values) != len(value.Names) {
+		return false
+	}
+	for _, initial := range value.Values {
+		literal, ok := initial.(*ast.BasicLit)
+		if !ok || literal.Kind != token.STRING {
+			return false
+		}
+	}
+	return true
 }
 
 // readFormula は、tap へ同期する formula の正本を読む。

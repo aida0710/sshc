@@ -16,6 +16,7 @@ import (
 	"golang.org/x/term"
 
 	"sshc/internal/app"
+	"sshc/internal/buildinfo"
 	"sshc/internal/handoff"
 	"sshc/internal/releasecheck"
 	"sshc/internal/releasewatch"
@@ -187,7 +188,7 @@ func runEngineApp(
 		},
 		// 起動通知とWeb UIの手動確認は同じrelease判定を使用する。
 		Updates:         updates,
-		About:           runningBuildInfo(version),
+		About:           runningBuildInfo(buildinfo.Stamp{Version: version, Revision: revision, CommitTime: commitTime}),
 		SelfUpdate:      newWebUpdater(runCtx, userPaths{home: home, stateDir: stateDirectory}, version),
 		Listen:          net.Listen,
 		UI:              assets,
