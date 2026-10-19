@@ -1367,7 +1367,7 @@ export const en = {
   "section.sync": "Sync",
   "section.history": "History",
 
-  "home.heading": "Your connections",
+  "home.heading": "Home",
   "home.manageConnections": "Manage connections",
   "home.groups": "Groups",
   "home.attention": "Needs attention",

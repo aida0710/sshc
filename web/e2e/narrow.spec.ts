@@ -636,7 +636,7 @@ test("keeps every section inside 360 pixels", async ({ page, installation }) => 
   });
   await answerNoVPNProfiles(page);
   await openApplication(page, installation);
-  await expect(page.getByRole("heading", { name: "Your connections", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page, "Home");
   await expectNothingCutOff(page, "Home");
   const layout = page.getByRole("group", { name: "Connection layout" });

@@ -1368,7 +1368,7 @@ export const ja = {
   "section.sync": "Sync",
   "section.history": "History",
 
-  "home.heading": "Connections",
+  "home.heading": "Home",
   "home.manageConnections": "Connectionsを管理",
   "home.groups": "グループ",
   "home.attention": "確認が必要",
