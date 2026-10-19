@@ -86,10 +86,11 @@ func ComputeEffective(graph *config.Graph, root, alias string, facts effective.L
 // OpenSSH から見れば同じ alias を宣言する 2 つ目のブロックなので、internal/effective は
 // 重複として印を付ける。しかしその行は sshc がメンバーに値を足すために置いたもので、
 // 利用者が直す重複ではない。値の出所（Entries）からは除かない。
+// duplicate_alias の Path は、画面に出す形（~/.ssh からの相対パス）で届く。
 func withoutGroupSettingsDuplicates(notices []Notice, root, groupsFile string) []Notice {
 	var kept []Notice
 	for _, notice := range notices {
-		if notice.Code == NoticeDuplicateAlias && NewFileRef(root, notice.Path).Path == groupsFile {
+		if notice.Code == NoticeDuplicateAlias && displayedPath(root, notice.Path) == groupsFile {
 			continue
 		}
 		kept = append(kept, notice)
