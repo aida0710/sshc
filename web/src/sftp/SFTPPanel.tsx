@@ -463,7 +463,7 @@ export function SFTPPanel({
   const loadingLabel = t(local ? "sftp.local.loading" : "sftp.loading");
 
   return (
-    <section ref={panelRoot} className="flex h-full min-h-0 min-w-0 flex-col gap-1" aria-labelledby={headingId}>
+    <section ref={panelRoot} className="flex h-full min-h-0 min-w-0 flex-col" aria-labelledby={headingId}>
       <h2 id={headingId} className="sr-only">{t(local ? "sftp.local.heading" : "sftp.heading")}</h2>
       <div ref={toolbarRoot} className="relative shrink-0">
         <SFTPToolbar
@@ -535,7 +535,7 @@ export function SFTPPanel({
         <div
           aria-label={t(local ? "sftp.local.dropZone" : "sftp.dropZone")}
           aria-busy={busy}
-          className={`relative flex min-h-0 min-w-0 flex-col rounded-md border bg-card transition-shadow ${transfers.dragging ? "border-accent ring-1 ring-accent" : "border-line/60"}`}
+          className={`relative flex min-h-0 min-w-0 flex-col bg-card transition-shadow ${transfers.dragging ? "ring-2 ring-inset ring-accent" : ""}`}
           onDragEnter={transfers.dragEnter}
           onDragOver={transfers.dragOver}
           onDragLeave={transfers.dragLeave}
