@@ -1161,10 +1161,37 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/about:
+    get:
+      operationId: getAbout
+      description: Reports the running executable and its installation independently of GitHub availability.
+      responses:
+        "200":
+          description: Running executable information
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/About" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/update/check:
+    post:
+      operationId: refreshUpdate
+      description: Refreshes the engine's retained release check, joining any check already in progress. Failures are retained in checkError.
+      responses:
+        "200":
+          description: Refreshed release and update state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpdateStatus" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/update:
     get:
-      operationId: checkForUpdate
-      description: Reports the latest release, installation boundary and durable update job. Result checks are available while the vault is locked after restart.
+      operationId: getUpdateStatus
+      description: Reports the retained release check, installation boundary and durable update job. Only the first read may contact GitHub. Result checks are available while the vault is locked after restart.
       responses:
         "200":
           description: Current release and update state
@@ -1175,7 +1202,6 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
-        "502": { $ref: "#/components/responses/Problem" }
     post:
       operationId: startSelfUpdate
       description: Consumes the preview's single-use X-SSHC-Action token, bound to the release and inspected installation. Flushes the accepted response before starting installation and restart. Terminals and transfers disconnect.
@@ -3033,6 +3059,29 @@ components:
         # false なら key_passphrase の hosts は空ではなく未確認。password の
         # hosts は vault の割り当てなので、この値に関わらず完全である。
         keyHostUsageComplete: { type: boolean }
+    About:
+      type: object
+      additionalProperties: false
+      required: [version, revision, goVersion, os, arch, manager, executable]
+      properties:
+        version: { type: string }
+        revision: { type: string }
+        commitTime: { type: string, format: date-time, description: VCS commit time recorded by Go; not the compilation time. }
+        modified: { type: boolean }
+        goVersion: { type: string }
+        os: { type: string }
+        arch: { type: string }
+        manager: { type: string, enum: [homebrew, install.sh, install.ps1, unknown] }
+        executable: { type: string }
+    ReleaseNotes:
+      type: object
+      additionalProperties: false
+      required: [version, pageUrl, body]
+      properties:
+        version: { type: string }
+        pageUrl: { type: string }
+        publishedAt: { type: string, format: date-time }
+        body: { type: string, maxLength: 65536, description: Original Markdown displayed as plain text; bounded to 64 KiB of UTF-8. }
     UpdateStatus:
       type: object
       additionalProperties: false
@@ -3040,6 +3089,10 @@ components:
       properties:
         current: { type: string }
         latest: { type: string }
+        publishedAt: { type: string, format: date-time }
+        checkedAt: { type: string, format: date-time, description: Completion time of the last check, successful or failed. }
+        checkError: { type: string, description: Failure of the last check; previous successful release information is retained. }
+        releases: { type: array, maxItems: 100, items: { $ref: "#/components/schemas/ReleaseNotes" } }
         available: { type: boolean }
         pageUrl: { type: string }
         manager: { type: string, enum: [homebrew, install.sh, install.ps1] }

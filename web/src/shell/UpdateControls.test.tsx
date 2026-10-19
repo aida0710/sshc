@@ -8,7 +8,7 @@ import { UpdateBadge } from "./UpdateBadge";
 const available: UpdateStatus = { current: "v1.0.0", latest: "v1.1.0", available: true, canUpdate: true, manager: "install.sh" };
 function updater(): UpdateApi {
   return {
-    updateStatus: vi.fn().mockResolvedValue(available),
+    checkUpdate: vi.fn(), updateStatus: vi.fn().mockResolvedValue(available),
     previewUpdate: vi.fn().mockResolvedValue({ current: "v1.0.0", target: "v1.1.0", manager: "install.sh", actionToken: "confirmed-plan", actionExpiresAt: "2026-10-07T09:00:00Z" }),
     startUpdate: vi.fn().mockResolvedValue({ id: "job-one", target: "v1.1.0", state: "accepted", problem: "" }),
   };
@@ -136,7 +136,7 @@ describe("Web self update", () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, pageUrl: "https://github.com/aida0710/sshc/releases/tag/v1.1.0" });
     const first = render(<UpdateBadge api={api} />);
-    const version = await screen.findByRole("button", { name: "Version v1.0.0" });
+    const version = await screen.findByRole("button", { name: "Toggle update notice" });
     expect(version).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("link", { name: /v1.1.0 is available/ })).toBeVisible();
     await userEvent.click(version);
@@ -145,12 +145,12 @@ describe("Web self update", () => {
     first.unmount();
 
     render(<UpdateBadge api={api} />);
-    expect(await screen.findByRole("button", { name: "Version v1.0.0" })).toHaveAttribute("aria-expanded", "false");
+    expect(await screen.findByRole("button", { name: "Toggle update notice" })).toHaveAttribute("aria-expanded", "false");
     cleanup();
 
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, latest: "v1.2.0", pageUrl: "https://github.com/aida0710/sshc/releases/tag/v1.2.0" });
     render(<UpdateBadge api={api} />);
-    expect(await screen.findByRole("button", { name: "Version v1.0.0" })).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByRole("button", { name: "Toggle update notice" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("link", { name: /v1.2.0 is available/ })).toBeVisible();
   });
 
@@ -167,7 +167,7 @@ describe("Web self update", () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, available: false, canUpdate: false, reason });
     render(<UpdateBadge api={api} />);
-    const version = await screen.findByRole("button", { name: "Version v1.0.0" });
+    const version = await screen.findByRole("button", { name: "Toggle update notice" });
     const explanation = document.getElementById(version.getAttribute("aria-controls") ?? "");
     expect(explanation).not.toBeVisible();
     await userEvent.click(version);
@@ -177,7 +177,7 @@ describe("Web self update", () => {
     expect(document.body.textContent).not.toContain("unavailable for this installation");
   });
 
-  it("keeps the version as plain text when there is nothing to explain", async () => {
+  it("links the version to About when there is nothing to explain", async () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.0.0", latest: "v1.0.0", available: false, canUpdate: false, reason: "" });
     render(<UpdateBadge api={api} />);

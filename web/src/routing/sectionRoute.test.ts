@@ -22,6 +22,7 @@ const routes = [
   ["VPN", "/vpn"],
   ["History", "/history"],
   ["License", "/license"],
+  ["About", "/about"],
 ] as const;
 
 describe("section routes", () => {

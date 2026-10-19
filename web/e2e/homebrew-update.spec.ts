@@ -22,10 +22,10 @@ test("confirms Homebrew updates and shows the installed version once after resta
   await expect(navigation.getByRole("link", { name: /v1\.1\.0 is available/ })).toBeVisible();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await navigation.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/update-notice-open.png` });
-    await navigation.getByRole("button", { name: "Version v1.0.0" }).click();
+    await navigation.getByRole("button", { name: "Toggle update notice" }).click();
     await expect(navigation.getByRole("link", { name: /v1\.1\.0 is available/ })).toBeHidden();
     await navigation.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/update-notice-folded.png` });
-    await navigation.getByRole("button", { name: "Version v1.0.0" }).click();
+    await navigation.getByRole("button", { name: "Toggle update notice" }).click();
   }
   await page.getByRole("button", { name: "Update sshc", exact: true }).click();
   const confirmation = page.getByRole("dialog", { name: "Update sshc?" });

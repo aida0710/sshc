@@ -896,6 +896,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Reports the running executable and its installation independently of GitHub availability. */
+        get: operations["getAbout"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/update/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Refreshes the engine's retained release check, joining any check already in progress. Failures are retained in checkError. */
+        post: operations["refreshUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/update": {
         parameters: {
             query?: never;
@@ -903,8 +937,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Reports the latest release, installation boundary and durable update job. Result checks are available while the vault is locked after restart. */
-        get: operations["checkForUpdate"];
+        /** @description Reports the retained release check, installation boundary and durable update job. Only the first read may contact GitHub. Result checks are available while the vault is locked after restart. */
+        get: operations["getUpdateStatus"];
         put?: never;
         /** @description Consumes the preview's single-use X-SSHC-Action token, bound to the release and inspected installation. Flushes the accepted response before starting installation and restart. Terminals and transfers disconnect. */
         post: operations["startSelfUpdate"];
@@ -2366,9 +2400,43 @@ export interface components {
             dedicatedKeyPassphrases: components["schemas"]["DedicatedKeyPassphraseUsage"][];
             keyHostUsageComplete: boolean;
         };
+        About: {
+            version: string;
+            revision: string;
+            /**
+             * Format: date-time
+             * @description VCS commit time recorded by Go; not the compilation time.
+             */
+            commitTime?: string;
+            modified?: boolean;
+            goVersion: string;
+            os: string;
+            arch: string;
+            /** @enum {string} */
+            manager: "homebrew" | "install.sh" | "install.ps1" | "unknown";
+            executable: string;
+        };
+        ReleaseNotes: {
+            version: string;
+            pageUrl: string;
+            /** Format: date-time */
+            publishedAt?: string;
+            /** @description Original Markdown displayed as plain text; bounded to 64 KiB of UTF-8. */
+            body: string;
+        };
         UpdateStatus: {
             current: string;
             latest?: string;
+            /** Format: date-time */
+            publishedAt?: string;
+            /**
+             * Format: date-time
+             * @description Completion time of the last check
+             */
+            checkedAt?: string;
+            /** @description Failure of the last check; previous successful release information is retained. */
+            checkError?: string;
+            releases?: components["schemas"]["ReleaseNotes"][];
             available: boolean;
             pageUrl?: string;
             /** @enum {string} */
@@ -6073,7 +6141,54 @@ export interface operations {
             500: components["responses"]["Problem"];
         };
     };
-    checkForUpdate: {
+    getAbout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Running executable information */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["About"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    refreshUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Refreshed release and update state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    getUpdateStatus: {
         parameters: {
             query?: never;
             header?: never;
@@ -6095,7 +6210,6 @@ export interface operations {
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
-            502: components["responses"]["Problem"];
         };
     };
     startSelfUpdate: {

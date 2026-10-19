@@ -154,6 +154,10 @@ A state or definition change while waiting for confirmation also prevents succes
 
 ### Update from the web UI
 
+Open **About sshc** under **Others** in the Menu, or select the version in the sidebar, to see the running version, commit, installation method, and release notes. Notes cover the current version through the latest stable release within the 100 most recent releases retrieved. Their Markdown source is shown as plain text.
+
+The engine checks at startup and every six hours, retaining the result. The sidebar rereads that result hourly. Select **Check for updates** on About sshc to check immediately, then **Update sshc** when available. If a check fails, the previously retrieved release information remains available.
+
 Verified Homebrew and `install.sh` installations on macOS and Linux, and `install.ps1` installations on Windows, show a notice and an update button under the version when a newer stable release is available. Fold them with the mark beside the version; a folded notice stays closed until a newer stable release appears. Review the current version, target version, and installation method before confirming. The installation directory must be writable. Homebrew runs `brew upgrade` and checks the version actually installed. Its formula can advance after confirmation, so a newer version may be installed. The `install.sh` and `install.ps1` installers use the confirmed version. Manual installations, development builds, and Android show guidance for updating through their installation method.
 
 The engine restarts after installation, ending connected sessions and transfers. Unlock a password-protected vault again after the restart. A dialog shows the progress and the result, which appears once per update. Duplicate updates are refused. If installation succeeds but restarting fails, follow the restart guidance and reload the page without reinstalling.
