@@ -15,7 +15,8 @@ import { ConnectionAnalysis } from "./ConnectionAnalysis";
 import { ConnectionBasicForm } from "./ConnectionBasicForm";
 import { ConnectionChecks } from "./ConnectionChecks";
 import type { ConnectionSavedState } from "./connectionSavedState";
-import { NoticeList, SavePreviewPanel } from "./SavePreview";
+import { SavePreviewPanel } from "./SavePreview";
+import { NoticeList } from "./NoticeList";
 import { draftResetKey } from "./draftResetKey";
 import { HostInspector } from "./HostInspector";
 import { useReportDirty } from "./useReportDirty";
@@ -141,7 +142,7 @@ export function HostDetailPanel({
 
   return (
     <section className="flex flex-col gap-4">
-      <NoticeList notices={detail.form.notices ?? []} />
+      <NoticeList collapsible notices={detail.form.notices ?? []} />
 
       {/* 接続の確認は、保存済みの接続を試すもので、どのタブを開いていても同じである。
           Basic のときだけ出すと、タブを切り替えるたびに下の編集欄の位置が上下する。 */}

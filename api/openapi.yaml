@@ -4697,6 +4697,16 @@ components:
         path: { type: string }
         line: { type: integer }
         detail: { type: string }
+        # 同じ注意に関わるもう一つの場所。duplicate_alias では、同じ alias を先に宣言している
+        # ブロック（OpenSSH が先に読む方）を指す。
+        related: { $ref: "#/components/schemas/NoticeLocation" }
+    NoticeLocation:
+      type: object
+      additionalProperties: false
+      required: [path, line]
+      properties:
+        path: { type: string }
+        line: { type: integer }
     Diagnostic:
       type: object
       additionalProperties: false

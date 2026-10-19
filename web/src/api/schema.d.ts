@@ -3436,6 +3436,11 @@ export interface components {
             path?: string;
             line?: number;
             detail?: string;
+            related?: components["schemas"]["NoticeLocation"];
+        };
+        NoticeLocation: {
+            path: string;
+            line: number;
         };
         Diagnostic: {
             severity: string;

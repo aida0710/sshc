@@ -51,9 +51,13 @@ func ComputeEffective(graph *config.Graph, root, alias string, facts effective.L
 
 	// 結果は確定しているが、書いたユーザー本人には見えていないこと。
 	for _, note := range resolution.Notes {
-		computed.Notices = appendNotice(computed.Notices, Notice{
-			Code: noteNotices[note.Code], Path: note.Path, Line: note.Line, Detail: note.Detail,
-		})
+		notice := Notice{Code: noteNotices[note.Code], Path: note.Path, Line: note.Line, Detail: note.Detail}
+		if note.RelatedPath != "" {
+			// 画面は Path と同じ形で並べて出すので、~/.ssh からの相対パスにそろえる。
+			notice.Path = displayedPath(root, note.Path)
+			notice.Related = NoticeLocation{Path: displayedPath(root, note.RelatedPath), Line: note.RelatedLine}
+		}
+		computed.Notices = appendNotice(computed.Notices, notice)
 	}
 
 	for _, entry := range resolution.Accepted {
@@ -248,4 +252,12 @@ func (s *Service) ResolveConnection(alias string) (effective.Values, error) {
 		return effective.Values{}, failure
 	}
 	return resolution.Values, nil
+}
+
+// displayedPath は、~/.ssh の中のファイルを ~/.ssh からの相対パスで、外のファイルをそのまま返す。
+func displayedPath(root, path string) string {
+	if reference := NewFileRef(root, path); !reference.External {
+		return reference.Path
+	}
+	return path
 }

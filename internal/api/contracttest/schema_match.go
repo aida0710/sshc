@@ -203,7 +203,7 @@ func (w schemaWalk) verifyObject(at location, schema map[string]any, typeID refl
 			continue
 		}
 		if field.required != required[name] {
-			w.t.Errorf("%s: required=%t but Go omitempty implies required=%t", at.property(name), required[name], field.required)
+			w.t.Errorf("%s: required=%t but Go omitempty/omitzero implies required=%t", at.property(name), required[name], field.required)
 		}
 		propertySchema, ok := property.(map[string]any)
 		if !ok {
@@ -268,7 +268,10 @@ func (w schemaWalk) collectJSONFields(at location, typeID reflect.Type) map[stri
 		if _, duplicate := fields[name]; duplicate {
 			w.t.Fatalf("%s: duplicate JSON field", at.property(name))
 		}
-		fields[name] = jsonField{typeID: field.Type, required: !slices.Contains(strings.Split(options, ","), "omitempty")}
+		// omitempty も omitzero も、値が無ければキーごと書かない。どちらも OpenAPI では省略可能である。
+		tagOptions := strings.Split(options, ",")
+		omitted := slices.Contains(tagOptions, "omitempty") || slices.Contains(tagOptions, "omitzero")
+		fields[name] = jsonField{typeID: field.Type, required: !omitted}
 	}
 	return fields
 }

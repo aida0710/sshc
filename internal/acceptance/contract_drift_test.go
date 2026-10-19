@@ -62,6 +62,7 @@ var servedTypes = []struct {
 	{"IncludeReference", application.IncludeReference{}},
 	{"Metadata", application.Metadata{}},
 	{"Notice", application.Notice{}},
+	{"NoticeLocation", application.NoticeLocation{}},
 	{"Overview", application.Overview{}},
 	{"PasswordEligibility", application.PasswordEligibility{}},
 	{"RelocatedKeyFile", application.RelocatedKeyFile{}},

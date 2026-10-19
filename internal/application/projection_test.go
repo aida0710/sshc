@@ -143,6 +143,10 @@ func TestProjectHostsFlagsAnAliasDeclaredInAnotherFile(t *testing.T) {
 				t.Errorf("the notice names %q, want the shadowed block's file %q",
 					notice.Path, claiming[1].File.Path)
 			}
+			want := NoticeLocation{Path: claiming[0].File.Path, Line: claiming[0].Line}
+			if notice.Related != want {
+				t.Errorf("the notice relates %#v, want the block OpenSSH reads first %#v", notice.Related, want)
+			}
 		}
 	}
 	if !found {

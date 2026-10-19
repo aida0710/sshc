@@ -66,6 +66,10 @@ type Complexity struct {
 	Line      int
 	Condition string
 	Detail    string
+	// RelatedPath と RelatedLine は、同じ印に関わるもう一つの場所である。duplicate_alias では、
+	// 同じ alias を先に宣言しているブロック（OpenSSH が先に読む方）を指す。
+	RelatedPath string
+	RelatedLine int
 }
 
 // Projection は、ひとつの alias に対するエンジン自身の設定の読み。

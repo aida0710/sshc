@@ -1171,10 +1171,17 @@ type LocalShellProfileList struct {
 
 // Notice defines model for Notice.
 type Notice struct {
-	Code   string  `json:"code"`
-	Detail *string `json:"detail,omitempty"`
-	Line   *int    `json:"line,omitempty"`
-	Path   *string `json:"path,omitempty"`
+	Code    string          `json:"code"`
+	Detail  *string         `json:"detail,omitempty"`
+	Line    *int            `json:"line,omitempty"`
+	Path    *string         `json:"path,omitempty"`
+	Related *NoticeLocation `json:"related,omitempty"`
+}
+
+// NoticeLocation defines model for NoticeLocation.
+type NoticeLocation struct {
+	Line int    `json:"line"`
+	Path string `json:"path"`
 }
 
 // OpenTerminalSessionRequest defines model for OpenTerminalSessionRequest.

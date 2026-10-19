@@ -19,7 +19,7 @@ import {
   type CreateConnectionDraft,
   type CreationPrerequisite,
 } from "./CreateConnectionModal";
-import { NoticeList } from "./SavePreview";
+import { NoticeList } from "./NoticeList";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { OrphanPanel } from "./OrphanPanel";
 import { useTranslate } from "../i18n/context";
@@ -218,6 +218,14 @@ export function ConnectionsPage({
   const editedGroup = groupEditorName === null
     ? null
     : (overview?.metadata.groups ?? []).find((group) => group.name === groupEditorName) ?? { name: groupEditorName };
+
+  // 右側に出す設定全体の注意。接続先を開いているときは、その接続先（alias かファイル）に関わるものだけにする。
+  // ほかの接続先の注意は、一覧のその行の印で分かる。
+  const paneNotices = (overview?.notices ?? []).filter((notice) => {
+    if (groupNoticeCodes.has(notice.code) || selectionNoticeCodes.has(notice.code)) return false;
+    if (selection === null) return true;
+    return notice.detail === selection.alias || notice.path === selection.path || notice.related?.path === selection.path;
+  });
 
   // 選んだ接続先への操作の帯。広い画面では一覧の上、スマホでは一覧の下に置く。
   function selectionBar(placement: "top" | "bottom") {
@@ -421,11 +429,7 @@ export function ConnectionsPage({
           {t("conn.allConnections")}
         </Button>
 
-        <NoticeList
-          notices={overview.notices.filter(
-            (notice) => !groupNoticeCodes.has(notice.code) && !selectionNoticeCodes.has(notice.code),
-          )}
-        />
+        <NoticeList collapsible notices={paneNotices} />
         <OrphanPanel
           metadata={overview.metadata}
           hosts={overview.hosts}

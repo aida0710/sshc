@@ -4,7 +4,7 @@ import type { DiagnosticsApi, EffectiveResponse } from "../api/diagnostics";
 import { useTranslate } from "../i18n/context";
 import { hintText, sectionHeading, tableHeadCell, tableHeadRow } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
-import { NoticeList } from "./SavePreview";
+import { NoticeList } from "./NoticeList";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 
 type ConnectionAnalysisProps = {

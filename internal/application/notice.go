@@ -6,6 +6,15 @@ type Notice struct {
 	Path   string `json:"path,omitempty"`
 	Line   int    `json:"line,omitempty"`
 	Detail string `json:"detail,omitempty"`
+	// Related は、同じ注意に関わるもう一つの場所である。duplicate_alias では、同じ alias を
+	// 先に宣言しているブロック（OpenSSH が先に読む方）を指す。
+	Related NoticeLocation `json:"related,omitzero"`
+}
+
+// NoticeLocation は、注意が指す設定ファイルの行である。
+type NoticeLocation struct {
+	Path string `json:"path"`
+	Line int    `json:"line"`
 }
 
 // Notice code は、UI が自前のコピーへ対応付ける安定した識別子である。

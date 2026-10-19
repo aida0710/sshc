@@ -1673,6 +1673,9 @@ export const en = {
     "This value cannot be edited in the simplified view because its source uses a wildcard, negation, Match block, or duplicate alias. The source is shown instead.",
   "notice.duplicate_alias":
     "Another block declares the same alias. For most options, OpenSSH uses the first value it reads.",
+  "notice.duplicate_alias_both":
+    "{alias} is declared in both {first} and {second}. For most settings OpenSSH uses the values from {first}, which it reads first.",
+  "notice.summary": "Warnings ({count})",
   "notice.proxy_ignored":
     "Both ProxyCommand and ProxyJump are set. OpenSSH keeps whichever it read first, so this line is ignored.",
   "notice.wildcard_shadow":

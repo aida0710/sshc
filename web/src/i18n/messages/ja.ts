@@ -1674,6 +1674,9 @@ export const ja = {
     "ワイルドカード、否定、Matchブロック、aliasの重複のいずれかが含まれるため、この値を単純な形式では編集できません。値の参照元を表示します。",
   "notice.duplicate_alias":
     "別のブロックも同じaliasを宣言しています。OpenSSHは多くの設定項目で、最初に読み込んだ値を使用します。",
+  "notice.duplicate_alias_both":
+    "{alias}は{first}と{second}の両方で宣言されています。OpenSSHは多くの設定項目で、先に読み込む{first}の値を使用します。",
+  "notice.summary": "警告 {count}件",
   "notice.proxy_ignored":
     "ProxyCommandとProxyJumpの両方が書かれています。OpenSSHは先に読み込んだ方だけを使い、この行は無視されます。",
   "notice.wildcard_shadow":

@@ -371,6 +371,23 @@ describe("ConnectionsPage", () => {
     expect(screen.queryByText(/no concrete alias/)).not.toBeInTheDocument();
   });
 
+  it("shows only the warnings about the open connection beside it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.overview).mockResolvedValue({
+      ...overview,
+      notices: [
+        { code: "duplicate_alias", path: "conf.d/extra.conf", line: 4, detail: "bastion", related: { path: "config", line: 1 } },
+        { code: "duplicate_alias", path: "conf.d/extra.conf", line: 9, detail: "edge", related: { path: "conf.d/edge.conf", line: 1 } },
+      ],
+    });
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} onNavigateLocation={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "bastion" }));
+
+    expect(await screen.findByText(/^bastion is declared in both config:1 and conf\.d\/extra\.conf:4/)).toBeInTheDocument();
+    expect(screen.queryByText(/^edge is declared/)).not.toBeInTheDocument();
+    expect(screen.getByText("Warnings (1)")).toBeInTheDocument();
+  });
+
   it("loads the tree, opens a host and saves a Basic field with the loaded base", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.updateConnection).mockResolvedValue({
