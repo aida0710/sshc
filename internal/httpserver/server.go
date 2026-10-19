@@ -20,13 +20,14 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/browserauth"
+	"sshc/internal/buildinfo"
 	"sshc/internal/diagnostics"
 	"sshc/internal/handoff"
 	"sshc/internal/knownhosts"
 	"sshc/internal/loopbackpeer"
 	"sshc/internal/platform"
 	"sshc/internal/recent"
-	"sshc/internal/releasecheck"
+	"sshc/internal/releasewatch"
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
@@ -58,8 +59,9 @@ type Options struct {
 	// Updates はプロジェクトのリリースを調べる。nil の場合、バージョンを
 	// 報告するのみで何も提示しない。比較すべきリリースを持たないビルドが
 	// すべきことはこれである。
-	Updates    *releasecheck.Checker
+	Updates    *releasewatch.Watcher
 	SelfUpdate *selfupdate.Service
+	About      *buildinfo.Info
 	Listener   net.Listener
 	Sessions   *session.Manager
 	// BrowserAuth keeps only hashes of browser enrolment capabilities. It is
@@ -427,7 +429,8 @@ func New(options Options) (*Server, error) {
 			Binding:     passwordBinding,
 		})
 	}
-	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Checker: options.Updates, Service: options.SelfUpdate, Actions: actions})
+	registerAboutRoute(e, options.Version, options.About)
+	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Watcher: options.Updates, Service: options.SelfUpdate, Actions: actions})
 
 	registerCLIRoutes(e, newCLIHandlers(options, host))
 	if options.Sync != nil {

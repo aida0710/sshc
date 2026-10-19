@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/echo/v5"
 	"sshc/internal/api"
 	"sshc/internal/releasecheck"
+	"sshc/internal/releasewatch"
 	"sshc/internal/selfupdate"
 	"sshc/internal/session"
 )
@@ -246,7 +247,9 @@ func TestWebUpdateProgressDoesNotDependOnTheReleaseServer(t *testing.T) {
 		response.WriteHeader(http.StatusBadGateway)
 	}))
 	defer releaseServer.Close()
-	harness.handlers.Checker = &releasecheck.Checker{API: releaseServer.URL, HTTP: releaseServer.Client()}
+	checker := &releasecheck.Checker{API: releaseServer.URL, HTTP: releaseServer.Client()}
+	harness.handlers.Watcher = releasewatch.New(context.Background(), func(ctx context.Context) (releasecheck.Catalog, error) { return checker.Catalog(ctx, "v1.0.0") })
+	t.Cleanup(harness.handlers.Watcher.Stop)
 	preview := harness.preview(t)
 	response := sendKeyRequest(t, harness.engine, harness.credentials, http.MethodPost, "/api/v1/update", []byte(`{"target":"v1.1.0"}`), preview.ActionToken)
 	if response.Code != http.StatusAccepted {

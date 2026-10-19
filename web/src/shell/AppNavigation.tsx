@@ -178,6 +178,7 @@ export function AppNavigation({
           {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
         </p>
         <UpdateBadge
+          onNavigate={(event) => onNavigate(event, "About")}
           current={version}
           enabled={state === "ready" || state === "locked"}
           indicator={(

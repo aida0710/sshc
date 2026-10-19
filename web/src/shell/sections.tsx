@@ -9,6 +9,7 @@ import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { MenuPanel, type MenuGroup } from "./MenuPanel";
 import type { Declared, Handoff, Navigation, Shell } from "./sectionProps";
 
+const AboutPage = lazy(() => import("../about/AboutPage").then((module) => ({ default: module.AboutPage })));
 const LicensePage = lazy(() => import("../licenses/LicensePage").then((module) => ({ default: module.LicensePage })));
 
 const ConnectionsPage = lazy(() =>
@@ -99,6 +100,7 @@ export const sectionLabels: Record<Section, MessageKey> = {
   VPN: "section.vpn",
   History: "section.history",
   License: "section.license",
+  About: "section.about",
 };
 
 export const sectionIcons: Record<Section, IconName> = {
@@ -122,6 +124,7 @@ export const sectionIcons: Record<Section, IconName> = {
   VPN: "vpn",
   History: "history",
   License: "license",
+  About: "info",
 };
 
 export const startSections: Section[] = ["Home", "Connections", "Files"];
@@ -263,6 +266,7 @@ function PaddedSection({
       />
     );
   }
+  if (section === "About") return <AboutPage />;
   if (section === "License") return <LicensePage />;
   if (section === "Menu") {
     return (

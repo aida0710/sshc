@@ -1,4 +1,5 @@
-import { useId, useState, type ReactNode } from "react";
+import { sectionPath } from "../routing/sectionRoute";
+import { useId, useState, type MouseEvent, type ReactNode } from "react";
 import { updateApi, type UpdateApi } from "../api/update";
 import { useTranslate } from "../i18n/context";
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
@@ -16,12 +17,13 @@ type UpdateBadgeProps = {
   current?: string;
   indicator?: ReactNode;
   enabled?: boolean;
+  onNavigate?: (event: MouseEvent<HTMLAnchorElement>) => void;
 };
 
 // UpdateBadge shows the version, and under it only what concerns the next release:
 // that one is available, or why this installation cannot update from the Web. That
-// part folds under the version. An update's progress and result open in a dialog.
-export function UpdateBadge({ api = updateApi, current = "", indicator, enabled = true }: UpdateBadgeProps) {
+// part has its own disclosure button beside the version link. An update's progress and result open in a dialog.
+export function UpdateBadge({ api = updateApi, current = "", indicator, enabled = true, onNavigate }: UpdateBadgeProps) {
   const t = useTranslate();
   const { status, setStatus } = useUpdateStatus(api, enabled);
   const [shownResultId] = useState(readShownUpdateResult);
@@ -54,29 +56,26 @@ export function UpdateBadge({ api = updateApi, current = "", indicator, enabled 
     setFoldedRelease(folded);
   }
 
+  function followAbout(event: MouseEvent<HTMLAnchorElement>) {
+    if (onNavigate === undefined || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    onNavigate(event);
+  }
+
   const dialogJob = status === null ? undefined : updateJobToShow(status, shownResultId);
   const openDialogJob = dialogJob !== undefined && updateDialogKey(dialogJob) !== closedDialogKey ? dialogJob : undefined;
 
   return (
     <div className="border-t border-line px-2 py-2 text-xs text-ink-muted">
-      {!hasDetails ? (
-        <div className="flex items-center gap-2">
-          {indicator}
-          <p>{versionLabel}</p>
-        </div>
-      ) : (
-        <button
-          type="button"
-          aria-expanded={isOpen}
-          aria-controls={detailsId}
-          className="flex items-center gap-2 text-left hover:text-ink"
-          onClick={toggleDetails}
-        >
-          {indicator}
-          <span>{versionLabel}</span>
-          <DisclosureChevron expanded={isOpen} className="size-3" />
-        </button>
-      )}
+      <div className="flex items-center gap-2">
+        {indicator}
+        <a href={sectionPath("About")} onClick={followAbout} className="hover:text-ink hover:underline">{versionLabel}</a>
+        {!hasDetails ? null : (
+          <button type="button" aria-label={t("update.toggleNotice")} aria-expanded={isOpen}
+            aria-controls={detailsId} className="rounded p-1 hover:bg-hover hover:text-ink" onClick={toggleDetails}>
+            <DisclosureChevron expanded={isOpen} className="size-3" />
+          </button>
+        )}
+      </div>
       <div id={detailsId} hidden={hasDetails && !isOpen}>
         {reason === undefined ? null : <p className={detailIndent}>{t(updateMessage(reason))}</p>}
         {release === undefined || releasePage === undefined ? null : (
