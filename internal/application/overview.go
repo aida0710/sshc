@@ -18,8 +18,12 @@ func (s *Service) Overview() (Overview, error) {
 	if err != nil {
 		return Overview{}, err
 	}
+	stored, _, err := s.metadata.Load()
+	if err != nil {
+		return Overview{}, err
+	}
 	root := s.workspace.Root()
-	hosts, notices := ProjectHosts(graph, root)
+	hosts, notices := ProjectHosts(graph, root, stored.GroupsPath())
 	facts := s.localFacts()
 	for index := range hosts {
 		alias := hosts[index].Identity.Alias
@@ -35,10 +39,6 @@ func (s *Service) Overview() (Overview, error) {
 		hosts[index].Port = resolution.Values.First("port")
 	}
 
-	stored, _, err := s.metadata.Load()
-	if err != nil {
-		return Overview{}, err
-	}
 	identities := make([]HostIdentity, 0, len(hosts))
 	for _, host := range hosts {
 		if !host.Identity.IsZero() {
@@ -155,6 +155,8 @@ func (s *Service) HostDetail(relative, alias string) (HostDetail, error) {
 		File:      contents,
 		Metadata:  HostMetadata{Identity: identity},
 	}
+	detail.Effective.Notices = withoutGroupSettingsDuplicates(
+		detail.Effective.Notices, s.workspace.Root(), stored.GroupsPath())
 	if index := hostMetadataIndex(stored.Hosts, identity); index >= 0 {
 		detail.Metadata = stored.Hosts[index]
 	}

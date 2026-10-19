@@ -29,7 +29,11 @@ func (s *Service) KeyHosts(relativePaths []string) (map[string][]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	projected, _ := ProjectHosts(graph, s.workspace.Root())
+	stored, _, err := s.metadata.Load()
+	if err != nil {
+		return nil, err
+	}
+	projected, _ := ProjectHosts(graph, s.workspace.Root(), stored.GroupsPath())
 	seen := make(map[string]map[string]bool, len(absoluteByKey))
 	for relative := range absoluteByKey {
 		seen[relative] = map[string]bool{}
