@@ -5,7 +5,6 @@ import { parseSettingsPage, settingsPageMeta, settingsPages } from "../settings/
 import type { IconName } from "../ui/icons";
 import type { MessageKey } from "../i18n/messages";
 import type { SFTPTarget } from "../sftp/SFTPPanel";
-import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { SectionBar } from "../ui/SectionBar";
 import { useTranslate } from "../i18n/context";
 import { MenuPanel, type MenuGroup } from "./MenuPanel";
@@ -208,7 +207,6 @@ export type SectionViewProps = {
 
 export function SectionView(props: SectionViewProps) {
   const t = useTranslate();
-  const compactFiles = useMediaQuery(mobileViewportQuery);
   if (props.section === "Terminal") {
     return null;
   }
@@ -243,7 +241,8 @@ export function SectionView(props: SectionViewProps) {
     return (
       <div className="flex h-full min-h-0 flex-col">
         <SectionBar title={t(sectionLabels.Files)} />
-        <div className={`min-h-0 flex-1 overflow-hidden ${compactFiles ? "p-1" : "p-2 md:px-5 md:pb-5 md:pt-3"}`}>
+        {/* Connections と同じく余白を取らず、帯・タブ・一覧・転送マネージャーの境目は線だけにする。 */}
+        <div className="min-h-0 flex-1 overflow-hidden">
           <PaddedSection {...props} />
         </div>
       </div>
