@@ -29,9 +29,9 @@ func TestHostEditsをHTTPで送るとPreviewとSaveが通る(t *testing.T) {
 				t.Fatal(err)
 			}
 			request := application.EditRequest{Kind: kind, Hosts: []application.HostEdit{
-				{Path: "config", Alias: "bastion", Base: string(base)},
-				{Path: "config", Alias: "second", Base: string(base)},
-			}}
+				{Path: "config", Alias: "bastion"},
+				{Path: "config", Alias: "second"},
+			}, Bases: []application.FileBase{{Path: "config", Base: string(base)}}}
 			if kind == application.EditMoveHosts {
 				request.DestinationGroup = "work"
 			}
@@ -72,22 +72,25 @@ func TestHostEditsをHTTPで送るとPreviewとSaveが通る(t *testing.T) {
 }
 
 func TestHostEditsの不正な選択をHTTPで送ると拒否される(t *testing.T) {
-	valid := application.HostEdit{Path: "config", Alias: "bastion", Base: handlerConfig}
-	selections := map[string][]application.HostEdit{
-		"empty":              nil,
-		"too many":           make([]application.HostEdit, application.MaxHostEdits+1),
-		"missing path":       {{Alias: "bastion", Base: handlerConfig}},
-		"traversal":          {{Path: "../config", Alias: "bastion", Base: handlerConfig}},
-		"missing alias":      {{Path: "config", Base: handlerConfig}},
-		"oversized base":     {{Path: "config", Alias: "bastion", Base: strings.Repeat("a", maxRawLength+1)}},
-		"inconsistent bases": {valid, {Path: "config", Alias: "second", Base: "different"}},
-		"duplicate":          {valid, valid},
+	host := application.HostEdit{Path: "config", Alias: "bastion"}
+	base := application.FileBase{Path: "config", Base: handlerConfig}
+	selections := map[string]application.EditRequest{
+		"empty":                 {Bases: []application.FileBase{base}},
+		"too many":              {Hosts: make([]application.HostEdit, application.MaxHostEdits+1), Bases: []application.FileBase{base}},
+		"missing alias":         {Hosts: []application.HostEdit{{Path: "config"}}, Bases: []application.FileBase{base}},
+		"duplicate":             {Hosts: []application.HostEdit{host, host}, Bases: []application.FileBase{base}},
+		"no contents":           {Hosts: []application.HostEdit{host}},
+		"missing base path":     {Hosts: []application.HostEdit{host}, Bases: []application.FileBase{{Base: handlerConfig}}},
+		"traversal":             {Hosts: []application.HostEdit{{Path: "../config", Alias: "bastion"}}, Bases: []application.FileBase{{Path: "../config", Base: handlerConfig}}},
+		"oversized base":        {Hosts: []application.HostEdit{host}, Bases: []application.FileBase{{Path: "config", Base: strings.Repeat("a", maxRawLength+1)}}},
+		"two contents for file": {Hosts: []application.HostEdit{host}, Bases: []application.FileBase{base, {Path: "config", Base: "different"}}},
+		"contents nothing uses": {Hosts: []application.HostEdit{host}, Bases: []application.FileBase{base, {Path: "conf.d/10-home.conf", Base: ""}}},
 	}
-	for name, hosts := range selections {
+	for name, selection := range selections {
 		t.Run(name, func(t *testing.T) {
 			harness := newConfigHarness(t)
 			for _, kind := range []application.EditKind{application.EditMoveHosts, application.EditDeleteHosts} {
-				request := application.EditRequest{Kind: kind, Hosts: hosts, DestinationPath: "config", DestinationBase: handlerConfig}
+				request := application.EditRequest{Kind: kind, Hosts: selection.Hosts, Bases: selection.Bases, DestinationPath: "config", DestinationBase: handlerConfig}
 				for _, endpoint := range []string{"preview", "save"} {
 					response := harness.call(t, http.MethodPost, "/api/v1/config/"+endpoint, request, true, true)
 					if response.Code != http.StatusBadRequest {
@@ -101,9 +104,10 @@ func TestHostEditsの不正な選択をHTTPで送ると拒否される(t *testin
 
 func TestHostEditsの古いBaseをHTTPで送ると全体のConflictが返る(t *testing.T) {
 	harness := newConfigHarness(t)
-	request := application.EditRequest{Kind: application.EditDeleteHosts, Hosts: []application.HostEdit{
-		{Path: "config", Alias: "bastion", Base: handlerConfig + "# stale\n"},
-	}}
+	request := application.EditRequest{Kind: application.EditDeleteHosts,
+		Hosts: []application.HostEdit{{Path: "config", Alias: "bastion"}},
+		Bases: []application.FileBase{{Path: "config", Base: handlerConfig + "# stale\n"}},
+	}
 	for _, endpoint := range []string{"preview", "save"} {
 		response := harness.call(t, http.MethodPost, "/api/v1/config/"+endpoint, request, true, true)
 		if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"path":"config"`) {

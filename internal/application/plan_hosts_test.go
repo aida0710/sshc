@@ -20,9 +20,24 @@ func hostEdits(t *testing.T, workspace *storage.Workspace, identities ...HostIde
 	t.Helper()
 	hosts := make([]HostEdit, 0, len(identities))
 	for _, identity := range identities {
-		hosts = append(hosts, HostEdit{Path: identity.Path, Alias: identity.Alias, Base: readFile(t, workspace, identity.Path)})
+		hosts = append(hosts, HostEdit{Path: identity.Path, Alias: identity.Alias})
 	}
 	return hosts
+}
+
+// fileBases は、hosts が指すファイルをいまのディスクから 1 回ずつ読み、要求の bases にする。
+func fileBases(t *testing.T, workspace *storage.Workspace, hosts []HostEdit) []FileBase {
+	t.Helper()
+	var bases []FileBase
+	seen := map[string]bool{}
+	for _, host := range hosts {
+		if seen[host.Path] {
+			continue
+		}
+		seen[host.Path] = true
+		bases = append(bases, FileBase{Path: host.Path, Base: readFile(t, workspace, host.Path)})
+	}
+	return bases
 }
 
 func assertPreviewPaths(t *testing.T, preview SavePreview, paths ...string) {
@@ -51,8 +66,8 @@ func TestMoveHosts同じファイルの2件を移すと両方とMetadataが移�
 		{Identity: HostIdentity{Path: "config", Alias: "second"}, Tags: []string{"second"}},
 	}
 	seedMetadata(t, service, metadata)
-	request := EditRequest{Kind: EditMoveHosts, DestinationGroup: "work", Hosts: hostEdits(t, workspace,
-		HostIdentity{Path: "config", Alias: "bastion"}, HostIdentity{Path: "config", Alias: "second"})}
+	hosts := hostEdits(t, workspace, HostIdentity{Path: "config", Alias: "bastion"}, HostIdentity{Path: "config", Alias: "second"})
+	request := EditRequest{Kind: EditMoveHosts, DestinationGroup: "work", Hosts: hosts, Bases: fileBases(t, workspace, hosts)}
 	preview, err := service.Preview(request)
 	if err != nil {
 		t.Fatal(err)
@@ -91,13 +106,14 @@ func TestHostEdits2件目のBaseが古いと全ファイルが変わらない(t 
 			declareGroup(t, service, "work")
 			hosts := hostEdits(t, workspace, HostIdentity{Path: "config", Alias: "bastion"},
 				HostIdentity{Path: "conf.d/10-home.conf", Alias: "nas"})
-			hosts[1].Base += "# stale\n"
+			bases := fileBases(t, workspace, hosts)
+			bases[1].Base += "# stale\n"
 			paths := []string{"config", "conf.d/10-home.conf", DefaultGroupsFile, service.displayPath(service.metadata.Path())}
 			before := map[string]string{}
 			for _, path := range paths {
 				before[path] = readFile(t, workspace, path)
 			}
-			_, err := service.Save(EditRequest{Kind: kind, Hosts: hosts, DestinationGroup: "work"})
+			_, err := service.Save(EditRequest{Kind: kind, Hosts: hosts, Bases: bases, DestinationGroup: "work"})
 			var conflict *ConflictError
 			if !errors.As(err, &conflict) || conflict.Report.Path != hosts[1].Path {
 				t.Fatalf("save = %v, want conflict on second file", err)
@@ -122,7 +138,7 @@ func TestMoveHosts別グループの接続先をまとめると未分類へも�
 	third := writeGroupFile(t, workspace, "two", "other.conf", "Host third\n\tHostName third.example\n")
 	hosts := hostEdits(t, workspace, HostIdentity{Path: first, Alias: "first"},
 		HostIdentity{Path: second, Alias: "second"}, HostIdentity{Path: third, Alias: "third"})
-	if _, err := service.Save(EditRequest{Kind: EditMoveHosts, Hosts: hosts, DestinationGroup: "target"}); err != nil {
+	if _, err := service.Save(EditRequest{Kind: EditMoveHosts, Hosts: hosts, Bases: fileBases(t, workspace, hosts), DestinationGroup: "target"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range []string{first, second, third} {
@@ -133,7 +149,7 @@ func TestMoveHosts別グループの接続先をまとめると未分類へも�
 	hosts = hostEdits(t, workspace, HostIdentity{Path: "connections/target/hosts.conf", Alias: "first"},
 		HostIdentity{Path: "connections/target/hosts.conf", Alias: "second"},
 		HostIdentity{Path: "connections/target/other.conf", Alias: "third"})
-	if _, err := service.Save(EditRequest{Kind: EditMoveHosts, Hosts: hosts,
+	if _, err := service.Save(EditRequest{Kind: EditMoveHosts, Hosts: hosts, Bases: fileBases(t, workspace, hosts),
 		DestinationPath: "config", DestinationBase: readFile(t, workspace, "config")}); err != nil {
 		t.Fatal(err)
 	}
@@ -153,19 +169,19 @@ func TestMoveHosts移動先の接続先を含めると飛ばされ全件なら�
 		if !residentFirst {
 			slices.Reverse(hosts)
 		}
-		if _, err := service.Preview(EditRequest{Kind: EditMoveHosts, Hosts: hosts, DestinationGroup: "work"}); err != nil {
+		if _, err := service.Preview(EditRequest{Kind: EditMoveHosts, Hosts: hosts, Bases: fileBases(t, workspace, hosts), DestinationGroup: "work"}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	hosts := hostEdits(t, workspace, HostIdentity{Path: path, Alias: "resident"}, HostIdentity{Path: "config", Alias: "bastion"})
-	if _, err := service.Save(EditRequest{Kind: EditMoveHosts, Hosts: hosts, DestinationGroup: "work"}); err != nil {
+	if _, err := service.Save(EditRequest{Kind: EditMoveHosts, Hosts: hosts, Bases: fileBases(t, workspace, hosts), DestinationGroup: "work"}); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Count(readFile(t, workspace, path), "Host resident") != 1 {
 		t.Fatal("resident was duplicated")
 	}
 	hosts = hostEdits(t, workspace, HostIdentity{Path: path, Alias: "resident"}, HostIdentity{Path: path, Alias: "bastion"})
-	request := EditRequest{Kind: EditMoveHosts, Hosts: hosts, DestinationGroup: "work"}
+	request := EditRequest{Kind: EditMoveHosts, Hosts: hosts, Bases: fileBases(t, workspace, hosts), DestinationGroup: "work"}
 	preview, err := service.Preview(request)
 	if err != nil || len(preview.Diffs) != 0 {
 		t.Fatalf("no-op preview = %#v, %v", preview, err)
@@ -198,9 +214,9 @@ func TestDeleteHosts同一ファイル2件と別ファイル1件を消すと単�
 		start := len(strings.Join(lines[:form.Entry.Line-1-form.CommentLines], ""))
 		want = want[:start] + want[offset+len(form.Raw):]
 	}
-	request := EditRequest{Kind: EditDeleteHosts, Hosts: hostEdits(t, workspace,
-		HostIdentity{Path: path, Alias: "first"}, HostIdentity{Path: path, Alias: "second"},
-		HostIdentity{Path: "conf.d/10-home.conf", Alias: "nas"})}
+	hosts := hostEdits(t, workspace, HostIdentity{Path: path, Alias: "first"}, HostIdentity{Path: path, Alias: "second"},
+		HostIdentity{Path: "conf.d/10-home.conf", Alias: "nas"})
+	request := EditRequest{Kind: EditDeleteHosts, Hosts: hosts, Bases: fileBases(t, workspace, hosts)}
 	preview, err := service.Preview(request)
 	if err != nil {
 		t.Fatal(err)
@@ -229,8 +245,8 @@ func TestHostEdits移動と削除をするとグループの共通設定のメ�
 		t.Fatal(err)
 	}
 	for _, kind := range []EditKind{EditMoveHosts, EditDeleteHosts} {
-		request := EditRequest{Kind: kind, DestinationGroup: "new", Hosts: hostEdits(t, workspace,
-			HostIdentity{Path: path, Alias: "first"}, HostIdentity{Path: path, Alias: "second"})}
+		hosts := hostEdits(t, workspace, HostIdentity{Path: path, Alias: "first"}, HostIdentity{Path: path, Alias: "second"})
+		request := EditRequest{Kind: kind, DestinationGroup: "new", Hosts: hosts, Bases: fileBases(t, workspace, hosts)}
 		preview, err := service.Preview(request)
 		if err != nil {
 			t.Fatal(err)
@@ -255,17 +271,22 @@ func TestHostEdits移動と削除をするとグループの共通設定のメ�
 	}
 }
 
-func TestHostEdits同じファイルのBaseが違うか選択が不正だと拒否される(t *testing.T) {
+func TestHostEditsのファイルの中身が無いか重なるか選択が不正だと拒否される(t *testing.T) {
 	service, workspace := newTestService(t)
-	host := hostEdits(t, workspace, HostIdentity{Path: "config", Alias: "bastion"})[0]
-	for _, hosts := range [][]HostEdit{
-		nil,
-		make([]HostEdit, MaxHostEdits+1),
-		{host, host},
-		{host, {Path: "config", Alias: "other", Base: "different"}},
+	host := HostEdit{Path: "config", Alias: "bastion"}
+	base := FileBase{Path: "config", Base: readFile(t, workspace, "config")}
+	unused := FileBase{Path: "conf.d/10-home.conf", Base: readFile(t, workspace, "conf.d/10-home.conf")}
+	for name, request := range map[string]EditRequest{
+		"no hosts":              {Bases: []FileBase{base}},
+		"too many hosts":        {Hosts: make([]HostEdit, MaxHostEdits+1), Bases: []FileBase{base}},
+		"same host twice":       {Hosts: []HostEdit{host, host}, Bases: []FileBase{base}},
+		"no contents for file":  {Hosts: []HostEdit{host}},
+		"two contents for file": {Hosts: []HostEdit{host}, Bases: []FileBase{base, {Path: "config", Base: "different"}}},
+		"contents nothing uses": {Hosts: []HostEdit{host}, Bases: []FileBase{base, unused}},
 	} {
-		if _, err := service.Save(EditRequest{Kind: EditDeleteHosts, Hosts: hosts}); !errors.Is(err, ErrInvalidHostSelection) {
-			t.Fatalf("invalid selection returned %v", err)
+		request.Kind = EditDeleteHosts
+		if _, err := service.Save(request); !errors.Is(err, ErrInvalidHostSelection) {
+			t.Fatalf("%s returned %v", name, err)
 		}
 	}
 }
@@ -273,13 +294,13 @@ func TestHostEdits同じファイルのBaseが違うか選択が不正だと拒�
 func TestMoveHosts保存直前にファイルが変わると全体がConflictになる(t *testing.T) {
 	service, workspace := newTestService(t)
 	declareGroup(t, service, "work")
-	request := EditRequest{Kind: EditMoveHosts, DestinationGroup: "work", Hosts: hostEdits(t, workspace,
-		HostIdentity{Path: "config", Alias: "bastion"}, HostIdentity{Path: "conf.d/10-home.conf", Alias: "nas"})}
+	hosts := hostEdits(t, workspace, HostIdentity{Path: "config", Alias: "bastion"}, HostIdentity{Path: "conf.d/10-home.conf", Alias: "nas"})
+	request := EditRequest{Kind: EditMoveHosts, DestinationGroup: "work", Hosts: hosts, Bases: fileBases(t, workspace, hosts)}
 	prepared, err := service.plan(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	changed := request.Hosts[1].Base + "# external edit\n"
+	changed := request.Bases[1].Base + "# external edit\n"
 	if err := os.WriteFile(filepath.Join(workspace.Root(), request.Hosts[1].Path), []byte(changed), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +309,7 @@ func TestMoveHosts保存直前にファイルが変わると全体がConflictに
 	if !errors.As(err, &conflict) || conflict.Report.Path != request.Hosts[1].Path {
 		t.Fatalf("commit = %v", err)
 	}
-	if readFile(t, workspace, "config") != request.Hosts[0].Base || readFile(t, workspace, request.Hosts[1].Path) != changed {
+	if readFile(t, workspace, "config") != request.Bases[0].Base || readFile(t, workspace, request.Hosts[1].Path) != changed {
 		t.Fatal("conflict changed a source")
 	}
 }
@@ -314,15 +335,16 @@ func TestHostEdits書き込み途中に失敗すると先に書いたファイ�
 			hosts := hostEdits(t, workspace, HostIdentity{Path: "config", Alias: "first"}, HostIdentity{Path: path, Alias: "second"})
 			fileSystem.path = filepath.Join(workspace.Root(), path)
 			fileSystem.err = errors.New("injected second source write failure")
-			if _, err := service.Save(EditRequest{Kind: kind, Hosts: hosts, DestinationGroup: "new"}); err == nil {
+			bases := fileBases(t, workspace, hosts)
+			if _, err := service.Save(EditRequest{Kind: kind, Hosts: hosts, Bases: bases, DestinationGroup: "new"}); err == nil {
 				t.Fatal("save unexpectedly succeeded")
 			}
 			if fileSystem.err != nil {
 				t.Fatal("save failed before reaching the injected write failure")
 			}
-			for _, host := range hosts {
-				if readFile(t, workspace, host.Path) != host.Base {
-					t.Fatalf("rollback did not restore %s", host.Path)
+			for _, base := range bases {
+				if readFile(t, workspace, base.Path) != base.Base {
+					t.Fatalf("rollback did not restore %s", base.Path)
 				}
 			}
 		})
@@ -345,9 +367,10 @@ func TestHostEdits上限の256件を選ぶと1回で処理できる(t *testing.T
 			}
 			hosts := make([]HostEdit, MaxHostEdits)
 			for index := range hosts {
-				hosts[index] = HostEdit{Path: "config", Alias: fmt.Sprintf("batch-%d", index), Base: base}
+				hosts[index] = HostEdit{Path: "config", Alias: fmt.Sprintf("batch-%d", index)}
 			}
-			if _, err := service.Save(EditRequest{Kind: kind, Hosts: hosts, DestinationGroup: "work"}); err != nil {
+			bases := []FileBase{{Path: "config", Base: base}}
+			if _, err := service.Save(EditRequest{Kind: kind, Hosts: hosts, Bases: bases, DestinationGroup: "work"}); err != nil {
 				t.Fatal(err)
 			}
 			if strings.Contains(readFile(t, workspace, "config"), "Host batch-") {

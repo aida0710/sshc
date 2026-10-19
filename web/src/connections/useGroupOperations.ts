@@ -1,4 +1,4 @@
-import { configApi, type GroupMetadata, type Overview, type SaveResult } from "../api/config";
+import { configApi, type GroupMetadata, type Overview } from "../api/config";
 import { toProblem } from "../api/guards";
 import type { SaveFeedback } from "./pageState";
 
@@ -8,8 +8,9 @@ type GroupOperationsOptions = {
   reload: () => Promise<Overview | null>;
 };
 
-// useGroupOperations は、Connections 画面から行うグループの作成・名前の変更・削除・設定の保存を持つ。
-// どれも Groups 画面と同じ sshcエンジンの操作を呼ぶ。
+// useGroupOperations は、Connections 画面から行うグループの作成と設定の保存を持つ。どちらも metadata の
+// グループの設定を書き換える操作で、Groups 画面と同じ sshcエンジンの保存を呼ぶ。名前の変更と削除は
+// 開いている接続先の場所も変えるので、useConnectionManagement が持つ。
 export function useGroupOperations({ overview, feedback, reload }: GroupOperationsOptions) {
   const { setPreview, setProblem } = feedback;
 
@@ -30,18 +31,6 @@ export function useGroupOperations({ overview, feedback, reload }: GroupOperatio
     }
   }
 
-  async function runGroupChange(change: () => Promise<SaveResult>) {
-    try {
-      const result = await change();
-      setPreview(result.preview);
-      setProblem(null);
-      await reload();
-    } catch (error) {
-      setPreview(null);
-      setProblem(toProblem(error));
-    }
-  }
-
   return {
     createGroup: (name: string) => saveGroups((current) => [...current, { name }]),
     // 宣言だけあって metadata に設定が無いグループは、ここで足す。
@@ -49,7 +38,5 @@ export function useGroupOperations({ overview, feedback, reload }: GroupOperatio
       saveGroups((current) => current.some((group) => group.name === updated.name)
         ? current.map((group) => (group.name === updated.name ? updated : group))
         : [...current, updated]),
-    renameGroup: (from: string, to: string) => runGroupChange(() => configApi.renameGroup(from, to)),
-    deleteGroup: (name: string, destination: string) => runGroupChange(() => configApi.deleteGroup(name, destination)),
   };
 }

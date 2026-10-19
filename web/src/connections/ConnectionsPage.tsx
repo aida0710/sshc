@@ -384,8 +384,8 @@ export function ConnectionsPage({
           onDismissInvalidLocation={dismissInvalidLocation}
           onSelect={onSelect}
           onDrop={(payload, target) => {
-            void management.dropOnTree(payload, target).then(() => {
-              if (payload.kind === "connections") clearChecked();
+            void management.dropOnTree(payload, target).then((saved) => {
+              if (saved && payload.kind === "connections") clearChecked();
             });
           }}
           movesDisabled={movesDisabled}
@@ -538,8 +538,8 @@ export function ConnectionsPage({
     <ConnectionListDialogs
       actions={listActions}
       createGroup={groups.createGroup}
-      renameGroup={groups.renameGroup}
-      deleteGroup={groups.deleteGroup}
+      renameGroup={management.renameGroup}
+      deleteGroup={management.deleteGroup}
       renameConnection={management.renameConnection}
     />
     {discardIntent === null ? null : (

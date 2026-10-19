@@ -12,7 +12,7 @@ type hostRelocation struct {
 }
 
 func (s *Service) planHostEdits(graph *config.Graph, request EditRequest) (planned, error) {
-	files, err := s.loadHostEditSources(request.Hosts)
+	files, err := s.loadHostEditSources(request.Hosts, request.Bases)
 	if err != nil {
 		return planned{}, err
 	}
@@ -23,7 +23,8 @@ func (s *Service) planHostEdits(graph *config.Graph, request EditRequest) (plann
 	}
 	var relocations []hostRelocation
 	for _, host := range request.Hosts {
-		source, err := s.loadHostEditFile(files, host.Path, &host.Base)
+		// 選択元のファイルは loadHostEditSources が bases から読み込み済みである。
+		source, err := s.loadHostEditFile(files, host.Path, nil)
 		if err != nil {
 			return planned{}, err
 		}

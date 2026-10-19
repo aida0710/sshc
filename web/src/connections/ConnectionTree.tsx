@@ -459,7 +459,7 @@ export function ConnectionTree({
         descriptionId={`${descriptionIdPrefix}-connection-${item.projectionOrder}`}
         opened={selected?.path === host.identity.path && selected.alias === host.identity.alias}
         chosen={checked.keys.has(item.key)}
-        choosing={checked.keys.size >= 2 || selectionMode}
+        choosing={checked.keys.size > 0 || selectionMode}
         showCheckbox={selectionMode}
         draggable={!movesDisabled && !selectionMode}
         menuItems={selectionMode ? [] : connectionActions?.(host) ?? []}

@@ -11,8 +11,9 @@ import type { ConnectionListActions } from "./useConnectionListActions";
 type ConnectionListDialogsProps = {
   actions: ConnectionListActions;
   createGroup: (name: string) => Promise<boolean>;
-  renameGroup: (from: string, to: string) => Promise<void>;
-  deleteGroup: (name: string, destination: string) => Promise<void>;
+  // グループの名前の変更と削除は、保存できたかを返す。保存できたときだけ絞り込みを追わせる。
+  renameGroup: (from: string, to: string) => Promise<boolean>;
+  deleteGroup: (name: string, destination: string) => Promise<boolean>;
   renameConnection: (host: HostIdentity, newAlias: string) => Promise<void>;
 };
 
@@ -34,11 +35,15 @@ export function ConnectionListDialogs({ actions, createGroup, renameGroup, delet
           }}
           onRename={(from, to) => {
             actions.closeGroupDialog();
-            void renameGroup(from, to).then(() => actions.followGroupRename(from, to));
+            void renameGroup(from, to).then((saved) => {
+              if (saved) actions.followGroupRename(from, to);
+            });
           }}
           onDelete={(name, destination) => {
             actions.closeGroupDialog();
-            void deleteGroup(name, destination).then(() => actions.forgetDeletedGroup(name));
+            void deleteGroup(name, destination).then((saved) => {
+              if (saved) actions.forgetDeletedGroup(name);
+            });
           }}
           onClose={actions.closeGroupDialog}
         />

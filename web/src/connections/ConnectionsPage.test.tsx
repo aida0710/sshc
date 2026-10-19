@@ -95,6 +95,53 @@ beforeEach(() => {
 });
 
 describe("ConnectionsPage", () => {
+  describe("acting on several chosen connections", () => {
+    const twoInConfig = {
+      ...overview,
+      hosts: [
+        ...overview.hosts,
+        { identity: { path: "config", alias: "edge" }, file: { path: "config", absolute: "/home/tester/.ssh/config" }, line: 4, patterns: ["edge"], editable: true },
+      ],
+      groups: [{ name: "work", directory: "connections/work", keyDirectory: "keys/work", memberCount: 0, directoryPresent: true }],
+    };
+    const configContents = "Host bastion\n\tPort 22\n\nHost edge\n";
+
+    async function chooseBoth() {
+      const user = userEvent.setup();
+      vi.mocked(configApi.overview).mockResolvedValue(twoInConfig);
+      vi.mocked(configApi.file).mockResolvedValue({ ...detail.file, contents: configContents });
+      render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} onNavigateLocation={vi.fn()} />);
+      await user.click(await screen.findByRole("button", { name: "bastion" }));
+      fireEvent.click(screen.getByRole("button", { name: "edge" }), { ctrlKey: true });
+      const bar = await screen.findByRole("toolbar", { name: "2 selected" });
+      return { user, bar };
+    }
+
+    it("sends both connections and their shared file once, and keeps them chosen when the save is refused", async () => {
+      vi.mocked(configApi.save).mockRejectedValue(new ApiError("conflict", 409, { code: "conflict", message: "changed on disk" }));
+      const { user, bar } = await chooseBoth();
+      await user.click(within(bar).getByRole("button", { name: "Move to group…" }));
+      await user.click(within(screen.getByRole("dialog", { name: "Move 2 connections" })).getByRole("button", { name: "work" }));
+
+      await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
+        kind: "move_hosts",
+        hosts: [{ path: "config", alias: "bastion" }, { path: "config", alias: "edge" }],
+        bases: [{ path: "config", base: configContents }],
+        destinationGroup: "work",
+      }));
+      expect(configApi.file).toHaveBeenCalledTimes(1);
+      expect(await screen.findByRole("toolbar", { name: "2 selected" })).toBeInTheDocument();
+    });
+
+    it("lets the choice go once the move is saved", async () => {
+      vi.mocked(configApi.save).mockResolvedValue({ transactionId: "t1", written: ["config"], preview: { operation: "config.move_hosts", diffs: [] } });
+      const { user, bar } = await chooseBoth();
+      await user.click(within(bar).getByRole("button", { name: "Move to group…" }));
+      await user.click(within(screen.getByRole("dialog", { name: "Move 2 connections" })).getByRole("button", { name: "work" }));
+      await waitFor(() => expect(screen.queryByRole("toolbar", { name: "2 selected" })).not.toBeInTheDocument());
+    });
+  });
+
   it("uses the expanded management tree instead of the quick-connect browser", async () => {
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
@@ -1246,7 +1293,8 @@ describe("ConnectionsPage", () => {
 
     await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
       kind: "delete_hosts",
-      hosts: [{ path: "config", alias: "bastion", base: "Host bastion\n\tPort 22\n" }],
+      hosts: [{ path: "config", alias: "bastion" }],
+      bases: [{ path: "config", base: "Host bastion\n\tPort 22\n" }],
     }));
     expect(onNavigateLocation).toHaveBeenLastCalledWith("/connections/servers", { replace: true });
   });

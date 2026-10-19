@@ -43,6 +43,7 @@ var servedTypes = []struct {
 	{"EmbeddedTerminal", application.EmbeddedTerminal{}},
 	{"EditRequest", application.EditRequest{}},
 	{"HostEdit", application.HostEdit{}},
+	{"FileBase", application.FileBase{}},
 	{"EngineSettings", application.EngineSettings{}},
 	{"FieldEdit", application.FieldEdit{}},
 	{"FileContents", application.FileContents{}},

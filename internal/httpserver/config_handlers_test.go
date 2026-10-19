@@ -600,7 +600,8 @@ func TestEveryEditKindTheApplicationAcceptsPassesValidation(t *testing.T) {
 		case application.EditMove:
 			request.Alias, request.DestinationGroup = "nas", "work"
 		case application.EditMoveHosts, application.EditDeleteHosts:
-			request.Hosts = []application.HostEdit{{Path: "config", Alias: "nas", Base: "Host nas\n"}}
+			request.Hosts = []application.HostEdit{{Path: "config", Alias: "nas"}}
+			request.Bases = []application.FileBase{{Path: "config", Base: "Host nas\n"}}
 			request.DestinationGroup = "work"
 		case application.EditComment:
 			request.Alias = "nas"

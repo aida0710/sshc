@@ -2496,6 +2496,8 @@ export const en = {
   "groupEditor.removeOther": "Remove {keyword}",
   "groupEditor.save": "Save group",
   "groupEditor.discardPrompt": "Discard the unsaved group settings?",
+  "groupEditor.repeatedField": "Set more than once here, so edit it under Other settings.",
+  "groupEditor.useFieldAbove": "{field} has its own field above.",
 
   "browser.invalidUrl": "This connection URL is not recognised.",
   "browser.backToServers": "Back to servers",

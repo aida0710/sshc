@@ -2,30 +2,38 @@ package httpserver
 
 import "sshc/internal/application"
 
-func validateHostEdits(hosts []application.HostEdit) error {
-	if len(hosts) == 0 || len(hosts) > application.MaxHostEdits {
+// validateHostEdits は、一括操作の対象を確かめる。各接続先の path は bases のどれか 1 つと
+// 同じ文字列で、bases の各ファイルはどれかの接続先に使われていなければならない。
+func validateHostEdits(hosts []application.HostEdit, bases []application.FileBase) error {
+	if len(hosts) == 0 || len(hosts) > application.MaxHostEdits || len(bases) == 0 || len(bases) > application.MaxHostEdits {
 		return errInvalidEdit
 	}
-	bases := map[string]string{}
-	seen := map[application.HostIdentity]bool{}
-	for _, host := range hosts {
-		if err := validatePathParameter(host.Path); err != nil {
+	unused := map[string]bool{}
+	for _, base := range bases {
+		if err := validatePathParameter(base.Path); err != nil {
 			return err
 		}
+		if len(base.Base) > maxRawLength || unused[base.Path] {
+			return errInvalidEdit
+		}
+		unused[base.Path] = true
+	}
+	seen := map[application.HostIdentity]bool{}
+	for _, host := range hosts {
 		if err := validateHostBlockAlias(host.Alias); err != nil {
 			return err
 		}
-		if len(host.Base) > maxRawLength {
-			return errInvalidEdit
-		}
-		if base, exists := bases[host.Path]; exists && base != host.Base {
-			return errInvalidEdit
-		}
 		identity := application.HostIdentity{Path: host.Path, Alias: host.Alias}
-		if seen[identity] {
+		if _, declared := unused[host.Path]; !declared || seen[identity] {
 			return errInvalidEdit
 		}
-		bases[host.Path], seen[identity] = host.Base, true
+		seen[identity] = true
+		unused[host.Path] = false
+	}
+	for _, left := range unused {
+		if left {
+			return errInvalidEdit
+		}
 	}
 	return nil
 }

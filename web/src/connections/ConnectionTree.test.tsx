@@ -259,6 +259,16 @@ describe("ConnectionTree", () => {
       expect(screen.getByRole("button", { name: "nas" })).toHaveAttribute("aria-current", "true");
     });
 
+    it("keeps showing the one connection still chosen after Ctrl takes the open one out", () => {
+      render(<ChoosingTree />);
+      fireEvent.click(screen.getByRole("button", { name: "nas" }));
+      fireEvent.click(screen.getByRole("button", { name: "bastion" }), { ctrlKey: true });
+      fireEvent.click(screen.getByRole("button", { name: "nas" }), { ctrlKey: true });
+      expect(chosen()).toEqual(["bastion"]);
+      expect(screen.getByRole("button", { name: "nas" })).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("button", { name: "nas" })).toHaveAttribute("aria-current", "true");
+    });
+
     it("opens the clicked connection instead while the open one has unsaved edits", () => {
       render(<ChoosingTree multiSelectDisabled />);
       fireEvent.click(screen.getByRole("button", { name: "nas" }));

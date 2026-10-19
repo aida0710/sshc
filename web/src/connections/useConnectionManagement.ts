@@ -100,28 +100,73 @@ export function useConnectionManagement({
     }
   }
 
-  async function renameGroupByDrop(name: string, target: string) {
-    const base = name.slice(name.lastIndexOf("/") + 1);
-    const destinationName = target === "" ? base : `${target}/${base}`;
-    const selectedHost = overview?.hosts.find(
+  function selectedHostGroup(): string | undefined {
+    return overview?.hosts.find(
       (host) => host.identity.path === selection?.path && host.identity.alias === selection.alias,
-    );
-    const selectedDestinationGroup = groupAfterRename(selectedHost?.group, name, destinationName);
-    const result = await configApi.renameGroup(name, destinationName);
-    setPreview(result.preview);
-    setProblem(null);
-    const nextOverview = await reload();
-    if (selection === null || selectedDestinationGroup === null) return;
-    const moved = movedHostIdentity(nextOverview, selection.alias, selectedDestinationGroup);
+    )?.group;
+  }
+
+  // followSelectionInto は、開いていた接続先が group へ移ったあと、選択をその新しい識別子へ追わせる。
+  function followSelectionInto(nextOverview: Overview | null, group: string) {
+    if (selection === null) return;
+    const moved = movedHostIdentity(nextOverview, selection.alias, group);
     if (moved !== undefined) followCommittedIdentity(moved);
     else leaveCommittedIdentityUnknown();
   }
 
+  // renameGroupFollowingSelection は、グループ（と、その下のグループ）の名前を変え、開いていた接続先が
+  // その中にあれば選択も新しい場所へ追わせる。
+  async function renameGroupFollowingSelection(from: string, to: string) {
+    const selectedDestinationGroup = groupAfterRename(selectedHostGroup(), from, to);
+    const result = await configApi.renameGroup(from, to);
+    setPreview(result.preview);
+    setProblem(null);
+    const nextOverview = await reload();
+    if (selectedDestinationGroup !== null) followSelectionInto(nextOverview, selectedDestinationGroup);
+  }
+
+  async function renameGroupByDrop(name: string, target: string) {
+    const base = name.slice(name.lastIndexOf("/") + 1);
+    await renameGroupFollowingSelection(name, target === "" ? base : `${target}/${base}`);
+  }
+
+  // renameGroup と deleteGroup は、グループの「…」から呼ぶ。保存できたかを返し、呼び手は
+  // 保存できたときだけ絞り込みなどを新しい名前へ追わせる。
+  async function renameGroup(from: string, to: string): Promise<boolean> {
+    try {
+      await renameGroupFollowingSelection(from, to);
+      return true;
+    } catch (error) {
+      setPreview(null);
+      setProblem(toProblem(error));
+      return false;
+    }
+  }
+
+  async function deleteGroup(name: string, destination: string): Promise<boolean> {
+    const selectedGroup = selectedHostGroup();
+    const selectionMoves = selectedGroup !== undefined && (selectedGroup === name || selectedGroup.startsWith(`${name}/`));
+    try {
+      const result = await configApi.deleteGroup(name, destination);
+      setPreview(result.preview);
+      setProblem(null);
+      const nextOverview = await reload();
+      if (selectionMoves) followSelectionInto(nextOverview, destination);
+      return true;
+    } catch (error) {
+      setPreview(null);
+      setProblem(toProblem(error));
+      return false;
+    }
+  }
+
   // readBases は、選んだ接続先のファイルを1回ずつ読み、保存の前提（base）として返す。
-  // 同じファイルにある接続先は同じ base を持つので、sshcエンジンはまとめて1回で書き換えられる。
-  async function readBases(paths: Iterable<string>): Promise<Map<string, string>> {
-    const bases = new Map<string, string>();
-    for (const path of new Set(paths)) bases.set(path, (await configApi.file(path)).contents);
+  // 同じファイルにある接続先がいくつあっても中身は1回だけ送り、sshcエンジンはまとめて1回で書き換える。
+  async function readBases(items: readonly HostTarget[]): Promise<{ path: string; base: string }[]> {
+    const bases: { path: string; base: string }[] = [];
+    for (const path of new Set(items.map((item) => item.path))) {
+      bases.push({ path, base: (await configApi.file(path)).contents });
+    }
     return bases;
   }
 
@@ -130,61 +175,62 @@ export function useConnectionManagement({
   }
 
   // moveConnections は、選んだ接続先を group へまとめて移す。group が "" なら入口のファイルへ戻す。
-  // どれか1つのファイルがほかで変わっていれば、sshcエンジンが全体を断り、何も動かない。
-  async function moveConnections(items: readonly HostTarget[], group: string) {
-    if (movesDisabled || items.length === 0) return;
+  // どれか1つのファイルがほかで変わっていれば、sshcエンジンが全体を断り、何も動かない。保存できたかを返す。
+  async function moveConnections(items: readonly HostTarget[], group: string): Promise<boolean> {
+    if (movesDisabled || items.length === 0) return false;
     try {
-      const bases = await readBases([...items.map((item) => item.path), ...(group === "" ? [entryPath] : [])]);
-      const hosts = items.map((item) => ({ path: item.path, alias: item.alias, base: bases.get(item.path) ?? "" }));
+      const bases = await readBases(items);
+      const entryBase = bases.find((base) => base.path === entryPath)?.base;
       const destination = group === ""
-        ? { destinationPath: entryPath, destinationBase: bases.get(entryPath) ?? "" }
+        ? { destinationPath: entryPath, destinationBase: entryBase ?? (await configApi.file(entryPath)).contents }
         : { destinationGroup: group };
-      const attempt = await submit({ kind: "move_hosts", hosts, ...destination }, false);
-      if (!attempt.saved) return;
+      // 開いている接続先の識別子が変わるときだけ選択を追わせ、変わらないときは開いたまま読み直す。
+      // 同じファイルのほかの接続先が動くと、開いている接続先の base も変わるため。
       const opened = items.find(isSelected);
-      if (opened === undefined) return;
-      if (group === "") {
-        followCommittedIdentity({ path: entryPath, alias: opened.alias });
-        return;
+      const openedMoves = opened !== undefined && (group === "" ? opened.path !== entryPath : selectedHostGroup() !== group);
+      const hosts = items.map((item) => ({ path: item.path, alias: item.alias }));
+      const attempt = await submit({ kind: "move_hosts", hosts, bases, ...destination }, !openedMoves);
+      if (!attempt.saved) return false;
+      if (opened !== undefined && openedMoves) {
+        if (group === "") followCommittedIdentity({ path: entryPath, alias: opened.alias });
+        else followSelectionInto(attempt.overview, group);
       }
-      const moved = movedHostIdentity(attempt.overview, opened.alias, group);
-      if (moved !== undefined) followCommittedIdentity(moved);
-      else leaveCommittedIdentityUnknown();
+      return true;
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
+      return false;
     }
   }
 
-  // deleteConnections は、選んだ接続先の Host ブロックをまとめて消す。開いていた接続先が消えたら選択を外す。
-  async function deleteConnections(items: readonly HostTarget[]) {
-    if (movesDisabled || items.length === 0) return;
+  // deleteConnections は、選んだ接続先の Host ブロックをまとめて消す。開いていた接続先が消えたら選択を外し、
+  // 残っていれば読み直す。保存できたかを返す。
+  async function deleteConnections(items: readonly HostTarget[]): Promise<boolean> {
+    if (movesDisabled || items.length === 0) return false;
     try {
-      const bases = await readBases(items.map((item) => item.path));
-      const hosts = items.map((item) => ({ path: item.path, alias: item.alias, base: bases.get(item.path) ?? "" }));
-      const attempt = await submit({ kind: "delete_hosts", hosts }, false);
-      if (!attempt.saved || !items.some(isSelected)) return;
-      clearSelection();
-      clearTarget({ replace: true });
+      const bases = await readBases(items);
+      const deletesOpened = items.some(isSelected);
+      const hosts = items.map((item) => ({ path: item.path, alias: item.alias }));
+      const attempt = await submit({ kind: "delete_hosts", hosts, bases }, !deletesOpened);
+      if (!attempt.saved) return false;
+      if (deletesOpened) {
+        clearSelection();
+        clearTarget({ replace: true });
+      }
+      return true;
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
+      return false;
     }
   }
 
-  // renameConnection は、開いていない接続先の名前を一覧の「…」から変える。
-  // 開いている接続先は、選択も新しい名前へ追う rename を使う。
+  // renameConnection は、一覧の「…」から接続先の名前を変える。開いている接続先なら選択も新しい名前へ追い、
+  // ほかの接続先なら開いている接続先を読み直す（同じファイルなら base が変わるため）。
   async function renameConnection(item: HostTarget, newAlias: string) {
-    if (selection?.path === item.path && selection.alias === item.alias && detail !== null) {
-      rename(newAlias);
-      return;
-    }
     try {
       const file = await configApi.file(item.path);
-      const result = await configApi.save({ kind: "rename", path: item.path, alias: item.alias, base: file.contents, newAlias });
-      setPreview(result.preview);
-      setProblem(null);
-      await reload();
+      await submit({ kind: "rename", path: item.path, alias: item.alias, base: file.contents, newAlias });
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
@@ -194,29 +240,29 @@ export function useConnectionManagement({
   async function duplicateConnection(item: HostTarget) {
     try {
       const file = await configApi.file(item.path);
-      await submit({ kind: "duplicate", path: item.path, base: file.contents, alias: item.alias, newAlias: `${item.alias}-copy` }, false);
+      await submit({ kind: "duplicate", path: item.path, base: file.contents, alias: item.alias, newAlias: `${item.alias}-copy` });
     } catch (error) {
       setProblem(toProblem(error));
     }
   }
 
-  async function dropOnTree(payload: DragPayload, target: string) {
-    if (movesDisabled) return;
+  // dropOnTree は、一覧からグループへ落とした接続先やグループを動かし、保存できたかを返す。
+  async function dropOnTree(payload: DragPayload, target: string): Promise<boolean> {
+    if (movesDisabled) return false;
+    if (payload.kind === "connections") return moveConnections(payload.items, target);
     try {
       if (payload.kind === "group") {
         await renameGroupByDrop(payload.name, target);
-        return;
-      }
-      if (payload.kind === "connections") {
-        await moveConnections(payload.items, target);
-        return;
+        return true;
       }
       const file = await configApi.file(payload.path);
       const followsSelection = selection?.path === payload.path && selection.alias === payload.alias;
       await moveHostToGroup({ path: payload.path, alias: payload.alias, base: file.contents }, target, followsSelection);
+      return true;
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
+      return false;
     }
   }
 
@@ -256,12 +302,18 @@ export function useConnectionManagement({
   // remove は、開いている接続先を、画面が読み込んだときのファイルを前提に消す。
   async function remove() {
     if (detail === null || selection === null) return;
-    const host = { path: selection.path, alias: selection.alias, base: detail.file.contents };
-    const attempt = await submit({ kind: "delete_hosts", hosts: [host] }, false);
+    const attempt = await submit({
+      kind: "delete_hosts",
+      hosts: [{ path: selection.path, alias: selection.alias }],
+      bases: [{ path: selection.path, base: detail.file.contents }],
+    }, false);
     if (!attempt.saved) return;
     clearSelection();
     clearTarget({ replace: true });
   }
 
-  return { rename, comment, moveToGroup, dropOnTree, duplicate, moveToFile, remove, moveConnections, deleteConnections, renameConnection, duplicateConnection };
+  return {
+    rename, comment, moveToGroup, dropOnTree, duplicate, moveToFile, remove,
+    moveConnections, deleteConnections, renameConnection, duplicateConnection, renameGroup, deleteGroup,
+  };
 }

@@ -2503,6 +2503,8 @@ export const ja = {
   "groupEditor.removeOther": "{keyword}を削除",
   "groupEditor.save": "グループを保存",
   "groupEditor.discardPrompt": "保存していないグループの設定を破棄しますか？",
+  "groupEditor.repeatedField": "複数指定されているため、「その他の設定」で編集してください。",
+  "groupEditor.useFieldAbove": "{field}は上の欄で指定してください。",
 
   "browser.invalidUrl": "この接続URLは認識できません。",
   "browser.backToServers": "接続一覧へ戻る",

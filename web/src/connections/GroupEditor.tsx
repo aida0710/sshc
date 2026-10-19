@@ -1,56 +1,13 @@
 import { useEffect, useState } from "react";
 import type { GroupMetadata } from "../api/config";
 import { useTranslate } from "../i18n/context";
-import type { MessageKey } from "../i18n/messages";
 import { formatDirectiveValues, parseDirectiveValues } from "../rules/rules";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { Field, control, hintText, sectionHeading } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { Button, Card, Notice } from "../ui/surface";
 import { DraftSaveBar } from "./DraftSaveBar";
-
-type Setting = NonNullable<GroupMetadata["settings"]>[number];
-
-// 既定値として欄を用意する項目。接続先の編集でよく使うものだけを並べ、残りは「その他の設定」に置く。
-const defaultFields: readonly { keyword: string; label: MessageKey; placeholder: string }[] = [
-  { keyword: "User", label: "groupEditor.user", placeholder: "deploy" },
-  { keyword: "Port", label: "groupEditor.port", placeholder: "22" },
-  { keyword: "IdentityFile", label: "groupEditor.identityFile", placeholder: "~/.ssh/keys/id_ed25519" },
-  { keyword: "ProxyJump", label: "groupEditor.proxyJump", placeholder: "bastion" },
-];
-
-const fieldKeywords = new Set(defaultFields.map((field) => field.keyword.toLowerCase()));
-
-type GroupDraft = {
-  colour: string;
-  defaults: Record<string, string>;
-  other: Setting[];
-};
-
-function draftOf(group: GroupMetadata): GroupDraft {
-  const defaults: Record<string, string> = {};
-  const other: Setting[] = [];
-  for (const setting of group.settings ?? []) {
-    const field = defaultFields.find((candidate) => candidate.keyword.toLowerCase() === setting.keyword.toLowerCase());
-    if (field === undefined) other.push(setting);
-    else defaults[field.keyword] = formatDirectiveValues(setting.keyword, setting.values) ?? "";
-  }
-  return { colour: group.colour ?? "", defaults, other };
-}
-
-function groupFrom(group: GroupMetadata, draft: GroupDraft): GroupMetadata {
-  const settings: Setting[] = [];
-  for (const field of defaultFields) {
-    const text = (draft.defaults[field.keyword] ?? "").trim();
-    if (text !== "") settings.push({ keyword: field.keyword, values: parseDirectiveValues(field.keyword, text) });
-  }
-  settings.push(...draft.other);
-  const next: GroupMetadata = { ...group, settings };
-  if (draft.colour === "") delete next.colour;
-  else next.colour = draft.colour;
-  if (settings.length === 0) delete next.settings;
-  return next;
-}
+import { defaultFields, draftOf, groupFrom, repeatedFieldKeywords } from "./groupSettingsDraft";
 
 type GroupEditorProps = {
   group: GroupMetadata;
@@ -66,6 +23,8 @@ type GroupEditorProps = {
 export function GroupEditor({ group, memberCount, actions, onSave, onDirtyChange }: GroupEditorProps) {
   const t = useTranslate();
   const [saved, setSaved] = useState(() => draftOf(group));
+  // 欄にしないで「その他の設定」で編集する項目（2回以上指定されているもの）。
+  const repeated = repeatedFieldKeywords(group);
   const [draft, setDraft] = useState(saved);
   const [newKeyword, setNewKeyword] = useState("");
   const [newValue, setNewValue] = useState("");
@@ -83,7 +42,12 @@ export function GroupEditor({ group, memberCount, actions, onSave, onDirtyChange
 
   function addOther() {
     const keyword = newKeyword.trim();
-    if (keyword === "" || fieldKeywords.has(keyword.toLowerCase())) return;
+    if (keyword === "") return;
+    const field = defaultFields.find((candidate) => candidate.keyword.toLowerCase() === keyword.toLowerCase());
+    if (field !== undefined && !repeated.has(field.keyword)) {
+      setDraftError(t("groupEditor.useFieldAbove", { field: t(field.label) }));
+      return;
+    }
     let values: string[];
     try {
       values = parseDirectiveValues(keyword, newValue);
@@ -142,10 +106,15 @@ export function GroupEditor({ group, memberCount, actions, onSave, onDirtyChange
         <p className={hintText}>{t("groupEditor.defaultsHint")}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {defaultFields.map((field) => (
-            <Field key={field.keyword} label={t(field.label)}>
+            <Field
+              key={field.keyword}
+              label={t(field.label)}
+              {...(repeated.has(field.keyword) ? { hint: t("groupEditor.repeatedField") } : {})}
+            >
               <input
                 value={draft.defaults[field.keyword] ?? ""}
-                placeholder={`${t("groupEditor.notSet")}（${field.placeholder}）`}
+                disabled={repeated.has(field.keyword)}
+                placeholder={repeated.has(field.keyword) ? "" : `${t("groupEditor.notSet")}（${field.placeholder}）`}
                 onChange={(event) => setDraft({ ...draft, defaults: { ...draft.defaults, [field.keyword]: event.currentTarget.value } })}
                 className={control}
               />

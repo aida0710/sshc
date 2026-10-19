@@ -154,7 +154,7 @@ func validateEditRequest(request application.EditRequest) error {
 		}
 	case application.EditGroups:
 	case application.EditMoveHosts, application.EditDeleteHosts:
-		if err := validateHostEdits(request.Hosts); err != nil {
+		if err := validateHostEdits(request.Hosts, request.Bases); err != nil {
 			return err
 		}
 	default:

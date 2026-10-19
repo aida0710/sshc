@@ -3,6 +3,7 @@ import type { HostEntry, HostIdentity, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { identityKey } from "./connectionBrowser";
+import { groupAfterRename } from "./connectionMoves";
 import type { HostSelection, Scope } from "./ConnectionTree";
 import type { GroupDialogState } from "./GroupDialogs";
 import { listGroups } from "./groupListing";
@@ -19,8 +20,9 @@ type ConnectionListActionsOptions = {
   // connectionDraft が true なら、開いている接続先の下書きも対象にする（接続先を閉じるため）。
   confirmBeforeLeaving: (proceed: () => void, options: { connectionDraft: boolean }) => void;
   onOpenSSHSession: (alias: string) => Promise<void>;
-  moveConnections: (hosts: readonly HostIdentity[], group: string) => Promise<void>;
-  deleteConnections: (hosts: readonly HostIdentity[]) => Promise<void>;
+  // 一括の移動と削除は、保存できたかを返す。保存できたときだけ選択を解く。
+  moveConnections: (hosts: readonly HostIdentity[], group: string) => Promise<boolean>;
+  deleteConnections: (hosts: readonly HostIdentity[]) => Promise<boolean>;
   duplicateConnection: (host: HostIdentity) => Promise<void>;
 };
 
@@ -67,16 +69,20 @@ export function useConnectionListActions({
     }, { connectionDraft: false });
   }
 
-  // 名前を変えたグループや消したグループを絞り込んでいたら、絞り込みを追従させる。
+  // 名前を変えたグループ（とその下のグループ）を絞り込んだり編集したりしていたら、新しい名前へ追わせる。
   function followGroupRename(from: string, to: string) {
-    if (scope.kind === "group" && scope.name === from) setScope({ kind: "group", name: to });
+    if (scope.kind === "group") {
+      const renamed = groupAfterRename(scope.name, from, to);
+      if (renamed !== null) setScope({ kind: "group", name: renamed });
+    }
+    setEditingGroup((current) => (current === null ? null : groupAfterRename(current, from, to) ?? current));
   }
 
+  // 消したグループ（とその下のグループ）を絞り込んだり編集したりしていたら、すべての接続先へ戻す。
   function forgetDeletedGroup(name: string) {
-    if (scope.kind === "group" && (scope.name === name || scope.name.startsWith(`${name}/`))) {
-      setScope({ kind: "all" });
-      setEditingGroup(null);
-    }
+    const removed = (group: string) => group === name || group.startsWith(`${name}/`);
+    if (scope.kind === "group" && removed(scope.name)) setScope({ kind: "all" });
+    setEditingGroup((current) => (current !== null && removed(current) ? null : current));
   }
 
   function clearChecked() {
@@ -118,15 +124,13 @@ export function useConnectionListActions({
   async function moveChosenTo(group: string) {
     const hosts = moving ?? [];
     setMoving(null);
-    await moveConnections(hosts.map((host) => host.identity), group);
-    clearChecked();
+    if (await moveConnections(hosts.map((host) => host.identity), group)) clearChecked();
   }
 
   async function deleteChosen() {
     const hosts = deleting ?? [];
     setDeleting(null);
-    await deleteConnections(hosts.map((host) => host.identity));
-    clearChecked();
+    if (await deleteConnections(hosts.map((host) => host.identity))) clearChecked();
   }
 
   return {

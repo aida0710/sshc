@@ -23,7 +23,7 @@ type ConnectionRowProps = {
   duplicateAlias: boolean;
   descriptionId: string;
   // opened はエディタで開いている行、chosen は複数選択に入っている行。
-  // choosing のあいだ（2件以上選んでいるか、スマホの選択中）は chosen の行だけを強く見せる。
+  // choosing のあいだ（1件でも選んでいるか、スマホの選択中）は chosen の行だけを強く見せる。
   opened: boolean;
   chosen: boolean;
   choosing: boolean;
@@ -62,7 +62,7 @@ export function ConnectionRow({
       <button
         type="button"
         aria-label={host.identity.alias}
-        aria-current={opened && !choosing ? "true" : undefined}
+        aria-current={opened ? "true" : undefined}
         aria-pressed={choosing ? chosen : undefined}
         aria-describedby={descriptionId}
         draggable={draggable}

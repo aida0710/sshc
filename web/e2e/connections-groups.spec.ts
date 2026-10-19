@@ -135,3 +135,60 @@ test("asks before dropping a group's unsaved defaults when another group is chos
   await expect(editor).toHaveCount(0);
   await expect(installation.read("groups.sshc.conf")).rejects.toThrow();
 });
+
+test("keeps the open connection open when it was already in the group the others moved to", async ({ page, installation }) => {
+  await installWorkGroup(installation);
+  const tree = await openConnections(page, installation);
+
+  await tree.getByRole("button", { name: "web", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "web", exact: true })).toBeVisible();
+  await tree.getByRole("button", { name: "alpha", exact: true }).click({ modifiers: ["Control"] });
+  await page.getByRole("toolbar", { name: "2 selected" }).getByRole("button", { name: "Move to group…" }).click();
+  await page.getByRole("dialog", { name: "Move 2 connections" }).getByRole("button", { name: "work" }).click();
+
+  await expect(tree.getByRole("region", { name: "work group, 2 connections" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "web", exact: true })).toBeVisible();
+});
+
+test("follows the open connection and the group editor when their group is renamed", async ({ page, installation }) => {
+  await installWorkGroup(installation);
+  const tree = await openConnections(page, installation);
+
+  await tree.getByRole("button", { name: "web", exact: true }).click();
+  await tree.getByRole("button", { name: "work", exact: true }).hover();
+  await tree.getByRole("button", { name: "Actions for work" }).click();
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  const rename = page.getByRole("dialog", { name: "Rename work" });
+  await rename.getByLabel("Name").fill("lab");
+  await rename.getByRole("button", { name: "Rename" }).click();
+  await expect(tree.getByRole("button", { name: "lab", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "web", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/path=connections%2Flab%2Fweb\.conf/);
+
+  await tree.getByRole("button", { name: "lab", exact: true }).hover();
+  await tree.getByRole("button", { name: "Actions for lab" }).click();
+  await page.getByRole("menuitem", { name: "Edit" }).click();
+  await expect(page.getByRole("region", { name: "lab", exact: true })).toBeVisible();
+  await tree.getByRole("button", { name: "lab", exact: true }).hover();
+  await tree.getByRole("button", { name: "Actions for lab" }).click();
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  const second = page.getByRole("dialog", { name: "Rename lab" });
+  await second.getByLabel("Name").fill("ops");
+  await second.getByRole("button", { name: "Rename" }).click();
+  await expect(page.getByRole("region", { name: "ops", exact: true })).toBeVisible();
+});
+
+test("deletes the open connection from its management panel with the file's contents sent once", async ({ page, installation }) => {
+  await installWorkGroup(installation);
+  const tree = await openConnections(page, installation);
+  const saves = savesTo(page);
+
+  await tree.getByRole("button", { name: "alpha", exact: true }).click();
+  await page.getByRole("button", { name: "Manage connection" }).click();
+  await page.getByRole("button", { name: "Delete connection" }).click();
+  await page.getByRole("button", { name: "Delete it" }).click();
+
+  await expect(tree.getByRole("button", { name: "alpha", exact: true })).toHaveCount(0);
+  expect(JSON.parse(saves[0] ?? "{}")).toMatchObject({ kind: "delete_hosts", hosts: [{ path: "config", alias: "alpha" }] });
+  expect(await installation.read("config")).toContain("Host beta");
+});

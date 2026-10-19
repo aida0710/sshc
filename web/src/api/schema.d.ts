@@ -3830,6 +3830,9 @@ export interface components {
         HostEdit: {
             path: string;
             alias: string;
+        };
+        FileBase: {
+            path: string;
             base: string;
         };
         EditRequest: {
@@ -3838,8 +3841,10 @@ export interface components {
             base?: string;
             alias?: string;
             newAlias?: string;
-            /** @description Targets for move_hosts or delete_hosts. Entries sharing a path must have identical base contents. */
+            /** @description Targets for move_hosts or delete_hosts. Each path must have exactly one entry in bases. */
             hosts?: components["schemas"]["HostEdit"][];
+            /** @description The file each move_hosts or delete_hosts target lives in, with the contents the client loaded, once per file. */
+            bases?: components["schemas"]["FileBase"][];
             fields?: components["schemas"]["FieldEdit"][];
             raw?: string;
             comment?: string;

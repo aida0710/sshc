@@ -93,6 +93,7 @@ output-options:
     # application/httpserverの手書き型だけを使う現行config wire shape。
     - EditRequest
     - HostEdit
+    - FileBase
     - EmbeddedTerminal
     - FieldEdit
     - FileTransferSettings

@@ -12,7 +12,7 @@ import (
 // MaxHostEdits は、1 トランザクションで扱う接続先数を API 契約に合わせて制限する。
 const MaxHostEdits = 256
 
-var ErrInvalidHostSelection = errors.New("hosts must contain 1-256 distinct targets with consistent file bases")
+var ErrInvalidHostSelection = errors.New("hosts must contain 1-256 distinct targets, each with exactly one base for its file")
 
 // hostEditFiles は、同じファイルへの変更を読み込み順に集約する。
 type hostEditFiles struct {
@@ -65,22 +65,45 @@ func (s *Service) loadHostEditFile(files *hostEditFiles, relative string, base *
 	return loaded, nil
 }
 
-func (s *Service) loadHostEditSources(hosts []HostEdit) (*hostEditFiles, error) {
-	if len(hosts) == 0 || len(hosts) > MaxHostEdits {
+// loadHostEditSources は、bases のファイルを 1 回ずつ読み、hosts がどれかのファイルを指し、
+// どのファイルもどれかの接続先に使われていることを確かめる。
+func (s *Service) loadHostEditSources(hosts []HostEdit, bases []FileBase) (*hostEditFiles, error) {
+	if len(hosts) == 0 || len(hosts) > MaxHostEdits || len(bases) == 0 || len(bases) > MaxHostEdits {
 		return nil, ErrInvalidHostSelection
 	}
 	files := &hostEditFiles{byPath: map[string]*hostEditFile{}}
-	seen := map[HostIdentity]bool{}
-	for _, host := range hosts {
-		file, err := s.loadHostEditFile(files, host.Path, &host.Base)
+	for _, base := range bases {
+		absolute, err := AbsolutePath(s.workspace.Root(), base.Path)
 		if err != nil {
 			return nil, err
 		}
-		identity := HostIdentity{Path: file.relative, Alias: host.Alias}
-		if host.Alias == "" || seen[identity] {
+		if files.byPath[absolute] != nil {
+			return nil, ErrInvalidHostSelection
+		}
+		if _, err := s.loadHostEditFile(files, base.Path, &base.Base); err != nil {
+			return nil, err
+		}
+	}
+	used := map[*hostEditFile]bool{}
+	seen := map[HostIdentity]bool{}
+	for _, host := range hosts {
+		absolute, err := AbsolutePath(s.workspace.Root(), host.Path)
+		if err != nil {
+			return nil, err
+		}
+		file := files.byPath[absolute]
+		identity := HostIdentity{Path: host.Path, Alias: host.Alias}
+		if file != nil {
+			identity.Path = file.relative
+		}
+		if file == nil || host.Alias == "" || seen[identity] {
 			return nil, ErrInvalidHostSelection
 		}
 		seen[identity] = true
+		used[file] = true
+	}
+	if len(used) != len(files.order) {
+		return nil, ErrInvalidHostSelection
 	}
 	return files, nil
 }
