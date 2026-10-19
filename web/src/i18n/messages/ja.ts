@@ -1383,13 +1383,11 @@ export const ja = {
   "connection.lastConnected": "最終接続：{at}",
   "home.connectionList": "利用できる接続",
   "home.search": "接続を検索",
-  "home.searchPlaceholder": "ホスト、グループ、タグを検索",
   "home.viewMode": "接続先の表示形式",
   "home.panelView": "パネル",
   "home.listView": "リスト",
   "home.groupFilter": "グループで接続先を絞り込み",
   "home.allGroups": "すべて",
-  "home.connectionCount": "接続先{count}件",
   "home.groupBreadcrumb": "選択中のグループ",
   "home.openGroup": "{name}を開く（接続先{count}件）",
   "home.connectGesture":
@@ -2446,8 +2444,7 @@ export const ja = {
   "tree.byGroups": "グループ",
   "tree.groupSection": "{name}グループ（接続先{count}件）",
   "tree.filter": "接続を絞り込む",
-  "tree.filterPlaceholderExpanded":
-    "名前、接続先、ユーザー、グループ、タグを検索",
+  "hostSearch.placeholder": "名前やアドレスで絞り込み",
   "tree.allConnections": "すべて",
   "tree.resultsLabel": "接続先",
   "tree.resultCount": "{visible}件 / 全{total}件",

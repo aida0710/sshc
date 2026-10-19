@@ -10,12 +10,12 @@ import { localStorageKeys } from "../ui/browserStorageKeys";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { useLongPress } from "../ui/useLongPress";
-import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
+import { ActionMenu, revealOnHover, type ActionMenuItem } from "../ui/ActionMenu";
 import { duplicateAliasesOf, hostMetadataByIdentity, identityKey } from "./connectionBrowser";
 import { canDrop, dragMimeType, type DragPayload } from "./dragdrop";
 import { applySelectionGesture, emptyMultiSelection, keepVisible, type MultiSelection } from "./multiSelection";
 import { GroupSheet } from "./GroupSheet";
-import { ConnectionRow, revealOnHover } from "./ConnectionRow";
+import { ConnectionRow } from "./ConnectionRow";
 import { listGroups, ungroupedCount } from "./groupListing";
 
 export type HostSelection = { path: string; alias: string };
@@ -37,6 +37,8 @@ type DecoratedHost = {
 type GroupNode = {
   name: string;
   label: string;
+  // グループに付けた色。Home のグループの点と同じ色で、フォルダの印に付ける。
+  colour: string;
   hidden: boolean;
   order: number;
   sourceOrder: number;
@@ -183,6 +185,7 @@ export function ConnectionTree({
       nodes.set(group.name, {
         name: group.name,
         label: group.name.slice(group.name.lastIndexOf("/") + 1),
+        colour: display?.colour ?? "",
         hidden: display?.hidden === true,
         order: display?.order ?? group.order ?? 0,
         sourceOrder,
@@ -401,7 +404,9 @@ export function ConnectionTree({
             onClick={() => setScope({ kind: "group", name: node.name })}
             className={`${facetClass(active)} min-w-0 flex-1 px-1.5`}
           >
-            <Icon name="groups" className="size-4" />
+            <span className="flex shrink-0" style={node.colour === "" ? undefined : { color: node.colour }}>
+              <Icon name="groups" className="size-4" />
+            </span>
             <span className="min-w-0 flex-1 truncate">{node.label}</span>
             <span className={`shrink-0 text-[0.68rem] text-ink-faint ${items.length === 0 ? "" : "group-hover/row:hidden group-focus-within/row:hidden"} ${openMenu === menuKey ? "hidden" : ""}`}>{node.descendantCount}</span>
           </button>
@@ -477,10 +482,13 @@ export function ConnectionTree({
 
   function renderResultSection(section: ResultSection) {
     const name = section.name === "" ? t("tree.ungrouped") : section.name;
+    const colour = (overview.metadata.groups ?? []).find((group) => group.name === section.name)?.colour ?? "";
     return (
       <section key={section.name || "ungrouped"} data-connection-group={section.name || "ungrouped"} aria-label={t("tree.groupSection", { name, count: section.items.length })}>
         <header className="sticky top-0 z-[1] flex min-h-8 items-center gap-2 border-y border-line bg-tree px-3 py-2 text-[0.68rem] text-ink-muted">
-          <Icon name="groups" className="size-3.5 shrink-0 text-ink-faint" />
+          <span className="flex shrink-0 text-ink-faint" style={colour === "" ? undefined : { color: colour }}>
+            <Icon name="groups" className="size-3.5" />
+          </span>
           <h3 className="min-w-0 flex-1 truncate font-medium" title={name}>{name}</h3>
           <span className="shrink-0 font-mono tabular-nums text-ink-faint">{section.items.length}</span>
         </header>
@@ -540,7 +548,7 @@ export function ConnectionTree({
             <label className="relative block min-w-0" htmlFor="connection-filter">
               <span className="sr-only">{t("tree.filter")}</span>
               <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint" />
-              <input id="connection-filter" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={t("tree.filterPlaceholderExpanded")} className={`${control} min-h-10 rounded-lg bg-control py-2 pl-9 pr-3 md:min-h-0`} />
+              <input id="connection-filter" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={t("hostSearch.placeholder")} className={`${control} min-h-10 rounded-lg bg-control py-2 pl-9 pr-3 md:min-h-0`} />
             </label>
           </div>
           <div className="mt-2 flex items-center justify-between gap-3 text-xs text-ink-faint">

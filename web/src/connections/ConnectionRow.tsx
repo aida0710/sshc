@@ -1,18 +1,14 @@
 import type { DragEvent, MouseEvent, PointerEvent } from "react";
 import type { HostEntry, HostMetadata } from "../api/config";
 import { useTranslate } from "../i18n/context";
-import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
+import { ActionMenu, revealOnHover, type ActionMenuItem } from "../ui/ActionMenu";
+import { connectionAddress } from "./connectionAddress";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 
-// 「…」はマウスでは行に乗ったときだけ出し、タッチでは常に出す。
-export const revealOnHover = "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100";
-
 function targetFor(host: HostEntry): string {
-  if ((host.hostName ?? "") === "") return host.file.path ?? host.file.absolute;
-  const account = (host.user ?? "") === "" ? "" : `${host.user}@`;
-  const port = (host.port ?? "") === "" || host.port === "22" ? "" : `:${host.port}`;
-  return `${account}${host.hostName}${port}`;
+  const address = connectionAddress({ hostName: host.hostName ?? "", user: host.user ?? "", port: host.port ?? "" });
+  return address === "" ? host.file.path ?? host.file.absolute : address;
 }
 
 type ConnectionRowProps = {
