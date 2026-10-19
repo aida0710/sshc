@@ -21,10 +21,21 @@ type Info struct {
 	Executable string
 }
 
-func Read(version string) Info {
+// Stamp is what the build passes with -ldflags -X. Homebrew builds the tagged
+// source archive, which has no .git, so Go cannot record vcs.revision and vcs.time
+// there; the formula passes the tagged commit instead.
+type Stamp struct {
+	Version  string
+	Revision string
+	// CommitTime is in RFC 3339, like vcs.time.
+	CommitTime string
+}
+
+func Read(stamp Stamp) Info {
 	build, _ := debug.ReadBuildInfo()
 	buildInfo := fromBuildInfo(build)
-	buildInfo.Version = version
+	buildInfo.Version = stamp.Version
+	stamp.fillMissing(&buildInfo)
 	buildInfo.OS, buildInfo.Arch = runtime.GOOS, runtime.GOARCH
 	buildInfo.Manager = "unknown"
 	buildInfo.Executable, _ = os.Executable()
@@ -54,4 +65,18 @@ func fromBuildInfo(build *debug.BuildInfo) Info {
 		}
 	}
 	return buildInfo
+}
+
+// fillMissing uses the stamp only where Go recorded no version control
+// information, so a build from a git checkout (brew install --HEAD, make build)
+// keeps what Go recorded.
+func (stamp Stamp) fillMissing(buildInfo *Info) {
+	if buildInfo.Revision == "" {
+		buildInfo.Revision = stamp.Revision
+	}
+	if buildInfo.CommitTime == nil {
+		if timestamp, err := time.Parse(time.RFC3339, stamp.CommitTime); err == nil {
+			buildInfo.CommitTime = &timestamp
+		}
+	}
 }

@@ -3,7 +3,7 @@ import { createElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import { LanguageProvider, useTranslate, type Translate } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
-import { formatBytes, formatDateTime, formatDuration, formatOptionalDateTime } from "./format";
+import { formatBytes, formatDateTime, formatDuration, formatOptionalDateTime, formatTimeOfDay } from "./format";
 
 function translatorFor(locale: Locale): Translate {
   const { result } = renderHook(() => useTranslate(), {
@@ -46,6 +46,14 @@ describe("formatDateTime", () => {
 
   it("formats a timestamp in the requested locale", () => {
     expect(formatDateTime("2026-09-18T04:05:00Z", "en-US")).toMatch(/Sep 18, 2026/);
+  });
+});
+
+describe("formatTimeOfDay", () => {
+  it("shows the seconds so that steps within one minute read apart", () => {
+    const moment = new Date(2026, 9, 19, 18, 8, 12);
+    expect(formatTimeOfDay(moment, "en-US")).toBe("6:08:12 PM");
+    expect(formatTimeOfDay(moment, "ja-JP")).toBe("18:08:12");
   });
 });
 

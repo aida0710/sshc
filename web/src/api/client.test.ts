@@ -201,6 +201,19 @@ describe("apiClient", () => {
     });
   });
 
+  it("leaves a network failure to the screen that declares it handles one", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    apiClient.setCSRF("c".repeat(43));
+
+    await expect(apiClient.mutate("/api/v1/update/check", { method: "POST" }, {
+      locallyHandledCodes: ["network_request_failed"],
+    })).rejects.toThrow("fetch failed");
+
+    expect(diagnostic).not.toHaveBeenCalled();
+  });
+
   it("reports failed raw responses used by streaming APIs", async () => {
     const diagnostic = vi.fn();
     whenRequestFailed(diagnostic);

@@ -547,6 +547,7 @@ jobs:
           SOURCE_REPO: ${{ github.repository }}
           TAP_REPO: aida0710/homebrew-tap
           RELEASE_CHANNEL: ${{ needs.verify-source.outputs.release-channel }}
+          RELEASE_SHA: ${{ needs.verify-source.outputs.release-sha }}
         run: |
           set -eu
           if [ "$RELEASE_CHANNEL" != stable ]; then
@@ -562,11 +563,17 @@ jobs:
           curl -fsSL "$tarball" -o source.tar.gz
           sum=$(sha256sum source.tar.gz | cut -d' ' -f1)
           version=${RELEASE_TAG#v}
+          # ソースアーカイブには .git が無いので、formula がタグのコミットとその日時を go build へ渡す。
+          commit_time=$(TZ=UTC0 git show -s --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd "$RELEASE_SHA")
           sed -e "s#^  url .*#  url \"$tarball\"#" \
               -e "s#^  sha256 .*#  sha256 \"$sum\"#" \
+              -e "s#^  SOURCE_REVISION = .*#  SOURCE_REVISION = \"$RELEASE_SHA\".freeze#" \
+              -e "s#^  SOURCE_COMMIT_TIME = .*#  SOURCE_COMMIT_TIME = \"$commit_time\".freeze#" \
               packaging/homebrew/sshc.rb > sshc.rb
           grep -q "$sum" sshc.rb || { echo "the checksum was not written into the formula" >&2; exit 1; }
           grep -q "$RELEASE_TAG" sshc.rb || { echo "the tag was not written into the formula" >&2; exit 1; }
+          grep -q "SOURCE_REVISION = \"$RELEASE_SHA\"" sshc.rb || { echo "the commit was not written into the formula" >&2; exit 1; }
+          grep -q "SOURCE_COMMIT_TIME = \"$commit_time\"" sshc.rb || { echo "the commit time was not written into the formula" >&2; exit 1; }
 
           mkdir -p ~/.ssh
           printf '%s\n' "$TAP_KEY" > ~/.ssh/tap
