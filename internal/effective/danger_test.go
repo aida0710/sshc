@@ -44,12 +44,20 @@ var (
 
 func graphFor(t *testing.T, files map[string]string) *config.Graph {
 	t.Helper()
-	resolver := config.Resolver{
+	return resolveWith(t, resolverFor(files))
+}
+
+func resolverFor(files map[string]string) config.Resolver {
+	return config.Resolver{
 		Loader: fakeLoader{files: files},
 		Home:   testHome,
 		Root:   testRoot,
 		Tokens: map[byte]string{'d': testHome},
 	}
+}
+
+func resolveWith(t *testing.T, resolver config.Resolver) *config.Graph {
+	t.Helper()
 	graph, err := resolver.Resolve(testConfig)
 	if err != nil {
 		t.Fatal(err)

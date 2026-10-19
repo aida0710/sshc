@@ -24,7 +24,11 @@ func (notes *hostBlockNotes) observe(header blockHeader, kind string) []Complexi
 	// 数えるのは alias を指定しているブロックだけである。たまたま一致した
 	// catch-all は「二つのブロックがこの名前を主張している」ではない。それは
 	// ワイルドカードで一致したという別の話である。
-	if DeclaresExactly(header.block.Patterns, notes.alias) {
+	//
+	// groups file のブロックも数えない。sshc が、ほかのファイルで宣言された接続先へ
+	// グループの共通設定を足すために、メンバーの alias を並べて書いたもので、利用者が
+	// 直す重複ではない。値の出所としては、ほかのブロックと同じく扱う。
+	if DeclaresExactly(header.block.Patterns, notes.alias) && !header.inGroupsFile {
 		notes.declaring++
 		if notes.declaring == 1 {
 			notes.first = header
