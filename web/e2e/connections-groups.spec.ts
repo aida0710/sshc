@@ -65,7 +65,8 @@ test("deletes the chosen connections together after confirming", async ({ page, 
   await tree.getByRole("button", { name: "bastion", exact: true }).click({ modifiers: ["Control"] });
   await page.getByRole("toolbar", { name: "2 selected" }).getByRole("button", { name: "Delete…" }).click();
   const confirm = page.getByRole("dialog", { name: "Delete 2 connections?" });
-  await confirm.getByRole("button", { name: "Delete it" }).click();
+  await expect(confirm).toContainText("This removes these Host blocks from your configuration.");
+  await confirm.getByRole("button", { name: "Delete 2" }).click();
 
   await expect(tree.getByRole("button", { name: "alpha", exact: true })).toHaveCount(0);
   await expect(tree.getByRole("button", { name: "beta", exact: true })).toHaveCount(0);
@@ -96,7 +97,7 @@ test("creates, renames and deletes a group from the Connections group column", a
   await tree.getByRole("button", { name: "homelab", exact: true }).hover();
   await tree.getByRole("button", { name: "Actions for homelab" }).click();
   await page.getByRole("menuitem", { name: "Delete…" }).click();
-  await page.getByRole("dialog", { name: "Delete homelab?" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: "Delete homelab?" }).getByRole("button", { name: "Delete group" }).click();
   await expect(tree.getByRole("button", { name: "homelab", exact: true })).toHaveCount(0);
   expect(await installation.read("config")).not.toContain("connections/homelab");
 });

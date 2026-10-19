@@ -114,7 +114,7 @@ export function GroupEditor({ group, memberCount, actions, onSave, onDirtyChange
               <input
                 value={draft.defaults[field.keyword] ?? ""}
                 disabled={repeated.has(field.keyword)}
-                placeholder={repeated.has(field.keyword) ? "" : `${t("groupEditor.notSet")}（${field.placeholder}）`}
+                placeholder={repeated.has(field.keyword) ? "" : t("groupEditor.example", { value: field.placeholder })}
                 onChange={(event) => setDraft({ ...draft, defaults: { ...draft.defaults, [field.keyword]: event.currentTarget.value } })}
                 className={control}
               />

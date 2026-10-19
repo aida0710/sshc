@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
+import { maxGroupSegments } from "../rules/generated";
 import { isValidGroupName } from "../rules/rules";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { control, fieldLabel } from "../ui/form";
@@ -41,8 +42,10 @@ export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete,
   // 名前の欄には、親を除いた最後の1段だけを入れてもらう。階層は「中にグループを作成」とドラッグで決める。
   function validateSegment(parent: string, current: string | null) {
     return (value: string) => {
-      if (value.includes("/") || !isValidGroupName(value)) return t("groups.invalidName");
+      if (value.includes("/")) return t("groupDialog.noSlash");
+      if (!isValidGroupName(value)) return t("groupDialog.invalidCharacters");
       const full = joinGroup(parent, value);
+      if (!isValidGroupName(full)) return t("groupDialog.tooDeep", { count: maxGroupSegments });
       if (full !== current && taken.has(full.toLowerCase())) return t("groups.nameTaken");
       return "";
     };
@@ -92,13 +95,16 @@ export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete,
       body={dialog.memberCount === 0 ? (
         <p className="text-sm text-ink-muted">{t("groupDialog.deleteEmpty")}</p>
       ) : (
-        <label className="flex flex-col gap-1">
-          <span className={fieldLabel}>{t("groupDialog.deleteMoveTo", { count: dialog.memberCount })}</span>
-          <select value={destination} onChange={(event) => setDestination(event.currentTarget.value)} className={control}>
-            <option value="">{t("tree.ungrouped")}</option>
-            {candidates.map((name) => <option key={name} value={name}>{name}</option>)}
-          </select>
-        </label>
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-ink-muted">{t("groupDialog.deleteKeepsConnections")}</p>
+          <label className="flex flex-col gap-1">
+            <span className={fieldLabel}>{t("groupDialog.deleteMoveTo", { count: dialog.memberCount })}</span>
+            <select value={destination} onChange={(event) => setDestination(event.currentTarget.value)} className={control}>
+              <option value="">{t("tree.ungrouped")}</option>
+              {candidates.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </label>
+        </div>
       )}
       confirmLabel={t("groupDialog.delete")}
       cancelLabel={t("groupDialog.cancel")}

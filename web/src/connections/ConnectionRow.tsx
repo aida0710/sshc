@@ -62,6 +62,7 @@ export function ConnectionRow({
       <button
         type="button"
         aria-label={host.identity.alias}
+        title={host.identity.alias}
         aria-current={opened ? "true" : undefined}
         aria-pressed={choosing ? chosen : undefined}
         aria-describedby={descriptionId}
@@ -94,7 +95,11 @@ export function ConnectionRow({
               <span className={`truncate ${highlighted ? "font-semibold" : "font-medium"}`}>{host.identity.alias}</span>
               {duplicateAlias ? <Icon name="warning" className="size-3.5 text-notice-ink" /> : null}
             </span>
-            <span className={`mt-0.5 block truncate font-mono text-xs leading-4 ${highlighted ? "text-ink-muted" : "text-ink-faint"}`}>{targetFor(host)}</span>
+            <span className={`mt-0.5 block truncate font-mono text-xs leading-4 ${highlighted ? "text-ink-muted" : "text-ink-faint"}`}>
+              {targetFor(host)}
+              {/* 同じ名前の接続先が並ぶときは、どのファイルの行かを添えて見分けられるようにする。 */}
+              {duplicateAlias ? ` · ${host.file.path ?? host.file.absolute}:${host.line}` : null}
+            </span>
             {tags.length === 0 ? null : (
               <span aria-hidden="true" className="mt-1 flex flex-wrap gap-1">
                 {tags.map((tag) => <span key={tag} className="rounded bg-toolbar px-1 text-[0.65rem] text-ink-muted">{tag}</span>)}

@@ -24,7 +24,15 @@ describe("GroupDialogs", () => {
     await userEvent.type(screen.getByLabelText("Name"), "work/eu");
     await userEvent.click(screen.getByRole("button", { name: "Create" }));
     expect(onCreate).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("A name cannot contain “/”.");
+  });
+
+  it("refuses a group nested deeper than six levels", async () => {
+    const { onCreate } = open({ kind: "create", parent: "a/b/c/d/e/f" });
+    await userEvent.type(screen.getByLabelText("Name"), "g");
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Groups can be nested at most 6 levels deep.");
   });
 
   it("refuses a name another group already has, whatever its case", async () => {
@@ -55,15 +63,16 @@ describe("GroupDialogs", () => {
     const { onDelete } = open({ kind: "delete", name: "production", memberCount: 4 });
     const destination = screen.getByRole("combobox");
     expect(screen.queryByRole("option", { name: "production/web" })).not.toBeInTheDocument();
+    expect(screen.getByText("Deleting the group does not delete its connections. They move to the group you choose.")).toBeInTheDocument();
     await userEvent.selectOptions(destination, "staging");
-    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete group" }));
     expect(onDelete).toHaveBeenCalledWith("production", "staging");
   });
 
   it("deletes an empty group without asking where its members go", async () => {
     const { onDelete } = open({ kind: "delete", name: "staging", memberCount: 0 });
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete group" }));
     expect(onDelete).toHaveBeenCalledWith("staging", "");
   });
 });

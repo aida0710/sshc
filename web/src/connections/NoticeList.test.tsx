@@ -12,7 +12,7 @@ describe("NoticeList", () => {
   it("names the duplicated alias and both places that declare it", () => {
     render(<NoticeList notices={[duplicate]} />);
     expect(screen.getByText(
-      "nas is declared in both conf.d/10-home.conf:1 and config:3. For most settings OpenSSH uses the values from conf.d/10-home.conf:1, which it reads first.",
+      "nas is declared in both conf.d/10-home.conf:1 and config:3. For most settings OpenSSH uses the values from conf.d/10-home.conf:1, which it reads first. Delete the one you do not use, or rename it.",
     )).toBeInTheDocument();
   });
 

@@ -393,6 +393,7 @@ export function ConnectionTree({
           <button
             type="button"
             aria-label={node.name}
+            title={node.name}
             aria-pressed={active}
             draggable={!movesDisabled}
             onDragStart={(event) => startDrag(event, { kind: "group", name: node.name })}
@@ -480,7 +481,7 @@ export function ConnectionTree({
       <section key={section.name || "ungrouped"} data-connection-group={section.name || "ungrouped"} aria-label={t("tree.groupSection", { name, count: section.items.length })}>
         <header className="sticky top-0 z-[1] flex min-h-8 items-center gap-2 border-y border-line bg-tree px-3 py-2 text-[0.68rem] text-ink-muted">
           <Icon name="groups" className="size-3.5 shrink-0 text-ink-faint" />
-          <h3 className="min-w-0 flex-1 truncate font-medium">{name}</h3>
+          <h3 className="min-w-0 flex-1 truncate font-medium" title={name}>{name}</h3>
           <span className="shrink-0 font-mono tabular-nums text-ink-faint">{section.items.length}</span>
         </header>
         {section.items.length === 0 ? null : <ul>{section.items.map(renderItem)}</ul>}

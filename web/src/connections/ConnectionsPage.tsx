@@ -219,12 +219,14 @@ export function ConnectionsPage({
     ? null
     : (overview?.metadata.groups ?? []).find((group) => group.name === groupEditorName) ?? { name: groupEditorName };
 
-  // 右側に出す設定全体の注意。接続先を開いているときは、その接続先（alias かファイル）に関わるものだけにする。
-  // ほかの接続先の注意は、一覧のその行の印で分かる。
+  // 右側に出す設定全体の注意。接続先を開いているときは、その接続先に関わるものだけにする。
+  // alias を持つ注意（重複など）は alias で、持たない注意はファイルで見分ける。同じファイルにある
+  // ほかの接続先の注意まで出さないため。ほかの接続先の注意は、一覧のその行の印で分かる。
   const paneNotices = (overview?.notices ?? []).filter((notice) => {
     if (groupNoticeCodes.has(notice.code) || selectionNoticeCodes.has(notice.code)) return false;
     if (selection === null) return true;
-    return notice.detail === selection.alias || notice.path === selection.path || notice.related?.path === selection.path;
+    if (notice.detail !== undefined && notice.detail !== "") return notice.detail === selection.alias;
+    return notice.path === selection.path;
   });
 
   // 選んだ接続先への操作の帯。広い画面では一覧の上、スマホでは一覧の下に置く。

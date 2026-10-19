@@ -5,7 +5,8 @@ import { Button } from "../ui/surface";
 import type { GroupListing } from "./groupListing";
 
 type MoveToGroupDialogProps = {
-  count: number;
+  // 動かす接続先の名前。1件なら見出しに名前を出す。
+  aliases: readonly string[];
   groups: readonly GroupListing[];
   // 選んだ接続先がすべているグループ。そこへは移せないので選べなくする。
   currentGroup: string | null;
@@ -15,7 +16,7 @@ type MoveToGroupDialogProps = {
 
 // MoveToGroupDialog は、選んだ接続先の移動先を、グループの一覧から1回のタップで選ばせる。
 // スマホでは下から出る。
-export function MoveToGroupDialog({ count, groups, currentGroup, onPick, onCancel }: MoveToGroupDialogProps) {
+export function MoveToGroupDialog({ aliases, groups, currentGroup, onPick, onCancel }: MoveToGroupDialogProps) {
   const t = useTranslate();
   const rows = [
     ...groups.map((group) => ({ name: group.name, label: group.label, depth: group.depth })),
@@ -30,7 +31,7 @@ export function MoveToGroupDialog({ count, groups, currentGroup, onPick, onCance
       panelClassName="flex max-h-[80dvh] w-full max-w-md flex-col rounded-lg"
     >
       <h2 id="move-to-group-heading" className="border-b border-line px-4 py-3 text-base font-semibold text-ink">
-        {t("moveDialog.heading", { count })}
+        {aliases.length === 1 ? t("moveDialog.headingOne", { alias: aliases[0] ?? "" }) : t("moveDialog.heading", { count: aliases.length })}
       </h2>
       <ul className="min-h-0 flex-1 overflow-y-auto p-2">
         {rows.map((row) => (

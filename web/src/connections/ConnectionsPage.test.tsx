@@ -377,7 +377,8 @@ describe("ConnectionsPage", () => {
       ...overview,
       notices: [
         { code: "duplicate_alias", path: "conf.d/extra.conf", line: 4, detail: "bastion", related: { path: "config", line: 1 } },
-        { code: "duplicate_alias", path: "conf.d/extra.conf", line: 9, detail: "edge", related: { path: "conf.d/edge.conf", line: 1 } },
+        // edge の重複は bastion と同じファイル（config）にあるが、bastion についての警告ではない。
+        { code: "duplicate_alias", path: "config", line: 9, detail: "edge", related: { path: "conf.d/edge.conf", line: 1 } },
       ],
     });
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} onNavigateLocation={vi.fn()} />);

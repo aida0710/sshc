@@ -50,7 +50,7 @@ export function ConnectionListDialogs({ actions, createGroup, renameGroup, delet
       )}
       {moving === null ? null : (
         <MoveToGroupDialog
-          count={moving.length}
+          aliases={moving.map((host) => host.identity.alias)}
           groups={actions.groupListings}
           currentGroup={moving.every((host) => (host.group ?? "") === (moving[0]?.group ?? "")) ? (moving[0]?.group ?? "") : null}
           onPick={(group) => void actions.moveChosenTo(group)}
@@ -64,13 +64,16 @@ export function ConnectionListDialogs({ actions, createGroup, renameGroup, delet
             ? t("conn.deleteHeading", { alias: deleting[0]?.identity.alias ?? "" })
             : t("bulkDelete.heading", { count: deleting.length })}
           body={(
-            <ul className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
-              {deleting.map((host) => (
-                <li key={identityKey(host.identity)} className="rounded-md bg-surface-subtle px-2 py-1 font-mono text-xs text-ink">{host.identity.alias}</li>
-              ))}
-            </ul>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-ink-muted">{deleting.length === 1 ? t("conn.deleteBody") : t("bulkDelete.body")}</p>
+              <ul className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
+                {deleting.map((host) => (
+                  <li key={identityKey(host.identity)} className="rounded-md bg-surface-subtle px-2 py-1 font-mono text-xs text-ink">{host.identity.alias}</li>
+                ))}
+              </ul>
+            </div>
           )}
-          confirmLabel={t("conn.confirmDelete")}
+          confirmLabel={deleting.length === 1 ? t("conn.confirmDelete") : t("bulkDelete.confirm", { count: deleting.length })}
           cancelLabel={t("conn.deleteCancel")}
           onConfirm={() => void actions.deleteChosen()}
           onCancel={actions.cancelDelete}
