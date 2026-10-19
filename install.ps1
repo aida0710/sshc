@@ -214,7 +214,8 @@ function Show-ShadowedExecutable([string]$Target) {
 }
 
 function Confirm-ReleaseAttestation([string[]]$Paths, [string]$Tag) {
-    $github = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
+    # PATH can hold more than one gh.exe; run the one PowerShell would run, not all of them.
+    $github = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -eq $github) {
         Write-Note 'GitHub CLI (gh) is not installed, so the release attestation was not checked; only the checksum was'
         return
