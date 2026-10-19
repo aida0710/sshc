@@ -345,15 +345,32 @@ export function ConnectionsPage({
   }
 
   if (overview === null) {
-    return problem === null ? (
-      <PanelState tone="loading" title={t("conn.loading")} />
-    ) : (
-      <PanelState
-        tone="failed"
-        title={problem.message}
-        {...(problem.detail === undefined ? {} : { detail: problem.detail })}
-        action={<Button onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>}
-      />
+    // 読み込むあいだも、帯と一覧・右側の枠は出しておく。読み込みが終わったときに画面が組み変わって見えないように。
+    return (
+      <div className="flex h-full min-h-0 flex-col bg-canvas">
+        <SectionBar
+          title={t("conn.heading")}
+          actions={<Button kind="primary" className="shrink-0" disabled>{t("conn.new")}</Button>}
+        />
+        <div
+          style={{ "--list-width": `${listWidth}px` } as CSSProperties}
+          className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] ${compact ? "" : "md:grid-cols-[minmax(16rem,var(--list-width))_minmax(0,1fr)]"}`}
+        >
+          <div className="flex min-h-0 flex-col border-r border-line bg-tree">
+            {problem === null ? (
+              <PanelState tone="loading" title={t("conn.loading")} />
+            ) : (
+              <PanelState
+                tone="failed"
+                title={problem.message}
+                {...(problem.detail === undefined ? {} : { detail: problem.detail })}
+                action={<Button onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>}
+              />
+            )}
+          </div>
+          {compact ? null : <div className="hidden bg-card md:block" />}
+        </div>
+      </div>
     );
   }
 
