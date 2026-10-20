@@ -460,6 +460,18 @@ describe("SFTPPanel uploads", () => {
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/other"));
   });
 
+  it("goes to a path typed from ~ and shows the absolute path the engine resolved", async () => {
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    api.list.mockResolvedValueOnce({ path: "/home/deploy/logs", entries: [] });
+    fireEvent.click(screen.getByRole("navigation", { name: "Remote path" }));
+    const input = screen.getByRole("textbox", { name: "Remote path" });
+    await userEvent.clear(input);
+    await userEvent.type(input, "~/logs{Enter}");
+    await waitFor(() => expect(api.list).toHaveBeenLastCalledWith("edge", "~/logs"));
+    expect(await screen.findByTestId("sftp-current-path")).toHaveAttribute("data-path", "/home/deploy/logs");
+  });
+
   it("queues multiple selected entries after one confirmation and opens the queue", async () => {
     const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["delete-one", "delete-two"]);
     api.list.mockResolvedValue({

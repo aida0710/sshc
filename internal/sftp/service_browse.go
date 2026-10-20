@@ -16,7 +16,8 @@ import (
 func (s Service) ListDirectory(ctx context.Context, alias, remotePath string) (Listing, error) {
 	var cleaned string
 	var err error
-	if remotePath != "" {
+	belowHome, fromHome := cutRemoteHomePrefix(remotePath)
+	if !fromHome {
 		cleaned, err = cleanPublicPath(remotePath, true)
 		if err != nil {
 			return Listing{}, err
@@ -27,12 +28,12 @@ func (s Service) ListDirectory(ctx context.Context, alias, remotePath string) (L
 		return Listing{}, err
 	}
 	defer remote.Close()
-	if remotePath == "" {
+	if fromHome {
 		workingDirectory, err := remote.Getwd(ctx)
 		if err != nil {
 			return Listing{}, err
 		}
-		cleaned, err = cleanPublicPath(workingDirectory, true)
+		cleaned, err = cleanPublicPath(path.Join(workingDirectory, belowHome), true)
 		if err != nil {
 			return Listing{}, err
 		}
@@ -52,6 +53,22 @@ func (s Service) ListDirectory(ctx context.Context, alias, remotePath string) (L
 	describeLinks(remote, entries)
 	sortListing(entries)
 	return Listing{Path: cleaned, Entries: entries}, nil
+}
+
+// cutRemoteHomePrefix reports whether remotePath starts at the directory the
+// SFTP server logs the user into, which is the home directory on most servers,
+// and returns the part below it. An empty path, `~` and `~/…` start there, as
+// they do in an OpenSSH shell; `~user` is not expanded and stays a relative
+// path, which a listing refuses. The listing answers with the absolute path, so
+// the pane shows where `~` led.
+func cutRemoteHomePrefix(remotePath string) (string, bool) {
+	switch {
+	case remotePath == "" || remotePath == "~":
+		return "", true
+	case strings.HasPrefix(remotePath, "~/"):
+		return strings.TrimPrefix(remotePath, "~/"), true
+	}
+	return "", false
 }
 
 // sortListing puts what opens as a folder first, then orders by name without
