@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { localMutationProblemText, sftpProblemText } from "./sftpProblemText";
@@ -7,6 +8,7 @@ import { sftpApi, type RemoteEntry } from "./api";
 import { parentRowKey, type SFTPEntryListModel } from "./useSFTPEntryList";
 import { remoteJoin as join, remoteParentOf as parentOf, type SFTPSource } from "./sftpSource";
 import { sftpTransferManager } from "./transferManager";
+import { startsAtHome } from "./remotePathInput";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 
 type SFTPInputIntent =
@@ -162,6 +164,23 @@ export function useSFTPEntryActions({
     }
   }
 
+  // A destination typed from ~ is listed first: the listing answers with the
+  // absolute path a transfer needs, and proves the directory is there.
+  async function moveEntriesTo(entries: RemoteEntry[], typed: string) {
+    if (source === null) return;
+    let directory = typed;
+    if (startsAtHome(typed)) {
+      try {
+        directory = (await source.list(typed)).path;
+      } catch (error) {
+        if (failureCode(error) === "invalid_request") setProblem(t("sftp.pathCannotOpen"));
+        else report(error);
+        return;
+      }
+    }
+    await queueRemoteOperation(entries, "move", (entry) => join(directory, entry.name));
+  }
+
   // 削除ジョブを積めなかったときは、確認ダイアログを開いたまま、その中に失敗を出す。
   // 一部でも積めたらダイアログを閉じ、失敗は画面に出す。
   async function remove() {
@@ -280,7 +299,7 @@ export function useSFTPEntryActions({
       else if (intent.kind === "createFile") void makeEmptyFile(value);
       else if (intent.kind === "rename") void rename(intent.entry, value);
       else if (intent.kind === "duplicate") void queueRemoteOperation([intent.entry], "copy", () => join(parentOf(intent.entry.path), value));
-      else if (intent.kind === "moveTo") void queueRemoteOperation(intent.entries, "move", (entry) => join(value, entry.name));
+      else if (intent.kind === "moveTo") void moveEntriesTo(intent.entries, value);
     },
     remove,
   };
