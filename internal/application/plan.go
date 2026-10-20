@@ -290,7 +290,7 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 		}
 	}
 	root := s.workspace.Root()
-	hosts, _ := ProjectHosts(graph, root, stored.GroupsPath())
+	hosts, _ := ProjectHosts(graph, root)
 	identities := make([]HostIdentity, 0, len(hosts))
 	for _, host := range hosts {
 		if !host.Identity.IsZero() {
@@ -367,7 +367,7 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 		prepared.directories = append(prepared.directories, absolute)
 	}
 
-	afterHosts, _ := ProjectHosts(after, root, reconciled.GroupsPath())
+	afterHosts, _ := ProjectHosts(after, root)
 	for _, host := range afterHosts {
 		if host.Group == "" || host.Identity.IsZero() || len(prepared.preview.Effective) >= maxEffectivePreviews {
 			continue

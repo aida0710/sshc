@@ -114,11 +114,11 @@ func PrimaryAlias(patterns []config.Pattern) string {
 
 // ProjectHosts は、Include graph が届く Host ブロックを、接続先の一覧として返す。
 //
-// groupsFile（metadata の GroupsPath()）の Host ブロックは返さない。sshc がグループの
-// 共通設定をメンバーの alias に効かせるために書いた行で、接続先ではない。返すと、
-// メンバーが一覧に 2 回並び、alias の重複として知らされる。その行の値は、メンバーの
+// groups file（config.Node.GroupsFile の印が付いたファイル）の Host ブロックは返さない。
+// sshc がグループの共通設定をメンバーの alias に効かせるために書いた行で、接続先ではない。
+// 返すと、メンバーが一覧に 2 回並び、alias の重複として知らされる。その行の値は、メンバーの
 // 実効値の計算（ComputeEffective）が今までどおり受け取る。
-func ProjectHosts(graph *config.Graph, root, groupsFile string) ([]HostEntry, []Notice) {
+func ProjectHosts(graph *config.Graph, root string) ([]HostEntry, []Notice) {
 	var hosts []HostEntry
 	var notices []Notice
 	// firstDeclared は、alias ごとに最初にそれを宣言した Host ブロックの場所である。
@@ -128,17 +128,16 @@ func ProjectHosts(graph *config.Graph, root, groupsFile string) ([]HostEntry, []
 		if visit.Block.Kind != config.BlockHost || visit.Block.Header != visit.Index {
 			return true
 		}
-		file := NewFileRef(root, visit.Path)
-		if file.Path == groupsFile {
+		node, ok := graph.Nodes[visit.Path]
+		if ok && node.GroupsFile {
 			return true
 		}
 		entry := HostEntry{
-			File:     file,
+			File:     NewFileRef(root, visit.Path),
 			Line:     visit.Index + 1,
 			Patterns: make([]string, 0, len(visit.Block.Patterns)),
 		}
 		entry.Group, _ = GroupOfPath(entry.File.Path)
-		node, ok := graph.Nodes[visit.Path]
 		entry.Editable = ok && node.Editable && !entry.File.External
 		for _, pattern := range visit.Block.Patterns {
 			entry.Patterns = append(entry.Patterns, pattern.Raw)
