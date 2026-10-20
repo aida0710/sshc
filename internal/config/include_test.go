@@ -55,7 +55,12 @@ func TestExpandPatternFollowsOpenSSHRules(t *testing.T) {
 
 func TestExpandPatternRefusesToGuess(t *testing.T) {
 	resolver := newTestResolver()
-	for _, argument := range []string{"~other/config", "%h/config", "%C.conf", ""} {
+	refused := []string{"~other/config", "%h/config", "%C.conf", ""}
+	if filepath.Separator != '\\' {
+		// Off Windows, \ belongs to a file name, so ~\x names a user called \x.
+		refused = append(refused, `~\work\config`)
+	}
+	for _, argument := range refused {
 		if got, err := resolver.expandPattern(argument); !errors.Is(err, ErrUnsupportedExpansion) {
 			t.Errorf("expandPattern(%q) = %q, %v; want ErrUnsupportedExpansion", argument, got, err)
 		}
