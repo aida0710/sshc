@@ -2,6 +2,7 @@ package platform
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -45,4 +46,35 @@ func ResolveUnderHome(path, home string) (string, error) {
 		return "", ErrDirectoryRelative
 	}
 	return filepath.Clean(trimmed), nil
+}
+
+// CutTypedHome reports whether a path typed for immediate use starts at the
+// user's home, and returns the part below it. Besides `~` and `~/`, the file
+// system's own separator may follow `~`, so a Windows user can type
+// `~\Documents` as in PowerShell. A typed path is resolved at once on this
+// machine and never saved, so this spelling cannot reach a machine where `\`
+// belongs to a file name; ResolveUnderHome, which reads saved settings, keeps
+// refusing it. `~user` is not a typed home.
+func CutTypedHome(value string) (string, bool) {
+	if value == "~" {
+		return "", true
+	}
+	if len(value) >= 2 && value[0] == '~' && os.IsPathSeparator(value[1]) {
+		return value[2:], true
+	}
+	return "", false
+}
+
+// ExpandTypedHome replaces the home a typed path starts at (see CutTypedHome)
+// with this user's home directory. Any other path is returned unchanged.
+func ExpandTypedHome(value string) (string, error) {
+	belowHome, ok := CutTypedHome(value)
+	if !ok {
+		return value, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, filepath.FromSlash(belowHome)), nil
 }

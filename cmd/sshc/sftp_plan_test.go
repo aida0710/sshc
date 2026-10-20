@@ -17,6 +17,13 @@ import (
 // listingEngine answers directory listings from a map and counts them.
 func listingEngine(t *testing.T, listings map[string][]api.SFTPEntry, calls *atomic.Int32) *engineAPI {
 	t.Helper()
+	return listingEngineAtHome(t, "", listings, calls)
+}
+
+// listingEngineAtHome is listingEngine for a server that logs the user into
+// home: it answers a listing of ~ with that directory, as the engine does.
+func listingEngineAtHome(t *testing.T, home string, listings map[string][]api.SFTPEntry, calls *atomic.Int32) *engineAPI {
+	t.Helper()
 	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
 			t.Errorf("unexpected request: %s %s", request.Method, request.URL.String())
@@ -25,6 +32,9 @@ func listingEngine(t *testing.T, listings map[string][]api.SFTPEntry, calls *ato
 		}
 		calls.Add(1)
 		remotePath := request.URL.Query().Get("path")
+		if remotePath == "~" && home != "" {
+			remotePath = home
+		}
 		entries, exists := listings[remotePath]
 		if !exists {
 			writeTestJSON(response, http.StatusNotFound, map[string]string{"code": "sftp_not_found", "message": "not found"})
@@ -151,5 +161,55 @@ func TestGetPlanTransfersWhatRemoteLinksPointToAndSkipsBrokenOnes(t *testing.T) 
 	}
 	if plan.Skipped != 2 || len(plan.SkippedPaths) != 2 || plan.SkippedPaths[0].Path != "/srv/broken" || plan.SkippedPaths[1].Path != "/srv/socket" {
 		t.Fatalf("skipped = %+v", plan.SkippedPaths)
+	}
+}
+
+func TestGetPlanCountsAQuotedTildeFromTheRemoteHomeAndExpandsTheLocalOne(t *testing.T) {
+	localHome := t.TempDir()
+	t.Setenv("HOME", localHome)
+	t.Setenv("USERPROFILE", localHome)
+	var calls atomic.Int32
+	engine := listingEngineAtHome(t, "/home/edge", map[string][]api.SFTPEntry{
+		"/home/edge":      {{Name: "logs", Path: "/home/edge/logs", Type: "directory"}},
+		"/home/edge/logs": {{Name: "a.log", Path: "/home/edge/logs/a.log", Type: "file", Size: 5}},
+	}, &calls)
+
+	plan, err := buildSFTPGetPlan(t.Context(), engine, sftpInvocation{Action: sftpGet, Alias: "edge", Source: "~/logs/a.log", Destination: "~/dl.log"})
+	if err != nil {
+		t.Fatalf("buildSFTPGetPlan() = %v", err)
+	}
+	if plan.Source != "/home/edge/logs/a.log" || plan.Destination != filepath.Join(localHome, "dl.log") {
+		t.Fatalf("plan source %q, destination %q", plan.Source, plan.Destination)
+	}
+}
+
+func TestPutPlanCountsAQuotedTildeDestinationFromTheRemoteHome(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "one.txt")
+	if err := os.WriteFile(source, []byte("one"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	engine := listingEngineAtHome(t, "/home/edge", map[string][]api.SFTPEntry{
+		"/":                 {{Name: "home", Path: "/home", Type: "directory"}},
+		"/home":             {{Name: "edge", Path: "/home/edge", Type: "directory"}},
+		"/home/edge":        {{Name: "upload", Path: "/home/edge/upload", Type: "directory"}},
+		"/home/edge/upload": {},
+	}, &calls)
+
+	plan, err := buildSFTPPutPlan(t.Context(), engine, sftpInvocation{Action: sftpPut, Alias: "edge", Source: source, Destination: "~/upload/one.txt"})
+	if err != nil {
+		t.Fatalf("buildSFTPPutPlan() = %v", err)
+	}
+	if plan.Destination != "/home/edge/upload/one.txt" {
+		t.Fatalf("plan destination = %q", plan.Destination)
+	}
+}
+
+func TestSFTPPlansRefuseAnotherUsersTildeWithoutAskingTheEngine(t *testing.T) {
+	var calls atomic.Int32
+	engine := listingEngineAtHome(t, "/home/edge", map[string][]api.SFTPEntry{}, &calls)
+	_, err := buildSFTPGetPlan(t.Context(), engine, sftpInvocation{Action: sftpGet, Alias: "edge", Source: "~deploy/a.log", Destination: t.TempDir()})
+	if !errors.Is(err, errSFTPRemotePath) || calls.Load() != 0 {
+		t.Fatalf("buildSFTPGetPlan(~deploy) = %v after %d requests, want errSFTPRemotePath before any", err, calls.Load())
 	}
 }

@@ -15,6 +15,7 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/httpserver"
+	"sshc/internal/platform"
 	sftpcore "sshc/internal/sftp"
 )
 
@@ -193,14 +194,15 @@ func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	if err != nil {
 		return sftpCLIPlan{}, err
 	}
-	if !path.IsAbs(called.Source) {
-		return sftpCLIPlan{}, errSFTPRemotePath
-	}
-	source, err := sftpRemoteStat(ctx, engine, called.Alias, path.Clean(called.Source))
+	remoteSource, err := resolveSFTPRemotePath(ctx, engine, called.Alias, called.Source)
 	if err != nil {
 		return sftpCLIPlan{}, err
 	}
-	destination, err := filepath.Abs(called.Destination)
+	source, err := sftpRemoteStat(ctx, engine, called.Alias, remoteSource)
+	if err != nil {
+		return sftpCLIPlan{}, err
+	}
+	destination, err := resolveSFTPLocalPath(called.Destination)
 	if err != nil {
 		return sftpCLIPlan{}, err
 	}
@@ -327,10 +329,11 @@ func buildSFTPPutPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	if err != nil {
 		return sftpCLIPlan{}, err
 	}
-	if !path.IsAbs(called.Destination) {
-		return sftpCLIPlan{}, errSFTPRemotePath
+	destination, err := resolveSFTPRemotePath(ctx, engine, called.Alias, called.Destination)
+	if err != nil {
+		return sftpCLIPlan{}, err
 	}
-	source, err := filepath.Abs(called.Source)
+	source, err := resolveSFTPLocalPath(called.Source)
 	if err != nil {
 		return sftpCLIPlan{}, err
 	}
@@ -342,7 +345,6 @@ func buildSFTPPutPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	if !info.Mode().IsRegular() && !info.IsDir() {
 		return sftpCLIPlan{}, fmt.Errorf("%w: %s", errSFTPUnsupportedLocal, source)
 	}
-	destination := path.Clean(called.Destination)
 	listings := newRemoteListings(engine, called.Alias)
 	remoteDestination, remoteErr := listings.stat(ctx, destination)
 	remoteExists := remoteErr == nil
@@ -481,6 +483,34 @@ func transferableSFTPFiles(files []sftpCLIFile, skipExisting bool) []sftpCLIFile
 		}
 	}
 	return selected
+}
+
+// resolveSFTPRemotePath は、コマンドラインのリモートのパスを絶対パスにする。~ と ~/… は、
+// 起動中の sshc エンジンが SFTP サーバーのログイン先（通常はホーム）から数えて答える。
+// シェルは引用していない ~ を手元のホームに置き換えるので、sshc に ~ が届くのは
+// 利用者が '~/logs' のように引用したときだけである。
+func resolveSFTPRemotePath(ctx context.Context, engine *engineAPI, alias, typed string) (string, error) {
+	if typed == "~" || strings.HasPrefix(typed, "~/") {
+		home, err := sftpList(ctx, engine, alias, "~")
+		if err != nil {
+			return "", err
+		}
+		return path.Join(home.Path, strings.TrimPrefix(typed, "~")), nil
+	}
+	if !path.IsAbs(typed) {
+		return "", errSFTPRemotePath
+	}
+	return path.Clean(typed), nil
+}
+
+// resolveSFTPLocalPath は、コマンドラインの手元のパスを絶対パスにする。引用された ~ は、
+// シェルの代わりに手元のホームへ置き換える。
+func resolveSFTPLocalPath(typed string) (string, error) {
+	expanded, err := platform.ExpandTypedHome(typed)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Abs(expanded)
 }
 
 func sftpList(ctx context.Context, engine *engineAPI, alias, remotePath string) (httpserver.SFTPListing, error) {

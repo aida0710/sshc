@@ -49,7 +49,7 @@ var (
 	// guess at a directory the person may have mistyped.
 	errSFTPRemoteDirectoryMissing = errors.New("the remote directory does not exist")
 	errSFTPMissingRevision        = errors.New("download response has no revision")
-	errSFTPRemotePath             = errors.New("remote path must be absolute")
+	errSFTPRemotePath             = errors.New("remote path must be absolute or start with ~/")
 	errSFTPRecursiveLimit         = errors.New("recursive download safety limit exceeded")
 	// A remote entry whose name cannot be one file name on this machine, such
 	// as "a/b", or on Windows "CON" or "a:b". The engine's own get refuses the
@@ -331,7 +331,7 @@ func writeHumanSFTPFailure(stderr io.Writer, failure commandFailure, cause error
 	case "remote_directory_missing":
 		fmt.Fprintf(stderr, "sshc: %v; create it first or put a directory with --recursive\n", cause)
 	case "invalid_remote_path":
-		fmt.Fprintln(stderr, "sshc: remote paths must be absolute POSIX paths")
+		fmt.Fprintln(stderr, "sshc: remote paths must be absolute POSIX paths or start with ~/ (quote it, as in '~/logs', so that the shell does not replace it with the local home)")
 	case "recursive_limit":
 		fmt.Fprintf(stderr, "sshc: %v; choose a narrower source or raise the recursive limit explicitly\n", cause)
 	case "local_not_found":
