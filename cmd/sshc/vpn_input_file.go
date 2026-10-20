@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"strings"
 
+	"sshc/internal/platform"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnrefusal"
 )
@@ -27,18 +26,14 @@ type vpnInputFile struct {
 	field string
 }
 
-// readVPNInputFile は、ファイルを上限の長さまで読む。先頭の ~/ はホーム
-// ディレクトリとして読む。ターミナルの入力はシェルを通らないので、~ は展開されない。
+// readVPNInputFile は、ファイルを上限の長さまで読む。先頭の ~ と ~/（Windows では ~\ も）は
+// ホームディレクトリとして読む。ターミナルの入力はシェルを通らないので、~ は展開されない。
 //
 // 設定ファイルは鍵を含みうるので []byte で返す。呼び出し側が使い終わったら消す。
 func readVPNInputFile(wanted vpnInputFile) ([]byte, error) {
-	path := wanted.path
-	if rest, found := strings.CutPrefix(path, "~/"); found {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, unreadableVPNInputFile(wanted, path, err)
-		}
-		path = filepath.Join(home, rest)
+	path, err := platform.ExpandTypedHome(wanted.path)
+	if err != nil {
+		return nil, unreadableVPNInputFile(wanted, wanted.path, err)
 	}
 	file, err := os.Open(path)
 	if err != nil {
