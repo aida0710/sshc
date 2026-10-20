@@ -97,7 +97,13 @@ func validatePathParameter(value string) error {
 	if strings.HasPrefix(value, "/") || strings.ContainsAny(value, "\x00\n\r") {
 		return errInvalidPath
 	}
-	for _, segment := range strings.Split(value, "/") {
+	segments := strings.Split(value, "/")
+	// ~ で始まるパスは、利用者がホームから書いたものである。~/.ssh からの相対パスとして
+	// つなぐと、~/.ssh の中に ~ という名前のフォルダができてしまう。
+	if segments[0] == "~" {
+		return errInvalidPath
+	}
+	for _, segment := range segments {
 		if segment == "" || segment == "." || segment == ".." {
 			return errInvalidPath
 		}
