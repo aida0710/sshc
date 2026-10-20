@@ -18,7 +18,8 @@ $target = Join-Path $installed 'sshc.exe'
 $receiptPath = Join-Path $installed '.sshc-install-receipt.json'
 $uninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\sshc'
 $environmentNames = @('PATH', 'USERPROFILE', 'HOME', 'SSHC_INSTALL_TESTING', 'SSHC_TEST_RELEASE_DIR',
-    'SSHC_INSTALL_DIR', 'SSHC_ADD_TO_PATH', 'SSHC_VERSION', 'SSHC_INSTALL_CALLER', 'SSHC_SMOKE_GH_LOG', 'SSHC_SMOKE_GH_FAIL')
+    'SSHC_INSTALL_DIR', 'SSHC_ADD_TO_PATH', 'SSHC_VERSION', 'SSHC_INSTALL_CALLER', 'SSHC_SMOKE_GH_LOG', 'SSHC_SMOKE_GH_FAIL',
+    'SSHC_SMOKE_OLDER_SSHC_STOP_SIGNAL')
 $originalEnvironment = @{}
 foreach ($name in $environmentNames) { $originalEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $environmentKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
@@ -56,9 +57,24 @@ function Invoke-Installer {
     & (Join-Path $root 'install.ps1')
 }
 
+# Fixtures are built from Go source so they run as native executables, as the programs they stand in for do.
+function Build-GoFixture([string]$Name, [string]$Source, [string]$Output) {
+    $sourcePath = Join-Path $fixture "$Name.go"
+    [System.IO.File]::WriteAllText($sourcePath, $Source)
+    go build -o $Output $sourcePath
+    if ($LASTEXITCODE -ne 0) { throw "could not build $Name fixture" }
+}
+
+function Assert-OlderSshcReplaced {
+    $installedVersion = (& $target version).Trim()
+    if ($installedVersion -cne "sshc $ExpectedVersion windows/$goarch") { throw "older sshc was not replaced: $installedVersion" }
+    if ([System.IO.File]::ReadAllText($receiptPath) -cne $receiptBefore) { throw 'replacing an older sshc changed the receipt' }
+}
+
 # Waiting on a process handle verifies exit without a fixed delay.
 $engineExitTimeoutMilliseconds = 45000
 $engine = $null
+$olderEngine = $null
 try {
     New-Item -ItemType Directory -Path $release, $installed, $smokeProfile, $shadow, $tools | Out-Null
     $assets = @(Get-ChildItem -LiteralPath $dist -Filter 'sshc-windows-*.exe' -File)
@@ -74,8 +90,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $release "sshc-windows-$goarch.exe") -Destination (Join-Path $shadow 'sshc.exe')
     # gh is stubbed because CI binaries have not yet received release attestations.
     # Verify both attestation calls and fail closed when verification fails.
-    $githubFixture = Join-Path $fixture 'gh.go'
-    [System.IO.File]::WriteAllText($githubFixture, @'
+    Build-GoFixture 'gh' @'
 package main
 import ("fmt"; "os"; "strings")
 func main() {
@@ -87,9 +102,40 @@ func main() {
     log.Close()
     if os.Getenv("SSHC_SMOKE_GH_FAIL") == "1" { os.Exit(1) }
 }
-'@)
-    go build -o (Join-Path $tools 'gh.exe') $githubFixture
-    if ($LASTEXITCODE -ne 0) { throw 'could not build gh fixture' }
+'@ (Join-Path $tools 'gh.exe')
+    # An sshc before v0.42.0 prints nothing on standard output when status cannot reach its
+    # engine, and its service status fails on Windows (as v0.32.0 does). Those releases have
+    # no stop either; this one has, so the installer can stop linger, its stand-in engine.
+    $olderSshc = Join-Path $fixture 'older-sshc.exe'
+    Build-GoFixture 'older-sshc' @'
+package main
+import ("fmt"; "os"; "strings"; "time")
+// Longer than the installer's 45 s wait for exit, so only stop can end linger in time.
+const lingerLimit = 3 * time.Minute
+func main() {
+    arguments := strings.Join(os.Args[1:], " ")
+    stopSignal := os.Getenv("SSHC_SMOKE_OLDER_SSHC_STOP_SIGNAL")
+    switch arguments {
+    case "status", "status --json":
+        fmt.Fprintln(os.Stderr, `sshc: Get "http://127.0.0.1:49152/cli/status": dial tcp 127.0.0.1:49152: connectex: No connection could be made because the target machine actively refused it.`)
+        os.Exit(1)
+    case "service status":
+        fmt.Fprintln(os.Stderr, "sshc: service is unavailable: managed user services are supported only on Linux and macOS")
+        os.Exit(1)
+    case "stop":
+        if stopSignal == "" { fmt.Fprintln(os.Stderr, "SSHC_SMOKE_OLDER_SSHC_STOP_SIGNAL is not set"); os.Exit(1) }
+        if err := os.WriteFile(stopSignal, nil, 0600); err != nil { panic(err) }
+    case "linger":
+        for deadline := time.Now().Add(lingerLimit); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+            if _, err := os.Stat(stopSignal); err == nil { return }
+        }
+        os.Exit(1)
+    default:
+        fmt.Fprintf(os.Stderr, "older sshc fixture: unexpected arguments %q\n", arguments)
+        os.Exit(2)
+    }
+}
+'@ $olderSshc
     $env:PATH = "$tools;$shadow;$env:PATH"
     $env:USERPROFILE = $smokeProfile
     $env:HOME = $smokeProfile
@@ -101,6 +147,7 @@ func main() {
     $env:SSHC_INSTALL_CALLER = ''
     $env:SSHC_SMOKE_GH_LOG = Join-Path $fixture 'gh.log'
     $env:SSHC_SMOKE_GH_FAIL = ''
+    $env:SSHC_SMOKE_OLDER_SSHC_STOP_SIGNAL = Join-Path $fixture 'older-sshc-stop-signal'
     $rawPath = '%USERPROFILE%\tools;C:\Windows'
     $environmentKey.SetValue('Path', "$rawPath;$($installed.ToUpperInvariant())\", [Microsoft.Win32.RegistryValueKind]::ExpandString)
 
@@ -182,6 +229,29 @@ func main() {
     $engine.Dispose()
     $engine = $null
 
+    # An older sshc that cannot report its engine is replaced when nothing runs from it.
+    Copy-Item -LiteralPath $olderSshc -Destination $target -Force
+    Invoke-Installer
+    Assert-OlderSshcReplaced
+
+    # One running from the installed path is stopped first, and the new engine is started in its place.
+    Copy-Item -LiteralPath $olderSshc -Destination $target -Force
+    Remove-Item -LiteralPath $env:SSHC_SMOKE_OLDER_SSHC_STOP_SIGNAL -Force -ErrorAction SilentlyContinue
+    $olderEngine = Start-Process -FilePath $target -ArgumentList 'linger' -NoNewWindow -PassThru
+    $null = $olderEngine.Handle
+    Invoke-Installer
+    # The installer waits for the process to exit before it replaces the image.
+    if (-not $olderEngine.HasExited -or $olderEngine.ExitCode -ne 0) { throw 'installer did not stop the older sshc' }
+    $olderEngine.Dispose()
+    $olderEngine = $null
+    Assert-OlderSshcReplaced
+    $engine = Get-Process -Id ((Get-Content -LiteralPath $handoffPath -Raw | ConvertFrom-Json).pid)
+    $null = $engine.Handle
+    & $target stop
+    if (-not $engine.WaitForExit($engineExitTimeoutMilliseconds)) { throw 'engine started in place of the older sshc did not exit' }
+    $engine.Dispose()
+    $engine = $null
+
     foreach ($failure in @('checksum', 'attestation')) {
         if ($failure -eq 'checksum') {
             $bad = $checksumLines | ForEach-Object {
@@ -234,6 +304,11 @@ func main() {
 }
 finally {
     try {
+        # linger would end by itself, but not before the fixture below is removed.
+        if ($null -ne $olderEngine -and -not $olderEngine.HasExited) {
+            $olderEngine.Kill()
+            $null = $olderEngine.WaitForExit($engineExitTimeoutMilliseconds)
+        }
         if ($null -ne $engine -and -not $engine.HasExited -and (Test-Path -LiteralPath $target)) {
             & $target stop
             if (-not $engine.WaitForExit($engineExitTimeoutMilliseconds)) { throw 'smoke engine did not exit during cleanup' }

@@ -350,6 +350,9 @@ function Get-SshcTask {
 }
 
 function Get-EnabledService([string]$Target) {
+    # Without this account's task there is no service to resume. sshc before v0.48.0 cannot
+    # create the task, and its service status fails on Windows, so it is not asked.
+    if ($null -eq (Get-SshcTask)) { return $null }
     $serviceStatus = (& $Target service status | Out-String)
     if ($LASTEXITCODE -ne 0) { Stop-Install "could not inspect the sshc service: $serviceStatus" }
     if ($serviceStatus -match 'service is not installed') { return $null }
