@@ -148,6 +148,7 @@ export const ja = {
   "sftp.noHosts": "保存済みホストなし",
   "sftp.chooseHost": "ホストを選択",
   "sftp.chooseHostHint": "ローカルか保存済みのSSHホストを選択してください。SSHホストは選ぶと接続します。",
+  "sftp.chooseHostAction": "接続先を選択",
   "sftp.connect": "接続",
   "sftp.connecting": "{alias}に接続しています…",
   "sftp.readyToConnect": "{alias}は未接続です",

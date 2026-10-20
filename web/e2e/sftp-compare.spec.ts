@@ -17,7 +17,7 @@ test("compares engine-local directory metadata without offering a write operatio
   });
   await openApplication(page, installation);
   await openSection(page, "SFTP");
-  await openSecondSFTPPane(page, "New tab");
+  await openSecondSFTPPane(page, "New tab", "Local");
   for (const [index, directory] of ["compare-left", "compare-right"].entries()) {
     const pane = page.getByRole("tabpanel").nth(index);
     await openLocalSFTPDirectory({ page, pane, directory: join(installation.home, ".ssh", directory) });
@@ -54,7 +54,7 @@ test("SHA256 comparison finds different contents with identical size and modific
   });
   await openApplication(page, installation);
   await openSection(page, "SFTP");
-  await openSecondSFTPPane(page, "New tab");
+  await openSecondSFTPPane(page, "New tab", "Local");
   for (const [index, directory] of ["hash-left", "hash-right"].entries()) {
     const pane = page.getByRole("tabpanel").nth(index);
     await openLocalSFTPDirectory({ page, pane, directory: join(installation.home, ".ssh", directory) });

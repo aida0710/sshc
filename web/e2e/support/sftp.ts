@@ -30,13 +30,15 @@ export async function openLocalSFTPDirectory({ page, pane, directory }: {
   await pathInput.press("Enter");
 }
 
-// Opens the second SFTP pane the way a user does: a blank tab is added to the
-// left pane and dragged onto the right half of that pane, which moves the tab
-// into a new pane on the right. `newTabLabel` is the "+" button's name in the
-// language the page is showing.
-export async function openSecondSFTPPane(page: Page, newTabLabel: string): Promise<void> {
+// Opens the second SFTP pane the way a user does: "+" on the left pane asks for
+// the connection, the tab it adds is dragged onto the right half of that pane,
+// and the tab moves into a new pane on the right. `newTabLabel` is the "+"
+// button's name in the language the page is showing, and `connection` is the
+// name the connection picker shows (an alias, or Local in that language).
+export async function openSecondSFTPPane(page: Page, newTabLabel: string, connection: string): Promise<void> {
   const leftStrip = page.locator("[data-sftp-pane-tabs]").first();
   await leftStrip.getByRole("button", { name: newTabLabel, exact: true }).click();
+  await page.getByRole("dialog").getByText(connection, { exact: true }).click();
   const content = page.locator("[data-sftp-pane-content]").first();
   const bounds = await content.boundingBox();
   if (bounds === null) throw new Error("the SFTP pane is not visible");

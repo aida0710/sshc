@@ -112,6 +112,7 @@ export function SFTPPanel({
   onOpenTerminal,
   onQueueOpen,
   hostPickerRequest,
+  onChooseHost,
 }: {
   aliases: string[];
   hosts?: HostEntry[];
@@ -136,6 +137,8 @@ export function SFTPPanel({
   onOpenTerminal?: ((alias: string, path: string) => void | Promise<void>) | undefined;
   onQueueOpen?: () => void;
   hostPickerRequest?: number;
+  // onChooseHost opens the connection picker from the empty pane, when the picker has no button of its own here.
+  onChooseHost?: () => void;
 }) {
   const t = useTranslate();
   const [searchOptionsOpen, setSearchOptionsOpen] = useState(false);
@@ -663,7 +666,8 @@ export function SFTPPanel({
           {connected && pendingPath !== null ? <div role="status" className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-card/80 p-4 backdrop-blur-[1px]"><span className="flex min-w-0 items-center gap-3 rounded-lg bg-toolbar px-4 py-3 text-sm"><span aria-hidden="true" className="size-4 shrink-0 animate-spin rounded-full border-2 border-accent border-t-transparent motion-reduce:animate-none" /><span className="min-w-0"><span className="block">{loadingLabel}</span><span className="block truncate font-mono text-xs text-ink-muted">{pendingPath || t("sftp.homeDirectory")}</span></span></span></div> : null}
           <div data-testid="sftp-file-list" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" inert={connected && busy} onKeyDown={list.handleListKeys}>
             {alias === "" || can === undefined ? (
-              <div className="flex h-full p-4"><EmptyState icon="files" title={t("sftp.chooseHost")} detail={t("sftp.chooseHostHint")} /></div>
+              <div className="flex h-full p-4"><EmptyState icon="files" title={t("sftp.chooseHost")} detail={t("sftp.chooseHostHint")}
+                {...(onChooseHost === undefined ? {} : { action: <Button kind="primary" onClick={onChooseHost}>{t("sftp.chooseHostAction")}</Button> })} /></div>
             ) : !connected && busy ? (
               <PanelState tone="loading" title={can.connect ? t("sftp.connecting", { alias }) : loadingLabel} />
             ) : !connected && problem !== "" ? (
