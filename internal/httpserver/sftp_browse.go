@@ -22,8 +22,12 @@ func (h SFTPHandlers) ListLocal(c *echo.Context) error {
 }
 
 func (h SFTPHandlers) List(c *echo.Context) error {
-	remotePath := c.QueryParam("path")
-	listing, err := h.Service.ListDirectory(c.Request().Context(), c.Param("alias"), remotePath)
+	ctx, finishAttempt, err := h.observeConnection(c)
+	if err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	listing, err := h.Service.ListDirectory(ctx, c.Param("alias"), c.QueryParam("path"))
+	finishAttempt(err)
 	if err != nil {
 		return sftpProblem(c, err)
 	}

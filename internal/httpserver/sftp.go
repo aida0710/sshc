@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"sshc/internal/connectionattempt"
 	"sshc/internal/session"
 	sshcSFTP "sshc/internal/sftp"
 )
@@ -15,6 +16,8 @@ type SFTPHandlers struct {
 	Service   *sshcSFTP.Service
 	Transfers *sshcSFTP.TransferManager
 	Actions   ActionHandlers
+	// Attempts は、一覧の要求が張る接続の段階と接続ログを、要求が返る前に読めるよう預かる。
+	Attempts *connectionattempt.Registry
 }
 
 func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
@@ -36,6 +39,7 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.POST("/api/v1/sftp/local/delete-plan", handlers.PlanLocalDelete)
 	engine.POST("/api/v1/sftp/local/delete", handlers.DeleteLocal)
 	engine.GET("/api/v1/sftp/:alias/entries", handlers.List)
+	engine.GET("/api/v1/sftp/:alias/connection-attempts/:attempt", handlers.ConnectionAttempt)
 	engine.POST("/api/v1/sftp/:alias/entries", handlers.CreateEntry)
 	engine.GET("/api/v1/sftp/:alias/stats", handlers.DirectoryStats)
 	engine.GET("/api/v1/sftp/:alias/preview", handlers.Preview)

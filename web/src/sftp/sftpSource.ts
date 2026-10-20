@@ -1,4 +1,4 @@
-import { sftpApi, type RemoteEntry } from "./api";
+import { sftpApi, type RemoteEntry, type SFTPListOptions } from "./api";
 import { localHostAlias } from "./localHost";
 import { localMutationApi } from "./localMutationApi";
 
@@ -38,7 +38,7 @@ export type SFTPSource = {
   alias: string;
   local: boolean;
   can: SFTPCapabilities;
-  list(path: string): Promise<SFTPListing>;
+  list(path: string, options?: SFTPListOptions): Promise<SFTPListing>;
   mkdir(directory: string, name: string): Promise<RemoteEntry>;
   rename(entry: RemoteEntry, name: string): Promise<RemoteEntry>;
   // Immediate filesystem deletion, instead of a remote transfer job.
@@ -76,7 +76,7 @@ export function remoteSource(alias: string): SFTPSource {
     alias,
     local: false,
     can: remoteCapabilities,
-    list: (path) => sftpApi.list(alias, path),
+    list: (path, options) => (options === undefined ? sftpApi.list(alias, path) : sftpApi.list(alias, path, options)),
     mkdir: (directory, name) => sftpApi.mkdir(alias, remoteJoin(directory, name)),
     rename: (entry, name) => sftpApi.rename(alias, entry.path, remoteJoin(remoteParentOf(entry.path), name)),
     parentOf: remoteParentOf,

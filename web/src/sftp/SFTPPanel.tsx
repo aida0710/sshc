@@ -27,6 +27,8 @@ import { TransferManagerList } from "./TransferManagerList";
 import { sftpTransferManager } from "./transferManager";
 import { remoteParentOf } from "./sftpSource";
 import { useSFTPBrowser, type RestoredSFTPLocation } from "./useSFTPBrowser";
+import { SFTPConnectionStatus } from "./SFTPConnectionStatus";
+import { connectionStageText } from "../shell/connectionStageText";
 import { SFTPEntryActionDialogs } from "./SFTPEntryActionDialogs";
 import { useSFTPEntryActions } from "./useSFTPEntryActions";
 import { useSFTPSearch } from "./useSFTPSearch";
@@ -669,11 +671,17 @@ export function SFTPPanel({
               <div className="flex h-full p-4"><EmptyState icon="files" title={t("sftp.chooseHost")} detail={t("sftp.chooseHostHint")}
                 {...(onChooseHost === undefined ? {} : { action: <Button kind="primary" onClick={onChooseHost}>{t("sftp.chooseHostAction")}</Button> })} /></div>
             ) : !connected && busy ? (
-              <PanelState tone="loading" title={can.connect ? t("sftp.connecting", { alias }) : loadingLabel} />
+              <SFTPConnectionStatus
+                tone="loading"
+                title={browser.connection?.progress !== undefined ? connectionStageText(t, browser.connection.progress)
+                  : can.connect ? t("sftp.connecting", { alias }) : loadingLabel}
+                log={browser.connection?.log ?? []}
+              />
             ) : !connected && problem !== "" ? (
-              <PanelState
+              <SFTPConnectionStatus
                 tone="failed"
                 title={problem}
+                log={browser.connection?.log ?? []}
                 action={<Button onClick={() => void browser.retry()}>{t("sftp.retry")}</Button>}
               />
             ) : !connected && can.connect ? (

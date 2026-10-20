@@ -1549,6 +1549,15 @@ type SFTPChmodSelectionRequest struct {
 // SFTPComparisonMode defines model for SFTPComparisonMode.
 type SFTPComparisonMode string
 
+// SFTPConnectionAttempt defines model for SFTPConnectionAttempt.
+type SFTPConnectionAttempt struct {
+	Finished bool `json:"finished"`
+
+	// Log Connection log lines at the configured verbosity, oldest first, without line endings. A failed attempt ends with the reason.
+	Log      []string                    `json:"log"`
+	Progress *TerminalConnectionProgress `json:"progress,omitempty"`
+}
+
 // SFTPCreateEntryRequest defines model for SFTPCreateEntryRequest.
 type SFTPCreateEntryRequest struct {
 	Path string                     `json:"path"`

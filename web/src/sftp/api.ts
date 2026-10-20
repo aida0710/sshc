@@ -1,5 +1,5 @@
 import { localHostAlias } from "./localHost";
-import { apiClient } from "../api/client";
+import { apiClient, failureCode } from "../api/client";
 import { issueAction, patchJSON, postJSON, putJSON, sendJSON } from "../api/guards";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
@@ -27,6 +27,13 @@ export type TransferJobList = components["schemas"]["SFTPTransferJobList"];
 export type RemoteSearchResult = components["schemas"]["SFTPSearchResult"];
 export type DirectoryComparison = components["schemas"]["SFTPDirectoryComparison"];
 export type RemoteDirectoryStats = components["schemas"]["SFTPDirectoryStats"];
+export type SFTPConnectionAttempt = components["schemas"]["SFTPConnectionAttempt"];
+
+export type SFTPListOptions = {
+  // attempt names the SSH connection this listing may have to open, so that
+  // connectionAttempt can report its stage and log before the listing returns.
+  attempt?: string;
+};
 
 export type RemotePreview = {
   contentType: string;
@@ -40,6 +47,9 @@ export type RemotePreview = {
 // (sftpProblemText), and the details dialog marks the value unavailable. The
 // application-wide failure notice on top would repeat it.
 const connectionProblems = ["sftp_failed", "sftp_connection_lost", ...vpnProblemCodes];
+
+// A listing that has not begun connecting yet has left nothing to read.
+const connectionAttemptNotFound = "sftp_connection_attempt_not_found";
 
 // preview が返しうる問題は、詳細モーダルがその場で言葉にする。共通の失敗
 // 通知まで重ねると、preview できない普通のファイルを開くたびに全画面の
@@ -167,13 +177,29 @@ export const sftpApi = {
     const response = await apiClient.send(endpoint, { method: "GET", headers: { "If-Range": revision } });
     if (response.status !== 204) throw new Error("download_changed");
   },
-  async list(alias: string, remotePath = ""): Promise<{ path: string; entries: RemoteEntry[] }> {
-    const endpoint = remotePath === ""
+  async list(alias: string, remotePath = "", { attempt }: SFTPListOptions = {}): Promise<{ path: string; entries: RemoteEntry[] }> {
+    const listing = remotePath === ""
       ? `/api/v1/sftp/${encodeURIComponent(alias)}/entries`
       : pathFor(alias, "entries", remotePath);
+    const endpoint = attempt === undefined
+      ? listing
+      : `${listing}${listing.includes("?") ? "&" : "?"}attempt=${encodeURIComponent(attempt)}`;
     return validateOpenAPISchema<components["schemas"]["SFTPListing"]>("SFTPListing", await apiClient.read(endpoint, {
       locallyHandledCodes: connectionProblems,
     }));
+  },
+  // connectionAttempt returns the stage and connection log of the listing that
+  // named this attempt, or null while that listing has not begun connecting.
+  async connectionAttempt(alias: string, attempt: string): Promise<SFTPConnectionAttempt | null> {
+    const endpoint = `/api/v1/sftp/${encodeURIComponent(alias)}/connection-attempts/${encodeURIComponent(attempt)}`;
+    try {
+      return validateOpenAPISchema<SFTPConnectionAttempt>("SFTPConnectionAttempt", await apiClient.read(endpoint, {
+        locallyHandledCodes: [connectionAttemptNotFound],
+      }));
+    } catch (error) {
+      if (failureCode(error) === connectionAttemptNotFound) return null;
+      throw error;
+    }
   },
   async search({ alias, path, query, mode = "name", signal }: SearchOptions): Promise<RemoteSearchResult> {
     const parameters = new URLSearchParams({ path, query, mode });

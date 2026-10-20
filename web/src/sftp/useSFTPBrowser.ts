@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { sftpProblemText } from "./sftpProblemText";
-import type { RemoteEntry } from "./api";
+import type { RemoteEntry, SFTPConnectionAttempt } from "./api";
+import { watchConnectionAttempt } from "./sftpConnectionAttempt";
 import { localHostAlias } from "./localHost";
 import { sourceFor, type SFTPListing } from "./sftpSource";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
@@ -57,6 +58,9 @@ export function useSFTPBrowser({
   const [entries, setEntries] = useState<RemoteEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
+  // connection is what the engine reported while this pane connected: the stage
+  // while it waits, and the log it keeps showing when the connection failed.
+  const [connection, setConnection] = useState<SFTPConnectionAttempt | null>(null);
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [navigation, setNavigation] = useState<{ paths: string[]; index: number }>({ paths: [], index: -1 });
   const loadGeneration = useRequestGeneration();
@@ -64,8 +68,8 @@ export function useSFTPBrowser({
   const openedInitialLocation = useRef(false);
   const reportLocation = useRef(onLocationChange);
   reportLocation.current = onLocationChange;
-  const latest = useRef({ alias, path });
-  latest.current = { alias, path };
+  const latest = useRef({ alias, path, connected });
+  latest.current = { alias, path, connected };
   const source = useMemo(() => sourceFor(alias), [alias]);
 
   function knownHost(candidate: string): boolean {
@@ -86,9 +90,16 @@ export function useSFTPBrowser({
     setBusy(true);
     setPendingPath(nextPath);
     setProblem("");
+    // A listing for a host this pane is not connected to opens the SSH
+    // connection, which the engine reports while it lasts.
+    const connecting = !target.local && (!latest.current.connected || targetAlias !== latest.current.alias);
+    const watch = connecting ? watchConnectionAttempt(targetAlias, (reading) => { if (isCurrent()) setConnection(reading); }) : null;
+    if (connecting) setConnection(null);
     try {
-      const listing = await target.list(nextPath);
+      const listing = await (watch === null ? target.list(nextPath) : target.list(nextPath, { attempt: watch.attempt }));
+      void watch?.stop({ readFinal: false });
       if (!isCurrent()) return null;
+      setConnection(null);
       const changed = listing.path !== latest.current.path || targetAlias !== latest.current.alias;
       setPath(listing.path);
       setHome(listing.home);
@@ -105,6 +116,7 @@ export function useSFTPBrowser({
       onLoaded?.(listing, { refresh, changed });
       return listing.entries;
     } catch (error) {
+      await watch?.stop({ readFinal: true });
       if (!isCurrent()) return null;
       if (!target.local && failureCode(error) === "sftp_failed") {
         setProblem(t("sftp.connectionFailed"));
@@ -159,10 +171,11 @@ export function useSFTPBrowser({
     setEntries([]);
     setNavigation({ paths: [], index: -1 });
     setProblem("");
+    setConnection(null);
     setBusy(false);
     setPendingPath(null);
     onReset?.();
-    latest.current = { alias: nextAlias, path: "" };
+    latest.current = { alias: nextAlias, path: "", connected: false };
   }
 
   // Choosing a host is the request to use it, so an SSH host connects here
@@ -183,7 +196,7 @@ export function useSFTPBrowser({
     setAlias(initialLocation.alias);
     setPath(initialLocation.path);
     setConnected(false);
-    latest.current = { alias: initialLocation.alias, path: initialLocation.path };
+    latest.current = { alias: initialLocation.alias, path: initialLocation.path, connected: false };
     // Tabs restored from storage remember where they were, but never open an
     // SSH connection until the user explicitly presses Connect. The engine's
     // own disk needs no connection, and a tab that was connected when it moved
@@ -219,6 +232,7 @@ export function useSFTPBrowser({
     busy,
     problem,
     setProblem,
+    connection,
     pendingPath,
     listingFailed,
     atRoot,

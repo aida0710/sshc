@@ -148,6 +148,7 @@ export const en = {
   "sftp.chooseHostAction": "Choose a connection",
   "sftp.connect": "Connect",
   "sftp.connecting": "Connecting to {alias}…",
+  "sftp.connectionLog": "Connection log",
   "sftp.readyToConnect": "{alias} is disconnected",
   "sftp.connectHint": "SFTP does not connect just because you opened the screen or restored a saved tab.",
   "sftp.loading": "Reading the remote directory…",
