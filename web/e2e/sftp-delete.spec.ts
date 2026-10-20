@@ -36,7 +36,7 @@ for (const layout of deletionLayouts) {
     if (layout.mobile) await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "SFTP", exact: true }).click();
     else await openSection(page, "SFTP");
     await connectSFTPHost(page, "bastion");
-    if (layout.secondPane) await openSecondSFTPPane(page, "New tab");
+    if (layout.secondPane) await openSecondSFTPPane(page, "New tab", "Local");
     const pane = page.getByRole("tabpanel").first();
 
     for (const entry of deletionEntries) {

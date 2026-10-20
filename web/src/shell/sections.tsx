@@ -1,10 +1,11 @@
-import { lazy } from "react";
+import { Suspense, lazy } from "react";
 import { OverviewPanel } from "../overview/OverviewPanel";
 import { sectionPath, type Section } from "../routing/sectionRoute";
 import { parseSettingsPage, settingsPageMeta, settingsPages } from "../settings/settingsRoute";
 import type { IconName } from "../ui/icons";
 import type { MessageKey } from "../i18n/messages";
 import type { SFTPTarget } from "../sftp/SFTPPanel";
+import { RouteSkeleton } from "../ui/RouteSkeleton";
 import { SectionBar } from "../ui/SectionBar";
 import { useTranslate } from "../i18n/context";
 import { MenuPanel, type MenuGroup } from "./MenuPanel";
@@ -238,13 +239,13 @@ export function SectionView(props: SectionViewProps) {
     );
   }
   if (props.section === "Files") {
+    // 帯は比較のボタンと一緒に SFTPWorkspace が描く。SFTPWorkspace を読み込むあいだも帯は出しておく。
+    // Connections と同じく余白を取らず、帯・タブ・一覧・転送マネージャーの境目は線だけにする。
     return (
-      <div className="flex h-full min-h-0 flex-col">
-        <SectionBar title={t(sectionLabels.Files)} />
-        {/* Connections と同じく余白を取らず、帯・タブ・一覧・転送マネージャーの境目は線だけにする。 */}
-        <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="h-full min-h-0 overflow-hidden">
+        <Suspense fallback={<div className="flex h-full min-h-0 flex-col"><SectionBar title={t(sectionLabels.Files)} /><RouteSkeleton /></div>}>
           <PaddedSection {...props} />
-        </div>
+        </Suspense>
       </div>
     );
   }
@@ -264,6 +265,7 @@ function PaddedSection({
   sftpTarget,
   onSftpTargetHandled,
 }: SectionViewProps) {
+  const t = useTranslate();
   const { fileTarget, onNavigateLocation } = navigation;
   const {
     onLock,
@@ -297,6 +299,7 @@ function PaddedSection({
   if (section === "Files") {
     return (
       <SFTPWorkspace
+        title={t(sectionLabels.Files)}
         aliases={declared.knownAliases}
         hosts={declared.hosts}
         hostVPN={declared.hostVPN}

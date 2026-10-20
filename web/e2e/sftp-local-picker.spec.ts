@@ -26,7 +26,7 @@ test("selects the pinned Local destination beside an SSH host", async ({ page, i
   await (await sftpHostPicker(page, first)).click();
   await page.getByRole("dialog").getByText("bastion", { exact: true }).click();
   await expect(first.getByRole("button", { name: "README.md" })).toBeVisible();
-  await openSecondSFTPPane(page, "新しいタブ");
+  await openSecondSFTPPane(page, "新しいタブ", "bastion");
   const second = page.getByLabel("2つ目のリモートペイン");
   await (await sftpHostPicker(page, second)).click();
   const picker = page.getByRole("dialog");

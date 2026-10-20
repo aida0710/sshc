@@ -145,6 +145,7 @@ export const en = {
   "sftp.noHosts": "No saved hosts",
   "sftp.chooseHost": "Select a host",
   "sftp.chooseHostHint": "Choose Local or a saved SSH host. An SSH host connects when you choose it.",
+  "sftp.chooseHostAction": "Choose a connection",
   "sftp.connect": "Connect",
   "sftp.connecting": "Connecting to {alias}…",
   "sftp.readyToConnect": "{alias} is disconnected",

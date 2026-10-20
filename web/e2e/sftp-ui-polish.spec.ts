@@ -165,6 +165,7 @@ test("adds a compact file tab and preserves both directories and selections with
   await page.setViewportSize({ width: 390, height: 640 });
   await expectCompactControls(page);
   await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.getByRole("dialog").getByText("Local", { exact: true }).click();
   await openLocalSFTPDirectory({ page, pane: page.getByRole("tabpanel"), directory: secondPath });
   const strip = page.getByRole("tablist", { name: "File tabs", exact: true });
   await expect(strip.getByRole("tab")).toHaveCount(2);
