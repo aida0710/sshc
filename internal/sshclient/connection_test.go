@@ -3,13 +3,17 @@ package sshclient_test
 import (
 	"context"
 	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 
+	"sshc/internal/connectionlog"
 	"sshc/internal/knownhosts"
 	"sshc/internal/sshclient"
+	"sshc/internal/terminal"
 	"sshc/internal/testwait"
 )
 
@@ -151,4 +155,62 @@ func TestSubsystemConnectionClosesWhenKeepAlivesGoUnanswered(t *testing.T) {
 	if got := server.KeepAlives(); got < 1 {
 		t.Fatalf("the server saw %d keepalives before the close", got)
 	}
+}
+
+// lockedLog は、接続ログを受け取る書き先である。keepalive も同じ書き先へ書くことがある。
+type lockedLog struct {
+	mutex sync.Mutex
+	text  strings.Builder
+}
+
+func (log *lockedLog) Write(contents []byte) (int, error) {
+	log.mutex.Lock()
+	defer log.mutex.Unlock()
+	return log.text.Write(contents)
+}
+
+func (log *lockedLog) String() string {
+	log.mutex.Lock()
+	defer log.mutex.Unlock()
+	return log.text.String()
+}
+
+func TestSubsystemConnectionReportsItsStagesAndLogToAnObserver(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	dialer := dialerFor(t, server, sshclient.Auth{Password: func(sshclient.Target) (string, bool) { return "hunter2", true }})
+	dialer.Verbosity = func() connectionlog.Level { return connectionlog.Detailed }
+	var phases []string
+	log := &lockedLog{}
+	ctx := sshclient.WithConnectionObserver(context.Background(), sshclient.ConnectionObserver{
+		Progress: func(progress terminal.ConnectionProgress) { phases = append(phases, progress.Phase) },
+		Log:      log,
+	})
+
+	connection, err := dialer.Connect(ctx, targetWith(server))
+	if err != nil {
+		t.Fatalf("Connect = %v", err)
+	}
+	_ = connection.Close()
+
+	want := []string{terminal.ConnectionDialing, terminal.ConnectionHostKey, terminal.ConnectionAuthenticating, terminal.ConnectionAuthenticated}
+	if strings.Join(phases, ",") != strings.Join(want, ",") {
+		t.Errorf("phases = %v, want %v", phases, want)
+	}
+	if !strings.Contains(log.String(), "[sshc][debug") || !strings.HasSuffix(log.String(), "\r\n") {
+		t.Errorf("log = %q, want debug lines ending in CRLF as on a terminal", log.String())
+	}
+}
+
+func TestSubsystemConnectionWithoutAnObserverWritesNothing(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	dialer := dialerFor(t, server, sshclient.Auth{Password: func(sshclient.Target) (string, bool) { return "hunter2", true }})
+	dialer.Verbosity = func() connectionlog.Level {
+		t.Error("an unobserved connection read the log setting")
+		return connectionlog.Full
+	}
+	connection, err := dialer.Connect(context.Background(), targetWith(server))
+	if err != nil {
+		t.Fatalf("Connect = %v", err)
+	}
+	_ = connection.Close()
 }

@@ -137,11 +137,7 @@ func describeSession(view terminal.View) api.TerminalSession {
 		}
 	}
 	if view.Progress != nil {
-		described.Progress = &api.TerminalConnectionProgress{
-			Phase: api.TerminalConnectionProgressPhase(view.Progress.Phase),
-			Alias: view.Progress.Alias, HostName: view.Progress.HostName,
-			User: view.Progress.User, Hop: view.Progress.Hop, Hops: view.Progress.Hops,
-		}
+		described.Progress = describeConnectionProgress(*view.Progress)
 	}
 	if view.ProgramProgress != nil {
 		var progress any
@@ -670,4 +666,13 @@ func (h TerminalHandlers) Close(c *echo.Context) error {
 	// 使われなかったチケットを、もう閉じたセッションに向けたまま残さない。
 	h.Tickets.Forget(id)
 	return c.JSON(http.StatusOK, h.list())
+}
+
+// describeConnectionProgress は、接続の段階を API の形にする。ターミナルと SFTP の接続で同じ形を使う。
+func describeConnectionProgress(progress terminal.ConnectionProgress) *api.TerminalConnectionProgress {
+	return &api.TerminalConnectionProgress{
+		Phase: api.TerminalConnectionProgressPhase(progress.Phase),
+		Alias: progress.Alias, HostName: progress.HostName,
+		User: progress.User, Hop: progress.Hop, Hops: progress.Hops,
+	}
 }
