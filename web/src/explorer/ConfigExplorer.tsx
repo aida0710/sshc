@@ -18,6 +18,7 @@ import type { BrowserLocation, NavigateLocationOptions, NavigationBlocker } from
 import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
 import { sectionPath } from "../routing/sectionRoute";
 import { ConfigFileList } from "./ConfigFileList";
+import { sshDirectoryPath } from "./sshDirectoryPath";
 import { ConfigPathActions } from "./ConfigPathActions";
 import { ConfigDiagnostics } from "./ConfigDiagnostics";
 import { ConfigFileOperations } from "./ConfigFileOperations";
@@ -54,7 +55,9 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   const [preview, setPreview] = useState<SavePreview | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [newPath, setNewPath] = useState("");
+  const [pathProblem, setPathProblem] = useState("");
   const [renameTo, setRenameTo] = useState("");
+  const [renameProblem, setRenameProblem] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [jump, setJump] = useState("");
   const [hierarchyOpen, setHierarchyOpen] = useState(false);
@@ -132,19 +135,21 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   }
 
   async function renameFile() {
-    if (file === null || file.file.path === undefined || renameTo === "") return;
+    if (file === null || file.file.path === undefined) return;
+    const destinationPath = toSSHDirectoryPath(renameTo, setRenameProblem);
+    if (destinationPath === null) return;
     try {
       const result = await configApi.save({
         kind: "file_rename",
         path: file.file.path,
         base: file.contents,
-        destinationPath: renameTo,
+        destinationPath,
       });
       setPreview(result.preview);
       setProblem(null);
       setRenameTo("");
       await reload();
-      await open(renameTo);
+      await open(destinationPath);
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
@@ -171,10 +176,22 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
     }
   }
 
+  // toSSHDirectoryPath は、欄の値を ~/.ssh からの相対パスにする。~/.ssh の外を指していれば、
+  // report で欄の下に理由を出して null を返す。
+  function toSSHDirectoryPath(typed: string, report: (problem: string) => void): string | null {
+    const resolved = sshDirectoryPath(typed);
+    if ("outside" in resolved) {
+      report(t("explorer.pathOutsideSSHDirectory"));
+      return null;
+    }
+    report("");
+    return resolved.relative === "" ? null : resolved.relative;
+  }
+
   // 作ったファイルを開くので、いまの下書きは消える。呼び手が先に破棄を確かめる。
   async function createFile() {
-    if (newPath === "") return;
-    const path = newPath;
+    const path = toSSHDirectoryPath(newPath, setPathProblem);
+    if (path === null) return;
     try {
       await configApi.save({ kind: "file_raw", path, base: "", raw: "# created by sshc\n" });
       setNewPath("");
@@ -187,9 +204,10 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   }
 
   async function createDirectory() {
-    if (newPath === "") return;
+    const path = toSSHDirectoryPath(newPath, setPathProblem);
+    if (path === null) return;
     try {
-      await configApi.save({ kind: "directory_create", path: newPath });
+      await configApi.save({ kind: "directory_create", path });
       setNewPath("");
       setProblem(null);
       await reload();
@@ -199,9 +217,10 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   }
 
   async function deleteDirectory() {
-    if (newPath === "") return;
+    const path = toSSHDirectoryPath(newPath, setPathProblem);
+    if (path === null) return;
     try {
-      await configApi.save({ kind: "directory_delete", path: newPath });
+      await configApi.save({ kind: "directory_delete", path });
       setNewPath("");
       setProblem(null);
       await reload();
@@ -303,7 +322,8 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
             <ConfigFileList files={overview.files} openPath={openPath} onOpen={requestOpen} />
             <ConfigPathActions
               path={newPath}
-              onPathChange={setNewPath}
+              problem={pathProblem}
+              onPathChange={(path) => { setNewPath(path); setPathProblem(""); }}
               onCreateFile={() => draftDiscard.confirmBefore(() => void createFile())}
               onCreateDirectory={() => void createDirectory()}
               onDeleteDirectory={() => void deleteDirectory()}
@@ -358,7 +378,8 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
                   path={file.file.path}
                   modified={modified}
                   renameTo={renameTo}
-                  onRenameToChange={setRenameTo}
+                  renameProblem={renameProblem}
+                  onRenameToChange={(path) => { setRenameTo(path); setRenameProblem(""); }}
                   onRename={() => void renameFile()}
                   onDelete={() => {
                     setProblem(null);

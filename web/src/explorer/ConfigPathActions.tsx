@@ -7,12 +7,15 @@ import { Button } from "../ui/surface";
 // 消したりする欄である。どの操作も入力したパスを使う。
 export function ConfigPathActions({
   path,
+  problem,
   onPathChange,
   onCreateFile,
   onCreateDirectory,
   onDeleteDirectory,
 }: {
   path: string;
+  // problem は、入力したパスが ~/.ssh の外を指しているときに欄の下へ出す理由である。
+  problem: string;
   onPathChange: (path: string) => void;
   onCreateFile: () => void;
   onCreateDirectory: () => void;
@@ -28,8 +31,11 @@ export function ConfigPathActions({
         value={path}
         onChange={(event) => onPathChange(event.target.value)}
         placeholder="conf.d/30-lab.conf"
+        aria-invalid={problem === "" ? undefined : true}
+        aria-describedby={problem === "" ? undefined : "new-file-path-problem"}
         className={`${control} min-h-10 font-mono text-xs md:min-h-0`}
       />
+      {problem === "" ? null : <p id="new-file-path-problem" role="alert" className="text-xs text-danger">{problem}</p>}
       <div className="flex flex-wrap gap-2">
         <Button className="min-h-10 md:min-h-0" onClick={onCreateFile} disabled={path === ""}>
           {t("explorer.createFile")}
