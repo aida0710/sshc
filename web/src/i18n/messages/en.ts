@@ -476,7 +476,7 @@ export const en = {
   "sftp.mkdirPrompt": "Folder name",
   "sftp.newFilePrompt": "File name",
   "sftp.moveToPrompt": "Destination folder",
-  "sftp.pathAbsolute": "Enter an absolute path beginning with /.",
+  "sftp.pathAbsolute": "Enter an absolute path beginning with / or a path beginning with ~/.",
   "sftp.renamePrompt": "New name",
   "sftp.nameRequired": "Enter a name.",
   "sftp.nameInvalid": "Use a single name other than . or .., without slashes or backslashes.",
