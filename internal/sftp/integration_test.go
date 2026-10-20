@@ -356,6 +356,16 @@ func TestListDirectoryStartsAtOpenSSHUserHome(t *testing.T) {
 	if listing.Path != "/config" {
 		t.Fatalf("initial path = %q, want fixture user's home /config", listing.Path)
 	}
+	// A path typed from ~ starts at the same directory and is answered absolute.
+	for typed, want := range map[string]string{"~": "/config", "~/.ssh": "/config/.ssh"} {
+		listing, err := service.ListDirectory(t.Context(), "integration", typed)
+		if err != nil {
+			t.Fatalf("list %q: %v", typed, err)
+		}
+		if listing.Path != want {
+			t.Errorf("list %q: path = %q, want %q", typed, listing.Path, want)
+		}
+	}
 }
 
 func TestServiceRoundTripsFilesAgainstOpenSSHSFTP(t *testing.T) {
