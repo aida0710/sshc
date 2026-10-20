@@ -481,7 +481,7 @@ export const ja = {
   "sftp.mkdirPrompt": "フォルダ名",
   "sftp.newFilePrompt": "ファイル名",
   "sftp.moveToPrompt": "移動先フォルダ",
-  "sftp.pathAbsolute": "/で始まる絶対パスを入力してください。",
+  "sftp.pathAbsolute": "/で始まる絶対パスか、~/で始まるパスを入力してください。",
   "sftp.renamePrompt": "新しい名前",
   "sftp.nameRequired": "名前を入力してください。",
   "sftp.nameInvalid": "「.」「..」だけの名前や、スラッシュ・バックスラッシュを含む名前は使用できません。",

@@ -419,6 +419,64 @@ describe("SFTPPanel uploads", () => {
     }
   });
 
+  it("moves selected entries to a folder typed from ~ after reading where it is", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [{ name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "file" }],
+    });
+    const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["move-one"]);
+    try {
+      render(<SFTPPanel aliases={["edge"]} />);
+      await chooseHost("edge");
+      await userEvent.click(await screen.findByRole("checkbox", { name: "Select notes.txt" }));
+      await userEvent.click(screen.getByRole("button", { name: "Actions for notes.txt" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "Move to folder" }));
+      const dialog = screen.getByRole("dialog", { name: "Move to folder" });
+      const destination = within(dialog).getByRole("textbox", { name: "Destination folder" });
+      api.list.mockResolvedValueOnce({ path: "/home/deploy/archive", entries: [] });
+      await userEvent.clear(destination);
+      await userEvent.type(destination, "~/archive");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Move" }));
+
+      await waitFor(() => expect(addRemoteTransfers).toHaveBeenCalledWith([
+        expect.objectContaining({ sourcePath: "/remote/notes.txt", targetPath: "/home/deploy/archive/notes.txt" }),
+      ], "move"));
+      expect(api.list).toHaveBeenLastCalledWith("edge", "~/archive");
+    } finally {
+      addRemoteTransfers.mockRestore();
+    }
+  });
+
+  it("says a destination typed from ~user cannot be opened and moves nothing", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [{ name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "file" }],
+    });
+    const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["move-one"]);
+    try {
+      render(<SFTPPanel aliases={["edge"]} />);
+      await chooseHost("edge");
+      await userEvent.click(await screen.findByRole("checkbox", { name: "Select notes.txt" }));
+      await userEvent.click(screen.getByRole("button", { name: "Actions for notes.txt" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "Move to folder" }));
+      const dialog = screen.getByRole("dialog", { name: "Move to folder" });
+      const destination = within(dialog).getByRole("textbox", { name: "Destination folder" });
+      await userEvent.clear(destination);
+      await userEvent.type(destination, "~deploy/archive");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Move" }));
+      expect(within(dialog).getByText("Enter an absolute path beginning with / or a path beginning with ~/.")).toBeVisible();
+
+      await userEvent.clear(destination);
+      api.list.mockRejectedValueOnce(new ApiError("invalid_request", 400, null));
+      await userEvent.type(destination, "~/../../outside");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Move" }));
+      expect(await screen.findByText("Could not open the path. Enter an absolute path or one starting with ~/.")).toBeVisible();
+      expect(addRemoteTransfers).not.toHaveBeenCalled();
+    } finally {
+      addRemoteTransfers.mockRestore();
+    }
+  });
+
   it("supports range/additive selection and copies selected names or full paths", async () => {
     api.list.mockResolvedValue({
       path: "/remote",

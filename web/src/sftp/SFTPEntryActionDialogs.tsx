@@ -3,6 +3,7 @@ import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { InputDialog } from "../ui/InputDialog";
 import { entryInputDialogText } from "./entryInputDialogText";
+import { isRemoteDirectoryInput } from "./remotePathInput";
 import type { SFTPEntryActionsModel } from "./useSFTPEntryActions";
 
 export function SFTPEntryActionDialogs({ actions, currentPath, returnFocusRef }: {
@@ -48,7 +49,7 @@ export function SFTPEntryActionDialogs({ actions, currentPath, returnFocusRef }:
           cancelLabel={t("sftp.cancel")}
           returnFocusRef={returnFocusRef}
           validate={(value) => {
-            if (inputIntent.kind === "moveTo") return value.startsWith("/") ? "" : t("sftp.pathAbsolute");
+            if (inputIntent.kind === "moveTo") return isRemoteDirectoryInput(value) ? "" : t("sftp.pathAbsolute");
             if (value === "") return t("sftp.nameRequired");
             if (value === "." || value === ".." || /[/\\\0]/.test(value)) return t("sftp.nameInvalid");
             if (inputIntent.kind === "rename" && value === inputIntent.entry.name) return t("sftp.renameUnchanged");
