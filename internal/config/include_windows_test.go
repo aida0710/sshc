@@ -32,6 +32,7 @@ func TestWindowsExpandPatternProducesNativeGlobs(t *testing.T) {
 		"relative with backslashes":                 {`conf.d\*.conf`, `C:\Users\Tester\.ssh\conf.d\*.conf`},
 		"tilde uses the home directory":             {"~/work/config", `C:\Users\Tester\work\config`},
 		"bare tilde is the home directory":          {"~", `C:\Users\Tester`},
+		"tilde with a Windows separator":            {`~\work\config`, `C:\Users\Tester\work\config`},
 		"percent d is the home directory":           {"%d/.ssh/extra", `C:\Users\Tester\.ssh\extra`},
 		"absolute drive stays absolute":             {`C:/tools/ssh_config`, `C:\tools\ssh_config`},
 		"absolute drive in native spelling":         {`C:\tools\ssh_config`, `C:\tools\ssh_config`},
