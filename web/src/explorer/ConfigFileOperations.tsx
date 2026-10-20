@@ -8,6 +8,7 @@ export function ConfigFileOperations({
   path,
   modified,
   renameTo,
+  renameProblem,
   onRenameToChange,
   onRename,
   onDelete,
@@ -15,6 +16,8 @@ export function ConfigFileOperations({
   path: string;
   modified: boolean;
   renameTo: string;
+  // renameProblem は、新しいパスが ~/.ssh の外を指しているときに欄の下へ出す理由である。
+  renameProblem: string;
   onRenameToChange: (path: string) => void;
   onRename: () => void;
   onDelete: () => void;
@@ -34,6 +37,8 @@ export function ConfigFileOperations({
             value={renameTo}
             onChange={(event) => onRenameToChange(event.target.value)}
             placeholder={path}
+            aria-invalid={renameProblem === "" ? undefined : true}
+            aria-describedby={renameProblem === "" ? undefined : "rename-file-path-problem"}
             className={`${control} min-h-10 min-w-48 max-w-sm font-mono text-xs md:min-h-0`}
           />
           <Button
@@ -48,6 +53,7 @@ export function ConfigFileOperations({
           </Button>
         </div>
       </div>
+      {renameProblem === "" ? null : <p id="rename-file-path-problem" role="alert" className="text-xs text-danger">{renameProblem}</p>}
       <p className={hintText}>{modified ? t("explorer.saveOrDiscardFirst") : t("explorer.deleteIsRecoverable")}</p>
     </div>
   );

@@ -196,6 +196,56 @@ describe("ConfigExplorer", () => {
     expect(screen.getByRole("button", { name: "Create file" })).toBeEnabled();
   });
 
+  it("creates a folder typed from ~/.ssh in ~/.ssh instead of nesting another ~ inside it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.save).mockResolvedValue({
+      transactionId: "t1", written: ["conf.d"], preview: { operation: "config.directory_create", diffs: [] },
+    });
+    render(<ConfigExplorer />);
+
+    await user.type(await screen.findByLabelText("New file path"), "~/.ssh/conf.d");
+    await user.click(screen.getByRole("button", { name: "Create directory" }));
+
+    await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({ kind: "directory_create", path: "conf.d" }));
+  });
+
+  it("explains a path outside ~/.ssh under the field and sends nothing", async () => {
+    const user = userEvent.setup();
+    render(<ConfigExplorer />);
+
+    const field = await screen.findByLabelText("New file path");
+    await user.type(field, "~/notes");
+    await user.click(screen.getByRole("button", { name: "Create directory" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Paths outside ~/.ssh cannot be used.");
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(configApi.save).not.toHaveBeenCalled();
+    await user.type(field, "x");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("renames a file to a path typed from ~/.ssh and refuses one outside it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.save).mockResolvedValue({
+      transactionId: "t1", written: ["conf.d/11-home.conf"], preview: { operation: "config.file_rename", diffs: [] },
+    });
+    render(<ConfigExplorer />);
+    await user.click(await screen.findByRole("button", { name: "conf.d/10-home.conf" }));
+    const field = await screen.findByLabelText("New path");
+
+    await user.type(field, "~/other.conf");
+    await user.click(screen.getByRole("button", { name: "Rename file" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Paths outside ~/.ssh cannot be used.");
+    expect(configApi.save).not.toHaveBeenCalled();
+
+    await user.clear(field);
+    await user.type(field, "~/.ssh/conf.d/11-home.conf");
+    await user.click(screen.getByRole("button", { name: "Rename file" }));
+    await waitFor(() => expect(configApi.save).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "file_rename", path: "conf.d/10-home.conf", destinationPath: "conf.d/11-home.conf",
+    })));
+  });
+
   it("edits a whole file and saves it with the loaded base", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.save).mockResolvedValue({

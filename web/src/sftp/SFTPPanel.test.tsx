@@ -472,6 +472,20 @@ describe("SFTPPanel uploads", () => {
     expect(await screen.findByTestId("sftp-current-path")).toHaveAttribute("data-path", "/home/deploy/logs");
   });
 
+  it("says the typed path cannot be opened instead of reporting a failed connection", async () => {
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    api.list.mockRejectedValueOnce(new ApiError("invalid_request", 400, null));
+    fireEvent.click(screen.getByRole("navigation", { name: "Remote path" }));
+    const input = screen.getByRole("textbox", { name: "Remote path" });
+    await userEvent.clear(input);
+    await userEvent.type(input, "logs{Enter}");
+    expect(await screen.findByText("Could not open the path. Enter an absolute path or one starting with ~/.")).toBeVisible();
+    expect(screen.queryByText("Could not connect.")).not.toBeInTheDocument();
+    // The pane stays on the directory it showed, and the typed path can be corrected.
+    expect(screen.getByRole("textbox", { name: "Remote path" })).toHaveValue("logs");
+  });
+
   it("queues multiple selected entries after one confirmation and opens the queue", async () => {
     const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["delete-one", "delete-two"]);
     api.list.mockResolvedValue({
