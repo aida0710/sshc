@@ -32,6 +32,7 @@ const api = vi.hoisted(() => ({
   listTransfers: vi.fn(),
   previewFile: vi.fn(),
   clearFinishedTransfers: vi.fn(),
+  connectionAttempt: vi.fn(),
 }));
 const permissions = vi.hoisted(() => ({ plan: vi.fn(), apply: vi.fn() }));
 const clipboard = vi.hoisted(() => ({ writeText: vi.fn(async () => undefined) }));
@@ -42,6 +43,9 @@ vi.mock("./chmodApi", async (importOriginal) => ({
 }));
 vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText: clipboard.writeText } }));
 vi.mock("../api/recentConnections", () => ({ recentConnectionsApi: { recentConnections: vi.fn(async () => ({ connections: [] })) } }));
+
+// The listing that opens a host's SSH connection names the attempt the pane reads its stage from.
+const connecting = { attempt: expect.any(String) };
 
 async function chooseHost(alias: string) {
   await userEvent.click(screen.getByRole("button", { name: "Host" }));
@@ -123,7 +127,7 @@ describe("SFTPPanel uploads", () => {
     render(<SFTPPanel aliases={["edge"]} />);
     expect(api.list).not.toHaveBeenCalled();
     await chooseHost("edge");
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "", connecting));
 
     const first = new File(["alpha"], "first.txt", { type: "text/plain" });
     const second = new File(["beta"], "second.txt", { type: "text/plain" });
@@ -159,7 +163,7 @@ describe("SFTPPanel uploads", () => {
     await userEvent.click(screen.getByRole("button", { name: "Host" }));
     const label = await screen.findByText("edge", { selector: "span.font-medium" });
     await userEvent.click(label.closest("button")!);
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "", connecting));
     expect(screen.queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
     expect(await screen.findByTestId("sftp-current-path")).toHaveAttribute("data-path", "/remote");
   });
@@ -168,7 +172,7 @@ describe("SFTPPanel uploads", () => {
     const onOpenTerminal = vi.fn();
     render(<SFTPPanel aliases={["edge"]} onOpenTerminal={onOpenTerminal} />);
     await chooseHost("edge");
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "", connecting));
 
     await userEvent.click(screen.getByRole("button", { name: "Open Terminal here" }));
 
@@ -614,7 +618,7 @@ describe("SFTPPanel uploads", () => {
 
     render(<SFTPPanel aliases={["edge", "miyabi"]} />);
     await chooseHost("edge");
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "", connecting));
     await chooseHost("miyabi");
     await waitFor(() => expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/current"));
 
@@ -661,7 +665,7 @@ describe("SFTPPanel uploads", () => {
     const handled = vi.fn();
     render(<SFTPPanel aliases={["edge"]} target={{ alias: "edge", path: "/var/log/app.log", action: "browse", request: 1 }} onTargetHandled={handled} />);
 
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log"));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log", connecting));
     expect(handled).toHaveBeenCalledWith(1);
     expect(screen.getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "edge");
     expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/remote");
@@ -685,7 +689,7 @@ describe("SFTPPanel uploads", () => {
 
     render(<SFTPPanel aliases={["edge"]} target={{ alias: "edge", path: "/var/log", action: "browse", request: 5 }} />);
 
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log"));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log", connecting));
     expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/var/log");
   });
 
@@ -721,6 +725,27 @@ describe("SFTPPanel uploads", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("This terminal link is no longer available.");
     expect(api.list).not.toHaveBeenCalled();
+  });
+
+  it("shows the stage and connection log while connecting, and keeps the log with the reason when it fails", async () => {
+    let failConnection: (reason: unknown) => void = () => undefined;
+    api.list.mockImplementationOnce(() => new Promise((_, reject) => { failConnection = reject; }));
+    const authenticating = { phase: "authenticating", alias: "edge", hostName: "edge.example", user: "deploy", hop: 1, hops: 1 };
+    api.connectionAttempt.mockResolvedValue({ progress: authenticating, log: ["[sshc][debug1] 接続先：edge"], finished: false });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+
+    expect(await screen.findByText("authenticating with edge · 1/1", {}, { timeout: 2000 })).toBeVisible();
+    expect(screen.getByLabelText("Connection log")).toHaveTextContent("[sshc][debug1] 接続先：edge");
+    const attempt = (api.list.mock.calls[0]?.[2] as { attempt: string }).attempt;
+    expect(api.connectionAttempt).toHaveBeenCalledWith("edge", attempt);
+
+    api.connectionAttempt.mockResolvedValue({
+      progress: authenticating, log: ["[sshc][debug1] 接続先：edge", "sshc: ssh: handshake failed"], finished: true,
+    });
+    failConnection(new ApiError("sftp_failed", 502, null));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not connect.");
+    expect(screen.getByLabelText("Connection log")).toHaveTextContent("sshc: ssh: handshake failed");
   });
 
   it("shows a friendly inline message when SFTP cannot connect", async () => {

@@ -68,6 +68,15 @@ func (httpContentFile) Close() error                    { return nil }
 
 func contentHTTPEngine(t *testing.T) (*echo.Echo, *httpContentRemote, session.Credentials) {
 	t.Helper()
+	remote := &httpContentRemote{contents: map[string]string{"/work/notes.txt": "first\nneedle\n", "/work/binary": "needle\x00"}}
+	service := &sshcSFTP.Service{Open: func(context.Context, string) (sshcSFTP.Remote, error) { return remote, nil }}
+	engine, credentials := sftpHTTPEngine(t, SFTPHandlers{Service: service})
+	return engine, remote, credentials
+}
+
+// sftpHTTPEngine は、handlers の SFTP の口を、署名済みのセッションで呼べる engine に載せる。
+func sftpHTTPEngine(t *testing.T, handlers SFTPHandlers) (*echo.Echo, session.Credentials) {
+	t.Helper()
 	manager, token, err := session.NewManager(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -76,12 +85,10 @@ func contentHTTPEngine(t *testing.T) (*echo.Echo, *httpContentRemote, session.Cr
 	if err != nil {
 		t.Fatal(err)
 	}
-	remote := &httpContentRemote{contents: map[string]string{"/work/notes.txt": "first\nneedle\n", "/work/binary": "needle\x00"}}
-	service := &sshcSFTP.Service{Open: func(context.Context, string) (sshcSFTP.Remote, error) { return remote, nil }}
 	engine := echo.New()
 	engine.Use((Security{ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: manager, Unlocked: alwaysUnlocked}).Middleware)
-	registerSFTPRoutes(engine, SFTPHandlers{Service: service})
-	return engine, remote, credentials
+	registerSFTPRoutes(engine, handlers)
+	return engine, credentials
 }
 
 func TestContentSearchHTTPReturnsLinesOmissionsAndPreservesDefaultNameSearch(t *testing.T) {

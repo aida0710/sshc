@@ -20,6 +20,9 @@ vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText: c
 vi.mock("../api/recentConnections", () => ({
   recentConnectionsApi: { recentConnections: vi.fn(async () => ({ connections: [] })) },
 }));
+
+// The listing that opens a host's SSH connection names the attempt the pane reads its stage from.
+const connecting = { attempt: expect.any(String) };
 vi.mock("./MonacoEditor", () => ({
   MonacoEditor: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
     <textarea
@@ -176,7 +179,7 @@ describe("SFTP tabs", () => {
     await addTab("edge");
     expect(screen.getAllByRole("tab")).toHaveLength(2);
     // Choosing the host is the request to connect; there is no separate Connect step.
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "", connecting));
     expect(await screen.findByRole("tab", { name: "edge:edge" })).toHaveAttribute("aria-selected", "true");
   });
 
@@ -308,7 +311,7 @@ describe("SFTP tabs", () => {
     expect(screen.getByText("edge is disconnected")).toBeVisible();
 
     await userEvent.click(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Connect" }));
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log"));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log", connecting));
     expect(api.list).not.toHaveBeenCalledWith("miyabi", "/srv");
   });
 
@@ -427,7 +430,7 @@ describe("SFTP tabs", () => {
     await waitFor(() => expect(currentPath()).toHaveAttribute("data-path", "/home/edge"));
     const second = await openSecondPane("miyabi");
     // The tab moved while it was still connecting, and it keeps connecting in its new pane.
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("miyabi", ""));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("miyabi", "", connecting));
     expect(storedPanes()).toHaveLength(2);
     const leftTabs = screen.getByRole("tablist", { name: "Left pane tabs" });
     const rightTabs = screen.getByRole("tablist", { name: "Right pane tabs" });
@@ -887,7 +890,7 @@ describe("SFTP tabs", () => {
         { tabs: [{ alias: "miyabi", path: "/srv", sortKey: "name", sortDirection: "ascending" }], activeIndex: 0 },
       ]);
       workspace.rerender(<SFTPWorkspace title="SFTP" aliases={["edge", "miyabi"]} target={{ alias: "edge", path: "/var/log/report.txt", action: "browse", request: 1 }} />);
-      await waitFor(() => expect(api.list).toHaveBeenLastCalledWith("edge", "/var/log"));
+      await waitFor(() => expect(api.list).toHaveBeenLastCalledWith("edge", "/var/log", connecting));
       expect(getHostButton(second)).toHaveAttribute("data-value", "edge");
       expect(storedPanes()[0]?.tabs[0]?.alias).toBe("");
     } finally {
@@ -930,7 +933,7 @@ describe("SFTP tabs", () => {
       target={{ alias: "edge", path: "/var/log", action: "browse", request: 7 }} onTargetHandled={handled} />);
     await waitFor(() => expect(handled).toHaveBeenCalledWith(7));
     expect(getHostButton()).toHaveAttribute("data-value", "edge");
-    expect(api.list).toHaveBeenCalledWith("edge", "/var");
+    expect(api.list).toHaveBeenCalledWith("edge", "/var", connecting);
   });
 
   it("downloads a terminal-linked remote file while the visible tab still shows Local", async () => {
