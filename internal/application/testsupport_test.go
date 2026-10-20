@@ -42,11 +42,13 @@ func newTestGraph(t *testing.T, files map[string]string) *config.Graph {
 	for name, contents := range files {
 		absolute[filepath.Join(testRoot, filepath.FromSlash(name))] = contents
 	}
+	// 本番の Service と同じく、既定の groups file に印を付ける。
 	resolver := config.Resolver{
-		Loader: fakeLoader{files: absolute},
-		Home:   testHome,
-		Root:   testRoot,
-		Tokens: map[byte]string{'d': testHome},
+		Loader:     fakeLoader{files: absolute},
+		Home:       testHome,
+		Root:       testRoot,
+		Tokens:     map[byte]string{'d': testHome},
+		GroupsFile: func() string { return filepath.Join(testRoot, DefaultGroupsFile) },
 	}
 	graph, err := resolver.Resolve(filepath.Join(testRoot, "config"))
 	if err != nil {

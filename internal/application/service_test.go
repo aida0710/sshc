@@ -524,6 +524,59 @@ func TestSavingGroupSettingsKeepsEachMemberAsOneConnection(t *testing.T) {
 	}
 }
 
+// 利用者が groups.sshc.conf の Include をメンバーの Include より前へ移すと、OpenSSH は
+// グループの共通設定の Host 行を先に読む。その行は alias の最初の宣言にも数えないので、
+// メンバーのファイルの Host 行が 2 つ目の宣言として知らされることもない。
+func TestGroupSettingsReadBeforeTheirMembersAreNotADuplicateAlias(t *testing.T) {
+	service, workspace := newTestService(t)
+	if err := os.Remove(filepath.Join(workspace.Root(), "conf.d", "10-home.conf")); err != nil {
+		t.Fatal(err)
+	}
+	database := writeGroupFile(t, workspace, "production", "db.conf", "Host db-primary\n\tHostName 203.0.113.20\n")
+	files := map[string]string{
+		"config": RegionStartMarker + "\nInclude " + DefaultGroupsFile + "\nInclude " +
+			GroupIncludePattern("production") + "\n" + RegionEndMarker + "\n",
+		DefaultGroupsFile: "Host db-primary\n\tUser ops\n",
+	}
+	for name, contents := range files {
+		if err := os.WriteFile(filepath.Join(workspace.Root(), name), []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	overview, err := service.Overview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(overview.Hosts) != 1 || overview.Hosts[0].File.Path != database || overview.Hosts[0].Duplicate {
+		t.Fatalf("listed connections = %#v, want db-primary once from its own file", overview.Hosts)
+	}
+	for _, notice := range overview.Notices {
+		if notice.Code == NoticeDuplicateAlias {
+			t.Errorf("overview notices = %#v, want no duplicate_alias", overview.Notices)
+		}
+	}
+
+	detail, err := service.HostDetail(database, "db-primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, notice := range detail.Effective.Notices {
+		if notice.Code == NoticeDuplicateAlias {
+			t.Errorf("effective notices = %#v, want no duplicate_alias", detail.Effective.Notices)
+		}
+	}
+	inherited := false
+	for _, entry := range detail.Effective.Entries {
+		if entry.Keyword == "User" && entry.Values[0] == "ops" && entry.Source.Path == DefaultGroupsFile {
+			inherited = true
+		}
+	}
+	if !inherited {
+		t.Fatalf("effective entries = %#v, want User ops from the group settings", detail.Effective.Entries)
+	}
+}
+
 // 書けないグループ設定を通すと、生成ファイルからそのグループが外れ、同じグループの
 // ほかの設定まで接続に効かなくなる。接続の編集と同じく、保存の前に断る。
 func TestSavingGroupsRefusesAProxyCommandWithAQuoteThatIsNotClosed(t *testing.T) {

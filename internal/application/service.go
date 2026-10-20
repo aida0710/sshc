@@ -50,6 +50,9 @@ func NewService(workspace *storage.Workspace, manager *storage.Manager) *Service
 		entryPath: filepath.Join(workspace.Root(), entryFileName),
 		factsFor:  LocalFactsFor,
 	}
+	// グループの共通設定の Host 行を、接続先としても alias の重複としても数えない。
+	// 計画中の変更を重ねて読むリゾルバも、これを写して使う。
+	service.resolver.GroupsFile = service.AbsoluteGroupsPath
 	manager.Validate = service.validate
 	return service
 }

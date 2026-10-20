@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -140,6 +141,9 @@ func (fileSystem *privateStateUnreadableFileSystem) ReadPrivateFile(path string)
 // Config Explorerは、sshcの状態ファイルを名前だけで断り、中身を読まない。読んでから
 // 断ると、Windowsで状態ファイルのACLの確認に落ちたときに、path_not_editableではなく
 // ACLのエラーが返る。断るだけの操作のためにVaultの鍵を読むことにもなる。
+//
+// 変更の計画はInclude graphを読み、リゾルバはそのたびにgroups fileの場所をmetadataから
+// 読む。metadataが読めなくても、断る理由はpath_not_editableのままである。
 func TestConfigExplorerRefusesStateFilesWithoutReadingThem(t *testing.T) {
 	fileSystem := &privateStateUnreadableFileSystem{FileSystem: storage.OSFileSystem{}}
 	workspace, err := storage.NewWorkspace(fileSystem, t.TempDir())
@@ -170,7 +174,8 @@ func TestConfigExplorerRefusesStateFilesWithoutReadingThem(t *testing.T) {
 	if _, err := service.FileContents("sshc/local-vault-key"); !errors.Is(err, ErrNotEditable) {
 		t.Errorf("FileContents = %v, want ErrNotEditable", err)
 	}
-	if len(fileSystem.privateReads) != 0 {
-		t.Errorf("state files read = %v, want none", fileSystem.privateReads)
+	refused := filepath.Join(workspace.StateDir(), "local-vault-key")
+	if slices.Contains(fileSystem.privateReads, refused) {
+		t.Errorf("state files read = %v, want no read of the refused file", fileSystem.privateReads)
 	}
 }

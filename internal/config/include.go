@@ -68,6 +68,7 @@ type Resolver struct {
 	// groups file は、ほかのファイルで宣言された接続先へ値を足すために、メンバーの
 	// alias を並べた Host 行を置く。OpenSSH から見れば同じ alias の 2 つ目のブロック
 	// なので、internal/effective はこの印を見て、alias の宣言として数えない。
+	// application 層の接続先の一覧も、印の付いたファイルの Host 行を接続先として返さない。
 	//
 	// ファイルの場所を知っているのは application 層の metadata なので、Resolve の
 	// たびに尋ねる。省略可能で、これを持たないリゾルバはどのファイルにも印を付けない。
