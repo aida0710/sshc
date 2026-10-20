@@ -194,7 +194,7 @@ Host lab
 
 ## SFTP転送
 
-起動中のsshcエンジンと、Web UIと同じOpenSSH設定、ホスト鍵の検証、Vaultの認証情報を使って転送します。リモートパスは`/var/log/app.log`のような絶対POSIXパスで指定します。
+起動中のsshcエンジンと、Web UIと同じOpenSSH設定、ホスト鍵の検証、Vaultの認証情報を使って転送します。リモートパスは`/var/log/app.log`のような絶対POSIXパスか、`~/`で始まるパスで指定します。`~/`は、SFTPサーバーのログイン先（通常はホームディレクトリ）から数えます。`~`は`'~/logs/app.log'`のように引用してください。引用しないと、シェルが手元のホームディレクトリに置き換えてからsshcに渡します。手元のパスでは、引用した`~`も手元のホームディレクトリとして読みます。
 
 ```sh
 sshc sftp get bastion /var/log/app.log ./app.log

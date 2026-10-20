@@ -265,7 +265,9 @@ func sftpHelp() string {
   sshc sftp settings [options]
 
 Transfer files through the running engine and its SSH/Vault configuration.
-Remote paths must be absolute POSIX paths.
+Remote paths must be absolute POSIX paths, or start with ~/ to count from the
+directory the SFTP server logs you into (usually your home). Quote ~, as in
+'~/logs', so that your shell does not replace it with the local home.
 
 Options:
   -r, --recursive   copy directories recursively

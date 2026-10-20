@@ -194,7 +194,7 @@ Attaching, detaching or replacing a profile with `bind` and `unbind` stops the s
 
 ## SFTP transfers
 
-Transfers use the running engine and the same OpenSSH configuration, host-key checks, and Vault credentials as the Web UI. Specify remote paths as absolute POSIX paths such as `/var/log/app.log`.
+Transfers use the running engine and the same OpenSSH configuration, host-key checks, and Vault credentials as the Web UI. Specify remote paths as absolute POSIX paths such as `/var/log/app.log`, or start them with `~/` to count from the directory the SFTP server logs you into (usually your home). Quote `~`, as in `'~/logs/app.log'`: unquoted, your shell replaces it with the local home directory before sshc sees it. In local paths, a quoted `~` is read as the local home directory.
 
 ```sh
 sshc sftp get bastion /var/log/app.log ./app.log
