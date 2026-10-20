@@ -10,6 +10,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"sshc/internal/platform"
 )
 
 // Local paths name the engine filesystem, never the browser filesystem. The
@@ -33,7 +35,7 @@ func cleanLocalPath(value string) (string, error) {
 	}
 	if value == "" {
 		value = home
-	} else if belowHome, ok := cutLocalHomePrefix(value); ok {
+	} else if belowHome, ok := platform.CutTypedHome(value); ok {
 		value = filepath.Join(home, filepath.FromSlash(belowHome))
 	}
 	if strings.ContainsRune(value, 0) || !filepath.IsAbs(value) {
@@ -46,23 +48,6 @@ func cleanLocalPath(value string) (string, error) {
 		return "", ErrInvalidPath
 	}
 	return filepath.ToSlash(cleaned), nil
-}
-
-// cutLocalHomePrefix reports whether value starts at the engine user's home
-// and returns the part below it. Besides `~/`, the home may be followed by the
-// file system's own separator, so a Windows user can type `~\Documents` as in
-// PowerShell. A local path is resolved at once and never saved, so this
-// spelling cannot reach a machine where `\` belongs to a file name. The saved
-// start directory of a shell is different: platform.ResolveUnderHome keeps
-// refusing `~\` there.
-func cutLocalHomePrefix(value string) (string, bool) {
-	if value == "~" {
-		return "", true
-	}
-	if len(value) >= 2 && value[0] == '~' && os.IsPathSeparator(value[1]) {
-		return value[2:], true
-	}
-	return "", false
 }
 
 // openLocalRoot opens the file system root that holds value and returns value
