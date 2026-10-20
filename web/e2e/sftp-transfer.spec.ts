@@ -214,13 +214,11 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await japaneseTransferManager.getByRole("button", { name: "転送マネージャーを展開" }).click();
     await page.screenshot({ path: `${visualDirectory}/transfer-manager-ja.png`, fullPage: true });
     await japaneseTransferManager.getByRole("button", { name: "転送マネージャーを折りたたむ" }).click();
-    await openSecondSFTPPane(page, "新しいタブ");
+    await openSecondSFTPPane(page, "新しいタブ", "nas");
     const secondTabs = page.getByRole("tablist", { name: "右ペインのタブ" });
     await expect(secondTabs.getByRole("tab")).toHaveCount(1);
-    await expect(secondTabs.getByRole("tab", { name: "新しいタブ" })).toHaveAttribute("aria-selected", "true");
     const secondPane = page.getByLabel("2つ目のリモートペイン");
-    await connectSFTPHost(page, "nas", secondPane);
-    await expect(secondTabs.getByRole("tab", { name: /^nas:/ })).toBeVisible();
+    await expect(secondTabs.getByRole("tab", { name: /^nas:/ })).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("[data-sftp-pane-tabs]").nth(1).getByRole("button", { name: "新しいタブ" })).toBeVisible();
     await expect(secondPane.getByRole("button", { name: "backups" })).toBeVisible();
     await expect(page.getByRole("button", { name: "ここでターミナルを開く" })).toHaveCount(2);
@@ -279,7 +277,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.screenshot({ path: `${visualDirectory}/sftp-details-desktop.png`, fullPage: true });
     await detailsDialog.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: "project", exact: true }).click();
-    await openSecondSFTPPane(page, "New tab");
+    await openSecondSFTPPane(page, "New tab", "Local");
     await page.setViewportSize({ width: 360, height: 800 });
     await page.getByRole("navigation", { name: "SFTP pane switcher" }).getByRole("button", { name: "Left: bastion", exact: true }).click();
     await page.waitForTimeout(400);

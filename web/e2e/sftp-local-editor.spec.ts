@@ -102,7 +102,7 @@ for (const file of comparisonFiles) {
     page.on("pageerror", (error) => errors.push(error.stack ?? error.message));
     await openApplication(page, installation);
     await openSection(page, "SFTP");
-    await openSecondSFTPPane(page, "New tab");
+    await openSecondSFTPPane(page, "New tab", "Local");
     for (const [index, directory] of ["text-left", "text-right"].entries()) {
       await openLocalSFTPDirectory({ page, pane: page.getByRole("tabpanel").nth(index), directory: join(installation.home, ".ssh", directory) });
     }

@@ -6,10 +6,13 @@ import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { SplitResizeHandle } from "../ui/SplitResizeHandle";
 import { useCompactViewport } from "../ui/useMediaQuery";
+import { SectionBar } from "../ui/SectionBar";
+import { Button } from "../ui/surface";
 import { SFTPPanel, type SFTPTarget } from "./SFTPPanel";
 import type { RestoredSFTPLocation } from "./useSFTPBrowser";
 import { localHostAlias } from "./localHost";
 import { SFTPCompareDialog } from "./SFTPCompareDialog";
+import { SFTPHostPicker } from "./SFTPHostPicker";
 import { SFTPTabDropTarget } from "./SFTPTabDropTarget";
 import { SFTPTabStrip, tabElementId, tabPanelElementId } from "./SFTPTabStrip";
 import { TransferManagerList } from "./TransferManagerList";
@@ -51,11 +54,12 @@ function useCallbackPerTab<T>(handle: (tabId: string, value: T) => void) {
   return { forTab, forget };
 }
 
-// The workspace lays one or two panes side by side. Each pane has its own tab
-// strip; a tab dragged onto a pane moves there, and a tab dragged beside the
-// only pane opens the second one. The transfer queue is global to the engine
-// and is drawn once below the panes.
+// The workspace lays one or two panes side by side under the SFTP section bar.
+// Each pane has its own tab strip; a tab dragged onto a pane moves there, and a
+// tab dragged beside the only pane opens the second one. The transfer queue is
+// global to the engine and is drawn once below the panes.
 export function SFTPWorkspace({
+  title,
   aliases,
   hostVPN,
   hosts,
@@ -65,6 +69,8 @@ export function SFTPWorkspace({
   onNavigateLocation,
   onOpenTerminal,
 }: {
+  // title is the section name shown in the bar above the panes.
+  title: string;
   aliases: string[];
   // hostVPN は、alias ごとに通るVPN経路の名前である。
   hostVPN?: Map<string, string>;
@@ -84,6 +90,8 @@ export function SFTPWorkspace({
   const [compareTabsOpen, setCompareTabsOpen] = useState(false);
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
   const [hostPickerRequests, setHostPickerRequests] = useState<Record<string, number>>({});
+  // newTabRequest opens the connection picker for "+"; the tab is added to paneId once a connection is chosen.
+  const [newTabRequest, setNewTabRequest] = useState({ paneId: "", count: 0 });
   const [dirtyTabs, setDirtyTabs] = useState<Map<string, string>>(() => new Map());
   const [connectedTabs, setConnectedTabs] = useState<ReadonlySet<string>>(() => new Set());
   const [closeTabIntent, setCloseTabIntent] = useState<CloseTabIntent | null>(null);
@@ -156,10 +164,17 @@ export function SFTPWorkspace({
     });
   }
 
-  function openTab(pane: SFTPPane) {
-    const opened = blankTab();
-    setPanes((current) => addTab(current, pane.id, opened));
-    setFocusedPaneId(pane.id);
+  // "+" asks for the connection first, so closing the picker without a choice adds no tab.
+  function requestNewTab(pane: SFTPPane) {
+    setNewTabRequest((current) => ({ paneId: pane.id, count: current.count + 1 }));
+  }
+
+  function openTabWithHost(paneId: string, alias: string) {
+    const opened = { ...blankTab(), alias };
+    // Without connect, the panel would wait for Connect as a restored tab does.
+    restoring.current.set(opened.id, { alias, path: "", connect: true });
+    setPanes((current) => addTab(current, paneId, opened));
+    setFocusedPaneId(paneId);
   }
 
   function removeTab(tabId: string) {
@@ -189,13 +204,15 @@ export function SFTPWorkspace({
 
   // A moved tab is unmounted from one pane and mounted in the other, so the
   // new panel reopens the directory the tab was showing. A tab still waiting
-  // for Connect since it was restored keeps waiting.
+  // for Connect since it was restored keeps waiting; one added with "+" is
+  // still connecting and keeps connecting.
   function placeTab(tabId: string, destination: TabDestination) {
     const found = findTab(panes, tabId);
     if (found === null) return;
     const next = moveTab(panes, tabId, destination);
     if (next === panes) return;
-    const live = !restoring.current.has(tabId);
+    const pending = restoring.current.get(tabId);
+    const live = pending === undefined || pending.connect === true;
     restoring.current.set(tabId, { alias: found.tab.alias, path: found.tab.path, connect: live });
     setPanes(next);
     setFocusedPaneId(findTab(next, tabId)?.pane.id ?? next[0]?.id ?? "");
@@ -253,29 +270,37 @@ export function SFTPWorkspace({
   function openFileTab() {
     const destination = focusedPane !== null && focusedPane.tabs.length < maxTabsPerPane
       ? focusedPane : panes.find((pane) => pane.tabs.length < maxTabsPerPane);
-    if (destination !== undefined && destination !== null) openTab(destination);
+    if (destination !== undefined && destination !== null) requestNewTab(destination);
   }
 
+  // Two visible panes that both have a connection are compared directly; otherwise the two tabs are chosen first.
   function requestComparison() {
-    if (compactViewport) {
-      setCompareTabsOpen(true);
-    } else if (compareReady && leftLocation !== null && rightLocation !== null) {
+    if (visibleSplit && compareReady && leftLocation !== null && rightLocation !== null) {
       setComparisonLocations({ left: leftLocation, right: rightLocation });
+    } else {
+      setCompareTabsOpen(true);
     }
   }
 
-  function comparisonButton(enabled: boolean) {
-    return <button type="button" aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")}
-      disabled={!enabled} onClick={requestComparison}
-      className={`flex shrink-0 items-center rounded text-sm text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint ${compactViewport ? "min-h-12 w-12 justify-center" : "gap-1.5 px-2"}`}>
-      <Icon name="arrowLeftRight" className={compactViewport ? "size-5" : "size-4"} />{compactViewport ? null : t("sftp.compare.action")}
-    </button>;
-  }
+  const canCompare = comparisonTabs.length > 1;
+  // On a phone the section bar would take a whole row for this one button, so it stays at the end of the tab strip.
+  const comparisonAction = compactViewport ? null : (
+    <Button aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")} disabled={!canCompare}
+      onClick={requestComparison} className="flex items-center gap-1.5">
+      <Icon name="arrowLeftRight" className="size-4" />{t("sftp.compare.action")}
+    </Button>
+  );
+  const compactComparisonButton = (
+    <button type="button" aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")}
+      disabled={!canCompare} onClick={requestComparison}
+      className="flex min-h-12 w-12 shrink-0 items-center justify-center rounded text-sm text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint">
+      <Icon name="arrowLeftRight" className="size-5" />
+    </button>
+  );
 
   function renderPane(pane: SFTPPane, index: number) {
     const concealed = compactViewport && pane.id !== focusedPane?.id;
     const other = index === 0 ? rightLocation : leftLocation;
-    const last = index === panes.length - 1;
     const closable = pane.tabs.length > 1 || panes.length > 1;
     const dropPlacement = draggedTabId === null || compactViewport ? null
       : panes.length > 1 ? (findTab(panes, draggedTabId)?.pane.id === pane.id ? null : "whole" as const)
@@ -299,12 +324,11 @@ export function SFTPWorkspace({
             label={t(index === 0 ? "sftp.primaryTabs" : "sftp.secondaryTabs")}
             closable={closable}
             movable={(tab) => !compactViewport && !dirtyTabs.has(tab.id)}
-            trailing={last && visibleSplit ? comparisonButton(compareReady) : null}
             onChangeHost={requestHostChange}
             canChangeHost={(tab) => !dirtyTabs.has(tab.id)}
             onSelect={(tabId) => chooseTab(pane, tabId)}
             onClose={requestCloseTab}
-            onAdd={() => openTab(pane)}
+            onAdd={() => requestNewTab(pane)}
             onDragStart={setDraggedTabId}
             onDragEnd={() => setDraggedTabId(null)}
             onMove={moveTabWithKeyboard}
@@ -327,6 +351,7 @@ export function SFTPWorkspace({
                   <SFTPPanel
                     aliases={aliases}
                     hostPickerRequest={hostPickerRequests[tab.id] ?? 0}
+                    onChooseHost={() => requestHostChange(tab)}
                     {...(hosts === undefined ? {} : { hosts })}
                     {...(hostVPN === undefined ? {} : { hostVPN })}
                     target={ownsTarget ? target : null}
@@ -360,59 +385,65 @@ export function SFTPWorkspace({
   }
 
   return (
-    <section ref={workspaceRoot} className="flex h-full min-h-0 min-w-0 flex-col" aria-label={t("sftp.tabs")}>
-      {compactViewport && compactTabs !== null ? <SFTPTabStrip
-        pane={compactTabs} compact label={t("sftp.mobileTabs")} closable={compactTabs.tabs.length > 1}
-        movable={() => false} addDisabled={panes.every((pane) => pane.tabs.length >= maxTabsPerPane)}
-        trailing={comparisonButton(comparisonTabs.length > 1)} onChangeHost={requestHostChange}
-        canChangeHost={(tab) => !dirtyTabs.has(tab.id)} onSelect={selectFileTab} onClose={requestCloseTab}
-        onAdd={openFileTab} onDragStart={setDraggedTabId} onDragEnd={() => setDraggedTabId(null)} onMove={moveTabWithKeyboard}
-      /> : null}
-      <div className="flex min-h-0 min-w-0 flex-1">
-        {panes.map(renderPane)}
-      </div>
-      <TransferManagerList openRequest={openQueueRequest} onNavigateLocation={onNavigateLocation} />
-      {closeTabIntent?.kind === "unsaved" ? (
-        <ConfirmDialog
-          id="sftp-close-dirty-tab"
-          heading={t("sftp.leaveHeading")}
-          body={<p className="text-sm text-ink-muted">{t("sftp.leaveBody", { path: closeTabIntent.path })}</p>}
-          confirmLabel={t("sftp.leaveDiscard")}
-          cancelLabel={t("sftp.leaveStay")}
-          onConfirm={() => {
-            setCloseTabIntent(null);
-            removeTab(closeTabIntent.tabId);
-          }}
-          onCancel={() => setCloseTabIntent(null)}
-        />
-      ) : null}
-      {closeTabIntent?.kind === "connected" ? (
-        <ConfirmDialog
-          id="sftp-close-connected-tab"
-          heading={t("sftp.closeConnectedHeading", { host: closeTabIntent.alias })}
-          body={<>
-            <p className="text-sm text-ink-muted">{t("sftp.closeConnectedBody")}</p>
-            <p className="mt-2 text-xs text-ink-faint">{t("sftp.closeConnectedShiftHint")}</p>
-          </>}
-          confirmLabel={t("sftp.closeConnectedConfirm")}
-          cancelLabel={t("sftp.closeConnectedCancel")}
-          onConfirm={() => {
-            setCloseTabIntent(null);
-            removeTab(closeTabIntent.tabId);
-          }}
-          onCancel={() => setCloseTabIntent(null)}
-        />
-      ) : null}
-      {compareTabsOpen ? <SFTPCompareTabsDialog tabs={comparisonTabs} currentTabId={focusedLocation?.id ?? ""}
-        onCompare={(left, right) => { setCompareTabsOpen(false); setComparisonLocations({ left, right }); }}
-        onDismiss={() => setCompareTabsOpen(false)} /> : null}
-      {comparisonLocations !== null ? (
-        <SFTPCompareDialog
-          left={{ alias: comparisonLocations.left.alias, path: comparisonLocations.left.path || "/" }}
-          right={{ alias: comparisonLocations.right.alias, path: comparisonLocations.right.path || "/" }}
-          onDismiss={() => setComparisonLocations(null)}
-        />
-      ) : null}
-    </section>
+    <div className="flex h-full min-h-0 flex-col">
+      <SectionBar title={title} actions={comparisonAction} />
+      <section ref={workspaceRoot} className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label={t("sftp.tabs")}>
+        {compactViewport && compactTabs !== null ? <SFTPTabStrip
+          pane={compactTabs} compact label={t("sftp.mobileTabs")} closable={compactTabs.tabs.length > 1}
+          movable={() => false} addDisabled={panes.every((pane) => pane.tabs.length >= maxTabsPerPane)}
+          trailing={compactComparisonButton} onChangeHost={requestHostChange}
+          canChangeHost={(tab) => !dirtyTabs.has(tab.id)} onSelect={selectFileTab} onClose={requestCloseTab}
+          onAdd={openFileTab} onDragStart={setDraggedTabId} onDragEnd={() => setDraggedTabId(null)} onMove={moveTabWithKeyboard}
+        /> : null}
+        <div className="flex min-h-0 min-w-0 flex-1">
+          {panes.map(renderPane)}
+        </div>
+        <TransferManagerList openRequest={openQueueRequest} onNavigateLocation={onNavigateLocation} />
+        {closeTabIntent?.kind === "unsaved" ? (
+          <ConfirmDialog
+            id="sftp-close-dirty-tab"
+            heading={t("sftp.leaveHeading")}
+            body={<p className="text-sm text-ink-muted">{t("sftp.leaveBody", { path: closeTabIntent.path })}</p>}
+            confirmLabel={t("sftp.leaveDiscard")}
+            cancelLabel={t("sftp.leaveStay")}
+            onConfirm={() => {
+              setCloseTabIntent(null);
+              removeTab(closeTabIntent.tabId);
+            }}
+            onCancel={() => setCloseTabIntent(null)}
+          />
+        ) : null}
+        {closeTabIntent?.kind === "connected" ? (
+          <ConfirmDialog
+            id="sftp-close-connected-tab"
+            heading={t("sftp.closeConnectedHeading", { host: closeTabIntent.alias })}
+            body={<>
+              <p className="text-sm text-ink-muted">{t("sftp.closeConnectedBody")}</p>
+              <p className="mt-2 text-xs text-ink-faint">{t("sftp.closeConnectedShiftHint")}</p>
+            </>}
+            confirmLabel={t("sftp.closeConnectedConfirm")}
+            cancelLabel={t("sftp.closeConnectedCancel")}
+            onConfirm={() => {
+              setCloseTabIntent(null);
+              removeTab(closeTabIntent.tabId);
+            }}
+            onCancel={() => setCloseTabIntent(null)}
+          />
+        ) : null}
+        <SFTPHostPicker aliases={aliases} {...(hosts === undefined ? {} : { hosts })} value="" includeLocal hideTrigger
+          compact={compactViewport} openRequest={newTabRequest.count}
+          onChange={(alias) => openTabWithHost(newTabRequest.paneId, alias)} />
+        {compareTabsOpen ? <SFTPCompareTabsDialog tabs={comparisonTabs} currentTabId={focusedLocation?.id ?? ""}
+          onCompare={(left, right) => { setCompareTabsOpen(false); setComparisonLocations({ left, right }); }}
+          onDismiss={() => setCompareTabsOpen(false)} /> : null}
+        {comparisonLocations !== null ? (
+          <SFTPCompareDialog
+            left={{ alias: comparisonLocations.left.alias, path: comparisonLocations.left.path || "/" }}
+            right={{ alias: comparisonLocations.right.alias, path: comparisonLocations.right.path || "/" }}
+            onDismiss={() => setComparisonLocations(null)}
+          />
+        ) : null}
+      </section>
+    </div>
   );
 }
