@@ -9,12 +9,12 @@ import (
 )
 
 func TestValidatePathParameterRejectsTraversalAndControlCharacters(t *testing.T) {
-	for _, valid := range []string{"config", "conf.d/10-home.conf", "a..b.conf"} {
+	for _, valid := range []string{"config", "conf.d/10-home.conf", "a..b.conf", "conf.d/~backup", "~user"} {
 		if err := validatePathParameter(valid); err != nil {
 			t.Errorf("validatePathParameter(%q) = %v, want nil", valid, err)
 		}
 	}
-	for _, invalid := range []string{"", "/etc/ssh/ssh_config", "../.bashrc", "conf.d/../../escape", "conf.d/./x", "a\x00b", "a\nb", strings.Repeat("a", 600)} {
+	for _, invalid := range []string{"", "/etc/ssh/ssh_config", "../.bashrc", "conf.d/../../escape", "conf.d/./x", "a\x00b", "a\nb", strings.Repeat("a", 600), "~", "~/.ssh/conf.d"} {
 		if err := validatePathParameter(invalid); !errors.Is(err, errInvalidPath) {
 			t.Errorf("validatePathParameter(%q) = %v, want errInvalidPath", invalid, err)
 		}

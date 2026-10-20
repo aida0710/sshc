@@ -118,7 +118,12 @@ export function useSFTPBrowser({
     } catch (error) {
       await watch?.stop({ readFinal: true });
       if (!isCurrent()) return null;
-      if (!target.local && failureCode(error) === "sftp_failed") {
+      const code = failureCode(error);
+      if (code === "invalid_request") {
+        // A listing's only free input is the path typed into the pane, so the
+        // engine refusing the request means it cannot open that path.
+        setProblem(t("sftp.pathCannotOpen"));
+      } else if (!target.local && code === "sftp_failed") {
         setProblem(t("sftp.connectionFailed"));
       } else {
         setProblem(sftpProblemText(t, error, target.local ? "sftp.problem.failed" : "sftp.connectionFailed"));
