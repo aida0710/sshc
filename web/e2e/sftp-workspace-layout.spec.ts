@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { expect, openApplication, openSection, test } from "./support/environment";
-import { connectSFTPHost, openLocalSFTPDirectory, openSecondSFTPPane } from "./support/sftp";
+import { openLocalSFTPDirectory, openSecondSFTPPane } from "./support/sftp";
 
 // Mouse and touch controls must align without sacrificing phone tap targets.
 for (const hasTouch of [false, true]) {
@@ -18,9 +18,8 @@ for (const hasTouch of [false, true]) {
       await openApplication(page, installation);
       await openSection(page, "SFTP");
       await openLocalSFTPDirectory({ page, pane: page.getByRole("tabpanel"), directory: join(installation.home, ".ssh/layout") });
-      await openSecondSFTPPane(page, "New tab");
+      await openSecondSFTPPane(page, "New tab", "bastion");
       const remote = page.getByRole("tabpanel").nth(1);
-      await connectSFTPHost(page, "bastion", remote);
       const local = page.getByRole("tabpanel").first();
       const localFilter = local.getByRole("searchbox", { name: "Filter entries" });
       const remoteFilter = remote.getByRole("searchbox", { name: "Filter entries" });

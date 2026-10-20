@@ -7,7 +7,7 @@ description: Remote file operations and a resumable SFTP Transfer Manager.
 
 ![The SFTP file browser](/images/sftp-desktop.png)
 
-Each tab shows its folder and host side by side, or on separate lines on narrow screens. To change a host, use the destination button at the right of the selected tab. Host changes are disabled while that tab has unsaved edits.
+Each tab shows its folder and host side by side, or on separate lines on narrow screens. To change a host, use the destination button at the right of the selected tab. Host changes are disabled while that tab has unsaved edits. `+` opens the connection picker and opens a new tab on the connection you choose; closing the picker without a choice adds no tab. A tab without a host also offers **Choose a connection** in its file list.
 
 Opening the SFTP screen does not connect to a saved server. Choosing a host in the host picker connects right away. Restored tabs show their saved host and path without reconnecting in the background, and connect when you press **Connect**. Closing a tab connected to an SSH host asks for confirmation; hold Shift while closing to skip the disconnection confirmation. Unsaved edits always require confirmation before discarding, even with Shift held. The host picker searches aliases, groups, destination hosts and users, and switches between recently connected and SSH Config group views. A first connection opens the login user's home directory reported by the SFTP server and reuses the saved SSH configuration, host keys and credentials.
 
@@ -67,7 +67,7 @@ Symlinks are listed as `name → target`. A link to a directory opens as that di
 
 ![The two-pane SFTP view with independent tabs on each side](/images/sftp-two-pane-en.png)
 
-Use **Compare** to recursively inspect the directories in the currently selected left and right tabs by metadata such as size, modification time, permissions, and type. The preview distinguishes left-only, right-only, changed, and type-mismatched entries. For comparisons between remote tabs, select only the entries you want, then copy left to right or right to left. Comparison never deletes entries that exist only on the destination.
+**Compare** sits in the bar at the top of the screen. When both panes of a split view have a host, it recursively inspects the directories in the currently selected left and right tabs by metadata such as size, modification time, permissions, and type. Otherwise you first choose the two tabs to compare. It is unavailable until at least two tabs have a host. The preview distinguishes left-only, right-only, changed, and type-mismatched entries. For comparisons between remote tabs, select only the entries you want, then copy left to right or right to left. Comparison never deletes entries that exist only on the destination.
 
 Local tabs can also be compared. Comparisons involving a local tab display differences without modifying files.
 
