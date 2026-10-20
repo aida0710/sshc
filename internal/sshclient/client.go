@@ -68,16 +68,10 @@ func (d Dialer) Open(ctx context.Context, target Target, size terminal.Size) (te
 
 func (d Dialer) connect(ctx context.Context, target Target, session *Session, observed func(string)) {
 	prompt := session.Prompter()
-	level := connectionlog.Notice
-	if d.Verbosity != nil {
-		level = d.Verbosity()
-	}
-	trace := newTracer(level, session.writer)
-	trace.progress = session.setProgress
+	trace := d.connectionTracer(session.writer, session.setProgress)
 	session.trace = trace
 	session.closingTrace = trace.writingTo(&session.closingLog)
 	started := trace.now()
-	trace.say(connectionlog.Full, "接続ログ：すべて（-vvv）")
 
 	client, closers, err := d.chain(ctx, target, prompt, trace)
 	if err != nil {

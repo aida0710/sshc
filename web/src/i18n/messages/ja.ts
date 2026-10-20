@@ -151,6 +151,7 @@ export const ja = {
   "sftp.chooseHostAction": "接続先を選択",
   "sftp.connect": "接続",
   "sftp.connecting": "{alias}に接続しています…",
+  "sftp.connectionLog": "接続のログ",
   "sftp.readyToConnect": "{alias}は未接続です",
   "sftp.connectHint": "画面や保存済みのタブを開いただけでは、SFTP接続は開始されません。",
   "sftp.loading": "リモートディレクトリを読み込んでいます…",

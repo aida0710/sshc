@@ -1732,6 +1732,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/{alias}/connection-attempts/{attempt}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                attempt: string;
+            };
+            cookie?: never;
+        };
+        /** @description The stage and connection log of a listing that named this attempt. 404 means the listing has not begun connecting yet, or finished long enough ago to be forgotten. */
+        get: operations["getSFTPConnectionAttempt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/{alias}/preview": {
         parameters: {
             query?: never;
@@ -3954,6 +3974,12 @@ export interface components {
             linkTarget?: string;
             /** @enum {string} */
             targetType?: "file" | "directory" | "other";
+        };
+        SFTPConnectionAttempt: {
+            progress?: components["schemas"]["TerminalConnectionProgress"];
+            /** @description Connection log lines at the configured verbosity, oldest first, without line endings. A failed attempt ends with the reason. */
+            log: string[];
+            finished: boolean;
         };
         SFTPListing: {
             path: string;
@@ -7912,6 +7938,8 @@ export interface operations {
             query?: {
                 /** @description Omit to list the remote user's working directory */
                 path?: string;
+                /** @description Names this request's SSH connection attempt, so getSFTPConnectionAttempt can report its stage and connection log while the listing waits for the connection. Nothing is reported when a pooled connection is reused. */
+                attempt?: string;
             };
             header?: never;
             path: {
@@ -7966,6 +7994,33 @@ export interface operations {
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
+        };
+    };
+    getSFTPConnectionAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                attempt: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connection attempt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPConnectionAttempt"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
         };
     };
     previewSFTPFile: {

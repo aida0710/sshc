@@ -2319,6 +2319,11 @@ paths:
       operationId: listSFTPEntries
       parameters:
         - { name: path, in: query, required: false, description: Omit to list the remote user's working directory, schema: { type: string } }
+        - name: attempt
+          in: query
+          required: false
+          description: Names this request's SSH connection attempt, so getSFTPConnectionAttempt can report its stage and connection log while the listing waits for the connection. Nothing is reported when a pooled connection is reused.
+          schema: { type: string, pattern: "^[A-Za-z0-9-]{16,64}$" }
       responses:
         "200": { description: Remote directory listing, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPListing" } } } }
         "400": { $ref: "#/components/responses/Problem" }
@@ -2336,6 +2341,19 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/connection-attempts/{attempt}:
+    parameters:
+      - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 64 } }
+      - { name: attempt, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9-]{16,64}$" } }
+    get:
+      operationId: getSFTPConnectionAttempt
+      description: The stage and connection log of a listing that named this attempt. 404 means the listing has not begun connecting yet, or finished long enough ago to be forgotten.
+      responses:
+        "200": { description: Connection attempt, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPConnectionAttempt" } } } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/preview:
     parameters: *sftpAlias
     get:
@@ -5579,6 +5597,17 @@ components:
         # size when the target is a file.
         linkTarget: { type: string }
         targetType: { type: string, enum: [file, directory, other] }
+    SFTPConnectionAttempt:
+      type: object
+      additionalProperties: false
+      required: [log, finished]
+      properties:
+        progress: { $ref: "#/components/schemas/TerminalConnectionProgress" }
+        log:
+          description: Connection log lines at the configured verbosity, oldest first, without line endings. A failed attempt ends with the reason.
+          type: array
+          items: { type: string }
+        finished: { type: boolean }
     SFTPListing:
       type: object
       additionalProperties: false
