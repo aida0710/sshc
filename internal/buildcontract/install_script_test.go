@@ -352,3 +352,14 @@ func TestWindowsInstallerReplacesAnOlderSshcThatCannotReportItsEngine(t *testing
 		}
 	}
 }
+
+// sshc v0.48.0 より前は Windows の service status に失敗する。動いているエンジンを止めて
+// 置き換えるとき、タスクが無ければ古い sshc に尋ねずに「サービスは無い」と判断する。
+func TestWindowsInstallerLooksForTheTaskBeforeAskingTheInstalledSshcAboutItsService(t *testing.T) {
+	script := readWindowsInstallScript(t)
+	taskCheck := strings.Index(script, "if ($null -eq (Get-SshcTask)) { return $null }")
+	serviceStatus := strings.Index(script, "$serviceStatus = (& $Target service status")
+	if taskCheck < 0 || serviceStatus < 0 || serviceStatus < taskCheck {
+		t.Error("Windows installer asks the installed sshc about its service before looking for the task")
+	}
+}
