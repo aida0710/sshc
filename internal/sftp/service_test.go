@@ -570,6 +570,51 @@ func TestListDirectoryUsesRemoteWorkingDirectoryWhenPathIsOmitted(t *testing.T) 
 	}
 }
 
+func TestListDirectoryStartsATildePathAtTheRemoteWorkingDirectory(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/home":                 directory("home"),
+		"/home/aida":            directory("aida"),
+		"/home/aida/logs":       directory("logs"),
+		"/home/aida/logs/a.log": file("a.log", "hello", 0o600),
+		"/home/shared":          directory("shared"),
+	})
+	remote.workingDir = "/home/aida"
+	service := serviceFor(remote)
+
+	for typed, want := range map[string]string{
+		"~":             "/home/aida",
+		"~/":            "/home/aida",
+		"~/logs":        "/home/aida/logs",
+		"~/logs/":       "/home/aida/logs",
+		"~/../shared":   "/home/shared",
+		"~/./logs/../.": "/home/aida",
+	} {
+		listing, err := service.ListDirectory(t.Context(), "edge", typed)
+		if err != nil {
+			t.Fatalf("ListDirectory(%q) = %v", typed, err)
+		}
+		if listing.Path != want {
+			t.Errorf("ListDirectory(%q).Path = %q, want %q", typed, listing.Path, want)
+		}
+	}
+}
+
+func TestListDirectoryRefusesAnotherUsersTildeBeforeConnecting(t *testing.T) {
+	opened := 0
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) {
+		opened++
+		return remoteWith(nil), nil
+	}}
+	for _, typed := range []string{"~aida", "~aida/logs", "logs/~"} {
+		if _, err := service.ListDirectory(t.Context(), "edge", typed); !errors.Is(err, sftp.ErrInvalidPath) {
+			t.Errorf("ListDirectory(%q) = %v, want ErrInvalidPath", typed, err)
+		}
+	}
+	if opened != 0 {
+		t.Errorf("a refused path opened %d connections", opened)
+	}
+}
+
 func TestReadTextAcceptsUTF8AndRejectsBinaryOrLargeFiles(t *testing.T) {
 	t.Run("utf8", func(t *testing.T) {
 		remote := remoteWith(map[string]node{"/メモ.txt": file("メモ.txt", "一行目\n", 0o640)})
