@@ -108,7 +108,9 @@ func (r Resolver) expandPattern(argument string) (string, error) {
 	switch {
 	case expanded == "~":
 		expanded = r.Home
-	case strings.HasPrefix(expanded, "~/"):
+	// Win32-OpenSSH は、Windows の区切りの ~\ も ~/ と同じくホームにする（2026-10-20 に
+	// OpenSSH_for_Windows_9.5p2 の ssh -G で確かめた）。IdentityFile の展開（effective）とそろえる。
+	case strings.HasPrefix(expanded, "~/"), strings.HasPrefix(expanded, "~"+string(filepath.Separator)):
 		expanded = r.Home + expanded[1:]
 	case strings.HasPrefix(expanded, "~"):
 		// '~user/...' は、エンジンが行わない passwd データベースの参照を必要とする。
