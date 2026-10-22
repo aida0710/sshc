@@ -14,6 +14,9 @@ import { readShownUpdateResult, updateDialogKey, updateJobToShow } from "./updat
 type UpdateBadgeProps = {
   api?: UpdateApi;
   current?: string;
+  // leading is drawn before the version in the same row: the sidebar puts the
+  // brand there, so the version reads "sshc | v0.52.1".
+  leading?: ReactNode;
   indicator?: ReactNode;
   enabled?: boolean;
   // About lists an update's progress itself; while it is open, only the result opens a dialog.
@@ -21,11 +24,11 @@ type UpdateBadgeProps = {
   onNavigate?: (event: MouseEvent<HTMLAnchorElement>) => void;
 };
 
-// UpdateBadge shows the version, and under it only what concerns the next release:
+// UpdateBadge shows the version in the sidebar heading, and under it only what concerns the next release:
 // that one is available, or why this installation cannot update from the Web. That
 // part has its own disclosure button beside the version link. An update is confirmed
 // and followed on About, so the notice links there; its result opens in a dialog.
-export function UpdateBadge({ api = updateApi, current = "", indicator, enabled = true, showsProgressDialog = true, onNavigate }: UpdateBadgeProps) {
+export function UpdateBadge({ api = updateApi, current = "", leading, indicator, enabled = true, showsProgressDialog = true, onNavigate }: UpdateBadgeProps) {
   const t = useTranslate();
   const { status } = useUpdateStatus(api, enabled);
   const [shownResultId] = useState(readShownUpdateResult);
@@ -35,7 +38,7 @@ export function UpdateBadge({ api = updateApi, current = "", indicator, enabled 
   const detailsId = useId();
 
   const displayedCurrent = status?.current ?? current;
-  if (displayedCurrent === "") {
+  if (displayedCurrent === "" && leading === undefined) {
     return null;
   }
   const versionLabel = t("update.version", { version: displayedCurrent });
@@ -46,7 +49,7 @@ export function UpdateBadge({ api = updateApi, current = "", indicator, enabled 
   // The notice of a release stays open until it is folded; a newer release unfolds it.
   // The reason only says how to update outside the Web UI, so it starts folded.
   const isOpen = release === undefined ? isReasonOpen : foldedRelease !== release;
-  const detailIndent = indicator === undefined ? "mt-1" : "mt-1 pl-3.5";
+  const detailIndent = "mt-1";
 
   function toggleDetails() {
     if (release === undefined) {
@@ -69,10 +72,15 @@ export function UpdateBadge({ api = updateApi, current = "", indicator, enabled 
   const offersUpdate = status?.canUpdate === true && !isUpdateActive(status.job);
 
   return (
-    <div className="border-t border-line px-2 py-2 text-xs text-ink-muted">
-      <div className="flex items-center gap-2">
-        {indicator}
-        <a href={sectionPath("About")} onClick={followAbout} className="hover:text-ink hover:underline">{versionLabel}</a>
+    <div className="text-xs text-ink-muted">
+      <div className="flex h-10 min-w-0 items-center gap-2 px-1">
+        {leading}
+        {displayedCurrent === "" ? null : (
+          <>
+            {indicator}
+            <a href={sectionPath("About")} onClick={followAbout} aria-label={versionLabel} className="min-w-0 truncate font-mono hover:text-ink hover:underline">{displayedCurrent}</a>
+          </>
+        )}
         {!hasDetails ? null : (
           <button type="button" aria-label={t("update.toggleNotice")} aria-expanded={isOpen}
             aria-controls={detailsId} className="rounded p-1 hover:bg-hover hover:text-ink" onClick={toggleDetails}>
@@ -80,7 +88,7 @@ export function UpdateBadge({ api = updateApi, current = "", indicator, enabled 
           </button>
         )}
       </div>
-      <div id={detailsId} hidden={hasDetails && !isOpen}>
+      <div id={detailsId} hidden={hasDetails && !isOpen} className="px-1 pb-1">
         {reason === undefined ? null : <p className={detailIndent}>{t(updateMessage(reason))}</p>}
         {release === undefined || releasePage === undefined ? null : (
           <p className={detailIndent}>

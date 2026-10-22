@@ -286,7 +286,7 @@ test("reports a completed vault migration with both versions on mobile", async (
   }
 });
 
-test("draws one separator above the version in the mobile drawer", async ({ page, installation }) => {
+test("shows the version beside the brand in the mobile drawer", async ({ page, installation }) => {
   await page.route("**/api/v1/update", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -304,19 +304,8 @@ test("draws one separator above the version in the mobile drawer", async ({ page
   await expect(brandMark).toBeVisible();
   await expect(brandMark).toHaveAttribute("viewBox", "0 0 512 512");
   await expect(navigation).not.toContainText(">_");
-  const version = navigation.getByText(/^Version /);
+  const version = navigation.locator("[data-navigation-heading]").getByRole("link", { name: /^Version / });
   await expect(version).toBeVisible();
-  const borders = await version.evaluate((node) => {
-    const navigation = node.closest("nav");
-    let current: HTMLElement | null = node.parentElement;
-    let count = 0;
-    while (current !== null && current !== navigation) {
-      if (Number.parseFloat(getComputedStyle(current).borderTopWidth) > 0) count += 1;
-      current = current.parentElement;
-    }
-    return count;
-  });
-  expect(borders).toBe(1);
   const status = navigation.locator("[data-session-status-badge]");
   const [versionBox, statusBox] = await Promise.all([version.boundingBox(), status.boundingBox()]);
   expect(versionBox).not.toBeNull();

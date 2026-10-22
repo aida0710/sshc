@@ -5,22 +5,6 @@ const manyHosts = Array.from(
   (_unused, index) => `Host lab-${String(index).padStart(2, "0")}\n\tHostName 198.51.100.${index + 1}\n`,
 ).join("\n");
 
-async function navigationFooterTopBorders(page: import("@playwright/test").Page): Promise<number> {
-  const navigation = page.getByRole("navigation", { name: "Primary" });
-  const version = navigation.getByText(/^Version /);
-  await expect(version).toBeVisible();
-  return version.evaluate((node) => {
-    const navigation = node.closest("nav");
-    let current: HTMLElement | null = node.parentElement;
-    let borders = 0;
-    while (current !== null && current !== navigation) {
-      if (Number.parseFloat(getComputedStyle(current).borderTopWidth) > 0) borders += 1;
-      current = current.parentElement;
-    }
-    return borders;
-  });
-}
-
 async function stubUpdateStatus(page: import("@playwright/test").Page) {
   await page.route("**/api/v1/update", async (route) => {
     await route.fulfill({
@@ -30,7 +14,7 @@ async function stubUpdateStatus(page: import("@playwright/test").Page) {
   });
 }
 
-test("draws one separator above the desktop navigation version", async ({ page, installation }) => {
+test("shows the version beside the brand in the desktop navigation heading", async ({ page, installation }) => {
   await stubUpdateStatus(page);
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -44,15 +28,18 @@ test("draws one separator above the desktop navigation version", async ({ page, 
   await expect(navigation).not.toContainText(">_");
   await expect(navigation.getByText("Home", { exact: true }).first()).toBeVisible();
   await expect(page.locator("[data-app-header]")).toBeHidden();
-  await expect.poll(() => navigationFooterTopBorders(page)).toBe(1);
-  const [versionBox, statusBox] = await Promise.all([
-    navigation.getByText(/^Version /).boundingBox(),
+  const heading = navigation.locator("[data-navigation-heading]");
+  await expect(heading.getByRole("link", { name: /^Version / })).toBeVisible();
+  const [brandBox, versionBox, statusBox] = await Promise.all([
+    brandMark.boundingBox(),
+    navigation.getByRole("link", { name: /^Version / }).boundingBox(),
     navigation.locator("[data-session-status-badge]").boundingBox(),
   ]);
   expect(versionBox).not.toBeNull();
   expect(statusBox).not.toBeNull();
-  if (versionBox !== null && statusBox !== null) {
+  if (brandBox !== null && versionBox !== null && statusBox !== null) {
     expect(Math.abs(versionBox.y + versionBox.height / 2 - statusBox.y - statusBox.height / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(versionBox.y + versionBox.height / 2 - brandBox.y - brandBox.height / 2)).toBeLessThanOrEqual(2);
   }
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
@@ -71,7 +58,7 @@ test("keeps the engine version visible when the release check fails", async ({ p
   await openApplication(page, installation);
 
   const navigation = page.getByRole("navigation", { name: "Primary" });
-  await expect(navigation.getByText(/^Version /)).toBeVisible();
+  await expect(navigation.getByRole("link", { name: /^Version / })).toBeVisible();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/version-with-update-failure.png` });
   }
