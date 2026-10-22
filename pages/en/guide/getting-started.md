@@ -40,6 +40,7 @@ sshc is not an SSH server or a cloud relay. Connections and decryption happen on
 | Area | What it covers |
 | --- | --- |
 | Terminal | SSH/local shells, search, links, encodings, Quick Commands |
+| Workspaces | Groups of sessions, hidden groups, broadcast commands |
 | Connections | Host blocks, Include trees, groups, keys, passwords, known hosts |
 | SFTP | File browser, editor, folder transfer, and a queue that can resume files when recovery requirements are met |
 | Sync | User-provided S3-compatible storage, local encryption, push, pull, history |

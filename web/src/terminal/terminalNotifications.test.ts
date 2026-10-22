@@ -5,7 +5,7 @@ import type { Translate } from "../i18n/context";
 import { nextTerminalNotification } from "./terminalNotifications";
 
 const session: TerminalSession = {
-  id: "one", kind: "ssh", alias: "orchid", title: "API認証の修正",
+  id: "one", kind: "ssh", workspaceId: "default", alias: "orchid", title: "API認証の修正",
   startedAt: "2026-08-29T01:00:00Z", state: "connected", problem: "",
   presentation: { displayTitle: "API認証の修正", titleSource: "terminal", titlePinned: false },
   notificationVersion: 2,

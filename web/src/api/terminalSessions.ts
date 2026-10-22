@@ -32,6 +32,7 @@ export type TerminalSessionsApi = {
     title: string | null,
   ): Promise<TerminalSessionList>;
   closeTerminalSession(id: string): Promise<TerminalSessionList>;
+  moveTerminalSession(id: string, workspaceId: string): Promise<TerminalSessionList>;
 };
 
 function validateTerminalSessionList(value: unknown): TerminalSessionList {
@@ -104,6 +105,11 @@ export const terminalSessionsApi: TerminalSessionsApi = {
   async setTerminalSessionTitle(id, title) {
     return validateTerminalSessionList(
       await putJSON<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/title`, { title }),
+    );
+  },
+  async moveTerminalSession(id, workspaceId) {
+    return validateTerminalSessionList(
+      await putJSON<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/workspace`, { workspaceId }),
     );
   },
   async closeTerminalSession(id) {

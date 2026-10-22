@@ -4,6 +4,9 @@ import { useTranslate } from "../i18n/context";
 
 export type SessionRowMenuPlacement = "up" | "down";
 
+// A workspace the session can be moved to, already named for this screen.
+export type WorkspaceMoveTarget = { id: string; label: string };
+
 // The menu of one row in the terminal list. Every item closes the menu after
 // it acts.
 export function SessionRowMenu({
@@ -18,6 +21,8 @@ export function SessionRowMenu({
   onDuplicate,
   onMoveUp,
   onMoveDown,
+  moveTargets,
+  onMoveToWorkspace,
   onClose,
 }: {
   session: TerminalSession;
@@ -31,6 +36,8 @@ export function SessionRowMenu({
   onDuplicate: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  moveTargets: readonly WorkspaceMoveTarget[];
+  onMoveToWorkspace: (workspaceId: string) => void;
   onClose: () => void;
 }) {
   const t = useTranslate();
@@ -54,6 +61,16 @@ export function SessionRowMenu({
       </SessionRowMenuItem>
       <SessionRowMenuItem disabled={!canMoveUp} onClick={choose(onMoveUp)}>{t("terminal.moveUp")}</SessionRowMenuItem>
       <SessionRowMenuItem disabled={!canMoveDown} onClick={choose(onMoveDown)}>{t("terminal.moveDown")}</SessionRowMenuItem>
+      {moveTargets.length === 0 ? null : (
+        <div role="group" aria-label={t("workspace.moveTo")} className="mt-1 border-t border-line pt-1">
+          <p aria-hidden="true" className="px-2 py-1 text-[11px] text-ink-faint">{t("workspace.moveTo")}</p>
+          {moveTargets.map((target) => (
+            <SessionRowMenuItem key={target.id} onClick={choose(() => onMoveToWorkspace(target.id))}>
+              {target.label}
+            </SessionRowMenuItem>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

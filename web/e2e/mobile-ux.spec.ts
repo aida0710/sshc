@@ -186,7 +186,7 @@ test("quick navigation and terminal keys remain available in portrait and touch 
     if (new URL(route.request().url()).pathname.endsWith("/stream")) {
       return route.fulfill({ status: 201, json: { streamTicket: "mobile-demo-ticket" } });
     }
-    return route.fulfill({ json: { sessions: [{ id: "mobile-demo-shell", kind: "shell", title: "Demo shell", startedAt: "2026-09-12T00:00:00Z", state: "connected", problem: "", forwards: [] }], maxSessions: 12 } });
+    return route.fulfill({ json: { sessions: [{ id: "mobile-demo-shell", kind: "shell", workspaceId: "default", title: "Demo shell", startedAt: "2026-09-12T00:00:00Z", state: "connected", problem: "", forwards: [] }], maxSessions: 12 } });
   });
   await page.routeWebSocket("**/terminal/stream?**", (socket) => {
     socket.send(Buffer.from("Mobile terminal demo\r\nFiles: projects/  archives/  report.txt\r\n$ "));

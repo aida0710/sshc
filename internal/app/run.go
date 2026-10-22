@@ -265,6 +265,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		Sync:                      services.sync,
 		AutoSync:                  services.autoSync,
 		Terminals:                 services.terminals,
+		TerminalWorkspaces:        services.terminalWorkspaces,
 		VPN:                       services.vpn,
 		VPNProfiles:               services.vpnProfiles,
 		TerminalStartDirectory:    services.config.TerminalStartDirectory,

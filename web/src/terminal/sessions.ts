@@ -14,7 +14,7 @@ const sessionListPollIntervalMs = 2_000;
 export type TerminalSessionsApi = Pick<
   SessionsApi,
   "terminalSessions" | "openTerminalSession" | "reconnectTerminalSession" | "closeTerminalSession" | "setTerminalSessionTitle"
-  | "stopTerminalReconnect"
+  | "stopTerminalReconnect" | "moveTerminalSession"
 >;
 
 export type TerminalSessionsState = {
@@ -32,6 +32,7 @@ export type TerminalSessionsState = {
   closeAll: () => Promise<void>;
   refresh: () => Promise<void>;
   markExited: (id: string) => void;
+  moveToWorkspace: (id: string, workspaceId: string) => Promise<boolean>;
 };
 
 export function useTerminalSessions(
@@ -233,6 +234,12 @@ export function useTerminalSessions(
     [api, applyMutation, translate],
   );
 
+  const moveToWorkspace = useCallback(
+    (id: string, workspaceId: string): Promise<boolean> =>
+      applyMutation(() => api.moveTerminalSession(id, workspaceId), () => setProblem(translate("workspace.moveFailed"))),
+    [api, applyMutation, translate],
+  );
+
   const markExited = useCallback((id: string) => {
     beginMutation();
     setSessions((current) =>
@@ -244,7 +251,7 @@ export function useTerminalSessions(
     );
   }, [beginMutation]);
 
-  return { sessions, maxSessions, busy, problem, loaded, rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited };
+  return { sessions, maxSessions, busy, problem, loaded, rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited, moveToWorkspace };
 }
 
 export function terminalProblemKey(code: string): MessageKey {

@@ -8,7 +8,7 @@ import { TerminalPortForwards } from "./TerminalPortForwards";
 
 const session: TerminalSession = {
   id: "session-1",
-  kind: "ssh",
+  kind: "ssh", workspaceId: "default",
   alias: "bastion",
   title: "bastion",
   startedAt: "2026-08-30T00:00:00Z",
