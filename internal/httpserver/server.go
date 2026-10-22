@@ -83,10 +83,13 @@ type Options struct {
 	VPNProfiles *vpnprofile.Service
 	Keys        KeyService
 	// Connect は、alias ひとつ分の対話セッションを開く。合成の根が組み立てる。
-	Connect     Connector
-	Diagnostics *diagnostics.Service
-	KnownHosts  *knownhosts.Service
-	RemoteKeys  *remotekey.Service
+	Connect Connector
+	// RemoteEngines は、SSH の接続先のエンジンへの中継を開く。nil なら `sshc open <alias>`
+	// の受け口を登録しない。
+	RemoteEngines RemoteEngineOpener
+	Diagnostics   *diagnostics.Service
+	KnownHosts    *knownhosts.Service
+	RemoteKeys    *remotekey.Service
 	// Recent は、この端末で成功した接続を現在の設定へ解決する。
 	Recent *recent.Service
 	SFTP   *sshcSFTP.Service
@@ -539,6 +542,7 @@ func newCLIHandlers(options Options, host string) CLIHandlers {
 		Version:         options.Version,
 		ProtocolVersion: options.ProtocolVersion,
 		StopEngine:      options.StopEngine,
+		RemoteEngines:   options.RemoteEngines,
 		WorkspaceKeys: func(alias string) ([]string, error) {
 			if options.Config == nil || options.Keys == nil {
 				return nil, nil

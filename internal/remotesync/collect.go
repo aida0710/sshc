@@ -15,6 +15,7 @@ import (
 	"sshc/internal/handoff"
 	"sshc/internal/keys"
 	"sshc/internal/recent"
+	"sshc/internal/remoteengine"
 	"sshc/internal/secret"
 	"sshc/internal/selfupdate"
 	"sshc/internal/storage"
@@ -51,6 +52,9 @@ var neverTravels = slices.Concat([]string{
 	// Browser enrolment is a capability for this device's loopback origin. Only
 	// hashes are stored, but moving them would still be meaningless and unsafe.
 	browserauth.PathRelative,
+	// 接続先のエンジンへの中継が、このマシンで待ち受けたポート。ブラウザの保存が
+	// このマシンのポートごとに分かれるために覚えるもので、別のマシンでは意味を持たない。
+	remoteengine.PortsPathRelative,
 	// pane layout is device-local and contains no process/session state that can
 	// be meaningfully restored on another engine.
 	terminalworkspace.PathRelative,

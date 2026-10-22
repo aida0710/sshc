@@ -178,7 +178,7 @@ _sshc_completion() {
       _sshc_complete_words "{{TELNET_OPTIONS}}"
       ;;
     open)
-      _sshc_complete_words "--no-browser --help"
+      if (( COMP_CWORD == 2 )); then _sshc_complete_aliases "--no-browser --help"; else _sshc_complete_words "--no-browser"; fi
       ;;
     status)
       _sshc_complete_words "--json --help"
@@ -328,7 +328,9 @@ _sshc() {
       ;;
     serial) _sshc_values '{{SERIAL_OPTIONS}}' ;;
     telnet) _sshc_values '{{TELNET_OPTIONS}}' ;;
-    open) _sshc_values '--no-browser --help' ;;
+    open)
+      if (( CURRENT == 3 )); then _sshc_aliases; _sshc_values '--no-browser --help'; else _sshc_values '--no-browser'; fi
+      ;;
     status) _sshc_values '--json --help' ;;
     update) _sshc_values '-y --yes --help' ;;
     service)
@@ -467,6 +469,7 @@ complete -c sshc -f -n '__sshc_prefix ssh' -l help -d 'Show help for sshc ssh'
 complete -c sshc -f -n '__sshc_command ssh; and __sshc_min_words 3; and not contains -- --non-interactive (commandline -opc)' -a '--non-interactive'
 complete -c sshc -f -n '__sshc_previous --non-interactive' -a '--'
 complete -c sshc -f -n '__sshc_prefix info' -a '(command sshc ssh --list 2>/dev/null)'
+complete -c sshc -f -n '__sshc_prefix open' -a '(command sshc ssh --list 2>/dev/null)'
 complete -c sshc -f -n '__sshc_prefix terminal create' -a 'shell ssh'
 complete -c sshc -f -n '__sshc_prefix terminal create ssh' -a '(command sshc ssh --list 2>/dev/null)'
 complete -c sshc -f -n '__sshc_prefix terminal list; or __sshc_prefix terminal show; or __sshc_prefix terminal read; or __sshc_prefix terminal send; or __sshc_prefix terminal wait; or __sshc_prefix terminal rename; or __sshc_prefix terminal close' -a '--help'
