@@ -665,6 +665,66 @@ describe("VPNPanel", () => {
     expect(screen.queryByRole("article", { name: "tohoku" })).toBeNull();
   });
 
+  it("shows the card's Remove as working after the confirmation closes, and says why the rest wait", async () => {
+    const user = userEvent.setup();
+    let answer: () => void = () => undefined;
+    const removeVPNProfile = vi.fn(() => new Promise<VPNOverview>((resolve) => {
+      answer = () => resolve(overview({ profiles: [] }));
+    }));
+    render(<VPNPanel api={buildApi({ removeVPNProfile })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Remove" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Remove tohoku?" })).getByRole("button", { name: "Remove" }));
+
+    const remove = within(route).getByRole("button", { name: "Remove" });
+    expect(remove).toHaveAttribute("aria-busy", "true");
+    expect(remove).not.toHaveAttribute("title");
+    const edit = within(route).getByRole("button", { name: "Edit" });
+    expect(edit).toBeDisabled();
+    expect(edit).not.toHaveAttribute("aria-busy");
+    expect(edit).toHaveAttribute("title", "Available once the current operation finishes.");
+    const save = within(screen.getByRole("region", { name: "Add a VPN profile" })).getByRole("button", { name: "Save" });
+    expect(save).toHaveAttribute("title", "Available once the current operation finishes.");
+    await act(async () => answer());
+    expect(await screen.findByText("No VPN profiles yet. Add one below.")).toBeVisible();
+  });
+
+  it("shows Connect as working while the route is being opened, and why the profile cannot be changed meanwhile", async () => {
+    const user = userEvent.setup();
+    const startVPNRoute = vi.fn().mockReturnValue(new Promise<VPNOverview>(() => undefined));
+    render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(stoppedOverview()), startVPNRoute })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Connect" }));
+
+    expect(within(route).getByRole("button", { name: "Connect" })).toHaveAttribute("aria-busy", "true");
+    expect(within(route).getByRole("button", { name: "Edit" })).toHaveAttribute(
+      "title",
+      "Cannot be changed while the route is being prepared. Disconnect to stop preparing it.",
+    );
+  });
+
+  it("shows the new profile's Save as working until the engine answers", async () => {
+    const user = userEvent.setup();
+    let answer: () => void = () => undefined;
+    const createVPNProfile = vi.fn(() => new Promise<VPNOverview>((resolve) => {
+      answer = () => resolve(overview());
+    }));
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await fillWireGuardProfile(user, form);
+    const save = within(form).getByRole("button", { name: "Save" });
+    await user.click(save);
+
+    expect(save).toHaveAttribute("aria-busy", "true");
+    expect(save).not.toHaveAttribute("title");
+    await act(async () => answer());
+    await waitFor(() => expect(save).not.toHaveAttribute("aria-busy"));
+    expect(within(form).getByLabelText("Name")).toHaveValue("");
+  });
+
   it("keeps the profile when removing is cancelled", async () => {
     const user = userEvent.setup();
     const removeVPNProfile = vi.fn().mockResolvedValue(overview({ profiles: [] }));

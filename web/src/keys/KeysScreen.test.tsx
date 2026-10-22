@@ -414,6 +414,52 @@ describe("KeysScreen", () => {
     expect(screen.getByLabelText("New passphrase")).toHaveValue("");
   });
 
+  it("shows only the passphrase change as working while it waits, and sends it once", async () => {
+    const user = userEvent.setup();
+    let answer: () => void = () => undefined;
+    const changePassphrase = vi.fn(() => new Promise((resolve) => {
+      answer = () => resolve({ id: "key-one", relativePath: "id_work", encrypted: true, notes: [], transactionId: "tx" });
+    }));
+    render(<KeysScreen api={buildApi({ changePassphrase } as Partial<KeysApi>)} />);
+
+    const management = await openKeyDetails(await screen.findByRole("row", { name: /id_work/ }));
+    await user.click(within(management).getByRole("button", { name: "Change passphrase" }));
+    await user.type(screen.getByLabelText("Current passphrase"), "first passphrase");
+    await user.type(screen.getByLabelText("New passphrase"), "second passphrase");
+    const passphraseForm = screen.getByRole("heading", { name: "Change passphrase: id_work" }).closest("form")!;
+    const submit = within(passphraseForm).getByRole("button", { name: "Change passphrase" });
+    await user.click(submit);
+
+    expect(submit).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Create key" })).not.toHaveAttribute("aria-busy");
+    await user.type(screen.getByLabelText("New passphrase"), "{Enter}");
+    expect(changePassphrase).toHaveBeenCalledTimes(1);
+    answer();
+    await waitFor(() => expect(screen.queryByLabelText("Current passphrase")).not.toBeInTheDocument());
+  });
+
+  it("shows key creation working until the key is made", async () => {
+    const user = userEvent.setup();
+    let answer: () => void = () => undefined;
+    const generate = vi.fn(() => new Promise((resolve) => {
+      answer = () => resolve({
+        id: "key-new", relativePath: "id_new", publicRelativePath: "id_new.pub", fingerprint: "SHA256:new",
+        keyType: "ssh-ed25519", bits: 256, encrypted: true, transactionId: "tx",
+      });
+    }));
+    render(<KeysScreen api={buildApi({ generate } as Partial<KeysApi>)} />);
+
+    await user.type(await screen.findByLabelText("File name"), "id_new");
+    await user.type(screen.getByLabelText("Passphrase"), "one-time secret");
+    const create = screen.getByRole("button", { name: "Create key" });
+    await user.click(create);
+
+    expect(create).toHaveAttribute("aria-busy", "true");
+    answer();
+    expect(await screen.findByRole("button", { name: "Assign to a connection" })).toBeInTheDocument();
+    expect(create).not.toHaveAttribute("aria-busy");
+  });
+
   it("keeps a typed passphrase out of browser storage", async () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     render(<KeysScreen api={buildApi()} />);
