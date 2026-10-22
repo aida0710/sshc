@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
+	"sshc/internal/handoff"
 )
 
 // strictEngine は、接続先のエンジンと同じく、Host と Origin が自分の 127.0.0.1:<ポート>
@@ -31,6 +33,11 @@ func strictEngine(t *testing.T) *httptest.Server {
 		}
 		if origin := request.Header.Get("Origin"); origin != "" && origin != server.URL {
 			http.Error(response, "cross_site_request "+origin, http.StatusForbidden)
+			return
+		}
+		if request.URL.Path == challengePath {
+			response.Header().Set(handoff.ProofHeader, handoff.Prove(fakeSecret, request.Header.Get(handoff.ChallengeHeader)))
+			response.WriteHeader(http.StatusNoContent)
 			return
 		}
 		if request.URL.Path == "/terminal/stream" {
@@ -60,6 +67,7 @@ func strictEngine(t *testing.T) *httptest.Server {
 }
 
 // fakeLink は、SSH の代わりにこのマシンの TCP を開き、入口のコマンドに決まった出力を返す。
+// handoff を尋ねられたら、入口の URL のポートと fakeSecret を書いた handoff を返す。
 type fakeLink struct {
 	entrance string
 	exitCode int
@@ -82,6 +90,10 @@ func (l *fakeLink) DialContext(ctx context.Context, network, address string) (ne
 }
 
 func (l *fakeLink) Run(_ context.Context, command string, _ time.Duration) (RunResult, error) {
+	if command == handoffCommand {
+		origin, _, _ := strings.Cut(l.entrance, "/#")
+		return RunResult{Stdout: []byte(handoffDocument(origin, fakeSecret, "v9"))}, nil
+	}
 	if command != EntranceCommand {
 		return RunResult{}, fmt.Errorf("unexpected command %q", command)
 	}

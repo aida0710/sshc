@@ -41,8 +41,8 @@ func newRelayHandler(localPort int, remotePort func() int, transport http.RoundT
 		Transport: transport,
 		// ターミナルの出力やファイルの受け渡しを溜めずに流す。
 		FlushInterval: -1,
-		ErrorHandler: func(response http.ResponseWriter, _ *http.Request, _ error) {
-			writeProblem(response, http.StatusBadGateway, "remote_engine_unreachable")
+		ErrorHandler: func(response http.ResponseWriter, _ *http.Request, err error) {
+			writeProblem(response, http.StatusBadGateway, unreachableCode(err))
 		},
 	}
 	return handler

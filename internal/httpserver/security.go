@@ -142,6 +142,9 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return problem(c, http.StatusForbidden, "invalid_host")
 		}
 
+		if c.Path() == remoteEngineStreamRoute {
+			return s.requireSignedInAndUnlocked(c, next)
+		}
 		if !isAPI {
 			return next(c)
 		}
@@ -216,6 +219,36 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		c.Set(SessionContextKey, cookie.Value)
 		return next(c)
 	}
+}
+
+// requireSignedInAndUnlocked は、/api/ の外にあって、それでもこのマシンのセッションと
+// Vault のロックの解除を求める受け口（実行先のターミナルの入出力）を守る。
+//
+// 実行先のターミナルの入出力は、接続先のエンジンが発行したチケットを接続先で確かめる。
+// このマシンはチケットを確かめられないので、確かめずに取り次ぐと、cookie も持たない
+// 要求で接続先への SSH 接続と CLI セッションの発行まで進む。WebSocket は CSRF の
+// トークンをヘッダーで送れないので、cookie（SameSite=Strict）と Origin（取り次ぐ受け口が
+// 完全一致を求める）で同じページからの要求に限る。ロック中に断るのは、取り次ぐ
+// ターミナルの API と同じ扱いにするためである。
+func (s Security) requireSignedInAndUnlocked(c *echo.Context, next echo.HandlerFunc) error {
+	cookie, err := c.Request().Cookie(SessionCookie)
+	if err != nil {
+		return problem(c, http.StatusUnauthorized, "session_required")
+	}
+	if s.Sessions == nil {
+		return problem(c, http.StatusUnauthorized, "invalid_session")
+	}
+	endRequest, authenticated := s.Sessions.BeginRequest(cookie.Value)
+	if !authenticated {
+		return problem(c, http.StatusUnauthorized, "invalid_session")
+	}
+	// 入出力が続くあいだセッションを使用中として持ち続けない。このマシンの
+	// /terminal/stream と同じく、開くときに一度だけ確かめる。
+	endRequest()
+	if s.Unlocked == nil || !s.Unlocked() {
+		return problem(c, http.StatusConflict, "vault_locked")
+	}
+	return next(c)
 }
 
 func setSecurityHeaders(header http.Header, apiResponse bool) {
