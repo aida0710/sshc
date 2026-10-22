@@ -22,6 +22,7 @@ const vpnFieldReasonMessages = {
   decided_by_sshc: "vpn.field.decided_by_sshc",
   file_reference: "vpn.field.file_reference",
   server_mode: "vpn.field.server_mode",
+  unlisted_directive: "vpn.field.unlisted_directive",
   unsupported_inline: "vpn.field.unsupported_inline",
   unclosed_inline: "vpn.field.unclosed_inline",
   not_client: "vpn.field.not_client",

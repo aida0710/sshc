@@ -238,9 +238,9 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
 - コンテナは`--network bridge`と`--security-opt no-new-privileges:true`で起動し、`--privileged`と`--network host`は使いません。権限は既定の権限に`NET_ADMIN`を足したものを基本にし、WireGuardとOpenVPNは既定の権限を外したうえで`NET_ADMIN`、`NET_RAW`、`DAC_OVERRIDE`だけを渡します。デバイスはトンネルに要るもの（`/dev/net/tun`、L2TP/IPsecは`/dev/ppp`）だけを渡し、IKEv2には渡しません。
 - ホストのルーティングとDNSは変えません。経路とパケットフィルタは、接続に使った接続先の分だけコンテナの中に作ります。VPNの向こうのネットワーク全体は引き込みません。
 - fail closedです。接続先宛ての通信がトンネル以外から出ようとすると、コンテナの中で拒否します。経路を用意できないときは、通常のネットワークへ切り替えずに接続を中止します。
-- WireGuardとOpenVPNの設定ファイルは、コンテナへ渡す前にsshcが読み、次の指示を断ります。
-  - コマンドやプログラムを実行する指示（WireGuardの`PreUp`、`PostUp`など、OpenVPNの`up`、`plugin`など）
-  - 経路やDNSを変える指示（OpenVPNの`route`、`redirect-gateway`など）
+- WireGuardとOpenVPNの設定ファイルは、コンテナへ渡す前にsshcが読みます。どちらも、確かめた指示だけを受け付ける許可リストで検査します。OpenVPNの表（`internal/vpn/openvpn_config.go`の`allowedOpenVPNDirectives`）は、OpenVPN 2.6のmanでコマンドを実行せず、ファイルを読み書きせず、経路とDNSを変えないと確かめたクライアントの指示です。OpenVPNのバージョンが上がって増えた指示（2.7の`dns-updown`など）は、表に足すまで断ります。`setenv`で置ける環境変数は、OpenVPNやAccess Serverが読む名前（`CLIENT_CERT`、`FORWARD_COMPATIBLE`、`PUSH_PEER_INFO`）と`UV_`・`IV_`で始まる名前に限ります。ほかの名前（`LD_PRELOAD`など）は、sshcがOpenVPNに動かさせる`openvpn-up`の環境に届くためです。表に無い指示で断るときは、その語がシークレットでありうるので、名前を示さず行だけを示します。次の指示は、理由を示せるよう名前を挙げて断ります。
+  - コマンドやプログラムを実行する指示（WireGuardの`PreUp`、`PostUp`など、OpenVPNの`up`、`plugin`、`providers`、`dns-updown`など）
+  - 経路やDNSを変える指示（OpenVPNの`route`、`redirect-gateway`、`dns`など）
   - sshcが決める指示（OpenVPNの`dev`（`tun`以外）、`daemon`、`log`、`management`など）
   - コンテナの中に無いファイルを指す指示（インラインのブロックは受け付けます）
   - VPNサーバー用の指示（OpenVPNの`server`、`mode`など）
