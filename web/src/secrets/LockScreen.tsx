@@ -10,6 +10,7 @@ import { autoControl, CheckboxField } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
 import { ErrorDiagnosticNotice } from "../shell/ErrorDiagnosticNotice";
+import { SignOutButton } from "../session/SignOutButton";
 import { isAcceptedButShort, meetsMasterPasswordMinimum } from "./masterPasswordLength";
 
 type LockScreenProps = {
@@ -20,6 +21,9 @@ type LockScreenProps = {
   onOpen: (status?: PasswordVaultStatus) => void;
   onExists?: () => void;
   version?: string;
+  // offerSignOut shows sign-out for the whole-app lock screen, so a browser can
+  // leave without the master password. The Passwords panel has the menu instead.
+  offerSignOut?: boolean;
   api?: Pick<VaultApi, "passwordVault" | "initialiseVault" | "unlockVault" | "recoverCompatibleVault" | "resetUnsupportedVault">;
 };
 
@@ -36,6 +40,7 @@ export function LockScreen({
   onOpen,
   onExists = () => undefined,
   version = "",
+  offerSignOut = false,
   api = vaultApi,
 }: LockScreenProps) {
   const { locale, setLocale, t } = useLanguage();
@@ -285,6 +290,12 @@ export function LockScreen({
             </Button>
           </form>
         </div>
+        {offerSignOut ? (
+          <footer className="flex flex-col gap-3 border-t border-control-line px-7 py-5 md:px-10">
+            <p className="text-sm leading-6 text-ink-muted">{t("menu.signOutHint")}</p>
+            <SignOutButton />
+          </footer>
+        ) : null}
       </section>
     </main>
   );

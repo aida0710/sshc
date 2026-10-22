@@ -116,12 +116,14 @@ type Security struct {
 // session/bootstrap と session/recover は gate より前に通すので、ここには無い。
 // recover-compatible-backup と reset-unsupported は、別の版が書いた Vault を
 // 開けずロックされたままのときにだけ意味を持つため、ロック中に通す必要がある。
-// どちらも unlock と同じく master password を検証する。
+// どちらも unlock と同じく master password を検証する。sign-out はセッションと
+// 登録を消すだけで Vault の中身に触れないので、master password を知らない人も
+// ロック画面からこのブラウザをサインアウトできるよう通す。
 func gateExempt(method, path string) bool {
 	switch path {
 	case "/api/v1/health", "/api/v1/update":
 		return method == http.MethodGet
-	case "/api/v1/session/renew":
+	case "/api/v1/session/renew", "/api/v1/session/sign-out":
 		return method == http.MethodPost
 	case "/api/v1/passwords":
 		return method == http.MethodGet
