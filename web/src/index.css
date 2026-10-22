@@ -564,15 +564,14 @@
   animation: sshc-popover-enter 120ms ease-out;
 }
 /* 押せないボタンは、どの画面でも同じ濃さにする。理由はボタンの title や近くの文で伝える。
-   無効の fieldset の中のボタンは、fieldset 自身が薄くなるので重ねて薄くしない。 */
+   無効の fieldset の中のボタンも同じにする（fieldset 自身はたいてい薄くならない）。 */
 :where(button):disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 /* 押したあと処理を待っているボタン（aria-busy）は、使えないのではなく働いている最中なので
    薄くしない。もう一度押せないことは、カーソルと回転の印で伝える。 */
-:where(button[aria-busy="true"]):disabled,
-:where(fieldset:disabled) :where(button):disabled {
+:where(button[aria-busy="true"]):disabled {
   opacity: 1;
 }
 :where(button[aria-busy="true"]):disabled {
