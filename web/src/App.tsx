@@ -113,16 +113,26 @@ export function App({
 
   const runTargets = useRunTargets({ translate: t, enabled: state === "ready", localVersion: version });
   // The terminal API of the run target: this machine's own, or the one this
-  // machine's engine forwards for an engine on an SSH host.
+  // machine's engine forwards for an engine on an SSH host. A new API is a new
+  // engine to the hooks below, which drop what they showed and read it anew;
+  // that is wanted once a run target's Vault is unlocked, so the API is built
+  // again for each unlock (vaultRevision).
+  const vaultRevision = runTargets.vaultUnlock.revision;
   const runTargetApis = useMemo(() => {
     const alias = runTargets.selected;
-    if (alias === null) return { sessions: terminalSessionsApi, workspaces: terminalWorkspacesApi };
+    if (alias === null) return { sessions: terminalSessionsApi, workspaces: terminalWorkspacesApi, vaultRevision };
     return {
       sessions: createTerminalSessionsApi(engineTerminalBase(alias), engineStreamPath(alias)),
       workspaces: createTerminalWorkspacesApi(engineTerminalBase(alias)),
+      vaultRevision,
     };
-  }, [runTargets.selected]);
+  }, [runTargets.selected, vaultRevision]);
   const terminalSessions = useTerminalSessions(runTargetApis.sessions, t, state === "ready");
+  // A run target found locked asks for its Vault password at once.
+  const { offer: offerVaultUnlock } = runTargets.vaultUnlock;
+  useEffect(() => {
+    if (terminalSessions.remoteVaultLocked && runTargets.selected !== null) offerVaultUnlock(runTargets.selected);
+  }, [offerVaultUnlock, runTargets.selected, terminalSessions.remoteVaultLocked]);
   const terminalWorkspaces = useTerminalWorkspaces({
     sessions: terminalSessions.sessions,
     translate: t,

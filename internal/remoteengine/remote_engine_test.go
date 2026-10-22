@@ -21,6 +21,13 @@ import (
 
 const fakeSecret = "the-remote-handoff-secret"
 
+// fakeVaultPassword は偽の接続先の Vault のパスワードである。fakeVaultMissing を送ると、
+// Vault が無いと断る。
+const (
+	fakeVaultPassword = "correct horse battery"
+	fakeVaultMissing  = "no vault here"
+)
+
 // fakeRemoteEngine は、接続先のエンジンの /cli/ と /api/v1/terminal/ の一部を、本物と
 // 同じ規則（秘密、cookie、CSRF、Origin、Sec-Fetch-Site）で答える。
 type fakeRemoteEngine struct {
@@ -79,22 +86,31 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewEncoder(w).Encode(Status{Version: "v9", Vault: true, Unlocked: true, Sessions: 3})
 	case "/api/v1/terminal/sessions":
-		f.mutex.Lock()
-		cookie, csrf := f.cookie, f.csrf
-		f.mutex.Unlock()
-		sent, _ := r.Cookie(sessionCookieName)
-		switch {
-		case r.Header.Get("Origin") != f.origin() || r.Header.Get("Sec-Fetch-Site") != "same-origin":
-			http.Error(w, "cross_site_request", http.StatusForbidden)
-		case sent == nil || sent.Value != cookie || r.Header.Get(csrfHeaderName) != csrf:
-			http.Error(w, "invalid_session", http.StatusUnauthorized)
-		case f.expired.CompareAndSwap(true, false):
-			http.Error(w, "invalid_session", http.StatusUnauthorized)
+		if !f.authorized(w, r) {
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Set-Cookie", "leaked=1")
+		fmt.Fprintf(w, `{"method":%q,"body":%q,"cookies":%q}`, r.Method, string(body), r.Header.Get("Cookie"))
+	case remoteUnlockPath:
+		if !f.authorized(w, r) {
+			return
+		}
+		var request struct {
+			Passphrase string `json:"passphrase"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		w.Header().Set("Content-Type", "application/json")
+		switch request.Passphrase {
+		case fakeVaultPassword:
+			fmt.Fprint(w, `{"exists":true,"unlocked":true}`)
+		case fakeVaultMissing:
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"code":"vault_missing"}`)
 		default:
-			body, _ := io.ReadAll(r.Body)
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Set-Cookie", "leaked=1")
-			fmt.Fprintf(w, `{"method":%q,"body":%q,"cookies":%q}`, r.Method, string(body), r.Header.Get("Cookie"))
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"code":"wrong_passphrase"}`)
 		}
 	case "/api/v1/terminal/workspaces":
 		w.Header().Set("Content-Type", "application/problem+json")
@@ -119,6 +135,26 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// authorized は、接続先のエンジンの API の規則（Origin、cookie、CSRF）を確かめる。
+// 満たさなければ断りを書いて false を返す。
+func (f *fakeRemoteEngine) authorized(w http.ResponseWriter, r *http.Request) bool {
+	f.mutex.Lock()
+	cookie, csrf := f.cookie, f.csrf
+	f.mutex.Unlock()
+	sent, _ := r.Cookie(sessionCookieName)
+	switch {
+	case r.Header.Get("Origin") != f.origin() || r.Header.Get("Sec-Fetch-Site") != "same-origin":
+		http.Error(w, "cross_site_request", http.StatusForbidden)
+	case sent == nil || sent.Value != cookie || r.Header.Get(csrfHeaderName) != csrf:
+		http.Error(w, "invalid_session", http.StatusUnauthorized)
+	case f.expired.CompareAndSwap(true, false):
+		http.Error(w, "invalid_session", http.StatusUnauthorized)
+	default:
+		return true
+	}
+	return false
 }
 
 // handoffLink は fakeLink に、handoffCommand への答えを足したものである。
@@ -355,5 +391,26 @@ func TestAnEngineIsUpdatedRestartedOrStoppedWithTheHostsOwnSSHCAndItsCredentials
 	}
 	if _, err := manager.ControlEngine(context.Background(), "r540", "reboot"); !errors.Is(err, ErrUnknownAction) {
 		t.Fatalf("unknown action = %v", err)
+	}
+}
+
+func TestTheRemoteVaultIsUnlockedWithItsOwnCredentialsAndAWrongPasswordIsToldApart(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r540"); err != nil {
+		t.Fatal(err)
+	}
+	remote.expired.Store(true)
+	if err := manager.UnlockVault(context.Background(), "r540", fakeVaultPassword); err != nil {
+		t.Fatalf("unlock after the remote session expired = %v", err)
+	}
+	if err := manager.UnlockVault(context.Background(), "r540", "wrong"); !errors.Is(err, ErrWrongPassphrase) {
+		t.Fatalf("wrong password = %v", err)
+	}
+	if err := manager.UnlockVault(context.Background(), "r540", fakeVaultMissing); !errors.Is(err, ErrUnlockRefused) || !strings.Contains(err.Error(), "vault_missing") {
+		t.Fatalf("missing vault = %v", err)
+	}
+	if err := manager.UnlockVault(context.Background(), "gpu-box", fakeVaultPassword); !errors.Is(err, ErrNotAdded) {
+		t.Fatalf("an engine that was not added = %v", err)
 	}
 }

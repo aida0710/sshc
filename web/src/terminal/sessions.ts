@@ -22,6 +22,9 @@ export type TerminalSessionsState = {
   maxSessions: number;
   busy: boolean;
   problem: string;
+  // remoteVaultLocked is true while the run target's list is refused because
+  // that engine's Vault is locked.
+  remoteVaultLocked: boolean;
   loaded: boolean;
   rename: (id: string, title: string) => Promise<boolean>;
   unpinTitle?: (id: string) => Promise<boolean>;
@@ -44,6 +47,7 @@ export function useTerminalSessions(
   const [maxSessions, setMaxSessions] = useState(0);
   const [pendingOperations, setPendingOperations] = useState(0);
   const [problem, setProblem] = useState("");
+  const [remoteVaultLocked, setRemoteVaultLocked] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const refreshGeneration = useRequestGeneration();
   const mutationGeneration = useRequestGeneration();
@@ -86,12 +90,16 @@ export function useTerminalSessions(
       if (!isCurrent()) return;
       setSessions(listed.sessions);
       setMaxSessions(listed.maxSessions);
+      setRemoteVaultLocked(false);
     } catch (error) {
       // A run-target engine that cannot be reached would otherwise look like
       // one with no sessions. This machine's own list keeps failing quietly:
       // the next poll reads it again.
       const code = failureCode(error);
-      if (isCurrent() && code.startsWith("remote_engine_")) setProblem(translate(terminalProblemKey(code)));
+      if (isCurrent() && code.startsWith("remote_engine_")) {
+        setProblem(translate(terminalProblemKey(code)));
+        setRemoteVaultLocked(code === "remote_engine_vault_locked");
+      }
     } finally {
       if (isCurrent()) setLoaded(true);
     }
@@ -133,6 +141,7 @@ export function useTerminalSessions(
     setSessions([]);
     setMaxSessions(0);
     setProblem("");
+    setRemoteVaultLocked(false);
     setLoaded(false);
   }, [api, mutationGeneration, refreshGeneration]);
 
@@ -267,7 +276,7 @@ export function useTerminalSessions(
     );
   }, [beginMutation]);
 
-  return { sessions, maxSessions, busy, problem, loaded, rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited, moveToWorkspace };
+  return { sessions, maxSessions, busy, problem, remoteVaultLocked, loaded, rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited, moveToWorkspace };
 }
 
 export function terminalProblemKey(code: string): MessageKey {

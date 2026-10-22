@@ -22,11 +22,15 @@ export function useEngineInfo({
   api,
   translate,
   localVersion,
+  vaultRevision,
 }: {
   alias: string;
   api: RemoteEnginesApi;
   translate: Translate;
   localVersion: string;
+  // vaultRevision changes when a run-target Vault is unlocked, which is when
+  // the status is read again.
+  vaultRevision: number;
 }): EngineInfoState {
   const [status, setStatus] = useState<RemoteEngineStatus | null>(null);
   const [problem, setProblem] = useState("");
@@ -44,7 +48,7 @@ export function useEngineInfo({
     }
   }, [alias, api, localVersion, translate]);
 
-  useEffect(() => { void readStatus(); }, [readStatus]);
+  useEffect(() => { void readStatus(); }, [readStatus, vaultRevision]);
 
   const run = useCallback(async (action: RemoteEngineAction) => {
     setRunning(action);
