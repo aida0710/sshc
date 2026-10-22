@@ -144,10 +144,12 @@ describe("RunTargetSwitcher", () => {
       }
     });
     const vaultUnlock = vaultUnlockState({ unlockFor: "r540" });
-    render(<RunTargetSwitcher targets={targets({ api: enginesApi({ unlockVault }), vaultUnlock })} aliases={["r540"]} hosts={[]} />);
+    const status = vi.fn(async () => ({ alias: "r540", version: "v0.53.0", vault: true, unlocked: false, passwordless: false, sessions: 2 }));
+    render(<RunTargetSwitcher targets={targets({ api: enginesApi({ unlockVault, status }), vaultUnlock })} aliases={["r540"]} hosts={[]} />);
 
     const dialog = screen.getByRole("dialog", { name: "Unlock the vault on r540" });
     const field = within(dialog).getByLabelText("Vault password for r540");
+    await waitFor(() => expect(field).toBeEnabled());
     await user.type(field, "wrong");
     await user.click(within(dialog).getByRole("button", { name: "Unlock" }));
     expect(await within(dialog).findByText("The vault password for r540 is wrong.")).toBeInTheDocument();
@@ -157,5 +159,17 @@ describe("RunTargetSwitcher", () => {
     await user.type(field, "correct horse battery{Enter}");
     await waitFor(() => expect(vaultUnlock.unlocked).toHaveBeenCalledTimes(1));
     expect(unlockVault).toHaveBeenLastCalledWith("r540", "correct horse battery");
+  });
+
+  it("sends an engine with no Vault yet to its own screen instead of asking for a password", async () => {
+    const user = userEvent.setup();
+    const status = vi.fn(async () => ({ alias: "r540", version: "v0.53.0", vault: false, unlocked: false, passwordless: false, sessions: 0 }));
+    const state = targets({ api: enginesApi({ status }), vaultUnlock: vaultUnlockState({ unlockFor: "r540" }) });
+    render(<RunTargetSwitcher targets={state} aliases={["r540"]} hosts={[]} />);
+
+    const dialog = await screen.findByRole("dialog", { name: "r540 has no vault" });
+    await user.click(within(dialog).getByRole("button", { name: "Open its full screen in a new tab" }));
+    expect(state.vaultUnlock.close).toHaveBeenCalled();
+    expect(state.openInNewTab).toHaveBeenCalledWith("r540");
   });
 });

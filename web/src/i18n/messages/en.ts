@@ -545,6 +545,8 @@ export const en = {
   "runTarget.unlock": "Unlock",
   "runTarget.unlocking": "Unlocking…",
   "runTarget.unlockCancel": "Cancel",
+  "runTarget.vaultMissingHeading": "{alias} has no vault",
+  "runTarget.vaultMissingBody": "To use the terminals of the engine on {alias}, create its vault first. Open the screen of {alias} in a new tab and create it there.",
   "workspace.heading": "Workspaces",
   "workspace.headingActions": "Workspace list actions",
   "workspace.showHidden": "Show hidden workspaces",

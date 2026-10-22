@@ -550,6 +550,8 @@ export const ja = {
   "runTarget.unlock": "解除",
   "runTarget.unlocking": "解除しています…",
   "runTarget.unlockCancel": "キャンセル",
+  "runTarget.vaultMissingHeading": "{alias} にVaultがありません",
+  "runTarget.vaultMissingBody": "{alias} のsshcエンジンのターミナルを使うには、先にそのVaultを作ります。{alias} の画面を別タブで開いて作ってください。",
   "workspace.heading": "Workspaces",
   "workspace.headingActions": "ワークスペースの一覧の操作",
   "workspace.showHidden": "非表示のワークスペースも表示",

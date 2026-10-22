@@ -139,6 +139,11 @@ export function RunTargetSwitcher({
           api={targets.api}
           localVersion={targets.localVersion}
           onUnlocked={targets.vaultUnlock.unlocked}
+          onOpenInNewTab={() => {
+            const alias = targets.vaultUnlock.unlockFor;
+            targets.vaultUnlock.close();
+            if (alias !== null) void targets.openInNewTab(alias);
+          }}
           onClose={targets.vaultUnlock.close}
         />
       )}
