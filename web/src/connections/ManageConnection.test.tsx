@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { FileNode, HostDetail } from "../api/config";
@@ -141,5 +141,20 @@ describe("ManageConnection", () => {
     expect(screen.getByLabelText("Comment")).toHaveValue("saved comment");
     expect(screen.getByRole("button", { name: "Delete connection" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Confirm delete" })).toBeNull();
+  });
+
+  it("marks the pressed operation as working and holds the others until it is saved", async () => {
+    const user = userEvent.setup();
+    let finish: () => void = () => undefined;
+    const onDuplicate = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    renderManage({ onDuplicate });
+
+    await user.click(screen.getByRole("button", { name: "Duplicate connection" }));
+    expect(screen.getByRole("button", { name: "Duplicate connection" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Delete connection" })).toBeDisabled();
+
+    finish();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Duplicate connection" })).not.toHaveAttribute("aria-busy"));
+    expect(screen.getByRole("button", { name: "Delete connection" })).toBeEnabled();
   });
 });

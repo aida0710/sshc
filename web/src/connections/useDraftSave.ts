@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useTranslate } from "../i18n/context";
+import { useToast } from "../ui/useToast";
 
 type SaveOutcome = {
   // draft と saved は、保存を始めたときの下書きと保存済みの値（どちらも参照）である。
@@ -17,7 +19,11 @@ type SaveOutcome = {
 // 結果は、保存を始めたときの下書きと保存済みの値が、どちらも同じ参照のあいだだけ当てはまる。
 // 下書きを編集・破棄するか、保存済みの値を読み直すと、結果は外れる。読み直した値に保存した
 // 変更が無ければ、下書きはふたたび未保存の変更として見える。
+//
+// 書き込めたら、保存のバーが消えるだけでは終わったか分からないので、知らせを出す。
 export function useDraftSave({ draft, saved }: { draft: unknown; saved: unknown }) {
+  const t = useTranslate();
+  const showToast = useToast();
   const [saving, setSaving] = useState(false);
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
   const result = outcome !== null && outcome.draft === draft && outcome.saved === saved ? outcome.result : null;
@@ -30,6 +36,7 @@ export function useDraftSave({ draft, saved }: { draft: unknown; saved: unknown 
     try {
       await write();
       setOutcome({ ...started, result: "written" });
+      showToast(t("conn.draftSaved"), { tone: "success" });
       return true;
     } catch {
       setOutcome({ ...started, result: "failed" });

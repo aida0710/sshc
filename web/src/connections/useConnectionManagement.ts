@@ -6,6 +6,7 @@ import { groupAfterRename, movedHostIdentity } from "./connectionMoves";
 import type { DraggedConnection, DragPayload } from "./dragdrop";
 import type { SaveFeedback } from "./pageState";
 import type { SaveAttempt } from "./useConnectionSave";
+import { duplicateAliasOf } from "./duplicateAlias";
 
 // A host source for a move: the file it lives in now and that file's
 // contents at the time the move was decided.
@@ -47,56 +48,60 @@ export function useConnectionManagement({
   const { setPreview, setProblem, setLocalError } = feedback;
   const entryPath = overview?.entry.path ?? "config";
 
-  function rename(newName: string) {
-    if (detail === null || selection === null) return;
+  // 開いている接続先への操作（rename から remove まで）は、保存できたかを返す。
+  async function rename(newName: string): Promise<boolean> {
+    if (detail === null || selection === null) return false;
     setLocalError("");
-    void submit({
+    return (await submit({
       kind: "rename",
       path: selection.path,
       alias: selection.alias,
       base: detail.file.contents,
       newAlias: newName,
-    });
+    })).saved;
   }
 
-  function comment(text: string) {
-    if (detail === null || selection === null) return;
-    void submit({
+  async function comment(text: string): Promise<boolean> {
+    if (detail === null || selection === null) return false;
+    return (await submit({
       kind: "comment",
       path: selection.path,
       alias: selection.alias,
       base: detail.file.contents,
       comment: text,
-    });
+    })).saved;
   }
 
   // moveHostToGroup moves the host into group, or into the entry file when
   // group is "" (a host without a group lives there). When follow is set,
-  // the selection follows the host to wherever the engine put it.
-  async function moveHostToGroup(source: MoveSource, group: string, follow: boolean) {
+  // the selection follows the host to wherever the engine put it. Resolves to
+  // whether the move was saved.
+  async function moveHostToGroup(source: MoveSource, group: string, follow: boolean): Promise<boolean> {
     if (group !== "") {
       const attempt = await submit({ kind: "move", ...source, destinationGroup: group }, false);
-      if (!attempt.saved || !follow) return;
+      if (!attempt.saved || !follow) return attempt.saved;
       const moved = movedHostIdentity(attempt.overview, source.alias, group);
       if (moved !== undefined) followCommittedIdentity(moved);
       else leaveCommittedIdentityUnknown();
-      return;
+      return true;
     }
     const destination = await configApi.file(entryPath);
     const attempt = await submit({
       kind: "move", ...source, destinationPath: entryPath, destinationBase: destination.contents,
     }, false);
-    if (!attempt.saved || !follow) return;
+    if (!attempt.saved || !follow) return attempt.saved;
     followCommittedIdentity({ path: entryPath, alias: source.alias });
+    return true;
   }
 
-  async function moveToGroup(group: string) {
-    if (detail === null) return;
+  async function moveToGroup(group: string): Promise<boolean> {
+    if (detail === null) return false;
     const source = { path: detail.form.entry.file.path ?? "", alias: detail.form.entry.identity.alias, base: detail.file.contents };
     try {
-      await moveHostToGroup(source, group, true);
+      return await moveHostToGroup(source, group, true);
     } catch (error) {
       setProblem(toProblem(error));
+      return false;
     }
   }
 
@@ -227,22 +232,26 @@ export function useConnectionManagement({
 
   // renameConnection は、一覧の「…」から接続先の名前を変える。開いている接続先なら選択も新しい名前へ追い、
   // ほかの接続先なら開いている接続先を読み直す（同じファイルなら base が変わるため）。
-  async function renameConnection(item: HostTarget, newAlias: string) {
+  // 保存できたかを返す。
+  async function renameConnection(item: HostTarget, newAlias: string): Promise<boolean> {
     try {
       const file = await configApi.file(item.path);
-      await submit({ kind: "rename", path: item.path, alias: item.alias, base: file.contents, newAlias });
+      return (await submit({ kind: "rename", path: item.path, alias: item.alias, base: file.contents, newAlias })).saved;
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
+      return false;
     }
   }
 
-  async function duplicateConnection(item: HostTarget) {
+  // 保存できたかを返す。
+  async function duplicateConnection(item: HostTarget): Promise<boolean> {
     try {
       const file = await configApi.file(item.path);
-      await submit({ kind: "duplicate", path: item.path, base: file.contents, alias: item.alias, newAlias: `${item.alias}-copy` });
+      return (await submit({ kind: "duplicate", path: item.path, base: file.contents, alias: item.alias, newAlias: duplicateAliasOf(item.alias) })).saved;
     } catch (error) {
       setProblem(toProblem(error));
+      return false;
     }
   }
 
@@ -257,8 +266,7 @@ export function useConnectionManagement({
       }
       const file = await configApi.file(payload.path);
       const followsSelection = selection?.path === payload.path && selection.alias === payload.alias;
-      await moveHostToGroup({ path: payload.path, alias: payload.alias, base: file.contents }, target, followsSelection);
-      return true;
+      return await moveHostToGroup({ path: payload.path, alias: payload.alias, base: file.contents }, target, followsSelection);
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
@@ -266,20 +274,20 @@ export function useConnectionManagement({
     }
   }
 
-  function duplicate() {
-    if (detail === null || selection === null) return;
+  async function duplicate(): Promise<boolean> {
+    if (detail === null || selection === null) return false;
     setLocalError("");
-    void submit({
+    return (await submit({
       kind: "duplicate",
       path: selection.path,
       base: detail.file.contents,
       alias: selection.alias,
-      newAlias: `${selection.alias}-copy`,
-    });
+      newAlias: duplicateAliasOf(selection.alias),
+    })).saved;
   }
 
-  async function moveToFile(target: string) {
-    if (detail === null || selection === null || target === "") return;
+  async function moveToFile(target: string): Promise<boolean> {
+    if (detail === null || selection === null || target === "") return false;
     try {
       const destination = await configApi.file(target);
       const source = selection;
@@ -291,25 +299,28 @@ export function useConnectionManagement({
         destinationPath: target,
         destinationBase: destination.contents,
       }, false);
-      if (!attempt.saved) return;
+      if (!attempt.saved) return false;
       followCommittedIdentity({ path: target, alias: source.alias });
       setLocalError("");
+      return true;
     } catch (error) {
       setProblem(toProblem(error));
+      return false;
     }
   }
 
   // remove は、開いている接続先を、画面が読み込んだときのファイルを前提に消す。
-  async function remove() {
-    if (detail === null || selection === null) return;
+  async function remove(): Promise<boolean> {
+    if (detail === null || selection === null) return false;
     const attempt = await submit({
       kind: "delete_hosts",
       hosts: [{ path: selection.path, alias: selection.alias }],
       bases: [{ path: selection.path, base: detail.file.contents }],
     }, false);
-    if (!attempt.saved) return;
+    if (!attempt.saved) return false;
     clearSelection();
     clearTarget({ replace: true });
+    return true;
   }
 
   return {
