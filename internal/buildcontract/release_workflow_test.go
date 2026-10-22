@@ -225,6 +225,30 @@ func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
 	}
 }
 
+// タグのrunは、mainが保存したActionsのキャッシュも復元する。成果物を作るjobで復元すると、
+// mainへpushできる者が置いたビルド結果や依存が、Release workflowの検査を経ずに入る。
+func TestReleaseJobsDoNotRestoreActionsCaches(t *testing.T) {
+	document, _ := readReleaseWorkflow(t)
+	for id, job := range document.Jobs {
+		for _, step := range job.Steps {
+			action, _, _ := strings.Cut(step.Uses, "@")
+			switch action {
+			case "actions/cache", "actions/cache/restore":
+				t.Errorf("job %s restores a cache with %s", id, step.Uses)
+			case "actions/setup-go":
+				// setup-go は、cache を書かなければ既定で復元する。
+				if cache, ok := step.With["cache"]; !ok || cache != false {
+					t.Errorf("job %s sets up Go without cache: false", id)
+				}
+			case "actions/setup-node", "actions/setup-java":
+				if cache, ok := step.With["cache"]; ok {
+					t.Errorf("job %s restores the %v cache with %s", id, cache, action)
+				}
+			}
+		}
+	}
+}
+
 // すべてのタグに、バージョン管理されたリリースノートを要求する。
 func TestReleaseRequiresVersionControlledNotes(t *testing.T) {
 	_, source := readReleaseWorkflow(t)

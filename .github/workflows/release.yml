@@ -25,6 +25,10 @@ permissions:
   actions: read
   contents: read
 
+# ビルドのjobはActionsのキャッシュを復元しない。タグのrunはmainが保存したキャッシュも
+# 復元するので、mainへpushできる者が、Release workflowの検査を経ずに成果物へ入る
+# Goのビルド結果やnpm・Gradleの依存を置けてしまう。
+
 jobs:
   verify-source:
     name: Verify release source
@@ -115,12 +119,10 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache: false
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
 
       # Linux jobがfull suiteを一度実行する。ここでは配布対象OSに固有のPTY、path、
@@ -155,12 +157,10 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache: false
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
 
       # tagがmain以外を指しても未検証の成果物を公開しないよう、full suiteは
@@ -195,12 +195,10 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache: false
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
 
       # Makefile の recipe は POSIX シェルを前提とするため、Windows では
@@ -248,12 +246,11 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache: false
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: 21
-          cache: gradle
 
       - name: Install gobind
         run: scripts/ci/retry.sh go install golang.org/x/mobile/cmd/gobind
@@ -300,14 +297,10 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache: false
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            demo/package-lock.json
-            web/package-lock.json
       - run: npm ci --prefix demo && npm ci --prefix web
       - run: npm test --prefix demo
       - name: Build the versioned VM images and UI
