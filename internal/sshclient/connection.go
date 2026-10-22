@@ -4,8 +4,11 @@ import (
 	"context"
 	"io"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"sshc/internal/textencoding"
 )
 
 // Connection is an authenticated SSH transport without a terminal channel.
@@ -13,11 +16,13 @@ import (
 // deliberately non-interactive: stored credentials and known hosts are used,
 // while a prompt that would need a terminal makes the connection fail.
 type Connection struct {
-	client  *ssh.Client
-	closers []io.Closer
-	done    chan struct{}
-	once    sync.Once
-	err     error
+	client *ssh.Client
+	// encoding は、Run が運ぶコマンドの入出力の文字コードである。
+	encoding textencoding.Name
+	closers  []io.Closer
+	done     chan struct{}
+	once     sync.Once
+	err      error
 }
 
 // Connect authenticates one target and returns a transport owned by the
@@ -34,7 +39,7 @@ func (d Dialer) Connect(ctx context.Context, target Target) (*Connection, error)
 		return nil, err
 	}
 	connection := &Connection{
-		client: client, closers: append(closers, client), done: make(chan struct{}),
+		client: client, encoding: strict.Encoding, closers: append(closers, client), done: make(chan struct{}),
 	}
 	if keepAlive := keepAliveLoop(client, keepAliveSettings{interval: strict.KeepAlive, count: strict.KeepAliveMax, done: connection.done}); keepAlive != nil {
 		go keepAlive()
@@ -58,6 +63,14 @@ func requireKnownHosts(target Target) Target {
 
 // Client exposes the authenticated transport to SSH channel protocols.
 func (c *Connection) Client() *ssh.Client { return c.client }
+
+// Run は、この輸送の上でコマンドをひとつ走らせる。Dialer.Run と違い輸送は開いたまま
+// にする。ctx の取り消しか Limit の期限で打ち切るときも、閉じるのはそのチャンネルだけである。
+func (c *Connection) Run(ctx context.Context, command Command) (Output, error) {
+	return runCommand(ctx, commandRun{
+		client: c.client, encoding: c.encoding, command: command, started: time.Now(), abandon: func() {},
+	})
+}
 
 // Wait blocks until the final transport ends, whether the peer or Close ended it.
 func (c *Connection) Wait() error { return c.client.Wait() }

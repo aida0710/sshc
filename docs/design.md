@@ -7,7 +7,7 @@
 
 ## セキュリティ境界
 
-- HTTP サーバーは IPv4 の `127.0.0.1` だけに bind します。LAN、Tailnet、コンテナ外部など、ネットワークへ公開して安全な設計ではありません。
+- HTTP サーバーは IPv4 の `127.0.0.1` だけに bind します。LAN、Tailnet、コンテナ外部など、ネットワークへ公開して安全な設計ではありません。別のマシンのsshcエンジンを開くときも、SSH接続の中を通して中継します（[接続先のsshcエンジンを開く中継の境界](#接続先のsshcエンジンを開く中継の境界)）。
 - このアプリケーションは利用者の `~/.ssh` を読み書きし、鍵を生成し、埋め込みターミナルからリモートホストへ接続します。それぞれの境界は以下の各節で説明します。
 - セッションのcookie（`sshc_session`）の属性は`HttpOnly`、`SameSite=Strict`、`Path=/`です。`Secure`は付けません。engineは平文のHTTPで`127.0.0.1`だけを待ち受け、HTTPSで配信する経路が無いからです（loopbackの通信はマシンの外へ出ません）。`Max-Age`と`Expires`も付けません。セッションの期限はengineが判定します（下のブラウザ登録の項）。
 - cookie 単体ではリクエスト元を検証できません。cookie はポートを区別せず、`SameSite` の site 判定にもポートは含まれないため、同じブラウザで `http://127.0.0.1:<別ポート>` を開くと session cookie は別ポートにも送信されます。そのため、読み取りを含むすべての API リクエストに `X-SSHC-CSRF` を要求します。このトークンは port を含む origin ごとの `sessionStorage` に保持され、別ポートには送信されません。例外は 3 つです。`POST /api/v1/session/bootstrap` と `POST /api/v1/session/recover` は最初のトークンを発行するため、代わりに `Origin` の完全一致を要求します。`GET /api/v1/health` も例外です。さらに全 `/api/` 要求に `Sec-Fetch-Site: same-origin` を要求し、`Host` は `127.0.0.1:<port>` との完全一致だけを通します。`POST /api/v1/session/renew` は `sessionStorage` に残った現在のトークンを検証してから新しいトークンを発行します。同じsessionを使うタブが互いを切らないよう、1つのsessionは`MaxCSRFTokensPerSession`（8）個までトークンを保持します。上限を越えたときは、renewで置き換えられたトークンを置き換えた順に、次に最も長く使われていないトークンから退役させます。発行順で退役させると、開いたままのタブのトークンが、ほかのタブの再読み込みで押し出されるためです。
@@ -261,6 +261,19 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
 - Androidのdebug buildは`applicationIdSuffix = ".dev"`と`versionNameSuffix = "-dev"`を使い、`com.github.aida0710.sshc.dev`／`sshc Dev`として正式版と共存します。namespaceとActivityのclass名は従来どおりです。Vault、設定、WebView storageは別packageのapp dataに保存し、正式版から自動移行しません。release buildのpackageと署名方式は変えません。
 - Android版のengineも、desktopと同じく既定のportを使い、埋まっていれば選んだ空きportを保存します。WebViewの`localStorage`とOPFSはorigin（port）ごとに分かれるため、起動のたびにportが変わると、設定が既定値に戻り、途中で止まったダウンロードの一時データも片付けられなくなります。既定のportはdesktopの54447とは別の54448にし、同じデバイスで動くdesktop版とoriginを共有しません。
 - Android版のengine ownerは同一packageの単一app processです。desktop／CLI用のOS file lockは使わず、Go側のprocess内mutexでstart／stopを直列化します。Service再生成などで`Start`が重複した場合は二重起動エラーにせず、以前のengineを停止して新しいengineへ置き換えます。desktop／CLIは別processを起動できるため、引き続き`engine.lock`を保持します。
+
+## 接続先のsshcエンジンを開く中継の境界
+
+- `sshc open <alias>`は、SSHの接続先で動いているsshcエンジンを、このマシンのブラウザで開きます。ターミナル、ワークスペース、Vault、`~/.ssh`は接続先のsshcエンジンのものを使います。このマシンのsshcエンジンは中継するだけで、接続先の画面も接続先のsshcエンジンが配信します。そのため、両方のバージョンを揃える必要はありません。
+- 中継はこのマシンのsshcエンジンが持ちます（`internal/remoteengine`）。CLIのプロセスに持たせると、ターミナルを閉じたときに中継も終わるためです。寿命はsshcエンジンと同じで、停止時に待ち受けとSSH接続を閉じます。
+- SSH接続はSFTPと同じ非対話の`Dialer.Connect`を使います。未知のホスト鍵と、保存していないパスフレーズ・パスワード・ワンタイムパスワードは尋ねずに失敗し、CLIが理由ごとの対処を表示します。
+- 接続先のURLは、接続先で固定のコマンド（`remoteengine.EntranceCommand`）を実行して受け取ります。非対話のSSHのコマンドはログインシェルの`PATH`を読まないことが多いので、`PATH`に加えてsshcの既定のインストール先を順に探します。alias、hostname、userはコマンドへ埋め込みません。出力は`http://127.0.0.1:<ポート>/`で始まる1行だけを受け付けます。それ以外の宛先へ中継すると、接続先から見て別のマシンへ届くためです。
+- 待ち受けは、このマシンでも`127.0.0.1`だけです。接続先へはSSH接続の中の`direct-tcpip`で、接続先の`127.0.0.1:<ポート>`へ届けます。どちらのマシンでも外へ待ち受けを開けません。接続先のSSHサーバーが`AllowTcpForwarding`などで転送を断る場合は、URLを返す前に一度接続して確かめ、`remote_engine_forwarding_refused`で断ります。確かめずに返すと、ブラウザが理由の分からない502を受け取るだけになるためです。
+- 接続先のsshcエンジンは、`Host`と`Origin`が自分の`127.0.0.1:<ポート>`と完全に一致する要求だけを受け付けます。中継は、`Host`と（あれば）`Origin`が中継自身の`127.0.0.1:<ポート>`と完全に一致することを確かめてから、接続先のポートへ書き換えます。確かめずに書き換えると、DNSで127.0.0.1を指すよそのページの要求も接続先へ届きます。接続先のsshcエンジンの検査は変えていません。
+- 接続先のsshcエンジンは、入口のURLを使った接続の持ち主を確かめます。中継を通った接続は、接続先ではSSHサーバー（同じOSユーザー）から来たように見えます。そのため中継は、受け付けた接続のうち、このマシンの別のOSユーザーのものかもしれない接続を、読まずに閉じます（`loopbackpeer.MayBelongToAnotherUser`）。
+- 中継のポートは接続先ごとに`~/.ssh/sshc/remote-engines.json`へ保存し、次も同じポートを使います。ブラウザの`localStorage`とOPFSはポートごとに分かれるためです。保存したポートが使用中なら別のポートを選んで保存し直します。このファイルはこのマシンだけのもので、同期しません。
+- SSH接続が切れたら（スリープなど）、次の要求で一度だけ接続し直します。接続し直せなければ、その要求を`502 remote_engine_unreachable`で断ります。回数を重ねて試すと、接続できない理由（鍵や接続先の変更）が見えなくなるためです。接続先のsshcエンジンが起動し直してポートが変わったときも同じ応答になるので、`sshc open <alias>`をもう一度実行します。
+- 対象外: Windowsの接続先、接続先へのsshcのインストールと更新、このマシンの画面の中に接続先のワークスペースを並べること。
 
 ## 更新の境界
 

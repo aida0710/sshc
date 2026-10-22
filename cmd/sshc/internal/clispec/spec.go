@@ -107,7 +107,7 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
             --timeout D --settle D --max-bytes N --line-ending MODE
             --require-output --json
 `},
-	{Name: "open", Route: "open", Help: "usage:\n  sshc open [--no-browser]\n\nStart the engine in the background if needed, print a one-time UI URL and open it in your browser.\n  --no-browser  print the URL without opening a browser\n"},
+	{Name: "open", Route: "open", Help: "usage:\n  sshc open [--no-browser]\n  sshc open <alias> [--no-browser]\n\nStart the engine in the background if needed, print a one-time UI URL and open it in your browser.\n\nWith an alias, open the sshc engine running on that SSH host instead. This machine's engine connects to the host without prompting, asks the sshc there for a one-time UI URL, and relays it to a port on this machine's 127.0.0.1 that stays the same for the alias. Terminals opened there keep running on that host after the browser closes. The relay lasts until this machine's engine stops; run the command again to reopen it. sshc must already be installed on the host, its SSH server must allow TCP forwarding, and its host key and credentials must already be accepted or saved here.\n  --no-browser  print the URL without opening a browser\n"},
 	{Name: "stop", Route: "stop", Help: "usage:\n  sshc stop\n\nAsk the running engine to stop and wait for it to exit.\n"},
 	{Name: "status", Route: "status", Help: "usage:\n  sshc status [--json]\n\nPrint what the running engine is doing.\n"},
 	{Name: "update", Route: "update", Help: "usage:\n  sshc update [-y|--yes]\n\nUpdate an installation managed by Homebrew or install.sh. The command shows the plan and asks before changing the installation; -y or --yes skips the prompt.\n"},
@@ -227,6 +227,8 @@ const GlobalHelp = `usage:
   sshc open [--no-browser]
                        start the engine in the background if needed, print a one-time UI URL and open it
                        --no-browser  print the URL without opening a browser
+  sshc open <alias> [--no-browser]
+                       open the sshc engine running on that SSH host through a relay on this machine
   sshc stop            stop the running engine and wait for it to exit
   sshc status          print what the running engine is doing
                        --json      print it as JSON, for the shell

@@ -16,8 +16,10 @@ import (
 	"sshc/internal/diagnostics"
 	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
+	"sshc/internal/loopbackpeer"
 	"sshc/internal/platform"
 	"sshc/internal/recent"
+	"sshc/internal/remoteengine"
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
@@ -54,7 +56,9 @@ type engineServices struct {
 	terminals    *terminal.Registry
 	vpn          *vpn.Manager
 	vpnProfiles  *vpnprofile.Service
-	ssh          sshParts
+	// remoteEngines は、SSH の接続先のエンジンをこのマシンのブラウザから開く中継である。
+	remoteEngines *remoteengine.Manager
+	ssh           sshParts
 }
 
 // newEngineServices は、~/.ssh をひとつ開いて、その上に engine の部品を組む。
@@ -245,6 +249,11 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
 		sftp: sftpService, sftpPool: sftpPool, workspaces: workspaceService, snippets: snippetService,
 		vpn: vpnRoutes, vpnProfiles: vpnProfiles, ssh: inProcessSSH,
+		remoteEngines: remoteengine.NewManager(remoteengine.ManagerOptions{
+			Connect:                    inProcessSSH.remoteEngineLink,
+			Ports:                      remoteengine.NewPortStore(workspace),
+			PeerMayBelongToAnotherUser: loopbackpeer.MayBelongToAnotherUser,
+		}),
 	}
 	services.sync, services.autoSync, err = buildSync(workspace, transactions, vault, snippetStore, dependencies)
 	if err != nil {
