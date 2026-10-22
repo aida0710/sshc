@@ -98,3 +98,4 @@ Telnet neither encrypts traffic nor authenticates the server. sshc warns before 
 sshc does not trust the file names and attributes that an SFTP server returns. In case you connect to a malicious or compromised server, it handles them as follows.
 
 - When saving to this machine, sshc checks every name the server returned. If a name would point outside the destination folder, such as one containing `\` or `..`, the transfer fails before it starts.
+- When downloading a folder as a ZIP file, sshc writes only the read, write and execute permissions of each file. It does not write the setuid, setgid or sticky bits.
