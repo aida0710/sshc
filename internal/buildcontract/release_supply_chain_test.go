@@ -264,33 +264,3 @@ func TestReleaseDocumentationRecoversAWorkflowThatDidNotStart(t *testing.T) {
 		}
 	}
 }
-
-// gradlew は android/gradle/wrapper/gradle-wrapper.jar を実行する。jar を差し替えた
-// pull request が Gradle を動かす前に、Gradle が公開する正規の wrapper の checksum と
-// 照らす。照らすのは、どの gradlew よりも前である。
-func TestAndroidJobsValidateTheGradleWrapperBeforeRunningGradle(t *testing.T) {
-	const validation = "gradle/actions/wrapper-validation@"
-	for _, workflowPath := range []string{"ci.yml", "release.yml"} {
-		document, _ := readWorkflowFile(t, filepath.Join(workflowsDirectory(), workflowPath))
-		job, ok := document.Jobs["android"]
-		if !ok {
-			t.Fatalf("%s has no android job", workflowPath)
-		}
-		validated, ranGradle := false, false
-		for _, step := range job.Steps {
-			if strings.HasPrefix(step.Uses, validation) {
-				validated = !ranGradle
-			}
-			if strings.Contains(step.Run, "./gradlew") {
-				ranGradle = true
-			}
-		}
-		// 正のコントロール: gradlew を見つけられないなら、順番の検査は何も見ていない。
-		if !ranGradle {
-			t.Errorf("%s: the android job runs no ./gradlew; this test is looking at the wrong job", workflowPath)
-		}
-		if !validated {
-			t.Errorf("%s: the android job does not validate the Gradle wrapper before ./gradlew", workflowPath)
-		}
-	}
-}

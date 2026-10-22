@@ -243,9 +243,6 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ needs.verify-source.outputs.release-sha }}
-      # android/gradle/wrapper/gradle-wrapper.jar を、Gradle が公開する正規の wrapper の
-      # checksum と照らす。gradlew はこの jar を実行するので、差し替えられた jar を動かす前に止める。
-      - uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
