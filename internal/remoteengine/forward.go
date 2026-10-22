@@ -3,6 +3,7 @@ package remoteengine
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -58,9 +59,42 @@ func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, ali
 			engine.forget(session)
 			continue
 		}
+		if code := remoteRefusal(response); code != "" {
+			writeProblem(w, http.StatusBadGateway, code)
+			return nil
+		}
 		copyResponse(w, response)
 		return nil
 	}
+}
+
+// maxRefusalBody は、接続先の断りの本文を読む上限である。断りは短い JSON だけである。
+const maxRefusalBody = 64 << 10
+
+// remoteRefusal は、接続先のエンジン自身の資格や Vault についての断りを、このマシンの
+// 画面が自分のものと取り違えない code に置き換える。置き換えないものは空を返し、本文は
+// 読まずに残す。
+//
+// 接続先の 401・403 をそのまま返すと、このマシンの画面は自分のセッションが切れたと
+// 読んでサインインし直させる。接続先の vault_locked をそのまま返すと、このマシンの
+// Vault がロックされたと読んでロックの画面を出す。
+func remoteRefusal(response *http.Response) string {
+	switch response.StatusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		_ = response.Body.Close()
+		return "remote_engine_refused"
+	case http.StatusConflict:
+		body, _ := io.ReadAll(io.LimitReader(response.Body, maxRefusalBody))
+		_ = response.Body.Close()
+		var refusal struct {
+			Code string `json:"code"`
+		}
+		if json.Unmarshal(body, &refusal) == nil && refusal.Code == "vault_locked" {
+			return "remote_engine_vault_locked"
+		}
+		response.Body = io.NopCloser(bytes.NewReader(body))
+	}
+	return ""
 }
 
 func forwardedRequest(ctx context.Context, r *http.Request, session *remoteSession, remotePath string, body []byte) *http.Request {

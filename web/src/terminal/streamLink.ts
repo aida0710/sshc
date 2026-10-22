@@ -25,7 +25,7 @@ const countdownTickMs = 1000;
 
 export type StreamLinkOptions = StreamHandlers & {
   sessionId: string;
-  api: Pick<TerminalSessionsApi, "terminalStreamTicket">;
+  api: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath">;
   // Receives every phase change so the view can show where the link stands.
   onLink: (link: StreamLink) => void;
   // Runs each time a new stream is attached, before any output arrives.
@@ -66,7 +66,7 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
       .then((issued) => {
         if (halted()) return;
         attachedAt = Date.now();
-        stream = openStream(issued.streamTicket, {
+        stream = openStream(issued.streamTicket, options.api.streamPath, {
           onReplay: (replay) => {
             cursor = replay.start;
             options.onReplay(replay);

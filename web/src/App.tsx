@@ -1,8 +1,10 @@
 import { usePresetSync } from "./keyconfig/presets";
 import { useBindings } from "./keyconfig/bindings";
-import { Suspense, useCallback, useEffect, type CSSProperties, type MouseEvent } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
 import { type HealthResponse } from "./api/client";
-import { terminalSessionsApi } from "./api/terminalSessions";
+import { createTerminalSessionsApi, terminalSessionsApi } from "./api/terminalSessions";
+import { createTerminalWorkspacesApi, terminalWorkspacesApi } from "./api/terminalWorkspaces";
+import { engineStreamPath, engineTerminalBase } from "./api/remoteEngines";
 import { settingsApi } from "./api/settings";
 import { vaultApi, type PasswordVaultStatus } from "./api/vault";
 import type { SessionState } from "./session/bootstrap";
@@ -22,6 +24,7 @@ import { useStoredColumnWidth } from "./ui/useStoredColumnWidth";
 import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
 import { useTerminalWorkspaces } from "./terminal/useTerminalWorkspaces";
+import { useRunTargets } from "./terminal/useRunTargets";
 import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
 import { localHostAlias } from "./sftp/localHost";
@@ -108,12 +111,24 @@ export function App({
     setAndroidAppearance(resolvedTheme);
   }, [resolvedTheme]);
 
-  const terminalSessions = useTerminalSessions(terminalSessionsApi, t, state === "ready");
+  const runTargets = useRunTargets({ translate: t, enabled: state === "ready", localVersion: version });
+  // The terminal API of the run target: this machine's own, or the one this
+  // machine's engine forwards for an engine on an SSH host.
+  const runTargetApis = useMemo(() => {
+    const alias = runTargets.selected;
+    if (alias === null) return { sessions: terminalSessionsApi, workspaces: terminalWorkspacesApi };
+    return {
+      sessions: createTerminalSessionsApi(engineTerminalBase(alias), engineStreamPath(alias)),
+      workspaces: createTerminalWorkspacesApi(engineTerminalBase(alias)),
+    };
+  }, [runTargets.selected]);
+  const terminalSessions = useTerminalSessions(runTargetApis.sessions, t, state === "ready");
   const terminalWorkspaces = useTerminalWorkspaces({
     sessions: terminalSessions.sessions,
     translate: t,
     enabled: state === "ready",
     onSessionsMoved: terminalSessions.refresh,
+    api: runTargetApis.workspaces,
   });
   const terminalWorkspace = useTerminalWorkspaceController({
     api: settingsApi,
@@ -137,13 +152,34 @@ export function App({
     setSettings: setTerminalSettings,
   } = terminalWorkspace;
 
+  // SFTP and Home open terminals on this machine. With an engine on an SSH
+  // host chosen, the run target goes back to this machine first and the
+  // session is opened once its terminal API is the one in use.
+  const [pendingLocalOpen, setPendingLocalOpen] = useState<{ alias: string; cwd?: string } | null>(null);
   const openSFTPTerminal = useCallback(async (alias: string, cwd?: string) => {
+    if (runTargets.selected !== null) {
+      setPendingLocalOpen(cwd === undefined ? { alias } : { alias, cwd });
+      runTargets.select(null);
+      return;
+    }
     if (alias === localHostAlias) {
       await openLocalShell(undefined, cwd);
       return;
     }
     await openSSHSession(alias, cwd);
-  }, [openLocalShell, openSSHSession]);
+  }, [openLocalShell, openSSHSession, runTargets]);
+
+  useEffect(() => {
+    if (pendingLocalOpen === null || runTargets.selected !== null) return;
+    setPendingLocalOpen(null);
+    void openSFTPTerminal(pendingLocalOpen.alias, pendingLocalOpen.cwd);
+  }, [openSFTPTerminal, pendingLocalOpen, runTargets.selected]);
+
+  // Home opens a session on this machine itself, so it is shown there.
+  const showLocalSession = useCallback((id: string) => {
+    runTargets.select(null);
+    showSession(id);
+  }, [runTargets, showSession]);
 
   useAppShortcuts({
     enabled: state === "ready",
@@ -300,6 +336,7 @@ export function App({
             onNavigate={navigateFromMenu}
             terminalSessions={terminalSessions}
             terminalWorkspaces={terminalWorkspaces}
+            runTargets={runTargets}
             orderedSessions={orderedSessions}
             activeSessionId={activeSessionId}
             unreadBySession={unreadSessions}
@@ -344,6 +381,8 @@ export function App({
                       hostAppearance={declared.hostAppearance}
                       hostOSC52={declared.hostOSC52}
                       hostVPN={declared.hostVPN}
+                      api={runTargetApis.sessions}
+                      runTarget={runTargets.selected}
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
                     />
@@ -381,7 +420,7 @@ export function App({
                         passwordless: session.passwordless,
                         onInspector: setInspector,
                         terminalSessions,
-                        onShowSession: showSession,
+                        onShowSession: showLocalSession,
                         onOpenSSHSession: openSSHSession,
                         onOpenTerminal: openSFTPTerminal,
                         onTerminalSettingsChange: async (settings) => {

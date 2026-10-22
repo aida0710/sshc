@@ -36,7 +36,8 @@ describe("useTerminalSessions", () => {
       .mockRejectedValueOnce(
         new ApiError("terminal_start_failed", 500, { code: "terminal_start_failed", message: "refused" }),
       );
-    const { result } = renderHook(() => useTerminalSessions(api({ openTerminalSession }), translate));
+    const inlineClient = api({ openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
     await act(async () => {
@@ -58,7 +59,8 @@ describe("useTerminalSessions", () => {
     const openTerminalSession = vi.fn()
       .mockReturnValueOnce(first)
       .mockReturnValueOnce(second);
-    const { result } = renderHook(() => useTerminalSessions(api({ openTerminalSession }), translate));
+    const inlineClient = api({ openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
     let firstOpen: Promise<unknown> = Promise.resolve();
@@ -171,7 +173,8 @@ describe("useTerminalSessions", () => {
 
   it("reports a finished load even when the list could not be read", async () => {
     const terminalSessions = vi.fn().mockRejectedValue(new Error("offline"));
-    const { result } = renderHook(() => useTerminalSessions(api({ terminalSessions }), translate));
+    const inlineClient = api({ terminalSessions });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
 
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(result.current.sessions).toEqual([]);
@@ -179,8 +182,9 @@ describe("useTerminalSessions", () => {
 
   it("reads nothing until it is allowed to", async () => {
     const terminalSessions = vi.fn().mockResolvedValue(list);
+    const client = api({ terminalSessions });
     const { result, rerender } = renderHook(
-      ({ enabled }) => useTerminalSessions(api({ terminalSessions }), translate, enabled),
+      ({ enabled }) => useTerminalSessions(client, translate, enabled),
       { initialProps: { enabled: false } },
     );
 
@@ -201,7 +205,8 @@ describe("useTerminalSessions", () => {
       startedAt: "2026-08-29T01:00:00Z", state: "connected", problem: "",
     } as const;
     const terminalSessions = vi.fn().mockResolvedValue({ sessions: [connected], maxSessions: 50 });
-    const { result } = renderHook(() => useTerminalSessions(api({ terminalSessions }), translate));
+    const inlineClient = api({ terminalSessions });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
 
     await act(async () => {
       vi.runAllTicks();
@@ -223,7 +228,8 @@ describe("useTerminalSessions", () => {
       .fn()
       .mockReturnValueOnce(initial)
       .mockResolvedValueOnce({ sessions: [], maxSessions: 1 });
-    const { result } = renderHook(() => useTerminalSessions(api({ terminalSessions }), translate));
+    const inlineClient = api({ terminalSessions });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
 
     await waitFor(() => expect(terminalSessions).toHaveBeenCalledTimes(1));
     await act(async () => {
@@ -350,7 +356,8 @@ describe("useTerminalSessions", () => {
     const setTerminalSessionTitle = vi.fn().mockRejectedValue(
       new ApiError("invalid_terminal_title", 400, { code: "invalid_terminal_title", message: "no" }),
     );
-    const { result } = renderHook(() => useTerminalSessions(api({ setTerminalSessionTitle }), translate));
+    const inlineClient = api({ setTerminalSessionTitle });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
     let outcome = true;
@@ -404,7 +411,8 @@ describe("useTerminalSessions", () => {
     const openTerminalSession = vi.fn().mockRejectedValue(
       new ApiError("jump_depth_exceeded", 422, { code: "jump_depth_exceeded", message: "no" }),
     );
-    const { result } = renderHook(() => useTerminalSessions(api({ openTerminalSession }), translate));
+    const inlineClient = api({ openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
     await act(async () => {
@@ -417,7 +425,8 @@ describe("useTerminalSessions", () => {
     const openTerminalSession = vi.fn().mockRejectedValue(
       new ApiError("something_new", 500, { code: "something_new", message: "no" }),
     );
-    const { result } = renderHook(() => useTerminalSessions(api({ openTerminalSession }), translate));
+    const inlineClient = api({ openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
     await act(async () => {

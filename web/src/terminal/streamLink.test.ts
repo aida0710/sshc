@@ -5,7 +5,7 @@ import { createStreamLink, stableStreamResetMs, type StreamLink } from "./stream
 
 const streams: { handlers: StreamHandlers; stream: TerminalStream }[] = [];
 vi.mock("./stream", () => ({
-  openStream: (_ticket: string, handlers: StreamHandlers) => {
+  openStream: (_ticket: string, _streamPath: string, handlers: StreamHandlers) => {
     const stream: TerminalStream = { send: vi.fn(), resize: vi.fn(), close: vi.fn() };
     streams.push({ handlers, stream });
     return stream;
@@ -20,7 +20,7 @@ function startLink(terminalStreamTicket: TicketIssuer = async () => ({ streamTic
   const onExit = vi.fn();
   const controller = createStreamLink({
     sessionId: "a",
-    api: { terminalStreamTicket: ticket },
+    api: { streamPath: "/terminal/stream", terminalStreamTicket: ticket },
     onLink: (link) => links.push(link),
     onAttached: vi.fn(),
     onReplay: vi.fn(),
