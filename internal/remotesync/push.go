@@ -121,9 +121,9 @@ func (s *Service) push(ctx context.Context, syncKey, forcedETag, message string)
 		current.ETag = ""
 		current.Base = nil
 	}
-	// state の base は vault 文書の digest を鍵付きで持つ。いま集めた vault 文書と
-	// 比べられる形に戻してから差分を取る。
-	if current.Base, err = s.comparableBase(current.Base, travelDigest(&manifest)); err != nil {
+	// state の base は vault 文書とスニペットの文書の digest を鍵付きで持つ。いま
+	// 集めた文書と比べられる形に戻してから差分を取る。
+	if current.Base, err = s.comparableBase(current.Base, plainDigests{}.addManifest(&manifest)); err != nil {
 		return PushResult{}, err
 	}
 	// 親との差分は、保存するかどうかの判断、生成する message、利用者へ見せる
@@ -280,7 +280,7 @@ func (s *Service) PushDraft() (PushDraft, error) {
 	if !stateMatchesTarget(current, binding.config) {
 		base = nil
 	}
-	base, err = s.comparableBase(base, travelDigest(&manifest))
+	base, err = s.comparableBase(base, plainDigests{}.addManifest(&manifest))
 	if err != nil {
 		return PushDraft{}, err
 	}

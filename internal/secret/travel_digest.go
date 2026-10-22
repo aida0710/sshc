@@ -7,14 +7,16 @@ import (
 	"sshc/internal/storage"
 )
 
-// travelDigestPurpose は、同期状態に残す vault 文書の digest を鍵付きにするときの
-// HKDF の用途名。vault の暗号化鍵そのものを MAC に使い回さないために分ける。
+// travelDigestPurpose は、同期状態に残す文書（vault 文書と保護文書）の digest を
+// 鍵付きにするときの HKDF の用途名。vault の暗号化鍵そのものを MAC に使い回さない
+// ために分ける。値を変えると既存の同期状態の値と一致しなくなるので、名前は vault
+// 文書だけを鍵付きにしていたころのまま残す。
 const travelDigestPurpose = "sshc sync-state vault document digest"
 
-// KeyedTravelDigest は、同期状態のファイルに残す vault 文書の digest を、この
-// マシンの vault の鍵で鍵付きにする。素の SHA-256 を残すと、~/.ssh の写しを
-// 手に入れた者が、マスターパスワードの Argon2id を経ずに保存済みのシークレットを
-// 総当たりで照合できる。
+// KeyedTravelDigest は、同期状態のファイルに残す文書（vault 文書と、スニペットの
+// ような保護文書）の digest を、このマシンの vault の鍵で鍵付きにする。素の SHA-256
+// を残すと、~/.ssh の写しを手に入れた者が、マスターパスワードの Argon2id を経ずに
+// 保存済みのシークレットを総当たりで照合できる。
 //
 // 鍵はマスターパスワードの世代ごとに変わる。鍵を変える変更は、同じトランザクション
 // で同期状態の値を新しい鍵へ移す（TravelDigestRekey）。
@@ -37,11 +39,14 @@ func keyedTravelDigest(key envelope.Key, digest string) (string, error) {
 }
 
 // TravelDigestRekey は、vault の鍵が変わる変更の中で、同期状態に鍵付きで残した
-// vault 文書の digest を新しい鍵へ移すための材料である。鍵そのものは渡さない。
+// digest を新しい鍵へ移すための材料である。鍵そのものは渡さない。
 type TravelDigestRekey struct {
 	// Digest は、変更のあとの vault 文書の素の digest。同期が集めるときと同じく、
 	// 空の vault は空の文書の digest になる。
 	Digest string
+	// ProtectedDigests は、封じ直した保護文書の平文の素の digest。キーは文書の
+	// ファイルのパス（RegisterProtectedDocument の Path）。ファイルの無い文書は含まない。
+	ProtectedDigests map[string]string
 	// Previous は、変更の前の鍵で素の digest を鍵付きにする。
 	Previous func(digest string) (string, error)
 	// Next は、変更のあとの鍵で素の digest を鍵付きにする。
@@ -62,7 +67,9 @@ func (s *Service) SetTravelDigestRekey(rekey func(TravelDigestRekey) ([]storage.
 
 // travelDigestRekeyChanges は、vault の鍵が previous から candidate の鍵へ変わる
 // 変更に載せる、同期状態の書き換えを返す。
-func (s *Service) travelDigestRekeyChanges(previous envelope.Key, candidate *Vault) ([]storage.Change, error) {
+func (s *Service) travelDigestRekeyChanges(
+	previous envelope.Key, candidate *Vault, protectedDigests map[string]string,
+) ([]storage.Change, error) {
 	if s.travelDigestRekey == nil {
 		return nil, nil
 	}
@@ -76,8 +83,9 @@ func (s *Service) travelDigestRekeyChanges(previous envelope.Key, candidate *Vau
 	digest := storage.Digest(document)
 	clear(document)
 	return s.travelDigestRekey(TravelDigestRekey{
-		Digest:   digest,
-		Previous: func(digest string) (string, error) { return keyedTravelDigest(previous, digest) },
-		Next:     func(digest string) (string, error) { return keyedTravelDigest(candidate.key, digest) },
+		Digest:           digest,
+		ProtectedDigests: protectedDigests,
+		Previous:         func(digest string) (string, error) { return keyedTravelDigest(previous, digest) },
+		Next:             func(digest string) (string, error) { return keyedTravelDigest(candidate.key, digest) },
 	})
 }
