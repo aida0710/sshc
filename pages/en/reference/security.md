@@ -14,6 +14,7 @@ The engine serves its Web UI and API on a loopback address. UI URLs are issued o
 The relay of `sshc open <alias>` and the run target reach an engine on an SSH host through the SSH connection.
 
 - Each time it opens a connection to the remote engine, the local engine checks with the secret in the remote `~/.ssh/sshc/cli` that the other side is that engine before it sends a browser request or credentials. If the remote engine restarts on another port and another OS user on the remote host listens on the old port, neither the cookie nor the vault password reaches that program.
+- With a run target, headers such as cookies returned by the remote engine are not passed to this machine's UI, so the remote engine cannot overwrite or clear this machine's sign-in.
 - If the check fails, nothing but the check is sent and an error is shown. A run target reads the remote `~/.ssh/sshc/cli` again and reconnects once. For the relay in another tab, run `sshc open <alias>` again.
 
 ## Vault

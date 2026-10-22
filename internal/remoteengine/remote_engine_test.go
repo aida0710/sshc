@@ -128,6 +128,9 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
+		// 接続先が付けたヘッダーがブラウザへ届かないことを確かめるために付ける。
+		w.Header().Set("Set-Cookie", sessionCookieName+"=remote; Path=/")
+		w.Header().Set("Clear-Site-Data", `"cookies"`)
 		connection, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 		if err != nil {
 			return
@@ -320,11 +323,14 @@ func TestATerminalStreamReachesTheRemoteEngineWithItsOriginAndNoCookie(t *testin
 	header := http.Header{}
 	header.Set("Origin", local.URL)
 	header.Set("Cookie", "sshc_session=this-machine")
-	connection, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(local.URL, "http")+"/engines/r540/terminal/stream?ticket=t", &websocket.DialOptions{HTTPHeader: header})
+	connection, handshake, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(local.URL, "http")+"/engines/r540/terminal/stream?ticket=t", &websocket.DialOptions{HTTPHeader: header})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer connection.CloseNow()
+	if cookies := handshake.Header.Values("Set-Cookie"); len(cookies) != 0 || handshake.Header.Get("Clear-Site-Data") != "" {
+		t.Fatalf("the remote handshake headers reached the browser: Set-Cookie=%q Clear-Site-Data=%q", cookies, handshake.Header.Get("Clear-Site-Data"))
+	}
 	if err := connection.Write(ctx, websocket.MessageBinary, []byte("ls")); err != nil {
 		t.Fatal(err)
 	}
@@ -417,5 +423,36 @@ func TestTheRemoteVaultIsUnlockedWithItsOwnCredentialsAndAWrongPasswordIsToldApa
 	}
 	if err := manager.UnlockVault(context.Background(), "gpu-box", fakeVaultPassword); !errors.Is(err, ErrNotAdded) {
 		t.Fatalf("an engine that was not added = %v", err)
+	}
+}
+
+func TestARefusedTerminalStreamDoesNotPassTheRemoteCookiesToTheBrowser(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != RemoteStreamPath {
+			remote.serve(w, r)
+			return
+		}
+		w.Header().Add("Set-Cookie", sessionCookieName+"=attacker-chosen; Path=/")
+		w.Header().Set("Clear-Site-Data", `"cookies"`)
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer refusing.Close()
+	// handoff と Origin が、断る側のサーバーを指すようにする。
+	remote.server.URL = refusing.URL
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r540"); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/engines/r540/terminal/stream?ticket=x", nil)
+	recorder := httptest.NewRecorder()
+	if err := manager.ForwardTerminalStream(recorder, request, "r540"); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("stream = %d, want the remote 400", recorder.Code)
+	}
+	if cookies := recorder.Header().Values("Set-Cookie"); len(cookies) != 0 || recorder.Header().Get("Clear-Site-Data") != "" {
+		t.Fatalf("the remote refusal headers reached the browser: Set-Cookie=%q Clear-Site-Data=%q", cookies, recorder.Header().Get("Clear-Site-Data"))
 	}
 }

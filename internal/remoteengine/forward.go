@@ -24,7 +24,15 @@ var ErrRequestTooLarge = errors.New("the request body is too large to forward")
 
 // forwardedResponseHeaders は、接続先の答えのうち、ブラウザへ渡すヘッダーである。cookie
 // （接続先の資格）やセキュリティのヘッダー（このマシンのエンジンが付ける）は渡さない。
+// Set-Cookie や Clear-Site-Data を渡すと、接続先がこのマシンの画面のセッションを上書き
+// したり消したりできる。
 var forwardedResponseHeaders = []string{"Content-Type", "Cache-Control"}
+
+// forwardedUpgradeHeaders は、ターミナルの入出力の WebSocket のハンドシェイクの答えの
+// うち、ブラウザへ渡すヘッダーである。ハンドシェイクを終えるのに要るものだけを渡す。
+var forwardedUpgradeHeaders = []string{
+	"Connection", "Upgrade", "Sec-WebSocket-Accept", "Sec-WebSocket-Protocol", "Sec-WebSocket-Extensions",
+}
 
 // ForwardTerminalAPI は、ブラウザの要求を、接続先のエンジンの remotePath（/api/v1/terminal/…）
 // へ取り次ぐ。ブラウザの cookie と CSRF のトークンはこのマシンのエンジンのもので、接続先へは
@@ -132,13 +140,37 @@ func authorizeRemoteRequest(request *http.Request, session *remoteSession) {
 
 func copyResponse(w http.ResponseWriter, response *http.Response) {
 	defer func() { _ = response.Body.Close() }()
-	for _, name := range forwardedResponseHeaders {
-		if value := response.Header.Get(name); value != "" {
-			w.Header().Set(name, value)
-		}
-	}
+	copyAllowedHeaders(w.Header(), response.Header, forwardedResponseHeaders)
 	w.WriteHeader(response.StatusCode)
 	_, _ = io.Copy(w, response.Body)
+}
+
+// copyAllowedHeaders は、source のヘッダーのうち allowed に挙げたものだけを destination へ
+// 写す。source にあるものは、destination の同じ名前のヘッダーを置き換える。
+func copyAllowedHeaders(destination, source http.Header, allowed []string) {
+	for _, name := range allowed {
+		values := source.Values(name)
+		if len(values) == 0 {
+			continue
+		}
+		destination.Del(name)
+		for _, value := range values {
+			destination.Add(name, value)
+		}
+	}
+}
+
+// keepStreamHeaders は、接続先の WebSocket の答えのヘッダーを、ブラウザへ渡してよいもの
+// だけにする。API の取り次ぎと同じく、接続先の cookie などはこのマシンの画面へ渡さない。
+func keepStreamHeaders(response *http.Response) error {
+	allowed := forwardedResponseHeaders
+	if response.StatusCode == http.StatusSwitchingProtocols {
+		allowed = forwardedUpgradeHeaders
+	}
+	kept := http.Header{}
+	copyAllowedHeaders(kept, response.Header, allowed)
+	response.Header = kept
+	return nil
 }
 
 // ForwardTerminalStream は、ターミナルの入出力の WebSocket を、接続先のエンジンへ取り次ぐ。
@@ -162,8 +194,9 @@ func (m *Manager) ForwardTerminalStream(w http.ResponseWriter, r *http.Request, 
 			request.Out.Header.Del("Cookie")
 			request.Out.Header.Set("Origin", session.origin())
 		},
-		Transport:     session.transport,
-		FlushInterval: -1,
+		ModifyResponse: keepStreamHeaders,
+		Transport:      session.transport,
+		FlushInterval:  -1,
 		ErrorHandler: func(response http.ResponseWriter, _ *http.Request, err error) {
 			// チケットは前のエンジンが発行したものなので、ここでは送り直さない。資格だけを
 			// 捨て、画面が繋ぎ直すときに handoff を読み直す。
