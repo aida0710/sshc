@@ -8,6 +8,7 @@ import {
 } from "react";
 import { describeControl } from "./describeControl";
 import { dangerAction, hintText, primaryAction, secondaryAction } from "./form";
+import { Spinner } from "./Spinner";
 
 type CardElement = "div" | "section" | "article" | "dl" | "ul";
 
@@ -174,13 +175,19 @@ export function Segmented<T extends string>({
 
 type ButtonProps = {
   kind?: "primary" | "secondary" | "danger";
+  // busy は、このボタンで始めた処理を待っている間。文言は変えずに回転の印を添え、
+  // aria-busy を付けて押せなくする（薄くはしない。index.css の決まり）。
+  busy?: boolean;
 } & ButtonHTMLAttributes<HTMLButtonElement>;
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {
     kind = "secondary",
+    busy = false,
+    disabled,
     className = "",
     type = "button",
+    children,
     ...rest
   },
   ref,
@@ -191,5 +198,20 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       : kind === "danger"
         ? dangerAction
         : secondaryAction;
-  return <button ref={ref} type={type} className={`${base} ${className}`} {...rest} />;
+  // 回転の印と文言を横に並べるため、待っている間だけ flex にする。いつも flex にすると、
+  // 幅いっぱいに広げたボタンの文言が左に寄る。
+  const busyLayout = busy ? "inline-flex items-center justify-center gap-2" : "";
+  return (
+    <button
+      ref={ref}
+      type={type}
+      disabled={disabled === true || busy}
+      aria-busy={busy || undefined}
+      className={`${base} ${busyLayout} ${className}`}
+      {...rest}
+    >
+      {busy ? <Spinner /> : null}
+      {children}
+    </button>
+  );
 });
