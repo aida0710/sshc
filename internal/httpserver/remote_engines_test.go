@@ -2,15 +2,18 @@ package httpserver
 
 import (
 	"context"
+	"crypto/rand"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
 	"sshc/internal/remoteengine"
+	"sshc/internal/session"
 )
 
 // fakeEngineDirectory は、実行先の一覧と、取り次ぎに渡された alias と接続先のパスを覚える。
@@ -173,5 +176,55 @@ func TestTheRemoteVaultIsUnlockedAndAWrongPasswordIsNotMistakenForThisMachinesSe
 	recorder = send(t, engine, http.MethodPost, "/api/v1/engines/r540/vault/unlock", `{"passphrase":"wrong"}`, headers)
 	if recorder.Code != http.StatusForbidden || !strings.Contains(recorder.Body.String(), `"remote_engine_wrong_passphrase"`) {
 		t.Fatalf("wrong password = %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestTheForwardedStreamIsReachedOnlyWithThisMachinesSessionAndAnUnlockedVault(t *testing.T) {
+	sessions, _, err := session.NewManager(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials, _, err := sessions.JoinOrIssue("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var unlocked atomic.Bool
+	directory := &fakeEngineDirectory{engines: []string{"r540"}}
+	engine := echo.New()
+	engine.Use((Security{
+		ExpectedHost: "127.0.0.1:54447", ExpectedOrigin: "http://127.0.0.1:54447",
+		Sessions: sessions, Unlocked: unlocked.Load,
+	}).Middleware)
+	registerRemoteEngineRoutes(engine, RemoteEngineHandlers{Engines: directory, ExpectedOrigin: "http://127.0.0.1:54447"})
+	stream := func(cookie string) int {
+		request := httptest.NewRequest(http.MethodGet, "/engines/r540/terminal/stream?ticket=x", nil)
+		request.Host = "127.0.0.1:54447"
+		request.Header.Set("Origin", "http://127.0.0.1:54447")
+		if cookie != "" {
+			request.AddCookie(&http.Cookie{Name: SessionCookie, Value: cookie})
+		}
+		recorder := httptest.NewRecorder()
+		engine.ServeHTTP(recorder, request)
+		return recorder.Code
+	}
+
+	for _, tc := range []struct {
+		name   string
+		cookie string
+		open   bool
+		want   int
+	}{
+		{"no session", "", true, http.StatusUnauthorized},
+		{"an unknown session", "not-a-session", true, http.StatusUnauthorized},
+		{"a locked vault", credentials.SessionID, false, http.StatusConflict},
+	} {
+		unlocked.Store(tc.open)
+		if code := stream(tc.cookie); code != tc.want || len(directory.streamed) != 0 {
+			t.Fatalf("%s = %d, streamed %v, want %d and nothing streamed", tc.name, code, directory.streamed, tc.want)
+		}
+	}
+	unlocked.Store(true)
+	if code := stream(credentials.SessionID); len(directory.streamed) != 1 {
+		t.Fatalf("this machine's session = %d, streamed %v", code, directory.streamed)
 	}
 }
