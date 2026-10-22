@@ -550,9 +550,11 @@
     animation-name: sshc-sheet-enter;
   }
 }
-/* 押した瞬間・開いた瞬間の反応は、マウスでもタッチでも同じにする。 */
+/* 押した瞬間・開いた瞬間の反応は、マウスでもタッチでも同じにする。押した瞬間は filter ではなく
+   opacity で示す。filter は中の absolute の基準を自分に変えるので、行いっぱいに広げた ::after
+   （SessionList の行）が押した瞬間に縮み、離した位置がボタンから外れてクリックにならない。 */
 :where(button, [role="button"], [role="menuitem"], a, summary):not(:disabled):not(.monaco-editor *):not(.xterm *):active {
-  filter: brightness(0.92);
+  opacity: 0.85;
 }
 .sshc-modal-panel {
   animation: sshc-dialog-enter 140ms ease-out;

@@ -19,6 +19,7 @@ describe("button state CSS", () => {
   it("answers a press on desktop as well as on touch", () => {
     const mobileOnly = css.match(/@media \(max-width: 767px\), \(pointer: coarse\) \{[\s\S]*?\n\}/)?.[0] ?? "";
     expect(mobileOnly).not.toMatch(/:active/);
-    expect(css).toMatch(/summary\):not\(:disabled\)[^{]*:active \{\s*filter: brightness\(0\.92\);/);
+    // filter は中の absolute の基準を変えて、押した場所からクリックを外すので使わない。
+    expect(css).toMatch(/summary\):not\(:disabled\)[^{]*:active \{\s*opacity: 0\.85;/);
   });
 });

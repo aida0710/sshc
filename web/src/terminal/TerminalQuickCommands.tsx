@@ -291,7 +291,7 @@ export function TerminalQuickCommands({
               type="button"
               disabled={busy || saveName.trim() === ""}
               onClick={() => void saveSelection()}
-              className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast"
+              className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-ink"
             >
               {t("terminal.quickCommandSave")}
             </button>
@@ -376,7 +376,7 @@ export function TerminalQuickCommands({
                   type="button"
                   disabled={busy}
                   onClick={() => void runPrepared()}
-                  className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast"
+                  className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-ink"
                 >
                   {t("terminal.quickCommandRun")}
                 </button>
