@@ -25,7 +25,7 @@ import { recentBufferText } from "./buffer";
 import { attachOsc52Clipboard } from "./osc52";
 import { createTerminalOutput } from "./output";
 import { attachKittyKeyboardProtocol, encodeIntlYen } from "./kittyKeyboard";
-import { modifierOpensLink, osc8Link } from "./links";
+import { linkTextNamesTarget, modifierOpensLink, osc8Link } from "./links";
 import { attachLinkProvider } from "./linkProvider";
 import { openTerminalURL, TerminalLinkPopover, type RemotePathAction, type TerminalLinkSelection } from "./TerminalLinkPopover";
 import { TerminalQuickCommands } from "./TerminalQuickCommands";
@@ -214,7 +214,7 @@ export function TerminalView({
           const visible = line.slice(range.start.x - 1, range.end.x);
           const link = osc8Link(target, visible, range.start.x - 1, range.end.x);
           if (link === null) return;
-          if (modifierOpensLink(event)) {
+          if (modifierOpensLink(event) && linkTextNamesTarget(link)) {
             openTerminalURL(link.target);
             return;
           }
