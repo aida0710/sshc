@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -19,6 +20,7 @@ type RemoteEngineDirectory interface {
 	AddEngine(ctx context.Context, alias string) error
 	RemoveEngine(alias string) error
 	EngineStatus(ctx context.Context, alias string) (remoteengine.Status, error)
+	ControlEngine(ctx context.Context, alias string, action remoteengine.EngineAction) (remoteengine.ActionResult, error)
 	ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
 	ForwardTerminalStream(w http.ResponseWriter, r *http.Request, alias string) error
 }
@@ -44,6 +46,7 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.DELETE("/api/v1/engines/:alias", handlers.Remove)
 	engine.GET("/api/v1/engines/:alias/status", handlers.Status)
 	engine.POST("/api/v1/engines/:alias/open", handlers.Open)
+	engine.POST("/api/v1/engines/:alias/control", handlers.Control)
 	engine.GET("/api/v1/engines/:alias/terminal/sessions", handlers.ForwardTerminal)
 	engine.POST("/api/v1/engines/:alias/terminal/sessions", handlers.ForwardTerminal)
 	engine.GET("/api/v1/engines/:alias/terminal/shell-profiles", handlers.ForwardTerminal)
@@ -144,6 +147,27 @@ func (h RemoteEngineHandlers) Open(c *echo.Context) error {
 		return remoteEngineProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, api.RemoteEngineEntrance{Url: opened})
+}
+
+// Control は、実行先のエンジンを止める・起動し直す・更新する。どれも接続先のターミナルを
+// すべて止めるので、画面が尋ねてから送る。
+func (h RemoteEngineHandlers) Control(c *echo.Context) error {
+	alias, ok := aliasParam(c)
+	if !ok {
+		return problem(c, http.StatusBadRequest, "unsafe_alias")
+	}
+	var request api.RemoteEngineActionRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	result, err := h.Engines.ControlEngine(c.Request().Context(), alias, remoteengine.EngineAction(request.Action))
+	if errors.Is(err, remoteengine.ErrUnknownAction) {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if err != nil {
+		return remoteEngineProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, api.RemoteEngineActionResult{Succeeded: result.Succeeded, Output: result.Output})
 }
 
 // ForwardTerminal は、実行先のエンジンのターミナルの操作を取り次ぐ。このマシンの

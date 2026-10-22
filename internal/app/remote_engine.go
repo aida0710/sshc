@@ -46,7 +46,7 @@ func (l sshRemoteEngineLink) DialContext(ctx context.Context, network, address s
 
 func (l sshRemoteEngineLink) Run(ctx context.Context, command string, limit time.Duration) (remoteengine.RunResult, error) {
 	output, err := l.connection.Run(ctx, sshclient.Command{Line: command, Limit: limit})
-	return remoteengine.RunResult{Stdout: output.Stdout, ExitCode: output.ExitCode}, err
+	return remoteengine.RunResult{Stdout: output.Stdout, Stderr: output.Stderr, ExitCode: output.ExitCode}, err
 }
 
 func (l sshRemoteEngineLink) Wait() error  { return l.connection.Wait() }

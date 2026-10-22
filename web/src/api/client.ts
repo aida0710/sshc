@@ -92,6 +92,9 @@ function notifyFailure(diagnostic: RequestFailureDiagnostic) {
   if (diagnostic.status >= 400 && diagnostic.status < 500 && !isWorkspaceRefusal(diagnostic.code)) return;
   // 更新確認は任意のbackground taskであり、製品操作の失敗ではない。
   if (diagnostic.code === "update_check_failed") return;
+  // 実行先のsshcエンジンに届かない理由は、実行先の一覧・セッションの一覧・エンジンの情報が
+  // 接続先で何をすればよいかと一緒に出す。共通通知は理由を言えないので重ねない。
+  if (diagnostic.code.startsWith("remote_engine_")) return;
   onRequestFailed?.(diagnostic);
 }
 

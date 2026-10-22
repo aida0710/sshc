@@ -16,7 +16,19 @@ Only the terminals change: sessions and [workspaces](./workspace). Connections, 
 3. Open **Run on** at the bottom of the sidebar and choose the host from **Add an engine…**.
 4. Choose the host in the list: the workspaces and sessions become that engine's, and the terminal heading says it runs there.
 
-Each host's **…** offers **Open its full screen in a new tab** (the host engine's own screen, like `sshc open <alias>`) and **Remove from the list**. Removing it stops neither the host's engine nor its terminals.
+Each host's **…** offers **Engine information…**, **Open its full screen in a new tab** (the host engine's own screen, like `sshc open <alias>`) and **Remove from the list**. Removing it stops neither the host's engine nor its terminals.
+
+## Engine information
+
+**Engine information…** shows the host engine's version, its vault state and how many sessions run on it. From there you can run the following. Each one ends every terminal on that host, so it asks first.
+
+- **Update**: runs `sshc update --yes` on the host. Use it to bring the host up to this computer's version after updating this computer.
+- **Restart**: runs `sshc service restart --yes` on the host. It works only for an engine running as the sshc-managed service.
+- **Stop**: runs `sshc stop` on the host. To use it again, run `sshc open` or `systemctl --user start sshc` on the host.
+
+After **Update** or **Restart**, a password-protected vault is locked.
+
+The dialog shows the end of what the host's `sshc` wrote.
 
 ## Requirements and limits
 
