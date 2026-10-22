@@ -107,25 +107,29 @@ export function Row({
   );
 }
 
-// Notice is the one way a panel tells the user something went wrong or
-// needs attention; "compact" fits it into dense lists and side panes.
+const noticeToneClasses = {
+  notice: "border-notice-line bg-notice text-notice-ink",
+  danger: "border-control-line text-danger",
+  success: "border-live/40 bg-live/10 text-live",
+} as const;
+
+// Notice is the one way a panel tells the user something went wrong, needs
+// attention, or has just been done ("success": saved, started, restored).
+// "compact" fits it into dense lists and side panes.
 export function Notice({
   children,
   tone = "notice",
   compact = false,
 }: {
   children: ReactNode;
-  tone?: "notice" | "danger";
+  tone?: keyof typeof noticeToneClasses;
   compact?: boolean;
 }) {
-  const danger = tone === "danger";
   const spacing = compact ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-sm";
   return (
     <p
-      role={danger ? "alert" : "status"}
-      className={`flex items-center gap-2 rounded-md border ${spacing} ${
-        danger ? "border-control-line text-danger" : "border-notice-line bg-notice text-notice-ink"
-      }`}
+      role={tone === "danger" ? "alert" : "status"}
+      className={`flex items-center gap-2 rounded-md border ${spacing} ${noticeToneClasses[tone]}`}
     >
       {children}
     </p>

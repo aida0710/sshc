@@ -96,7 +96,7 @@ export function NotificationSettingsSection({ showHeading }: { showHeading: bool
         {permission === "default" || permission === "granted" || request.error !== "" ? (
           <ActionArea status={request.error === ""
             ? (permission === "granted"
-                ? <p role="status" className="text-sm text-live">{t("terminal.browserNotificationsEnabled")}</p>
+                ? <Notice tone="success">{t("terminal.browserNotificationsEnabled")}</Notice>
                 : undefined)
             : <Notice tone="danger">{request.error}</Notice>}
           >

@@ -91,6 +91,12 @@ describe("Notice", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("This cannot be undone.");
   });
+
+  it("tells that something has just been done without interrupting", () => {
+    render(<Notice tone="success">Saved.</Notice>);
+    expect(screen.getByRole("status")).toHaveTextContent("Saved.");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });
 
 describe("Button", () => {

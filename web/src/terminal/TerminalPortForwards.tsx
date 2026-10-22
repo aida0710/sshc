@@ -120,7 +120,7 @@ export function TerminalPortForwards({
 
         <div className="flex min-h-0 flex-col gap-5 overflow-y-auto p-4 sm:p-5">
           {error === "" ? null : <Notice tone="danger">{error}</Notice>}
-          {notice === "" ? null : <Notice>{notice}</Notice>}
+          {notice === "" ? null : <Notice tone="success">{notice}</Notice>}
           {session.state === "reconnecting" ? <Notice>{t("terminal.forwardPausedReconnect")}</Notice> : null}
 
           <section aria-labelledby="terminal-forward-active" className="flex flex-col gap-2">

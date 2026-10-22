@@ -21,11 +21,14 @@ type Prepared = {
 export function TerminalQuickCommands({
   session,
   onClose,
+  onCopied,
   initialCommand = "",
   returnFocusRef,
 }: {
   session: TerminalSession;
   onClose: () => void;
+  // コピーは画面に何も起きないので、閉じたあとに呼び手が「コピーしました」を出す。
+  onCopied: () => void;
   initialCommand?: string;
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
@@ -145,6 +148,7 @@ export function TerminalQuickCommands({
     try {
       await clipboard.writeText(await revealPrepared());
       onClose();
+      onCopied();
     } catch (error) {
       if (failureCode(error) === "terminal_command_preview_changed") {
         await handleActionFailure(error, current);
