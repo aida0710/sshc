@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { usePendingResult } from "./usePendingResult";
 import { control, hintText } from "./form";
 import { Button } from "./surface";
 import { ModalShell } from "./ModalShell";
@@ -41,7 +42,8 @@ export function InputDialog({
 }) {
   const [value, setValue] = useState(initialValue);
   const [touched, setTouched] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const submission = usePendingResult();
+  const submitting = submission.pending;
   const inputRef = useRef<HTMLInputElement>(null);
   const normalized = value.trim();
   const validation = useMemo(() => validate?.(normalized) ?? "", [normalized, validate]);
@@ -56,11 +58,7 @@ export function InputDialog({
     if (submitting) return;
     setTouched(true);
     if (validation !== "") return;
-    const pending = onSubmit(normalized);
-    if (pending === undefined) return;
-    setSubmitting(true);
-    // 失敗の文は呼び手が error で渡す。ここでは終わるのを待つだけにする。
-    void pending.catch(() => undefined).finally(() => setSubmitting(false));
+    submission.watch(onSubmit(normalized));
   }
 
   return (

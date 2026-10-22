@@ -10,6 +10,7 @@ import { terminalSessionsApi } from "../api/terminalSessions";
 import { vaultApi } from "../api/vault";
 import { keysApi } from "../keys/api";
 import { vaultStatus } from "../testing/vaultStatus";
+import { ToastProvider } from "../ui/ToastProvider";
 
 vi.mock("../api/config", async () => {
   const actual = await vi.importActual<typeof import("../api/config")>("../api/config");
@@ -110,7 +111,7 @@ describe("ConnectionsPage", () => {
       const user = userEvent.setup();
       vi.mocked(configApi.overview).mockResolvedValue(twoInConfig);
       vi.mocked(configApi.file).mockResolvedValue({ ...detail.file, contents: configContents });
-      render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} onNavigateLocation={vi.fn()} />);
+      render(<ToastProvider><ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} onNavigateLocation={vi.fn()} /></ToastProvider>);
       await user.click(await screen.findByRole("button", { name: "bastion" }));
       fireEvent.click(screen.getByRole("button", { name: "edge" }), { ctrlKey: true });
       const bar = await screen.findByRole("toolbar", { name: "2 selected" });
@@ -131,6 +132,10 @@ describe("ConnectionsPage", () => {
       }));
       expect(configApi.file).toHaveBeenCalledTimes(1);
       expect(await screen.findByRole("toolbar", { name: "2 selected" })).toBeInTheDocument();
+      // ダイアログは開いたまま、断られた理由をその中に出す。背面に出すとダイアログに隠れる。
+      const dialog = screen.getByRole("dialog", { name: "Move 2 connections" });
+      expect(await within(dialog).findByRole("alert")).not.toBeEmptyDOMElement();
+      expect(within(dialog).getByRole("button", { name: "work" })).toBeEnabled();
     });
 
     it("lets the choice go once the move is saved", async () => {
@@ -139,6 +144,24 @@ describe("ConnectionsPage", () => {
       await user.click(within(bar).getByRole("button", { name: "Move to group…" }));
       await user.click(within(screen.getByRole("dialog", { name: "Move 2 connections" })).getByRole("button", { name: "work" }));
       await waitFor(() => expect(screen.queryByRole("toolbar", { name: "2 selected" })).not.toBeInTheDocument());
+      expect(screen.queryByRole("dialog", { name: "Move 2 connections" })).not.toBeInTheDocument();
+      expect(await screen.findByText("Moved 2 connections to work.")).toBeInTheDocument();
+    });
+
+    it("keeps the move dialog open and marks the chosen group while the move is saved", async () => {
+      let finish: () => void = () => undefined;
+      vi.mocked(configApi.save).mockImplementation(() => new Promise((resolve) => {
+        finish = () => resolve({ transactionId: "t1", written: ["config"], preview: { operation: "config.move_hosts", diffs: [] } });
+      }));
+      const { user, bar } = await chooseBoth();
+      await user.click(within(bar).getByRole("button", { name: "Move to group…" }));
+      const dialog = screen.getByRole("dialog", { name: "Move 2 connections" });
+      await user.click(within(dialog).getByRole("button", { name: "work" }));
+
+      await waitFor(() => expect(within(dialog).getByRole("button", { name: "work" })).toHaveAttribute("aria-busy", "true"));
+      expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeDisabled();
+      finish();
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Move 2 connections" })).not.toBeInTheDocument());
     });
   });
 
@@ -984,7 +1007,7 @@ describe("ConnectionsPage", () => {
         .toHaveTextContent("Change a value to see exactly what would be written."));
   });
 
-  it("hides the previous connection while a newly selected detail is still loading", async () => {
+  it("says the newly selected connection is loading instead of asking to choose one", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
@@ -1009,7 +1032,9 @@ describe("ConnectionsPage", () => {
     await user.click(screen.getByRole("button", { name: "nas" }));
 
     expect(screen.queryByRole("heading", { name: /^bastion$/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Choose a connection" })).toBeInTheDocument();
+    // 一覧では nas が選ばれているので、「接続を選択」を出すと食い違う。
+    expect(screen.getByText("Loading nas…").closest("[role=status]")).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByRole("heading", { name: "Choose a connection" })).not.toBeInTheDocument();
   });
 
   it("keeps pattern rules in Config and never asks for their host detail", async () => {

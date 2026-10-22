@@ -115,7 +115,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
               </li>
             ))}
           </ul>
-          <Button className="mt-3" disabled={busy !== null} onClick={() => void authenticate(true)}>
+          <Button className="mt-3" disabled={busy !== null} busy={busy === "authentication"} onClick={() => void authenticate(true)}>
             {t("conn.checksAcknowledge")}
           </Button>
         </div>
