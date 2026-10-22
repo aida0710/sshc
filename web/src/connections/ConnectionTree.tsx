@@ -11,6 +11,7 @@ import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { useLongPress } from "../ui/useLongPress";
 import { ActionMenu, revealOnHover, type ActionMenuItem } from "../ui/ActionMenu";
+import { draggableCursor, dropTargetLook } from "../ui/dragAndDropLook";
 import { duplicateAliasesOf, hostMetadataByIdentity, identityKey } from "./connectionBrowser";
 import { canDrop, dragMimeType, type DragPayload } from "./dragdrop";
 import { applySelectionGesture, emptyMultiSelection, keepVisible, type MultiSelection } from "./multiSelection";
@@ -141,6 +142,8 @@ export function ConnectionTree({
   const [sortOrder, setSortOrder] = useState<SortOrder>("name");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [dragging, setDragging] = useState<DragPayload | null>(null);
+  // ドラッグ中にポインタが上にある落とし先（グループの名前、グループなしは ""）。
+  const [dropOver, setDropOver] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [groupSheetOpen, setGroupSheetOpen] = useState(false);
   const longPress = useLongPress();
@@ -288,6 +291,11 @@ export function ConnectionTree({
     setDragging(payload);
   }
 
+  function endDrag() {
+    setDragging(null);
+    setDropOver(null);
+  }
+
   function dragPayloadFor(item: DecoratedHost): DragPayload {
     if (checked.keys.size >= 2 && checked.keys.has(item.key)) {
       const items = decorated
@@ -309,13 +317,19 @@ export function ConnectionTree({
         event.preventDefault();
         event.stopPropagation();
         event.dataTransfer.dropEffect = "move";
+        setDropOver(target);
+      },
+      onDragLeave: (event: DragEvent) => {
+        // 落とし先の中のボタンへ移っただけのときも dragleave が来るので、外へ出たときだけ消す。
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+        setDropOver((current) => (current === target ? null : current));
       },
       onDrop: (event: DragEvent) => {
         if (dragging === null || !accepts(target)) return;
         event.preventDefault();
         event.stopPropagation();
         onDrop(dragging, target);
-        setDragging(null);
+        endDrag();
       },
     };
   }
@@ -367,7 +381,7 @@ export function ConnectionTree({
     return (
       <div key={node.name} className="min-w-max md:min-w-0">
         <div
-          className={`group/row flex items-center rounded-md ${accepts(node.name) ? "bg-select-fill outline outline-1 outline-accent" : ""}`}
+          className={`group/row flex items-center rounded-md ${dropTargetLook({ accepts: accepts(node.name), over: dropOver === node.name })}`}
           style={padding}
           onContextMenu={items.length === 0 ? undefined : (event) => {
             event.preventDefault();
@@ -400,9 +414,9 @@ export function ConnectionTree({
             aria-pressed={active}
             draggable={!movesDisabled}
             onDragStart={(event) => startDrag(event, { kind: "group", name: node.name })}
-            onDragEnd={() => setDragging(null)}
+            onDragEnd={endDrag}
             onClick={() => setScope({ kind: "group", name: node.name })}
-            className={`${facetClass(active)} min-w-0 flex-1 px-1.5`}
+            className={`${facetClass(active)} min-w-0 flex-1 px-1.5 ${movesDisabled ? "" : draggableCursor}`}
           >
             <span className="flex shrink-0" style={node.colour === "" ? undefined : { color: node.colour }}>
               <Icon name="groups" className="size-4" />
@@ -440,7 +454,7 @@ export function ConnectionTree({
           <span className="text-[0.68rem] text-ink-faint">{decorated.length}</span>
         </button>
         {groupTree.map((node) => renderGroupFacet(node))}
-        <div {...dropHandlers("")} className={accepts("") ? "rounded-md outline outline-1 outline-accent" : ""}>
+        <div {...dropHandlers("")} className={`rounded-md ${dropTargetLook({ accepts: accepts(""), over: dropOver === "" })}`}>
           <button type="button" aria-label={t("tree.ungrouped")} aria-pressed={ungroupedActive} onClick={() => setScope({ kind: "ungrouped" })} className={`${facetClass(ungroupedActive)} min-w-max md:min-w-0`}>
             <Icon name="groups" className="size-4" />
             <span className="min-w-0 flex-1 truncate">{t("tree.ungrouped")}</span>
@@ -475,7 +489,7 @@ export function ConnectionTree({
         onPointerDown={(event) => beginLongPress(event, item)}
         onPointerEnd={longPress.cancel}
         onDragStart={(event) => startDrag(event, dragPayloadFor(item))}
-        onDragEnd={() => setDragging(null)}
+        onDragEnd={endDrag}
       />
     );
   }

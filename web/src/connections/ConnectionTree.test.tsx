@@ -220,6 +220,47 @@ describe("ConnectionTree", () => {
     expect(onDrop).not.toHaveBeenCalled();
   });
 
+  it("outlines the groups a dragged connection can land on, and fills only the one under the pointer", () => {
+    render(
+      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
+    );
+    const tree = screen.getByRole("navigation", { name: "Connections" });
+    const groupButton = (name: string) => within(tree).getByRole("button", { name });
+    // 落とし先の見た目は、グループのボタンを包む行に付く。
+    const dropZone = (name: string) => groupButton(name).parentElement!;
+    const source = screen.getByRole("button", { name: "nas" });
+    const dataTransfer = transfer({ kind: "connection", path: homeNas.identity.path, alias: "nas", group: "home" });
+
+    expect(dropZone("empty")).not.toHaveClass("outline-dashed");
+    fireEvent.dragStart(source, { dataTransfer });
+    expect(dropZone("empty")).toHaveClass("outline-dashed");
+    expect(dropZone("home/eu")).toHaveClass("outline-dashed");
+    expect(dropZone("Ungrouped")).toHaveClass("outline-dashed");
+    // 今いるグループへは落とせないので、点線も付けない。
+    expect(dropZone("home")).not.toHaveClass("outline-dashed");
+
+    fireEvent.dragOver(groupButton("empty"), { dataTransfer });
+    expect(dropZone("empty")).toHaveClass("outline-solid", "bg-accent/20");
+    expect(dropZone("empty")).not.toHaveClass("outline-dashed");
+    expect(dropZone("home/eu")).toHaveClass("outline-dashed");
+    expect(dropZone("Ungrouped")).toHaveClass("outline-dashed");
+
+    fireEvent.dragOver(groupButton("home/eu"), { dataTransfer });
+    expect(dropZone("home/eu")).toHaveClass("outline-solid");
+    expect(dropZone("empty")).toHaveClass("outline-dashed");
+    expect(dropZone("empty")).not.toHaveClass("outline-solid");
+
+    fireEvent.dragLeave(dropZone("home/eu"), { dataTransfer });
+    expect(dropZone("home/eu")).toHaveClass("outline-dashed");
+    expect(dropZone("home/eu")).not.toHaveClass("outline-solid");
+
+    fireEvent.dragEnd(source, { dataTransfer });
+    for (const name of ["empty", "home/eu", "Ungrouped"]) {
+      expect(dropZone(name)).not.toHaveClass("outline-dashed");
+      expect(dropZone(name)).not.toHaveClass("outline-solid");
+    }
+  });
+
   describe("choosing several connections", () => {
     function ChoosingTree({ onDrop = vi.fn(), multiSelectDisabled = false }: { onDrop?: (payload: DragPayload, target: string) => void; multiSelectDisabled?: boolean }) {
       const [selected, setSelected] = useState<HostSelection | null>(null);

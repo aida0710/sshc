@@ -2,6 +2,7 @@ import { useEffect, useRef, type DragEvent, type KeyboardEvent as ReactKeyboardE
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
+import { draggableCursor } from "../ui/dragAndDropLook";
 import { localHostAlias } from "./localHost";
 import { maxTabsPerPane, type PaneSide, type SFTPPane, type SFTPTab } from "./sftpPanes";
 import { sftpTabMimeType } from "./SFTPTabDropTarget";
@@ -120,7 +121,7 @@ export function SFTPTabStrip({
               draggable={draggable}
               onDragStart={draggable ? (event) => beginDrag(event, tab) : undefined}
               onDragEnd={draggable ? onDragEnd : undefined}
-              className={`group relative flex w-52 shrink-0 items-stretch rounded ${selected ? "bg-card shadow-sm" : "hover:bg-card/50"} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+              className={`group relative flex w-52 shrink-0 items-stretch rounded ${selected ? "bg-card shadow-sm" : "hover:bg-card/50"} ${draggable ? draggableCursor : ""}`}
             >
               <button
                 type="button"

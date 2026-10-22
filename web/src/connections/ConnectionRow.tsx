@@ -3,6 +3,7 @@ import type { HostEntry, HostMetadata } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { ActionMenu, revealOnHover, type ActionMenuItem } from "../ui/ActionMenu";
 import { connectionAddress } from "./connectionAddress";
+import { draggableCursor } from "../ui/dragAndDropLook";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 
@@ -74,7 +75,7 @@ export function ConnectionRow({
         onPointerCancel={onPointerEnd}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        className={`min-h-14 w-full select-none border-l-[3px] px-3 py-2.5 pr-11 text-left text-sm transition-colors ${highlighted ? "border-accent bg-select-fill text-ink" : "border-transparent text-ink-muted hover:bg-hover hover:text-ink"}`}
+        className={`min-h-14 w-full select-none border-l-[3px] px-3 py-2.5 pr-11 text-left text-sm transition-colors ${draggable ? draggableCursor : ""} ${highlighted ? "border-accent bg-select-fill text-ink" : "border-transparent text-ink-muted hover:bg-hover hover:text-ink"}`}
       >
         <span className="flex min-w-0 items-center gap-2">
           {showCheckbox ? (
