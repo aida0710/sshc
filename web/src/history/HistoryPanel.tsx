@@ -112,7 +112,7 @@ export function HistoryPanel() {
       {problem === null ? null : (
         <Notice tone="danger">{t("history.requestRejected", { code: problem.code })}</Notice>
       )}
-      {message === "" ? null : <p role="status" className="text-sm text-live">{message}</p>}
+      {message === "" ? null : <Notice tone="success">{message}</Notice>}
 
       {pending.length === 0 ? null : (
         <Card as="section" aria-labelledby="pending-heading" radius="md" tone="notice">

@@ -7,6 +7,7 @@ import { SFTPPanel } from "./SFTPPanel";
 import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { ApiError } from "../api/client";
 import { sftpTransferManager } from "./transferManager";
+import { ToastProvider } from "../ui/ToastProvider";
 import type { UploadChunk, UploadCompletion, UploadStart } from "./api";
 
 const api = vi.hoisted(() => ({
@@ -505,11 +506,13 @@ describe("SFTPPanel uploads", () => {
   });
 
   it("copies the current directory and edits it from the empty breadcrumb area", async () => {
-    render(<SFTPPanel aliases={["edge"]} />);
+    render(<ToastProvider><SFTPPanel aliases={["edge"]} /></ToastProvider>);
     await chooseHost("edge");
     await userEvent.click(screen.getByRole("button", { name: "Folder actions" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Copy full path" }));
     expect(clipboard.writeText).toHaveBeenLastCalledWith("/remote");
+    // メニューは閉じるので、コピーできたことは画面の下の知らせで伝える。
+    expect(await screen.findByText("Copied.")).toBeVisible();
     fireEvent.click(screen.getByRole("navigation", { name: "Remote path" }));
     const input = screen.getByRole("textbox", { name: "Remote path" });
     expect(input).toHaveValue("/remote");

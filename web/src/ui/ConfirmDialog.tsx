@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ModalShell } from "./ModalShell";
-import { Spinner } from "./Spinner";
 import { Button } from "./surface";
 
 // ConfirmDialog は、取り消せない操作の前に確かめる。
@@ -89,12 +88,11 @@ export function ConfirmDialog({
         <Button
           ref={confirmRef}
           kind={confirmKind}
-          disabled={locked || confirmDisabled}
-          aria-busy={locked}
+          busy={locked}
+          disabled={confirmDisabled}
           onClick={confirm}
-          className="inline-flex items-center gap-2 focus:outline-2 focus:outline-offset-2 focus:outline-accent"
+          className="focus:outline-2 focus:outline-offset-2 focus:outline-accent"
         >
-          {locked ? <Spinner /> : null}
           {confirmLabel}
         </Button>
       </div>

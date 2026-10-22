@@ -7,6 +7,7 @@ import { CrashBoundary } from "./shell/CrashBoundary";
 import { bootstrapSession } from "./session/bootstrap";
 import { LanguageProvider } from "./i18n/context";
 import { ThemeProvider } from "./theme/context";
+import { ToastProvider } from "./ui/ToastProvider";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("root element missing");
@@ -41,10 +42,12 @@ createRoot(root).render(
     <CrashBoundary>
     <ThemeProvider>
       <LanguageProvider>
-        <App
-          bootstrap={() => sessionPromise}
-          health={() => apiClient.health()}
-        />
+        <ToastProvider>
+          <App
+            bootstrap={() => sessionPromise}
+            health={() => apiClient.health()}
+          />
+        </ToastProvider>
       </LanguageProvider>
     </ThemeProvider>
     </CrashBoundary>

@@ -351,7 +351,7 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
       <ActionArea status={save.error === ""
         ? (settingsLoad.state === "loading"
             ? <p role="status" className="text-sm text-ink-muted">{t("terminal.settingsLoading")}</p>
-            : !loaded || !save.saved ? undefined : <p role="status" className="text-sm text-live">{t("terminal.settingsSaved")}</p>)
+            : !loaded || !save.saved ? undefined : <Notice tone="success">{t("terminal.settingsSaved")}</Notice>)
         : <Notice tone="danger">{save.error}</Notice>}
       >
         <Button kind="primary" disabled={!loaded || busy} onClick={() => void submit()}>
