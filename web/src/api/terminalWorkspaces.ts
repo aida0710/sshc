@@ -27,22 +27,26 @@ function validateWorkspace(value: unknown): TerminalWorkspace {
   return validateOpenAPISchema<TerminalWorkspace>("TerminalWorkspace", value);
 }
 
-const workspacePath = (id: string) => `/api/v1/terminal/workspaces/${encodeURIComponent(id)}`;
-
-// The engine's terminal workspaces: the named groups the session list is
+// The terminal workspaces of one engine: the named groups the session list is
 // drawn in. Moving a session between them is a session operation
-// (terminalSessionsApi.moveTerminalSession).
-export const terminalWorkspacesApi: TerminalWorkspacesApi = {
-  async list() {
-    return validateList(await apiClient.read("/api/v1/terminal/workspaces"));
-  },
-  async create(name) {
-    return validateWorkspace(await postJSON<unknown>("/api/v1/terminal/workspaces", { name }));
-  },
-  async update(id, change) {
-    return validateWorkspace(await patchJSON<unknown>(workspacePath(id), change));
-  },
-  async remove(id) {
-    return validateList(await apiClient.mutate<unknown>(workspacePath(id), { method: "DELETE" }));
-  },
-};
+// (moveTerminalSession). `base` is the engine's terminal API, as for sessions.
+export function createTerminalWorkspacesApi(base: string): TerminalWorkspacesApi {
+  const workspacePath = (id: string) => `${base}/workspaces/${encodeURIComponent(id)}`;
+  return {
+    async list() {
+      return validateList(await apiClient.read(`${base}/workspaces`));
+    },
+    async create(name) {
+      return validateWorkspace(await postJSON<unknown>(`${base}/workspaces`, { name }));
+    },
+    async update(id, change) {
+      return validateWorkspace(await patchJSON<unknown>(workspacePath(id), change));
+    },
+    async remove(id) {
+      return validateList(await apiClient.mutate<unknown>(workspacePath(id), { method: "DELETE" }));
+    },
+  };
+}
+
+// This machine's own terminal workspaces.
+export const terminalWorkspacesApi = createTerminalWorkspacesApi("/api/v1/terminal");

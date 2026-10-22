@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from "react";
 import type { TerminalAppearance, TerminalSettings } from "../api/settings";
-import type { TerminalSession } from "../api/terminalSessions";
+import type { TerminalSession, TerminalSessionsApi } from "../api/terminalSessions";
 import { resolveAppearance } from "../terminal/appearance";
 import { TerminalEmptyState } from "../terminal/TerminalEmptyState";
 import type { RemotePathAction } from "../terminal/TerminalLinkPopover";
@@ -30,6 +30,8 @@ export function TerminalScreen({
   hostAppearance,
   hostOSC52,
   hostVPN,
+  api,
+  runTarget,
   onOpenRemotePath,
   onOSC52Change,
 }: {
@@ -41,6 +43,10 @@ export function TerminalScreen({
   hostOSC52: Map<string, "allow" | "deny">;
   // hostVPN は、alias ごとに通るVPN経路の名前である。
   hostVPN: Map<string, string>;
+  // api is the terminal API of the run target the sessions belong to.
+  api: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath">;
+  // runTarget is the SSH alias of that engine; null for this machine.
+  runTarget: string | null;
   onOpenRemotePath: (
     alias: string,
     path: string,
@@ -75,6 +81,8 @@ export function TerminalScreen({
       <TerminalView
         key={session.id}
         session={session}
+        api={api}
+        {...(runTarget === null ? {} : { runTarget })}
         searchShortcutActive={visible && activeSessionId === session.id}
         {...(settings.fontSize === undefined
           ? {}

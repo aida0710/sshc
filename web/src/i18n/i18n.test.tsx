@@ -89,6 +89,7 @@ describe("the catalogue", () => {
         "shell.languageJapanese",
         "shell.navVault",
         "workspace.heading",
+        "runTarget.thisMachine",
         "shell.title",
         "shortcuts.heading",
         "snippets.heading",

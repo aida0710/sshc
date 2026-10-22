@@ -86,11 +86,16 @@ export function useTerminalSessions(
       if (!isCurrent()) return;
       setSessions(listed.sessions);
       setMaxSessions(listed.maxSessions);
-    } catch {
+    } catch (error) {
+      // A run-target engine that cannot be reached would otherwise look like
+      // one with no sessions. This machine's own list keeps failing quietly:
+      // the next poll reads it again.
+      const code = failureCode(error);
+      if (isCurrent() && code.startsWith("remote_engine_")) setProblem(translate(terminalProblemKey(code)));
     } finally {
       if (isCurrent()) setLoaded(true);
     }
-  }, [api, enabled, refreshGeneration]);
+  }, [api, enabled, refreshGeneration, translate]);
 
   // applyMutation runs one request whose response is the listing after the
   // change. A response that lost the race to a newer mutation is discarded in
@@ -119,6 +124,17 @@ export function useTerminalSessions(
     setProblem(translate(terminalProblemKey(failureCode(error))));
     await refresh();
   }, [refresh, translate]);
+
+  // A different api is another engine: what the last one listed is not shown
+  // while the new list is read.
+  useEffect(() => {
+    refreshGeneration.retire();
+    mutationGeneration.retire();
+    setSessions([]);
+    setMaxSessions(0);
+    setProblem("");
+    setLoaded(false);
+  }, [api, mutationGeneration, refreshGeneration]);
 
   useEffect(() => {
     void refresh();
@@ -294,6 +310,15 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.vpnRouteDisconnected";
     case "connect_failed":
       return "terminal.connectFailed";
+    case "remote_engine_vault_locked":
+      return "terminal.remoteVaultLocked";
+    case "remote_engine_refused":
+    case "remote_engine_unreachable":
+    case "remote_engine_not_running":
+    case "remote_engine_unproven":
+    case "remote_engine_connect_failed":
+    case "remote_engine_version_mismatch":
+      return "terminal.remoteEngineUnavailable";
     case "reconnect_failed":
       return "terminal.reconnectFailed";
     case "reconnect_exhausted":

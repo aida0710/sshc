@@ -58,7 +58,7 @@ import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion"
 type TerminalViewProps = {
   session: TerminalSession;
   searchShortcutActive?: boolean;
-  api?: Pick<TerminalSessionsApi, "terminalStreamTicket">;
+  api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath">;
   onExit?: () => void;
   onReconnect?: () => Promise<boolean>;
   onStopReconnect?: () => Promise<boolean>;
@@ -74,6 +74,10 @@ type TerminalViewProps = {
   osc52Enabled?: boolean;
   // vpnProfile は、この接続が通るVPN経路の名前である。空なら通らない。
   vpnProfile?: string;
+  // runTarget is the SSH alias of the engine this session runs on, when it is
+  // not this machine. Port forwarding, Quick Commands and opening remote paths
+  // in SFTP act on this machine's engine, so they are not offered for it.
+  runTarget?: string;
   scrollbackLines?: number;
   onOsc52Change?: (enabled: boolean) => void | Promise<void>;
   onForwardsChanged?: () => void | Promise<void>;
@@ -116,6 +120,7 @@ export function TerminalView({
   onOpenRemotePath,
   osc52Enabled: initialOsc52Enabled = false,
   vpnProfile = "",
+  runTarget,
   scrollbackLines = defaultBrowserScrollbackLines,
   onOsc52Change,
   onForwardsChanged,
@@ -479,6 +484,9 @@ export function TerminalView({
             <span className="min-w-0 truncate font-mono">{subtitle}</span>
             <span role="status" className="shrink-0">{connectionStatus}</span>
             <VPNProfileChip name={vpnProfile} />
+            {runTarget === undefined ? null : (
+              <span className="shrink-0 rounded-full bg-accent/15 px-2 py-px font-mono text-[11px] text-accent">{t("runTarget.runningOn", { alias: runTarget })}</span>
+            )}
           </div>
         </div>
         <button
@@ -504,12 +512,12 @@ export function TerminalView({
           <TerminalOverflowMenu
             triggerRef={overflowTrigger}
             osc52Enabled={osc52Enabled}
-            onQuickCommands={() => {
+            onQuickCommands={runTarget !== undefined ? undefined : () => {
               setQuickCommandSelection(terminal.current?.getSelection() ?? "");
               setQuickCommandsOpen(true);
             }}
-            onPortForwarding={session.kind === "ssh" ? () => setPortForwardsOpen(true) : undefined}
-            onOpenRemoteDirectory={session.kind === "ssh" && session.alias !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
+            onPortForwarding={session.kind === "ssh" && runTarget === undefined ? () => setPortForwardsOpen(true) : undefined}
+            onOpenRemoteDirectory={runTarget === undefined && session.kind === "ssh" && session.alias !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
               ? () => onOpenRemotePath(session.alias!, currentDirectory, "browse")
               : undefined}
             onCopyContext={() => copyContext.current()}
@@ -582,7 +590,7 @@ export function TerminalView({
         <TerminalLinkPopover
           selection={linkSelection}
           onClose={() => setLinkSelection(null)}
-          {...(remoteAlias !== undefined && onOpenRemotePath !== undefined
+          {...(runTarget === undefined && remoteAlias !== undefined && onOpenRemotePath !== undefined
             ? { onRemotePath: (path: string, action: RemotePathAction) => onOpenRemotePath(remoteAlias, path, action) }
             : {})}
         />
