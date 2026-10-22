@@ -7,7 +7,7 @@ description: Local boundaries, vault encryption, VPN, host keys, sync and Telnet
 
 ## Local application
 
-The engine serves its Web UI and API on a loopback address. UI URLs are issued on demand rather than logged at startup for long-term reuse. If the saved port is unavailable and the engine moves to another port, sshc revokes previous browser registrations and requires enrolment against the current engine. On Linux, other OS users on the same machine can read the one-time registration URL that `sshc` passes to the browser, so the engine accepts a registration only from a connection owned by the same OS user or root. A process running as the same OS user is assumed to have access to that user's SSH files already.
+The engine serves its Web UI and API on a loopback address. UI URLs are issued on demand rather than logged at startup for long-term reuse. If the saved port is unavailable and the engine moves to another port, sshc revokes previous browser registrations and requires enrolment against the current engine. On Linux, other OS users on the same machine can read the one-time registration URL that `sshc` passes to the browser, so the engine accepts a registration only from a connection owned by the same OS user or root. On Windows, sshc uses the OpenSSH agent pipe (`\\.\pipe\openssh-ssh-agent`) only when it was created by LocalSystem, Administrators or the current user, so another user who creates a pipe with that name while the ssh-agent service is stopped receives neither keys added from the SSH Keys screen nor authentication requests. A process running as the same OS user is assumed to have access to that user's SSH files already.
 
 ## Vault
 

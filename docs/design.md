@@ -137,7 +137,7 @@
 - 秘密鍵の表示応答は `Cache-Control: no-store` で返し、鍵本文はログ行にも history にもエラー応答にも出しません。history には「表示した」という事実と対象パスのみを記録します。
 - 画面は表示した鍵本文をコンポーネント状態にのみ保持し、ダイアログを閉じた時点で破棄します。`localStorage`、`sessionStorage`、グローバルオブジェクトのいずれにも書きません。再表示には新しい確認 token が必要です。
 - ssh-agentへの登録にはagentプロトコルを直接使用し、`ssh-add`は起動しません。鍵はプロセス内で復号し、復号済み鍵をagentに渡します。これにより、パスフレーズを子プロセスの標準入力に渡す必要がありません。
-- agentの宛先は、macOS・Linuxでは`SSH_AUTH_SOCK`のunix socket、WindowsではOpenSSHの固定のnamed pipe（`\\.\pipe\openssh-ssh-agent`）です。Keys画面の登録、接続の公開鍵認証、agent転送は、どれも`keys.NewAgent`が組んだ同じ宛先を使います。agentを開けないときは公開鍵認証の失敗として扱い、パスワードなどほかの認証方式へ進みます。
+- agentの宛先は、macOS・Linuxでは`SSH_AUTH_SOCK`のunix socket、WindowsではOpenSSHの固定のnamed pipe（`\\.\pipe\openssh-ssh-agent`）です。Keys画面の登録、接続の公開鍵認証、agent転送は、どれも`keys.NewAgent`が組んだ同じ宛先を使います。agentを開けないときは公開鍵認証の失敗として扱い、パスワードなどほかの認証方式へ進みます。Windowsのnamed pipeは名前が早い者勝ちで、ssh-agentサービス（既定で無効）が止まっていると、同じマシンの別のユーザーが先に同じ名前のpipeを作れます。そのため、開いたpipeの持ち主がLocalSystem、Administrators、現在のユーザーのどれかであることを確かめ、それ以外の持ち主のpipeは開けないagentとして扱います。相手のプロセスのトークンは、標準ユーザーではLocalSystemのサービスについて読めないので条件にしません。pipeは`SECURITY_IDENTIFICATION`で開き、相手がこちらのユーザーとして動けないようにします。
 - パスフレーズを保存するのは、利用者がVaultを作成した場合だけです。ssh-agent への委譲は従来どおり利用者の明示的な操作で、既定では何も保存しません。保存する場合の境界は次節にまとめます。
 
 ## アプリケーションのロックとVaultの境界
