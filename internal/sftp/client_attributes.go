@@ -24,8 +24,9 @@ const (
 )
 
 type attributeReader struct {
-	source  io.Reader
-	pending *bytes.Reader
+	source      io.Reader
+	pending     *bytes.Reader
+	directories *directoryEntryLimit
 }
 
 func (reader *attributeReader) Read(destination []byte) (int, error) {
@@ -47,6 +48,11 @@ func (reader *attributeReader) Read(destination []byte) (int, error) {
 			return 0, err
 		}
 		packet := frame[len(header):]
+		if status := reader.directories.overLimitStatus(packet); status != nil {
+			packet = status
+			binary.BigEndian.PutUint32(header[:], uint32(len(packet)))
+			frame = append(header[:], packet...)
+		}
 		if packet[0] == sftpAttributesPacket || packet[0] == sftpNamesPacket {
 			preserved, err := preserveMetadataFlags(packet)
 			if err != nil {

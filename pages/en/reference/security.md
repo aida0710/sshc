@@ -101,3 +101,11 @@ Scrollback stays in memory and is not persisted or synced. OSC 52 clipboard acce
 ## Telnet
 
 Telnet neither encrypts traffic nor authenticates the server. sshc warns before connecting but cannot secure the protocol. Use it only behind another trusted network boundary when credentials are involved.
+
+## SFTP
+
+sshc does not trust the file names and attributes that an SFTP server returns. In case you connect to a malicious or compromised server, it handles them as follows.
+
+- When saving to this machine, sshc checks every name the server returned. If a name would point outside the destination folder, such as one containing `\` or `..`, the transfer fails before it starts.
+- When downloading a folder as a ZIP file, sshc writes only the read, write and execute permissions of each file. It does not write the setuid, setgid or sticky bits.
+- sshc reads at most 100,000 entries from a single folder listing. If the server never ends the listing, sshc stops reading at that limit and reports an error.

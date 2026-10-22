@@ -154,6 +154,9 @@ func (w *archiveWalk) addFile(ctx context.Context, file archiveItem, info fs.Fil
 		return err
 	}
 	header.Name, header.Method = file.archivePath, zip.Deflate
+	// 権限のビットだけを書く。setuid・setgid・sticky を残すと、mode を戻す展開ツールが
+	// サーバーの決めた setuid のファイルを手元に作れる。get がリモートの mode を持ち込まないのと揃える。
+	header.SetMode(info.Mode().Perm())
 	entry, err := w.archive.CreateHeader(header)
 	if err != nil {
 		return err
