@@ -5,8 +5,8 @@
 //
 // 登録は固定 loopback origin に置く再利用可能な bearer なので、奪われた場合の
 // 被害を時間と回数で区切る。recover のたびに token を差し替え（rotation）、
-// 差し替え前の token が猶予の後に提示されたら盗まれたものとみなして登録ごと
-// 失効し、使われない登録は期限で消す。port が変わればすべて失効する。
+// 差し替え前のどの世代の token でも、猶予の後に提示されたら盗まれたものとみなして
+// 登録ごと失効し、使われない登録は期限で消す。port が変わればすべて失効する。
 package browserauth
 
 import (
@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	SchemaVersion    = 2
+	SchemaVersion    = 3
 	PathRelative     = "sshc/browser-registrations.json"
 	MaxRegistrations = 16
 	temporaryName    = ".browser-registrations-"
@@ -42,6 +42,13 @@ const (
 	// 持ったまま来る。その tab にも同じ新 token を渡し、猶予を過ぎた提示だけを
 	// 再利用（盗難）として扱う。
 	rotationGrace = time.Minute
+	// MaxRetiredTokens は、1 つの登録が覚えておく退役 token の世代数。盗んだ側が
+	// 続けて recover しても、正規のブラウザが持つ古い token をこの世代数までは
+	// 複製として検知できる。recover は engine の再起動とセッションの期限のたびに
+	// 起きる程度（1 日に数回）なので、普通に使われる複製なら数週間分を覆う。
+	// 上限を超えて差し替えた複製は検知できない。上限は、16 件の登録すべてが
+	// 上限まで覚えても文書が数十 KB に収まるように決めた。
+	MaxRetiredTokens = 64
 )
 
 var ErrInvalidDocument = errors.New("browser registrations document is invalid")
@@ -49,9 +56,10 @@ var ErrInvalidDocument = errors.New("browser registrations document is invalid")
 // registration は、登録済みブラウザ 1 つの状態である。token は保存せずハッシュだけを持つ。
 type registration struct {
 	Hash string `json:"hash"`
-	// Previous は、直前の rotation で退役した token のハッシュ。猶予の後に提示されたら
-	// この登録は盗まれている。
-	Previous   string    `json:"previous,omitempty"`
+	// Retired は、rotation で退役した token のハッシュを古い順に並べたもの。どれかが
+	// 猶予の後に提示されたら、この登録は盗まれている。直前の 1 世代だけを覚えると、
+	// 盗んだ側が 2 回続けて recover すれば正規のブラウザの token が外れる。
+	Retired    []string  `json:"retired,omitempty"`
 	IssuedAt   time.Time `json:"issuedAt"`
 	LastUsedAt time.Time `json:"lastUsedAt"`
 }
@@ -159,7 +167,7 @@ func (s *Store) SetPort(port int) error {
 // 新しい token を返す。呼び出し側は新しい token を保存させる。
 //
 // 差し替え前の token は猶予のあいだだけ同じ新 token を返す。猶予の後に提示された
-// 退役 token は盗まれたものとみなし、その登録を消して拒否する。
+// 退役 token は、何世代前のものでも盗まれたものとみなし、その登録を消して拒否する。
 func (s *Store) Recover(presented string) (Recovery, error) {
 	if !randomid.IsToken(presented) {
 		return Recovery{}, nil
@@ -179,7 +187,7 @@ func (s *Store) Recover(presented string) (Recovery, error) {
 		if err != nil {
 			return Recovery{}, err
 		}
-		live[index].Previous = live[index].Hash
+		live[index].Retired = retire(live[index].Retired, live[index].Hash)
 		live[index].Hash = hashToken(token)
 		live[index].LastUsedAt = now
 		stored.Registrations = live
@@ -193,9 +201,9 @@ func (s *Store) Recover(presented string) (Recovery, error) {
 	if recent, ok := s.rotations[presentedHash]; ok && now.Before(recent.until) {
 		return Recovery{Token: recent.token, Registration: s.identifiers.of(hashToken(recent.token))}, nil
 	}
-	if index := indexOf(live, presentedHash, previousHash); index >= 0 {
-		// 猶予を過ぎた退役 token の提示。正規のブラウザは既に新しい token で
-		// 動いているので、これは複製された token である。登録ごと失効する。
+	if index := indexOf(live, presentedHash, retiredHashes); index >= 0 {
+		// 猶予を過ぎた退役 token の提示。正規のブラウザと複製の片方は既に新しい
+		// token で動いているので、これは複製された token である。登録ごと失効する。
 		stolen := s.identifiers.of(live[index].Hash)
 		stored.Registrations = append(live[:index:index], live[index+1:]...)
 		if err := s.write(stored); err != nil {
@@ -225,7 +233,7 @@ func (s *Store) Forget(presented string) (string, error) {
 	s.pruneRotations(live)
 	index := indexOf(live, presentedHash, currentHash)
 	if index < 0 {
-		index = indexOf(live, presentedHash, previousHash)
+		index = indexOf(live, presentedHash, retiredHashes)
 	}
 	if index < 0 {
 		if recent, ok := s.rotations[presentedHash]; ok {
@@ -310,16 +318,27 @@ func leastRecentlyUsed(registrations []registration) int {
 	return oldest
 }
 
-func currentHash(entry registration) string  { return entry.Hash }
-func previousHash(entry registration) string { return entry.Previous }
+func currentHash(entry registration) []string   { return []string{entry.Hash} }
+func retiredHashes(entry registration) []string { return entry.Retired }
 
-// indexOf は、field が hash と一致する登録の位置を定数時間の比較で探す。
-func indexOf(registrations []registration, hash string, field func(registration) string) int {
+// retire は、退役した token のハッシュを古い順の列の末尾に足し、MaxRetiredTokens を
+// 超えた古い世代を落とす。
+func retire(retired []string, hash string) []string {
+	retired = append(retired, hash)
+	if len(retired) > MaxRetiredTokens {
+		retired = retired[len(retired)-MaxRetiredTokens:]
+	}
+	return retired
+}
+
+// indexOf は、field のどれかが hash と一致する登録の位置を定数時間の比較で探す。
+func indexOf(registrations []registration, hash string, field func(registration) []string) int {
 	found := -1
 	for index, entry := range registrations {
-		candidate := field(entry)
-		if candidate != "" && subtle.ConstantTimeCompare([]byte(candidate), []byte(hash)) == 1 {
-			found = index
+		for _, candidate := range field(entry) {
+			if candidate != "" && subtle.ConstantTimeCompare([]byte(candidate), []byte(hash)) == 1 {
+				found = index
+			}
 		}
 	}
 	return found
@@ -341,13 +360,18 @@ func (s *Store) load() (document, error) {
 	var header struct {
 		SchemaVersion int `json:"schemaVersion"`
 	}
-	if json.Unmarshal(contents, &header) == nil && header.SchemaVersion > 0 && header.SchemaVersion < SchemaVersion {
-		// 古い形式は読まない。登録はブラウザを一度開き直せば作り直せるので、
-		// 形式が変わった端末では登録なしから始める。
+	if json.Unmarshal(contents, &header) == nil && header.SchemaVersion > 0 && header.SchemaVersion < schemaVersionWithPrevious {
+		// ハッシュの一覧だけの形式は読まない。登録はブラウザを一度開き直せば
+		// 作り直せるので、形式が変わった端末では登録なしから始める。
 		return document{SchemaVersion: SchemaVersion, Registrations: []registration{}}, nil
 	}
 	var stored document
-	if err := strictjson.Decode(contents, &stored); err != nil {
+	if header.SchemaVersion == schemaVersionWithPrevious {
+		stored, err = decodeDocumentWithPrevious(contents)
+	} else {
+		err = strictjson.Decode(contents, &stored)
+	}
+	if err != nil {
 		return document{}, fmt.Errorf("%w: %v", ErrInvalidDocument, err)
 	}
 	if stored.SchemaVersion != SchemaVersion ||
@@ -357,11 +381,16 @@ func (s *Store) load() (document, error) {
 	}
 	seen := make(map[string]bool, len(stored.Registrations))
 	for _, entry := range stored.Registrations {
-		if !validHash(entry.Hash) || (entry.Previous != "" && !validHash(entry.Previous)) ||
-			seen[entry.Hash] || entry.IssuedAt.IsZero() || entry.LastUsedAt.IsZero() {
+		if !validHash(entry.Hash) || seen[entry.Hash] || len(entry.Retired) > MaxRetiredTokens ||
+			entry.IssuedAt.IsZero() || entry.LastUsedAt.IsZero() {
 			return document{}, ErrInvalidDocument
 		}
 		seen[entry.Hash] = true
+		for _, retired := range entry.Retired {
+			if !validHash(retired) {
+				return document{}, ErrInvalidDocument
+			}
+		}
 	}
 	stored.Registrations = append([]registration(nil), stored.Registrations...)
 	return stored, nil
