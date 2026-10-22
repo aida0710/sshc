@@ -44,6 +44,7 @@ describe("the catalogue", () => {
         "desktop.closeAllHeading",
         "diag.hostAlias",
         "engine.heading",
+        "engineInfo.vault",
         "explorer.fileState",
         "groups.directories",
         "groups.metricConnections",

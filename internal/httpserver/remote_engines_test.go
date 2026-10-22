@@ -21,6 +21,7 @@ type fakeEngineDirectory struct {
 	forwarded  []string
 	streamed   []string
 	statusSeen remoteengine.Status
+	controlled []string
 }
 
 func (f *fakeEngineDirectory) Engines() ([]string, error) { return f.engines, nil }
@@ -34,6 +35,13 @@ func (f *fakeEngineDirectory) AddEngine(_ context.Context, alias string) error {
 func (f *fakeEngineDirectory) RemoveEngine(string) error { f.engines = nil; return nil }
 func (f *fakeEngineDirectory) EngineStatus(context.Context, string) (remoteengine.Status, error) {
 	return f.statusSeen, nil
+}
+func (f *fakeEngineDirectory) ControlEngine(_ context.Context, alias string, action remoteengine.EngineAction) (remoteengine.ActionResult, error) {
+	if action != remoteengine.ActionStop && action != remoteengine.ActionRestart && action != remoteengine.ActionUpdate {
+		return remoteengine.ActionResult{}, remoteengine.ErrUnknownAction
+	}
+	f.controlled = append(f.controlled, alias+" "+string(action))
+	return remoteengine.ActionResult{Succeeded: true, Output: "stopped"}, nil
 }
 func (f *fakeEngineDirectory) ForwardTerminalAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
 	f.forwarded = append(f.forwarded, alias+" "+remotePath)
@@ -126,5 +134,22 @@ func TestEachReasonAnEngineCannotBeUsedHasItsOwnCode(t *testing.T) {
 		if recorder.Code != tc.status || decodeAs[api.Problem](t, recorder.Body.String()).Code != tc.code {
 			t.Errorf("%v = %d %s, want %d %s", tc.err, recorder.Code, recorder.Body.String(), tc.status, tc.code)
 		}
+	}
+}
+
+func TestControlRunsTheChosenActionAndRefusesAnUnknownOne(t *testing.T) {
+	directory := &fakeEngineDirectory{}
+	engine := remoteEnginesEngine(directory)
+	headers := map[string]string{"Content-Type": "application/json"}
+	recorder := send(t, engine, http.MethodPost, "/api/v1/engines/r540/control", `{"action":"restart"}`, headers)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"succeeded":true`) {
+		t.Fatalf("restart = %d %s", recorder.Code, recorder.Body.String())
+	}
+	if strings.Join(directory.controlled, ",") != "r540 restart" {
+		t.Fatalf("controlled = %v", directory.controlled)
+	}
+	recorder = send(t, engine, http.MethodPost, "/api/v1/engines/r540/control", `{"action":"reboot"}`, headers)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("unknown action = %d %s", recorder.Code, recorder.Body.String())
 	}
 }

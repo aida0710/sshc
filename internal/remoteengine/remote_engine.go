@@ -122,6 +122,13 @@ func (e *remoteEngine) forget(stale *remoteSession) {
 	}
 }
 
+// forgetAny は、持っている資格を捨てる。エンジンを止めたり起動し直したりしたあとに使う。
+func (e *remoteEngine) forgetAny() {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.session = nil
+}
+
 // attach は、接続先の handoff を読み、相手がその秘密を持つエンジンかを確かめてから、
 // API の資格を受け取る。手順はこのマシンの sshc CLI と同じである。
 func (e *remoteEngine) attach(ctx context.Context) (*remoteSession, error) {
