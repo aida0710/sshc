@@ -341,6 +341,13 @@ func finishVaultMutation(ctx context.Context, environment commandEnvironment, mu
 		clear(payload)
 		return exitInterrupted
 	}
+	// パスワードの入力を待つあいだに engine が終わり、別のプロセスが同じ port を
+	// 取っているかもしれない。最初に確かめた engine のままであることを、handoff の
+	// 秘密とパスワードを送る直前に確かめ直す。
+	if err := proveEngine(ctx, found, noRedirectClient(client)); err != nil {
+		clear(payload)
+		return reportEngineUnreachable(ctx, err, stderr)
+	}
 	response, err := sendVaultPOST(ctx, client, found, path, payload)
 	if err != nil {
 		writeUncertainVaultResult(path, stderr)
