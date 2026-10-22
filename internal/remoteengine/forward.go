@@ -96,24 +96,38 @@ const maxRefusalBody = 64 << 10
 //
 // 接続先の 401・403 をそのまま返すと、このマシンの画面は自分のセッションが切れたと
 // 読んでサインインし直させる。接続先の vault_locked をそのまま返すと、このマシンの
-// Vault がロックされたと読んでロックの画面を出す。
+// Vault がロックされたと読んでロックの画面を出す。画面は状態コードに関係なく code で
+// 読むので、code も状態コードに関係なく置き換える。
 func remoteRefusal(response *http.Response) string {
 	switch response.StatusCode {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		_ = response.Body.Close()
 		return "remote_engine_refused"
-	case http.StatusConflict:
-		body, _ := io.ReadAll(io.LimitReader(response.Body, maxRefusalBody))
-		_ = response.Body.Close()
-		var refusal struct {
-			Code string `json:"code"`
-		}
-		if json.Unmarshal(body, &refusal) == nil && refusal.Code == "vault_locked" {
-			return "remote_engine_vault_locked"
-		}
-		response.Body = io.NopCloser(bytes.NewReader(body))
 	}
+	if response.StatusCode < http.StatusBadRequest {
+		return ""
+	}
+	body, _ := io.ReadAll(io.LimitReader(response.Body, maxRefusalBody))
+	_ = response.Body.Close()
+	var refusal struct {
+		Code string `json:"code"`
+	}
+	if json.Unmarshal(body, &refusal) == nil {
+		if replaced, found := remoteRefusalCodes[refusal.Code]; found {
+			return replaced
+		}
+	}
+	response.Body = io.NopCloser(bytes.NewReader(body))
 	return ""
+}
+
+// remoteRefusalCodes は、このマシンの画面が自分のセッションや Vault の状態として読む
+// code と、接続先のものとして置き換える code である。
+var remoteRefusalCodes = map[string]string{
+	"vault_locked":     "remote_engine_vault_locked",
+	"session_required": "remote_engine_refused",
+	"invalid_session":  "remote_engine_refused",
+	"invalid_csrf":     "remote_engine_refused",
 }
 
 func forwardedRequest(ctx context.Context, r *http.Request, session *remoteSession, remotePath string, body []byte) *http.Request {

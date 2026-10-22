@@ -456,3 +456,50 @@ func TestARefusedTerminalStreamDoesNotPassTheRemoteCookiesToTheBrowser(t *testin
 		t.Fatalf("the remote refusal headers reached the browser: Set-Cookie=%q Clear-Site-Data=%q", cookies, recorder.Header().Get("Clear-Site-Data"))
 	}
 }
+
+// remoteRefusalAnswer は、接続先が返す断りの状態コードと code である。
+type remoteRefusalAnswer struct {
+	status int
+	code   string
+}
+
+func TestTheRemoteEnginesVaultAndSessionCodesAreReplacedWhateverTheStatus(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	var answer atomic.Value
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/terminal/sessions" {
+			remote.serve(w, r)
+			return
+		}
+		refusal := answer.Load().(remoteRefusalAnswer)
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(refusal.status)
+		fmt.Fprintf(w, `{"code":%q}`, refusal.code)
+	}))
+	defer refusing.Close()
+	remote.server.URL = refusing.URL
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r540"); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		refusal remoteRefusalAnswer
+		want    string
+	}{
+		{remoteRefusalAnswer{http.StatusLocked, "vault_locked"}, "remote_engine_vault_locked"},
+		{remoteRefusalAnswer{http.StatusServiceUnavailable, "vault_locked"}, "remote_engine_vault_locked"},
+		{remoteRefusalAnswer{http.StatusBadRequest, "invalid_session"}, "remote_engine_refused"},
+		{remoteRefusalAnswer{http.StatusConflict, "invalid_csrf"}, "remote_engine_refused"},
+		{remoteRefusalAnswer{http.StatusInternalServerError, "session_required"}, "remote_engine_refused"},
+	} {
+		answer.Store(tc.refusal)
+		status, body, _ := forward(t, manager, http.MethodGet, "")
+		if status != http.StatusBadGateway || !strings.Contains(body, `"`+tc.want+`"`) {
+			t.Errorf("%+v = %d %s, want 502 %s", tc.refusal, status, body, tc.want)
+		}
+	}
+	answer.Store(remoteRefusalAnswer{http.StatusNotFound, "terminal_session_not_found"})
+	if status, body, _ := forward(t, manager, http.MethodGet, ""); status != http.StatusNotFound || !strings.Contains(body, "terminal_session_not_found") {
+		t.Errorf("another refusal = %d %s, want it passed through", status, body)
+	}
+}
