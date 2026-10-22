@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import type { HostEntry, HostIdentity, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import type { ActionMenuItem } from "../ui/ActionMenu";
+import { useToast } from "../ui/useToast";
 import { identityKey } from "./connectionBrowser";
+import { duplicateAliasOf } from "./duplicateAlias";
 import { groupAfterRename } from "./connectionMoves";
 import type { HostSelection, Scope } from "./ConnectionTree";
 import type { GroupDialogState } from "./GroupDialogs";
@@ -23,7 +25,8 @@ type ConnectionListActionsOptions = {
   // 一括の移動と削除は、保存できたかを返す。保存できたときだけ選択を解く。
   moveConnections: (hosts: readonly HostIdentity[], group: string) => Promise<boolean>;
   deleteConnections: (hosts: readonly HostIdentity[]) => Promise<boolean>;
-  duplicateConnection: (host: HostIdentity) => Promise<void>;
+  // 保存できたかを返す。
+  duplicateConnection: (host: HostIdentity) => Promise<boolean>;
 };
 
 // useConnectionListActions は、Connections の一覧で選んでいるもの（グループの絞り込み、複数選択）と、
@@ -41,6 +44,7 @@ export function useConnectionListActions({
   duplicateConnection,
 }: ConnectionListActionsOptions) {
   const t = useTranslate();
+  const showToast = useToast();
   const [scope, setScope] = useState<Scope>({ kind: "all" });
   const [checked, setChecked] = useState<MultiSelection>(emptyMultiSelection);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -115,22 +119,29 @@ export function useConnectionListActions({
     return [
       { label: t("tree.connect"), onSelect: () => void onOpenSSHSession(host.identity.alias) },
       { label: t("tree.rename"), onSelect: () => setRenamingConnection(host), disabled: movesDisabled },
-      { label: t("tree.duplicate"), onSelect: () => void duplicateConnection(host.identity), disabled: movesDisabled },
+      { label: t("tree.duplicate"), onSelect: () => void duplicateAndTell(host.identity), disabled: movesDisabled },
       { label: t("tree.moveToGroup"), onSelect: () => setMoving([host]), disabled: movesDisabled },
       { label: t("tree.deleteEllipsis"), tone: "danger", onSelect: () => setDeleting([host]), disabled: movesDisabled },
     ];
   }
 
-  async function moveChosenTo(group: string) {
-    const hosts = moving ?? [];
-    setMoving(null);
-    if (await moveConnections(hosts.map((host) => host.identity), group)) clearChecked();
+  // 「…」の［複製］はダイアログを開かず、一覧のどこに増えたかも見えにくいので、できたら知らせる。
+  async function duplicateAndTell(host: HostIdentity) {
+    if (!(await duplicateConnection(host))) return;
+    showToast(t("conn.duplicated", { alias: host.alias, copy: duplicateAliasOf(host.alias) }), { tone: "success" });
   }
 
-  async function deleteChosen() {
-    const hosts = deleting ?? [];
-    setDeleting(null);
-    if (await deleteConnections(hosts.map((host) => host.identity))) clearChecked();
+  // moveChosenTo と deleteChosen は、ダイアログを開いたまま保存し、保存できたかを返す。閉じるのは呼び手。
+  async function moveChosenTo(group: string): Promise<boolean> {
+    const saved = await moveConnections((moving ?? []).map((host) => host.identity), group);
+    if (saved) clearChecked();
+    return saved;
+  }
+
+  async function deleteChosen(): Promise<boolean> {
+    const saved = await deleteConnections((deleting ?? []).map((host) => host.identity));
+    if (saved) clearChecked();
+    return saved;
   }
 
   return {
@@ -155,11 +166,11 @@ export function useConnectionListActions({
     closeGroupDialog: () => setGroupDialog(null),
     moving,
     chooseMoveTarget: (hosts: HostEntry[]) => setMoving(hosts),
-    cancelMove: () => setMoving(null),
+    closeMove: () => setMoving(null),
     moveChosenTo,
     deleting,
     confirmDeleting: (hosts: HostEntry[]) => setDeleting(hosts),
-    cancelDelete: () => setDeleting(null),
+    closeDelete: () => setDeleting(null),
     deleteChosen,
     renamingConnection,
     closeConnectionRename: () => setRenamingConnection(null),

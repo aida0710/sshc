@@ -8,6 +8,8 @@ import {
   type Overview,
 } from "../api/config";
 import { ConnectionListPane } from "./ConnectionListPane";
+import { useToast } from "../ui/useToast";
+import { usePendingResult } from "../ui/usePendingResult";
 import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import { useStoredColumnWidth, type StoredColumnWidth } from "../ui/useStoredColumnWidth";
 import { localStorageKeys } from "../ui/browserStorageKeys";
@@ -48,6 +50,8 @@ import { useConnectionManagement } from "./useConnectionManagement";
 import { useGroupOperations } from "./useGroupOperations";
 import { useConnectionListActions } from "./useConnectionListActions";
 import { ConnectionListDialogs } from "./ConnectionListDialogs";
+import { manageConnectionHandlers } from "./manageConnectionHandlers";
+import { droppedMessage } from "./movedMessage";
 import { SelectionBar } from "./SelectionBar";
 import { GroupEditor } from "./GroupEditor";
 
@@ -107,6 +111,8 @@ export function ConnectionsPage({
   onOpenSSHSession,
 }: ConnectionsPageProps) {
   const t = useTranslate();
+  const showToast = useToast();
+  const retry = usePendingResult();
   const compact = useMediaQuery(mobileViewportQuery);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [listWidth, setListWidth] = useStoredColumnWidth(connectionListWidth);
@@ -364,7 +370,7 @@ export function ConnectionsPage({
                 tone="failed"
                 title={problem.message}
                 {...(problem.detail === undefined ? {} : { detail: problem.detail })}
-                action={<Button onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>}
+                action={<Button busy={retry.pending} onClick={() => retry.watch(reload())}>{t("shell.bootstrapRetry")}</Button>}
               />
             )}
           </div>
@@ -408,7 +414,10 @@ export function ConnectionsPage({
           onSelect={onSelect}
           onDrop={(payload, target) => {
             void management.dropOnTree(payload, target).then((saved) => {
-              if (saved && payload.kind === "connections") clearChecked();
+              if (!saved) return;
+              if (payload.kind === "connections") clearChecked();
+              // 落とした行は絞り込みの外へ出て見えなくなることがあるので、動いたことを知らせる。
+              showToast(droppedMessage(t, { payload, target }), { tone: "success" });
             });
           }}
           movesDisabled={movesDisabled}
@@ -466,6 +475,9 @@ export function ConnectionsPage({
           </>
         ) : detail === null && missingSelection && selection !== null ? (
           <MissingConnection onBackToList={() => clearTarget({ replace: true })} />
+        ) : (detail === null || savedState === null) && selection !== null ? (
+          // 一覧では選ばれているので、読み終えるまで「接続を選択」を出さずに読み込み中と出す。
+          <PanelState tone="loading" title={t("conn.loadingConnection", { alias: selection.alias })} />
         ) : detail === null || savedState === null ? (
           <>
             {/* 接続を開いていないと、保存の結果を出す HostDetailPanel が無い。接続先が存在しない
@@ -503,12 +515,7 @@ export function ConnectionsPage({
                 groups={overview.groups}
                 files={overview.files}
                 disabled={editorDirty || refreshState !== "idle"}
-                onRename={management.rename}
-                onMoveToGroup={(group) => void management.moveToGroup(group)}
-                onComment={management.comment}
-                onDuplicate={management.duplicate}
-                onMoveToFile={(path) => void management.moveToFile(path)}
-                onDelete={() => void management.remove()}
+                {...manageConnectionHandlers({ saves: management, alias: detail.form.entry.identity.alias, t, showToast })}
               />
             ) : null}
             <HostDetailPanel
@@ -560,6 +567,7 @@ export function ConnectionsPage({
       renameGroup={management.renameGroup}
       deleteGroup={management.deleteGroup}
       renameConnection={management.renameConnection}
+      failure={problem === null ? "" : saveProblemMessage(problem, t)}
     />
     {discardIntent === null ? null : (
       <ConfirmDialog
