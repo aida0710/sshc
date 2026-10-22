@@ -161,8 +161,9 @@ var allowedOpenVPNDirectives = map[string]bool{
 	"server-poll-timeout": true, "explicit-exit-notify": true, "keepalive": true, "ping": true,
 	"ping-restart": true, "ping-exit": true, "ping-timer-rem": true, "inactive": true,
 	"session-timeout": true, "hand-window": true, "tran-window": true, "disable-occ": true,
-	// ログの量。出力先は sshc が決める（log などは断る）。
-	"verb": true, "mute": true, "mute-replay-warnings": true,
+	"preresolve": true, "nice": true,
+	// ログの量と、ログへ書く文。出力先は sshc が決める（log などは断る）。
+	"verb": true, "mute": true, "mute-replay-warnings": true, "echo": true,
 	// 認証と暗号。
 	"auth-user-pass": true, "auth-nocache": true, "auth-retry": true, "static-challenge": true,
 	"cipher": true, "data-ciphers": true, "data-ciphers-fallback": true, "ncp-ciphers": true,
@@ -175,15 +176,22 @@ var allowedOpenVPNDirectives = map[string]bool{
 	// トンネルとパケットの大きさ。
 	"tun-mtu": true, "tun-mtu-extra": true, "link-mtu": true, "mssfix": true, "fragment": true,
 	"mtu-disc": true, "mtu-test": true, "sndbuf": true, "rcvbuf": true, "txqueuelen": true,
-	"fast-io": true, "tcp-nodelay": true, "tun-ipv6": true,
-	"comp-lzo": true, "compress": true, "allow-compression": true, "comp-noadapt": true,
-	// 経路を作らせない指示と、サーバーが配る指示の選び方。経路は sshc が作る。
-	"route-nopull": true, "route-noexec": true, "ifconfig-noexec": true, "ifconfig-nowarning": true,
-	"route-gateway": true, "route-metric": true, "route-delay": true, "pull-filter": true,
-	// Linux の OpenVPN は、サーバーへ送る値として環境変数に残すだけである。
+	"fast-io": true, "tcp-nodelay": true, "tun-ipv6": true, "shaper": true, "passtos": true,
+	"tcp-queue-limit": true, "comp-lzo": true, "compress": true, "allow-compression": true,
+	"comp-noadapt": true,
+	// 経路を作らせない指示と、サーバーが配る指示の選び方。経路は sshc が作る。sshc は
+	// --ifconfig-noexec で起動するので、ifconfig の値は openvpn-up が /32 で付けるだけになる。
+	"ifconfig": true, "ifconfig-ipv6": true, "route-nopull": true, "route-noexec": true,
+	"ifconfig-noexec": true, "ifconfig-nowarning": true, "route-gateway": true, "route-metric": true,
+	"route-delay": true, "pull-filter": true,
+	// Linux の OpenVPN 2.6 は、スクリプトへ渡す環境変数に残すだけで DNS を変えない。
+	// sshc の openvpn-up はその変数を読まない。
 	"dhcp-option": true,
-	// Windows の OpenVPN だけが使う。ほかの OS の OpenVPN は読み飛ばす。
-	"block-outside-dns": true,
+	// Windows の OpenVPN だけが使う。Windows 用に配られた設定ファイルに含まれることが多い。
+	// コンテナの Linux の OpenVPN では何も動かさない。
+	"block-outside-dns": true, "route-method": true, "ip-win32": true, "dhcp-renew": true,
+	"dhcp-release": true, "register-dns": true, "tap-sleep": true, "windows-driver": true,
+	"win-sys": true, "cryptoapicert": true,
 	// 知らない指示を読み飛ばさせる。読み飛ばす指示も、ここで表に無ければ断る。
 	"ignore-unknown-option": true,
 	// 環境変数を置く。setenv は変数の名前も確かめる（allowedOpenVPNVariable）。

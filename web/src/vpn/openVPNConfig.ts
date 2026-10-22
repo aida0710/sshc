@@ -74,8 +74,8 @@ const allowedDirectives = new Set([
   "http-proxy", "http-proxy-option", "socks-proxy", "allow-pull-fqdn",
   "persist-key", "persist-tun", "persist-remote-ip", "persist-local-ip", "connect-retry", "connect-retry-max",
   "connect-timeout", "server-poll-timeout", "explicit-exit-notify", "keepalive", "ping", "ping-restart", "ping-exit",
-  "ping-timer-rem", "inactive", "session-timeout", "hand-window", "tran-window", "disable-occ",
-  "verb", "mute", "mute-replay-warnings",
+  "ping-timer-rem", "inactive", "session-timeout", "hand-window", "tran-window", "disable-occ", "preresolve", "nice",
+  "verb", "mute", "mute-replay-warnings", "echo",
   "auth-user-pass", "auth-nocache", "auth-retry", "static-challenge", "cipher", "data-ciphers",
   "data-ciphers-fallback", "ncp-ciphers", "ncp-disable", "auth", "tls-cipher", "tls-ciphersuites", "tls-groups",
   "tls-version-min", "tls-version-max", "tls-cert-profile", "ecdh-curve", "key-direction", "key-method",
@@ -83,9 +83,11 @@ const allowedDirectives = new Set([
   "tls-exit", "single-session", "reneg-sec", "reneg-bytes", "reneg-pkts", "replay-window", "no-replay",
   "push-peer-info",
   "tun-mtu", "tun-mtu-extra", "link-mtu", "mssfix", "fragment", "mtu-disc", "mtu-test", "sndbuf", "rcvbuf",
-  "txqueuelen", "fast-io", "tcp-nodelay", "tun-ipv6", "comp-lzo", "compress", "allow-compression", "comp-noadapt",
-  "route-nopull", "route-noexec", "ifconfig-noexec", "ifconfig-nowarning", "route-gateway", "route-metric",
-  "route-delay", "pull-filter", "dhcp-option", "block-outside-dns", "ignore-unknown-option", "setenv", "setenv-safe",
+  "txqueuelen", "fast-io", "tcp-nodelay", "tun-ipv6", "shaper", "passtos", "tcp-queue-limit",
+  "comp-lzo", "compress", "allow-compression", "comp-noadapt", "ifconfig", "ifconfig-ipv6", "route-nopull", "route-noexec", "ifconfig-noexec", "ifconfig-nowarning", "route-gateway", "route-metric",
+  "route-delay", "pull-filter", "dhcp-option", "ignore-unknown-option", "setenv", "setenv-safe",
+  "block-outside-dns", "route-method", "ip-win32", "dhcp-renew", "dhcp-release", "register-dns", "tap-sleep",
+  "windows-driver", "win-sys", "cryptoapicert",
 ]);
 
 // allowedVariables は、setenv で置いてよい環境変数である（Go の allowedOpenVPNVariables）。

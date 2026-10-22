@@ -398,6 +398,29 @@
       "directive": ""
     },
     {
+      "name": "Windows 用に配られた設定ファイルの Windows だけの指示は通る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "route-method exe",
+        "route-delay 2",
+        "ip-win32 dynamic",
+        "register-dns",
+        "block-outside-dns",
+        "windows-driver wintun"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
       "name": "up はコマンドを実行するので断る",
       "config": [
         "client",
