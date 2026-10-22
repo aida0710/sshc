@@ -41,7 +41,7 @@ import { SFTPMetadataActionDialog } from "./SFTPMetadataActionDialog";
 import { SFTPFilesystemSpace } from "./SFTPFilesystemSpace";
 import { useSFTPPermissions } from "./useSFTPPermissions";
 import { SFTPPermissionsDialog } from "./SFTPPermissionsDialog";
-import { Spinner } from "../ui/Spinner";
+import { SFTPWaitingOverlay } from "./SFTPWaitingOverlay";
 
 const noHosts: HostEntry[] = [];
 
@@ -467,6 +467,9 @@ export function SFTPPanel({
     : selectedEntries.length === 0 ? undefined
       : <SFTPCompactSelection label={selectionLabel} menuLabel={selectionMenuLabel()} expanded={menu?.kind === "selected"} onClear={list.clearSelection} onSearch={() => search.setMobileSearchOpen(true)} onMenu={(button) => toggleMenu("selected", button)} />;
   const loadingLabel = t(local ? "sftp.local.loading" : "sftp.loading");
+  const waitingFor = connected && pendingPath !== null ? { label: loadingLabel, detail: pendingPath || t("sftp.homeDirectory") }
+    : editor.openingPath !== null ? { label: t("sftp.editorOpening"), detail: editor.openingPath }
+    : null;
 
   return (
     <section ref={panelRoot} className="flex h-full min-h-0 min-w-0 flex-col" aria-labelledby={headingId}>
@@ -503,7 +506,7 @@ export function SFTPPanel({
           ) : null}
           actions={<>
             {mobileInteraction ? <button type="button" aria-label={t(search.searching ? "sftp.search.stop" : "sftp.mobile.search")} aria-expanded={search.mobileSearchOpen} disabled={!search.searching && (busy || !connected)} onClick={() => { if (search.searching) search.cancelSearch(); else search.setMobileSearchOpen((value) => !value); }} className={`flex shrink-0 items-center justify-center rounded active:bg-select-fill ${mobileInteraction ? "size-12" : "size-9"} ${search.mobileSearchOpen || search.filter !== "" ? "text-accent" : "text-ink-muted"}`}><Icon name="search" className="size-5" /></button> : null}
-            <button type="button" aria-label={t("sftp.mobile.actions")} aria-haspopup={mobileInteraction ? "dialog" : "menu"} aria-expanded={menu?.kind === "folder"} onClick={(event) => toggleMenu("folder", event.currentTarget)} className={`flex shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill ${mobileInteraction ? "size-12" : "size-9"}`}><Icon name="moreHorizontal" className="size-5" /></button>
+            <button type="button" aria-label={t("sftp.mobile.actions")} aria-haspopup={mobileInteraction ? "dialog" : "menu"} aria-expanded={menu?.kind === "folder"} onClick={(event) => toggleMenu("folder", event.currentTarget)} className={`flex shrink-0 items-center justify-center rounded text-ink-muted transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-select-fill ${mobileInteraction ? "size-12" : "size-9"}`}><Icon name="moreHorizontal" className="size-5" /></button>
           </>}
         />
       {!mobileInteraction && menu?.kind === "folder" ? <div ref={menuPanel} role="menu" aria-label={t("sftp.mobile.actions")} className="absolute right-0 top-full z-20 max-h-[70dvh] w-60 overflow-y-auto rounded-lg border border-control-line bg-card p-1 shadow-lg"><MenuActionList actions={folderMenuActions()} /></div> : null}
@@ -524,13 +527,13 @@ export function SFTPPanel({
               path: search.search.root,
             })}
           </span>
-          <button type="button" disabled={busy} onClick={search.endSearch} className={`shrink-0 text-accent ${mobileInteraction ? "min-h-12 px-2" : ""}`}>{t("sftp.searchEnd")}</button>
+          <button type="button" disabled={busy} onClick={search.endSearch} className={`shrink-0 rounded text-accent transition-colors duration-150 hover:bg-hover ${mobileInteraction ? "min-h-12 px-2" : "px-1.5"}`}>{t("sftp.searchEnd")}</button>
         </p>
       )}
       {actions.undo === null ? null : (
         <p role="status" className="flex items-center gap-3 rounded-md border border-line bg-surface-subtle px-3 py-2 text-sm text-ink-muted">
           <span className="min-w-0 grow truncate">{actions.undo.label}</span>
-          <button type="button" disabled={busy} onClick={() => void actions.undo?.run()} className={`shrink-0 text-accent ${mobileInteraction ? "min-h-12 px-2" : ""}`}>{t("sftp.undo")}</button>
+          <button type="button" disabled={busy} onClick={() => void actions.undo?.run()} className={`shrink-0 rounded text-accent transition-colors duration-150 hover:bg-hover ${mobileInteraction ? "min-h-12 px-2" : "px-1.5"}`}>{t("sftp.undo")}</button>
           <button type="button" aria-label={t("sftp.dismissUndo")} onClick={actions.dismissUndo} className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:text-ink ${mobileInteraction ? "size-12" : "size-6"}`}>
             <Icon name="close" className={mobileInteraction ? "size-5" : "size-3"} />
           </button>
@@ -666,7 +669,7 @@ export function SFTPPanel({
               </div>
             ) : null}
           </div>
-          {connected && pendingPath !== null ? <div role="status" className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-card/80 p-4 backdrop-blur-[1px]"><span className="flex min-w-0 items-center gap-3 rounded-lg bg-toolbar px-4 py-3 text-sm"><Spinner className="size-4 text-accent" /><span className="min-w-0"><span className="block">{loadingLabel}</span><span className="block truncate font-mono text-xs text-ink-muted">{pendingPath || t("sftp.homeDirectory")}</span></span></span></div> : null}
+          {waitingFor === null ? null : <SFTPWaitingOverlay label={waitingFor.label} detail={waitingFor.detail} />}
           <div data-testid="sftp-file-list" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" inert={connected && busy} onKeyDown={list.handleListKeys}>
             {alias === "" || can === undefined ? (
               <div className="flex h-full p-4"><EmptyState icon="files" title={t("sftp.chooseHost")} detail={t("sftp.chooseHostHint")}

@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { useTranslate } from "../i18n/context";
+import { PanelState } from "../ui/PanelState";
 import { Notice } from "../ui/surface";
 import { sftpTransferManager } from "../sftp/transferManager";
 import { TransferSettingsForm } from "../sftp/TransferSettingsForm";
@@ -25,6 +26,7 @@ export function SFTPSettingsSection({ showHeading }: { showHeading: boolean }) {
       <div className="max-w-2xl">
         <SettingsLoadFailure settingsLoad={settingsLoad} title={t("sftp.settingsLoadFailed")} />
         {problem === "" ? null : <div className="mb-5"><Notice tone="danger" compact>{problem}</Notice></div>}
+        {settingsLoad.state === "loading" ? <PanelState tone="loading" title={t("sftp.settingsLoading")} /> : null}
         {settingsLoad.state === "loaded" ? (
           <TransferSettingsForm settings={sftpTransferManager.getSettings()}
             onCommit={(change) => runControl(() => sftpTransferManager.applySettings(change))} />
