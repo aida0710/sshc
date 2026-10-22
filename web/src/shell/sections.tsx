@@ -234,7 +234,6 @@ export function SectionView(props: SectionViewProps) {
         onNavigate={props.navigation.onNavigate}
         onNavigateLocation={props.navigation.onNavigateLocation}
         onSessionOpened={props.shell.onShowSession}
-        onOpenWorkspace={props.shell.onOpenWorkspace}
       />
     );
   }

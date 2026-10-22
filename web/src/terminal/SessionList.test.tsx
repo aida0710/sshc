@@ -25,7 +25,6 @@ function renderList(overrides: Partial<Parameters<typeof SessionList>[0]> = {}) 
     onSelect: vi.fn(),
     onClose: vi.fn(),
     onRename: vi.fn(async () => true),
-    onRenameWorkspace: vi.fn(),
     onUnpinTitle: vi.fn(async () => true),
     onDuplicate: vi.fn(),
     onReorder: vi.fn(),
@@ -118,68 +117,6 @@ describe("SessionList", () => {
 
     expect(props.onSelect).toHaveBeenCalledWith(live.id);
     expect(detail.closest("button")).toHaveAttribute("aria-label", live.title);
-  });
-
-  it("collapses split terminals into one live workspace entry", async () => {
-    const user = userEvent.setup();
-    const props = renderList({
-      workspace: {
-        id: "live-workspace",
-        name: "bastion + db-primary",
-        memberSessionIds: [live.id, dead.id],
-        focusedSessionId: live.id,
-      },
-    });
-
-    expect(screen.getAllByRole("listitem")).toHaveLength(2);
-    expect(screen.getByText("bastion + db-primary")).toBeVisible();
-    expect(screen.getByText("2 sessions")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "bastion" })).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: "Show terminals in bastion + db-primary" }));
-    expect(screen.getByRole("button", { name: "bastion" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "db-primary" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "bastion + db-primary" }));
-    expect(props.onSelect).toHaveBeenCalledWith(live.id);
-  });
-
-  it("renames the live workspace from its row menu", async () => {
-    const user = userEvent.setup();
-    const props = renderList({
-      workspace: {
-        id: "live-workspace",
-        name: "bastion + db-primary",
-        memberSessionIds: [live.id, dead.id],
-        focusedSessionId: live.id,
-      },
-    });
-
-    await user.click(screen.getByRole("button", { name: "Actions for bastion + db-primary" }));
-    await user.click(screen.getByRole("menuitem", { name: "Rename workspace" }));
-    const field = screen.getByRole("textbox", { name: "New name for bastion + db-primary" });
-    await user.clear(field);
-    await user.type(field, "Production{Enter}");
-
-    expect(props.onRenameWorkspace).toHaveBeenCalledWith("Production");
-  });
-
-  it("keeps the workspace name when its inline rename is abandoned", async () => {
-    const user = userEvent.setup();
-    const props = renderList({
-      workspace: {
-        id: "live-workspace",
-        name: "bastion + db-primary",
-        memberSessionIds: [live.id, dead.id],
-        focusedSessionId: live.id,
-      },
-    });
-
-    await user.click(screen.getByRole("button", { name: "Actions for bastion + db-primary" }));
-    await user.click(screen.getByRole("menuitem", { name: "Rename workspace" }));
-    await user.type(screen.getByRole("textbox", { name: "New name for bastion + db-primary" }), "x{Escape}");
-
-    expect(props.onRenameWorkspace).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "bastion + db-primary" })).toBeVisible();
   });
 
   it("renames a session in place and leaves its destination alone", async () => {

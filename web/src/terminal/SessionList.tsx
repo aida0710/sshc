@@ -5,10 +5,9 @@ import { useTranslate, type Translate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Icon } from "../ui/icons";
 import { describeForwardProblem } from "./forwardProblem";
-import { sessionDragMimeType, type LiveWorkspaceSummary } from "../features/workspaces/live";
+import { sessionDragMimeType } from "./sessionDrag";
 import { sessionMarkerClass, sessionStatusText } from "./sessionStatus";
 import { SessionRowMenu, type SessionRowMenuPlacement } from "./SessionRowMenu";
-import { WorkspaceGroupRow } from "./WorkspaceGroupRow";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import type { UnreadSessions } from "./terminalNotifications";
 import { HostPickerDialog, type LocalChoice } from "../shell/HostPickerDialog";
@@ -25,12 +24,10 @@ type SessionListProps = {
   maxSessions: number;
   busy: boolean;
   problem: string;
-  workspace?: LiveWorkspaceSummary | null;
   unreadBySession?: UnreadSessions;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onRename: (id: string, title: string) => Promise<boolean>;
-  onRenameWorkspace: (name: string) => void;
   onUnpinTitle: (id: string) => Promise<boolean>;
   onDuplicate: (id: string) => void;
   onReorder: (order: string[]) => void;
@@ -62,12 +59,10 @@ export function SessionList({
   maxSessions,
   busy,
   problem,
-  workspace = null,
   unreadBySession = new Set(),
   onSelect,
   onClose,
   onRename,
-  onRenameWorkspace,
   onUnpinTitle,
   onDuplicate,
   onReorder,
@@ -94,43 +89,28 @@ export function SessionList({
   const [draft, setDraft] = useState("");
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropBefore, setDropBefore] = useState<string | null>(null);
-  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const shiftPressed = useShiftKeyHeld();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const live = sessions.filter((session) => session.exited === undefined).length;
   const full = maxSessions > 0 && live >= maxSessions;
-  const workspaceMembers = new Set(workspace?.memberSessionIds ?? []);
-  const groupedSessions = workspace === null ? [] : sessions.filter((session) => workspaceMembers.has(session.id));
-  const standaloneSessions = sessions.filter((session) => !workspaceMembers.has(session.id));
-  const displayedSessions = workspace !== null && workspaceExpanded
-    ? [...groupedSessions, ...standaloneSessions]
-    : standaloneSessions;
 
   useEffect(() => {
     if (menuFor !== null && !sessions.some((session) => session.id === menuFor)) setMenuFor(null);
     if (renaming !== null && !sessions.some((session) => session.id === renaming)) setRenaming(null);
-    if (workspace === null) setWorkspaceMenuOpen(false);
-  }, [sessions, menuFor, renaming, workspace]);
+  }, [sessions, menuFor, renaming]);
 
   useDismissibleLayer({
-    open: menuFor !== null || workspaceMenuOpen,
+    open: menuFor !== null,
     containerRefs: [menuRef, menuTriggerRef],
-    onDismiss: () => {
-      setMenuFor(null);
-      setWorkspaceMenuOpen(false);
-    },
+    onDismiss: () => setMenuFor(null),
     returnFocusRef: menuTriggerRef,
   });
   useMenuKeyboard({
-    open: menuFor !== null || workspaceMenuOpen,
+    open: menuFor !== null,
     menuRef,
-    onClose: () => {
-      setMenuFor(null);
-      setWorkspaceMenuOpen(false);
-    },
+    onClose: () => setMenuFor(null),
   });
 
   function move(id: string, delta: number) {
@@ -175,28 +155,7 @@ export function SessionList({
           }}
           onDrop={() => drop(null)}
         >
-          {workspace === null || groupedSessions.length < 2 ? null : (
-            <WorkspaceGroupRow
-              workspace={workspace}
-              memberCount={groupedSessions.length}
-              unread={groupedSessions.some((session) => unreadBySession.has(session.id))}
-              selected={workspaceMembers.has(selected ?? "")}
-              expanded={workspaceExpanded}
-              onToggleExpanded={() => setWorkspaceExpanded((current) => !current)}
-              onOpen={() => onSelect(workspace.focusedSessionId)}
-              onRename={onRenameWorkspace}
-              menuOpen={workspaceMenuOpen}
-              menuRef={menuRef}
-              onToggleMenu={(event) => {
-                menuTriggerRef.current = event.currentTarget;
-                setMenuFor(null);
-                setWorkspaceMenuOpen((open) => !open);
-              }}
-              onCloseMenu={() => setWorkspaceMenuOpen(false)}
-            />
-          )}
-          {displayedSessions.map((session) => {
-            const index = sessions.findIndex((candidate) => candidate.id === session.id);
+          {sessions.map((session, index) => {
             const destination = terminalSubtitle(session, t);
             const displayTitle = terminalDisplayTitle(session);
             const unread = unreadBySession.has(session.id);
@@ -241,7 +200,7 @@ export function SessionList({
                   event.stopPropagation();
                   drop(session.id);
                 }}
-                className={`relative ${dragging === session.id ? "opacity-40" : ""} ${workspaceMembers.has(session.id) ? "ml-4 border-l border-line pl-1" : ""}`}
+                className={`relative ${dragging === session.id ? "opacity-40" : ""}`}
               >
                 {dropBefore === session.id && dragging !== session.id ? (
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
@@ -313,7 +272,6 @@ export function SessionList({
                       const spaceBelow = lowerEdge - trigger.bottom;
                       const spaceAbove = trigger.top - upperEdge;
                       setMenuPlacement(spaceBelow < 132 && spaceAbove > spaceBelow ? "up" : "down");
-                      setWorkspaceMenuOpen(false);
                       setMenuFor(session.id);
                     }}
                     className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-6"

@@ -6,13 +6,11 @@ import { syncApi, type SyncStatus } from "../api/sync";
 import { terminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
-import { Button, Card, Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { SectionBar } from "../ui/SectionBar";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
-import { workspaceApi, type SavedWorkspace } from "../features/workspaces/api";
-import { storedPaneCount } from "../features/workspaces/layout";
 import { PanelState } from "../ui/PanelState";
-import { formatDateTime, formatOptionalDateTime } from "../ui/format";
+import { formatOptionalDateTime } from "../ui/format";
 
 export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
 
@@ -20,18 +18,15 @@ type OverviewPanelProps = {
   loadOverview?: () => Promise<Overview>;
   loadSync?: () => Promise<SyncStatus>;
   loadRecent?: () => Promise<RecentConnectionList>;
-  loadWorkspaces?: () => Promise<SavedWorkspace[]>;
   launch?: (alias: string) => Promise<{ session: { id: string } }>;
   onNavigate: (destination: OverviewDestination) => void;
   onNavigateLocation: (location: string) => void;
   onSessionOpened?: (id: string) => void;
-  onOpenWorkspace?: (id: string) => void;
 };
 
 const loadDefaultOverview = () => configApi.overview();
 const loadDefaultSync = () => syncApi.syncStatus();
 const loadDefaultRecent = () => recentConnectionsApi.recentConnections();
-const loadDefaultWorkspaces = () => workspaceApi.list();
 const launchDefault = (alias: string) => terminalSessionsApi.openTerminalSession({ kind: "ssh", alias });
 const informationalNoticeCodes = new Set(["group_empty"]);
 
@@ -39,42 +34,38 @@ export function OverviewPanel({
   loadOverview = loadDefaultOverview,
   loadSync = loadDefaultSync,
   loadRecent = loadDefaultRecent,
-  loadWorkspaces = loadDefaultWorkspaces,
   launch = launchDefault,
   onNavigate,
   onNavigateLocation,
   onSessionOpened,
-  onOpenWorkspace = () => undefined,
 }: OverviewPanelProps) {
   const t = useTranslate();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [sync, setSync] = useState<SyncStatus | null>(null);
   const [recent, setRecent] = useState<RecentConnectionList["connections"]>([]);
-  const [workspaces, setWorkspaces] = useState<SavedWorkspace[]>([]);
   const [launching, setLaunching] = useState("");
   const launchPending = useRef(false);
   const [problem, setProblem] = useState("");
-  // 読めなかったことを「無い」と見分けられるように、履歴と保存レイアウトの失敗は
-  // 空の一覧とは別に持つ。SSH設定を読めなかったときは overview を null にする。
+  // 読めなかったことを「無い」と見分けられるように、履歴の失敗は空の一覧とは
+  // 別に持つ。SSH設定を読めなかったときは overview を null にする。
   const [listsFailed, setListsFailed] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
-    void Promise.allSettled([loadOverview(), loadSync(), loadRecent(), loadWorkspaces()]).then(([workspace, remote, history, saved]) => {
+    void Promise.allSettled([loadOverview(), loadSync(), loadRecent()]).then(([workspace, remote, history]) => {
       if (!active) return;
       setOverview(workspace.status === "fulfilled" ? workspace.value : null);
       if (remote.status === "fulfilled") setSync(remote.value);
       if (history.status === "fulfilled") setRecent(history.value.connections);
-      if (saved.status === "fulfilled") setWorkspaces(saved.value);
-      setListsFailed(history.status === "rejected" || saved.status === "rejected");
+      setListsFailed(history.status === "rejected");
       setLoading(false);
     });
     return () => {
       active = false;
     };
-  }, [loadOverview, loadSync, loadRecent, loadWorkspaces, loadAttempt]);
+  }, [loadOverview, loadSync, loadRecent, loadAttempt]);
 
   function reload() {
     setLoading(true);
@@ -160,36 +151,6 @@ export function OverviewPanel({
             <Button onClick={() => onNavigate("History")}>{t("home.recoverChanges")}</Button>
           )}
         </section>
-      )}
-
-      {workspaces.length === 0 ? null : (
-        <Card as="section" aria-labelledby="saved-workspaces-heading" radius="sm">
-          <div className="border-b border-line px-4 py-3 sm:px-5">
-            <h3 id="saved-workspaces-heading" className="font-semibold">{t("home.savedWorkspaces")}</h3>
-            <p className="mt-0.5 text-xs text-ink-muted">{t("home.savedWorkspacesHint")}</p>
-          </div>
-          <ul aria-label={t("home.savedWorkspaceList")} className="divide-y divide-line">
-            {workspaces.map((workspace) => (
-              <li key={workspace.id} className="flex min-w-0 flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:px-5">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{workspace.name}</p>
-                  <p className="mt-0.5 truncate text-xs text-ink-muted">
-                    {t("home.workspacePanes", { count: storedPaneCount(workspace.layout) })}
-                    {" · "}
-                    <time dateTime={workspace.updatedAt}>{t("home.workspaceUpdated", { at: formatDateTime(workspace.updatedAt) })}</time>
-                  </p>
-                </div>
-                <Button
-                  kind="primary"
-                  className="min-h-10 w-full shrink-0 sm:w-auto md:min-h-0"
-                  onClick={() => onOpenWorkspace(workspace.id)}
-                >
-                  {t("home.openWorkspace")}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </Card>
       )}
 
       <section aria-label={t("home.sync")} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3 text-xs text-ink-muted">

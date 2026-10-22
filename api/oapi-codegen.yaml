@@ -9,7 +9,7 @@ output-options:
   user-templates:
     param-types.tmpl: ../../api/templates/models-only-operation-types.tmpl
     request-bodies.tmpl: ../../api/templates/models-only-operation-types.tmpl
-  # 次の HTTP 境界は application/sftp/snippets/workspace のドメイン型を
+  # 次の HTTP 境界は application/sftp/snippets のドメイン型を
   # 明示的に変換して扱う。Go の生成型や operation 別 alias/params は
   # 使わないため operation ごと除外し、同じ wire shape の型を二重に持たない。
   # TypeScript の生成はこの Go 専用設定を使わないので、ブラウザ側の契約型は
@@ -42,12 +42,6 @@ output-options:
     - completeSFTPResumableUpload
     - renameSFTPEntry
     - chmodSFTPEntry
-    - listTerminalWorkspaces
-    - createTerminalWorkspace
-    - getTerminalWorkspace
-    - updateTerminalWorkspace
-    - deleteTerminalWorkspace
-    - restoreTerminalWorkspace
     - listSnippets
     - createSnippet
     - updateSnippet
@@ -85,11 +79,6 @@ output-options:
     - TerminalBackgroundCapacityRequest
     - TerminalBackgroundList
     - Source
-    # workspace operation を Go 生成から外しても、再帰 schema は generator の prune
-    # 後に残るため明示的に除外する。実際の型は internal/workspace にある。
-    - WorkspaceNode
-    - WorkspacePane
-    - WorkspaceSplit
     # application/httpserverの手書き型だけを使う現行config wire shape。
     - EditRequest
     - HostEdit

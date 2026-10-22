@@ -36,5 +36,4 @@ export const localStorageKeys = {
 // sessionStorage belongs to one tab and ends with it.
 export const sessionStorageKeys = {
   sessionCSRF: "sshc.session.csrf",
-  liveWorkspace: "sshc.terminal.live-workspace.v1",
 } as const;

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalShellProfileList, SettingsApi, TerminalSettings } from "../api/settings";
 import type { Section } from "../routing/sectionRoute";
-import type { WorkspaceRenameRequest, WorkspaceRestoreRequest } from "../features/workspaces/TerminalWorkspace";
-import type { LiveWorkspaceSummary } from "../features/workspaces/live";
 import type { TerminalSessionsState } from "./sessions";
 
 type TerminalWorkspaceControllerOptions = {
@@ -25,16 +23,7 @@ export function useTerminalWorkspaceController({
   const [settings, setSettings] = useState<TerminalSettings>({});
   const [localShellProfiles, setLocalShellProfiles] = useState<LocalShellProfileList["profiles"]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [liveWorkspace, setLiveWorkspace] =
-    useState<LiveWorkspaceSummary | null>(null);
-  const [restoreRequest, setRestoreRequest] =
-    useState<WorkspaceRestoreRequest | null>(null);
-  const [renameRequest, setRenameRequest] =
-    useState<WorkspaceRenameRequest | null>(null);
-  const [workspaceRestoring, setWorkspaceRestoring] = useState(false);
   const [sessionOrder, setSessionOrder] = useState<string[]>([]);
-  const restoreSequence = useRef(0);
-  const renameSequence = useRef(0);
   const pendingSessionId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -89,43 +78,9 @@ export function useTerminalWorkspaceController({
     [closeNavigation, terminalSessions, navigate],
   );
 
-  const openWorkspace = useCallback(
-    (id: string) => {
-      restoreSequence.current += 1;
-      setRestoreRequest({ id, sequence: restoreSequence.current });
-      navigate("Terminal");
-    },
-    [navigate],
-  );
-
-  const consumeRestore = useCallback((sequence: number) => {
-    setRestoreRequest((current) =>
-      current?.sequence === sequence ? null : current,
-    );
-  }, []);
-
-  const renameWorkspace = useCallback(
-    (name: string) => {
-      renameSequence.current += 1;
-      setRenameRequest({ name, sequence: renameSequence.current });
-      closeNavigation();
-      navigate("Terminal");
-    },
-    [closeNavigation, navigate],
-  );
-
-  const consumeRename = useCallback((sequence: number) => {
-    setRenameRequest((current) =>
-      current?.sequence === sequence ? null : current,
-    );
-  }, []);
-
   // The terminal screen stays drawn behind other sections while it holds a
-  // session. A workspace restore counts too: its first session may not exist
-  // yet, and removing the screen would abandon the restore and close every
-  // session it has opened.
-  const terminalScreenMounted =
-    section === "Terminal" || activeSessionId !== null || workspaceRestoring;
+  // session.
+  const terminalScreenMounted = section === "Terminal" || activeSessionId !== null;
 
   const orderedSessions = useMemo(() => {
     const rank = new Map(sessionOrder.map((id, index) => [id, index]));
@@ -185,21 +140,12 @@ export function useTerminalWorkspaceController({
     localShellProfiles,
     activeSessionId,
     terminalScreenMounted,
-    liveWorkspace,
-    restoreRequest,
-    renameRequest,
     orderedSessions,
     showSession,
-    openWorkspace,
-    renameWorkspace,
     openLocalShell,
     openSSHSession,
     duplicateSession,
-    consumeRestore,
-    setWorkspaceRestoring,
-    consumeRename,
     reorderSessions: setSessionOrder,
-    setLiveWorkspace,
     setSettings,
   };
 }

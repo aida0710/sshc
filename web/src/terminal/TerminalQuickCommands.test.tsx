@@ -18,7 +18,7 @@ vi.mock("../snippets/api", async () => {
   const actual = await vi.importActual<typeof import("../snippets/api")>("../snippets/api");
   return { ...actual, snippetsApi: { ...actual.snippetsApi, library: mocks.library, create: mocks.create } };
 });
-vi.mock("../features/workspaces/commandApi", () => ({ terminalCommandApi: { preview: mocks.preview, dispatch: mocks.dispatch } }));
+vi.mock("./commands/commandApi", () => ({ terminalCommandApi: { preview: mocks.preview, dispatch: mocks.dispatch } }));
 vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText: mocks.writeText } }));
 
 const session = {

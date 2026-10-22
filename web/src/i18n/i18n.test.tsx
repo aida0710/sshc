@@ -101,7 +101,6 @@ describe("the catalogue", () => {
         "terminal.settingsHeading",
         "tree.navLabel",
         "vpn.heading",
-        "workspace.groupCount",
       ].sort(),
     );
   });
