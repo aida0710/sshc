@@ -52,6 +52,7 @@ A passwordless Vault is neither auto-locked nor lockable by hand: it opens when 
 - Copy on select and right-click paste
 - Global OSC 52 default
 - JIS yen-key to backslash behavior
+- Identifying the terminal as iTerm2 (so Claude Code shows images)
 
 The engine replay buffer retains bytes in memory so it can replay output when a browser reconnects. Browser scrollback is the separate number of display lines retained by xterm. Neither setting writes terminal output to disk.
 

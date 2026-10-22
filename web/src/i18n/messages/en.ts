@@ -993,6 +993,9 @@ export const en = {
   "terminal.jisYenBackslashLabel": "Send the JIS ¥ key as backslash",
   "terminal.jisYenBackslashHint":
     "Useful with Japanese keyboards. IME composition is not modified.",
+  "terminal.identifyAsITerm2Label": "Identify the terminal as iTerm2",
+  "terminal.identifyAsITerm2Hint":
+    "Claude Code shows images only in a terminal that names itself iTerm2. Other programs that check the terminal's name also treat it as iTerm2.",
   "terminal.fontSizeLabel": "Font size",
   "terminal.paletteLabel": "Colour scheme",
   "terminal.verbosityLabel": "Connection log",
