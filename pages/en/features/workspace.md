@@ -1,39 +1,35 @@
 ---
 title: Workspaces
-description: Arrange SSH and local shells in up to four panes and save the layout.
+description: Group terminal sessions into named workspaces, and keep connections opened by LLMs in a hidden one.
 ---
 
 # Workspaces
 
-![A workspace with multiple terminal panes](/images/workspace-desktop.png)
+The sidebar shows sessions grouped by workspace. Press a workspace row to show or hide its sessions; this browser remembers which ones are folded.
 
-Drag a connected terminal onto the current pane to split above, below, left or right according to the drop position. SSH and local shells belong to the same workspace model.
+## Built-in workspaces
 
-## Layout
+Two workspaces always exist and cannot be deleted. Both can be renamed.
 
-- Up to four panes
-- Drag dividers between 10% and 90%
-- Swap panes
-- Focus Mode for one pane
-- Rename a workspace before or after saving it
-- Save a named layout on this device
+| Workspace | What goes in | Shown |
+| --- | --- | --- |
+| Main | Sessions opened from the app, including Home and SFTP | Yes |
+| Agents | Sessions opened with `sshc terminal create` | Hidden |
 
-The saved record contains pane kinds, targets, the split tree, ratios and focus—not session IDs, remote processes or scrollback. Reopening it from Home starts fresh SSH sessions or local shells.
+Connections that LLMs and scripts open with `sshc terminal create` go into Agents and stay out of the sidebar. `--workspace` puts them in another workspace instead (see [CLI](/en/reference/cli)).
 
-## Command Center
+## Actions
 
-Preview the targets and expanded command, then send the command and Enter to every connected pane. SSH and local shells can be mixed; each PTY keeps its current directory, environment and shell state.
+- **Create**: **…** next to the Workspaces heading → **New workspace**
+- **See hidden workspaces**: the heading's **…** → **Show hidden workspaces**. Hidden ones appear dimmed.
+- **Open a session**: **+** on a workspace row. **New session** below the tree opens in the selected session's workspace.
+- **Move**: a session's **…** → **Move to workspace**
+- **A workspace's …**: rename, hide or show, [send a command](/en/terminal/commands), delete
 
-On mobile, sshc shows workspace panes one at a time instead of squeezing the split layout into a narrow screen. The pane and workspace name remain visible, while rename and overflow management controls are hidden at narrow widths. Manage the layout from a desktop-width view.
+Deleting a workspace closes nothing: its sessions move to Main.
 
-Rename a workspace from its actions menu in the session list. A live workspace can be named before its layout is saved.
+## What is stored
 
-## Build and reuse a workspace
+The engine keeps workspace names and whether each is hidden in `~/.ssh/sshc/workspaces.json`. Which session is in which workspace lives only in the engine's memory, like the sessions themselves, and ends when the engine stops. The file is excluded from encrypted sync.
 
-1. Open at least two terminals.
-2. Drag a session from the session list onto the current pane.
-3. Drop on the top, bottom, left, or right zone.
-4. Drag the divider to tune the ratio.
-5. Optionally save a named layout.
-
-With one connection, sshc hides layout and broadcast controls and keeps the pane title and search. Saved layouts reopen from Home as new sessions.
+The split-pane Workspace of earlier versions has been removed, and its saved layouts are not carried over.

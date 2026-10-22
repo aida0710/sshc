@@ -5,14 +5,13 @@ description: SSH and local shells, SFTP, OpenSSH connection management, reusable
 
 # Features
 
-sshc is a local terminal application for SSH and local shells. It combines SFTP, port forwarding, and multiple panes with OpenSSH connection management, reusable credentials and one-time passwords, per-connection VPN, a CLI, and encrypted sync. To try it without installing, use the [public demo](https://sshc-demo.aida0710.work/index.html).
+sshc is a local terminal application for SSH and local shells. It combines SFTP and port forwarding with OpenSSH connection management, reusable credentials and one-time passwords, per-connection VPN, a CLI, and encrypted sync. To try it without installing, use the [public demo](https://sshc-demo.aida0710.work/index.html).
 
 ## Terminal
 
-- Use SSH and local shells in the same interface
+- Use SSH and local shells in the same interface, grouped into [workspaces](./workspace), with connections opened by LLMs kept in a hidden one
 - Follow connection progress, and reconnect an exited SSH session while keeping its pane and scrollback
 - Search, choose encodings, and open links and remote paths
-- Arrange up to four panes and manage saved layouts and broadcast input in [Workspaces](./workspace)
 - Use [Quick Commands and snippets](/en/terminal/commands) with confirmation before running, automatic runs on connect, and runs across several connections
 - Show pane names and notifications sent by programs with [titles and notifications](/en/terminal/notifications), including notifications from Claude Code and Codex
 - [Port forwarding](/en/terminal/port-forwarding) supports Local forwarding, Remote forwarding and Dynamic SOCKS, as saved settings or temporary forwards

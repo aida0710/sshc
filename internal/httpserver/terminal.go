@@ -17,6 +17,7 @@ import (
 	"sshc/internal/platform"
 	"sshc/internal/snippets"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalworkspace"
 	"sshc/internal/validate"
 )
 
@@ -65,6 +66,9 @@ type TerminalHandlers struct {
 	// Connected は、SSH接続とstream ticketの作成が成功したあとに呼ぶ。
 	// 履歴の失敗で接続を失わせないため、エラーは呼び出し側が処理する。
 	Connected func(alias string)
+	// Workspaces は、セッションをまとめるワークスペースの定義を持つ。nil なら
+	// ワークスペースの受け口を登録せず、セッションはすべて default に入る。
+	Workspaces *terminalworkspace.Service
 	// Startup は、alias に割り当てた起動スニペットを、この接続で送るかを決める。
 	// コマンドは変数（シークレットを含む）を展開したもので、認証とリモートシェルの
 	// 起動が済んでから送る。送らない理由の案内も、同じ時点でターミナルへ書く。
@@ -88,6 +92,9 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	engine.PUT("/api/v1/terminal/sessions/:id/title", handlers.SetTitle)
 	engine.DELETE("/api/v1/terminal/sessions/:id", handlers.Close)
 	engine.GET(StreamPath, handlers.Stream)
+	if handlers.Workspaces != nil {
+		registerTerminalWorkspaceRoutes(engine, handlers)
+	}
 }
 
 // maxSessionIdentifier は、パスから受け取る識別子の長さを制限する。
@@ -107,12 +114,13 @@ func identifierParam(c *echo.Context, name string) (string, bool) {
 
 func describeSession(view terminal.View) api.TerminalSession {
 	described := api.TerminalSession{
-		Id:        view.ID,
-		Kind:      api.TerminalSessionKind(view.Kind),
-		Title:     view.Title,
-		StartedAt: view.Started.UTC().Format(time.RFC3339),
-		State:     api.TerminalSessionState(view.State),
-		Problem:   view.Problem,
+		Id:          view.ID,
+		Kind:        api.TerminalSessionKind(view.Kind),
+		Title:       view.Title,
+		WorkspaceId: view.Workspace,
+		StartedAt:   view.Started.UTC().Format(time.RFC3339),
+		State:       api.TerminalSessionState(view.State),
+		Problem:     view.Problem,
 		Presentation: &api.TerminalPresentation{
 			DisplayTitle: view.Presentation.DisplayTitle,
 			TitleSource:  api.TerminalPresentationTitleSource(view.Presentation.TitleSource),
@@ -286,6 +294,10 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 	spec, err := h.spec(request, size)
 	if err != nil {
 		return h.startProblem(c, err)
+	}
+	spec.Workspace, err = h.openingWorkspace(request.WorkspaceId)
+	if err != nil {
+		return terminalWorkspaceProblem(c, err)
 	}
 	session, err := h.Registry.Open(c.Request().Context(), spec)
 	if err != nil {

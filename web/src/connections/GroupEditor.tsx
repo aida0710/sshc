@@ -6,6 +6,7 @@ import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { Field, control, hintText, sectionHeading } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { Button, Card, Notice } from "../ui/surface";
+import { useToast } from "../ui/useToast";
 import { DraftSaveBar } from "./DraftSaveBar";
 import { defaultFields, draftOf, groupFrom, repeatedFieldKeywords } from "./groupSettingsDraft";
 
@@ -22,6 +23,7 @@ type GroupEditorProps = {
 // SSH の設定はキーワードを打ち込ませず、接続先の編集と同じ名前の欄で既定値として見せる。
 export function GroupEditor({ group, memberCount, actions, onSave, onDirtyChange }: GroupEditorProps) {
   const t = useTranslate();
+  const showToast = useToast();
   const [saved, setSaved] = useState(() => draftOf(group));
   // 欄にしないで「その他の設定」で編集する項目（2回以上指定されているもの）。
   const repeated = repeatedFieldKeywords(group);
@@ -73,7 +75,9 @@ export function GroupEditor({ group, memberCount, actions, onSave, onDirtyChange
     setSaving(true);
     const ok = await onSave(next);
     setSaving(false);
-    if (ok) setSaved(draft);
+    if (!ok) return;
+    setSaved(draft);
+    showToast(t("groupEditor.saved", { name: group.name }), { tone: "success" });
   }
 
   return (

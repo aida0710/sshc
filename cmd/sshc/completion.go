@@ -151,7 +151,7 @@ _sshc_completion() {
         case "${COMP_WORDS[2]}" in
           list) _sshc_complete_words "--json --help" ;;
           show|close) if (( COMP_CWORD >= 4 )); then _sshc_complete_words "--json"; fi ;;
-          create) if [[ "${COMP_WORDS[3]}" == "shell" && COMP_CWORD -ge 4 || "${COMP_WORDS[3]}" == "ssh" && COMP_CWORD -ge 5 ]]; then _sshc_complete_words "--json"; fi ;;
+          create) if [[ "${COMP_WORDS[3]}" == "shell" && COMP_CWORD -ge 4 || "${COMP_WORDS[3]}" == "ssh" && COMP_CWORD -ge 5 ]]; then _sshc_complete_words "--workspace --json"; fi ;;
           rename) if (( COMP_CWORD == 4 )); then _sshc_complete_words "--auto"; else _sshc_complete_words "--json"; fi ;;
           read) if (( COMP_CWORD >= 4 )); then _sshc_complete_words "--cursor --limit --json"; fi ;;
           send) if (( COMP_CWORD >= 4 )); then _sshc_complete_words "--text --no-enter --json"; fi ;;
@@ -178,7 +178,7 @@ _sshc_completion() {
       _sshc_complete_words "{{TELNET_OPTIONS}}"
       ;;
     open)
-      _sshc_complete_words "--no-browser --help"
+      if (( COMP_CWORD == 2 )); then _sshc_complete_aliases "--no-browser --help"; else _sshc_complete_words "--no-browser"; fi
       ;;
     status)
       _sshc_complete_words "--json --help"
@@ -307,7 +307,7 @@ _sshc() {
         case "${words[3]}" in
           list) _sshc_values '--json --help' ;;
           show|close) (( CURRENT >= 5 )) && _sshc_values '--json' ;;
-          create) if [[ "${words[4]}" == 'shell' && CURRENT -ge 5 || "${words[4]}" == 'ssh' && CURRENT -ge 6 ]]; then _sshc_values '--json'; fi ;;
+          create) if [[ "${words[4]}" == 'shell' && CURRENT -ge 5 || "${words[4]}" == 'ssh' && CURRENT -ge 6 ]]; then _sshc_values '--workspace --json'; fi ;;
           rename) if (( CURRENT == 5 )); then _sshc_values '--auto'; else _sshc_values '--json'; fi ;;
           read) (( CURRENT >= 5 )) && _sshc_values '--cursor --limit --json' ;;
           send) (( CURRENT >= 5 )) && _sshc_values '--text --no-enter --json' ;;
@@ -328,7 +328,9 @@ _sshc() {
       ;;
     serial) _sshc_values '{{SERIAL_OPTIONS}}' ;;
     telnet) _sshc_values '{{TELNET_OPTIONS}}' ;;
-    open) _sshc_values '--no-browser --help' ;;
+    open)
+      if (( CURRENT == 3 )); then _sshc_aliases; _sshc_values '--no-browser --help'; else _sshc_values '--no-browser'; fi
+      ;;
     status) _sshc_values '--json --help' ;;
     update) _sshc_values '-y --yes --help' ;;
     service)
@@ -467,6 +469,7 @@ complete -c sshc -f -n '__sshc_prefix ssh' -l help -d 'Show help for sshc ssh'
 complete -c sshc -f -n '__sshc_command ssh; and __sshc_min_words 3; and not contains -- --non-interactive (commandline -opc)' -a '--non-interactive'
 complete -c sshc -f -n '__sshc_previous --non-interactive' -a '--'
 complete -c sshc -f -n '__sshc_prefix info' -a '(command sshc ssh --list 2>/dev/null)'
+complete -c sshc -f -n '__sshc_prefix open' -a '(command sshc ssh --list 2>/dev/null)'
 complete -c sshc -f -n '__sshc_prefix terminal create' -a 'shell ssh'
 complete -c sshc -f -n '__sshc_prefix terminal create ssh' -a '(command sshc ssh --list 2>/dev/null)'
 complete -c sshc -f -n '__sshc_prefix terminal list; or __sshc_prefix terminal show; or __sshc_prefix terminal read; or __sshc_prefix terminal send; or __sshc_prefix terminal wait; or __sshc_prefix terminal rename; or __sshc_prefix terminal close' -a '--help'
@@ -505,6 +508,7 @@ complete -c sshc -f -n '__sshc_action sftp get; or __sshc_action sftp put' -a '{
 complete -c sshc -f -n '__sshc_action sync push; or __sshc_action sync pull' -a '--force'
 complete -c sshc -f -n '__sshc_sync_json' -a '--json'
 complete -c sshc -f -n '__sshc_terminal_options' -a '--json'
+complete -c sshc -f -n '__sshc_terminal_options; and contains -- create (commandline -opc)' -a '--workspace'
 complete -c sshc -f -n '__sshc_action terminal read; and __sshc_min_words 4' -a '--cursor --limit'
 complete -c sshc -f -n '__sshc_action terminal send; and __sshc_min_words 4' -a '--text --no-enter'
 complete -c sshc -f -n '__sshc_action terminal wait; and __sshc_min_words 4' -a '--for --timeout'

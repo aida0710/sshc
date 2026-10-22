@@ -43,10 +43,9 @@ describe("UpdateBadge", () => {
   it("shows the version and offers nothing when there is nothing newer", async () => {
     render(<UpdateBadge api={buildApi({ current: "0.1.0", available: false })} />);
 
-    const version = await screen.findByText("Version 0.1.0");
-    expect(version).toBeInTheDocument();
-    expect(version.parentElement?.parentElement).toHaveClass("border-t");
-    expect(screen.getByRole("link", { name: "Version 0.1.0" })).toHaveAttribute("href", "/about");
+    const version = await screen.findByRole("link", { name: "Version 0.1.0" });
+    expect(version).toHaveTextContent("0.1.0");
+    expect(version).toHaveAttribute("href", "/about");
   });
 
   it("links to the release rather than offering to install it", async () => {
@@ -72,20 +71,22 @@ describe("UpdateBadge", () => {
     });
     render(<UpdateBadge api={api} current="0.1.0" />);
     await waitFor(() => expect(api.updateStatus).toHaveBeenCalled());
-    expect(screen.getByText("Version 0.1.0")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Version 0.1.0" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Version 0.1.0" })).toHaveAttribute("href", "/about");
   });
 
-  it("places an optional status indicator in the version row", async () => {
+  it("places the brand and an optional status indicator in the version row", async () => {
     render(
       <UpdateBadge
         api={buildApi({ current: "0.1.0", available: false })}
+        leading={<span data-testid="brand" />}
         indicator={<span data-testid="indicator" />}
       />,
     );
 
-    const version = await screen.findByText("Version 0.1.0");
+    const version = await screen.findByRole("link", { name: "Version 0.1.0" });
     expect(screen.getByTestId("indicator").parentElement).toBe(version.parentElement);
+    expect(screen.getByTestId("brand").parentElement).toBe(version.parentElement);
     expect(version.parentElement).toHaveClass("items-center");
   });
 });

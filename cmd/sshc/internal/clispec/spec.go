@@ -64,8 +64,8 @@ Print the resolved SSH target without connecting.
   sshc terminal read <session-id> [--cursor N] [--limit N] [--json]
   sshc terminal send <session-id> --text <text> [--no-enter] [--json]
   sshc terminal wait <session-id> --for <state> [--timeout D] [--json]
-  sshc terminal create shell [--json]
-  sshc terminal create ssh <alias> [--json]
+  sshc terminal create shell [--workspace <id-or-name>] [--json]
+  sshc terminal create ssh <alias> [--workspace <id-or-name>] [--json]
   sshc terminal rename <session-id> <title> [--json]
   sshc terminal rename <session-id> --auto [--json]
   sshc terminal close <session-id> [--json]
@@ -75,7 +75,7 @@ Print the resolved SSH target without connecting.
 		{Name: "read", Help: "usage:\n  sshc terminal read <session-id> [--cursor N] [--limit N] [--json]\n\nRead retained terminal output from a byte cursor.\n"},
 		{Name: "send", Help: "usage:\n  sshc terminal send <session-id> --text <text> [--no-enter] [--json]\n\nSend text to the current process generation. A carriage return is appended\nunless --no-enter is set.\n"},
 		{Name: "wait", Help: "usage:\n  sshc terminal wait <session-id> --for <state> [--timeout D] [--json]\n\nStates: connecting, connected, reconnecting, exited.\n"},
-		{Name: "create", Help: "usage:\n  sshc terminal create shell [--json]\n  sshc terminal create ssh <alias> [--json]\n\nCreate a local shell or SSH terminal in the running engine.\n"},
+		{Name: "create", Help: "usage:\n  sshc terminal create shell [--workspace <id-or-name>] [--json]\n  sshc terminal create ssh <alias> [--workspace <id-or-name>] [--json]\n\nCreate a local shell or SSH terminal in the running engine. It goes into the\nhidden agents workspace unless --workspace names another one by ID or name,\nso terminals opened by scripts and agents stay out of the sidebar.\n"},
 		{Name: "rename", Help: "usage:\n  sshc terminal rename <session-id> <title> [--json]\n  sshc terminal rename <session-id> [--json] -- <title>\n  sshc terminal rename <session-id> --auto [--json]\n\nPin the title of a terminal owned by the running engine, so titles that\nprograms set no longer replace it. --auto unpins it and returns to the\nautomatic name: the title the program set, or else the Host alias or shell\nname.\n\nA title that starts with - is read as an option, so put it after --.\n"},
 		{Name: "close", Help: "usage:\n  sshc terminal close <session-id> [--json]\n\nClose a terminal owned by the running engine.\n"},
 	}},
@@ -107,7 +107,7 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
             --timeout D --settle D --max-bytes N --line-ending MODE
             --require-output --json
 `},
-	{Name: "open", Route: "open", Help: "usage:\n  sshc open [--no-browser]\n\nStart the engine in the background if needed, print a one-time UI URL and open it in your browser.\n  --no-browser  print the URL without opening a browser\n"},
+	{Name: "open", Route: "open", Help: "usage:\n  sshc open [--no-browser]\n  sshc open <alias> [--no-browser]\n\nStart the engine in the background if needed, print a one-time UI URL and open it in your browser.\n\nWith an alias, open the sshc engine running on that SSH host instead. This machine's engine connects to the host without prompting, asks the sshc there for a one-time UI URL, and relays it to a port on this machine's 127.0.0.1 that stays the same for the alias. Terminals opened there keep running on that host after the browser closes. The relay lasts until this machine's engine stops; run the command again to reopen it. sshc must already be installed on the host, its SSH server must allow TCP forwarding, and its host key and credentials must already be accepted or saved here.\n  --no-browser  print the URL without opening a browser\n"},
 	{Name: "stop", Route: "stop", Help: "usage:\n  sshc stop\n\nAsk the running engine to stop and wait for it to exit.\n"},
 	{Name: "status", Route: "status", Help: "usage:\n  sshc status [--json]\n\nPrint what the running engine is doing.\n"},
 	{Name: "update", Route: "update", Help: "usage:\n  sshc update [-y|--yes]\n\nUpdate an installation managed by Homebrew or install.sh. The command shows the plan and asks before changing the installation; -y or --yes skips the prompt.\n"},
@@ -192,8 +192,9 @@ const GlobalHelp = `usage:
   sshc terminal send <session-id> --text <text> [--no-enter] [--json]
   sshc terminal wait <session-id> --for <state> [--timeout D] [--json]
                        states: connecting, connected, reconnecting, exited
-  sshc terminal create shell [--json]
-  sshc terminal create ssh <alias> [--json]
+  sshc terminal create shell [--workspace <id-or-name>] [--json]
+  sshc terminal create ssh <alias> [--workspace <id-or-name>] [--json]
+                       created terminals go into the hidden agents workspace unless --workspace is given
   sshc terminal rename <session-id> <title> [--json]
   sshc terminal rename <session-id> --auto [--json]
   sshc terminal close <session-id> [--json]
@@ -227,6 +228,8 @@ const GlobalHelp = `usage:
   sshc open [--no-browser]
                        start the engine in the background if needed, print a one-time UI URL and open it
                        --no-browser  print the URL without opening a browser
+  sshc open <alias> [--no-browser]
+                       open the sshc engine running on that SSH host through a relay on this machine
   sshc stop            stop the running engine and wait for it to exit
   sshc status          print what the running engine is doing
                        --json      print it as JSON, for the shell

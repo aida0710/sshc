@@ -54,11 +54,13 @@ import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
+import { ToastMessage } from "../ui/ToastMessage";
+import { toastVisibleMs } from "../ui/ToastProvider";
 
 type TerminalViewProps = {
   session: TerminalSession;
   searchShortcutActive?: boolean;
-  api?: Pick<TerminalSessionsApi, "terminalStreamTicket">;
+  api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath">;
   onExit?: () => void;
   onReconnect?: () => Promise<boolean>;
   onStopReconnect?: () => Promise<boolean>;
@@ -74,15 +76,15 @@ type TerminalViewProps = {
   osc52Enabled?: boolean;
   // vpnProfile は、この接続が通るVPN経路の名前である。空なら通らない。
   vpnProfile?: string;
+  // runTarget is the SSH alias of the engine this session runs on, when it is
+  // not this machine. Port forwarding, Quick Commands and opening remote paths
+  // in SFTP act on this machine's engine, so they are not offered for it.
+  runTarget?: string;
   scrollbackLines?: number;
   onOsc52Change?: (enabled: boolean) => void | Promise<void>;
   onForwardsChanged?: () => void | Promise<void>;
   jisYenBackslash?: boolean;
 };
-
-// Long enough to read a one-line notice such as "Copied" without it lingering
-// over the output.
-const terminalNoticeMs = 2500;
 
 // A command shorter than this usually finishes while the user is still
 // watching, so a desktop notification for it would only be noise.
@@ -116,6 +118,7 @@ export function TerminalView({
   onOpenRemotePath,
   osc52Enabled: initialOsc52Enabled = false,
   vpnProfile = "",
+  runTarget,
   scrollbackLines = defaultBrowserScrollbackLines,
   onOsc52Change,
   onForwardsChanged,
@@ -179,7 +182,7 @@ export function TerminalView({
 
   useEffect(() => {
     if (terminalNotice === "") return;
-    const timer = window.setTimeout(() => setTerminalNotice(""), terminalNoticeMs);
+    const timer = window.setTimeout(() => setTerminalNotice(""), toastVisibleMs);
     return () => window.clearTimeout(timer);
   }, [terminalNotice]);
 
@@ -390,6 +393,7 @@ export function TerminalView({
       coarsePointer: () => coarse,
       settings: () => clipboardSettings.current,
       refuse: () => setProblem(t("terminal.clipboardRefused")),
+      copied: () => setTerminalNotice(t("copy.done")),
       enhancedKey: (event) => encodeIntlYen(event, intlYenRef.current) ?? kittyKeyboard.encode(event),
       sendEnhancedKey: (sequence) => linkController.currentStream()?.send(sequence),
     });
@@ -479,6 +483,9 @@ export function TerminalView({
             <span className="min-w-0 truncate font-mono">{subtitle}</span>
             <span role="status" className="shrink-0">{connectionStatus}</span>
             <VPNProfileChip name={vpnProfile} />
+            {runTarget === undefined ? null : (
+              <span className="shrink-0 rounded-full bg-accent/15 px-2 py-px font-mono text-[11px] text-accent">{t("runTarget.runningOn", { alias: runTarget })}</span>
+            )}
           </div>
         </div>
         <button
@@ -504,12 +511,12 @@ export function TerminalView({
           <TerminalOverflowMenu
             triggerRef={overflowTrigger}
             osc52Enabled={osc52Enabled}
-            onQuickCommands={() => {
+            onQuickCommands={runTarget !== undefined ? undefined : () => {
               setQuickCommandSelection(terminal.current?.getSelection() ?? "");
               setQuickCommandsOpen(true);
             }}
-            onPortForwarding={session.kind === "ssh" ? () => setPortForwardsOpen(true) : undefined}
-            onOpenRemoteDirectory={session.kind === "ssh" && session.alias !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
+            onPortForwarding={session.kind === "ssh" && runTarget === undefined ? () => setPortForwardsOpen(true) : undefined}
+            onOpenRemoteDirectory={runTarget === undefined && session.kind === "ssh" && session.alias !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
               ? () => onOpenRemotePath(session.alias!, currentDirectory, "browse")
               : undefined}
             onCopyContext={() => copyContext.current()}
@@ -558,9 +565,9 @@ export function TerminalView({
         />
         {search.open ? <TerminalSearchBar search={search} mobile={mobile} /> : null}
         {terminalNotice === "" ? null : (
-          <p role="status" className="absolute bottom-3 right-3 z-20 max-w-[min(24rem,calc(100%-1.5rem))] rounded border border-line bg-toolbar/95 px-3 py-2 text-xs text-ink shadow-lg">
+          <ToastMessage role="status" className="absolute bottom-3 right-3 z-20 max-w-[min(24rem,calc(100%-1.5rem))]">
             {terminalNotice}
-          </p>
+          </ToastMessage>
         )}
       </div>
       {quickCommandsOpen ? (
@@ -569,6 +576,7 @@ export function TerminalView({
           initialCommand={quickCommandSelection}
           returnFocusRef={overflowTrigger}
           onClose={() => setQuickCommandsOpen(false)}
+          onCopied={() => setTerminalNotice(t("copy.done"))}
         />
       ) : null}
       {portForwardsOpen ? (
@@ -582,7 +590,7 @@ export function TerminalView({
         <TerminalLinkPopover
           selection={linkSelection}
           onClose={() => setLinkSelection(null)}
-          {...(remoteAlias !== undefined && onOpenRemotePath !== undefined
+          {...(runTarget === undefined && remoteAlias !== undefined && onOpenRemotePath !== undefined
             ? { onRemotePath: (path: string, action: RemotePathAction) => onOpenRemotePath(remoteAlias, path, action) }
             : {})}
         />

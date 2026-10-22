@@ -10,7 +10,7 @@ import { mobileViewportQuery } from "../ui/useMediaQuery";
 
 const streams: { handlers: StreamHandlers; stream: TerminalStream }[] = [];
 vi.mock("./stream", () => ({
-  openStream: (_ticket: string, handlers: StreamHandlers) => {
+  openStream: (_ticket: string, _streamPath: string, handlers: StreamHandlers) => {
     const stream: TerminalStream = { send: vi.fn(), resize: vi.fn(), close: vi.fn() };
     streams.push({ handlers, stream });
     return stream;
@@ -23,11 +23,11 @@ vi.mock("./TerminalQuickCommands", () => ({
 const { TerminalView } = await import("./TerminalView");
 
 const session: TerminalSession = {
-  id: "a", kind: "shell", title: "zsh", startedAt: "2026-08-14T09:00:00Z", state: "connected", problem: "",
+  id: "a", kind: "shell", workspaceId: "default", title: "zsh", startedAt: "2026-08-14T09:00:00Z", state: "connected", problem: "",
 };
 
 function renderView(terminalStreamTicket = vi.fn(async () => ({ streamTicket: "one-time" }))) {
-  render(<TerminalView session={session} api={{ terminalStreamTicket }} />);
+  render(<TerminalView session={session} api={{ streamPath: "/terminal/stream", terminalStreamTicket }} />);
   return terminalStreamTicket;
 }
 
@@ -56,12 +56,12 @@ describe("TerminalView", () => {
   it("says which VPN route an SSH connection takes, and says nothing when it takes none", () => {
     const ssh: TerminalSession = { ...session, kind: "ssh", alias: "tains", title: "tains" };
     const { rerender } = render(
-      <TerminalView session={ssh} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} vpnProfile="tohoku" />,
+      <TerminalView session={ssh} api={{ streamPath: "/terminal/stream", terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} vpnProfile="tohoku" />,
     );
 
     expect(screen.getByText("VPN: tohoku")).toBeVisible();
 
-    rerender(<TerminalView session={ssh} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    rerender(<TerminalView session={ssh} api={{ streamPath: "/terminal/stream", terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
     expect(screen.queryByText(/^VPN: /)).toBeNull();
   });
 
@@ -136,7 +136,7 @@ describe("TerminalView", () => {
   });
 
   it("keeps its title and search toolbar visible", () => {
-    render(<TerminalView session={session} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    render(<TerminalView session={session} api={{ streamPath: "/terminal/stream", terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
 
     expect(screen.getByRole("region", { name: "Terminal for zsh" })).toBeVisible();
     expect(screen.getByText("zsh", { exact: true })).toBeVisible();
@@ -169,7 +169,7 @@ describe("TerminalView", () => {
   });
 
   it("owns search from outside the terminal and repeated searches only while active", async () => {
-    const api = { terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
+    const api = { streamPath: "/terminal/stream", terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
     const view = render(<TerminalView session={session} api={api} searchShortcutActive />);
     expect(fireEvent.keyDown(document.body, { key: "f", ctrlKey: true, cancelable: true })).toBe(false);
     const input = await screen.findByRole("textbox", { name: "Search terminal output" });
@@ -209,7 +209,7 @@ describe("TerminalView", () => {
 
   it("reports an OSC 52 preference change for connection-level persistence", async () => {
     const onOsc52Change = vi.fn();
-    render(<TerminalView session={session} osc52Enabled onOsc52Change={onOsc52Change} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    render(<TerminalView session={session} osc52Enabled onOsc52Change={onOsc52Change} api={{ streamPath: "/terminal/stream", terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
     await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
     const toggle = screen.getByRole("menuitemcheckbox", { name: /OSC 52/ });
     expect(toggle).toHaveAttribute("aria-checked", "true");
@@ -219,7 +219,7 @@ describe("TerminalView", () => {
 
   it("keeps the OSC 52 toggle unchanged and reports persistence failure", async () => {
     const onOsc52Change = vi.fn(async () => Promise.reject(new Error("save failed")));
-    render(<TerminalView session={session} osc52Enabled onOsc52Change={onOsc52Change} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    render(<TerminalView session={session} osc52Enabled onOsc52Change={onOsc52Change} api={{ streamPath: "/terminal/stream", terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
     await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
     await userEvent.click(screen.getByRole("menuitemcheckbox", { name: /OSC 52/ }));
     await waitFor(() => expect(onOsc52Change).toHaveBeenCalledWith(false));
@@ -274,7 +274,7 @@ describe("TerminalView", () => {
     render(<TerminalView session={{
       ...session, kind: "ssh", alias: "osaka", title: "vim notes.md",
       presentation: { displayTitle: "vim notes.md", titleSource: "terminal", titlePinned: false },
-    }} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    }} api={{ streamPath: "/terminal/stream", terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
     await waitFor(() => expect(streams).toHaveLength(1));
     const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
 
@@ -297,7 +297,7 @@ describe("TerminalView", () => {
 
   it("never carries a pending paste into a different terminal session", async () => {
     const ticket = vi.fn(async () => ({ streamTicket: "one-time" }));
-    const rendered = render(<TerminalView session={session} api={{ terminalStreamTicket: ticket }} />);
+    const rendered = render(<TerminalView session={session} api={{ streamPath: "/terminal/stream", terminalStreamTicket: ticket }} />);
     await waitFor(() => expect(streams).toHaveLength(1));
     const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
     fireEvent.paste(host, { clipboardData: { getData: () => "echo one\necho two" } });
@@ -306,7 +306,7 @@ describe("TerminalView", () => {
     rendered.rerender(
       <TerminalView
         session={{ ...session, id: "b", title: "bash" }}
-        api={{ terminalStreamTicket: ticket }}
+        api={{ streamPath: "/terminal/stream", terminalStreamTicket: ticket }}
       />,
     );
 
@@ -360,7 +360,7 @@ describe("TerminalView", () => {
       kind: "ssh",
       alias: "bastion",
       title: "bastion",
-    }} onOpenRemotePath={onOpenRemotePath} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    }} onOpenRemotePath={onOpenRemotePath} api={{ streamPath: "/terminal/stream", terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
     await waitFor(() => expect(streams).toHaveLength(1));
     streams[0]!.handlers.onReplay({ start: 0, next: 0, end: 0, truncated: false });
     streams[0]!.handlers.onOutput(new TextEncoder().encode("\x1b]7;file://bastion/srv/app\x07"));
@@ -378,7 +378,7 @@ describe("TerminalView", () => {
       progress: {
         phase: "host_key", alias: "bastion", hostName: "192.0.2.10", user: "ops", hop: 1, hops: 2,
       },
-    }} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    }} api={{ streamPath: "/terminal/stream", terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
 
     expect(screen.getByText("checking the host key for bastion · 1/2")).toBeVisible();
   });
@@ -388,7 +388,7 @@ describe("TerminalView", () => {
     render(<TerminalView session={{
       ...session, kind: "ssh", alias: "tv", title: "tv", state: "reconnecting",
       reconnect: { attempt: 2, limit: 5, retryAt: "2026-09-18T00:00:10Z", problem: "reconnect_failed" },
-    }} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} onStopReconnect={onStopReconnect} />);
+    }} api={{ streamPath: "/terminal/stream", terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} onStopReconnect={onStopReconnect} />);
 
     expect(screen.getByText("reconnecting 2/5")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Stop reconnecting" }));
@@ -399,7 +399,7 @@ describe("TerminalView", () => {
     render(<TerminalView session={{
       ...session, kind: "ssh", alias: "osaka", title: "vim notes.md",
       presentation: { displayTitle: "vim notes.md", titleSource: "terminal", titlePinned: false },
-    }} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    }} api={{ streamPath: "/terminal/stream", terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
 
     expect(screen.getByText("vim notes.md")).toBeVisible();
     expect(screen.getByText("osaka")).toBeVisible();
@@ -468,7 +468,7 @@ describe("TerminalView", () => {
     const ticket = vi.fn(async () => {
       throw new ApiError("terminal_session_not_found", 404, null);
     });
-    render(<TerminalView session={session} api={{ terminalStreamTicket: ticket }} />);
+    render(<TerminalView session={session} api={{ streamPath: "/terminal/stream", terminalStreamTicket: ticket }} />);
 
     expect(await screen.findByText(/session no longer exists/)).toBeVisible();
     expect(screen.queryByRole("button", { name: "Connect now" })).toBeNull();
@@ -488,7 +488,7 @@ describe("TerminalView", () => {
   it("offers an explicit reconnect inside an exited SSH terminal and reattaches", async () => {
     const ticket = vi.fn(async () => ({ streamTicket: "one-time" }));
     const onReconnect = vi.fn().mockResolvedValue(true);
-    render(<TerminalView session={{ ...session, kind: "ssh", alias: "bastion", title: "bastion", state: "exited", exited: { code: 255, signal: "", at: "2026-08-26T01:00:00Z" } }} api={{ terminalStreamTicket: ticket }} onReconnect={onReconnect} />);
+    render(<TerminalView session={{ ...session, kind: "ssh", alias: "bastion", title: "bastion", state: "exited", exited: { code: 255, signal: "", at: "2026-08-26T01:00:00Z" } }} api={{ streamPath: "/terminal/stream", terminalStreamTicket: ticket }} onReconnect={onReconnect} />);
     await waitFor(() => expect(ticket).toHaveBeenCalledTimes(1));
 
     await userEvent.click(screen.getByRole("button", { name: "Reconnect" }));

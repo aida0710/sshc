@@ -17,7 +17,6 @@ import (
 	"sshc/internal/sftp"
 	"sshc/internal/snippets"
 	"sshc/internal/vpn"
-	"sshc/internal/workspace"
 )
 
 // This test exercises the handwritten HTTP DTOs. Generated clients cannot
@@ -60,14 +59,6 @@ func TestHandwrittenHTTPWireTypesMatchOpenAPIRecursively(t *testing.T) {
 		"SFTPStartUploadRequest":          sftpStartUploadRequest{},
 		"SFTPCompleteUploadRequest":       sftpCompleteUploadRequest{},
 		"SFTPResumableUpload":             SFTPResumableUpload{},
-		"WorkspacePane":                   workspace.Pane{},
-		"WorkspaceSplit":                  workspace.Split{},
-		"WorkspaceNode":                   workspace.Node{},
-		"WorkspaceDefinition":             workspaceDefinition{},
-		"TerminalWorkspace":               workspace.Workspace{},
-		"WorkspaceList":                   workspaceListResponse{},
-		"WorkspaceReconnectPane":          workspace.PaneReconnect{},
-		"WorkspaceRestorePlan":            workspace.RestorePlan{},
 		"SnippetVariable":                 snippets.Variable{},
 		"SnippetDraft":                    snippetDraft{},
 		"Snippet":                         snippets.Snippet{},
@@ -120,7 +111,7 @@ func assertEveryHandwrittenJSONStructIsClassified(t *testing.T, contracts map[st
 	// protocols. Listing them explicitly keeps those boundaries visible while
 	// ensuring a newly added JSON struct cannot silently bypass this test.
 	for _, name := range []string{
-		"CLIStatus", "connectRequest", "connectResponse", "openResponse",
+		"CLIStatus", "connectRequest", "connectResponse", "openResponse", "remoteEngineRequest",
 		"exitMessage", "replayMessage", "resizeMessage", "shellReplacedMessage", "vaultChangeRequest", "vaultPassphraseRequest",
 	} {
 		classified[name] = true
@@ -232,9 +223,6 @@ var wireEnumValues = map[reflect.Type][]string{
 		string(sftp.TransferPauseControl), string(sftp.TransferResumeControl),
 		string(sftp.TransferRetryControl), string(sftp.TransferCancelControl), string(sftp.TransferRemoveControl),
 	},
-	reflect.TypeOf(workspace.Direction("")):      {string(workspace.Horizontal), string(workspace.Vertical)},
-	reflect.TypeOf(workspace.PaneKind("")):       {string(workspace.PaneSSH), string(workspace.PaneShell)},
-	reflect.TypeOf(workspace.ReconnectState("")): {string(workspace.ReconnectRequired)},
 	reflect.TypeOf(snippets.VariableType("")): {
 		string(snippets.VariableString), string(snippets.VariableInteger), string(snippets.VariableBoolean), string(snippets.VariableSecret),
 	},

@@ -27,9 +27,9 @@ import (
 	"sshc/internal/storage"
 	"sshc/internal/syncrestore"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalworkspace"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnprofile"
-	terminalworkspace "sshc/internal/workspace"
 )
 
 // engineServices は、engine がひとつのワークスペースの上に組む部品一式である。
@@ -49,12 +49,13 @@ type engineServices struct {
 	recent       *recent.Service
 	sftp         *sshcSFTP.Service
 	sftpPool     *sshcSFTP.RemotePool
-	workspaces   *terminalworkspace.Service
 	snippets     *snippets.Service
 	terminals    *terminal.Registry
-	vpn          *vpn.Manager
-	vpnProfiles  *vpnprofile.Service
-	ssh          sshParts
+	// terminalWorkspaces は、ターミナルのセッションをまとめるワークスペースの定義である。
+	terminalWorkspaces *terminalworkspace.Service
+	vpn                *vpn.Manager
+	vpnProfiles        *vpnprofile.Service
+	ssh                sshParts
 }
 
 // newEngineServices は、~/.ssh をひとつ開いて、その上に engine の部品を組む。
@@ -151,7 +152,6 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	})
 	sftpPool := sshcSFTP.NewRemotePool(inProcessSSH.sftp())
 	sftpService := &sshcSFTP.Service{Open: sftpPool.Open, ConnectionLimit: sftpConnectionLimit(vault, inProcessSSH.target)}
-	workspaceService := terminalworkspace.NewService(terminalworkspace.NewStore(workspace), time.Now, dependencies.Random)
 	probe := dependencies.Probe
 	if probe == nil {
 		probe = inProcessSSH.probe()
@@ -243,8 +243,9 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		config:      configService, keys: keyService, diagnostics: diagnosticsService,
 		knownHosts: knownHostsService, vault: vault,
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
-		sftp: sftpService, sftpPool: sftpPool, workspaces: workspaceService, snippets: snippetService,
+		sftp: sftpService, sftpPool: sftpPool, snippets: snippetService,
 		vpn: vpnRoutes, vpnProfiles: vpnProfiles, ssh: inProcessSSH,
+		terminalWorkspaces: terminalworkspace.NewService(workspace, dependencies.Random),
 	}
 	services.sync, services.autoSync, err = buildSync(workspace, transactions, vault, snippetStore, dependencies)
 	if err != nil {

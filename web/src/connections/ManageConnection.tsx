@@ -4,20 +4,25 @@ import { useTranslate } from "../i18n/context";
 import { control, hintText, sectionHeading } from "../ui/form";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Button, Card } from "../ui/surface";
+import { usePendingAction } from "../ui/usePendingAction";
 import { draftResetKey } from "./draftResetKey";
 
+// 操作はどれも、保存し終えるまで待てる Promise を返す。待つ間は押したボタンを busy にし、
+// ほかの操作を止める（同じファイルを続けて書き換えると、2つ目が古い内容を前提にして断られる）。
 type ManageConnectionProps = {
   detail: HostDetail;
   groups: GroupMetadata[];
   files: FileNode[];
   disabled: boolean;
-  onRename: (alias: string) => void;
-  onMoveToGroup: (group: string) => void;
-  onComment: (comment: string) => void;
-  onDuplicate: () => void;
-  onMoveToFile: (path: string) => void;
-  onDelete: () => void;
+  onRename: (alias: string) => Promise<unknown>;
+  onMoveToGroup: (group: string) => Promise<unknown>;
+  onComment: (comment: string) => Promise<unknown>;
+  onDuplicate: () => Promise<unknown>;
+  onMoveToFile: (path: string) => Promise<unknown>;
+  onDelete: () => Promise<unknown>;
 };
+
+type ManageAction = "rename" | "group" | "comment" | "file" | "duplicate" | "delete";
 
 export function ManageConnection({
   detail,
@@ -41,6 +46,9 @@ export function ManageConnection({
   const [comment, setComment] = useState(initialComment);
   const [file, setFile] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const pending = usePendingAction<ManageAction>();
+  const start = (kind: ManageAction, work: () => Promise<unknown>) => void pending.start(kind, work);
+  const busyWith = (kind: ManageAction) => pending.running === kind;
 
   useEffect(() => {
     setRenameTo(identity.alias);
@@ -73,7 +81,7 @@ export function ManageConnection({
         {disabled ? <p className="mt-1 text-xs text-notice-ink">{t("conn.manageDraftBlocked")}</p> : null}
       </div>
 
-      <fieldset disabled={disabled} className="contents">
+      <fieldset disabled={disabled || pending.running !== null} className="contents">
         <div className="grid gap-5 border-t border-line pt-5 lg:grid-cols-2">
           <div className="flex min-w-0 flex-col gap-1.5">
             <label htmlFor="manage-rename-alias" className={sectionHeading}>{t("host.renameAlias")}</label>
@@ -85,7 +93,7 @@ export function ManageConnection({
               onChange={(event) => setRenameTo(event.target.value)}
               className={control}
             />
-              <Button disabled={!renameDirty} onClick={() => onRename(renameTo)}>{t("host.rename")}</Button>
+              <Button disabled={!renameDirty} busy={busyWith("rename")} onClick={() => start("rename", () => onRename(renameTo))}>{t("host.rename")}</Button>
             </div>
           </div>
           <div className="flex min-w-0 flex-col gap-1.5">
@@ -101,7 +109,7 @@ export function ManageConnection({
               <option value="">{t("host.groupNone")}</option>
               {groups.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
             </select>
-              <Button disabled={!groupDirty} onClick={() => onMoveToGroup(group)}>{t("host.moveToGroup")}</Button>
+              <Button disabled={!groupDirty} busy={busyWith("group")} onClick={() => start("group", () => onMoveToGroup(group))}>{t("host.moveToGroup")}</Button>
             </div>
             <span className={hintText}>{t("host.groupNoneMeans")}</span>
           </div>
@@ -122,7 +130,7 @@ export function ManageConnection({
               : t("host.commentNote")}
           </span>
         </label>
-        <Button className="self-start" disabled={!commentDirty} onClick={() => onComment(comment)}>
+        <Button className="self-start" disabled={!commentDirty} busy={busyWith("comment")} onClick={() => start("comment", () => onComment(comment))}>
           {t("host.saveComment")}
         </Button>
 
@@ -144,14 +152,14 @@ export function ManageConnection({
                 .filter((node) => node.editable && node.file.path !== undefined && node.file.path !== identity.path)
                 .map((node) => <option key={node.file.absolute} value={node.file.path}>{node.file.path}</option>)}
             </select>
-            <Button disabled={file === ""} onClick={() => onMoveToFile(file)}>{t("conn.move")}</Button>
+            <Button disabled={file === ""} busy={busyWith("file")} onClick={() => start("file", () => onMoveToFile(file))}>{t("conn.move")}</Button>
             </div>
           </div>
-          <Button className="self-start" onClick={onDuplicate}>{t("conn.duplicate")}</Button>
+          <Button className="self-start" busy={busyWith("duplicate")} onClick={() => start("duplicate", onDuplicate)}>{t("conn.duplicate")}</Button>
         </div>
 
         <div className="border-t border-danger/30 pt-5">
-          <Button kind="danger" onClick={() => setConfirmingDelete(true)}>{t("conn.delete")}</Button>
+          <Button kind="danger" busy={busyWith("delete")} onClick={() => setConfirmingDelete(true)}>{t("conn.delete")}</Button>
           {confirmingDelete ? (
             <ConfirmDialog
               id="delete-connection-heading"
@@ -161,8 +169,9 @@ export function ManageConnection({
               cancelLabel={t("conn.deleteCancel")}
               onCancel={() => setConfirmingDelete(false)}
               onConfirm={() => {
+                // 先に閉じてから消す。断られた理由は背面の画面に出るので、閉じておかないと隠れる。
                 setConfirmingDelete(false);
-                onDelete();
+                start("delete", onDelete);
               }}
             />
           ) : null}

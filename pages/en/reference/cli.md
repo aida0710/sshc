@@ -36,6 +36,7 @@ sshc engine --background
 sshc
 sshc open
 sshc open --no-browser
+sshc open <alias>
 sshc stop
 sshc status --json
 sshc version
@@ -52,6 +53,16 @@ sshc update
 ```
 
 `sshc` without arguments and `sshc open` start the engine in the background if needed, wait until it is ready, print a one-time URL and open it in the browser. `sshc open --no-browser` performs the same startup but only prints the URL, for headless machines or use over SSH.
+
+`sshc open <alias>` opens the sshc engine running on an SSH host in this machine's browser. This machine's engine connects to the host over SSH and receives the one-time URL printed by `sshc open --no-browser` there. It replaces the port with a relay listening on this machine's `127.0.0.1`, prints the URL and opens it in the browser. Terminals and workspaces belong to the engine on the host, so they keep running there after the browser closes.
+
+- The relay port is remembered per alias and reused, because the settings a browser saves are kept per port.
+- The relay lasts until this machine's engine stops. After that, or after the engine on the host restarts, run `sshc open <alias>` again.
+- The SSH connection does not prompt. Accept a new host's key with `sshc ssh <alias>` first, and save any passphrase or password the host needs in Connections.
+- The SSH server on the host must allow TCP forwarding to its `127.0.0.1` (`AllowTcpForwarding yes` or `local` in `sshd_config`). If it does not, the command says so before printing a URL.
+- sshc must already be installed on the host. It is looked up on `PATH` and in `~/.local/bin`, `/home/linuxbrew/.linuxbrew/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. The host must run macOS or Linux.
+- Both machines listen on `127.0.0.1` only. On Linux, connections from another OS user on this machine are not relayed.
+- This machine's sshc UI and the host's UI can be open in the same browser at the same time.
 
 `sshc stop` asks the running engine to stop and waits for it to exit. Open terminals and transfers close. If no engine is running, it exits successfully. On Linux, macOS, and Windows, an enabled service starts the engine again at the next login; use `sshc service disable` to keep it stopped.
 
@@ -239,6 +250,7 @@ Inspect, create, and control terminals owned by the running engine.
 sshc terminal list --json
 sshc terminal create ssh bastion --json
 sshc terminal create shell --json
+sshc terminal create shell --workspace "sshc dev"
 sshc terminal show <session-id> --json
 sshc terminal read <session-id> --cursor 0 --limit 4096 --json
 sshc terminal send <session-id> --text 'uptime' --json
@@ -250,6 +262,8 @@ sshc terminal close <session-id>
 ```
 
 `create shell` opens a local shell on the engine host. `send` appends Enter (CR) by default; `--no-enter` sends the text as is.
+
+A session opened with `create` goes into the hidden Agents [workspace](/en/features/workspace) by default, so connections opened by LLMs and scripts stay out of the sidebar. `--workspace` puts it in another workspace, named by ID or name. `list` also shows the workspace ID of each session.
 
 `read` returns a scrollback cursor and warns when an older position has already been discarded. `send` checks the current process generation to avoid sending to a replacement process.
 

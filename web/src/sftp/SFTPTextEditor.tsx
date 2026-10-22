@@ -31,7 +31,7 @@ export function SFTPTextEditor({ editor, busy = false }: {
             <h2 id={`${id}-editor`} className="min-w-0 grow truncate font-mono text-xs">{opened.entry.path}</h2>
             <span role="status" className="text-xs text-ink-muted">{editor.saving ? t("sftp.editorSaving") : dirty ? t("sftp.unsaved") : editor.saved ? t("sftp.editorSaved") : ""}</span>
             <Button disabled={writeDisabled} onClick={() => void editor.save()}>{editor.saving ? t("sftp.editorSaving") : t("sftp.save")}</Button>
-            <button type="button" className="text-xs text-ink-muted" onClick={editor.dismiss}>{t("sftp.close")}</button>
+            <button type="button" className="rounded px-2 py-1 text-xs text-ink-muted transition-colors duration-150 hover:bg-hover hover:text-ink" onClick={editor.dismiss}>{t("sftp.close")}</button>
           </div>
           {problem === null ? null : (
             <div className="border-b border-line px-3 py-2">
@@ -41,8 +41,8 @@ export function SFTPTextEditor({ editor, busy = false }: {
                   <span className="grow basis-48">{problem.message}</span>
                   {problem.conflict ? (
                     <span className="flex shrink-0 gap-3">
-                      <button type="button" disabled={editor.busy} className="text-accent disabled:text-ink-faint" onClick={editor.requestReload}>{t(editor.local ? "sftp.editorLocalReload" : "sftp.editorReload")}</button>
-                      <button type="button" disabled={writeDisabled} className="text-accent disabled:text-ink-faint" onClick={() => void editor.requestOverwrite()}>{t("sftp.editorOverwrite")}</button>
+                      <button type="button" disabled={editor.busy} className="text-accent" onClick={editor.requestReload}>{t(editor.local ? "sftp.editorLocalReload" : "sftp.editorReload")}</button>
+                      <button type="button" disabled={writeDisabled} className="text-accent" onClick={() => void editor.requestOverwrite()}>{t("sftp.editorOverwrite")}</button>
                     </span>
                   ) : null}
                 </span>

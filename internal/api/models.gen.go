@@ -161,6 +161,27 @@ func (e PullRequestResolve) Valid() bool {
 	}
 }
 
+// Defines values for RemoteEngineActionRequestAction.
+const (
+	RemoteEngineActionRequestActionRestart RemoteEngineActionRequestAction = "restart"
+	RemoteEngineActionRequestActionStop    RemoteEngineActionRequestAction = "stop"
+	RemoteEngineActionRequestActionUpdate  RemoteEngineActionRequestAction = "update"
+)
+
+// Valid indicates whether the value is a known member of the RemoteEngineActionRequestAction enum.
+func (e RemoteEngineActionRequestAction) Valid() bool {
+	switch e {
+	case RemoteEngineActionRequestActionRestart:
+		return true
+	case RemoteEngineActionRequestActionStop:
+		return true
+	case RemoteEngineActionRequestActionUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SFTPComparisonMode.
 const (
 	Content  SFTPComparisonMode = "content"
@@ -598,16 +619,16 @@ func (e UpdateStatusManager) Valid() bool {
 
 // Defines values for VaultAutoLockSettingsMode.
 const (
-	Idle    VaultAutoLockSettingsMode = "idle"
-	Restart VaultAutoLockSettingsMode = "restart"
+	VaultAutoLockSettingsModeIdle    VaultAutoLockSettingsMode = "idle"
+	VaultAutoLockSettingsModeRestart VaultAutoLockSettingsMode = "restart"
 )
 
 // Valid indicates whether the value is a known member of the VaultAutoLockSettingsMode enum.
 func (e VaultAutoLockSettingsMode) Valid() bool {
 	switch e {
-	case Idle:
+	case VaultAutoLockSettingsModeIdle:
 		return true
-	case Restart:
+	case VaultAutoLockSettingsModeRestart:
 		return true
 	default:
 		return false
@@ -649,6 +670,11 @@ type About struct {
 
 // AboutManager defines model for About.Manager.
 type AboutManager string
+
+// AddRemoteEngineRequest defines model for AddRemoteEngineRequest.
+type AddRemoteEngineRequest struct {
+	Alias string `json:"alias"`
+}
 
 // AgentIdentitiesResponse defines model for AgentIdentitiesResponse.
 type AgentIdentitiesResponse struct {
@@ -864,6 +890,12 @@ type CreateNewSharedPasswordAuthentication struct {
 type CreateSavedPasswordAuthentication struct {
 	Credential string `json:"credential"`
 	Kind       string `json:"kind"`
+}
+
+// CreateTerminalWorkspaceRequest defines model for CreateTerminalWorkspaceRequest.
+type CreateTerminalWorkspaceRequest struct {
+	Hidden *bool  `json:"hidden,omitempty"`
+	Name   string `json:"name"`
 }
 
 // Credential defines model for Credential.
@@ -1169,6 +1201,11 @@ type LocalShellProfileList struct {
 	Profiles []LocalShellProfile `json:"profiles"`
 }
 
+// MoveTerminalSessionRequest defines model for MoveTerminalSessionRequest.
+type MoveTerminalSessionRequest struct {
+	WorkspaceId string `json:"workspaceId"`
+}
+
 // Notice defines model for Notice.
 type Notice struct {
 	Code    string          `json:"code"`
@@ -1186,12 +1223,13 @@ type NoticeLocation struct {
 
 // OpenTerminalSessionRequest defines model for OpenTerminalSessionRequest.
 type OpenTerminalSessionRequest struct {
-	Alias     *string                        `json:"alias,omitempty"`
-	Cols      *int                           `json:"cols,omitempty"`
-	Cwd       *string                        `json:"cwd,omitempty"`
-	Kind      OpenTerminalSessionRequestKind `json:"kind"`
-	ProfileId *string                        `json:"profileId,omitempty"`
-	Rows      *int                           `json:"rows,omitempty"`
+	Alias       *string                        `json:"alias,omitempty"`
+	Cols        *int                           `json:"cols,omitempty"`
+	Cwd         *string                        `json:"cwd,omitempty"`
+	Kind        OpenTerminalSessionRequestKind `json:"kind"`
+	ProfileId   *string                        `json:"profileId,omitempty"`
+	Rows        *int                           `json:"rows,omitempty"`
+	WorkspaceId *string                        `json:"workspaceId,omitempty"`
 }
 
 // OpenTerminalSessionRequestKind defines model for OpenTerminalSessionRequest.Kind.
@@ -1399,6 +1437,45 @@ type RelocateKeyResponse struct {
 type RelocatedKeyFile struct {
 	From string `json:"from"`
 	To   string `json:"to"`
+}
+
+// RemoteEngine defines model for RemoteEngine.
+type RemoteEngine struct {
+	Alias string `json:"alias"`
+}
+
+// RemoteEngineActionRequest defines model for RemoteEngineActionRequest.
+type RemoteEngineActionRequest struct {
+	Action RemoteEngineActionRequestAction `json:"action"`
+}
+
+// RemoteEngineActionRequestAction defines model for RemoteEngineActionRequest.Action.
+type RemoteEngineActionRequestAction string
+
+// RemoteEngineActionResult defines model for RemoteEngineActionResult.
+type RemoteEngineActionResult struct {
+	Output    string `json:"output"`
+	Succeeded bool   `json:"succeeded"`
+}
+
+// RemoteEngineEntrance defines model for RemoteEngineEntrance.
+type RemoteEngineEntrance struct {
+	Url string `json:"url"`
+}
+
+// RemoteEngineList defines model for RemoteEngineList.
+type RemoteEngineList struct {
+	Engines []RemoteEngine `json:"engines"`
+}
+
+// RemoteEngineStatus defines model for RemoteEngineStatus.
+type RemoteEngineStatus struct {
+	Alias        string `json:"alias"`
+	Passwordless bool   `json:"passwordless"`
+	Sessions     int    `json:"sessions"`
+	Unlocked     bool   `json:"unlocked"`
+	Vault        bool   `json:"vault"`
+	Version      string `json:"version"`
 }
 
 // RemoteKeyPlan defines model for RemoteKeyPlan.
@@ -2144,6 +2221,7 @@ type TerminalSession struct {
 	StartedAt           string                      `json:"startedAt"`
 	State               TerminalSessionState        `json:"state"`
 	Title               string                      `json:"title"`
+	WorkspaceId         string                      `json:"workspaceId"`
 }
 
 // TerminalSessionKind defines model for TerminalSession.Kind.
@@ -2179,6 +2257,20 @@ type TerminalSettings struct {
 // TerminalStreamTicket defines model for TerminalStreamTicket.
 type TerminalStreamTicket struct {
 	StreamTicket string `json:"streamTicket"`
+}
+
+// TerminalWorkspace defines model for TerminalWorkspace.
+type TerminalWorkspace struct {
+	BuiltIn bool   `json:"builtIn"`
+	Hidden  bool   `json:"hidden"`
+	Id      string `json:"id"`
+	Name    string `json:"name"`
+}
+
+// TerminalWorkspaceList defines model for TerminalWorkspaceList.
+type TerminalWorkspaceList struct {
+	MaxWorkspaces int                 `json:"maxWorkspaces"`
+	Workspaces    []TerminalWorkspace `json:"workspaces"`
 }
 
 // TrashEntrySummary defines model for TrashEntrySummary.
@@ -2348,6 +2440,12 @@ type UpdateTOTPSaved struct {
 // UpdateTOTPUnchanged defines model for UpdateTOTPUnchanged.
 type UpdateTOTPUnchanged struct {
 	Kind string `json:"kind"`
+}
+
+// UpdateTerminalWorkspaceRequest defines model for UpdateTerminalWorkspaceRequest.
+type UpdateTerminalWorkspaceRequest struct {
+	Hidden *bool   `json:"hidden,omitempty"`
+	Name   *string `json:"name,omitempty"`
 }
 
 // ValueSource defines model for ValueSource.

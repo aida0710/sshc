@@ -5,8 +5,8 @@ import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { snippetsApi, type Snippet } from "../snippets/api";
 import { clipboard } from "../ui/clipboard";
-import { terminalCommandApi } from "../features/workspaces/commandApi";
-import { describeTerminalCommandFailure, terminalCommandProblemText } from "../features/workspaces/terminalCommandProblem";
+import { terminalCommandApi } from "./commands/commandApi";
+import { describeTerminalCommandFailure, terminalCommandProblemText } from "./commands/terminalCommandProblem";
 import { describeSnippetFailure } from "../snippets/snippetFailure";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { SnippetVariableInputs } from "../snippets/SnippetVariableInputs";
@@ -21,11 +21,14 @@ type Prepared = {
 export function TerminalQuickCommands({
   session,
   onClose,
+  onCopied,
   initialCommand = "",
   returnFocusRef,
 }: {
   session: TerminalSession;
   onClose: () => void;
+  // コピーは画面に何も起きないので、閉じたあとに呼び手が「コピーしました」を出す。
+  onCopied: () => void;
   initialCommand?: string;
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
@@ -145,6 +148,7 @@ export function TerminalQuickCommands({
     try {
       await clipboard.writeText(await revealPrepared());
       onClose();
+      onCopied();
     } catch (error) {
       if (failureCode(error) === "terminal_command_preview_changed") {
         await handleActionFailure(error, current);
@@ -291,7 +295,7 @@ export function TerminalQuickCommands({
               type="button"
               disabled={busy || saveName.trim() === ""}
               onClick={() => void saveSelection()}
-              className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast disabled:opacity-50"
+              className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-ink"
             >
               {t("terminal.quickCommandSave")}
             </button>
@@ -351,7 +355,7 @@ export function TerminalQuickCommands({
               type="button"
               disabled={busy || selected === null}
               onClick={() => void prepare()}
-              className="min-h-8 self-start rounded border border-control-line bg-control px-3 py-1 text-sm font-medium hover:bg-select-fill disabled:opacity-50"
+              className="min-h-8 self-start rounded border border-control-line bg-control px-3 py-1 text-sm font-medium hover:bg-select-fill"
             >
               {t("snippets.preview")}
             </button>
@@ -368,7 +372,7 @@ export function TerminalQuickCommands({
                   type="button"
                   disabled={busy}
                   onClick={() => void insertPrepared()}
-                  className="min-h-8 rounded border border-control-line bg-control px-3 py-1 text-sm hover:bg-select-fill disabled:opacity-50"
+                  className="min-h-8 rounded border border-control-line bg-control px-3 py-1 text-sm hover:bg-select-fill"
                 >
                   {t("terminal.quickCommandInsert")}
                 </button>
@@ -376,7 +380,7 @@ export function TerminalQuickCommands({
                   type="button"
                   disabled={busy}
                   onClick={() => void runPrepared()}
-                  className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast disabled:opacity-50"
+                  className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-ink"
                 >
                   {t("terminal.quickCommandRun")}
                 </button>
@@ -384,7 +388,7 @@ export function TerminalQuickCommands({
                   type="button"
                   disabled={busy}
                   onClick={() => void copyPrepared()}
-                  className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill disabled:opacity-50"
+                  className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill"
                 >
                   {t("terminal.quickCommandCopy")}
                 </button>

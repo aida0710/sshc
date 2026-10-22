@@ -163,7 +163,8 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
   });
   const transferManager = page.getByRole("region", { name: "Transfer Manager" });
   await expect(transferManager.getByText("1 transferring", { exact: true })).toBeVisible();
-  await transferManager.getByRole("button", { name: "Expand Transfer Manager" }).click();
+  // Queuing the upload opened the manager by itself.
+  await expect(transferManager.getByRole("button", { name: "Collapse Transfer Manager" })).toBeVisible();
   await expect(page.getByText("Transferring…")).toBeVisible();
   const fileListBounds = await page.getByRole("table").boundingBox();
   const transferManagerBounds = await page.getByRole("region", { name: "Transfer Manager" }).boundingBox();

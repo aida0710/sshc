@@ -2,7 +2,7 @@ import { expect, openApplication, openSection, test } from "./support/environmen
 
 const exited = {
   id: "manual-reconnect-fixture",
-  kind: "ssh",
+  kind: "ssh", workspaceId: "default",
   alias: "production-api",
   title: "production-api",
   startedAt: "2026-08-26T01:00:00Z",

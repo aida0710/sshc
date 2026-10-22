@@ -15,11 +15,11 @@ sshcはmacOS、Linux、Windows、Androidで利用できるターミナルアプ�
 brew install aida0710/tap/sshc
 ```
 
-Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.52.1`を導入する例です。
+Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.53.0`を導入する例です。
 
 ```sh
-SSHC_VERSION=v0.52.1 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.52.1/install.sh | sh'
+SSHC_VERSION=v0.53.0 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.53.0/install.sh | sh'
 ```
 
 導入後は`sshc update`で更新できます。Homebrewで入れた場合はHomebrewから、`install.sh`で入れた場合は同じ配布元から更新されます。スクリプトなどで確認を省略する場合は、`sshc update --yes`を指定してください。
@@ -156,7 +156,7 @@ sshc service restart
 
 ### Web画面から更新する
 
-メニューのOthersにある［About sshc］、またはサイドバーのバージョン表示から、現在のバージョン・コミット・導入方法とリリースノートを確認できます。リリースノートは、取得した最新100件のうち、現在のバージョンから最新の安定版までを表示します。本文はMarkdownを整形せず、そのまま表示します。
+メニューのOthersにある［About sshc］、またはサイドバー左上のロゴの横にあるバージョンから、現在のバージョン・コミット・導入方法とリリースノートを確認できます。リリースノートは、取得した最新100件のうち、現在のバージョンから最新の安定版までを表示します。本文はMarkdownを整形せず、そのまま表示します。
 
 sshcエンジンは起動時と6時間ごとに更新を確認し、結果を保持します。サイドバーは1時間ごとにその結果を読み直します。すぐに確認するには、About sshcの［更新を確認］を押してください。更新できる場合は、同じページの［sshcを更新］から進めます。ボタンの下には、確認と更新の経過が時刻付きで表示されます。確認に失敗した場合も、前回取得したリリース情報は残ります。
 

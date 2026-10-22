@@ -36,6 +36,7 @@ sshc engine --background
 sshc
 sshc open
 sshc open --no-browser
+sshc open <alias>
 sshc stop
 sshc status --json
 sshc version
@@ -52,6 +53,16 @@ sshc update
 ```
 
 引数なしの`sshc`と`sshc open`は、sshcエンジンが停止中ならバックグラウンドで起動します。準備ができてから、一度限りのURLを表示してブラウザで開きます。`sshc open --no-browser`も必要なら起動しますが、URLの表示だけで終了します。画面のないマシンやSSH経由で使う場合に指定してください。
+
+`sshc open <alias>`は、SSHの接続先で動いているsshcエンジンを、このマシンのブラウザで開きます。このマシンのsshcエンジンが接続先へSSHで接続し、接続先の`sshc open --no-browser`が表示した一度限りのURLを受け取ります。そのURLを、このマシンの`127.0.0.1`で待ち受ける中継のポートに置き換えて表示し、ブラウザで開きます。接続先のターミナルとワークスペースは接続先のsshcエンジンが持つので、ブラウザを閉じても接続先で動き続けます。
+
+- 中継のポートは接続先ごとに覚えて、次も同じポートを使います。ブラウザに保存される設定がポートごとに分かれるためです。
+- 中継はこのマシンのsshcエンジンが止まるまで続きます。止まったあとや、接続先のsshcエンジンが起動し直したあとは、もう一度`sshc open <alias>`を実行してください。
+- SSH接続は確認を求めずに行います。初めての接続先は、先に`sshc ssh <alias>`でホスト鍵を確認してください。パスフレーズやパスワードが必要な接続先は、Connectionsで保存しておいてください。
+- 接続先のSSHサーバーが、接続先の`127.0.0.1`へのTCP転送を許可している必要があります（`sshd_config`の`AllowTcpForwarding`が`yes`か`local`）。許可されていなければ、URLを表示する前にその旨を表示して終了します。
+- 接続先には、先にsshcをインストールしておく必要があります。`PATH`のほか、`~/.local/bin`、`/home/linuxbrew/.linuxbrew/bin`、`/opt/homebrew/bin`、`/usr/local/bin`から探します。接続先はmacOSかLinuxに限ります。
+- どちらのマシンでも、待ち受けは`127.0.0.1`だけです。Linuxでは、このマシンの別のOSユーザーからの接続は中継しません。
+- このマシンのsshcの画面と接続先の画面は、同じブラウザで同時に開けます。
 
 `sshc stop`は、起動中のsshcエンジンへ停止を要求し、終了するまで待ちます。開いているターミナルや転送も終了します。停止中なら終了コード0で終了します。Linux・macOS・Windowsでログイン時の自動起動を有効にしている場合は、次のログインで再び起動します。停止したままにするには`sshc service disable`を実行してください。
 
@@ -239,6 +250,7 @@ SerialとTelnetの対話接続は`Ctrl+]`で切断できます。Telnetは通信
 sshc terminal list --json
 sshc terminal create ssh bastion --json
 sshc terminal create shell --json
+sshc terminal create shell --workspace "sshc開発"
 sshc terminal show <session-id> --json
 sshc terminal read <session-id> --cursor 0 --limit 4096 --json
 sshc terminal send <session-id> --text 'uptime' --json
@@ -250,6 +262,8 @@ sshc terminal close <session-id>
 ```
 
 `create shell`はsshcエンジン側のローカルシェルを開きます。`send`は既定で末尾にEnter（CR）を付け、`--no-enter`で付けません。
+
+`create`で開いたセッションは、既定で非表示の「エージェント」の[ワークスペース](/features/workspace)に入ります。LLMやスクリプトが開いた接続を、画面のサイドバーに混ぜないためです。`--workspace`にワークスペースのIDか名前を指定すると、そのワークスペースに入れます。`list`は、各セッションが入っているワークスペースのIDも表示します。
 
 `read`では、保持しているスクロールバックと次回指定する読み取り位置を取得できます。指定した位置の出力がすでに破棄されている場合は、現在残っている先頭から返し、そのことを警告に含めます。`send`は、確認後にセッション内のプロセスが入れ替わっていた場合には何も送信しません。
 

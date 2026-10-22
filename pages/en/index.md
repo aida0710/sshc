@@ -19,17 +19,17 @@ outline: false
       </div>
     </div>
     <div class="sshc-preview">
-      <img src="/images/workspace-desktop.png" alt="Four SSH connections open in the sshc terminal" width="1280" height="720">
+      <img src="/images/terminal-desktop.png" alt="An SSH connection open in the sshc terminal" width="1280" height="720">
     </div>
   </section>
 
   <section class="sshc-home-section">
     <div class="sshc-section-heading">
       <h2>Features</h2>
-      <p>Open SSH sessions and local shells in multiple panes, then use SFTP and port forwarding with the same connections. Connection settings remain in OpenSSH format. Chosen connections can also go through <a href="./features/vpn">a VPN of their own</a>.</p>
+      <p>Open SSH sessions and local shells side by side in one list, then use SFTP and port forwarding with the same connections. Connection settings remain in OpenSSH format. Chosen connections can also go through <a href="./features/vpn">a VPN of their own</a>.</p>
     </div>
     <div class="sshc-feature-grid">
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/workspace-desktop.png" alt="A Workspace with multiple SSH connections open" width="1280" height="720"><div class="sshc-feature-body"><span class="index">01</span><h3>SSH and local shells</h3><p>Reconnect, search, forward ports, and arrange up to four panes in one terminal.</p></div></article>
+      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/terminal-desktop.png" alt="An SSH connection open in the terminal" width="1280" height="720"><div class="sshc-feature-body"><span class="index">01</span><h3>SSH and local shells</h3><p>Switch between sessions from the list. Reconnect, search, and forward ports.</p></div></article>
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/connections-desktop.png" alt="Connections screen for organizing OpenSSH hosts" width="1280" height="720"><div class="sshc-feature-body"><span class="index">02</span><h3>Use OpenSSH configuration directly</h3><p>Keep <code>~/.ssh/config</code>, Include, and Match intact, so regular ssh and VS Code use the same aliases.</p></div></article>
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/credentials-desktop.png" alt="Vault screen assigning a saved password to multiple hosts" width="1280" height="720"><div class="sshc-feature-body"><span class="index">03</span><h3>Reuse saved credentials</h3><p>Register passwords and key passphrases in the vault once, then use them from the terminal, SFTP, and CLI without configuring each feature separately.</p></div></article>
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/otp-desktop-en.png" alt="OTP screen showing current codes and assigned hosts" width="1280" height="720"><div class="sshc-feature-body"><span class="index">04</span><h3>One-time passwords</h3><p>Store TOTP setup keys in the vault to see the current codes. Assign one to a connection, and sshc enters the code when the server asks for it.</p></div></article>

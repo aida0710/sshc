@@ -37,9 +37,9 @@ import (
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/snippets"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalworkspace"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnprofile"
-	"sshc/internal/workspace"
 )
 
 type Options struct {
@@ -83,10 +83,13 @@ type Options struct {
 	VPNProfiles *vpnprofile.Service
 	Keys        KeyService
 	// Connect は、alias ひとつ分の対話セッションを開く。合成の根が組み立てる。
-	Connect     Connector
-	Diagnostics *diagnostics.Service
-	KnownHosts  *knownhosts.Service
-	RemoteKeys  *remotekey.Service
+	Connect Connector
+	// RemoteEngines は、SSH の接続先のエンジンへの中継と、実行先としての取り次ぎを持つ。
+	// nil なら `sshc open <alias>` と実行先の受け口を登録しない。
+	RemoteEngines RemoteEngineDirectory
+	Diagnostics   *diagnostics.Service
+	KnownHosts    *knownhosts.Service
+	RemoteKeys    *remotekey.Service
 	// Recent は、この端末で成功した接続を現在の設定へ解決する。
 	Recent *recent.Service
 	SFTP   *sshcSFTP.Service
@@ -97,7 +100,6 @@ type Options struct {
 	// sent (see sftp.NewTransferManager). Empty leaves downloads unavailable;
 	// the caller that could not find a place reports why.
 	SFTPDownloadSpoolRoot string
-	Workspaces            *workspace.Service
 	Snippets              *snippets.Service
 	// Vault は、アカウントのパスワード、鍵のパスフレーズ、TOTP、同期の設定、
 	// VPN のシークレットを暗号化して持ち、マスターパスワードでのロックとロックの解除を扱う。
@@ -113,6 +115,8 @@ type Options struct {
 	// セッションのルートと WebSocket を未登録のままにする。これは、それを
 	// 配線しないテストが当てにしていることである。
 	Terminals *terminal.Registry
+	// TerminalWorkspaces は、セッションをまとめるワークスペースの定義を持つ。
+	TerminalWorkspaces *terminalworkspace.Service
 	// ConnectionOpened は、SSHセッションとstream ticketの両方を作れたあとに呼ぶ。
 	ConnectionOpened func(alias string)
 	// TerminalStartDirectory は、ローカルシェルが始まる場所を返す。空なら
@@ -402,9 +406,6 @@ func New(options Options) (*Server, error) {
 		server.transfers = transfers
 		registerSFTPRoutes(e, SFTPHandlers{Service: options.SFTP, Transfers: transfers, Actions: actions, Attempts: connectionattempt.NewRegistry()})
 	}
-	if options.Workspaces != nil {
-		registerWorkspaceRoutes(e, WorkspaceHandlers{Service: options.Workspaces})
-	}
 	if options.Snippets != nil {
 		registerSnippetRoutes(e, SnippetHandlers{Service: options.Snippets, Actions: actions, BaseContext: baseCtx})
 	}
@@ -442,6 +443,9 @@ func New(options Options) (*Server, error) {
 	}
 	if options.Terminals != nil {
 		registerTerminalRoutes(e, newTerminalHandlers(options, actions, host))
+		if options.RemoteEngines != nil {
+			registerRemoteEngineRoutes(e, RemoteEngineHandlers{Engines: options.RemoteEngines, ExpectedOrigin: "http://" + host})
+		}
 	}
 	if options.VPN != nil {
 		registerVPNRoutes(e, VPNHandlers{
@@ -539,6 +543,7 @@ func newCLIHandlers(options Options, host string) CLIHandlers {
 		Version:         options.Version,
 		ProtocolVersion: options.ProtocolVersion,
 		StopEngine:      options.StopEngine,
+		RemoteEngines:   options.RemoteEngines,
 		WorkspaceKeys: func(alias string) ([]string, error) {
 			if options.Config == nil || options.Keys == nil {
 				return nil, nil
@@ -572,6 +577,7 @@ func newTerminalHandlers(options Options, actions ActionHandlers, host string) T
 		Environment:         options.TerminalEnvironment,
 		StartDirectory:      options.TerminalStartDirectory,
 		Connected:           options.ConnectionOpened,
+		Workspaces:          options.TerminalWorkspaces,
 		Startup: func(alias string) StartupSnippet {
 			return prepareStartupSnippet(options.Snippets, options.Logger, alias)
 		},

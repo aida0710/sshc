@@ -9,7 +9,7 @@ import type { Section } from "../routing/sectionRoute";
 function session(id: string): TerminalSession {
   return {
     id,
-    kind: "ssh",
+    kind: "ssh", workspaceId: "default",
     alias: id,
     title: id,
     startedAt: "2026-01-01T00:00:00Z",
@@ -103,18 +103,6 @@ describe("useTerminalWorkspaceController", () => {
       rerender({ list: [session("s1")] });
     });
     expect(result.current.activeSessionId).toBe("s1");
-  });
-
-  it("keeps the terminal screen behind another section while a workspace restore has no session yet", async () => {
-    const refresh = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useController([], refresh, "Connections"));
-    expect(result.current.terminalScreenMounted).toBe(false);
-
-    act(() => result.current.setWorkspaceRestoring(true));
-    expect(result.current.terminalScreenMounted).toBe(true);
-
-    act(() => result.current.setWorkspaceRestoring(false));
-    expect(result.current.terminalScreenMounted).toBe(false);
   });
 
   it("shows an opened SSH session in the terminal section, and stays put when it could not be opened", async () => {

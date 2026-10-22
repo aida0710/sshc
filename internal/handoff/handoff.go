@@ -194,16 +194,33 @@ func readValidatedHandleWith(path string, operations handoffFileOperations) (Han
 		_ = file.Close()
 		return Handoff{}, nil, err
 	}
-	var document Handoff
-	if err := json.Unmarshal(body, &document); err != nil {
-		_ = file.Close()
-		return Handoff{}, nil, fmt.Errorf("%w: cannot decode document", ErrInvalid)
-	}
-	if err := validate(document); err != nil {
+	document, err := decode(body)
+	if err != nil {
 		_ = file.Close()
 		return Handoff{}, nil, err
 	}
 	return document, file, nil
+}
+
+// Parse は、ファイルではなく受け取った中身から handoff を読む。SSH の接続先の engine の
+// handoff を、接続先で読んだ中身から確かめるために使う。ファイルの持ち主と権限は、
+// 読んだ側（接続先の同じ利用者）が確かめたことになる。
+func Parse(body []byte) (Handoff, error) {
+	if len(body) > handoffDocumentMaxSize {
+		return Handoff{}, ErrDocumentTooLarge
+	}
+	return decode(body)
+}
+
+func decode(body []byte) (Handoff, error) {
+	var document Handoff
+	if err := json.Unmarshal(body, &document); err != nil {
+		return Handoff{}, fmt.Errorf("%w: cannot decode document", ErrInvalid)
+	}
+	if err := validate(document); err != nil {
+		return Handoff{}, err
+	}
+	return document, nil
 }
 
 func readHandoffBody(reader io.Reader) ([]byte, error) {

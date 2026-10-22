@@ -5,13 +5,13 @@ import { SessionList } from "./SessionList";
 import type { TerminalSession } from "../api/terminalSessions";
 
 const live: TerminalSession = {
-  id: "a", kind: "ssh", alias: "bastion", title: "bastion", startedAt: "2026-08-13T09:00:00Z", state: "connected", problem: "",
+  id: "a", kind: "ssh", workspaceId: "default", alias: "bastion", title: "bastion", startedAt: "2026-08-13T09:00:00Z", state: "connected", problem: "",
 };
 const shell: TerminalSession = {
-  id: "b", kind: "shell", title: "zsh", startedAt: "2026-08-13T09:01:00Z", state: "connected", problem: "",
+  id: "b", kind: "shell", workspaceId: "default", title: "zsh", startedAt: "2026-08-13T09:01:00Z", state: "connected", problem: "",
 };
 const dead: TerminalSession = {
-  id: "c", kind: "ssh", alias: "db-primary", title: "db-primary", startedAt: "2026-08-13T09:02:00Z", state: "exited", problem: "",
+  id: "c", kind: "ssh", workspaceId: "default", alias: "db-primary", title: "db-primary", startedAt: "2026-08-13T09:02:00Z", state: "exited", problem: "",
   exited: { code: 255, signal: "", at: "2026-08-13T09:02:01Z" },
 };
 
@@ -19,17 +19,16 @@ function renderList(overrides: Partial<Parameters<typeof SessionList>[0]> = {}) 
   const props = {
     sessions: [live, shell, dead],
     selected: null,
-    maxSessions: 50,
+    atSessionLimit: false,
     busy: false,
-    problem: "",
     onSelect: vi.fn(),
     onClose: vi.fn(),
     onRename: vi.fn(async () => true),
-    onRenameWorkspace: vi.fn(),
     onUnpinTitle: vi.fn(async () => true),
     onDuplicate: vi.fn(),
     onReorder: vi.fn(),
-    onOpenShell: vi.fn(),
+    moveTargets: [{ id: "default", label: "Main" }, { id: "w1", label: "sshc dev" }],
+    onMoveToWorkspace: vi.fn(),
     ...overrides,
   };
   const { rerender } = render(<SessionList {...props} />);
@@ -37,6 +36,16 @@ function renderList(overrides: Partial<Parameters<typeof SessionList>[0]> = {}) 
 }
 
 describe("SessionList", () => {
+  it("offers every other workspace to move a session to", async () => {
+    const user = userEvent.setup();
+    const props = renderList({ sessions: [live] });
+    await user.click(screen.getByRole("button", { name: "Actions for bastion" }));
+    const menu = screen.getByRole("menu");
+    expect(within(menu).queryByRole("menuitem", { name: "Main" })).not.toBeInTheDocument();
+    await user.click(within(menu).getByRole("menuitem", { name: "sshc dev" }));
+    expect(props.onMoveToWorkspace).toHaveBeenCalledWith("a", "w1");
+  });
+
   it("shows program progress for an unselected session and keeps connection progress separate", () => {
     const background = { ...live, programProgress: { state: "normal" as const, percent: 40 } };
     renderList({ sessions: [background, shell], selected: shell.id });
@@ -118,68 +127,6 @@ describe("SessionList", () => {
 
     expect(props.onSelect).toHaveBeenCalledWith(live.id);
     expect(detail.closest("button")).toHaveAttribute("aria-label", live.title);
-  });
-
-  it("collapses split terminals into one live workspace entry", async () => {
-    const user = userEvent.setup();
-    const props = renderList({
-      workspace: {
-        id: "live-workspace",
-        name: "bastion + db-primary",
-        memberSessionIds: [live.id, dead.id],
-        focusedSessionId: live.id,
-      },
-    });
-
-    expect(screen.getAllByRole("listitem")).toHaveLength(2);
-    expect(screen.getByText("bastion + db-primary")).toBeVisible();
-    expect(screen.getByText("2 sessions")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "bastion" })).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: "Show terminals in bastion + db-primary" }));
-    expect(screen.getByRole("button", { name: "bastion" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "db-primary" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "bastion + db-primary" }));
-    expect(props.onSelect).toHaveBeenCalledWith(live.id);
-  });
-
-  it("renames the live workspace from its row menu", async () => {
-    const user = userEvent.setup();
-    const props = renderList({
-      workspace: {
-        id: "live-workspace",
-        name: "bastion + db-primary",
-        memberSessionIds: [live.id, dead.id],
-        focusedSessionId: live.id,
-      },
-    });
-
-    await user.click(screen.getByRole("button", { name: "Actions for bastion + db-primary" }));
-    await user.click(screen.getByRole("menuitem", { name: "Rename workspace" }));
-    const field = screen.getByRole("textbox", { name: "New name for bastion + db-primary" });
-    await user.clear(field);
-    await user.type(field, "Production{Enter}");
-
-    expect(props.onRenameWorkspace).toHaveBeenCalledWith("Production");
-  });
-
-  it("keeps the workspace name when its inline rename is abandoned", async () => {
-    const user = userEvent.setup();
-    const props = renderList({
-      workspace: {
-        id: "live-workspace",
-        name: "bastion + db-primary",
-        memberSessionIds: [live.id, dead.id],
-        focusedSessionId: live.id,
-      },
-    });
-
-    await user.click(screen.getByRole("button", { name: "Actions for bastion + db-primary" }));
-    await user.click(screen.getByRole("menuitem", { name: "Rename workspace" }));
-    await user.type(screen.getByRole("textbox", { name: "New name for bastion + db-primary" }), "x{Escape}");
-
-    expect(props.onRenameWorkspace).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "bastion + db-primary" })).toBeVisible();
   });
 
   it("renames a session in place and leaves its destination alone", async () => {
@@ -361,86 +308,13 @@ describe("SessionList", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("opens a local shell from the same picker SFTP uses", async () => {
-    const user = userEvent.setup();
-    const props = renderList();
-
-    await user.click(screen.getByRole("button", { name: "New session" }));
-    const dialog = screen.getByRole("dialog", { name: "New session" });
-    await user.click(within(dialog).getByRole("button", { name: /Local shell, localhost/ }));
-
-    expect(props.onOpenShell).toHaveBeenCalledWith(undefined);
-    expect(screen.queryByRole("dialog", { name: "New session" })).not.toBeInTheDocument();
-  });
-
-  it("connects to an SSH host chosen in the picker", async () => {
-    const user = userEvent.setup();
-    const onConnect = vi.fn();
-    renderList({
-      aliases: ["bastion", "nas"],
-      hosts: [
-        { identity: { path: "config", alias: "bastion" }, file: { path: "config", absolute: "/home/tester/.ssh/config" }, line: 1, patterns: ["bastion"], editable: true, group: "prod", hostName: "10.0.0.1" },
-      ] as never,
-      onConnect,
-    });
-
-    await user.click(screen.getByRole("button", { name: "New session" }));
-    const dialog = screen.getByRole("dialog", { name: "New session" });
-    await user.type(within(dialog).getByRole("searchbox", { name: "Search connections" }), "bast");
-    await user.click(within(dialog).getByRole("button", { name: /bastion/ }));
-
-    expect(onConnect).toHaveBeenCalledWith("bastion");
-  });
-
-  it("opens a detected shell profile once without changing the default", async () => {
-    const user = userEvent.setup();
-    const props = renderList({
-      localShellProfiles: [
-        { id: "default", label: "bash", path: "/bin/bash", arguments: [], default: true },
-        { id: "fish", label: "fish", path: "/usr/bin/fish", arguments: [], default: false },
-      ],
-    });
-
-    await user.click(screen.getByRole("button", { name: "New session" }));
-    const dialog = screen.getByRole("dialog", { name: "New session" });
-    await user.click(within(dialog).getByRole("button", { name: /Local shell · fish/ }));
-
-    expect(props.onOpenShell).toHaveBeenCalledWith("fish");
-  });
-
-  it("stops offering a new shell once the live limit is reached", () => {
-    renderList({ sessions: [live, shell], maxSessions: 2 });
-
-    expect(screen.getByRole("button", { name: "New session" })).toBeDisabled();
-    expect(screen.getByText(/limit of 2 open sessions/)).toBeInTheDocument();
-  });
-
-  it("does not count an exited session against the limit", () => {
-    renderList({ sessions: [live, dead], maxSessions: 2 });
-
-    expect(screen.getByRole("button", { name: "New session" })).toBeEnabled();
-  });
-
-  it("does not call itself full before the limit is known", () => {
-    renderList({ sessions: [], maxSessions: 0 });
-
-    expect(screen.getByRole("button", { name: "New session" })).toBeEnabled();
-    expect(screen.queryByText(/limit of/)).not.toBeInTheDocument();
-  });
-
   it("shows nothing to open and no list when there is no session", () => {
     renderList({ sessions: [] });
 
     expect(screen.getByText("No session is open.")).toBeInTheDocument();
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "New session" })).toBeEnabled();
   });
 
-  it("reports a refusal where the action was taken", () => {
-    renderList({ problem: "No more sessions can be opened. Close one first." });
-
-    expect(screen.getByRole("alert")).toHaveTextContent("No more sessions can be opened");
-  });
   it("shows the forwards a session has open", () => {
     renderList({
       sessions: [{

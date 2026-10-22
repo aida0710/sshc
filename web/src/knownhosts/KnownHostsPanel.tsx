@@ -15,11 +15,17 @@ import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { SortableTableHeader } from "../ui/tableSort";
 import { useTableSort, type SortValue } from "../ui/useTableSort";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { PanelState } from "../ui/PanelState";
+import { usePendingAction } from "../ui/usePendingAction";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
+import { useToast } from "../ui/useToast";
 
 type KnownHostsPanelProps = { api?: KnownHostsApi };
 type CandidateSort = "host" | "type" | "fingerprint" | "trust";
 type TrustedSort = Exclude<CandidateSort, "trust">;
+// KnownHostsAction は、相手のホストか known_hosts の書き込みを待つ操作である。押したボタンに
+// 回転の印を出し、待つ間はもう一方も始めない。
+type KnownHostsAction = "scan" | "addToKnownHosts";
 
 // sshc neither reads nor writes ~/.ssh/known_hosts through a symbolic link, so
 // every operation on the file fails the same way. That message says why and that
@@ -39,12 +45,17 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   // notice ではなく、画面の言語で出す。
   const [scanned, setScanned] = useState(false);
   const [candidates, setCandidates] = useState<KnownHostCandidate[]>([]);
+  const action = usePendingAction<KnownHostsAction>();
   const [adding, setAdding] = useState<KnownHostCandidate | null>(null);
   const [expectedFingerprint, setExpectedFingerprint] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
-  const [status, setStatus] = useState("");
+  // 追加と削除の結果は、確かめる欄やダイアログを閉じたあとに出すので、トーストで知らせる。
+  const showToast = useToast();
   const [error, setError] = useState("");
   const [deleteError, setDeleteError] = useState("");
+  // firstListingAnswered は、開いたときの一覧の読み込みが答えた（読めた、または読めなかった）
+  // ことを表す。error はスキャンや検索を始めるたびに消えるので、読み込み中かどうかには使えない。
+  const [firstListingAnswered, setFirstListingAnswered] = useState(false);
   const candidateSort = useTableSort<CandidateSort>("host");
   const trustedSort = useTableSort<TrustedSort>("host");
 
@@ -61,6 +72,9 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
       })
       .catch((failure: unknown) => {
         if (isCurrent()) setError(failureMessage(t, failure, t("kh.unreadable")));
+      })
+      .finally(() => {
+        if (isCurrent()) setFirstListingAnswered(true);
       });
     return listingRequests.retire;
   }, [api, listingRequests, t]);
@@ -89,20 +103,22 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
     if (removed === null) {
       return;
     }
-    setStatus(t("kh.removed", { id: removed.transactionId }));
+    showToast(t("kh.removed", { id: removed.transactionId }), { tone: "success" });
     setPending(null);
     await search(query);
   }
 
   async function scan() {
-    setError("");
-    try {
-      const result = await api.scanKnownHosts(scanHost, 22);
-      setScanned(true);
-      setCandidates(result.candidates);
-    } catch {
-      setError(t("kh.scanFailed"));
-    }
+    await action.start("scan", async () => {
+      setError("");
+      try {
+        const result = await api.scanKnownHosts(scanHost, 22);
+        setScanned(true);
+        setCandidates(result.candidates);
+      } catch {
+        setError(t("kh.scanFailed"));
+      }
+    });
   }
 
   function resetAdd() {
@@ -122,32 +138,35 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
 
   async function confirmAdd() {
     if (!adding) return;
+    const candidate = adding;
     const typed = expectedFingerprint.trim();
-    if (typed !== "" && typed !== adding.fingerprint) {
-      setError(t("kh.fingerprintMismatch", { typed, scanned: adding.fingerprint }));
+    if (typed !== "" && typed !== candidate.fingerprint) {
+      setError(t("kh.fingerprintMismatch", { typed, scanned: candidate.fingerprint }));
       return;
     }
-    setError("");
-    try {
-      const result = await api.addKnownHost(
-        { host: adding.host, port: adding.port, keyType: adding.keyType, key: adding.key },
-        typed,
-        acknowledged,
-      );
-      setStatus(t("kh.added", { host: adding.host, id: result.transactionId }));
-      closeAdd();
-      await search(query);
-    } catch (failure) {
-      const code = failureCode(failure);
-      setError(
-        failureMessage(
-          t,
-          failure,
-          code === "" ? t("kh.addFailed") : t("kh.addFailedCode", { code }),
-        ),
-      );
-      closeAdd();
-    }
+    await action.start("addToKnownHosts", async () => {
+      setError("");
+      try {
+        const result = await api.addKnownHost(
+          { host: candidate.host, port: candidate.port, keyType: candidate.keyType, key: candidate.key },
+          typed,
+          acknowledged,
+        );
+        showToast(t("kh.added", { host: candidate.host, id: result.transactionId }), { tone: "success" });
+        closeAdd();
+        await search(query);
+      } catch (failure) {
+        const code = failureCode(failure);
+        setError(
+          failureMessage(
+            t,
+            failure,
+            code === "" ? t("kh.addFailed") : t("kh.addFailedCode", { code }),
+          ),
+        );
+        closeAdd();
+      }
+    });
   }
 
   const provenOrAcknowledged = expectedFingerprint.trim() !== "" || acknowledged;
@@ -172,22 +191,27 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   const displayedCandidates = candidateSort.sorted(candidates, candidateSortValue);
   const displayedEntries = trustedSort.sorted(listing?.entries ?? [], trustedSortValue);
 
+  // 最初の一覧が届くまでは、件数を「0」と言わない。
+  if (!firstListingAnswered) {
+    return <PanelState tone="loading" title={t("kh.loading")} />;
+  }
+
   return (
     <section aria-label={t("kh.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader title={t("kh.heading")} description={t("kh.pageDescription")} />
-      <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
-        {([
-          [t("kh.metricEntries"), listing?.entries.length ?? 0],
-          [t("kh.metricHashed"), listing?.entries.filter((entry) => entry.hashed).length ?? 0],
-          [t("kh.metricCandidates"), candidates.length],
-        ] as const).map(([label, value], index) => (
-          <MetricCard key={String(label)} label={String(label)} value={value} compact attention={index === 2 && candidates.length > 0} />
-        ))}
-      </MetricGrid>
+      {/* 読めなかった known_hosts の件数は分からないので、件数の欄ごと出さない。 */}
+      {listing === null ? null : (
+        <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
+          {([
+            [t("kh.metricEntries"), listing.entries.length],
+            [t("kh.metricHashed"), listing.entries.filter((entry) => entry.hashed).length],
+            [t("kh.metricCandidates"), candidates.length],
+          ] as const).map(([label, value], index) => (
+            <MetricCard key={String(label)} label={String(label)} value={value} compact attention={index === 2 && candidates.length > 0} />
+          ))}
+        </MetricGrid>
+      )}
 
-      <p aria-live="polite" className="text-sm text-ink-muted">
-        {status}
-      </p>
       {error ? (
         <Notice tone="danger">{error}</Notice>
       ) : null}
@@ -211,7 +235,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
                 />
               </Field>
             </div>
-            <Button kind="primary" onClick={() => void scan()}>
+            <Button kind="primary" busy={action.running === "scan"} disabled={action.running !== null} onClick={() => void scan()}>
               {t("kh.scan")}
             </Button>
           </div>
@@ -273,15 +297,15 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
               onChange={setAcknowledged}
             />
             <div className="mt-2 flex gap-2">
-              <button
-                type="button"
-                disabled={!provenOrAcknowledged}
+              <Button
+                kind="primary"
+                busy={action.running === "addToKnownHosts"}
+                disabled={!provenOrAcknowledged || action.running !== null}
                 onClick={() => void confirmAdd()}
-                className="rounded-md bg-accent px-3 py-1.5 font-medium text-accent-ink disabled:bg-line disabled:text-ink-faint"
               >
                 {t("kh.addToKnownHosts")}
-              </button>
-              <Button onClick={closeAdd}>
+              </Button>
+              <Button disabled={action.running === "addToKnownHosts"} onClick={closeAdd}>
                 {t("kh.cancel")}
               </Button>
             </div>

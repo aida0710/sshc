@@ -11,7 +11,8 @@ const jaSidebar = [
   ] },
   { text: "Terminal", items: [
     { text: "Terminalを使う", link: "/features/terminal" },
-    { text: "Workspaceと分割", link: "/features/workspace" },
+    { text: "ワークスペース", link: "/features/workspace" },
+    { text: "実行先", link: "/features/run-target" },
     { text: "クイックコマンド", link: "/terminal/commands" },
     { text: "タイトルと通知", link: "/terminal/notifications" },
     { text: "ポート転送", link: "/terminal/port-forwarding" },
@@ -50,7 +51,8 @@ const enSidebar = [
   ] },
   { text: "Terminal", items: [
     { text: "Use the terminal", link: "/en/features/terminal" },
-    { text: "Workspaces and splits", link: "/en/features/workspace" },
+    { text: "Workspaces", link: "/en/features/workspace" },
+    { text: "Run on", link: "/en/features/run-target" },
     { text: "Quick Commands", link: "/en/terminal/commands" },
     { text: "Titles and notifications", link: "/en/terminal/notifications" },
     { text: "Port forwarding", link: "/en/terminal/port-forwarding" },
@@ -94,7 +96,7 @@ export default defineConfig({
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:title", content: "sshc" }],
     ["meta", { property: "og:description", content: "SSHとローカルシェルを扱うターミナルアプリ。OpenSSH設定をそのまま使い、SFTP、認証情報の再利用、AIエージェント向けCLI、暗号化同期に対応。" }],
-    ["meta", { property: "og:image", content: "https://aida0710.github.io/sshc/images/workspace-desktop.png" }],
+    ["meta", { property: "og:image", content: "https://aida0710.github.io/sshc/images/terminal-desktop.png" }],
     ["meta", { name: "twitter:card", content: "summary_large_image" }],
     ["link", { rel: "icon", href: `${base}logo.svg`, type: "image/svg+xml" }],
   ],

@@ -51,11 +51,11 @@ test("confirms Homebrew updates and shows the installed version once after resta
   }
   await result.getByRole("button", { name: "Close" }).click();
   await expect(result).toBeHidden();
-  await expect(page.getByText("Version v1.2.0", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Version v1.2.0" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Update sshc", exact: true })).toHaveCount(0);
   // The result opens once per update; it does not stay under the version.
   await page.reload();
-  await expect(page.getByText("Version v1.2.0", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Version v1.2.0" })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "sshc update" })).toHaveCount(0);
   await expect(page.getByText("Updated to v1.2.0.")).toHaveCount(0);
 });

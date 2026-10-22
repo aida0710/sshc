@@ -14,6 +14,7 @@ function api(overrides: Partial<TerminalSessionsApi> = {}): TerminalSessionsApi 
     stopTerminalReconnect: vi.fn().mockResolvedValue(list),
     closeTerminalSession: vi.fn().mockResolvedValue(list),
     setTerminalSessionTitle: vi.fn().mockResolvedValue(list),
+    moveTerminalSession: vi.fn().mockResolvedValue(list),
     ...overrides,
   };
 }
@@ -35,7 +36,8 @@ describe("useTerminalSessions", () => {
       .mockRejectedValueOnce(
         new ApiError("terminal_start_failed", 500, { code: "terminal_start_failed", message: "refused" }),
       );
-    const { result } = renderHook(() => useTerminalSessions(api({ openTerminalSession }), translate));
+    const inlineClient = api({ openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
     await act(async () => {
@@ -57,7 +59,8 @@ describe("useTerminalSessions", () => {
     const openTerminalSession = vi.fn()
       .mockReturnValueOnce(first)
       .mockReturnValueOnce(second);
-    const { result } = renderHook(() => useTerminalSessions(api({ openTerminalSession }), translate));
+    const inlineClient = api({ openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
     let firstOpen: Promise<unknown> = Promise.resolve();
@@ -72,7 +75,7 @@ describe("useTerminalSessions", () => {
     await act(async () => {
       resolveFirst({
         session: {
-          id: "first", kind: "shell", title: "first", startedAt: "2026-09-04T00:00:00Z",
+          id: "first", kind: "shell", workspaceId: "default", title: "first", startedAt: "2026-09-04T00:00:00Z",
           state: "connected", problem: "",
         },
         streamTicket: "first-ticket",
@@ -84,7 +87,7 @@ describe("useTerminalSessions", () => {
     await act(async () => {
       resolveSecond({
         session: {
-          id: "second", kind: "shell", title: "second", startedAt: "2026-09-04T00:00:01Z",
+          id: "second", kind: "shell", workspaceId: "default", title: "second", startedAt: "2026-09-04T00:00:01Z",
           state: "connected", problem: "",
         },
         streamTicket: "second-ticket",
@@ -96,10 +99,10 @@ describe("useTerminalSessions", () => {
 
   it("keeps an opened session listed when a close answered before the session existed", async () => {
     const existing = {
-      id: "old", kind: "shell", title: "bash", startedAt: "2026-09-30T00:00:00Z", state: "connected", problem: "",
+      id: "old", kind: "shell", workspaceId: "default", title: "bash", startedAt: "2026-09-30T00:00:00Z", state: "connected", problem: "",
     } as const;
     const opened = {
-      id: "new", kind: "shell", title: "zsh", startedAt: "2026-09-30T00:00:01Z", state: "connected", problem: "",
+      id: "new", kind: "shell", workspaceId: "default", title: "zsh", startedAt: "2026-09-30T00:00:01Z", state: "connected", problem: "",
     } as const;
     const pendingRead = new Promise(() => undefined);
     const terminalSessions = vi.fn()
@@ -129,7 +132,7 @@ describe("useTerminalSessions", () => {
 
   it("hands back an opened session, already listed, while the list is still being read again", async () => {
     const opened = {
-      id: "new", kind: "shell", title: "zsh", startedAt: "2026-09-30T00:00:00Z", state: "connected", problem: "",
+      id: "new", kind: "shell", workspaceId: "default", title: "zsh", startedAt: "2026-09-30T00:00:00Z", state: "connected", problem: "",
     } as const;
     const terminalSessions = vi.fn()
       .mockResolvedValueOnce(list)
@@ -151,7 +154,7 @@ describe("useTerminalSessions", () => {
 
   it("keeps an opened session listed when the list cannot be read afterwards", async () => {
     const opened = {
-      id: "new", kind: "shell", title: "zsh", startedAt: "2026-09-30T00:00:00Z", state: "connected", problem: "",
+      id: "new", kind: "shell", workspaceId: "default", title: "zsh", startedAt: "2026-09-30T00:00:00Z", state: "connected", problem: "",
     } as const;
     const terminalSessions = vi.fn()
       .mockResolvedValueOnce(list)
@@ -170,7 +173,8 @@ describe("useTerminalSessions", () => {
 
   it("reports a finished load even when the list could not be read", async () => {
     const terminalSessions = vi.fn().mockRejectedValue(new Error("offline"));
-    const { result } = renderHook(() => useTerminalSessions(api({ terminalSessions }), translate));
+    const inlineClient = api({ terminalSessions });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
 
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(result.current.sessions).toEqual([]);
@@ -178,8 +182,9 @@ describe("useTerminalSessions", () => {
 
   it("reads nothing until it is allowed to", async () => {
     const terminalSessions = vi.fn().mockResolvedValue(list);
+    const client = api({ terminalSessions });
     const { result, rerender } = renderHook(
-      ({ enabled }) => useTerminalSessions(api({ terminalSessions }), translate, enabled),
+      ({ enabled }) => useTerminalSessions(client, translate, enabled),
       { initialProps: { enabled: false } },
     );
 
@@ -196,11 +201,12 @@ describe("useTerminalSessions", () => {
     vi.useFakeTimers();
     vi.spyOn(document, "hidden", "get").mockReturnValue(true);
     const connected = {
-      id: "a", kind: "ssh", alias: "osaka", title: "osaka",
+      id: "a", kind: "ssh", workspaceId: "default", alias: "osaka", title: "osaka",
       startedAt: "2026-08-29T01:00:00Z", state: "connected", problem: "",
     } as const;
     const terminalSessions = vi.fn().mockResolvedValue({ sessions: [connected], maxSessions: 50 });
-    const { result } = renderHook(() => useTerminalSessions(api({ terminalSessions }), translate));
+    const inlineClient = api({ terminalSessions });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
 
     await act(async () => {
       vi.runAllTicks();
@@ -222,7 +228,8 @@ describe("useTerminalSessions", () => {
       .fn()
       .mockReturnValueOnce(initial)
       .mockResolvedValueOnce({ sessions: [], maxSessions: 1 });
-    const { result } = renderHook(() => useTerminalSessions(api({ terminalSessions }), translate));
+    const inlineClient = api({ terminalSessions });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
 
     await waitFor(() => expect(terminalSessions).toHaveBeenCalledTimes(1));
     await act(async () => {
@@ -239,7 +246,7 @@ describe("useTerminalSessions", () => {
 
   it("does not let an in-flight refresh resurrect a session after close", async () => {
     const connected = {
-      id: "a", kind: "ssh", alias: "bastion", title: "bastion",
+      id: "a", kind: "ssh", workspaceId: "default", alias: "bastion", title: "bastion",
       startedAt: "2026-08-26T01:00:00Z", state: "connected", problem: "",
     } as const;
     const beforeClose = { sessions: [connected], maxSessions: 50 };
@@ -268,11 +275,11 @@ describe("useTerminalSessions", () => {
 
   it("does not let parallel mutation responses resurrect a session", async () => {
     const first = {
-      id: "a", kind: "ssh", alias: "first", title: "first",
+      id: "a", kind: "ssh", workspaceId: "default", alias: "first", title: "first",
       startedAt: "2026-09-04T01:00:00Z", state: "connected", problem: "",
     } as const;
     const second = {
-      id: "b", kind: "ssh", alias: "second", title: "second",
+      id: "b", kind: "ssh", workspaceId: "default", alias: "second", title: "second",
       startedAt: "2026-09-04T01:00:01Z", state: "connected", problem: "",
     } as const;
     const initial = { sessions: [first, second], maxSessions: 50 };
@@ -313,11 +320,11 @@ describe("useTerminalSessions", () => {
 
   it("does not let an older close response erase a session opened afterwards", async () => {
     const first = {
-      id: "a", kind: "ssh", alias: "first", title: "first",
+      id: "a", kind: "ssh", workspaceId: "default", alias: "first", title: "first",
       startedAt: "2026-09-04T01:00:00Z", state: "connected", problem: "",
     } as const;
     const opened = {
-      id: "b", kind: "shell", title: "second",
+      id: "b", kind: "shell", workspaceId: "default", title: "second",
       startedAt: "2026-09-04T01:00:01Z", state: "connected", problem: "",
     } as const;
     let resolveClose: (value: typeof list) => void = () => undefined;
@@ -349,7 +356,8 @@ describe("useTerminalSessions", () => {
     const setTerminalSessionTitle = vi.fn().mockRejectedValue(
       new ApiError("invalid_terminal_title", 400, { code: "invalid_terminal_title", message: "no" }),
     );
-    const { result } = renderHook(() => useTerminalSessions(api({ setTerminalSessionTitle }), translate));
+    const inlineClient = api({ setTerminalSessionTitle });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
     let outcome = true;
@@ -363,7 +371,7 @@ describe("useTerminalSessions", () => {
 
   it("reconnects the same retained session and adopts the returned state", async () => {
     const connected = {
-      id: "a", kind: "ssh", alias: "bastion", title: "bastion",
+      id: "a", kind: "ssh", workspaceId: "default", alias: "bastion", title: "bastion",
       startedAt: "2026-08-26T01:00:00Z", state: "connected", problem: "",
     } as const;
     const reconnectTerminalSession = vi.fn().mockResolvedValue({ sessions: [connected], maxSessions: 50 });
@@ -403,7 +411,8 @@ describe("useTerminalSessions", () => {
     const openTerminalSession = vi.fn().mockRejectedValue(
       new ApiError("jump_depth_exceeded", 422, { code: "jump_depth_exceeded", message: "no" }),
     );
-    const { result } = renderHook(() => useTerminalSessions(api({ openTerminalSession }), translate));
+    const inlineClient = api({ openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
     await act(async () => {
@@ -416,7 +425,8 @@ describe("useTerminalSessions", () => {
     const openTerminalSession = vi.fn().mockRejectedValue(
       new ApiError("something_new", 500, { code: "something_new", message: "no" }),
     );
-    const { result } = renderHook(() => useTerminalSessions(api({ openTerminalSession }), translate));
+    const inlineClient = api({ openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
     await act(async () => {

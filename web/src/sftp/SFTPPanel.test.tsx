@@ -7,6 +7,7 @@ import { SFTPPanel } from "./SFTPPanel";
 import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { ApiError } from "../api/client";
 import { sftpTransferManager } from "./transferManager";
+import { ToastProvider } from "../ui/ToastProvider";
 import type { UploadChunk, UploadCompletion, UploadStart } from "./api";
 
 const api = vi.hoisted(() => ({
@@ -361,7 +362,7 @@ describe("SFTPPanel uploads", () => {
     });
     const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["copy-one"]);
     try {
-      render(<SFTPPanel aliases={["edge"]} />);
+      render(<ToastProvider><SFTPPanel aliases={["edge"]} /></ToastProvider>);
       await chooseHost("edge");
       await userEvent.click(await screen.findByRole("button", { name: "notes.txt" }));
       await userEvent.click(screen.getByRole("button", { name: "Actions for notes.txt" }));
@@ -383,6 +384,9 @@ describe("SFTPPanel uploads", () => {
         name: "notes.txt",
         totalBytes: 12,
       }], "copy"));
+      // ダイアログを閉じると結果を書く場所が無いので、ジョブを積めたことを画面の下の知らせで伝える。
+      expect(await screen.findByText("Copy of notes.txt added to the Transfer Manager.")).toBeVisible();
+      expect(screen.queryByRole("dialog", { name: "Duplicate" })).not.toBeInTheDocument();
     } finally {
       addRemoteTransfers.mockRestore();
     }
@@ -398,7 +402,7 @@ describe("SFTPPanel uploads", () => {
     });
     const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["move-one", "move-two"]);
     try {
-      render(<SFTPPanel aliases={["edge"]} />);
+      render(<ToastProvider><SFTPPanel aliases={["edge"]} /></ToastProvider>);
       await chooseHost("edge");
       await userEvent.click(await screen.findByRole("checkbox", { name: "Select all entries" }));
       await userEvent.click(screen.getByRole("button", { name: "Actions for 2 selected items" }));
@@ -414,6 +418,7 @@ describe("SFTPPanel uploads", () => {
         expect.objectContaining({ sourcePath: "/remote/project", targetPath: "/archive/project", kind: "folder" }),
         expect.objectContaining({ sourcePath: "/remote/notes.txt", targetPath: "/archive/notes.txt", kind: "file" }),
       ], "move"));
+      expect(await screen.findByText("Move of 2 items added to the Transfer Manager.")).toBeVisible();
     } finally {
       addRemoteTransfers.mockRestore();
     }
@@ -470,7 +475,9 @@ describe("SFTPPanel uploads", () => {
       api.list.mockRejectedValueOnce(new ApiError("invalid_request", 400, null));
       await userEvent.type(destination, "~/../../outside");
       await userEvent.click(within(dialog).getByRole("button", { name: "Move" }));
-      expect(await screen.findByText("Could not open the path. Enter an absolute path or one starting with ~/.")).toBeVisible();
+      // 移動先を直してそのまま送り直せるよう、ダイアログは開いたままその中で伝える。
+      expect(await within(dialog).findByText("Could not open the path. Enter an absolute path or one starting with ~/.")).toBeVisible();
+      expect(within(dialog).getByRole("textbox", { name: "Destination folder" })).toHaveValue("~/../../outside");
       expect(addRemoteTransfers).not.toHaveBeenCalled();
     } finally {
       addRemoteTransfers.mockRestore();
@@ -505,11 +512,13 @@ describe("SFTPPanel uploads", () => {
   });
 
   it("copies the current directory and edits it from the empty breadcrumb area", async () => {
-    render(<SFTPPanel aliases={["edge"]} />);
+    render(<ToastProvider><SFTPPanel aliases={["edge"]} /></ToastProvider>);
     await chooseHost("edge");
     await userEvent.click(screen.getByRole("button", { name: "Folder actions" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Copy full path" }));
     expect(clipboard.writeText).toHaveBeenLastCalledWith("/remote");
+    // メニューは閉じるので、コピーできたことは画面の下の知らせで伝える。
+    expect(await screen.findByText("Copied.")).toBeVisible();
     fireEvent.click(screen.getByRole("navigation", { name: "Remote path" }));
     const input = screen.getByRole("textbox", { name: "Remote path" });
     expect(input).toHaveValue("/remote");
@@ -1338,6 +1347,105 @@ describe("SFTPPanel uploads", () => {
     await waitFor(() => expect(api.rename).toHaveBeenCalledWith("edge", "/srv/app/report.log", "/srv/app/old.log"));
     await waitFor(() => expect(api.search).toHaveBeenCalledTimes(2));
     expect(screen.getByText(/matches for/)).toBeVisible();
+  });
+
+  it("keeps the new folder dialog waiting while the folder is made, and says inside it why the folder was not made", async () => {
+    let refuse: (error: unknown) => void = () => undefined;
+    api.mkdir.mockImplementationOnce(() => new Promise((_resolve, reject) => { refuse = reject; }));
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    await userEvent.click(screen.getByRole("button", { name: "Create or upload" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "New folder" }));
+    const dialog = screen.getByRole("dialog", { name: "New folder" });
+    await userEvent.type(within(dialog).getByRole("textbox", { name: "Folder name" }), "logs");
+    await userEvent.click(within(dialog).getByRole("button", { name: "New folder" }));
+
+    expect(within(dialog).getByRole("button", { name: "New folder" })).toHaveAttribute("aria-busy", "true");
+    refuse(new ApiError("sftp_exists", 409, null));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("An entry with the same name already exists.");
+    expect(within(dialog).getByRole("textbox", { name: "Folder name" })).toHaveValue("logs");
+    // 背面のペインの帯には出さない。ダイアログに隠れて見えないため。
+    expect(screen.getAllByText("An entry with the same name already exists.")).toHaveLength(1);
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "New folder" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "New folder" })).not.toBeInTheDocument());
+    expect(api.mkdir).toHaveBeenLastCalledWith("edge", "/remote/logs");
+  });
+
+  it("keeps the rename dialog waiting until the entry is renamed", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [{ name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "file" }],
+    });
+    let finish: () => void = () => undefined;
+    api.rename.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve(undefined); }));
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    await userEvent.click(await screen.findByRole("button", { name: "notes.txt" }));
+    await userEvent.click(screen.getByRole("button", { name: "Actions for notes.txt" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const dialog = screen.getByRole("dialog", { name: "Rename" });
+    const name = within(dialog).getByRole("textbox", { name: "New name" });
+    await userEvent.clear(name);
+    await userEvent.type(name, "notes.md");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Rename" }));
+
+    expect(within(dialog).getByRole("button", { name: "Rename" })).toHaveAttribute("aria-busy", "true");
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeDisabled();
+    finish();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Rename" })).not.toBeInTheDocument());
+    expect(api.rename).toHaveBeenCalledWith("edge", "/remote/notes.txt", "/remote/notes.md");
+    expect(await screen.findByText("Renamed to notes.md.")).toBeVisible();
+  });
+
+  it("says which file it is opening while the editor waits for it", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [{ name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "rev" }],
+    });
+    let deliver: () => void = () => undefined;
+    api.readText.mockImplementationOnce(() => new Promise((resolve) => {
+      deliver = () => resolve({
+        entry: { name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "rev" },
+        contents: "hello\n",
+        revision: "rev",
+      });
+    }));
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    await userEvent.click(await screen.findByRole("button", { name: "notes.txt" }));
+    await userEvent.click(screen.getByRole("button", { name: "Actions for notes.txt" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Edit file" }));
+
+    const opening = (await screen.findByText("Opening the file…")).closest("[role=status]");
+    expect(opening).toHaveTextContent("/remote/notes.txt");
+    deliver();
+    expect(await screen.findByRole("dialog", { name: "/remote/notes.txt" })).toBeVisible();
+    expect(screen.queryByText("Opening the file…")).not.toBeInTheDocument();
+  });
+
+  it("opens the transfer manager once for each download or upload request, however many jobs it makes", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [
+        { name: "first.txt", path: "/remote/first.txt", type: "file", size: 1, mode: "0644", modifiedAt: "", revision: "first" },
+        { name: "second.txt", path: "/remote/second.txt", type: "file", size: 2, mode: "0644", modifiedAt: "", revision: "second" },
+      ],
+    });
+    const onQueueOpen = vi.fn();
+    render(<SFTPPanel aliases={["edge"]} onQueueOpen={onQueueOpen} />);
+    await chooseHost("edge");
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Select all entries" }));
+    await userEvent.click(screen.getByRole("button", { name: "Actions for 2 selected items" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Download" }));
+    await waitFor(() => expect(api.createTransfer).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onQueueOpen).toHaveBeenCalledOnce());
+
+    fireEvent.drop(screen.getByLabelText("Upload files or folders to the current remote directory"), {
+      dataTransfer: { files: [new File(["alpha"], "third.txt"), new File(["beta"], "fourth.txt")] },
+    });
+    await waitFor(() => expect(api.createTransfer).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(onQueueOpen).toHaveBeenCalledTimes(2));
   });
 
   it("downloads folders as archives and changes permissions with the current revision", async () => {

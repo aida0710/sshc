@@ -14,7 +14,7 @@ import (
 	"sshc/internal/secret"
 	"sshc/internal/selfupdate"
 	"sshc/internal/storage"
-	terminalworkspace "sshc/internal/workspace"
+	"sshc/internal/terminalworkspace"
 )
 
 // ownedDeviceLocalPaths は、このマシンだけのものとして持ち主のパッケージが決めた

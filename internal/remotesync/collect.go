@@ -15,10 +15,11 @@ import (
 	"sshc/internal/handoff"
 	"sshc/internal/keys"
 	"sshc/internal/recent"
+	"sshc/internal/remoteengine"
 	"sshc/internal/secret"
 	"sshc/internal/selfupdate"
 	"sshc/internal/storage"
-	terminalworkspace "sshc/internal/workspace"
+	"sshc/internal/terminalworkspace"
 )
 
 // neverTravels は、ワークスペースに存在しても同期対象から除外するファイル。
@@ -51,8 +52,11 @@ var neverTravels = slices.Concat([]string{
 	// Browser enrolment is a capability for this device's loopback origin. Only
 	// hashes are stored, but moving them would still be meaningless and unsafe.
 	browserauth.PathRelative,
-	// pane layout is device-local and contains no process/session state that can
-	// be meaningfully restored on another engine.
+	// 接続先のエンジンへの中継が、このマシンで待ち受けたポート。ブラウザの保存が
+	// このマシンのポートごとに分かれるために覚えるもので、別のマシンでは意味を持たない。
+	remoteengine.PathRelative,
+	// ターミナルのワークスペースの定義。セッションと同じく、このマシンのエンジンだけの
+	// ものなので運ばない。
 	terminalworkspace.PathRelative,
 	// 次の 2 つの持ち主は app で、app は remotesync を使う側なので、ここからは参照
 	// できない。app のテストが、持ち主の定数と NeverTravels を照合する。

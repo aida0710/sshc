@@ -62,7 +62,7 @@ export function BasicPasswordSection({
                 onChange={(value) => onEdit({ masterConfirmation: value })}
               />
             )}
-            <Button kind="primary" disabled={secrets.vaultBusy || !derived.canOpenVault} onClick={onOpenVault}>
+            <Button kind="primary" disabled={!derived.canOpenVault} busy={secrets.vaultBusy} onClick={onOpenVault}>
               {t(vault.exists ? "conn.createUnlockVault" : "conn.createInitialiseVault")}
             </Button>
           </div>

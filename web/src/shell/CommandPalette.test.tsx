@@ -155,7 +155,7 @@ describe("CommandPalette", () => {
   it("lists hosts to connect before sessions that are already open", () => {
     renderPalette({
       sessions: [
-        { id: "first", kind: "ssh", alias: "r540", title: "r540", startedAt: "2026-08-29T00:00:00Z", state: "connected", problem: "" },
+        { id: "first", kind: "ssh", workspaceId: "default", alias: "r540", title: "r540", startedAt: "2026-08-29T00:00:00Z", state: "connected", problem: "" },
       ],
     });
 
@@ -171,8 +171,8 @@ describe("CommandPalette", () => {
     const onOpenSession = vi.fn();
     renderPalette({
       sessions: [
-        { id: "first", kind: "ssh", alias: "osaka", title: "First", startedAt: "2026-08-29T00:00:00Z", state: "connected", problem: "" },
-        { id: "second", kind: "ssh", alias: "tokyo", title: "Fix login", startedAt: "2026-08-29T00:01:00Z", state: "connected", problem: "", notificationVersion: 1, lastNotification: { title: "", body: "waiting for input", occurredAt: "2026-08-29T00:02:00Z" } },
+        { id: "first", kind: "ssh", workspaceId: "default", alias: "osaka", title: "First", startedAt: "2026-08-29T00:00:00Z", state: "connected", problem: "" },
+        { id: "second", kind: "ssh", workspaceId: "default", alias: "tokyo", title: "Fix login", startedAt: "2026-08-29T00:01:00Z", state: "connected", problem: "", notificationVersion: 1, lastNotification: { title: "", body: "waiting for input", occurredAt: "2026-08-29T00:02:00Z" } },
       ],
       unreadBySession: new Set(["second"]),
       onOpenSession,

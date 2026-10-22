@@ -1,5 +1,6 @@
 import type { ComponentPropsWithoutRef, ComponentPropsWithRef, DragEvent as ReactDragEvent } from "react";
 import { useLanguage, useTranslate } from "../i18n/context";
+import { draggableCursor } from "../ui/dragAndDropLook";
 import { Icon } from "../ui/icons";
 import { SortableTableHeader } from "../ui/tableSort";
 import type { RemoteEntry } from "./api";
@@ -80,6 +81,7 @@ export function SFTPEntryList({
     rowContextMenu, beginLongPress, trackLongPress, cancelLongPress,
   } = model;
   const rowDraggable = (entry: RemoteEntry) => !mobileInteraction && draggable(entry);
+  const rowCursor = (entry: RemoteEntry) => (rowDraggable(entry) ? draggableCursor : "cursor-default");
   // Both layouts wire their rows through these three, so that focus, selection
   // and the long press work the same whichever layout is on screen. Only the
   // markup around them differs.
@@ -124,7 +126,7 @@ export function SFTPEntryList({
             <button
               type="button"
               {...parentButtonProps}
-              className="flex min-h-11 w-full items-center gap-2.5 px-3 py-1.5 text-left text-base hover:bg-hover disabled:text-ink-faint"
+              className="flex min-h-11 w-full items-center gap-2.5 px-3 py-1.5 text-left text-base hover:bg-hover"
             >
               <ParentRowLabel />
             </button>
@@ -145,7 +147,7 @@ export function SFTPEntryList({
             <button
               type="button"
               {...entryButtonProps(entry)}
-              className="flex min-h-14 min-w-0 flex-1 touch-pan-y select-none items-center gap-2.5 px-2.5 py-1.5 text-left hover:bg-hover active:bg-select-fill disabled:text-ink-faint"
+              className="flex min-h-14 min-w-0 flex-1 touch-pan-y select-none items-center gap-2.5 px-2.5 py-1.5 text-left hover:bg-hover active:bg-select-fill"
             >
               <Icon name={entryIcon(entry)} className="size-5 shrink-0 text-ink-muted" />
               <span className="min-w-0 flex-1">
@@ -195,7 +197,7 @@ export function SFTPEntryList({
               <button
                 type="button"
                 {...parentButtonProps}
-                className="flex w-full items-center gap-2 rounded py-0.5 text-left text-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:text-ink-faint"
+                className="flex w-full items-center gap-2 rounded py-0.5 text-left text-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
               >
                 <ParentRowLabel />
               </button>
@@ -211,7 +213,7 @@ export function SFTPEntryList({
             onContextMenu={(event) => rowContextMenu(event, entry)}
             draggable={rowDraggable(entry)}
             onDragStart={(event) => onDragStart?.(event, entry)}
-            className={`cursor-default border-t border-line/40 transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : "hover:bg-hover/55"}`}
+            className={`${rowCursor(entry)} border-t border-line/40 transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : "hover:bg-hover/55"}`}
           >
             <td className="w-9 px-2 py-1 md:py-0.5">
               <input type="checkbox" {...entryCheckboxProps(entry)} onDoubleClick={(event) => event.stopPropagation()} />
@@ -220,7 +222,7 @@ export function SFTPEntryList({
               <button
                 type="button"
                 {...entryButtonProps(entry)}
-                className="flex w-full min-w-0 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                className={`flex w-full min-w-0 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${rowCursor(entry)}`}
               >
                 <Icon name={entryIcon(entry)} className="size-4 text-ink-muted" />
                 <span className="min-w-0 grow">

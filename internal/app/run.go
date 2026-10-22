@@ -22,8 +22,10 @@ import (
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/keys"
+	"sshc/internal/loopbackpeer"
 	"sshc/internal/platform"
 	"sshc/internal/releasewatch"
+	"sshc/internal/remoteengine"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
 	"sshc/internal/selfupdate"
@@ -155,6 +157,7 @@ type runtime struct {
 	vpn           *vpn.Manager
 	vpnCancel     context.CancelFunc
 	vpnDone       chan struct{}
+	remoteEngines *remoteengine.Manager
 	releaseCancel context.CancelFunc
 	releaseDone   chan struct{}
 }
@@ -164,6 +167,14 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 	if err != nil {
 		return runtime{}, err
 	}
+	// 接続先のエンジンへの中継と、実行先としての取り次ぎ。実行先は同じバージョンの
+	// エンジンだけを使うので、このエンジンのバージョンを渡す。
+	remoteEngines := remoteengine.NewManager(remoteengine.ManagerOptions{
+		Connect:                    services.ssh.remoteEngineLink,
+		Store:                      remoteengine.NewStore(services.workspace),
+		LocalVersion:               version,
+		PeerMayBelongToAnotherUser: loopbackpeer.MayBelongToAnotherUser,
+	})
 	wanted := dependencies.Port
 	if wanted == 0 {
 		wanted = services.config.EngineSettings().Port
@@ -251,10 +262,10 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		SFTP:                  services.sftp,
 		SFTPTransferStatePath: filepath.Join(services.workspace.StateDir(), sftpTransferStateName),
 		SFTPDownloadSpoolRoot: dependencies.SFTPDownloadSpoolRoot,
-		Workspaces:            services.workspaces,
 		Snippets:              services.snippets,
 		Vault:                 services.vault,
 		Connect:               services.ssh.connector(),
+		RemoteEngines:         remoteEngines,
 		ConnectionOpened: func(alias string) {
 			if err := services.recentStore.Record(alias); err != nil && dependencies.Logger != nil {
 				dependencies.Logger.Warn("record recent SSH connection", "alias", alias, "error", err)
@@ -263,6 +274,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		Sync:                      services.sync,
 		AutoSync:                  services.autoSync,
 		Terminals:                 services.terminals,
+		TerminalWorkspaces:        services.terminalWorkspaces,
 		VPN:                       services.vpn,
 		VPNProfiles:               services.vpnProfiles,
 		TerminalStartDirectory:    services.config.TerminalStartDirectory,
@@ -305,16 +317,17 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		return runtime{}, fmt.Errorf("publish the command-line handoff: %w", err)
 	}
 	return runtime{
-		server:      server,
-		bootstrap:   bootstrap,
-		document:    document,
-		stateDir:    stateDir,
-		terminals:   services.terminals,
-		vault:       services.vault,
-		autoSync:    services.autoSync,
-		browserAuth: services.browserAuth,
-		sftpPool:    services.sftpPool,
-		vpn:         services.vpn,
+		server:        server,
+		bootstrap:     bootstrap,
+		document:      document,
+		stateDir:      stateDir,
+		terminals:     services.terminals,
+		vault:         services.vault,
+		autoSync:      services.autoSync,
+		browserAuth:   services.browserAuth,
+		sftpPool:      services.sftpPool,
+		vpn:           services.vpn,
+		remoteEngines: remoteEngines,
 	}, nil
 }
 
@@ -480,6 +493,10 @@ func (r runtime) unwind(dependencies Dependencies) error {
 		if err := r.sftpPool.Close(); err != nil {
 			joined = append(joined, fmt.Errorf("close the idle SFTP connections: %w", err))
 		}
+	}
+	// 接続先のエンジンへの中継は、HTTP の要求を受け付け終えたあとに閉じる。
+	if r.remoteEngines != nil {
+		r.remoteEngines.Close()
 	}
 	// 経路は engine のものである。engine が終わったあとも動いているコンテナは、
 	// 誰も面倒を見ないまま残り、次の起動で回収されるまでトンネルを張り続ける。

@@ -14,7 +14,7 @@ const sessionListPollIntervalMs = 2_000;
 export type TerminalSessionsApi = Pick<
   SessionsApi,
   "terminalSessions" | "openTerminalSession" | "reconnectTerminalSession" | "closeTerminalSession" | "setTerminalSessionTitle"
-  | "stopTerminalReconnect"
+  | "stopTerminalReconnect" | "moveTerminalSession"
 >;
 
 export type TerminalSessionsState = {
@@ -22,6 +22,9 @@ export type TerminalSessionsState = {
   maxSessions: number;
   busy: boolean;
   problem: string;
+  // remoteVaultLocked is true while the run target's list is refused because
+  // that engine's Vault is locked.
+  remoteVaultLocked: boolean;
   loaded: boolean;
   rename: (id: string, title: string) => Promise<boolean>;
   unpinTitle?: (id: string) => Promise<boolean>;
@@ -32,6 +35,7 @@ export type TerminalSessionsState = {
   closeAll: () => Promise<void>;
   refresh: () => Promise<void>;
   markExited: (id: string) => void;
+  moveToWorkspace: (id: string, workspaceId: string) => Promise<boolean>;
 };
 
 export function useTerminalSessions(
@@ -43,6 +47,7 @@ export function useTerminalSessions(
   const [maxSessions, setMaxSessions] = useState(0);
   const [pendingOperations, setPendingOperations] = useState(0);
   const [problem, setProblem] = useState("");
+  const [remoteVaultLocked, setRemoteVaultLocked] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const refreshGeneration = useRequestGeneration();
   const mutationGeneration = useRequestGeneration();
@@ -85,11 +90,20 @@ export function useTerminalSessions(
       if (!isCurrent()) return;
       setSessions(listed.sessions);
       setMaxSessions(listed.maxSessions);
-    } catch {
+      setRemoteVaultLocked(false);
+    } catch (error) {
+      // A run-target engine that cannot be reached would otherwise look like
+      // one with no sessions. This machine's own list keeps failing quietly:
+      // the next poll reads it again.
+      const code = failureCode(error);
+      if (isCurrent() && code.startsWith("remote_engine_")) {
+        setProblem(translate(terminalProblemKey(code)));
+        setRemoteVaultLocked(code === "remote_engine_vault_locked");
+      }
     } finally {
       if (isCurrent()) setLoaded(true);
     }
-  }, [api, enabled, refreshGeneration]);
+  }, [api, enabled, refreshGeneration, translate]);
 
   // applyMutation runs one request whose response is the listing after the
   // change. A response that lost the race to a newer mutation is discarded in
@@ -118,6 +132,18 @@ export function useTerminalSessions(
     setProblem(translate(terminalProblemKey(failureCode(error))));
     await refresh();
   }, [refresh, translate]);
+
+  // A different api is another engine: what the last one listed is not shown
+  // while the new list is read.
+  useEffect(() => {
+    refreshGeneration.retire();
+    mutationGeneration.retire();
+    setSessions([]);
+    setMaxSessions(0);
+    setProblem("");
+    setRemoteVaultLocked(false);
+    setLoaded(false);
+  }, [api, mutationGeneration, refreshGeneration]);
 
   useEffect(() => {
     void refresh();
@@ -233,6 +259,12 @@ export function useTerminalSessions(
     [api, applyMutation, translate],
   );
 
+  const moveToWorkspace = useCallback(
+    (id: string, workspaceId: string): Promise<boolean> =>
+      applyMutation(() => api.moveTerminalSession(id, workspaceId), () => setProblem(translate("workspace.moveFailed"))),
+    [api, applyMutation, translate],
+  );
+
   const markExited = useCallback((id: string) => {
     beginMutation();
     setSessions((current) =>
@@ -244,7 +276,7 @@ export function useTerminalSessions(
     );
   }, [beginMutation]);
 
-  return { sessions, maxSessions, busy, problem, loaded, rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited };
+  return { sessions, maxSessions, busy, problem, remoteVaultLocked, loaded, rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited, moveToWorkspace };
 }
 
 export function terminalProblemKey(code: string): MessageKey {
@@ -287,6 +319,15 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.vpnRouteDisconnected";
     case "connect_failed":
       return "terminal.connectFailed";
+    case "remote_engine_vault_locked":
+      return "terminal.remoteVaultLocked";
+    case "remote_engine_refused":
+    case "remote_engine_unreachable":
+    case "remote_engine_not_running":
+    case "remote_engine_unproven":
+    case "remote_engine_connect_failed":
+    case "remote_engine_version_mismatch":
+      return "terminal.remoteEngineUnavailable";
     case "reconnect_failed":
       return "terminal.reconnectFailed";
     case "reconnect_exhausted":

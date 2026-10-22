@@ -111,27 +111,15 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 20. 待機中・一時停止中・転送中のjobを作ってengineを再起動し、queueが復元されることを確認する。Remote→Remoteの転送中jobは待機へ戻って再実行され、`~/.ssh/sshc/transfers.json`が0600で、Remote Syncのsnapshotに含まれないことを確認する。
 21. 作成したfileとdirectoryを削除して原状復帰する。
 
-## M8. Workspace Command Center
+## M8. ワークスペースとコマンドの一括送信
 
-1. SSHを2つ、ローカルシェルを1つ含む3 paneのWorkspaceを開く。SSHの2つは同じaliasでもよい。
-2. 各paneの対話shellで別々のdirectoryへ移動し、直接入力した`pwd`のpreviewがkindに関係なく3 sessionすべてを表示することを確認する。
-3. 送信後、別接続の結果欄ではなく各paneにそのpane自身のcwdが表示されることを確認する。
-4. 単一terminalへ戻すと、Workspace名・台数・一括送信・保存レイアウト管理が表示されず、terminal名と検索toolbarは残ることを確認する。検索ボタンまたは`Ctrl/Cmd+F`で検索欄が開き、0台では保存済みレイアウトを開く入口が残る。
-4. 1 paneを再接続中にして開き直し、未接続paneが送信対象外と表示され、aliasを使った代替接続が作られないことを確認する。
-5. preview後に対象paneを再接続してから送信し、preview変更として拒否され、新しいshellへ古いcommandが届かないことを確認する。
-6. 通常変数を持つSnippetは展開後commandをpreviewして送信でき、secret変数を持つSnippetはterminal表示とshell履歴への漏洩防止のため送信できないことを確認する。
-7. `cat`などがforegroundで標準入力を待つpaneへ送るとshell commandとしてではなくそのprocessの入力になることを確認し、modalの注意書きと一致することを確認する。
-
-## M9. Workspace paneの配置交換
-
-1. 3 pane以上のnested Workspaceを開き、各paneで識別できるcommand outputを表示する。
-2. 1つ目のpaneの移動handleを別paneへDrag & Dropし、2つのpane位置だけが交換されることを確認する。
-3. 交換後も各terminalのscrollbackと接続が対応するpaneに残り、split方向と比率が変わらないことを確認する。
-4. 移動handleを2つ順に選択し、Drag & Dropと同じ交換が行われることを確認する。最初のhandleでEscapeを押すと選択を解除できることも確認する。
-5. Workspaceを保存して再度開き、交換後の配置でaliasごとに新規接続されることを確認する。
-6. ローカルシェルを2つ開き、一方の一覧行をもう一方の上下左右へdropして分割できることを確認する。保存後に再度開くと、同じ配置で新しいローカルシェルが2つ開始されることを確認する。
-6. 縦横それぞれのseparatorをDragして比率を変更し、保存・再オープン後に復元されることを確認する。矢印キーでも5%ずつ変更できることを確認する。
-7. 任意paneをFocus Modeへ切り替え、他paneの接続を閉じずに単一paneだけが表示されること、Escとtoolbarの両方で元layoutへ戻ることを確認する。
+1. 見出し「Workspaces」の［…］からワークスペースを作り、その行の［＋］でSSHを2つ、ローカルシェルを1つ開く。3つともそのワークスペースの下に並ぶことを確認する。
+2. `sshc terminal create shell`を実行し、サイドバーに出ないこと、見出しの［…］→［非表示のワークスペースも表示］で「エージェント」の下に薄い色で出ることを確認する。`--workspace <名前>`を付けると、そのワークスペースに入ることを確認する。
+3. 作ったワークスペースの［…］→［コマンドを一括送信…］を開き、各セッションの対話shellで別々のdirectoryへ移動したうえで、直接入力した`pwd`のpreviewが3つのセッションをすべて表示することを確認する。
+4. 送信後、各セッションにそのセッション自身のcwdが表示されることを確認する。
+5. 1つを再接続中にして開き直し、未接続のセッションが送信対象外と表示されることを確認する。preview後に対象を再接続してから送信し、preview変更として拒否されることを確認する。
+6. 通常変数を持つSnippetは展開後commandをpreviewして送信でき、secret変数を持つSnippetは送信できないことを確認する。
+7. セッションの［…］→［ワークスペースへ移動］で別のワークスペースへ移せること、ワークスペースを削除すると中のセッションが閉じずに「メイン」へ移ることを確認する。
 
 ## M10. Terminal検索と入力
 

@@ -44,6 +44,7 @@ describe("the catalogue", () => {
         "desktop.closeAllHeading",
         "diag.hostAlias",
         "engine.heading",
+        "engineInfo.vault",
         "explorer.fileState",
         "groups.directories",
         "groups.metricConnections",
@@ -88,7 +89,8 @@ describe("the catalogue", () => {
         "shell.languageEnglish",
         "shell.languageJapanese",
         "shell.navVault",
-        "shell.sessions",
+        "workspace.heading",
+        "runTarget.thisMachine",
         "shell.title",
         "shortcuts.heading",
         "snippets.heading",
@@ -101,7 +103,6 @@ describe("the catalogue", () => {
         "terminal.settingsHeading",
         "tree.navLabel",
         "vpn.heading",
-        "workspace.groupCount",
       ].sort(),
     );
   });

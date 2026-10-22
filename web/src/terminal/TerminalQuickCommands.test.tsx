@@ -18,12 +18,12 @@ vi.mock("../snippets/api", async () => {
   const actual = await vi.importActual<typeof import("../snippets/api")>("../snippets/api");
   return { ...actual, snippetsApi: { ...actual.snippetsApi, library: mocks.library, create: mocks.create } };
 });
-vi.mock("../features/workspaces/commandApi", () => ({ terminalCommandApi: { preview: mocks.preview, dispatch: mocks.dispatch } }));
+vi.mock("./commands/commandApi", () => ({ terminalCommandApi: { preview: mocks.preview, dispatch: mocks.dispatch } }));
 vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText: mocks.writeText } }));
 
 const session = {
   id: "session-one",
-  kind: "ssh" as const,
+  kind: "ssh" as const, workspaceId: "default",
   alias: "edge",
   title: "edge",
   state: "connected" as const,
@@ -54,7 +54,7 @@ describe("TerminalQuickCommands", () => {
     const view = render(
       <LanguageProvider>
         <button ref={opener} type="button">More</button>
-        <TerminalQuickCommands session={session} onClose={onClose} returnFocusRef={opener} />
+        <TerminalQuickCommands session={session} onClose={onClose} onCopied={() => undefined} returnFocusRef={opener} />
         <textarea aria-label="Terminal input" />
       </LanguageProvider>,
     );
@@ -79,7 +79,7 @@ describe("TerminalQuickCommands", () => {
   });
 
   it("previews an expanded snippet and inserts it without submitting", async () => {
-    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} /></LanguageProvider>);
+    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} onCopied={() => undefined} /></LanguageProvider>);
     await screen.findByRole("option", { name: "Status" });
     await userEvent.type(screen.getByRole("textbox"), "sshd");
     await userEvent.click(screen.getByRole("button", { name: "Preview execution" }));
@@ -96,17 +96,19 @@ describe("TerminalQuickCommands", () => {
     );
   });
 
-  it("copies only the server-expanded command", async () => {
-    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} /></LanguageProvider>);
+  it("copies only the server-expanded command and says it was copied", async () => {
+    const onCopied = vi.fn();
+    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} onCopied={onCopied} /></LanguageProvider>);
     await screen.findByRole("option", { name: "Status" });
     await userEvent.type(screen.getByRole("textbox"), "sshd");
     await userEvent.click(screen.getByRole("button", { name: "Preview execution" }));
     await userEvent.click(await screen.findByRole("button", { name: "Copy" }));
     expect(mocks.writeText).toHaveBeenCalledWith("systemctl status sshd");
+    await waitFor(() => expect(onCopied).toHaveBeenCalledTimes(1));
   });
 
   it("issues an action token only when run is chosen and never reveals the command", async () => {
-    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} /></LanguageProvider>);
+    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} onCopied={() => undefined} /></LanguageProvider>);
     await screen.findByRole("option", { name: "Status" });
     await userEvent.type(screen.getByRole("textbox"), "sshd");
     await userEvent.click(screen.getByRole("button", { name: "Preview execution" }));
@@ -135,7 +137,7 @@ describe("TerminalQuickCommands", () => {
       .mockRejectedValueOnce(new ApiError("terminal_command_preview_changed", 409, null))
       .mockResolvedValueOnce(updatedPreview);
 
-    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} /></LanguageProvider>);
+    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} onCopied={() => undefined} /></LanguageProvider>);
     await screen.findByRole("option", { name: "Status" });
     await userEvent.type(screen.getByRole("textbox"), "sshd");
     await userEvent.click(screen.getByRole("button", { name: "Preview execution" }));
@@ -149,7 +151,7 @@ describe("TerminalQuickCommands", () => {
   it("explains a refused preview in words instead of showing the failure code", async () => {
     mocks.preview.mockRejectedValueOnce(new ApiError("terminal_command_too_large", 400, null));
 
-    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} /></LanguageProvider>);
+    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} onCopied={() => undefined} /></LanguageProvider>);
     await screen.findByRole("option", { name: "Status" });
     await userEvent.type(screen.getByRole("textbox"), "sshd");
     await userEvent.click(screen.getByRole("button", { name: "Preview execution" }));
@@ -159,7 +161,7 @@ describe("TerminalQuickCommands", () => {
   });
 
   it("saves selected terminal text as a reusable snippet", async () => {
-    render(<LanguageProvider><TerminalQuickCommands session={session} initialCommand="deploy --dry-run" onClose={() => undefined} /></LanguageProvider>);
+    render(<LanguageProvider><TerminalQuickCommands session={session} initialCommand="deploy --dry-run" onClose={() => undefined} onCopied={() => undefined} /></LanguageProvider>);
     await screen.findByRole("option", { name: "Status" });
     await userEvent.click(screen.getByRole("button", { name: "Save selection as snippet" }));
     await userEvent.type(screen.getByRole("textbox", { name: "Snippet name" }), "Deploy");

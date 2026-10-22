@@ -1,8 +1,10 @@
 import { usePresetSync } from "./keyconfig/presets";
 import { useBindings } from "./keyconfig/bindings";
-import { Suspense, useCallback, useEffect, type CSSProperties, type MouseEvent } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
 import { type HealthResponse } from "./api/client";
-import { terminalSessionsApi } from "./api/terminalSessions";
+import { createTerminalSessionsApi, terminalSessionsApi } from "./api/terminalSessions";
+import { createTerminalWorkspacesApi, terminalWorkspacesApi } from "./api/terminalWorkspaces";
+import { engineStreamPath, engineTerminalBase } from "./api/remoteEngines";
 import { settingsApi } from "./api/settings";
 import { vaultApi, type PasswordVaultStatus } from "./api/vault";
 import type { SessionState } from "./session/bootstrap";
@@ -21,6 +23,8 @@ import { navigationWidth } from "./shell/navigationLayout";
 import { useStoredColumnWidth } from "./ui/useStoredColumnWidth";
 import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
+import { useTerminalWorkspaces } from "./terminal/useTerminalWorkspaces";
+import { useRunTargets } from "./terminal/useRunTargets";
 import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
 import { localHostAlias } from "./sftp/localHost";
@@ -107,7 +111,35 @@ export function App({
     setAndroidAppearance(resolvedTheme);
   }, [resolvedTheme]);
 
-  const terminalSessions = useTerminalSessions(terminalSessionsApi, t, state === "ready");
+  const runTargets = useRunTargets({ translate: t, enabled: state === "ready", localVersion: version });
+  // The terminal API of the run target: this machine's own, or the one this
+  // machine's engine forwards for an engine on an SSH host. A new API is a new
+  // engine to the hooks below, which drop what they showed and read it anew;
+  // that is wanted once a run target's Vault is unlocked, so the API is built
+  // again for each unlock (vaultRevision).
+  const vaultRevision = runTargets.vaultUnlock.revision;
+  const runTargetApis = useMemo(() => {
+    const alias = runTargets.selected;
+    if (alias === null) return { sessions: terminalSessionsApi, workspaces: terminalWorkspacesApi, vaultRevision };
+    return {
+      sessions: createTerminalSessionsApi(engineTerminalBase(alias), engineStreamPath(alias)),
+      workspaces: createTerminalWorkspacesApi(engineTerminalBase(alias)),
+      vaultRevision,
+    };
+  }, [runTargets.selected, vaultRevision]);
+  const terminalSessions = useTerminalSessions(runTargetApis.sessions, t, state === "ready");
+  // A run target found locked asks for its Vault password at once.
+  const { offer: offerVaultUnlock } = runTargets.vaultUnlock;
+  useEffect(() => {
+    if (terminalSessions.remoteVaultLocked && runTargets.selected !== null) offerVaultUnlock(runTargets.selected);
+  }, [offerVaultUnlock, runTargets.selected, terminalSessions.remoteVaultLocked]);
+  const terminalWorkspaces = useTerminalWorkspaces({
+    sessions: terminalSessions.sessions,
+    translate: t,
+    enabled: state === "ready",
+    onSessionsMoved: terminalSessions.refresh,
+    api: runTargetApis.workspaces,
+  });
   const terminalWorkspace = useTerminalWorkspaceController({
     api: settingsApi,
     terminalSessions,
@@ -121,31 +153,43 @@ export function App({
     localShellProfiles,
     activeSessionId,
     terminalScreenMounted,
-    liveWorkspace,
-    restoreRequest: workspaceRestoreRequest,
-    renameRequest: workspaceRenameRequest,
     orderedSessions,
     showSession,
-    openWorkspace,
-    renameWorkspace,
     openLocalShell,
     openSSHSession,
     duplicateSession,
-    consumeRestore: consumeWorkspaceRestore,
-    setWorkspaceRestoring,
-    consumeRename: consumeWorkspaceRename,
     reorderSessions: setSessionOrder,
-    setLiveWorkspace,
     setSettings: setTerminalSettings,
   } = terminalWorkspace;
 
+  // SFTP and Home open terminals on this machine. With an engine on an SSH
+  // host chosen, the run target goes back to this machine first and the
+  // session is opened once its terminal API is the one in use.
+  const [pendingLocalOpen, setPendingLocalOpen] = useState<{ alias: string; cwd?: string } | null>(null);
   const openSFTPTerminal = useCallback(async (alias: string, cwd?: string) => {
+    if (runTargets.selected !== null) {
+      setPendingLocalOpen(cwd === undefined ? { alias } : { alias, cwd });
+      runTargets.select(null);
+      return;
+    }
     if (alias === localHostAlias) {
       await openLocalShell(undefined, cwd);
       return;
     }
     await openSSHSession(alias, cwd);
-  }, [openLocalShell, openSSHSession]);
+  }, [openLocalShell, openSSHSession, runTargets]);
+
+  useEffect(() => {
+    if (pendingLocalOpen === null || runTargets.selected !== null) return;
+    setPendingLocalOpen(null);
+    void openSFTPTerminal(pendingLocalOpen.alias, pendingLocalOpen.cwd);
+  }, [openSFTPTerminal, pendingLocalOpen, runTargets.selected]);
+
+  // Home opens a session on this machine itself, so it is shown there.
+  const showLocalSession = useCallback((id: string) => {
+    runTargets.select(null);
+    showSession(id);
+  }, [runTargets, showSession]);
 
   useAppShortcuts({
     enabled: state === "ready",
@@ -301,19 +345,19 @@ export function App({
             sectionLabels={sectionLabels}
             onNavigate={navigateFromMenu}
             terminalSessions={terminalSessions}
+            terminalWorkspaces={terminalWorkspaces}
+            runTargets={runTargets}
             orderedSessions={orderedSessions}
             activeSessionId={activeSessionId}
-            liveWorkspace={liveWorkspace}
-            onRenameWorkspace={renameWorkspace}
             unreadBySession={unreadSessions}
             onShowSession={showSession}
             onDuplicateSession={(id) => void duplicateSession(id)}
             onReorderSessions={setSessionOrder}
             localShellProfiles={localShellProfiles}
-            onOpenShell={(profileId) => void openLocalShell(profileId)}
+            onOpenShell={(profileId, workspaceId) => void openLocalShell(profileId, undefined, workspaceId)}
             aliases={declared.knownAliases}
             hosts={declared.hosts}
-            onConnect={(alias) => void openSSHSession(alias)}
+            onConnect={(alias, workspaceId) => void openSSHSession(alias, undefined, workspaceId)}
             onOpenCommandPalette={openPaletteFromNavigation}
           />
 
@@ -347,19 +391,10 @@ export function App({
                       hostAppearance={declared.hostAppearance}
                       hostOSC52={declared.hostOSC52}
                       hostVPN={declared.hostVPN}
-                      onActive={showSession}
-                      onLiveWorkspaceChange={setLiveWorkspace}
-                      onOpenAlias={(alias) =>
-                        terminalSessions.open({ kind: "ssh", alias })
-                      }
-                      onOpenShell={() => terminalSessions.open({ kind: "shell" })}
+                      api={runTargetApis.sessions}
+                      runTarget={runTargets.selected}
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
-                      restoreRequest={workspaceRestoreRequest}
-                      onRestoreConsumed={consumeWorkspaceRestore}
-                      onRestoringChange={setWorkspaceRestoring}
-                      renameRequest={workspaceRenameRequest}
-                      onRenameConsumed={consumeWorkspaceRename}
                     />
                   </div>
                 ) : null}
@@ -395,10 +430,9 @@ export function App({
                         passwordless: session.passwordless,
                         onInspector: setInspector,
                         terminalSessions,
-                        onShowSession: showSession,
+                        onShowSession: showLocalSession,
                         onOpenSSHSession: openSSHSession,
                         onOpenTerminal: openSFTPTerminal,
-                        onOpenWorkspace: openWorkspace,
                         onTerminalSettingsChange: async (settings) => {
                           setTerminalSettings(settings);
                           await terminalSessions.refresh();

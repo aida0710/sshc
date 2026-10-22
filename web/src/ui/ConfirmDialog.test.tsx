@@ -109,6 +109,21 @@ describe("ConfirmDialog", () => {
     outside.remove();
   });
 
+  it("marks the pressed confirm button as working, with the same label, until the action settles", async () => {
+    let settle: () => void = () => undefined;
+    const onConfirm = vi.fn(() => new Promise<void>((resolve) => { settle = resolve; }));
+    open({ onConfirm });
+    const user = userEvent.setup();
+
+    expect(screen.getByRole("button", { name: "Close" })).not.toHaveAttribute("aria-busy");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.getByRole("button", { name: "Close" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Keep it open" })).not.toHaveAttribute("aria-busy");
+
+    settle();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).not.toHaveAttribute("aria-busy"));
+  });
+
   it("disables both buttons while the caller reports busy", () => {
     open({ busy: true });
     expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();

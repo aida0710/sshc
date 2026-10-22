@@ -70,7 +70,7 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
   }
 
   const strong = meetsMasterPasswordMinimum(draft.next, minPassphraseLength) && draft.next === draft.confirm;
-  const canChange = passwordless !== null && !save.busy && (draft.withoutPassword || strong);
+  const canChange = passwordless !== null && (draft.withoutPassword || strong);
   return (
     <SettingsSection id="settings-password" label={t("secrets.changeHeading")} icon="secrets" showHeading={showHeading}>
       <div className="max-w-2xl">
@@ -103,10 +103,10 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
         </div>
         {!draft.withoutPassword && isAcceptedButShort(draft.next, minPassphraseLength) ? <p className="mt-3 text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
         <ActionArea status={save.error === ""
-          ? (save.saved ? <p role="status" className="text-sm text-live">{t("secrets.changedMasterLocally")}</p> : undefined)
+          ? (save.saved ? <Notice tone="success">{t("secrets.changedMasterLocally")}</Notice> : undefined)
           : <Notice tone="danger">{save.error}</Notice>}
         >
-          <Button kind="primary" disabled={!canChange} onClick={() => void submit()}>
+          <Button kind="primary" busy={save.busy} disabled={!canChange} onClick={() => void submit()}>
             {t("secrets.change")}
           </Button>
         </ActionArea>

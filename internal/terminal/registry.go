@@ -17,9 +17,11 @@ type Spec struct {
 	Kind  Kind
 	Alias string
 	// Title は一覧に出す名前である。ssh は alias、shell はシェルの basename。
-	Title   string
-	Command Command
-	Size    Size
+	Title string
+	// Workspace は、このセッションを入れるワークスペースの ID である。
+	Workspace string
+	Command   Command
+	Size      Size
 	// Open は呼び出し側が Process を生成するコールバックである。
 	Open func(ctx context.Context, size Size) (Process, error)
 	// Reopen defaults to Open and is used for transport/manual reconnects.
@@ -198,6 +200,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 	session := &Session{
 		id: id, kind: spec.Kind, alias: spec.Alias, title: spec.Title,
 		fallbackTitle: spec.Title,
+		workspace:     spec.Workspace,
 		started:       r.now(),
 		buffer:        NewRing(limits.Scrollback),
 		streams:       map[*Stream]bool{},

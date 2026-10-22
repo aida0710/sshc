@@ -15,11 +15,11 @@ sshc is a terminal app for macOS, Linux, Windows, and Android. On desktop, one `
 brew install aida0710/tap/sshc
 ```
 
-Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.52.1`.
+Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.53.0`.
 
 ```sh
-SSHC_VERSION=v0.52.1 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.52.1/install.sh | sh'
+SSHC_VERSION=v0.53.0 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.53.0/install.sh | sh'
 ```
 
 After installation, `sshc update` delegates upgrades to Homebrew or to a receipt-aware installer. It shows the planned change and asks for confirmation. In non-interactive automation, review the plan and use `sshc update --yes`.
@@ -154,7 +154,7 @@ A state or definition change while waiting for confirmation also prevents succes
 
 ### Update from the web UI
 
-Open **About sshc** under **Others** in the Menu, or select the version in the sidebar, to see the running version, commit, installation method, and release notes. Notes cover the current version through the latest stable release within the 100 most recent releases retrieved. Their Markdown source is shown as plain text.
+Open **About sshc** under **Others** in the Menu, or select the version beside the logo at the top of the sidebar, to see the running version, commit, installation method, and release notes. Notes cover the current version through the latest stable release within the 100 most recent releases retrieved. Their Markdown source is shown as plain text.
 
 The engine checks at startup and every six hours, retaining the result. The sidebar rereads that result hourly. Select **Check for updates** on About sshc to check immediately, then **Update sshc** when available. Below the buttons, each step of a check or an update is listed with its time. If a check fails, the previously retrieved release information remains available.
 

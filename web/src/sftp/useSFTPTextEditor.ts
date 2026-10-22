@@ -75,6 +75,9 @@ export function useSFTPTextEditor({
   const [opened, setOpened] = useState<OpenedText | null>(null);
   const [contents, setContents] = useState("");
   const [busy, setBusy] = useState(false);
+  // The file being read into the editor, so that the pane can say which file
+  // it is waiting for before the editor opens.
+  const [readingPath, setReadingPath] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const writing = useRef(false);
@@ -106,6 +109,7 @@ export function useSFTPTextEditor({
     setOpened(null);
     setContents("");
     setBusy(false);
+    setReadingPath(null);
     setProblem(null);
     setConfirming(null);
     setOverwriteConfirmation(null);
@@ -123,6 +127,7 @@ export function useSFTPTextEditor({
   async function read(alias: string, path: string, { reportFailure, position }: { reportFailure: (message: string) => void; position?: EditorPosition }) {
     const isCurrent = fileGeneration.begin();
     setBusy(true);
+    setReadingPath(path);
     try {
       const file = position?.expectedRevision === undefined ? await source.readText(alias, path) : await source.readText(alias, path, { expectedRevision: position.expectedRevision });
       if (!isCurrent()) return;
@@ -138,7 +143,10 @@ export function useSFTPTextEditor({
       if (!isCurrent()) return;
       reportFailure(readProblemText(error));
     } finally {
-      if (isCurrent()) setBusy(false);
+      if (isCurrent()) {
+        setBusy(false);
+        setReadingPath(null);
+      }
     }
   }
 
@@ -263,6 +271,8 @@ export function useSFTPTextEditor({
 
   return {
     opened: opened?.file ?? null,
+    // A reload reads with the editor already open, which shows that itself.
+    openingPath: opened === null ? readingPath : null,
     local: opened?.alias === localHostAlias,
     initialLine: opened?.initialLine ?? 1,
     contents,
