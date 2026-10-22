@@ -77,6 +77,7 @@ func TestARefusedRemoteEngineIsExplainedWithTheNextStep(t *testing.T) {
 		{engineProblem{Code: "remote_engine_not_installed"}, "install sshc there"},
 		{engineProblem{Code: "remote_engine_no_entrance"}, "sshc open --no-browser on r540"},
 		{engineProblem{Code: "remote_engine_forwarding_refused"}, "AllowTcpForwarding"},
+		{engineProblem{Code: "remote_engine_unproven"}, "sshc status on r540"},
 		{engineProblem{Code: "server_stopping"}, "code server_stopping"},
 	} {
 		if got := remoteEngineRefusal("r540", test.refusal); !strings.Contains(got, test.advice) {

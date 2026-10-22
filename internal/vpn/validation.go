@@ -158,7 +158,8 @@ func validateLength(field, value string, limit int) error {
 }
 
 // validateServerName は、VPN サーバーの名前またはアドレスとして、設定ファイルと
-// コマンド引数へそのまま書けるかを確かめる。
+// コマンド引数へそのまま書けるかを確かめる。先頭が - の値は、コマンドがオプション
+// として読む（openconnect の --script など）。名前にもアドレスにも無い形なので断る。
 func validateServerName(field, server string) error {
 	if server == "" {
 		return fieldError(ErrSettings, field, ReasonRequired)
@@ -166,7 +167,7 @@ func validateServerName(field, server string) error {
 	if err := validateLength(field, server, maxServerLength); err != nil {
 		return err
 	}
-	if strings.ContainsAny(server, " \t\r\n\"\\") {
+	if strings.ContainsAny(server, " \t\r\n\"\\") || strings.HasPrefix(server, "-") {
 		return fieldError(ErrSettings, field, ReasonFormat)
 	}
 	return nil

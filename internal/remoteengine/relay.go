@@ -15,22 +15,23 @@ const relayReadHeaderTimeout = 10 * time.Second
 
 // relay は、接続先ひとつ分の「別タブで開く」中継である。このマシンの
 // 127.0.0.1:<localPort> で待ち受け、SSH の接続を通して、接続先の 127.0.0.1:<remotePort>
-// のエンジンへ届ける。
+// のエンジンへ届ける。新しく開く TCP の接続ごとに、接続先のエンジンが handoff の秘密を
+// 持つことを確かめてから、ブラウザの要求を運ぶ。
 type relay struct {
 	link      *hostLink
 	localPort int
 	server    *http.Server
 	transport *http.Transport
 
-	mutex      sync.Mutex
-	remotePort int
+	mutex  sync.Mutex
+	remote engineIdentity
 }
 
 func newRelay(link *hostLink) *relay {
 	r := &relay{link: link}
 	r.transport = &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return link.dialLoopback(ctx, r.currentRemotePort())
+			return link.dialProven(ctx, r.currentRemote())
 		},
 		// 圧縮はブラウザと接続先のエンジンのあいだのことで、中継はそのまま運ぶ。
 		DisableCompression: true,
@@ -40,17 +41,24 @@ func newRelay(link *hostLink) *relay {
 	return r
 }
 
-func (r *relay) setRemotePort(port int) {
+// setRemote は、中継する先のエンジンを覚え直す。前のエンジンへの待機中の接続は捨てる。
+func (r *relay) setRemote(remote engineIdentity) {
 	r.mutex.Lock()
-	defer r.mutex.Unlock()
-	r.remotePort = port
+	changed := r.remote != remote
+	r.remote = remote
+	r.mutex.Unlock()
+	if changed {
+		r.transport.CloseIdleConnections()
+	}
 }
 
-func (r *relay) currentRemotePort() int {
+func (r *relay) currentRemote() engineIdentity {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	return r.remotePort
+	return r.remote
 }
+
+func (r *relay) currentRemotePort() int { return r.currentRemote().port }
 
 // serve は、listener で中継を始める。
 func (r *relay) serve(listener net.Listener, port int) {

@@ -993,6 +993,9 @@ export const en = {
   "terminal.jisYenBackslashLabel": "Send the JIS ¥ key as backslash",
   "terminal.jisYenBackslashHint":
     "Useful with Japanese keyboards. IME composition is not modified.",
+  "terminal.identifyAsITerm2Label": "Identify the terminal as iTerm2",
+  "terminal.identifyAsITerm2Hint":
+    "Claude Code shows images only in a terminal that names itself iTerm2. Other programs that check the terminal's name also treat it as iTerm2.",
   "terminal.fontSizeLabel": "Font size",
   "terminal.paletteLabel": "Colour scheme",
   "terminal.verbosityLabel": "Connection log",
@@ -1636,6 +1639,7 @@ export const en = {
   "vpn.field.decided_by_sshc": "Settings that sshc decides cannot be used.",
   "vpn.field.file_reference": "Directives that name a file cannot be used. Embed the contents in the configuration file.",
   "vpn.field.server_mode": "VPN server settings cannot be used.",
+  "vpn.field.unlisted_directive": "This is not an OpenVPN directive that sshc accepts.",
   "vpn.field.unsupported_inline": "This directive cannot be embedded as a block.",
   "vpn.field.unclosed_inline": "An embedded block has no closing line.",
   "vpn.field.not_client": "This is not an OpenVPN client configuration file. Use a file that has client or tls-client.",
@@ -1648,6 +1652,7 @@ export const en = {
   "vpn.configLine.decided_by_sshc": "Line {line}: \"{directive}\" is decided by sshc, so it cannot be used.",
   "vpn.configLine.file_reference": "Line {line}: \"{directive}\" names a file, which the container cannot read. Embed its contents as <{directive}>…</{directive}>.",
   "vpn.configLine.server_mode": "Line {line}: \"{directive}\" is a VPN server setting, so it cannot be used.",
+  "vpn.configLine.unlisted_directive": "Line {line}: \"{directive}\" has a value that sshc does not accept.",
   "vpn.field.unknown_directive": "This item cannot be used in a WireGuard configuration file.",
   "vpn.field.misplaced_directive": "This item cannot be written in this section.",
   "vpn.field.missing_directive": "A required item is missing.",

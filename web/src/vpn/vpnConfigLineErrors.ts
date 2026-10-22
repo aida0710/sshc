@@ -13,6 +13,7 @@ const directiveMessages: Partial<Record<VPNFieldError["reason"], MessageKey>> = 
   format: "vpn.configLine.format",
   file_reference: "vpn.configLine.file_reference",
   server_mode: "vpn.configLine.server_mode",
+  unlisted_directive: "vpn.configLine.unlisted_directive",
   not_ipv4: "vpn.configLine.not_ipv4",
   unroutable: "vpn.configLine.unroutable",
   out_of_range: "vpn.configLine.out_of_range",

@@ -33,8 +33,11 @@ describe("inspectOpenVPNConfig", () => {
   );
 
   it("does not take a directive named after an object property for a listed one", () => {
-    expect(inspectOpenVPNConfig("client\nremote vpn.example.jp\nconstructor x\n<toString>\n</toString>\n")).toEqual({
-      refusal: { field: "secrets.openvpnConfig", reason: "unsupported_inline", line: 4 },
+    expect(inspectOpenVPNConfig("client\nremote vpn.example.jp\nconstructor x\n")).toEqual({
+      refusal: { field: "secrets.openvpnConfig", reason: "unlisted_directive", line: 3 },
+    });
+    expect(inspectOpenVPNConfig("client\nremote vpn.example.jp\n<toString>\n</toString>\n")).toEqual({
+      refusal: { field: "secrets.openvpnConfig", reason: "unsupported_inline", line: 3 },
     });
   });
 });

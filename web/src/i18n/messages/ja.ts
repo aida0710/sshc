@@ -993,6 +993,9 @@ export const ja = {
   "terminal.jisYenBackslashLabel": "JIS配列の¥キーをバックスラッシュ（\\）として送る",
   "terminal.jisYenBackslashHint":
     "日本語キーボード向けです。IME変換中の入力は変更しません。",
+  "terminal.identifyAsITerm2Label": "ターミナルの名前を iTerm2 と答える",
+  "terminal.identifyAsITerm2Hint":
+    "Claude Code は、名前が iTerm2 のターミナルでだけ画像を表示します。名前を見て動きを変えるほかのプログラムにも iTerm2 と見なされます。",
   "terminal.fontSizeLabel": "文字の大きさ",
   "terminal.paletteLabel": "配色",
   "terminal.verbosityLabel": "接続のログ",
@@ -1636,6 +1639,7 @@ export const ja = {
   "vpn.field.decided_by_sshc": "sshcが決める設定は使用できません。",
   "vpn.field.file_reference": "ファイルを指定する指示は使用できません。中身を設定ファイルに埋め込んでください。",
   "vpn.field.server_mode": "VPNサーバー用の設定は使用できません。",
+  "vpn.field.unlisted_directive": "sshcで使用できるOpenVPNの指示ではありません。",
   "vpn.field.unsupported_inline": "埋め込みのブロックに対応していない指示です。",
   "vpn.field.unclosed_inline": "埋め込みのブロックの終わりの行がありません。",
   "vpn.field.not_client": "OpenVPNのクライアント用の設定ファイルではありません。clientまたはtls-clientを含む設定ファイルを指定してください。",
@@ -1648,6 +1652,7 @@ export const ja = {
   "vpn.configLine.decided_by_sshc": "{line}行目の「{directive}」は、sshcが決める設定のため使用できません。",
   "vpn.configLine.file_reference": "{line}行目の「{directive}」はファイルを指定しています。コンテナからはファイルを読めないため、中身を<{directive}>〜</{directive}>の形で設定ファイルに埋め込んでください。",
   "vpn.configLine.server_mode": "{line}行目の「{directive}」は、VPNサーバー用の設定のため使用できません。",
+  "vpn.configLine.unlisted_directive": "{line}行目の「{directive}」に、sshcで使用できない値があります。",
   "vpn.field.unknown_directive": "WireGuardの設定ファイルで使えない項目です。",
   "vpn.field.misplaced_directive": "この節には書けない項目です。",
   "vpn.field.missing_directive": "必要な項目がありません。",

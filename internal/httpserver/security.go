@@ -116,12 +116,14 @@ type Security struct {
 // session/bootstrap と session/recover は gate より前に通すので、ここには無い。
 // recover-compatible-backup と reset-unsupported は、別の版が書いた Vault を
 // 開けずロックされたままのときにだけ意味を持つため、ロック中に通す必要がある。
-// どちらも unlock と同じく master password を検証する。
+// どちらも unlock と同じく master password を検証する。sign-out はセッションと
+// 登録を消すだけで Vault の中身に触れないので、master password を知らない人も
+// ロック画面からこのブラウザをサインアウトできるよう通す。
 func gateExempt(method, path string) bool {
 	switch path {
 	case "/api/v1/health", "/api/v1/update":
 		return method == http.MethodGet
-	case "/api/v1/session/renew":
+	case "/api/v1/session/renew", "/api/v1/session/sign-out":
 		return method == http.MethodPost
 	case "/api/v1/passwords":
 		return method == http.MethodGet
@@ -142,6 +144,9 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return problem(c, http.StatusForbidden, "invalid_host")
 		}
 
+		if c.Path() == remoteEngineStreamRoute {
+			return s.requireSignedInAndUnlocked(c, next)
+		}
 		if !isAPI {
 			return next(c)
 		}
@@ -216,6 +221,36 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		c.Set(SessionContextKey, cookie.Value)
 		return next(c)
 	}
+}
+
+// requireSignedInAndUnlocked は、/api/ の外にあって、それでもこのマシンのセッションと
+// Vault のロックの解除を求める受け口（実行先のターミナルの入出力）を守る。
+//
+// 実行先のターミナルの入出力は、接続先のエンジンが発行したチケットを接続先で確かめる。
+// このマシンはチケットを確かめられないので、確かめずに取り次ぐと、cookie も持たない
+// 要求で接続先への SSH 接続と CLI セッションの発行まで進む。WebSocket は CSRF の
+// トークンをヘッダーで送れないので、cookie（SameSite=Strict）と Origin（取り次ぐ受け口が
+// 完全一致を求める）で同じページからの要求に限る。ロック中に断るのは、取り次ぐ
+// ターミナルの API と同じ扱いにするためである。
+func (s Security) requireSignedInAndUnlocked(c *echo.Context, next echo.HandlerFunc) error {
+	cookie, err := c.Request().Cookie(SessionCookie)
+	if err != nil {
+		return problem(c, http.StatusUnauthorized, "session_required")
+	}
+	if s.Sessions == nil {
+		return problem(c, http.StatusUnauthorized, "invalid_session")
+	}
+	endRequest, authenticated := s.Sessions.BeginRequest(cookie.Value)
+	if !authenticated {
+		return problem(c, http.StatusUnauthorized, "invalid_session")
+	}
+	// 入出力が続くあいだセッションを使用中として持ち続けない。このマシンの
+	// /terminal/stream と同じく、開くときに一度だけ確かめる。
+	endRequest()
+	if s.Unlocked == nil || !s.Unlocked() {
+		return problem(c, http.StatusConflict, "vault_locked")
+	}
+	return next(c)
 }
 
 func setSecurityHeaders(header http.Header, apiResponse bool) {

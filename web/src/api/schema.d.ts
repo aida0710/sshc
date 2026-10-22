@@ -4036,6 +4036,7 @@ export interface components {
             webgl?: boolean;
             osc52?: boolean;
             jisYenBackslash?: boolean;
+            identifyAsITerm2?: boolean;
             localShellProfile?: string;
             startDirectory?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
@@ -4053,6 +4054,7 @@ export interface components {
             webgl?: boolean;
             osc52?: boolean;
             jisYenBackslash?: boolean;
+            identifyAsITerm2?: boolean;
             localShellProfile?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
         };
@@ -4879,7 +4881,6 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
         };
     };

@@ -216,10 +216,18 @@ func (engine *engineAPI) sendJSONWithAction(
 
 // sendSecretJSON takes ownership of payload and zeroes it on every exit. The
 // one-shot reader deliberately has no GetBody, preventing transparent replay.
+//
+// The secret was usually typed after openEngineAPI proved the engine, and the
+// engine may have exited and another process taken its port meanwhile, so the
+// engine proves itself again right before the secret leaves.
 func (engine *engineAPI) sendSecretJSON(
 	ctx context.Context, method, path string, payload []byte, target any,
 ) error {
 	defer clear(payload)
+	handoffToProve := handoff.Handoff{URL: engine.origin, Secret: engine.secret}
+	if err := proveEngine(ctx, handoffToProve, engine.client); err != nil {
+		return err
+	}
 	var body io.Reader
 	if payload != nil {
 		body = &oneShotSecretPayload{body: payload}

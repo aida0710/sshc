@@ -59,6 +59,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/BootstrapResponse" }
         "401": { $ref: "#/components/responses/Problem" }
+        # Linux で、接続が同じマシンの別 OS ユーザーのものかもしれないときの
+        # recover_forbidden。登録 token は差し替えない。
         "403": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
   /api/v1/session/renew:
@@ -96,7 +98,6 @@ paths:
           description: The session is gone and the cookie is cleared
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
   /api/v1/health:
     get:
@@ -6042,6 +6043,9 @@ components:
         webgl: { type: boolean }
         osc52: { type: boolean }
         jisYenBackslash: { type: boolean }
+        # 端末の名前を問う XTVERSION（CSI > q）に、xterm.js でなく iTerm2 3.5 と
+        # 答える。Claude Code は名前が iTerm2 3.5 以降のときだけ画像を描く。
+        identifyAsITerm2: { type: boolean }
         localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
         # ローカルシェルの開始ディレクトリ。`~` を維持し、空なら home を使う。
         startDirectory: { type: string, maxLength: 4096 }
@@ -6079,6 +6083,9 @@ components:
         webgl: { type: boolean }
         osc52: { type: boolean }
         jisYenBackslash: { type: boolean }
+        # 端末の名前を問う XTVERSION（CSI > q）に、xterm.js でなく iTerm2 3.5 と
+        # 答える。Claude Code は名前が iTerm2 3.5 以降のときだけ画像を描く。
+        identifyAsITerm2: { type: boolean }
         localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
     # このマシンの sshc エンジンの設定。同期しない。

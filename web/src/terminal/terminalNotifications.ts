@@ -25,9 +25,12 @@ export function nextTerminalNotification(
   if (last === undefined) return null;
   const displayTitle = terminalDisplayTitle(session);
   const alias = session.kind === "ssh" ? session.alias : undefined;
-  const subject = alias === undefined || alias === displayTitle ? displayTitle : `${displayTitle}（${alias}）`;
-  // The browser notification names the pane so several agents stay apart;
+  // The connection alias leads the heading because it is the only part the
+  // server cannot choose: the pane title follows the program's OSC title, so a
+  // hostile server could otherwise word the whole notification like sshc's own.
+  // The pane title still follows so several agents on one host stay apart, and
   // the program's own title becomes the first line of the body.
+  const subject = alias === undefined || alias === displayTitle ? displayTitle : `${alias}（${displayTitle}）`;
   const body = last.title !== "" && last.body !== ""
     ? `${last.title}\n${last.body}`
     : last.title || last.body || t("terminal.notificationFallback");

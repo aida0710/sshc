@@ -53,6 +53,17 @@ func TestTheOpenConnectScriptOnlyBringsUpTheInterface(t *testing.T) {
 	}
 }
 
+// サーバーは -- の後ろで渡すので、検査をすり抜けた値があってもオプションとして読まれない。
+func TestTheOpenConnectServerIsPassedAfterTheEndOfOptions(t *testing.T) {
+	script, err := container.ReadFile("container/backend-openconnect.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(script), `openconnect "$@" -- "$server"`) {
+		t.Fatalf("the server is not passed after --:\n%s", script)
+	}
+}
+
 // 二段目を聞いてくる装置には、決めた語をそのまま送る。
 //
 // openconnect は、パスワードの次の質問にも標準入力の次の行を使う。装置ごとに
@@ -177,6 +188,10 @@ func TestAnOpenConnectProfileIsRefusedWhenItCannotBecomeARoute(t *testing.T) {
 	}{
 		{"装置が空", func(settings *OpenConnectSettings) { settings.Server = "" }},
 		{"装置に空白", func(settings *OpenConnectSettings) { settings.Server = "vpn example jp" }},
+		// 先頭が - の値は、openconnect がオプションとして読む。
+		{"装置が --script= で始まる", func(settings *OpenConnectSettings) { settings.Server = "--script=id>/tmp/x" }},
+		{"装置が -s で始まる", func(settings *OpenConnectSettings) { settings.Server = "-s/bin/true" }},
+		{"装置が --config= で始まる", func(settings *OpenConnectSettings) { settings.Server = "--config=/dev/stdin" }},
 		{"利用者名が空", func(settings *OpenConnectSettings) { settings.Username = "" }},
 		{"知らない方式", func(settings *OpenConnectSettings) { settings.Protocol = "openvpn" }},
 		{"指紋の形が違う", func(settings *OpenConnectSettings) { settings.ServerCertificate = "abc123" }},

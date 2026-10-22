@@ -3,6 +3,8 @@ package browserauth_test
 import (
 	"testing"
 	"time"
+
+	"sshc/internal/browserauth"
 )
 
 func TestSignOutRevokesEveryGraceToken(t *testing.T) {
@@ -52,11 +54,19 @@ func TestNewRotationsDoNotExtendAnOlderTokensGrace(t *testing.T) {
 	clock.advance(40 * time.Second)
 	third, _ := recover(t, store, second)
 	clock.advance(21 * time.Second)
-	if _, accepted := recover(t, store, first); accepted {
+	late, err := store.Recover(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if late.Accepted() {
 		t.Fatal("later rotation extended the oldest token's grace")
 	}
-	if _, accepted := recover(t, store, third); !accepted {
-		t.Fatal("current token stopped working with the oldest token's expiry")
+	// 猶予の切れた退役 token は、何世代前でも複製として登録ごと消す。
+	if late.Stolen == "" {
+		t.Fatal("the oldest token after its grace was not detected as a clone")
+	}
+	if _, accepted := recover(t, store, third); accepted {
+		t.Fatal("the current token survived the detected clone")
 	}
 }
 
@@ -101,5 +111,61 @@ func TestARegistrationKeepsItsIdentifierAcrossRotationsAndTheft(t *testing.T) {
 	}
 	if copied.Stolen != rotated.Registration {
 		t.Fatalf("stolen = %q, want %q", copied.Stolen, rotated.Registration)
+	}
+}
+
+// 盗んだ側が続けて何度 recover しても、正規のブラウザが猶予の後に元の token を
+// 出せば複製として検知し、盗んだ側の現在の token も使えなくなる。
+func TestAnOriginalTokenIsDetectedAsACloneAfterSeveralRotations(t *testing.T) {
+	store, clock := newStore(t, randomBytes(t, 32*8))
+	original, _, err := store.Register("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stolen1, ok := recover(t, store, original)
+	if !ok {
+		t.Fatal("first recover with the stolen token was refused")
+	}
+	stolen2, ok := recover(t, store, stolen1)
+	if !ok {
+		t.Fatal("second recover with the stolen token was refused")
+	}
+	clock.advance(2 * time.Minute)
+	genuine, err := store.Recover(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if genuine.Accepted() || genuine.Stolen == "" {
+		t.Fatalf("Recover(original after two rotations) = %+v; want the clone detected", genuine)
+	}
+	if _, accepted := recover(t, store, stolen2); accepted {
+		t.Fatal("the thief's current token still recovers after the clone was detected")
+	}
+}
+
+// 覚えておく退役 token は MaxRetiredTokens 世代まで。それより古い token は、
+// 複製として検知できず、ただ断られる。
+func TestATokenOlderThanTheRetiredGenerationsIsOnlyRefused(t *testing.T) {
+	store, clock := newStore(t, randomBytes(t, 32*(browserauth.MaxRetiredTokens+4)))
+	original, _, err := store.Register("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldest := original
+	current := original
+	for range browserauth.MaxRetiredTokens + 1 {
+		next, ok := recover(t, store, current)
+		if !ok {
+			t.Fatal("rotation was refused")
+		}
+		current = next
+	}
+	clock.advance(2 * time.Minute)
+	forgotten, err := store.Recover(oldest)
+	if err != nil || forgotten.Accepted() || forgotten.Stolen != "" {
+		t.Fatalf("Recover(beyond the retired generations) = %+v, %v; want a plain refusal", forgotten, err)
+	}
+	if _, accepted := recover(t, store, current); !accepted {
+		t.Fatal("the current token stopped working")
 	}
 }
