@@ -36,12 +36,13 @@ export function WorkspaceRow({
         className="flex min-h-10 min-w-0 grow items-center gap-1.5 rounded-md px-1 text-left text-sm hover:bg-hover md:min-h-8"
       >
         <DisclosureChevron expanded={expanded} className="size-3.5 shrink-0 text-ink-faint" />
-        <span className={`min-w-0 grow truncate ${expanded ? "font-semibold text-ink" : "text-ink-muted"}`}>{name}</span>
+        {/* The workspace name labels its sessions, so it stays quieter than they are. */}
+        <span className="min-w-0 grow truncate text-xs font-normal text-ink-faint">{name}</span>
         {hidden ? <span className="sr-only">{t("workspace.hiddenMark")}</span> : null}
         {unread && !expanded ? (
           <span aria-label={t("terminal.unreadNotification")} className="size-2 shrink-0 rounded-full bg-accent" />
         ) : null}
-        <span className="shrink-0 text-xs text-ink-faint">{sessionCount}</span>
+        <span className="shrink-0 text-[11px] text-ink-faint">{sessionCount}</span>
       </button>
       <button
         type="button"
