@@ -12,6 +12,7 @@ const jaSidebar = [
   { text: "Terminal", items: [
     { text: "Terminalを使う", link: "/features/terminal" },
     { text: "ワークスペース", link: "/features/workspace" },
+    { text: "実行先", link: "/features/run-target" },
     { text: "クイックコマンド", link: "/terminal/commands" },
     { text: "タイトルと通知", link: "/terminal/notifications" },
     { text: "ポート転送", link: "/terminal/port-forwarding" },
@@ -51,6 +52,7 @@ const enSidebar = [
   { text: "Terminal", items: [
     { text: "Use the terminal", link: "/en/features/terminal" },
     { text: "Workspaces", link: "/en/features/workspace" },
+    { text: "Run on", link: "/en/features/run-target" },
     { text: "Quick Commands", link: "/en/terminal/commands" },
     { text: "Titles and notifications", link: "/en/terminal/notifications" },
     { text: "Port forwarding", link: "/en/terminal/port-forwarding" },

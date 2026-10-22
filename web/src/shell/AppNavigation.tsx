@@ -8,6 +8,8 @@ import {
 import { WorkspaceTree } from "../terminal/WorkspaceTree";
 import type { TerminalWorkspacesState } from "../terminal/useTerminalWorkspaces";
 import { UpdateBadge } from "./UpdateBadge";
+import { RunTargetSwitcher } from "./RunTargetSwitcher";
+import type { RunTargetsState } from "../terminal/useRunTargets";
 import { Icon, type IconName } from "../ui/icons";
 import { BrandMark } from "../ui/BrandMark";
 import { useTranslate } from "../i18n/context";
@@ -38,6 +40,7 @@ export function AppNavigation({
   onNavigate,
   terminalSessions,
   terminalWorkspaces,
+  runTargets,
   orderedSessions,
   activeSessionId,
   unreadBySession,
@@ -66,6 +69,7 @@ export function AppNavigation({
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, name: Section) => void;
   terminalSessions: TerminalSessionsState;
   terminalWorkspaces: TerminalWorkspacesState;
+  runTargets: RunTargetsState;
   orderedSessions: TerminalSession[];
   activeSessionId: string | null;
   unreadBySession: UnreadSessions;
@@ -176,7 +180,12 @@ export function AppNavigation({
           aliases={aliases}
           hosts={hosts}
           {...(onConnect === undefined ? {} : { onConnect })}
+          canBroadcast={runTargets.selected === null}
         />
+      </div>
+
+      <div className="shrink-0">
+        <RunTargetSwitcher targets={runTargets} aliases={aliases} hosts={hosts} />
       </div>
 
       <NavigationResizeHandle width={desktopWidth} onWidthChange={onDesktopWidthChange} />

@@ -15,7 +15,7 @@ export function TerminalOverflowMenu({
   triggerRef,
 }: {
   osc52Enabled: boolean;
-  onQuickCommands: () => void;
+  onQuickCommands?: (() => void) | undefined;
   onPortForwarding?: (() => void) | undefined;
   onOpenRemoteDirectory?: (() => void) | undefined;
   onCopyContext: () => void;
@@ -46,9 +46,11 @@ export function TerminalOverflowMenu({
       aria-label={t("terminal.moreActions")}
       className="absolute right-2 top-[calc(100%-0.25rem)] z-40 w-64 rounded-md border border-control-line bg-card p-1.5 shadow-2xl"
     >
-      <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onQuickCommands)}>
-        {t("terminal.quickCommands")}
-      </button>
+      {onQuickCommands === undefined ? null : (
+        <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onQuickCommands)}>
+          {t("terminal.quickCommands")}
+        </button>
+      )}
       {onPortForwarding === undefined ? null : (
         <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onPortForwarding)}>
           {t("terminal.portForwarding")}

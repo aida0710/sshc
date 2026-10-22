@@ -31,6 +31,8 @@ export const localStorageKeys = {
   collapsedTerminalWorkspaces: "sshc.terminal.collapsed-workspaces.v1",
   // "true" while hidden terminal workspaces are drawn in the tree as well.
   showHiddenTerminalWorkspaces: "sshc.terminal.show-hidden-workspaces.v1",
+  // The SSH alias of the engine whose terminals are shown; empty for this machine.
+  runTarget: "sshc.terminal.run-target.v1",
   // The update job whose result dialog this browser has shown, so it opens once.
   updateShownResult: "sshc.update.shown-result.v1",
   // The release whose notice under the version was folded; a newer one unfolds it.

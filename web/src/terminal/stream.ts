@@ -22,13 +22,15 @@ export type TerminalStream = {
 // may safely span WebSocket messages as long as their order is preserved.
 const inputFrameBytes = 64 * 1024;
 
-export function streamURL(ticket: string, location: Location = window.location): string {
+// streamPath is where the engine that issued the ticket redeems it: this
+// machine's /terminal/stream, or the forwarded stream of a run-target engine.
+export function streamURL(ticket: string, streamPath = "/terminal/stream", location: Location = window.location): string {
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-  return `${scheme}//${location.host}/terminal/stream?ticket=${encodeURIComponent(ticket)}`;
+  return `${scheme}//${location.host}${streamPath}?ticket=${encodeURIComponent(ticket)}`;
 }
 
-export function openStream(ticket: string, handlers: StreamHandlers): TerminalStream {
-  const socket = new WebSocket(streamURL(ticket));
+export function openStream(ticket: string, streamPath: string, handlers: StreamHandlers): TerminalStream {
+  const socket = new WebSocket(streamURL(ticket, streamPath));
   socket.binaryType = "arraybuffer";
   const encoder = new TextEncoder();
   let exited = false;
