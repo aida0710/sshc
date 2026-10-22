@@ -38,8 +38,9 @@ func NewSSHClient(connection *ssh.Client, options ...pkgsftp.ClientOption) (*Cli
 }
 
 func newClientPipe(reader io.Reader, writer io.WriteCloser, options ...pkgsftp.ClientOption) (*Client, error) {
-	attributes := &noFollowAttributesWriter{destination: writer}
-	client, err := pkgsftp.NewClientPipe(&attributeReader{source: reader}, attributes, options...)
+	directories := newDirectoryEntryLimit()
+	attributes := &noFollowAttributesWriter{destination: writer, directories: directories}
+	client, err := pkgsftp.NewClientPipe(&attributeReader{source: reader, directories: directories}, attributes, options...)
 	if err != nil {
 		return nil, err
 	}

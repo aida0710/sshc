@@ -139,13 +139,15 @@ For safety, a configuration file with any of the following directives cannot be 
 
 | Kind | Directives | Why |
 |---|---|---|
-| Runs a command or loads a program | `up`, `down`, `route-up`, `route-pre-down`, `ipchange`, `tls-verify`, `client-connect`, `client-disconnect`, `client-crresponse`, `learn-address`, `auth-user-pass-verify`, `tls-crypt-v2-verify`, `iproute`, `plugin`, `engine`, `pkcs11-providers`, `script-security` | Anything could run inside the container and undo the rule that only the target's traffic goes into the tunnel |
-| Changes routes or DNS | `route`, `route-ipv6`, `redirect-gateway`, `redirect-private`, `client-nat` | sshc adds a route for each target itself |
+| Runs a command or loads a program | `up`, `down`, `route-up`, `route-pre-down`, `ipchange`, `tls-verify`, `client-connect`, `client-disconnect`, `client-crresponse`, `learn-address`, `auth-user-pass-verify`, `tls-crypt-v2-verify`, `iproute`, `plugin`, `engine`, `pkcs11-providers`, `providers`, `script-security`, `dns-updown` | Anything could run inside the container and undo the rule that only the target's traffic goes into the tunnel |
+| Changes routes or DNS | `route`, `route-ipv6`, `redirect-gateway`, `redirect-private`, `client-nat`, `dns` | sshc adds a route for each target itself |
 | Decided by sshc | `dev` and `dev-type` other than `tun`, `dev-node`, `lladdr`, `mktun`, `rmtun`, `daemon`, `log`, `log-append`, `syslog`, `status`, `writepid`, `tmp-dir`, `chroot`, `cd`, `user`, `group`, `setcon`, `askpass`, and every directive starting with `management` | sshc decides the tunnel interface, where the log goes and how OpenVPN runs |
 | Names a file | `ca`, `cert`, `key`, `tls-auth`, `tls-crypt`, `pkcs12`, `auth-user-pass` and the like with a file name, and `config`, `capath`, `tls-export-cert`, `replay-persist`, `genkey` | The file is not in the container. Embedding its contents, as in `<ca>`…`</ca>`, works |
 | For a VPN server | `mode`, `server`, `server-ipv6`, `server-bridge`, `tls-server` | sshc only connects as a client |
 
-A directive behind `setenv opt` is checked as if it were written on its own. The list was checked against the OpenVPN 2.6 manual.
+A directive missing from the table is still refused unless sshc has checked it as a client setting (`remote`, `proto`, `cipher`, `verb` and the like). Directives added by newer OpenVPN releases cannot be used until they are checked. For these the screen names only the line, not the directive: the file holds secrets, so words sshc has not checked are not shown.
+
+`setenv` may set only `CLIENT_CERT`, `FORWARD_COMPATIBLE` and `PUSH_PEER_INFO`, which OpenVPN and its servers read, and names starting with `UV_` or `IV_`. Other variables could change how the script sshc has OpenVPN run behaves. A directive behind `setenv opt` is checked as if it were written on its own. Both the accepted and the refused directives were checked against the OpenVPN 2.6 manual.
 
 #### What sshc decides
 

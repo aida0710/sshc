@@ -326,6 +326,49 @@ func TestEngineAPIMutationTransportFailureIsOutcomeUnknownAndSecretPayloadIsEras
 	}
 }
 
+// engine を確かめてから秘密を入力するあいだに、engine が消えて同じ port を別の
+// プロセスが取った状況である。送る直前に確かめ直すので、秘密はそのプロセスへ届かず、
+// 本文も消える。
+func TestEngineAPISendsNoSecretWhenThePortChangesHandsAfterTheEngineWasProven(t *testing.T) {
+	script := &engineAPIScript{t: t, statusBody: validEngineStatus()}
+	server := engineTestServer(http.HandlerFunc(script.handler))
+	defer server.Close()
+	baseTransport := server.Client().Transport
+	replaced := false
+	secretSent := false
+	client := &http.Client{Transport: testHTTPTransport(func(request *http.Request) (*http.Response, error) {
+		if !replaced {
+			return baseTransport.RoundTrip(request)
+		}
+		if request.URL.Path != httpserver.ChallengePath {
+			secretSent = true
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: http.NoBody, Request: request}, nil
+		}
+		header := make(http.Header)
+		header.Set(handoff.ProofHeader, handoff.Prove("not the secret", request.Header.Get(handoff.ChallengeHeader)))
+		return &http.Response{StatusCode: http.StatusNoContent, Header: header, Body: http.NoBody, Request: request}, nil
+	})}
+	stateDir := t.TempDir()
+	writeTestHandoff(t, stateDir, server.URL)
+	opened, err := openEngineAPI(context.Background(), stateDir, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replaced = true
+
+	payload := []byte(`{"secretAccessKey":"a-secret"}`)
+	err = opened.sendSecretJSON(context.Background(), http.MethodPut, "/api/v1/sync/setup", payload, nil)
+	if !errors.Is(err, errEngineUnproven) {
+		t.Fatalf("send to the process that took the port = %v, want errEngineUnproven", err)
+	}
+	if secretSent {
+		t.Fatal("the secret reached the process that took the port")
+	}
+	if !allZero(payload) {
+		t.Fatalf("secret payload was not erased: %q", payload)
+	}
+}
+
 func TestEngineAPIIssueActionUsesTheTypedEndpoint(t *testing.T) {
 	script := &engineAPIScript{t: t, statusBody: validEngineStatus()}
 	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {

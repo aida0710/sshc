@@ -135,6 +135,43 @@ describe("TerminalView", () => {
     }
   });
 
+  for (const [name, visibleText, opensAtOnce] of [
+    ["shows the real address first when an OSC 8 link's text names another address", "https://github.com/", false],
+    ["opens an OSC 8 link at once when its text names its own address", "https://evil.example/", true],
+  ] as const) {
+    it(name, async () => {
+      let view: Terminal | undefined;
+      const originalOpen = Terminal.prototype.open;
+      const open = vi.spyOn(Terminal.prototype, "open").mockImplementation(function (this: Terminal, parent: HTMLElement) {
+        view = this;
+        return originalOpen.call(this, parent);
+      });
+      const openWindow = vi.spyOn(window, "open").mockReturnValue(null);
+
+      try {
+        renderView();
+        const terminal = view!;
+        // What `\e]8;;https://evil.example/\e\\<text>\e]8;;\e\\` leaves on screen.
+        await new Promise<void>((resolve) => terminal.write(visibleText, resolve));
+        const range = { start: { x: 1, y: 1 }, end: { x: visibleText.length, y: 1 } };
+        const ctrlClick = new MouseEvent("click", { ctrlKey: true, clientX: 10, clientY: 10 });
+        act(() => terminal.options.linkHandler?.activate(ctrlClick, "https://evil.example/", range));
+
+        if (opensAtOnce) {
+          expect(openWindow).toHaveBeenCalledWith("https://evil.example/", "_blank", "noopener,noreferrer");
+          expect(screen.queryByRole("dialog", { name: "Terminal link actions" })).toBeNull();
+        } else {
+          expect(openWindow).not.toHaveBeenCalled();
+          const popover = screen.getByRole("dialog", { name: "Terminal link actions" });
+          expect(popover).toHaveTextContent("https://evil.example/");
+        }
+      } finally {
+        openWindow.mockRestore();
+        open.mockRestore();
+      }
+    });
+  }
+
   it("keeps its title and search toolbar visible", () => {
     render(<TerminalView session={session} api={{ streamPath: "/terminal/stream", terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
 

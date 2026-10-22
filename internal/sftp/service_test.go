@@ -1045,6 +1045,34 @@ func TestDownloadArchiveSkipsUnpublishedUploadParts(t *testing.T) {
 	}
 }
 
+func TestDownloadArchiveWritesOnlyThePermissionBitsOfARemoteFile(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/project":      directory("project"),
+		"/project/tool": file("tool", "x", fs.ModeSetuid|fs.ModeSetgid|fs.ModeSticky|0o755),
+	})
+	var contents bytes.Buffer
+	if _, err := serviceFor(remote).DownloadArchive(t.Context(), "edge", "/project", &contents); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := zip.NewReader(bytes.NewReader(contents.Bytes()), int64(contents.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range reader.File {
+		if entry.Name != "project/tool" {
+			continue
+		}
+		if got := entry.Mode(); got != 0o755 {
+			t.Fatalf("archived mode = %v, want %v", got, fs.FileMode(0o755))
+		}
+		if unixMode := entry.ExternalAttrs >> 16; unixMode&0o7000 != 0 {
+			t.Fatalf("archived unix mode = %o keeps setuid, setgid or sticky", unixMode)
+		}
+		return
+	}
+	t.Fatalf("archive has no project/tool: %v", reader.File)
+}
+
 func TestMkdirTreatsAnExistingDirectoryAsSuccess(t *testing.T) {
 	remote := remoteWith(map[string]node{"/project": directory("project")})
 	entry, err := serviceFor(remote).Mkdir(t.Context(), "edge", "/project")

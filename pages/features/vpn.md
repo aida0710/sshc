@@ -144,13 +144,15 @@ OpenVPNでは、プロバイダや組織が配るクライアント用の設定�
 
 | 種類 | 指示 | 理由 |
 |---|---|---|
-| コマンドやプログラムを実行する | `up`、`down`、`route-up`、`route-pre-down`、`ipchange`、`tls-verify`、`client-connect`、`client-disconnect`、`client-crresponse`、`learn-address`、`auth-user-pass-verify`、`tls-crypt-v2-verify`、`iproute`、`plugin`、`engine`、`pkcs11-providers`、`script-security` | コンテナの中で任意のコマンドが動き、接続先への通信だけをトンネルへ通す仕組みを壊せるため |
-| ルートやDNSを変更する | `route`、`route-ipv6`、`redirect-gateway`、`redirect-private`、`client-nat` | ルートはsshcが接続先ごとに追加するため |
+| コマンドやプログラムを実行する | `up`、`down`、`route-up`、`route-pre-down`、`ipchange`、`tls-verify`、`client-connect`、`client-disconnect`、`client-crresponse`、`learn-address`、`auth-user-pass-verify`、`tls-crypt-v2-verify`、`iproute`、`plugin`、`engine`、`pkcs11-providers`、`providers`、`script-security`、`dns-updown` | コンテナの中で任意のコマンドが動き、接続先への通信だけをトンネルへ通す仕組みを壊せるため |
+| ルートやDNSを変更する | `route`、`route-ipv6`、`redirect-gateway`、`redirect-private`、`client-nat`、`dns` | ルートはsshcが接続先ごとに追加するため |
 | sshcが決める設定 | `dev`と`dev-type`（`tun`以外）、`dev-node`、`lladdr`、`mktun`、`rmtun`、`daemon`、`log`、`log-append`、`syslog`、`status`、`writepid`、`tmp-dir`、`chroot`、`cd`、`user`、`group`、`setcon`、`askpass`、`management`で始まる指示 | トンネルのインターフェース、ログの出力先、OpenVPNを動かす環境はsshcが決めるため |
 | ファイルを指定する | `ca`、`cert`、`key`、`tls-auth`、`tls-crypt`、`pkcs12`、`auth-user-pass`などのファイル名の指定、`config`、`capath`、`tls-export-cert`、`replay-persist`、`genkey` | コンテナの中にそのファイルは無いため。中身を`<ca>`〜`</ca>`の形で埋め込めば使用できます |
 | VPNサーバー用 | `mode`、`server`、`server-ipv6`、`server-bridge`、`tls-server` | sshcはクライアントとしてだけ接続するため |
 
-`setenv opt`を付けた指示も、付けていない指示と同じように確認します。使用できない指示は、OpenVPN 2.6のマニュアルで確認して決めています。
+表に無い指示も、sshcがクライアントの設定として確認した指示（`remote`、`proto`、`cipher`、`verb`など）でなければ保存できません。OpenVPNのバージョンが上がって増えた指示は、確認するまで使用できません。この場合は、指示の名前を表示せずに何行目かだけを表示します。設定ファイルにはシークレットが含まれるため、確認していない語は表示しません。
+
+`setenv`で設定できる環境変数は、OpenVPNなどが読む`CLIENT_CERT`、`FORWARD_COMPATIBLE`、`PUSH_PEER_INFO`と、`UV_`または`IV_`で始まる名前だけです。ほかの環境変数は、sshcがOpenVPNから起動するスクリプトの動作を変えられるため使用できません。`setenv opt`を付けた指示も、付けていない指示と同じように確認します。使用できる指示と使用できない指示は、OpenVPN 2.6のマニュアルで確認して決めています。
 
 #### sshcが決める指定
 

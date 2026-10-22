@@ -21,6 +21,7 @@ const verifiedReleaseTag = "v9.8.7"
 func publishedReleaseAssets() []string {
 	return []string{
 		"checksums.txt",
+		"install.sh",
 		"install.ps1",
 		"sshc-android-" + verifiedReleaseTag + ".apk",
 		"sshc-demo-" + verifiedReleaseTag + ".tar.gz",

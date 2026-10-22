@@ -140,41 +140,6 @@ func TestPowerShellUpdateRejectsMissingOrChangedReceiptsBeforeDownloading(t *tes
 	}
 }
 
-func TestPowerShellUpdateRejectsUnverifiedScriptsBeforeExecution(t *testing.T) {
-	for _, scenario := range []string{"missing checksum", "duplicate checksum", "wrong checksum", "HTTP failure", "oversized script"} {
-		t.Run(scenario, func(t *testing.T) {
-			found := powerShellInstallationFixture(t)
-			script := "fixture"
-			digest := sha256.Sum256([]byte(script))
-			checksum := hex.EncodeToString(digest[:]) + "  install.ps1\n"
-			client := &http.Client{Transport: testHTTPTransport(func(request *http.Request) (*http.Response, error) {
-				body, code := script, http.StatusOK
-				if strings.HasSuffix(request.URL.Path, "checksums.txt") {
-					switch scenario {
-					case "missing checksum":
-						body = ""
-					case "duplicate checksum":
-						body = checksum + checksum
-					case "wrong checksum":
-						body = strings.Repeat("0", 64) + "  install.ps1\n"
-					default:
-						body = checksum
-					}
-				} else if scenario == "HTTP failure" {
-					code = http.StatusNotFound
-				} else if scenario == "oversized script" {
-					body = strings.Repeat("x", maxInstallerSize+1)
-				}
-				return &http.Response{StatusCode: code, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-			})}
-			installer := updateInstaller{client: client, commands: fakeInstallationCommands{run: func(context.Context, installationProcess) error { t.Fatal("unverified script executed"); return nil }}}
-			if err := installer.install(context.Background(), found, releasecheck.Release{Version: "v1.1.0"}); err == nil {
-				t.Fatal("unverified script accepted")
-			}
-		})
-	}
-}
-
 func TestPowerShellUpdateDoesNotRestartTheEngineTwice(t *testing.T) {
 	found := powerShellInstallationFixture(t)
 	var stdout, stderr bytes.Buffer

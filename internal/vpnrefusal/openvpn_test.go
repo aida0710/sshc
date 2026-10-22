@@ -12,7 +12,7 @@ func TestEveryOpenVPNReasonHasASentence(t *testing.T) {
 	for _, reason := range []vpn.Reason{
 		vpn.ReasonRunsCommand, vpn.ReasonChangesRoutes, vpn.ReasonDecidedBySshc, vpn.ReasonFileReference,
 		vpn.ReasonServerMode, vpn.ReasonUnsupportedInline, vpn.ReasonUnclosedInline, vpn.ReasonNotClient,
-		vpn.ReasonNoRemote, vpn.ReasonConfigMismatch, vpn.ReasonRequiredByConfig,
+		vpn.ReasonNoRemote, vpn.ReasonConfigMismatch, vpn.ReasonRequiredByConfig, vpn.ReasonUnlistedDirective,
 	} {
 		if _, known := fieldReasons[reason]; !known {
 			t.Errorf("%s has no field sentence", reason)

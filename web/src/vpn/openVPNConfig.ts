@@ -44,8 +44,9 @@ const refusedDirectives = new Map<string, VPNFieldReason>(Object.entries({
   "client-disconnect": "runs_command", "client-crresponse": "runs_command", "learn-address": "runs_command",
   "auth-user-pass-verify": "runs_command", "tls-crypt-v2-verify": "runs_command", iproute: "runs_command",
   plugin: "runs_command", engine: "runs_command", "pkcs11-providers": "runs_command", "script-security": "runs_command",
+  "dns-updown": "runs_command", providers: "runs_command",
   route: "changes_routes", "route-ipv6": "changes_routes", "redirect-gateway": "changes_routes",
-  "redirect-private": "changes_routes", "client-nat": "changes_routes",
+  "redirect-private": "changes_routes", "client-nat": "changes_routes", dns: "changes_routes",
   "dev-node": "decided_by_sshc", lladdr: "decided_by_sshc", mktun: "decided_by_sshc", rmtun: "decided_by_sshc",
   daemon: "decided_by_sshc", log: "decided_by_sshc", "log-append": "decided_by_sshc", syslog: "decided_by_sshc",
   status: "decided_by_sshc", writepid: "decided_by_sshc", "tmp-dir": "decided_by_sshc", chroot: "decided_by_sshc",
@@ -64,6 +65,46 @@ const inlineDirectives = new Map<string, boolean>(Object.entries({
   "crl-verify": false, "http-proxy-user-pass": false, "tls-auth": false, "auth-gen-token-secret": false,
   "tls-crypt": false, "tls-crypt-v2": false, "peer-fingerprint": true, "verify-hash": true, "auth-user-pass": false,
 }));
+
+// allowedDirectives は、クライアントの設定に書けると確かめた指示である。ここに無い指示は
+// 断る（Go の allowedOpenVPNDirectives）。
+const allowedDirectives = new Set([
+  "client", "tls-client", "pull", "dev", "dev-type", "topology", "proto", "proto-force", "remote", "remote-random",
+  "remote-random-hostname", "resolv-retry", "nobind", "bind", "local", "port", "lport", "rport", "float",
+  "http-proxy", "http-proxy-option", "socks-proxy", "allow-pull-fqdn", "persist-key", "persist-tun",
+  "persist-remote-ip", "persist-local-ip", "connect-retry", "connect-retry-max", "connect-timeout",
+  "server-poll-timeout", "explicit-exit-notify", "keepalive", "ping", "ping-restart", "ping-exit", "ping-timer-rem",
+  "inactive", "session-timeout", "hand-window", "tran-window", "disable-occ", "preresolve", "nice", "verb", "mute",
+  "mute-replay-warnings", "echo", "auth-user-pass", "auth-nocache", "auth-retry", "static-challenge", "cipher",
+  "data-ciphers", "data-ciphers-fallback", "ncp-ciphers", "auth", "tls-cipher", "tls-ciphersuites", "tls-groups",
+  "tls-version-min", "tls-version-max", "tls-cert-profile", "ecdh-curve", "key-direction", "remote-cert-tls",
+  "remote-cert-ku", "remote-cert-eku", "ns-cert-type", "verify-x509-name", "tls-timeout", "tls-exit",
+  "single-session", "reneg-sec", "reneg-bytes", "reneg-pkts", "replay-window", "no-replay", "push-peer-info",
+  "tun-mtu", "tun-mtu-extra", "link-mtu", "mssfix", "fragment", "mtu-disc", "mtu-test", "sndbuf", "rcvbuf",
+  "txqueuelen", "fast-io", "tcp-nodelay", "tun-ipv6", "shaper", "passtos", "tcp-queue-limit", "comp-lzo", "compress",
+  "allow-compression", "comp-noadapt", "ifconfig", "ifconfig-ipv6", "route-nopull", "route-noexec",
+  "ifconfig-noexec", "route-gateway", "route-metric", "route-delay", "pull-filter", "dhcp-option",
+  "ignore-unknown-option", "setenv", "setenv-safe", "block-outside-dns", "route-method", "ip-win32", "dhcp-renew",
+  "dhcp-release", "register-dns", "tap-sleep", "windows-driver", "win-sys", "cryptoapicert",
+]);
+
+// allowedVariables は、setenv で置いてよい環境変数である（Go の allowedOpenVPNVariables）。
+const allowedVariables = new Set(["CLIENT_CERT", "FORWARD_COMPATIBLE", "PUSH_PEER_INFO"]);
+// peerInfoVariable は、push-peer-info でサーバーへ送る変数の名前である（Go の openVPNPeerInfoVariable）。
+const peerInfoVariable = /^(UV|IV)_[A-Za-z0-9_]+$/;
+
+function isAllowedVariable(args: string[]): boolean {
+  const [name] = args;
+  return name === undefined || allowedVariables.has(name) || peerInfoVariable.test(name);
+}
+
+// reportedDirective は、断った行について示す指示の名前を返す。表に無い語は、設定ファイルの
+// シークレット（行に紛れた鍵など）でありうるので示さない（Go の reportedOpenVPNDirective）。
+function reportedDirective(name: string): string {
+  const known = refusedDirectives.has(name) || inlineDirectives.has(name) || allowedDirectives.has(name) ||
+    name.startsWith(managementPrefix);
+  return known ? name : "";
+}
 
 function refuse(reason: VPNFieldReason, line: number, directive = "", limit?: number): OpenVPNConfigInspection {
   return {
@@ -177,7 +218,9 @@ function directiveReason(name: string, args: string[]): VPNFieldReason | null {
       return third !== undefined ? "file_reference" : null;
   }
   const acceptsValue = inlineDirectives.get(name);
-  return acceptsValue === false && args.length > 0 ? "file_reference" : null;
+  if (acceptsValue !== undefined) return !acceptsValue && args.length > 0 ? "file_reference" : null;
+  if (name === "setenv") return isAllowedVariable(args) ? null : "unlisted_directive";
+  return allowedDirectives.has(name) ? null : "unlisted_directive";
 }
 
 type Reader = {
@@ -200,7 +243,7 @@ function readDirective(reader: Reader, allWords: string[], lineNumber: number): 
   if (words.length === 0) return null;
   const [name = "", ...args] = words;
   const reason = directiveReason(name, args);
-  if (reason !== null) return refuse(reason, lineNumber, name);
+  if (reason !== null) return refuse(reason, lineNumber, reportedDirective(name));
   switch (name) {
     case "client":
     case "tls-client":

@@ -248,8 +248,16 @@ func (s *Service) Initialise(passphrase string) error {
 //
 // 誤りには Unlock と同じく refuse で待つ。/cli/vault/verify には handoff の
 // シークレットを持つどのプロセスからでも届くので、ここで待たないと、Unlock の待ちを
-// 避けてパスワードを次々に試す道になる。
+// 避けてパスワードを次々に試す道になる。待ちは Unlock と同じ mutationMutex の中で行う。
+// 錠の外で待つと、並べて送った試行が同時に待ちへ入り、待ちが試行の速さを抑えない。
 func (s *Service) Verify(passphrase string) (bool, error) {
+	s.mutationMutex.Lock()
+	defer s.mutationMutex.Unlock()
+	return s.verifyHeld(passphrase)
+}
+
+// verifyHeld は Verify の本体である。呼び手が mutationMutex を持っている。
+func (s *Service) verifyHeld(passphrase string) (bool, error) {
 	passphrase, err := s.resolvePassphrase(passphrase)
 	if err != nil {
 		return false, err

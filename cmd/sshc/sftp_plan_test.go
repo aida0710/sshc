@@ -213,3 +213,60 @@ func TestSFTPPlansRefuseAnotherUsersTildeWithoutAskingTheEngine(t *testing.T) {
 		t.Fatalf("buildSFTPGetPlan(~deploy) = %v after %d requests, want errSFTPRemotePath before any", err, calls.Load())
 	}
 }
+
+func TestGetPlanRefusesARootNameFromTheServerThatPointsOutsideAnExistingFolder(t *testing.T) {
+	unsafeName := `..\..\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`
+	home := "/" + unsafeName
+	tests := []struct {
+		name      string
+		source    string
+		recursive bool
+		listings  map[string][]api.SFTPEntry
+	}{
+		{
+			name:      "folder",
+			source:    "~",
+			recursive: true,
+			listings: map[string][]api.SFTPEntry{
+				"/":  {{Name: unsafeName, Path: home, Type: api.Directory}},
+				home: {{Name: "payload.cmd", Path: home + "/payload.cmd", Type: api.File, Size: 4}},
+			},
+		},
+		{
+			name:   "single file",
+			source: "/files/report.txt",
+			listings: map[string][]api.SFTPEntry{
+				"/files": {{Name: unsafeName, Path: "/files/report.txt", Type: api.File, Size: 4}},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var calls atomic.Int32
+			engine := listingEngineAtHome(t, home, test.listings, &calls)
+			_, err := buildSFTPGetPlan(t.Context(), engine, sftpInvocation{
+				Action: sftpGet, Alias: "evil", Source: test.source, Destination: t.TempDir(), Recursive: test.recursive,
+			})
+			if !errors.Is(err, errSFTPLocalName) {
+				t.Fatalf("plan error = %v, want %v", err, errSFTPLocalName)
+			}
+		})
+	}
+}
+
+func TestGetPlanPutsTheRemoteRootStraightIntoAnExistingFolder(t *testing.T) {
+	var calls atomic.Int32
+	engine := listingEngine(t, map[string][]api.SFTPEntry{
+		"/": {{Name: "a.txt", Path: "/a.txt", Type: api.File, Size: 1}},
+	}, &calls)
+	destination := t.TempDir()
+	plan, err := buildSFTPGetPlan(t.Context(), engine, sftpInvocation{
+		Action: sftpGet, Alias: "work", Source: "/", Destination: destination, Recursive: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Destination != destination {
+		t.Fatalf("plan.Destination = %q, want %q", plan.Destination, destination)
+	}
+}

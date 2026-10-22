@@ -21,6 +21,8 @@ type noFollowAttributesWriter struct {
 	destination  io.WriteCloser
 	payloadBytes uint32
 	permissions  bool
+	// directories は、この writer が区切る要求の頭を見て、フォルダの一覧の件数を数える。
+	directories *directoryEntryLimit
 }
 
 func (writer *noFollowAttributesWriter) Close() error { return writer.destination.Close() }
@@ -45,6 +47,7 @@ func (writer *noFollowAttributesWriter) Write(packet []byte) (int, error) {
 		return 0, fmt.Errorf("invalid SFTP request length")
 	}
 	writer.payloadBytes = uint32(length - uint64(len(packet)))
+	writer.directories.observeRequest(packet)
 	if packet[4] != sftpSetstatPacket {
 		return writer.destination.Write(packet)
 	}

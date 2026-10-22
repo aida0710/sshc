@@ -10,7 +10,10 @@ import (
 //
 // 設定ファイルは Vault に置くシークレットである。プロバイダや組織が配るものは、鍵を
 // インラインのブロック（<key>…</key> など）で含むことが多い。ここでは中身を
-// OpenVPN と同じ読み方で読み、次のものを断る。
+// OpenVPN と同じ読み方で読み、クライアントの設定として確かめた指示
+// （allowedOpenVPNDirectives）だけを受け付ける。OpenVPN のバージョンが上がって増えた
+// 指示（2.7 の dns-updown など）は、確かめて表に足すまで断る。よく知られた危うい指示は、
+// 利用者に理由を示せるよう、別の表（refusedOpenVPNDirectives など）で理由を添えて断る。
 //
 //   - コマンドやプログラムを実行する指示（up、plugin など）。コンテナの中で任意の
 //     コマンドが動き、fail closed の約束を破りうる。
@@ -44,6 +47,9 @@ const (
 	// ReasonRequiredByConfig は、設定ファイルがユーザー名とパスワードを求めているのに、
 	// プロファイルにユーザー名が無いことを表す。
 	ReasonRequiredByConfig Reason = "required_by_config"
+	// ReasonUnlistedDirective は、sshc が使用できると確かめた指示（と setenv の変数）に
+	// 含まれないことを表す。
+	ReasonUnlistedDirective Reason = "unlisted_directive"
 )
 
 const (
@@ -83,8 +89,11 @@ var refusedOpenVPNDirectives = map[string]Reason{
 	"auth-user-pass-verify": ReasonRunsCommand, "tls-crypt-v2-verify": ReasonRunsCommand,
 	// ip の代わりに動かすコマンドを指定する。
 	"iproute": ReasonRunsCommand,
+	// OpenVPN 2.7 で増えた、DNS の設定を変えるコマンドを指定する。
+	"dns-updown": ReasonRunsCommand,
 	// 共有ライブラリを読み込む。
 	"plugin": ReasonRunsCommand, "engine": ReasonRunsCommand, "pkcs11-providers": ReasonRunsCommand,
+	"providers": ReasonRunsCommand,
 	// sshc が自分の up のためだけに 2 にする。
 	"script-security": ReasonRunsCommand,
 
@@ -92,6 +101,8 @@ var refusedOpenVPNDirectives = map[string]Reason{
 	"redirect-gateway": ReasonChangesRoutes, "redirect-private": ReasonChangesRoutes,
 	// 送る・受けるパケットのアドレスを書き換える。
 	"client-nat": ReasonChangesRoutes,
+	// DNS の設定を変える。OpenVPN 2.7 は、これがあると DNS を書き換えるスクリプトを動かす。
+	"dns": ReasonChangesRoutes,
 
 	// トンネルの interface は sshc が決める。dev と dev-type は、sshc と同じ tun なら
 	// 受け付ける（下の openVPNDirectiveReason）。
@@ -126,6 +137,89 @@ var openVPNInlineDirectives = map[string]bool{
 	"peer-fingerprint": true, "verify-hash": true,
 	// 引数の無い auth-user-pass は受け付ける（sshc がユーザー名とパスワードを渡す）。
 	"auth-user-pass": false,
+}
+
+// allowedOpenVPNDirectives は、クライアントの設定に書けると確かめた指示である。ここに
+// 無い指示は断る（ReasonUnlistedDirective）。インラインのブロックで書ける指示
+// （openVPNInlineDirectives）も受け付ける。
+//
+// OpenVPN 2.6 の man（generic-options、client-options、link-options、
+// protocol-options、tls-options、vpn-network-options、windows-options）と
+// src/openvpn/options.c で、コマンドを実行せず、ファイルを読み書きせず、経路と DNS を
+// 変えないことを確かめたものだけを並べる。2.6 が読まなくなった指示（ncp-disable など）は
+// 載せない。
+// dev、dev-type、http-proxy、socks-proxy、setenv は、引数も確かめる
+// （openVPNDirectiveReason）。
+var allowedOpenVPNDirectives = map[string]bool{
+	// クライアントであること、繋ぐ先と繋ぎ方。
+	"client": true, "tls-client": true, "pull": true, "dev": true, "dev-type": true, "topology": true,
+	"proto": true, "proto-force": true, "remote": true, "remote-random": true,
+	"remote-random-hostname": true, "resolv-retry": true, "nobind": true, "bind": true, "local": true,
+	"port": true, "lport": true, "rport": true, "float": true, "http-proxy": true,
+	"http-proxy-option": true, "socks-proxy": true, "allow-pull-fqdn": true,
+	// 繋ぎ直しと生存確認。
+	"persist-key": true, "persist-tun": true, "persist-remote-ip": true, "persist-local-ip": true,
+	"connect-retry": true, "connect-retry-max": true, "connect-timeout": true,
+	"server-poll-timeout": true, "explicit-exit-notify": true, "keepalive": true, "ping": true,
+	"ping-restart": true, "ping-exit": true, "ping-timer-rem": true, "inactive": true,
+	"session-timeout": true, "hand-window": true, "tran-window": true, "disable-occ": true,
+	"preresolve": true, "nice": true,
+	// ログの量と、ログへ書く文。出力先は sshc が決める（log などは断る）。
+	"verb": true, "mute": true, "mute-replay-warnings": true, "echo": true,
+	// 認証と暗号。
+	"auth-user-pass": true, "auth-nocache": true, "auth-retry": true, "static-challenge": true,
+	"cipher": true, "data-ciphers": true, "data-ciphers-fallback": true, "ncp-ciphers": true,
+	"auth": true, "tls-cipher": true, "tls-ciphersuites": true, "tls-groups": true,
+	"tls-version-min": true, "tls-version-max": true, "tls-cert-profile": true, "ecdh-curve": true,
+	"key-direction": true, "remote-cert-tls": true, "remote-cert-ku": true,
+	"remote-cert-eku": true, "ns-cert-type": true, "verify-x509-name": true, "tls-timeout": true,
+	"tls-exit": true, "single-session": true, "reneg-sec": true, "reneg-bytes": true,
+	"reneg-pkts": true, "replay-window": true, "no-replay": true, "push-peer-info": true,
+	// トンネルとパケットの大きさ。
+	"tun-mtu": true, "tun-mtu-extra": true, "link-mtu": true, "mssfix": true, "fragment": true,
+	"mtu-disc": true, "mtu-test": true, "sndbuf": true, "rcvbuf": true, "txqueuelen": true,
+	"fast-io": true, "tcp-nodelay": true, "tun-ipv6": true, "shaper": true, "passtos": true,
+	"tcp-queue-limit": true, "comp-lzo": true, "compress": true, "allow-compression": true,
+	"comp-noadapt": true,
+	// 経路を作らせない指示と、サーバーが配る指示の選び方。経路は sshc が作る。sshc は
+	// --ifconfig-noexec で起動するので、ifconfig の値は openvpn-up が /32 で付けるだけになる。
+	"ifconfig": true, "ifconfig-ipv6": true, "route-nopull": true, "route-noexec": true,
+	"ifconfig-noexec": true, "route-gateway": true, "route-metric": true,
+	"route-delay": true, "pull-filter": true,
+	// Linux の OpenVPN 2.6 は、スクリプトへ渡す環境変数に残すだけで DNS を変えない。
+	// sshc の openvpn-up はその変数を読まない。
+	"dhcp-option": true,
+	// Windows の OpenVPN だけが使う。Windows 用に配られた設定ファイルに含まれることが多い。
+	// コンテナの Linux の OpenVPN では何も動かさない。
+	"block-outside-dns": true, "route-method": true, "ip-win32": true, "dhcp-renew": true,
+	"dhcp-release": true, "register-dns": true, "tap-sleep": true, "windows-driver": true,
+	"win-sys": true, "cryptoapicert": true,
+	// 知らない指示を読み飛ばさせる。読み飛ばす指示も、ここで表に無ければ断る。
+	"ignore-unknown-option": true,
+	// 環境変数を置く。setenv は変数の名前も確かめる（allowedOpenVPNVariable）。
+	// setenv-safe の変数は名前の頭に OPENVPN_ が付くので、ほかのプログラムの動きを変えない。
+	"setenv": true, "setenv-safe": true,
+}
+
+// allowedOpenVPNVariables は、setenv で置いてよい環境変数である。OpenVPN 自身や
+// OpenVPN Access Server が読む名前に限る。ほかの名前は、sshc が OpenVPN に動かさせる
+// openvpn-up の環境にだけ届く。LD_PRELOAD のような名前で、そのシェルに共有ライブラリを
+// 読み込ませられるので断る。
+var allowedOpenVPNVariables = map[string]bool{
+	"CLIENT_CERT": true, "FORWARD_COMPATIBLE": true, "PUSH_PEER_INFO": true,
+}
+
+// openVPNPeerInfoVariable は、push-peer-info でサーバーへ送る変数の名前である（UV_ は
+// 利用者が決める値、IV_ はクライアントの情報）。
+var openVPNPeerInfoVariable = regexp.MustCompile(`^(UV|IV)_[A-Za-z0-9_]+$`)
+
+// allowedOpenVPNVariable は、setenv の引数の変数を置いてよいかを返す。
+func allowedOpenVPNVariable(arguments []string) bool {
+	if len(arguments) == 0 {
+		return true
+	}
+	name := arguments[0]
+	return allowedOpenVPNVariables[name] || openVPNPeerInfoVariable.MatchString(name)
 }
 
 // openVPNManagementPrefix は、管理用の口（management とその仲間）の指示の頭である。
@@ -289,7 +383,7 @@ func (reader *openVPNConfigReader) readDirective(words []string, lineNumber int)
 	}
 	name, arguments := words[0], words[1:]
 	if reason, refused := openVPNDirectiveReason(name, arguments); refused {
-		return configLineError(reason, lineNumber, name)
+		return configLineError(reason, lineNumber, reportedOpenVPNDirective(name))
 	}
 	switch name {
 	case "client", "tls-client":
@@ -341,10 +435,29 @@ func openVPNDirectiveReason(name string, arguments []string) (Reason, bool) {
 		// socks-proxy <サーバー> [<ポート>] [<ファイル>]
 		return ReasonFileReference, len(arguments) >= 3
 	}
-	if acceptsValue, inlineCapable := openVPNInlineDirectives[name]; inlineCapable && !acceptsValue {
-		return ReasonFileReference, len(arguments) > 0
+	acceptsValue, inlineCapable := openVPNInlineDirectives[name]
+	if inlineCapable {
+		return ReasonFileReference, !acceptsValue && len(arguments) > 0
 	}
-	return "", false
+	if name == "setenv" {
+		return ReasonUnlistedDirective, !allowedOpenVPNVariable(arguments)
+	}
+	return ReasonUnlistedDirective, !allowedOpenVPNDirectives[name]
+}
+
+// reportedOpenVPNDirective は、断った行について応答に載せる指示の名前を返す。表に無い
+// 語は、設定ファイルのシークレット（行に紛れた鍵など）でありうるので載せない。
+func reportedOpenVPNDirective(name string) string {
+	if _, refused := refusedOpenVPNDirectives[name]; refused {
+		return name
+	}
+	if _, inlineCapable := openVPNInlineDirectives[name]; inlineCapable {
+		return name
+	}
+	if allowedOpenVPNDirectives[name] || strings.HasPrefix(name, openVPNManagementPrefix) {
+		return name
+	}
+	return ""
 }
 
 // withoutSetenvOpt は、`setenv opt` の頭を外す。OpenVPN は、この頭の付いた指示を、

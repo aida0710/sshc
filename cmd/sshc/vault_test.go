@@ -1234,3 +1234,47 @@ func TestRunVaultUnlockSendsNothingToAnEngineThatCannotProveTheHandoffSecret(t *
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
+
+// engine を確かめたあと、パスワードを入力しているあいだに engine が消え、同じ port を
+// 別のプロセスが取った状況である。送る直前に確かめ直すので、パスワードも handoff の
+// 秘密もそのプロセスへは届かない。
+func TestRunVaultUnlockSendsNothingWhenThePortChangesHandsDuringThePrompt(t *testing.T) {
+	secret := testHandoff("").Secret
+	replaced := false
+	var afterReplacement []string
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if replaced {
+			afterReplacement = append(afterReplacement, request.URL.Path)
+			if request.Header.Get(handoff.HeaderName) != "" {
+				t.Errorf("the handoff secret reached the process that took the port: %s", request.URL.Path)
+			}
+		}
+		switch {
+		case request.URL.Path == httpserver.ChallengePath && replaced:
+			response.Header().Set(handoff.ProofHeader, handoff.Prove("not the secret", request.Header.Get(handoff.ChallengeHeader)))
+			response.WriteHeader(http.StatusNoContent)
+		case request.URL.Path == httpserver.ChallengePath:
+			answerChallenge(response, request, secret)
+		case request.URL.Path == httpserver.VaultStatusPath:
+			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, false))
+		default:
+			response.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer server.Close()
+	stateDir := t.TempDir()
+	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
+
+	terminal := &fakePasswordTerminal{terminal: true, answers: [][]byte{[]byte(vaultPasswordCanary)}, afterRead: func(int) { replaced = true }}
+	var stdout, stderr strings.Builder
+	code := runVault(context.Background(), "unlock", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: terminal})
+	if code != 1 {
+		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
+	}
+	if !slices.Equal(afterReplacement, []string{httpserver.ChallengePath}) {
+		t.Fatalf("requests after the port changed hands = %v, want only the challenge", afterReplacement)
+	}
+	if !strings.Contains(stderr.String(), "did not prove") || strings.Contains(stdout.String(), "vault unlocked") {
+		t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findTerminalLinks, modifierOpensLink, osc8Link } from "./links";
+import { findTerminalLinks, linkTextNamesTarget, modifierOpensLink, osc8Link } from "./links";
 
 describe("findTerminalLinks", () => {
   it("finds http links without swallowing sentence punctuation", () => {
@@ -31,6 +31,12 @@ describe("findTerminalLinks", () => {
       end: 17,
     });
     expect(osc8Link("javascript:alert(1)", "unsafe", 0, 6)).toBeNull();
+  });
+
+  it("treats an OSC 8 link as naming its address only when the text is that same address", () => {
+    expect(linkTextNamesTarget({ text: "https://example.test", target: "https://example.test/" })).toBe(true);
+    expect(linkTextNamesTarget({ text: "https://github.com/", target: "https://evil.example/" })).toBe(false);
+    expect(linkTextNamesTarget({ text: "documentation", target: "https://example.test/actual" })).toBe(false);
   });
 
   it("uses the platform modifier contract for direct opening", () => {

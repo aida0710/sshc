@@ -191,7 +191,7 @@ func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
 		t.Fatal("release.yml has no stage-release job")
 	}
 	for _, required := range []string{
-		"install.ps1",
+		"install.sh", "install.ps1",
 		"sshc-darwin-amd64", "sshc-darwin-arm64",
 		"sshc-linux-amd64", "sshc-linux-arm64",
 		"sshc-windows-amd64.exe", "sshc-windows-arm64.exe",
@@ -199,8 +199,11 @@ func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
 		"sshc-demo-${RELEASE_TAG}.tar.gz", "sshc-demo-${RELEASE_TAG}.json",
 		`[ "$count" -eq 1 ]`,
 		`[ "$count" -eq 9 ]`,
-		`sha256sum sshc-* install.ps1`,
-		`dist/sshc-* dist/install.ps1 dist/checksums.txt`,
+		`cp install.sh dist/install.sh`,
+		`sha256sum sshc-* install.sh install.ps1`,
+		"dist/install.sh\n",
+		`dist/sshc-* dist/install.sh dist/install.ps1 dist/checksums.txt`,
+		`"install.sh",`,
 		`--verify-tag`,
 		`--draft`,
 		`jq -e '.[0].draft == true'`,
@@ -219,6 +222,30 @@ func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
 	}
 	if strings.Contains(stage, `draft=false`) {
 		t.Error("the staging job publishes before Homebrew succeeds")
+	}
+}
+
+// タグのrunは、mainが保存したActionsのキャッシュも復元する。成果物を作るjobで復元すると、
+// mainへpushできる者が置いたビルド結果や依存が、Release workflowの検査を経ずに入る。
+func TestReleaseJobsDoNotRestoreActionsCaches(t *testing.T) {
+	document, _ := readReleaseWorkflow(t)
+	for id, job := range document.Jobs {
+		for _, step := range job.Steps {
+			action, _, _ := strings.Cut(step.Uses, "@")
+			switch action {
+			case "actions/cache", "actions/cache/restore":
+				t.Errorf("job %s restores a cache with %s", id, step.Uses)
+			case "actions/setup-go":
+				// setup-go は、cache を書かなければ既定で復元する。
+				if cache, ok := step.With["cache"]; !ok || cache != false {
+					t.Errorf("job %s sets up Go without cache: false", id)
+				}
+			case "actions/setup-node", "actions/setup-java":
+				if cache, ok := step.With["cache"]; ok {
+					t.Errorf("job %s restores the %v cache with %s", id, cache, action)
+				}
+			}
+		}
 	}
 }
 

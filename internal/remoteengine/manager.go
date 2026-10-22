@@ -158,12 +158,12 @@ func (m *Manager) Open(ctx context.Context, alias string) (string, error) {
 	if target.relay == nil {
 		target.relay = newRelay(target.link)
 	}
-	opened, err := m.issueEntrance(ctx, target.link)
+	opened, remote, err := m.issueEntrance(ctx, target.link)
 	if err != nil {
 		m.dropIdleRelay(alias, target)
 		return "", err
 	}
-	target.relay.setRemotePort(opened.port)
+	target.relay.setRemote(remote)
 	if !target.relay.listening() {
 		if err := m.listen(alias, target.relay); err != nil {
 			m.dropIdleRelay(alias, target)
@@ -187,33 +187,46 @@ func (m *Manager) dropIdleRelay(alias string, target *remoteHost) {
 	}
 }
 
-// issueEntrance は、接続先で入口の URL を 1 件発行させる。
-func (m *Manager) issueEntrance(ctx context.Context, link *hostLink) (entrance, error) {
+// issueEntrance は、接続先で入口の URL を 1 件発行させ、その URL のエンジンの身元を
+// handoff から読む。
+func (m *Manager) issueEntrance(ctx context.Context, link *hostLink) (entrance, engineIdentity, error) {
 	live, err := link.live(ctx)
 	if err != nil {
-		return entrance{}, err
+		return entrance{}, engineIdentity{}, err
 	}
 	result, err := live.Run(ctx, EntranceCommand, EntranceLimit)
 	switch {
 	case err != nil:
-		return entrance{}, err
+		return entrance{}, engineIdentity{}, err
 	case result.ExitCode == notInstalledExit:
-		return entrance{}, ErrNotInstalled
+		return entrance{}, engineIdentity{}, ErrNotInstalled
 	case result.ExitCode != 0:
-		return entrance{}, ErrNoEntrance
+		return entrance{}, engineIdentity{}, ErrNoEntrance
 	}
 	opened, err := parseEntrance(result.Stdout)
 	if err != nil {
-		return entrance{}, err
+		return entrance{}, engineIdentity{}, err
 	}
-	// URL を返す前に、接続先のエンジンへ届くかを一度確かめる。SSH サーバーが TCP を
-	// 開かない設定だと、URL を開いたブラウザが理由の分からない 502 を受け取るだけになる。
-	probe, err := live.DialContext(ctx, "tcp", loopbackHost(opened.port))
+	// sshc open はエンジンを起こしてから URL を返すので、handoff は同じポートを指す。
+	// 違えば、URL を発行したエンジンの身元を確かめられない。
+	remote, err := readIdentity(ctx, link)
 	if err != nil {
-		return entrance{}, fmt.Errorf("%w: %v", ErrForwardingRefused, err)
+		return entrance{}, engineIdentity{}, err
+	}
+	if remote.port != opened.port {
+		return entrance{}, engineIdentity{}, fmt.Errorf("%w: the UI URL is on port %d but the handoff names port %d", ErrUnproven, opened.port, remote.port)
+	}
+	// URL を返す前に、接続先のエンジンへ届き、身元を示せるかを一度確かめる。SSH サーバーが
+	// TCP を開かない設定だと、URL を開いたブラウザが理由の分からない 502 を受け取るだけになる。
+	probe, err := link.dialProven(ctx, remote)
+	switch {
+	case errors.Is(err, ErrUnproven):
+		return entrance{}, engineIdentity{}, err
+	case err != nil:
+		return entrance{}, engineIdentity{}, fmt.Errorf("%w: %v", ErrForwardingRefused, err)
 	}
 	_ = probe.Close()
-	return opened, nil
+	return opened, remote, nil
 }
 
 // listen は、alias の中継を、前に使ったポートで待ち受ける。そのポートが塞がっていれば

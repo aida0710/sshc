@@ -19,6 +19,17 @@ export function modifierOpensLink(event: Pick<MouseEvent, "ctrlKey" | "metaKey">
   return event.ctrlKey || event.metaKey;
 }
 
+// An OSC 8 link shows one text and opens another address. A modifier-click
+// opens it at once only when the text names that same address; otherwise the
+// address is shown first, so a program cannot dress one site up as another.
+export function linkTextNamesTarget(link: Pick<TerminalLinkMatch, "text" | "target">): boolean {
+  try {
+    return new URL(link.text.trim()).href === new URL(link.target).href;
+  } catch {
+    return false;
+  }
+}
+
 export function osc8Link(target: string, visibleText: string, start: number, end: number): TerminalLinkMatch | null {
   if (!isSafeHttpURL(target) || target.length > maxLinkLength) return null;
   return { kind: "url", text: visibleText || target, target, start, end };
