@@ -1,5 +1,5 @@
 {
-  "go.mod": "4732d5020c5e91dddd90029f410eb5c2b581f66b012e6fdcf78a9e081d53cdf3",
+  "go.mod": "5213c265c6adbf0712b23eb3399332e2c57f760285fc4c5dbf52581531bcb025",
   "go.sum": "8120a354fb31e76c047928b5830f9b27bc8cb868bb99dc9749cacde0bc1ba9ef",
   "web/package-lock.json": "f3821bda87ae68b399bb8596a1fa99b4d263b8607ee4ff70ef924982df3049f0",
   "android/app/build.gradle.kts": "f747f5a1fda19249935f7de57aa819c24603ed5adb5d482f0527165690b45eb2",
