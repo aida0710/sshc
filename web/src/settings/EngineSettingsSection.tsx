@@ -140,7 +140,7 @@ export function EngineSettingsSection({ api, showHeading, passwordless }: {
               : !loaded || !save.saved ? undefined : <Notice tone="success">{t("engine.saved")}</Notice>)
           : <Notice tone="danger">{save.error}</Notice>}
         >
-          <Button kind="primary" disabled={disabled} onClick={() => void submit()}>
+          <Button kind="primary" busy={save.busy} disabled={!loaded} onClick={() => void submit()}>
             {t("terminal.startSave")}
           </Button>
         </ActionArea>

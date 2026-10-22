@@ -1497,6 +1497,26 @@ describe("SyncPanel", () => {
     await waitFor(() => expect(syncNow).toHaveBeenCalledOnce());
   });
 
+  it("shows only the pressed sync button as working while the cycle runs", async () => {
+    let answer: () => void = () => undefined;
+    const syncNow = vi.fn(() => new Promise<SyncStatus>((resolve) => {
+      answer = () => resolve(configured);
+    }));
+    const api = buildApi(configured, nothingToDo, { syncNow });
+    render(<SyncPanel api={api} />);
+
+    const button = await screen.findByRole("button", { name: "Sync now" });
+    await userEvent.click(button);
+
+    expect(button).toHaveAttribute("aria-busy", "true");
+    const review = screen.getByRole("button", { name: "Review remote changes" });
+    expect(review).toBeDisabled();
+    expect(review).not.toHaveAttribute("aria-busy");
+    answer();
+    await waitFor(() => expect(button).not.toHaveAttribute("aria-busy"));
+    expect(syncNow).toHaveBeenCalledOnce();
+  });
+
   it("offers both sides of a conflict and previews the choice before applying it", async () => {
     const conflicted = {
       applied: false,

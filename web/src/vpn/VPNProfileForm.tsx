@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import { Field, control, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Card, Notice } from "../ui/surface";
+import { usePendingResult } from "../ui/usePendingResult";
 import { IKEv2ProfileFields } from "./IKEv2ProfileFields";
 import { settingsSection, vpnBackendLabel, vpnBackends, type VPNBackend } from "./vpnBackends";
 import { describeVPNFieldError, type VPNFieldError } from "./vpnFieldErrors";
@@ -66,6 +67,9 @@ export function VPNProfileForm({
   const [openedDraft] = useState<VPNProfileDraft>(() => (editing === undefined ? emptyDraft : draftOf(editing)));
   const [draft, setDraft] = useState<VPNProfileDraft>(openedDraft);
   const [refusal, setRefusal] = useState<VPNFieldError | null>(null);
+  // saving は、このフォームが頼んだ保存を待つ。busy は画面のどこで始めた操作でも立つので、
+  // 回転の印はこちらで出す。
+  const saving = usePendingResult();
   const { reveal, forget } = useVPNSecretsReveal({
     name: editing?.name,
     revealSecrets,
@@ -174,7 +178,9 @@ export function VPNProfileForm({
       setRefusal(refused);
       return;
     }
-    const result = await onSave(profile, secretsOf(draft));
+    const request = onSave(profile, secretsOf(draft));
+    saving.watch(request);
+    const result = await request;
     if (!result.saved) {
       setRefusal(result.fieldError);
       return;
@@ -330,7 +336,9 @@ export function VPNProfileForm({
       <div className="flex flex-wrap gap-2">
         <Button
           kind="primary"
+          busy={saving.pending}
           disabled={busy || reveal?.state === "revealing" || !hasRequiredValues(draft, stored)}
+          title={busy && !saving.pending ? t("vpn.waitingForOperation") : undefined}
           onClick={() => void save()}
         >
           {t("vpn.save")}
