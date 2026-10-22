@@ -4879,7 +4879,6 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
         };
     };

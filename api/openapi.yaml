@@ -98,7 +98,6 @@ paths:
           description: The session is gone and the cookie is cleared
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
   /api/v1/health:
     get:

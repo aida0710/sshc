@@ -89,3 +89,60 @@ func TestSignedOutBrowserCannotRecoverUsingAnOlderGraceToken(t *testing.T) {
 		t.Fatalf("recover status: %d", reentered.Code)
 	}
 }
+
+// Vault がロックされていても、master password を知らないままこのブラウザを
+// サインアウトでき、登録も消えて入り直せなくなる。
+func TestSigningOutWhileTheVaultIsLockedRemovesTheRegistration(t *testing.T) {
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	registrations := browserauth.NewStore(workspace, rand.Reader)
+	if err := registrations.SetPort(43123); err != nil {
+		t.Fatal(err)
+	}
+	token, _, err := registrations.Register("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, _, err := session.NewManager(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := echo.New()
+	server.Use((Security{ExpectedHost: "127.0.0.1:43123", ExpectedOrigin: "http://127.0.0.1:43123", Sessions: manager,
+		Unlocked: func() bool { return false }}).Middleware)
+	handlers := Handlers{Sessions: manager, BrowserAuth: registrations}
+	server.POST("/api/v1/session/recover", handlers.Recover)
+	server.POST("/api/v1/session/sign-out", handlers.SignOut)
+	call := func(path, browserToken, csrf string, cookie *http.Cookie) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, path, nil)
+		request.Host = "127.0.0.1:43123"
+		request.Header.Set(echo.HeaderOrigin, "http://127.0.0.1:43123")
+		request.Header.Set("Sec-Fetch-Site", "same-origin")
+		request.Header.Set("X-SSHC-Browser", browserToken)
+		request.Header.Set(CSRFHeader, csrf)
+		if cookie != nil {
+			request.AddCookie(cookie)
+		}
+		response := httptest.NewRecorder()
+		server.ServeHTTP(response, request)
+		return response
+	}
+	entered := call("/api/v1/session/recover", token, "", nil)
+	if entered.Code != http.StatusOK {
+		t.Fatalf("recover = %d: %s", entered.Code, entered.Body.String())
+	}
+	var credentials api.BootstrapResponse
+	if err := json.NewDecoder(entered.Body).Decode(&credentials); err != nil {
+		t.Fatal(err)
+	}
+	cookie := entered.Result().Cookies()[0]
+	signedOut := call("/api/v1/session/sign-out", *credentials.BrowserToken, credentials.CsrfToken, cookie)
+	if signedOut.Code != http.StatusNoContent {
+		t.Fatalf("sign-out while locked = %d: %s", signedOut.Code, signedOut.Body.String())
+	}
+	if registered, err := registrations.HasRegistrations(); err != nil || registered {
+		t.Fatalf("registrations after sign-out = (%t, %v)", registered, err)
+	}
+}
