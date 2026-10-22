@@ -144,8 +144,10 @@ var openVPNInlineDirectives = map[string]bool{
 // （openVPNInlineDirectives）も受け付ける。
 //
 // OpenVPN 2.6 の man（generic-options、client-options、link-options、
-// protocol-options、tls-options、vpn-network-options）で、コマンドを実行せず、
-// ファイルを読み書きせず、経路と DNS を変えないことを確かめたものだけを並べる。
+// protocol-options、tls-options、vpn-network-options、windows-options）と
+// src/openvpn/options.c で、コマンドを実行せず、ファイルを読み書きせず、経路と DNS を
+// 変えないことを確かめたものだけを並べる。2.6 が読まなくなった指示（ncp-disable など）は
+// 載せない。
 // dev、dev-type、http-proxy、socks-proxy、setenv は、引数も確かめる
 // （openVPNDirectiveReason）。
 var allowedOpenVPNDirectives = map[string]bool{
@@ -167,9 +169,9 @@ var allowedOpenVPNDirectives = map[string]bool{
 	// 認証と暗号。
 	"auth-user-pass": true, "auth-nocache": true, "auth-retry": true, "static-challenge": true,
 	"cipher": true, "data-ciphers": true, "data-ciphers-fallback": true, "ncp-ciphers": true,
-	"ncp-disable": true, "auth": true, "tls-cipher": true, "tls-ciphersuites": true, "tls-groups": true,
+	"auth": true, "tls-cipher": true, "tls-ciphersuites": true, "tls-groups": true,
 	"tls-version-min": true, "tls-version-max": true, "tls-cert-profile": true, "ecdh-curve": true,
-	"key-direction": true, "key-method": true, "remote-cert-tls": true, "remote-cert-ku": true,
+	"key-direction": true, "remote-cert-tls": true, "remote-cert-ku": true,
 	"remote-cert-eku": true, "ns-cert-type": true, "verify-x509-name": true, "tls-timeout": true,
 	"tls-exit": true, "single-session": true, "reneg-sec": true, "reneg-bytes": true,
 	"reneg-pkts": true, "replay-window": true, "no-replay": true, "push-peer-info": true,
@@ -182,7 +184,7 @@ var allowedOpenVPNDirectives = map[string]bool{
 	// 経路を作らせない指示と、サーバーが配る指示の選び方。経路は sshc が作る。sshc は
 	// --ifconfig-noexec で起動するので、ifconfig の値は openvpn-up が /32 で付けるだけになる。
 	"ifconfig": true, "ifconfig-ipv6": true, "route-nopull": true, "route-noexec": true,
-	"ifconfig-noexec": true, "ifconfig-nowarning": true, "route-gateway": true, "route-metric": true,
+	"ifconfig-noexec": true, "route-gateway": true, "route-metric": true,
 	"route-delay": true, "pull-filter": true,
 	// Linux の OpenVPN 2.6 は、スクリプトへ渡す環境変数に残すだけで DNS を変えない。
 	// sshc の openvpn-up はその変数を読まない。
