@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 確認の手順（scripts/android、docs/manual-acceptance.md）が screencap で画面を撮るため。 -->
+    <bool name="secure_window">false</bool>
+</resources>

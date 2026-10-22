@@ -8,6 +8,9 @@ import { ThemeProvider } from "../theme/context";
 import { LockScreen } from "./LockScreen";
 import type { VaultApi } from "../api/vault";
 
+const { signOut } = vi.hoisted(() => ({ signOut: vi.fn() }));
+vi.mock("../session/signOut", () => ({ signOut }));
+
 function buildApi(overrides: Partial<VaultApi> = {}): VaultApi {
   return {
     initialiseVault: vi.fn().mockResolvedValue(vaultStatus()),
@@ -17,6 +20,27 @@ function buildApi(overrides: Partial<VaultApi> = {}): VaultApi {
 }
 
 describe("LockScreen", () => {
+  it("signs this browser out without the master password when the whole app is locked", async () => {
+    const user = userEvent.setup();
+    const reload = vi.fn();
+    vi.stubGlobal("location", { ...window.location, reload });
+    signOut.mockResolvedValue(undefined);
+    const api = buildApi();
+    render(<LockScreen exists offerSignOut onOpen={vi.fn()} api={api} />);
+
+    await user.click(screen.getByRole("button", { name: "Sign out of this browser" }));
+    await user.click(screen.getByRole("dialog").querySelector("button:last-of-type") as HTMLElement);
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    expect(api.unlockVault).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("leaves sign-out to the menu when it is not the whole-app lock screen", () => {
+    render(<LockScreen exists onOpen={vi.fn()} api={buildApi()} />);
+    expect(screen.queryByRole("button", { name: "Sign out of this browser" })).not.toBeInTheDocument();
+  });
+
   it("offers appearance and language controls before creating or opening the vault", async () => {
     render(
       <ThemeProvider initial="dark">

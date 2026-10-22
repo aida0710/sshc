@@ -3,6 +3,7 @@ package browserauth_test
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -212,7 +213,7 @@ func TestInvalidDocumentIsNotSilentlyReplaced(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(store.Path()), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	original := []byte(`{"schemaVersion":2,"registrations":[],"unknown":true}`)
+	original := []byte(`{"schemaVersion":3,"registrations":[],"unknown":true}`)
 	acltest.WritePrivateFile(t, store.Path(), original)
 	if _, _, err := store.Register(""); !errors.Is(err, browserauth.ErrInvalidDocument) {
 		t.Fatalf("Register = %v, want ErrInvalidDocument", err)
@@ -238,6 +239,51 @@ func TestAnOlderDocumentStartsWithoutRegistrations(t *testing.T) {
 	}
 	if _, issued, err := store.Register(""); err != nil || !issued {
 		t.Fatalf("Register on an old document = (%t, %v)", issued, err)
+	}
+}
+
+// 退役 token を直前の 1 世代だけ覚えていた形式の登録は、そのまま引き継ぐ。直前の
+// 世代も退役 token として覚えたままなので、猶予の後に出されれば複製として検知する。
+func TestADocumentWithOnlyThePreviousTokenKeepsItsRegistrations(t *testing.T) {
+	store, clock := newStore(t, randomBytes(t, 32*8))
+	original, _, err := store.Register("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated, _ := recover(t, store, original)
+	contents, err := os.ReadFile(store.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var current struct {
+		Registrations []struct {
+			Hash       string    `json:"hash"`
+			Retired    []string  `json:"retired"`
+			IssuedAt   time.Time `json:"issuedAt"`
+			LastUsedAt time.Time `json:"lastUsedAt"`
+		} `json:"registrations"`
+	}
+	if err := json.Unmarshal(contents, &current); err != nil || len(current.Registrations) != 1 {
+		t.Fatalf("registrations = %+v, %v", current, err)
+	}
+	entry := current.Registrations[0]
+	older, err := json.Marshal(map[string]any{
+		"schemaVersion": 2,
+		"registrations": []map[string]any{{
+			"hash": entry.Hash, "previous": entry.Retired[0], "issuedAt": entry.IssuedAt, "lastUsedAt": entry.LastUsedAt,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	acltest.WritePrivateFile(t, store.Path(), older)
+
+	clock.advance(2 * time.Minute)
+	if copied, err := store.Recover(original); err != nil || copied.Accepted() || copied.Stolen == "" {
+		t.Fatalf("Recover(previous after the grace) = %+v, %v; want the clone detected", copied, err)
+	}
+	if _, accepted := recover(t, store, rotated); accepted {
+		t.Fatal("the registration survived the detected clone")
 	}
 }
 

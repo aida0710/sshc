@@ -42,6 +42,8 @@ The engine runs as a foreground service with a persistent "sshc is running" noti
 
 App data (the vault, keys, settings, and browser registrations) is excluded entirely from Android Auto Backup and device-to-device transfer. To move to a new device, use encrypted Sync or set up the configuration and keys again there.
 
+The sshc screen does not appear in screenshots or screen recordings, and the recent apps list does not show its contents, so terminal output and password fields are not kept as images. The development APK still allows screenshots, because its verification steps capture the screen.
+
 ## Local shell
 
 The local shell runs in the app's private directory with Android sandbox permissions. It is not a full desktop Linux environment; aliases such as `ll` and tools such as `dir` may not exist.

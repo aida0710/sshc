@@ -58,6 +58,8 @@ func remoteEngineRefusal(alias string, refusal engineProblem) string {
 		return fmt.Sprintf("sshc was not found on %s; install sshc there first", alias)
 	case "remote_engine_forwarding_refused":
 		return fmt.Sprintf("the SSH server on %s refused to forward a connection to its sshc engine; allow it with AllowTcpForwarding local (or yes) in its sshd_config", alias)
+	case "remote_engine_unproven":
+		return fmt.Sprintf("the process listening for the sshc engine on %s could not prove it owns ~/.ssh/sshc/cli there; run sshc status on %s to check its engine, then try again", alias, alias)
 	case "remote_engine_no_entrance":
 		return fmt.Sprintf("sshc on %s did not return a UI URL; run sshc open --no-browser on %s to see why", alias, alias)
 	}

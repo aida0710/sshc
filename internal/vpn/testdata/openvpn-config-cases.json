@@ -355,7 +355,62 @@
         "client",
         "\"dev\" 'tun'",
         "remote \"vpn.example.jp\" 1194",
-        "setenv NAME a\\ b"
+        "setenv UV_NAME a\\ b"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "クライアントの設定によくある指示は通る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "auth SHA512",
+        "key-direction 1",
+        "tls-version-min 1.2",
+        "data-ciphers AES-256-GCM:AES-128-GCM",
+        "reneg-sec 0",
+        "ping 15",
+        "ping-restart 0",
+        "explicit-exit-notify",
+        "mssfix 1450",
+        "comp-lzo no",
+        "auth-nocache",
+        "push-peer-info",
+        "setenv UV_ID fixture",
+        "setenv-safe NAME fixture",
+        "ignore-unknown-option block-outside-dns"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "Windows 用に配られた設定ファイルの Windows だけの指示は通る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "route-method exe",
+        "route-delay 2",
+        "ip-win32 dynamic",
+        "register-dns",
+        "block-outside-dns",
+        "windows-driver wintun"
       ],
       "servers": [
         "vpn.example.jp"
@@ -723,6 +778,104 @@
       "directive": "server"
     },
     {
+      "name": "OpenVPN 2.7 の dns-updown はコマンドを実行するので断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "dns-updown /bin/sh"
+      ],
+      "reason": "runs_command",
+      "line": 6,
+      "directive": "dns-updown"
+    },
+    {
+      "name": "setenv opt の後ろの dns-updown も断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "setenv opt dns-updown /bin/sh"
+      ],
+      "reason": "runs_command",
+      "line": 6,
+      "directive": "dns-updown"
+    },
+    {
+      "name": "providers は共有ライブラリを読み込むので断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "providers /run/sshc-vpn/x.so"
+      ],
+      "reason": "runs_command",
+      "line": 6,
+      "directive": "providers"
+    },
+    {
+      "name": "dns は DNS を変えるので断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "dns server 1 address 10.8.0.1"
+      ],
+      "reason": "changes_routes",
+      "line": 6,
+      "directive": "dns"
+    },
+    {
+      "name": "setenv で表に無い環境変数を置くことは断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "setenv LD_PRELOAD /run/sshc-vpn/x.so"
+      ],
+      "reason": "unlisted_directive",
+      "line": 6,
+      "directive": "setenv"
+    },
+    {
+      "name": "表に無い指示は、名前を挙げずに断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "mark 1"
+      ],
+      "reason": "unlisted_directive",
+      "line": 6,
+      "directive": ""
+    },
+    {
+      "name": "setenv opt の後ろの表に無い指示も断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "setenv opt sshc-unknown 1"
+      ],
+      "reason": "unlisted_directive",
+      "line": 6,
+      "directive": ""
+    },
+    {
       "name": "インラインにできない指示のブロックは断る",
       "config": [
         "client",
@@ -835,7 +988,7 @@
         "proto udp",
         "remote vpn.example.jp 1194",
         "nobind",
-        "setenv opt sshc-padding 4 5 6 7 8 9 10 11 12 13 14 15 16 \"17"
+        "setenv UV_PADDING 3 4 5 6 7 8 9 10 11 12 13 14 15 16 \"17"
       ],
       "servers": [
         "vpn.example.jp"
@@ -853,7 +1006,7 @@
         "proto udp",
         "remote vpn.example.jp 1194",
         "nobind",
-        "setenv opt sshc-padding 4 5 6 7 8 9 10 11 12 13 14 15 \"16"
+        "setenv UV_PADDING 3 4 5 6 7 8 9 10 11 12 13 14 15 \"16"
       ],
       "reason": "format",
       "line": 6,
@@ -877,7 +1030,7 @@
         "proto udp",
         "remote vpn.example.jp 1194",
         "nobind",
-        "setenv PADDING aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "setenv UV_PADDING aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       ],
       "servers": [
         "vpn.example.jp"
@@ -891,7 +1044,7 @@
       "name": "OpenVPN が途中で切る長さの行は断る",
       "config": [
         "client",
-        "setenv PADDING aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "setenv UV_PADDING aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       ],
       "reason": "too_long",
       "line": 2,

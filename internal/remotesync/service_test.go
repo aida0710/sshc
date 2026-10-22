@@ -3605,15 +3605,18 @@ func withVault(t *testing.T, machine *installation, master string) *secret.Servi
 	if err := secrets.Initialise(master); err != nil {
 		t.Fatalf("Initialise: %v", err)
 	}
-	machine.replaceIntegrations(t, func(hooks *remotesync.IntegrationHooks) {
-		hooks.OpenVault = secrets.TravelDocument
-		hooks.SealVault = secrets.AdoptTravelDocument
-		hooks.EmptyVaultDocument = secrets.EmptyTravelDocument
-		hooks.VaultAdopted = secrets.Reload
-		hooks.KeyedTravelDigest = secrets.KeyedTravelDigest
-	})
+	machine.replaceIntegrations(t, func(hooks *remotesync.IntegrationHooks) { useVault(hooks, secrets) })
 	secrets.SetTravelDigestRekey(machine.service.RekeyTravelDigest)
 	return secrets
+}
+
+// useVault は、同期の vault 文書の出入りを secrets へ繋ぐ。
+func useVault(hooks *remotesync.IntegrationHooks, secrets *secret.Service) {
+	hooks.OpenVault = secrets.TravelDocument
+	hooks.SealVault = secrets.AdoptTravelDocument
+	hooks.EmptyVaultDocument = secrets.EmptyTravelDocument
+	hooks.VaultAdopted = secrets.Reload
+	hooks.KeyedTravelDigest = secrets.KeyedTravelDigest
 }
 
 // sync-state.json に vault 文書の素の SHA-256 を残すと、~/.ssh の写しを手に入れた

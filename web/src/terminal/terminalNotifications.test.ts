@@ -28,8 +28,17 @@ describe("terminal notification policy", () => {
 
   it("emits only when notificationVersion advances and names the pane", () => {
     const notification = nextTerminalNotification(translator("ja"), session, 1);
-    expect(notification).toEqual({ title: "API認証の修正（osaka）", body: "Claude Code\n入力を待っています" });
+    expect(notification).toEqual({ title: "osaka（API認証の修正）", body: "Claude Code\n入力を待っています" });
     expect(nextTerminalNotification(translator("ja"), session, 2)).toBeNull();
+  });
+
+  it("leads the heading with the connection alias, which the server cannot set", () => {
+    const disguised: TerminalSession = {
+      ...session,
+      presentation: { displayTitle: "sshc", titleSource: "terminal", titlePinned: false },
+      lastNotification: { title: "Vault", body: "Unlock the vault again", occurredAt: "2026-08-29T01:01:00Z" },
+    };
+    expect(nextTerminalNotification(translator("en"), disguised, 1)?.title).toBe("osaka（sshc）");
   });
 
   it("falls back to a generic body when the program sent no text", () => {

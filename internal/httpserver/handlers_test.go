@@ -245,6 +245,63 @@ func TestBootstrapFromAnotherOSUserIsRefusedAndLeftForTheBrowser(t *testing.T) {
 	}
 }
 
+func TestRecoverFromAnotherOSUserIsRefusedWithoutRotatingTheToken(t *testing.T) {
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	registrations := browserauth.NewStore(workspace, rand.Reader)
+	engineAddress := netip.MustParseAddrPort("127.0.0.1:43123")
+	if err := registrations.SetPort(int(engineAddress.Port())); err != nil {
+		t.Fatal(err)
+	}
+	token, _, err := registrations.Register("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, _, err := session.NewManager(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intruder := netip.MustParseAddrPort("127.0.0.1:50001")
+	e := echo.New()
+	e.Use((Security{
+		ExpectedHost:   engineAddress.String(),
+		ExpectedOrigin: "http://" + engineAddress.String(),
+		Sessions:       manager, Unlocked: alwaysUnlocked,
+	}).Middleware)
+	e.POST("/api/v1/session/recover", (Handlers{
+		Sessions: manager, BrowserAuth: registrations,
+		PeerMayBelongToAnotherUser: func(client, _ netip.AddrPort) bool { return client == intruder },
+	}).Recover)
+	call := func(client netip.AddrPort) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/session/recover", nil)
+		request = request.WithContext(context.WithValue(request.Context(), http.LocalAddrContextKey,
+			net.TCPAddrFromAddrPort(engineAddress)))
+		request.RemoteAddr = client.String()
+		request.Host = engineAddress.String()
+		// curl と同じく、ブラウザの印は手で付けられる。
+		request.Header.Set(echo.HeaderOrigin, "http://"+engineAddress.String())
+		request.Header.Set("Sec-Fetch-Site", "same-origin")
+		request.Header.Set("X-SSHC-Browser", token)
+		response := httptest.NewRecorder()
+		e.ServeHTTP(response, request)
+		return response
+	}
+
+	refused := call(intruder)
+	if refused.Code != http.StatusForbidden || !strings.Contains(refused.Body.String(), "recover_forbidden") {
+		t.Fatalf("recover from another OS user = %d %s, want 403 recover_forbidden", refused.Code, refused.Body.String())
+	}
+	if cookies := refused.Result().Cookies(); len(cookies) != 0 {
+		t.Fatalf("cookies for another OS user = %#v", cookies)
+	}
+	// 断った要求では token を差し替えないので、正規のブラウザは同じ token で入り直せる。
+	if accepted := call(netip.MustParseAddrPort("127.0.0.1:50002")); accepted.Code != http.StatusOK {
+		t.Fatalf("recover for the browser after the refusal = %d, want %d", accepted.Code, http.StatusOK)
+	}
+}
+
 func TestHealthRequiresSessionCookie(t *testing.T) {
 	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x71}, 96)))
 	if err != nil {

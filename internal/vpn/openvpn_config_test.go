@@ -113,3 +113,23 @@ func TestEveryListedDirectiveIsRefused(t *testing.T) {
 		}
 	}
 }
+
+// 表に無い指示は、OpenVPN のバージョンが上がって意味を持っても通らない。コマンドを実行
+// しうる指示と環境変数を断り、クライアントの設定によくある指示は通す。
+func TestOnlyListedOpenVPNDirectivesAreAccepted(t *testing.T) {
+	const base = "client\nremote vpn.example.jp 1194\n"
+	for _, line := range []string{
+		"providers /run/sshc-vpn/x.so",
+		"setenv LD_PRELOAD /run/sshc-vpn/x.so",
+		"dns-updown /bin/sh",
+		"setenv opt dns-updown /bin/sh",
+		"up /bin/sh",
+	} {
+		if _, err := InspectOpenVPNConfig([]byte(base + line + "\n")); err == nil {
+			t.Errorf("%q was accepted", line)
+		}
+	}
+	if _, err := InspectOpenVPNConfig([]byte(base + "push-peer-info\n")); err != nil {
+		t.Errorf("push-peer-info was refused: %v", err)
+	}
+}

@@ -214,7 +214,10 @@ func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	}
 	if sftpEntryOpensAs(source) == api.File {
 		if localExists && info.IsDir() {
-			destination = filepath.Join(destination, source.Name)
+			destination, err = localChildForRemoteSource(destination, source)
+			if err != nil {
+				return plan, err
+			}
 		}
 		exists, err := localFileConflict(destination)
 		if err != nil {
@@ -236,7 +239,10 @@ func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 		if !info.IsDir() {
 			return plan, errSFTPTypeMismatch
 		}
-		root = filepath.Join(destination, source.Name)
+		root, err = localChildForRemoteSource(destination, source)
+		if err != nil {
+			return plan, err
+		}
 	}
 	plan.Destination = root
 	plan.Directories = append(plan.Directories, root)
@@ -246,6 +252,20 @@ func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 		return plan, err
 	}
 	return plan, nil
+}
+
+// localChildForRemoteSource は、既にあるフォルダ destination の中に source を置くパスを返す。
+// source の名前は ~ の解決や親の一覧からサーバーが決めるので、フォルダの中の entry と
+// 同じ規則で検査する。検査しないと、Windows では \ や .. を含む名前で destination の外を指せる。
+// リモートの / は名前を持たないので、destination にそのまま中身を置く。
+func localChildForRemoteSource(destination string, source api.SFTPEntry) (string, error) {
+	if source.Path == "/" {
+		return destination, nil
+	}
+	if !sftpcore.ValidLocalChildName(source.Name) {
+		return "", fmt.Errorf("%w: %q", errSFTPLocalName, source.Name)
+	}
+	return filepath.Join(destination, source.Name), nil
 }
 
 // modifiedUnix is the entry's modification time in milliseconds, or 0 when

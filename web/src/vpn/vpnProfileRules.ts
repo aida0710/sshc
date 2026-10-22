@@ -57,6 +57,8 @@ export type IKEv2Authentication = (typeof ikev2Authentications)[number];
 
 // 設定ファイルとコマンド引数へそのまま書けない字である。
 const serverForbidden = /[ \t\r\n"\\]/;
+// 先頭が - のサーバーは、コマンドがオプションとして読む。名前にもアドレスにも無い形である。
+const serverOptionLike = /^-/;
 const usernameForbidden = /[\r\n"\\]/;
 const whitespace = /[ \t\r\n]/;
 
@@ -97,7 +99,10 @@ function validateResolvers(resolvers: string[]): Outcome {
 
 function validateServerName(field: string, server: string): Outcome {
   if (server === "") return refuse(field, "required");
-  return validateLength(field, server, maxServerLength) ?? (serverForbidden.test(server) ? refuse(field, "format") : null);
+  return (
+    validateLength(field, server, maxServerLength) ??
+    (serverForbidden.test(server) || serverOptionLike.test(server) ? refuse(field, "format") : null)
+  );
 }
 
 function validateUsername(field: string, username: string): Outcome {

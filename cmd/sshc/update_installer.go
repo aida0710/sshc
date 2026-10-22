@@ -53,16 +53,25 @@ func (installer updateInstaller) runTaggedInstaller(ctx context.Context, found i
 func (installer updateInstaller) downloadTaggedInstaller(ctx context.Context, tag, name string) ([]byte, error) {
 	url := "https://" + taggedInstallerHost + "/" + installRepository + "/" + tag + "/" + name
 	script, err := downloadInstallerFile(ctx, installer.client, url)
-	if err != nil || name != "install.ps1" {
-		return script, err
+	if err != nil {
+		return nil, err
 	}
-	// Unlike install.sh, install.ps1 is also a checksummed Release asset. Bind
-	// the tagged source to that published asset before executing any PowerShell.
+	// Both installers are checksummed Release assets. Bind the tagged source to
+	// that published asset before executing it, so a commit pushed to the tag
+	// without passing through the Release workflow is never run.
+	if err := installer.verifyPublishedChecksum(ctx, tag, name, script); err != nil {
+		return nil, err
+	}
+	return script, nil
+}
+
+// verifyPublishedChecksum requires checksums.txt of the same Release to list the installer exactly once, with this digest.
+func (installer updateInstaller) verifyPublishedChecksum(ctx context.Context, tag, name string, script []byte) error {
 	client := *installer.client
 	client.CheckRedirect = allowReleaseAssetRedirect
 	checksums, err := downloadInstallerFile(ctx, &client, "https://github.com/"+installRepository+"/releases/download/"+tag+"/checksums.txt")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	digest := sha256.Sum256(script)
 	want := hex.EncodeToString(digest[:])
@@ -74,13 +83,13 @@ func (installer updateInstaller) downloadTaggedInstaller(ctx context.Context, ta
 		}
 		entries++
 		if !strings.EqualFold(fields[0], want) {
-			return nil, errors.New("install.ps1 does not match its published checksum")
+			return fmt.Errorf("%s does not match its published checksum", name)
 		}
 	}
 	if entries != 1 {
-		return nil, errors.New("checksums.txt must list install.ps1 exactly once")
+		return fmt.Errorf("checksums.txt must list %s exactly once", name)
 	}
-	return script, nil
+	return nil
 }
 
 func allowReleaseAssetRedirect(request *http.Request, previous []*http.Request) error {

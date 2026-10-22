@@ -59,6 +59,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/BootstrapResponse" }
         "401": { $ref: "#/components/responses/Problem" }
+        # Linux で、接続が同じマシンの別 OS ユーザーのものかもしれないときの
+        # recover_forbidden。登録 token は差し替えない。
         "403": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
   /api/v1/session/renew:
@@ -96,7 +98,6 @@ paths:
           description: The session is gone and the cookie is cleared
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
   /api/v1/health:
     get:

@@ -90,7 +90,7 @@ func (s *Service) writeState(next state) error {
 
 func (s *Service) stateChange(next state) (storage.Change, error) {
 	next.SchemaVersion = stateSchemaVersion
-	base, err := s.withKeyedTravelDigest(next.Base)
+	base, err := s.withKeyedDigests(next.Base)
 	if err != nil {
 		return storage.Change{}, err
 	}
@@ -110,8 +110,8 @@ func (s *Service) stateChange(next state) (storage.Change, error) {
 		Path:         s.statePath(),
 		Contents:     body,
 		Precondition: precondition,
-		// state は vault 文書の digest を鍵付きでしか持たず、秘密を照合できる値を
-		// 含まない。このアプリケーション自身のファイルであり、同期のたびにその
+		// state はシークレットを含む文書の digest を鍵付きでしか持たず、秘密を照合
+		// できる値を含まない。このアプリケーション自身のファイルであり、同期のたびにその
 		// 世代が増えるのは、バックアップディレクトリの中の雑音でしかない。
 		SkipBackup: true,
 	}, nil
