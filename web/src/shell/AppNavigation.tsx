@@ -17,7 +17,6 @@ import type { TerminalSessionsState } from "../terminal/sessions";
 import type { LocalShellProfile } from "../api/settings";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { HostEntry } from "../api/config";
-import type { LiveWorkspaceSummary } from "../features/workspaces/live";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
 import { navigationWidth } from "./navigationLayout";
 import { sftpTransferManager } from "../sftp/transferManager";
@@ -39,8 +38,6 @@ export function AppNavigation({
   terminalSessions,
   orderedSessions,
   activeSessionId,
-  liveWorkspace,
-  onRenameWorkspace,
   unreadBySession,
   onShowSession,
   onDuplicateSession,
@@ -68,8 +65,6 @@ export function AppNavigation({
   terminalSessions: TerminalSessionsState;
   orderedSessions: TerminalSession[];
   activeSessionId: string | null;
-  liveWorkspace: LiveWorkspaceSummary | null;
-  onRenameWorkspace: (name: string) => void;
   unreadBySession: UnreadSessions;
   onShowSession: (id: string) => void;
   onDuplicateSession: (id: string) => void;
@@ -153,8 +148,6 @@ export function AppNavigation({
         <SessionList
           sessions={orderedSessions}
           selected={section === "Terminal" ? activeSessionId : null}
-          workspace={liveWorkspace}
-          onRenameWorkspace={onRenameWorkspace}
           unreadBySession={unreadBySession}
           maxSessions={terminalSessions.maxSessions}
           busy={terminalSessions.busy}

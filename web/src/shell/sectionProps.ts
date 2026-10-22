@@ -44,7 +44,6 @@ export type Shell = {
   onOpenSSHSession: (alias: string, cwd?: string) => Promise<void>;
   // SFTP locations can name an SSH connection or the engine filesystem.
   onOpenTerminal: (alias: string, cwd?: string) => Promise<void>;
-  onOpenWorkspace: (id: string) => void;
   onTerminalSettingsChange: (settings: TerminalSettings) => Promise<void>;
 };
 

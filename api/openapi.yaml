@@ -2776,62 +2776,6 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "501": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
-  /api/v1/workspaces:
-    get:
-      operationId: listTerminalWorkspaces
-      responses:
-        "200": { description: Device-local terminal workspaces, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceList" } } } }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-        "500": { $ref: "#/components/responses/Problem" }
-    post:
-      operationId: createTerminalWorkspace
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceDefinition" } } } }
-      responses:
-        "201": { description: Workspace saved, content: { application/json: { schema: { $ref: "#/components/schemas/TerminalWorkspace" } } } }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-  /api/v1/workspaces/{id}:
-    parameters: [ { name: id, in: path, required: true, schema: { type: string, maxLength: 64 } } ]
-    get:
-      operationId: getTerminalWorkspace
-      responses:
-        "200": { description: Saved workspace, content: { application/json: { schema: { $ref: "#/components/schemas/TerminalWorkspace" } } } }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-    put:
-      operationId: updateTerminalWorkspace
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceDefinition" } } } }
-      responses:
-        "200": { description: Updated workspace, content: { application/json: { schema: { $ref: "#/components/schemas/TerminalWorkspace" } } } }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-    delete:
-      operationId: deleteTerminalWorkspace
-      responses:
-        "200": { description: Workspace deleted, content: { application/json: { schema: { $ref: "#/components/schemas/ChangedResponse" } } } }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-  /api/v1/workspaces/{id}/restore:
-    post:
-      operationId: restoreTerminalWorkspace
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, maxLength: 64 } } ]
-      responses:
-        "200": { description: Layout and explicit reconnect plan, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceRestorePlan" } } } }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/snippets:
     get:
       operationId: listSnippets
@@ -6033,71 +5977,6 @@ components:
       properties:
         offset: { type: integer, format: int64, minimum: 0 }
         size: { type: integer, format: int64, minimum: 1, maximum: 4294967296 }
-    WorkspacePane:
-      type: object
-      additionalProperties: false
-      required: [id, alias]
-      properties:
-        id: { type: string }
-        alias: { type: string }
-        kind: { type: string, enum: [ssh, shell], description: Omitted for an SSH pane; an omitted kind means ssh. }
-    WorkspaceSplit:
-      type: object
-      additionalProperties: false
-      required: [direction, ratio, first, second]
-      properties:
-        direction: { type: string, enum: [horizontal, vertical] }
-        ratio: { type: integer, minimum: 10, maximum: 90 }
-        first: { $ref: "#/components/schemas/WorkspaceNode" }
-        second: { $ref: "#/components/schemas/WorkspaceNode" }
-    WorkspaceNode:
-      type: object
-      additionalProperties: false
-      x-sshc-exactly-one:
-        - [pane, split]
-      properties:
-        pane: { $ref: "#/components/schemas/WorkspacePane" }
-        split: { $ref: "#/components/schemas/WorkspaceSplit" }
-    WorkspaceDefinition:
-      type: object
-      additionalProperties: false
-      required: [name, layout, focusedPaneId]
-      properties:
-        name: { type: string, minLength: 1, maxLength: 80 }
-        layout: { $ref: "#/components/schemas/WorkspaceNode" }
-        focusedPaneId: { type: string }
-    TerminalWorkspace:
-      type: object
-      additionalProperties: false
-      required: [name, layout, focusedPaneId, id, createdAt, updatedAt]
-      properties:
-        name: { type: string, minLength: 1, maxLength: 80 }
-        layout: { $ref: "#/components/schemas/WorkspaceNode" }
-        focusedPaneId: { type: string }
-        id: { type: string }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
-    WorkspaceList:
-      type: object
-      additionalProperties: false
-      required: [workspaces]
-      properties: { workspaces: { type: array, items: { $ref: "#/components/schemas/TerminalWorkspace" } } }
-    WorkspaceReconnectPane:
-      type: object
-      additionalProperties: false
-      required: [paneId, alias, kind, state]
-      properties:
-        paneId: { type: string }
-        alias: { type: string }
-        kind: { type: string, enum: [ssh, shell] }
-        state: { type: string, enum: [reconnect_required] }
-    WorkspaceRestorePlan:
-      type: object
-      additionalProperties: false
-      required: [workspace, panes]
-      properties:
-        workspace: { $ref: "#/components/schemas/TerminalWorkspace" }
-        panes: { type: array, items: { $ref: "#/components/schemas/WorkspaceReconnectPane" } }
     SnippetVariable:
       type: object
       additionalProperties: false

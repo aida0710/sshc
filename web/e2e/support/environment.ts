@@ -265,7 +265,7 @@ export async function openSection(page: Page, name: string): Promise<void> {
   await expect(sessionStatus(page)).toContainText("Local session active");
   if (name === "Terminal") {
     // Terminal no longer has a product-menu entry. Most tests reach it by
-    // selecting or creating a session; the few empty-state/workspace tests
+    // selecting or creating a session; the few empty-state tests
     // still need to exercise the routable screen directly.
     await page.evaluate(() => {
       window.history.pushState(null, "", "/terminal");

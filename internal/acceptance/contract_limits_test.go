@@ -12,7 +12,6 @@ import (
 	"sshc/internal/remotesync"
 	"sshc/internal/sftp"
 	"sshc/internal/validate"
-	"sshc/internal/workspace"
 )
 
 // openAPISpec は、api/openapi.yaml を型の無い木として読む。
@@ -100,11 +99,6 @@ func TestAPILimitsMatchTheGoLimits(t *testing.T) {
 		{"Metadata", "shortcutPresets", "maxItems", validate.MaxShortcutPresets},
 		{"ShortcutPreset", "name", "maxLength", validate.MaxShortcutPresetNameLength},
 		{"ShortcutPreset", "bindings.palette", "maxItems", validate.MaxShortcutKeysPerAction},
-
-		{"WorkspaceDefinition", "name", "maxLength", workspace.MaxNameRunes},
-		{"TerminalWorkspace", "name", "maxLength", workspace.MaxNameRunes},
-		{"WorkspaceSplit", "ratio", "minimum", workspace.MinSplitRatio},
-		{"WorkspaceSplit", "ratio", "maximum", workspace.MaxSplitRatio},
 
 		{"FileTransferSettings", "maxConcurrent", "maximum", sftp.MaxTransferConcurrency},
 		{"FileTransferSettings", "largeFileThresholdBytes", "minimum", sftp.MinLargeFileThreshold},

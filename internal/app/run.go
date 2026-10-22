@@ -253,7 +253,6 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		SFTP:                  services.sftp,
 		SFTPTransferStatePath: filepath.Join(services.workspace.StateDir(), sftpTransferStateName),
 		SFTPDownloadSpoolRoot: dependencies.SFTPDownloadSpoolRoot,
-		Workspaces:            services.workspaces,
 		Snippets:              services.snippets,
 		Vault:                 services.vault,
 		Connect:               services.ssh.connector(),

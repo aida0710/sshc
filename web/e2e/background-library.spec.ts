@@ -9,7 +9,7 @@ test("background image library stays compact and searchable", async ({ page, ins
   await mkdir(backgrounds, { recursive: true, mode: 0o700 });
   const fixtures = [
     ["night-terminal.png", "terminal-desktop.png"],
-    ["workspace-grid.png", "workspace-desktop.png"],
+    ["sftp-view.png", "sftp-desktop.png"],
     ["android-console.png", "android-home.png"],
     ["transfer-view.png", "transfer-manager-ja.png"],
   ] as const;

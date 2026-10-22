@@ -19,7 +19,6 @@ import (
 	"sshc/internal/secret"
 	"sshc/internal/selfupdate"
 	"sshc/internal/storage"
-	terminalworkspace "sshc/internal/workspace"
 )
 
 // neverTravels は、ワークスペースに存在しても同期対象から除外するファイル。
@@ -55,9 +54,9 @@ var neverTravels = slices.Concat([]string{
 	// 接続先のエンジンへの中継が、このマシンで待ち受けたポート。ブラウザの保存が
 	// このマシンのポートごとに分かれるために覚えるもので、別のマシンでは意味を持たない。
 	remoteengine.PortsPathRelative,
-	// pane layout is device-local and contains no process/session state that can
-	// be meaningfully restored on another engine.
-	terminalworkspace.PathRelative,
+	// ターミナルのワークスペースの定義。分割のレイアウトを保存していた頃から、この
+	// マシンのエンジンだけのものとして運ばない。
+	"sshc/workspaces.json",
 	// 次の 2 つの持ち主は app で、app は remotesync を使う側なので、ここからは参照
 	// できない。app のテストが、持ち主の定数と NeverTravels を照合する。
 	//
