@@ -21,6 +21,9 @@ export function TransferIntegerSetting({ label, value, min, max, scale = 1, unit
       setDraft(String(shownValue));
       return;
     }
+    // Leaving the field without changing it is not a change, and must not
+    // be reported as one that was saved.
+    if (parsed === shownValue) return;
     onCommit(parsed * scale);
   }
   return (

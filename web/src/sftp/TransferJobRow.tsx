@@ -8,6 +8,9 @@ import { getDisplayedTransferStatus, type DisplayedTransferStatus } from "./tran
 import { TransferJobRoute } from "./TransferJobRoute";
 import { TransferExclusionSummary } from "./TransferExclusionSummary";
 import { sftpTransferProblemText } from "./sftpProblemText";
+import { Spinner } from "../ui/Spinner";
+import { usePendingResult } from "../ui/usePendingResult";
+import type { RunTransferControl } from "./useTransferControl";
 
 const statusLabelKeys: Record<DisplayedTransferStatus, MessageKey> = {
   queued: "sftp.manager.status.queued", running: "sftp.manager.status.running",
@@ -31,12 +34,16 @@ function operationIcon(job: ManagedTransferJob): IconName {
   return "arrowLeftRight";
 }
 
+// A job's controls wait for the engine, which can take a moment over a slow
+// route. The pressed one turns into a spinner until the engine answers, so a
+// press is seen to have been taken and is not sent twice.
 function JobAction({ label, icon, tone = "text-ink-muted", disabled = false, onClick }: {
-  label: string; icon: IconName; tone?: string; disabled?: boolean; onClick: () => void;
+  label: string; icon: IconName; tone?: string; disabled?: boolean; onClick: () => Promise<unknown>;
 }) {
-  return <button type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick}
+  const control = usePendingResult();
+  return <button type="button" aria-label={label} title={label} disabled={disabled || control.pending} aria-busy={control.pending || undefined} onClick={() => control.watch(onClick())}
     className={`flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-select-fill focus-visible:ring-2 focus-visible:ring-accent md:size-8 [@media(pointer:coarse)]:size-11 ${tone}`}>
-    <Icon name={icon} className="size-4" />
+    {control.pending ? <Spinner className="size-4" /> : <Icon name={icon} className="size-4" />}
   </button>;
 }
 
@@ -45,7 +52,7 @@ export function TransferJobRow({ job, waiting, processingStopped, maxReconnectAt
   waiting: readonly ManagedTransferJob[];
   processingStopped: boolean;
   maxReconnectAttempts: number;
-  runControl: (operation: () => Promise<void>) => void;
+  runControl: RunTransferControl;
 }) {
   const t = useTranslate();
   const [detailsOpen, setDetailsOpen] = useState(false);

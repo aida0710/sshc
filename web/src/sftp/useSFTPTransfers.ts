@@ -105,6 +105,9 @@ export function useSFTPTransfers({
     setProblem(sftpProblemText(t, error));
   }
 
+  // Opens the transfer manager on work just queued, once per request however
+  // many jobs it made, so that the user sees the work start. A manager the
+  // user closes afterwards stays closed until the next request.
   function openQueue() {
     setOpenQueueRequest((current) => current + 1);
     onQueueOpen?.();
@@ -171,6 +174,7 @@ export function useSFTPTransfers({
         kind: folderBatch ? "folder" : "file",
       }, admission);
       admission = undefined;
+      openQueue();
     } catch (error) {
       report(error);
     } finally {
@@ -332,6 +336,7 @@ export function useSFTPTransfers({
         name: entry.name,
         totalBytes: entry.type === "file" ? entry.size : -1,
       })), operation);
+      openQueue();
     } catch (error) {
       report(error);
     }
@@ -370,6 +375,7 @@ export function useSFTPTransfers({
             targetPath: localJoin(counterpart.path, entry.name), name: entry.name, kind, totalBytes: size }], "get")
         : sftpTransferManager.addDownload(targetAlias, entry.path, kind, size);
     }));
+    if (results.some((result) => result.status === "fulfilled")) openQueue();
     const failed = results.find((result) => result.status === "rejected");
     if (failed?.status === "rejected") report(failed.reason);
   }
