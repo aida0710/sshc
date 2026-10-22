@@ -192,9 +192,6 @@ test("quick navigation and terminal keys remain available in portrait and touch 
     socket.send(Buffer.from("Mobile terminal demo\r\nFiles: projects/  archives/  report.txt\r\n$ "));
     socket.onMessage((data) => messages.push(typeof data === "string" ? data : data.toString("utf8")));
   });
-  await page.addInitScript(() => window.sessionStorage.setItem("sshc.terminal.live-workspace.v1", JSON.stringify({
-    version: 1, root: { pane: { id: "mobile-demo-pane", sessionId: "mobile-demo-shell" } }, focusedPaneId: "mobile-demo-pane", focusModePaneId: null,
-  })));
   await page.setViewportSize({ width: 390, height: 640 });
   await openApplication(page, installation);
   const navigation = page.getByRole("navigation", { name: "Quick navigation" });

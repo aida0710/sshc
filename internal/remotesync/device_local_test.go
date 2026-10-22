@@ -14,7 +14,6 @@ import (
 	"sshc/internal/secret"
 	"sshc/internal/selfupdate"
 	"sshc/internal/storage"
-	terminalworkspace "sshc/internal/workspace"
 )
 
 // ownedDeviceLocalPaths は、このマシンだけのものとして持ち主のパッケージが決めた
@@ -32,7 +31,7 @@ func ownedDeviceLocalPaths() []string {
 		keys.TrashPathRelative,
 		recent.PathRelative,
 		browserauth.PathRelative,
-		terminalworkspace.PathRelative,
+		"sshc/workspaces.json",
 	}, storage.DeviceLocalPaths()...)
 }
 

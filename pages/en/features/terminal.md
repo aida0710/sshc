@@ -5,7 +5,7 @@ description: Open SSH and local shells with search, reconnect, encodings, and po
 
 # Terminal
 
-Open SSH and local shells in the same interface, with multiple-pane workspaces, search, Quick Commands, and port forwarding.
+Open SSH and local shells in the same interface, with search, Quick Commands, and port forwarding.
 
 ![A connected terminal and its action menu](/images/terminal-desktop.png)
 
@@ -45,7 +45,7 @@ Kitty keyboard mode follows requests from the remote application. A JIS option s
 
 OSC 8 links and detected URLs open in the system browser. A detected remote path or the current working directory reported through OSC 7 (OSC 9;9 from PowerShell or cmd on Windows) can open SFTP at the same host and directory. SFTP can also open a terminal at its displayed directory: an SSH session for a remote tab, or a local shell on the engine machine for a local tab.
 
-**New session** in the session list opens the same picker SFTP uses for its destination: **Local shell** at the top (one row per detected shell profile), then search, recent connections and groups for SSH hosts. Local shells use the same subsystem as SSH: search, Quick Commands, workspaces, and broadcast commands all apply. On macOS and Linux, sshc supplies the terminal information needed by line editors such as zsh and fish even when the engine was started as a background service.
+**New session** in the session list opens the same picker SFTP uses for its destination: **Local shell** at the top (one row per detected shell profile), then search, recent connections and groups for SSH hosts. Local shells use the same subsystem as SSH: search and Quick Commands both apply. On macOS and Linux, sshc supplies the terminal information needed by line editors such as zsh and fish even when the engine was started as a background service.
 
 ## Images and character widths
 

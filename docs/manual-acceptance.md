@@ -122,17 +122,6 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 6. 通常変数を持つSnippetは展開後commandをpreviewして送信でき、secret変数を持つSnippetはterminal表示とshell履歴への漏洩防止のため送信できないことを確認する。
 7. `cat`などがforegroundで標準入力を待つpaneへ送るとshell commandとしてではなくそのprocessの入力になることを確認し、modalの注意書きと一致することを確認する。
 
-## M9. Workspace paneの配置交換
-
-1. 3 pane以上のnested Workspaceを開き、各paneで識別できるcommand outputを表示する。
-2. 1つ目のpaneの移動handleを別paneへDrag & Dropし、2つのpane位置だけが交換されることを確認する。
-3. 交換後も各terminalのscrollbackと接続が対応するpaneに残り、split方向と比率が変わらないことを確認する。
-4. 移動handleを2つ順に選択し、Drag & Dropと同じ交換が行われることを確認する。最初のhandleでEscapeを押すと選択を解除できることも確認する。
-5. Workspaceを保存して再度開き、交換後の配置でaliasごとに新規接続されることを確認する。
-6. ローカルシェルを2つ開き、一方の一覧行をもう一方の上下左右へdropして分割できることを確認する。保存後に再度開くと、同じ配置で新しいローカルシェルが2つ開始されることを確認する。
-6. 縦横それぞれのseparatorをDragして比率を変更し、保存・再オープン後に復元されることを確認する。矢印キーでも5%ずつ変更できることを確認する。
-7. 任意paneをFocus Modeへ切り替え、他paneの接続を閉じずに単一paneだけが表示されること、Escとtoolbarの両方で元layoutへ戻ることを確認する。
-
 ## M10. Terminal検索と入力
 
 1. 長い出力を作り、Ctrl/Cmd+Fでscrollback内の語を検索する。Enter／Shift+Enterと前後buttonで一致を巡回できることを確認する。

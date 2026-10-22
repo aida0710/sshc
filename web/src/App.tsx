@@ -121,21 +121,12 @@ export function App({
     localShellProfiles,
     activeSessionId,
     terminalScreenMounted,
-    liveWorkspace,
-    restoreRequest: workspaceRestoreRequest,
-    renameRequest: workspaceRenameRequest,
     orderedSessions,
     showSession,
-    openWorkspace,
-    renameWorkspace,
     openLocalShell,
     openSSHSession,
     duplicateSession,
-    consumeRestore: consumeWorkspaceRestore,
-    setWorkspaceRestoring,
-    consumeRename: consumeWorkspaceRename,
     reorderSessions: setSessionOrder,
-    setLiveWorkspace,
     setSettings: setTerminalSettings,
   } = terminalWorkspace;
 
@@ -303,8 +294,6 @@ export function App({
             terminalSessions={terminalSessions}
             orderedSessions={orderedSessions}
             activeSessionId={activeSessionId}
-            liveWorkspace={liveWorkspace}
-            onRenameWorkspace={renameWorkspace}
             unreadBySession={unreadSessions}
             onShowSession={showSession}
             onDuplicateSession={(id) => void duplicateSession(id)}
@@ -347,19 +336,8 @@ export function App({
                       hostAppearance={declared.hostAppearance}
                       hostOSC52={declared.hostOSC52}
                       hostVPN={declared.hostVPN}
-                      onActive={showSession}
-                      onLiveWorkspaceChange={setLiveWorkspace}
-                      onOpenAlias={(alias) =>
-                        terminalSessions.open({ kind: "ssh", alias })
-                      }
-                      onOpenShell={() => terminalSessions.open({ kind: "shell" })}
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
-                      restoreRequest={workspaceRestoreRequest}
-                      onRestoreConsumed={consumeWorkspaceRestore}
-                      onRestoringChange={setWorkspaceRestoring}
-                      renameRequest={workspaceRenameRequest}
-                      onRenameConsumed={consumeWorkspaceRename}
                     />
                   </div>
                 ) : null}
@@ -398,7 +376,6 @@ export function App({
                         onShowSession: showSession,
                         onOpenSSHSession: openSSHSession,
                         onOpenTerminal: openSFTPTerminal,
-                        onOpenWorkspace: openWorkspace,
                         onTerminalSettingsChange: async (settings) => {
                           setTerminalSettings(settings);
                           await terminalSessions.refresh();
