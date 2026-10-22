@@ -91,6 +91,12 @@ describe("Notice", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("This cannot be undone.");
   });
+
+  it("tells that something has just been done without interrupting", () => {
+    render(<Notice tone="success">Saved.</Notice>);
+    expect(screen.getByRole("status")).toHaveTextContent("Saved.");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });
 
 describe("Button", () => {
@@ -119,5 +125,23 @@ describe("Card", () => {
     render(<Card as="section" aria-label="Summary" radius="md" tone="notice">Body</Card>);
 
     expect(screen.getByRole("region", { name: "Summary" })).toHaveClass("sshc-card", "rounded-md", "bg-notice");
+  });
+});
+
+describe("Button while it waits", () => {
+  it("keeps its label while it waits, and cannot be pressed again", async () => {
+    const onClick = vi.fn();
+    render(<Button busy onClick={onClick}>Save</Button>);
+    const button = screen.getByRole("button", { name: "Save" });
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toBeDisabled();
+    await userEvent.click(button);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("says nothing about waiting when it is idle", () => {
+    render(<Button>Save</Button>);
+    expect(screen.getByRole("button", { name: "Save" })).not.toHaveAttribute("aria-busy");
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 });

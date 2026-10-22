@@ -22,6 +22,9 @@ type TerminalClipboardOptions = {
   coarsePointer?: () => boolean;
   settings: () => TerminalClipboardSettings;
   refuse: () => void;
+  // copied は、コピーのショートカットで選択を写せたときだけ呼ぶ。選ぶだけで写す設定のときに
+  // 毎回知らせると、選び直すたびに知らせが出てうるさい。
+  copied?: () => void;
   enhancedKey?: (event: KeyboardEvent) => string | null;
   sendEnhancedKey?: (sequence: string) => void;
 };
@@ -39,15 +42,18 @@ export function attachTerminalClipboard({
   coarsePointer = () => false,
   settings,
   refuse,
+  copied,
   enhancedKey,
   sendEnhancedKey,
 }: TerminalClipboardOptions): () => void {
   let active = true;
-  const copySelection = () => {
+  const copySelection = ({ announce }: { announce: boolean }) => {
     if (!terminal.hasSelection()) return;
     const text = terminal.getSelection();
     if (text === "") return;
-    void clipboard.writeText(text).catch(refuse);
+    void clipboard.writeText(text).then(() => {
+      if (announce && active) copied?.();
+    }, refuse);
   };
 
   const readAndPaste = () => {
@@ -67,7 +73,7 @@ export function attachTerminalClipboard({
     if (event.type !== "keydown") return true;
     if (matchesShortcut(event, "copy") && terminal.hasSelection()) {
       event.preventDefault();
-      copySelection();
+      copySelection({ announce: true });
       return false;
     }
     if (matchesShortcut(event, "paste")) {
@@ -89,7 +95,7 @@ export function attachTerminalClipboard({
 
   const selection = terminal.onSelectionChange(() => {
     if (!settings().copyOnSelect) return;
-    copySelection();
+    copySelection({ announce: false });
   });
   const onPaste = (event: ClipboardEvent) => {
     const text = event.clipboardData?.getData("text/plain");

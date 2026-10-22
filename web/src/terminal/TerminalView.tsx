@@ -54,6 +54,8 @@ import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
+import { ToastMessage } from "../ui/ToastMessage";
+import { toastVisibleMs } from "../ui/ToastProvider";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -83,10 +85,6 @@ type TerminalViewProps = {
   onForwardsChanged?: () => void | Promise<void>;
   jisYenBackslash?: boolean;
 };
-
-// Long enough to read a one-line notice such as "Copied" without it lingering
-// over the output.
-const terminalNoticeMs = 2500;
 
 // A command shorter than this usually finishes while the user is still
 // watching, so a desktop notification for it would only be noise.
@@ -184,7 +182,7 @@ export function TerminalView({
 
   useEffect(() => {
     if (terminalNotice === "") return;
-    const timer = window.setTimeout(() => setTerminalNotice(""), terminalNoticeMs);
+    const timer = window.setTimeout(() => setTerminalNotice(""), toastVisibleMs);
     return () => window.clearTimeout(timer);
   }, [terminalNotice]);
 
@@ -395,6 +393,7 @@ export function TerminalView({
       coarsePointer: () => coarse,
       settings: () => clipboardSettings.current,
       refuse: () => setProblem(t("terminal.clipboardRefused")),
+      copied: () => setTerminalNotice(t("copy.done")),
       enhancedKey: (event) => encodeIntlYen(event, intlYenRef.current) ?? kittyKeyboard.encode(event),
       sendEnhancedKey: (sequence) => linkController.currentStream()?.send(sequence),
     });
@@ -566,9 +565,9 @@ export function TerminalView({
         />
         {search.open ? <TerminalSearchBar search={search} mobile={mobile} /> : null}
         {terminalNotice === "" ? null : (
-          <p role="status" className="absolute bottom-3 right-3 z-20 max-w-[min(24rem,calc(100%-1.5rem))] rounded border border-line bg-toolbar/95 px-3 py-2 text-xs text-ink shadow-lg">
+          <ToastMessage role="status" className="absolute bottom-3 right-3 z-20 max-w-[min(24rem,calc(100%-1.5rem))]">
             {terminalNotice}
-          </p>
+          </ToastMessage>
         )}
       </div>
       {quickCommandsOpen ? (
@@ -577,6 +576,7 @@ export function TerminalView({
           initialCommand={quickCommandSelection}
           returnFocusRef={overflowTrigger}
           onClose={() => setQuickCommandsOpen(false)}
+          onCopied={() => setTerminalNotice(t("copy.done"))}
         />
       ) : null}
       {portForwardsOpen ? (

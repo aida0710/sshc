@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { localMutationProblemText, sftpProblemText } from "./sftpProblemText";
 import { clipboard } from "../ui/clipboard";
+import { useToast } from "../ui/useToast";
 import { sftpApi, type RemoteEntry } from "./api";
 import { parentRowKey, type SFTPEntryListModel } from "./useSFTPEntryList";
 import { remoteJoin as join, remoteParentOf as parentOf, type SFTPSource } from "./sftpSource";
@@ -44,6 +45,7 @@ export function useSFTPEntryActions({
   onInteract?: () => void;
 }) {
   const t = useTranslate();
+  const showToast = useToast();
   const { alias, path, source, setProblem } = browser;
   const generation = browser.generation;
   const { selectedEntries, selectedEntry, rowKeys, setSelectedPaths, focusAfterReload, cancelPendingFocus } = list;
@@ -264,14 +266,18 @@ export function useSFTPEntryActions({
     onInteract?.();
     try {
       await clipboard.writeText(selectedEntries.map((entry) => kind === "name" ? entry.name : entry.path).join("\n"));
+      showToast(t("copy.done"), { tone: "success" });
     } catch {
       setProblem(t("copy.refused"));
     }
   }
 
   async function copyCurrentPath() {
-    try { await clipboard.writeText(path); setProblem(""); }
-    catch { setProblem(t("copy.refused")); }
+    try {
+      await clipboard.writeText(path);
+      setProblem("");
+      showToast(t("copy.done"), { tone: "success" });
+    } catch { setProblem(t("copy.refused")); }
   }
 
   return {

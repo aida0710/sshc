@@ -103,7 +103,7 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
         </div>
         {!draft.withoutPassword && isAcceptedButShort(draft.next, minPassphraseLength) ? <p className="mt-3 text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
         <ActionArea status={save.error === ""
-          ? (save.saved ? <p role="status" className="text-sm text-live">{t("secrets.changedMasterLocally")}</p> : undefined)
+          ? (save.saved ? <Notice tone="success">{t("secrets.changedMasterLocally")}</Notice> : undefined)
           : <Notice tone="danger">{save.error}</Notice>}
         >
           <Button kind="primary" disabled={!canChange} onClick={() => void submit()}>
