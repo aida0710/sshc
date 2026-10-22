@@ -41,8 +41,8 @@ export function SFTPTextEditor({ editor, busy = false }: {
                   <span className="grow basis-48">{problem.message}</span>
                   {problem.conflict ? (
                     <span className="flex shrink-0 gap-3">
-                      <button type="button" disabled={editor.busy} className="text-accent disabled:text-ink-faint" onClick={editor.requestReload}>{t(editor.local ? "sftp.editorLocalReload" : "sftp.editorReload")}</button>
-                      <button type="button" disabled={writeDisabled} className="text-accent disabled:text-ink-faint" onClick={() => void editor.requestOverwrite()}>{t("sftp.editorOverwrite")}</button>
+                      <button type="button" disabled={editor.busy} className="text-accent" onClick={editor.requestReload}>{t(editor.local ? "sftp.editorLocalReload" : "sftp.editorReload")}</button>
+                      <button type="button" disabled={writeDisabled} className="text-accent" onClick={() => void editor.requestOverwrite()}>{t("sftp.editorOverwrite")}</button>
                     </span>
                   ) : null}
                 </span>

@@ -124,7 +124,7 @@ export function SFTPEntryList({
             <button
               type="button"
               {...parentButtonProps}
-              className="flex min-h-11 w-full items-center gap-2.5 px-3 py-1.5 text-left text-base hover:bg-hover disabled:text-ink-faint"
+              className="flex min-h-11 w-full items-center gap-2.5 px-3 py-1.5 text-left text-base hover:bg-hover"
             >
               <ParentRowLabel />
             </button>
@@ -145,7 +145,7 @@ export function SFTPEntryList({
             <button
               type="button"
               {...entryButtonProps(entry)}
-              className="flex min-h-14 min-w-0 flex-1 touch-pan-y select-none items-center gap-2.5 px-2.5 py-1.5 text-left hover:bg-hover active:bg-select-fill disabled:text-ink-faint"
+              className="flex min-h-14 min-w-0 flex-1 touch-pan-y select-none items-center gap-2.5 px-2.5 py-1.5 text-left hover:bg-hover active:bg-select-fill"
             >
               <Icon name={entryIcon(entry)} className="size-5 shrink-0 text-ink-muted" />
               <span className="min-w-0 flex-1">
@@ -195,7 +195,7 @@ export function SFTPEntryList({
               <button
                 type="button"
                 {...parentButtonProps}
-                className="flex w-full items-center gap-2 rounded py-0.5 text-left text-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:text-ink-faint"
+                className="flex w-full items-center gap-2 rounded py-0.5 text-left text-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
               >
                 <ParentRowLabel />
               </button>

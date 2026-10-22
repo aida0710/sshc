@@ -329,7 +329,7 @@ export function RemoteKeyPanel({
                         type="button"
                         disabled={busy || matchingHosts.length === 0}
                         onClick={selectMatchingHosts}
-                        className="text-xs text-accent hover:underline disabled:text-ink-faint disabled:no-underline"
+                        className="text-xs text-accent hover:underline"
                       >
                         {t("rk.selectMatches")}
                       </button>
@@ -337,7 +337,7 @@ export function RemoteKeyPanel({
                         type="button"
                         disabled={busy || selectedAliases.length === 0}
                         onClick={clearSelectedHosts}
-                        className="text-xs text-ink-muted hover:text-ink disabled:text-ink-faint"
+                        className="text-xs text-ink-muted hover:text-ink"
                       >
                         {t("rk.clearSelection")}
                       </button>

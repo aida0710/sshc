@@ -27,13 +27,15 @@ export const narrowControl = sizedControl("narrow");
 
 export const autoControl = sizedControl("auto");
 
+// 押せないときの見た目（薄くする、載せても光らない）は index.css の :disabled の決まりが
+// どのボタンにも同じく付けるので、ここでは書かない。
 export const primaryAction =
   "whitespace-nowrap rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink " +
-  "transition-[background-color,box-shadow,filter] duration-150 hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:bg-line disabled:text-ink-faint";
+  "transition-[background-color,box-shadow,filter] duration-150 hover:brightness-110 active:brightness-95";
 
 export const secondaryAction =
   "whitespace-nowrap rounded-md border border-control-line bg-card px-3 py-1.5 text-sm text-ink " +
-  "transition-colors duration-150 hover:border-accent/50 hover:bg-hover active:bg-select-fill disabled:cursor-not-allowed disabled:text-ink-faint";
+  "transition-colors duration-150 hover:border-accent/50 hover:bg-hover active:bg-select-fill";
 
 export const dangerAction =
   "whitespace-nowrap rounded-md border border-control-line px-3 py-1.5 text-sm text-danger " +

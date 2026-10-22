@@ -293,7 +293,7 @@ export function SFTPWorkspace({
   const compactComparisonButton = (
     <button type="button" aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")}
       disabled={!canCompare} onClick={requestComparison}
-      className="flex min-h-12 w-12 shrink-0 items-center justify-center rounded text-sm text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint">
+      className="flex min-h-12 w-12 shrink-0 items-center justify-center rounded text-sm text-ink-muted hover:bg-card/50 hover:text-ink">
       <Icon name="arrowLeftRight" className="size-5" />
     </button>
   );

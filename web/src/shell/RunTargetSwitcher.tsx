@@ -96,7 +96,7 @@ export function RunTargetSwitcher({
             type="button"
             disabled={targets.busy}
             onClick={() => setPicking(true)}
-            className="flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-ink-muted hover:bg-hover disabled:text-ink-faint md:min-h-7"
+            className="flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-ink-muted hover:bg-hover md:min-h-7"
           >
             <Icon name="plus" className="size-3.5" aria-hidden="true" />
             {targets.busy ? t("runTarget.adding") : t("runTarget.add")}

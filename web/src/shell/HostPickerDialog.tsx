@@ -175,7 +175,7 @@ export function HostPickerDialog({
               disabled={recentChoices.length === 0}
               onClick={() => setView("recent")}
               onKeyDown={(event) => activateTabFromKeyboard(event, 0, views, setView)}
-              className={`grow rounded px-3 py-1.5 text-sm disabled:text-ink-faint ${view === "recent" ? "bg-card shadow-sm" : "text-ink-muted"}`}
+              className={`grow rounded px-3 py-1.5 text-sm ${view === "recent" ? "bg-card shadow-sm" : "text-ink-muted"}`}
             >
               {t("sftp.recentHosts")}
             </button>

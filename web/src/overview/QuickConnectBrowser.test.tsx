@@ -199,8 +199,10 @@ describe("QuickConnectBrowser", () => {
     expect(opening).toBeDisabled();
     expect(opening).toHaveTextContent("Opening…");
     expect(opening.closest("li")).toHaveAttribute("aria-busy", "true");
+    expect(opening).toHaveAttribute("aria-busy", "true");
     const another = screen.getByRole("button", { name: /^Connect to eu-api\./ });
     expect(another).toBeDisabled();
+    expect(another).toHaveAttribute("aria-busy", "false");
     await userEvent.click(another);
     expect(connect).not.toHaveBeenCalled();
   });

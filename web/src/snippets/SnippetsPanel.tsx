@@ -606,7 +606,7 @@ export function SnippetsPanel({
           </Button>
           <button
             disabled={operation.busy || startupAlias === ""}
-            className="ml-2 text-xs text-ink-muted disabled:opacity-50"
+            className="ml-2 text-xs text-ink-muted"
             onClick={() => void updateStartup("")}
           >
             {t("snippets.clearStartup")}

@@ -27,7 +27,7 @@ export function SFTPContentSearchResults({ search, disabled, onOpen }: {
     </ul>}
     {matches.length === 0 ? <p className="p-3 text-ink-muted">{t(search.truncated ? "sftp.search.noContentMatchesPartial" : "sftp.search.noContentMatches")}</p> : <ul>
       {matches.map((match) => <li key={`${match.entry.path}:${match.line}`} className="border-b border-line/40">
-        <button type="button" disabled={disabled} aria-label={t("sftp.search.openLine", { path: match.entry.path, line: match.line })} onClick={() => onOpen(match)} className="block w-full px-3 py-2 text-left hover:bg-hover disabled:text-ink-faint">
+        <button type="button" disabled={disabled} aria-label={t("sftp.search.openLine", { path: match.entry.path, line: match.line })} onClick={() => onOpen(match)} className="block w-full px-3 py-2 text-left hover:bg-hover">
           <span className="block break-all font-mono text-xs text-accent">{match.entry.path}:{match.line}</span>
           <span className="mt-1 block break-all font-mono text-xs text-ink-muted">{match.snippet}</span>
         </button>
