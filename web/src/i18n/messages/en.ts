@@ -526,6 +526,7 @@ export const en = {
   "engineInfo.confirmRestart": "Restart the engine on {alias}?",
   "engineInfo.confirmStop": "Stop the engine on {alias}?",
   "engineInfo.stopsSessions": "All {count} sessions running on {alias} will end.",
+  "engineInfo.noSessions": "No sessions are running on {alias}.",
   "engineInfo.stopsSessionsUnknown": "Every session running there will end.",
   "engineInfo.locksVault": "A password-protected vault will lock.",
   "engineInfo.updated": "Updated.",

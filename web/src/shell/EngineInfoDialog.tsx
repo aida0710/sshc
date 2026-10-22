@@ -123,7 +123,9 @@ function EngineFacts({ status, localVersion, t }: { status: RemoteEngineStatus; 
 function confirmBody(t: Translate, action: RemoteEngineAction, status: RemoteEngineStatus | null): string {
   const sessions = status === null
     ? t("engineInfo.stopsSessionsUnknown")
-    : t("engineInfo.stopsSessions", { alias: status.alias, count: String(status.sessions) });
+    : status.sessions === 0
+      ? t("engineInfo.noSessions", { alias: status.alias })
+      : t("engineInfo.stopsSessions", { alias: status.alias, count: String(status.sessions) });
   const locksVault = action !== "stop" && (status === null || (status.vault && !status.passwordless));
   return locksVault ? `${sessions} ${t("engineInfo.locksVault")}` : sessions;
 }

@@ -531,6 +531,7 @@ export const ja = {
   "engineInfo.confirmRestart": "{alias} のsshcエンジンを再起動しますか？",
   "engineInfo.confirmStop": "{alias} のsshcエンジンを停止しますか？",
   "engineInfo.stopsSessions": "{alias} で動いている{count}件のセッションはすべて終了します。",
+  "engineInfo.noSessions": "{alias} で動いているセッションはありません。",
   "engineInfo.stopsSessionsUnknown": "動いているセッションはすべて終了します。",
   "engineInfo.locksVault": "パスワードを設定したVaultはロックされます。",
   "engineInfo.updated": "更新しました。",

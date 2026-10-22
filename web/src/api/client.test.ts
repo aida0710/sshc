@@ -155,6 +155,21 @@ describe("apiClient", () => {
     expect(diagnostic).not.toHaveBeenCalled();
   });
 
+  it("leaves run-target engine failures to the run-target screens", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: "remote_engine_not_running", message: "request rejected" }),
+      { status: 502, headers: { "Content-Type": "application/problem+json" } },
+    )));
+    apiClient.setCSRF("c".repeat(43));
+
+    await expect(apiClient.read("/api/v1/engines/r540/terminal/sessions"))
+      .rejects.toMatchObject({ code: "remote_engine_not_running" });
+
+    expect(diagnostic).not.toHaveBeenCalled();
+  });
+
   it("leaves locally handled mutation failures to the operation panel", async () => {
     const diagnostic = vi.fn();
     whenRequestFailed(diagnostic);
