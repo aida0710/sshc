@@ -58,6 +58,7 @@ export function SFTPEntryActionDialogs({ actions, currentPath, returnFocusRef }:
           }}
           onSubmit={actions.submit}
           onCancel={actions.cancelInput}
+          error={actions.inputProblem}
         />
       )}
     </>

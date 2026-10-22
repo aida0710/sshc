@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { en } from "../i18n/messages";
@@ -128,6 +128,23 @@ describe("the transfer queue", () => {
   it("offers no settings button when it has nowhere to go", () => {
     render(<TransferManagerList />);
     expect(screen.queryByRole("button", { name: "Transfer settings" })).not.toBeInTheDocument();
+  });
+
+  it("shows the pressed job control waiting until the engine answers", async () => {
+    let answer: () => void = () => undefined;
+    manager.pause.mockImplementationOnce(() => new Promise<undefined>((resolve) => { answer = () => resolve(undefined); }));
+    manager.setJobs([job("big.iso", { status: "running" })]);
+    render(<TransferManagerList />);
+    const pause = screen.getByRole("button", { name: "Pause" });
+    await userEvent.click(pause);
+
+    expect(pause).toHaveAttribute("aria-busy", "true");
+    expect(pause).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+    answer();
+    await waitFor(() => expect(pause).not.toHaveAttribute("aria-busy"));
+    expect(pause).toBeEnabled();
+    expect(manager.pause).toHaveBeenCalledOnce();
   });
 
   it("shows a reconnect wait with its budget and a manual pause action", () => {
