@@ -131,6 +131,7 @@ export function QuickConnectBrowser({
           data-touch-compact
           aria-label={t(opening ? "home.openingConnection" : "home.connectGesture", { alias })}
           aria-pressed={selected}
+          aria-busy={opening}
           disabled={launching !== ""}
           onPointerDown={(event) => { pointerType.current = event.pointerType; }}
           onClick={() => {
