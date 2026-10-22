@@ -1450,7 +1450,6 @@ export const en = {
   "home.connectionActions": "Actions for {alias}",
   "home.openConnectionSettings": "Open connection settings",
   "home.connect": "Connect",
-  "home.connectTo": "Connect to {alias}",
   "home.openingConnection": "Opening {alias}…",
   "home.opening": "Opening…",
   "home.loadFailed": "The SSH configuration could not be read.",

@@ -185,58 +185,11 @@ describe("QuickConnectBrowser", () => {
     await userEvent.click(button);
     expect(connect).not.toHaveBeenCalled();
     expect(button).toHaveAttribute("aria-pressed", "true");
+    expect(within(card).queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
 
     await userEvent.click(within(card).getByRole("button", { name: "Actions for nas" }));
     expect(connect).not.toHaveBeenCalled();
     expect(screen.getByRole("menu")).toBeVisible();
-  });
-
-  it("shows a visible Connect button only on the card chosen with a mouse, and connects when it is pressed", async () => {
-    const connect = vi.fn();
-    renderBrowser({ onConnect: connect });
-    const nasCard = screen.getByRole("button", { name: /^Connect to nas\./ });
-    const euCard = screen.getByRole("button", { name: /^Connect to eu-api\./ });
-    expect(screen.queryByRole("button", { name: "Connect to nas" })).not.toBeInTheDocument();
-
-    await userEvent.click(nasCard);
-    const visibleConnect = within(nasCard.closest("li")!).getByRole("button", { name: "Connect to nas" });
-    expect(visibleConnect).toHaveTextContent("Connect");
-    expect(within(euCard.closest("li")!).queryByRole("button", { name: "Connect to eu-api" })).not.toBeInTheDocument();
-    expect(connect).not.toHaveBeenCalled();
-
-    await userEvent.click(visibleConnect);
-    expect(connect).toHaveBeenCalledExactlyOnceWith("nas");
-  });
-
-  it("does not add the Connect button after a touch or a key connects straight away", async () => {
-    const connect = vi.fn();
-    renderBrowser({ onConnect: connect });
-    const nasCard = screen.getByRole("button", { name: /^Connect to nas\./ });
-
-    fireEvent.pointerDown(nasCard, { pointerType: "touch" });
-    fireEvent.click(nasCard);
-    expect(connect).toHaveBeenCalledWith("nas");
-    expect(screen.queryByRole("button", { name: "Connect to nas" })).not.toBeInTheDocument();
-
-    const euCard = screen.getByRole("button", { name: /^Connect to eu-api\./ });
-    euCard.focus();
-    await userEvent.keyboard("{Enter}");
-    expect(connect).toHaveBeenLastCalledWith("eu-api");
-    expect(screen.queryByRole("button", { name: "Connect to eu-api" })).not.toBeInTheDocument();
-  });
-
-  it("disables the visible Connect button while any connection is opening", async () => {
-    const connect = vi.fn();
-    const view = renderBrowser({ onConnect: connect });
-    await userEvent.click(screen.getByRole("button", { name: /^Connect to nas\./ }));
-
-    view.rerender(
-      <QuickConnectBrowser overview={overview} recent={recent} launching="eu-api" onConnect={connect} onOpenSettings={vi.fn()} />,
-    );
-    const visibleConnect = screen.getByRole("button", { name: "Connect to nas" });
-    expect(visibleConnect).toBeDisabled();
-    await userEvent.click(visibleConnect);
-    expect(connect).not.toHaveBeenCalled();
   });
 
   it("shows the pending host and prevents another launch while opening", async () => {
