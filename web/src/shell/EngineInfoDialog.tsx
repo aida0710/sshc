@@ -36,7 +36,9 @@ export function EngineInfoDialog({
   const t = useTranslate();
   const headingId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
-  const info = useEngineInfo({ alias, api: targets.api, translate: t, localVersion: targets.localVersion });
+  const info = useEngineInfo({
+    alias, api: targets.api, translate: t, localVersion: targets.localVersion, vaultRevision: targets.vaultUnlock.revision,
+  });
   const [confirming, setConfirming] = useState<RemoteEngineAction | null>(null);
   const busy = info.running !== null;
 
@@ -53,7 +55,9 @@ export function EngineInfoDialog({
         <h2 id={headingId} className="text-sm font-medium text-ink">
           {t("engineInfo.heading", { alias })}
         </h2>
-        {info.status === null ? null : <EngineFacts status={info.status} localVersion={targets.localVersion} t={t} />}
+        {info.status === null ? null : (
+          <EngineFacts status={info.status} localVersion={targets.localVersion} t={t} onUnlock={busy ? undefined : () => targets.vaultUnlock.ask(alias)} />
+        )}
         {info.problem === "" ? null : <Notice tone="danger" compact>{info.problem}</Notice>}
         <div className="flex flex-wrap gap-2">
           {engineActions.map((action) => (
@@ -101,7 +105,18 @@ export function EngineInfoDialog({
   );
 }
 
-function EngineFacts({ status, localVersion, t }: { status: RemoteEngineStatus; localVersion: string; t: Translate }) {
+function EngineFacts({
+  status,
+  localVersion,
+  t,
+  onUnlock,
+}: {
+  status: RemoteEngineStatus;
+  localVersion: string;
+  t: Translate;
+  onUnlock: (() => void) | undefined;
+}) {
+  const locked = status.vault && !status.unlocked;
   const vault = !status.vault ? t("engineInfo.vaultNone") : status.unlocked ? t("engineInfo.vaultUnlocked") : t("engineInfo.vaultLocked");
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
@@ -111,7 +126,14 @@ function EngineFacts({ status, localVersion, t }: { status: RemoteEngineStatus; 
         {status.version === localVersion ? null : <span className="ml-2 text-xs text-danger">{t("engineInfo.versionDiffers", { local: localVersion })}</span>}
       </dd>
       <dt className="text-ink-faint">{t("engineInfo.vault")}</dt>
-      <dd className="text-ink">{vault}</dd>
+      <dd className="flex items-center gap-2 text-ink">
+        {vault}
+        {locked && onUnlock !== undefined ? (
+          <button type="button" onClick={onUnlock} className="text-xs text-accent underline-offset-2 hover:underline">
+            {t("runTarget.unlockOpen")}
+          </button>
+        ) : null}
+      </dd>
       <dt className="text-ink-faint">{t("engineInfo.sessions")}</dt>
       <dd className="text-ink">{t("engineInfo.sessionCount", { count: String(status.sessions) })}</dd>
     </dl>

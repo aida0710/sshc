@@ -651,6 +651,33 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/engines/{alias}/vault/unlock:
+    post:
+      operationId: unlockRemoteEngineVault
+      description: Unlocks the remote engine's vault. The password is passed to that engine and not kept on this one.
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PassphraseRequest" }
+      responses:
+        "204":
+          description: The remote vault is unlocked
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/engines/{alias}/terminal/sessions:
     get:
       operationId: remoteEngineListTerminalSessions

@@ -4,6 +4,7 @@ import type { Translate } from "../i18n/context";
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 import { runTargetProblemText } from "./runTargetProblem";
+import { useRemoteVaultUnlock, type RemoteVaultUnlockState } from "./useRemoteVaultUnlock";
 
 export type RunTargetsState = {
   // engines are the SSH hosts whose engine was added as a run target.
@@ -20,6 +21,7 @@ export type RunTargetsState = {
   // api and localVersion are what the engine information dialog asks with.
   api: RemoteEnginesApi;
   localVersion: string;
+  vaultUnlock: RemoteVaultUnlockState;
 };
 
 // useRunTargets holds the run targets: this machine and the engines on SSH
@@ -40,6 +42,8 @@ export function useRunTargets({
   const [stored, setStored] = useState(() => readStoredValue(localStorageKeys.runTarget) ?? "");
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
+  const vaultUnlock = useRemoteVaultUnlock();
+  const { allowOffer } = vaultUnlock;
 
   useEffect(() => {
     if (!enabled) return;
@@ -57,9 +61,12 @@ export function useRunTargets({
 
   const select = useCallback((alias: string | null) => {
     setProblem("");
+    // Choosing a run target again asks for its Vault password again, even if
+    // the dialog was closed before.
+    if (alias !== null) allowOffer(alias);
     setStored(alias ?? "");
     writeStoredValue(localStorageKeys.runTarget, alias ?? "");
-  }, []);
+  }, [allowOffer]);
 
   const add = useCallback(async (alias: string) => {
     setProblem("");
@@ -103,5 +110,5 @@ export function useRunTargets({
     }
   }, [api, localVersion, translate]);
 
-  return { engines, selected, problem, busy, select, add, remove, openInNewTab, api, localVersion };
+  return { engines, selected, problem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock };
 }
