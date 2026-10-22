@@ -80,6 +80,9 @@ func dispatchInvocation(called invocation, paths userPaths, client *http.Client)
 	case invocationOpenInBrowser, invocationOpen:
 		openCtx, stopSignals := notifySignals(ctx)
 		defer stopSignals()
+		if len(called.Args) == 1 {
+			return runOpenRemote(openCtx, called.Args[0], systemCommandEnvironment(paths, client), !called.NoBrowser)
+		}
 		return runOpen(openCtx, systemCommandEnvironment(paths, client), !called.NoBrowser)
 	case invocationEngine:
 		// engine は stdin を読み取らない。

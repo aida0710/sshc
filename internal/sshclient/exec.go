@@ -10,6 +10,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"sshc/internal/iowrite"
+	"sshc/internal/textencoding"
 )
 
 // MaxCapturedOutput は、リモートのコマンドから取り込む量の上限である。
@@ -55,9 +56,6 @@ var ErrCommandTimedOut = fmt.Errorf("the remote command did not finish within it
 // ロケールに依存しないよう、ssh_config の SetEnv は送らない。
 func (d Dialer) Run(ctx context.Context, target Target, command Command) (Output, error) {
 	started := time.Now()
-	failed := func() Output {
-		return Output{ExitCode: RemoteFailureExit, Elapsed: time.Since(started)}
-	}
 
 	// 非対話処理では未知のホストを信頼済みに変更しない。
 	strict := requireKnownHosts(target)
@@ -66,14 +64,47 @@ func (d Dialer) Run(ctx context.Context, target Target, command Command) (Output
 	// ここで Run 全体に掛けると、接続の速い相手でも長いコマンドが途中で切られる。
 	client, closers, err := d.chain(ctx, strict, noPrompt, nil)
 	if err != nil {
-		return failed(), err
+		return Output{ExitCode: RemoteFailureExit, Elapsed: time.Since(started)}, err
 	}
 	defer func() {
 		_ = client.Close()
 		closeAll(closers)
 	}()
 
-	session, err := client.NewSession()
+	finished := make(chan struct{})
+	defer close(finished)
+	if keepAlive := keepAliveLoop(client, keepAliveSettings{interval: strict.KeepAlive, count: strict.KeepAliveMax, done: finished}); keepAlive != nil {
+		go keepAlive()
+	}
+	return runCommand(ctx, commandRun{
+		client: client, encoding: strict.Encoding, command: command, started: started,
+		// Run は session.Run の最中にも ctx の所有下にある。チャンネルだけでなく
+		// 輸送も閉じるのは、応答しない相手の Close を待たずに解除するためである。
+		abandon: func() {
+			_ = client.Close()
+			closeAll(closers)
+		},
+	})
+}
+
+// commandRun は、認証済みの輸送の上でコマンドをひとつ走らせるのに要るものである。
+type commandRun struct {
+	client   *ssh.Client
+	encoding textencoding.Name
+	command  Command
+	started  time.Time
+	// abandon は、ctx の取り消しか Limit の期限でコマンドを打ち切るときに呼ぶ。
+	// チャンネルはそのあと閉じる。
+	abandon func()
+}
+
+// runCommand は、輸送の上にチャンネルをひとつ開いてコマンドを走らせ、結果を集める。
+func runCommand(ctx context.Context, run commandRun) (Output, error) {
+	command := run.command
+	failed := func() Output {
+		return Output{ExitCode: RemoteFailureExit, Elapsed: time.Since(run.started)}
+	}
+	session, err := run.client.NewSession()
 	if err != nil {
 		return failed(), err
 	}
@@ -86,7 +117,7 @@ func (d Dialer) Run(ctx context.Context, target Target, command Command) (Output
 	if len(command.Stdin) > 0 {
 		streams.In = bytes.NewReader(command.Stdin)
 	}
-	encoded, closeEncoding, err := encodeStreams(streams, strict.Encoding)
+	encoded, closeEncoding, err := encodeStreams(streams, run.encoding)
 	if err != nil {
 		return failed(), err
 	}
@@ -100,18 +131,12 @@ func (d Dialer) Run(ctx context.Context, target Target, command Command) (Output
 	}
 	defer stop()
 
-	// Run は session.Run の最中にも ctx の所有下にある。チャンネルだけでなく
-	// 輸送も閉じるのは、応答しない相手の Close を待たずに解除するためである。
 	finished := make(chan struct{})
 	defer close(finished)
-	if keepAlive := keepAliveLoop(client, keepAliveSettings{interval: strict.KeepAlive, count: strict.KeepAliveMax, done: finished}); keepAlive != nil {
-		go keepAlive()
-	}
 	go func() {
 		select {
 		case <-running.Done():
-			_ = client.Close()
-			closeAll(closers)
+			run.abandon()
 			_ = session.Close()
 		case <-finished:
 		}
@@ -122,7 +147,7 @@ func (d Dialer) Run(ctx context.Context, target Target, command Command) (Output
 	encodingErr := closeEncoding()
 	output.Stdout, output.Stderr = stdout.Bytes(), stderr.Bytes()
 	output.Truncated = stdout.Truncated() || stderr.Truncated()
-	output.Elapsed = time.Since(started)
+	output.Elapsed = time.Since(run.started)
 	if cause := ctx.Err(); cause != nil {
 		return output, cause
 	}

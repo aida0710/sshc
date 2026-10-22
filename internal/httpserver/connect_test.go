@@ -423,7 +423,8 @@ func TestEveryCLIRouteExceptChallengeRefusesAMissingOrWrongSecret(t *testing.T) 
 	stopped := false
 	engine := connectEngine(t, CLIHandlers{
 		Secret: "the secret for this run", Vault: newCLIVaultService(t),
-		StopEngine: func() { stopped = true },
+		StopEngine:    func() { stopped = true },
+		RemoteEngines: fakeRemoteEngines{},
 	})
 
 	checked := 0
@@ -439,8 +440,9 @@ func TestEveryCLIRouteExceptChallengeRefusesAMissingOrWrongSecret(t *testing.T) 
 			}
 		}
 	}
-	// 接続、ブラウザを開く、CLI セッションの発行と取り消し、状態、停止、Vault の 6 本。
-	const authenticatedCLIRoutes = 12
+	// 接続、ブラウザを開く、CLI セッションの発行と取り消し、状態、停止、接続先のエンジンを
+	// 開く、Vault の 6 本。
+	const authenticatedCLIRoutes = 13
 	if checked != authenticatedCLIRoutes {
 		t.Errorf("checked %d /cli/ routes, want %d", checked, authenticatedCLIRoutes)
 	}
