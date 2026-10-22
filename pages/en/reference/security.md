@@ -9,6 +9,13 @@ description: Local boundaries, vault encryption, VPN, host keys, sync and Telnet
 
 The engine serves its Web UI and API on a loopback address. UI URLs are issued on demand rather than logged at startup for long-term reuse. If the saved port is unavailable and the engine moves to another port, sshc revokes previous browser registrations and requires enrolment against the current engine. On Linux, other OS users on the same machine can read the one-time registration URL that `sshc` passes to the browser, so the engine accepts a registration only from a connection owned by the same OS user or root. A process running as the same OS user is assumed to have access to that user's SSH files already.
 
+## Remote sshc engines
+
+The relay of `sshc open <alias>` and the run target reach an engine on an SSH host through the SSH connection.
+
+- Each time it opens a connection to the remote engine, the local engine checks with the secret in the remote `~/.ssh/sshc/cli` that the other side is that engine before it sends a browser request or credentials. If the remote engine restarts on another port and another OS user on the remote host listens on the old port, neither the cookie nor the vault password reaches that program.
+- If the check fails, nothing but the check is sent and an error is shown. A run target reads the remote `~/.ssh/sshc/cli` again and reconnects once. For the relay in another tab, run `sshc open <alias>` again.
+
 ## Vault
 
 The vault key encrypts:

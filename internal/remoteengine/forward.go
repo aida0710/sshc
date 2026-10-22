@@ -32,6 +32,8 @@ var forwardedResponseHeaders = []string{"Content-Type", "Cache-Control"}
 //
 // 資格を用意できなかったときは、何も書かずにその理由を返す（呼び出し側が断りの形にする）。
 // 接続先が資格を断ったとき（資格が古くなった）は、受け取り直して一度だけ送り直す。
+// 前のポートで接続先のエンジンが身元を示せないとき（起動し直してポートを移った）も、
+// handoff を読み直して一度だけ送り直す。
 func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error {
 	engine, err := m.engine(alias)
 	if err != nil {
@@ -49,8 +51,17 @@ func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, ali
 		if err != nil {
 			return err
 		}
-		response, err := engine.client().Do(forwardedRequest(r.Context(), r, session, remotePath, body))
+		response, err := session.client().Do(forwardedRequest(r.Context(), r, session, remotePath, body))
 		if err != nil {
+			if isDialFailure(err) {
+				engine.forget(session)
+				if attempt == 0 {
+					continue
+				}
+			}
+			if errors.Is(err, ErrUnproven) {
+				return ErrUnproven
+			}
 			writeProblem(w, http.StatusBadGateway, "remote_engine_unreachable")
 			return nil
 		}
@@ -151,12 +162,25 @@ func (m *Manager) ForwardTerminalStream(w http.ResponseWriter, r *http.Request, 
 			request.Out.Header.Del("Cookie")
 			request.Out.Header.Set("Origin", session.origin())
 		},
-		Transport:     engine.transport,
+		Transport:     session.transport,
 		FlushInterval: -1,
-		ErrorHandler: func(response http.ResponseWriter, _ *http.Request, _ error) {
-			writeProblem(response, http.StatusBadGateway, "remote_engine_unreachable")
+		ErrorHandler: func(response http.ResponseWriter, _ *http.Request, err error) {
+			// チケットは前のエンジンが発行したものなので、ここでは送り直さない。資格だけを
+			// 捨て、画面が繋ぎ直すときに handoff を読み直す。
+			if isDialFailure(err) {
+				engine.forget(session)
+			}
+			writeProblem(response, http.StatusBadGateway, unreachableCode(err))
 		},
 	}
 	proxy.ServeHTTP(w, r)
 	return nil
+}
+
+// unreachableCode は、接続先のエンジンへ届かなかった理由の code である。
+func unreachableCode(err error) string {
+	if errors.Is(err, ErrUnproven) {
+		return "remote_engine_unproven"
+	}
+	return "remote_engine_unreachable"
 }

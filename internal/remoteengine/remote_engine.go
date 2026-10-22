@@ -2,29 +2,16 @@ package remoteengine
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"strconv"
-	"strings"
 	"sync"
-	"time"
 
 	"sshc/internal/handoff"
 )
-
-// handoffCommand は、接続先で、そのエンジンの handoff（待ち受けのポートと CLI の秘密）を
-// 読む固定のコマンドである。接続先の sshc CLI が読むのと同じファイルを、同じ利用者として
-// 読む。無ければ（エンジンが動いていなければ）0 以外で終わる。
-const handoffCommand = `sh -c 'cat "$HOME/.ssh/sshc/cli"'`
-
-// handoffLimit は、handoffCommand が終わるまでの上限である。小さいファイルを読むだけで、
-// SSH の往復を含めても数秒で終わる。
-const handoffLimit = 10 * time.Second
 
 // Header names and the cookie the remote engine's own API expects. They are
 // spelled here rather than imported because httpserver imports this package.
@@ -52,50 +39,54 @@ func (e *VersionMismatchError) Error() string {
 }
 
 // remoteSession は、接続先のエンジンの API を使うための資格である。CLI と同じく
-// /cli/session で受け取る。
+// /cli/session で受け取る。transport は、この資格を受け取ったエンジンへだけ繋ぐ。
 type remoteSession struct {
-	port    int
-	secret  string
-	version string
-	cookie  string
-	csrf    string
+	engineIdentity
+	transport *http.Transport
+	cookie    string
+	csrf      string
 }
 
 func (s *remoteSession) origin() string { return "http://" + loopbackHost(s.port) }
+
+func (s *remoteSession) client() *http.Client {
+	return &http.Client{
+		Transport: s.transport,
+		// 接続先のエンジンは redirect を返さない。返されても、秘密や cookie を付けたまま
+		// 別の場所へ送らない。
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+}
+
+// newSessionTransport は、identity のエンジンへだけ繋ぐ Transport を返す。新しく開く
+// TCP の接続ごとに、資格を送る前に相手の身元を確かめる。
+func newSessionTransport(link *hostLink, identity engineIdentity) *http.Transport {
+	return &http.Transport{
+		// 宛先は接続先から見た 127.0.0.1:<identity.port> だけである。要求の URL が別の
+		// ポートを指していても、そこへは開かない。
+		DialContext: func(ctx context.Context, _, address string) (net.Conn, error) {
+			if address != loopbackHost(identity.port) {
+				return nil, &dialFailure{err: fmt.Errorf("unexpected address %s", address)}
+			}
+			return link.dialProven(ctx, identity)
+		},
+		DisableCompression: true,
+	}
+}
 
 // remoteEngine は、実行先に足した接続先のエンジンひとつである。
 type remoteEngine struct {
 	link         *hostLink
 	localVersion string
-	transport    *http.Transport
 
 	mutex   sync.Mutex
 	session *remoteSession
 }
 
 func newRemoteEngine(link *hostLink, localVersion string) *remoteEngine {
-	transport := &http.Transport{
-		// 宛先は接続先から見た 127.0.0.1:<ポート> である。
-		DialContext: func(ctx context.Context, _, address string) (net.Conn, error) {
-			link, err := link.live(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return link.DialContext(ctx, "tcp", address)
-		},
-		DisableCompression: true,
-	}
-	link.whenEnded(transport.CloseIdleConnections)
-	return &remoteEngine{link: link, localVersion: localVersion, transport: transport}
-}
-
-func (e *remoteEngine) client() *http.Client {
-	return &http.Client{
-		Transport: e.transport,
-		// 接続先のエンジンは redirect を返さない。返されても、秘密や cookie を付けたまま
-		// 別の場所へ送らない。
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
+	engine := &remoteEngine{link: link, localVersion: localVersion}
+	link.whenEnded(engine.closeIdleConnections)
+	return engine
 }
 
 // current は、使える資格を返す。まだ無ければ、接続先で handoff を読んで受け取る。
@@ -119,6 +110,7 @@ func (e *remoteEngine) forget(stale *remoteSession) {
 	defer e.mutex.Unlock()
 	if e.session == stale {
 		e.session = nil
+		stale.transport.CloseIdleConnections()
 	}
 }
 
@@ -126,66 +118,44 @@ func (e *remoteEngine) forget(stale *remoteSession) {
 func (e *remoteEngine) forgetAny() {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
-	e.session = nil
+	if e.session != nil {
+		e.session.transport.CloseIdleConnections()
+		e.session = nil
+	}
+}
+
+// closeIdleConnections は、待機中の HTTP の接続を捨てる。SSH の接続が終わると、その上の
+// 接続は使えない。残すと次の要求がそれを使って失敗する。
+func (e *remoteEngine) closeIdleConnections() {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	if e.session != nil {
+		e.session.transport.CloseIdleConnections()
+	}
 }
 
 // attach は、接続先の handoff を読み、相手がその秘密を持つエンジンかを確かめてから、
-// API の資格を受け取る。手順はこのマシンの sshc CLI と同じである。
+// API の資格を受け取る。手順はこのマシンの sshc CLI と同じで、確かめるのは
+// newSessionTransport が開く接続ごとである。
 func (e *remoteEngine) attach(ctx context.Context) (*remoteSession, error) {
-	link, err := e.link.live(ctx)
+	identity, err := readIdentity(ctx, e.link)
 	if err != nil {
 		return nil, err
 	}
-	result, err := link.Run(ctx, handoffCommand, handoffLimit)
-	if err != nil {
-		return nil, err
+	if identity.version != e.localVersion {
+		return nil, &VersionMismatchError{Local: e.localVersion, Remote: identity.version}
 	}
-	if result.ExitCode != 0 {
-		return nil, ErrNotRunning
-	}
-	document, err := handoff.Parse(result.Stdout)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrNotRunning, err)
-	}
-	if document.Version != e.localVersion {
-		return nil, &VersionMismatchError{Local: e.localVersion, Remote: document.Version}
-	}
-	port, err := strconv.Atoi(strings.TrimPrefix(document.URL, "http://"+handoff.EngineHost+":"))
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrNotRunning, err)
-	}
-	session := &remoteSession{port: port, secret: document.Secret, version: document.Version}
-	if err := e.prove(ctx, session); err != nil {
-		return nil, err
-	}
+	session := &remoteSession{engineIdentity: identity, transport: newSessionTransport(e.link, identity)}
 	if err := e.openSession(ctx, session); err != nil {
+		session.transport.CloseIdleConnections()
+		var connectErr *ConnectError
+		if isDialFailure(err) && !errors.Is(err, ErrUnproven) && !errors.As(err, &connectErr) {
+			// handoff は残っているが、そのポートで誰も待ち受けていない。
+			return nil, fmt.Errorf("%w: %v", ErrNotRunning, err)
+		}
 		return nil, err
 	}
 	return session, nil
-}
-
-// prove は乱数を送り、handoff の秘密で署名した答えが返ることを確かめる。handoff だけが
-// 残り、同じポートを別のプロセスが取っていると、秘密をそのプロセスへ渡してしまう。
-func (e *remoteEngine) prove(ctx context.Context, session *remoteSession) error {
-	challenge, err := handoff.MintChallenge(rand.Reader)
-	if err != nil {
-		return err
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, session.origin()+challengePath, nil)
-	if err != nil {
-		return err
-	}
-	request.Header.Set(handoff.ChallengeHeader, challenge)
-	response, err := e.client().Do(request)
-	if err != nil {
-		return err
-	}
-	_ = response.Body.Close()
-	if response.StatusCode != http.StatusNoContent ||
-		!handoff.VerifyProof(session.secret, challenge, response.Header.Get(handoff.ProofHeader)) {
-		return ErrUnproven
-	}
-	return nil
 }
 
 // openSession は、handoff の秘密と引き換えに、API の cookie と CSRF のトークンを受け取る。
@@ -195,7 +165,7 @@ func (e *remoteEngine) openSession(ctx context.Context, session *remoteSession) 
 		return err
 	}
 	request.Header.Set(handoff.HeaderName, session.secret)
-	response, err := e.client().Do(request)
+	response, err := session.client().Do(request)
 	if err != nil {
 		return err
 	}
@@ -234,20 +204,34 @@ type Status struct {
 }
 
 // status は、接続先のエンジンに状態を尋ねる。sshc status と同じ問い合わせである。
+// 接続先のエンジンが起動し直して前のポートで身元を示せなければ、handoff を読み直して
+// 一度だけ尋ね直す。
 func (e *remoteEngine) status(ctx context.Context) (Status, error) {
-	session, err := e.current(ctx)
-	if err != nil {
-		return Status{}, err
+	for attempt := 0; ; attempt++ {
+		session, err := e.current(ctx)
+		if err != nil {
+			return Status{}, err
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, session.origin()+cliStatusPath, nil)
+		if err != nil {
+			return Status{}, err
+		}
+		request.Header.Set(handoff.HeaderName, session.secret)
+		response, err := session.client().Do(request)
+		if err != nil {
+			if isDialFailure(err) {
+				e.forget(session)
+				if attempt == 0 {
+					continue
+				}
+			}
+			return Status{}, err
+		}
+		return e.readStatus(session, response)
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, session.origin()+cliStatusPath, nil)
-	if err != nil {
-		return Status{}, err
-	}
-	request.Header.Set(handoff.HeaderName, session.secret)
-	response, err := e.client().Do(request)
-	if err != nil {
-		return Status{}, err
-	}
+}
+
+func (e *remoteEngine) readStatus(session *remoteSession, response *http.Response) (Status, error) {
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode == http.StatusUnauthorized {
 		// 接続先のエンジンが起動し直して秘密が変わった。次に受け取り直す。
@@ -265,5 +249,5 @@ func (e *remoteEngine) status(ctx context.Context) (Status, error) {
 }
 
 func (e *remoteEngine) close() {
-	e.transport.CloseIdleConnections()
+	e.forgetAny()
 }

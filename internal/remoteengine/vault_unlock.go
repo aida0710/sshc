@@ -32,7 +32,9 @@ func (m *Manager) UnlockVault(ctx context.Context, alias, passphrase string) err
 	return engine.unlockVault(ctx, passphrase)
 }
 
-// unlockVault は、接続先の資格が古くなっていれば受け取り直して一度だけ送り直す。
+// unlockVault は、接続先の資格が古くなっていれば受け取り直して一度だけ送り直す。接続先の
+// エンジンが起動し直して前のポートで身元を示せないときも、handoff を読み直して一度だけ
+// 送り直す。パスワードは、身元を示した接続にだけ書く。
 func (e *remoteEngine) unlockVault(ctx context.Context, passphrase string) error {
 	body, err := json.Marshal(struct {
 		Passphrase string `json:"passphrase"`
@@ -51,8 +53,14 @@ func (e *remoteEngine) unlockVault(ctx context.Context, passphrase string) error
 		}
 		request.Header.Set("Content-Type", "application/json")
 		authorizeRemoteRequest(request, session)
-		response, err := e.client().Do(request)
+		response, err := session.client().Do(request)
 		if err != nil {
+			if isDialFailure(err) {
+				e.forget(session)
+				if attempt == 0 {
+					continue
+				}
+			}
 			return err
 		}
 		code := refusalCode(response)

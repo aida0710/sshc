@@ -52,8 +52,13 @@ func newFakeRemoteEngine(t *testing.T) *fakeRemoteEngine {
 func (f *fakeRemoteEngine) origin() string { return f.server.URL }
 
 func (f *fakeRemoteEngine) handoffDocument(version string) string {
+	return handoffDocument(f.server.URL, fakeSecret, version)
+}
+
+// handoffDocument は、origin で待ち受け secret を持つエンジンの handoff である。
+func handoffDocument(origin, secret, version string) string {
 	body, _ := json.Marshal(handoff.Handoff{
-		SchemaVersion: handoff.SchemaVersion, URL: f.server.URL, Secret: fakeSecret,
+		SchemaVersion: handoff.SchemaVersion, URL: origin, Secret: secret,
 		Owner: handoff.OwnerEngine, PID: 4242, Version: version, ProtocolVersion: handoff.ProtocolVersion,
 	})
 	return string(body)
