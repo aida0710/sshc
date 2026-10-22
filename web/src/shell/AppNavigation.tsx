@@ -109,13 +109,33 @@ export function AppNavigation({
         navigationOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full shadow-none"
       }`}
     >
-      <div data-navigation-heading className="mb-2 flex h-10 shrink-0 items-center gap-2 px-1">
-        <BrandMark className="h-6 w-6" />
-        <h1 className="font-mono text-sm font-semibold tracking-tight">{t("shell.title")}</h1>
-        <span aria-hidden="true" className="h-4 w-px bg-line" />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-          {section === null ? t("shell.pageNotFound") : t(sectionLabels[section])}
-        </span>
+      <div data-navigation-heading className="mb-2 shrink-0">
+        <p role="status" data-session-status className="sr-only">
+          {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
+        </p>
+        <UpdateBadge
+          onNavigate={(event) => onNavigate(event, "About")}
+          showsProgressDialog={section !== "About"}
+          current={version}
+          enabled={state === "ready" || state === "locked"}
+          leading={(
+            <>
+              <BrandMark className="h-6 w-6" />
+              <h1 className="font-mono text-sm font-semibold tracking-tight">{t("shell.title")}</h1>
+              <span aria-hidden="true" className="h-4 w-px bg-line" />
+            </>
+          )}
+          indicator={(
+            <span
+              aria-hidden="true"
+              data-session-status-badge
+              title={state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
+              className={`size-1.5 shrink-0 rounded-full shadow-[0_0_0_3px_color-mix(in_srgb,var(--ui-live)_14%,transparent)] ${
+                state === "ready" ? "bg-live" : "bg-ink-faint"
+              }`}
+            />
+          )}
+        />
       </div>
 
       <button
@@ -156,28 +176,6 @@ export function AppNavigation({
           aliases={aliases}
           hosts={hosts}
           {...(onConnect === undefined ? {} : { onConnect })}
-        />
-      </div>
-
-      <div className="shrink-0 pt-1 md:pt-2">
-        <p role="status" data-session-status className="sr-only">
-          {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
-        </p>
-        <UpdateBadge
-          onNavigate={(event) => onNavigate(event, "About")}
-          showsProgressDialog={section !== "About"}
-          current={version}
-          enabled={state === "ready" || state === "locked"}
-          indicator={(
-            <span
-              aria-hidden="true"
-              data-session-status-badge
-              title={state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
-              className={`size-1.5 shrink-0 rounded-full shadow-[0_0_0_3px_color-mix(in_srgb,var(--ui-live)_14%,transparent)] ${
-                state === "ready" ? "bg-live" : "bg-ink-faint"
-              }`}
-            />
-          )}
         />
       </div>
 
