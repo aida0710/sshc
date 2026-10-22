@@ -854,6 +854,7 @@ export const en = {
   "sftp.manager.settings": "Transfer settings",
   "sftp.settingsHeading": "SFTP",
   "sftp.settingsLoadFailed": "SFTP settings could not be loaded. They cannot be saved until they load.",
+  "sftp.settingsLoading": "Loading SFTP settings…",
   "sftp.settingsSaving": "Saving…",
   "sftp.settingsSaved": "Saved.",
   "sftp.manager.settingsRecovery": "Speed and recovery",

@@ -858,6 +858,7 @@ export const ja = {
   "sftp.manager.settings": "転送設定",
   "sftp.settingsHeading": "SFTP",
   "sftp.settingsLoadFailed": "SFTPの設定を読み込めませんでした。読み込めるまで保存できません。",
+  "sftp.settingsLoading": "SFTPの設定を読み込んでいます…",
   "sftp.settingsSaving": "保存中…",
   "sftp.settingsSaved": "保存しました。",
   "sftp.manager.settingsRecovery": "速度と復旧",

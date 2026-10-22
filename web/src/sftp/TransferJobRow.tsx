@@ -9,6 +9,7 @@ import { TransferJobRoute } from "./TransferJobRoute";
 import { TransferExclusionSummary } from "./TransferExclusionSummary";
 import { sftpTransferProblemText } from "./sftpProblemText";
 import { Spinner } from "../ui/Spinner";
+import { usePendingResult } from "../ui/usePendingResult";
 import type { RunTransferControl } from "./useTransferControl";
 
 const statusLabelKeys: Record<DisplayedTransferStatus, MessageKey> = {
@@ -39,18 +40,10 @@ function operationIcon(job: ManagedTransferJob): IconName {
 function JobAction({ label, icon, tone = "text-ink-muted", disabled = false, onClick }: {
   label: string; icon: IconName; tone?: string; disabled?: boolean; onClick: () => Promise<unknown>;
 }) {
-  const [busy, setBusy] = useState(false);
-  async function run() {
-    setBusy(true);
-    try {
-      await onClick();
-    } finally {
-      setBusy(false);
-    }
-  }
-  return <button type="button" aria-label={label} title={label} disabled={disabled || busy} aria-busy={busy || undefined} onClick={() => void run()}
+  const control = usePendingResult();
+  return <button type="button" aria-label={label} title={label} disabled={disabled || control.pending} aria-busy={control.pending || undefined} onClick={() => control.watch(onClick())}
     className={`flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-select-fill focus-visible:ring-2 focus-visible:ring-accent md:size-8 [@media(pointer:coarse)]:size-11 ${tone}`}>
-    {busy ? <Spinner className="size-4" /> : <Icon name={icon} className="size-4" />}
+    {control.pending ? <Spinner className="size-4" /> : <Icon name={icon} className="size-4" />}
   </button>;
 }
 
