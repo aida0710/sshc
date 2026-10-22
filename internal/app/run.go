@@ -22,6 +22,7 @@ import (
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/keys"
+	"sshc/internal/loopbackpeer"
 	"sshc/internal/platform"
 	"sshc/internal/releasewatch"
 	"sshc/internal/remoteengine"
@@ -166,6 +167,14 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 	if err != nil {
 		return runtime{}, err
 	}
+	// 接続先のエンジンへの中継と、実行先としての取り次ぎ。実行先は同じバージョンの
+	// エンジンだけを使うので、このエンジンのバージョンを渡す。
+	remoteEngines := remoteengine.NewManager(remoteengine.ManagerOptions{
+		Connect:                    services.ssh.remoteEngineLink,
+		Store:                      remoteengine.NewStore(services.workspace),
+		LocalVersion:               version,
+		PeerMayBelongToAnotherUser: loopbackpeer.MayBelongToAnotherUser,
+	})
 	wanted := dependencies.Port
 	if wanted == 0 {
 		wanted = services.config.EngineSettings().Port
@@ -256,7 +265,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		Snippets:              services.snippets,
 		Vault:                 services.vault,
 		Connect:               services.ssh.connector(),
-		RemoteEngines:         services.remoteEngines,
+		RemoteEngines:         remoteEngines,
 		ConnectionOpened: func(alias string) {
 			if err := services.recentStore.Record(alias); err != nil && dependencies.Logger != nil {
 				dependencies.Logger.Warn("record recent SSH connection", "alias", alias, "error", err)
@@ -318,7 +327,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		browserAuth:   services.browserAuth,
 		sftpPool:      services.sftpPool,
 		vpn:           services.vpn,
-		remoteEngines: services.remoteEngines,
+		remoteEngines: remoteEngines,
 	}, nil
 }
 
