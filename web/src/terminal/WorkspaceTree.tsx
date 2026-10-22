@@ -40,6 +40,9 @@ type WorkspaceTreeProps = {
   // canBroadcast is false for an engine on an SSH host: sending a command to
   // several sessions is confirmed by an action token only this machine issues.
   canBroadcast?: boolean;
+  // onUnlockRemoteVault asks for the Vault password of the run target whose
+  // sessions could not be listed because it is locked.
+  onUnlockRemoteVault?: () => void;
 };
 
 type NameRequest = { kind: "create" } | { kind: "rename"; workspace: TerminalWorkspace };
@@ -67,6 +70,7 @@ export function WorkspaceTree({
   onOpenShell,
   onConnect,
   canBroadcast = true,
+  onUnlockRemoteVault,
 }: WorkspaceTreeProps) {
   const t = useTranslate();
   const [showHidden, setShowHidden] = useState(() => readStoredValue(localStorageKeys.showHiddenTerminalWorkspaces) === "true");
@@ -158,6 +162,11 @@ export function WorkspaceTree({
         />
       </div>
       {terminalSessions.problem === "" ? null : <Notice tone="danger" compact>{terminalSessions.problem}</Notice>}
+      {terminalSessions.remoteVaultLocked && onUnlockRemoteVault !== undefined ? (
+        <button type="button" onClick={onUnlockRemoteVault} className="mx-2 min-h-10 rounded-md border border-line px-2 text-left text-xs text-ink hover:bg-hover md:min-h-7">
+          {t("runTarget.unlockOpen")}
+        </button>
+      ) : null}
       {workspaces.problem === "" ? null : <Notice tone="danger" compact>{workspaces.problem}</Notice>}
       <ul aria-label={t("workspace.heading")} className="flex flex-col gap-0.5">
         {groups.map(({ workspace, sessions: members }) => {

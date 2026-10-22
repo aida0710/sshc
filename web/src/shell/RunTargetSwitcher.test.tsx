@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { RemoteEnginesApi } from "../api/remoteEngines";
+import { useRemoteVaultUnlock, type RemoteVaultUnlockState } from "../terminal/useRemoteVaultUnlock";
 import { useRunTargets, type RunTargetsState } from "../terminal/useRunTargets";
 import { RunTargetSwitcher } from "./RunTargetSwitcher";
 
@@ -17,6 +18,7 @@ function enginesApi(overrides: Partial<RemoteEnginesApi> = {}): RemoteEnginesApi
     status: vi.fn(),
     open: vi.fn(async () => ({ url: "http://127.0.0.1:61000/#bootstrap=x" })),
     control: vi.fn(async () => ({ succeeded: true, output: "" })),
+    unlockVault: vi.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -25,12 +27,38 @@ function targets(overrides: Partial<RunTargetsState> = {}): RunTargetsState {
   return {
     engines: ["r540"], selected: null, problem: "", busy: false,
     select: vi.fn(), add: vi.fn(async () => true), remove: vi.fn(async () => undefined), openInNewTab: vi.fn(async () => undefined),
-    api: enginesApi(), localVersion: "v0.53.0",
+    api: enginesApi(), localVersion: "v0.53.0", vaultUnlock: vaultUnlockState(),
+    ...overrides,
+  };
+}
+
+function vaultUnlockState(overrides: Partial<RemoteVaultUnlockState> = {}): RemoteVaultUnlockState {
+  return {
+    unlockFor: null, revision: 0,
+    ask: vi.fn(), offer: vi.fn(), allowOffer: vi.fn(), close: vi.fn(), unlocked: vi.fn(),
     ...overrides,
   };
 }
 
 afterEach(() => window.localStorage.clear());
+
+describe("useRemoteVaultUnlock", () => {
+  it("does not offer again a dialog the user closed until the run target is chosen anew", () => {
+    const { result } = renderHook(() => useRemoteVaultUnlock());
+    act(() => result.current.offer("r540"));
+    expect(result.current.unlockFor).toBe("r540");
+    act(() => result.current.close());
+    act(() => result.current.offer("r540"));
+    expect(result.current.unlockFor).toBeNull();
+
+    act(() => result.current.allowOffer("r540"));
+    act(() => result.current.offer("r540"));
+    expect(result.current.unlockFor).toBe("r540");
+    act(() => result.current.unlocked());
+    expect(result.current.unlockFor).toBeNull();
+    expect(result.current.revision).toBe(1);
+  });
+});
 
 describe("useRunTargets", () => {
   it("remembers the chosen engine and falls back to this machine when it is no longer added", async () => {
@@ -106,5 +134,28 @@ describe("RunTargetSwitcher", () => {
     expect(control).toHaveBeenCalledWith("r540", "restart");
     expect(await screen.findByRole("status")).toHaveTextContent("Restarted.");
     expect(screen.getByLabelText("Output of sshc on that host")).toHaveTextContent("restarted sshc.service");
+  });
+
+  it("unlocks the run target's Vault with the password and says when it is wrong", async () => {
+    const user = userEvent.setup();
+    const unlockVault = vi.fn(async (_alias: string, passphrase: string) => {
+      if (passphrase !== "correct horse battery") {
+        throw new ApiError("remote_engine_wrong_passphrase", 403, { code: "remote_engine_wrong_passphrase", message: "request rejected" });
+      }
+    });
+    const vaultUnlock = vaultUnlockState({ unlockFor: "r540" });
+    render(<RunTargetSwitcher targets={targets({ api: enginesApi({ unlockVault }), vaultUnlock })} aliases={["r540"]} hosts={[]} />);
+
+    const dialog = screen.getByRole("dialog", { name: "Unlock the vault on r540" });
+    const field = within(dialog).getByLabelText("Vault password for r540");
+    await user.type(field, "wrong");
+    await user.click(within(dialog).getByRole("button", { name: "Unlock" }));
+    expect(await within(dialog).findByText("The vault password for r540 is wrong.")).toBeInTheDocument();
+    expect(vaultUnlock.unlocked).not.toHaveBeenCalled();
+
+    await user.clear(field);
+    await user.type(field, "correct horse battery{Enter}");
+    await waitFor(() => expect(vaultUnlock.unlocked).toHaveBeenCalledTimes(1));
+    expect(unlockVault).toHaveBeenLastCalledWith("r540", "correct horse battery");
   });
 });

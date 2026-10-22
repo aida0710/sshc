@@ -103,6 +103,13 @@ func forwardedRequest(ctx context.Context, r *http.Request, session *remoteSessi
 	if contentType := r.Header.Get("Content-Type"); contentType != "" {
 		request.Header.Set("Content-Type", contentType)
 	}
+	authorizeRemoteRequest(request, session)
+	return request
+}
+
+// authorizeRemoteRequest は、接続先のエンジンの API への要求に、このマシンのエンジンが
+// 受け取った資格を付ける。
+func authorizeRemoteRequest(request *http.Request, session *remoteSession) {
 	request.Header.Set("Accept", "application/json")
 	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: session.cookie})
 	request.Header.Set(csrfHeaderName, session.csrf)
@@ -110,7 +117,6 @@ func forwardedRequest(ctx context.Context, r *http.Request, session *remoteSessi
 	// ブラウザからの要求をこのマシンの規則で確かめ終えているので、接続先の規則を満たして送る。
 	request.Header.Set("Sec-Fetch-Site", "same-origin")
 	request.Header.Set("Origin", session.origin())
-	return request
 }
 
 func copyResponse(w http.ResponseWriter, response *http.Response) {

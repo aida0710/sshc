@@ -6,6 +6,7 @@ import { Icon } from "../ui/icons";
 import { Notice } from "../ui/surface";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { EngineInfoDialog } from "./EngineInfoDialog";
+import { RemoteVaultUnlockDialog } from "./RemoteVaultUnlockDialog";
 import { HostPickerDialog } from "./HostPickerDialog";
 
 // RunTargetSwitcher sits at the bottom of the sidebar and chooses whose
@@ -130,6 +131,16 @@ export function RunTargetSwitcher({
       />
       {infoFor === null ? null : (
         <EngineInfoDialog alias={infoFor} targets={targets} returnFocusRef={triggerRef} onClose={() => setInfoFor(null)} />
+      )}
+      {/* After the information dialog so that, asked from there, it opens above it. */}
+      {targets.vaultUnlock.unlockFor === null ? null : (
+        <RemoteVaultUnlockDialog
+          alias={targets.vaultUnlock.unlockFor}
+          api={targets.api}
+          localVersion={targets.localVersion}
+          onUnlocked={targets.vaultUnlock.unlocked}
+          onClose={targets.vaultUnlock.close}
+        />
       )}
     </div>
   );

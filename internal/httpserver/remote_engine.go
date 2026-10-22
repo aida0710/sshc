@@ -91,6 +91,12 @@ func remoteEngineProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadGateway, "remote_engine_forwarding_refused")
 	case errors.Is(err, remoteengine.ErrNoEntrance):
 		return problem(c, http.StatusBadGateway, "remote_engine_no_entrance")
+	case errors.Is(err, remoteengine.ErrWrongPassphrase):
+		// 断ったのは接続先の Vault で、このマシンのセッションではない。403 でも、画面は
+		// invalid_csrf 以外をサインインのやり直しと読まない。
+		return problem(c, http.StatusForbidden, "remote_engine_wrong_passphrase")
+	case errors.Is(err, remoteengine.ErrUnlockRefused):
+		return problem(c, http.StatusBadGateway, "remote_engine_unlock_failed")
 	}
 	return unexpectedProblem(c, "remote_engine_failed", err)
 }

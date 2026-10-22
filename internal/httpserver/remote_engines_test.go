@@ -22,6 +22,7 @@ type fakeEngineDirectory struct {
 	streamed   []string
 	statusSeen remoteengine.Status
 	controlled []string
+	unlocked   []string
 }
 
 func (f *fakeEngineDirectory) Engines() ([]string, error) { return f.engines, nil }
@@ -42,6 +43,13 @@ func (f *fakeEngineDirectory) ControlEngine(_ context.Context, alias string, act
 	}
 	f.controlled = append(f.controlled, alias+" "+string(action))
 	return remoteengine.ActionResult{Succeeded: true, Output: "stopped"}, nil
+}
+func (f *fakeEngineDirectory) UnlockVault(_ context.Context, alias, passphrase string) error {
+	if passphrase != "correct horse battery" {
+		return remoteengine.ErrWrongPassphrase
+	}
+	f.unlocked = append(f.unlocked, alias)
+	return nil
 }
 func (f *fakeEngineDirectory) ForwardTerminalAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
 	f.forwarded = append(f.forwarded, alias+" "+remotePath)
@@ -151,5 +159,19 @@ func TestControlRunsTheChosenActionAndRefusesAnUnknownOne(t *testing.T) {
 	recorder = send(t, engine, http.MethodPost, "/api/v1/engines/r540/control", `{"action":"reboot"}`, headers)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("unknown action = %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestTheRemoteVaultIsUnlockedAndAWrongPasswordIsNotMistakenForThisMachinesSession(t *testing.T) {
+	directory := &fakeEngineDirectory{}
+	engine := remoteEnginesEngine(directory)
+	headers := map[string]string{"Content-Type": "application/json"}
+	recorder := send(t, engine, http.MethodPost, "/api/v1/engines/r540/vault/unlock", `{"passphrase":"correct horse battery"}`, headers)
+	if recorder.Code != http.StatusNoContent || strings.Join(directory.unlocked, ",") != "r540" {
+		t.Fatalf("unlock = %d %s, unlocked %v", recorder.Code, recorder.Body.String(), directory.unlocked)
+	}
+	recorder = send(t, engine, http.MethodPost, "/api/v1/engines/r540/vault/unlock", `{"passphrase":"wrong"}`, headers)
+	if recorder.Code != http.StatusForbidden || !strings.Contains(recorder.Body.String(), `"remote_engine_wrong_passphrase"`) {
+		t.Fatalf("wrong password = %d %s", recorder.Code, recorder.Body.String())
 	}
 }

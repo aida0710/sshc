@@ -16,6 +16,7 @@ export type RemoteEnginesApi = {
   status(alias: string): Promise<RemoteEngineStatus>;
   open(alias: string): Promise<RemoteEngineEntrance>;
   control(alias: string, action: RemoteEngineAction): Promise<RemoteEngineActionResult>;
+  unlockVault(alias: string, passphrase: string): Promise<void>;
 };
 
 const enginePath = (alias: string) => `/api/v1/engines/${encodeURIComponent(alias)}`;
@@ -40,6 +41,9 @@ export const remoteEnginesApi: RemoteEnginesApi = {
   },
   async control(alias, action) {
     return validateOpenAPISchema<RemoteEngineActionResult>("RemoteEngineActionResult", await postJSON<unknown>(`${enginePath(alias)}/control`, { action }));
+  },
+  async unlockVault(alias, passphrase) {
+    await postJSON<void>(`${enginePath(alias)}/vault/unlock`, { passphrase });
   },
 };
 
