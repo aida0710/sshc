@@ -29,7 +29,10 @@ type terminalInvocation struct {
 	Selector string
 	Kind     string
 	Alias    string
-	Title    string
+	// Workspace は create --workspace の値（ワークスペースの ID か名前）である。空なら
+	// 非表示の agents に入れる。LLM などがコマンドで開いた接続を、画面の一覧に混ぜない。
+	Workspace string
+	Title     string
 	// UnpinTitle は rename --auto で立つ。Title の代わりに表示名の固定を外し、
 	// 画面の「Use automatic name」と同じく自動の名前へ戻す。
 	UnpinTitle bool
@@ -230,9 +233,31 @@ func readTerminalCreate(args []string, parsed *terminalInvocation) error {
 		}
 		parsed.Alias, remaining = remaining[0], remaining[1:]
 	}
-	var err error
+	remaining, workspace, err := cutTerminalWorkspaceOption(remaining)
+	if err != nil {
+		return err
+	}
+	parsed.Workspace = workspace
 	parsed.JSON, err = parseOptionalJSON("terminal create", remaining)
 	return err
+}
+
+// cutTerminalWorkspaceOption は、--workspace <ID か名前> を取り出し、残りを返す。
+func cutTerminalWorkspaceOption(args []string) ([]string, string, error) {
+	var rest []string
+	workspace := ""
+	for index := 0; index < len(args); index++ {
+		if args[index] != "--workspace" {
+			rest = append(rest, args[index])
+			continue
+		}
+		if workspace != "" || index+1 >= len(args) || strings.TrimSpace(args[index+1]) == "" {
+			return nil, "", fmt.Errorf("terminal create --workspace requires one workspace ID or name")
+		}
+		workspace = args[index+1]
+		index++
+	}
+	return rest, workspace, nil
 }
 
 func validateTerminalSelector(selector string) error {

@@ -5,7 +5,7 @@ import { TerminalStatusBanners } from "./TerminalStatusBanners";
 import type { StreamLink } from "./streamLink";
 
 const session: TerminalSession = {
-  id: "a", kind: "shell", title: "zsh", startedAt: "2026-08-14T09:00:00Z", state: "connected", problem: "",
+  id: "a", kind: "shell", workspaceId: "default", title: "zsh", startedAt: "2026-08-14T09:00:00Z", state: "connected", problem: "",
 };
 
 // スクリーンリーダーが live 領域から読む文。aria-hidden の中は読まれない。

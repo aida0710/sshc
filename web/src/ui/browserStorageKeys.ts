@@ -27,6 +27,10 @@ export const localStorageKeys = {
   shortcutBindings: "sshc.shortcuts.v1",
   shortcutPresetSelection: "sshc.shortcuts.selected.v1",
   notificationSound: "sshc.terminal-notification-sound.v1",
+  // The terminal workspaces folded in the sidebar tree, by engine workspace ID.
+  collapsedTerminalWorkspaces: "sshc.terminal.collapsed-workspaces.v1",
+  // "true" while hidden terminal workspaces are drawn in the tree as well.
+  showHiddenTerminalWorkspaces: "sshc.terminal.show-hidden-workspaces.v1",
   // The update job whose result dialog this browser has shown, so it opens once.
   updateShownResult: "sshc.update.shown-result.v1",
   // The release whose notice under the version was folded; a newer one unfolds it.

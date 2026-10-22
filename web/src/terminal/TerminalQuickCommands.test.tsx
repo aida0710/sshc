@@ -23,7 +23,7 @@ vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText: m
 
 const session = {
   id: "session-one",
-  kind: "ssh" as const,
+  kind: "ssh" as const, workspaceId: "default",
   alias: "edge",
   title: "edge",
   state: "connected" as const,

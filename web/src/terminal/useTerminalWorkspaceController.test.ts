@@ -9,7 +9,7 @@ import type { Section } from "../routing/sectionRoute";
 function session(id: string): TerminalSession {
   return {
     id,
-    kind: "ssh",
+    kind: "ssh", workspaceId: "default",
     alias: id,
     title: id,
     startedAt: "2026-01-01T00:00:00Z",

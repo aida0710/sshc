@@ -80,7 +80,7 @@ describe("WorkspaceCommandCenter", () => {
     answerDispatch({
       results: [{ targetId: "pane-a", sessionId: "session-a", alias: "edge", title: "Primary terminal", status: "delivered" }],
     });
-    expect(await screen.findByText(/Primary terminal · Pane 1 · Sent/)).toBeVisible();
+    expect(await screen.findByText(/Primary terminal · Session 1 · Sent/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Close command delivery" })).toBeEnabled();
     await user.keyboard("{Escape}");
     expect(close).toHaveBeenCalledOnce();
@@ -103,8 +103,8 @@ describe("WorkspaceCommandCenter", () => {
         { targetId: "pane-b", sessionId: "session-b" },
       ],
     }));
-    expect(screen.getAllByText(/Primary terminal · Pane 1/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Second terminal · Pane 2/)).toBeVisible();
+    expect(screen.getAllByText(/Primary terminal · Session 1/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Second terminal · Session 2/)).toBeVisible();
   });
 
   it("omits panes whose SSH session is not connected", async () => {
@@ -137,7 +137,7 @@ describe("WorkspaceCommandCenter", () => {
       inputs: {},
       targets: [{ targetId: "pane-a", sessionId: "session-a" }],
     }));
-    expect(await screen.findByText(/Primary terminal · Pane 1 · Sent/)).toBeVisible();
+    expect(await screen.findByText(/Primary terminal · Session 1 · Sent/)).toBeVisible();
     expect(screen.getByText(/does not mean the command has finished/)).toBeVisible();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });

@@ -19,6 +19,9 @@ type Session struct {
 	titleSource   TitleSource
 	titlePinned   bool
 	started       time.Time
+	// workspace は、このセッションが入っているワークスペースの ID である。移せるので
+	// mutex の中で読み書きする。
+	workspace string
 
 	mutex         sync.Mutex
 	inputMutex    sync.Mutex
@@ -84,6 +87,7 @@ type View struct {
 	Kind      Kind
 	Alias     string
 	Title     string
+	Workspace string
 	Started   time.Time
 	Exited    *ExitInfo
 	State     State
@@ -169,7 +173,7 @@ func (s *Session) View() View {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	view := View{
-		ID: s.id, Kind: s.kind, Alias: s.alias, Title: s.title,
+		ID: s.id, Kind: s.kind, Alias: s.alias, Title: s.title, Workspace: s.workspace,
 		Started: s.started, State: s.state, Problem: s.problem,
 		Presentation:        Presentation{DisplayTitle: s.title, TitleSource: s.titleSource, TitlePinned: s.titlePinned},
 		NotificationVersion: s.notificationVersion,

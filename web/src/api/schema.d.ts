@@ -276,6 +276,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/terminal/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listTerminalWorkspaces"];
+        put?: never;
+        post: operations["createTerminalWorkspace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminal/workspaces/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteTerminalWorkspace"];
+        options?: never;
+        head?: never;
+        patch: operations["updateTerminalWorkspace"];
+        trace?: never;
+    };
+    "/api/v1/terminal/sessions/{id}/workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["moveTerminalSession"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/terminal/shell-profiles": {
         parameters: {
             query?: never;
@@ -2729,6 +2777,7 @@ export interface components {
             id: string;
             /** @enum {string} */
             kind: "ssh" | "shell";
+            workspaceId: string;
             alias?: string;
             title: string;
             startedAt: string;
@@ -2823,6 +2872,7 @@ export interface components {
             cols?: number;
             rows?: number;
             profileId?: string;
+            workspaceId?: string;
         };
         LocalShellProfile: {
             id: string;
@@ -2833,6 +2883,27 @@ export interface components {
         };
         LocalShellProfileList: {
             profiles: components["schemas"]["LocalShellProfile"][];
+        };
+        TerminalWorkspace: {
+            id: string;
+            name: string;
+            hidden: boolean;
+            builtIn: boolean;
+        };
+        TerminalWorkspaceList: {
+            workspaces: components["schemas"]["TerminalWorkspace"][];
+            maxWorkspaces: number;
+        };
+        CreateTerminalWorkspaceRequest: {
+            name: string;
+            hidden?: boolean;
+        };
+        UpdateTerminalWorkspaceRequest: {
+            name?: string;
+            hidden?: boolean;
+        };
+        MoveTerminalSessionRequest: {
+            workspaceId: string;
         };
         SetTerminalSessionTitleRequest: {
             title: string | null;
@@ -4905,6 +4976,152 @@ export interface operations {
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    listTerminalWorkspaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every terminal workspace, hidden ones included */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalWorkspaceList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    createTerminalWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTerminalWorkspaceRequest"];
+            };
+        };
+        responses: {
+            /** @description The workspace that was created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalWorkspace"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    deleteTerminalWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The remaining workspaces; the deleted one's sessions moved to default */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalWorkspaceList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    updateTerminalWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTerminalWorkspaceRequest"];
+            };
+        };
+        responses: {
+            /** @description The workspace after renaming or hiding it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalWorkspace"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    moveTerminalSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveTerminalSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description The session list after moving the session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalSessionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
         };
     };
