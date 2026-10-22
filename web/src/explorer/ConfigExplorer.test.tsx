@@ -5,6 +5,7 @@ import { ConfigExplorer } from "./ConfigExplorer";
 import { ApiError } from "../api/client";
 import { configApi } from "../api/config";
 import { captureNavigationBlocker } from "../testing/navigationBlocker";
+import { ToastProvider } from "../ui/ToastProvider";
 
 vi.mock("../api/config", async () => {
   const actual = await vi.importActual<typeof import("../api/config")>("../api/config");
@@ -266,6 +267,53 @@ describe("ConfigExplorer", () => {
       base: "Host nas\n\tUser aida\n",
       raw: "Host nas\n\tUser root\n",
     }));
+  });
+
+  it("shows Save file working until the save is answered, and holds the other file actions meanwhile", async () => {
+    const user = userEvent.setup();
+    let answer: () => void = () => undefined;
+    vi.mocked(configApi.save).mockImplementation(() => new Promise((resolve) => {
+      answer = () => resolve({
+        transactionId: "t1", written: ["conf.d/10-home.conf"], preview: { operation: "config.file_raw", diffs: [] },
+      });
+    }));
+    render(<ToastProvider><ConfigExplorer /></ToastProvider>);
+
+    await user.click(await screen.findByRole("button", { name: "conf.d/10-home.conf" }));
+    await user.type(await screen.findByLabelText(/File text/), "\tPort 2222\n");
+    const save = screen.getByRole("button", { name: "Save file" });
+    await user.click(save);
+
+    expect(save).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Preview" })).not.toHaveAttribute("aria-busy");
+    await user.click(save);
+    expect(configApi.save).toHaveBeenCalledTimes(1);
+    answer();
+    expect(await screen.findByText("Saved conf.d/10-home.conf.")).toBeInTheDocument();
+  });
+
+  it("says a directory was created, because the file list does not show directories", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.save).mockResolvedValue({
+      transactionId: "t1", written: ["conf.d/eu"], preview: { operation: "config.directory_create", diffs: [] },
+    });
+    render(<ToastProvider><ConfigExplorer /></ToastProvider>);
+
+    await user.type(await screen.findByLabelText("New file path"), "conf.d/eu");
+    await user.click(screen.getByRole("button", { name: "Create directory" }));
+
+    expect(await screen.findByText("Created the directory conf.d/eu.")).toBeInTheDocument();
+    expect(screen.getByLabelText("New file path")).toHaveValue("");
+  });
+
+  it("highlights a file row that can be opened when the pointer rests on it, but not one outside ~/.ssh", async () => {
+    render(<ConfigExplorer />);
+
+    const openable = (await screen.findByRole("button", { name: "conf.d/10-home.conf" })).closest("li");
+    const external = screen.getByText("/etc/ssh/ssh_config").closest("li");
+    expect(openable?.className).toContain("hover:bg-hover");
+    expect(external?.className).not.toContain("hover:");
   });
 
   it("shows a refused delete once, inside the confirmation, and keeps the confirmation open", async () => {

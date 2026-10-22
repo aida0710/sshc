@@ -6,6 +6,7 @@ import { tableHeadCell, tableHeadRow } from "../ui/form";
 import { describeKeyKind, noteLabels, rowAction, rowDanger, rowPrimary } from "./labels";
 import { keyItemGroups } from "./organizer";
 import { SortableTableHeader } from "../ui/tableSort";
+import { draggableCursor } from "../ui/dragAndDropLook";
 import { useTableSort, type SortValue } from "../ui/useTableSort";
 
 type KeySort = "file" | "kind" | "state";
@@ -133,7 +134,7 @@ export function KeyTable({
                       aria-label={t("keys.dragKey", { path: item.relativePath })}
                       onDragStart={(event) => actions.onBeginDrag(event, item)}
                       onDragEnd={actions.onEndDrag}
-                      className="flex min-h-10 min-w-8 cursor-grab select-none items-center justify-center rounded px-1.5 py-1 text-sm leading-none text-ink-faint hover:bg-surface active:cursor-grabbing md:min-h-0 md:min-w-0"
+                      className={`flex min-h-10 min-w-8 select-none items-center justify-center rounded px-1.5 py-1 text-sm leading-none text-ink-faint hover:bg-surface md:min-h-0 md:min-w-0 ${draggableCursor}`}
                     >
                       ⠿
                     </span>
@@ -163,7 +164,7 @@ export function KeyTable({
                     aria-expanded={relatedExpanded}
                     disabled={revealRelated}
                     onClick={() => toggleRelated(item)}
-                    className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-md bg-surface px-2 py-1 text-xs font-medium text-ink-muted hover:text-ink disabled:cursor-default md:min-h-0"
+                    className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-md bg-surface px-2 py-1 text-xs font-medium text-ink-muted hover:text-ink disabled:cursor-default disabled:opacity-100 md:min-h-0"
                   >
                     <DisclosureChevron expanded={relatedExpanded} className="size-3.5 text-ink-faint" />
                     {t("keys.relatedPublicFiles", { count: relatedCount })}

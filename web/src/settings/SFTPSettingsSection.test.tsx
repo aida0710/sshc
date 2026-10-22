@@ -53,6 +53,18 @@ describe("Settings > SFTP", () => {
     expect(manager.reconcile).toHaveBeenCalledOnce();
   });
 
+  it("says it is reading the settings until the engine's queue answers", async () => {
+    let answer: () => void = () => undefined;
+    manager.reconcile.mockReturnValue(new Promise<void>((resolve) => { answer = resolve; }));
+    render(<SFTPSettingsSection showHeading={false} />);
+    expect(screen.getByText("Loading SFTP settings…")).toBeVisible();
+    expect(screen.queryByRole("group", { name: "Speed and recovery" })).not.toBeInTheDocument();
+
+    answer();
+    expect(await screen.findByRole("group", { name: "Speed and recovery" })).toBeVisible();
+    expect(screen.queryByText("Loading SFTP settings…")).not.toBeInTheDocument();
+  });
+
   it("sends each change to the engine on its own", async () => {
     render(<SFTPSettingsSection showHeading={false} />);
     await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Concurrent transfers" }), "5");

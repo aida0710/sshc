@@ -90,7 +90,7 @@ function SessionRowMenuItem({
       role="menuitem"
       disabled={disabled}
       onClick={onClick}
-      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
+      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0"
     >
       {children}
     </button>

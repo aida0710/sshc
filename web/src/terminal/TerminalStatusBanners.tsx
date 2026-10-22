@@ -5,6 +5,8 @@ import { terminalProblemKey } from "./sessions";
 import type { StreamLink } from "./streamLink";
 
 const notice = "shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink";
+// 経路の帯のボタンは、ほかの帯のボタン（再接続をやめる・再接続）と同じく、載せると選択の色になる。
+const linkButton = "shrink-0 rounded border border-notice-line px-2 py-0.5 text-notice-ink transition-colors duration-150 hover:bg-select-fill";
 
 function StreamLinkMessage({ link }: { link: Exclude<StreamLink, { phase: "live" }> }) {
   const t = useTranslate();
@@ -94,7 +96,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
               type="button"
               disabled={stopBusy}
               onClick={() => void stopReconnecting()}
-              className="min-h-8 shrink-0 rounded border border-notice-line px-3 py-1 font-medium text-notice-ink hover:bg-select-fill disabled:opacity-50"
+              className="min-h-8 shrink-0 rounded border border-notice-line px-3 py-1 font-medium text-notice-ink hover:bg-select-fill"
             >
               {t("terminal.stopReconnect")}
             </button>
@@ -118,7 +120,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
               type="button"
               disabled={link.phase === "connecting"}
               onClick={onLinkNow}
-              className="shrink-0 rounded border border-notice-line px-2 py-0.5 text-notice-ink disabled:opacity-50"
+              className={linkButton}
             >
               {t("terminal.linkNow")}
             </button>
@@ -127,7 +129,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
             <button
               type="button"
               onClick={onLinkStop}
-              className="shrink-0 rounded border border-notice-line px-2 py-0.5 text-notice-ink"
+              className={linkButton}
             >
               {t("terminal.linkStop")}
             </button>
@@ -146,7 +148,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
               type="button"
               disabled={reconnectBusy}
               onClick={() => void reconnectExitedSession()}
-              className="min-h-8 shrink-0 rounded border border-control-line bg-control px-3 py-1 font-medium text-ink hover:bg-select-fill disabled:opacity-50"
+              className="min-h-8 shrink-0 rounded border border-control-line bg-control px-3 py-1 font-medium text-ink hover:bg-select-fill"
             >
               {t(reconnectBusy ? "terminal.manualReconnecting" : "terminal.manualReconnect")}
             </button>

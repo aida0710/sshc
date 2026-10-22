@@ -12,13 +12,15 @@ export type GroupDialogState =
   | { kind: "rename"; name: string }
   | { kind: "delete"; name: string; memberCount: number };
 
+// 作成・名前の変更・削除は、Promise を返すとダイアログを開いたまま待つ。断られた理由は error で中に出す。
 type GroupDialogsProps = {
   dialog: GroupDialogState;
   groupNames: readonly string[];
-  onCreate: (name: string) => void;
-  onRename: (from: string, to: string) => void;
-  onDelete: (name: string, destination: string) => void;
+  onCreate: (name: string) => void | Promise<unknown>;
+  onRename: (from: string, to: string) => void | Promise<unknown>;
+  onDelete: (name: string, destination: string) => void | Promise<unknown>;
   onClose: () => void;
+  error?: string;
 };
 
 function lastSegment(name: string): string {
@@ -34,7 +36,7 @@ function joinGroup(parent: string, segment: string): string {
   return parent === "" ? segment : `${parent}/${segment}`;
 }
 
-export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete, onClose }: GroupDialogsProps) {
+export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete, onClose, error = "" }: GroupDialogsProps) {
   const t = useTranslate();
   const [destination, setDestination] = useState("");
   const taken = new Set(groupNames.map((name) => name.toLowerCase()));
@@ -62,6 +64,7 @@ export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete,
         validate={validateSegment(dialog.parent, null)}
         onSubmit={(value) => onCreate(joinGroup(dialog.parent, value))}
         onCancel={onClose}
+        error={error}
       />
     );
   }
@@ -79,10 +82,14 @@ export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete,
         validate={validateSegment(parent, dialog.name)}
         onSubmit={(value) => {
           const target = joinGroup(parent, value);
-          if (target === dialog.name) onClose();
-          else onRename(dialog.name, target);
+          if (target === dialog.name) {
+            onClose();
+            return;
+          }
+          return onRename(dialog.name, target);
         }}
         onCancel={onClose}
+        error={error}
       />
     );
   }
@@ -110,6 +117,7 @@ export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete,
       cancelLabel={t("groupDialog.cancel")}
       onConfirm={() => onDelete(dialog.name, destination)}
       onCancel={onClose}
+      error={error}
     />
   );
 }

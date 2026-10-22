@@ -10,12 +10,14 @@ type BackgroundCapacityProps = {
   capacityInput: string;
   onCapacityInputChange: (next: string) => void;
   canSave: boolean;
+  // saving は、上限の保存を待っている間である。保存のボタンに回転の印を出す。
+  saving: boolean;
   onSave: () => void;
 };
 
 // How much of the background library's limit the saved images use, and the
 // field that changes the limit.
-export function BackgroundCapacity({ usedBytes, capacityBytes, capacityInput, onCapacityInputChange, canSave, onSave }: BackgroundCapacityProps) {
+export function BackgroundCapacity({ usedBytes, capacityBytes, capacityInput, onCapacityInputChange, canSave, saving, onSave }: BackgroundCapacityProps) {
   const t = useTranslate();
   const usedPercent = Math.min(100, (usedBytes / Math.max(capacityBytes, 1)) * 100);
   return (
@@ -38,7 +40,7 @@ export function BackgroundCapacity({ usedBytes, capacityBytes, capacityInput, on
               <span>MiB</span>
             </span>
           </span>
-          <Button disabled={!canSave} onClick={onSave}>{t("terminal.backgroundCapacitySave")}</Button>
+          <Button busy={saving} disabled={!canSave} onClick={onSave}>{t("terminal.backgroundCapacitySave")}</Button>
         </label>
       </div>
       <p className="mt-2 text-xs text-ink-faint">{t("terminal.backgroundCapacityHint")}</p>

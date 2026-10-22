@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { localMutationProblemText, sftpProblemText } from "./sftpProblemText";
 import { clipboard } from "../ui/clipboard";
+import { useToast } from "../ui/useToast";
 import { sftpApi, type RemoteEntry } from "./api";
 import { parentRowKey, type SFTPEntryListModel } from "./useSFTPEntryList";
 import { remoteJoin as join, remoteParentOf as parentOf, type SFTPSource } from "./sftpSource";
@@ -44,11 +45,15 @@ export function useSFTPEntryActions({
   onInteract?: () => void;
 }) {
   const t = useTranslate();
+  const showToast = useToast();
   const { alias, path, source, setProblem } = browser;
   const generation = browser.generation;
   const { selectedEntries, selectedEntry, rowKeys, setSelectedPaths, focusAfterReload, cancelPendingFocus } = list;
   const [acting, setActing] = useState(false);
   const [inputIntent, setInputIntent] = useState<SFTPInputIntent | null>(null);
+  // Why the change asked for in the name dialog did not go through. It is shown
+  // in the dialog, which stays open so that the name can be fixed and sent again.
+  const [inputProblem, setInputProblem] = useState("");
   const [deleteIntent, setDeleteIntent] = useState<{
     entries: RemoteEntry[]; source: SFTPSource; path: string; isCurrent: () => boolean;
   } | null>(null);
@@ -57,8 +62,12 @@ export function useSFTPEntryActions({
   // What the last change was, and how to put it back.
   const [undo, setUndo] = useState<{ label: string; run: () => Promise<void> } | null>(null);
 
+  function problemText(error: unknown, fallback: MessageKey = "sftp.problem.failed"): string {
+    return source?.local ? localMutationProblemText(t, error, fallback) : sftpProblemText(t, error, fallback);
+  }
+
   function report(error: unknown, fallback: MessageKey = "sftp.problem.failed") {
-    setProblem(source?.local ? localMutationProblemText(t, error, fallback) : sftpProblemText(t, error, fallback));
+    setProblem(problemText(error, fallback));
   }
 
   // The offer stands until the next thing happens. A timer would take it away
@@ -77,77 +86,96 @@ export function useSFTPEntryActions({
     });
   }
 
-  async function makeDirectory(name: string) {
-    if (source === null || !source.can.createDirectory) return;
-    const isCurrent = generation.observe();
-    const targetAlias = alias;
-    const targetPath = path;
+  // Makes a change asked for in the name dialog. The dialog waits while the
+  // change is made and shows why it failed. Once the change is made the dialog
+  // closes, and afterChange brings the pane up to date; a problem there is the
+  // pane's, since the change itself went through.
+  async function changeFromDialog<T>({ change, afterChange }: {
+    change: () => Promise<T>;
+    afterChange: (result: T) => Promise<void> | void;
+  }) {
     setActing(true);
+    setInputProblem("");
+    setProblem("");
+    let result: T;
     try {
-      await source.mkdir(targetPath, name);
-      if (!isCurrent()) return;
-      focusAfterReload(source.join(targetPath, name));
-      await browser.load(targetPath, { alias: targetAlias });
+      result = await change();
     } catch (error) {
-      if (!isCurrent()) return;
+      setInputProblem(problemText(error));
+      setActing(false);
+      return;
+    }
+    setInputIntent(null);
+    try {
+      await afterChange(result);
+    } catch (error) {
       report(error);
     } finally {
       setActing(false);
     }
   }
 
-  async function makeEmptyFile(name: string) {
-    if (!source?.can.createEntries) return;
+  function makeDirectory(target: SFTPSource, name: string) {
+    const isCurrent = generation.observe();
+    const targetAlias = alias;
+    const targetPath = path;
+    return changeFromDialog({
+      change: () => target.mkdir(targetPath, name),
+      afterChange: async () => {
+        if (!isCurrent()) return;
+        focusAfterReload(target.join(targetPath, name));
+        await browser.load(targetPath, { alias: targetAlias });
+      },
+    });
+  }
+
+  function makeEmptyFile(name: string) {
     const isCurrent = generation.observe();
     const targetAlias = alias;
     const targetPath = path;
     const createdPath = join(targetPath, name);
-    setActing(true);
-    setProblem("");
-    try {
-      await sftpApi.createEmptyFile(targetAlias, createdPath);
-      if (!isCurrent()) return;
-      focusAfterReload(createdPath);
-      await browser.load(targetPath, { alias: targetAlias });
-    } catch (error) {
-      if (!isCurrent()) return;
-      report(error);
-    } finally {
-      setActing(false);
-    }
+    return changeFromDialog({
+      change: () => sftpApi.createEmptyFile(targetAlias, createdPath),
+      afterChange: async () => {
+        if (!isCurrent()) return;
+        focusAfterReload(createdPath);
+        await browser.load(targetPath, { alias: targetAlias });
+      },
+    });
   }
 
-  async function rename(entry: RemoteEntry, name: string) {
-    if (source === null || !source.can.rename) return;
+  function rename(target: SFTPSource, entry: RemoteEntry, name: string) {
     const isCurrent = generation.observe();
     const targetAlias = alias;
-    const targetPath = source.parentOf(entry.path);
-    const renamed = source.join(targetPath, name);
-    setActing(true);
-    try {
-      const updated = await source.rename(entry, name);
-      if (!isCurrent()) return;
-      focusAfterReload(renamed);
-      await refreshAfterChange(targetPath, targetAlias);
-      offerUndo(t("sftp.renamedTo", { name }), async () => {
-        await source.rename({ ...entry, path: renamed, name, revision: updated?.revision ?? entry.revision }, entry.name);
-        focusAfterReload(entry.path);
+    const targetPath = target.parentOf(entry.path);
+    const renamed = target.join(targetPath, name);
+    return changeFromDialog({
+      change: () => target.rename(entry, name),
+      afterChange: async (updated) => {
+        if (!isCurrent()) return;
+        focusAfterReload(renamed);
         await refreshAfterChange(targetPath, targetAlias);
-      });
-    } catch (error) {
-      if (!isCurrent()) return;
-      report(error);
-    } finally {
-      setActing(false);
-    }
+        offerUndo(t("sftp.renamedTo", { name }), async () => {
+          await target.rename({ ...entry, path: renamed, name, revision: updated?.revision ?? entry.revision }, entry.name);
+          focusAfterReload(entry.path);
+          await refreshAfterChange(targetPath, targetAlias);
+        });
+      },
+    });
   }
 
-  async function queueRemoteOperation(entries: RemoteEntry[], operation: "copy" | "move", destination: (entry: RemoteEntry) => string) {
-    if (operation === "move" ? !source?.can.moveEntries : !source?.can.createEntries) return;
-    setActing(true);
-    setProblem("");
-    try {
-      await sftpTransferManager.addRemoteTransfers(entries.map((entry) => ({
+  function queuedText(entries: RemoteEntry[], operation: "copy" | "move"): string {
+    const name = entries[0]?.name ?? "";
+    if (operation === "copy") return t("sftp.duplicateQueued", { name });
+    return entries.length === 1 ? t("sftp.moveQueued", { name }) : t("sftp.moveQueuedCount", { count: entries.length });
+  }
+
+  // A copy or a move runs as a job in the transfer manager. Once it is queued
+  // the dialog has closed and the rows have not changed yet, so a toast says
+  // that the job was taken.
+  function queueRemoteOperation(entries: RemoteEntry[], operation: "copy" | "move", destination: (entry: RemoteEntry) => string) {
+    return changeFromDialog({
+      change: () => sftpTransferManager.addRemoteTransfers(entries.map((entry) => ({
         sourceAlias: alias,
         sourcePath: entry.path,
         targetAlias: alias,
@@ -155,30 +183,59 @@ export function useSFTPEntryActions({
         kind: entry.type === "directory" ? "folder" : "file",
         name: entry.name,
         totalBytes: entry.type === "file" ? entry.size : -1,
-      })), operation);
-      setSelectedPaths(new Set());
-    } catch (error) {
-      report(error);
-    } finally {
-      setActing(false);
-    }
+      })), operation),
+      afterChange: () => {
+        setSelectedPaths(new Set());
+        showToast(queuedText(entries, operation), { tone: "success" });
+      },
+    });
   }
 
   // A destination typed from ~ is listed first: the listing answers with the
   // absolute path a transfer needs, and proves the directory is there.
-  async function moveEntriesTo(entries: RemoteEntry[], typed: string) {
-    if (source === null) return;
+  async function moveEntriesTo(target: SFTPSource, entries: RemoteEntry[], typed: string) {
     let directory = typed;
     if (startsAtHome(typed)) {
+      setInputProblem("");
       try {
-        directory = (await source.list(typed)).path;
+        directory = (await target.list(typed)).path;
       } catch (error) {
-        if (failureCode(error) === "invalid_request") setProblem(t("sftp.pathCannotOpen"));
-        else report(error);
+        setInputProblem(failureCode(error) === "invalid_request" ? t("sftp.pathCannotOpen") : problemText(error));
         return;
       }
     }
     await queueRemoteOperation(entries, "move", (entry) => join(directory, entry.name));
+  }
+
+  // Whether the pane's source still takes the change the dialog asks for. The
+  // menus offer only the changes it takes; this keeps a dialog left open from
+  // acting on a source that has changed since.
+  function sourceTakes(intent: SFTPInputIntent): boolean {
+    const can = source?.can;
+    if (can === undefined) return false;
+    switch (intent.kind) {
+      case "mkdir": return can.createDirectory;
+      case "createFile":
+      case "duplicate": return can.createEntries;
+      case "rename": return can.rename;
+      case "moveTo": return can.moveEntries;
+    }
+  }
+
+  // What an answered name dialog runs. The dialog waits for the returned
+  // promise, so it stays open until the change is made or has failed.
+  async function submit(value: string) {
+    const intent = inputIntent;
+    if (intent === null) return;
+    if (source === null || !sourceTakes(intent)) {
+      setInputIntent(null);
+      return;
+    }
+    if (intent.kind === "mkdir") await makeDirectory(source, value);
+    else if (intent.kind === "createFile") await makeEmptyFile(value);
+    else if (intent.kind === "rename") await rename(source, intent.entry, value);
+    else if (intent.kind === "duplicate") await queueRemoteOperation([intent.entry], "copy", () => join(parentOf(intent.entry.path), value));
+    else await moveEntriesTo(source, intent.entries, value);
   }
 
   // 削除ジョブを積めなかったときは、確認ダイアログを開いたまま、その中に失敗を出す。
@@ -249,29 +306,33 @@ export function useSFTPEntryActions({
     setDeleteIntent({ entries: selectedEntries, source, path, isCurrent: generation.observe() });
   }
 
-  function renameSelection() {
-    if (selectedEntry === null || acting) return;
-    onInteract?.();
-    setInputIntent({ kind: "rename", entry: selectedEntry });
-  }
-
   function ask(intent: SFTPInputIntent) {
     onInteract?.();
+    setInputProblem("");
     setInputIntent(intent);
+  }
+
+  function renameSelection() {
+    if (selectedEntry === null || acting) return;
+    ask({ kind: "rename", entry: selectedEntry });
   }
 
   async function copySelected(kind: "name" | "path") {
     onInteract?.();
     try {
       await clipboard.writeText(selectedEntries.map((entry) => kind === "name" ? entry.name : entry.path).join("\n"));
+      showToast(t("copy.done"), { tone: "success" });
     } catch {
       setProblem(t("copy.refused"));
     }
   }
 
   async function copyCurrentPath() {
-    try { await clipboard.writeText(path); setProblem(""); }
-    catch { setProblem(t("copy.refused")); }
+    try {
+      await clipboard.writeText(path);
+      setProblem("");
+      showToast(t("copy.done"), { tone: "success" });
+    } catch { setProblem(t("copy.refused")); }
   }
 
   return {
@@ -280,6 +341,7 @@ export function useSFTPEntryActions({
     dismissUndo: () => setUndo(null),
     offerUndo,
     inputIntent,
+    inputProblem,
     deleting,
     deletingLocal: deleteIntent?.source.local ?? false,
     deleteProblem,
@@ -290,17 +352,7 @@ export function useSFTPEntryActions({
     renameSelection,
     copySelected,
     copyCurrentPath,
-    // What an answered dialog runs.
-    submit(value: string) {
-      const intent = inputIntent;
-      if (intent === null) return;
-      setInputIntent(null);
-      if (intent.kind === "mkdir") void makeDirectory(value);
-      else if (intent.kind === "createFile") void makeEmptyFile(value);
-      else if (intent.kind === "rename") void rename(intent.entry, value);
-      else if (intent.kind === "duplicate") void queueRemoteOperation([intent.entry], "copy", () => join(parentOf(intent.entry.path), value));
-      else if (intent.kind === "moveTo") void moveEntriesTo(intent.entries, value);
-    },
+    submit,
     remove,
   };
 }

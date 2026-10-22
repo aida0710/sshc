@@ -2,13 +2,14 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
 import { TransferJobRow } from "./TransferJobRow";
+import type { RunTransferControl } from "./useTransferControl";
 
 export function TransferBatchList({ batches, waiting, processingStopped, maxReconnectAttempts, runControl }: {
   batches: readonly [string, ManagedTransferJob[]][];
   waiting: readonly ManagedTransferJob[];
   processingStopped: boolean;
   maxReconnectAttempts: number;
-  runControl: (operation: () => Promise<void>) => void;
+  runControl: RunTransferControl;
 }) {
   const t = useTranslate();
   return batches.map(([batchId, items]) => {
@@ -22,7 +23,7 @@ export function TransferBatchList({ batches, waiting, processingStopped, maxReco
           <span className="truncate font-medium" title={first.batchName}>{first.batchName}</span>
         </div>
         <span className="shrink-0 tabular-nums text-ink-muted">{t("sftp.manager.batchProgress", { completed, total: items.length })}</span>
-        {failed > 0 ? <button type="button" className="min-h-11 shrink-0 px-2 text-accent md:min-h-8 [@media(pointer:coarse)]:min-h-11" onClick={() => runControl(() => sftpTransferManager.retryFailed(batchId))}>{t("sftp.manager.retryFailed", { count: failed })}</button> : null}
+        {failed > 0 ? <button type="button" className="min-h-11 shrink-0 px-2 text-accent md:min-h-8 [@media(pointer:coarse)]:min-h-11" onClick={() => void runControl(() => sftpTransferManager.retryFailed(batchId))}>{t("sftp.manager.retryFailed", { count: failed })}</button> : null}
       </div> : null}
       <ul aria-label={t("sftp.manager.items")}>
         {items.map((job) => <TransferJobRow key={job.id} job={job} waiting={waiting} processingStopped={processingStopped}
