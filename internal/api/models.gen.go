@@ -161,6 +161,27 @@ func (e PullRequestResolve) Valid() bool {
 	}
 }
 
+// Defines values for RemoteEngineActionRequestAction.
+const (
+	RemoteEngineActionRequestActionRestart RemoteEngineActionRequestAction = "restart"
+	RemoteEngineActionRequestActionStop    RemoteEngineActionRequestAction = "stop"
+	RemoteEngineActionRequestActionUpdate  RemoteEngineActionRequestAction = "update"
+)
+
+// Valid indicates whether the value is a known member of the RemoteEngineActionRequestAction enum.
+func (e RemoteEngineActionRequestAction) Valid() bool {
+	switch e {
+	case RemoteEngineActionRequestActionRestart:
+		return true
+	case RemoteEngineActionRequestActionStop:
+		return true
+	case RemoteEngineActionRequestActionUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SFTPComparisonMode.
 const (
 	Content  SFTPComparisonMode = "content"
@@ -598,16 +619,16 @@ func (e UpdateStatusManager) Valid() bool {
 
 // Defines values for VaultAutoLockSettingsMode.
 const (
-	Idle    VaultAutoLockSettingsMode = "idle"
-	Restart VaultAutoLockSettingsMode = "restart"
+	VaultAutoLockSettingsModeIdle    VaultAutoLockSettingsMode = "idle"
+	VaultAutoLockSettingsModeRestart VaultAutoLockSettingsMode = "restart"
 )
 
 // Valid indicates whether the value is a known member of the VaultAutoLockSettingsMode enum.
 func (e VaultAutoLockSettingsMode) Valid() bool {
 	switch e {
-	case Idle:
+	case VaultAutoLockSettingsModeIdle:
 		return true
-	case Restart:
+	case VaultAutoLockSettingsModeRestart:
 		return true
 	default:
 		return false
@@ -1421,6 +1442,20 @@ type RelocatedKeyFile struct {
 // RemoteEngine defines model for RemoteEngine.
 type RemoteEngine struct {
 	Alias string `json:"alias"`
+}
+
+// RemoteEngineActionRequest defines model for RemoteEngineActionRequest.
+type RemoteEngineActionRequest struct {
+	Action RemoteEngineActionRequestAction `json:"action"`
+}
+
+// RemoteEngineActionRequestAction defines model for RemoteEngineActionRequest.Action.
+type RemoteEngineActionRequestAction string
+
+// RemoteEngineActionResult defines model for RemoteEngineActionResult.
+type RemoteEngineActionResult struct {
+	Output    string `json:"output"`
+	Succeeded bool   `json:"succeeded"`
 }
 
 // RemoteEngineEntrance defines model for RemoteEngineEntrance.

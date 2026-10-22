@@ -621,6 +621,36 @@ paths:
           $ref: '#/components/responses/Problem'
         '502':
           $ref: '#/components/responses/Problem'
+  /api/v1/engines/{alias}/control:
+    post:
+      operationId: controlRemoteEngine
+      description: Stops, restarts or updates the remote engine with the host's own sshc command. Every terminal on it stops.
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RemoteEngineActionRequest" }
+      responses:
+        "200":
+          description: Whether the host's sshc command succeeded, and the end of what it wrote
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RemoteEngineActionResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/engines/{alias}/terminal/sessions:
     get:
       operationId: remoteEngineListTerminalSessions
@@ -4524,6 +4554,20 @@ components:
         passwordless: { type: boolean }
         # sessions は、接続先のエンジンの終了していないターミナルの本数である。
         sessions: { type: integer, minimum: 0 }
+    RemoteEngineActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, enum: [stop, restart, update] }
+    RemoteEngineActionResult:
+      type: object
+      additionalProperties: false
+      required: [succeeded, output]
+      properties:
+        succeeded: { type: boolean }
+        # output は、接続先の sshc が書いた標準出力と標準エラーの末尾（4 KiB まで）である。
+        output: { type: string, maxLength: 4096 }
     RemoteEngineEntrance:
       type: object
       additionalProperties: false

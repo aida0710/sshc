@@ -21,6 +21,7 @@ type Link interface {
 // RunResult は、Link.Run が走らせたコマンドの結果である。
 type RunResult struct {
 	Stdout   []byte
+	Stderr   []byte
 	ExitCode int
 }
 

@@ -17,6 +17,9 @@ export type RunTargetsState = {
   add: (alias: string) => Promise<boolean>;
   remove: (alias: string) => Promise<void>;
   openInNewTab: (alias: string) => Promise<void>;
+  // api and localVersion are what the engine information dialog asks with.
+  api: RemoteEnginesApi;
+  localVersion: string;
 };
 
 // useRunTargets holds the run targets: this machine and the engines on SSH
@@ -100,5 +103,5 @@ export function useRunTargets({
     }
   }, [api, localVersion, translate]);
 
-  return { engines, selected, problem, busy, select, add, remove, openInNewTab };
+  return { engines, selected, problem, busy, select, add, remove, openInNewTab, api, localVersion };
 }

@@ -388,6 +388,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/engines/{alias}/control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Stops, restarts or updates the remote engine with the host's own sshc command. Every terminal on it stops. */
+        post: operations["controlRemoteEngine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/engines/{alias}/terminal/sessions": {
         parameters: {
             query?: never;
@@ -3138,6 +3155,14 @@ export interface components {
             passwordless: boolean;
             sessions: number;
         };
+        RemoteEngineActionRequest: {
+            /** @enum {string} */
+            action: "stop" | "restart" | "update";
+        };
+        RemoteEngineActionResult: {
+            succeeded: boolean;
+            output: string;
+        };
         RemoteEngineEntrance: {
             url: string;
         };
@@ -5516,6 +5541,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RemoteEngineEntrance"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    controlRemoteEngine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoteEngineActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Whether the host's sshc command succeeded, and the end of what it wrote */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteEngineActionResult"];
                 };
             };
             400: components["responses"]["Problem"];
