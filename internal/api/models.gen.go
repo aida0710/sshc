@@ -866,6 +866,12 @@ type CreateSavedPasswordAuthentication struct {
 	Kind       string `json:"kind"`
 }
 
+// CreateTerminalWorkspaceRequest defines model for CreateTerminalWorkspaceRequest.
+type CreateTerminalWorkspaceRequest struct {
+	Hidden *bool  `json:"hidden,omitempty"`
+	Name   string `json:"name"`
+}
+
 // Credential defines model for Credential.
 type Credential struct {
 	Hosts []string       `json:"hosts"`
@@ -1169,6 +1175,11 @@ type LocalShellProfileList struct {
 	Profiles []LocalShellProfile `json:"profiles"`
 }
 
+// MoveTerminalSessionRequest defines model for MoveTerminalSessionRequest.
+type MoveTerminalSessionRequest struct {
+	WorkspaceId string `json:"workspaceId"`
+}
+
 // Notice defines model for Notice.
 type Notice struct {
 	Code    string          `json:"code"`
@@ -1186,12 +1197,13 @@ type NoticeLocation struct {
 
 // OpenTerminalSessionRequest defines model for OpenTerminalSessionRequest.
 type OpenTerminalSessionRequest struct {
-	Alias     *string                        `json:"alias,omitempty"`
-	Cols      *int                           `json:"cols,omitempty"`
-	Cwd       *string                        `json:"cwd,omitempty"`
-	Kind      OpenTerminalSessionRequestKind `json:"kind"`
-	ProfileId *string                        `json:"profileId,omitempty"`
-	Rows      *int                           `json:"rows,omitempty"`
+	Alias       *string                        `json:"alias,omitempty"`
+	Cols        *int                           `json:"cols,omitempty"`
+	Cwd         *string                        `json:"cwd,omitempty"`
+	Kind        OpenTerminalSessionRequestKind `json:"kind"`
+	ProfileId   *string                        `json:"profileId,omitempty"`
+	Rows        *int                           `json:"rows,omitempty"`
+	WorkspaceId *string                        `json:"workspaceId,omitempty"`
 }
 
 // OpenTerminalSessionRequestKind defines model for OpenTerminalSessionRequest.Kind.
@@ -2144,6 +2156,7 @@ type TerminalSession struct {
 	StartedAt           string                      `json:"startedAt"`
 	State               TerminalSessionState        `json:"state"`
 	Title               string                      `json:"title"`
+	WorkspaceId         string                      `json:"workspaceId"`
 }
 
 // TerminalSessionKind defines model for TerminalSession.Kind.
@@ -2179,6 +2192,20 @@ type TerminalSettings struct {
 // TerminalStreamTicket defines model for TerminalStreamTicket.
 type TerminalStreamTicket struct {
 	StreamTicket string `json:"streamTicket"`
+}
+
+// TerminalWorkspace defines model for TerminalWorkspace.
+type TerminalWorkspace struct {
+	BuiltIn bool   `json:"builtIn"`
+	Hidden  bool   `json:"hidden"`
+	Id      string `json:"id"`
+	Name    string `json:"name"`
+}
+
+// TerminalWorkspaceList defines model for TerminalWorkspaceList.
+type TerminalWorkspaceList struct {
+	MaxWorkspaces int                 `json:"maxWorkspaces"`
+	Workspaces    []TerminalWorkspace `json:"workspaces"`
 }
 
 // TrashEntrySummary defines model for TrashEntrySummary.
@@ -2348,6 +2375,12 @@ type UpdateTOTPSaved struct {
 // UpdateTOTPUnchanged defines model for UpdateTOTPUnchanged.
 type UpdateTOTPUnchanged struct {
 	Kind string `json:"kind"`
+}
+
+// UpdateTerminalWorkspaceRequest defines model for UpdateTerminalWorkspaceRequest.
+type UpdateTerminalWorkspaceRequest struct {
+	Hidden *bool   `json:"hidden,omitempty"`
+	Name   *string `json:"name,omitempty"`
 }
 
 // ValueSource defines model for ValueSource.

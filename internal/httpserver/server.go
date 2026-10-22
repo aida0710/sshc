@@ -37,6 +37,7 @@ import (
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/snippets"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalworkspace"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnprofile"
 )
@@ -114,6 +115,8 @@ type Options struct {
 	// セッションのルートと WebSocket を未登録のままにする。これは、それを
 	// 配線しないテストが当てにしていることである。
 	Terminals *terminal.Registry
+	// TerminalWorkspaces は、セッションをまとめるワークスペースの定義を持つ。
+	TerminalWorkspaces *terminalworkspace.Service
 	// ConnectionOpened は、SSHセッションとstream ticketの両方を作れたあとに呼ぶ。
 	ConnectionOpened func(alias string)
 	// TerminalStartDirectory は、ローカルシェルが始まる場所を返す。空なら
@@ -571,6 +574,7 @@ func newTerminalHandlers(options Options, actions ActionHandlers, host string) T
 		Environment:         options.TerminalEnvironment,
 		StartDirectory:      options.TerminalStartDirectory,
 		Connected:           options.ConnectionOpened,
+		Workspaces:          options.TerminalWorkspaces,
 		Startup: func(alias string) StartupSnippet {
 			return prepareStartupSnippet(options.Snippets, options.Logger, alias)
 		},

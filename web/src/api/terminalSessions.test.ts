@@ -26,6 +26,7 @@ describe("terminalSessionsApi terminal sessions", () => {
   const session = {
     id: "3f9c",
     kind: "shell",
+    workspaceId: "default",
     title: "zsh",
     startedAt: "2026-08-13T09:00:00Z",
     state: "connected",

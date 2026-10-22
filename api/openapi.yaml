@@ -369,6 +369,107 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/workspaces:
+    get:
+      operationId: listTerminalWorkspaces
+      responses:
+        "200":
+          description: Every terminal workspace, hidden ones included
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalWorkspaceList" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createTerminalWorkspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTerminalWorkspaceRequest" }
+      responses:
+        "201":
+          description: The workspace that was created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalWorkspace" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/workspaces/{id}:
+    patch:
+      operationId: updateTerminalWorkspace
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateTerminalWorkspaceRequest" }
+      responses:
+        "200":
+          description: The workspace after renaming or hiding it
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalWorkspace" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteTerminalWorkspace
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          description: The remaining workspaces; the deleted one's sessions moved to default
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalWorkspaceList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/sessions/{id}/workspace:
+    put:
+      operationId: moveTerminalSession
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MoveTerminalSessionRequest" }
+      responses:
+        "200":
+          description: The session list after moving the session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalSessionList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/shell-profiles:
     get:
       operationId: listLocalShellProfiles
@@ -3551,10 +3652,12 @@ components:
     TerminalSession:
       type: object
       additionalProperties: false
-      required: [id, kind, title, startedAt, state, problem]
+      required: [id, kind, title, workspaceId, startedAt, state, problem]
       properties:
         id: { type: string }
         kind: { type: string, enum: [ssh, shell] }
+        # セッションが入っているワークスペース（TerminalWorkspace.id）。
+        workspaceId: { type: string }
         # alias を持つのは kind が ssh のときだけである。localhost はローカル
         # シェルであって ssh 接続ではないので、alias を持たない。
         alias: { type: string }
@@ -3696,6 +3799,8 @@ components:
         # shell kind only. Must match one of LocalShellProfileList; executable
         # paths and command strings are never accepted from the caller.
         profileId: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
+        # 入れるワークスペース。省略すると default。
+        workspaceId: { type: string, minLength: 1, maxLength: 64 }
     LocalShellProfile:
       type: object
       additionalProperties: false
@@ -3715,6 +3820,43 @@ components:
     # 名前は一覧の表示だけのものである。走っているプロセスにも ssh の相手にも
     # 触れず、metadata へも書かない。セッションと一緒に消える。null は、利用者が
     # 付けた名前を外し、プログラムが付けた名前か接続先の名前へ戻す。
+    # ターミナルのセッションをまとめるワークスペース。default と agents は消せず、
+    # name が空なら画面がその言語の既定の名前を出す。
+    TerminalWorkspace:
+      type: object
+      additionalProperties: false
+      required: [id, name, hidden, builtIn]
+      properties:
+        id: { type: string }
+        name: { type: string, maxLength: 64 }
+        hidden: { type: boolean }
+        builtIn: { type: boolean }
+    TerminalWorkspaceList:
+      type: object
+      additionalProperties: false
+      required: [workspaces, maxWorkspaces]
+      properties:
+        workspaces: { type: array, items: { $ref: "#/components/schemas/TerminalWorkspace" } }
+        maxWorkspaces: { type: integer, minimum: 1 }
+    CreateTerminalWorkspaceRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        hidden: { type: boolean }
+    UpdateTerminalWorkspaceRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 64 }
+        hidden: { type: boolean }
+    MoveTerminalSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [workspaceId]
+      properties:
+        workspaceId: { type: string, minLength: 1, maxLength: 64 }
     SetTerminalSessionTitleRequest:
       type: object
       additionalProperties: false

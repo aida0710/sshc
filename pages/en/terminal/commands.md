@@ -1,6 +1,6 @@
 ---
 title: Quick Commands and Snippets
-description: Save, preview, and send commands to one pane or a workspace.
+description: Save, preview, and send commands to one session or a workspace.
 ---
 
 # Quick Commands and Snippets
@@ -28,7 +28,7 @@ Assignments made by an earlier version, which did not record the destination, ar
 
 The Snippets screen can also run one Snippet against several hosts as non-interactive SSH executions. It previews the expanded command and the resolved targets before starting and reports the result per host. One run takes up to 64 targets and executes 4 at a time. These executions use their own connections and do not inherit the working directory or shell state of an open pane.
 
-With two or more panes, Command Center can target selected SSH and local-shell panes. It previews an ad-hoc command or Snippet before writing the command and Enter to each PTY.
+**Send a command…** in a sidebar workspace's **…** menu sends an ad-hoc command or Snippet to the connected sessions of that workspace, SSH and local shells alike. It previews the command and the targets before writing the command and Enter to each session; sessions that are not connected are skipped.
 
 ::: warning Secrets
 The normal preview replaces secret variables with `[secret]`. After confirmation, sshc writes the expanded value to the PTY. It may remain in remote shell history, TTY echo, or scrollback, so verify the targets and command before sending it.

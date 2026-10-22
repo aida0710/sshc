@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import type { LocalShellProfile } from "../api/settings";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { TerminalForward, TerminalSession } from "../api/terminalSessions";
 import { useTranslate, type Translate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -7,23 +6,21 @@ import { Icon } from "../ui/icons";
 import { describeForwardProblem } from "./forwardProblem";
 import { sessionDragMimeType } from "./sessionDrag";
 import { sessionMarkerClass, sessionStatusText } from "./sessionStatus";
-import { SessionRowMenu, type SessionRowMenuPlacement } from "./SessionRowMenu";
+import { SessionRowMenu, type SessionRowMenuPlacement, type WorkspaceMoveTarget } from "./SessionRowMenu";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import type { UnreadSessions } from "./terminalNotifications";
-import { HostPickerDialog, type LocalChoice } from "../shell/HostPickerDialog";
-import type { HostEntry } from "../api/config";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { useShiftKeyHeld } from "../ui/useShiftKeyHeld";
-import { Notice } from "../ui/surface";
 import { TerminalProgressBar } from "./TerminalProgressBar";
 
 type SessionListProps = {
   sessions: TerminalSession[];
   selected: string | null;
-  maxSessions: number;
+  // atSessionLimit is true while the engine holds as many live sessions as it
+  // allows, counted over every workspace, so nothing can be duplicated.
+  atSessionLimit: boolean;
   busy: boolean;
-  problem: string;
   unreadBySession?: UnreadSessions;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
@@ -31,13 +28,10 @@ type SessionListProps = {
   onUnpinTitle: (id: string) => Promise<boolean>;
   onDuplicate: (id: string) => void;
   onReorder: (order: string[]) => void;
-  localShellProfiles?: LocalShellProfile[];
-  onOpenShell: (profileId?: string) => void;
-  // aliases/hosts feed the same picker SFTP uses, so a new session starts
-  // from one dialog whether it is a local shell or an SSH host.
-  aliases?: string[];
-  hosts?: HostEntry[];
-  onConnect?: (alias: string) => void;
+  // moveTargets are every workspace a session can be moved to; a row leaves out
+  // the one it is already in.
+  moveTargets: readonly WorkspaceMoveTarget[];
+  onMoveToWorkspace: (sessionId: string, workspaceId: string) => void;
 };
 
 function describeForward(t: Translate, forward: TerminalForward): string {
@@ -56,9 +50,8 @@ function describeForward(t: Translate, forward: TerminalForward): string {
 export function SessionList({
   sessions,
   selected,
-  maxSessions,
+  atSessionLimit,
   busy,
-  problem,
   unreadBySession = new Set(),
   onSelect,
   onClose,
@@ -66,22 +59,10 @@ export function SessionList({
   onUnpinTitle,
   onDuplicate,
   onReorder,
-  localShellProfiles = [],
-  onOpenShell,
-  aliases = [],
-  hosts = [],
-  onConnect,
+  moveTargets,
+  onMoveToWorkspace,
 }: SessionListProps) {
   const t = useTranslate();
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const newSessionTrigger = useRef<HTMLButtonElement>(null);
-  const localChoices = useMemo<LocalChoice[]>(() => {
-    const profiles = localShellProfiles.filter((profile) => profile.id !== "default");
-    return [
-      { id: "default", label: t("terminal.openShell"), detail: t("terminal.localhost") },
-      ...profiles.map((profile) => ({ id: profile.id, label: `${t("terminal.openShell")} · ${profile.label}`, detail: profile.path })),
-    ];
-  }, [localShellProfiles, t]);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [menuPlacement, setMenuPlacement] = useState<SessionRowMenuPlacement>("down");
   const [closing, setClosing] = useState<TerminalSession | null>(null);
@@ -93,8 +74,6 @@ export function SessionList({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
 
-  const live = sessions.filter((session) => session.exited === undefined).length;
-  const full = maxSessions > 0 && live >= maxSessions;
 
   useEffect(() => {
     if (menuFor !== null && !sessions.some((session) => session.id === menuFor)) setMenuFor(null);
@@ -143,7 +122,6 @@ export function SessionList({
 
   return (
     <div className="flex flex-col gap-2">
-      {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
       {sessions.length === 0 ? (
         <p className="px-2 text-xs text-ink-muted">{t("terminal.noSessions")}</p>
       ) : (
@@ -161,11 +139,11 @@ export function SessionList({
             const unread = unreadBySession.has(session.id);
             const status = sessionStatusText(t, session);
             const marker = (
-              <span aria-hidden="true" className={`mt-1.5 size-1.5 shrink-0 rounded-full ${sessionMarkerClass(session)}`} />
+              <span aria-hidden="true" className={`mt-1.5 size-1.5 shrink-0 rounded-full md:mt-1 ${sessionMarkerClass(session)}`} />
             );
             const details = (
               <>
-                <p className="truncate text-xs text-ink-faint">
+                <p className="truncate text-xs text-ink-faint md:leading-tight">
                   {t("terminal.rowDetail", { status, destination })}
                 </p>
                 {(session.forwards ?? []).map((forward) => (
@@ -206,7 +184,7 @@ export function SessionList({
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
                 ) : null}
                 <div
-                  className={`relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors ${
+                  className={`relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors md:py-0.5 ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
                       : session.id === selected ? "bg-select-fill" : "hover:bg-hover"
@@ -243,7 +221,7 @@ export function SessionList({
                     >
                       {marker}
                       <span className="min-w-0 grow">
-                        <span className={`block truncate text-sm ${session.id === selected ? "font-semibold text-accent" : "text-ink"}`}>{displayTitle}</span>
+                        <span className={`block truncate text-sm md:leading-tight ${session.id === selected ? "font-semibold text-accent" : "text-ink"}`}>{displayTitle}</span>
                         {details}
                       </span>
                     </button>
@@ -274,7 +252,7 @@ export function SessionList({
                       setMenuPlacement(spaceBelow < 132 && spaceAbove > spaceBelow ? "up" : "down");
                       setMenuFor(session.id);
                     }}
-                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-6"
+                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5"
                   >
                     <Icon name="moreHorizontal" className="size-3.5" />
                   </button>
@@ -288,7 +266,7 @@ export function SessionList({
                       }
                       setClosing(session);
                     }}
-                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-6"
+                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5"
                   >
                     <Icon name="close" className="size-3.5" />
                   </button>
@@ -298,7 +276,7 @@ export function SessionList({
                     session={session}
                     menuRef={menuRef}
                     placement={menuPlacement}
-                    canDuplicate={!busy && !full}
+                    canDuplicate={!busy && !atSessionLimit}
                     canMoveUp={index > 0}
                     canMoveDown={index < sessions.length - 1}
                     onRename={() => {
@@ -309,6 +287,8 @@ export function SessionList({
                     onDuplicate={() => onDuplicate(session.id)}
                     onMoveUp={() => move(session.id, -1)}
                     onMoveDown={() => move(session.id, 1)}
+                    moveTargets={moveTargets.filter((target) => target.id !== session.workspaceId)}
+                    onMoveToWorkspace={(workspaceId) => onMoveToWorkspace(session.id, workspaceId)}
                     onClose={() => setMenuFor(null)}
                   />
                 ) : null}
@@ -317,28 +297,6 @@ export function SessionList({
           })}
         </ul>
       )}
-      <button
-        ref={newSessionTrigger}
-        type="button"
-        disabled={busy || full}
-        onClick={() => setPickerOpen(true)}
-        className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ink hover:bg-hover disabled:text-ink-faint"
-      >
-        <Icon name="plus" className="size-3.5" aria-hidden="true" />
-        {t("terminal.newSession")}
-      </button>
-      <HostPickerDialog
-        open={pickerOpen}
-        heading={t("terminal.newSession")}
-        aliases={aliases}
-        hosts={hosts}
-        local={localChoices}
-        returnFocusRef={newSessionTrigger}
-        onChoose={(alias) => { setPickerOpen(false); onConnect?.(alias); }}
-        onChooseLocal={(id) => { setPickerOpen(false); onOpenShell(id === "default" ? undefined : id); }}
-        onClose={() => setPickerOpen(false)}
-      />
-      {full ? <p className="px-2 text-xs text-ink-muted">{t("terminal.limitReached", { max: maxSessions })}</p> : null}
       {closing === null ? null : (
         <CloseConfirmation
           session={closing}

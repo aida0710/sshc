@@ -7,7 +7,7 @@ import { useTerminalNotifications } from "./useTerminalNotifications";
 import { fakeAndroidBridge } from "../android/fakeAndroidBridge";
 
 const initial: TerminalSession = {
-  id: "one", kind: "ssh", alias: "osaka", title: "API認証の修正",
+  id: "one", kind: "ssh", workspaceId: "default", alias: "osaka", title: "API認証の修正",
   startedAt: "2026-08-29T01:00:00Z", state: "connected", problem: "",
   presentation: { displayTitle: "API認証の修正", titleSource: "terminal", titlePinned: false },
   notificationVersion: 0,

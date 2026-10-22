@@ -243,7 +243,7 @@ describe("App", () => {
     { button: "open remote folder", kind: "ssh", alias: "gallery-web", cwd: "/srv/project's work" },
   ] as const)("opens $button in the matching terminal kind", async ({ button, kind, cwd, ...identity }) => {
     const opened: TerminalSession = {
-      id: "folder-session", kind, title: "folder-session", ...identity,
+      id: "folder-session", kind, workspaceId: "default", title: "folder-session", ...identity,
       startedAt: "2026-10-10T00:00:00Z", state: "connected", problem: "",
     };
     const open = vi.spyOn(terminalSessionsApi, "openTerminalSession").mockResolvedValue({ session: opened, streamTicket: "fixture" });
@@ -485,7 +485,7 @@ describe("App", () => {
       "SFTP",
     ]);
     expect(screen.getByRole("link", { name: "Menu" })).toHaveAttribute("href", "/menu");
-    expect(screen.getByText("Sessions", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("Workspaces", { exact: true })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Terminal" })).toBeNull();
 
     await user.click(screen.getByRole("link", { name: "Menu" }));

@@ -326,14 +326,17 @@ test("draws one separator above the version in the mobile drawer", async ({ page
   }
 
   const menu = navigation.getByRole("link", { name: "Menu", exact: true });
-  const localShell = navigation.getByRole("button", { name: "New session", exact: true });
+  // The first workspace of the tree sits right under Menu; its sessions and
+  // the new session button follow it.
+  const localShell = navigation.getByRole("button", { name: /^Main/ });
   const [menuBox, shellBox] = await Promise.all([menu.boundingBox(), localShell.boundingBox()]);
   expect(menuBox).not.toBeNull();
   expect(shellBox).not.toBeNull();
   if (menuBox !== null && shellBox !== null) {
     expect(shellBox.height).toBeGreaterThanOrEqual(44);
     expect(menuBox.height).toBeGreaterThanOrEqual(44);
-    expect(shellBox.y - (menuBox.y + menuBox.height)).toBeLessThanOrEqual(64);
+    // Between them sit only the Workspaces heading and its actions button.
+    expect(shellBox.y - (menuBox.y + menuBox.height)).toBeLessThanOrEqual(96);
   }
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-mobile-drawer-dark.png`, fullPage: true });
@@ -357,7 +360,7 @@ test("uses established product names in the Japanese navigation", async ({ page,
   for (const section of ["Home", "Connections", "SFTP"]) {
     await expect(navigation.getByRole("link", { name: section, exact: true })).toBeVisible();
   }
-  await expect(navigation.getByText("Sessions", { exact: true })).toBeVisible();
+  await expect(navigation.getByText("Workspaces", { exact: true })).toBeVisible();
   await expect(navigation.getByRole("button", { name: "新しいセッション", exact: true })).toBeVisible();
   await expect(navigation.getByRole("tab")).toHaveCount(0);
   await navigation.getByRole("link", { name: "Menu", exact: true }).click();

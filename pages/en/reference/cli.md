@@ -250,6 +250,7 @@ Inspect, create, and control terminals owned by the running engine.
 sshc terminal list --json
 sshc terminal create ssh bastion --json
 sshc terminal create shell --json
+sshc terminal create shell --workspace "sshc dev"
 sshc terminal show <session-id> --json
 sshc terminal read <session-id> --cursor 0 --limit 4096 --json
 sshc terminal send <session-id> --text 'uptime' --json
@@ -261,6 +262,8 @@ sshc terminal close <session-id>
 ```
 
 `create shell` opens a local shell on the engine host. `send` appends Enter (CR) by default; `--no-enter` sends the text as is.
+
+A session opened with `create` goes into the hidden Agents [workspace](/en/features/workspace) by default, so connections opened by LLMs and scripts stay out of the sidebar. `--workspace` puts it in another workspace, named by ID or name. `list` also shows the workspace ID of each session.
 
 `read` returns a scrollback cursor and warns when an older position has already been discarded. `send` checks the current process generation to avoid sending to a replacement process.
 

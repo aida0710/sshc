@@ -21,6 +21,7 @@ import { navigationWidth } from "./shell/navigationLayout";
 import { useStoredColumnWidth } from "./ui/useStoredColumnWidth";
 import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
+import { useTerminalWorkspaces } from "./terminal/useTerminalWorkspaces";
 import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
 import { localHostAlias } from "./sftp/localHost";
@@ -108,6 +109,12 @@ export function App({
   }, [resolvedTheme]);
 
   const terminalSessions = useTerminalSessions(terminalSessionsApi, t, state === "ready");
+  const terminalWorkspaces = useTerminalWorkspaces({
+    sessions: terminalSessions.sessions,
+    translate: t,
+    enabled: state === "ready",
+    onSessionsMoved: terminalSessions.refresh,
+  });
   const terminalWorkspace = useTerminalWorkspaceController({
     api: settingsApi,
     terminalSessions,
@@ -292,6 +299,7 @@ export function App({
             sectionLabels={sectionLabels}
             onNavigate={navigateFromMenu}
             terminalSessions={terminalSessions}
+            terminalWorkspaces={terminalWorkspaces}
             orderedSessions={orderedSessions}
             activeSessionId={activeSessionId}
             unreadBySession={unreadSessions}
@@ -299,10 +307,10 @@ export function App({
             onDuplicateSession={(id) => void duplicateSession(id)}
             onReorderSessions={setSessionOrder}
             localShellProfiles={localShellProfiles}
-            onOpenShell={(profileId) => void openLocalShell(profileId)}
+            onOpenShell={(profileId, workspaceId) => void openLocalShell(profileId, undefined, workspaceId)}
             aliases={declared.knownAliases}
             hosts={declared.hosts}
-            onConnect={(alias) => void openSSHSession(alias)}
+            onConnect={(alias, workspaceId) => void openSSHSession(alias, undefined, workspaceId)}
             onOpenCommandPalette={openPaletteFromNavigation}
           />
 

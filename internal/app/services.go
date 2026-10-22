@@ -29,6 +29,7 @@ import (
 	"sshc/internal/storage"
 	"sshc/internal/syncrestore"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalworkspace"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnprofile"
 )
@@ -52,8 +53,10 @@ type engineServices struct {
 	sftpPool     *sshcSFTP.RemotePool
 	snippets     *snippets.Service
 	terminals    *terminal.Registry
-	vpn          *vpn.Manager
-	vpnProfiles  *vpnprofile.Service
+	// terminalWorkspaces は、ターミナルのセッションをまとめるワークスペースの定義である。
+	terminalWorkspaces *terminalworkspace.Service
+	vpn                *vpn.Manager
+	vpnProfiles        *vpnprofile.Service
 	// remoteEngines は、SSH の接続先のエンジンをこのマシンのブラウザから開く中継である。
 	remoteEngines *remoteengine.Manager
 	ssh           sshParts
@@ -246,6 +249,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
 		sftp: sftpService, sftpPool: sftpPool, snippets: snippetService,
 		vpn: vpnRoutes, vpnProfiles: vpnProfiles, ssh: inProcessSSH,
+		terminalWorkspaces: terminalworkspace.NewService(workspace, dependencies.Random),
 		remoteEngines: remoteengine.NewManager(remoteengine.ManagerOptions{
 			Connect:                    inProcessSSH.remoteEngineLink,
 			Ports:                      remoteengine.NewPortStore(workspace),
