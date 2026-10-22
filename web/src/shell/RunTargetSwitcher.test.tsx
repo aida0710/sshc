@@ -16,6 +16,7 @@ function enginesApi(overrides: Partial<RemoteEnginesApi> = {}): RemoteEnginesApi
     remove: vi.fn(async () => ({ engines: [] })),
     status: vi.fn(),
     open: vi.fn(async () => ({ url: "http://127.0.0.1:61000/#bootstrap=x" })),
+    control: vi.fn(async () => ({ succeeded: true, output: "" })),
     ...overrides,
   };
 }
@@ -24,6 +25,7 @@ function targets(overrides: Partial<RunTargetsState> = {}): RunTargetsState {
   return {
     engines: ["r540"], selected: null, problem: "", busy: false,
     select: vi.fn(), add: vi.fn(async () => true), remove: vi.fn(async () => undefined), openInNewTab: vi.fn(async () => undefined),
+    api: enginesApi(), localVersion: "v0.53.0",
     ...overrides,
   };
 }
@@ -79,5 +81,30 @@ describe("RunTargetSwitcher", () => {
     expect(state.openInNewTab).toHaveBeenCalledWith("r540");
     await user.click(screen.getByRole("button", { name: "Remove from the list" }));
     expect(state.remove).toHaveBeenCalledWith("r540");
+  });
+
+  it("shows the engine's version, Vault and sessions, and restarts it after saying its sessions end", async () => {
+    const user = userEvent.setup();
+    const control = vi.fn(async () => ({ succeeded: true, output: "restarted sshc.service" }));
+    const status = vi.fn(async () => ({ alias: "r540", version: "v0.51.0", vault: true, unlocked: false, passwordless: false, sessions: 3 }));
+    const state = targets({ api: enginesApi({ control, status }) });
+    render(<RunTargetSwitcher targets={state} aliases={["r540"]} hosts={[]} />);
+    await user.click(screen.getByRole("button", { name: /^Choose where terminals run/ }));
+    await user.click(screen.getByRole("button", { name: "Actions for engine r540" }));
+    await user.click(screen.getByRole("button", { name: "Engine information…" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Engine on r540" });
+    await within(dialog).findByText("v0.51.0");
+    expect(within(dialog).getByText("this computer runs v0.53.0")).toBeInTheDocument();
+    expect(within(dialog).getByText("locked")).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Restart" }));
+    const confirm = screen.getByRole("dialog", { name: "Restart the engine on r540?" });
+    expect(within(confirm).getByText("All 3 sessions running on r540 will end. A password-protected vault will lock.")).toBeInTheDocument();
+    await user.click(within(confirm).getByRole("button", { name: "Restart" }));
+
+    expect(control).toHaveBeenCalledWith("r540", "restart");
+    expect(await screen.findByRole("status")).toHaveTextContent("Restarted.");
+    expect(screen.getByLabelText("Output of sshc on that host")).toHaveTextContent("restarted sshc.service");
   });
 });

@@ -312,3 +312,48 @@ func TestTheRemoteEnginesOwnRefusalsAreNotMistakenForThisMachines(t *testing.T) 
 		}
 	}
 }
+
+// controlLink は、handoff を答え、それ以外のコマンドを覚えて決まった結果を返す。
+type controlLink struct {
+	*handoffLink
+	commands []string
+	result   RunResult
+}
+
+func (l *controlLink) Run(ctx context.Context, command string, limit time.Duration) (RunResult, error) {
+	if command == handoffCommand {
+		return l.handoffLink.Run(ctx, command, limit)
+	}
+	l.commands = append(l.commands, command)
+	return l.result, nil
+}
+
+func TestAnEngineIsUpdatedRestartedOrStoppedWithTheHostsOwnSSHCAndItsCredentialsAreDropped(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	link := &controlLink{
+		handoffLink: &handoffLink{fakeLink: newFakeLink("", 0), handoff: remote.handoffDocument("v9")},
+		result:      RunResult{Stdout: []byte("sshc: updated\n"), Stderr: []byte("restarted"), ExitCode: 0},
+	}
+	manager := NewManager(ManagerOptions{Store: newStore(t), LocalVersion: "v9", Connect: func(context.Context, string) (Link, error) { return link, nil }})
+	defer manager.Close()
+	if err := manager.AddEngine(context.Background(), "r540"); err != nil {
+		t.Fatal(err)
+	}
+	for action, arguments := range map[EngineAction]string{ActionUpdate: "update --yes", ActionRestart: "service restart --yes", ActionStop: `"$candidate" stop;`} {
+		result, err := manager.ControlEngine(context.Background(), "r540", action)
+		if err != nil || !result.Succeeded || result.Output != "sshc: updated\nrestarted" {
+			t.Fatalf("%s = %+v, %v", action, result, err)
+		}
+		if last := link.commands[len(link.commands)-1]; !strings.Contains(last, arguments) {
+			t.Fatalf("%s ran %q, want it to contain %q", action, last, arguments)
+		}
+	}
+	// 資格を捨てたので、次の取り次ぎは受け取り直す。
+	forward(t, manager, http.MethodGet, "")
+	if got := remote.sessions.Load(); got != 2 {
+		t.Fatalf("sessions issued = %d, want 2", got)
+	}
+	if _, err := manager.ControlEngine(context.Background(), "r540", "reboot"); !errors.Is(err, ErrUnknownAction) {
+		t.Fatalf("unknown action = %v", err)
+	}
+}

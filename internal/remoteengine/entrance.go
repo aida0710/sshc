@@ -15,13 +15,18 @@ import (
 	"time"
 )
 
-// EntranceCommand は、接続先で sshc を探し、入口の URL を 1 件発行させるコマンドである。
+// remoteSSHC は、接続先で sshc を探し、arguments を付けて走らせるコマンドである。
 //
 // 非対話の SSH のコマンドは、ログインシェルの設定を読まない PATH で走る。Homebrew や
 // install.sh の置き先はそこに入らないことが多いので、sshc の既定の置き先を順に探す。
-// alias やホスト名は埋め込まない固定の文字列で、接続先のシェルが 1 本の文字列として
-// 受け取る。見つからなければ notInstalledExit で終わる。
-const EntranceCommand = `sh -c 'for candidate in "$(command -v sshc)" "$HOME/.local/bin/sshc" /home/linuxbrew/.linuxbrew/bin/sshc /opt/homebrew/bin/sshc /usr/local/bin/sshc; do if [ -n "$candidate" ] && [ -x "$candidate" ]; then exec "$candidate" open --no-browser; fi; done; echo "sshc was not found" >&2; exit 127'`
+// arguments はこのパッケージの固定の文字列だけで、alias やホスト名は埋め込まない。
+// 接続先のシェルが 1 本の文字列として受け取る。見つからなければ notInstalledExit で終わる。
+func remoteSSHC(arguments string) string {
+	return `sh -c 'for candidate in "$(command -v sshc)" "$HOME/.local/bin/sshc" /home/linuxbrew/.linuxbrew/bin/sshc /opt/homebrew/bin/sshc /usr/local/bin/sshc; do if [ -n "$candidate" ] && [ -x "$candidate" ]; then exec "$candidate" ` + arguments + `; fi; done; echo "sshc was not found" >&2; exit 127'`
+}
+
+// EntranceCommand は、接続先で sshc を探し、入口の URL を 1 件発行させるコマンドである。
+var EntranceCommand = remoteSSHC("open --no-browser")
 
 // EntranceLimit は、EntranceCommand が終わるまでの上限である。接続先のエンジンが
 // 止まっていれば、sshc open はエンジンを起こして準備を待つ（その上限が 20 秒）。

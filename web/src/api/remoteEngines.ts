@@ -6,6 +6,8 @@ import { validateOpenAPISchema } from "./validators.generated";
 export type RemoteEngineList = components["schemas"]["RemoteEngineList"];
 export type RemoteEngineStatus = components["schemas"]["RemoteEngineStatus"];
 export type RemoteEngineEntrance = components["schemas"]["RemoteEngineEntrance"];
+export type RemoteEngineAction = components["schemas"]["RemoteEngineActionRequest"]["action"];
+export type RemoteEngineActionResult = components["schemas"]["RemoteEngineActionResult"];
 
 export type RemoteEnginesApi = {
   list(): Promise<RemoteEngineList>;
@@ -13,6 +15,7 @@ export type RemoteEnginesApi = {
   remove(alias: string): Promise<RemoteEngineList>;
   status(alias: string): Promise<RemoteEngineStatus>;
   open(alias: string): Promise<RemoteEngineEntrance>;
+  control(alias: string, action: RemoteEngineAction): Promise<RemoteEngineActionResult>;
 };
 
 const enginePath = (alias: string) => `/api/v1/engines/${encodeURIComponent(alias)}`;
@@ -34,6 +37,9 @@ export const remoteEnginesApi: RemoteEnginesApi = {
   },
   async open(alias) {
     return validateOpenAPISchema<RemoteEngineEntrance>("RemoteEngineEntrance", await postEmpty<unknown>(`${enginePath(alias)}/open`));
+  },
+  async control(alias, action) {
+    return validateOpenAPISchema<RemoteEngineActionResult>("RemoteEngineActionResult", await postJSON<unknown>(`${enginePath(alias)}/control`, { action }));
   },
 };
 
