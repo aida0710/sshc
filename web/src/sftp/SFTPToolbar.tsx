@@ -98,7 +98,7 @@ export function SFTPToolbar({
   ) : mobile ? (
     <button type="button" data-testid="sftp-current-path" data-path={path}
       aria-label={labels.editPath} title={path} disabled={navigationDisabled} onClick={() => setPathEditing(true)}
-      className="flex min-h-12 min-w-0 flex-1 items-center gap-1 rounded px-2 text-left active:bg-select-fill disabled:text-ink-faint">
+      className="flex min-h-12 min-w-0 flex-1 items-center gap-1 rounded px-2 text-left active:bg-select-fill">
       <span className="min-w-0 flex-1 truncate font-mono text-sm font-medium">{current?.label ?? "/"}</span>
       <Icon name="chevronRight" className="size-3 shrink-0 rotate-90 text-ink-muted" />
     </button>
@@ -110,11 +110,11 @@ export function SFTPToolbar({
           {index > 0 ? <Icon name="chevronRight" className="size-3 text-ink-faint" /> : null}
           {index === crumbs.length - 1 ? <span aria-current="location" className="max-w-40 truncate px-1 py-2 font-medium" title={crumb.path}>{crumb.label}</span>
             : <button type="button" disabled={navigationDisabled} onClick={() => void browser.load(crumb.path)}
-              className="max-w-28 truncate rounded px-1 py-2 text-ink-muted hover:bg-hover disabled:text-ink-faint" title={crumb.path}>{crumb.label}</button>}
+              className="max-w-28 truncate rounded px-1 py-2 text-ink-muted hover:bg-hover" title={crumb.path}>{crumb.label}</button>}
         </span>)}
       </nav>
       <button type="button" aria-label={labels.editPath} title={labels.editPath} disabled={navigationDisabled} onClick={() => setPathEditing(true)}
-        className="flex min-h-9 min-w-9 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover disabled:text-ink-faint"><Icon name="edit" className="size-3.5" /></button>
+        className="flex min-h-9 min-w-9 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover"><Icon name="edit" className="size-3.5" /></button>
     </div>
   );
 
@@ -126,17 +126,17 @@ export function SFTPToolbar({
       {content ?? <>
         <button type="button" aria-label={t(mobile ? "sftp.parentDirectory" : "sftp.back")} title={t(mobile ? "sftp.parentDirectory" : "sftp.back")}
           disabled={busy || locked || (mobile ? !canParent : !browser.canBack)} onClick={() => { if (mobile) onParent?.(); else void browser.back(); }}
-          className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover disabled:text-ink-faint ${mobile ? "size-12" : "size-9"}`}>
+          className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover ${mobile ? "size-12" : "size-9"}`}>
           <Icon name={mobile ? "arrowUp" : "arrowLeft"} className="size-4" />
         </button>
         {mobile ? null : <button type="button" aria-label={t("sftp.forward")} title={t("sftp.forward")}
           disabled={busy || locked || !browser.canForward} onClick={() => void browser.forward()}
-          className="flex size-9 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover disabled:text-ink-faint"><Icon name="arrowRight" className="size-4" /></button>}
+          className="flex size-9 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover"><Icon name="arrowRight" className="size-4" /></button>}
         {pathField}
         <VPNProfileChip name={vpnProfile} className="max-w-24 truncate" />
         {mobile || pathEditing ? null : <button type="button" aria-label={t("sftp.refreshDirectory")} title={t("sftp.refreshDirectory")}
           disabled={navigationDisabled} onClick={refresh}
-          className="flex size-9 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover disabled:text-ink-faint"><Icon name="sync" className="size-4" /></button>}
+          className="flex size-9 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover"><Icon name="sync" className="size-4" /></button>}
         {pathEditing ? null : <>{leading}<div className="flex shrink-0 items-center gap-1">{actions}</div></>}
       </>}
     </div>

@@ -7,7 +7,7 @@ import { useMenuKeyboard } from "./useMenuKeyboard";
 
 // revealOnHover は、行やカードの「…」を、マウスでは乗せたとき（とキーボードで触れたとき）だけ出し、
 // タッチでは常に出すための class である。行やカードの側に group/row を付けて使う。
-export const revealOnHover = "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100";
+export const revealOnHover = "opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100";
 
 export type ActionMenuItem = {
   label: string;
@@ -84,7 +84,7 @@ export function ActionMenu({ label, items, triggerClassName, iconClassName = "si
               role="menuitem"
               disabled={item.disabled}
               onClick={() => select(item)}
-              className={`block min-h-10 w-full rounded-md px-3 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0 ${item.tone === "danger" ? "text-danger" : "text-ink"}`}
+              className={`block min-h-10 w-full rounded-md px-3 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0 ${item.tone === "danger" ? "text-danger" : "text-ink"}`}
             >
               {item.label}
             </button>

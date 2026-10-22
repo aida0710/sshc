@@ -277,7 +277,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
                 type="button"
                 disabled={!provenOrAcknowledged}
                 onClick={() => void confirmAdd()}
-                className="rounded-md bg-accent px-3 py-1.5 font-medium text-accent-ink disabled:bg-line disabled:text-ink-faint"
+                className="rounded-md bg-accent px-3 py-1.5 font-medium text-accent-ink"
               >
                 {t("kh.addToKnownHosts")}
               </button>

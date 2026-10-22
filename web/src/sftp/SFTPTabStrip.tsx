@@ -148,7 +148,7 @@ export function SFTPTabStrip({
                   title={t("sftp.chooseHostHeading")}
                   disabled={!canChangeHost(tab)}
                   onClick={() => onChangeHost(tab)}
-                  className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint ${controlSize[size]}`}
+                  className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink ${controlSize[size]}`}
                 >
                   <Icon name="chevronRight" className="size-3.5 rotate-90" />
                 </button>
@@ -172,7 +172,7 @@ export function SFTPTabStrip({
         aria-label={t("sftp.newTab")}
         disabled={addDisabled}
         onClick={onAdd}
-        className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint ${controlSize[size]}`}
+        className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-card/50 hover:text-ink ${controlSize[size]}`}
       >
         <Icon name="plus" className={compact ? "size-5" : "size-4"} />
       </button>

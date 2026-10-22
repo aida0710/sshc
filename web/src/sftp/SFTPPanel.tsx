@@ -41,6 +41,7 @@ import { SFTPMetadataActionDialog } from "./SFTPMetadataActionDialog";
 import { SFTPFilesystemSpace } from "./SFTPFilesystemSpace";
 import { useSFTPPermissions } from "./useSFTPPermissions";
 import { SFTPPermissionsDialog } from "./SFTPPermissionsDialog";
+import { Spinner } from "../ui/Spinner";
 
 const noHosts: HostEntry[] = [];
 
@@ -76,7 +77,7 @@ function MenuActionList({ actions, mobile = false }: { actions: SFTPMenuAction[]
           role="menuitem"
           disabled={action.disabled === true}
           onClick={action.run}
-          className={`block w-full rounded text-left hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint ${mobile ? "min-h-12 px-3 py-3 text-base" : "min-h-10 px-2.5 py-2 text-sm md:min-h-0"} ${action.danger === true ? "text-danger" : ""}`}
+          className={`block w-full rounded text-left hover:bg-hover focus:bg-select-fill focus:outline-none ${mobile ? "min-h-12 px-3 py-3 text-base" : "min-h-10 px-2.5 py-2 text-sm md:min-h-0"} ${action.danger === true ? "text-danger" : ""}`}
         >
           {action.label}
         </button>
@@ -495,7 +496,7 @@ export function SFTPPanel({
               title={t("sftp.openTerminalHere")}
               disabled={busy || dirty || !connected || path === ""}
               onClick={() => void onOpenTerminal(alias, path)}
-              className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover disabled:text-ink-faint ${mobileInteraction ? "size-12" : "size-9"}`}
+              className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover ${mobileInteraction ? "size-12" : "size-9"}`}
             >
               <Icon name="terminal" className="size-4" />
             </button>
@@ -523,13 +524,13 @@ export function SFTPPanel({
               path: search.search.root,
             })}
           </span>
-          <button type="button" disabled={busy} onClick={search.endSearch} className={`shrink-0 text-accent disabled:text-ink-faint ${mobileInteraction ? "min-h-12 px-2" : ""}`}>{t("sftp.searchEnd")}</button>
+          <button type="button" disabled={busy} onClick={search.endSearch} className={`shrink-0 text-accent ${mobileInteraction ? "min-h-12 px-2" : ""}`}>{t("sftp.searchEnd")}</button>
         </p>
       )}
       {actions.undo === null ? null : (
         <p role="status" className="flex items-center gap-3 rounded-md border border-line bg-surface-subtle px-3 py-2 text-sm text-ink-muted">
           <span className="min-w-0 grow truncate">{actions.undo.label}</span>
-          <button type="button" disabled={busy} onClick={() => void actions.undo?.run()} className={`shrink-0 text-accent disabled:text-ink-faint ${mobileInteraction ? "min-h-12 px-2" : ""}`}>{t("sftp.undo")}</button>
+          <button type="button" disabled={busy} onClick={() => void actions.undo?.run()} className={`shrink-0 text-accent ${mobileInteraction ? "min-h-12 px-2" : ""}`}>{t("sftp.undo")}</button>
           <button type="button" aria-label={t("sftp.dismissUndo")} onClick={actions.dismissUndo} className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:text-ink ${mobileInteraction ? "size-12" : "size-6"}`}>
             <Icon name="close" className={mobileInteraction ? "size-5" : "size-3"} />
           </button>
@@ -565,9 +566,9 @@ export function SFTPPanel({
                   <Icon name="search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" />
                   {filterInput}
                 </label>
-                {compactViewport || !can?.details ? null : <button type="button" disabled={busy} onClick={showDetails} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">{t("sftp.details")}</button>}
-                {compactViewport && !local ? null : <button type="button" disabled={busy || !transferableSelection || !transfers.canTransferOut} title={transfers.canTransferOut ? undefined : t("sftp.local.connectRemote")} onClick={() => void transfers.transferOut(selectedEntries)} className={`rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint ${mobileInteraction ? "min-h-12 px-3 text-sm" : "px-2 py-1 text-xs"}`}>{transferOutLabel}</button>}
-                {compactViewport || selectedEntry === null || !can?.rename ? null : <button type="button" disabled={busy} onClick={actions.renameSelection} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">{t("sftp.rename")}</button>}
+                {compactViewport || !can?.details ? null : <button type="button" disabled={busy} onClick={showDetails} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink">{t("sftp.details")}</button>}
+                {compactViewport && !local ? null : <button type="button" disabled={busy || !transferableSelection || !transfers.canTransferOut} title={transfers.canTransferOut ? undefined : t("sftp.local.connectRemote")} onClick={() => void transfers.transferOut(selectedEntries)} className={`rounded text-ink-muted hover:bg-hover hover:text-ink ${mobileInteraction ? "min-h-12 px-3 text-sm" : "px-2 py-1 text-xs"}`}>{transferOutLabel}</button>}
+                {compactViewport || selectedEntry === null || !can?.rename ? null : <button type="button" disabled={busy} onClick={actions.renameSelection} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink">{t("sftp.rename")}</button>}
                 <button
                   type="button"
                   aria-label={selectionMenuLabel()}
@@ -589,7 +590,7 @@ export function SFTPPanel({
                 aria-expanded={!mobileInteraction && menu?.kind === "create"}
                 disabled={busy || !connected}
                 onClick={(event) => toggleMenu("create", event.currentTarget)}
-                className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7"
+                className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-7"
               >
                 <Icon name="plus" className="size-4" />
               </button>
@@ -599,7 +600,7 @@ export function SFTPPanel({
               <Icon name="search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" />
               {filterInput}
             </label>
-            {can?.search ? <button type="button" aria-label={t("sftp.search.mode")} title={t("sftp.search.mode")} disabled={!connected || dirty} onClick={() => setSearchOptionsOpen(true)} className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-7"><Icon name="settings" className="size-4" /></button> : null}
+            {can?.search ? <button type="button" aria-label={t("sftp.search.mode")} title={t("sftp.search.mode")} disabled={!connected || dirty} onClick={() => setSearchOptionsOpen(true)} className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover md:size-7"><Icon name="settings" className="size-4" /></button> : null}
             {can?.search ? (
               <button
                 type="button"
@@ -607,7 +608,7 @@ export function SFTPPanel({
                 title={t(search.searching ? "sftp.search.stop" : "sftp.searchBelow")}
                 disabled={!search.searching && (busy || !connected || search.filter.trim() === "")}
                 onClick={() => { if (search.searching) search.cancelSearch(); else void search.runSearch(); }}
-                className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7"
+                className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-7"
               >
                 <Icon name="search" className="size-4" />
               </button>
@@ -635,13 +636,13 @@ export function SFTPPanel({
             {!mobileInteraction && menu?.kind === "create" ? (
               <div ref={menuPanel} role="menu" aria-label={t("sftp.createActions")} className="absolute left-2 top-full z-20 mt-1 w-52 rounded-lg border border-control-line bg-card p-1 shadow-lg">
                 {can?.createDirectory ? <>
-                  <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "mkdir" })} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFolder")}</button>
-                  {can?.createEntries ? <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "createFile" })} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFile")}</button> : null}
+                  <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "mkdir" })} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.newFolder")}</button>
+                  {can?.createEntries ? <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "createFile" })} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.newFile")}</button> : null}
                 </> : null}
                 {can?.symlink ? <MenuActionList actions={folderMenuActions().filter((action) => action.key === "newSymlink")} /> : null}
                 {can?.browserUpload ? <>
-                  <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFiles(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.upload")}</button>
-                  <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFolder(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.uploadFolder")}</button>
+                  <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFiles(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.upload")}</button>
+                  <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFolder(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.uploadFolder")}</button>
                 </> : null}
               </div>
             ) : null}
@@ -665,7 +666,7 @@ export function SFTPPanel({
               </div>
             ) : null}
           </div>
-          {connected && pendingPath !== null ? <div role="status" className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-card/80 p-4 backdrop-blur-[1px]"><span className="flex min-w-0 items-center gap-3 rounded-lg bg-toolbar px-4 py-3 text-sm"><span aria-hidden="true" className="size-4 shrink-0 animate-spin rounded-full border-2 border-accent border-t-transparent motion-reduce:animate-none" /><span className="min-w-0"><span className="block">{loadingLabel}</span><span className="block truncate font-mono text-xs text-ink-muted">{pendingPath || t("sftp.homeDirectory")}</span></span></span></div> : null}
+          {connected && pendingPath !== null ? <div role="status" className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-card/80 p-4 backdrop-blur-[1px]"><span className="flex min-w-0 items-center gap-3 rounded-lg bg-toolbar px-4 py-3 text-sm"><Spinner className="size-4 text-accent" /><span className="min-w-0"><span className="block">{loadingLabel}</span><span className="block truncate font-mono text-xs text-ink-muted">{pendingPath || t("sftp.homeDirectory")}</span></span></span></div> : null}
           <div data-testid="sftp-file-list" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" inert={connected && busy} onKeyDown={list.handleListKeys}>
             {alias === "" || can === undefined ? (
               <div className="flex h-full p-4"><EmptyState icon="files" title={t("sftp.chooseHost")} detail={t("sftp.chooseHostHint")}

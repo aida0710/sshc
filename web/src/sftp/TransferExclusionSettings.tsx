@@ -29,7 +29,7 @@ export function TransferExclusionSettings({ patterns, onCommit, defaultOpen = fa
       </label>
       <p>{t("sftp.manager.exclusionsSyntax")}</p>
       {!valid ? <p role="alert" className="text-danger">{t("sftp.manager.exclusionsInvalid")}</p> : null}
-      <button type="button" className="min-h-11 self-start rounded-md border border-control-line px-3 py-2 disabled:opacity-50"
+      <button type="button" className="min-h-11 self-start rounded-md border border-control-line px-3 py-2"
         disabled={!valid || !changed} onClick={() => onCommit({ excludePatterns: parsed })}>
         {t("sftp.manager.exclusionsApply")}
       </button>

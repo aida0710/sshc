@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ModalShell } from "./ModalShell";
+import { Spinner } from "./Spinner";
 import { Button } from "./surface";
 
 // ConfirmDialog は、取り消せない操作の前に確かめる。
@@ -13,7 +14,8 @@ import { Button } from "./surface";
 //   出す。ダイアログが残らないので、失敗が隠れない。接続・シークレット・VPN
 //   プロファイル・スニペットの削除などがこちら。
 // onConfirm が Promise を返す間と busy の間は、両方のボタンとダイアログを閉じる操作を
-// 止め、二度押しで要求が 2 回飛ばないようにする。
+// 止め、二度押しで要求が 2 回飛ばないようにする。その間、確認ボタンは文言を変えずに
+// 回転の印を添え、押したことが受け付けられて進んでいると分かるようにする。
 // confirmDisabled は、確かめる内容がまだ揃っていない間（確認の前提をサーバーから
 // 読み込んでいる間など）、確認ボタンだけを止める。キャンセルとダイアログを閉じる
 // 操作は止めない。開いた直後のフォーカスもキャンセルに置いたままにする。
@@ -84,7 +86,15 @@ export function ConfirmDialog({
         <Button ref={cancelRef} disabled={locked} onClick={onCancel} className="focus:outline-2 focus:outline-offset-2 focus:outline-accent">
           {cancelLabel}
         </Button>
-        <Button ref={confirmRef} kind={confirmKind} disabled={locked || confirmDisabled} onClick={confirm} className="focus:outline-2 focus:outline-offset-2 focus:outline-accent">
+        <Button
+          ref={confirmRef}
+          kind={confirmKind}
+          disabled={locked || confirmDisabled}
+          aria-busy={locked}
+          onClick={confirm}
+          className="inline-flex items-center gap-2 focus:outline-2 focus:outline-offset-2 focus:outline-accent"
+        >
+          {locked ? <Spinner /> : null}
           {confirmLabel}
         </Button>
       </div>
