@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { TerminalForward, TerminalSession } from "../api/terminalSessions";
 import { useTranslate, type Translate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { draggableCursor } from "../ui/dragAndDropLook";
 import { Icon } from "../ui/icons";
 import { describeForwardProblem } from "./forwardProblem";
 import { sessionDragMimeType } from "./sessionDrag";
@@ -112,6 +113,9 @@ export function SessionList({
     onReorder(order);
   }
 
+  const rowsDraggable = renaming === null;
+  const rowCursor = rowsDraggable ? draggableCursor : "";
+
   async function commitRename(id: string) {
     const wanted = draft.trim();
     setRenaming(null);
@@ -159,7 +163,7 @@ export function SessionList({
             return (
               <li
                 key={session.id}
-                draggable={renaming === null}
+                draggable={rowsDraggable}
                 onDragStart={(event: DragEvent) => {
                   event.dataTransfer.setData(sessionDragMimeType, session.id);
                   event.dataTransfer.effectAllowed = "move";
@@ -178,7 +182,7 @@ export function SessionList({
                   event.stopPropagation();
                   drop(session.id);
                 }}
-                className={`relative ${dragging === session.id ? "opacity-40" : ""}`}
+                className={`relative ${rowCursor} ${dragging === session.id ? "opacity-40" : ""}`}
               >
                 {dropBefore === session.id && dragging !== session.id ? (
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
@@ -217,7 +221,7 @@ export function SessionList({
                       aria-label={displayTitle}
                       aria-current={session.id === selected ? "true" : undefined}
                       onClick={() => onSelect(session.id)}
-                      className="flex min-w-0 grow items-start gap-2 text-left after:absolute after:inset-0 after:rounded-md"
+                      className={`flex min-w-0 grow items-start gap-2 text-left after:absolute after:inset-0 after:rounded-md ${rowCursor}`}
                     >
                       {marker}
                       <span className="min-w-0 grow">

@@ -8,7 +8,7 @@ import {
 } from "../connections/connectionBrowser";
 import { useLanguage } from "../i18n/context";
 import { control } from "../ui/form";
-import { Segmented } from "../ui/surface";
+import { Button, Segmented } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
@@ -29,6 +29,17 @@ type QuickConnectBrowserProps = {
 };
 
 type QuickConnectView = "panel" | "list";
+
+// マウスの1回のクリックはカードを選ぶだけなので、そのカードには見える［接続］ボタンを出す。
+// タッチとキーボードは押せばそのまま接続するので、byMouse で見分けてボタンを出さない。
+type CardSelection = { alias: string; byMouse: boolean };
+
+const noCardSelection: CardSelection = { alias: "", byMouse: false };
+
+// カードの文字が右上のボタンの下に入らないように空ける幅。「…」だけのときと、［接続］も並ぶとき。
+// ［接続］も並ぶときは、英語の「Connect」と、幅768px未満で44pxになる「…」が並んでも文字に重ならない幅にする。
+const cardTextInsetForMenu = "pr-14";
+const cardTextInsetForMenuAndConnect = "pr-36";
 
 function storedView(): QuickConnectView {
   return readStoredValue(localStorageKeys.quickConnectView) === "list" ? "list" : "panel";
@@ -64,7 +75,7 @@ export function QuickConnectBrowser({
   const [query, setQuery] = useState("");
   const [groupTrail, setGroupTrail] = useState<string[]>([]);
   const [view, setView] = useState<QuickConnectView>(storedView);
-  const [selectedAlias, setSelectedAlias] = useState("");
+  const [selection, setSelection] = useState<CardSelection>(noCardSelection);
   const pointerType = useRef("keyboard");
   const index = useMemo(() => buildConnectionBrowserIndex(overview), [overview]);
   const recentByAlias = useMemo(
@@ -109,12 +120,14 @@ export function QuickConnectBrowser({
     const lastConnected = recentConnection === undefined
       ? ""
       : t("connection.lastConnected", { at: formatDateTime(recentConnection.lastConnectedAt, locale) });
-    const selected = selectedAlias === alias;
+    const selected = selection.alias === alias;
+    const offersConnectButton = selected && selection.byMouse;
     const opening = launching === alias;
     const panel = view === "panel";
     const connect = () => {
       if (launching !== "") return;
-      setSelectedAlias(alias);
+      // マウスで選んだカードから接続したときは［接続］ボタンを消さず、接続中は押せない状態で残す。
+      setSelection((current) => (current.alias === alias ? current : { alias, byMouse: false }));
       onConnect(alias);
     };
 
@@ -136,7 +149,7 @@ export function QuickConnectBrowser({
           onPointerDown={(event) => { pointerType.current = event.pointerType; }}
           onClick={() => {
             if (pointerType.current === "mouse") {
-              setSelectedAlias(alias);
+              setSelection({ alias, byMouse: true });
               return;
             }
             connect();
@@ -149,9 +162,9 @@ export function QuickConnectBrowser({
             event.preventDefault();
             connect();
           }}
-          className={`flex w-full min-w-0 items-center gap-3 rounded-lg py-3 pl-3 pr-14 text-left disabled:cursor-wait ${
-            panel ? "min-h-24" : "min-h-20"
-          }`}
+          className={`flex w-full min-w-0 items-center gap-3 rounded-lg py-3 pl-3 text-left disabled:cursor-wait ${
+            offersConnectButton ? cardTextInsetForMenuAndConnect : cardTextInsetForMenu
+          } ${panel ? "min-h-24" : "min-h-20"}`}
         >
           <OperatingSystemIcon os={server.os} colour={server.colour} />
           <span className="min-w-0 flex-1">
@@ -176,15 +189,29 @@ export function QuickConnectBrowser({
             </span>
           </span>
         </button>
-        <div className={`pointer-events-none absolute right-2 top-2 ${revealOnHover}`}>
-          <ConnectionActions
-            alias={alias}
-            path={server.identity.path}
-            busy={launching !== ""}
-            opening={opening}
-            onOpenSettings={onOpenSettings}
-            onConnect={connect}
-          />
+        <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-1">
+          {offersConnectButton ? (
+            <Button
+              kind="primary"
+              aria-label={t("home.connectTo", { alias })}
+              disabled={launching !== ""}
+              onClick={connect}
+              className="pointer-events-auto"
+            >
+              {t("home.connect")}
+            </Button>
+          ) : null}
+          {/* ［接続］の隣が空いて見えないよう、選んだカードでは「…」も出しておく。 */}
+          <div className={offersConnectButton ? "" : revealOnHover}>
+            <ConnectionActions
+              alias={alias}
+              path={server.identity.path}
+              busy={launching !== ""}
+              opening={opening}
+              onOpenSettings={onOpenSettings}
+              onConnect={connect}
+            />
+          </div>
         </div>
       </li>
     );

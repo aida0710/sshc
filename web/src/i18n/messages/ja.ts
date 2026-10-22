@@ -1451,6 +1451,7 @@ export const ja = {
   "home.connectionActions": "{alias}の操作",
   "home.openConnectionSettings": "接続設定を開く",
   "home.connect": "接続",
+  "home.connectTo": "{alias}に接続",
   "home.openingConnection": "{alias}に接続中…",
   "home.opening": "接続中…",
   "home.loadFailed": "SSH設定を読み込めませんでした。",

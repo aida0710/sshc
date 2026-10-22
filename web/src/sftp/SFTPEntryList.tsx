@@ -1,5 +1,6 @@
 import type { ComponentPropsWithoutRef, ComponentPropsWithRef, DragEvent as ReactDragEvent } from "react";
 import { useLanguage, useTranslate } from "../i18n/context";
+import { draggableCursor } from "../ui/dragAndDropLook";
 import { Icon } from "../ui/icons";
 import { SortableTableHeader } from "../ui/tableSort";
 import type { RemoteEntry } from "./api";
@@ -80,6 +81,7 @@ export function SFTPEntryList({
     rowContextMenu, beginLongPress, trackLongPress, cancelLongPress,
   } = model;
   const rowDraggable = (entry: RemoteEntry) => !mobileInteraction && draggable(entry);
+  const rowCursor = (entry: RemoteEntry) => (rowDraggable(entry) ? draggableCursor : "cursor-default");
   // Both layouts wire their rows through these three, so that focus, selection
   // and the long press work the same whichever layout is on screen. Only the
   // markup around them differs.
@@ -211,7 +213,7 @@ export function SFTPEntryList({
             onContextMenu={(event) => rowContextMenu(event, entry)}
             draggable={rowDraggable(entry)}
             onDragStart={(event) => onDragStart?.(event, entry)}
-            className={`cursor-default border-t border-line/40 transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : "hover:bg-hover/55"}`}
+            className={`${rowCursor(entry)} border-t border-line/40 transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : "hover:bg-hover/55"}`}
           >
             <td className="w-9 px-2 py-1 md:py-0.5">
               <input type="checkbox" {...entryCheckboxProps(entry)} onDoubleClick={(event) => event.stopPropagation()} />
@@ -220,7 +222,7 @@ export function SFTPEntryList({
               <button
                 type="button"
                 {...entryButtonProps(entry)}
-                className="flex w-full min-w-0 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                className={`flex w-full min-w-0 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${rowCursor(entry)}`}
               >
                 <Icon name={entryIcon(entry)} className="size-4 text-ink-muted" />
                 <span className="min-w-0 grow">
