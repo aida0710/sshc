@@ -48,7 +48,8 @@ backend_up() {
 	# 繋がっていない。承認待ちは長いので、止める合図を受けられるよう背後で待つ
 	# （wait_for_step）。$! は timeout で、止める合図は timeout の process group にいる
 	# openconnect へも届く（signal_waiting_step）。
-	send_answers | timeout "$(timeout_seconds)" openconnect "$@" "$server" \
+	# サーバーは -- の後ろに置き、オプションとして読ませない。
+	send_answers | timeout "$(timeout_seconds)" openconnect "$@" -- "$server" \
 		>"$runtime/openconnect.log" 2>&1 &
 	if ! wait_for_step $!; then
 		password=

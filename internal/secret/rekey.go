@@ -78,7 +78,7 @@ func (s *Service) ChangeMasterPassword(ctx context.Context, current, next string
 	if !s.Unlocked() {
 		return ErrLocked
 	}
-	if ok, err := s.Verify(current); err != nil {
+	if ok, err := s.verifyHeld(current); err != nil {
 		return err
 	} else if !ok {
 		return ErrWrongPassphrase
@@ -179,7 +179,7 @@ type keyBoundReSeal struct {
 }
 
 // reSealKeyBoundArtifactsは、古い鍵が暗号化したすべてのファイルを読み、新しい鍵で暗号化し直す。
-// 同期状態に古い鍵で鍵付きにして残した vault 文書の digest も、新しい鍵の値へ移す。
+// 同期状態に古い鍵で鍵付きにして残した vault 文書と保護文書の digest も、新しい鍵の値へ移す。
 //
 // 読むのは今の形（封じた保護文書と、入れ子の控え）だけである。旧バージョンが残した形は、
 // 呼び出し側が先に migrateKeyBoundArtifacts で移しておく。
@@ -187,7 +187,7 @@ type keyBoundReSeal struct {
 // バックアップはマネージャ経由ではなく直接読む。マネージャは現在の新しい鍵を
 // 使用するため、古い鍵で暗号化されたバックアップを開けない。
 func (s *Service) reSealKeyBoundArtifacts(reSeal keyBoundReSeal) ([]storage.Change, error) {
-	changes, err := s.reSealProtectedDocuments(reSeal)
+	changes, protectedDigests, err := s.reSealProtectedDocuments(reSeal)
 	if err != nil {
 		return nil, fmt.Errorf("re-seal protected documents: %w", err)
 	}
@@ -249,7 +249,7 @@ func (s *Service) reSealKeyBoundArtifacts(reSeal keyBoundReSeal) ([]storage.Chan
 	if walkErr != nil && !errors.Is(walkErr, fs.ErrNotExist) {
 		return nil, walkErr
 	}
-	travel, err := s.travelDigestRekeyChanges(reSeal.Previous, reSeal.Vault)
+	travel, err := s.travelDigestRekeyChanges(reSeal.Previous, reSeal.Vault, protectedDigests)
 	if err != nil {
 		return nil, fmt.Errorf("rekey the synchronization state: %w", err)
 	}
@@ -325,22 +325,27 @@ func (s *Service) backupKeyBoundDocument(path string) (bool, func([]byte) error)
 	return false, nil
 }
 
-func (s *Service) reSealProtectedDocuments(reSeal keyBoundReSeal) ([]storage.Change, error) {
+// reSealProtectedDocuments は、保護文書を新しい鍵で封じ直す変更と、文書のパスごとの
+// 平文の digest を返す。平文は封じ直しても変わらないので、digest は同期状態の値を
+// 新しい鍵へ移すのに使える。
+func (s *Service) reSealProtectedDocuments(reSeal keyBoundReSeal) ([]storage.Change, map[string]string, error) {
 	changes := make([]storage.Change, 0, len(s.protectedDocuments))
+	digests := make(map[string]string, len(s.protectedDocuments))
 	for _, document := range s.protectedDocuments {
 		body, err := s.workspace.FileSystem().ReadFile(document.Path)
 		switch {
 		case err == nil:
 			plaintext, openErr := openWithKnownGeneration(body, reSeal.Previous, reSeal.Passphrase)
 			if openErr != nil {
-				return nil, fmt.Errorf("open %s: %w", filepath.Base(document.Path), openErr)
+				return nil, nil, fmt.Errorf("open %s: %w", filepath.Base(document.Path), openErr)
 			}
 			if validateErr := document.Validate(plaintext); validateErr != nil {
-				return nil, validateErr
+				return nil, nil, validateErr
 			}
+			digests[document.Path] = storage.Digest(plaintext)
 			resealed, sealErr := reSeal.Vault.SealBytes(plaintext)
 			if sealErr != nil {
-				return nil, sealErr
+				return nil, nil, sealErr
 			}
 			changes = append(changes, storage.Change{
 				Path: document.Path, Contents: resealed,
@@ -349,10 +354,10 @@ func (s *Service) reSealProtectedDocuments(reSeal keyBoundReSeal) ([]storage.Cha
 			})
 		case errors.Is(err, fs.ErrNotExist):
 		default:
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return changes, nil
+	return changes, digests, nil
 }
 
 // TravelDocument は、同期用に復号した vault 文書を返す。

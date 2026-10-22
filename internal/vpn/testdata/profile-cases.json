@@ -611,6 +611,32 @@
       "reason": "format"
     },
     {
+      "name": "openconnect のサーバーが - で始まり、オプションとして読まれる",
+      "profile": {
+        "name": "campus",
+        "backend": "openconnect",
+        "openconnect": {
+          "server": "--script=/bin/true",
+          "username": "fixture"
+        }
+      },
+      "field": "openconnect.server",
+      "reason": "format"
+    },
+    {
+      "name": "l2tp_ipsec のサーバーが - で始まる",
+      "profile": {
+        "name": "office",
+        "backend": "l2tp_ipsec",
+        "l2tp": {
+          "server": "-vpn.example.jp",
+          "username": "fixture"
+        }
+      },
+      "field": "l2tp.server",
+      "reason": "format"
+    },
+    {
       "name": "openconnect の利用者名が空",
       "profile": {
         "name": "campus",

@@ -1,6 +1,7 @@
 package remotesync
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -8,26 +9,53 @@ import (
 	"sshc/internal/storage"
 )
 
-// keyedDigestPrefix は、sync-state.json の Base に残した vault 文書（TravelPath）の
-// digest が、このマシンの vault の鍵で鍵付きにした値であることを示す。
+// keyedDigestPrefix は、sync-state.json の Base に残した文書の digest が、この
+// マシンの vault の鍵で鍵付きにした値であることを示す。
 //
-// vault 文書の素の SHA-256 をディスクに残すと、~/.ssh の写しを手に入れた者が、
-// マスターパスワードの Argon2id を経ずに保存済みのシークレットを総当たりで照合
-// できる。リモートのマニフェストは同期キーの envelope の内側にあるので素のまま
-// でよく、鍵付きにするのはこのマシンの state に書くときだけである。
+// シークレットを含む文書の素の SHA-256 をディスクに残すと、~/.ssh の写しを手に
+// 入れた者が、マスターパスワードの Argon2id を経ずに保存済みのシークレットを
+// 総当たりで照合できる。リモートのマニフェストは同期キーの envelope の内側に
+// あるので素のままでよく、鍵付きにするのはこのマシンの state に書くときだけである。
 const keyedDigestPrefix = "hmac-sha256:"
 
-// travelEntryIndex は、manifest の中の TravelPath の位置を返す。なければ -1。
-func travelEntryIndex(manifest *Manifest) int {
-	if manifest == nil {
-		return -1
-	}
-	return slices.IndexFunc(manifest.Files, func(entry Entry) bool { return entry.Path == TravelPath })
+// keyedPaths は、state に digest を鍵付きで残す文書。vault 文書と、起動スニペットの
+// secret 入力の値を含むスニペットの文書である。
+var keyedPaths = []string{TravelPath, SnippetsPath}
+
+// isKeyedPath は、path の digest を state に鍵付きで残すかを返す。
+func isKeyedPath(path string) bool {
+	return slices.Contains(keyedPaths, path)
 }
 
-// keyedTravelDigest は、素の digest を state に書く鍵付きの形にする。
+// plainDigests は、鍵付きにする path ごとの、state の値と比べる素の digest の候補。
+type plainDigests map[string][]string
+
+// addManifest は、manifest が持つ鍵付きにする path の digest を候補に加える。
+func (candidates plainDigests) addManifest(manifest *Manifest) plainDigests {
+	if manifest == nil {
+		return candidates
+	}
+	for _, entry := range manifest.Files {
+		if isKeyedPath(entry.Path) {
+			candidates[entry.Path] = append(candidates[entry.Path], entry.SHA256)
+		}
+	}
+	return candidates
+}
+
+// addLocal は、このマシンの文書の digest を候補に加える。
+func (candidates plainDigests) addLocal(local map[string]LocalEntry) plainDigests {
+	for _, path := range keyedPaths {
+		if entry, ok := local[path]; ok {
+			candidates[path] = append(candidates[path], entry.SHA256)
+		}
+	}
+	return candidates
+}
+
+// keyedDigest は、素の digest を state に書く鍵付きの形にする。
 // すでに鍵付きなら、そのまま返す。
-func (s *Service) keyedTravelDigest(digest string) (string, error) {
+func (s *Service) keyedDigest(digest string) (string, error) {
 	if strings.HasPrefix(digest, keyedDigestPrefix) {
 		return digest, nil
 	}
@@ -38,66 +66,96 @@ func (s *Service) keyedTravelDigest(digest string) (string, error) {
 	return keyedDigestPrefix + keyed, nil
 }
 
-// withKeyedTravelDigest は、state に書くために、TravelPath の digest を鍵付きに
+// withKeyedDigests は、state に書くために、鍵付きにする path の digest を鍵付きに
 // した base の写しを返す。呼び出し側の manifest は書き換えない。
-func (s *Service) withKeyedTravelDigest(base *Manifest) (*Manifest, error) {
-	index := travelEntryIndex(base)
-	if index < 0 {
+func (s *Service) withKeyedDigests(base *Manifest) (*Manifest, error) {
+	if base == nil {
+		return nil, nil
+	}
+	var copied *Manifest
+	for index, entry := range base.Files {
+		if !isKeyedPath(entry.Path) {
+			continue
+		}
+		keyed, err := s.keyedDigest(entry.SHA256)
+		if err != nil {
+			return nil, err
+		}
+		if keyed == entry.SHA256 {
+			continue
+		}
+		if copied == nil {
+			copied = cloneManifest(base)
+		}
+		copied.Files[index].SHA256 = keyed
+	}
+	if copied == nil {
 		return base, nil
 	}
-	keyed, err := s.keyedTravelDigest(base.Files[index].SHA256)
-	if err != nil {
-		return nil, err
-	}
-	copied := *base
-	copied.Files = slices.Clone(base.Files)
-	copied.Files[index].SHA256 = keyed
-	return &copied, nil
+	return copied, nil
 }
 
-// comparableBase は、state から読んだ base の鍵付きの TravelPath の digest を、
-// candidates（このマシンの vault 文書やリモートのマニフェストが持つ素の digest）の
-// うち一致するものに戻した写しを返す。同期の三方比較は digest が等しいかだけを
-// 見るので、一致したものに戻せば比較の意味は変わらない。どれとも一致しなければ
-// 鍵付きのまま残し、どの素の digest とも等しくならないので「変わった」と扱われる。
-func (s *Service) comparableBase(base *Manifest, candidates ...string) (*Manifest, error) {
-	index := travelEntryIndex(base)
-	if index < 0 {
+// comparableBase は、state から読んだ base の鍵付きの digest を、candidates（この
+// マシンの文書やリモートのマニフェストが持つ素の digest）のうち一致するものに戻した
+// 写しを返す。同期の三方比較は digest が等しいかだけを見るので、一致したものに戻せば
+// 比較の意味は変わらない。どれとも一致しなければ鍵付きのまま残し、どの素の digest
+// とも等しくならないので「変わった」と扱われる。鍵付きにする前の版が書いた素の値は、
+// 素の digest とそのまま比べられるので、手を付けずに残す。
+func (s *Service) comparableBase(base *Manifest, candidates plainDigests) (*Manifest, error) {
+	if base == nil {
+		return nil, nil
+	}
+	var copied *Manifest
+	for index, entry := range base.Files {
+		if !isKeyedPath(entry.Path) || !strings.HasPrefix(entry.SHA256, keyedDigestPrefix) {
+			continue
+		}
+		plain, err := s.matchingPlainDigest(entry.SHA256, candidates[entry.Path])
+		if err != nil {
+			return nil, err
+		}
+		if plain == "" {
+			continue
+		}
+		if copied == nil {
+			copied = cloneManifest(base)
+		}
+		copied.Files[index].SHA256 = plain
+	}
+	if copied == nil {
 		return base, nil
 	}
-	stored := base.Files[index].SHA256
+	return copied, nil
+}
+
+// matchingPlainDigest は、鍵付きにすると stored になる候補を返す。なければ空文字列。
+func (s *Service) matchingPlainDigest(stored string, candidates []string) (string, error) {
 	for _, candidate := range candidates {
 		if candidate == "" {
 			continue
 		}
-		keyed, err := s.keyedTravelDigest(candidate)
+		keyed, err := s.keyedDigest(candidate)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
-		if keyed != stored {
-			continue
+		if keyed == stored {
+			return candidate, nil
 		}
-		copied := *base
-		copied.Files = slices.Clone(base.Files)
-		copied.Files[index].SHA256 = candidate
-		return &copied, nil
 	}
-	return base, nil
+	return "", nil
 }
 
-// travelDigest は、manifest の TravelPath の digest を返す。なければ空文字列。
-func travelDigest(manifest *Manifest) string {
-	index := travelEntryIndex(manifest)
-	if index < 0 {
-		return ""
-	}
-	return manifest.Files[index].SHA256
+// cloneManifest は、Files を書き換えられる manifest の写しを返す。
+func cloneManifest(manifest *Manifest) *Manifest {
+	copied := *manifest
+	copied.Files = slices.Clone(manifest.Files)
+	return &copied
 }
 
 // RekeyTravelDigest は、vault の鍵が変わる変更（secret.SetTravelDigestRekey）に載せる
-// state の書き換えを返す。state の TravelPath の digest が、変更のあとの vault 文書を
-// 前の鍵で鍵付きにした値と一致するときだけ、新しい鍵で鍵付きにした値に書き換える。
-// 一致しなければ、この vault は前回の同期から変わっているので、書き換えずに
+// state の書き換えを返す。state の鍵付きの digest が、変更のあとの文書を前の鍵で
+// 鍵付きにした値と一致するときだけ、新しい鍵で鍵付きにした値に書き換える。
+// 一致しなければ、その文書は前回の同期から変わっているので、書き換えずに
 // 「変わった」扱いのまま残す。
 //
 // vault の変更のロックの中で呼ばれるので、vault を呼び返さない。
@@ -106,25 +164,35 @@ func (s *Service) RekeyTravelDigest(rekey secret.TravelDigestRekey) ([]storage.C
 	if err != nil {
 		return nil, err
 	}
-	index := travelEntryIndex(current.Base)
-	if index < 0 {
+	if current.Base == nil {
 		return nil, nil
 	}
-	previous, err := rekey.Previous(rekey.Digest)
-	if err != nil {
-		return nil, err
+	var rekeyed *Manifest
+	for index, entry := range current.Base.Files {
+		plain, ok := s.plainDigestAfterRekey(entry.Path, rekey)
+		if !ok {
+			continue
+		}
+		previous, err := rekey.Previous(plain)
+		if err != nil {
+			return nil, err
+		}
+		if entry.SHA256 != keyedDigestPrefix+previous {
+			continue
+		}
+		next, err := rekey.Next(plain)
+		if err != nil {
+			return nil, err
+		}
+		if rekeyed == nil {
+			rekeyed = cloneManifest(current.Base)
+		}
+		rekeyed.Files[index].SHA256 = keyedDigestPrefix + next
 	}
-	if current.Base.Files[index].SHA256 != keyedDigestPrefix+previous {
+	if rekeyed == nil {
 		return nil, nil
 	}
-	next, err := rekey.Next(rekey.Digest)
-	if err != nil {
-		return nil, err
-	}
-	base := *current.Base
-	base.Files = slices.Clone(current.Base.Files)
-	base.Files[index].SHA256 = keyedDigestPrefix + next
-	current.Base = &base
+	current.Base = rekeyed
 	change, err := s.stateChange(current)
 	if err != nil {
 		return nil, err
@@ -132,9 +200,22 @@ func (s *Service) RekeyTravelDigest(rekey secret.TravelDigestRekey) ([]storage.C
 	return []storage.Change{change}, nil
 }
 
-// MigrateTravelDigest は、鍵付きにする前の版が書いた state の素の TravelPath の
-// digest を、今の vault の鍵で鍵付きにした値へ書き換える。素の値を鍵付きへ直すのは
-// この移行だけで、comparableBase は state の値が鍵付きであることを前提にする。
+// plainDigestAfterRekey は、鍵を変える変更のあとの、path の文書の素の digest を返す。
+// スニペットの文書は、ファイルの平文がそのまま同期で運ぶ文書になる。
+func (s *Service) plainDigestAfterRekey(path string, rekey secret.TravelDigestRekey) (string, bool) {
+	switch path {
+	case TravelPath:
+		return rekey.Digest, true
+	case SnippetsPath:
+		digest, ok := rekey.ProtectedDigests[filepath.Join(s.workspace.Root(), filepath.FromSlash(SnippetsPath))]
+		return digest, ok
+	default:
+		return "", false
+	}
+}
+
+// MigrateTravelDigest は、鍵付きにする前の版が書いた state の素の digest（vault
+// 文書とスニペットの文書）を、今の vault の鍵で鍵付きにした値へ書き換える。
 // 鍵が要るので、vault を開いたあとに呼ぶ。閉じていれば secret.ErrLocked を返す。
 //
 // vault の変更のロックの中で書くので、マスターパスワードの変更と入れ違って
@@ -145,10 +226,14 @@ func (s *Service) MigrateTravelDigest() error {
 		if err != nil {
 			return err
 		}
-		index := travelEntryIndex(current.Base)
-		if index < 0 || strings.HasPrefix(current.Base.Files[index].SHA256, keyedDigestPrefix) {
+		if current.Base == nil || !slices.ContainsFunc(current.Base.Files, hasPlainKeyedDigest) {
 			return nil
 		}
 		return s.writeState(current)
 	})
+}
+
+// hasPlainKeyedDigest は、鍵付きで残すべき entry が素の digest のままかを返す。
+func hasPlainKeyedDigest(entry Entry) bool {
+	return isKeyedPath(entry.Path) && !strings.HasPrefix(entry.SHA256, keyedDigestPrefix)
 }

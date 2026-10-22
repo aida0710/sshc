@@ -134,6 +134,10 @@ verify_public_release() {
   if [ "$(printf '%s\n' v0.44.0 "$tag" | sort -V | head -1)" = v0.44.0 ]; then
     expected_assets=$(printf '%s\n' "$expected_assets" "sshc-demo-$tag.tar.gz" "sshc-demo-$tag.json" | sort)
   fi
+  # v0.52.1より後は、sshc updateが実行前に照合するinstall.shも公開契約に含む。
+  if [ "$tag" != v0.52.1 ] && [ "$(printf '%s\n' v0.52.1 "$tag" | sort -V | head -1)" = v0.52.1 ]; then
+    expected_assets=$(printf '%s\n' "$expected_assets" install.sh | sort)
+  fi
   actual_assets=$(printf '%s' "$release" | jq -r '.assets[].name' | sort)
   [ "$actual_assets" = "$expected_assets" ] || die 'release asset set differs from the publication contract'
 

@@ -1,13 +1,22 @@
 ---
 title: Security
-description: Local boundaries, vault encryption, VPN, host keys, sync and Telnet.
+description: Local boundaries, vault encryption, VPN, host keys, sync, Telnet and updates.
 ---
 
 # Security
 
 ## Local application
 
-The engine serves its Web UI and API on a loopback address. UI URLs are issued on demand rather than logged at startup for long-term reuse. If the saved port is unavailable and the engine moves to another port, sshc revokes previous browser registrations and requires enrolment against the current engine. On Linux, other OS users on the same machine can read the one-time registration URL that `sshc` passes to the browser, so the engine accepts a registration only from a connection owned by the same OS user or root. A process running as the same OS user is assumed to have access to that user's SSH files already.
+The engine serves its Web UI and API on a loopback address. UI URLs are issued on demand rather than logged at startup for long-term reuse. If the saved port is unavailable and the engine moves to another port, sshc revokes previous browser registrations and requires enrolment against the current engine. On Linux, other OS users on the same machine can read the one-time registration URL that `sshc` passes to the browser, so the engine accepts a registration only from a connection owned by the same OS user or root. It checks the same way when a registered browser signs in again after the engine restarts. On Windows, sshc uses the OpenSSH agent pipe (`\\.\pipe\openssh-ssh-agent`) only when it was created by LocalSystem, Administrators or the current user, so another user who creates a pipe with that name while the ssh-agent service is stopped receives neither keys added from the SSH Keys screen nor authentication requests. A process running as the same OS user is assumed to have access to that user's SSH files already.
+
+## Remote sshc engines
+
+The relay of `sshc open <alias>` and the run target reach an engine on an SSH host through the SSH connection.
+
+- Each time it opens a connection to the remote engine, the local engine checks with the secret in the remote `~/.ssh/sshc/cli` that the other side is that engine before it sends a browser request or credentials. If the remote engine restarts on another port and another OS user on the remote host listens on the old port, neither the cookie nor the vault password reaches that program.
+- If the check fails, nothing but the check is sent and an error is shown. A run target reads the remote `~/.ssh/sshc/cli` again and reconnects once. For the relay in another tab, run `sshc open <alias>` again.
+- With a run target, headers such as cookies returned by the remote engine are not passed to this machine's UI, so the remote engine cannot overwrite or clear this machine's sign-in.
+- Terminal input and output of a run target is forwarded only while you are signed in to this machine's UI and this machine's vault is unlocked.
 
 ## Vault
 
@@ -17,7 +26,7 @@ The vault key encrypts:
 - VPN profile secrets (WireGuard and OpenVPN configuration files, which contain keys, VPN passwords, IPsec pre-shared keys, and the TOTP secret for OpenConnect's second factor)
 - snippets, sync settings and backups
 
-With password protection, that key is derived from the master password. At least four characters are required, with no character-class restrictions. Protection against copied local files depends on password strength. The sync record (`sshc/sync-state.json`) stores the last synchronized vault contents only as a hash keyed with the vault key, so it cannot be used to check guesses about the vault contents. After an update from an earlier release, sshc rewrites the record into this form the first time the vault is unlocked (at engine start for a vault without a password). Passwords are not accepted through command-line arguments or environment variables. Automatic locking defaults to 12 hours and can be configured in Settings.
+With password protection, that key is derived from the master password. At least four characters are required, with no character-class restrictions. Protection against copied local files depends on password strength. The sync record (`sshc/sync-state.json`) stores the last synchronized vault and snippet contents only as hashes keyed with the vault key, so it cannot be used to check guesses about those contents. After an update from an earlier release, sshc rewrites the record into this form the first time the vault is unlocked (at engine start for a vault without a password). Passwords are not accepted through command-line arguments or environment variables. Automatic locking defaults to 12 hours and can be configured in Settings.
 
 Without a password, a random unlock secret is stored on the device and the vault opens automatically at startup. Idle locking does not apply. This does not protect against someone who can read both the device secret and ciphertext. The device secret is excluded from sync; remote data keeps using an independent encryption key.
 
@@ -87,8 +96,20 @@ sshc has no command to delete older history. Delete it with the S3 console or to
 
 ## Terminal data
 
-Scrollback stays in memory and is not persisted or synced. OSC 52 clipboard access is configurable. A secret sent to a remote shell can still reach remote history, TTY echo or terminal output.
+Scrollback stays in memory and is not persisted or synced. OSC 52 clipboard access is configurable. An OSC 8 link whose text is a different address from where it goes shows the real destination before opening, even on Ctrl-click (⌘-click on a Mac). Images are checked for their pixel count and inflated size before they are decoded, and an image past the limits is not shown, so output cannot exhaust the browser's memory. A secret sent to a remote shell can still reach remote history, TTY echo or terminal output.
 
 ## Telnet
 
 Telnet neither encrypts traffic nor authenticates the server. sshc warns before connecting but cannot secure the protocol. Use it only behind another trusted network boundary when credentials are involved.
+
+## SFTP
+
+sshc does not trust the file names and attributes that an SFTP server returns. In case you connect to a malicious or compromised server, it handles them as follows.
+
+- When saving to this machine, sshc checks every name the server returned. If a name would point outside the destination folder, such as one containing `\` or `..`, the transfer fails before it starts.
+- When downloading a folder as a ZIP file, sshc writes only the read, write and execute permissions of each file. It does not write the setuid, setgid or sticky bits.
+- sshc reads at most 100,000 entries from a single folder listing. If the server never ends the listing, sshc stops reading at that limit and reports an error.
+
+## Updates
+
+`sshc update` and the web UI update an installation made by `install.sh` or `install.ps1` with the same installer from the latest stable release tag. The installer runs only when its SHA-256 matches the entry in `checksums.txt` of the same GitHub Release, so a script placed on the tag without going through the release workflow is never run.

@@ -9,7 +9,8 @@ import "sshc/internal/vpn"
 var openVPNDirectiveReasons = map[vpn.Reason]string{
 	vpn.ReasonFileReference: "「%[1]s」はファイルを指定しています。コンテナからはファイルを読めないため、" +
 		"中身を<%[1]s>〜</%[1]s>の形で設定ファイルに埋め込んでください。",
-	vpn.ReasonServerMode: "「%s」は、VPNサーバー用の設定のため使用できません。",
+	vpn.ReasonServerMode:        "「%s」は、VPNサーバー用の設定のため使用できません。",
+	vpn.ReasonUnlistedDirective: "「%s」に、sshcで使用できない値があります。",
 }
 
 // openVPNFieldReasons は、OpenVPN の設定ファイルとプロファイルに固有の理由の言い方である。
@@ -20,8 +21,9 @@ var openVPNFieldReasons = map[vpn.Reason]string{
 	vpn.ReasonUnclosedInline:    "埋め込みのブロックの終わりの行がありません。",
 	vpn.ReasonNotClient: "OpenVPNのクライアント用の設定ファイルではありません。" +
 		"clientまたはtls-clientを含む設定ファイルを指定してください。",
-	vpn.ReasonNoRemote:         "接続するVPNサーバー（remote）が設定ファイルにありません。",
-	vpn.ReasonRequiredByConfig: "設定ファイルがユーザー名とパスワードを要求しています（auth-user-pass）。ユーザー名を入力してください。",
+	vpn.ReasonNoRemote:          "接続するVPNサーバー（remote）が設定ファイルにありません。",
+	vpn.ReasonRequiredByConfig:  "設定ファイルがユーザー名とパスワードを要求しています（auth-user-pass）。ユーザー名を入力してください。",
+	vpn.ReasonUnlistedDirective: "sshcで使用できるOpenVPNの指示ではありません。",
 }
 
 // openVPNRouteReasons は、OpenVPN の経路を用意できなかった理由の言い方である。
@@ -39,7 +41,8 @@ var openVPNRouteReasons = map[vpn.FailureReason]string{
 var openVPNEnglishDirectiveReasons = map[vpn.Reason]string{
 	vpn.ReasonFileReference: "\"%[1]s\" names a file, which the container cannot read. " +
 		"Embed its contents as <%[1]s>…</%[1]s>.",
-	vpn.ReasonServerMode: "\"%s\" is a VPN server setting, so it cannot be used.",
+	vpn.ReasonServerMode:        "\"%s\" is a VPN server setting, so it cannot be used.",
+	vpn.ReasonUnlistedDirective: "\"%s\" has a value that sshc does not accept.",
 }
 
 // openVPNEnglishFieldReasons は、openVPNFieldReasons の英語である。
@@ -53,6 +56,7 @@ var openVPNEnglishFieldReasons = map[vpn.Reason]string{
 	vpn.ReasonNoRemote: "The configuration file names no VPN server (remote).",
 	vpn.ReasonRequiredByConfig: "The configuration file asks for a username and a password (auth-user-pass). " +
 		"Enter the username.",
+	vpn.ReasonUnlistedDirective: "This is not an OpenVPN directive that sshc accepts.",
 }
 
 // openVPNEnglishRouteReasons は、openVPNRouteReasons の英語である。

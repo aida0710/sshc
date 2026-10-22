@@ -62,8 +62,12 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.POST("/api/v1/engines/:alias/terminal/workspaces", handlers.ForwardTerminal)
 	engine.PATCH("/api/v1/engines/:alias/terminal/workspaces/:id", handlers.ForwardTerminal)
 	engine.DELETE("/api/v1/engines/:alias/terminal/workspaces/:id", handlers.ForwardTerminal)
-	engine.GET("/engines/:alias/terminal/stream", handlers.ForwardStream)
+	engine.GET(remoteEngineStreamRoute, handlers.ForwardStream)
 }
+
+// remoteEngineStreamRoute は、実行先のエンジンのターミナルの入出力の WebSocket である。
+// /api/ の外にあるが、Security がこのマシンのセッションと Vault のロックの解除を求める。
+const remoteEngineStreamRoute = "/engines/:alias/terminal/stream"
 
 func (h RemoteEngineHandlers) engineList() (api.RemoteEngineList, error) {
 	aliases, err := h.Engines.Engines()
@@ -205,7 +209,8 @@ func (h RemoteEngineHandlers) ForwardTerminal(c *echo.Context) error {
 }
 
 // ForwardStream は、実行先のエンジンのターミナルの入出力を取り次ぐ。このマシンの
-// /terminal/stream と同じく、Origin の完全一致を求める。認可は、接続先のエンジンが
+// /terminal/stream と同じく、Origin の完全一致を求める。このマシンのセッションと Vault の
+// ロックの解除は Security が確かめ終えている。ターミナルへの認可は、接続先のエンジンが
 // 発行した使い捨てのチケットで、接続先が確かめる。
 func (h RemoteEngineHandlers) ForwardStream(c *echo.Context) error {
 	request := c.Request()

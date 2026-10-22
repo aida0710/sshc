@@ -263,6 +263,7 @@ export function App({
         passwordless={session.passwordless}
         minPassphraseLength={session.minPassphraseLength}
         version={version}
+        offerSignOut
         onExists={session.markVaultExists}
         onOpen={session.openVault}
       />

@@ -313,7 +313,7 @@ func buildSync(
 	// 同期先のアクセスキーとシークレットは Vault の中にある。Vault が閉じたら
 	// メモリからも手放す。
 	vault.SetAfterLock(syncService.Forget)
-	// 同期状態に残す Vault 文書の digest は Vault の鍵で鍵付きにしてある。鍵を変える
+	// 同期状態に残す Vault 文書とスニペットの文書の digest は Vault の鍵で鍵付きにしてある。鍵を変える
 	// 変更は、同じトランザクションでその値を新しい鍵へ移す。
 	vault.SetTravelDigestRekey(syncService.RekeyTravelDigest)
 	// 鍵付きにする前の版が書いた素の digest は、Vault を開いたときに移す。起動時に

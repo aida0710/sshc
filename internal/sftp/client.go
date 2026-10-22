@@ -3,6 +3,7 @@ package sftp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"time"
@@ -43,7 +44,12 @@ func (c *Client) Getwd(ctx context.Context) (string, error) {
 func (c *Client) RealPath(path string) (string, error) { return c.client.RealPath(path) }
 
 func (c *Client) ReadDir(ctx context.Context, path string) ([]fs.FileInfo, error) {
-	return c.client.ReadDirContext(ctx, path)
+	infos, err := c.client.ReadDirContext(ctx, path)
+	var status *pkgsftp.StatusError
+	if errors.As(err, &status) && status.Code == directoryEntryLimitStatus {
+		return nil, fmt.Errorf("%w: %s has more than %d entries", ErrTraversalLimit, path, maxDirectoryEntries)
+	}
+	return infos, err
 }
 
 func (c *Client) Lstat(path string) (fs.FileInfo, error) { return c.client.Lstat(path) }

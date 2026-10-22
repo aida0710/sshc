@@ -320,7 +320,7 @@ func (failure unexpectedVersionError) Error() string {
 	return fmt.Sprintf("%s does not report version %s", failure.executable, failure.tag)
 }
 
-// taggedInstallerHTTPClient は、tag 固定の install.sh の取得に使う client を作る。
+// taggedInstallerHTTPClient は、tag 固定の install.sh と install.ps1 の取得に使う client を作る。
 func taggedInstallerHTTPClient() *http.Client {
 	return &http.Client{Timeout: installerDownloadTimeout, CheckRedirect: allowTaggedInstallerRedirect}
 }
