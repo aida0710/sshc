@@ -54,7 +54,7 @@ var neverTravels = slices.Concat([]string{
 	browserauth.PathRelative,
 	// 接続先のエンジンへの中継が、このマシンで待ち受けたポート。ブラウザの保存が
 	// このマシンのポートごとに分かれるために覚えるもので、別のマシンでは意味を持たない。
-	remoteengine.PortsPathRelative,
+	remoteengine.PathRelative,
 	// ターミナルのワークスペースの定義。セッションと同じく、このマシンのエンジンだけの
 	// ものなので運ばない。
 	terminalworkspace.PathRelative,
