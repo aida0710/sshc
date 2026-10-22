@@ -21,6 +21,7 @@ type RemoteEngineDirectory interface {
 	RemoveEngine(alias string) error
 	EngineStatus(ctx context.Context, alias string) (remoteengine.Status, error)
 	ControlEngine(ctx context.Context, alias string, action remoteengine.EngineAction) (remoteengine.ActionResult, error)
+	UnlockVault(ctx context.Context, alias, passphrase string) error
 	ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
 	ForwardTerminalStream(w http.ResponseWriter, r *http.Request, alias string) error
 }
@@ -47,6 +48,7 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.GET("/api/v1/engines/:alias/status", handlers.Status)
 	engine.POST("/api/v1/engines/:alias/open", handlers.Open)
 	engine.POST("/api/v1/engines/:alias/control", handlers.Control)
+	engine.POST("/api/v1/engines/:alias/vault/unlock", handlers.UnlockVault)
 	engine.GET("/api/v1/engines/:alias/terminal/sessions", handlers.ForwardTerminal)
 	engine.POST("/api/v1/engines/:alias/terminal/sessions", handlers.ForwardTerminal)
 	engine.GET("/api/v1/engines/:alias/terminal/shell-profiles", handlers.ForwardTerminal)
@@ -168,6 +170,23 @@ func (h RemoteEngineHandlers) Control(c *echo.Context) error {
 		return remoteEngineProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, api.RemoteEngineActionResult{Succeeded: result.Succeeded, Output: result.Output})
+}
+
+// UnlockVault は、実行先のエンジンの Vault のロックを解除する。パスワードは接続先へ
+// 渡すだけで、このマシンには残さない。
+func (h RemoteEngineHandlers) UnlockVault(c *echo.Context) error {
+	alias, ok := aliasParam(c)
+	if !ok {
+		return problem(c, http.StatusBadRequest, "unsafe_alias")
+	}
+	var request api.PassphraseRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if err := h.Engines.UnlockVault(c.Request().Context(), alias, request.Passphrase); err != nil {
+		return remoteEngineProblem(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // ForwardTerminal は、実行先のエンジンのターミナルの操作を取り次ぐ。このマシンの

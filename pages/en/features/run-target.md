@@ -18,6 +18,8 @@ Only the terminals change: sessions and [workspaces](./workspace). Connections, 
 
 Each host's **…** offers **Engine information…**, **Open its full screen in a new tab** (the host engine's own screen, like `sshc open <alias>`) and **Remove from the list**. Removing it stops neither the host's engine nor its terminals.
 
+If the chosen host's vault is locked, sshc asks for that vault's password. This computer's engine passes it to the host's engine inside the SSH connection and does not save it here. If you cancel, unlock it at any time with **Unlock…** under Workspaces.
+
 ## Engine information
 
 **Engine information…** shows the host engine's version, its vault state and how many sessions run on it. From there you can run the following. Each one ends every terminal on that host, so it asks first.
@@ -26,7 +28,7 @@ Each host's **…** offers **Engine information…**, **Open its full screen in 
 - **Restart**: runs `sshc service restart --yes` on the host. It works only for an engine running as the sshc-managed service.
 - **Stop**: runs `sshc stop` on the host. To use it again, run `sshc open` or `systemctl --user start sshc` on the host.
 
-After **Update** or **Restart**, a password-protected vault is locked.
+After **Update** or **Restart**, a password-protected vault is locked. Unlock it with **Unlock…** in its vault row.
 
 The dialog shows the end of what the host's `sshc` wrote.
 
@@ -34,7 +36,7 @@ The dialog shows the end of what the host's `sshc` wrote.
 
 - sshc on the host must be the same version as on this computer. Otherwise sshc tells you to run `sshc update` there.
 - The host's SSH server must allow TCP forwarding to its `127.0.0.1` (`AllowTcpForwarding yes` or `local`).
-- If the host's vault is locked, unlock it through **Open its full screen in a new tab**.
+- If the host has no vault yet, create it through **Open its full screen in a new tab**.
 - Port forwarding, sending a command to several sessions, and Quick Commands work only for terminals running on this computer.
 - Notifications (unread marks) are not shown for a run target that is not chosen.
 - The host must run macOS or Linux.

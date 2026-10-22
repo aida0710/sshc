@@ -20,6 +20,10 @@ export function runTargetProblemText(t: Translate, error: unknown, alias: string
       return t("runTarget.forwardingRefused", { alias });
     case "remote_engine_not_installed":
       return t("runTarget.notInstalled", { alias });
+    case "remote_engine_wrong_passphrase":
+      return t("runTarget.wrongPassword", { alias });
+    case "remote_engine_unlock_failed":
+      return t("runTarget.unlockFailed", { alias });
     default:
       return t("runTarget.failed", { alias });
   }
