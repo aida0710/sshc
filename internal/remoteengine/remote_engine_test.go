@@ -96,6 +96,12 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Set-Cookie", "leaked=1")
 			fmt.Fprintf(w, `{"method":%q,"body":%q,"cookies":%q}`, r.Method, string(body), r.Header.Get("Cookie"))
 		}
+	case "/api/v1/terminal/workspaces":
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusConflict)
+		fmt.Fprint(w, `{"code":"vault_locked","message":"request rejected"}`)
+	case "/api/v1/terminal/shell-profiles":
+		w.WriteHeader(http.StatusForbidden)
 	case RemoteStreamPath:
 		if r.Header.Get("Origin") != f.origin() || r.Header.Get("Cookie") != "" {
 			w.WriteHeader(http.StatusForbidden)
@@ -283,5 +289,26 @@ func TestATerminalStreamReachesTheRemoteEngineWithItsOriginAndNoCookie(t *testin
 	}
 	if _, message, err := connection.Read(ctx); err != nil || string(message) != "remote:ls" {
 		t.Fatalf("stream answer = %q, %v", message, err)
+	}
+}
+
+func TestTheRemoteEnginesOwnRefusalsAreNotMistakenForThisMachines(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r540"); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]string{
+		"/api/v1/terminal/workspaces":     "remote_engine_vault_locked",
+		"/api/v1/terminal/shell-profiles": "remote_engine_refused",
+	} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/engines/r540/terminal/x", nil)
+		if err := manager.ForwardTerminalAPI(recorder, request, "r540", path); err != nil {
+			t.Fatal(err)
+		}
+		if recorder.Code != http.StatusBadGateway || !strings.Contains(recorder.Body.String(), want) {
+			t.Errorf("%s = %d %s, want 502 %s", path, recorder.Code, recorder.Body.String(), want)
+		}
 	}
 }

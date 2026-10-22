@@ -37,6 +37,9 @@ type WorkspaceTreeProps = {
   hosts?: HostEntry[];
   onOpenShell: (profileId: string | undefined, workspaceId: string) => void;
   onConnect?: (alias: string, workspaceId: string) => void;
+  // canBroadcast is false for an engine on an SSH host: sending a command to
+  // several sessions is confirmed by an action token only this machine issues.
+  canBroadcast?: boolean;
 };
 
 type NameRequest = { kind: "create" } | { kind: "rename"; workspace: TerminalWorkspace };
@@ -63,6 +66,7 @@ export function WorkspaceTree({
   hosts = [],
   onOpenShell,
   onConnect,
+  canBroadcast = true,
 }: WorkspaceTreeProps) {
   const t = useTranslate();
   const [showHidden, setShowHidden] = useState(() => readStoredValue(localStorageKeys.showHiddenTerminalWorkspaces) === "true");
@@ -113,12 +117,14 @@ export function WorkspaceTree({
         label: workspace.hidden ? t("workspace.show") : t("workspace.hide"),
         onSelect: () => void workspaces.update(workspace.id, { hidden: !workspace.hidden }),
       },
-      {
+    ];
+    if (canBroadcast) {
+      items.push({
         label: t("workspace.broadcast"),
         disabled: !members.some((session) => session.state === "connected"),
         onSelect: () => setBroadcasting(members),
-      },
-    ];
+      });
+    }
     if (!workspace.builtIn) {
       items.push({
         label: t("workspace.delete"),

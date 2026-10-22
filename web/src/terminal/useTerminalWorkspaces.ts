@@ -39,13 +39,23 @@ export function useTerminalWorkspaces({
   const [maxWorkspaces, setMaxWorkspaces] = useState(0);
   const [problem, setProblem] = useState("");
 
+  // A different api is another engine, whose workspaces are read afresh.
+  useEffect(() => {
+    setWorkspaces([]);
+    setMaxWorkspaces(0);
+    setProblem("");
+  }, [api]);
+
   const reload = useCallback(async () => {
     try {
       const listed = await api.list();
       setWorkspaces(listed.workspaces);
       setMaxWorkspaces(listed.maxWorkspaces);
     } catch (error) {
-      setProblem(translate(workspaceProblemKey(failureCode(error))));
+      // A run-target engine that cannot be reached is reported once, by the
+      // session list beside this one.
+      const code = failureCode(error);
+      if (!code.startsWith("remote_engine_")) setProblem(translate(workspaceProblemKey(code)));
     }
   }, [api, translate]);
 

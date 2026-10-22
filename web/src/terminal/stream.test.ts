@@ -3,15 +3,21 @@ import { openStream, streamURL } from "./stream";
 
 describe("streamURL", () => {
   it("stays on the same origin and carries only the ticket", () => {
-    const url = streamURL("one-time", { protocol: "http:", host: "127.0.0.1:51234" } as Location);
+    const url = streamURL("one-time", "/terminal/stream", { protocol: "http:", host: "127.0.0.1:51234" } as Location);
 
     expect(url).toBe("ws://127.0.0.1:51234/terminal/stream?ticket=one-time");
   });
 
   it("follows the page scheme and escapes the ticket", () => {
-    const url = streamURL("a b&c", { protocol: "https:", host: "127.0.0.1:1" } as Location);
+    const url = streamURL("a b&c", "/terminal/stream", { protocol: "https:", host: "127.0.0.1:1" } as Location);
 
     expect(url).toBe("wss://127.0.0.1:1/terminal/stream?ticket=a%20b%26c");
+  });
+
+  it("goes to the forwarded stream of a run-target engine", () => {
+    const url = streamURL("t", "/engines/r540/terminal/stream", { protocol: "http:", host: "127.0.0.1:54447" } as Location);
+
+    expect(url).toBe("ws://127.0.0.1:54447/engines/r540/terminal/stream?ticket=t");
   });
 });
 
@@ -65,7 +71,7 @@ describe("openStream", () => {
     const onExit = vi.fn();
     const onClose = vi.fn();
     const onShellReplaced = vi.fn();
-    openStream("one-time", { onReplay, onOutput, onExit, onShellReplaced, onClose });
+    openStream("one-time", "/terminal/stream", { onReplay, onOutput, onExit, onShellReplaced, onClose });
     const socket = FakeSocket.last!;
 
     expect(socket.binaryType).toBe("arraybuffer");
@@ -89,7 +95,7 @@ describe("openStream", () => {
 
   it("sends keystrokes as bytes and resizes as JSON", () => {
     withFakeSocket();
-    const stream = openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose: vi.fn() });
+    const stream = openStream("one-time", "/terminal/stream", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose: vi.fn() });
     const socket = FakeSocket.last!;
     socket.open();
 
@@ -102,7 +108,7 @@ describe("openStream", () => {
 
   it("splits a large UTF-8 paste below the server's per-message limit without changing bytes", () => {
     withFakeSocket();
-    const stream = openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose: vi.fn() });
+    const stream = openStream("one-time", "/terminal/stream", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose: vi.fn() });
     const socket = FakeSocket.last!;
     socket.open();
     const pasted = `\u001b[200~${"日本語".repeat(100_000)}\u001b[201~`;
@@ -125,7 +131,7 @@ describe("openStream", () => {
 
   it("holds frames sent before the socket opens and delivers them in order", () => {
     withFakeSocket();
-    const stream = openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose: vi.fn() });
+    const stream = openStream("one-time", "/terminal/stream", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose: vi.fn() });
     const socket = FakeSocket.last!;
 
     stream.resize(120, 34);
@@ -140,7 +146,7 @@ describe("openStream", () => {
 
   it("does not deliver held frames when it was closed before opening", () => {
     withFakeSocket();
-    const stream = openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose: vi.fn() });
+    const stream = openStream("one-time", "/terminal/stream", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose: vi.fn() });
     const socket = FakeSocket.last!;
 
     stream.resize(120, 34);
@@ -154,7 +160,7 @@ describe("openStream", () => {
     withFakeSocket();
     const onExit = vi.fn();
     const onClose = vi.fn();
-    openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit, onShellReplaced: vi.fn(), onClose });
+    openStream("one-time", "/terminal/stream", { onReplay: vi.fn(), onOutput: vi.fn(), onExit, onShellReplaced: vi.fn(), onClose });
 
     FakeSocket.last!.emit("close", {});
 
@@ -166,7 +172,7 @@ describe("openStream", () => {
     withFakeSocket();
     const onExit = vi.fn();
     const onClose = vi.fn();
-    openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit, onShellReplaced: vi.fn(), onClose });
+    openStream("one-time", "/terminal/stream", { onReplay: vi.fn(), onOutput: vi.fn(), onExit, onShellReplaced: vi.fn(), onClose });
     const socket = FakeSocket.last!;
 
     socket.emit("message", { data: JSON.stringify({ exit: { code: 0, signal: "" } }) });
@@ -179,7 +185,7 @@ describe("openStream", () => {
   it("survives a control frame it cannot read", () => {
     withFakeSocket();
     const onClose = vi.fn();
-    openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose });
+    openStream("one-time", "/terminal/stream", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose });
 
     FakeSocket.last!.emit("message", { data: "{not json" });
 
