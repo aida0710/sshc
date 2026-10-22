@@ -378,7 +378,7 @@ export function KeysScreen({
         storedPhrases={storedPhrases}
         onAssign={(item) => void assignPhrase(item)}
         onUnassign={(item) => void unassignPhrase(item)}
-        onStoreAndAssign={(item) => void storeAndAssignPhrase(item)}
+        onStoreAndAssign={storeAndAssignPhrase}
       />
 
       <TrashConfirmation
@@ -395,21 +395,21 @@ export function KeysScreen({
       <AgentForm
         form={agentForm}
         storedPhrases={storedPhrases}
-        onSubmit={(item) => void registerWithAgent(item)}
+        onSubmit={registerWithAgent}
         onAssignPhrase={(item) => void assignPhrase(item)}
       />
 
       <RelocateForm
         form={relocateForm}
         groups={groups}
-        onSubmit={(item) => void submitRelocation(item)}
+        onSubmit={submitRelocation}
       />
 
       <RelocateResult result={relocated} onClose={() => setRelocated(null)} />
 
       <PassphraseForm
         form={passphraseForm}
-        onSubmit={(item) => void changePassphrase(item)}
+        onSubmit={changePassphrase}
       />
 
       <KeyGenerationSection

@@ -266,14 +266,14 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
             )
           }
           onSyncNow={() =>
-            void run(
+            run(
               () => api.syncNow(),
               adoptStatus,
               t("sync.autoNowFailed"),
             )
           }
-          onPreviewRemoteHead={() => void previewCurrentRemoteHead()}
-          onPreview={() => void previewWith(undefined)}
+          onPreviewRemoteHead={previewCurrentRemoteHead}
+          onPreview={() => previewWith(undefined)}
           onForcePush={() => {
             // 前の操作の失敗をダイアログの中に持ち込まない。
             clearError();

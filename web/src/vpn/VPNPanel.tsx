@@ -13,10 +13,11 @@ import { PanelState } from "../ui/PanelState";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { Button, Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { usePendingAction } from "../ui/usePendingAction";
 import { usePolling } from "../ui/usePolling";
 import { describeVPNFieldError, vpnFieldErrorOf, type VPNFieldError } from "./vpnFieldErrors";
 import { VPNLogsDialog } from "./VPNLogsDialog";
-import { VPNProfileCard } from "./VPNProfileCard";
+import { VPNProfileCard, type VPNProfileCardAction } from "./VPNProfileCard";
 import { VPNProfileForm, type VPNProfileSaveResult } from "./VPNProfileForm";
 import { overviewRefreshIntervalMs, routeProgressIntervalMs } from "./vpnOverviewPolling";
 import { describeVPNProblem } from "./vpnProblemMessage";
@@ -27,6 +28,14 @@ import { VPNUnavailableNotice } from "./VPNUnavailableNotice";
 // プロファイルの定義と、いまの状態と、どの接続がそれを使うかを扱う。接続へ
 // プロファイルを付けるのは Connections で行う。シークレットは保存のときに送り、編集を
 // 開いたときだけ、確認のトークンを添えてengineから取り出す。
+
+// ProfileActionKey は、カードのどのボタンで始めた操作かを、ボタンとプロファイルの名前で表す。
+// 操作の名前には「:」が無いので、プロファイルの名前に「:」があっても取り違えない。
+type ProfileActionKey = `${VPNProfileCardAction}:${string}`;
+
+function profileActionKey(action: VPNProfileCardAction, name: string): ProfileActionKey {
+  return `${action}:${name}`;
+}
 
 type VPNPanelProps = {
   api?: VPNApi;
@@ -45,6 +54,9 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
   // editingProfile は、いま編集のフォームを開いているプロファイルである。
   const [editingProfile, setEditingProfile] = useState("");
   const [shownLogs, setShownLogs] = useState("");
+  // profileAction は、カードのボタンで始めて待っている操作である。
+  const profileAction = usePendingAction<ProfileActionKey>();
+  const { start: startProfileAction } = profileAction;
   // startingProfiles は、この画面がいま経路を用意させているプロファイルである。用意は
   // 初回のイメージの作成で分単位になるので、ほかのプロファイルの操作は止めない。
   const [startingProfiles, setStartingProfiles] = useState<ReadonlySet<string>>(() => new Set());
@@ -93,6 +105,14 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
       return succeeded;
     },
     [describe, overviewGeneration, run],
+  );
+
+  // actOnProfile は、カードのボタンで始めた操作を act で走らせ、終わるまでそのボタンを待たせる。
+  // 失敗は act が画面の上に出すので、ここでは reject しない。
+  const actOnProfile = useCallback(
+    (name: string, action: VPNProfileCardAction, work: () => Promise<VPNOverview>) =>
+      startProfileAction(profileActionKey(action, name), () => act(work)),
+    [act, startProfileAction],
   );
 
   // 開いたときは、経路の状態を docker から読むのを待たずに一覧を読む。docker は
@@ -171,9 +191,9 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
   const disconnectProfile = useCallback(
     (name: string) => {
       if (startingProfiles.has(name)) abandonedStarts.current.add(name);
-      void act(() => api.disconnectVPNRoute(name));
+      void actOnProfile(name, "disconnect", () => api.disconnectVPNRoute(name));
     },
-    [act, api, startingProfiles],
+    [actOnProfile, api, startingProfiles],
   );
 
   // requestDisconnect は、経路を切断する。経路を使っている接続があれば、それらも
@@ -268,6 +288,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
                   <VPNProfileCard
                     status={status}
                     busy={operation.busy}
+                    busyWith={(action) => profileAction.running === profileActionKey(action, name)}
                     starting={startingProfiles.has(name)}
                     available={overview.available}
                     checking={overview.checking}
@@ -324,7 +345,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
           onConfirm={() => {
             const name = pendingRemoval;
             setPendingRemoval("");
-            void act(() => api.removeVPNProfile(name));
+            void actOnProfile(name, "remove", () => api.removeVPNProfile(name));
           }}
         />
       )}
@@ -347,7 +368,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
           onSubmit={(value) => {
             const from = pendingRename;
             setPendingRename("");
-            void act(() => api.renameVPNProfile(from, value));
+            void actOnProfile(from, "rename", () => api.renameVPNProfile(from, value));
           }}
         />
       )}

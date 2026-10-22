@@ -348,17 +348,19 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
           />
         </div>
       </div>
+      </fieldset>
+      {/* 保存のボタンは fieldset の外に置く。中に置くと、保存を待つ間に fieldset ごと薄くなり、
+          回転の印が「押せない」に見える。 */}
       <ActionArea status={save.error === ""
         ? (settingsLoad.state === "loading"
             ? <p role="status" className="text-sm text-ink-muted">{t("terminal.settingsLoading")}</p>
             : !loaded || !save.saved ? undefined : <Notice tone="success">{t("terminal.settingsSaved")}</Notice>)
         : <Notice tone="danger">{save.error}</Notice>}
       >
-        <Button kind="primary" disabled={!loaded || busy} onClick={() => void submit()}>
+        <Button kind="primary" busy={busy} disabled={!loaded} onClick={() => void submit()}>
           {t("terminal.startSave")}
         </Button>
       </ActionArea>
-      </fieldset>
     </SettingsSection>
   );
 }

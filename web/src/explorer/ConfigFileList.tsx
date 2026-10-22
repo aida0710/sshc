@@ -23,8 +23,10 @@ export function ConfigFileList({
           loads: node.loads > 1 ? t("explorer.readTimes", { count: node.loads }) : "",
           editable: node.editable ? t("explorer.editable") : t("explorer.readOnly"),
         });
+        // 開けるファイルの行だけが、載せたときに背景の色を変える。~/.ssh の外のファイルは押せない。
+        const rowHover = node.file.path === undefined ? "" : "transition-colors duration-150 hover:bg-hover";
         return (
-          <li key={node.file.absolute} className={`rounded-lg ${current ? "bg-select-fill" : "hover:bg-surface-subtle"}`}>
+          <li key={node.file.absolute} className={`rounded-lg ${current ? "bg-select-fill" : rowHover}`}>
             <div className="flex items-start gap-2.5 px-2.5 py-2">
               <span
                 data-config-node-icon
@@ -44,7 +46,7 @@ export function ConfigFileList({
                     type="button"
                     aria-current={current ? "true" : "false"}
                     onClick={() => onOpen(node.file.path ?? "")}
-                    className={`block min-h-10 w-full truncate text-left font-mono text-sm md:min-h-0 ${current ? "font-semibold text-ink" : "text-ink-muted hover:text-ink"}`}
+                    className={`block min-h-10 w-full truncate text-left font-mono text-sm transition-colors duration-150 md:min-h-0 ${current ? "font-semibold text-ink" : "text-ink-muted hover:text-ink"}`}
                   >
                     {node.file.path}
                   </button>

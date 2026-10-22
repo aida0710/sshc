@@ -631,6 +631,113 @@ describe("SettingsPanel", () => {
     const region = await screen.findByRole("region", { name: "Open connections" });
     expect(within(region).getByRole("button", { name: "Close every connection" })).toBeDisabled();
   });
+
+  it("shows closing every connection as working until the sessions are closed", async () => {
+    const user = userEvent.setup();
+    let finishClosing: () => void = () => undefined;
+    const closeAll = vi.fn(() => new Promise<void>((resolve) => {
+      finishClosing = resolve;
+    }));
+    render(
+      <SettingsPanel
+        api={buildApi()}
+        terminalSessions={{
+          sessions: [
+            { id: "a", title: "one", kind: "shell", forwards: [], exited: { code: 0, signal: "", at: "x" } },
+          ] as never,
+          busy: false,
+          closeAll,
+        }}
+      />,
+    );
+
+    const region = await screen.findByRole("region", { name: "Open connections" });
+    const closeEvery = within(region).getByRole("button", { name: "Close every connection" });
+    await user.click(closeEvery);
+
+    expect(closeEvery).toHaveAttribute("aria-busy", "true");
+    await user.click(closeEvery);
+    expect(closeAll).toHaveBeenCalledTimes(1);
+    finishClosing();
+    await waitFor(() => expect(closeEvery).not.toHaveAttribute("aria-busy"));
+  });
+
+  it("does not show closing as working while another part of the app is busy with sessions", async () => {
+    render(
+      <SettingsPanel
+        api={buildApi()}
+        terminalSessions={{
+          sessions: [{ id: "a", title: "one", kind: "shell", forwards: [] }] as never,
+          busy: true,
+          closeAll: vi.fn(),
+        }}
+      />,
+    );
+
+    const region = await screen.findByRole("region", { name: "Open connections" });
+    const closeEvery = within(region).getByRole("button", { name: "Close every connection" });
+    expect(closeEvery).toBeDisabled();
+    expect(closeEvery).not.toHaveAttribute("aria-busy");
+  });
+
+  it("shows the engine save working until the engine answers and accepts no second press", async () => {
+    const user = userEvent.setup();
+    let answer: () => void = () => undefined;
+    const setEngineSettings = vi.fn(() => new Promise<void>((resolve) => {
+      answer = resolve;
+    }));
+    render(<SettingsPanel api={buildApi({ setEngineSettings })} />);
+
+    const region = screen.getByRole("region", { name: "Engine" });
+    const save = within(region).getByRole("button", { name: "Save" });
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.click(save);
+
+    expect(save).toHaveAttribute("aria-busy", "true");
+    await user.click(save);
+    expect(setEngineSettings).toHaveBeenCalledTimes(1);
+    answer();
+    expect(await within(region).findByText(/Auto-lock applies now/)).toBeVisible();
+    expect(save).not.toHaveAttribute("aria-busy");
+  });
+
+  it("shows the terminal save working while the fields wait, without dimming it with them", async () => {
+    const user = userEvent.setup();
+    let answer: () => void = () => undefined;
+    const setTerminalSettings = vi.fn(() => new Promise<void>((resolve) => {
+      answer = resolve;
+    }));
+    render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    const sessions = within(region).getByLabelText("Sessions open at once");
+    await waitFor(() => expect(sessions).toBeEnabled());
+    const save = within(region).getByRole("button", { name: "Save" });
+    await user.click(save);
+
+    expect(save).toHaveAttribute("aria-busy", "true");
+    expect(sessions).toBeDisabled();
+    expect(save.closest("fieldset:disabled")).toBeNull();
+    answer();
+    expect(await within(region).findByText(/Saved/)).toBeVisible();
+  });
+
+  it("shows the master password change working until the vault answers", async () => {
+    const user = userEvent.setup();
+    let answer: (value: { vault: ReturnType<typeof vaultStatus> }) => void = () => undefined;
+    const changeMasterPassword = vi.fn(() => new Promise<{ vault: ReturnType<typeof vaultStatus> }>((resolve) => {
+      answer = resolve;
+    }));
+    render(<SettingsPanel api={buildApi({ changeMasterPassword })} />);
+    await fillMasterPassword(user);
+    const change = screen.getByRole("button", { name: "Change the master password" });
+    await user.click(change);
+
+    expect(change).toHaveAttribute("aria-busy", "true");
+    answer({ vault: vaultStatus() });
+    expect(await screen.findByText(/remote snapshots were not rewritten/i)).toBeVisible();
+    expect(change).not.toHaveAttribute("aria-busy");
+  });
 });
 
 
