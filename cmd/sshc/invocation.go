@@ -108,10 +108,7 @@ func parseInvocation(argv []string) (invocation, error) {
 		if helpRequested(args) {
 			return helpInvocation(canonicalCLICommand(cliCommandOpen)), nil
 		}
-		if len(args) == 1 && args[0] == "--no-browser" {
-			return invocation{Kind: invocationOpen, NoBrowser: true}, nil
-		}
-		return noArguments(invocationOpen, word, args)
+		return parseOpenInvocation(args)
 	case cliCommandStop:
 		if helpRequested(args) {
 			return helpInvocation(canonicalCLICommand(cliCommandStop)), nil
@@ -296,6 +293,23 @@ func parseEngineFlags(args []string) (invocation, error) {
 		return invalidInvocation(err.Error())
 	}
 	return invocation{Kind: invocationEngine, Port: port, Replace: arguments.has("--replace"), Background: arguments.has("--background")}, nil
+}
+
+// parseOpenInvocation は `sshc open [<alias>] [--no-browser]` を読む。alias があれば、
+// その SSH の接続先のエンジンを開く。
+func parseOpenInvocation(args []string) (invocation, error) {
+	opened := invocation{Kind: invocationOpen}
+	for _, arg := range args {
+		switch {
+		case arg == "--no-browser" && !opened.NoBrowser:
+			opened.NoBrowser = true
+		case !strings.HasPrefix(arg, "-") && len(opened.Args) == 0:
+			opened.Args = []string{arg}
+		default:
+			return invalidInvocation("open takes an optional alias and --no-browser")
+		}
+	}
+	return opened, nil
 }
 
 func noArguments(kind invocationKind, command string, args []string) (invocation, error) {

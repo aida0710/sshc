@@ -69,6 +69,8 @@ type CLIHandlers struct {
 	// TerminateProcess は即死である。開いている端末も転送も vault も畳まれない
 	// まま消える。自分自身に頼めば、どの OS でも同じ畳み方を通る。
 	StopEngine func()
+	// RemoteEngines は、SSH の接続先のエンジンへの中継を開く。nil なら受け口を登録しない。
+	RemoteEngines RemoteEngineOpener
 }
 
 type connectRequest struct {
@@ -295,6 +297,9 @@ func registerCLIRoutes(engine *echo.Echo, handlers CLIHandlers) {
 	authenticated.DELETE(cliRoute(CLISessionPath), handlers.RevokeCLISession)
 	authenticated.GET(cliRoute(StatusPath), handlers.Status)
 	authenticated.POST(cliRoute(StopPath), handlers.Stop)
+	if handlers.RemoteEngines != nil {
+		authenticated.POST(cliRoute(RemoteEnginePath), handlers.OpenRemoteEngine)
+	}
 	registerVaultCLIRoutes(authenticated, handlers)
 }
 
