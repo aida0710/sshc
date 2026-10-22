@@ -10,6 +10,10 @@ import { vpnPhases } from "./vpnPhases";
 // このプロファイルを使う接続を見せ、接続・切断・ログ・編集・名前の変更・削除を受け付ける。
 // 接続へプロファイルを付けたり外したりするのは Connections で行い、ここでは見せるだけにする。
 
+// VPNProfileCardAction は、カードのボタンで始め、画面全体を待たせる操作である。名前の変更と
+// 削除はダイアログを閉じてから始まるので、待つ間はカードのそのボタンに回転の印を出す。
+export type VPNProfileCardAction = "disconnect" | "rename" | "remove";
+
 export type VPNProfileActions = {
   onStart: () => void;
   onStop: () => void;
@@ -29,6 +33,7 @@ function serverOf(profile: VPNProfile): string {
 export function VPNProfileCard({
   status,
   busy,
+  pendingAction,
   starting,
   available,
   checking,
@@ -37,6 +42,8 @@ export function VPNProfileCard({
   status: VPNProfileStatus;
   // busy は、画面全体を待たせる操作（保存、名前の変更、削除、切断）の最中であることを表す。
   busy: boolean;
+  // pendingAction は、このカードのボタンで始めて待っている操作である。
+  pendingAction: VPNProfileCardAction | null;
   // starting は、この画面がこのプロファイルの経路を用意させている最中であることを表す。
   starting: boolean;
   // available は、このマシンが経路を作れるかどうかである。
@@ -64,6 +71,12 @@ export function VPNProfileCard({
   // preparing は、この画面かほかの入口（CLI、Terminal）が経路を用意している最中である。
   // 用意の途中でも切断でき、sshcエンジンは用意を打ち切る。
   const preparing = starting || phase !== undefined;
+  // 押せない理由のうち、カードのほかの所に書いていないものを title で伝える。確かめている
+  // 最中であることは状態の文が、このマシンで使えないことは画面の上の知らせが伝える。
+  const waitingForOperation = busy ? t("vpn.waitingForOperation") : undefined;
+  const waitingToChange = waitingForOperation ?? (starting ? t("vpn.waitingForRoute") : undefined);
+  const reasonUnlessPending = (action: VPNProfileCardAction, reason: string | undefined) =>
+    pendingAction === action ? undefined : reason;
   return (
     <Card as="article" padded aria-label={status.profile.name}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -72,22 +85,43 @@ export function VPNProfileCard({
           <p className={hintText}>{summary.join(" · ")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button disabled={busy || preparing || checking || !available} onClick={actions.onStart}>
+          <Button
+            busy={starting}
+            disabled={busy || preparing || checking || !available}
+            title={starting ? undefined : waitingForOperation}
+            onClick={actions.onStart}
+          >
             {t("vpn.connect")}
           </Button>
-          <Button disabled={busy || checking || !(status.running || preparing)} onClick={actions.onStop}>
+          <Button
+            busy={pendingAction === "disconnect"}
+            disabled={busy || checking || !(status.running || preparing)}
+            title={reasonUnlessPending("disconnect", waitingForOperation)}
+            onClick={actions.onStop}
+          >
             {t("vpn.disconnect")}
           </Button>
-          <Button disabled={busy || !available} onClick={actions.onShowLogs}>
+          <Button disabled={busy || !available} title={waitingForOperation} onClick={actions.onShowLogs}>
             {t("vpn.logs")}
           </Button>
-          <Button disabled={busy || starting} onClick={actions.onEdit}>
+          <Button disabled={busy || starting} title={waitingToChange} onClick={actions.onEdit}>
             {t("vpn.edit")}
           </Button>
-          <Button disabled={busy || starting} onClick={actions.onRename}>
+          <Button
+            busy={pendingAction === "rename"}
+            disabled={busy || starting}
+            title={reasonUnlessPending("rename", waitingToChange)}
+            onClick={actions.onRename}
+          >
             {t("vpn.rename")}
           </Button>
-          <Button kind="danger" disabled={busy || starting} onClick={actions.onRemove}>
+          <Button
+            kind="danger"
+            busy={pendingAction === "remove"}
+            disabled={busy || starting}
+            title={reasonUnlessPending("remove", waitingToChange)}
+            onClick={actions.onRemove}
+          >
             {t("vpn.remove")}
           </Button>
         </div>

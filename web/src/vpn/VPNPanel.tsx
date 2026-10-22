@@ -16,7 +16,7 @@ import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { usePolling } from "../ui/usePolling";
 import { describeVPNFieldError, vpnFieldErrorOf, type VPNFieldError } from "./vpnFieldErrors";
 import { VPNLogsDialog } from "./VPNLogsDialog";
-import { VPNProfileCard } from "./VPNProfileCard";
+import { VPNProfileCard, type VPNProfileCardAction } from "./VPNProfileCard";
 import { VPNProfileForm, type VPNProfileSaveResult } from "./VPNProfileForm";
 import { overviewRefreshIntervalMs, routeProgressIntervalMs } from "./vpnOverviewPolling";
 import { describeVPNProblem } from "./vpnProblemMessage";
@@ -45,6 +45,8 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
   // editingProfile は、いま編集のフォームを開いているプロファイルである。
   const [editingProfile, setEditingProfile] = useState("");
   const [shownLogs, setShownLogs] = useState("");
+  // profileAction は、カードのボタンで始めて待っている操作と、そのプロファイルである。
+  const [profileAction, setProfileAction] = useState<{ name: string; action: VPNProfileCardAction } | null>(null);
   // startingProfiles は、この画面がいま経路を用意させているプロファイルである。用意は
   // 初回のイメージの作成で分単位になるので、ほかのプロファイルの操作は止めない。
   const [startingProfiles, setStartingProfiles] = useState<ReadonlySet<string>>(() => new Set());
@@ -93,6 +95,19 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
       return succeeded;
     },
     [describe, overviewGeneration, run],
+  );
+
+  // actOnProfile は、カードのボタンで始めた操作を act で走らせ、終わるまでそのボタンを待たせる。
+  const actOnProfile = useCallback(
+    async (name: string, action: VPNProfileCardAction, work: () => Promise<VPNOverview>) => {
+      setProfileAction({ name, action });
+      try {
+        return await act(work);
+      } finally {
+        setProfileAction(null);
+      }
+    },
+    [act],
   );
 
   // 開いたときは、経路の状態を docker から読むのを待たずに一覧を読む。docker は
@@ -171,9 +186,9 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
   const disconnectProfile = useCallback(
     (name: string) => {
       if (startingProfiles.has(name)) abandonedStarts.current.add(name);
-      void act(() => api.disconnectVPNRoute(name));
+      void actOnProfile(name, "disconnect", () => api.disconnectVPNRoute(name));
     },
-    [act, api, startingProfiles],
+    [actOnProfile, api, startingProfiles],
   );
 
   // requestDisconnect は、経路を切断する。経路を使っている接続があれば、それらも
@@ -268,6 +283,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
                   <VPNProfileCard
                     status={status}
                     busy={operation.busy}
+                    pendingAction={profileAction?.name === name ? profileAction.action : null}
                     starting={startingProfiles.has(name)}
                     available={overview.available}
                     checking={overview.checking}
@@ -324,7 +340,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
           onConfirm={() => {
             const name = pendingRemoval;
             setPendingRemoval("");
-            void act(() => api.removeVPNProfile(name));
+            void actOnProfile(name, "remove", () => api.removeVPNProfile(name));
           }}
         />
       )}
@@ -347,7 +363,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
           onSubmit={(value) => {
             const from = pendingRename;
             setPendingRename("");
-            void act(() => api.renameVPNProfile(from, value));
+            void actOnProfile(from, "rename", () => api.renameVPNProfile(from, value));
           }}
         />
       )}

@@ -41,6 +41,10 @@ function addFailureMessage(code: string): MessageKey {
   return addFailureMessages[code] ?? "terminal.backgroundFailed";
 }
 
+// ライブラリへの操作は一度に一つだけ走らせる。どれを待っているかを持ち、押したボタンだけに
+// 回転の印を出す。
+type LibraryOperation = "add" | "capacity" | "rename" | "delete";
+
 export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen, api = settingsApi }: BackgroundPickerProps) {
   const t = useTranslate();
   const [stored, setStored] = useState<TerminalBackground[]>([]);
@@ -54,7 +58,8 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [draft, setDraft] = useState(value);
   const [query, setQuery] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [pendingOperation, setPendingOperation] = useState<LibraryOperation | null>(null);
+  const busy = pendingOperation !== null;
   const [deleteProblem, setDeleteProblem] = useState("");
   const chooser = useRef<HTMLInputElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
@@ -87,46 +92,47 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
   }, [query, stored]);
 
   async function add(file: File) {
-    setBusy(true); setProblem("");
+    setPendingOperation("add"); setProblem("");
     try {
       const added = await api.addTerminalBackground(file.name, file);
       await reload();
       setDraft(added.name);
     } catch (error) {
       setProblem(t(addFailureMessage(failureCode(error))));
-    } finally { setBusy(false); }
+    } finally { setPendingOperation(null); }
   }
 
   async function saveCapacity() {
     const next = Number(capacityInput);
     if (!Number.isSafeInteger(next) || next < 1 || next > 1024) { setProblem(t("terminal.backgroundCapacityInvalid")); return; }
-    setBusy(true); setProblem("");
+    setPendingOperation("capacity"); setProblem("");
     try { applyList(await api.setTerminalBackgroundCapacity(next)); }
     catch { setProblem(t("terminal.backgroundCapacityFailed")); }
-    finally { setBusy(false); }
+    finally { setPendingOperation(null); }
   }
 
   // 削除の失敗は確認ダイアログの中に出す。ライブラリの画面はダイアログの背面にある。
   // 削除したあとで一覧を読み直せなければ、古い一覧を残さずに読み込みの失敗を出す。
   async function drop(name: string) {
-    setBusy(true); setDeleteProblem("");
+    setPendingOperation("delete"); setDeleteProblem("");
     try {
       await api.deleteTerminalBackground(name);
     } catch {
       setDeleteProblem(t("terminal.backgroundDeleteFailed"));
-      setBusy(false);
+      setPendingOperation(null);
       return;
     }
     if (draft === name) setDraft("");
     if (value === name) onChange("");
     setDeleteTarget(null);
     await loadLibrary();
-    setBusy(false);
+    setPendingOperation(null);
   }
 
+  // 名前の変更の失敗は名前を尋ねるダイアログの中に出す。ダイアログは成功するまで閉じない。
   async function rename(nextName: string) {
     if (renameTarget === null) return;
-    setBusy(true); setRenameProblem("");
+    setPendingOperation("rename"); setRenameProblem("");
     try {
       const renamed = await api.renameTerminalBackground(renameTarget.name, nextName);
       if (draft === renameTarget.name) setDraft(renamed.name);
@@ -135,7 +141,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
       await reload();
     } catch (error) {
       setRenameProblem(failureCode(error) === "background_already_exists" ? t("terminal.backgroundRenameExists") : t("terminal.backgroundRenameFailed"));
-    } finally { setBusy(false); }
+    } finally { setPendingOperation(null); }
   }
 
   const selected = stored.find((image) => image.name === value);
@@ -190,7 +196,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
                 if (file !== undefined) void add(file);
               }}
             />
-            <Button kind="primary" onClick={() => chooser.current?.click()} disabled={busy}>{t("terminal.backgroundAdd")}</Button>
+            <Button kind="primary" onClick={() => chooser.current?.click()} busy={pendingOperation === "add"} disabled={busy}>{t("terminal.backgroundAdd")}</Button>
           </div>
           {libraryState === "failed" ? (
             <PanelState tone="failed" title={t("terminal.backgroundLoadFailed")} action={<Button onClick={() => void loadLibrary()}>{t("shell.bootstrapRetry")}</Button>} />
@@ -226,7 +232,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
           {problem === "" ? null : <p role="alert" className="text-xs text-danger">{problem}</p>}
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-line bg-toolbar px-4 py-3">
-          <button type="button" className="text-sm text-ink-muted hover:text-ink" onClick={() => setDraft("")}>{t("terminal.backgroundUseNone")}</button>
+          <button type="button" className="text-sm text-ink-muted transition-colors duration-150 hover:text-ink" onClick={() => setDraft("")}>{t("terminal.backgroundUseNone")}</button>
           <Button kind="primary" disabled={busy} onClick={() => { onChange(draft); setLibraryOpen(false); }}>{t("terminal.backgroundUse")}</Button>
         </footer>
       </ModalShell> : null}
@@ -236,14 +242,15 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
           key={renameTarget.name}
           id="terminal-background-rename"
           heading={t("terminal.backgroundRenameHeading")}
-          description={renameProblem === "" ? t("terminal.backgroundRenameHint") : <span role="alert" className="text-danger">{renameProblem}</span>}
+          description={t("terminal.backgroundRenameHint")}
           label={t("terminal.backgroundRenameLabel")}
           initialValue={renameTarget.name}
           submitLabel={t("terminal.backgroundRenameSubmit")}
           cancelLabel={t("terminal.backgroundRenameCancel")}
           validate={(next) => next === "" ? t("terminal.backgroundRenameRequired") : ""}
-          onSubmit={(next) => void rename(next)}
+          onSubmit={rename}
           onCancel={() => { setRenameProblem(""); setRenameTarget(null); }}
+          error={renameProblem}
         />
       )}
       {deleteTarget === null ? null : (

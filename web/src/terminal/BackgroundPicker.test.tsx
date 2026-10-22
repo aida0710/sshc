@@ -173,6 +173,48 @@ describe("BackgroundPicker", () => {
     expect(screen.queryByText("wall.png")).not.toBeInTheDocument();
   });
 
+  it("shows adding an image as working until the upload is answered", async () => {
+    const user = userEvent.setup();
+    const api = libraryWithWall();
+    let answer: (added: { name: string; bytes: number; type: string }) => void = () => undefined;
+    api.addTerminalBackground.mockImplementation(() => new Promise((resolve) => {
+      answer = resolve;
+    }));
+    const { container } = render(
+      <BackgroundPicker value="" onChange={vi.fn()} tint={55} onTintChange={vi.fn()} unchosen="No image" api={api} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Change" }));
+    const add = await screen.findByRole("button", { name: "Add an image" });
+    expect(add).not.toHaveAttribute("aria-busy");
+    const chooser = container.ownerDocument.querySelector<HTMLInputElement>('input[type="file"]');
+    if (chooser === null) throw new Error("no file chooser");
+    await user.upload(chooser, new File(["\x89PNG"], "photo.png", { type: "image/png" }));
+
+    expect(add).toHaveAttribute("aria-busy", "true");
+    answer({ name: "photo.png", bytes: 4, type: "image/png" });
+    await vi.waitFor(() => expect(add).not.toHaveAttribute("aria-busy"));
+  });
+
+  it("keeps the rename dialog open with the reason when the name is taken", async () => {
+    const user = userEvent.setup();
+    const api = libraryWithWall();
+    api.renameTerminalBackground.mockRejectedValue(new ApiError("background_already_exists", 409, null));
+    render(<BackgroundPicker value="" onChange={vi.fn()} tint={55} onTintChange={vi.fn()} unchosen="No image" api={api} />);
+
+    await user.click(screen.getByRole("button", { name: "Change" }));
+    await user.click(await screen.findByRole("button", { name: "Actions for wall.png" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const dialog = screen.getByRole("dialog", { name: "Rename background image" });
+    const input = within(dialog).getByRole("textbox", { name: "New file name" });
+    await user.clear(input);
+    await user.type(input, "taken.png");
+    await user.click(within(dialog).getByRole("button", { name: "Rename" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("A background image with that name already exists.");
+    expect(screen.getByRole("dialog", { name: "Rename background image" })).toBe(dialog);
+    await vi.waitFor(() => expect(input).toHaveFocus());
+  });
+
   it("says the saved images could not be read instead of calling the library empty", async () => {
     const user = userEvent.setup();
     const api = {

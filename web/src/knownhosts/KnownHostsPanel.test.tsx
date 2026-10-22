@@ -311,6 +311,82 @@ describe("KnownHostsPanel", () => {
     expect(confirm).toBeDisabled();
   });
 
+  it("says the file is loading instead of counting zero entries before the first listing arrives", async () => {
+    let answer: (listing: KnownHostsResponse) => void = () => undefined;
+    const knownHosts = vi.fn(() => new Promise<KnownHostsResponse>((resolve) => {
+      answer = resolve;
+    }));
+    render(<KnownHostsPanel api={buildApi({ knownHosts })} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Loading known_hosts");
+    expect(screen.queryByText("Trusted entries")).not.toBeInTheDocument();
+    await act(async () => answer({ path: "~/.ssh/known_hosts", entries: [entry] }));
+    expect(await screen.findByRole("row", { name: /bastion\.example\.com/ })).toBeInTheDocument();
+    expect(screen.getByText("Trusted entries").nextSibling).toHaveTextContent("1");
+  });
+
+  it("shows no counts for a known_hosts it could not read", async () => {
+    render(<KnownHostsPanel api={buildApi({ knownHosts: vi.fn().mockRejectedValue(new Error("unreadable")) })} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The known_hosts file could not be read.");
+    expect(screen.queryByText("Trusted entries")).not.toBeInTheDocument();
+  });
+
+  it("keeps the scan form on screen while scanning after the file could not be read", async () => {
+    const user = userEvent.setup();
+    const scanKnownHosts = vi.fn(() => new Promise<ReturnType<typeof scanResult>>(() => undefined));
+    render(<KnownHostsPanel api={buildApi({ knownHosts: vi.fn().mockRejectedValue(new Error("unreadable")), scanKnownHosts })} />);
+
+    const host = await screen.findByLabelText("Host to scan");
+    await user.type(host, "new.example.com");
+    await user.click(screen.getByRole("button", { name: "Scan" }));
+
+    expect(host).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Scan" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText("Loading known_hosts…")).not.toBeInTheDocument();
+  });
+
+  it("shows the scan working until the host answers and scans once", async () => {
+    const user = userEvent.setup();
+    let answer: () => void = () => undefined;
+    const scanKnownHosts = vi.fn(() => new Promise<ReturnType<typeof scanResult>>((resolve) => {
+      answer = () => resolve(scanResult(candidate));
+    }));
+    render(<KnownHostsPanel api={buildApi({ scanKnownHosts })} />);
+
+    await user.type(await screen.findByLabelText("Host to scan"), "new.example.com");
+    const scan = screen.getByRole("button", { name: "Scan" });
+    await user.click(scan);
+
+    expect(scan).toHaveAttribute("aria-busy", "true");
+    await user.click(scan);
+    expect(scanKnownHosts).toHaveBeenCalledTimes(1);
+    await act(async () => answer());
+    expect(await screen.findByRole("row", { name: /new\.example\.com/ })).toBeInTheDocument();
+    expect(scan).not.toHaveAttribute("aria-busy");
+  });
+
+  it("shows adding to known_hosts working and holds the form until the file is written", async () => {
+    const user = userEvent.setup();
+    let answer: () => void = () => undefined;
+    const addKnownHost = vi.fn(() => new Promise<{ changed: boolean; transactionId: string }>((resolve) => {
+      answer = () => resolve({ changed: true, transactionId: "tx-2" });
+    }));
+    const api = buildApi({ addKnownHost });
+    await openAddForm(api);
+
+    await user.click(screen.getByLabelText(acknowledgement));
+    const add = screen.getByRole("button", { name: "Add to known_hosts" });
+    await user.click(add);
+
+    expect(add).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    await user.click(add);
+    expect(addKnownHost).toHaveBeenCalledTimes(1);
+    await act(async () => answer());
+    expect(await screen.findByText(/Added new\.example\.com/)).toBeInTheDocument();
+  });
+
   it("says a symlinked known_hosts is why it cannot be listed and that ssh can add a host", async () => {
     const symlinked = new ApiError("known_hosts_symlink", 403, {
       code: "known_hosts_symlink",

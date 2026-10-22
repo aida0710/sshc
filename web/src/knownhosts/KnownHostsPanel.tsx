@@ -15,6 +15,7 @@ import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { SortableTableHeader } from "../ui/tableSort";
 import { useTableSort, type SortValue } from "../ui/useTableSort";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { PanelState } from "../ui/PanelState";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 
 type KnownHostsPanelProps = { api?: KnownHostsApi };
@@ -39,12 +40,19 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   // notice ではなく、画面の言語で出す。
   const [scanned, setScanned] = useState(false);
   const [candidates, setCandidates] = useState<KnownHostCandidate[]>([]);
+  // scanning と addingToKnownHosts は、スキャンと known_hosts への追加の応答を待っている間である。
+  // どちらも相手のホストやファイルを待つので、押したボタンに回転の印を出し、二度押しを止める。
+  const [scanning, setScanning] = useState(false);
   const [adding, setAdding] = useState<KnownHostCandidate | null>(null);
+  const [addingToKnownHosts, setAddingToKnownHosts] = useState(false);
   const [expectedFingerprint, setExpectedFingerprint] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [deleteError, setDeleteError] = useState("");
+  // firstListingAnswered は、開いたときの一覧の読み込みが答えた（読めた、または読めなかった）
+  // ことを表す。error はスキャンや検索を始めるたびに消えるので、読み込み中かどうかには使えない。
+  const [firstListingAnswered, setFirstListingAnswered] = useState(false);
   const candidateSort = useTableSort<CandidateSort>("host");
   const trustedSort = useTableSort<TrustedSort>("host");
 
@@ -61,6 +69,9 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
       })
       .catch((failure: unknown) => {
         if (isCurrent()) setError(failureMessage(t, failure, t("kh.unreadable")));
+      })
+      .finally(() => {
+        if (isCurrent()) setFirstListingAnswered(true);
       });
     return listingRequests.retire;
   }, [api, listingRequests, t]);
@@ -95,13 +106,17 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   }
 
   async function scan() {
+    if (scanning) return;
     setError("");
+    setScanning(true);
     try {
       const result = await api.scanKnownHosts(scanHost, 22);
       setScanned(true);
       setCandidates(result.candidates);
     } catch {
       setError(t("kh.scanFailed"));
+    } finally {
+      setScanning(false);
     }
   }
 
@@ -121,13 +136,14 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   }
 
   async function confirmAdd() {
-    if (!adding) return;
+    if (!adding || addingToKnownHosts) return;
     const typed = expectedFingerprint.trim();
     if (typed !== "" && typed !== adding.fingerprint) {
       setError(t("kh.fingerprintMismatch", { typed, scanned: adding.fingerprint }));
       return;
     }
     setError("");
+    setAddingToKnownHosts(true);
     try {
       const result = await api.addKnownHost(
         { host: adding.host, port: adding.port, keyType: adding.keyType, key: adding.key },
@@ -147,6 +163,8 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
         ),
       );
       closeAdd();
+    } finally {
+      setAddingToKnownHosts(false);
     }
   }
 
@@ -172,18 +190,26 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   const displayedCandidates = candidateSort.sorted(candidates, candidateSortValue);
   const displayedEntries = trustedSort.sorted(listing?.entries ?? [], trustedSortValue);
 
+  // 最初の一覧が届くまでは、件数を「0」と言わない。
+  if (!firstListingAnswered) {
+    return <PanelState tone="loading" title={t("kh.loading")} />;
+  }
+
   return (
     <section aria-label={t("kh.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader title={t("kh.heading")} description={t("kh.pageDescription")} />
-      <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
-        {([
-          [t("kh.metricEntries"), listing?.entries.length ?? 0],
-          [t("kh.metricHashed"), listing?.entries.filter((entry) => entry.hashed).length ?? 0],
-          [t("kh.metricCandidates"), candidates.length],
-        ] as const).map(([label, value], index) => (
-          <MetricCard key={String(label)} label={String(label)} value={value} compact attention={index === 2 && candidates.length > 0} />
-        ))}
-      </MetricGrid>
+      {/* 読めなかった known_hosts の件数は分からないので、件数の欄ごと出さない。 */}
+      {listing === null ? null : (
+        <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
+          {([
+            [t("kh.metricEntries"), listing.entries.length],
+            [t("kh.metricHashed"), listing.entries.filter((entry) => entry.hashed).length],
+            [t("kh.metricCandidates"), candidates.length],
+          ] as const).map(([label, value], index) => (
+            <MetricCard key={String(label)} label={String(label)} value={value} compact attention={index === 2 && candidates.length > 0} />
+          ))}
+        </MetricGrid>
+      )}
 
       <p aria-live="polite" className="text-sm text-ink-muted">
         {status}
@@ -211,7 +237,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
                 />
               </Field>
             </div>
-            <Button kind="primary" onClick={() => void scan()}>
+            <Button kind="primary" busy={scanning} onClick={() => void scan()}>
               {t("kh.scan")}
             </Button>
           </div>
@@ -273,15 +299,15 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
               onChange={setAcknowledged}
             />
             <div className="mt-2 flex gap-2">
-              <button
-                type="button"
+              <Button
+                kind="primary"
+                busy={addingToKnownHosts}
                 disabled={!provenOrAcknowledged}
                 onClick={() => void confirmAdd()}
-                className="rounded-md bg-accent px-3 py-1.5 font-medium text-accent-ink"
               >
                 {t("kh.addToKnownHosts")}
-              </button>
-              <Button onClick={closeAdd}>
+              </Button>
+              <Button disabled={addingToKnownHosts} onClick={closeAdd}>
                 {t("kh.cancel")}
               </Button>
             </div>

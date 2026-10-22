@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { Button, Notice } from "../ui/surface";
-import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { useAsyncOperation, type RunOptions } from "../ui/useAsyncOperation";
 import { PasswordInput } from "../ui/PasswordField";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
@@ -93,6 +93,10 @@ export function snippetProblemLabelKey(problem: string | undefined): MessageKey 
   }
 }
 
+// SnippetAction は、この画面が engine に頼む操作である。操作は一度に一つだけ走らせるので、
+// 最後に始めた操作を覚えておけば、待っているのがどのボタンか、成功したのが保存かが分かる。
+type SnippetAction = "save" | "remove" | "preview" | "run" | "cancel" | "setStartup" | "clearStartup";
+
 const blank: SnippetDraft = {
   name: "",
   description: "",
@@ -137,7 +141,11 @@ export function SnippetsPanel({
   const [libraryState, setLibraryState] = useState<"loading" | "ready" | "failed">("loading");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const operation = useAsyncOperation();
-  const { clearError } = operation;
+  const { clearError, touch } = operation;
+  const [lastAction, setLastAction] = useState<SnippetAction | null>(null);
+  const pendingAction = operation.busy ? lastAction : null;
+  // 保存できたことは、次に編集欄を変えるか、別の操作を始めるまで編集欄の下に出す。
+  const savedJustNow = operation.saved && lastAction === "save";
   const describeFailure = (error: unknown) => describeSnippetFailure(t, error);
   // ホストの一覧は後から届くので、選んだホストが一覧に無いあいだは先頭を選んでいるとみなす。
   // select が表示するホストと、ボタンで送るホストを同じ値にする。
@@ -187,7 +195,19 @@ export function SnippetsPanel({
     setPreview(null);
     setJob(null);
     clearError();
-  }, [clearError]);
+    touch();
+  }, [clearError, touch]);
+
+  // changeDraft は、編集欄の入力を変える。変えた時点で、前の保存の成功はもう今の入力を指さない。
+  function changeDraft(next: SnippetDraft) {
+    setDraft(next);
+    touch();
+  }
+
+  function perform<T>(action: SnippetAction, work: () => Promise<T>, options: RunOptions<T> = {}) {
+    setLastAction(action);
+    return operation.run(work, { describe: describeFailure, ...options });
+  }
 
   useEffect(() => {
     if (selectedSnippetId === null) return;
@@ -207,7 +227,7 @@ export function SnippetsPanel({
   }, { intervalMs: snippetJobPollIntervalMs, enabled: job?.status === "running", whileHidden: true });
 
   async function save() {
-    await operation.run(async () => {
+    await perform("save", async () => {
       const value = {
         ...draft,
         variables: variablesFor(draft.command, draft.variables),
@@ -218,36 +238,30 @@ export function SnippetsPanel({
           : await snippetsApi.update(selected, value);
       await reload();
       edit(saved);
-    }, { describe: describeFailure });
+    });
   }
 
   async function makePreview() {
     if (selected === null || targets.length === 0) return;
     setJob(null);
-    await operation.run(() => snippetsApi.preview(selected, targets, inputs), {
-      apply: setPreview,
-      describe: describeFailure,
-    });
+    await perform("preview", () => snippetsApi.preview(selected, targets, inputs), { apply: setPreview });
   }
 
   async function run() {
     if (preview === null) return;
-    await operation.run(async () => {
+    await perform("run", async () => {
       setJob(await snippetsApi.start(preview, targets, inputs));
       setPreview(null);
-    }, { describe: describeFailure });
+    });
   }
 
   // 取り消しの前にジョブが終わると、サーバーは 409 snippet_job_finished で断る。
   async function cancelJob(jobId: string) {
-    await operation.run(() => snippetsApi.cancel(jobId), {
-      apply: setJob,
-      describe: describeFailure,
-    });
+    await perform("cancel", () => snippetsApi.cancel(jobId), { apply: setJob });
   }
 
   function updateVariable(name: string, update: Partial<SnippetVariable>) {
-    setDraft({
+    changeDraft({
       ...draft,
       variables: variablesFor(draft.command, draft.variables).map((variable) =>
         variable.name === name ? { ...variable, ...update } : variable,
@@ -258,23 +272,23 @@ export function SnippetsPanel({
 
   async function removeCurrent() {
     if (current === null) return;
-    await operation.run(async () => {
+    await perform("remove", async () => {
       await snippetsApi.remove(current.id);
       edit(null);
       await reload();
-    }, { describe: describeFailure });
+    });
   }
 
   async function updateStartup(snippetId: string) {
     if (startupAlias === "") return;
-    await operation.run(async () => {
+    await perform(snippetId === "" ? "clearStartup" : "setStartup", async () => {
       await snippetsApi.setStartup(
         startupAlias,
         snippetId,
         snippetId === "" ? {} : inputs,
       );
       await reload();
-    }, { describe: describeFailure });
+    });
   }
 
   return (
@@ -295,6 +309,8 @@ export function SnippetsPanel({
             title={t("snippets.loadFailed")}
             action={<Button onClick={() => void loadLibrary()}>{t("shell.bootstrapRetry")}</Button>}
           />
+        ) : libraryState === "loading" ? (
+          <PanelState tone="loading" title={t("snippets.loading")} />
         ) : null}
         <select
           aria-label={t("snippets.heading")}
@@ -335,7 +351,7 @@ export function SnippetsPanel({
           <input
             value={draft.name}
             onChange={(event) =>
-              setDraft({ ...draft, name: event.target.value })
+              changeDraft({ ...draft, name: event.target.value })
             }
             className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
           />
@@ -345,7 +361,7 @@ export function SnippetsPanel({
           <input
             value={draft.description}
             onChange={(event) =>
-              setDraft({ ...draft, description: event.target.value })
+              changeDraft({ ...draft, description: event.target.value })
             }
             className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
           />
@@ -356,7 +372,7 @@ export function SnippetsPanel({
             rows={7}
             value={draft.command}
             onChange={(event) => {
-              setDraft({ ...draft, command: event.target.value });
+              changeDraft({ ...draft, command: event.target.value });
               setPreview(null);
             }}
             className="mt-1 block w-full rounded border border-control-line bg-control p-2 font-mono text-sm"
@@ -439,16 +455,18 @@ export function SnippetsPanel({
             )}
           </div>
         ))}
+        {savedJustNow ? <Notice tone="success">{t("snippets.saved")}</Notice> : null}
         <div className="flex flex-wrap gap-2">
           <Button
             kind="primary"
+            busy={pendingAction === "save"}
             disabled={operation.busy || draft.name.trim() === "" || draft.command === ""}
             onClick={() => void save()}
           >
             {t("snippets.save")}
           </Button>
           {current === null ? null : (
-            <Button disabled={operation.busy} onClick={() => setConfirmingDelete(true)}>
+            <Button busy={pendingAction === "remove"} disabled={operation.busy} onClick={() => setConfirmingDelete(true)}>
               {t("snippets.delete")}
             </Button>
           )}
@@ -479,6 +497,7 @@ export function SnippetsPanel({
           </div>
           <Button
             className="mt-3"
+            busy={pendingAction === "preview"}
             disabled={operation.busy || selected === null || targets.length === 0}
             onClick={() => void makePreview()}
           >
@@ -510,7 +529,7 @@ export function SnippetsPanel({
                 </pre>
               </div>
             ))}
-            <Button kind="primary" className="mt-3" disabled={operation.busy} onClick={() => void run()}>
+            <Button kind="primary" className="mt-3" busy={pendingAction === "run"} disabled={operation.busy} onClick={() => void run()}>
               {t("snippets.run")}
             </Button>
           </section>
@@ -523,6 +542,7 @@ export function SnippetsPanel({
               </h3>
               {job.status === "running" ? (
                 <Button
+                  busy={pendingAction === "cancel"}
                   onClick={() => void cancelJob(job.id)}
                 >
                   {t("snippets.cancel")}
@@ -597,6 +617,7 @@ export function SnippetsPanel({
           ) : null}
           <Button
             className="mt-2"
+            busy={pendingAction === "setStartup"}
             disabled={operation.busy || selected === null || startupAlias === ""}
             onClick={() =>
               selected === null ? undefined : void updateStartup(selected)
@@ -606,7 +627,7 @@ export function SnippetsPanel({
           </Button>
           <button
             disabled={operation.busy || startupAlias === ""}
-            className="ml-2 text-xs text-ink-muted"
+            className="ml-2 text-xs text-ink-muted transition-colors duration-150 hover:text-ink"
             onClick={() => void updateStartup("")}
           >
             {t("snippets.clearStartup")}

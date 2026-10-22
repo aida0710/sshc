@@ -19,6 +19,7 @@ import type {
   useStoredPhrases,
 } from "./forms";
 import { describeBlocker, noteLabels, rowDanger } from "./labels";
+import { useFormSubmission } from "./useFormSubmission";
 
 function namedStoredFor(
   phrases: Credential[],
@@ -51,9 +52,10 @@ export function RelocateForm({
 }: {
   form: ReturnType<typeof useRelocateForm>;
   groups: string[];
-  onSubmit: (item: KeyItem) => void;
+  onSubmit: (item: KeyItem) => Promise<unknown>;
 }) {
   const t = useTranslate();
+  const submission = useFormSubmission(onSubmit);
   const item = form.relocating;
   if (item === null) return null;
   return (
@@ -62,7 +64,7 @@ export function RelocateForm({
       className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit(item);
+        void submission.submit(item);
       }}
     >
       <h3 id="relocate-heading" className={sectionHeading}>
@@ -93,7 +95,7 @@ export function RelocateForm({
         </Row>
       </Card>
       <div className="flex gap-2">
-        <Button kind="primary" type="submit">
+        <Button kind="primary" type="submit" busy={submission.submitting}>
           {t("keys.relocateSubmit")}
         </Button>
         <Button onClick={form.close}>{t("keys.cancel")}</Button>
@@ -107,9 +109,10 @@ export function PassphraseForm({
   onSubmit,
 }: {
   form: ReturnType<typeof usePassphraseForm>;
-  onSubmit: (item: KeyItem) => void;
+  onSubmit: (item: KeyItem) => Promise<unknown>;
 }) {
   const t = useTranslate();
+  const submission = useFormSubmission(onSubmit);
   const item = form.changingPassphrase;
   if (item === null) return null;
   return (
@@ -118,7 +121,7 @@ export function PassphraseForm({
       className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit(item);
+        void submission.submit(item);
       }}
     >
       <h3 id="passphrase-heading" className={sectionHeading}>
@@ -151,7 +154,7 @@ export function PassphraseForm({
         }}
       />
       <div className="flex gap-2">
-        <Button kind="primary" type="submit">
+        <Button kind="primary" type="submit" busy={submission.submitting}>
           {t("keys.savePassphrase")}
         </Button>
         <Button onClick={form.close}>{t("keys.cancel")}</Button>
@@ -168,10 +171,11 @@ export function AgentForm({
 }: {
   form: ReturnType<typeof useAgentForm>;
   storedPhrases: ReturnType<typeof useStoredPhrases>;
-  onSubmit: (item: KeyItem) => void;
+  onSubmit: (item: KeyItem) => Promise<unknown>;
   onAssignPhrase: (item: KeyItem) => void;
 }) {
   const t = useTranslate();
+  const submission = useFormSubmission(onSubmit);
   const item = form.registering;
   if (item === null) return null;
   const { phrases, dedicatedPhrasePaths, chosenPhrase, setChosenPhrase } =
@@ -183,7 +187,7 @@ export function AgentForm({
       className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit(item);
+        void submission.submit(item);
       }}
     >
       <h3 id="agent-register-heading" className={sectionHeading}>
@@ -254,7 +258,7 @@ export function AgentForm({
         </div>
       )}
       <div className="flex gap-2">
-        <Button kind="primary" type="submit">
+        <Button kind="primary" type="submit" busy={submission.submitting}>
           {t("keys.registerSubmit")}
         </Button>
         <Button onClick={form.close}>{t("keys.cancel")}</Button>
@@ -274,9 +278,10 @@ export function StoredPassphrasePanel({
   storedPhrases: ReturnType<typeof useStoredPhrases>;
   onAssign: (item: KeyItem) => void;
   onUnassign: (item: KeyItem) => void;
-  onStoreAndAssign: (item: KeyItem) => void;
+  onStoreAndAssign: (item: KeyItem) => Promise<unknown>;
 }) {
   const t = useTranslate();
+  const submission = useFormSubmission(onStoreAndAssign);
   const item = form.managingPassphrase;
   if (item === null) return null;
   const { phrases, dedicatedPhrasePaths, chosenPhrase, setChosenPhrase } =
@@ -346,10 +351,11 @@ export function StoredPassphrasePanel({
       <div className="flex flex-wrap gap-2">
         <Button
           kind="primary"
+          busy={submission.submitting}
           disabled={
             form.storedPhraseName === "" || form.storedPhraseSecret === ""
           }
-          onClick={() => onStoreAndAssign(item)}
+          onClick={() => void submission.submit(item)}
         >
           {t("keys.storeAndUsePassphrase")}
         </Button>

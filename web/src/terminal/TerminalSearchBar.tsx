@@ -2,6 +2,8 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import type { TerminalSearch } from "./useTerminalSearch";
 
+const stepButton = "rounded border border-control-line px-2 py-1 transition-colors duration-150 hover:bg-hover";
+
 // The find-in-scrollback bar floating over the terminal.
 export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; mobile: boolean }) {
   const t = useTranslate();
@@ -24,7 +26,7 @@ export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; 
         type="button"
         aria-label={t("terminal.searchCaseSensitive")}
         aria-pressed={search.caseSensitive}
-        className={`rounded border px-1.5 py-1 text-xs ${search.caseSensitive ? "border-accent bg-accent/10 text-accent" : "border-control-line text-ink-muted"}`}
+        className={`rounded border px-1.5 py-1 text-xs transition-colors duration-150 ${search.caseSensitive ? "border-accent bg-accent/10 text-accent" : "border-control-line text-ink-muted hover:bg-hover hover:text-ink"}`}
         onClick={() => search.setCaseSensitive((current) => !current)}
       >
         Aa
@@ -33,7 +35,7 @@ export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; 
         type="button"
         aria-label={t("terminal.searchRegex")}
         aria-pressed={search.regex}
-        className={`rounded border px-1.5 py-1 font-mono text-xs ${search.regex ? "border-accent bg-accent/10 text-accent" : "border-control-line text-ink-muted"}`}
+        className={`rounded border px-1.5 py-1 font-mono text-xs transition-colors duration-150 ${search.regex ? "border-accent bg-accent/10 text-accent" : "border-control-line text-ink-muted hover:bg-hover hover:text-ink"}`}
         onClick={() => search.setRegex((current) => !current)}
       >
         .*
@@ -45,9 +47,9 @@ export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; 
             ? t("terminal.searchNoResults")
             : `${search.result.index + 1}/${search.result.total}`}
       </span>
-      <button type="button" aria-label={t("terminal.searchPrevious")} className="rounded border border-control-line px-2 py-1" onClick={() => search.step(-1)}><Icon name="arrowUp" className="size-3.5" /></button>
-      <button type="button" aria-label={t("terminal.searchNext")} className="rounded border border-control-line px-2 py-1" onClick={() => search.step(1)}><Icon name="arrowDown" className="size-3.5" /></button>
-      <button type="button" aria-label={t("terminal.searchClose")} className="rounded px-2 py-1" onClick={search.close}><Icon name="close" className="size-3.5" /></button>
+      <button type="button" aria-label={t("terminal.searchPrevious")} className={stepButton} onClick={() => search.step(-1)}><Icon name="arrowUp" className="size-3.5" /></button>
+      <button type="button" aria-label={t("terminal.searchNext")} className={stepButton} onClick={() => search.step(1)}><Icon name="arrowDown" className="size-3.5" /></button>
+      <button type="button" aria-label={t("terminal.searchClose")} className="rounded px-2 py-1 transition-colors duration-150 hover:bg-hover" onClick={search.close}><Icon name="close" className="size-3.5" /></button>
     </div>
   );
 }

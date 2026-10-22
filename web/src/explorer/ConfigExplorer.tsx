@@ -12,6 +12,7 @@ import { hintText, sectionHeading } from "../ui/form";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
+import { useToast } from "../ui/useToast";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
 import type { BrowserLocation, NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
@@ -22,6 +23,7 @@ import { sshDirectoryPath } from "./sshDirectoryPath";
 import { ConfigPathActions } from "./ConfigPathActions";
 import { ConfigDiagnostics } from "./ConfigDiagnostics";
 import { ConfigFileOperations } from "./ConfigFileOperations";
+import type { ConfigOperation } from "./configOperation";
 
 // request numbers each handoff, so the handoff that was taken is the one cleared.
 export type FileTarget = { path: string; line: number; request: number };
@@ -62,6 +64,8 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   const [jump, setJump] = useState("");
   const [hierarchyOpen, setHierarchyOpen] = useState(false);
   const [opening, setOpening] = useState(false);
+  const [pendingOperation, setPendingOperation] = useState<ConfigOperation | null>(null);
+  const showToast = useToast();
   const editorRef = useRef<HTMLTextAreaElement>(null);
   // The handed line is kept here once the handoff is cleared, until the file
   // it names has opened and the line is selected.
@@ -134,46 +138,64 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
     }
   }
 
-  async function renameFile() {
-    if (file === null || file.file.path === undefined) return;
-    const destinationPath = toSSHDirectoryPath(renameTo, setRenameProblem);
-    if (destinationPath === null) return;
+  // perform は、操作を一つ走らせる。待っている間は pendingOperation がその操作を指す。失敗は
+  // 理由をプレビューの欄（削除なら確認ダイアログの中）に出し、古いプレビューは残さない。
+  // 成功を伝えるのは work の役目である。結果が画面のどこにも残らない操作があるので、
+  // 書き込みはどれもトーストで知らせる。
+  async function perform(operation: ConfigOperation, work: () => Promise<void>) {
+    if (pendingOperation !== null) return;
+    setPendingOperation(operation);
+    setProblem(null);
     try {
-      const result = await configApi.save({
-        kind: "file_rename",
-        path: file.file.path,
-        base: file.contents,
-        destinationPath,
-      });
-      setPreview(result.preview);
-      setProblem(null);
-      setRenameTo("");
-      await reload();
-      await open(destinationPath);
+      await work();
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
+    } finally {
+      setPendingOperation(null);
     }
+  }
+
+  function reportWritten(message: string) {
+    showToast(message, { tone: "success" });
+  }
+
+  async function renameFile() {
+    if (file === null || file.file.path === undefined) return;
+    const path = file.file.path;
+    const destinationPath = toSSHDirectoryPath(renameTo, setRenameProblem);
+    if (destinationPath === null) return;
+    await perform("rename", async () => {
+      const result = await configApi.save({
+        kind: "file_rename",
+        path,
+        base: file.contents,
+        destinationPath,
+      });
+      reportWritten(t("explorer.renamedFile", { path: destinationPath }));
+      setPreview(result.preview);
+      setRenameTo("");
+      await reload();
+      await open(destinationPath);
+    });
   }
 
   async function deleteFile() {
     if (file === null || file.file.path === undefined) return;
-    try {
+    const path = file.file.path;
+    await perform("delete", async () => {
       const result = await configApi.save({
         kind: "file_delete",
-        path: file.file.path,
+        path,
         base: file.contents,
       });
+      reportWritten(t("explorer.deletedFile", { path }));
       setPreview(result.preview);
-      setProblem(null);
       setConfirmingDelete(false);
       setFile(null);
       setDraft("");
       await reload();
-    } catch (error) {
-      setPreview(null);
-      setProblem(toProblem(error));
-    }
+    });
   }
 
   // toSSHDirectoryPath は、欄の値を ~/.ssh からの相対パスにする。~/.ssh の外を指していれば、
@@ -192,41 +214,35 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   async function createFile() {
     const path = toSSHDirectoryPath(newPath, setPathProblem);
     if (path === null) return;
-    try {
+    await perform("createFile", async () => {
       await configApi.save({ kind: "file_raw", path, base: "", raw: "# created by sshc\n" });
+      reportWritten(t("explorer.createdFile", { path }));
       setNewPath("");
-      setProblem(null);
       await reload();
       await open(path);
-    } catch (error) {
-      setProblem(toProblem(error));
-    }
+    });
   }
 
   async function createDirectory() {
     const path = toSSHDirectoryPath(newPath, setPathProblem);
     if (path === null) return;
-    try {
+    await perform("createDirectory", async () => {
       await configApi.save({ kind: "directory_create", path });
+      reportWritten(t("explorer.createdDirectory", { path }));
       setNewPath("");
-      setProblem(null);
       await reload();
-    } catch (error) {
-      setProblem(toProblem(error));
-    }
+    });
   }
 
   async function deleteDirectory() {
     const path = toSSHDirectoryPath(newPath, setPathProblem);
     if (path === null) return;
-    try {
+    await perform("deleteDirectory", async () => {
       await configApi.save({ kind: "directory_delete", path });
+      reportWritten(t("explorer.deletedDirectory", { path }));
       setNewPath("");
-      setProblem(null);
       await reload();
-    } catch (error) {
-      setProblem(toProblem(error));
-    }
+    });
   }
 
   async function run(action: "preview" | "save") {
@@ -237,21 +253,17 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
       base: file.contents,
       raw: draft,
     };
-    try {
+    await perform(action, async () => {
       if (action === "preview") {
         setPreview(await configApi.preview(request));
-        setProblem(null);
         return;
       }
       const result = await configApi.save(request);
+      reportWritten(t("explorer.savedFile", { path: request.path }));
       setPreview(result.preview);
-      setProblem(null);
       await reload();
       await open(request.path);
-    } catch (error) {
-      setPreview(null);
-      setProblem(toProblem(error));
-    }
+    });
   }
 
   const modified = file !== null && draft !== file.contents;
@@ -323,6 +335,7 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
             <ConfigPathActions
               path={newPath}
               problem={pathProblem}
+              pendingOperation={pendingOperation}
               onPathChange={(path) => { setNewPath(path); setPathProblem(""); }}
               onCreateFile={() => draftDiscard.confirmBefore(() => void createFile())}
               onCreateDirectory={() => void createDirectory()}
@@ -368,8 +381,23 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
                   className="min-h-96 w-full flex-1 resize-y border-0 bg-control p-4 font-mono text-xs leading-6 text-ink focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent disabled:bg-surface-subtle disabled:text-ink-faint"
                 />
                 <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 border-t border-line bg-toolbar px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:static md:z-auto md:py-3">
-                  <Button className="min-h-10 md:min-h-0" onClick={() => void run("preview")}>{t("explorer.preview")}</Button>
-                  <Button kind="primary" className="min-h-10 md:min-h-0" onClick={() => void run("save")} disabled={!file.editable}>{t("explorer.saveFile")}</Button>
+                  <Button
+                    className="min-h-10 md:min-h-0"
+                    busy={pendingOperation === "preview"}
+                    disabled={pendingOperation !== null}
+                    onClick={() => void run("preview")}
+                  >
+                    {t("explorer.preview")}
+                  </Button>
+                  <Button
+                    kind="primary"
+                    className="min-h-10 md:min-h-0"
+                    busy={pendingOperation === "save"}
+                    disabled={!file.editable || pendingOperation !== null}
+                    onClick={() => void run("save")}
+                  >
+                    {t("explorer.saveFile")}
+                  </Button>
                 </div>
               </div>
 
@@ -379,6 +407,7 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
                   modified={modified}
                   renameTo={renameTo}
                   renameProblem={renameProblem}
+                  pendingOperation={pendingOperation}
                   onRenameToChange={(path) => { setRenameTo(path); setRenameProblem(""); }}
                   onRename={() => void renameFile()}
                   onDelete={() => {

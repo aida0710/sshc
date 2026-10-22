@@ -1,6 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import { control, hintText, sectionHeading } from "../ui/form";
 import { Button } from "../ui/surface";
+import type { ConfigOperation } from "./configOperation";
 
 // ConfigFileOperations は、開いているファイルの名前を変える・消す欄である。
 // 保存していない変更があるあいだは、どちらもできない。
@@ -9,6 +10,7 @@ export function ConfigFileOperations({
   modified,
   renameTo,
   renameProblem,
+  pendingOperation,
   onRenameToChange,
   onRename,
   onDelete,
@@ -18,6 +20,7 @@ export function ConfigFileOperations({
   renameTo: string;
   // renameProblem は、新しいパスが ~/.ssh の外を指しているときに欄の下へ出す理由である。
   renameProblem: string;
+  pendingOperation: ConfigOperation | null;
   onRenameToChange: (path: string) => void;
   onRename: () => void;
   onDelete: () => void;
@@ -44,11 +47,12 @@ export function ConfigFileOperations({
           <Button
             className="min-h-10 md:min-h-0"
             onClick={onRename}
-            disabled={renameTo === "" || renameTo === path || modified}
+            busy={pendingOperation === "rename"}
+            disabled={renameTo === "" || renameTo === path || modified || pendingOperation !== null}
           >
             {t("explorer.renameFile")}
           </Button>
-          <Button className="min-h-10 md:min-h-0" onClick={onDelete} disabled={modified}>
+          <Button className="min-h-10 md:min-h-0" onClick={onDelete} disabled={modified || pendingOperation !== null}>
             {t("explorer.deleteFile")}
           </Button>
         </div>

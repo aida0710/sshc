@@ -2,12 +2,14 @@ import { useTranslate } from "../i18n/context";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { control, fieldLabel, hintText, sectionHeading } from "../ui/form";
 import { Button } from "../ui/surface";
+import type { ConfigOperation } from "./configOperation";
 
 // ConfigPathActions は、~/.ssh の中にファイルやフォルダを作ったり、フォルダを
 // 消したりする欄である。どの操作も入力したパスを使う。
 export function ConfigPathActions({
   path,
   problem,
+  pendingOperation,
   onPathChange,
   onCreateFile,
   onCreateDirectory,
@@ -16,6 +18,7 @@ export function ConfigPathActions({
   path: string;
   // problem は、入力したパスが ~/.ssh の外を指しているときに欄の下へ出す理由である。
   problem: string;
+  pendingOperation: ConfigOperation | null;
   onPathChange: (path: string) => void;
   onCreateFile: () => void;
   onCreateDirectory: () => void;
@@ -37,13 +40,29 @@ export function ConfigPathActions({
       />
       {problem === "" ? null : <p id="new-file-path-problem" role="alert" className="text-xs text-danger">{problem}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button className="min-h-10 md:min-h-0" onClick={onCreateFile} disabled={path === ""}>
+        <Button
+          className="min-h-10 md:min-h-0"
+          onClick={onCreateFile}
+          busy={pendingOperation === "createFile"}
+          disabled={path === "" || pendingOperation !== null}
+        >
           {t("explorer.createFile")}
         </Button>
-        <Button className="min-h-10 md:min-h-0" onClick={onCreateDirectory} disabled={path === ""}>
+        <Button
+          className="min-h-10 md:min-h-0"
+          onClick={onCreateDirectory}
+          busy={pendingOperation === "createDirectory"}
+          disabled={path === "" || pendingOperation !== null}
+        >
           {t("explorer.createDirectory")}
         </Button>
-        <Button kind="danger" className="min-h-10 md:min-h-0" onClick={onDeleteDirectory} disabled={path === ""}>
+        <Button
+          kind="danger"
+          className="min-h-10 md:min-h-0"
+          onClick={onDeleteDirectory}
+          busy={pendingOperation === "deleteDirectory"}
+          disabled={path === "" || pendingOperation !== null}
+        >
           {t("explorer.deleteDirectory")}
         </Button>
       </div>
