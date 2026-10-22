@@ -1,4 +1,15 @@
 @import "tailwindcss";
+
+/* 押せない要素は、載せても押しても見た目を変えない。hover と active の指定を、:disabled の
+   ときは効かせない形に置き換える（:where で詳細度は上げない）。 */
+@custom-variant hover {
+  @media (hover: hover) {
+    &:hover:where(:not(:disabled)) {
+      @slot;
+    }
+  }
+}
+@custom-variant active (&:active:where(:not(:disabled)));
 :root {
   color-scheme: light;
 
@@ -535,19 +546,43 @@
   :where(label:has(> input[type="checkbox"]), label:has(> input[type="radio"])):not(.monaco-editor *):not(.xterm *) {
     min-height: 44px;
   }
-  :where(button, [role="button"], [role="menuitem"], a):not(:disabled):not(.monaco-editor *):not(.xterm *):active {
-    filter: brightness(0.92);
-  }
-  .sshc-modal-panel {
-    animation: sshc-dialog-enter 140ms ease-out;
-  }
   [data-modal-placement="sheet"] .sshc-modal-panel {
     animation-name: sshc-sheet-enter;
   }
 }
+/* 押した瞬間・開いた瞬間の反応は、マウスでもタッチでも同じにする。 */
+:where(button, [role="button"], [role="menuitem"], a, summary):not(:disabled):not(.monaco-editor *):not(.xterm *):active {
+  filter: brightness(0.92);
+}
+.sshc-modal-panel {
+  animation: sshc-dialog-enter 140ms ease-out;
+}
+/* メニューは開いたときに初めて描かれるので、出てきた場所が分かるよう短く動かす。 */
+:where([role="menu"]) {
+  animation: sshc-popover-enter 120ms ease-out;
+}
+/* 押せないボタンは、どの画面でも同じ濃さにする。理由はボタンの title や近くの文で伝える。
+   無効の fieldset の中のボタンは、fieldset 自身が薄くなるので重ねて薄くしない。 */
+:where(button):disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+/* 押したあと処理を待っているボタン（aria-busy）は、使えないのではなく働いている最中なので
+   薄くしない。もう一度押せないことは、カーソルと回転の印で伝える。 */
+:where(button[aria-busy="true"]):disabled,
+:where(fieldset:disabled) :where(button):disabled {
+  opacity: 1;
+}
+:where(button[aria-busy="true"]):disabled {
+  cursor: progress;
+}
 @keyframes sshc-dialog-enter {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sshc-popover-enter {
+  from { opacity: 0; transform: translateY(-2px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes sshc-sheet-enter {
   from { opacity: 0; transform: translateY(24px); }

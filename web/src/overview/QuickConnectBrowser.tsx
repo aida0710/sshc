@@ -17,6 +17,7 @@ import { ConnectionActions } from "./ConnectionActions";
 import { hostMatchesQuery, normalizeHostQuery } from "../connections/hostSearch";
 import { connectionAddress } from "../connections/connectionAddress";
 import { revealOnHover } from "../ui/ActionMenu";
+import { Spinner } from "../ui/Spinner";
 import { formatDateTime } from "../ui/format";
 
 type QuickConnectBrowserProps = {
@@ -161,7 +162,7 @@ export function QuickConnectBrowser({
             <span aria-live="polite">
               {opening ? (
                 <span className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-muted">
-                  <span aria-hidden="true" className="size-3 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none" />
+                  <Spinner className="size-3" />
                   {t("home.opening")}
                 </span>
               ) : server.group === "" && lastConnected === "" ? null : (

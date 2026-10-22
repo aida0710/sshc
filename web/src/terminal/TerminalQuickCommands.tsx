@@ -291,7 +291,7 @@ export function TerminalQuickCommands({
               type="button"
               disabled={busy || saveName.trim() === ""}
               onClick={() => void saveSelection()}
-              className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast disabled:opacity-50"
+              className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast"
             >
               {t("terminal.quickCommandSave")}
             </button>
@@ -351,7 +351,7 @@ export function TerminalQuickCommands({
               type="button"
               disabled={busy || selected === null}
               onClick={() => void prepare()}
-              className="min-h-8 self-start rounded border border-control-line bg-control px-3 py-1 text-sm font-medium hover:bg-select-fill disabled:opacity-50"
+              className="min-h-8 self-start rounded border border-control-line bg-control px-3 py-1 text-sm font-medium hover:bg-select-fill"
             >
               {t("snippets.preview")}
             </button>
@@ -368,7 +368,7 @@ export function TerminalQuickCommands({
                   type="button"
                   disabled={busy}
                   onClick={() => void insertPrepared()}
-                  className="min-h-8 rounded border border-control-line bg-control px-3 py-1 text-sm hover:bg-select-fill disabled:opacity-50"
+                  className="min-h-8 rounded border border-control-line bg-control px-3 py-1 text-sm hover:bg-select-fill"
                 >
                   {t("terminal.quickCommandInsert")}
                 </button>
@@ -376,7 +376,7 @@ export function TerminalQuickCommands({
                   type="button"
                   disabled={busy}
                   onClick={() => void runPrepared()}
-                  className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast disabled:opacity-50"
+                  className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast"
                 >
                   {t("terminal.quickCommandRun")}
                 </button>
@@ -384,7 +384,7 @@ export function TerminalQuickCommands({
                   type="button"
                   disabled={busy}
                   onClick={() => void copyPrepared()}
-                  className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill disabled:opacity-50"
+                  className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill"
                 >
                   {t("terminal.quickCommandCopy")}
                 </button>

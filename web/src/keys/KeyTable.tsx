@@ -163,7 +163,7 @@ export function KeyTable({
                     aria-expanded={relatedExpanded}
                     disabled={revealRelated}
                     onClick={() => toggleRelated(item)}
-                    className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-md bg-surface px-2 py-1 text-xs font-medium text-ink-muted hover:text-ink disabled:cursor-default md:min-h-0"
+                    className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-md bg-surface px-2 py-1 text-xs font-medium text-ink-muted hover:text-ink disabled:cursor-default disabled:opacity-100 md:min-h-0"
                   >
                     <DisclosureChevron expanded={relatedExpanded} className="size-3.5 text-ink-faint" />
                     {t("keys.relatedPublicFiles", { count: relatedCount })}

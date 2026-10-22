@@ -35,7 +35,7 @@ function JobAction({ label, icon, tone = "text-ink-muted", disabled = false, onC
   label: string; icon: IconName; tone?: string; disabled?: boolean; onClick: () => void;
 }) {
   return <button type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick}
-    className={`flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-select-fill focus-visible:ring-2 focus-visible:ring-accent disabled:text-ink-faint md:size-8 [@media(pointer:coarse)]:size-11 ${tone}`}>
+    className={`flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-select-fill focus-visible:ring-2 focus-visible:ring-accent md:size-8 [@media(pointer:coarse)]:size-11 ${tone}`}>
     <Icon name={icon} className="size-4" />
   </button>;
 }

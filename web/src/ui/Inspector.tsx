@@ -30,8 +30,8 @@ export function InspectorToggle({
       aria-expanded={open}
       aria-controls={inspectorId}
       onClick={onToggle}
-      className={`relative flex items-center gap-1.5 rounded-md border border-control-line px-2 py-1 text-ink ${
-        open ? "bg-select-fill" : "bg-card"
+      className={`relative flex items-center gap-1.5 rounded-md border border-control-line px-2 py-1 text-ink transition-colors duration-150 hover:border-accent/50 ${
+        open ? "bg-select-fill" : "bg-card hover:bg-hover"
       }`}
     >
       <Icon name="inspector" className="h-4 w-4" />

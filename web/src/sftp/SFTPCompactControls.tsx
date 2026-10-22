@@ -37,7 +37,7 @@ export function SFTPCompactSearch({ search, recursive, disabled, onOptions }: {
       <button type="button" aria-label={t("sftp.search.mode")} onClick={onOptions} className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name="settings" className="size-5" /></button>
       <button type="button" aria-label={search.searching ? t("sftp.search.stop") : t("sftp.searchBelow")} disabled={!search.searching && (disabled || search.filter.trim() === "")}
         onClick={() => { search.searchInput.current?.blur(); if (search.searching) search.cancelSearch(); else void search.runSearch(); }}
-        className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint"><Icon name={search.searching ? "close" : "search"} className="size-5" /></button>
+        className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name={search.searching ? "close" : "search"} className="size-5" /></button>
     </> : null}
     <button type="button" aria-label={t("sftp.close")} onClick={() => { search.setMobileSearchOpen(false); search.setFilter(""); }} className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name="close" className="size-5" /></button>
   </>;
