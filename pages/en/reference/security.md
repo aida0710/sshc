@@ -1,13 +1,13 @@
 ---
 title: Security
-description: Local boundaries, vault encryption, VPN, host keys, sync and Telnet.
+description: Local boundaries, vault encryption, VPN, host keys, sync, Telnet and updates.
 ---
 
 # Security
 
 ## Local application
 
-The engine serves its Web UI and API on a loopback address. UI URLs are issued on demand rather than logged at startup for long-term reuse. If the saved port is unavailable and the engine moves to another port, sshc revokes previous browser registrations and requires enrolment against the current engine. On Linux, other OS users on the same machine can read the one-time registration URL that `sshc` passes to the browser, so the engine accepts a registration only from a connection owned by the same OS user or root. It checks the same way when a registered browser signs in again after the engine restarts. A process running as the same OS user is assumed to have access to that user's SSH files already.
+The engine serves its Web UI and API on a loopback address. UI URLs are issued on demand rather than logged at startup for long-term reuse. If the saved port is unavailable and the engine moves to another port, sshc revokes previous browser registrations and requires enrolment against the current engine. On Linux, other OS users on the same machine can read the one-time registration URL that `sshc` passes to the browser, so the engine accepts a registration only from a connection owned by the same OS user or root. It checks the same way when a registered browser signs in again after the engine restarts. On Windows, sshc uses the OpenSSH agent pipe (`\\.\pipe\openssh-ssh-agent`) only when it was created by LocalSystem, Administrators or the current user, so another user who creates a pipe with that name while the ssh-agent service is stopped receives neither keys added from the SSH Keys screen nor authentication requests. A process running as the same OS user is assumed to have access to that user's SSH files already.
 
 ## Remote sshc engines
 
@@ -109,3 +109,7 @@ sshc does not trust the file names and attributes that an SFTP server returns. I
 - When saving to this machine, sshc checks every name the server returned. If a name would point outside the destination folder, such as one containing `\` or `..`, the transfer fails before it starts.
 - When downloading a folder as a ZIP file, sshc writes only the read, write and execute permissions of each file. It does not write the setuid, setgid or sticky bits.
 - sshc reads at most 100,000 entries from a single folder listing. If the server never ends the listing, sshc stops reading at that limit and reports an error.
+
+## Updates
+
+`sshc update` and the web UI update an installation made by `install.sh` or `install.ps1` with the same installer from the latest stable release tag. The installer runs only when its SHA-256 matches the entry in `checksums.txt` of the same GitHub Release, so a script placed on the tag without going through the release workflow is never run.

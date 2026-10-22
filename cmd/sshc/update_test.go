@@ -338,11 +338,16 @@ func TestTaggedInstallerUsesTheExactReleaseAndInstallDirectory(t *testing.T) {
 	if err := os.WriteFile(executable, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	script := "#!/bin/sh\n"
+	digest := sha256.Sum256([]byte(script))
+	downloaded := []string{}
 	client := &http.Client{Transport: testHTTPTransport(func(request *http.Request) (*http.Response, error) {
-		if got := request.URL.String(); got != "https://raw.githubusercontent.com/aida0710/sshc/v0.14.0/install.sh" {
-			t.Fatalf("installer URL = %s", got)
+		downloaded = append(downloaded, request.URL.String())
+		contents := script
+		if strings.HasSuffix(request.URL.Path, "/checksums.txt") {
+			contents = hex.EncodeToString(digest[:]) + "  install.sh\n"
 		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("#!/bin/sh\n")), Header: make(http.Header)}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(contents)), Header: make(http.Header)}, nil
 	})}
 	commands := fakeInstallationCommands{
 		output: func(_ context.Context, name string, _ ...string) ([]byte, error) {
@@ -374,6 +379,66 @@ func TestTaggedInstallerUsesTheExactReleaseAndInstallDirectory(t *testing.T) {
 	if err := installer.runTaggedInstaller(context.Background(),
 		installation{manager: managerShell, executable: executable}, "v0.14.0"); err != nil {
 		t.Fatal(err)
+	}
+	want := []string{
+		"https://raw.githubusercontent.com/aida0710/sshc/v0.14.0/install.sh",
+		"https://github.com/aida0710/sshc/releases/download/v0.14.0/checksums.txt",
+	}
+	if strings.Join(downloaded, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("downloads = %v, want %v", downloaded, want)
+	}
+}
+
+// タグの installer は、同じ Release の checksums.txt にちょうど一度、同じ digest で
+// 載っているときだけ実行する。載っていなければ、Release のワークフローを経ずにタグへ
+// push されたものかもしれない。
+func TestTaggedInstallerIsNotRunUnlessTheReleaseChecksumMatches(t *testing.T) {
+	for _, installer := range []struct {
+		name  string
+		found func(t *testing.T) installation
+	}{
+		{name: "install.sh", found: func(t *testing.T) installation {
+			return installation{manager: managerShell, executable: filepath.Join(t.TempDir(), "sshc")}
+		}},
+		{name: "install.ps1", found: powerShellInstallationFixture},
+	} {
+		for _, scenario := range []string{"missing checksum", "duplicate checksum", "wrong checksum", "checksum of another file", "HTTP failure", "oversized script"} {
+			t.Run(installer.name+"/"+scenario, func(t *testing.T) {
+				script := "fixture"
+				digest := sha256.Sum256([]byte(script))
+				checksum := hex.EncodeToString(digest[:]) + "  " + installer.name + "\n"
+				client := &http.Client{Transport: testHTTPTransport(func(request *http.Request) (*http.Response, error) {
+					body, code := script, http.StatusOK
+					if strings.HasSuffix(request.URL.Path, "checksums.txt") {
+						switch scenario {
+						case "missing checksum":
+							body = ""
+						case "duplicate checksum":
+							body = checksum + checksum
+						case "wrong checksum":
+							body = strings.Repeat("0", 64) + "  " + installer.name + "\n"
+						case "checksum of another file":
+							body = hex.EncodeToString(digest[:]) + "  sshc-linux-amd64\n"
+						default:
+							body = checksum
+						}
+					} else if scenario == "HTTP failure" {
+						code = http.StatusNotFound
+					} else if scenario == "oversized script" {
+						body = strings.Repeat("x", maxInstallerSize+1)
+					}
+					return &http.Response{StatusCode: code, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+				})}
+				commands := fakeInstallationCommands{run: func(context.Context, installationProcess) error {
+					t.Fatal("an unverified installer was executed")
+					return nil
+				}}
+				update := updateInstaller{client: client, commands: commands}
+				if err := update.install(context.Background(), installer.found(t), releasecheck.Release{Version: "v1.1.0"}); err == nil {
+					t.Fatal("an unverified installer was accepted")
+				}
+			})
+		}
 	}
 }
 

@@ -73,7 +73,7 @@ sshc update
 更新するバージョン、実行ファイル、管理元を表示した後に確認を求めます。CIなど対話型のターミナルのない環境で実行する場合は、内容を確認した上で`sshc update --yes`を使用してください。
 
 - Homebrew版は、`brew --prefix --installed aida0710/tap/sshc`の`bin/sshc`と実行中ファイルが同一であることを確認し、`brew upgrade --formula --no-ask aida0710/tap/sshc`を実行します。Homebrewがtapを更新しなかったために新しいバージョンが入らなかった場合（`HOMEBREW_NO_AUTO_UPDATE`を設定している場合など）は、`brew update`を実行してから`sshc update`を再実行するよう表示します。
-- `install.sh`版は、SHA-256を記録したreceiptを確認し、GitHubの最新の安定バージョンのタグに固定した`install.sh`を実行します。`install.sh`は公開された`checksums.txt`でバイナリを検証し、同じディレクトリの中で名前を変更して置き換えます。Ctrl-Cなどで取り消すと、`install.sh`に一時ファイルを削除させてから停止します。
+- `install.sh`版は、SHA-256を記録したreceiptを確認し、GitHubの最新の安定バージョンのタグに固定した`install.sh`を取得します。スクリプトが同じReleaseの`checksums.txt`と一致したときだけ実行します。`install.sh`は公開された`checksums.txt`でバイナリを検証し、同じディレクトリの中で名前を変更して置き換えます。Ctrl-Cなどで取り消すと、`install.sh`に一時ファイルを削除させてから停止します。
 - Windowsの`install.ps1`版は、receiptとSHA-256を確認し、公開済みのタグの`install.ps1`を取得します。スクリプトも同じReleaseの`checksums.txt`と照合し、対象タグを`SSHC_VERSION`へ設定してPowerShellで実行します。Web画面からも確認後に更新できます。
 - 手動配置、ソースビルド、判定不能な導入は変更しません。Windowsでは`install.ps1`での導入方法を、それ以外では元の導入方法での更新を案内します。
 

@@ -60,10 +60,17 @@ func DialContext(ctx context.Context, path string) (net.Conn, error) {
 			windows.OPEN_EXISTING,
 			// overlapped でなければ、待っている読み書きを解除する手段が無い。
 			// 締切もキャンセルも、そこから作られる。
-			windows.FILE_FLAG_OVERLAPPED,
+			// 相手には、こちらが誰かを確かめさせるだけで、こちらとして振る舞わせない。
+			// 既定の SecurityImpersonation のままだと、pipe を作った者がこのユーザー
+			// の権限で動けてしまう。
+			windows.FILE_FLAG_OVERLAPPED|windows.SECURITY_SQOS_PRESENT|windows.SECURITY_IDENTIFICATION,
 			0,
 		)
 		if err == nil {
+			if err := verifyPipeOwner(handle); err != nil {
+				_ = windows.CloseHandle(handle)
+				return nil, &net.OpError{Op: "dial", Net: "pipe", Err: err}
+			}
 			return newConn(handle, path)
 		}
 		if !errors.Is(err, windows.ERROR_PIPE_BUSY) {
