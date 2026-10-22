@@ -259,6 +259,8 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
 - **cookie はポートに紐づきません。** 同じ `127.0.0.1` の別ポートに居るサーバーがこの session の cookie を受け取りうるので、読み取りにも CSRF トークンを要求します。トークンは port-origin ごとの `sessionStorage` にあり、そこへは渡りません。
 - デスクトップパッケージは廃止し、`sshc-<OS>-<アーキ>` 形式の CLI バイナリだけを配布します。署名、公証、インストーラーは使用しません。`curl` で取得し、`chmod +x` を設定して実行できます。Homebrew formula はソースからビルドします。
 - GUI アプリケーションとして配布するのは Android 版だけです。Android ではストア配布と WebView へのアクセス URL の受け渡しが必要です。iOS 版はラッパー、CI、検査がない状態で `ios-bind` target だけが残っていたため廃止しました。engine 側の `mobile` は gomobile のビルド対象として iOS を扱えますが、iOS 版の配布は保証しません。
+- Android版の画面には`FLAG_SECURE`を付け、ターミナルの出力やシークレットの入力欄がスクリーンショット、画面の録画、最近使ったアプリの一覧の画像に残らないようにします。debug buildは確認の手順（`scripts/android`、`docs/manual-acceptance.md`）が`adb exec-out screencap`で画面を撮るため付けません（`res/values/window.xml`の`secure_window`）。
+- ターミナルの通知を押して開いたMainActivityは、このプロセスが出した通知のtagだけを受け取ります。MainActivityはランチャーから開くためexportedで、ほかのアプリも同じextraを付けて開けるためです。Androidの通知には、ターミナルのプログラムからの通知であることをアプリ名の横に表示し、見出しは接続エイリアスから始めます。見出しのペイン名と本文は接続先のプログラムが決めるためです。
 - Androidのdebug buildは`applicationIdSuffix = ".dev"`と`versionNameSuffix = "-dev"`を使い、`com.github.aida0710.sshc.dev`／`sshc Dev`として正式版と共存します。namespaceとActivityのclass名は従来どおりです。Vault、設定、WebView storageは別packageのapp dataに保存し、正式版から自動移行しません。release buildのpackageと署名方式は変えません。
 - Android版のengineも、desktopと同じく既定のportを使い、埋まっていれば選んだ空きportを保存します。WebViewの`localStorage`とOPFSはorigin（port）ごとに分かれるため、起動のたびにportが変わると、設定が既定値に戻り、途中で止まったダウンロードの一時データも片付けられなくなります。既定のportはdesktopの54447とは別の54448にし、同じデバイスで動くdesktop版とoriginを共有しません。
 - Android版のengine ownerは同一packageの単一app processです。desktop／CLI用のOS file lockは使わず、Go側のprocess内mutexでstart／stopを直列化します。Service再生成などで`Start`が重複した場合は二重起動エラーにせず、以前のengineを停止して新しいengineへ置き換えます。desktop／CLIは別processを起動できるため、引き続き`engine.lock`を保持します。

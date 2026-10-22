@@ -17,11 +17,19 @@ final class TerminalNotifications {
     private static final String CHANNEL = "terminal";
     // 同じ tag の通知は置き換える。tag ごとに 1 件なので id は固定でよい。
     private static final int NOTIFICATION_ID = 1;
+    // 通知はプロセスに属し、出した MainActivity が閉じたあとに押されることもある。Activity
+    // ごとではなくプロセスで 1 つ持つ。
+    private static final IssuedNotificationTags issued = new IssuedNotificationTags();
 
     private final Context context;
 
     TerminalNotifications(Context context) {
         this.context = context;
+    }
+
+    /** tag の通知をこのアプリが出していれば、覚えた tag から外して true を返す。 */
+    static boolean takeIssued(String tag) {
+        return issued.take(tag);
     }
 
     void show(String tag, String title, String body) {
@@ -39,6 +47,9 @@ final class TerminalNotifications {
                 context, tag.hashCode(), open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification notification = new Notification.Builder(context, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_notify_chat)
+                // 見出しと本文は接続先のプログラムが決める。sshc 自身の通知と見分けられるよう、
+                // ターミナルのプログラムからの通知であることをアプリ名の横に出す。
+                .setSubText(context.getString(R.string.terminal_notification_source))
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(new Notification.BigTextStyle().bigText(body))
@@ -48,6 +59,7 @@ final class TerminalNotifications {
                 // プログラムが送った本文はロック画面に出さない。
                 .setVisibility(Notification.VISIBILITY_PRIVATE)
                 .build();
+        issued.issue(tag);
         manager.notify(tag, NOTIFICATION_ID, notification);
     }
 }
