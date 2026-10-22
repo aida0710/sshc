@@ -96,7 +96,7 @@ sshc has no command to delete older history. Delete it with the S3 console or to
 
 ## Terminal data
 
-Scrollback stays in memory and is not persisted or synced. OSC 52 clipboard access is configurable. A secret sent to a remote shell can still reach remote history, TTY echo or terminal output.
+Scrollback stays in memory and is not persisted or synced. OSC 52 clipboard access is configurable. An OSC 8 link whose text is a different address from where it goes shows the real destination before opening, even on Ctrl-click (⌘-click on a Mac). Images are checked for their pixel count and inflated size before they are decoded, and an image past the limits is not shown, so output cannot exhaust the browser's memory. A secret sent to a remote shell can still reach remote history, TTY echo or terminal output.
 
 ## Telnet
 
