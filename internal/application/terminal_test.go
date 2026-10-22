@@ -156,6 +156,7 @@ func TestTerminalDisplayAndSecurityChoicesRoundTrip(t *testing.T) {
 		WebGL:                  &webgl,
 		OSC52:                  true,
 		JISYenBackslash:        true,
+		IdentifyAsITerm2:       true,
 		LocalShellProfile:      "fish",
 	}
 	if _, err := service.SetTerminalSettings(want); err != nil {
@@ -163,7 +164,8 @@ func TestTerminalDisplayAndSecurityChoicesRoundTrip(t *testing.T) {
 	}
 	got := service.TerminalSettings()
 	if got.BrowserScrollbackLines != want.BrowserScrollbackLines || got.WebGL == nil || *got.WebGL || got.OSC52 != want.OSC52 ||
-		got.JISYenBackslash != want.JISYenBackslash || got.LocalShellProfile != want.LocalShellProfile {
+		got.JISYenBackslash != want.JISYenBackslash || got.IdentifyAsITerm2 != want.IdentifyAsITerm2 ||
+		got.LocalShellProfile != want.LocalShellProfile {
 		t.Fatalf("settings = %#v, want %#v", got, want)
 	}
 }

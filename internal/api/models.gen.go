@@ -2242,6 +2242,7 @@ type TerminalSettings struct {
 	BrowserScrollbackLines *int                `json:"browserScrollbackLines,omitempty"`
 	CopyOnSelect           *bool               `json:"copyOnSelect,omitempty"`
 	FontSize               *int                `json:"fontSize,omitempty"`
+	IdentifyAsITerm2       *bool               `json:"identifyAsITerm2,omitempty"`
 	JisYenBackslash        *bool               `json:"jisYenBackslash,omitempty"`
 	LocalShellProfile      *string             `json:"localShellProfile,omitempty"`
 	MaxSessions            *int                `json:"maxSessions,omitempty"`
