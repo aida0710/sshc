@@ -78,7 +78,7 @@ func (s *Service) ChangeMasterPassword(ctx context.Context, current, next string
 	if !s.Unlocked() {
 		return ErrLocked
 	}
-	if ok, err := s.Verify(current); err != nil {
+	if ok, err := s.verifyHeld(current); err != nil {
 		return err
 	} else if !ok {
 		return ErrWrongPassphrase

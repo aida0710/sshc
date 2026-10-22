@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -2056,6 +2057,48 @@ func TestWrongMasterPasswordsWaitTheSameThroughVerifyAndChange(t *testing.T) {
 	}
 	if len(waited) != 1 {
 		t.Errorf("waits for a refused change = %v, want one", waited)
+	}
+}
+
+// 誤ったパスワードの Verify を並べて送っても、待ちは 1 件ずつになる。
+//
+// 錠の外で待つと、N 件を同時に送れば N 件とも同時に待ちへ入り、待ちが試行の速さを
+// 抑えない。Unlock と同じく、待ちは Vault の変更と同じ錠の中で行う。
+func TestParallelWrongVerifiesWaitOneAtATime(t *testing.T) {
+	// refusalHold は、待ちの中にとどまる実時間。並べた試行の Argon2id は同時に 2 件まで
+	// 走るので、錠の外で待てば、ほぼ同時に判定を終えた 2 件の待ちがこの間に重なる。
+	const refusalHold = 50 * time.Millisecond
+	const callers = 4
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	service.Lock()
+
+	var waiting, mostAtOnce atomic.Int32
+	service.SetSleep(func(time.Duration) {
+		now := waiting.Add(1)
+		for {
+			most := mostAtOnce.Load()
+			if now <= most || mostAtOnce.CompareAndSwap(most, now) {
+				break
+			}
+		}
+		time.Sleep(refusalHold)
+		waiting.Add(-1)
+	})
+
+	var group sync.WaitGroup
+	for range callers {
+		group.Go(func() {
+			if ok, err := service.Verify("not the master password"); ok || err != nil {
+				t.Errorf("Verify with the wrong password = %v, %v", ok, err)
+			}
+		})
+	}
+	group.Wait()
+	if got := mostAtOnce.Load(); got != 1 {
+		t.Errorf("%d refusals waited at the same time, want 1", got)
 	}
 }
 
