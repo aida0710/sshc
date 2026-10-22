@@ -52,7 +52,7 @@ export function SortableTableHeader<Key extends string>({
       <button
         type="button"
         onClick={() => onSort(column)}
-        className={`inline-flex w-full items-center gap-1 text-inherit ${buttonClassName}`}
+        className={`inline-flex w-full items-center gap-1 text-inherit transition-colors duration-150 hover:text-ink ${buttonClassName}`}
       >
         <span>{children}</span>
         <Icon

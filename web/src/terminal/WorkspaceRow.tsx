@@ -50,7 +50,7 @@ export function WorkspaceRow({
         title={t("workspace.newSessionIn", { name })}
         disabled={!canOpenSession}
         onClick={onNewSession}
-        className={`flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-5 ${revealOnHover}`}
+        className={`flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5 ${revealOnHover}`}
       >
         <Icon name="plus" className="size-3.5" />
       </button>

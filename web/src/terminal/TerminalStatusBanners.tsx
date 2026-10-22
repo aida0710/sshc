@@ -94,7 +94,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
               type="button"
               disabled={stopBusy}
               onClick={() => void stopReconnecting()}
-              className="min-h-8 shrink-0 rounded border border-notice-line px-3 py-1 font-medium text-notice-ink hover:bg-select-fill disabled:opacity-50"
+              className="min-h-8 shrink-0 rounded border border-notice-line px-3 py-1 font-medium text-notice-ink hover:bg-select-fill"
             >
               {t("terminal.stopReconnect")}
             </button>
@@ -118,7 +118,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
               type="button"
               disabled={link.phase === "connecting"}
               onClick={onLinkNow}
-              className="shrink-0 rounded border border-notice-line px-2 py-0.5 text-notice-ink disabled:opacity-50"
+              className="shrink-0 rounded border border-notice-line px-2 py-0.5 text-notice-ink"
             >
               {t("terminal.linkNow")}
             </button>
@@ -146,7 +146,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
               type="button"
               disabled={reconnectBusy}
               onClick={() => void reconnectExitedSession()}
-              className="min-h-8 shrink-0 rounded border border-control-line bg-control px-3 py-1 font-medium text-ink hover:bg-select-fill disabled:opacity-50"
+              className="min-h-8 shrink-0 rounded border border-control-line bg-control px-3 py-1 font-medium text-ink hover:bg-select-fill"
             >
               {t(reconnectBusy ? "terminal.manualReconnecting" : "terminal.manualReconnect")}
             </button>

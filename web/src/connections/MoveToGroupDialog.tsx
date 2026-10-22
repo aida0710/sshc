@@ -41,7 +41,7 @@ export function MoveToGroupDialog({ aliases, groups, currentGroup, onPick, onCan
               disabled={row.name === currentGroup}
               onClick={() => onPick(row.name)}
               style={{ paddingInlineStart: `${0.75 + row.depth * 1.25}rem` }}
-              className="flex min-h-11 w-full items-center gap-2 rounded-md pr-3 text-left text-sm text-ink hover:bg-select-fill disabled:text-ink-faint disabled:hover:bg-transparent md:min-h-9"
+              className="flex min-h-11 w-full items-center gap-2 rounded-md pr-3 text-left text-sm text-ink hover:bg-select-fill md:min-h-9"
             >
               <Icon name="groups" className="size-4 text-ink-faint" />
               <span className="min-w-0 flex-1 truncate">{row.label}</span>

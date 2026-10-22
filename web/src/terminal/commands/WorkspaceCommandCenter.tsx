@@ -191,7 +191,7 @@ export function WorkspaceCommandCenter({
             disabled={busy}
             onClick={onClose}
             aria-label={t("workspace.commandClose")}
-            className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill disabled:opacity-50"
+            className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill"
           >
             <Icon name="close" className="size-4" />
           </button>
