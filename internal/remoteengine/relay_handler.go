@@ -6,6 +6,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // relayHandler は、このマシンのブラウザからの要求を確かめ、接続先のエンジン宛てに
@@ -23,6 +24,7 @@ type relayHandler struct {
 
 func newRelayHandler(localPort int, remotePort func() int, transport http.RoundTripper) http.Handler {
 	handler := &relayHandler{localHost: loopbackHost(localPort)}
+	cookiePrefix := relayCookiePrefix(localPort)
 	handler.proxy = &httputil.ReverseProxy{
 		Rewrite: func(request *httputil.ProxyRequest) {
 			remoteHost := loopbackHost(remotePort())
@@ -30,6 +32,11 @@ func newRelayHandler(localPort int, remotePort func() int, transport http.RoundT
 			if request.In.Header.Get("Origin") != "" {
 				request.Out.Header.Set("Origin", "http://"+remoteHost)
 			}
+			restoreRelayedCookies(request.Out.Header, request.In.Cookies(), cookiePrefix)
+		},
+		ModifyResponse: func(response *http.Response) error {
+			prefixSetCookies(response.Header, cookiePrefix)
+			return nil
 		},
 		Transport: transport,
 		// ターミナルの出力やファイルの受け渡しを溜めずに流す。
@@ -51,6 +58,42 @@ func (h *relayHandler) ServeHTTP(response http.ResponseWriter, request *http.Req
 		return
 	}
 	h.proxy.ServeHTTP(response, request)
+}
+
+// relayCookiePrefix は、接続先のエンジンが付けた cookie の名前の前に付ける文字列である。
+//
+// cookie はポートを区別しない。このマシンのエンジンも接続先のエンジンも、127.0.0.1 に
+// 同じ名前の cookie（sshc_session）を置くので、そのままでは片方を開くともう片方の
+// セッションを上書きする。上書きされた側の画面はセッションを失う。中継のポートごとの
+// 名前にして、ブラウザの中で分けておく。
+func relayCookiePrefix(localPort int) string {
+	return "sshc-relay-" + strconv.Itoa(localPort) + "-"
+}
+
+// prefixSetCookies は、接続先のエンジンが付けた cookie の名前の前に prefix を付ける。
+// Set-Cookie の値は名前から始まるので、前に足すだけで名前が変わる。
+func prefixSetCookies(header http.Header, prefix string) {
+	cookies := header.Values("Set-Cookie")
+	header.Del("Set-Cookie")
+	for _, cookie := range cookies {
+		header.Add("Set-Cookie", prefix+cookie)
+	}
+}
+
+// restoreRelayedCookies は、ブラウザが送った cookie のうち、この中継が名前を変えたもの
+// だけを元の名前に戻して接続先へ送る。ほかの cookie（このマシンのエンジンの sshc_session
+// など）は接続先へ送らない。
+func restoreRelayedCookies(header http.Header, sent []*http.Cookie, prefix string) {
+	header.Del("Cookie")
+	var restored []string
+	for _, cookie := range sent {
+		if name, relayed := strings.CutPrefix(cookie.Name, prefix); relayed && name != "" {
+			restored = append(restored, name+"="+cookie.Value)
+		}
+	}
+	if len(restored) > 0 {
+		header.Set("Cookie", strings.Join(restored, "; "))
+	}
 }
 
 func loopbackHost(port int) string {

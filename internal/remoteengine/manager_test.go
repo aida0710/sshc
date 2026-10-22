@@ -46,6 +46,13 @@ func strictEngine(t *testing.T) *httptest.Server {
 			_ = connection.Write(request.Context(), kind, append([]byte("echo:"), message...))
 			return
 		}
+		switch request.URL.Path {
+		case "/sign-in":
+			http.SetCookie(response, &http.Cookie{Name: "sshc_session", Value: "remote", Path: "/", HttpOnly: true})
+		case "/cookies":
+			fmt.Fprint(response, request.Header.Get("Cookie"))
+			return
+		}
 		fmt.Fprintf(response, "%s %s", request.Method, request.URL.Path)
 	}))
 	t.Cleanup(server.Close)
@@ -279,5 +286,29 @@ func TestAConnectionFromAnotherUserIsClosedUnread(t *testing.T) {
 	if response, err := http.DefaultClient.Do(request); err == nil {
 		response.Body.Close()
 		t.Fatalf("a connection from another user got %d", response.StatusCode)
+	}
+}
+
+func TestTheRemoteSessionCookieDoesNotOverwriteThisMachinesOwn(t *testing.T) {
+	fixture := newManagerFixture(t, newPortStore(t))
+	base := relayBase(t, fixture.open(t))
+
+	signIn, _ := http.NewRequest(http.MethodGet, base+"/sign-in", nil)
+	response, err := http.DefaultClient.Do(signIn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	set := response.Cookies()
+	prefix := relayCookiePrefix(fixture.manager.relays["r540"].localPort)
+	if len(set) != 1 || set[0].Name != prefix+"sshc_session" || set[0].Value != "remote" {
+		t.Fatalf("Set-Cookie through the relay = %v", set)
+	}
+
+	// cookie はポートを区別しないので、このマシンのエンジンの cookie も中継へ届く。
+	sent, _ := http.NewRequest(http.MethodGet, base+"/cookies", nil)
+	sent.Header.Set("Cookie", "sshc_session=local; "+prefix+"sshc_session=remote; sshc-relay-1-sshc_session=other")
+	if _, body := send(t, sent); body != "sshc_session=remote" {
+		t.Fatalf("the remote engine received cookies %q", body)
 	}
 }

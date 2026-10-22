@@ -61,7 +61,8 @@ sshc update
 - The SSH connection does not prompt. Accept a new host's key with `sshc ssh <alias>` first, and save any passphrase or password the host needs in Connections.
 - The SSH server on the host must allow TCP forwarding to its `127.0.0.1` (`AllowTcpForwarding yes` or `local` in `sshd_config`). If it does not, the command says so before printing a URL.
 - sshc must already be installed on the host. It is looked up on `PATH` and in `~/.local/bin`, `/home/linuxbrew/.linuxbrew/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. The host must run macOS or Linux.
-- Both machines listen on `127.0.0.1` only. Connections from another OS user on this machine are not relayed.
+- Both machines listen on `127.0.0.1` only. On Linux, connections from another OS user on this machine are not relayed.
+- This machine's sshc UI and the host's UI can be open in the same browser at the same time.
 
 `sshc stop` asks the running engine to stop and waits for it to exit. Open terminals and transfers close. If no engine is running, it exits successfully. On Linux, macOS, and Windows, an enabled service starts the engine again at the next login; use `sshc service disable` to keep it stopped.
 
