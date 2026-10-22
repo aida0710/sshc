@@ -6042,6 +6042,9 @@ components:
         webgl: { type: boolean }
         osc52: { type: boolean }
         jisYenBackslash: { type: boolean }
+        # 端末の名前を問う XTVERSION（CSI > q）に、xterm.js でなく iTerm2 3.5 と
+        # 答える。Claude Code は名前が iTerm2 3.5 以降のときだけ画像を描く。
+        identifyAsITerm2: { type: boolean }
         localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
         # ローカルシェルの開始ディレクトリ。`~` を維持し、空なら home を使う。
         startDirectory: { type: string, maxLength: 4096 }
@@ -6079,6 +6082,9 @@ components:
         webgl: { type: boolean }
         osc52: { type: boolean }
         jisYenBackslash: { type: boolean }
+        # 端末の名前を問う XTVERSION（CSI > q）に、xterm.js でなく iTerm2 3.5 と
+        # 答える。Claude Code は名前が iTerm2 3.5 以降のときだけ画像を描く。
+        identifyAsITerm2: { type: boolean }
         localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
     # このマシンの sshc エンジンの設定。同期しない。
