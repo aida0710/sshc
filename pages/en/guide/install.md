@@ -154,7 +154,7 @@ A state or definition change while waiting for confirmation also prevents succes
 
 ### Update from the web UI
 
-Open **About sshc** under **Others** in the Menu, or select the version in the sidebar, to see the running version, commit, installation method, and release notes. Notes cover the current version through the latest stable release within the 100 most recent releases retrieved. Their Markdown source is shown as plain text.
+Open **About sshc** under **Others** in the Menu, or select the version beside the logo at the top of the sidebar, to see the running version, commit, installation method, and release notes. Notes cover the current version through the latest stable release within the 100 most recent releases retrieved. Their Markdown source is shown as plain text.
 
 The engine checks at startup and every six hours, retaining the result. The sidebar rereads that result hourly. Select **Check for updates** on About sshc to check immediately, then **Update sshc** when available. Below the buttons, each step of a check or an update is listed with its time. If a check fails, the previously retrieved release information remains available.
 

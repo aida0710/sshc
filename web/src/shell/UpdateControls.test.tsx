@@ -98,7 +98,7 @@ describe("Web self update", () => {
     vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.2.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", installedVersion: "v1.2.0", state: "succeeded", problem: "" } });
     render(<UpdateBadge api={api} />);
     expect(await within(await screen.findByRole("dialog", { name: "sshc update" })).findByRole("status")).toHaveTextContent("Updated to v1.2.0");
-    expect(screen.getByText("Version v1.2.0")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Version v1.2.0" })).toBeVisible();
   });
 
   it("follows a started update in a dialog until its result", async () => {
@@ -124,7 +124,7 @@ describe("Web self update", () => {
     first.unmount();
 
     render(<UpdateBadge api={api} />);
-    await screen.findByText("Version v1.1.0");
+    await screen.findByRole("link", { name: "Version v1.1.0" });
     await waitFor(() => expect(api.updateStatus).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -133,7 +133,7 @@ describe("Web self update", () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.3.0", available: false, canUpdate: false, job: { id: "job-one", target: "v1.1.0", state: "succeeded", problem: "" } });
     render(<UpdateBadge api={api} />);
-    await screen.findByText("Version v1.3.0");
+    await screen.findByRole("link", { name: "Version v1.3.0" });
     await waitFor(() => expect(api.updateStatus).toHaveBeenCalled());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -165,7 +165,7 @@ describe("Web self update", () => {
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, manager: "homebrew", job: { id: "job-one", target: "v1.1.0", state: "failed", problem: "update_homebrew_not_updated" } });
     render(<UpdateBadge api={api} />);
     expect(await within(await screen.findByRole("dialog", { name: "sshc update" })).findByRole("status")).toHaveTextContent("brew update");
-    expect(screen.getByText("Version v1.0.0")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Version v1.0.0" })).toBeVisible();
     expect(api.startUpdate).not.toHaveBeenCalled();
   });
 
@@ -187,7 +187,7 @@ describe("Web self update", () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ current: "v1.0.0", latest: "v1.0.0", available: false, canUpdate: false, reason: "" });
     render(<UpdateBadge api={api} />);
-    await screen.findByText("Version v1.0.0");
+    await screen.findByRole("link", { name: "Version v1.0.0" });
     await waitFor(() => expect(api.updateStatus).toHaveBeenCalled());
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
