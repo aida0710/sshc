@@ -99,3 +99,4 @@ sshc does not trust the file names and attributes that an SFTP server returns. I
 
 - When saving to this machine, sshc checks every name the server returned. If a name would point outside the destination folder, such as one containing `\` or `..`, the transfer fails before it starts.
 - When downloading a folder as a ZIP file, sshc writes only the read, write and execute permissions of each file. It does not write the setuid, setgid or sticky bits.
+- sshc reads at most 100,000 entries from a single folder listing. If the server never ends the listing, sshc stops reading at that limit and reports an error.
