@@ -28,12 +28,12 @@ export function WorkspaceRow({
 }) {
   const t = useTranslate();
   return (
-    <div className="group/row flex items-center gap-1 rounded-md px-1 py-0.5">
+    <div className="group/row flex items-center gap-1 rounded-md px-1 py-0.5 md:py-0">
       <button
         type="button"
         aria-expanded={expanded}
         onClick={onToggle}
-        className="flex min-h-10 min-w-0 grow items-center gap-1.5 rounded-md px-1 text-left text-sm hover:bg-hover md:min-h-8"
+        className="flex min-h-10 min-w-0 grow items-center gap-1.5 rounded-md px-1 text-left text-sm hover:bg-hover md:min-h-6"
       >
         <DisclosureChevron expanded={expanded} className="size-3.5 shrink-0 text-ink-faint" />
         {/* The workspace name labels its sessions, so it stays quieter than they are. */}
@@ -50,14 +50,14 @@ export function WorkspaceRow({
         title={t("workspace.newSessionIn", { name })}
         disabled={!canOpenSession}
         onClick={onNewSession}
-        className={`flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-6 ${revealOnHover}`}
+        className={`flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-5 ${revealOnHover}`}
       >
         <Icon name="plus" className="size-3.5" />
       </button>
       <ActionMenu
         label={t("workspace.actions", { name })}
         items={actions}
-        triggerClassName={`flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-6 ${revealOnHover}`}
+        triggerClassName={`flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5 ${revealOnHover}`}
         iconClassName="size-3.5"
       />
     </div>
