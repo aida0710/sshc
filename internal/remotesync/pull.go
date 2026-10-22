@@ -184,9 +184,9 @@ func (s *Service) pullWithRemoteAcceptance(
 	if err := s.integrations.StableSnapshot(readLocal); err != nil {
 		return PullResult{}, err
 	}
-	// state の base は vault 文書の digest を鍵付きで持つ。三方比較の前に、この
-	// マシンの vault 文書かリモートの vault 文書のうち一致する方の digest に戻す。
-	base, err = s.comparableBase(base, local[TravelPath].SHA256, travelDigest(&manifest))
+	// state の base は vault 文書とスニペットの文書の digest を鍵付きで持つ。三方
+	// 比較の前に、このマシンの文書かリモートの文書のうち一致する方の digest に戻す。
+	base, err = s.comparableBase(base, plainDigests{}.addLocal(local).addManifest(&manifest))
 	if err != nil {
 		return PullResult{}, err
 	}
@@ -549,7 +549,7 @@ func (s *Service) diverged() (bool, error) {
 	if !stateMatchesTarget(current, binding.config) {
 		return len(manifest.Files) > 0, nil
 	}
-	base, err := s.comparableBase(current.Base, travelDigest(&manifest))
+	base, err := s.comparableBase(current.Base, plainDigests{}.addManifest(&manifest))
 	if err != nil {
 		return false, err
 	}

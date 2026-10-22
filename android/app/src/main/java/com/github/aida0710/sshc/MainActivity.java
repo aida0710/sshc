@@ -31,6 +31,7 @@ import android.webkit.WebResourceResponse;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -183,6 +184,9 @@ public final class MainActivity extends ComponentActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (getResources().getBoolean(R.bool.secure_window)) {
+            getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+        }
         showPreviousRuntimeNotice();
         // 閉じていたアプリを通知から開いた場合。Web 画面は起動したときに受け取りに来る。
         rememberOpenedNotification(getIntent());
@@ -214,10 +218,13 @@ public final class MainActivity extends ComponentActivity {
         webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('sshc-android-notification-opened'));", null);
     }
 
-    /** 通知から開いた Intent なら tag を覚えて true を返す。 */
+    /**
+     * 通知から開いた Intent なら tag を覚えて true を返す。この Activity は exported なので、
+     * ほかのアプリが付けた tag は受け取らず、このアプリが出した通知の tag だけを受け取る。
+     */
     private boolean rememberOpenedNotification(Intent intent) {
         String tag = intent.getStringExtra(TerminalNotifications.EXTRA_TAG);
-        if (tag == null || !NativeBridge.validNotificationTag(tag)) return false;
+        if (tag == null || !NativeBridge.validNotificationTag(tag) || !TerminalNotifications.takeIssued(tag)) return false;
         synchronized (openedNotificationLock) {
             openedNotificationTag = tag;
         }

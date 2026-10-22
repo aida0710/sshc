@@ -18,6 +18,8 @@
     <string name="failure_retrying">Starting…</string>
     <string name="file_picker_unavailable">No file picker is available on this device.</string>
     <string name="terminal_channel">Terminal</string>
+    <!-- ターミナルの通知のアプリ名の横に出す。見出しと本文は接続先のプログラムが決める。 -->
+    <string name="terminal_notification_source">From a terminal program</string>
     <string name="transfer_channel">SFTP transfers</string>
     <string name="transfer_completed">SFTP transfer completed.</string>
     <string name="transfer_failed">SFTP transfer failed. Open sshc for details.</string>
