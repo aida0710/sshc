@@ -139,11 +139,11 @@ export function SessionList({
             const unread = unreadBySession.has(session.id);
             const status = sessionStatusText(t, session);
             const marker = (
-              <span aria-hidden="true" className={`mt-1.5 size-1.5 shrink-0 rounded-full ${sessionMarkerClass(session)}`} />
+              <span aria-hidden="true" className={`mt-1.5 size-1.5 shrink-0 rounded-full md:mt-1 ${sessionMarkerClass(session)}`} />
             );
             const details = (
               <>
-                <p className="truncate text-xs text-ink-faint">
+                <p className="truncate text-xs text-ink-faint md:leading-tight">
                   {t("terminal.rowDetail", { status, destination })}
                 </p>
                 {(session.forwards ?? []).map((forward) => (
@@ -184,7 +184,7 @@ export function SessionList({
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
                 ) : null}
                 <div
-                  className={`relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors ${
+                  className={`relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors md:py-0.5 ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
                       : session.id === selected ? "bg-select-fill" : "hover:bg-hover"
@@ -221,7 +221,7 @@ export function SessionList({
                     >
                       {marker}
                       <span className="min-w-0 grow">
-                        <span className={`block truncate text-sm ${session.id === selected ? "font-semibold text-accent" : "text-ink"}`}>{displayTitle}</span>
+                        <span className={`block truncate text-sm md:leading-tight ${session.id === selected ? "font-semibold text-accent" : "text-ink"}`}>{displayTitle}</span>
                         {details}
                       </span>
                     </button>
@@ -252,7 +252,7 @@ export function SessionList({
                       setMenuPlacement(spaceBelow < 132 && spaceAbove > spaceBelow ? "up" : "down");
                       setMenuFor(session.id);
                     }}
-                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-6"
+                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5"
                   >
                     <Icon name="moreHorizontal" className="size-3.5" />
                   </button>
@@ -266,7 +266,7 @@ export function SessionList({
                       }
                       setClosing(session);
                     }}
-                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-6"
+                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5"
                   >
                     <Icon name="close" className="size-3.5" />
                   </button>

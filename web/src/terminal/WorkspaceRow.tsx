@@ -33,7 +33,7 @@ export function WorkspaceRow({
         type="button"
         aria-expanded={expanded}
         onClick={onToggle}
-        className="flex min-h-10 min-w-0 grow items-center gap-1.5 rounded-md px-1 text-left text-sm hover:bg-hover md:min-h-6"
+        className="flex min-h-10 min-w-0 grow items-center gap-1.5 rounded-md px-1 text-left text-sm hover:bg-hover md:min-h-5"
       >
         <DisclosureChevron expanded={expanded} className="size-3.5 shrink-0 text-ink-faint" />
         {/* The workspace name labels its sessions, so it stays quieter than they are. */}
