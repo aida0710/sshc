@@ -54,7 +54,6 @@ install_image terminal-desktop.png pages/public/images/terminal-desktop.png
 install_image transfer-manager-en.png pages/public/images/transfer-manager-en.png
 install_image transfer-manager-ja.png pages/public/images/transfer-manager-ja.png
 install_image transfer-manager-en.png pages/public/images/transfer-manager.png
-install_image sshc-v0.16.0-live-workspace-desktop.png pages/public/images/workspace-desktop.png
 install_image otp-desktop-en.png pages/public/images/otp-desktop-en.png
 install_image otp-desktop-ja.png pages/public/images/otp-desktop-ja.png
 install_image vpn-desktop-en.png pages/public/images/vpn-desktop-en.png

@@ -105,18 +105,6 @@ describe("useTerminalWorkspaceController", () => {
     expect(result.current.activeSessionId).toBe("s1");
   });
 
-  it("keeps the terminal screen behind another section while a workspace restore has no session yet", async () => {
-    const refresh = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useController([], refresh, "Connections"));
-    expect(result.current.terminalScreenMounted).toBe(false);
-
-    act(() => result.current.setWorkspaceRestoring(true));
-    expect(result.current.terminalScreenMounted).toBe(true);
-
-    act(() => result.current.setWorkspaceRestoring(false));
-    expect(result.current.terminalScreenMounted).toBe(false);
-  });
-
   it("shows an opened SSH session in the terminal section, and stays put when it could not be opened", async () => {
     const opened: (TerminalSession | null)[] = [session("s1"), null];
     const open = vi.fn(async () => opened.shift() ?? null);

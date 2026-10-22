@@ -33,23 +33,6 @@ describe("generated OpenAPI runtime validators", () => {
   });
 
   it("accepts strict extended resources and enforces exclusive request fields", () => {
-    expect(() => validateOpenAPISchema("TerminalWorkspace", {
-      id: "workspace-one",
-      name: "Operations",
-      layout: { pane: { id: "pane-one", alias: "edge", kind: "ssh" } },
-      focusedPaneId: "pane-one",
-      createdAt: "2026-08-31T12:00:00Z",
-      updatedAt: "2026-08-31T12:01:00Z",
-    })).not.toThrow();
-    expect(() => validateOpenAPISchema("WorkspaceNode", {})).toThrow("invalid_response");
-    expect(() => validateOpenAPISchema("WorkspaceNode", {
-      pane: { id: "pane-one", alias: "edge" },
-      split: {
-        direction: "horizontal", ratio: 50,
-        first: { pane: { id: "pane-two", alias: "edge" } },
-        second: { pane: { id: "pane-three", alias: "edge" } },
-      },
-    })).toThrow("invalid_response");
     expect(() => validateOpenAPISchema("Snippet", {
       id: "snippet-one",
       name: "Uptime",

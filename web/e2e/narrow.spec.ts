@@ -6,41 +6,6 @@ import { answerNoVPNProfiles } from "./support/vpn";
 
 const hosts = "Host alpha\n\tHostName 198.51.100.10\n\nHost bravo\n\tHostName 198.51.100.11\n";
 
-const mobileWorkspaceSessions = [
-  { id: "mobile-zsh", kind: "shell", title: "zsh", startedAt: "2026-08-31T08:00:00Z", state: "connected", problem: "", forwards: [] },
-  { id: "mobile-bash", kind: "shell", title: "bash", startedAt: "2026-08-31T08:01:00Z", state: "connected", problem: "", forwards: [] },
-];
-
-async function mockMobileWorkspace(page: import("@playwright/test").Page) {
-  let ticket = 0;
-  await page.route("**/api/v1/terminal/sessions**", async (route) => {
-    if (new URL(route.request().url()).pathname.endsWith("/stream")) {
-      ticket += 1;
-      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ streamTicket: `mobile-${ticket}` }) });
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ sessions: mobileWorkspaceSessions, maxSessions: 12 }),
-    });
-  });
-  await page.routeWebSocket("**/terminal/stream?**", (socket) => socket.send(Buffer.from("local shell\r\n$ ")));
-  await page.addInitScript(() => window.sessionStorage.setItem("sshc.terminal.live-workspace.v1", JSON.stringify({
-    version: 1,
-    root: {
-      split: {
-        direction: "horizontal",
-        ratio: 50,
-        first: { pane: { id: "mobile-pane-zsh", sessionId: "mobile-zsh" } },
-        second: { pane: { id: "mobile-pane-bash", sessionId: "mobile-bash" } },
-      },
-    },
-    focusedPaneId: "mobile-pane-zsh",
-    focusModePaneId: null,
-  })));
-}
-
 async function openSectionThroughDrawer(
   page: import("@playwright/test").Page,
   name: string,
@@ -466,33 +431,6 @@ test("keeps quick connection actions inside the viewport on mobile", async ({ pa
   await expect(connect).toBeFocused();
   await page.keyboard.press("ArrowUp");
   await expect(settings).toBeFocused();
-});
-
-test("keeps workspace management out of the mobile terminal", async ({ page, installation }) => {
-  await openApplication(page, installation);
-  await openSectionThroughDrawer(page, "Terminal", "No session is open");
-
-  await expect(page.getByRole("button", { name: "Split right" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Split down" })).toHaveCount(0);
-  await expect(page.locator("[data-desktop-workspace-controls]")).toBeHidden();
-  await expect(page.getByRole("button", { name: "Send command…" })).toBeHidden();
-  await expect(page.getByRole("button", { name: "Workspace actions" })).toBeHidden();
-  await expect(page.getByRole("navigation", { name: "Primary" })).toBeHidden();
-  await expect(page.getByRole("navigation", { name: "Quick navigation" })).toBeVisible();
-});
-
-test("keeps a live workspace visible without mobile rename controls", async ({ page, installation }) => {
-  await mockMobileWorkspace(page);
-  await openApplication(page, installation);
-
-  await page.getByRole("button", { name: "Navigation", exact: true }).click();
-  const navigation = page.getByRole("navigation", { name: "Primary" });
-  await expect(navigation.getByText("localhost", { exact: true })).toBeVisible();
-  await expect(navigation.getByText("2 sessions", { exact: true })).toBeVisible();
-  await expect(navigation.getByRole("button", { name: "Actions for localhost" })).toBeHidden();
-  await expect(navigation.getByRole("menuitem", { name: "Rename workspace" })).toHaveCount(0);
-  await expect(page.locator("[data-desktop-workspace-controls]").getByRole("button", { name: "Rename workspace" })).toHaveCount(0);
-  await expectNoHorizontalOverflow(page, "mobile workspace without management controls");
 });
 
 test("removes the session status badge from the mobile header", async ({ page, installation }) => {

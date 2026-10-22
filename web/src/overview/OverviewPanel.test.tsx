@@ -137,7 +137,6 @@ describe("OverviewPanel", () => {
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        loadWorkspaces={vi.fn().mockResolvedValue([])}
         launch={launch}
         onNavigate={vi.fn()}
         onNavigateLocation={vi.fn()}
@@ -216,7 +215,6 @@ describe("OverviewPanel", () => {
         loadOverview={loadOverview}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        loadWorkspaces={vi.fn().mockResolvedValue([])}
         onNavigate={vi.fn()}
         onNavigateLocation={vi.fn()}
       />,
@@ -235,13 +233,12 @@ describe("OverviewPanel", () => {
         loadOverview={vi.fn().mockResolvedValue({ ...overview, diagnostics: [] })}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockRejectedValue(new Error("history_failed"))}
-        loadWorkspaces={vi.fn().mockResolvedValue([])}
         onNavigate={vi.fn()}
         onNavigateLocation={vi.fn()}
       />,
     );
 
-    expect(await screen.findByText("Connection history or saved layouts could not be read.")).toBeInTheDocument();
+    expect(await screen.findByText("Connection history could not be read.")).toBeInTheDocument();
     expect(screen.getByText("database")).toBeInTheDocument();
   });
 
@@ -252,7 +249,6 @@ describe("OverviewPanel", () => {
         loadOverview={vi.fn().mockResolvedValue({ ...overview, diagnostics: [] })}
         loadSync={vi.fn().mockResolvedValue({ ...sync, configured: false })}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        loadWorkspaces={vi.fn().mockResolvedValue([])}
         onNavigate={navigate}
         onNavigateLocation={vi.fn()}
       />,
@@ -326,41 +322,4 @@ describe("OverviewPanel", () => {
     await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));
   });
 
-  it("lists saved workspaces without connecting until the explicit open action", async () => {
-    const openWorkspace = vi.fn();
-    render(
-      <OverviewPanel
-        loadOverview={vi.fn().mockResolvedValue(overview)}
-        loadSync={vi.fn().mockResolvedValue(sync)}
-        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        loadWorkspaces={vi.fn().mockResolvedValue([{
-          id: "workspace-1",
-          name: "Production pair",
-          layout: {
-            split: {
-              direction: "horizontal",
-              ratio: 50,
-              first: { pane: { id: "pane-a", alias: "web-a" } },
-              second: { pane: { id: "pane-b", alias: "web-b" } },
-            },
-          },
-          focusedPaneId: "pane-a",
-          createdAt: "2026-08-24T10:00:00Z",
-          updatedAt: "2026-08-24T11:00:00Z",
-        }])}
-        launch={vi.fn()}
-        onNavigate={vi.fn()}
-        onNavigateLocation={vi.fn()}
-        onOpenWorkspace={openWorkspace}
-      />,
-    );
-
-    const list = await screen.findByRole("list", { name: "Saved terminal layouts" });
-    expect(within(list).getByText("Production pair")).toBeInTheDocument();
-    expect(within(list).getByText(/2 panes/)).toBeInTheDocument();
-    expect(openWorkspace).not.toHaveBeenCalled();
-    await userEvent.click(within(list).getByRole("button", { name: "Open layout" }));
-    expect(openWorkspace).toHaveBeenCalledTimes(1);
-    expect(openWorkspace).toHaveBeenCalledWith("workspace-1");
-  });
 });

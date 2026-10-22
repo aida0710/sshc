@@ -5,14 +5,13 @@ description: SSHとローカルシェル、SFTP、OpenSSH接続管理、認証�
 
 # 機能
 
-sshcは、SSHとローカルシェルを扱うターミナルアプリです。SFTP、ポート転送、複数ペインに加え、OpenSSH接続管理、認証情報とワンタイムパスワードの再利用、接続ごとのVPN、CLI、暗号化同期を備えています。インストールせずに試す場合は、[公開デモ](https://sshc-demo.aida0710.work/index.html)を使えます。
+sshcは、SSHとローカルシェルを扱うターミナルアプリです。SFTP、ポート転送に加え、OpenSSH接続管理、認証情報とワンタイムパスワードの再利用、接続ごとのVPN、CLI、暗号化同期を備えています。インストールせずに試す場合は、[公開デモ](https://sshc-demo.aida0710.work/index.html)を使えます。
 
 ## Terminal
 
 - SSHとローカルシェルを同じ画面で操作
 - 接続の進行状況を表示し、終了したSSHセッションへ、ペインとスクロールバックを残したまま再接続
 - 検索、文字コード、リンクやリモートパスを開く操作
-- [Workspace](./workspace)で最大4ペインを配置し、レイアウトの保存と一括入力を管理
 - [クイックコマンドとスニペット](/terminal/commands)を、実行前の確認、接続時の自動実行、複数の接続先への実行に利用
 - [タイトルと通知](/terminal/notifications)で、プログラムが送るペイン名や通知を表示。Claude CodeやCodexの通知にも対応
 - [ポート転送](/terminal/port-forwarding)はLocal forwarding、Remote forwarding、Dynamic SOCKSに対応し、保存済みの設定と一時的な転送を使い分け

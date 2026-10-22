@@ -39,7 +39,6 @@ import (
 	"sshc/internal/terminal"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnprofile"
-	"sshc/internal/workspace"
 )
 
 type Options struct {
@@ -100,7 +99,6 @@ type Options struct {
 	// sent (see sftp.NewTransferManager). Empty leaves downloads unavailable;
 	// the caller that could not find a place reports why.
 	SFTPDownloadSpoolRoot string
-	Workspaces            *workspace.Service
 	Snippets              *snippets.Service
 	// Vault は、アカウントのパスワード、鍵のパスフレーズ、TOTP、同期の設定、
 	// VPN のシークレットを暗号化して持ち、マスターパスワードでのロックとロックの解除を扱う。
@@ -404,9 +402,6 @@ func New(options Options) (*Server, error) {
 		}
 		server.transfers = transfers
 		registerSFTPRoutes(e, SFTPHandlers{Service: options.SFTP, Transfers: transfers, Actions: actions, Attempts: connectionattempt.NewRegistry()})
-	}
-	if options.Workspaces != nil {
-		registerWorkspaceRoutes(e, WorkspaceHandlers{Service: options.Workspaces})
 	}
 	if options.Snippets != nil {
 		registerSnippetRoutes(e, SnippetHandlers{Service: options.Snippets, Actions: actions, BaseContext: baseCtx})
