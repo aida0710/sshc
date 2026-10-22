@@ -57,8 +57,8 @@ var ErrInvalidDocument = errors.New("browser registrations document is invalid")
 type registration struct {
 	Hash string `json:"hash"`
 	// Retired は、rotation で退役した token のハッシュを古い順に並べたもの。どれかが
-	// 猶予の後に提示されたら、この登録は盗まれている。直前の 1 世代だけを覚えると、
-	// 盗んだ側が 2 回続けて recover すれば正規のブラウザの token が外れる。
+	// 猶予の後に提示されたら、この登録は盗まれている。盗んだ側が続けて recover して
+	// も、正規のブラウザが持つ何世代か前の token をここで見つけられる。
 	Retired    []string  `json:"retired,omitempty"`
 	IssuedAt   time.Time `json:"issuedAt"`
 	LastUsedAt time.Time `json:"lastUsedAt"`
