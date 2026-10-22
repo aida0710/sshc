@@ -540,7 +540,7 @@ export const en = {
   "runTarget.unlockFailed": "The vault on {alias} could not be unlocked. Check it through Open its full screen in a new tab.",
   "runTarget.unlockOpen": "Unlock…",
   "runTarget.unlockHeading": "Unlock the vault on {alias}",
-  "runTarget.unlockBody": "The vault of the engine on {alias} is locked. Enter the vault password for {alias}. It is not saved on this computer.",
+  "runTarget.unlockBody": "The engine on {alias} is locked. Enter its password to unlock it.",
   "runTarget.unlockPassword": "Vault password for {alias}",
   "runTarget.unlock": "Unlock",
   "runTarget.unlocking": "Unlocking…",

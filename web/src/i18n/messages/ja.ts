@@ -545,7 +545,7 @@ export const ja = {
   "runTarget.unlockFailed": "{alias} のVaultのロックを解除できませんでした。［別タブで画面をまるごと開く］で確かめてください。",
   "runTarget.unlockOpen": "ロックを解除…",
   "runTarget.unlockHeading": "{alias} のVaultのロックを解除",
-  "runTarget.unlockBody": "{alias} のsshcエンジンのVaultがロックされています。{alias} のVaultのパスワードを入力してください。パスワードはこのPCに保存しません。",
+  "runTarget.unlockBody": "{alias} のsshcエンジンがロックされています。解除するためにパスワードを入力してください。",
   "runTarget.unlockPassword": "{alias} のVaultのパスワード",
   "runTarget.unlock": "解除",
   "runTarget.unlocking": "解除しています…",

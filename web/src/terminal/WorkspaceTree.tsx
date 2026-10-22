@@ -161,12 +161,16 @@ export function WorkspaceTree({
           iconClassName="size-3.5"
         />
       </div>
-      {terminalSessions.problem === "" ? null : <Notice tone="danger" compact>{terminalSessions.problem}</Notice>}
-      {terminalSessions.remoteVaultLocked && onUnlockRemoteVault !== undefined ? (
-        <button type="button" onClick={onUnlockRemoteVault} className="mx-2 min-h-10 rounded-md border border-line px-2 text-left text-xs text-ink hover:bg-hover md:min-h-7">
-          {t("runTarget.unlockOpen")}
-        </button>
-      ) : null}
+      {terminalSessions.problem === "" ? null : (
+        <Notice tone="danger" compact>
+          <span className="min-w-0 grow">{terminalSessions.problem}</span>
+          {terminalSessions.remoteVaultLocked && onUnlockRemoteVault !== undefined ? (
+            <button type="button" onClick={onUnlockRemoteVault} className="min-h-9 shrink-0 rounded border border-control-line px-2 text-ink hover:bg-hover md:min-h-6">
+              {t("runTarget.unlockOpen")}
+            </button>
+          ) : null}
+        </Notice>
+      )}
       {workspaces.problem === "" ? null : <Notice tone="danger" compact>{workspaces.problem}</Notice>}
       <ul aria-label={t("workspace.heading")} className="flex flex-col gap-0.5">
         {groups.map(({ workspace, sessions: members }) => {
