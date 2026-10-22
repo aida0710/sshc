@@ -102,11 +102,11 @@ type managerFixture struct {
 	links    chan *fakeLink
 }
 
-func newManagerFixture(t *testing.T, store *PortStore) *managerFixture {
+func newManagerFixture(t *testing.T, store *Store) *managerFixture {
 	t.Helper()
 	fixture := &managerFixture{engine: strictEngine(t), links: make(chan *fakeLink, 8)}
 	fixture.manager = NewManager(ManagerOptions{
-		Ports: store,
+		Store: store,
 		Connect: func(context.Context, string) (Link, error) {
 			fixture.connects.Add(1)
 			link := newFakeLink(fixture.engine.URL+"/#bootstrap=one-time", 0)
@@ -148,7 +148,7 @@ func send(t *testing.T, request *http.Request) (int, string) {
 }
 
 func TestTheRelayURLCarriesTheRemoteEntranceToALocalPort(t *testing.T) {
-	fixture := newManagerFixture(t, newPortStore(t))
+	fixture := newManagerFixture(t, newStore(t))
 	opened := fixture.open(t)
 	if !strings.HasPrefix(opened, "http://127.0.0.1:") || !strings.HasSuffix(opened, "/#bootstrap=one-time") {
 		t.Fatalf("opened = %q", opened)
@@ -159,7 +159,7 @@ func TestTheRelayURLCarriesTheRemoteEntranceToALocalPort(t *testing.T) {
 }
 
 func TestTheRemoteEngineSeesItsOwnHostAndOrigin(t *testing.T) {
-	fixture := newManagerFixture(t, newPortStore(t))
+	fixture := newManagerFixture(t, newStore(t))
 	base := relayBase(t, fixture.open(t))
 
 	request, _ := http.NewRequest(http.MethodPost, base+"/api/v1/session/bootstrap", nil)
@@ -171,7 +171,7 @@ func TestTheRemoteEngineSeesItsOwnHostAndOrigin(t *testing.T) {
 }
 
 func TestTheRelayRefusesAnotherHostOrOriginBeforeRewritingThem(t *testing.T) {
-	fixture := newManagerFixture(t, newPortStore(t))
+	fixture := newManagerFixture(t, newStore(t))
 	base := relayBase(t, fixture.open(t))
 
 	rebound, _ := http.NewRequest(http.MethodGet, base+"/", nil)
@@ -188,7 +188,7 @@ func TestTheRelayRefusesAnotherHostOrOriginBeforeRewritingThem(t *testing.T) {
 }
 
 func TestATerminalStreamPassesThroughTheRelay(t *testing.T) {
-	fixture := newManagerFixture(t, newPortStore(t))
+	fixture := newManagerFixture(t, newStore(t))
 	base := relayBase(t, fixture.open(t))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -211,7 +211,7 @@ func TestATerminalStreamPassesThroughTheRelay(t *testing.T) {
 }
 
 func TestOpeningAgainKeepsTheSameLocalPortEvenAfterTheEngineRestarts(t *testing.T) {
-	store := newPortStore(t)
+	store := newStore(t)
 	fixture := newManagerFixture(t, store)
 	first := relayBase(t, fixture.open(t))
 	if again := relayBase(t, fixture.open(t)); again != first {
@@ -226,7 +226,7 @@ func TestOpeningAgainKeepsTheSameLocalPortEvenAfterTheEngineRestarts(t *testing.
 }
 
 func TestAnEndedConnectionIsReopenedOnTheNextRequest(t *testing.T) {
-	fixture := newManagerFixture(t, newPortStore(t))
+	fixture := newManagerFixture(t, newStore(t))
 	base := relayBase(t, fixture.open(t))
 	(<-fixture.links).Close()
 
@@ -245,8 +245,8 @@ func TestAnEndedConnectionIsReopenedOnTheNextRequest(t *testing.T) {
 }
 
 func TestAHostWithoutSSHCAForwardingRefusalAndAFailedConnectionAreToldApart(t *testing.T) {
-	store := newPortStore(t)
-	missing := NewManager(ManagerOptions{Ports: store, Connect: func(context.Context, string) (Link, error) {
+	store := newStore(t)
+	missing := NewManager(ManagerOptions{Store: store, Connect: func(context.Context, string) (Link, error) {
 		return newFakeLink("", notInstalledExit), nil
 	}})
 	defer missing.Close()
@@ -255,7 +255,7 @@ func TestAHostWithoutSSHCAForwardingRefusalAndAFailedConnectionAreToldApart(t *t
 	}
 
 	engine := strictEngine(t)
-	prohibited := NewManager(ManagerOptions{Ports: store, Connect: func(context.Context, string) (Link, error) {
+	prohibited := NewManager(ManagerOptions{Store: store, Connect: func(context.Context, string) (Link, error) {
 		link := newFakeLink(engine.URL+"/#bootstrap=x", 0)
 		link.refuseDial = true
 		return link, nil
@@ -266,7 +266,7 @@ func TestAHostWithoutSSHCAForwardingRefusalAndAFailedConnectionAreToldApart(t *t
 	}
 
 	refused := errors.New("handshake failed")
-	unreachable := NewManager(ManagerOptions{Ports: store, Connect: func(context.Context, string) (Link, error) {
+	unreachable := NewManager(ManagerOptions{Store: store, Connect: func(context.Context, string) (Link, error) {
 		return nil, refused
 	}})
 	defer unreachable.Close()
@@ -278,7 +278,7 @@ func TestAHostWithoutSSHCAForwardingRefusalAndAFailedConnectionAreToldApart(t *t
 }
 
 func TestAConnectionFromAnotherUserIsClosedUnread(t *testing.T) {
-	fixture := newManagerFixture(t, newPortStore(t))
+	fixture := newManagerFixture(t, newStore(t))
 	fixture.manager.options.PeerMayBelongToAnotherUser = func(_, _ netip.AddrPort) bool { return true }
 	base := relayBase(t, fixture.open(t))
 
@@ -290,7 +290,7 @@ func TestAConnectionFromAnotherUserIsClosedUnread(t *testing.T) {
 }
 
 func TestTheRemoteSessionCookieDoesNotOverwriteThisMachinesOwn(t *testing.T) {
-	fixture := newManagerFixture(t, newPortStore(t))
+	fixture := newManagerFixture(t, newStore(t))
 	base := relayBase(t, fixture.open(t))
 
 	signIn, _ := http.NewRequest(http.MethodGet, base+"/sign-in", nil)
@@ -300,7 +300,7 @@ func TestTheRemoteSessionCookieDoesNotOverwriteThisMachinesOwn(t *testing.T) {
 	}
 	response.Body.Close()
 	set := response.Cookies()
-	prefix := relayCookiePrefix(fixture.manager.relays["r540"].localPort)
+	prefix := relayCookiePrefix(fixture.manager.hosts["r540"].relay.localPort)
 	if len(set) != 1 || set[0].Name != prefix+"sshc_session" || set[0].Value != "remote" {
 		t.Fatalf("Set-Cookie through the relay = %v", set)
 	}

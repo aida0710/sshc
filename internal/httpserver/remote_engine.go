@@ -56,20 +56,41 @@ func (h CLIHandlers) OpenRemoteEngine(c *echo.Context) error {
 	}
 
 	opened, err := h.RemoteEngines.Open(request.Context(), decoded.Alias)
+	if err != nil {
+		return remoteEngineProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, openResponse{URL: opened})
+}
+
+// remoteEngineProblem は、接続先のエンジンを開けなかった理由を、理由ごとの code で断る。
+// CLI と画面が、それぞれの言葉で直し方を添える。
+func remoteEngineProblem(c *echo.Context, err error) error {
 	var connectErr *remoteengine.ConnectError
+	var mismatch *remoteengine.VersionMismatchError
 	switch {
-	case err == nil:
-		return c.JSON(http.StatusOK, openResponse{URL: opened})
 	case errors.Is(err, remoteengine.ErrClosed):
 		return problem(c, http.StatusServiceUnavailable, "server_stopping")
+	case errors.Is(err, remoteengine.ErrNotAdded):
+		return problem(c, http.StatusNotFound, "remote_engine_not_added")
+	case errors.Is(err, remoteengine.ErrRequestTooLarge):
+		return problem(c, http.StatusRequestEntityTooLarge, "request_body_too_large")
 	case errors.As(err, &connectErr):
 		return problemWith(c, http.StatusBadGateway, problemPayload{
 			Code: "remote_engine_connect_failed", Reason: remoteEngineConnectFailure(connectErr.Err),
 		})
+	case errors.As(err, &mismatch):
+		// detail は接続先のバージョンだけである。このマシンのバージョンは画面と CLI が知っている。
+		return problemDetail(c, http.StatusConflict, "remote_engine_version_mismatch", mismatch.Remote)
+	case errors.Is(err, remoteengine.ErrNotRunning):
+		return problem(c, http.StatusBadGateway, "remote_engine_not_running")
+	case errors.Is(err, remoteengine.ErrUnproven):
+		return problem(c, http.StatusBadGateway, "remote_engine_unproven")
 	case errors.Is(err, remoteengine.ErrNotInstalled):
 		return problem(c, http.StatusBadGateway, "remote_engine_not_installed")
 	case errors.Is(err, remoteengine.ErrForwardingRefused):
 		return problem(c, http.StatusBadGateway, "remote_engine_forwarding_refused")
+	case errors.Is(err, remoteengine.ErrNoEntrance):
+		return problem(c, http.StatusBadGateway, "remote_engine_no_entrance")
 	}
-	return problem(c, http.StatusBadGateway, "remote_engine_no_entrance")
+	return unexpectedProblem(c, "remote_engine_failed", err)
 }

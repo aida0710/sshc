@@ -84,9 +84,9 @@ type Options struct {
 	Keys        KeyService
 	// Connect は、alias ひとつ分の対話セッションを開く。合成の根が組み立てる。
 	Connect Connector
-	// RemoteEngines は、SSH の接続先のエンジンへの中継を開く。nil なら `sshc open <alias>`
-	// の受け口を登録しない。
-	RemoteEngines RemoteEngineOpener
+	// RemoteEngines は、SSH の接続先のエンジンへの中継と、実行先としての取り次ぎを持つ。
+	// nil なら `sshc open <alias>` と実行先の受け口を登録しない。
+	RemoteEngines RemoteEngineDirectory
 	Diagnostics   *diagnostics.Service
 	KnownHosts    *knownhosts.Service
 	RemoteKeys    *remotekey.Service
@@ -443,6 +443,9 @@ func New(options Options) (*Server, error) {
 	}
 	if options.Terminals != nil {
 		registerTerminalRoutes(e, newTerminalHandlers(options, actions, host))
+		if options.RemoteEngines != nil {
+			registerRemoteEngineRoutes(e, RemoteEngineHandlers{Engines: options.RemoteEngines, ExpectedOrigin: "http://" + host})
+		}
 	}
 	if options.VPN != nil {
 		registerVPNRoutes(e, VPNHandlers{

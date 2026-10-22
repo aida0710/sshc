@@ -650,6 +650,11 @@ type About struct {
 // AboutManager defines model for About.Manager.
 type AboutManager string
 
+// AddRemoteEngineRequest defines model for AddRemoteEngineRequest.
+type AddRemoteEngineRequest struct {
+	Alias string `json:"alias"`
+}
+
 // AgentIdentitiesResponse defines model for AgentIdentitiesResponse.
 type AgentIdentitiesResponse struct {
 	AgentAvailable bool            `json:"agentAvailable"`
@@ -1411,6 +1416,31 @@ type RelocateKeyResponse struct {
 type RelocatedKeyFile struct {
 	From string `json:"from"`
 	To   string `json:"to"`
+}
+
+// RemoteEngine defines model for RemoteEngine.
+type RemoteEngine struct {
+	Alias string `json:"alias"`
+}
+
+// RemoteEngineEntrance defines model for RemoteEngineEntrance.
+type RemoteEngineEntrance struct {
+	Url string `json:"url"`
+}
+
+// RemoteEngineList defines model for RemoteEngineList.
+type RemoteEngineList struct {
+	Engines []RemoteEngine `json:"engines"`
+}
+
+// RemoteEngineStatus defines model for RemoteEngineStatus.
+type RemoteEngineStatus struct {
+	Alias        string `json:"alias"`
+	Passwordless bool   `json:"passwordless"`
+	Sessions     int    `json:"sessions"`
+	Unlocked     bool   `json:"unlocked"`
+	Vault        bool   `json:"vault"`
+	Version      string `json:"version"`
 }
 
 // RemoteKeyPlan defines model for RemoteKeyPlan.
