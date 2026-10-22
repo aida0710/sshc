@@ -470,6 +470,680 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
+  # 実行先に足した接続先のエンジン。/api/v1/engines/{alias}/terminal… は、接続先の
+  # /api/v1/terminal… へそのまま取り次ぐ（Go の forwardedTerminalRoutes と同じ並び）。
+  /api/v1/engines:
+    get:
+      operationId: listRemoteEngines
+      responses:
+        '200':
+          description: Remote engines added as run targets, in the order they were added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteEngineList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: addRemoteEngine
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddRemoteEngineRequest'
+      responses:
+        '201':
+          description: The engine was reachable, running the same version, and is now a run target
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteEngine'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /api/v1/engines/{alias}:
+    delete:
+      operationId: removeRemoteEngine
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      responses:
+        '200':
+          description: The remaining engines; the remote engine and its terminals keep running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteEngineList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /api/v1/engines/{alias}/status:
+    get:
+      operationId: getRemoteEngineStatus
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      responses:
+        '200':
+          description: The status the remote engine reports, as sshc status shows it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteEngineStatus'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /api/v1/engines/{alias}/open:
+    post:
+      operationId: openRemoteEngine
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      responses:
+        '200':
+          description: A one-time URL that opens the remote engine through a relay on this machine
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteEngineEntrance'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /api/v1/engines/{alias}/terminal/sessions:
+    get:
+      operationId: remoteEngineListTerminalSessions
+      responses:
+        '400':
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: Every open and retained terminal session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalSessionList'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+    post:
+      operationId: remoteEngineOpenTerminalSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenTerminalSessionRequest'
+      responses:
+        '201':
+          description: The session and a single-use ticket for its stream
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenTerminalSessionResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/shell-profiles:
+    get:
+      operationId: remoteEngineListLocalShellProfiles
+      responses:
+        '400':
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: Local shells detected and validated on this machine
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalShellProfileList'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/sessions/{id}/stream:
+    post:
+      operationId: remoteEngineIssueTerminalStreamTicket
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - name: cursor
+        in: query
+        required: false
+        description: Absolute byte position already rendered by this browser. Omit on a fresh page to replay all retained output.
+        schema:
+          type: integer
+          format: uint64
+          minimum: 0
+          default: 0
+      responses:
+        '201':
+          description: A single-use ticket bound to this session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalStreamTicket'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/sessions/{id}/reconnect:
+    post:
+      operationId: remoteEngineReconnectTerminalSession
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      responses:
+        '200':
+          description: The session list after reconnecting the exited SSH session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalSessionList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/sessions/{id}/reconnect/stop:
+    post:
+      operationId: remoteEngineStopTerminalReconnect
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      responses:
+        '400':
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: The session list after the automatic reconnect was stopped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalSessionList'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/sessions/{id}/title:
+    put:
+      operationId: remoteEngineSetTerminalSessionTitle
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetTerminalSessionTitleRequest'
+      responses:
+        '200':
+          description: The session list after pinning or unpinning the display title
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalSessionList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/sessions/{id}/workspace:
+    put:
+      operationId: remoteEngineMoveTerminalSession
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveTerminalSessionRequest'
+      responses:
+        '200':
+          description: The session list after moving the session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalSessionList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/sessions/{id}:
+    delete:
+      operationId: remoteEngineCloseTerminalSession
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      responses:
+        '400':
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: The session list after the close
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalSessionList'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /api/v1/engines/{alias}/terminal/workspaces:
+    get:
+      operationId: remoteEngineListTerminalWorkspaces
+      responses:
+        '400':
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: Every terminal workspace, hidden ones included
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalWorkspaceList'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+    post:
+      operationId: remoteEngineCreateTerminalWorkspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTerminalWorkspaceRequest'
+      responses:
+        '201':
+          description: The workspace that was created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalWorkspace'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/workspaces/{id}:
+    patch:
+      operationId: remoteEngineUpdateTerminalWorkspace
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTerminalWorkspaceRequest'
+      responses:
+        '200':
+          description: The workspace after renaming or hiding it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalWorkspace'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+    delete:
+      operationId: remoteEngineDeleteTerminalWorkspace
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      responses:
+        '200':
+          description: The remaining workspaces; the deleted one's sessions moved to default
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalWorkspaceList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
   /api/v1/terminal/shell-profiles:
     get:
       operationId: listLocalShellProfiles
@@ -3820,6 +4494,42 @@ components:
     # 名前は一覧の表示だけのものである。走っているプロセスにも ssh の相手にも
     # 触れず、metadata へも書かない。セッションと一緒に消える。null は、利用者が
     # 付けた名前を外し、プログラムが付けた名前か接続先の名前へ戻す。
+    RemoteEngine:
+      type: object
+      additionalProperties: false
+      required: [alias]
+      properties:
+        alias: { type: string, minLength: 1, maxLength: 64 }
+    RemoteEngineList:
+      type: object
+      additionalProperties: false
+      required: [engines]
+      properties:
+        engines: { type: array, items: { $ref: "#/components/schemas/RemoteEngine" } }
+    AddRemoteEngineRequest:
+      type: object
+      additionalProperties: false
+      required: [alias]
+      properties:
+        alias: { type: string, minLength: 1, maxLength: 64 }
+    RemoteEngineStatus:
+      type: object
+      additionalProperties: false
+      required: [alias, version, vault, unlocked, passwordless, sessions]
+      properties:
+        alias: { type: string }
+        version: { type: string }
+        vault: { type: boolean }
+        unlocked: { type: boolean }
+        passwordless: { type: boolean }
+        # sessions は、接続先のエンジンの終了していないターミナルの本数である。
+        sessions: { type: integer, minimum: 0 }
+    RemoteEngineEntrance:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url: { type: string }
     # ターミナルのセッションをまとめるワークスペース。default と agents は消せず、
     # name が空なら画面がその言語の既定の名前を出す。
     TerminalWorkspace:
