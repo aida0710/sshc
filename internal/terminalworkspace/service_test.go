@@ -2,10 +2,10 @@ package terminalworkspace
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/storage"
 )
 
@@ -47,13 +47,8 @@ func TestWithoutAFileOnlyTheBuiltInWorkspacesExistAndAgentsIsHidden(t *testing.T
 
 func TestASplitLayoutFileFromBeforeIsTreatedAsAbsent(t *testing.T) {
 	service, path := newService(t)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	old := `{"schemaVersion":2,"workspaces":[{"id":"w1","name":"Ops","layout":{"pane":{"id":"p","alias":"edge","kind":"ssh"}}}]}`
-	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, path, []byte(old))
 	if got := ids(t, service); len(got) != 2 {
 		t.Fatalf("ids = %v, want only the built-in workspaces", got)
 	}
@@ -61,12 +56,7 @@ func TestASplitLayoutFileFromBeforeIsTreatedAsAbsent(t *testing.T) {
 
 func TestANewerFileIsNotOverwritten(t *testing.T) {
 	service, path := newService(t)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(`{"schemaVersion":4,"workspaces":[]}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, path, []byte(`{"schemaVersion":4,"workspaces":[]}`))
 	if _, err := service.Create("Ops", false); !errors.Is(err, ErrUnsupportedVersion) {
 		t.Fatalf("Create = %v, want ErrUnsupportedVersion", err)
 	}
