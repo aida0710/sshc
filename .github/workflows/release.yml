@@ -437,18 +437,22 @@ jobs:
             echo "expected exactly 9 release artifacts, found $count" >&2
             exit 1
           }
+          # sshc update は、タグの install.sh と install.ps1 をこの checksums.txt と
+          # 照合してから実行する。Release を経ずにタグへ push された script を通さない。
+          cp install.sh dist/install.sh
           cp install.ps1 dist/install.ps1
           ls -la dist
 
-      # 手動ダウンロード用の SHA-256 チェックサムを生成する。
+      # 手動ダウンロードと sshc update の照合に使う SHA-256 チェックサムを生成する。
       - name: Package
-        run: cd dist && sha256sum sshc-* install.ps1 > checksums.txt
+        run: cd dist && sha256sum sshc-* install.sh install.ps1 > checksums.txt
 
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             dist/sshc-*
+            dist/install.sh
             dist/install.ps1
             dist/checksums.txt
 
@@ -510,7 +514,7 @@ jobs:
             $prerelease_args \
             --title "$RELEASE_TAG" \
             --notes-file "$notes_file" \
-            dist/sshc-* dist/install.ps1 dist/checksums.txt
+            dist/sshc-* dist/install.sh dist/install.ps1 dist/checksums.txt
           matches=$(matching_releases)
           [ "$(printf '%s' "$matches" | jq 'length')" -eq 1 ] || {
             echo "the release draft for $RELEASE_TAG is not unique" >&2
@@ -524,6 +528,7 @@ jobs:
             .prerelease == $expected_prerelease and
             ([.assets[].name] | sort) == ([
               "checksums.txt",
+              "install.sh",
               "install.ps1",
               ("sshc-android-" + $tag + ".apk"),
               ("sshc-demo-" + $tag + ".tar.gz"),

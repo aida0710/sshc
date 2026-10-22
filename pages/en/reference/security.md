@@ -1,6 +1,6 @@
 ---
 title: Security
-description: Local boundaries, vault encryption, VPN, host keys, sync and Telnet.
+description: Local boundaries, vault encryption, VPN, host keys, sync, Telnet and updates.
 ---
 
 # Security
@@ -92,3 +92,7 @@ Scrollback stays in memory and is not persisted or synced. OSC 52 clipboard acce
 ## Telnet
 
 Telnet neither encrypts traffic nor authenticates the server. sshc warns before connecting but cannot secure the protocol. Use it only behind another trusted network boundary when credentials are involved.
+
+## Updates
+
+`sshc update` and the web UI update an installation made by `install.sh` or `install.ps1` with the same installer from the latest stable release tag. The installer runs only when its SHA-256 matches the entry in `checksums.txt` of the same GitHub Release, so a script placed on the tag without going through the release workflow is never run.

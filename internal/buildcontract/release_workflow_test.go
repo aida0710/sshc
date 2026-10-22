@@ -191,7 +191,7 @@ func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
 		t.Fatal("release.yml has no stage-release job")
 	}
 	for _, required := range []string{
-		"install.ps1",
+		"install.sh", "install.ps1",
 		"sshc-darwin-amd64", "sshc-darwin-arm64",
 		"sshc-linux-amd64", "sshc-linux-arm64",
 		"sshc-windows-amd64.exe", "sshc-windows-arm64.exe",
@@ -199,8 +199,11 @@ func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
 		"sshc-demo-${RELEASE_TAG}.tar.gz", "sshc-demo-${RELEASE_TAG}.json",
 		`[ "$count" -eq 1 ]`,
 		`[ "$count" -eq 9 ]`,
-		`sha256sum sshc-* install.ps1`,
-		`dist/sshc-* dist/install.ps1 dist/checksums.txt`,
+		`cp install.sh dist/install.sh`,
+		`sha256sum sshc-* install.sh install.ps1`,
+		"dist/install.sh\n",
+		`dist/sshc-* dist/install.sh dist/install.ps1 dist/checksums.txt`,
+		`"install.sh",`,
 		`--verify-tag`,
 		`--draft`,
 		`jq -e '.[0].draft == true'`,
