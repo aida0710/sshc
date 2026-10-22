@@ -8,6 +8,7 @@ import {
 } from "react";
 import { describeControl } from "./describeControl";
 import { dangerAction, hintText, primaryAction, secondaryAction } from "./form";
+import { Spinner } from "./Spinner";
 
 type CardElement = "div" | "section" | "article" | "dl" | "ul";
 
@@ -107,25 +108,29 @@ export function Row({
   );
 }
 
-// Notice is the one way a panel tells the user something went wrong or
-// needs attention; "compact" fits it into dense lists and side panes.
+const noticeToneClasses = {
+  notice: "border-notice-line bg-notice text-notice-ink",
+  danger: "border-control-line text-danger",
+  success: "border-live/40 bg-live/10 text-live",
+} as const;
+
+// Notice is the one way a panel tells the user something went wrong, needs
+// attention, or has just been done ("success": saved, started, restored).
+// "compact" fits it into dense lists and side panes.
 export function Notice({
   children,
   tone = "notice",
   compact = false,
 }: {
   children: ReactNode;
-  tone?: "notice" | "danger";
+  tone?: keyof typeof noticeToneClasses;
   compact?: boolean;
 }) {
-  const danger = tone === "danger";
   const spacing = compact ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-sm";
   return (
     <p
-      role={danger ? "alert" : "status"}
-      className={`flex items-center gap-2 rounded-md border ${spacing} ${
-        danger ? "border-control-line text-danger" : "border-notice-line bg-notice text-notice-ink"
-      }`}
+      role={tone === "danger" ? "alert" : "status"}
+      className={`flex items-center gap-2 rounded-md border ${spacing} ${noticeToneClasses[tone]}`}
     >
       {children}
     </p>
@@ -170,13 +175,19 @@ export function Segmented<T extends string>({
 
 type ButtonProps = {
   kind?: "primary" | "secondary" | "danger";
+  // busy は、このボタンで始めた処理を待っている間。文言は変えずに回転の印を添え、
+  // aria-busy を付けて押せなくする（薄くはしない。index.css の決まり）。
+  busy?: boolean;
 } & ButtonHTMLAttributes<HTMLButtonElement>;
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {
     kind = "secondary",
+    busy = false,
+    disabled,
     className = "",
     type = "button",
+    children,
     ...rest
   },
   ref,
@@ -187,5 +198,20 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       : kind === "danger"
         ? dangerAction
         : secondaryAction;
-  return <button ref={ref} type={type} className={`${base} ${className}`} {...rest} />;
+  // 回転の印と文言を横に並べるため、待っている間だけ flex にする。いつも flex にすると、
+  // 幅いっぱいに広げたボタンの文言が左に寄る。
+  const busyLayout = busy ? "inline-flex items-center justify-center gap-2" : "";
+  return (
+    <button
+      ref={ref}
+      type={type}
+      disabled={disabled === true || busy}
+      aria-busy={busy || undefined}
+      className={`${base} ${busyLayout} ${className}`}
+      {...rest}
+    >
+      {busy ? <Spinner /> : null}
+      {children}
+    </button>
+  );
 });

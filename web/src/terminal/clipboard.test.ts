@@ -25,18 +25,21 @@ function harness(initial: TerminalClipboardSettings = { copyOnSelect: true, righ
     writeText: vi.fn(async () => undefined),
   };
   const refuse = vi.fn();
+  const copied = vi.fn();
   const detach = attachTerminalClipboard({
     container,
     terminal,
     clipboard,
     settings: () => settings,
     refuse,
+    copied,
   });
   return {
     container,
     terminal,
     clipboard,
     refuse,
+    copied,
     detach,
     key: (event: KeyboardEvent) => keyHandler?.(event),
     finishSelection: () => selectionHandler(),
@@ -77,6 +80,18 @@ describe("terminal clipboard interactions", () => {
 
     expect(subject.clipboard.writeText).toHaveBeenCalledTimes(1);
     expect(subject.clipboard.writeText).toHaveBeenCalledWith("selected text");
+  });
+
+  it("says a selection was copied only when the copy shortcut asked for it", async () => {
+    const subject = harness();
+
+    subject.finishSelection();
+    await Promise.resolve();
+    expect(subject.copied).not.toHaveBeenCalled();
+
+    expect(subject.key(new KeyboardEvent("keydown", { key: "C", ctrlKey: true, shiftKey: true, cancelable: true }))).toBe(false);
+    await vi.waitFor(() => expect(subject.copied).toHaveBeenCalledTimes(1));
+    expect(subject.clipboard.writeText).toHaveBeenCalledTimes(2);
   });
 
   it("leaves selection and the context menu alone when each choice is off", () => {
