@@ -90,7 +90,8 @@ func (h Handlers) Bootstrap(c *echo.Context) error {
 //
 // Linux では、ブラウザへ渡した bootstrap URL を別 OS ユーザーも
 // /proc/<pid>/cmdline から読める。bootstrap は最初に提示した者が使えるので、
-// 読まれても使わせないよう、接続の持ち主で断る。要求を送ってすぐ閉じた接続は
+// 読まれても使わせないよう、接続の持ち主で断る。登録 token で入り直す recover も、
+// 同じ理由で接続の持ち主を確かめる。要求を送ってすぐ閉じた接続は
 // 持ち主を読めないので、これも断る。正規のブラウザは応答を待つので、閉じた接続を
 // 断っても困らない。
 func (h Handlers) mayBeFromAnotherOSUser(request *http.Request) bool {
@@ -120,6 +121,12 @@ func (h Handlers) mayBeFromAnotherOSUser(request *http.Request) bool {
 func (h Handlers) Recover(c *echo.Context) error {
 	if h.Sessions == nil || h.BrowserAuth == nil {
 		return problem(c, http.StatusUnauthorized, "browser_registration_required")
+	}
+	// bootstrap と同じく、別 OS ユーザーの接続は token を差し替える前に断る。登録
+	// token を手に入れた別ユーザーが curl で cookie と CSRF を受け取れないようにし、
+	// 正規のブラウザの token も差し替えずに残す。
+	if h.mayBeFromAnotherOSUser(c.Request()) {
+		return problem(c, http.StatusForbidden, "recover_forbidden")
 	}
 	entry, err := h.entrance().Recover(sessionCookie(c.Request()), c.Request().Header.Get("X-SSHC-Browser"))
 	switch {
