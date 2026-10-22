@@ -250,6 +250,7 @@ SerialとTelnetの対話接続は`Ctrl+]`で切断できます。Telnetは通信
 sshc terminal list --json
 sshc terminal create ssh bastion --json
 sshc terminal create shell --json
+sshc terminal create shell --workspace "sshc開発"
 sshc terminal show <session-id> --json
 sshc terminal read <session-id> --cursor 0 --limit 4096 --json
 sshc terminal send <session-id> --text 'uptime' --json
@@ -261,6 +262,8 @@ sshc terminal close <session-id>
 ```
 
 `create shell`はsshcエンジン側のローカルシェルを開きます。`send`は既定で末尾にEnter（CR）を付け、`--no-enter`で付けません。
+
+`create`で開いたセッションは、既定で非表示の「エージェント」の[ワークスペース](/features/workspace)に入ります。LLMやスクリプトが開いた接続を、画面のサイドバーに混ぜないためです。`--workspace`にワークスペースのIDか名前を指定すると、そのワークスペースに入れます。`list`は、各セッションが入っているワークスペースのIDも表示します。
 
 `read`では、保持しているスクロールバックと次回指定する読み取り位置を取得できます。指定した位置の出力がすでに破棄されている場合は、現在残っている先頭から返し、そのことを警告に含めます。`send`は、確認後にセッション内のプロセスが入れ替わっていた場合には何も送信しません。
 

@@ -41,7 +41,7 @@ test("opens and copies a complete URL from its wrapped continuation", async ({ p
     };
   });
   await mockConnectedTerminal(page, {
-    id: "wrapped-link", kind: "shell", title: "sso-login", startedAt: "2026-09-26T00:00:00Z",
+    id: "wrapped-link", kind: "shell", workspaceId: "default", title: "sso-login", startedAt: "2026-09-26T00:00:00Z",
     state: "connected", problem: "", forwards: [],
   }, `Open this URL to sign in:\r\n${url}\r\n`);
   await openApplication(page, installation);
@@ -74,7 +74,7 @@ test("opens and copies a complete URL from its wrapped continuation", async ({ p
 test("renders the documented non-interactive CLI example", async ({ page, installation }) => {
   const session = {
     id: "cli-production",
-    kind: "ssh",
+    kind: "ssh", workspaceId: "default",
     alias: "production",
     title: "production",
     startedAt: "2026-09-01T00:00:00Z",
@@ -138,7 +138,7 @@ test("keeps terminal actions compact and exposes terminal settings", async ({ pa
     page,
     {
       id: "terminal-actions",
-      kind: "shell",
+      kind: "shell", workspaceId: "default",
       title: "docs-shell",
       startedAt: "2026-09-01T00:00:00Z",
       state: "connected",
@@ -194,7 +194,7 @@ test("keeps terminal actions compact and exposes terminal settings", async ({ pa
 test("opens forwarding management only for an SSH terminal", async ({ page, installation }) => {
   const session = {
     id: "forwarding-preview",
-    kind: "ssh",
+    kind: "ssh", workspaceId: "default",
     alias: "bastion",
     title: "bastion",
     startedAt: "2026-08-30T00:00:00Z",

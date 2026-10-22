@@ -20,7 +20,9 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/platform"
+	"sshc/internal/storage"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalworkspace"
 	"sshc/internal/testwait"
 )
 
@@ -373,9 +375,14 @@ func newTerminalFixture(t *testing.T, limits terminal.Limits) *terminalFixture {
 	server := httptest.NewUnstartedServer(nil)
 	fixture.origin = "http://" + server.Listener.Addr().String()
 
+	storageRoot, err := storage.NewWorkspace(storage.OSFileSystem{}, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	engine := echo.New()
 	registerTerminalRoutes(engine, TerminalHandlers{
 		Registry:       registry,
+		Workspaces:     terminalworkspace.NewService(storageRoot, nil),
 		Tickets:        &terminal.Tickets{},
 		Shell:          func() (string, error) { return "/bin/zsh", nil },
 		StartDirectory: func() string { return "/home/tester" },

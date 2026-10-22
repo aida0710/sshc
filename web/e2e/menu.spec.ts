@@ -12,7 +12,7 @@ test("keeps sessions in the sidebar and moves product navigation to the Menu pag
   await expect(navigation.getByRole("link", { name: "Connections", exact: true })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "SFTP", exact: true })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Menu", exact: true })).toBeVisible();
-  await expect(navigation.getByText("Sessions", { exact: true })).toBeVisible();
+  await expect(navigation.getByText("Workspaces", { exact: true })).toBeVisible();
   await expect(navigation.getByRole("tab")).toHaveCount(0);
   await expect(navigation.getByRole("link", { name: "Terminal", exact: true })).toHaveCount(0);
 

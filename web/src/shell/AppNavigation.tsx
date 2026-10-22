@@ -5,7 +5,8 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { SessionList } from "../terminal/SessionList";
+import { WorkspaceTree } from "../terminal/WorkspaceTree";
+import type { TerminalWorkspacesState } from "../terminal/useTerminalWorkspaces";
 import { UpdateBadge } from "./UpdateBadge";
 import { Icon, type IconName } from "../ui/icons";
 import { BrandMark } from "../ui/BrandMark";
@@ -36,6 +37,7 @@ export function AppNavigation({
   sectionLabels,
   onNavigate,
   terminalSessions,
+  terminalWorkspaces,
   orderedSessions,
   activeSessionId,
   unreadBySession,
@@ -63,6 +65,7 @@ export function AppNavigation({
   sectionLabels: Record<Section, MessageKey>;
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, name: Section) => void;
   terminalSessions: TerminalSessionsState;
+  terminalWorkspaces: TerminalWorkspacesState;
   orderedSessions: TerminalSession[];
   activeSessionId: string | null;
   unreadBySession: UnreadSessions;
@@ -70,10 +73,10 @@ export function AppNavigation({
   onDuplicateSession: (id: string) => void;
   onReorderSessions: (order: string[]) => void;
   localShellProfiles?: LocalShellProfile[];
-  onOpenShell: (profileId?: string) => void;
+  onOpenShell: (profileId: string | undefined, workspaceId: string) => void;
   aliases?: string[];
   hosts?: HostEntry[];
-  onConnect?: (alias: string) => void;
+  onConnect?: (alias: string, workspaceId: string) => void;
   onOpenCommandPalette: () => void;
 }) {
   const t = useTranslate();
@@ -139,23 +142,13 @@ export function AppNavigation({
       </div>
 
       <div data-navigation-scroll className="min-h-0 flex-1 overflow-y-auto pr-0.5 pt-2">
-        <span
-          aria-hidden="true"
-          className="block px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-faint"
-        >
-          {t("shell.sessions")}
-        </span>
-        <SessionList
+        <WorkspaceTree
+          workspaces={terminalWorkspaces}
+          terminalSessions={terminalSessions}
           sessions={orderedSessions}
           selected={section === "Terminal" ? activeSessionId : null}
           unreadBySession={unreadBySession}
-          maxSessions={terminalSessions.maxSessions}
-          busy={terminalSessions.busy}
-          problem={terminalSessions.problem}
           onSelect={onShowSession}
-          onClose={(id) => void terminalSessions.close(id)}
-          onRename={(id, title) => terminalSessions.rename(id, title)}
-          onUnpinTitle={(id) => terminalSessions.unpinTitle?.(id) ?? Promise.resolve(false)}
           onDuplicate={onDuplicateSession}
           onReorder={onReorderSessions}
           localShellProfiles={localShellProfiles}

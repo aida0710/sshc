@@ -70,9 +70,13 @@ func runTerminal(ctx context.Context, called terminalInvocation, environment com
 func executeTerminal(ctx context.Context, engine *engineAPI, called terminalInvocation) (any, error) {
 	switch called.Action {
 	case terminalList:
-		return terminalSessions(ctx, engine)
+		return listTerminalSessions(ctx, engine)
 	case terminalCreate:
-		request := api.OpenTerminalSessionRequest{Kind: api.OpenTerminalSessionRequestKind(called.Kind)}
+		workspace, err := resolveTerminalWorkspace(ctx, engine, called.Workspace)
+		if err != nil {
+			return nil, err
+		}
+		request := api.OpenTerminalSessionRequest{Kind: api.OpenTerminalSessionRequestKind(called.Kind), WorkspaceId: &workspace}
 		if called.Alias != "" {
 			request.Alias = &called.Alias
 		}
@@ -292,7 +296,7 @@ func waitForTerminal(
 
 func writeTerminalResult(stdout, stderr io.Writer, called terminalInvocation, result any) {
 	switch value := result.(type) {
-	case api.TerminalSessionList:
+	case terminalSessionListing:
 		sessions := append([]api.TerminalSession(nil), value.Sessions...)
 		sort.SliceStable(sessions, func(i, j int) bool { return sessions[i].StartedAt < sessions[j].StartedAt })
 		for _, session := range sessions {
@@ -300,8 +304,8 @@ func writeTerminalResult(stdout, stderr io.Writer, called terminalInvocation, re
 			if session.Alias != nil {
 				alias = *session.Alias
 			}
-			fmt.Fprintf(stdout, "%s  %-17s %-5s  %s  %s\n", session.Id, session.State, session.Kind,
-				safeTerminalCell(session.Title), safeTerminalCell(alias))
+			fmt.Fprintf(stdout, "%s  %-17s %-5s  %-10s  %s  %s\n", session.Id, session.State, session.Kind,
+				safeTerminalCell(value.workspaceName(session.WorkspaceId)), safeTerminalCell(session.Title), safeTerminalCell(alias))
 		}
 	case terminalControlWire:
 		if called.Action == terminalRead {

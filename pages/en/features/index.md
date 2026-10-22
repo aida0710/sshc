@@ -9,7 +9,7 @@ sshc is a local terminal application for SSH and local shells. It combines SFTP 
 
 ## Terminal
 
-- Use SSH and local shells in the same interface
+- Use SSH and local shells in the same interface, grouped into [workspaces](./workspace), with connections opened by LLMs kept in a hidden one
 - Follow connection progress, and reconnect an exited SSH session while keeping its pane and scrollback
 - Search, choose encodings, and open links and remote paths
 - Use [Quick Commands and snippets](/en/terminal/commands) with confirmation before running, automatic runs on connect, and runs across several connections

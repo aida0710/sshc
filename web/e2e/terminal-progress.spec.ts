@@ -2,7 +2,7 @@ import { expect, openApplication, openSection, test } from "./support/environmen
 
 const connecting = {
   id: "proxy-jump-progress",
-  kind: "ssh",
+  kind: "ssh", workspaceId: "default",
   alias: "jamstec-moon07-mdx01-tunnel",
   title: "jamstec-moon07-mdx01-tunnel",
   startedAt: "2026-08-28T00:00:00Z",

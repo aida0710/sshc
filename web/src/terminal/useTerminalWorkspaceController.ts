@@ -93,12 +93,15 @@ export function useTerminalWorkspaceController({
       .map((entry) => entry.session);
   }, [terminalSessions.sessions, sessionOrder]);
 
+  // workspaceId is where the session goes; without one the engine puts it in
+  // the default workspace.
   const openLocalShell = useCallback(
-    async (profileId?: string, cwd?: string) => {
+    async (profileId?: string, cwd?: string, workspaceId?: string) => {
       const opened = await terminalSessions.open({
         kind: "shell",
         ...(profileId === undefined ? {} : { profileId }),
         ...(cwd === undefined ? {} : { cwd }),
+        ...(workspaceId === undefined ? {} : { workspaceId }),
       });
       if (opened !== null) showSession(opened.id);
     },
@@ -107,11 +110,12 @@ export function useTerminalWorkspaceController({
 
   // cwd は、SFTP で開いているフォルダからターミナルを開くときの開始位置である。
   const openSSHSession = useCallback(
-    async (alias: string, cwd?: string) => {
+    async (alias: string, cwd?: string, workspaceId?: string) => {
       const opened = await terminalSessions.open({
         kind: "ssh",
         alias,
         ...(cwd === undefined ? {} : { cwd }),
+        ...(workspaceId === undefined ? {} : { workspaceId }),
       });
       if (opened !== null) showSession(opened.id);
     },
@@ -124,10 +128,11 @@ export function useTerminalWorkspaceController({
         (candidate) => candidate.id === id,
       );
       if (session === undefined) return null;
+      // A duplicate opens next to the original, in the same workspace.
       const opened = await terminalSessions.open(
         session.kind === "ssh" && session.alias !== undefined
-          ? { kind: "ssh", alias: session.alias }
-          : { kind: "shell" },
+          ? { kind: "ssh", alias: session.alias, workspaceId: session.workspaceId }
+          : { kind: "shell", workspaceId: session.workspaceId },
       );
       if (opened !== null) showSession(opened.id);
       return opened;

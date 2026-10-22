@@ -8,7 +8,7 @@ import { expect, openApplication, openSection, test } from "./support/environmen
 // TestStoppingTheReconnectWaitLeavesAnExitedPaneToReconnectByHand.
 const reconnecting = {
   id: "reconnect-stop-fixture",
-  kind: "ssh",
+  kind: "ssh", workspaceId: "default",
   alias: "gateway",
   title: "gateway",
   startedAt: "2026-08-26T01:00:00Z",

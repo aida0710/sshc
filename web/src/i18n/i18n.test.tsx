@@ -88,7 +88,7 @@ describe("the catalogue", () => {
         "shell.languageEnglish",
         "shell.languageJapanese",
         "shell.navVault",
-        "shell.sessions",
+        "workspace.heading",
         "shell.title",
         "shortcuts.heading",
         "snippets.heading",
