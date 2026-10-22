@@ -194,6 +194,7 @@ export function QuickConnectBrowser({
             <Button
               kind="primary"
               aria-label={t("home.connectTo", { alias })}
+              aria-busy={opening}
               disabled={launching !== ""}
               onClick={connect}
               className="pointer-events-auto"
