@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { sectionHeading } from "../ui/form";
+import { dropTargetLook } from "../ui/dragAndDropLook";
 import { sameFolder, type Folder, type FolderRow, type MoveTarget } from "./organizer";
 
 type FolderPaneProps = {
@@ -67,9 +68,7 @@ export function FolderPane({ rows, selected, dragging, onSelect, onDropInto }: F
                 style={{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }}
                 className={`flex min-w-max items-center justify-between gap-3 rounded-lg py-2 pr-2 text-left text-sm md:w-full md:min-w-0 ${
                   current ? "bg-card font-semibold text-ink shadow-sm" : "text-ink-muted hover:bg-select-fill hover:text-ink"
-                } ${dragging && target !== null ? "outline outline-1 outline-dashed outline-control-line" : ""} ${
-                  over === key ? "bg-accent/20 outline-2 outline-solid outline-accent" : ""
-                }`}
+                } ${dropTargetLook({ accepts: dragging && target !== null, over: over === key })}`}
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <span

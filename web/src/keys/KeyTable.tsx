@@ -6,6 +6,7 @@ import { tableHeadCell, tableHeadRow } from "../ui/form";
 import { describeKeyKind, noteLabels, rowAction, rowDanger, rowPrimary } from "./labels";
 import { keyItemGroups } from "./organizer";
 import { SortableTableHeader } from "../ui/tableSort";
+import { draggableCursor } from "../ui/dragAndDropLook";
 import { useTableSort, type SortValue } from "../ui/useTableSort";
 
 type KeySort = "file" | "kind" | "state";
@@ -133,7 +134,7 @@ export function KeyTable({
                       aria-label={t("keys.dragKey", { path: item.relativePath })}
                       onDragStart={(event) => actions.onBeginDrag(event, item)}
                       onDragEnd={actions.onEndDrag}
-                      className="flex min-h-10 min-w-8 cursor-grab select-none items-center justify-center rounded px-1.5 py-1 text-sm leading-none text-ink-faint hover:bg-surface active:cursor-grabbing md:min-h-0 md:min-w-0"
+                      className={`flex min-h-10 min-w-8 select-none items-center justify-center rounded px-1.5 py-1 text-sm leading-none text-ink-faint hover:bg-surface md:min-h-0 md:min-w-0 ${draggableCursor}`}
                     >
                       ⠿
                     </span>
