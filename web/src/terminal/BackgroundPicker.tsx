@@ -11,6 +11,7 @@ import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
 import { Button } from "../ui/surface";
 import { formatBytes } from "../ui/format";
+import { usePendingAction } from "../ui/usePendingAction";
 import { BackgroundCapacity } from "./BackgroundCapacity";
 import { BackgroundCard } from "./BackgroundCard";
 import { BackgroundThumbnail } from "./BackgroundThumbnail";
@@ -41,7 +42,7 @@ function addFailureMessage(code: string): MessageKey {
   return addFailureMessages[code] ?? "terminal.backgroundFailed";
 }
 
-// ライブラリへの操作は一度に一つだけ走らせる。どれを待っているかを持ち、押したボタンだけに
+// LibraryOperation は、ライブラリへの操作である。一度に一つだけ走らせ、押したボタンだけに
 // 回転の印を出す。
 type LibraryOperation = "add" | "capacity" | "rename" | "delete";
 
@@ -58,8 +59,8 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [draft, setDraft] = useState(value);
   const [query, setQuery] = useState("");
-  const [pendingOperation, setPendingOperation] = useState<LibraryOperation | null>(null);
-  const busy = pendingOperation !== null;
+  const library = usePendingAction<LibraryOperation>();
+  const busy = library.running !== null;
   const [deleteProblem, setDeleteProblem] = useState("");
   const chooser = useRef<HTMLInputElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
@@ -91,57 +92,64 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
     return needle === "" ? stored : stored.filter((image) => image.name.toLocaleLowerCase().includes(needle));
   }, [query, stored]);
 
+  // どの操作も失敗をこの中で文にするので、library.start は断られても reject しない。
   async function add(file: File) {
-    setPendingOperation("add"); setProblem("");
-    try {
-      const added = await api.addTerminalBackground(file.name, file);
-      await reload();
-      setDraft(added.name);
-    } catch (error) {
-      setProblem(t(addFailureMessage(failureCode(error))));
-    } finally { setPendingOperation(null); }
+    await library.start("add", async () => {
+      setProblem("");
+      try {
+        const added = await api.addTerminalBackground(file.name, file);
+        await reload();
+        setDraft(added.name);
+      } catch (error) {
+        setProblem(t(addFailureMessage(failureCode(error))));
+      }
+    });
   }
 
   async function saveCapacity() {
     const next = Number(capacityInput);
     if (!Number.isSafeInteger(next) || next < 1 || next > 1024) { setProblem(t("terminal.backgroundCapacityInvalid")); return; }
-    setPendingOperation("capacity"); setProblem("");
-    try { applyList(await api.setTerminalBackgroundCapacity(next)); }
-    catch { setProblem(t("terminal.backgroundCapacityFailed")); }
-    finally { setPendingOperation(null); }
+    await library.start("capacity", async () => {
+      setProblem("");
+      try { applyList(await api.setTerminalBackgroundCapacity(next)); }
+      catch { setProblem(t("terminal.backgroundCapacityFailed")); }
+    });
   }
 
   // 削除の失敗は確認ダイアログの中に出す。ライブラリの画面はダイアログの背面にある。
   // 削除したあとで一覧を読み直せなければ、古い一覧を残さずに読み込みの失敗を出す。
   async function drop(name: string) {
-    setPendingOperation("delete"); setDeleteProblem("");
-    try {
-      await api.deleteTerminalBackground(name);
-    } catch {
-      setDeleteProblem(t("terminal.backgroundDeleteFailed"));
-      setPendingOperation(null);
-      return;
-    }
-    if (draft === name) setDraft("");
-    if (value === name) onChange("");
-    setDeleteTarget(null);
-    await loadLibrary();
-    setPendingOperation(null);
+    await library.start("delete", async () => {
+      setDeleteProblem("");
+      try {
+        await api.deleteTerminalBackground(name);
+      } catch {
+        setDeleteProblem(t("terminal.backgroundDeleteFailed"));
+        return;
+      }
+      if (draft === name) setDraft("");
+      if (value === name) onChange("");
+      setDeleteTarget(null);
+      await loadLibrary();
+    });
   }
 
   // 名前の変更の失敗は名前を尋ねるダイアログの中に出す。ダイアログは成功するまで閉じない。
   async function rename(nextName: string) {
     if (renameTarget === null) return;
-    setPendingOperation("rename"); setRenameProblem("");
-    try {
-      const renamed = await api.renameTerminalBackground(renameTarget.name, nextName);
-      if (draft === renameTarget.name) setDraft(renamed.name);
-      if (value === renameTarget.name) onChange(renamed.name);
-      setRenameTarget(null);
-      await reload();
-    } catch (error) {
-      setRenameProblem(failureCode(error) === "background_already_exists" ? t("terminal.backgroundRenameExists") : t("terminal.backgroundRenameFailed"));
-    } finally { setPendingOperation(null); }
+    const previousName = renameTarget.name;
+    await library.start("rename", async () => {
+      setRenameProblem("");
+      try {
+        const renamed = await api.renameTerminalBackground(previousName, nextName);
+        if (draft === previousName) setDraft(renamed.name);
+        if (value === previousName) onChange(renamed.name);
+        setRenameTarget(null);
+        await reload();
+      } catch (error) {
+        setRenameProblem(failureCode(error) === "background_already_exists" ? t("terminal.backgroundRenameExists") : t("terminal.backgroundRenameFailed"));
+      }
+    });
   }
 
   const selected = stored.find((image) => image.name === value);
@@ -196,7 +204,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
                 if (file !== undefined) void add(file);
               }}
             />
-            <Button kind="primary" onClick={() => chooser.current?.click()} busy={pendingOperation === "add"} disabled={busy}>{t("terminal.backgroundAdd")}</Button>
+            <Button kind="primary" onClick={() => chooser.current?.click()} busy={library.running === "add"} disabled={busy}>{t("terminal.backgroundAdd")}</Button>
           </div>
           {libraryState === "failed" ? (
             <PanelState tone="failed" title={t("terminal.backgroundLoadFailed")} action={<Button onClick={() => void loadLibrary()}>{t("shell.bootstrapRetry")}</Button>} />
@@ -227,6 +235,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
             capacityInput={capacityInput}
             onCapacityInputChange={setCapacityInput}
             canSave={!busy && capacityInput !== String(Math.round(capacity / MiB))}
+            saving={library.running === "capacity"}
             onSave={() => void saveCapacity()}
           />
           {problem === "" ? null : <p role="alert" className="text-xs text-danger">{problem}</p>}

@@ -33,7 +33,7 @@ function serverOf(profile: VPNProfile): string {
 export function VPNProfileCard({
   status,
   busy,
-  pendingAction,
+  busyWith,
   starting,
   available,
   checking,
@@ -42,8 +42,8 @@ export function VPNProfileCard({
   status: VPNProfileStatus;
   // busy は、画面全体を待たせる操作（保存、名前の変更、削除、切断）の最中であることを表す。
   busy: boolean;
-  // pendingAction は、このカードのボタンで始めて待っている操作である。
-  pendingAction: VPNProfileCardAction | null;
+  // busyWith は、その操作をこのカードのボタンで始めて待っているかを答える。
+  busyWith: (action: VPNProfileCardAction) => boolean;
   // starting は、この画面がこのプロファイルの経路を用意させている最中であることを表す。
   starting: boolean;
   // available は、このマシンが経路を作れるかどうかである。
@@ -76,7 +76,7 @@ export function VPNProfileCard({
   const waitingForOperation = busy ? t("vpn.waitingForOperation") : undefined;
   const waitingToChange = waitingForOperation ?? (starting ? t("vpn.waitingForRoute") : undefined);
   const reasonUnlessPending = (action: VPNProfileCardAction, reason: string | undefined) =>
-    pendingAction === action ? undefined : reason;
+    busyWith(action) ? undefined : reason;
   return (
     <Card as="article" padded aria-label={status.profile.name}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -94,7 +94,7 @@ export function VPNProfileCard({
             {t("vpn.connect")}
           </Button>
           <Button
-            busy={pendingAction === "disconnect"}
+            busy={busyWith("disconnect")}
             disabled={busy || checking || !(status.running || preparing)}
             title={reasonUnlessPending("disconnect", waitingForOperation)}
             onClick={actions.onStop}
@@ -108,7 +108,7 @@ export function VPNProfileCard({
             {t("vpn.edit")}
           </Button>
           <Button
-            busy={pendingAction === "rename"}
+            busy={busyWith("rename")}
             disabled={busy || starting}
             title={reasonUnlessPending("rename", waitingToChange)}
             onClick={actions.onRename}
@@ -117,7 +117,7 @@ export function VPNProfileCard({
           </Button>
           <Button
             kind="danger"
-            busy={pendingAction === "remove"}
+            busy={busyWith("remove")}
             disabled={busy || starting}
             title={reasonUnlessPending("remove", waitingToChange)}
             onClick={actions.onRemove}

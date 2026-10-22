@@ -3,7 +3,7 @@ import { useTranslate } from "../i18n/context";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Button } from "../ui/surface";
-import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { usePendingResult } from "../ui/usePendingResult";
 import { ActionArea, SettingsSection } from "./SettingsSection";
 
 export type SessionSettingsState = Pick<TerminalSessionsState, "sessions" | "busy" | "closeAll">;
@@ -14,9 +14,9 @@ export function SessionSettingsSection({ terminalSessions, showHeading }: { term
   const [confirming, setConfirming] = useState(false);
   // terminalSessions.busy は、どこで始めたセッションの操作でも立つ。回転の印は、ここで
   // 始めた「すべて閉じる」を待つ間だけ出す。
-  const closing = useAsyncOperation();
+  const closing = usePendingResult();
   const live = terminalSessions.sessions.filter((session) => session.exited === undefined).length;
-  const closeEverySession = () => void closing.run(() => terminalSessions.closeAll());
+  const closeEverySession = () => closing.watch(terminalSessions.closeAll());
   return (
     <SettingsSection id="settings-connections" label={t("desktop.closeAllHeading")} icon="connections" showHeading={showHeading}>
       <p className="max-w-2xl text-sm leading-6 text-ink-muted">{t("desktop.closeAllNote")}</p>
@@ -27,7 +27,7 @@ export function SessionSettingsSection({ terminalSessions, showHeading }: { term
         </p>
       )}>
         <Button
-          busy={closing.busy}
+          busy={closing.pending}
           disabled={terminalSessions.busy || terminalSessions.sessions.length === 0}
           onClick={() => live === 0 ? closeEverySession() : setConfirming(true)}
         >

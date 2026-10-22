@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { KnownHostsPanel } from "./KnownHostsPanel";
 import { ApiError } from "../api/client";
 import { LanguageProvider } from "../i18n/context";
+import { ToastProvider, toastVisibleMs } from "../ui/ToastProvider";
 import type { KnownHostCandidate } from "../api/knownHosts";
 import type { KnownHostsApi, KnownHostsResponse } from "../api/knownHosts";
 
@@ -52,7 +53,7 @@ function buildApi(overrides: Partial<KnownHostsApi> = {}): KnownHostsApi {
 }
 
 async function openAddForm(api: KnownHostsApi) {
-  render(<KnownHostsPanel api={api} />);
+  render(<ToastProvider><KnownHostsPanel api={api} /></ToastProvider>);
   await userEvent.type(await screen.findByLabelText("Host to scan"), "new.example.com");
   await userEvent.click(screen.getByRole("button", { name: "Scan" }));
   const row = await screen.findByRole("row", { name: /new\.example\.com/ });
@@ -280,6 +281,18 @@ describe("KnownHostsPanel", () => {
       (key) => !globalsBefore.includes(key) && !frameworkGlobals.includes(key),
     );
     expect(added).toEqual([]);
+  });
+
+  it("says the entry was removed for a moment, without leaving the result on the screen", async () => {
+    const api = buildApi();
+    render(<ToastProvider><KnownHostsPanel api={api} /></ToastProvider>);
+
+    const row = await screen.findByRole("row", { name: /bastion\.example\.com/ });
+    await userEvent.click(within(row).getByRole("button", { name: "Delete" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm delete" }));
+
+    expect(await screen.findByText(/tx-1/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/tx-1/)).not.toBeInTheDocument(), { timeout: toastVisibleMs + 1000 });
   });
 
   it("reports a refused deletion without claiming the entry was removed", async () => {

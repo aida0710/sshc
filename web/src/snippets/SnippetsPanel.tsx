@@ -3,6 +3,7 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { Button, Notice } from "../ui/surface";
 import { useAsyncOperation, type RunOptions } from "../ui/useAsyncOperation";
+import { usePendingAction } from "../ui/usePendingAction";
 import { PasswordInput } from "../ui/PasswordField";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
@@ -93,8 +94,8 @@ export function snippetProblemLabelKey(problem: string | undefined): MessageKey 
   }
 }
 
-// SnippetAction は、この画面が engine に頼む操作である。操作は一度に一つだけ走らせるので、
-// 最後に始めた操作を覚えておけば、待っているのがどのボタンか、成功したのが保存かが分かる。
+// SnippetAction は、この画面が engine に頼む操作である。一度に一つだけ走らせ、押したボタン
+// だけに回転の印を出す。
 type SnippetAction = "save" | "remove" | "preview" | "run" | "cancel" | "setStartup" | "clearStartup";
 
 const blank: SnippetDraft = {
@@ -142,10 +143,12 @@ export function SnippetsPanel({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const operation = useAsyncOperation();
   const { clearError, touch } = operation;
-  const [lastAction, setLastAction] = useState<SnippetAction | null>(null);
-  const pendingAction = operation.busy ? lastAction : null;
-  // 保存できたことは、次に編集欄を変えるか、別の操作を始めるまで編集欄の下に出す。
-  const savedJustNow = operation.saved && lastAction === "save";
+  const pending = usePendingAction<SnippetAction>();
+  const busy = pending.running !== null;
+  // 保存できたことは、次に編集欄を変えるか、別の操作を始めるまで編集欄に出す。operation.saved は
+  // どの操作が成功しても立つので、最後に始めたのが保存だったかを覚えておく。
+  const [lastStarted, setLastStarted] = useState<SnippetAction | null>(null);
+  const savedJustNow = operation.saved && lastStarted === "save";
   const describeFailure = (error: unknown) => describeSnippetFailure(t, error);
   // ホストの一覧は後から届くので、選んだホストが一覧に無いあいだは先頭を選んでいるとみなす。
   // select が表示するホストと、ボタンで送るホストを同じ値にする。
@@ -204,9 +207,12 @@ export function SnippetsPanel({
     touch();
   }
 
+  // 失敗は operation が文にして編集欄の上に出すので、pending.start は断られても reject しない。
   function perform<T>(action: SnippetAction, work: () => Promise<T>, options: RunOptions<T> = {}) {
-    setLastAction(action);
-    return operation.run(work, { describe: describeFailure, ...options });
+    return pending.start(action, () => {
+      setLastStarted(action);
+      return operation.run(work, { describe: describeFailure, ...options });
+    });
   }
 
   useEffect(() => {
@@ -459,14 +465,14 @@ export function SnippetsPanel({
         <div className="flex flex-wrap gap-2">
           <Button
             kind="primary"
-            busy={pendingAction === "save"}
-            disabled={operation.busy || draft.name.trim() === "" || draft.command === ""}
+            busy={pending.running === "save"}
+            disabled={busy || draft.name.trim() === "" || draft.command === ""}
             onClick={() => void save()}
           >
             {t("snippets.save")}
           </Button>
           {current === null ? null : (
-            <Button busy={pendingAction === "remove"} disabled={operation.busy} onClick={() => setConfirmingDelete(true)}>
+            <Button busy={pending.running === "remove"} disabled={busy} onClick={() => setConfirmingDelete(true)}>
               {t("snippets.delete")}
             </Button>
           )}
@@ -497,8 +503,8 @@ export function SnippetsPanel({
           </div>
           <Button
             className="mt-3"
-            busy={pendingAction === "preview"}
-            disabled={operation.busy || selected === null || targets.length === 0}
+            busy={pending.running === "preview"}
+            disabled={busy || selected === null || targets.length === 0}
             onClick={() => void makePreview()}
           >
             {t("snippets.preview")}
@@ -529,7 +535,7 @@ export function SnippetsPanel({
                 </pre>
               </div>
             ))}
-            <Button kind="primary" className="mt-3" busy={pendingAction === "run"} disabled={operation.busy} onClick={() => void run()}>
+            <Button kind="primary" className="mt-3" busy={pending.running === "run"} disabled={busy} onClick={() => void run()}>
               {t("snippets.run")}
             </Button>
           </section>
@@ -542,7 +548,8 @@ export function SnippetsPanel({
               </h3>
               {job.status === "running" ? (
                 <Button
-                  busy={pendingAction === "cancel"}
+                  busy={pending.running === "cancel"}
+                  disabled={busy}
                   onClick={() => void cancelJob(job.id)}
                 >
                   {t("snippets.cancel")}
@@ -617,8 +624,8 @@ export function SnippetsPanel({
           ) : null}
           <Button
             className="mt-2"
-            busy={pendingAction === "setStartup"}
-            disabled={operation.busy || selected === null || startupAlias === ""}
+            busy={pending.running === "setStartup"}
+            disabled={busy || selected === null || startupAlias === ""}
             onClick={() =>
               selected === null ? undefined : void updateStartup(selected)
             }
@@ -626,7 +633,7 @@ export function SnippetsPanel({
             {t("snippets.setStartup")}
           </Button>
           <button
-            disabled={operation.busy || startupAlias === ""}
+            disabled={busy || startupAlias === ""}
             className="ml-2 text-xs text-ink-muted transition-colors duration-150 hover:text-ink"
             onClick={() => void updateStartup("")}
           >

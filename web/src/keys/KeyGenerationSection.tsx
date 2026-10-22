@@ -8,7 +8,7 @@ import { PasswordInput } from "../ui/PasswordField";
 import { Button, Card, Row } from "../ui/surface";
 import { useGenerationForm } from "./forms";
 import type { RunKeyOperation } from "./useKeyOperation";
-import { useFormSubmission } from "./useFormSubmission";
+import { usePendingResult } from "../ui/usePendingResult";
 
 // Creating a key: in the engine for software algorithms, or as a terminal
 // command to run by hand for hardware-backed ones. A generated key is offered
@@ -74,7 +74,7 @@ export function KeyGenerationSection({
     }, "keys.createFailed");
     if (!created) setPassphrase("");
   }
-  const submission = useFormSubmission(submitGeneration);
+  const submission = usePendingResult();
 
   return (
     <>
@@ -83,7 +83,7 @@ export function KeyGenerationSection({
         className="flex flex-col gap-3"
         onSubmit={(event) => {
           event.preventDefault();
-          void submission.submit();
+          if (!submission.pending) submission.watch(submitGeneration());
         }}
       >
         <h3 id="create-key-heading" className={sectionHeading}>
@@ -156,7 +156,7 @@ export function KeyGenerationSection({
             }}
           />
         )}
-        <Button kind="primary" type="submit" busy={submission.submitting} className="self-start">
+        <Button kind="primary" type="submit" busy={submission.pending} className="self-start">
           {inProcess ? t("keys.createSubmit") : t("keys.showTerminalCommand")}
         </Button>
       </form>

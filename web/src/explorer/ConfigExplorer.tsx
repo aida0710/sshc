@@ -13,6 +13,7 @@ import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { useToast } from "../ui/useToast";
+import { usePendingAction } from "../ui/usePendingAction";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
 import type { BrowserLocation, NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
@@ -20,13 +21,16 @@ import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmat
 import { sectionPath } from "../routing/sectionRoute";
 import { ConfigFileList } from "./ConfigFileList";
 import { sshDirectoryPath } from "./sshDirectoryPath";
-import { ConfigPathActions } from "./ConfigPathActions";
+import { ConfigPathActions, type ConfigPathAction } from "./ConfigPathActions";
 import { ConfigDiagnostics } from "./ConfigDiagnostics";
-import { ConfigFileOperations } from "./ConfigFileOperations";
-import type { ConfigOperation } from "./configOperation";
+import { ConfigFileOperations, type ConfigFileAction } from "./ConfigFileOperations";
 
 // request numbers each handoff, so the handoff that was taken is the one cleared.
 export type FileTarget = { path: string; line: number; request: number };
+
+// ConfigOperation は、SSH Config の画面が走らせるプレビューと書き込みである。一度に一つだけ
+// 走らせ、押したボタンだけに回転の印を出し、ほかの操作のボタンは終わるまで止める。
+type ConfigOperation = "preview" | "save" | ConfigPathAction | ConfigFileAction;
 
 type ConfigExplorerProps = {
   target?: FileTarget | null;
@@ -64,7 +68,9 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   const [jump, setJump] = useState("");
   const [hierarchyOpen, setHierarchyOpen] = useState(false);
   const [opening, setOpening] = useState(false);
-  const [pendingOperation, setPendingOperation] = useState<ConfigOperation | null>(null);
+  const pending = usePendingAction<ConfigOperation>();
+  const busy = pending.running !== null;
+  const busyWith = (operation: ConfigOperation) => pending.running === operation;
   const showToast = useToast();
   const editorRef = useRef<HTMLTextAreaElement>(null);
   // The handed line is kept here once the handoff is cleared, until the file
@@ -138,22 +144,19 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
     }
   }
 
-  // perform は、操作を一つ走らせる。待っている間は pendingOperation がその操作を指す。失敗は
-  // 理由をプレビューの欄（削除なら確認ダイアログの中）に出し、古いプレビューは残さない。
-  // 成功を伝えるのは work の役目である。結果が画面のどこにも残らない操作があるので、
-  // 書き込みはどれもトーストで知らせる。
+  // perform は、操作を一つ走らせる。失敗は理由をプレビューの欄（削除なら確認ダイアログの中）に
+  // 出し、古いプレビューは残さない。成功を伝えるのは work の役目である。結果が画面のどこにも
+  // 残らない操作があるので、書き込みはどれもトーストで知らせる。
   async function perform(operation: ConfigOperation, work: () => Promise<void>) {
-    if (pendingOperation !== null) return;
-    setPendingOperation(operation);
-    setProblem(null);
-    try {
-      await work();
-    } catch (error) {
-      setPreview(null);
-      setProblem(toProblem(error));
-    } finally {
-      setPendingOperation(null);
-    }
+    await pending.start(operation, async () => {
+      setProblem(null);
+      try {
+        await work();
+      } catch (error) {
+        setPreview(null);
+        setProblem(toProblem(error));
+      }
+    });
   }
 
   function reportWritten(message: string) {
@@ -335,7 +338,8 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
             <ConfigPathActions
               path={newPath}
               problem={pathProblem}
-              pendingOperation={pendingOperation}
+              busy={busy}
+              busyWith={busyWith}
               onPathChange={(path) => { setNewPath(path); setPathProblem(""); }}
               onCreateFile={() => draftDiscard.confirmBefore(() => void createFile())}
               onCreateDirectory={() => void createDirectory()}
@@ -383,8 +387,8 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
                 <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 border-t border-line bg-toolbar px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:static md:z-auto md:py-3">
                   <Button
                     className="min-h-10 md:min-h-0"
-                    busy={pendingOperation === "preview"}
-                    disabled={pendingOperation !== null}
+                    busy={busyWith("preview")}
+                    disabled={busy}
                     onClick={() => void run("preview")}
                   >
                     {t("explorer.preview")}
@@ -392,8 +396,8 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
                   <Button
                     kind="primary"
                     className="min-h-10 md:min-h-0"
-                    busy={pendingOperation === "save"}
-                    disabled={!file.editable || pendingOperation !== null}
+                    busy={busyWith("save")}
+                    disabled={!file.editable || busy}
                     onClick={() => void run("save")}
                   >
                     {t("explorer.saveFile")}
@@ -407,7 +411,8 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
                   modified={modified}
                   renameTo={renameTo}
                   renameProblem={renameProblem}
-                  pendingOperation={pendingOperation}
+                  busy={busy}
+                  busyWith={busyWith}
                   onRenameToChange={(path) => { setRenameTo(path); setRenameProblem(""); }}
                   onRename={() => void renameFile()}
                   onDelete={() => {

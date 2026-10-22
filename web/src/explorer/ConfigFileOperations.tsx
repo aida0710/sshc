@@ -1,7 +1,9 @@
 import { useTranslate } from "../i18n/context";
 import { control, hintText, sectionHeading } from "../ui/form";
 import { Button } from "../ui/surface";
-import type { ConfigOperation } from "./configOperation";
+
+// ConfigFileAction は、この欄のボタンで始める操作である。削除は確認ダイアログが待つ。
+export type ConfigFileAction = "rename" | "delete";
 
 // ConfigFileOperations は、開いているファイルの名前を変える・消す欄である。
 // 保存していない変更があるあいだは、どちらもできない。
@@ -10,7 +12,8 @@ export function ConfigFileOperations({
   modified,
   renameTo,
   renameProblem,
-  pendingOperation,
+  busy,
+  busyWith,
   onRenameToChange,
   onRename,
   onDelete,
@@ -20,7 +23,10 @@ export function ConfigFileOperations({
   renameTo: string;
   // renameProblem は、新しいパスが ~/.ssh の外を指しているときに欄の下へ出す理由である。
   renameProblem: string;
-  pendingOperation: ConfigOperation | null;
+  // busy は、SSH Config のどれかの操作を待っている間を表す。終わるまでボタンを止める。
+  busy: boolean;
+  // busyWith は、その操作をこの欄のボタンで始めて待っているかを答える。
+  busyWith: (action: ConfigFileAction) => boolean;
   onRenameToChange: (path: string) => void;
   onRename: () => void;
   onDelete: () => void;
@@ -47,12 +53,12 @@ export function ConfigFileOperations({
           <Button
             className="min-h-10 md:min-h-0"
             onClick={onRename}
-            busy={pendingOperation === "rename"}
-            disabled={renameTo === "" || renameTo === path || modified || pendingOperation !== null}
+            busy={busyWith("rename")}
+            disabled={renameTo === "" || renameTo === path || modified || busy}
           >
             {t("explorer.renameFile")}
           </Button>
-          <Button className="min-h-10 md:min-h-0" onClick={onDelete} disabled={modified || pendingOperation !== null}>
+          <Button className="min-h-10 md:min-h-0" onClick={onDelete} disabled={modified || busy}>
             {t("explorer.deleteFile")}
           </Button>
         </div>

@@ -1,8 +1,8 @@
-import { useState } from "react";
 import type { SyncStatus } from "../api/sync";
 import { useLanguage } from "../i18n/context";
 import { CheckboxField, hintText, sectionHeading } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
+import { usePendingAction } from "../ui/usePendingAction";
 import { describeLastSync } from "./describeLastSync";
 import { SyncErrorNotice } from "./SyncErrorNotice";
 import { syncAutoHintKeys, syncDirectionLabelKeys, syncNowLabelKeys } from "./syncMessageKeys";
@@ -38,16 +38,8 @@ export function SyncOverviewCard({
 }) {
   const { locale, t } = useLanguage();
   // busy は、この画面のどこで始めた同期の操作でも立つ。回転の印は、このカードで押したボタン
-  // だけに出す。
-  const [pendingAction, setPendingAction] = useState<OverviewAction | null>(null);
-  async function press(action: OverviewAction, start: () => Promise<unknown>) {
-    setPendingAction(action);
-    try {
-      await start();
-    } finally {
-      setPendingAction(null);
-    }
-  }
+  // だけに出す。失敗は SyncPanel が文にして出すので、pending.start は断られても reject しない。
+  const pending = usePendingAction<OverviewAction>();
   return (
     <Card as="section" radius="md">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
@@ -108,9 +100,9 @@ export function SyncOverviewCard({
         <div className="flex flex-wrap gap-2">
           <Button
             kind="primary"
-            busy={pendingAction === "syncNow"}
+            busy={pending.running === "syncNow"}
             disabled={busy || !status.keyConfigured}
-            onClick={() => void press("syncNow", remoteHeadBlocked ? onPreviewRemoteHead : onSyncNow)}
+            onClick={() => void pending.start("syncNow", remoteHeadBlocked ? onPreviewRemoteHead : onSyncNow)}
           >
             {t(
               remoteHeadBlocked
@@ -120,18 +112,18 @@ export function SyncOverviewCard({
           </Button>
           {status.direction === "push" || remoteHeadBlocked ? null : (
             <Button
-              busy={pendingAction === "checkRemoteChanges"}
+              busy={pending.running === "checkRemoteChanges"}
               disabled={busy || !status.keyConfigured}
-              onClick={() => void press("checkRemoteChanges", onPreview)}
+              onClick={() => void pending.start("checkRemoteChanges", onPreview)}
             >
               {t("sync.checkRemoteChanges")}
             </Button>
           )}
           {status.direction === "push" ? null : (
             <Button
-              busy={pendingAction === "forcePull"}
+              busy={pending.running === "forcePull"}
               disabled={busy || !status.keyConfigured}
-              onClick={() => void press("forcePull", onPreviewRemoteHead)}
+              onClick={() => void pending.start("forcePull", onPreviewRemoteHead)}
             >
               {t("sync.forcePull")}
             </Button>

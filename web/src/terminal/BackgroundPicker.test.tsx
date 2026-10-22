@@ -195,6 +195,27 @@ describe("BackgroundPicker", () => {
     await vi.waitFor(() => expect(add).not.toHaveAttribute("aria-busy"));
   });
 
+  it("shows saving the library limit as working until the engine answers", async () => {
+    const user = userEvent.setup();
+    const api = libraryWithWall();
+    let answer: () => void = () => undefined;
+    api.setTerminalBackgroundCapacity.mockImplementation(() => new Promise((resolve) => {
+      answer = () => resolve({ ...wallLibrary, capacityBytes: 32 * 1024 * 1024 });
+    }));
+    render(<BackgroundPicker value="" onChange={vi.fn()} tint={55} onTintChange={vi.fn()} unchosen="No image" api={api} />);
+    await user.click(screen.getByRole("button", { name: "Change" }));
+    const limit = await screen.findByRole("spinbutton");
+    await user.clear(limit);
+    await user.type(limit, "32");
+    const save = screen.getByRole("button", { name: "Save limit" });
+    await user.click(save);
+
+    expect(save).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Add an image" })).toBeDisabled();
+    answer();
+    await vi.waitFor(() => expect(save).not.toHaveAttribute("aria-busy"));
+  });
+
   it("keeps the rename dialog open with the reason when the name is taken", async () => {
     const user = userEvent.setup();
     const api = libraryWithWall();

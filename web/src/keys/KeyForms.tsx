@@ -19,7 +19,10 @@ import type {
   useStoredPhrases,
 } from "./forms";
 import { describeBlocker, noteLabels, rowDanger } from "./labels";
-import { useFormSubmission } from "./useFormSubmission";
+import { usePendingResult } from "../ui/usePendingResult";
+
+// どのフォームも、送った操作が終わるまで submission.pending で送信のボタンを busy にする。
+// 待つ間はボタンが押せないが、入力欄の Enter からの二度目の送信も onSubmit で止める。
 
 function namedStoredFor(
   phrases: Credential[],
@@ -55,7 +58,7 @@ export function RelocateForm({
   onSubmit: (item: KeyItem) => Promise<unknown>;
 }) {
   const t = useTranslate();
-  const submission = useFormSubmission(onSubmit);
+  const submission = usePendingResult();
   const item = form.relocating;
   if (item === null) return null;
   return (
@@ -64,7 +67,7 @@ export function RelocateForm({
       className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        void submission.submit(item);
+        if (!submission.pending) submission.watch(onSubmit(item));
       }}
     >
       <h3 id="relocate-heading" className={sectionHeading}>
@@ -95,7 +98,7 @@ export function RelocateForm({
         </Row>
       </Card>
       <div className="flex gap-2">
-        <Button kind="primary" type="submit" busy={submission.submitting}>
+        <Button kind="primary" type="submit" busy={submission.pending}>
           {t("keys.relocateSubmit")}
         </Button>
         <Button onClick={form.close}>{t("keys.cancel")}</Button>
@@ -112,7 +115,7 @@ export function PassphraseForm({
   onSubmit: (item: KeyItem) => Promise<unknown>;
 }) {
   const t = useTranslate();
-  const submission = useFormSubmission(onSubmit);
+  const submission = usePendingResult();
   const item = form.changingPassphrase;
   if (item === null) return null;
   return (
@@ -121,7 +124,7 @@ export function PassphraseForm({
       className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        void submission.submit(item);
+        if (!submission.pending) submission.watch(onSubmit(item));
       }}
     >
       <h3 id="passphrase-heading" className={sectionHeading}>
@@ -154,7 +157,7 @@ export function PassphraseForm({
         }}
       />
       <div className="flex gap-2">
-        <Button kind="primary" type="submit" busy={submission.submitting}>
+        <Button kind="primary" type="submit" busy={submission.pending}>
           {t("keys.savePassphrase")}
         </Button>
         <Button onClick={form.close}>{t("keys.cancel")}</Button>
@@ -175,7 +178,7 @@ export function AgentForm({
   onAssignPhrase: (item: KeyItem) => void;
 }) {
   const t = useTranslate();
-  const submission = useFormSubmission(onSubmit);
+  const submission = usePendingResult();
   const item = form.registering;
   if (item === null) return null;
   const { phrases, dedicatedPhrasePaths, chosenPhrase, setChosenPhrase } =
@@ -187,7 +190,7 @@ export function AgentForm({
       className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        void submission.submit(item);
+        if (!submission.pending) submission.watch(onSubmit(item));
       }}
     >
       <h3 id="agent-register-heading" className={sectionHeading}>
@@ -258,7 +261,7 @@ export function AgentForm({
         </div>
       )}
       <div className="flex gap-2">
-        <Button kind="primary" type="submit" busy={submission.submitting}>
+        <Button kind="primary" type="submit" busy={submission.pending}>
           {t("keys.registerSubmit")}
         </Button>
         <Button onClick={form.close}>{t("keys.cancel")}</Button>
@@ -281,7 +284,7 @@ export function StoredPassphrasePanel({
   onStoreAndAssign: (item: KeyItem) => Promise<unknown>;
 }) {
   const t = useTranslate();
-  const submission = useFormSubmission(onStoreAndAssign);
+  const submission = usePendingResult();
   const item = form.managingPassphrase;
   if (item === null) return null;
   const { phrases, dedicatedPhrasePaths, chosenPhrase, setChosenPhrase } =
@@ -351,11 +354,11 @@ export function StoredPassphrasePanel({
       <div className="flex flex-wrap gap-2">
         <Button
           kind="primary"
-          busy={submission.submitting}
+          busy={submission.pending}
           disabled={
             form.storedPhraseName === "" || form.storedPhraseSecret === ""
           }
-          onClick={() => void submission.submit(item)}
+          onClick={() => submission.watch(onStoreAndAssign(item))}
         >
           {t("keys.storeAndUsePassphrase")}
         </Button>

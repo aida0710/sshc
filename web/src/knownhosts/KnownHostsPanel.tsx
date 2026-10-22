@@ -16,11 +16,16 @@ import { SortableTableHeader } from "../ui/tableSort";
 import { useTableSort, type SortValue } from "../ui/useTableSort";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PanelState } from "../ui/PanelState";
+import { usePendingAction } from "../ui/usePendingAction";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
+import { useToast } from "../ui/useToast";
 
 type KnownHostsPanelProps = { api?: KnownHostsApi };
 type CandidateSort = "host" | "type" | "fingerprint" | "trust";
 type TrustedSort = Exclude<CandidateSort, "trust">;
+// KnownHostsAction は、相手のホストか known_hosts の書き込みを待つ操作である。押したボタンに
+// 回転の印を出し、待つ間はもう一方も始めない。
+type KnownHostsAction = "scan" | "addToKnownHosts";
 
 // sshc neither reads nor writes ~/.ssh/known_hosts through a symbolic link, so
 // every operation on the file fails the same way. That message says why and that
@@ -40,14 +45,12 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   // notice ではなく、画面の言語で出す。
   const [scanned, setScanned] = useState(false);
   const [candidates, setCandidates] = useState<KnownHostCandidate[]>([]);
-  // scanning と addingToKnownHosts は、スキャンと known_hosts への追加の応答を待っている間である。
-  // どちらも相手のホストやファイルを待つので、押したボタンに回転の印を出し、二度押しを止める。
-  const [scanning, setScanning] = useState(false);
+  const action = usePendingAction<KnownHostsAction>();
   const [adding, setAdding] = useState<KnownHostCandidate | null>(null);
-  const [addingToKnownHosts, setAddingToKnownHosts] = useState(false);
   const [expectedFingerprint, setExpectedFingerprint] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
-  const [status, setStatus] = useState("");
+  // 追加と削除の結果は、確かめる欄やダイアログを閉じたあとに出すので、トーストで知らせる。
+  const showToast = useToast();
   const [error, setError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   // firstListingAnswered は、開いたときの一覧の読み込みが答えた（読めた、または読めなかった）
@@ -100,24 +103,22 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
     if (removed === null) {
       return;
     }
-    setStatus(t("kh.removed", { id: removed.transactionId }));
+    showToast(t("kh.removed", { id: removed.transactionId }), { tone: "success" });
     setPending(null);
     await search(query);
   }
 
   async function scan() {
-    if (scanning) return;
-    setError("");
-    setScanning(true);
-    try {
-      const result = await api.scanKnownHosts(scanHost, 22);
-      setScanned(true);
-      setCandidates(result.candidates);
-    } catch {
-      setError(t("kh.scanFailed"));
-    } finally {
-      setScanning(false);
-    }
+    await action.start("scan", async () => {
+      setError("");
+      try {
+        const result = await api.scanKnownHosts(scanHost, 22);
+        setScanned(true);
+        setCandidates(result.candidates);
+      } catch {
+        setError(t("kh.scanFailed"));
+      }
+    });
   }
 
   function resetAdd() {
@@ -136,36 +137,36 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   }
 
   async function confirmAdd() {
-    if (!adding || addingToKnownHosts) return;
+    if (!adding) return;
+    const candidate = adding;
     const typed = expectedFingerprint.trim();
-    if (typed !== "" && typed !== adding.fingerprint) {
-      setError(t("kh.fingerprintMismatch", { typed, scanned: adding.fingerprint }));
+    if (typed !== "" && typed !== candidate.fingerprint) {
+      setError(t("kh.fingerprintMismatch", { typed, scanned: candidate.fingerprint }));
       return;
     }
-    setError("");
-    setAddingToKnownHosts(true);
-    try {
-      const result = await api.addKnownHost(
-        { host: adding.host, port: adding.port, keyType: adding.keyType, key: adding.key },
-        typed,
-        acknowledged,
-      );
-      setStatus(t("kh.added", { host: adding.host, id: result.transactionId }));
-      closeAdd();
-      await search(query);
-    } catch (failure) {
-      const code = failureCode(failure);
-      setError(
-        failureMessage(
-          t,
-          failure,
-          code === "" ? t("kh.addFailed") : t("kh.addFailedCode", { code }),
-        ),
-      );
-      closeAdd();
-    } finally {
-      setAddingToKnownHosts(false);
-    }
+    await action.start("addToKnownHosts", async () => {
+      setError("");
+      try {
+        const result = await api.addKnownHost(
+          { host: candidate.host, port: candidate.port, keyType: candidate.keyType, key: candidate.key },
+          typed,
+          acknowledged,
+        );
+        showToast(t("kh.added", { host: candidate.host, id: result.transactionId }), { tone: "success" });
+        closeAdd();
+        await search(query);
+      } catch (failure) {
+        const code = failureCode(failure);
+        setError(
+          failureMessage(
+            t,
+            failure,
+            code === "" ? t("kh.addFailed") : t("kh.addFailedCode", { code }),
+          ),
+        );
+        closeAdd();
+      }
+    });
   }
 
   const provenOrAcknowledged = expectedFingerprint.trim() !== "" || acknowledged;
@@ -211,9 +212,6 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
         </MetricGrid>
       )}
 
-      <p aria-live="polite" className="text-sm text-ink-muted">
-        {status}
-      </p>
       {error ? (
         <Notice tone="danger">{error}</Notice>
       ) : null}
@@ -237,7 +235,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
                 />
               </Field>
             </div>
-            <Button kind="primary" busy={scanning} onClick={() => void scan()}>
+            <Button kind="primary" busy={action.running === "scan"} disabled={action.running !== null} onClick={() => void scan()}>
               {t("kh.scan")}
             </Button>
           </div>
@@ -301,13 +299,13 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
             <div className="mt-2 flex gap-2">
               <Button
                 kind="primary"
-                busy={addingToKnownHosts}
-                disabled={!provenOrAcknowledged}
+                busy={action.running === "addToKnownHosts"}
+                disabled={!provenOrAcknowledged || action.running !== null}
                 onClick={() => void confirmAdd()}
               >
                 {t("kh.addToKnownHosts")}
               </Button>
-              <Button disabled={addingToKnownHosts} onClick={closeAdd}>
+              <Button disabled={action.running === "addToKnownHosts"} onClick={closeAdd}>
                 {t("kh.cancel")}
               </Button>
             </div>
