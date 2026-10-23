@@ -29,7 +29,6 @@ export function RunTargetSwitcher({
   // unfold in place: a menu of its own would sit outside this popover and
   // close it.
   const [actionsFor, setActionsFor] = useState<string | null>(null);
-  const [infoFor, setInfoFor] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   useDismissibleLayer({ open, containerRefs: [rootRef], onDismiss: () => setOpen(false), returnFocusRef: triggerRef });
@@ -67,7 +66,7 @@ export function RunTargetSwitcher({
         )}
         {alias === null || actionsFor !== alias ? null : (
           <div className="basis-full pb-1 pl-5">
-            <button type="button" onClick={() => { setActionsFor(null); setOpen(false); setInfoFor(alias); }} className="block min-h-10 w-full rounded px-2 text-left text-xs text-ink hover:bg-hover md:min-h-7">
+            <button type="button" onClick={() => { setActionsFor(null); setOpen(false); targets.engineInfo.ask(alias); }} className="block min-h-10 w-full rounded px-2 text-left text-xs text-ink hover:bg-hover md:min-h-7">
               {t("engineInfo.open")}
             </button>
             <button type="button" onClick={() => void targets.openInNewTab(alias)} className="block min-h-10 w-full rounded px-2 text-left text-xs text-ink hover:bg-hover md:min-h-7">
@@ -129,15 +128,14 @@ export function RunTargetSwitcher({
         }}
         onClose={() => setPicking(false)}
       />
-      {infoFor === null ? null : (
-        <EngineInfoDialog alias={infoFor} targets={targets} returnFocusRef={triggerRef} onClose={() => setInfoFor(null)} />
+      {targets.engineInfo.openFor === null ? null : (
+        <EngineInfoDialog key={targets.engineInfo.openFor} alias={targets.engineInfo.openFor} targets={targets} returnFocusRef={triggerRef} onClose={targets.engineInfo.close} />
       )}
       {/* After the information dialog so that, asked from there, it opens above it. */}
       {targets.vaultUnlock.unlockFor === null ? null : (
         <RemoteVaultUnlockDialog
           alias={targets.vaultUnlock.unlockFor}
           api={targets.api}
-          localVersion={targets.localVersion}
           onUnlocked={targets.vaultUnlock.unlocked}
           onOpenInNewTab={() => {
             const alias = targets.vaultUnlock.unlockFor;

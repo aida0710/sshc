@@ -24,6 +24,7 @@ type fakeEngineDirectory struct {
 	forwarded  []string
 	streamed   []string
 	statusSeen remoteengine.Status
+	statusErr  error
 	controlled []string
 	unlocked   []string
 }
@@ -38,7 +39,7 @@ func (f *fakeEngineDirectory) AddEngine(_ context.Context, alias string) error {
 }
 func (f *fakeEngineDirectory) RemoveEngine(string) error { f.engines = nil; return nil }
 func (f *fakeEngineDirectory) EngineStatus(context.Context, string) (remoteengine.Status, error) {
-	return f.statusSeen, nil
+	return f.statusSeen, f.statusErr
 }
 func (f *fakeEngineDirectory) ControlEngine(_ context.Context, alias string, action remoteengine.EngineAction) (remoteengine.ActionResult, error) {
 	if action != remoteengine.ActionStop && action != remoteengine.ActionRestart && action != remoteengine.ActionUpdate {
@@ -83,8 +84,8 @@ func TestAnAddedEngineIsListedAndAVersionMismatchNamesTheRemoteVersion(t *testin
 		t.Fatalf("list = %s", recorder.Body.String())
 	}
 
-	directory.addErr = &remoteengine.VersionMismatchError{Local: "v0.53.0", Remote: "v0.51.0"}
-	recorder = send(t, engine, http.MethodPost, "/api/v1/engines", `{"alias":"gpu-box"}`, map[string]string{"Content-Type": "application/json"})
+	directory.statusErr = &remoteengine.VersionMismatchError{Local: "v0.53.0", Remote: "v0.51.0"}
+	recorder = send(t, engine, http.MethodGet, "/api/v1/engines/r540/status", "", nil)
 	problem := decodeAs[api.Problem](t, recorder.Body.String())
 	if recorder.Code != http.StatusConflict || problem.Code != "remote_engine_version_mismatch" || problem.Detail == nil || *problem.Detail != "v0.51.0" {
 		t.Fatalf("mismatch = %d %s", recorder.Code, recorder.Body.String())

@@ -37,7 +37,7 @@ export function EngineInfoDialog({
   const headingId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const info = useEngineInfo({
-    alias, api: targets.api, translate: t, localVersion: targets.localVersion, vaultRevision: targets.vaultUnlock.revision,
+    alias, api: targets.api, translate: t, vaultRevision: targets.vaultUnlock.revision,
   });
   const [confirming, setConfirming] = useState<RemoteEngineAction | null>(null);
   const busy = info.running !== null;
@@ -55,13 +55,16 @@ export function EngineInfoDialog({
         <h2 id={headingId} className="text-sm font-medium text-ink">
           {t("engineInfo.heading", { alias })}
         </h2>
-        {info.status === null ? null : (
-          <EngineFacts status={info.status} localVersion={targets.localVersion} t={t} onUnlock={busy ? undefined : () => targets.vaultUnlock.ask(alias)} />
+        {info.status === null && info.remoteVersion === null ? null : (
+          <EngineFacts status={info.status} remoteVersion={info.remoteVersion} localVersion={targets.localVersion} t={t} onUnlock={busy ? undefined : () => targets.vaultUnlock.ask(alias)} />
+        )}
+        {info.remoteVersion === null ? null : (
+          <Notice tone="danger" compact>{t("engineInfo.versionMismatch", { alias })}</Notice>
         )}
         {info.problem === "" ? null : <Notice tone="danger" compact>{info.problem}</Notice>}
         <div className="flex flex-wrap gap-2">
           {engineActions.map((action) => (
-            <Button key={action} kind={action === "stop" ? "danger" : "secondary"} disabled={busy} onClick={() => setConfirming(action)}>
+            <Button key={action} kind={action === "update" ? "primary" : action === "stop" ? "danger" : "secondary"} disabled={busy} onClick={() => setConfirming(action)}>
               {info.running === action ? t(actionLabels[action].running) : t(actionLabels[action].button)}
             </Button>
           ))}
@@ -107,24 +110,39 @@ export function EngineInfoDialog({
 
 function EngineFacts({
   status,
+  remoteVersion,
   localVersion,
   t,
   onUnlock,
 }: {
-  status: RemoteEngineStatus;
+  status: RemoteEngineStatus | null;
+  remoteVersion: string | null;
   localVersion: string;
+  t: Translate;
+  onUnlock: (() => void) | undefined;
+}) {
+  const version = status?.version ?? remoteVersion;
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+      <dt className="text-ink-faint">{t("engineInfo.version")}</dt>
+      <dd className="font-mono text-ink">
+        {version}
+        {version === localVersion ? null : <span className="ml-2 text-xs text-danger">{t("engineInfo.versionDiffers", { local: localVersion })}</span>}
+      </dd>
+      {status === null ? null : <EngineStatusFacts status={status} t={t} onUnlock={onUnlock} />}
+    </dl>
+  );
+}
+
+function EngineStatusFacts({ status, t, onUnlock }: {
+  status: RemoteEngineStatus;
   t: Translate;
   onUnlock: (() => void) | undefined;
 }) {
   const locked = status.vault && !status.unlocked;
   const vault = !status.vault ? t("engineInfo.vaultNone") : status.unlocked ? t("engineInfo.vaultUnlocked") : t("engineInfo.vaultLocked");
   return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-      <dt className="text-ink-faint">{t("engineInfo.version")}</dt>
-      <dd className="font-mono text-ink">
-        {status.version}
-        {status.version === localVersion ? null : <span className="ml-2 text-xs text-danger">{t("engineInfo.versionDiffers", { local: localVersion })}</span>}
-      </dd>
+    <>
       <dt className="text-ink-faint">{t("engineInfo.vault")}</dt>
       <dd className="flex items-center gap-2 text-ink">
         {vault}
@@ -136,7 +154,7 @@ function EngineFacts({
       </dd>
       <dt className="text-ink-faint">{t("engineInfo.sessions")}</dt>
       <dd className="text-ink">{t("engineInfo.sessionCount", { count: String(status.sessions) })}</dd>
-    </dl>
+    </>
   );
 }
 

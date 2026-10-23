@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -243,16 +244,22 @@ func TestAnExpiredRemoteSessionIsIssuedAgainOnceAndTheRequestSentAgain(t *testin
 	}
 }
 
-func TestADifferentVersionOrAStoppedEngineIsNotAdded(t *testing.T) {
+func TestAnEngineOfADifferentVersionIsAddedSoThatItCanBeUpdated(t *testing.T) {
 	remote := newFakeRemoteEngine(t)
 	older := newEngineManager(t, remote, "v8")
-	var mismatch *VersionMismatchError
-	if err := older.AddEngine(context.Background(), "r540"); !errors.As(err, &mismatch) || mismatch.Remote != "v8" || mismatch.Local != "v9" {
+	if err := older.AddEngine(context.Background(), "r540"); err != nil {
 		t.Fatalf("AddEngine with v8 = %v", err)
 	}
-	if engines, _ := older.Engines(); len(engines) != 0 {
-		t.Fatalf("a refused engine was kept: %v", engines)
+	if engines, _ := older.Engines(); !slices.Equal(engines, []string{"r540"}) {
+		t.Fatalf("engines = %v, want [r540]", engines)
 	}
+	var mismatch *VersionMismatchError
+	if _, err := older.EngineStatus(context.Background(), "r540"); !errors.As(err, &mismatch) || mismatch.Remote != "v8" || mismatch.Local != "v9" {
+		t.Fatalf("EngineStatus with v8 = %v", err)
+	}
+}
+
+func TestAStoppedEngineIsNotAdded(t *testing.T) {
 
 	stopped := NewManager(ManagerOptions{Store: newStore(t), LocalVersion: "v9", Connect: func(context.Context, string) (Link, error) {
 		return &handoffLink{fakeLink: newFakeLink("", 0), exitCode: 1}, nil
