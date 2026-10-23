@@ -56,7 +56,6 @@ export function useRunTargets({
   const vaultUnlock = useRemoteVaultUnlock();
   const [engineInfoFor, setEngineInfoFor] = useState<string | null>(null);
   const closeEngineInfo = useCallback(() => setEngineInfoFor(null), []);
-  const { allowOffer: allowVaultOffer } = vaultUnlock;
 
   useEffect(() => {
     if (!enabled) return;
@@ -74,12 +73,9 @@ export function useRunTargets({
 
   const select = useCallback((alias: string | null) => {
     setProblem("");
-    // Choosing a run target again asks for its Vault password again, even if
-    // that was cancelled before.
-    if (alias !== null) allowVaultOffer(alias);
     setStored(alias ?? "");
     writeStoredValue(localStorageKeys.runTarget, alias ?? "");
-  }, [allowVaultOffer]);
+  }, []);
 
   // report shows why a request about an engine failed. A different version is
   // answered with the information dialog, whose Update fixes it.

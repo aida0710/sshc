@@ -28,7 +28,7 @@ function workspacesState(overrides: Partial<TerminalWorkspacesState> = {}): Term
 
 function sessionsState(overrides: Partial<TerminalSessionsState> = {}): TerminalSessionsState {
   return {
-    sessions: [], maxSessions: 50, busy: false, problem: "", remoteRefusal: null, loaded: true,
+    sessions: [], maxSessions: 50, busy: false, problem: "", remoteRefusal: null, remoteRefusalAt: null, loaded: true,
     rename: vi.fn(async () => true), open: vi.fn(async () => null), reconnect: vi.fn(async () => true),
     stopReconnect: vi.fn(async () => true), close: vi.fn(async () => undefined), closeAll: vi.fn(async () => undefined),
     refresh: vi.fn(async () => undefined), markExited: vi.fn(), moveToWorkspace: vi.fn(async () => true),

@@ -27,22 +27,23 @@ export function runTargetProblemText(t: Translate, error: unknown, alias: string
 }
 
 // runTargetRefusalText says why the run target's engine refused to list its
-// sessions: a heading naming what happened, and the reason when the heading
-// does not already say it.
+// sessions: a heading naming what happened, and the reason or what to do when
+// the heading does not already say it. Each heading names only what the error
+// code shows; an unreachable engine does not say whether SSH or the engine
+// failed, so its heading does not either.
 export function runTargetRefusalText(t: Translate, error: ApiError, alias: string): { heading: string; reason: string } {
   const unavailable = t("runTarget.unavailableHeading", { alias });
   switch (error.code) {
     case "remote_engine_vault_locked":
-      return { heading: t("runTarget.lockedHeading", { alias }), reason: "" };
+      return { heading: t("runTarget.lockedHeading", { alias }), reason: t("runTarget.lockedReason", { alias }) };
     case "remote_engine_incompatible":
-      return { heading: t("runTarget.incompatibleHeading", { alias }), reason: "" };
+      return { heading: t("runTarget.incompatibleHeading", { alias }), reason: t("runTarget.incompatibleReason", { alias }) };
     case "remote_engine_unreachable":
     case "remote_engine_refused":
       return { heading: unavailable, reason: t(terminalProblemKey(error.code)) };
     case "remote_engine_connect_failed": {
-      // Without a known cause, runTarget.connectFailed would only repeat the heading.
       const key = connectFailureKey(error);
-      return { heading: unavailable, reason: key === null ? "" : t(key, { alias }) };
+      return { heading: t("runTarget.connectFailedHeading", { alias }), reason: key === null ? "" : t(key, { alias }) };
     }
     default:
       return { heading: unavailable, reason: runTargetProblemText(t, error, alias) };

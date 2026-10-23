@@ -1,15 +1,13 @@
-import { useEffect, useId, useState, type FormEvent, type RefObject } from "react";
+import { useId, type RefObject } from "react";
 import type { RemoteEnginesApi } from "../api/remoteEngines";
 import { useTranslate } from "../i18n/context";
-import { runTargetProblemText } from "../terminal/runTargetProblem";
+import { useRemoteVaultUnlockForm } from "../terminal/useRemoteVaultUnlockForm";
 import { ModalShell } from "../ui/ModalShell";
 import { PasswordField } from "../ui/PasswordField";
 import { Button } from "../ui/surface";
 
 // RemoteVaultUnlockDialog asks for the Vault password of a run-target engine
-// and unlocks it. The password goes to that engine through this machine's
-// engine; neither keeps it here. An engine with no Vault yet is refused the
-// same way as a locked one; that Vault is created in the engine's own screen.
+// when the user chooses to unlock it from the engine information dialog.
 export function RemoteVaultUnlockDialog({
   alias,
   api,
@@ -27,41 +25,8 @@ export function RemoteVaultUnlockDialog({
 }) {
   const t = useTranslate();
   const headingId = useId();
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  // vaultMissing is null until the engine says whether it has a Vault.
-  const [vaultMissing, setVaultMissing] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void api.status(alias)
-      .then((status) => {
-        if (!active) return;
-        // Unlocked elsewhere in the meantime: there is nothing to ask.
-        if (status.vault && status.unlocked) onUnlocked();
-        else setVaultMissing(!status.vault);
-      })
-      // The password is still asked for; unlocking says what is wrong.
-      .catch(() => { if (active) setVaultMissing(false); });
-    return () => { active = false; };
-  }, [alias, api, onUnlocked]);
-
-  async function unlock(event: FormEvent) {
-    event.preventDefault();
-    if (busy || password === "") return;
-    setBusy(true);
-    setError("");
-    try {
-      await api.unlockVault(alias, password);
-      setPassword("");
-      onUnlocked();
-    } catch (caught) {
-      setError(runTargetProblemText(t, caught, alias));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const form = useRemoteVaultUnlockForm({ alias, api, translate: t, onUnlocked });
+  const { busy } = form;
 
   return (
     <ModalShell
@@ -71,7 +36,7 @@ export function RemoteVaultUnlockDialog({
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
       panelClassName="w-full max-w-sm rounded-lg p-4"
     >
-      {vaultMissing === true ? (
+      {form.vaultMissing === true ? (
         <div className="flex flex-col gap-3">
           <h2 id={headingId} className="text-sm font-medium text-ink">{t("runTarget.vaultMissingHeading", { alias })}</h2>
           <p className="text-sm text-ink-muted">{t("runTarget.vaultMissingBody", { alias })}</p>
@@ -81,13 +46,13 @@ export function RemoteVaultUnlockDialog({
           </div>
         </div>
       ) : (
-        <form onSubmit={(event) => void unlock(event)} className="flex flex-col gap-3">
+        <form onSubmit={(event) => void form.unlock(event)} className="flex flex-col gap-3">
           <h2 id={headingId} className="text-sm font-medium text-ink">{t("runTarget.unlockHeading", { alias })}</h2>
           <p className="text-sm text-ink-muted">{t("runTarget.unlockBody", { alias })}</p>
-          <PasswordField label={t("runTarget.unlockPassword", { alias })} value={password} onChange={setPassword} error={error} disabled={busy} autoFocus />
+          <PasswordField label={t("runTarget.unlockPassword", { alias })} value={form.password} onChange={form.setPassword} error={form.error} disabled={busy} autoFocus />
           <div className="flex justify-end gap-2">
             <Button disabled={busy} onClick={onClose}>{t("runTarget.unlockCancel")}</Button>
-            <Button type="submit" kind="primary" disabled={busy || password === ""}>
+            <Button type="submit" kind="primary" disabled={busy || form.password === ""}>
               {busy ? t("runTarget.unlocking") : t("runTarget.unlock")}
             </Button>
           </div>

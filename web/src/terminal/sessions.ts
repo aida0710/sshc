@@ -9,7 +9,7 @@ import type { MessageKey } from "../i18n/messages";
 // A hop or an authentication prompt should appear as soon as a person can
 // notice it; a settled list only needs to catch exits and notifications.
 const connectingPollIntervalMs = 500;
-const sessionListPollIntervalMs = 2_000;
+export const sessionListPollIntervalMs = 2_000;
 
 export type TerminalSessionsApi = Pick<
   SessionsApi,
@@ -23,8 +23,9 @@ export type TerminalSessionsState = {
   busy: boolean;
   problem: string;
   // remoteRefusal is why the run target's engine refused to list its sessions;
-  // null while it lists them.
+  // null while it lists them. remoteRefusalAt is when it last refused.
   remoteRefusal: ApiError | null;
+  remoteRefusalAt: Date | null;
   loaded: boolean;
   rename: (id: string, title: string) => Promise<boolean>;
   unpinTitle?: (id: string) => Promise<boolean>;
@@ -47,10 +48,12 @@ export function useTerminalSessions(
   const [maxSessions, setMaxSessions] = useState(0);
   const [pendingOperations, setPendingOperations] = useState(0);
   const [problem, setProblem] = useState("");
-  const [listFailure, setListFailure] = useState<{ api: TerminalSessionsApi; error: ApiError } | null>(null);
-  // Effects offering dialogs must never attribute the previous engine's refusal
+  const [listFailure, setListFailure] = useState<{ api: TerminalSessionsApi; error: ApiError; at: Date } | null>(null);
+  // The terminal area must never attribute the previous engine's refusal
   // to the newly selected one, even before the reset effect has run.
-  const remoteRefusal = listFailure?.api === api ? listFailure.error : null;
+  const currentFailure = listFailure?.api === api ? listFailure : null;
+  const remoteRefusal = currentFailure?.error ?? null;
+  const remoteRefusalAt = currentFailure?.at ?? null;
   const [loaded, setLoaded] = useState(false);
   const refreshGeneration = useRequestGeneration();
   const mutationGeneration = useRequestGeneration();
@@ -99,7 +102,7 @@ export function useTerminalSessions(
       // one with no sessions. This machine's own list keeps failing quietly:
       // the next poll reads it again.
       if (isCurrent() && error instanceof ApiError && error.code.startsWith("remote_engine_")) {
-        setListFailure({ api, error });
+        setListFailure({ api, error, at: new Date() });
       }
     } finally {
       if (isCurrent()) setLoaded(true);
@@ -279,7 +282,7 @@ export function useTerminalSessions(
   }, [beginMutation]);
 
   return {
-    sessions, maxSessions, busy, problem, remoteRefusal, loaded,
+    sessions, maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, loaded,
     rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited, moveToWorkspace,
   };
 }
