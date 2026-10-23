@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { aboutApi, type About, type AboutApi } from "../api/about";
 import { updateApi, type UpdateApi } from "../api/update";
 import { useLanguage } from "../i18n/context";
 import { UpdateControls } from "../shell/UpdateControls";
 import { explainedUpdateReason, updateMessage } from "../shell/updateMessage";
-import { useUpdateStatus } from "../shell/useUpdateStatus";
+import { isUpdateActive, useUpdateStatus } from "../shell/useUpdateStatus";
 import { formatDateTime } from "../ui/format";
 import { Button, Notice } from "../ui/surface";
 import { BuildDetails } from "./BuildDetails";
@@ -22,6 +22,10 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
   const [about, setAbout] = useState<About | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [checking, setChecking] = useState(false);
+  // A stored result may be days old; only a successful check on this page
+  // can establish whether a newer version exists.
+  const [checkedOnThisPage, setCheckedOnThisPage] = useState(false);
+  const openingCheckHandled = useRef(false);
   const { status, setStatus } = useUpdateStatus(updates);
   const activity = useUpdateActivity(status);
   const updateOutput = useUpdateOutput(updates, status?.job);
@@ -36,11 +40,14 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
 
   async function checkUpdate() {
     if (checking) return;
+    openingCheckHandled.current = true;
     setChecking(true);
+    setCheckedOnThisPage(false);
     activity.record(checkStartedActivity);
     try {
       const checked = await updates.checkUpdate();
       setStatus(checked);
+      setCheckedOnThisPage(!checked.checkError);
       activity.record(checkResultActivity(checked));
     } catch {
       activity.record(checkRequestFailedActivity);
@@ -49,10 +56,24 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
     }
   }
 
+  // Wait for the job status so an opening check cannot interfere with update
+  // progress. The ref also prevents StrictMode from checking twice.
+  useEffect(() => {
+    if (openingCheckHandled.current || status === null) return;
+    openingCheckHandled.current = true;
+    if (isUpdateActive(status.job)) return;
+    void checkUpdate();
+  });
+
   const reason = status === null ? undefined : explainedUpdateReason(status);
-  const currentState = status?.latest === undefined
-    ? t("about.noRelease")
-    : status.available ? t("about.available", { version: status.latest }) : t("about.upToDate", { version: status.current });
+  const currentState = getUpdateStateMessage();
+
+  function getUpdateStateMessage(): string | null {
+    if (!checkedOnThisPage || status === null) return checking ? t("about.checking") : null;
+    if (status.checkError) return null;
+    if (status.latest === undefined) return t("about.noRelease");
+    return status.available ? t("about.available", { version: status.latest }) : t("about.noNewerVersion", { version: status.current });
+  }
 
   return (
     <section aria-labelledby="about-heading" className="mx-auto flex w-full max-w-5xl flex-col gap-6">
@@ -65,7 +86,7 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
       <section aria-labelledby="about-update-heading" className="rounded border border-line bg-card p-4">
         <h3 id="about-update-heading" className="mb-3 font-semibold text-ink">{t("about.updates")}</h3>
         <div className="grid gap-3 text-sm text-ink-muted">
-          <p role="status">{currentState}</p>
+          {currentState === null ? null : <p role="status">{currentState}</p>}
           <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
             {status?.latest === undefined ? null : <><dt>{t("about.latest")}</dt><dd className="text-ink">{status.latest}</dd></>}
             {status?.publishedAt === undefined ? null : <><dt>{t("about.publishedAt")}</dt><dd>{formatDateTime(status.publishedAt, locale)}</dd></>}
