@@ -129,14 +129,12 @@ export function App({
   }, [runTargets.selected, vaultRevision]);
   const terminalSessions = useTerminalSessions(runTargetApis.sessions, t, state === "ready");
   // A run target found locked asks for its Vault password at once.
+  // Cancelling it leaves the terminal area's [Unlock…] to ask again.
   const { offer: offerVaultUnlock } = runTargets.vaultUnlock;
+  const runTargetLocked = terminalSessions.remoteRefusal?.code === "remote_engine_vault_locked";
   useEffect(() => {
-    if (terminalSessions.remoteRefusal === "vault_locked" && runTargets.selected !== null) offerVaultUnlock(runTargets.selected);
-  }, [offerVaultUnlock, runTargets.selected, terminalSessions.remoteRefusal]);
-  const { offer: offerEngineInfo } = runTargets.engineInfo;
-  useEffect(() => {
-    if (terminalSessions.remoteRefusal === "incompatible" && runTargets.selected !== null) offerEngineInfo(runTargets.selected);
-  }, [offerEngineInfo, runTargets.selected, terminalSessions.remoteRefusal]);
+    if (runTargetLocked && runTargets.selected !== null) offerVaultUnlock(runTargets.selected);
+  }, [offerVaultUnlock, runTargets.selected, runTargetLocked]);
   const terminalWorkspaces = useTerminalWorkspaces({
     sessions: terminalSessions.sessions,
     translate: t,
@@ -413,7 +411,7 @@ export function App({
                       hostOSC52={declared.hostOSC52}
                       hostVPN={declared.hostVPN}
                       api={runTargetApis.sessions}
-                      runTarget={runTargets.selected}
+                      runTargets={runTargets}
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
                     />
