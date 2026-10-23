@@ -1,4 +1,5 @@
 import { expect, test, openApplication } from "./support/environment";
+import { drawnRows, terminalKeyboard } from "./support/terminal";
 
 test("reveals workspace counts together with actions on hover and keyboard focus", async ({ page, installation }) => {
   await openApplication(page, installation);
@@ -60,6 +61,23 @@ test("groups sessions into workspaces and keeps a hidden one out of the tree", a
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
   await expect(workspace).toContainText("1");
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    // Capture the current workspace tree and run-target control before hiding the session.
+    const terminal = page.getByRole("region", { name: /^Terminal for / });
+    await expect(terminal).toContainText(/[$#%>]/);
+    // Keep the capture independent of the machine's user name and hostname.
+    await terminalKeyboard(page).focus();
+    await page.keyboard.type("export PS1='sshc@localhost:~$ '; printf '\\033[2J\\033[H'");
+    await page.keyboard.press("Enter");
+    await expect(drawnRows(page)).toHaveText("sshc@localhost:~$");
+    await page.mouse.move(0, 0);
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/terminal-desktop.png`, animations: "disabled" });
+    await navigation.getByRole("button", { name: /^Choose where terminals run/ }).click();
+    await expect(navigation.getByRole("list", { name: "Engines" })).toBeVisible();
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/run-target-desktop.png`, animations: "disabled" });
+    await page.keyboard.press("Escape");
+  }
 
   const session = tree.getByRole("button", { name: /^Actions for / });
   await session.click();

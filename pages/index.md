@@ -19,7 +19,7 @@ outline: false
       </div>
     </div>
     <div class="sshc-preview">
-      <img src="/images/terminal-desktop.png" alt="sshcでSSH接続を開いたTerminal画面" width="1280" height="720">
+      <img src="/images/terminal-desktop.png" alt="ワークスペース内でローカルシェルを開いたTerminal画面" width="1280" height="720">
     </div>
   </section>
 
@@ -29,7 +29,7 @@ outline: false
       <p>SSHとローカルシェルを同じ画面で開けます。SFTPやポート転送にも同じ接続設定を使い、OpenSSH形式のまま管理できます。選んだ接続だけを<a href="./features/vpn">専用のVPN</a>経由で接続することもできます。</p>
     </div>
     <div class="sshc-feature-grid">
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/terminal-desktop.png" alt="SSH接続を開いたTerminal" width="1280" height="720"><div class="sshc-feature-body"><span class="index">01</span><h3>SSHとローカルシェル</h3><p>セッションの一覧から切り替えて使えます。再接続、検索、ポート転送にも対応しています。</p></div></article>
+      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/terminal-desktop.png" alt="ワークスペース内でローカルシェルを開いたTerminal" width="1280" height="720"><div class="sshc-feature-body"><span class="index">01</span><h3>SSHとローカルシェル</h3><p>セッションの一覧から切り替えて使えます。再接続、検索、ポート転送にも対応しています。</p></div></article>
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/connections-desktop.png" alt="OpenSSH接続を整理するConnections画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">02</span><h3>OpenSSH設定をそのまま使う</h3><p><code>~/.ssh/config</code>の<code>Include</code>や<code>Match</code>をそのまま扱っています。通常の<code>ssh</code>やVS Codeでも、同じエイリアスを使えます。</p></div></article>
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/credentials-desktop.png" alt="保存済みパスワードを複数ホストへ割り当てたVault画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">03</span><h3>認証情報は一度保存</h3><p>パスワードや鍵のパスフレーズはVaultに一度保存すれば、Terminal、SFTP、CLIでそのまま使えます。機能ごとに設定し直す必要はありません。</p></div></article>
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/otp-desktop-ja.png" alt="現在のコードと割り当て先を表示したOTP画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">04</span><h3>ワンタイムパスワード</h3><p>TOTPのセットアップキーをVaultに保存すると、現在のコードを確認できます。接続先に割り当てておけば、サーバーが求めたときにコードを自動で入力します。</p></div></article>

@@ -176,8 +176,8 @@ export const shellSays = {
 
 export const test = base.extend<{ installation: Installation }>({
   page: async ({ page }, use) => {
-    // Documentation captures show the published release, not this development build and the
-    // update notice it would get. A test that stubs the update status itself registers later and wins.
+    // Keep documentation captures independent of release checks. The capture script supplies
+    // an exact release tag or dev; a test-specific update stub registers later and wins.
     const visualVersion = process.env.SSHC_VISUAL_VERSION;
     if (visualVersion !== undefined) {
       await page.route("**/api/v1/update", (route) => route.fulfill({

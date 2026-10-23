@@ -7,7 +7,7 @@ description: Open SSH and local shells with search, reconnect, encodings, and po
 
 Open SSH and local shells in the same interface, with search, Quick Commands, and port forwarding.
 
-![A connected terminal and its action menu](/images/terminal-desktop.png)
+![A local shell open in a named workspace](/images/terminal-desktop.png)
 
 ## See connection progress
 
