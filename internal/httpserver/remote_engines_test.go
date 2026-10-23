@@ -3,6 +3,8 @@ package httpserver
 import (
 	"context"
 	"crypto/rand"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/remoteengine"
 	"sshc/internal/session"
+	"sshc/internal/terminal"
 )
 
 // fakeEngineDirectory は、実行先の一覧と、取り次ぎに渡された alias と接続先のパスを覚える。
@@ -26,6 +29,10 @@ type fakeEngineDirectory struct {
 	statusSeen remoteengine.Status
 	statusErr  error
 	controlled []string
+	startErr   error
+	actionLog  remoteengine.ActionLogRead
+	logErr     error
+	logAsked   []string
 	unlocked   []string
 }
 
@@ -41,12 +48,19 @@ func (f *fakeEngineDirectory) RemoveEngine(string) error { f.engines = nil; retu
 func (f *fakeEngineDirectory) EngineStatus(context.Context, string) (remoteengine.Status, error) {
 	return f.statusSeen, f.statusErr
 }
-func (f *fakeEngineDirectory) ControlEngine(_ context.Context, alias string, action remoteengine.EngineAction) (remoteengine.ActionResult, error) {
+func (f *fakeEngineDirectory) StartAction(_ context.Context, alias string, action remoteengine.EngineAction) (uint64, error) {
 	if action != remoteengine.ActionStop && action != remoteengine.ActionRestart && action != remoteengine.ActionUpdate {
-		return remoteengine.ActionResult{}, remoteengine.ErrUnknownAction
+		return 0, remoteengine.ErrUnknownAction
+	}
+	if f.startErr != nil {
+		return 0, f.startErr
 	}
 	f.controlled = append(f.controlled, alias+" "+string(action))
-	return remoteengine.ActionResult{Succeeded: true, Output: "stopped"}, nil
+	return uint64(len(f.controlled)), nil
+}
+func (f *fakeEngineDirectory) ActionLog(alias string, cursor uint64, limit int) (remoteengine.ActionLogRead, error) {
+	f.logAsked = append(f.logAsked, fmt.Sprintf("%s %d %d", alias, cursor, limit))
+	return f.actionLog, f.logErr
 }
 func (f *fakeEngineDirectory) UnlockVault(_ context.Context, alias, passphrase string) error {
 	if passphrase != "correct horse battery" {
@@ -149,12 +163,12 @@ func TestEachReasonAnEngineCannotBeUsedHasItsOwnCode(t *testing.T) {
 	}
 }
 
-func TestControlRunsTheChosenActionAndRefusesAnUnknownOne(t *testing.T) {
+func TestControlStartsTheChosenActionAndRefusesAnUnknownOneOrASecondOne(t *testing.T) {
 	directory := &fakeEngineDirectory{}
 	engine := remoteEnginesEngine(directory)
 	headers := map[string]string{"Content-Type": "application/json"}
 	recorder := send(t, engine, http.MethodPost, "/api/v1/engines/r540/control", `{"action":"restart"}`, headers)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"succeeded":true`) {
+	if recorder.Code != http.StatusAccepted || decodeAs[api.RemoteEngineActionStarted](t, recorder.Body.String()).Generation != 1 {
 		t.Fatalf("restart = %d %s", recorder.Code, recorder.Body.String())
 	}
 	if strings.Join(directory.controlled, ",") != "r540 restart" {
@@ -163,6 +177,67 @@ func TestControlRunsTheChosenActionAndRefusesAnUnknownOne(t *testing.T) {
 	recorder = send(t, engine, http.MethodPost, "/api/v1/engines/r540/control", `{"action":"reboot"}`, headers)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("unknown action = %d %s", recorder.Code, recorder.Body.String())
+	}
+	directory.startErr = remoteengine.ErrActionRunning
+	recorder = send(t, engine, http.MethodPost, "/api/v1/engines/r540/control", `{"action":"update"}`, headers)
+	if recorder.Code != http.StatusConflict || decodeAs[api.Problem](t, recorder.Body.String()).Code != "remote_engine_action_running" {
+		t.Fatalf("while another runs = %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestTheActionLogReturnsTheOutputFromTheCursorAndWhyItEnded(t *testing.T) {
+	directory := &fakeEngineDirectory{actionLog: remoteengine.ActionLogRead{
+		Generation: 2, Action: remoteengine.ActionUpdate, Done: true, Failure: remoteengine.ErrNotInstalled,
+		Read:   terminal.RingRead{Start: 5, Next: 25, End: 25},
+		Output: "sshc was not found\n",
+	}}
+	engine := remoteEnginesEngine(directory)
+	recorder := send(t, engine, http.MethodGet, "/api/v1/engines/r540/control/log?cursor=5&limit=100", "", nil)
+	log := decodeAs[api.RemoteEngineActionLog](t, recorder.Body.String())
+	if recorder.Code != http.StatusOK || log.Generation != 2 || log.Action != api.RemoteEngineActionUpdate || !log.Done || log.Succeeded {
+		t.Fatalf("log = %d %s", recorder.Code, recorder.Body.String())
+	}
+	if log.Problem == nil || *log.Problem != "remote_engine_not_installed" || log.Output != "sshc was not found\n" {
+		t.Fatalf("log = %s", recorder.Body.String())
+	}
+	if log.Cursor != (api.TerminalControlCursor{Requested: 5, Start: 5, Next: 25, End: 25}) || strings.Join(directory.logAsked, ",") != "r540 5 100" {
+		t.Fatalf("cursor = %+v, asked %v", log.Cursor, directory.logAsked)
+	}
+
+	directory.actionLog.Failure = nil
+	recorder = send(t, engine, http.MethodGet, "/api/v1/engines/r540/control/log", "", nil)
+	if strings.Contains(recorder.Body.String(), `"problem"`) {
+		t.Fatalf("an action that ran to the end = %s", recorder.Body.String())
+	}
+	for _, tc := range []struct {
+		query  string
+		err    error
+		status int
+		code   string
+	}{
+		{"?cursor=x", nil, http.StatusBadRequest, "invalid_terminal_cursor"},
+		{"?limit=99999999", nil, http.StatusBadRequest, "invalid_terminal_cursor"},
+		{"", remoteengine.ErrNoAction, http.StatusNotFound, "remote_engine_no_action"},
+		{"?cursor=99", remoteengine.ErrActionCursorAhead, http.StatusConflict, "terminal_cursor_ahead"},
+		{"", remoteengine.ErrNotAdded, http.StatusNotFound, "remote_engine_not_added"},
+	} {
+		directory.logErr = tc.err
+		recorder := send(t, engine, http.MethodGet, "/api/v1/engines/r540/control/log"+tc.query, "", nil)
+		if recorder.Code != tc.status || decodeAs[api.Problem](t, recorder.Body.String()).Code != tc.code {
+			t.Errorf("%q with %v = %d %s, want %d %s", tc.query, tc.err, recorder.Code, recorder.Body.String(), tc.status, tc.code)
+		}
+	}
+}
+
+func TestAnActionThatEndedForAnotherReasonThanItsExitCodeNamesThatReason(t *testing.T) {
+	for failure, want := range map[error]string{
+		remoteengine.ErrActionTimedOut: "remote_engine_action_timed_out",
+		remoteengine.ErrClosed:         "server_stopping",
+		errors.New("ssh: lost"):        "remote_engine_failed",
+	} {
+		if got := actionFailureCode(failure); got == nil || *got != want {
+			t.Errorf("%v = %v, want %s", failure, got, want)
+		}
 	}
 }
 

@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import { Spinner } from "../ui/Spinner";
 import { Button } from "../ui/surface";
 import { useElapsedSeconds } from "../ui/useElapsedSeconds";
+import { EngineActionOutput } from "./EngineActionOutput";
 import { useEngineInfo } from "./useEngineInfo";
 
 // RunTargetEngineUpdate shows the two sshc versions that do not work together
@@ -26,7 +27,8 @@ export function RunTargetEngineUpdate({
   remoteVersion: string;
   localVersion: string;
   vaultRevision: number;
-  // onUpdated reads the session list again once the host's sshc succeeded.
+  // onUpdated reads the session list again once the host's sshc has ended
+  // and succeeded.
   onUpdated: () => void;
   // children are the panel's other actions, shown beside the update.
   children: ReactNode;
@@ -56,11 +58,7 @@ export function RunTargetEngineUpdate({
       {info.lastResult === null ? null : succeeded
         ? <p role="status" className="text-sm text-ink">{t("engineInfo.updated")}</p>
         : <p role="alert" className="text-sm text-danger">{t("engineInfo.actionFailed")}</p>}
-      {info.lastResult === null || info.lastResult.output === "" ? null : (
-        <pre aria-label={t("engineInfo.output")} className="max-h-40 overflow-auto rounded-md bg-control p-2 font-mono text-[11px] text-ink-muted">
-          {info.lastResult.output}
-        </pre>
-      )}
+      <EngineActionOutput output={info.output} />
       <div className="flex flex-wrap gap-2">
         <Button kind="primary" busy={updating} disabled={info.running !== null} onClick={() => void info.run("update")}>
           {updating ? t("runTarget.updating", { alias }) : t("runTarget.update", { alias })}

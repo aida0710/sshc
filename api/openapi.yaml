@@ -625,7 +625,9 @@ paths:
   /api/v1/engines/{alias}/control:
     post:
       operationId: controlRemoteEngine
-      description: Stops, restarts or updates the remote engine with the host's own sshc command. Every terminal on it stops.
+      description: >-
+        Starts stopping, restarting or updating the remote engine with the host's own sshc command. Every terminal on it stops.
+        The command keeps running when the caller goes away; its progress and output are read from /control/log.
       parameters:
       - name: alias
         in: path
@@ -640,18 +642,54 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RemoteEngineActionRequest" }
       responses:
-        "200":
-          description: Whether the host's sshc command succeeded, and the end of what it wrote
+        "202":
+          description: The host's sshc command started
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/RemoteEngineActionResult" }
+              schema: { $ref: "#/components/schemas/RemoteEngineActionStarted" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        # remote_engine_action_running when an action on that host has not ended.
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /api/v1/engines/{alias}/control/log:
+    get:
+      operationId: remoteEngineActionLog
+      description: The progress of the last action started on the remote engine and a bounded plain-text fragment of what the host's sshc wrote.
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - name: cursor
+        in: query
+        required: false
+        schema: { type: integer, format: uint64, minimum: 0, default: 0 }
+      - name: limit
+        in: query
+        required: false
+        schema: { type: integer, minimum: 0, maximum: 65536, default: 32768 }
+      responses:
+        "200":
+          description: The action's progress and output from the cursor
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RemoteEngineActionLog" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        # remote_engine_not_added, or remote_engine_no_action when no action was started since this engine started.
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /api/v1/engines/{alias}/vault/unlock:
     post:
       operationId: unlockRemoteEngineVault
@@ -4648,20 +4686,41 @@ components:
         passwordless: { type: boolean }
         # sessions は、接続先のエンジンの終了していないターミナルの本数である。
         sessions: { type: integer, minimum: 0 }
+    RemoteEngineAction:
+      type: string
+      enum: [stop, restart, update]
     RemoteEngineActionRequest:
       type: object
       additionalProperties: false
       required: [action]
       properties:
-        action: { type: string, enum: [stop, restart, update] }
-    RemoteEngineActionResult:
+        action: { $ref: "#/components/schemas/RemoteEngineAction" }
+    RemoteEngineActionStarted:
       type: object
       additionalProperties: false
-      required: [succeeded, output]
+      required: [generation]
       properties:
+        # generation は、始めた操作の番号である。/control/log の generation が違えば、
+        # 別の操作の記録である。
+        generation: { type: integer, format: uint64, minimum: 1 }
+    RemoteEngineActionLog:
+      type: object
+      additionalProperties: false
+      required: [generation, action, done, succeeded, cursor, output]
+      properties:
+        generation: { type: integer, format: uint64, minimum: 1 }
+        action: { $ref: "#/components/schemas/RemoteEngineAction" }
+        done: { type: boolean }
+        # succeeded は、接続先の sshc が 0 で終わったかである。done のときだけ意味がある。
         succeeded: { type: boolean }
-        # output は、接続先の sshc が書いた標準出力と標準エラーの末尾（4 KiB まで）である。
-        output: { type: string, maxLength: 4096 }
+        # problem は、接続先の sshc の終了コード以外で終わった理由の code である。
+        # 値は同じ失敗を要求が返すときの Problem の code と同じである。
+        problem: { type: string }
+        # cursor の位置は、操作ごとに 0 から数える。
+        cursor: { $ref: "#/components/schemas/TerminalControlCursor" }
+        # output は、接続先の sshc が書いた標準出力と標準エラーを、届いた順に、端末の
+        # 制御文字を除いて並べたものである。
+        output: { type: string, maxLength: 65536 }
     RemoteEngineEntrance:
       type: object
       additionalProperties: false

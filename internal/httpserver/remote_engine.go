@@ -65,38 +65,51 @@ func (h CLIHandlers) OpenRemoteEngine(c *echo.Context) error {
 // remoteEngineProblem は、接続先のエンジンを開けなかった理由を、理由ごとの code で断る。
 // CLI と画面が、それぞれの言葉で直し方を添える。
 func remoteEngineProblem(c *echo.Context, err error) error {
+	status, payload, known := remoteEngineFailure(err)
+	if !known {
+		return unexpectedProblem(c, payload.Code, err)
+	}
+	return problemWith(c, status, payload)
+}
+
+// remoteEngineFailure は、実行先のエンジンについての失敗を、状態コードと problem の本文にする。
+// known が false なら想定外の失敗で、本文は remote_engine_failed である。要求への応答と、
+// 終わった操作の記録（ActionLog）の problem が、同じ失敗に同じ code を使うよう、ここで一度だけ決める。
+func remoteEngineFailure(err error) (status int, payload problemPayload, known bool) {
 	var connectErr *remoteengine.ConnectError
 	var incompatible *remoteengine.IncompatibleEngineError
 	switch {
 	case errors.Is(err, remoteengine.ErrClosed):
-		return problem(c, http.StatusServiceUnavailable, "server_stopping")
+		return http.StatusServiceUnavailable, problemPayload{Code: "server_stopping"}, true
 	case errors.Is(err, remoteengine.ErrNotAdded):
-		return problem(c, http.StatusNotFound, "remote_engine_not_added")
+		return http.StatusNotFound, problemPayload{Code: "remote_engine_not_added"}, true
 	case errors.Is(err, remoteengine.ErrRequestTooLarge):
-		return problem(c, http.StatusRequestEntityTooLarge, "request_body_too_large")
+		return http.StatusRequestEntityTooLarge, problemPayload{Code: "request_body_too_large"}, true
 	case errors.As(err, &connectErr):
-		return problemWith(c, http.StatusBadGateway, problemPayload{
+		return http.StatusBadGateway, problemPayload{
 			Code: "remote_engine_connect_failed", Reason: remoteEngineConnectFailure(connectErr.Err),
-		})
+		}, true
 	case errors.As(err, &incompatible):
 		// detail は接続先のバージョンだけである。このマシンのバージョンは画面と CLI が知っている。
-		return problemDetail(c, http.StatusConflict, "remote_engine_incompatible", incompatible.Remote)
+		return http.StatusConflict, problemPayload{Code: "remote_engine_incompatible", Detail: boundedProblemDetail(incompatible.Remote)}, true
 	case errors.Is(err, remoteengine.ErrNotRunning):
-		return problem(c, http.StatusBadGateway, "remote_engine_not_running")
+		return http.StatusBadGateway, problemPayload{Code: "remote_engine_not_running"}, true
 	case errors.Is(err, remoteengine.ErrUnproven):
-		return problem(c, http.StatusBadGateway, "remote_engine_unproven")
+		return http.StatusBadGateway, problemPayload{Code: "remote_engine_unproven"}, true
 	case errors.Is(err, remoteengine.ErrNotInstalled):
-		return problem(c, http.StatusBadGateway, "remote_engine_not_installed")
+		return http.StatusBadGateway, problemPayload{Code: "remote_engine_not_installed"}, true
 	case errors.Is(err, remoteengine.ErrForwardingRefused):
-		return problem(c, http.StatusBadGateway, "remote_engine_forwarding_refused")
+		return http.StatusBadGateway, problemPayload{Code: "remote_engine_forwarding_refused"}, true
 	case errors.Is(err, remoteengine.ErrNoEntrance):
-		return problem(c, http.StatusBadGateway, "remote_engine_no_entrance")
+		return http.StatusBadGateway, problemPayload{Code: "remote_engine_no_entrance"}, true
 	case errors.Is(err, remoteengine.ErrWrongPassphrase):
 		// 断ったのは接続先の Vault で、このマシンのセッションではない。403 でも、画面は
 		// invalid_csrf 以外をサインインのやり直しと読まない。
-		return problem(c, http.StatusForbidden, "remote_engine_wrong_passphrase")
+		return http.StatusForbidden, problemPayload{Code: "remote_engine_wrong_passphrase"}, true
 	case errors.Is(err, remoteengine.ErrUnlockRefused):
-		return problem(c, http.StatusBadGateway, "remote_engine_unlock_failed")
+		return http.StatusBadGateway, problemPayload{Code: "remote_engine_unlock_failed"}, true
+	case errors.Is(err, remoteengine.ErrActionTimedOut):
+		return http.StatusGatewayTimeout, problemPayload{Code: "remote_engine_action_timed_out"}, true
 	}
-	return unexpectedProblem(c, "remote_engine_failed", err)
+	return http.StatusInternalServerError, problemPayload{Code: "remote_engine_failed"}, false
 }
