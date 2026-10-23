@@ -49,6 +49,14 @@ describe("findTerminalLinks", () => {
 });
 
 describe("relative image paths", () => {
+  it("keeps ~/ image paths whole and passes named users and non-image home paths by", () => {
+    expect(findTerminalLinks("[image] ~/shots/a.PNG (1 KB)")).toEqual([
+      { kind: "relative-path", text: "~/shots/a.PNG", target: "~/shots/a.PNG", start: 8, end: 21 },
+    ]);
+    expect(findTerminalLinks("~ ~/notes.txt ~/src/main.go ~other/a.png ~other.png ~/a.png.bak")).toEqual([]);
+    expect(findTerminalLinks("./~other/a.png").map((link) => link.target)).toEqual(["./~other/a.png"]);
+  });
+
   it("finds the relative path Claude Code prints for an image it sent", () => {
     expect(findTerminalLinks("› [image] artifacts/advisor-setting/2026-10-23/advisor-setting.png (16KB)")).toEqual([
       {
