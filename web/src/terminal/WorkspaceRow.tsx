@@ -84,7 +84,7 @@ export function WorkspaceRow({
         {unread && !expanded ? (
           <span aria-label={t("terminal.unreadNotification")} className="size-2 shrink-0 rounded-full bg-accent" />
         ) : null}
-        <span className="shrink-0 text-[11px] text-ink-faint">{sessionCount}</span>
+        <span className={`shrink-0 text-[11px] text-ink-faint ${revealOnHover}`}>{sessionCount}</span>
       </button>
       <button
         type="button"

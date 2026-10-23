@@ -178,7 +178,10 @@ describe("terminal clipboard interactions", () => {
     expect(subject.terminal.paste).toHaveBeenCalledWith("one paste");
   });
 
-  it("sends an application-enabled enhanced key once instead of xterm input", () => {
+  it.each([
+    { key: "Enter", sequence: "\u001b[13;2u" },
+    { key: "Tab", sequence: "\u001b[9;2u" },
+  ])("sends enhanced Shift+$key once and consumes the browser action", ({ key, sequence }) => {
     const container = document.createElement("div");
     let keyHandler: ((event: KeyboardEvent) => boolean) | undefined;
     const sendEnhancedKey = vi.fn();
@@ -194,12 +197,14 @@ describe("terminal clipboard interactions", () => {
       clipboard: { readText: vi.fn(), writeText: vi.fn() },
       settings: () => ({ copyOnSelect: false, rightClickPaste: false }),
       refuse: vi.fn(),
-      enhancedKey: () => "\u001b[13;2u",
+      enhancedKey: () => sequence,
       sendEnhancedKey,
     });
-    const event = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true });
+    const event = new KeyboardEvent("keydown", { key, shiftKey: true, cancelable: true });
     expect(keyHandler?.(event)).toBe(false);
-    expect(sendEnhancedKey).toHaveBeenCalledWith("\u001b[13;2u");
+    expect(event.defaultPrevented).toBe(true);
+    expect(event.cancelBubble).toBe(true);
+    expect(sendEnhancedKey).toHaveBeenCalledExactlyOnceWith(sequence);
   });
 
   it("copies a selection before encoding the shortcut as an enhanced key", () => {

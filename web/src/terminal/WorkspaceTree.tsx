@@ -157,11 +157,6 @@ export function WorkspaceTree({
 
   const headingActions: ActionMenuItem[] = [
     { label: showHidden ? t("workspace.hideHidden") : t("workspace.showHidden"), onSelect: toggleShowHidden },
-    {
-      label: t("workspace.create"),
-      disabled: workspaces.maxWorkspaces > 0 && workspaces.workspaces.length >= workspaces.maxWorkspaces,
-      onSelect: () => setNameRequest({ kind: "create" }),
-    },
   ];
 
   return (
@@ -170,6 +165,16 @@ export function WorkspaceTree({
         <span aria-hidden="true" className="block grow px-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-faint">
           {t("workspace.heading")}
         </span>
+        <button
+          type="button"
+          aria-label={t("workspace.create")}
+          title={t("workspace.create")}
+          disabled={workspaces.maxWorkspaces > 0 && workspaces.workspaces.length >= workspaces.maxWorkspaces}
+          onClick={() => setNameRequest({ kind: "create" })}
+          className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-6"
+        >
+          <Icon name="plus" className="size-3.5" />
+        </button>
         <ActionMenu
           label={t("workspace.headingActions")}
           items={headingActions}

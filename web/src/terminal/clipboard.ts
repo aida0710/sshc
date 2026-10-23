@@ -87,6 +87,10 @@ export function attachTerminalClipboard({
     }
     const sequence = enhancedKey?.(event) ?? null;
     if (sequence !== null) {
+      // Returning false skips xterm's cancellation too: consume the browser
+      // action so enhanced keys such as Shift+Tab cannot also move focus.
+      event.preventDefault();
+      event.stopPropagation();
       sendEnhancedKey?.(sequence);
       return false;
     }
