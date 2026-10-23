@@ -23,7 +23,7 @@ A dropped SSH session retries automatically with a growing delay. While it waits
 
 - Scrollback search with `Ctrl/Cmd+F`
 - Case, regex, match highlighting, and result navigation
-- URL and remote-path context actions, including OSC 8 links
+- URL and path context actions, including image previews of paths and OSC 8 links
 - Quick Commands and snippets
 - Pre-send review for pastes containing line breaks or control characters
 - OSC 52 clipboard, Kitty keyboard protocol and JIS keyboards
@@ -44,6 +44,8 @@ OSC 52 lets remote software write to the device clipboard. It has a global defau
 Kitty keyboard mode follows requests from the remote application. A JIS option sends the yen key as backslash. Mobile adds a special-key row for Ctrl, Alt, Esc, Tab, and arrows.
 
 OSC 8 links and detected URLs open in the system browser. Ctrl-click (⌘-click on a Mac) opens one at once, except an OSC 8 link whose text is a different address from where it goes: that opens a menu showing the real destination first. A detected remote path or the current working directory reported through OSC 7 (OSC 9;9 from PowerShell or cmd on Windows) can open SFTP at the same host and directory. SFTP can also open a terminal at its displayed directory: an SSH session for a remote tab, or a local shell on the engine machine for a local tab.
+
+Click a path starting with `/` and choose **Preview** to show that file over the terminal. PNG, JPEG, GIF, WebP and BMP images up to 8 MiB are shown, and UTF-8 text that is not an image shows its beginning. The file is read only when you choose **Preview**: from the engine machine for a local shell (from the run target for a shell opened there), and from the host for an SSH session. The image line Claude Code prints when it sends one (`[image] /tmp/….png`) opens the same way. It is not available in an SSH session opened on a run target.
 
 **New session** in the session list opens the same picker SFTP uses for its destination: **Local shell** at the top (one row per detected shell profile), then search, recent connections and groups for SSH hosts. Local shells use the same subsystem as SSH: search and Quick Commands both apply. On macOS and Linux, sshc supplies the terminal information needed by line editors such as zsh and fish even when the engine was started as a background service.
 

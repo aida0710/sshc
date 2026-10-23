@@ -52,6 +52,8 @@ import { createStreamLink, type StreamLink, type StreamLinkController } from "./
 import { defaultBrowserScrollbackLines } from "./browserScrollback";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
+import { pathPreviewAlias } from "./pathPreviewAlias";
+import { FilePreviewDialog } from "../sftp/FilePreviewDialog";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
 import { ToastMessage } from "../ui/ToastMessage";
@@ -165,6 +167,7 @@ export function TerminalView({
   const overflowTrigger = useRef<HTMLButtonElement>(null);
   const [portForwardsOpen, setPortForwardsOpen] = useState(false);
   const [linkSelection, setLinkSelection] = useState<TerminalLinkSelection | null>(null);
+  const [previewedPath, setPreviewedPath] = useState<string | null>(null);
   const streamLinkController = useRef<StreamLinkController | null>(null);
 
   const [modifiers, setModifiers] = useState<Modifiers>({ ctrl: false, alt: false });
@@ -277,7 +280,6 @@ export function TerminalView({
       });
     });
     const terminalLinks = attachLinkProvider(view, {
-      remote: session.kind === "ssh",
       open: openTerminalURL,
       select: selectLinkAt,
     });
@@ -352,7 +354,7 @@ export function TerminalView({
     const detachOverlay = coarse
       ? attachSelectionOverlay(container, view, {
         onTap: (point) => {
-          const link = linkAtPoint(view, point, session.kind === "ssh");
+          const link = linkAtPoint(view, point);
           if (link === null) return false;
           selectLinkAt(link, point);
           return true;
@@ -461,6 +463,7 @@ export function TerminalView({
   const displayTitle = terminalDisplayTitle(session);
   const subtitle = terminalSubtitle(session, t);
   const remoteAlias = session.kind === "ssh" ? session.alias : undefined;
+  const previewAlias = pathPreviewAlias(session, runTarget);
 
   return (
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
@@ -590,10 +593,14 @@ export function TerminalView({
         <TerminalLinkPopover
           selection={linkSelection}
           onClose={() => setLinkSelection(null)}
+          {...(previewAlias === undefined ? {} : { onPreviewPath: setPreviewedPath })}
           {...(runTarget === undefined && remoteAlias !== undefined && onOpenRemotePath !== undefined
             ? { onRemotePath: (path: string, action: RemotePathAction) => onOpenRemotePath(remoteAlias, path, action) }
             : {})}
         />
+      )}
+      {previewAlias === undefined || previewedPath === null ? null : (
+        <FilePreviewDialog alias={previewAlias} path={previewedPath} onClose={() => setPreviewedPath(null)} />
       )}
       {pendingPaste === null || pendingPaste.sessionId !== session.id ? null : (
         <TerminalPasteDialog
