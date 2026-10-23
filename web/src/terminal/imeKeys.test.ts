@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { attachImeKeys, imeKeyCode, withholdFromTerminal } from "./imeKeys";
+import { imeKeyCode } from "../ui/imeComposition";
+import { attachImeKeys, withholdFromTerminal } from "./imeKeys";
 
 describe("withholdFromTerminal", () => {
   it("withholds the key the IME uses to say it is handling input", () => {

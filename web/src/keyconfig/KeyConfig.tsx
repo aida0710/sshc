@@ -7,6 +7,7 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { newIdentifier } from "../ui/randomIdentifier";
 import { defaultBindings, shortcutActions, shortcutKey, useBindings, type Bindings, type ShortcutAction } from "./bindings";
 import { maxShortcutPresetNameLength, maxShortcutPresets } from "../rules/shortcuts.generated";
+import { isImeComposing } from "../ui/imeComposition";
 
 const actionLabelKeys: Record<ShortcutAction, MessageKey> = {
   palette: "shortcuts.palette",
@@ -87,12 +88,12 @@ export function KeyConfig() {
           onClick={() => { setRecording(action); setError(""); setMessage(""); }}
           onBlur={() => setRecording(null)}
           onKeyDown={(event) => {
-            if (recording !== action) return;
+            if (recording !== action || isImeComposing(event)) return;
             if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) { setRecording(null); return; }
             event.preventDefault();
             event.stopPropagation();
             if (event.key === "Escape") { setRecording(null); return; }
-            if (event.repeat || event.nativeEvent.isComposing) return;
+            if (event.repeat) return;
             const key = shortcutKey(event.nativeEvent);
             if (key === null) return;
             const conflict = shortcutActions.find((other) => other !== action && bindings[other].includes(key));

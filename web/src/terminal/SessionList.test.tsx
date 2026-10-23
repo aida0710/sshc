@@ -145,6 +145,48 @@ describe("SessionList", () => {
     expect(props.onRename).toHaveBeenCalledWith("a", "prod bastion");
   });
 
+  describe.each([
+    { isComposing: true },
+    { isComposing: false, keyCode: 229 },
+  ])("while the IME reports %j", (composition) => {
+    it("keeps the name editable on composition Enter and saves on the next Enter", async () => {
+      const user = userEvent.setup();
+      const props = renderList();
+      await user.click(screen.getByRole("button", { name: "Actions for bastion" }));
+      await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+      const field = screen.getByRole("textbox", { name: "New name for bastion" });
+      fireEvent.compositionStart(field);
+      fireEvent.change(field, { target: { value: "開発サーバ" } });
+      fireEvent.keyDown(field, { key: "Enter", ...composition });
+
+      expect(props.onRename).not.toHaveBeenCalled();
+      expect(field).toHaveFocus();
+      expect(field).toHaveValue("開発サーバ");
+
+      fireEvent.compositionEnd(field);
+      await user.keyboard("{Enter}");
+      expect(props.onRename).toHaveBeenCalledExactlyOnceWith("a", "開発サーバ");
+      expect(field).not.toBeInTheDocument();
+    });
+
+    it("keeps renaming open on composition Escape and cancels on the next Escape", async () => {
+      const user = userEvent.setup();
+      const props = renderList();
+      await user.click(screen.getByRole("button", { name: "Actions for bastion" }));
+      await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+      const field = screen.getByRole("textbox", { name: "New name for bastion" });
+      fireEvent.change(field, { target: { value: "開発サーバ" } });
+      fireEvent.keyDown(field, { key: "Escape", ...composition });
+      expect(field).toHaveFocus();
+      expect(field).toHaveValue("開発サーバ");
+      expect(props.onRename).not.toHaveBeenCalled();
+
+      await user.keyboard("{Escape}");
+      expect(field).not.toBeInTheDocument();
+      expect(props.onRename).not.toHaveBeenCalled();
+    });
+  });
+
   it("keeps the old name when a rename is abandoned", async () => {
     const user = userEvent.setup();
     const props = renderList();

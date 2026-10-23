@@ -6,6 +6,7 @@ import { Button } from "../ui/surface";
 import { SFTPHostPicker } from "./SFTPHostPicker";
 import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
+import { isImeComposing } from "../ui/imeComposition";
 
 // Navigation uses one row; on phones selection or search replaces that row.
 // The workspace tab already identifies the source, so its picker stays hidden here.
@@ -89,7 +90,7 @@ export function SFTPToolbar({
     <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); submitPath(); }}>
       <input ref={pathInput} aria-label={labels.input} value={pathDraft}
         onChange={(event) => setPathDraft(event.target.value)}
-        onKeyDown={(event) => { if (event.key === "Escape") cancelEdit(); }}
+        onKeyDown={(event) => { if (!isImeComposing(event) && event.key === "Escape") cancelEdit(); }}
         className={`min-w-0 flex-1 rounded border border-control-line bg-control px-2 font-mono outline-none focus:border-accent ${mobile ? "h-12 text-base" : "h-9 text-sm"}`} />
       <Button type="submit" disabled={navigationDisabled}>{t("sftp.go")}</Button>
       <button type="button" aria-label={t("sftp.cancel")} onClick={cancelEdit}

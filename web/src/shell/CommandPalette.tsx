@@ -10,6 +10,7 @@ import { terminalDisplayTitle, terminalSubtitle } from "../terminal/terminalPres
 import type { UnreadSessions } from "../terminal/terminalNotifications";
 import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
+import { isImeComposing } from "../ui/imeComposition";
 
 // A command is something the palette performs, rather than somewhere it goes.
 export type PaletteCommand = {
@@ -187,6 +188,7 @@ export function CommandPalette({
 
   // Arrow keys move through the results; Enter runs the selected one.
   function navigateResultsByKey(event: KeyboardEvent<HTMLInputElement>) {
+    if (isImeComposing(event)) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setSelected((current) => visible.length === 0 ? 0 : (current + 1) % visible.length);
