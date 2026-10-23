@@ -168,8 +168,6 @@ type EmbeddedTerminal struct {
 	OSC52 bool `json:"osc52,omitempty"`
 	// JISYenBackslashはJIS配列の¥キーをbackslashとして端末へ送る。
 	JISYenBackslash bool `json:"jisYenBackslash,omitempty"`
-	// IdentifyAsITerm2はXTVERSIONの問い合わせにiTerm2 3.5と答えさせる。
-	IdentifyAsITerm2 bool `json:"identifyAsITerm2,omitempty"`
 	// LocalShellProfileは検出済みprofileの安定IDであり、command文字列ではない。
 	LocalShellProfile string `json:"localShellProfile,omitempty"`
 	// StartDirectory は、ローカルシェルが始まる場所である。

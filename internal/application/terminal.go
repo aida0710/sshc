@@ -37,7 +37,6 @@ type TerminalSettings struct {
 	BrowserScrollbackLines int
 	OSC52                  bool
 	JISYenBackslash        bool
-	IdentifyAsITerm2       bool
 	LocalShellProfile      string
 	// Appearance は、どの接続にも選ばれていないときの見た目である。
 	Appearance TerminalAppearance
@@ -62,7 +61,6 @@ func (s *Service) TerminalSettings() TerminalSettings {
 		BrowserScrollbackLines: stored.EmbeddedTerminal.BrowserScrollbackLines,
 		OSC52:                  stored.EmbeddedTerminal.OSC52,
 		JISYenBackslash:        stored.EmbeddedTerminal.JISYenBackslash,
-		IdentifyAsITerm2:       stored.EmbeddedTerminal.IdentifyAsITerm2,
 		LocalShellProfile:      stored.EmbeddedTerminal.LocalShellProfile,
 		Appearance:             appearanceOf(stored.EmbeddedTerminal.Appearance),
 	}
@@ -116,7 +114,6 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 			BrowserScrollbackLines: settings.BrowserScrollbackLines,
 			OSC52:                  settings.OSC52,
 			JISYenBackslash:        settings.JISYenBackslash,
-			IdentifyAsITerm2:       settings.IdentifyAsITerm2,
 			LocalShellProfile:      settings.LocalShellProfile,
 			// 空の節は書かない。 残せば、次に読む者は何か選ばれていると思う。
 			Appearance: storedAppearance(settings.Appearance),

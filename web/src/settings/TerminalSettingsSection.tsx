@@ -42,14 +42,12 @@ type TerminalDraft = {
   webgl: boolean;
   osc52: boolean;
   jisYenBackslash: boolean;
-  identifyAsITerm2: boolean;
 };
 
 const initialDraft: TerminalDraft = {
   startDirectory: "", localShellProfile: "", maxSessions: "", scrollback: "", browserScrollbackLines: "", fontSize: "",
   verbosity: "0", reconnect: "", palette: "", font: "", background: "", tint: undefined,
   copyOnSelect: true, rightClickPaste: true, webgl: true, osc52: false, jisYenBackslash: false,
-  identifyAsITerm2: false,
 };
 
 function draftOf(settings: TerminalSettings): TerminalDraft {
@@ -72,7 +70,6 @@ function draftOf(settings: TerminalSettings): TerminalDraft {
     webgl: settings.webgl ?? true,
     osc52: settings.osc52 ?? false,
     jisYenBackslash: settings.jisYenBackslash ?? false,
-    identifyAsITerm2: settings.identifyAsITerm2 ?? false,
   };
 }
 
@@ -105,7 +102,6 @@ function settingsOf(draft: TerminalDraft): TerminalSettings | null {
     ...(draft.webgl ? {} : { webgl: false }),
     ...(draft.osc52 ? { osc52: true } : {}),
     ...(draft.jisYenBackslash ? { jisYenBackslash: true } : {}),
-    ...(draft.identifyAsITerm2 ? { identifyAsITerm2: true } : {}),
     ...(draft.localShellProfile === "" ? {} : { localShellProfile: draft.localShellProfile }),
     ...appearanceOf({ palette: draft.palette, font: draft.font, background: draft.background, tint: draft.tint }),
   };
@@ -328,7 +324,6 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
             ["copyOnSelect", "terminal.copyOnSelectLabel", "terminal.copyOnSelectHint"],
             ["osc52", "terminal.osc52DefaultLabel", "terminal.osc52DefaultHint"],
             ["jisYenBackslash", "terminal.jisYenBackslashLabel", "terminal.jisYenBackslashHint"],
-            ["identifyAsITerm2", "terminal.identifyAsITerm2Label", "terminal.identifyAsITerm2Hint"],
             ["rightClickPaste", "terminal.rightClickPasteLabel", "terminal.rightClickPasteHint"],
             ["webgl", "terminal.webglLabel", "terminal.webglHint"],
           ] as const).map(([key, label, hint]) => (
