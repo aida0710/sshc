@@ -5,6 +5,8 @@ import { ApiError } from "../api/client";
 import type { RemoteEnginesApi } from "../api/remoteEngines";
 import { useRemoteVaultUnlock, type RemoteVaultUnlockState } from "../terminal/useRemoteVaultUnlock";
 import { useRunTargets, type RunTargetsState } from "../terminal/useRunTargets";
+import { useOfferedDialog } from "../terminal/useOfferedDialog";
+import { EngineInfoDialog } from "./EngineInfoDialog";
 import { RunTargetSwitcher } from "./RunTargetSwitcher";
 
 const translate = ((key: string, values?: Record<string, string>) =>
@@ -28,6 +30,7 @@ function targets(overrides: Partial<RunTargetsState> = {}): RunTargetsState {
     engines: ["r540"], selected: null, problem: "", busy: false,
     select: vi.fn(), add: vi.fn(async () => true), remove: vi.fn(async () => undefined), openInNewTab: vi.fn(async () => undefined),
     api: enginesApi(), localVersion: "v0.53.0", vaultUnlock: vaultUnlockState(),
+    engineInfo: { openFor: null, ask: vi.fn(), offer: vi.fn(), allowOffer: vi.fn(), close: vi.fn(), finish: vi.fn() },
     ...overrides,
   };
 }
@@ -40,7 +43,16 @@ function vaultUnlockState(overrides: Partial<RemoteVaultUnlockState> = {}): Remo
   };
 }
 
-afterEach(() => window.localStorage.clear());
+afterEach(() => { window.localStorage.clear(); vi.restoreAllMocks(); });
+
+function versionMismatch() {
+  return new ApiError("remote_engine_version_mismatch", 409, { code: "remote_engine_version_mismatch", message: "request rejected", detail: "v0.51.0" });
+}
+
+function SwitcherWithDialogs({ state }: { state: RunTargetsState }) {
+  const engineInfo = useOfferedDialog();
+  return <RunTargetSwitcher targets={{ ...state, engineInfo }} aliases={["r540"]} hosts={[]} />;
+}
 
 describe("useRemoteVaultUnlock", () => {
   it("does not offer again a dialog the user closed until the run target is chosen anew", () => {
@@ -73,18 +85,32 @@ describe("useRunTargets", () => {
     expect(result.current.selected).toBeNull();
   });
 
-  it("says which version a refused engine runs and what to do on that host", async () => {
-    const add = vi.fn(async () => {
-      throw new ApiError("remote_engine_version_mismatch", 409, { code: "remote_engine_version_mismatch", message: "request rejected", detail: "v0.51.0" });
-    });
-    const api = enginesApi({ add });
+  it("opens engine information when opening a run target reports a version mismatch", async () => {
+    const closeTab = vi.fn();
+    vi.spyOn(window, "open").mockReturnValue({ close: closeTab } as unknown as Window);
+    const open = vi.fn().mockRejectedValue(versionMismatch());
+    const api = enginesApi({ open });
     const { result } = renderHook(() => useRunTargets({ translate, enabled: true, localVersion: "v0.53.0", api }));
-    let added = true;
-    await act(async () => { added = await result.current.add("gpu-box"); });
-    expect(added).toBe(false);
-    expect(result.current.problem).toBe("runTarget.versionMismatch gpu-box v0.51.0 v0.53.0");
-    expect(result.current.selected).toBeNull();
+    await act(async () => { await result.current.openInNewTab("r540"); });
+    expect(result.current.problem).toBe("");
+    expect(result.current.engineInfo.openFor).toBe("r540");
+    expect(closeTab).toHaveBeenCalled();
   });
+
+  it("offers engine information again when the same run target is selected anew", async () => {
+    const api = enginesApi();
+    const { result } = renderHook(() => useRunTargets({ translate, enabled: true, localVersion: "v1", api }));
+    await waitFor(() => expect(result.current.engines).toEqual(["r540"]));
+    act(() => result.current.select("r540"));
+    act(() => result.current.engineInfo.offer("r540"));
+    act(() => result.current.engineInfo.close());
+    act(() => result.current.engineInfo.offer("r540"));
+    expect(result.current.engineInfo.openFor).toBeNull();
+    act(() => result.current.select("r540"));
+    act(() => result.current.engineInfo.offer("r540"));
+    expect(result.current.engineInfo.openFor).toBe("r540");
+  });
+
 });
 
 describe("RunTargetSwitcher", () => {
@@ -116,7 +142,7 @@ describe("RunTargetSwitcher", () => {
     const control = vi.fn(async () => ({ succeeded: true, output: "restarted sshc.service" }));
     const status = vi.fn(async () => ({ alias: "r540", version: "v0.51.0", vault: true, unlocked: false, passwordless: false, sessions: 3 }));
     const state = targets({ api: enginesApi({ control, status }) });
-    render(<RunTargetSwitcher targets={state} aliases={["r540"]} hosts={[]} />);
+    render(<SwitcherWithDialogs state={state} />);
     await user.click(screen.getByRole("button", { name: /^Choose where terminals run/ }));
     await user.click(screen.getByRole("button", { name: "Actions for engine r540" }));
     await user.click(screen.getByRole("button", { name: "Engine information…" }));
@@ -171,5 +197,45 @@ describe("RunTargetSwitcher", () => {
     await user.click(within(dialog).getByRole("button", { name: "Open its full screen in a new tab" }));
     expect(state.vaultUnlock.close).toHaveBeenCalled();
     expect(state.openInNewTab).toHaveBeenCalledWith("r540");
+  });
+});
+
+describe("EngineInfoDialog", () => {
+  it("shows both versions and clears the update prompt once the updated engine answers", async () => {
+    const user = userEvent.setup();
+    const status = vi.fn().mockRejectedValueOnce(versionMismatch()).mockResolvedValue({
+      alias: "r540", version: "v0.53.0", vault: true, unlocked: true, passwordless: true, sessions: 0,
+    });
+    const api = enginesApi({ status });
+    render(<EngineInfoDialog alias="r540" targets={targets({ api })} onClose={vi.fn()} />);
+    const dialog = screen.getByRole("dialog", { name: "Engine on r540" });
+    const prompt = "Cannot connect to r540 because its version differs from this computer’s. Update it?";
+    expect(await within(dialog).findByText(prompt)).toBeInTheDocument();
+    expect(within(dialog).getAllByText("Version")).toHaveLength(1);
+    expect(within(dialog).getByText("v0.51.0")).toBeInTheDocument();
+    expect(within(dialog).getByText("this computer runs v0.53.0")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Vault")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Update" }));
+    const confirmation = screen.getByRole("dialog", { name: "Update sshc on r540?" });
+    expect(within(confirmation).getByText(/Every session/)).toBeInTheDocument();
+    await user.click(within(confirmation).getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(within(dialog).queryByText(prompt)).not.toBeInTheDocument());
+    expect(api.control).toHaveBeenCalledWith("r540", "update");
+    expect(within(dialog).getAllByText("Version")).toHaveLength(1);
+    expect(within(dialog).getByText("v0.53.0")).toBeInTheDocument();
+    expect(within(dialog).getByText("Vault")).toBeInTheDocument();
+  });
+
+  it("keeps the version prompt and allows another update when the update fails", async () => {
+    const user = userEvent.setup();
+    const api = enginesApi({ status: vi.fn().mockRejectedValue(versionMismatch()), control: vi.fn().mockResolvedValue({ succeeded: false, output: "update failed" }) });
+    render(<EngineInfoDialog alias="r540" targets={targets({ api })} onClose={vi.fn()} />);
+    const dialog = screen.getByRole("dialog", { name: "Engine on r540" });
+    await within(dialog).findByText("v0.51.0");
+    await user.click(within(dialog).getByRole("button", { name: "Update" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Update sshc on r540?" })).getByRole("button", { name: "Update" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("failed");
+    expect(within(dialog).getByText(/Cannot connect to r540/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Update" })).toBeEnabled();
   });
 });

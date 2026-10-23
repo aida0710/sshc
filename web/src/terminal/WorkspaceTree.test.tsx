@@ -27,7 +27,7 @@ function workspacesState(overrides: Partial<TerminalWorkspacesState> = {}): Term
 
 function sessionsState(overrides: Partial<TerminalSessionsState> = {}): TerminalSessionsState {
   return {
-    sessions: [], maxSessions: 50, busy: false, problem: "", remoteVaultLocked: false, loaded: true,
+    sessions: [], maxSessions: 50, busy: false, problem: "", remoteRefusal: null, loaded: true,
     rename: vi.fn(async () => true), open: vi.fn(async () => null), reconnect: vi.fn(async () => true),
     stopReconnect: vi.fn(async () => true), close: vi.fn(async () => undefined), closeAll: vi.fn(async () => undefined),
     refresh: vi.fn(async () => undefined), markExited: vi.fn(), moveToWorkspace: vi.fn(async () => true),
@@ -52,6 +52,8 @@ function renderTree(options: {
     onReorder: vi.fn(),
     onOpenShell: vi.fn(),
     onConnect: vi.fn(),
+    onUnlockRemoteVault: vi.fn(),
+    onUpdateRemoteEngine: vi.fn(),
     aliases: options.aliases ?? [],
   };
   render(<WorkspaceTree {...props} />);
@@ -79,6 +81,15 @@ function sessionRow(name: string): HTMLElement {
 }
 
 describe("WorkspaceTree", () => {
+  it.each(["vault_locked", "version_mismatch"] as const)("offers the action for %s beside the refusal", async (remoteRefusal) => {
+    const user = userEvent.setup();
+    const props = renderTree({ terminalSessions: { remoteRefusal, problem: "The run target refused the list." } });
+    expect(screen.getByText("The run target refused the list.")).toBeInTheDocument();
+    const locked = remoteRefusal === "vault_locked";
+    await user.click(screen.getByRole("button", { name: locked ? "Unlock…" : "Update…" }));
+    expect(locked ? props.onUnlockRemoteVault : props.onUpdateRemoteEngine).toHaveBeenCalledTimes(1);
+  });
+
   it("groups sessions by workspace and leaves the hidden agents workspace out", () => {
     renderTree();
     const tree = screen.getByRole("list", { name: "Workspaces" });
