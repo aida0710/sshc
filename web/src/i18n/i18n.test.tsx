@@ -95,6 +95,7 @@ describe("the catalogue", () => {
         "shell.title",
         "shortcuts.heading",
         "snippets.heading",
+        "splitView.heading",
         "sync.historyRelation.head",
         "terminal.browserNotificationsHeading",
         "terminal.localhost",

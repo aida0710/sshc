@@ -9,7 +9,7 @@ const stepButton = "rounded border border-control-line px-2 py-1 transition-colo
 export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; mobile: boolean }) {
   const t = useTranslate();
   return (
-    <div className={`absolute inset-x-2 top-2 z-20 items-center gap-1.5 rounded-lg border border-line bg-toolbar/95 p-1.5 shadow-lg backdrop-blur ${mobile ? "grid grid-cols-6" : "left-auto flex w-[34rem]"}`}>
+    <div className={`absolute inset-x-2 top-2 z-20 items-center gap-1.5 rounded-lg border border-line bg-toolbar/95 p-1.5 shadow-lg backdrop-blur ${mobile ? "grid grid-cols-6" : "left-auto flex w-[34rem] max-w-[calc(100%-1rem)] flex-wrap"}`}>
       <input
         ref={search.input}
         autoFocus

@@ -1,4 +1,4 @@
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 
 export type SplitDirection = "horizontal" | "vertical";
 
@@ -18,10 +18,12 @@ export function SplitResizeHandle({
   ratio,
   label,
   onRatioChange,
+  style,
 }: {
   direction: SplitDirection;
   ratio: number;
   label: string;
+  style?: CSSProperties;
   onRatioChange: (ratio: number) => void;
 }) {
   const row = direction === "horizontal";
@@ -59,6 +61,7 @@ export function SplitResizeHandle({
 
   return (
     <div
+      style={style}
       role="separator"
       tabIndex={0}
       aria-label={label}

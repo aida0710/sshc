@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Terminal } from "@xterm/xterm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -281,6 +281,23 @@ describe("TerminalView", () => {
     expect(screen.getByRole("button", { name: "More terminal actions" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Quick Commands" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Copy recent terminal context" })).toBeNull();
+    expect(within(screen.getByRole("button", { name: "Find" }).parentElement!).getAllByRole("button")).toHaveLength(2);
+  });
+
+  it("places additional actions in the existing header and removes them without reopening the terminal", async () => {
+    const api = { streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
+    const onAction = vi.fn();
+    const view = render(<TerminalView session={session} api={api} headerActions={<button onClick={onAction}>Pane action</button>} />);
+    await waitFor(() => expect(streams).toHaveLength(1));
+    const header = screen.getByRole("button", { name: "Find" }).parentElement!;
+    expect(within(header).getByText("zsh", { exact: true })).toBeVisible();
+    await userEvent.click(within(header).getByRole("button", { name: "Pane action" }));
+    expect(onAction).toHaveBeenCalledOnce();
+
+    view.rerender(<TerminalView session={session} api={api} />);
+    expect(screen.queryByRole("button", { name: "Pane action" })).toBeNull();
+    expect(streams).toHaveLength(1);
+    expect(streams[0]!.stream.close).not.toHaveBeenCalled();
   });
 
   it("reviews a multiline paste before sending it and can remove only the final Enter", async () => {
