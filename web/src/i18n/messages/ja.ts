@@ -752,6 +752,7 @@ export const ja = {
   "terminal.linkOpenBrowser": "ブラウザで開く",
   "terminal.linkPreview": "プレビュー",
   "terminal.relativePathUnknown": "どのフォルダから見たパスか分からないため開けません。フルパスなら開けます。",
+  "terminal.homePathUnknown": "このパスを開けません。セッションのホームフォルダを取得できませんでした。フルパスで試してください。",
   "terminal.linkBrowseSFTP": "SFTPで表示",
   "terminal.linkEditSFTP": "SFTPで編集",
   "terminal.linkDownloadSFTP": "SFTPでダウンロード",

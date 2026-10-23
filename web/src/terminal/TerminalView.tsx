@@ -53,8 +53,9 @@ import { defaultBrowserScrollbackLines } from "./browserScrollback";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { pathPreviewAlias } from "./pathPreviewAlias";
-import { imagePathsInBuffer } from "./imagePaths";
-import { resolveRelativePath } from "./relativePaths";
+import { imagePathsInBuffer, imagePathTargetsInBuffer } from "./imagePaths";
+import { isHomePath, resolveTerminalPath } from "./relativePaths";
+import { pathPreviewHome } from "./pathPreviewHome";
 import { FilePreviewDialog } from "../sftp/FilePreviewDialog";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
@@ -470,16 +471,23 @@ export function TerminalView({
   // A relative path is relative to where the program that printed it works.
   // The engine reads that for a local shell; an SSH session only has the
   // directory its shell reported through OSC 7.
-  async function previewPath(path: string, relative: boolean) {
-    const engineDirectory = await api.terminalSessionDirectory(session.id).catch(() => null);
+  async function previewPath(path: string) {
+    if (previewAlias === undefined) return;
+    const buffer = terminal.current?.buffer.active;
+    const needsHome = isHomePath(path) || (buffer !== undefined && imagePathTargetsInBuffer(buffer).some(isHomePath));
+    const [engineDirectory, home] = await Promise.all([
+      api.terminalSessionDirectory(session.id).catch(() => null),
+      needsHome ? pathPreviewHome(previewAlias).catch(() => null) : null,
+    ]);
     const directory = engineDirectory ?? (currentDirectory === "" ? null : currentDirectory);
-    if (relative && directory === null) {
-      setTerminalNotice(t("terminal.relativePathUnknown"));
+    const resolvedPath = resolveTerminalPath(path, directory, home);
+    if (resolvedPath === null) {
+      setTerminalNotice(t(isHomePath(path) ? "terminal.homePathUnknown" : "terminal.relativePathUnknown"));
       return;
     }
     setPathPreview({
-      path: relative && directory !== null ? resolveRelativePath(directory, path) : path,
-      imagePaths: terminal.current === null ? [] : imagePathsInBuffer(terminal.current.buffer.active, directory),
+      path: resolvedPath,
+      imagePaths: terminal.current === null ? [] : imagePathsInBuffer(terminal.current.buffer.active, directory, home),
     });
   }
 
@@ -611,7 +619,7 @@ export function TerminalView({
         <TerminalLinkPopover
           selection={linkSelection}
           onClose={() => setLinkSelection(null)}
-          {...(previewAlias === undefined ? {} : { onPreviewPath: (path: string, relative: boolean) => void previewPath(path, relative) })}
+          {...(previewAlias === undefined ? {} : { onPreviewPath: (path: string) => void previewPath(path) })}
           {...(runTarget === undefined && remoteAlias !== undefined && onOpenRemotePath !== undefined
             ? { onRemotePath: (path: string, action: RemotePathAction) => onOpenRemotePath(remoteAlias, path, action) }
             : {})}
