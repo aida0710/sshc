@@ -7,13 +7,15 @@ import { findBufferLinks } from "./bufferLinks";
 export function attachLinkProvider(view: Terminal, {
   open,
   select,
+  allowWindowsPaths = () => false,
 }: {
+  allowWindowsPaths?: () => boolean;
   open: (target: string) => void;
   select: (link: TerminalLinkMatch, event: MouseEvent) => void;
 }): { dispose(): void } {
   return view.registerLinkProvider({
     provideLinks: (bufferLineNumber, callback) => {
-      const matches = findBufferLinks(view.buffer.active, bufferLineNumber);
+      const matches = findBufferLinks(view.buffer.active, bufferLineNumber, allowWindowsPaths());
       callback(matches.length === 0 ? undefined : matches.map(({ match, range }) => ({
         text: match.text,
         range,

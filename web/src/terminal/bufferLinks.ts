@@ -6,7 +6,7 @@ const maxLogicalLineCells = 65536;
 
 type PositionedLink = { match: TerminalLinkMatch; range: IBufferRange };
 
-export function findBufferLinks(buffer: IBuffer, lineNumber: number): PositionedLink[] {
+export function findBufferLinks(buffer: IBuffer, lineNumber: number, allowWindowsPaths = false): PositionedLink[] {
   let firstRow = lineNumber - 1;
   let cellCount = 0;
   while (firstRow > 0 && buffer.getLine(firstRow)?.isWrapped) {
@@ -41,7 +41,7 @@ export function findBufferLinks(buffer: IBuffer, lineNumber: number): Positioned
     }
   }
 
-  return findTerminalLinks(text).flatMap((match) => {
+  return findTerminalLinks(text, allowWindowsPaths).flatMap((match) => {
     const start = starts[match.start];
     const end = ends[match.end - 1];
     if (!start || !end || lineNumber < start.y || lineNumber > end.y) return [];

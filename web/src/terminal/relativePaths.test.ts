@@ -28,6 +28,7 @@ describe("resolveTerminalPath", () => {
 
   it("keeps absolute paths and resolves ordinary paths only from the working directory", () => {
     expect(resolveTerminalPath("/tmp/a.png", null, null)).toBe("/tmp/a.png");
+    expect(resolveTerminalPath("C:/Users/aida/a.png", "C:/work", null)).toBe("C:/Users/aida/a.png");
     expect(resolveTerminalPath("shots/a.png", "/srv/project", "/users/alex")).toBe("/srv/project/shots/a.png");
     expect(resolveTerminalPath("shots/a.png", null, "/users/alex")).toBeNull();
   });

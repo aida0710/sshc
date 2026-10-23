@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { Page } from "@playwright/test";
 import { expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
 import { samplePNG } from "./support/images";
@@ -10,10 +11,18 @@ const visualDirectory = process.env.SSHC_VISUAL_DIR;
 async function previewPrintedPath(page: Page, text: string) {
   const path = drawnSpan(page, text).last();
   await expect(path).toBeVisible();
-  const bounds = await path.boundingBox();
-  if (bounds === null) throw new Error("the printed path is not visible");
+  const bounds = await path.evaluate((element, text) => {
+    const node = element.firstChild;
+    if (node === null) throw new Error("the printed path has no text");
+    const end = (node.textContent ?? "").lastIndexOf(text) + text.length;
+    const range = document.createRange();
+    range.setStart(node, end - 1);
+    range.setEnd(node, end);
+    const rectangle = range.getBoundingClientRect();
+    return { x: rectangle.x, y: rectangle.y, width: rectangle.width, height: rectangle.height };
+  }, text);
   // xterm's screen receives pointer events above its DOM text rows.
-  await page.mouse.click(bounds.x + bounds.width - 4, bounds.y + bounds.height / 2);
+  await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
   const actions = page.getByRole("dialog", { name: "Terminal link actions" });
   await expect(actions.getByRole("button", { name: "Browse in SFTP" })).toHaveCount(0);
   await actions.getByRole("button", { name: "Preview" }).click();
@@ -138,6 +147,7 @@ test("previews ~/ images printed by a real shell away from home and navigates be
     await page.screenshot({ path: join(visualDirectory, "terminal-tilde-path-preview.png") });
   }
   await preview.getByRole("button", { name: "Close" }).click();
+  await expect(preview).toBeHidden();
   await previewPrintedPath(page, "x.png");
   await expect(image).toBeVisible();
 });
@@ -156,4 +166,53 @@ test("explains a failed home lookup without treating ~/ as relative to cwd", asy
   await previewPrintedPath(page, "~/shots/x.png");
   await expect(page.getByText("Cannot open this path because the session's home folder could not be read. Try a full path.")).toBeVisible();
   expect(previews).toEqual([]);
+});
+
+function shellQuote(text: string): string {
+  return "'" + text.replaceAll("'", "'\\''") + "'";
+}
+
+test("opens Unicode and spaced image paths from a real shell and uses the same paths for navigation", async ({ page, installation }) => {
+  test.skip(process.platform !== "linux", "relative paths use the foreground directory from /proc");
+  const folder = join(installation.home, "画像");
+  await mkdir(folder);
+  await mkdir(join(installation.home, "work"));
+  const examples = [
+    { name: "画面_unicode.png", printed: "../画像/画面_unicode.png", click: "_unicode.png" },
+    { name: "二枚目 double.png", printed: `"${folder}/二枚目 double.png"`, click: "double.png" },
+    { name: "三枚目 single.png", printed: `'${folder}/三枚目 single.png'`, click: "single.png" },
+    { name: "四枚目 escaped.png", printed: `${folder}/四枚目\\ escaped.png`, click: "escaped.png" },
+    { name: "五枚目_home.png", printed: "$HOME/画像/五枚目_home.png", click: "_home.png" },
+    { name: "六枚目_braces.png", printed: "${HOME}/画像/六枚目_braces.png", click: "_braces.png" },
+    { name: "七枚目 uri.png", printed: pathToFileURL(join(folder, "七枚目 uri.png")).href, click: "uri.png" },
+  ];
+  for (const example of examples) await writeFile(join(folder, example.name), samplePNG());
+  // A script keeps command echo out of the image list. It prints the literal
+  // notation, so the browser, not shell expansion, resolves home and escapes.
+  const script = examples.map(({ printed }) => `printf '\\033[36m%s\\033[0m\\n' ${shellQuote(printed)}`).join("\n");
+  await writeFile(join(installation.home, "print-paths.sh"), script);
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type("cd ~/work && clear && sh ../print-paths.sh");
+  await page.keyboard.press("Enter");
+
+  for (const [index, example] of examples.entries()) {
+    await previewPrintedPath(page, example.click);
+    const preview = page.getByRole("dialog", { name: join(folder, example.name), exact: true });
+    const image = preview.getByRole("img", { name: example.name, exact: true });
+    await expect(image).toBeVisible();
+    await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(48);
+    await expect(preview).toContainText(`${index + 1} / ${examples.length}`);
+    const next = examples[index + 1];
+    if (next !== undefined) {
+      await page.keyboard.press("ArrowRight");
+      await expect(page.getByRole("dialog", { name: join(folder, next.name), exact: true }).getByRole("img")).toBeVisible();
+      await page.keyboard.press("ArrowLeft");
+      await expect(image).toBeVisible();
+    }
+    await preview.getByRole("button", { name: "Close" }).click();
+    await expect(preview).toBeHidden();
+  }
 });

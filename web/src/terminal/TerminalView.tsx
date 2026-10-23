@@ -55,6 +55,7 @@ import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { pathPreviewAlias } from "./pathPreviewAlias";
 import { imagePathsInBuffer, imagePathTargetsInBuffer } from "./imagePaths";
 import { isHomePath, resolveTerminalPath } from "./relativePaths";
+import { useLocalWindowsPaths } from "./useLocalWindowsPaths";
 import { pathPreviewHome } from "./pathPreviewHome";
 import { FilePreviewDialog } from "../sftp/FilePreviewDialog";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
@@ -161,6 +162,9 @@ export function TerminalView({
     raw: string;
   } | null>(null);
   const sendPaste = useRef<(text: string) => void>(() => {});
+  const allowWindowsPaths = useLocalWindowsPaths(session.kind, runTarget);
+  const windowsPathsRef = useRef(allowWindowsPaths);
+  windowsPathsRef.current = allowWindowsPaths;
   const [currentDirectory, setCurrentDirectory] = useState("");
   const [programProgress, setProgramProgress] = useState<TerminalProgress>(noTerminalProgress);
 
@@ -285,6 +289,7 @@ export function TerminalView({
     const terminalLinks = attachLinkProvider(view, {
       open: openTerminalURL,
       select: selectLinkAt,
+      allowWindowsPaths: () => windowsPathsRef.current,
     });
 
     let sent = "";
@@ -357,7 +362,7 @@ export function TerminalView({
     const detachOverlay = coarse
       ? attachSelectionOverlay(container, view, {
         onTap: (point) => {
-          const link = linkAtPoint(view, point);
+          const link = linkAtPoint(view, point, windowsPathsRef.current);
           if (link === null) return false;
           selectLinkAt(link, point);
           return true;
@@ -474,7 +479,7 @@ export function TerminalView({
   async function previewPath(path: string) {
     if (previewAlias === undefined) return;
     const buffer = terminal.current?.buffer.active;
-    const needsHome = isHomePath(path) || (buffer !== undefined && imagePathTargetsInBuffer(buffer).some(isHomePath));
+    const needsHome = isHomePath(path) || (buffer !== undefined && imagePathTargetsInBuffer(buffer, allowWindowsPaths).some(isHomePath));
     const [engineDirectory, home] = await Promise.all([
       api.terminalSessionDirectory(session.id).catch(() => null),
       needsHome ? pathPreviewHome(previewAlias).catch(() => null) : null,
@@ -487,7 +492,7 @@ export function TerminalView({
     }
     setPathPreview({
       path: resolvedPath,
-      imagePaths: terminal.current === null ? [] : imagePathsInBuffer(terminal.current.buffer.active, directory, home),
+      imagePaths: terminal.current === null ? [] : imagePathsInBuffer(terminal.current.buffer.active, { directory, home, allowWindowsPaths }),
     });
   }
 
