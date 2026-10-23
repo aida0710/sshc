@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
@@ -59,6 +59,24 @@ function renderTree(options: {
 }
 
 afterEach(() => window.localStorage.clear());
+
+// jsdom has no DataTransfer; this one carries what a drag sets between events.
+function dragData() {
+  const values = new Map<string, string>();
+  return {
+    get types() { return [...values.keys()]; },
+    setData: (type: string, value: string) => { values.set(type, value); },
+    getData: (type: string) => values.get(type) ?? "",
+    effectAllowed: "",
+    dropEffect: "",
+  };
+}
+
+function sessionRow(name: string): HTMLElement {
+  const row = screen.getByText(name).closest("li");
+  if (row === null) throw new Error(`no row for ${name}`);
+  return row;
+}
 
 describe("WorkspaceTree", () => {
   it("groups sessions by workspace and leaves the hidden agents workspace out", () => {
@@ -153,5 +171,44 @@ describe("WorkspaceTree", () => {
     await user.type(screen.getByRole("textbox", { name: "Workspace name" }), "training");
     await user.click(screen.getByRole("button", { name: "Create" }));
     expect(props.workspaces.create).toHaveBeenCalledWith("training");
+  });
+
+  it("moves a session dropped on another workspace to the end of it", () => {
+    const sessions = [session("main-shell", "default"), session("dev-shell", "w1"), session("other-shell", "default")];
+    const props = renderTree({ sessions });
+    const dataTransfer = dragData();
+    fireEvent.dragStart(sessionRow("main-shell"), { dataTransfer });
+    const target = screen.getByRole("button", { name: /^sshc dev/ }).parentElement!;
+    fireEvent.dragOver(target, { dataTransfer });
+    fireEvent.drop(target, { dataTransfer });
+
+    expect(props.terminalSessions.moveToWorkspace).toHaveBeenCalledWith("main-shell", "w1");
+    expect(props.onReorder).toHaveBeenCalledWith(["dev-shell", "main-shell", "other-shell"]);
+  });
+
+  it("moves a session dropped on a session of another workspace before it", () => {
+    const sessions = [session("main-shell", "default"), session("dev-a", "w1"), session("dev-b", "w1")];
+    const props = renderTree({ sessions });
+    const dataTransfer = dragData();
+    fireEvent.dragStart(sessionRow("main-shell"), { dataTransfer });
+    fireEvent.dragOver(sessionRow("dev-b"), { dataTransfer });
+    fireEvent.drop(sessionRow("dev-b"), { dataTransfer });
+
+    expect(props.terminalSessions.moveToWorkspace).toHaveBeenCalledWith("main-shell", "w1");
+    expect(props.onReorder).toHaveBeenCalledWith(["dev-a", "main-shell", "dev-b"]);
+  });
+
+  it("reorders a session dropped inside its own workspace without moving it", () => {
+    const sessions = [session("first", "default"), session("second", "default")];
+    const props = renderTree({ sessions });
+    const dataTransfer = dragData();
+    fireEvent.dragStart(sessionRow("second"), { dataTransfer });
+    fireEvent.dragOver(sessionRow("first"), { dataTransfer });
+    fireEvent.drop(sessionRow("first"), { dataTransfer });
+    const ownRow = screen.getByRole("button", { name: /^Main/ }).parentElement!;
+    fireEvent.drop(ownRow, { dataTransfer });
+
+    expect(props.onReorder).toHaveBeenCalledWith(["second", "first"]);
+    expect(props.terminalSessions.moveToWorkspace).not.toHaveBeenCalled();
   });
 });

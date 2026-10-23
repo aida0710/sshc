@@ -33,6 +33,13 @@ type SessionListProps = {
   // the one it is already in.
   moveTargets: readonly WorkspaceMoveTarget[];
   onMoveToWorkspace: (sessionId: string, workspaceId: string) => void;
+  // heldSessionId is the session being dragged anywhere in the tree, so a
+  // list can take a session dragged out of another workspace.
+  heldSessionId: string | null;
+  onHoldSession: (id: string | null) => void;
+  // onMoveIn takes a session from another workspace into this one, before
+  // beforeId or after the last session when it is null.
+  onMoveIn: (sessionId: string, beforeId: string | null) => void;
 };
 
 function describeForward(t: Translate, forward: TerminalForward): string {
@@ -62,6 +69,9 @@ export function SessionList({
   onReorder,
   moveTargets,
   onMoveToWorkspace,
+  heldSessionId,
+  onHoldSession,
+  onMoveIn,
 }: SessionListProps) {
   const t = useTranslate();
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -69,7 +79,6 @@ export function SessionList({
   const [closing, setClosing] = useState<TerminalSession | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-  const [dragging, setDragging] = useState<string | null>(null);
   const [dropBefore, setDropBefore] = useState<string | null>(null);
   const shiftPressed = useShiftKeyHeld();
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -80,6 +89,11 @@ export function SessionList({
     if (menuFor !== null && !sessions.some((session) => session.id === menuFor)) setMenuFor(null);
     if (renaming !== null && !sessions.some((session) => session.id === renaming)) setRenaming(null);
   }, [sessions, menuFor, renaming]);
+
+  // A drag that ended over another list, or outside the tree, leaves no mark here.
+  useEffect(() => {
+    if (heldSessionId === null) setDropBefore(null);
+  }, [heldSessionId]);
 
   useDismissibleLayer({
     open: menuFor !== null,
@@ -103,10 +117,14 @@ export function SessionList({
   }
 
   function drop(targetId: string | null) {
-    const held = dragging;
-    setDragging(null);
+    const held = heldSessionId;
+    onHoldSession(null);
     setDropBefore(null);
     if (held === null || held === targetId) return;
+    if (!sessions.some((session) => session.id === held)) {
+      onMoveIn(held, targetId);
+      return;
+    }
     const order = sessions.map((session) => session.id).filter((id) => id !== held);
     const at = targetId === null ? order.length : order.indexOf(targetId);
     order.splice(at < 0 ? order.length : at, 0, held);
@@ -167,10 +185,10 @@ export function SessionList({
                 onDragStart={(event: DragEvent) => {
                   event.dataTransfer.setData(sessionDragMimeType, session.id);
                   event.dataTransfer.effectAllowed = "move";
-                  setDragging(session.id);
+                  onHoldSession(session.id);
                 }}
                 onDragEnd={() => {
-                  setDragging(null);
+                  onHoldSession(null);
                   setDropBefore(null);
                 }}
                 onDragOver={(event: DragEvent) => {
@@ -182,9 +200,9 @@ export function SessionList({
                   event.stopPropagation();
                   drop(session.id);
                 }}
-                className={`relative ${rowCursor} ${dragging === session.id ? "opacity-40" : ""}`}
+                className={`relative ${rowCursor} ${heldSessionId === session.id ? "opacity-40" : ""}`}
               >
-                {dropBefore === session.id && dragging !== session.id ? (
+                {dropBefore === session.id && heldSessionId !== null && heldSessionId !== session.id ? (
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
                 ) : null}
                 <div
