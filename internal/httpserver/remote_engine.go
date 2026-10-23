@@ -66,7 +66,7 @@ func (h CLIHandlers) OpenRemoteEngine(c *echo.Context) error {
 // CLI と画面が、それぞれの言葉で直し方を添える。
 func remoteEngineProblem(c *echo.Context, err error) error {
 	var connectErr *remoteengine.ConnectError
-	var mismatch *remoteengine.VersionMismatchError
+	var incompatible *remoteengine.IncompatibleEngineError
 	switch {
 	case errors.Is(err, remoteengine.ErrClosed):
 		return problem(c, http.StatusServiceUnavailable, "server_stopping")
@@ -78,9 +78,9 @@ func remoteEngineProblem(c *echo.Context, err error) error {
 		return problemWith(c, http.StatusBadGateway, problemPayload{
 			Code: "remote_engine_connect_failed", Reason: remoteEngineConnectFailure(connectErr.Err),
 		})
-	case errors.As(err, &mismatch):
+	case errors.As(err, &incompatible):
 		// detail は接続先のバージョンだけである。このマシンのバージョンは画面と CLI が知っている。
-		return problemDetail(c, http.StatusConflict, "remote_engine_version_mismatch", mismatch.Remote)
+		return problemDetail(c, http.StatusConflict, "remote_engine_incompatible", incompatible.Remote)
 	case errors.Is(err, remoteengine.ErrNotRunning):
 		return problem(c, http.StatusBadGateway, "remote_engine_not_running")
 	case errors.Is(err, remoteengine.ErrUnproven):

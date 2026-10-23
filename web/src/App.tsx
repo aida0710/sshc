@@ -135,7 +135,7 @@ export function App({
   }, [offerVaultUnlock, runTargets.selected, terminalSessions.remoteRefusal]);
   const { offer: offerEngineInfo } = runTargets.engineInfo;
   useEffect(() => {
-    if (terminalSessions.remoteRefusal === "version_mismatch" && runTargets.selected !== null) offerEngineInfo(runTargets.selected);
+    if (terminalSessions.remoteRefusal === "incompatible" && runTargets.selected !== null) offerEngineInfo(runTargets.selected);
   }, [offerEngineInfo, runTargets.selected, terminalSessions.remoteRefusal]);
   const terminalWorkspaces = useTerminalWorkspaces({
     sessions: terminalSessions.sessions,

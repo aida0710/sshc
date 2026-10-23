@@ -76,6 +76,10 @@ type Handoff struct {
 	PID             int    `json:"pid"`
 	Version         string `json:"version"`
 	ProtocolVersion int    `json:"protocolVersion"`
+	// RunTargetCompatibility は、このエンジンを実行先として使えるかを決める番号
+	// （remoteengine.Compatibility）である。検証しない。この番号を書かない古い sshc の
+	// handoff も、0 として読めなければならない。
+	RunTargetCompatibility int `json:"runTargetCompatibility"`
 }
 
 // HeaderName は、コマンドラインからのリクエストに秘密を載せる。
