@@ -9,6 +9,8 @@ import type { TerminalSessionsState } from "../terminal/sessions";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
 import type { PaneEdge } from "../terminal/splitView/layout";
 import { SplitSessionPicker } from "../terminal/splitView/SplitSessionPicker";
+import { RunTargetRefusalPanel } from "../terminal/RunTargetRefusalPanel";
+import type { RunTargetsState } from "../terminal/useRunTargets";
 
 const TerminalView = lazy(() =>
   import("../terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
@@ -34,7 +36,7 @@ export function TerminalScreen({
   hostOSC52,
   hostVPN,
   api,
-  runTarget,
+  runTargets,
   onOpenRemotePath,
   onOSC52Change,
 }: {
@@ -49,8 +51,9 @@ export function TerminalScreen({
   hostVPN: Map<string, string>;
   // api is the terminal API of the run target the sessions belong to.
   api: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
-  // runTarget is the SSH alias of that engine; null for this machine.
-  runTarget: string | null;
+  // runTargets says which engine that is; its selected alias is null for this
+  // machine.
+  runTargets: RunTargetsState;
   onOpenRemotePath: (
     alias: string,
     path: string,
@@ -61,6 +64,10 @@ export function TerminalScreen({
     enabled: boolean,
   ) => Promise<void>;
 }) {
+  const runTarget = runTargets.selected;
+  // Only an engine on an SSH host refuses a list; this machine's own list
+  // keeps failing quietly.
+  const refusal = runTarget === null ? null : terminalSessions.remoteRefusal;
   const [splitRequest, setSplitRequest] = useState<{ targetSessionId: string; edge: PaneEdge } | null>(null);
   const session = terminalSessions.sessions.find((session) => session.id === activeSessionId) ?? null;
   useEffect(() => {
@@ -127,8 +134,18 @@ export function TerminalScreen({
       </div>
     );
   }
-  return <>
-    <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} renderTerminal={renderTerminal} />
+  return <div className="relative h-full">
+    {/* What the refusing engine listed before cannot be used, so it is kept out of reach. */}
+    <div className="h-full" inert={refusal !== null}>
+      <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} renderTerminal={renderTerminal} />
+    </div>
+    {runTarget === null || refusal === null ? null : <RunTargetRefusalPanel
+      alias={runTarget}
+      refusal={refusal}
+      onReconnect={terminalSessions.refresh}
+      onUseThisMachine={() => runTargets.select(null)}
+      onUnlock={() => runTargets.vaultUnlock.ask(runTarget)}
+      onOpenEngineInfo={() => runTargets.engineInfo.ask(runTarget)} />}
     {splitRequest === null ? null : <SplitSessionPicker
       sessions={terminalSessions.sessions.filter((candidate) => splitView.canSplit(candidate.id, splitRequest.targetSessionId))}
       onClose={() => setSplitRequest(null)}
@@ -136,5 +153,5 @@ export function TerminalScreen({
         splitView.split({ ...splitRequest, sourceSessionId });
         setSplitRequest(null);
       }} />}
-  </>;
+  </div>;
 }

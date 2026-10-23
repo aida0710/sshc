@@ -1,17 +1,16 @@
 import { ApiError, failureCode } from "../api/client";
 import type { Translate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
+import { terminalProblemKey } from "./sessions";
 
 // runTargetProblemText says why an engine on an SSH host could not be added,
 // opened or reached, with what to do about it on that host.
 export function runTargetProblemText(t: Translate, error: unknown, alias: string): string {
-  const problem = error instanceof ApiError ? error.problem : null;
   switch (failureCode(error)) {
     case "remote_engine_not_running":
       return t("runTarget.notRunning", { alias });
     case "remote_engine_connect_failed":
-      if (problem?.reason === "host_key_unknown") return t("runTarget.hostKeyUnknown", { alias });
-      if (problem?.reason === "prompt_unavailable") return t("runTarget.promptUnavailable", { alias });
-      return t("runTarget.connectFailed", { alias });
+      return t(connectFailureKey(error) ?? "runTarget.connectFailed", { alias });
     case "remote_engine_unproven":
       return t("runTarget.unproven", { alias });
     case "remote_engine_forwarding_refused":
@@ -25,4 +24,36 @@ export function runTargetProblemText(t: Translate, error: unknown, alias: string
     default:
       return t("runTarget.failed", { alias });
   }
+}
+
+// runTargetRefusalText says why the run target's engine refused to list its
+// sessions: a heading naming what happened, and the reason when the heading
+// does not already say it.
+export function runTargetRefusalText(t: Translate, error: ApiError, alias: string): { heading: string; reason: string } {
+  const unavailable = t("runTarget.unavailableHeading", { alias });
+  switch (error.code) {
+    case "remote_engine_vault_locked":
+      return { heading: t("runTarget.lockedHeading", { alias }), reason: "" };
+    case "remote_engine_incompatible":
+      return { heading: t("runTarget.incompatibleHeading", { alias }), reason: "" };
+    case "remote_engine_unreachable":
+    case "remote_engine_refused":
+      return { heading: unavailable, reason: t(terminalProblemKey(error.code)) };
+    case "remote_engine_connect_failed": {
+      // Without a known cause, runTarget.connectFailed would only repeat the heading.
+      const key = connectFailureKey(error);
+      return { heading: unavailable, reason: key === null ? "" : t(key, { alias }) };
+    }
+    default:
+      return { heading: unavailable, reason: runTargetProblemText(t, error, alias) };
+  }
+}
+
+// connectFailureKey names the known cause of a failed SSH connection to the
+// host; null when the engine gave none.
+function connectFailureKey(error: unknown): MessageKey | null {
+  const reason = error instanceof ApiError ? error.problem?.reason : undefined;
+  if (reason === "host_key_unknown") return "runTarget.hostKeyUnknown";
+  if (reason === "prompt_unavailable") return "runTarget.promptUnavailable";
+  return null;
 }

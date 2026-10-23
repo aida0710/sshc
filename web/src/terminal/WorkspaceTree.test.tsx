@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../api/client";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { TerminalWorkspace } from "../api/terminalWorkspaces";
 import type { TerminalSessionsState } from "./sessions";
@@ -52,8 +53,6 @@ function renderTree(options: {
     onReorder: vi.fn(),
     onOpenShell: vi.fn(),
     onConnect: vi.fn(),
-    onUnlockRemoteVault: vi.fn(),
-    onUpdateRemoteEngine: vi.fn(),
     aliases: options.aliases ?? [],
   };
   render(<WorkspaceTree {...props} />);
@@ -81,14 +80,14 @@ function sessionRow(name: string): HTMLElement {
 }
 
 describe("WorkspaceTree", () => {
-  it.each(["vault_locked", "incompatible"] as const)("offers the action for %s beside the refusal", async (remoteRefusal) => {
-    const user = userEvent.setup();
-    const props = renderTree({ terminalSessions: { remoteRefusal, problem: "The run target refused the list." } });
-    expect(screen.getByText("The run target refused the list.")).toBeInTheDocument();
-    const locked = remoteRefusal === "vault_locked";
-    await user.click(screen.getByRole("button", { name: locked ? "Unlock…" : "Update…" }));
-    expect(locked ? props.onUnlockRemoteVault : props.onUpdateRemoteEngine).toHaveBeenCalledTimes(1);
-  });
+  it.each(["remote_engine_vault_locked", "remote_engine_incompatible", "remote_engine_unreachable"])(
+    "leaves the run target's %s refusal to the terminal area",
+    (code) => {
+      renderTree({ terminalSessions: { remoteRefusal: new ApiError(code, 409, null) } });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^(Unlock|Update)…$/ })).not.toBeInTheDocument();
+    },
+  );
 
   it("groups sessions by workspace and leaves the hidden agents workspace out", () => {
     renderTree();
