@@ -165,13 +165,13 @@ export function SessionList({
             );
             const details = (
               <>
-                <p className="truncate text-xs text-ink-faint md:leading-tight">
+                <p className="truncate text-[11px] text-ink-faint md:leading-tight">
                   {t("terminal.rowDetail", { status, destination })}
                 </p>
                 {(session.forwards ?? []).map((forward) => (
                   <p
                     key={`${forward.kind}:${forward.listen}:${forward.to}`}
-                    className={`truncate text-xs ${forward.problem === "" ? "text-ink-faint" : "text-notice-ink"}`}
+                    className={`truncate text-[11px] ${forward.problem === "" ? "text-ink-faint" : "text-notice-ink"}`}
                   >
                     {forward.problem === "" ? describeForward(t, forward) : describeForwardProblem(t, forward.problem)}
                   </p>
@@ -206,7 +206,7 @@ export function SessionList({
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
                 ) : null}
                 <div
-                  className={`relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors md:py-0.5 ${
+                  className={`relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors md:py-0 ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
                       : session.id === selected ? "bg-select-fill" : "hover:bg-hover"
@@ -228,7 +228,7 @@ export function SessionList({
                           if (event.key === "Enter") void commitRename(session.id);
                           if (event.key === "Escape") setRenaming(null);
                         }}
-                        className="w-full rounded border border-accent bg-card px-1 py-0.5 text-sm text-ink"
+                        className="w-full rounded border border-accent bg-card px-1 py-0.5 text-xs text-ink"
                       />
                         {details}
                       </div>
@@ -243,7 +243,7 @@ export function SessionList({
                     >
                       {marker}
                       <span className="min-w-0 grow">
-                        <span className={`block truncate text-sm md:leading-tight ${session.id === selected ? "font-semibold text-accent" : "text-ink"}`}>{displayTitle}</span>
+                        <span className={`block truncate text-xs md:leading-tight ${session.id === selected ? "font-semibold text-accent" : "text-ink"}`}>{displayTitle}</span>
                         {details}
                       </span>
                     </button>
