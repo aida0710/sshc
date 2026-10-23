@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -37,6 +38,10 @@ type Command struct {
 	// Limit は、コマンドを走らせてから終わるまでの上限である。0 なら上限を置かず、
 	// ctx の取り消しだけで止まる。接続の確立には、ホップごとに ConnectTimeout が掛かる。
 	Limit time.Duration
+	// Observe は、標準出力と標準エラーを、届いた順に受け取る。nil なら渡さない。
+	// 文字コードを UTF-8 に直したあとの内容で、MaxCapturedOutput の上限は掛からない。
+	// 書き込みのエラーはコマンドの失敗にしない。
+	Observe io.Writer
 }
 
 // ErrCommandTimedOut は、コマンドが Command.Limit までに終わらなかったことを表す。
@@ -114,6 +119,10 @@ func runCommand(ctx context.Context, run commandRun) (Output, error) {
 	// コマンドの失敗として伝わる。切り詰めたという事実は Output.Truncated が運ぶ。
 	stdout, stderr := iowrite.NewCappedBuffer(MaxCapturedOutput), iowrite.NewCappedBuffer(MaxCapturedOutput)
 	streams := Streams{Out: stdout, Err: stderr}
+	if command.Observe != nil {
+		observer := newObservedOutput(command.Observe)
+		streams.Out, streams.Err = observer.tee(stdout), observer.tee(stderr)
+	}
 	if len(command.Stdin) > 0 {
 		streams.In = bytes.NewReader(command.Stdin)
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -277,4 +278,63 @@ func TestRunRefusesAnUnknownProxyJumpWithoutPersistingIt(t *testing.T) {
 	if written != 0 {
 		t.Fatal("Run persisted an unknown ProxyJump host key")
 	}
+}
+
+// Observe は、コマンドが終わるのを待たずに、標準出力と標準エラーを受け取る。
+func TestRunShowsTheOutputToTheObserverWhileTheCommandRuns(t *testing.T) {
+	path, contents, public := keyPair(t)
+	firstSeen := make(chan struct{})
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell: func(channel ssh.Channel) {
+			_, _ = io.WriteString(channel, "downloading\n")
+			// 最初の行が見えるまで終わらない。終わってから渡すのでは、ここで止まる。
+			select {
+			case <-firstSeen:
+			case <-time.After(10 * time.Second):
+				return
+			}
+			_, _ = io.WriteString(channel.Stderr(), "warning\n")
+		},
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	observer := &signallingWriter{wanted: "downloading\n", seen: firstSeen}
+
+	output, err := dialerFor(t, server, auth).Run(
+		context.Background(), targetWith(server, path),
+		sshclient.Command{Line: "update", Observe: observer})
+	if err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+	if got := observer.text(); got != "downloading\nwarning\n" {
+		t.Fatalf("observed = %q", got)
+	}
+	if string(output.Stdout) != "downloading\n" || string(output.Stderr) != "warning\n" {
+		t.Fatalf("captured = %q / %q", output.Stdout, output.Stderr)
+	}
+}
+
+// signallingWriter は、受け取った内容を貯め、wanted を受け取ったら seen を閉じる。
+type signallingWriter struct {
+	mutex    sync.Mutex
+	received strings.Builder
+	wanted   string
+	seen     chan struct{}
+	once     sync.Once
+}
+
+func (w *signallingWriter) Write(p []byte) (int, error) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+	w.received.Write(p)
+	if strings.Contains(w.received.String(), w.wanted) {
+		w.once.Do(func() { close(w.seen) })
+	}
+	return len(p), nil
+}
+
+func (w *signallingWriter) text() string {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+	return w.received.String()
 }

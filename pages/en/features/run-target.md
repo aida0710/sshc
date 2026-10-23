@@ -30,7 +30,7 @@ It also shows when the list was last tried. The list is read again every few sec
 
 - When the host cannot be reached: **Reconnect now** reads the list again at once.
 - When the host's vault is locked: enter the vault password there and choose **Unlock**. If the host has no vault yet, create one with **Open its full screen in a new tab**.
-- When sshc on the host does not work with this computer’s: both versions are shown side by side, and the update button there runs `sshc update --yes` on the host. While it runs, the seconds elapsed are shown; when it ends, what the host's `sshc` wrote is shown and the list is read again. Updating ends every session running on the host. If this computer's sshc is the older one, update it here instead.
+- When sshc on the host does not work with this computer’s: both versions are shown side by side, and the update button there runs `sshc update --yes` on the host. While it runs, the seconds elapsed and what the host's `sshc` writes are shown as it is written; when it ends, the list is read again. Updating ends every session running on the host. Leaving the page does not stop the update on the host. If this computer's sshc is the older one, update it here instead.
 
 In every case, **Switch back to localhost** makes this computer the run target again. **Details** shows the error code and detail the engine returned, and **Engine information…** is also offered.
 
@@ -44,7 +44,7 @@ In every case, **Switch back to localhost** makes this computer the run target a
 
 After **Update** or **Restart**, a password-protected vault is locked. Unlock it with **Unlock…** in its vault row.
 
-The dialog shows the end of what the host's `sshc` wrote.
+While an action runs, the dialog shows what the host's `sshc` writes as it is written. Leaving the page does not stop the action on the host.
 
 ## Requirements and limits
 

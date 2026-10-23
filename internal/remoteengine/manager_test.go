@@ -89,7 +89,8 @@ func (l *fakeLink) DialContext(ctx context.Context, network, address string) (ne
 	return dialer.DialContext(ctx, network, address)
 }
 
-func (l *fakeLink) Run(_ context.Context, command string, _ time.Duration) (RunResult, error) {
+func (l *fakeLink) Run(_ context.Context, request RunRequest) (RunResult, error) {
+	command := request.Command
 	if command == handoffCommand {
 		origin, _, _ := strings.Cut(l.entrance, "/#")
 		return RunResult{Stdout: []byte(handoffDocument(origin, fakeSecret, "v9"))}, nil

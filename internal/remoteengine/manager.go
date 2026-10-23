@@ -50,10 +50,21 @@ type Manager struct {
 	mutex  sync.Mutex
 	hosts  map[string]*remoteHost
 	closed bool
+	// actions は、接続先ごとの、最後に始めた操作の記録である。SSH の接続を閉じても残し、
+	// 終わった操作の出力も読めるようにする。
+	actions map[string]*actionLog
+	// actionContext は、走っている操作の寿命である。Close が stopActions で取り消す。
+	actionContext  context.Context
+	stopActions    context.CancelFunc
+	actionsRunning sync.WaitGroup
 }
 
 func NewManager(options ManagerOptions) *Manager {
-	return &Manager{options: options, hosts: map[string]*remoteHost{}}
+	actionContext, stopActions := context.WithCancel(context.Background())
+	return &Manager{
+		options: options, hosts: map[string]*remoteHost{}, actions: map[string]*actionLog{},
+		actionContext: actionContext, stopActions: stopActions,
+	}
 }
 
 // host は alias の remoteHost を返す。無ければ作る。mutex を持って呼ぶ。
@@ -196,7 +207,7 @@ func (m *Manager) issueEntrance(ctx context.Context, link *hostLink) (entrance, 
 	if err != nil {
 		return entrance{}, engineIdentity{}, err
 	}
-	result, err := live.Run(ctx, EntranceCommand, EntranceLimit)
+	result, err := live.Run(ctx, RunRequest{Command: EntranceCommand, Limit: EntranceLimit})
 	switch {
 	case err != nil:
 		return entrance{}, engineIdentity{}, err
@@ -255,8 +266,17 @@ func (m *Manager) listen(alias string, target *relay) error {
 	return nil
 }
 
-// Close は、すべての中継と取り次ぎを閉じる。以後の要求は ErrClosed で断る。
+// Close は、すべての中継と取り次ぎを閉じ、走っている操作を止めて終わるまで待つ。
+// 以後の要求は ErrClosed で断る。
 func (m *Manager) Close() {
+	// 操作を先に取り消す。SSH の接続を先に閉じると、操作は止められた理由ではなく
+	// 接続の失敗で終わったと記録される。
+	m.stopActions()
+	m.closeHosts()
+	m.actionsRunning.Wait()
+}
+
+func (m *Manager) closeHosts() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.closed = true

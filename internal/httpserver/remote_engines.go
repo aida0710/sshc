@@ -20,7 +20,8 @@ type RemoteEngineDirectory interface {
 	AddEngine(ctx context.Context, alias string) error
 	RemoveEngine(alias string) error
 	EngineStatus(ctx context.Context, alias string) (remoteengine.Status, error)
-	ControlEngine(ctx context.Context, alias string, action remoteengine.EngineAction) (remoteengine.ActionResult, error)
+	StartAction(ctx context.Context, alias string, action remoteengine.EngineAction) (uint64, error)
+	ActionLog(alias string, cursor uint64, limit int) (remoteengine.ActionLogRead, error)
 	UnlockVault(ctx context.Context, alias, passphrase string) error
 	ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
 	ForwardTerminalStream(w http.ResponseWriter, r *http.Request, alias string) error
@@ -48,6 +49,7 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.GET("/api/v1/engines/:alias/status", handlers.Status)
 	engine.POST("/api/v1/engines/:alias/open", handlers.Open)
 	engine.POST("/api/v1/engines/:alias/control", handlers.Control)
+	engine.GET("/api/v1/engines/:alias/control/log", handlers.ActionLog)
 	engine.POST("/api/v1/engines/:alias/vault/unlock", handlers.UnlockVault)
 	engine.GET("/api/v1/engines/:alias/terminal/sessions", handlers.ForwardTerminal)
 	engine.POST("/api/v1/engines/:alias/terminal/sessions", handlers.ForwardTerminal)
@@ -156,8 +158,8 @@ func (h RemoteEngineHandlers) Open(c *echo.Context) error {
 	return c.JSON(http.StatusOK, api.RemoteEngineEntrance{Url: opened})
 }
 
-// Control は、実行先のエンジンを止める・起動し直す・更新する。どれも接続先のターミナルを
-// すべて止めるので、画面が尋ねてから送る。
+// Control は、実行先のエンジンを止める・起動し直す・更新する操作を始める。どれも接続先の
+// ターミナルをすべて止めるので、画面が尋ねてから送る。操作の経過と出力は ActionLog で読む。
 func (h RemoteEngineHandlers) Control(c *echo.Context) error {
 	alias, ok := aliasParam(c)
 	if !ok {
@@ -167,14 +169,57 @@ func (h RemoteEngineHandlers) Control(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	result, err := h.Engines.ControlEngine(c.Request().Context(), alias, remoteengine.EngineAction(request.Action))
-	if errors.Is(err, remoteengine.ErrUnknownAction) {
+	generation, err := h.Engines.StartAction(c.Request().Context(), alias, remoteengine.EngineAction(request.Action))
+	switch {
+	case errors.Is(err, remoteengine.ErrUnknownAction):
 		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	if err != nil {
+	case errors.Is(err, remoteengine.ErrActionRunning):
+		return problem(c, http.StatusConflict, "remote_engine_action_running")
+	case err != nil:
 		return remoteEngineProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, api.RemoteEngineActionResult{Succeeded: result.Succeeded, Output: result.Output})
+	return c.JSON(http.StatusAccepted, api.RemoteEngineActionStarted{Generation: generation})
+}
+
+// ActionLog は、実行先のエンジンへの最後の操作の経過と、接続先の sshc が書いたものを
+// cursor から返す。cursor と limit の決まりはターミナルの Control と同じである。
+func (h RemoteEngineHandlers) ActionLog(c *echo.Context) error {
+	alias, ok := aliasParam(c)
+	if !ok {
+		return problem(c, http.StatusBadRequest, "unsafe_alias")
+	}
+	cursor, limit, ok := terminalControlRange(c)
+	if !ok {
+		return problem(c, http.StatusBadRequest, "invalid_terminal_cursor")
+	}
+	log, err := h.Engines.ActionLog(alias, cursor, limit)
+	switch {
+	case errors.Is(err, remoteengine.ErrNoAction):
+		return problem(c, http.StatusNotFound, "remote_engine_no_action")
+	case errors.Is(err, remoteengine.ErrActionCursorAhead):
+		return problem(c, http.StatusConflict, "terminal_cursor_ahead")
+	case err != nil:
+		return remoteEngineProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, api.RemoteEngineActionLog{
+		Generation: log.Generation, Action: api.RemoteEngineAction(log.Action),
+		Done: log.Done, Succeeded: log.Succeeded, Problem: actionFailureCode(log.Failure),
+		Cursor: api.TerminalControlCursor{
+			Requested: cursor, Start: log.Read.Start, Next: log.Read.Next,
+			End: log.Read.End, Truncated: log.Read.Truncated,
+		},
+		Output: log.Output,
+	})
+}
+
+// actionFailureCode は、操作が終了コード以外で終わった理由を、同じ失敗を要求が返すときの
+// code にする。理由が無ければ nil である。
+func actionFailureCode(failure error) *string {
+	if failure == nil {
+		return nil
+	}
+	_, payload, _ := remoteEngineFailure(failure)
+	return &payload.Code
 }
 
 // UnlockVault は、実行先のエンジンの Vault のロックを解除する。パスワードは接続先へ

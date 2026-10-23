@@ -45,7 +45,7 @@ func readIdentity(ctx context.Context, link *hostLink) (engineIdentity, error) {
 	if err != nil {
 		return engineIdentity{}, err
 	}
-	result, err := live.Run(ctx, handoffCommand, handoffLimit)
+	result, err := live.Run(ctx, RunRequest{Command: handoffCommand, Limit: handoffLimit})
 	if err != nil {
 		return engineIdentity{}, err
 	}
