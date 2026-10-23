@@ -27,8 +27,8 @@ type ManagerOptions struct {
 	// Connect は、alias へ非対話の SSH の接続を開く。
 	Connect func(ctx context.Context, alias string) (Link, error)
 	Store   *Store
-	// LocalVersion は、このマシンの sshc のバージョンである。実行先のエンジンは同じ
-	// バージョンでなければ使わない。
+	// LocalVersion は、このマシンの sshc のバージョンである。互換でない実行先を断るときに
+	// 添える。使えるかどうかは、バージョンではなく Compatibility で決める。
 	LocalVersion string
 	// PeerMayBelongToAnotherUser は、TCP の接続が、このマシンの別の OS ユーザーのもの
 	// かもしれないかを返す。nil なら確かめない。
@@ -74,15 +74,15 @@ func (m *Manager) Engines() ([]string, error) {
 }
 
 // AddEngine は、alias で動いているエンジンを実行先に足す。足す前に、接続できること、
-// 接続先のエンジンが動いていることを確かめる。バージョンが違うエンジンも足す。
+// 接続先のエンジンが動いていることを確かめる。互換でないエンジンも足す。
 // 画面から更新できるのは、実行先に足したエンジンだけだからである。
 func (m *Manager) AddEngine(ctx context.Context, alias string) error {
 	engine, err := m.hostEngine(alias)
 	if err != nil {
 		return err
 	}
-	var mismatch *VersionMismatchError
-	if _, err := engine.current(ctx); err != nil && !errors.As(err, &mismatch) {
+	var incompatible *IncompatibleEngineError
+	if _, err := engine.current(ctx); err != nil && !errors.As(err, &incompatible) {
 		return err
 	}
 	return m.options.Store.AddEngine(alias)

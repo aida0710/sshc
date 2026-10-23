@@ -72,7 +72,7 @@ func remoteEnginesEngine(directory *fakeEngineDirectory) *echo.Echo {
 	return engine
 }
 
-func TestAnAddedEngineIsListedAndAVersionMismatchNamesTheRemoteVersion(t *testing.T) {
+func TestAnAddedEngineIsListedAndAnIncompatibleEngineNamesTheRemoteVersion(t *testing.T) {
 	directory := &fakeEngineDirectory{}
 	engine := remoteEnginesEngine(directory)
 	recorder := send(t, engine, http.MethodPost, "/api/v1/engines", `{"alias":"r540"}`, map[string]string{"Content-Type": "application/json"})
@@ -84,11 +84,11 @@ func TestAnAddedEngineIsListedAndAVersionMismatchNamesTheRemoteVersion(t *testin
 		t.Fatalf("list = %s", recorder.Body.String())
 	}
 
-	directory.statusErr = &remoteengine.VersionMismatchError{Local: "v0.53.0", Remote: "v0.51.0"}
+	directory.statusErr = &remoteengine.IncompatibleEngineError{Local: "v0.53.0", Remote: "v0.51.0"}
 	recorder = send(t, engine, http.MethodGet, "/api/v1/engines/r540/status", "", nil)
 	problem := decodeAs[api.Problem](t, recorder.Body.String())
-	if recorder.Code != http.StatusConflict || problem.Code != "remote_engine_version_mismatch" || problem.Detail == nil || *problem.Detail != "v0.51.0" {
-		t.Fatalf("mismatch = %d %s", recorder.Code, recorder.Body.String())
+	if recorder.Code != http.StatusConflict || problem.Code != "remote_engine_incompatible" || problem.Detail == nil || *problem.Detail != "v0.51.0" {
+		t.Fatalf("incompatible = %d %s", recorder.Code, recorder.Body.String())
 	}
 }
 

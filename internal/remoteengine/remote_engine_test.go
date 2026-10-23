@@ -56,12 +56,27 @@ func (f *fakeRemoteEngine) handoffDocument(version string) string {
 	return handoffDocument(f.server.URL, fakeSecret, version)
 }
 
-// handoffDocument は、origin で待ち受け secret を持つエンジンの handoff である。
+// handoffDocument は、origin で待ち受け secret を持ち、このマシンと互換のエンジンの handoff である。
 func handoffDocument(origin, secret, version string) string {
 	body, _ := json.Marshal(handoff.Handoff{
 		SchemaVersion: handoff.SchemaVersion, URL: origin, Secret: secret,
 		Owner: handoff.OwnerEngine, PID: 4242, Version: version, ProtocolVersion: handoff.ProtocolVersion,
+		RunTargetCompatibility: Compatibility,
 	})
+	return string(body)
+}
+
+// withCompatibility は、document の互換の番号を compatibility に替える。nil なら、番号を
+// 書かない古い sshc の handoff にする。
+func withCompatibility(document string, compatibility *int) string {
+	var fields map[string]any
+	_ = json.Unmarshal([]byte(document), &fields)
+	if compatibility == nil {
+		delete(fields, "runTargetCompatibility")
+	} else {
+		fields["runTargetCompatibility"] = *compatibility
+	}
+	body, _ := json.Marshal(fields)
 	return string(body)
 }
 
@@ -182,11 +197,18 @@ func (l *handoffLink) Run(ctx context.Context, command string, limit time.Durati
 
 func newEngineManager(t *testing.T, remote *fakeRemoteEngine, remoteVersion string) *Manager {
 	t.Helper()
+	return newEngineManagerReading(t, remote, remote.handoffDocument(remoteVersion))
+}
+
+// newEngineManagerReading は、接続先で document を handoff として読む Manager を返す。
+// このマシンの sshc は v9 である。
+func newEngineManagerReading(t *testing.T, remote *fakeRemoteEngine, document string) *Manager {
+	t.Helper()
 	manager := NewManager(ManagerOptions{
 		Store:        newStore(t),
 		LocalVersion: "v9",
 		Connect: func(context.Context, string) (Link, error) {
-			return &handoffLink{fakeLink: newFakeLink(remote.server.URL+"/#x", 0), handoff: remote.handoffDocument(remoteVersion)}, nil
+			return &handoffLink{fakeLink: newFakeLink(remote.server.URL+"/#x", 0), handoff: document}, nil
 		},
 	})
 	t.Cleanup(manager.Close)
@@ -244,18 +266,46 @@ func TestAnExpiredRemoteSessionIsIssuedAgainOnceAndTheRequestSentAgain(t *testin
 	}
 }
 
-func TestAnEngineOfADifferentVersionIsAddedSoThatItCanBeUpdated(t *testing.T) {
+func TestAnEngineOfAnotherVersionWithTheSameCompatibilityIsUsed(t *testing.T) {
 	remote := newFakeRemoteEngine(t)
-	older := newEngineManager(t, remote, "v8")
-	if err := older.AddEngine(context.Background(), "r540"); err != nil {
+	manager := newEngineManager(t, remote, "v8")
+	if err := manager.AddEngine(context.Background(), "r540"); err != nil {
 		t.Fatalf("AddEngine with v8 = %v", err)
 	}
-	if engines, _ := older.Engines(); !slices.Equal(engines, []string{"r540"}) {
-		t.Fatalf("engines = %v, want [r540]", engines)
+	if status, err := manager.EngineStatus(context.Background(), "r540"); err != nil || status.Sessions != 3 {
+		t.Fatalf("EngineStatus with v8 = %+v, %v", status, err)
 	}
-	var mismatch *VersionMismatchError
-	if _, err := older.EngineStatus(context.Background(), "r540"); !errors.As(err, &mismatch) || mismatch.Remote != "v8" || mismatch.Local != "v9" {
-		t.Fatalf("EngineStatus with v8 = %v", err)
+	if status, _, _ := forward(t, manager, http.MethodGet, ""); status != http.StatusOK {
+		t.Fatalf("forward to v8 = %d, want 200", status)
+	}
+}
+
+func TestAnIncompatibleEngineIsAddedSoThatItCanBeUpdated(t *testing.T) {
+	other := Compatibility + 1
+	for _, tc := range []struct {
+		name          string
+		compatibility *int
+	}{
+		{"another compatibility", &other},
+		{"an older sshc that names none", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			remote := newFakeRemoteEngine(t)
+			manager := newEngineManagerReading(t, remote, withCompatibility(remote.handoffDocument("v8"), tc.compatibility))
+			if err := manager.AddEngine(context.Background(), "r540"); err != nil {
+				t.Fatalf("AddEngine = %v", err)
+			}
+			if engines, _ := manager.Engines(); !slices.Equal(engines, []string{"r540"}) {
+				t.Fatalf("engines = %v, want [r540]", engines)
+			}
+			var incompatible *IncompatibleEngineError
+			if _, err := manager.EngineStatus(context.Background(), "r540"); !errors.As(err, &incompatible) || incompatible.Remote != "v8" || incompatible.Local != "v9" {
+				t.Fatalf("EngineStatus = %v, want IncompatibleEngineError naming v8 and v9", err)
+			}
+			if got := remote.sessions.Load(); got != 0 {
+				t.Fatalf("sessions issued = %d, want 0", got)
+			}
+		})
 	}
 }
 

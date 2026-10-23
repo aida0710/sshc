@@ -35,6 +35,8 @@ type engineIdentity struct {
 	port    int
 	secret  string
 	version string
+	// compatibility は、接続先が名乗る互換の番号（Compatibility）である。
+	compatibility int
 }
 
 // readIdentity は、接続先で handoff を読む。
@@ -58,7 +60,9 @@ func readIdentity(ctx context.Context, link *hostLink) (engineIdentity, error) {
 	if err != nil {
 		return engineIdentity{}, fmt.Errorf("%w: %v", ErrNotRunning, err)
 	}
-	return engineIdentity{port: port, secret: document.Secret, version: document.Version}, nil
+	return engineIdentity{
+		port: port, secret: document.Secret, version: document.Version, compatibility: document.RunTargetCompatibility,
+	}, nil
 }
 
 // dialFailure は、接続先のエンジンへの TCP を開けなかった、または開いた相手が身元を

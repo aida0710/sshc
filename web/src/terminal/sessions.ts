@@ -23,7 +23,7 @@ export type TerminalSessionsState = {
   busy: boolean;
   problem: string;
   // remoteRefusal identifies the action needed before the run target can list sessions.
-  remoteRefusal: "vault_locked" | "version_mismatch" | null;
+  remoteRefusal: "vault_locked" | "incompatible" | null;
   loaded: boolean;
   rename: (id: string, title: string) => Promise<boolean>;
   unpinTitle?: (id: string) => Promise<boolean>;
@@ -51,7 +51,7 @@ export function useTerminalSessions(
   // to the newly selected one, even before the reset effect has run.
   const listFailureCode = listFailure?.api === api ? listFailure.code : "";
   const remoteRefusal = listFailureCode === "remote_engine_vault_locked" ? "vault_locked"
-    : listFailureCode === "remote_engine_version_mismatch" ? "version_mismatch" : null;
+    : listFailureCode === "remote_engine_incompatible" ? "incompatible" : null;
   const [loaded, setLoaded] = useState(false);
   const refreshGeneration = useRequestGeneration();
   const mutationGeneration = useRequestGeneration();
@@ -335,8 +335,8 @@ export function terminalProblemKey(code: string): MessageKey {
     case "remote_engine_unproven":
     case "remote_engine_connect_failed":
       return "terminal.remoteEngineUnavailable";
-    case "remote_engine_version_mismatch":
-      return "terminal.remoteVersionMismatch";
+    case "remote_engine_incompatible":
+      return "terminal.remoteIncompatible";
     case "reconnect_failed":
       return "terminal.reconnectFailed";
     case "reconnect_exhausted":

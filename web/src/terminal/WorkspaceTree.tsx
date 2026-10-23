@@ -84,7 +84,7 @@ export function WorkspaceTree({
   const t = useTranslate();
   const refusalAction = terminalSessions.remoteRefusal === "vault_locked"
     ? { onClick: onUnlockRemoteVault, label: t("runTarget.unlockOpen") }
-    : terminalSessions.remoteRefusal === "version_mismatch"
+    : terminalSessions.remoteRefusal === "incompatible"
       ? { onClick: onUpdateRemoteEngine, label: t("engineInfo.updateOpen") }
       : null;
   const [showHidden, setShowHidden] = useState(() => readStoredValue(localStorageKeys.showHiddenTerminalWorkspaces) === "true");

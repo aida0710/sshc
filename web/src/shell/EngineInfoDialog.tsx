@@ -59,7 +59,7 @@ export function EngineInfoDialog({
           <EngineFacts status={info.status} remoteVersion={info.remoteVersion} localVersion={targets.localVersion} t={t} onUnlock={busy ? undefined : () => targets.vaultUnlock.ask(alias)} />
         )}
         {info.remoteVersion === null ? null : (
-          <Notice tone="danger" compact>{t("engineInfo.versionMismatch", { alias })}</Notice>
+          <Notice tone="danger" compact>{t("engineInfo.incompatible", { alias })}</Notice>
         )}
         {info.problem === "" ? null : <Notice tone="danger" compact>{info.problem}</Notice>}
         <div className="flex flex-wrap gap-2">
@@ -122,12 +122,15 @@ function EngineFacts({
   onUnlock: (() => void) | undefined;
 }) {
   const version = status?.version ?? remoteVersion;
+  // A different version still connects while the run-target compatibility
+  // matches, so only a refused engine shows the difference as a problem.
+  const differenceTone = status === null ? "text-danger" : "text-ink-faint";
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
       <dt className="text-ink-faint">{t("engineInfo.version")}</dt>
       <dd className="font-mono text-ink">
         {version}
-        {version === localVersion ? null : <span className="ml-2 text-xs text-danger">{t("engineInfo.versionDiffers", { local: localVersion })}</span>}
+        {version === localVersion ? null : <span className={`ml-2 text-xs ${differenceTone}`}>{t("engineInfo.versionDiffers", { local: localVersion })}</span>}
       </dd>
       {status === null ? null : <EngineStatusFacts status={status} t={t} onUnlock={onUnlock} />}
     </dl>

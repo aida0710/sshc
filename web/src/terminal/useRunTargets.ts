@@ -79,10 +79,10 @@ export function useRunTargets({
     writeStoredValue(localStorageKeys.runTarget, alias ?? "");
   }, [allowEngineInfoOffer, allowVaultOffer]);
 
-  // report shows why a request about an engine failed. A different version is
-  // answered with the information dialog, whose Update fixes it.
+  // report shows why a request about an engine failed. An incompatible engine
+  // is answered with the information dialog, whose Update fixes it.
   const report = useCallback((error: unknown, alias: string) => {
-    if (failureCode(error) === "remote_engine_version_mismatch") askEngineInfo(alias);
+    if (failureCode(error) === "remote_engine_incompatible") askEngineInfo(alias);
     else setProblem(runTargetProblemText(translate, error, alias));
   }, [askEngineInfo, translate]);
 
