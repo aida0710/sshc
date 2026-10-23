@@ -37,8 +37,6 @@ import { attachOSC9Directory } from "./osc9Directory";
 import { attachOSC9Progress, noTerminalProgress, type TerminalProgress } from "./osc9Progress";
 import { TerminalProgressBar } from "./TerminalProgressBar";
 import { attachInlineImages } from "./inlineImages";
-import { attachITerm2Identity } from "./iterm2Identity";
-import { createImagePlaceholderMarkFilter } from "./imagePlaceholderMarks";
 import { applyUnicode11Widths } from "./unicodeWidths";
 import { attachCommandMarkers } from "./commandMarkers";
 import { showBrowserNotification } from "../ui/browserNotifications";
@@ -86,7 +84,6 @@ type TerminalViewProps = {
   onOsc52Change?: (enabled: boolean) => void | Promise<void>;
   onForwardsChanged?: () => void | Promise<void>;
   jisYenBackslash?: boolean;
-  identifyAsITerm2?: boolean;
 };
 
 // A command shorter than this usually finishes while the user is still
@@ -126,7 +123,6 @@ export function TerminalView({
   onOsc52Change,
   onForwardsChanged,
   jisYenBackslash = false,
-  identifyAsITerm2 = false,
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
@@ -154,8 +150,6 @@ export function TerminalView({
   osc52EnabledRef.current = osc52Enabled;
   const intlYenRef = useRef(jisYenBackslash);
   intlYenRef.current = jisYenBackslash;
-  const identifyAsITerm2Ref = useRef(identifyAsITerm2);
-  identifyAsITerm2Ref.current = identifyAsITerm2;
   const [terminalNotice, setTerminalNotice] = useState("");
   const [pendingPaste, setPendingPaste] = useState<{
     sessionId: string;
@@ -257,28 +251,13 @@ export function TerminalView({
     };
 
     const kittyKeyboard = attachKittyKeyboardProtocol(view.parser);
-    // Only a terminal that names itself iTerm2 gets Claude Code's image placeholders.
-    const stripPlaceholderMarks = createImagePlaceholderMarkFilter(() => identifyAsITerm2Ref.current);
-    const output = createTerminalOutput({
-      write: (text, callback) => {
-        const filtered = stripPlaceholderMarks(text);
-        if (callback === undefined) view.write(filtered);
-        else view.write(filtered, callback);
-      },
-    });
+    const output = createTerminalOutput(view);
     const detachOsc52 = attachOsc52Clipboard({
       parser: view.parser,
       enabled: () => osc52EnabledRef.current && !output.isReplaying(),
       writeText: (text) => clipboard.writeText(text),
       copied: () => setTerminalNotice(t("terminal.osc52Copied")),
       refused: () => setProblem(t("terminal.clipboardRefused")),
-    });
-    const iTerm2Identity = attachITerm2Identity({
-      parser: view.parser,
-      enabled: () => identifyAsITerm2Ref.current,
-      isReplaying: output.isReplaying,
-      // A reply is not typed by the person, so armed modifiers must not touch it.
-      reply: (text) => sendInput.current(text),
     });
     const osc7Directory = attachOSC7Directory(view.parser, setCurrentDirectory);
     const osc9Directory = attachOSC9Directory(view.parser, setCurrentDirectory);
@@ -432,7 +411,6 @@ export function TerminalView({
       detachClipboard();
       detachOsc52();
       output.dispose();
-      iTerm2Identity.dispose();
       osc7Directory.dispose();
       osc9Directory.dispose();
       osc9Progress.dispose();
