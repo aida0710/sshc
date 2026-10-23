@@ -111,7 +111,6 @@ export function AppNavigation({
       attentionLabel={name === "Files" && activeTransfers > 0 ? t("sftp.activeTransfers", { count: activeTransfers }) : undefined}
     />
   );
-  const remoteTarget = runTargets.selected;
   return (
     <nav
       ref={navigationRef}
@@ -200,10 +199,6 @@ export function AppNavigation({
           hosts={hosts}
           {...(onConnect === undefined ? {} : { onConnect })}
           canBroadcast={runTargets.selected === null}
-          {...(remoteTarget === null ? {} : {
-            onUnlockRemoteVault: () => runTargets.vaultUnlock.ask(remoteTarget),
-            onUpdateRemoteEngine: () => runTargets.engineInfo.ask(remoteTarget),
-          })}
         />
       </div>
 

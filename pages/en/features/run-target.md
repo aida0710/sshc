@@ -20,7 +20,17 @@ Only the terminals change: sessions and [workspaces](./workspace). Connections, 
 
 Each host's **…** offers **Engine information…**, **Open its full screen in a new tab** (the host engine's own screen, like `sshc open <alias>`) and **Remove from the list**. Removing it stops neither the host's engine nor its terminals.
 
-If the chosen host's vault is locked, sshc asks for that vault's password. This computer's engine passes it to the host's engine inside the SSH connection and does not save it here. If you cancel, unlock it at any time with **Unlock…** under Workspaces.
+If the chosen host's vault is locked, sshc asks for that vault's password. This computer's engine passes it to the host's engine inside the SSH connection and does not save it here. If you cancel, unlock it at any time with **Unlock…** in the terminal area.
+
+## When the host cannot be reached
+
+While the session list cannot be read from the chosen host's engine, the middle of the terminal area says what happened and what you can do. The sidebar and the other screens stay usable.
+
+- **Reconnect**: reads the list again. The list is also read every few seconds, so this goes away by itself once the host can be reached.
+- **Switch back to localhost**: makes this computer the run target again.
+- **Unlock…**: shown when the host's vault is locked.
+- **Update…**: shown when sshc on the host does not work with this computer’s. It opens the engine information.
+- **Engine information…**: shown for any other reason.
 
 ## Engine information
 
@@ -37,7 +47,7 @@ The dialog shows the end of what the host's `sshc` wrote.
 ## Requirements and limits
 
 - sshc on the host can be a different version from this computer’s as long as both versions talk to a run target the same way. When they differ, the version line in the engine information dialog also shows this computer’s version.
-- When a release changes how this computer talks to a run target, update the run target to that release or later too. The release notes of such a release say that run targets need updating. If sshc on the host does not work with this computer’s, the engine information dialog opens automatically. Choose **Update** to update the host. If you close the dialog, reopen it with **Update…** under Workspaces.
+- When a release changes how this computer talks to a run target, update the run target to that release or later too. The release notes of such a release say that run targets need updating. If sshc on the host does not work with this computer’s, open the engine information with **Update…** in the terminal area and choose **Update** to update the host.
 - The host's SSH server must allow TCP forwarding to its `127.0.0.1` (`AllowTcpForwarding yes` or `local`).
 - If the host has no vault yet, create it through **Open its full screen in a new tab**.
 - Port forwarding, sending a command to several sessions, and Quick Commands work only for terminals running on this computer.
