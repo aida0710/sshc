@@ -91,6 +91,24 @@ describe("application shortcuts", () => {
     expect(parseBindings('{"palette":["a"]}')).toEqual(defaultBindings);
   });
 
+  it.each([
+    { isComposing: true },
+    { isComposing: false, keyCode: 229 },
+  ])("keeps recording through IME keys reported as %j", async (composition) => {
+    render(<KeyConfig />);
+    const assign = screen.getByRole("button", { name: "Assign shortcut: Open Home" });
+    fireEvent.click(assign);
+    for (const key of ["Escape", "Enter", "F2"]) {
+      expect(fireEvent.keyDown(assign, { key, ...composition })).toBe(true);
+      expect(shortcutKey(new KeyboardEvent("keydown", { key, ...composition }))).toBeNull();
+      expect(shortcutsBlocked(new KeyboardEvent("keydown", { key, ...composition }))).toBe(true);
+    }
+    expect(apiClient.mutate).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(assign, { key: "F2" });
+    await waitFor(() => expect(loadBindings().home).toEqual(["F2"]));
+  });
+
   it("keeps shortcuts out of modal dialogs and the binding editor", () => {
     const view = render(<div role="dialog" aria-modal="true" />);
     expect(shortcutsBlocked(new KeyboardEvent("keydown"))).toBe(true);

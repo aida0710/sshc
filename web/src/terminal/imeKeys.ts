@@ -1,4 +1,5 @@
-export const imeKeyCode = 229;
+import { imeKeyCode } from "../ui/imeComposition";
+
 export function withholdFromTerminal(keyCode: number, composing: boolean): boolean {
   return keyCode === imeKeyCode && !composing;
 }

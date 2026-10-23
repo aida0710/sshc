@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
+import { isImeComposing } from "./imeComposition";
 
 export type DismissReason = "outside" | "escape" | "android-back" | "superseded";
 
@@ -75,6 +76,7 @@ function keepTabInLayer(layer: Layer, event: KeyboardEvent) {
 // レイヤーが使うキーを最前面のレイヤーで扱う。Tabはフォーカスをレイヤーの中で回し、Escapeは
 // レイヤーを閉じる。stopOtherListenersは、閉じるのに使ったEscapeを押された要素へ届けないときに付ける。
 function routeKeyToLayer(layer: Layer, event: KeyboardEvent, { stopOtherListeners }: { stopOtherListeners: boolean }) {
+  if (isImeComposing(event)) return;
   if (event.key === "Tab") {
     keepTabInLayer(layer, event);
     return;
