@@ -176,15 +176,12 @@ export const shellSays = {
 
 export const test = base.extend<{ installation: Installation }>({
   page: async ({ page }, use) => {
-    // Keep documentation captures independent of release checks. The capture script supplies
-    // an exact release tag or dev; a test-specific update stub registers later and wins.
-    const visualVersion = process.env.SSHC_VISUAL_VERSION;
-    if (visualVersion !== undefined) {
-      await page.route("**/api/v1/update", (route) => route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify({ current: visualVersion, available: false }),
-      }));
-    }
+    // Page navigation, including About's opening check, must not ask GitHub.
+    // Test-specific update stubs register later and override this default.
+    const current = process.env.SSHC_VISUAL_VERSION ?? "dev";
+    await page.route(/\/api\/v1\/update(?:\/check)?$/, (route) => route.fulfill({
+      json: { current, available: false, canUpdate: false },
+    }));
     await use(page);
   },
   installation: async ({}, use) => {

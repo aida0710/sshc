@@ -1245,7 +1245,7 @@ export const ja = {
   "about.activityRequestFailed": "最新リリースの確認に失敗しました。sshcエンジンから結果を取得できませんでした。",
   "about.updateOutput": "更新の出力",
   "about.updateOutputCapped": "出力が上限の256 KiBに達したため、それ以降の出力は記録していません。",
-  "about.upToDate": "使用中の{version}が最新です。",
+  "about.noNewerVersion": "新しいバージョンはありません。使用中の{version}が最新です。",
   "about.noRelease": "リリース情報は未取得です。",
   "about.releaseNotes": "リリースノート",
   "about.noNotes": "リリースノートはありません。",

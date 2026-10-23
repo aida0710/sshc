@@ -19,7 +19,7 @@ test("primary pages have no serious automated accessibility violations", async (
   await openApplication(page, installation);
 
   await expectNoSeriousAccessibilityViolations(page);
-  for (const path of ["/connections", "/sftp", "/menu", "/settings/terminal", "/licenses"]) {
+  for (const path of ["/connections", "/sftp", "/menu", "/settings/terminal", "/about", "/licenses"]) {
     await page.goto(`${installation.url}${path}`);
     await expect(page.locator("main")).toBeVisible();
     await expectNoSeriousAccessibilityViolations(page);
