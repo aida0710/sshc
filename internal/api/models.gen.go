@@ -2151,6 +2151,11 @@ type TerminalDeterminateProgress struct {
 // TerminalDeterminateProgressState defines model for TerminalDeterminateProgress.State.
 type TerminalDeterminateProgressState string
 
+// TerminalDirectory defines model for TerminalDirectory.
+type TerminalDirectory struct {
+	Path string `json:"path"`
+}
+
 // TerminalExit defines model for TerminalExit.
 type TerminalExit struct {
 	At     string `json:"at"`

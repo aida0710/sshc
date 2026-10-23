@@ -52,8 +52,31 @@ describe("TerminalLinkPopover", () => {
     expect(screen.queryByRole("button", { name: "Edit with SFTP" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Preview" }));
 
-    expect(onPreviewPath).toHaveBeenCalledWith("/tmp/shot.png");
+    expect(onPreviewPath).toHaveBeenCalledWith("/tmp/shot.png", false);
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("previews a relative path but leaves SFTP to full paths", async () => {
+    const onPreviewPath = vi.fn();
+    render(
+      <LanguageProvider>
+        <TerminalLinkPopover
+          selection={{
+            link: { kind: "relative-path", text: "shots/a.png", target: "shots/a.png", start: 0, end: 11 },
+            x: 20,
+            y: 30,
+          }}
+          onPreviewPath={onPreviewPath}
+          onRemotePath={vi.fn()}
+          onClose={() => undefined}
+        />
+      </LanguageProvider>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Browse in SFTP" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(onPreviewPath).toHaveBeenCalledWith("shots/a.png", true);
   });
 
   it("opens an HTTP link in a new isolated browser tab", async () => {

@@ -89,6 +89,7 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	engine.POST("/api/v1/terminal/sessions/:id/forwards", handlers.StartForward)
 	engine.DELETE("/api/v1/terminal/sessions/:id/forwards/:forwardId", handlers.StopForward)
 	engine.GET("/api/v1/terminal/sessions/:id/control", handlers.Control)
+	engine.GET("/api/v1/terminal/sessions/:id/directory", handlers.Directory)
 	engine.PUT("/api/v1/terminal/sessions/:id/title", handlers.SetTitle)
 	engine.DELETE("/api/v1/terminal/sessions/:id", handlers.Close)
 	engine.GET(StreamPath, handlers.Stream)

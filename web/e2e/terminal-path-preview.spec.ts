@@ -1,9 +1,9 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, openApplication, openSection, test } from "./support/environment";
+import { expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
 import { samplePNG } from "./support/images";
-import { drawnSpan } from "./support/terminal";
+import { drawnSpan, terminalKeyboard } from "./support/terminal";
 
 const visualDirectory = process.env.SSHC_VISUAL_DIR;
 
@@ -76,4 +76,28 @@ test("previews the image a local shell printed the path of", async ({ page, inst
 
   await preview.getByRole("button", { name: "Close" }).click();
   await expect(preview).toBeHidden();
+});
+
+test("previews an image a real shell printed a path relative to its directory", async ({ page, installation }) => {
+  test.skip(process.platform !== "linux", "the engine reads the shell's directory from /proc");
+  await mkdir(join(installation.home, "shots"), { recursive: true });
+  await writeFile(join(installation.home, "shots", "relative.png"), samplePNG());
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await terminalKeyboard(page).focus();
+  // The color puts the path in its own span so the test can click it.
+  await page.keyboard.type("cd ~ && printf '\\342\\200\\272 [image] \\033[36mshots/relative.png\\033[0m (1 KB)\\n'");
+  await page.keyboard.press("Enter");
+
+  const path = drawnSpan(page, "shots/relative.png").last();
+  await expect(path).toBeVisible();
+  const bounds = await path.boundingBox();
+  if (bounds === null) throw new Error("the printed path is not visible");
+  await page.mouse.click(bounds.x + bounds.width - 4, bounds.y + bounds.height / 2);
+  await page.getByRole("dialog", { name: "Terminal link actions" }).getByRole("button", { name: "Preview" }).click();
+
+  const preview = page.getByRole("dialog", { name: join(installation.home, "shots", "relative.png") });
+  await expect(preview.getByRole("img", { name: "relative.png" })).toBeVisible();
 });
