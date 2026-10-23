@@ -1,0 +1,1 @@
+import{m as e}from"./context-Bqz2zAA8.js";var t=e();function n(){let[e,n]=(0,t.useState)(null),r=(0,t.useRef)(null);return{running:e,start:(0,t.useCallback)(async(e,t)=>{if(r.current===null){r.current=e,n(e);try{await t()}finally{r.current=null,n(null)}}},[])}}export{n as t};

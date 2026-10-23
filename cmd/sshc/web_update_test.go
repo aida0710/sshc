@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -59,16 +60,18 @@ func TestWebUpdateUsesTheInstallationManagerAndKeepsTheInstalledVersion(t *testi
 				return installation{manager: manager, executable: executable}, nil
 			}
 			var installs atomic.Int32
-			installationDependencies.install = func(_ context.Context, found installation, release releasecheck.Release, _, _ io.Writer) error {
+			installationDependencies.install = func(_ context.Context, found installation, release releasecheck.Release, stdout, stderr io.Writer) error {
 				installs.Add(1)
+				fmt.Fprintln(stdout, "fixture installer output")
+				fmt.Fprintln(stderr, "fixture installer warning")
 				if found.manager != manager || release.Version != "v1.1.0" {
 					t.Errorf("unexpected installation = %+v, release=%+v", found, release)
 				}
 				return nil
 			}
 			install := installationDependencies.install
-			installationDependencies.installWeb = func(ctx context.Context, found installation, release releasecheck.Release) error {
-				return install(ctx, found, release, io.Discard, io.Discard)
+			installationDependencies.installWeb = func(ctx context.Context, request webInstallRequest) error {
+				return install(ctx, request.found, request.release, request.output, request.output)
 			}
 			if manager == managerPowerShell {
 				installationDependencies.install = func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error {
@@ -76,11 +79,13 @@ func TestWebUpdateUsesTheInstallationManagerAndKeepsTheInstalledVersion(t *testi
 					return nil
 				}
 			}
-			installationDependencies.upgradeHomebrew = func(_ context.Context, found installation) (string, error) {
+			installationDependencies.upgradeHomebrew = func(_ context.Context, request webInstallRequest) (string, error) {
 				installs.Add(1)
-				if found.manager != managerHomebrew {
-					t.Errorf("unexpected Homebrew installation = %+v", found)
+				if request.found.manager != managerHomebrew {
+					t.Errorf("unexpected Homebrew installation = %+v", request.found)
 				}
+				fmt.Fprintln(request.output, "fixture installer output")
+				fmt.Fprintln(request.output, "fixture installer warning")
 				return "v1.2.0", nil
 			}
 			dependencies := webUpdateDependencies(selfupdate.Dependencies{
@@ -114,6 +119,13 @@ func TestWebUpdateUsesTheInstallationManagerAndKeepsTheInstalledVersion(t *testi
 			if installs.Load() != 1 {
 				t.Fatalf("installer calls = %d", installs.Load())
 			}
+			log, err := service.Log(0, selfupdate.LogCapacity)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if log.JobID != job.ID || log.Output != "fixture installer output\nfixture installer warning\n" {
+				t.Fatalf("update log = %+v, want the installer output of job %s", log, job.ID)
+			}
 		})
 	}
 }
@@ -134,11 +146,11 @@ func TestWebUpdateRefusesAChangedManagerImmediatelyBeforeInstallation(t *testing
 	dependencies.detect = func(string) (installation, error) {
 		return installation{manager: managerHomebrew, executable: executable}, nil
 	}
-	dependencies.upgradeHomebrew = func(context.Context, installation) (string, error) {
+	dependencies.upgradeHomebrew = func(context.Context, webInstallRequest) (string, error) {
 		t.Error("installer ran after the installation manager changed")
 		return "v1.1.0", nil
 	}
-	_, err = installWebUpdate(context.Background(), selfupdate.Plan{Target: "v1.1.0", Installation: inspection}, dependencies)
+	_, err = installWebUpdate(context.Background(), selfupdate.InstallRequest{Plan: selfupdate.Plan{Target: "v1.1.0", Installation: inspection}, Output: io.Discard}, dependencies)
 	if err != selfupdate.ErrChanged {
 		t.Fatalf("changed manager = %v", err)
 	}
@@ -223,7 +235,8 @@ func TestWebUpdateRestartUsesTheManagedServiceOrStopsOnlyTheConfirmedForegroundE
 				job.OwnerPID++
 			}
 			starts, serviceCalls := 0, 0
-			run := webUpdateRestartRun{client: client, paths: userPaths{stateDir: stateDirectory}, job: job,
+			var output strings.Builder
+			run := webUpdateRestartRun{client: client, paths: userPaths{stateDir: stateDirectory}, job: job, output: &output,
 				restartService: func(_ context.Context, executable string) (bool, error) {
 					serviceCalls++
 					if executable != job.Plan.Installation.Executable {
@@ -271,6 +284,12 @@ func TestWebUpdateRestartUsesTheManagedServiceOrStopsOnlyTheConfirmedForegroundE
 			case "foreground", "Windows background":
 				if err != nil || starts != 1 || stopped.Load() != 1 {
 					t.Fatalf("foreground err=%v starts=%d stops=%d", err, starts, stopped.Load())
+				}
+				// 画面はインストーラーの出力に続けて、この経過を表示する。
+				for _, step := range []string{"sshc: stopping the engine (pid ", "sshc: starting the engine on port " + engineURL.Port() + "\n"} {
+					if !strings.Contains(output.String(), step) {
+						t.Errorf("restart log = %q, want %q", output.String(), step)
+					}
 				}
 			case "Windows task":
 				if err != nil || starts != 0 || stopped.Load() != 1 || serviceCalls != 1 {

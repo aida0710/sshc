@@ -2,7 +2,9 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { About } from "../api/about";
+import { ApiError } from "../api/client";
 import type { UpdateApi, UpdateStatus } from "../api/update";
+import { updateLog } from "../testing/updateLog";
 import { AboutPage } from "./AboutPage";
 import { UpdateBadge } from "../shell/UpdateBadge";
 
@@ -21,7 +23,10 @@ const status: UpdateStatus = {
   ],
 };
 function updates(initial: UpdateStatus = status): UpdateApi {
-  return { updateStatus: vi.fn().mockResolvedValue(initial), checkUpdate: vi.fn().mockResolvedValue(initial), previewUpdate: vi.fn(), startUpdate: vi.fn() };
+  return {
+    updateStatus: vi.fn().mockResolvedValue(initial), checkUpdate: vi.fn().mockResolvedValue(initial), previewUpdate: vi.fn(), startUpdate: vi.fn(),
+    updateLog: vi.fn().mockRejectedValue(new ApiError("update_log_missing", 404, null)),
+  };
 }
 const api = { about: vi.fn().mockResolvedValue(about) };
 
@@ -140,6 +145,23 @@ describe("AboutPage", () => {
     await waitFor(() => expect(update.startUpdate).toHaveBeenCalledWith("v1.2.0", "confirmation"));
     expect(await within(await within(page).findByRole("log")).findByText("Updating to v1.2.0…")).toBeVisible();
     expect(screen.queryByRole("dialog", { name: "sshc update" })).not.toBeInTheDocument();
+  });
+
+  it("shows the installer's output under the steps while the update runs", async () => {
+    const update = updates({ ...status, canUpdate: false, job: { id: "job-one", target: "v1.2.0", state: "installing", problem: "" } });
+    vi.mocked(update.updateLog).mockResolvedValue(updateLog("==> Upgrading aida0710/tap/sshc\n", 0, { reachedCapacity: true }));
+    render(<AboutPage api={api} updates={update} />);
+    const output = await screen.findByRole("log", { name: "Update output" });
+    expect(output).toHaveTextContent("==> Upgrading aida0710/tap/sshc");
+    expect(screen.getByText("The output reached the 256 KiB limit. Anything written after that was not recorded.")).toBeVisible();
+  });
+
+  it("still shows the output of an update that ended, as after reloading once sshc restarted", async () => {
+    const update = updates({ ...status, job: { id: "job-one", target: "v1.2.0", installedVersion: "v1.2.0", state: "succeeded", problem: "" } });
+    vi.mocked(update.updateLog).mockResolvedValue(updateLog("sshc: starting the engine on port 8022\n"));
+    render(<AboutPage api={api} updates={update} />);
+    expect(await screen.findByRole("log", { name: "Update output" })).toHaveTextContent("sshc: starting the engine on port 8022");
+    expect(screen.queryByRole("log", { name: "Check and update progress" })).not.toBeInTheDocument();
   });
 
   it("offers the reload that the sidebar dialog would have offered while sshc restarts", async () => {

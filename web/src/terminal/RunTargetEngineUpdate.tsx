@@ -1,10 +1,10 @@
 import { useEffect, type ReactNode } from "react";
 import type { RemoteEnginesApi } from "../api/remoteEngines";
 import { useTranslate } from "../i18n/context";
+import { CommandOutput } from "../ui/CommandOutput";
 import { Spinner } from "../ui/Spinner";
 import { Button } from "../ui/surface";
 import { useElapsedSeconds } from "../ui/useElapsedSeconds";
-import { EngineActionOutput } from "./EngineActionOutput";
 import { useEngineInfo } from "./useEngineInfo";
 
 // RunTargetEngineUpdate shows the two sshc versions that do not work together
@@ -58,7 +58,7 @@ export function RunTargetEngineUpdate({
       {info.lastResult === null ? null : succeeded
         ? <p role="status" className="text-sm text-ink">{t("engineInfo.updated")}</p>
         : <p role="alert" className="text-sm text-danger">{t("engineInfo.actionFailed")}</p>}
-      <EngineActionOutput output={info.output} />
+      <CommandOutput output={info.output} label={t("engineInfo.output")} />
       <div className="flex flex-wrap gap-2">
         <Button kind="primary" busy={updating} disabled={info.running !== null} onClick={() => void info.run("update")}>
           {updating ? t("runTarget.updating", { alias }) : t("runTarget.update", { alias })}

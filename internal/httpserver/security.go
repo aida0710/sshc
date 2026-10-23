@@ -118,10 +118,11 @@ type Security struct {
 // 開けずロックされたままのときにだけ意味を持つため、ロック中に通す必要がある。
 // どちらも unlock と同じく master password を検証する。sign-out はセッションと
 // 登録を消すだけで Vault の中身に触れないので、master password を知らない人も
-// ロック画面からこのブラウザをサインアウトできるよう通す。
+// ロック画面からこのブラウザをサインアウトできるよう通す。update/log は、更新の結果と
+// 同じく、更新を終えて再起動した sshc エンジンの Vault がロックされたままでも読めるようにする。
 func gateExempt(method, path string) bool {
 	switch path {
-	case "/api/v1/health", "/api/v1/update":
+	case "/api/v1/health", "/api/v1/update", "/api/v1/update/log":
 		return method == http.MethodGet
 	case "/api/v1/session/renew", "/api/v1/session/sign-out":
 		return method == http.MethodPost

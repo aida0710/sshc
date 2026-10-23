@@ -3,8 +3,8 @@ import type { RemoteEngineAction, RemoteEngineStatus } from "../api/remoteEngine
 import { useTranslate, type Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { RunTargetsState } from "../terminal/useRunTargets";
-import { EngineActionOutput } from "../terminal/EngineActionOutput";
 import { useEngineInfo } from "../terminal/useEngineInfo";
+import { CommandOutput } from "../ui/CommandOutput";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
@@ -76,7 +76,7 @@ export function EngineInfoDialog({
             {info.lastResult.succeeded ? t(actionLabels[info.lastResult.action].done) : t("engineInfo.actionFailed")}
           </p>
         )}
-        <EngineActionOutput output={info.output} />
+        <CommandOutput output={info.output} label={t("engineInfo.output")} />
         <div className="flex justify-end">
           <Button ref={closeRef} disabled={busy} onClick={onClose}>{t("engineInfo.close")}</Button>
         </div>

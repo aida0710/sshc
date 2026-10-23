@@ -86,6 +86,8 @@ func TestPowerShellUpdatePinsTheScriptAndReleaseAndDelegatesEngineRestart(t *tes
 						return err
 					}
 					writePowerShellReceipt(t, found.executable, "v1.1.0")
+					_, _ = io.WriteString(process.stdout, "sshc: installing sshc.exe (v1.1.0)\n")
+					_, _ = io.WriteString(process.stderr, "sshc: engine restart is left to the caller\n")
 					return nil
 				},
 				output: func(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -95,9 +97,21 @@ func TestPowerShellUpdatePinsTheScriptAndReleaseAndDelegatesEngineRestart(t *tes
 					return []byte("sshc v1.1.0 windows/amd64\n"), nil
 				},
 			}
-			installer := updateInstaller{client: client, commands: commands, stdout: io.Discard, stderr: io.Discard, caller: caller}
-			if err := installer.install(context.Background(), found, releasecheck.Release{Version: "v1.1.0"}); err != nil {
+			var installerOutput bytes.Buffer
+			var err error
+			if caller == "web-update" {
+				// The web update writes install.ps1's output to the job log the page reads while it runs.
+				installers := webInstallers{client: client, commands: commands}
+				err = installers.runTaggedInstaller(context.Background(), webInstallRequest{found: found, release: releasecheck.Release{Version: "v1.1.0"}, output: &installerOutput})
+			} else {
+				installer := updateInstaller{client: client, commands: commands, stdout: &installerOutput, stderr: &installerOutput, caller: caller}
+				err = installer.install(context.Background(), found, releasecheck.Release{Version: "v1.1.0"})
+			}
+			if err != nil {
 				t.Fatal(err)
+			}
+			if installerOutput.String() != "sshc: installing sshc.exe (v1.1.0)\nsshc: engine restart is left to the caller\n" {
+				t.Fatalf("installer output = %q", installerOutput.String())
 			}
 			if !reflect.DeepEqual(downloaded, []string{"https://raw.githubusercontent.com/aida0710/sshc/v1.1.0/install.ps1", "https://github.com/aida0710/sshc/releases/download/v1.1.0/checksums.txt"}) {
 				t.Fatalf("downloads=%v", downloaded)

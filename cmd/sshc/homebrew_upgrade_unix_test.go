@@ -41,6 +41,8 @@ fixture_prefix=$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)
 if [ "$#" -eq 3 ] && [ "$1" = --prefix ] && [ "$2" = --installed ] && [ "$3" = aida0710/tap/sshc ]; then
   printf '%s/opt/sshc\n' "$fixture_prefix"
 elif [ "$#" -eq 4 ] && [ "$1" = upgrade ] && [ "$2" = --formula ] && [ "$3" = --no-ask ] && [ "$4" = aida0710/tap/sshc ]; then
+  printf '==> Upgrading aida0710/tap/sshc\n'
+  printf 'Warning: fixture warning\n' >&2
   rm "$fixture_prefix/opt/sshc"
   ln -s ../Cellar/sshc/1.2.0 "$fixture_prefix/opt/sshc"
 else
@@ -86,9 +88,15 @@ fi
 			t.Fatal(err)
 		}
 		dependencies.Current, dependencies.PID = "v1.2.0", 202
-		confirmed, err := selfupdate.New(dependencies).Status()
+		restartedService := selfupdate.New(dependencies)
+		confirmed, err := restartedService.Status()
 		if err != nil || confirmed.State != selfupdate.JobSucceeded {
 			t.Fatalf("restart confirmation = %+v, %v", confirmed, err)
+		}
+		// The restarted engine still serves what brew wrote, from the same offsets.
+		log, err := restartedService.Log(0, selfupdate.LogCapacity)
+		if err != nil || log.JobID != job.ID || log.Output != "==> Upgrading aida0710/tap/sshc\nWarning: fixture warning\n" {
+			t.Fatalf("update log after restart = %+v, %v", log, err)
 		}
 	case <-time.After(webUpdateCompletionTimeout):
 		job, _ := service.Status()

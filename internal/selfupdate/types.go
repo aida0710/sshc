@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"time"
 
 	"sshc/internal/releasecheck"
@@ -91,6 +92,13 @@ const (
 	ErrPermission  Failure = "update_permission_denied"
 )
 
+// InstallRequest は、インストーラーに渡す計画と、インストーラーの出力の書き先である。
+type InstallRequest struct {
+	Plan Plan
+	// Output は、インストーラーの標準出力と標準エラーを、書かれた順に受け取る。
+	Output io.Writer
+}
+
 type Dependencies struct {
 	Current   string
 	PID       int
@@ -99,7 +107,7 @@ type Dependencies struct {
 	Latest    func(context.Context) (releasecheck.Release, error)
 	Inspect   func(context.Context) (Installation, error)
 	// Install reports the installed version only after the installer and its child processes are stopped.
-	Install func(context.Context, Plan) (string, error)
+	Install func(context.Context, InstallRequest) (string, error)
 	// Restart launches an independent helper and returns without waiting for engine shutdown.
 	Restart func(context.Context, Job) error
 }

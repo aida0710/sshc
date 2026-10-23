@@ -113,3 +113,11 @@ sshc does not trust the file names and attributes that an SFTP server returns. I
 ## Updates
 
 `sshc update` and the web UI update an installation made by `install.sh` or `install.ps1` with the same installer from the latest stable release tag. The installer runs only when its SHA-256 matches the entry in `checksums.txt` of the same GitHub Release, so a script placed on the tag without going through the release workflow is never run.
+
+When the update is started from the web UI, the installer's standard output and standard error, followed by the steps of restarting the engine, are written to `~/.ssh/sshc/web-update.log` (`%USERPROFILE%\.ssh\sshc\web-update.log` on Windows) and shown on About sshc.
+
+- At most 256 KiB is recorded for one update; anything after that is not recorded.
+- Starting the next update replaces the previous record.
+- The file is readable only by you and is excluded from encrypted sync.
+- In the web UI, only a signed-in browser can read it, including while the vault is locked after the restart.
+- sshc passes no tokens or passwords to the installer. The output is recorded as written, without masking.

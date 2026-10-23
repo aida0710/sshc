@@ -41,8 +41,8 @@ type updateDependencies struct {
 	detect            func(string) (installation, error)
 	latest            func(context.Context) (releasecheck.Release, error)
 	install           func(context.Context, installation, releasecheck.Release, io.Writer, io.Writer) error
-	installWeb        func(context.Context, installation, releasecheck.Release) error
-	upgradeHomebrew   func(context.Context, installation) (string, error)
+	installWeb        func(context.Context, webInstallRequest) error
+	upgradeHomebrew   func(context.Context, webInstallRequest) (string, error)
 	serviceExecutable func(context.Context, installation) (string, error)
 	restartService    func(context.Context, string) (bool, error)
 	// engineStatus は、再起動した engine の Vault の状態を読み、次にすることを選ぶために使う。
@@ -57,6 +57,7 @@ func defaultUpdateDependencies() updateDependencies {
 	}
 	installerClient := taggedInstallerHTTPClient()
 	commands := systemInstallationCommands{}
+	installers := webInstallers{client: installerClient, commands: commands}
 	return updateDependencies{
 		executable: os.Executable,
 		detect:     detectInstallation,
@@ -65,14 +66,11 @@ func defaultUpdateDependencies() updateDependencies {
 			installer := updateInstaller{client: installerClient, commands: commands, stdout: stdout, stderr: stderr}
 			return installer.install(ctx, found, release)
 		},
-		installWeb: func(ctx context.Context, found installation, release releasecheck.Release) error {
-			installer := updateInstaller{client: installerClient, commands: commands, stdout: io.Discard, stderr: io.Discard, caller: "web-update"}
-			return installer.install(ctx, found, release)
-		},
+		installWeb: installers.runTaggedInstaller,
 		serviceExecutable: func(ctx context.Context, found installation) (string, error) {
 			return managedInstallationExecutable(ctx, found, commands)
 		},
-		upgradeHomebrew: (updateInstaller{commands: commands, stdout: io.Discard, stderr: io.Discard}).upgradeHomebrewFromWeb,
+		upgradeHomebrew: installers.upgradeHomebrew,
 		restartService:  restartManagedServiceAfterUpdate,
 		engineStatus:    readEngineStatus,
 		confirm:         systemActionConfirmer,

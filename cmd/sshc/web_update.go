@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -23,8 +22,8 @@ func webUpdateDependencies(dependencies selfupdate.Dependencies, installationDep
 	dependencies.Inspect = func(ctx context.Context) (selfupdate.Installation, error) {
 		return inspectWebInstallation(ctx, installationDependencies)
 	}
-	dependencies.Install = func(ctx context.Context, plan selfupdate.Plan) (string, error) {
-		return installWebUpdate(ctx, plan, installationDependencies)
+	dependencies.Install = func(ctx context.Context, request selfupdate.InstallRequest) (string, error) {
+		return installWebUpdate(ctx, request, installationDependencies)
 	}
 	dependencies.Restart = func(ctx context.Context, job selfupdate.Job) error {
 		if err := ctx.Err(); err != nil {
@@ -35,7 +34,8 @@ func webUpdateDependencies(dependencies selfupdate.Dependencies, installationDep
 	return dependencies
 }
 
-func installWebUpdate(ctx context.Context, plan selfupdate.Plan, dependencies updateDependencies) (string, error) {
+func installWebUpdate(ctx context.Context, request selfupdate.InstallRequest, dependencies updateDependencies) (string, error) {
+	plan := request.Plan
 	inspected, err := inspectWebUpdateInstallation(ctx, dependencies)
 	if err != nil {
 		return "", err
@@ -44,20 +44,21 @@ func installWebUpdate(ctx context.Context, plan selfupdate.Plan, dependencies up
 		return "", selfupdate.ErrChanged
 	}
 	installedVersion := plan.Target
+	installRequest := webInstallRequest{found: inspected.found, release: releasecheck.Release{Version: plan.Target}, output: request.Output}
 	switch inspected.found.manager {
 	case managerHomebrew:
 		if dependencies.upgradeHomebrew == nil {
 			return "", selfupdate.ErrUnavailable
 		}
-		installedVersion, err = dependencies.upgradeHomebrew(ctx, inspected.found)
+		installedVersion, err = dependencies.upgradeHomebrew(ctx, installRequest)
 	case managerPowerShell:
 		// Keep the web engine alive until the durable result authorizes its helper.
 		if dependencies.installWeb == nil {
 			return "", selfupdate.ErrUnavailable
 		}
-		err = dependencies.installWeb(ctx, inspected.found, releasecheck.Release{Version: plan.Target})
+		err = dependencies.installWeb(ctx, installRequest)
 	default:
-		err = dependencies.install(ctx, inspected.found, releasecheck.Release{Version: plan.Target}, io.Discard, io.Discard)
+		err = dependencies.install(ctx, inspected.found, installRequest.release, request.Output, request.Output)
 	}
 
 	if errors.Is(err, os.ErrPermission) {

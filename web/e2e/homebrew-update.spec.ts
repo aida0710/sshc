@@ -1,7 +1,10 @@
 import { expect, openApplication, test } from "./support/environment";
 
-test("confirms Homebrew updates and shows the installed version once after restarting", async ({ page, installation }) => {
+test("confirms Homebrew updates, streams brew's output while it runs and shows the installed version once after restarting", async ({ page, installation }) => {
   let started = false;
+  // finished turns true once the test has seen brew's output while the job still installs.
+  let finished = false;
+  const brewOutput = "==> Upgrading aida0710/tap/sshc\n  1.0.0 -> 1.2.0\n";
   await page.route("**/api/v1/update", async (route) => {
     if (route.request().method() === "POST") {
       expect(route.request().postDataJSON()).toEqual({ target: "v1.1.0" });
@@ -9,10 +12,20 @@ test("confirms Homebrew updates and shows the installed version once after resta
       await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ id: "homebrew-job", target: "v1.1.0", state: "accepted", problem: "" }) });
       return;
     }
-    const status = started
+    const status = finished
       ? { current: "v1.2.0", available: false, canUpdate: false, manager: "homebrew", job: { id: "homebrew-job", target: "v1.1.0", installedVersion: "v1.2.0", state: "succeeded", problem: "" } }
-      : { current: "v1.0.0", latest: "v1.1.0", available: true, canUpdate: true, manager: "homebrew", pageUrl: "https://github.com/aida0710/sshc/releases/tag/v1.1.0" };
+      : started
+        ? { current: "v1.0.0", latest: "v1.1.0", available: true, canUpdate: false, manager: "homebrew", job: { id: "homebrew-job", target: "v1.1.0", state: "installing", problem: "" } }
+        : { current: "v1.0.0", latest: "v1.1.0", available: true, canUpdate: true, manager: "homebrew", pageUrl: "https://github.com/aida0710/sshc/releases/tag/v1.1.0" };
     await route.fulfill({ contentType: "application/json", body: JSON.stringify(status) });
+  });
+  await page.route("**/api/v1/update/log?*", async (route) => {
+    const cursor = Number(new URL(route.request().url()).searchParams.get("cursor") ?? "0");
+    const output = brewOutput.slice(cursor);
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({
+      jobId: "homebrew-job", reachedCapacity: false, output,
+      cursor: { requested: cursor, start: cursor, next: brewOutput.length, end: brewOutput.length, truncated: false },
+    }) });
   });
   await page.route("**/api/v1/update/preview", async (route) => {
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ current: "v1.0.0", target: "v1.1.0", manager: "homebrew", actionToken: "homebrew-confirmation", actionExpiresAt: "2026-10-10T09:00:00Z" }) });
@@ -43,7 +56,13 @@ test("confirms Homebrew updates and shows the installed version once after resta
   }
   await confirmation.getByRole("button", { name: "Update sshc", exact: true }).click();
   await expect(confirmation).toBeHidden();
-  await expect(about.getByRole("log").getByRole("listitem")).toHaveText([/Updating to v1\.1\.0…/, /Updated to v1\.2\.0\./]);
+  const progress = about.getByRole("log", { name: "Check and update progress" });
+  // brew's output appears while the job is still installing, not once it has ended.
+  await expect(about.getByRole("log", { name: "Update output" })).toHaveText(brewOutput);
+  await expect(progress.getByRole("listitem")).toHaveText([/Updating to v1\.1\.0…/]);
+  finished = true;
+  await expect(progress.getByRole("listitem")).toHaveText([/Updating to v1\.1\.0…/, /Updated to v1\.2\.0\./]);
+  await expect(about.getByRole("log", { name: "Update output" })).toHaveText(brewOutput);
   const result = page.getByRole("dialog", { name: "sshc update" });
   await expect(result).toContainText("Updated to v1.2.0.");
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
