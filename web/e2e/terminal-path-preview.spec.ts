@@ -35,11 +35,16 @@ async function mockShellPrinting(page: Page, output: string) {
 
 test("previews the image a local shell printed the path of", async ({ page, installation }) => {
   const imagePath = join(installation.home, "shot.png");
+  const laterPath = join(installation.home, "later.png");
   test.skip(!imagePath.startsWith("/"), "terminal paths are detected only when they start with /");
   await writeFile(imagePath, samplePNG());
+  await writeFile(laterPath, samplePNG());
   // The line Claude Code prints for an image it sent; the color puts the path
   // in its own span so the test can click it.
-  await mockShellPrinting(page, `› [image] \x1b[36m${imagePath}\x1b[0m (1 KB)\r\n`);
+  await mockShellPrinting(page, [
+    `› [image] \x1b[36m${imagePath}\x1b[0m (1 KB)`,
+    `› [image] ${laterPath} (1 KB)`,
+  ].join("\r\n"));
   await openApplication(page, installation);
   await openSection(page, "Terminal");
 
@@ -57,9 +62,18 @@ test("previews the image a local shell printed the path of", async ({ page, inst
   const image = preview.getByRole("img", { name: "shot.png" });
   await expect(image).toBeVisible();
   await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(48);
+
+  // The arrow keys step through the other images the terminal printed.
+  await page.keyboard.press("ArrowRight");
+  const later = page.getByRole("dialog", { name: laterPath });
+  await expect(later.getByRole("img", { name: "later.png" })).toBeVisible();
+  await expect(later).toContainText("2 / 2");
   if (visualDirectory !== undefined) {
     await page.screenshot({ path: join(visualDirectory, "terminal-path-preview.png") });
   }
+  await page.keyboard.press("ArrowLeft");
+  await expect(preview.getByRole("img", { name: "shot.png" })).toBeVisible();
+
   await preview.getByRole("button", { name: "Close" }).click();
   await expect(preview).toBeHidden();
 });

@@ -53,6 +53,7 @@ import { defaultBrowserScrollbackLines } from "./browserScrollback";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { pathPreviewAlias } from "./pathPreviewAlias";
+import { imagePathsInBuffer } from "./imagePaths";
 import { FilePreviewDialog } from "../sftp/FilePreviewDialog";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
@@ -167,7 +168,7 @@ export function TerminalView({
   const overflowTrigger = useRef<HTMLButtonElement>(null);
   const [portForwardsOpen, setPortForwardsOpen] = useState(false);
   const [linkSelection, setLinkSelection] = useState<TerminalLinkSelection | null>(null);
-  const [previewedPath, setPreviewedPath] = useState<string | null>(null);
+  const [pathPreview, setPathPreview] = useState<{ path: string; imagePaths: string[] } | null>(null);
   const streamLinkController = useRef<StreamLinkController | null>(null);
 
   const [modifiers, setModifiers] = useState<Modifiers>({ ctrl: false, alt: false });
@@ -593,14 +594,14 @@ export function TerminalView({
         <TerminalLinkPopover
           selection={linkSelection}
           onClose={() => setLinkSelection(null)}
-          {...(previewAlias === undefined ? {} : { onPreviewPath: setPreviewedPath })}
+          {...(previewAlias === undefined ? {} : { onPreviewPath: (path: string) => setPathPreview({ path, imagePaths: terminal.current === null ? [] : imagePathsInBuffer(terminal.current.buffer.active) }) })}
           {...(runTarget === undefined && remoteAlias !== undefined && onOpenRemotePath !== undefined
             ? { onRemotePath: (path: string, action: RemotePathAction) => onOpenRemotePath(remoteAlias, path, action) }
             : {})}
         />
       )}
-      {previewAlias === undefined || previewedPath === null ? null : (
-        <FilePreviewDialog alias={previewAlias} path={previewedPath} onClose={() => setPreviewedPath(null)} />
+      {previewAlias === undefined || pathPreview === null ? null : (
+        <FilePreviewDialog alias={previewAlias} path={pathPreview.path} paths={pathPreview.imagePaths} onClose={() => setPathPreview(null)} />
       )}
       {pendingPaste === null || pendingPaste.sessionId !== session.id ? null : (
         <TerminalPasteDialog

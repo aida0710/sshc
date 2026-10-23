@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import { LanguageProvider } from "../i18n/context";
@@ -7,10 +8,10 @@ import { FilePreviewDialog } from "./FilePreviewDialog";
 
 vi.mock("./api", () => ({ sftpApi: { previewFile: vi.fn(), readText: vi.fn() } }));
 
-function renderDialog(path: string) {
+function renderDialog(path: string, paths?: string[]) {
   render(
     <LanguageProvider>
-      <FilePreviewDialog alias="web" path={path} onClose={() => undefined} />
+      <FilePreviewDialog alias="web" path={path} {...(paths === undefined ? {} : { paths })} onClose={() => undefined} />
     </LanguageProvider>,
   );
 }
@@ -45,5 +46,29 @@ describe("FilePreviewDialog", () => {
 
     expect(await screen.findByText(/larger than 8 MiB/u)).toBeTruthy();
     expect(sftpApi.readText).not.toHaveBeenCalled();
+  });
+
+  it("steps to the next and previous image with the arrow keys, and stops at the ends", async () => {
+    vi.mocked(sftpApi.previewFile).mockResolvedValue({ contentType: "image/png", revision: "r1", blob: new Blob([new Uint8Array([1])]) });
+    renderDialog("/tmp/b.png", ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"]);
+    expect(await screen.findByRole("img", { name: "b.png" })).toBeTruthy();
+    expect(screen.getByText("2 / 3")).toBeTruthy();
+
+    await userEvent.keyboard("{ArrowRight}");
+    expect(await screen.findByRole("img", { name: "c.png" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next image" })).toHaveProperty("disabled", true);
+    await userEvent.keyboard("{ArrowRight}");
+    expect(screen.getByText("3 / 3")).toBeTruthy();
+
+    await userEvent.keyboard("{ArrowLeft}{ArrowLeft}");
+    expect(await screen.findByRole("img", { name: "a.png" })).toBeTruthy();
+    expect(sftpApi.previewFile).toHaveBeenLastCalledWith("web", "/tmp/a.png");
+  });
+
+  it("shows a path that is not among the steps alone", async () => {
+    vi.mocked(sftpApi.previewFile).mockResolvedValue({ contentType: "image/png", revision: "r1", blob: new Blob([new Uint8Array([1])]) });
+    renderDialog("/srv/plot", ["/tmp/a.png"]);
+    await screen.findByRole("img", { name: "plot" });
+    expect(screen.queryByRole("button", { name: "Next image" })).toBeNull();
   });
 });
