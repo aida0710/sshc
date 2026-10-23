@@ -52,7 +52,7 @@ describe("TerminalLinkPopover", () => {
     expect(screen.queryByRole("button", { name: "Edit with SFTP" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Preview" }));
 
-    expect(onPreviewPath).toHaveBeenCalledWith("/tmp/shot.png", false);
+    expect(onPreviewPath).toHaveBeenCalledWith("/tmp/shot.png");
     expect(onClose).toHaveBeenCalledOnce();
   });
 
@@ -76,7 +76,7 @@ describe("TerminalLinkPopover", () => {
     expect(screen.queryByRole("button", { name: "Browse in SFTP" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Preview" }));
 
-    expect(onPreviewPath).toHaveBeenCalledWith("shots/a.png", true);
+    expect(onPreviewPath).toHaveBeenCalledWith("shots/a.png");
   });
 
   it("opens an HTTP link in a new isolated browser tab", async () => {

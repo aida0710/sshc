@@ -7,6 +7,18 @@ import { drawnSpan, terminalKeyboard } from "./support/terminal";
 
 const visualDirectory = process.env.SSHC_VISUAL_DIR;
 
+async function previewPrintedPath(page: Page, text: string) {
+  const path = drawnSpan(page, text).last();
+  await expect(path).toBeVisible();
+  const bounds = await path.boundingBox();
+  if (bounds === null) throw new Error("the printed path is not visible");
+  // xterm's screen receives pointer events above its DOM text rows.
+  await page.mouse.click(bounds.x + bounds.width - 4, bounds.y + bounds.height / 2);
+  const actions = page.getByRole("dialog", { name: "Terminal link actions" });
+  await expect(actions.getByRole("button", { name: "Browse in SFTP" })).toHaveCount(0);
+  await actions.getByRole("button", { name: "Preview" }).click();
+}
+
 // The engine's terminal list and stream are replaced so the shell prints one
 // known line; the preview itself is read by the real engine from its machine.
 async function mockShellPrinting(page: Page, output: string) {
@@ -14,6 +26,10 @@ async function mockShellPrinting(page: Page, output: string) {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/stream")) {
       await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ streamTicket: "image-path" }) });
+      return;
+    }
+    if (path.endsWith("/directory")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ path: "/srv/project" }) });
       return;
     }
     await route.fulfill({
@@ -48,15 +64,7 @@ test("previews the image a local shell printed the path of", async ({ page, inst
   await openApplication(page, installation);
   await openSection(page, "Terminal");
 
-  const path = drawnSpan(page, "shot.png");
-  await expect(path).toBeVisible();
-  const bounds = await path.boundingBox();
-  if (bounds === null) throw new Error("the printed path is not visible");
-  // xterm's screen receives pointer events above its DOM text rows.
-  await page.mouse.click(bounds.x + bounds.width - 4, bounds.y + bounds.height / 2);
-  const actions = page.getByRole("dialog", { name: "Terminal link actions" });
-  await expect(actions.getByRole("button", { name: "Browse in SFTP" })).toHaveCount(0);
-  await actions.getByRole("button", { name: "Preview" }).click();
+  await previewPrintedPath(page, "shot.png");
 
   const preview = page.getByRole("dialog", { name: imagePath });
   const image = preview.getByRole("img", { name: "shot.png" });
@@ -91,13 +99,61 @@ test("previews an image a real shell printed a path relative to its directory", 
   await page.keyboard.type("cd ~ && printf '\\342\\200\\272 [image] \\033[36mshots/relative.png\\033[0m (1 KB)\\n'");
   await page.keyboard.press("Enter");
 
-  const path = drawnSpan(page, "shots/relative.png").last();
-  await expect(path).toBeVisible();
-  const bounds = await path.boundingBox();
-  if (bounds === null) throw new Error("the printed path is not visible");
-  await page.mouse.click(bounds.x + bounds.width - 4, bounds.y + bounds.height / 2);
-  await page.getByRole("dialog", { name: "Terminal link actions" }).getByRole("button", { name: "Preview" }).click();
+  await previewPrintedPath(page, "shots/relative.png");
 
   const preview = page.getByRole("dialog", { name: join(installation.home, "shots", "relative.png") });
   await expect(preview.getByRole("img", { name: "relative.png" })).toBeVisible();
+});
+
+test("previews ~/ images printed by a real shell away from home and navigates between them", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "this command uses a POSIX shell");
+  await mkdir(join(installation.home, "shots"), { recursive: true });
+  await mkdir(join(installation.home, "work"), { recursive: true });
+  await writeFile(join(installation.home, "shots", "x.png"), samplePNG());
+  await writeFile(join(installation.home, "shots", "later.png"), samplePNG());
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await terminalKeyboard(page).focus();
+  // Quoting preserves the literal ~ in the output. Unquoted echo expands it
+  // in the shell and only exercises the existing absolute-path support.
+  await page.keyboard.type("cd ~/work && clear && echo '~/shots/x.png' && echo '~/shots/later.png' && echo ~/shots/x.png");
+  await page.keyboard.press("Enter");
+  await previewPrintedPath(page, "~/shots/x.png");
+
+  const firstPath = join(installation.home, "shots", "x.png");
+  const preview = page.getByRole("dialog", { name: firstPath, exact: true });
+  const image = preview.getByRole("img", { name: "x.png", exact: true });
+  await expect(image).toBeVisible();
+  await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(48);
+  await expect(preview).toContainText("1 / 2");
+  await page.keyboard.press("ArrowRight");
+  const later = page.getByRole("dialog", { name: join(installation.home, "shots", "later.png"), exact: true });
+  await expect(later.getByRole("img", { name: "later.png" })).toBeVisible();
+  await expect(later).toContainText("2 / 2");
+  await page.keyboard.press("ArrowLeft");
+  await expect(image).toBeVisible();
+  if (visualDirectory !== undefined) {
+    await page.screenshot({ path: join(visualDirectory, "terminal-tilde-path-preview.png") });
+  }
+  await preview.getByRole("button", { name: "Close" }).click();
+  await previewPrintedPath(page, "x.png");
+  await expect(image).toBeVisible();
+});
+
+test("explains a failed home lookup without treating ~/ as relative to cwd", async ({ page, installation }) => {
+  await mockShellPrinting(page, "[image] \x1b[36m~/shots/x.png\x1b[0m (1 KB)");
+  await page.route("**/api/v1/sftp/local/entries?path=~", (route) => route.fulfill({
+    status: 404, contentType: "application/json", body: JSON.stringify({ code: "sftp_not_found" }),
+  }));
+  const previews: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith("/preview")) previews.push(request.url());
+  });
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  await previewPrintedPath(page, "~/shots/x.png");
+  await expect(page.getByText("Cannot open this path because the session's home folder could not be read. Try a full path.")).toBeVisible();
+  expect(previews).toEqual([]);
 });

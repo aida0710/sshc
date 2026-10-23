@@ -747,6 +747,7 @@ export const en = {
   "terminal.linkOpenBrowser": "Open in browser",
   "terminal.linkPreview": "Preview",
   "terminal.relativePathUnknown": "sshc cannot tell which folder this path is relative to. A full path opens.",
+  "terminal.homePathUnknown": "Cannot open this path because the session's home folder could not be read. Try a full path.",
   "terminal.linkBrowseSFTP": "Browse in SFTP",
   "terminal.linkEditSFTP": "Edit with SFTP",
   "terminal.linkDownloadSFTP": "Download with SFTP",
