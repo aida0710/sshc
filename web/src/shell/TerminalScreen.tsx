@@ -1,8 +1,9 @@
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, lazy, useEffect, type ReactNode } from "react";
 import type { TerminalAppearance, TerminalSettings } from "../api/settings";
 import type { TerminalSession, TerminalSessionsApi } from "../api/terminalSessions";
 import { resolveAppearance } from "../terminal/appearance";
-import { TerminalEmptyState } from "../terminal/TerminalEmptyState";
+import { TerminalSplitView } from "../terminal/splitView/TerminalSplitView";
+import type { SplitViewController } from "../terminal/splitView/useSplitView";
 import type { RemotePathAction } from "../terminal/TerminalLinkPopover";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
@@ -19,13 +20,13 @@ export function resolveOSC52(
   return policy === undefined ? fallback : policy === "allow";
 }
 
-// The terminal pane: the active session, with the appearance and clipboard
-// policy its host asks for. It stays mounted while other sections show, so
-// that output keeps flowing and nothing is re-rendered on return.
+// Terminals stay mounted behind other sections so output keeps flowing.
+// Each session uses its host's appearance and clipboard policy.
 export function TerminalScreen({
   visible,
   terminalSessions,
   activeSessionId,
+  splitView,
   settings,
   hostAppearance,
   hostOSC52,
@@ -38,6 +39,7 @@ export function TerminalScreen({
   visible: boolean;
   terminalSessions: TerminalSessionsState;
   activeSessionId: string | null;
+  splitView: SplitViewController;
   settings: TerminalSettings;
   hostAppearance: Map<string, TerminalAppearance>;
   hostOSC52: Map<string, "allow" | "deny">;
@@ -62,58 +64,63 @@ export function TerminalScreen({
     document.title = session === null ? "sshc" : `${session.presentation?.displayTitle ?? session.title} · sshc`;
     return () => { document.title = "sshc"; };
   }, [session]);
-  if (session === null) return <TerminalEmptyState />;
-  const appearance = resolveAppearance(
-    session.alias === undefined
-      ? undefined
-      : hostAppearance.get(session.alias),
-    settings.appearance,
-  );
-  const hostPolicy =
-    session.alias === undefined
-      ? undefined
-      : hostOSC52.get(session.alias);
-  const osc52Enabled = resolveOSC52(hostPolicy, settings.osc52 ?? false);
-  const vpnProfile = session.alias === undefined ? "" : hostVPN.get(session.alias) ?? "";
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <Suspense fallback={<RouteSkeleton kind="terminal" />}>
-      <TerminalView
-        key={session.id}
-        session={session}
-        api={api}
-        {...(runTarget === null ? {} : { runTarget })}
-        searchShortcutActive={visible && activeSessionId === session.id}
-        {...(settings.fontSize === undefined
-          ? {}
-          : { fontSize: settings.fontSize })}
-        {...(settings.browserScrollbackLines === undefined
-          ? {}
-          : { scrollbackLines: settings.browserScrollbackLines })}
-        osc52Enabled={osc52Enabled}
-        vpnProfile={vpnProfile}
-        jisYenBackslash={settings.jisYenBackslash ?? false}
-        onOsc52Change={(enabled) => onOSC52Change(session, enabled)}
-        onForwardsChanged={terminalSessions.refresh}
-        {...(appearance.palette === ""
-          ? {}
-          : { palette: appearance.palette })}
-        {...(appearance.font === "" ? {} : { font: appearance.font })}
-        {...(appearance.background === ""
-          ? {}
-          : { background: appearance.background })}
-        {...(appearance.tint === undefined
-          ? {}
-          : { tint: appearance.tint })}
-        copyOnSelect={settings.copyOnSelect ?? true}
-        rightClickPaste={settings.rightClickPaste ?? true}
-        webgl={settings.webgl ?? true}
-        onExit={() => terminalSessions.markExited(session.id)}
-        onReconnect={() => terminalSessions.reconnect(session.id)}
-        onStopReconnect={() => terminalSessions.stopReconnect(session.id)}
-        onOpenRemotePath={onOpenRemotePath}
-      />
-      </Suspense>
-    </div>
-  );
+  function renderTerminal(session: TerminalSession, headerActions: ReactNode) {
+    const appearance = resolveAppearance(
+      session.alias === undefined
+        ? undefined
+        : hostAppearance.get(session.alias),
+      settings.appearance,
+    );
+    const hostPolicy =
+      session.alias === undefined
+        ? undefined
+        : hostOSC52.get(session.alias);
+    const osc52Enabled = resolveOSC52(hostPolicy, settings.osc52 ?? false);
+    const vpnProfile = session.alias === undefined ? "" : hostVPN.get(session.alias) ?? "";
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <Suspense fallback={<RouteSkeleton kind="terminal" />}>
+        <TerminalView
+          key={session.id}
+          session={session}
+          active={visible && activeSessionId === session.id}
+          focusRequest={splitView.state.focusRevision}
+          headerActions={headerActions}
+          api={api}
+          {...(runTarget === null ? {} : { runTarget })}
+          searchShortcutActive={visible && activeSessionId === session.id}
+          {...(settings.fontSize === undefined
+            ? {}
+            : { fontSize: settings.fontSize })}
+          {...(settings.browserScrollbackLines === undefined
+            ? {}
+            : { scrollbackLines: settings.browserScrollbackLines })}
+          osc52Enabled={osc52Enabled}
+          vpnProfile={vpnProfile}
+          jisYenBackslash={settings.jisYenBackslash ?? false}
+          onOsc52Change={(enabled) => onOSC52Change(session, enabled)}
+          onForwardsChanged={terminalSessions.refresh}
+          {...(appearance.palette === ""
+            ? {}
+            : { palette: appearance.palette })}
+          {...(appearance.font === "" ? {} : { font: appearance.font })}
+          {...(appearance.background === ""
+            ? {}
+            : { background: appearance.background })}
+          {...(appearance.tint === undefined
+            ? {}
+            : { tint: appearance.tint })}
+          copyOnSelect={settings.copyOnSelect ?? true}
+          rightClickPaste={settings.rightClickPaste ?? true}
+          webgl={settings.webgl ?? true}
+          onExit={() => terminalSessions.markExited(session.id)}
+          onReconnect={() => terminalSessions.reconnect(session.id)}
+          onStopReconnect={() => terminalSessions.stopReconnect(session.id)}
+          onOpenRemotePath={onOpenRemotePath}
+        />
+        </Suspense>
+      </div>
+    );
+  }
+  return <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} renderTerminal={renderTerminal} />;
 }

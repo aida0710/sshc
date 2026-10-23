@@ -1,3 +1,4 @@
+import type { PaneEdge } from "./splitView/layout";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { TerminalForward, TerminalSession } from "../api/terminalSessions";
 import { useTranslate, type Translate } from "../i18n/context";
@@ -25,6 +26,8 @@ type SessionListProps = {
   busy: boolean;
   unreadBySession?: UnreadSessions;
   onSelect: (id: string) => void;
+  canSplitSession?: (id: string) => boolean;
+  onSplitSession?: (id: string, edge: PaneEdge) => void;
   onClose: (id: string) => void;
   onRename: (id: string, title: string) => Promise<boolean>;
   onUnpinTitle: (id: string) => Promise<boolean>;
@@ -63,6 +66,8 @@ export function SessionList({
   busy,
   unreadBySession = new Set(),
   onSelect,
+  canSplitSession,
+  onSplitSession,
   onClose,
   onRename,
   onUnpinTitle,
@@ -301,6 +306,8 @@ export function SessionList({
                     menuRef={menuRef}
                     placement={menuPlacement}
                     canDuplicate={!busy && !atSessionLimit}
+                    canSplit={canSplitSession?.(session.id) ?? false}
+                    {...(onSplitSession === undefined ? {} : { onSplit: (edge: PaneEdge) => onSplitSession(session.id, edge) })}
                     canMoveUp={index > 0}
                     canMoveDown={index < sessions.length - 1}
                     onRename={() => {

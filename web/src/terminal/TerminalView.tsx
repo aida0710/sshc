@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
@@ -66,6 +66,9 @@ import { toastVisibleMs } from "../ui/ToastProvider";
 type TerminalViewProps = {
   session: TerminalSession;
   searchShortcutActive?: boolean;
+  active?: boolean;
+  focusRequest?: number;
+  headerActions?: ReactNode;
   api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
   onExit?: () => void;
   onReconnect?: () => Promise<boolean>;
@@ -109,6 +112,9 @@ const desktopTerminalFontSize = 13;
 export function TerminalView({
   session,
   searchShortcutActive,
+  active = true,
+  focusRequest,
+  headerActions,
   api = terminalSessionsApi,
   onExit,
   onReconnect,
@@ -149,6 +155,8 @@ export function TerminalView({
   clipboardSettings.current = { copyOnSelect, rightClickPaste };
   const [problem, setProblem] = useState("");
   const [link, setLink] = useState<StreamLink>({ phase: "connecting", attempt: 1 });
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const search = useTerminalSearch({ shortcutActive: searchShortcutActive, region });
   const copyContext = useRef<() => void>(() => {});
   const [osc52Enabled, setOsc52Enabled] = useState(initialOsc52Enabled);
@@ -310,7 +318,7 @@ export function TerminalView({
       onLink: setLink,
       onAttached: () => {
         sent = "";
-        if (!coarse && session.state !== "exited" && !search.hasFocus()) {
+        if (activeRef.current && !coarse && session.state !== "exited" && !search.hasFocus()) {
           view.focus();
         }
         fitAndSync();
@@ -443,6 +451,10 @@ export function TerminalView({
   }, [session.id, api, backgroundConfigured, webglEnabled]);
 
   useEffect(() => {
+    if (focusRequest !== undefined && activeRef.current && !region.current?.contains(document.activeElement)) terminal.current?.focus();
+  }, [focusRequest]);
+
+  useEffect(() => {
     if (terminal.current === null || host.current === null) return;
     terminal.current.options.theme = terminalTheme(host.current, hasBackground);
   }, [resolved, palette, hasBackground]);
@@ -541,6 +553,7 @@ export function TerminalView({
         >
           <Icon name="moreHorizontal" className="size-3.5" />
         </button>
+        {headerActions}
         {overflowOpen ? (
           <TerminalOverflowMenu
             triggerRef={overflowTrigger}

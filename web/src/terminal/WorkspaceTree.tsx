@@ -1,3 +1,4 @@
+import type { PaneEdge } from "./splitView/layout";
 import { useMemo, useRef, useState } from "react";
 import type { HostEntry } from "../api/config";
 import type { LocalShellProfile } from "../api/settings";
@@ -28,6 +29,8 @@ type WorkspaceTreeProps = {
   selected: string | null;
   unreadBySession?: UnreadSessions;
   onSelect: (id: string) => void;
+  canSplitSession?: (id: string) => boolean;
+  onSplitSession?: (id: string, edge: PaneEdge) => void;
   onDuplicate: (id: string) => void;
   onReorder: (order: string[]) => void;
   localShellProfiles?: LocalShellProfile[];
@@ -63,6 +66,8 @@ export function WorkspaceTree({
   selected,
   unreadBySession = new Set(),
   onSelect,
+  canSplitSession,
+  onSplitSession,
   onDuplicate,
   onReorder,
   localShellProfiles = [],
@@ -231,6 +236,8 @@ export function WorkspaceTree({
                     busy={terminalSessions.busy}
                     unreadBySession={unreadBySession}
                     onSelect={onSelect}
+                    {...(canSplitSession === undefined ? {} : { canSplitSession })}
+                    {...(onSplitSession === undefined ? {} : { onSplitSession })}
                     onClose={(id) => void terminalSessions.close(id)}
                     onRename={terminalSessions.rename}
                     onUnpinTitle={(id) => terminalSessions.unpinTitle?.(id) ?? Promise.resolve(false)}

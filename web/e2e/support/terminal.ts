@@ -36,8 +36,8 @@ export function terminalScreen(page: Page): Locator {
 export function terminalCanvasCount(page: Page): Promise<number> {
   return page.locator(`${SCREEN} canvas`).count();
 }
-export function terminalKeyboard(page: Page): Locator {
-  return page.locator(KEYBOARD);
+export function terminalKeyboard(container: Page | Locator): Locator {
+  return container.locator(KEYBOARD);
 }
 export function terminalScrollbarSlider(page: Page): Locator {
   return page.locator(SCROLLBAR_SLIDER);

@@ -1,3 +1,4 @@
+import type { PaneEdge } from "../terminal/splitView/layout";
 import { useBindings } from "../keyconfig/bindings";
 import {
   useSyncExternalStore,
@@ -45,6 +46,8 @@ export function AppNavigation({
   activeSessionId,
   unreadBySession,
   onShowSession,
+  canSplitSession,
+  onSplitSession,
   onDuplicateSession,
   onReorderSessions,
   localShellProfiles = [],
@@ -74,6 +77,8 @@ export function AppNavigation({
   activeSessionId: string | null;
   unreadBySession: UnreadSessions;
   onShowSession: (id: string) => void;
+  canSplitSession?: (id: string) => boolean;
+  onSplitSession?: (id: string, edge: PaneEdge) => void;
   onDuplicateSession: (id: string) => void;
   onReorderSessions: (order: string[]) => void;
   localShellProfiles?: LocalShellProfile[];
@@ -174,6 +179,8 @@ export function AppNavigation({
           selected={section === "Terminal" ? activeSessionId : null}
           unreadBySession={unreadBySession}
           onSelect={onShowSession}
+          {...(canSplitSession === undefined ? {} : { canSplitSession })}
+          {...(onSplitSession === undefined ? {} : { onSplitSession })}
           onDuplicate={onDuplicateSession}
           onReorder={onReorderSessions}
           localShellProfiles={localShellProfiles}
