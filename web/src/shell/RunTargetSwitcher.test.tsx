@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -5,7 +6,6 @@ import { ApiError } from "../api/client";
 import type { RemoteEnginesApi } from "../api/remoteEngines";
 import { useRemoteVaultUnlock, type RemoteVaultUnlockState } from "../terminal/useRemoteVaultUnlock";
 import { useRunTargets, type RunTargetsState } from "../terminal/useRunTargets";
-import { useOfferedDialog } from "../terminal/useOfferedDialog";
 import { EngineInfoDialog } from "./EngineInfoDialog";
 import { RunTargetSwitcher } from "./RunTargetSwitcher";
 
@@ -30,7 +30,7 @@ function targets(overrides: Partial<RunTargetsState> = {}): RunTargetsState {
     engines: ["r540"], selected: null, problem: "", busy: false,
     select: vi.fn(), add: vi.fn(async () => true), remove: vi.fn(async () => undefined), openInNewTab: vi.fn(async () => undefined),
     api: enginesApi(), localVersion: "v0.53.0", vaultUnlock: vaultUnlockState(),
-    engineInfo: { openFor: null, ask: vi.fn(), offer: vi.fn(), allowOffer: vi.fn(), close: vi.fn(), finish: vi.fn() },
+    engineInfo: { openFor: null, ask: vi.fn(), close: vi.fn() },
     ...overrides,
   };
 }
@@ -50,7 +50,8 @@ function incompatibleEngine() {
 }
 
 function SwitcherWithDialogs({ state }: { state: RunTargetsState }) {
-  const engineInfo = useOfferedDialog();
+  const [openFor, setOpenFor] = useState<string | null>(null);
+  const engineInfo = { openFor, ask: setOpenFor, close: () => setOpenFor(null) };
   return <RunTargetSwitcher targets={{ ...state, engineInfo }} aliases={["r540"]} hosts={[]} />;
 }
 
@@ -95,20 +96,6 @@ describe("useRunTargets", () => {
     expect(result.current.problem).toBe("");
     expect(result.current.engineInfo.openFor).toBe("r540");
     expect(closeTab).toHaveBeenCalled();
-  });
-
-  it("offers engine information again when the same run target is selected anew", async () => {
-    const api = enginesApi();
-    const { result } = renderHook(() => useRunTargets({ translate, enabled: true, localVersion: "v1", api }));
-    await waitFor(() => expect(result.current.engines).toEqual(["r540"]));
-    act(() => result.current.select("r540"));
-    act(() => result.current.engineInfo.offer("r540"));
-    act(() => result.current.engineInfo.close());
-    act(() => result.current.engineInfo.offer("r540"));
-    expect(result.current.engineInfo.openFor).toBeNull();
-    act(() => result.current.select("r540"));
-    act(() => result.current.engineInfo.offer("r540"));
-    expect(result.current.engineInfo.openFor).toBe("r540");
   });
 
 });

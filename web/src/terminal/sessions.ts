@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePolling } from "../ui/usePolling";
 import { useRequestGeneration, type IsCurrentRequest } from "../ui/useRequestGeneration";
-import { failureCode } from "../api/client";
+import { ApiError, failureCode } from "../api/client";
 import type { OpenTerminalSessionRequest, TerminalSession, TerminalSessionsApi as SessionsApi } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
@@ -22,8 +22,9 @@ export type TerminalSessionsState = {
   maxSessions: number;
   busy: boolean;
   problem: string;
-  // remoteRefusal identifies the action needed before the run target can list sessions.
-  remoteRefusal: "vault_locked" | "incompatible" | null;
+  // remoteRefusal is why the run target's engine refused to list its sessions;
+  // null while it lists them.
+  remoteRefusal: ApiError | null;
   loaded: boolean;
   rename: (id: string, title: string) => Promise<boolean>;
   unpinTitle?: (id: string) => Promise<boolean>;
@@ -46,12 +47,10 @@ export function useTerminalSessions(
   const [maxSessions, setMaxSessions] = useState(0);
   const [pendingOperations, setPendingOperations] = useState(0);
   const [problem, setProblem] = useState("");
-  const [listFailure, setListFailure] = useState<{ api: TerminalSessionsApi; code: string } | null>(null);
+  const [listFailure, setListFailure] = useState<{ api: TerminalSessionsApi; error: ApiError } | null>(null);
   // Effects offering dialogs must never attribute the previous engine's refusal
   // to the newly selected one, even before the reset effect has run.
-  const listFailureCode = listFailure?.api === api ? listFailure.code : "";
-  const remoteRefusal = listFailureCode === "remote_engine_vault_locked" ? "vault_locked"
-    : listFailureCode === "remote_engine_incompatible" ? "incompatible" : null;
+  const remoteRefusal = listFailure?.api === api ? listFailure.error : null;
   const [loaded, setLoaded] = useState(false);
   const refreshGeneration = useRequestGeneration();
   const mutationGeneration = useRequestGeneration();
@@ -99,9 +98,8 @@ export function useTerminalSessions(
       // A run-target engine that cannot be reached would otherwise look like
       // one with no sessions. This machine's own list keeps failing quietly:
       // the next poll reads it again.
-      const code = failureCode(error);
-      if (isCurrent() && code.startsWith("remote_engine_")) {
-        setListFailure({ api, code });
+      if (isCurrent() && error instanceof ApiError && error.code.startsWith("remote_engine_")) {
+        setListFailure({ api, error });
       }
     } finally {
       if (isCurrent()) setLoaded(true);
@@ -166,7 +164,7 @@ export function useTerminalSessions(
   // empty list is retried too, so an update or Vault unlock restores it.
   usePolling(refresh, {
     intervalMs: connectionInProgress ? connectingPollIntervalMs : sessionListPollIntervalMs,
-    enabled: enabled && (sessions.length > 0 || listFailureCode !== ""),
+    enabled: enabled && (sessions.length > 0 || remoteRefusal !== null),
     whileHidden: true,
   });
 
@@ -281,8 +279,7 @@ export function useTerminalSessions(
   }, [beginMutation]);
 
   return {
-    sessions, maxSessions, busy, remoteRefusal, loaded,
-    problem: listFailureCode === "" ? problem : translate(terminalProblemKey(listFailureCode)),
+    sessions, maxSessions, busy, problem, remoteRefusal, loaded,
     rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited, moveToWorkspace,
   };
 }

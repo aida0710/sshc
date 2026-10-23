@@ -5,7 +5,6 @@ import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
 import { failureCode } from "../api/client";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 import { runTargetProblemText } from "./runTargetProblem";
-import { useOfferedDialog, type OfferedDialogState } from "./useOfferedDialog";
 import { useRemoteVaultUnlock, type RemoteVaultUnlockState } from "./useRemoteVaultUnlock";
 
 export type RunTargetsState = {
@@ -24,10 +23,16 @@ export type RunTargetsState = {
   api: RemoteEnginesApi;
   localVersion: string;
   vaultUnlock: RemoteVaultUnlockState;
-  // engineInfo is the engine information dialog. It also opens by itself for
-  // an engine whose version differs from this machine's, which is updated
-  // from there.
-  engineInfo: OfferedDialogState;
+  // engineInfo is the engine information dialog, from which an engine whose
+  // version differs from this machine's is updated.
+  engineInfo: EngineInfoDialogState;
+};
+
+export type EngineInfoDialogState = {
+  // openFor is the run target the dialog is open for.
+  openFor: string | null;
+  ask: (alias: string) => void;
+  close: () => void;
 };
 
 // useRunTargets holds the run targets: this machine and the engines on SSH
@@ -49,9 +54,9 @@ export function useRunTargets({
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
   const vaultUnlock = useRemoteVaultUnlock();
-  const engineInfo = useOfferedDialog();
+  const [engineInfoFor, setEngineInfoFor] = useState<string | null>(null);
+  const closeEngineInfo = useCallback(() => setEngineInfoFor(null), []);
   const { allowOffer: allowVaultOffer } = vaultUnlock;
-  const { allowOffer: allowEngineInfoOffer, ask: askEngineInfo } = engineInfo;
 
   useEffect(() => {
     if (!enabled) return;
@@ -69,22 +74,19 @@ export function useRunTargets({
 
   const select = useCallback((alias: string | null) => {
     setProblem("");
-    // Choosing a run target again offers its dialogs again, even if they were
-    // closed before.
-    if (alias !== null) {
-      allowVaultOffer(alias);
-      allowEngineInfoOffer(alias);
-    }
+    // Choosing a run target again asks for its Vault password again, even if
+    // that was cancelled before.
+    if (alias !== null) allowVaultOffer(alias);
     setStored(alias ?? "");
     writeStoredValue(localStorageKeys.runTarget, alias ?? "");
-  }, [allowEngineInfoOffer, allowVaultOffer]);
+  }, [allowVaultOffer]);
 
-  // report shows why a request about an engine failed. An incompatible engine
-  // is answered with the information dialog, whose Update fixes it.
+  // report shows why a request about an engine failed. A different version is
+  // answered with the information dialog, whose Update fixes it.
   const report = useCallback((error: unknown, alias: string) => {
-    if (failureCode(error) === "remote_engine_incompatible") askEngineInfo(alias);
+    if (failureCode(error) === "remote_engine_incompatible") setEngineInfoFor(alias);
     else setProblem(runTargetProblemText(translate, error, alias));
-  }, [askEngineInfo, translate]);
+  }, [translate]);
 
   const add = useCallback(async (alias: string) => {
     setProblem("");
@@ -128,5 +130,7 @@ export function useRunTargets({
     }
   }, [api, report]);
 
-  return { engines, selected, problem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock, engineInfo };
+  return { engines, selected, problem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock,
+    engineInfo: { openFor: engineInfoFor, ask: setEngineInfoFor, close: closeEngineInfo },
+  };
 }

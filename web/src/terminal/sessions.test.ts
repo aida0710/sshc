@@ -28,20 +28,27 @@ afterEach(() => {
 });
 
 describe("useTerminalSessions", () => {
-  it.each([
-    ["remote_engine_vault_locked", "vault_locked", "terminal.remoteVaultLocked"],
-    ["remote_engine_incompatible", "incompatible", "terminal.remoteIncompatible"],
-    ["remote_engine_unreachable", null, "terminal.remoteEngineUnavailable"],
-  ] as const)("reports %s and clears the refusal when the next listing succeeds", async (code, refusal, message) => {
-    const terminalSessions = vi.fn().mockRejectedValueOnce(new ApiError(code, 409, { code, message: "refused" })).mockResolvedValue(list);
+  it.each(["remote_engine_vault_locked", "remote_engine_incompatible", "remote_engine_unreachable"])(
+    "holds the %s refusal apart from the problems of operations and clears it when the next listing succeeds",
+    async (code) => {
+      const refusal = new ApiError(code, 409, { code, message: "refused" });
+      const terminalSessions = vi.fn().mockRejectedValueOnce(refusal).mockResolvedValue(list);
+      const client = api({ terminalSessions });
+      const { result } = renderHook(() => useTerminalSessions(client, translate));
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      expect(result.current.remoteRefusal).toBe(refusal);
+      expect(result.current.problem).toBe("");
+      await act(async () => { await result.current.refresh(); });
+      expect(result.current.remoteRefusal).toBeNull();
+    },
+  );
+
+  it("does not hold a failure that is not a run target refusal", async () => {
+    const terminalSessions = vi.fn().mockRejectedValue(new ApiError("internal_error", 500, null));
     const client = api({ terminalSessions });
     const { result } = renderHook(() => useTerminalSessions(client, translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
-    expect(result.current.remoteRefusal).toBe(refusal);
-    expect(result.current.problem).toBe(message);
-    await act(async () => { await result.current.refresh(); });
     expect(result.current.remoteRefusal).toBeNull();
-    expect(result.current.problem).toBe("");
   });
 
   it("does not offer the previous engine's refusal when switching to another engine", async () => {
@@ -53,13 +60,12 @@ describe("useTerminalSessions", () => {
       useEffect(() => { if (sessions.remoteRefusal !== null) offer(client); }, [client, sessions.remoteRefusal]);
       return sessions;
     }, { initialProps: { client: refused } });
-    await waitFor(() => expect(result.current.remoteRefusal).toBe("incompatible"));
+    await waitFor(() => expect(result.current.remoteRefusal?.code).toBe("remote_engine_incompatible"));
     rerender({ client: available });
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(offer).toHaveBeenCalledWith(refused);
     expect(offer).not.toHaveBeenCalledWith(available);
     expect(result.current.remoteRefusal).toBeNull();
-    expect(result.current.problem).toBe("");
   });
 
   it("keeps polling an empty refused list through the engine restart until it recovers", async () => {
@@ -71,14 +77,13 @@ describe("useTerminalSessions", () => {
     const client = api({ terminalSessions });
     const { result } = renderHook(() => useTerminalSessions(client, translate));
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    expect(result.current.remoteRefusal).toBe("incompatible");
+    expect(result.current.remoteRefusal?.code).toBe("remote_engine_incompatible");
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
     expect(terminalSessions).toHaveBeenCalledTimes(2);
-    expect(result.current.problem).toBe("terminal.remoteEngineUnavailable");
+    expect(result.current.remoteRefusal?.code).toBe("remote_engine_not_running");
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
     expect(terminalSessions).toHaveBeenCalledTimes(3);
     expect(result.current.remoteRefusal).toBeNull();
-    expect(result.current.problem).toBe("");
   });
 
   it("separates the session limit from a session that could not be opened", async () => {
