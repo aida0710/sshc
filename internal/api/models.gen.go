@@ -161,21 +161,21 @@ func (e PullRequestResolve) Valid() bool {
 	}
 }
 
-// Defines values for RemoteEngineActionRequestAction.
+// Defines values for RemoteEngineAction.
 const (
-	RemoteEngineActionRequestActionRestart RemoteEngineActionRequestAction = "restart"
-	RemoteEngineActionRequestActionStop    RemoteEngineActionRequestAction = "stop"
-	RemoteEngineActionRequestActionUpdate  RemoteEngineActionRequestAction = "update"
+	RemoteEngineActionRestart RemoteEngineAction = "restart"
+	RemoteEngineActionStop    RemoteEngineAction = "stop"
+	RemoteEngineActionUpdate  RemoteEngineAction = "update"
 )
 
-// Valid indicates whether the value is a known member of the RemoteEngineActionRequestAction enum.
-func (e RemoteEngineActionRequestAction) Valid() bool {
+// Valid indicates whether the value is a known member of the RemoteEngineAction enum.
+func (e RemoteEngineAction) Valid() bool {
 	switch e {
-	case RemoteEngineActionRequestActionRestart:
+	case RemoteEngineActionRestart:
 		return true
-	case RemoteEngineActionRequestActionStop:
+	case RemoteEngineActionStop:
 		return true
-	case RemoteEngineActionRequestActionUpdate:
+	case RemoteEngineActionUpdate:
 		return true
 	default:
 		return false
@@ -1444,18 +1444,28 @@ type RemoteEngine struct {
 	Alias string `json:"alias"`
 }
 
-// RemoteEngineActionRequest defines model for RemoteEngineActionRequest.
-type RemoteEngineActionRequest struct {
-	Action RemoteEngineActionRequestAction `json:"action"`
+// RemoteEngineAction defines model for RemoteEngineAction.
+type RemoteEngineAction string
+
+// RemoteEngineActionLog defines model for RemoteEngineActionLog.
+type RemoteEngineActionLog struct {
+	Action     RemoteEngineAction    `json:"action"`
+	Cursor     TerminalControlCursor `json:"cursor"`
+	Done       bool                  `json:"done"`
+	Generation uint64                `json:"generation"`
+	Output     string                `json:"output"`
+	Problem    *string               `json:"problem,omitempty"`
+	Succeeded  bool                  `json:"succeeded"`
 }
 
-// RemoteEngineActionRequestAction defines model for RemoteEngineActionRequest.Action.
-type RemoteEngineActionRequestAction string
+// RemoteEngineActionRequest defines model for RemoteEngineActionRequest.
+type RemoteEngineActionRequest struct {
+	Action RemoteEngineAction `json:"action"`
+}
 
-// RemoteEngineActionResult defines model for RemoteEngineActionResult.
-type RemoteEngineActionResult struct {
-	Output    string `json:"output"`
-	Succeeded bool   `json:"succeeded"`
+// RemoteEngineActionStarted defines model for RemoteEngineActionStarted.
+type RemoteEngineActionStarted struct {
+	Generation uint64 `json:"generation"`
 }
 
 // RemoteEngineEntrance defines model for RemoteEngineEntrance.

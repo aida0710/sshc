@@ -2,6 +2,7 @@ package remoteengine
 
 import (
 	"context"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -12,10 +13,19 @@ type Link interface {
 	// DialContext は、接続先から見た address へ TCP を開く。
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 	// Run は、接続先でコマンドをひとつ走らせる。接続は開いたままにする。
-	Run(ctx context.Context, command string, limit time.Duration) (RunResult, error)
+	Run(ctx context.Context, request RunRequest) (RunResult, error)
 	// Wait は、接続が終わるまで待つ。
 	Wait() error
 	Close() error
+}
+
+// RunRequest は、Link.Run が接続先で走らせるコマンドひとつである。
+type RunRequest struct {
+	Command string
+	// Limit は、コマンドが終わるまでの上限である。
+	Limit time.Duration
+	// Observe は、標準出力と標準エラーを届いた順に受け取る。nil なら渡さない。
+	Observe io.Writer
 }
 
 // RunResult は、Link.Run が走らせたコマンドの結果である。

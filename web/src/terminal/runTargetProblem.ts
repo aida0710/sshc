@@ -6,11 +6,20 @@ import { terminalProblemKey } from "./sessions";
 // runTargetProblemText says why an engine on an SSH host could not be added,
 // opened or reached, with what to do about it on that host.
 export function runTargetProblemText(t: Translate, error: unknown, alias: string): string {
-  switch (failureCode(error)) {
+  if (failureCode(error) === "remote_engine_connect_failed") {
+    return t(connectFailureKey(error) ?? "runTarget.connectFailed", { alias });
+  }
+  return runTargetFailureText(t, failureCode(error), alias);
+}
+
+// runTargetFailureText says the same for a problem code alone, as an action
+// on the host reports why it ended.
+export function runTargetFailureText(t: Translate, code: string, alias: string): string {
+  switch (code) {
     case "remote_engine_not_running":
       return t("runTarget.notRunning", { alias });
     case "remote_engine_connect_failed":
-      return t(connectFailureKey(error) ?? "runTarget.connectFailed", { alias });
+      return t("runTarget.connectFailed", { alias });
     case "remote_engine_unproven":
       return t("runTarget.unproven", { alias });
     case "remote_engine_forwarding_refused":
@@ -21,6 +30,12 @@ export function runTargetProblemText(t: Translate, error: unknown, alias: string
       return t("runTarget.wrongPassword", { alias });
     case "remote_engine_unlock_failed":
       return t("runTarget.unlockFailed", { alias });
+    case "remote_engine_action_running":
+      return t("runTarget.actionRunning", { alias });
+    case "remote_engine_action_timed_out":
+      return t("runTarget.actionTimedOut", { alias });
+    case "remote_engine_no_action":
+      return t("runTarget.actionLogLost", { alias });
     default:
       return t("runTarget.failed", { alias });
   }
