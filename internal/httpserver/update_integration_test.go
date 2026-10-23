@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -33,8 +34,10 @@ type webUpdateHarness struct {
 	installedVersion string
 	restarted        atomic.Int32
 	installResult    chan error
-	locked           bool
-	sessions         *session.Manager
+	// installerOutput is what the fake installer writes before it waits for installResult.
+	installerOutput string
+	locked          bool
+	sessions        *session.Manager
 }
 
 func newWebUpdateHarness(t *testing.T) *webUpdateHarness {
@@ -54,8 +57,9 @@ func newWebUpdateHarness(t *testing.T) *webUpdateHarness {
 			return releasecheck.Release{Version: "v1.1.0"}, nil
 		},
 		Inspect: func(context.Context) (selfupdate.Installation, error) { return harness.installation, nil },
-		Install: func(ctx context.Context, _ selfupdate.Plan) (string, error) {
+		Install: func(ctx context.Context, request selfupdate.InstallRequest) (string, error) {
 			harness.installed.Add(1)
+			_, _ = request.Output.Write([]byte(harness.installerOutput))
 			select {
 			case err := <-harness.installResult:
 				return harness.installedVersion, err
@@ -261,4 +265,60 @@ func TestWebUpdateProgressDoesNotDependOnTheReleaseServer(t *testing.T) {
 	}
 	harness.installResult <- errors.New("fixture failure")
 	awaitWebUpdate(t, harness, "failed")
+}
+
+func readUpdateLog(t *testing.T, harness *webUpdateHarness, query string) (int, api.UpdateLog, string) {
+	t.Helper()
+	response := sendKeyRequest(t, harness.engine, harness.credentials, http.MethodGet, "/api/v1/update/log"+query, nil, "")
+	var log api.UpdateLog
+	if response.Code == http.StatusOK {
+		if err := json.Unmarshal(response.Body.Bytes(), &log); err != nil {
+			t.Fatal(err)
+		}
+		return response.Code, log, ""
+	}
+	return response.Code, log, problemCode(t, response.Body.Bytes())
+}
+
+func TestWebUpdateLogShowsInstallerOutputBeforeTheInstallerEnds(t *testing.T) {
+	harness := newWebUpdateHarness(t)
+	harness.installerOutput = "\x1b[32msshc: installing sshc-linux-amd64 (v1.1.0)\x1b[0m\n"
+	if code, _, problem := readUpdateLog(t, harness, ""); code != http.StatusNotFound || problem != "update_log_missing" {
+		t.Fatalf("log before any job = %d %s", code, problem)
+	}
+	preview := harness.preview(t)
+	accepted := sendKeyRequest(t, harness.engine, harness.credentials, http.MethodPost, "/api/v1/update", []byte(`{"target":"v1.1.0"}`), preview.ActionToken)
+	if accepted.Code != http.StatusAccepted {
+		t.Fatalf("acceptance = %d: %s", accepted.Code, accepted.Body.String())
+	}
+	var job api.UpdateJob
+	if err := json.Unmarshal(accepted.Body.Bytes(), &job); err != nil {
+		t.Fatal(err)
+	}
+	awaitWebUpdate(t, harness, "installing")
+	var log api.UpdateLog
+	for deadline := time.Now().Add(3 * time.Second); log.Output == "" && time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		var code int
+		code, log, _ = readUpdateLog(t, harness, "?cursor=0")
+		if code != http.StatusOK {
+			t.Fatalf("log while installing = %d", code)
+		}
+	}
+	// The installer has not returned yet: it still waits for installResult.
+	if log.JobId != job.Id || log.Output != "sshc: installing sshc-linux-amd64 (v1.1.0)\n" || log.Cursor.Next != log.Cursor.End || log.ReachedCapacity {
+		t.Fatalf("log while installing = %+v", log)
+	}
+	// Once the update restarts the engine, the vault is locked; the output stays readable.
+	harness.locked = true
+	if code, rest, _ := readUpdateLog(t, harness, "?cursor="+strconv.FormatUint(log.Cursor.Next, 10)); code != http.StatusOK || rest.Output != "" {
+		t.Fatalf("log while the vault is locked = %d %+v", code, rest)
+	}
+	if code, _, problem := readUpdateLog(t, harness, "?cursor="+strconv.FormatUint(log.Cursor.End+1, 10)); code != http.StatusConflict || problem != "terminal_cursor_ahead" {
+		t.Fatalf("cursor past the end = %d %s", code, problem)
+	}
+	if code, _, problem := readUpdateLog(t, harness, "?limit=65537"); code != http.StatusBadRequest || problem != "invalid_terminal_cursor" {
+		t.Fatalf("limit over the maximum = %d %s", code, problem)
+	}
+	harness.installResult <- nil
+	awaitWebUpdate(t, harness, "restarting")
 }

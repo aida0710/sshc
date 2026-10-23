@@ -27,9 +27,10 @@ export function checkResultActivity(status: UpdateStatus): UpdateActivity {
 // The request to the engine itself failed, so GitHub was never asked.
 export const checkRequestFailedActivity: UpdateActivity = { message: "about.activityRequestFailed", tone: "danger" };
 
-// Each state of an update job is reported once; the key changes when the state does.
+// Each step of an update job is reported once; the key changes when the step's
+// message does. Accepted and installing read the same, so they make one line.
 export function updateJobActivityKey(job: UpdateJob): string {
-  return `${job.id}:${job.state}`;
+  return `${job.id}:${updateJobMessage(job)}`;
 }
 
 export function updateJobActivity(job: UpdateJob): UpdateActivity {

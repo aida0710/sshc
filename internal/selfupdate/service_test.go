@@ -20,7 +20,7 @@ func updateFixture(t *testing.T) Dependencies {
 		Inspect: func(context.Context) (Installation, error) {
 			return Installation{Manager: "install.sh", Executable: "/fixture/sshc", Identity: "receipt-digest"}, nil
 		},
-		Install: func(context.Context, Plan) (string, error) { return "v1.1.0", nil }, Restart: func(context.Context, Job) error { return nil }}
+		Install: func(context.Context, InstallRequest) (string, error) { return "v1.1.0", nil }, Restart: func(context.Context, Job) error { return nil }}
 }
 
 func waitForUpdateState(t *testing.T, service *Service, state string) Job {
@@ -49,7 +49,7 @@ func TestUpdateWaitsForResponseAndOnlyOneInstallerRuns(t *testing.T) {
 	dependencies := updateFixture(t)
 	installed := make(chan struct{}, 1)
 	allowInstall := make(chan struct{})
-	dependencies.Install = func(context.Context, Plan) (string, error) {
+	dependencies.Install = func(context.Context, InstallRequest) (string, error) {
 		installed <- struct{}{}
 		<-allowInstall
 		return "v1.1.0", nil
@@ -99,7 +99,7 @@ func TestUpdateWaitsForResponseAndOnlyOneInstallerRuns(t *testing.T) {
 
 func TestFailedInstallationNeverRestartsAndRequiresANewReservation(t *testing.T) {
 	dependencies := updateFixture(t)
-	dependencies.Install = func(context.Context, Plan) (string, error) {
+	dependencies.Install = func(context.Context, InstallRequest) (string, error) {
 		return "v1.1.0", errors.New("installer failed with private output")
 	}
 	restarted := false
@@ -139,7 +139,7 @@ func TestFailedResponseAndChangedInstallationNeverRunAnInstaller(t *testing.T) {
 	for _, scenario := range []string{"response", "installation"} {
 		t.Run(scenario, func(t *testing.T) {
 			dependencies := updateFixture(t)
-			dependencies.Install = func(context.Context, Plan) (string, error) { t.Error("installer ran"); return "v1.1.0", nil }
+			dependencies.Install = func(context.Context, InstallRequest) (string, error) { t.Error("installer ran"); return "v1.1.0", nil }
 			service := New(dependencies)
 			plan, _ := service.Prepare(context.Background(), "v1.1.0")
 			job, _ := service.Start(plan)
@@ -239,7 +239,7 @@ func TestConcurrentStartsReserveExactlyOneDurableJob(t *testing.T) {
 func TestStateSaveFailureAfterInstallationNeverRestarts(t *testing.T) {
 	dependencies := updateFixture(t)
 	restarted := false
-	dependencies.Install = func(context.Context, Plan) (string, error) {
+	dependencies.Install = func(context.Context, InstallRequest) (string, error) {
 		if err := os.Remove(dependencies.StatePath); err != nil {
 			return "v1.1.0", err
 		}

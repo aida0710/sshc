@@ -30,6 +30,7 @@ type UpdateHandlers struct {
 func registerUpdateRoutes(engine *echo.Echo, handlers *UpdateHandlers) {
 	engine.GET("/api/v1/update", handlers.Status)
 	engine.POST("/api/v1/update/check", handlers.Refresh)
+	engine.GET("/api/v1/update/log", handlers.Log)
 	engine.POST("/api/v1/update/preview", handlers.Preview)
 	engine.POST("/api/v1/update", handlers.Start)
 }

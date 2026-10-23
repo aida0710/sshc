@@ -12,6 +12,7 @@ it("retains update progress across a restart outage and stops polling after conf
     checkUpdate: vi.fn(), updateStatus: vi.fn().mockResolvedValue(idle),
     previewUpdate: vi.fn(),
     startUpdate: vi.fn(),
+    updateLog: vi.fn(),
   };
   const { result, unmount } = renderHook(() => useUpdateStatus(api));
   await act(async () => {});
