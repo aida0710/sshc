@@ -2,9 +2,80 @@ import { describe, expect, it } from "vitest";
 import { findTerminalLinks, linkTextNamesTarget, modifierOpensLink, osc8Link } from "./links";
 
 describe("findTerminalLinks", () => {
+  it.each([
+    ['[image] /home/aida/スクショ/画面.png', 'path', '/home/aida/スクショ/画面.png'],
+    ['[image] ~/projects/a b/x.png', null, null],
+    ['saved "/tmp/a b.png"', 'path', '/tmp/a b.png'],
+    ["saved '/tmp/x.png'", 'path', '/tmp/x.png'],
+    ['saved `/tmp/x.png`', 'path', '/tmp/x.png'],
+    ['Saved to:/tmp/x.png', 'path', '/tmp/x.png'],
+    ['保存しました：/tmp/x.png', 'path', '/tmp/x.png'],
+    ['→/tmp/x.png', 'path', '/tmp/x.png'],
+    ['➜/tmp/x.png', 'path', '/tmp/x.png'],
+    ['file:///tmp/x.png', 'path', '/tmp/x.png'],
+    ['file:///tmp/x.png:12:3', 'path', '/tmp/x.png'],
+    ['file:///tmp/a%3A12.png', 'path', '/tmp/a:12.png'],
+    ['C:\\Users\\aida\\x.png', null, null],
+    ['C:/Users/aida/x.png', null, null],
+    ['$HOME/x.png', 'relative-path', '~/x.png'],
+    ['~/x.PNG', 'relative-path', '~/x.PNG'],
+    ['~/x.svg', null, null],
+    ['screenshot.png', 'relative-path', 'screenshot.png'],
+    ['./out/x.jpeg', 'relative-path', './out/x.jpeg'],
+    ['../x.webp', 'relative-path', '../x.webp'],
+    ['/tmp/x.png:12', 'path', '/tmp/x.png'],
+    ['/tmp/a:b/x.png:12:4', 'path', '/tmp/a:b/x.png'],
+    ['/tmp/a\\ b.png', 'path', '/tmp/a b.png'],
+    ['artifacts/画面.png', 'relative-path', 'artifacts/画面.png'],
+    ['artifacts/📁/画面.png', 'relative-path', 'artifacts/📁/画面.png'],
+    ['📁/画面.png', 'relative-path', '📁/画面.png'],
+    ['artifacts/~/画面.png', 'relative-path', 'artifacts/~/画面.png'],
+    ['${HOME}/画面.png', 'relative-path', '~/画面.png'],
+    ['"${HOME}/a b.png"', 'relative-path', '~/a b.png'],
+    ["'artifacts/画面 1.png'", 'relative-path', 'artifacts/画面 1.png'],
+    ['file:///tmp/%E7%94%BB%E9%9D%A2%201.png', 'path', '/tmp/画面 1.png'],
+    ['/tmp/画面.png:12:3。）', 'path', '/tmp/画面.png'],
+    ['artifacts/画面.png:12:3、', 'relative-path', 'artifacts/画面.png'],
+    ['/tmp/e\u0301/😀.png', 'path', '/tmp/e\u0301/😀.png'],
+  ])('detects the complete path in %s', (line, kind, target) => {
+    const links = findTerminalLinks(line);
+    expect(links.map(({ kind, target }) => ({ kind, target }))).toEqual(kind === null ? [] : [{ kind, target }]);
+    for (const link of links) expect(line.slice(link.start, link.end)).toBe(link.text);
+  });
+
+  it.each([
+    '/tmp/a b.png', '/tmp/a b.png:12:3', '/tmp/a long name.png', '/tmp/a b/x.png', '/tmp/a b.png。', '/tmp/a b.png,',
+    '/tmp/a\\ b c.png', '/tmp/a\\ b c/x.png',
+    'artifacts/a b.png', '"/tmp/a b.png', "'/tmp/a b.png", '`/tmp/a b.png',
+    'foo:bar.png', 'foo:bar', 'ftp://host/tmp/x.png', 'ssh://host/tmp/x.png',
+    'file://host/tmp/x.png', 'file:///tmp/%ZZ.png', 'file:///tmp/%00.png',
+    '→C:/Users/aida/x.png', 'Saved to:C:/Users/aida/x.png',
+    'file:///C:/Users/aida/x.png', 'file:///tmp/x.png?query',
+    '$OTHER/x.png', '${OTHER}/x.png', '~user/画面.png', '~user/~/x.png', '$OTHER/~/x.png', '~/x.png.bak',
+    '/tmp/' + 'a'.repeat(4096) + '.png',
+  ])('does not link fragments of %s', (line) => {
+    expect(findTerminalLinks(line)).toEqual([]);
+  });
+
+  it.each(['C:\\Users\\aida\\x.png', 'C:/Users/aida/x.png', 'file:///C:/Users/aida/x.png', '→C:/Users/aida/x.png', 'Saved to:C:/Users/aida/x.png'])('accepts %s only with Windows local preview support', (line) => {
+    expect(findTerminalLinks(line, true).map(({ kind, target }) => ({ kind, target }))).toEqual([
+      { kind: 'path', target: 'C:/Users/aida/x.png' },
+    ]);
+  });
+
+  it.each(["C:/Users/a b.png", "C:\\Users\\a b.png"])("does not link unquoted Windows fragments in %s", (line) => {
+    expect(findTerminalLinks(line, true)).toEqual([]);
+  });
+
   it("finds http links without swallowing sentence punctuation", () => {
     expect(findTerminalLinks("see https://example.test/a?q=1.")).toEqual([
       { kind: "url", text: "https://example.test/a?q=1", target: "https://example.test/a?q=1", start: 4, end: 30 },
+    ]);
+  });
+
+  it("preserves the closing bracket of an IPv6 URL", () => {
+    expect(findTerminalLinks("see https://[::1],").map(({ kind, target }) => ({ kind, target }))).toEqual([
+      { kind: "url", target: "https://[::1]" },
     ]);
   });
 
