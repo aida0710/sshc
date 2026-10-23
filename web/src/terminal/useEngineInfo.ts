@@ -7,8 +7,9 @@ import { runTargetProblemText } from "./runTargetProblem";
 export type EngineInfoState = {
   status: RemoteEngineStatus | null;
   // problem says why the status could not be read. The actions stay offered:
-  // an engine whose version no longer matches is the one that needs updating.
+  // an incompatible engine is the one that needs updating.
   problem: string;
+  // remoteVersion is the version of an engine refused as incompatible.
   remoteVersion: string | null;
   running: RemoteEngineAction | null;
   // lastResult is what the host's sshc wrote for the last action.
@@ -46,9 +47,9 @@ export function useEngineInfo({
       setRemoteVersion(null);
     } catch (error) {
       setStatus(null);
-      const mismatch = error instanceof ApiError && error.code === "remote_engine_version_mismatch";
-      setRemoteVersion(mismatch ? error.problem?.detail ?? "" : null);
-      setProblem(mismatch ? "" : runTargetProblemText(translate, error, alias));
+      const incompatible = error instanceof ApiError && error.code === "remote_engine_incompatible";
+      setRemoteVersion(incompatible ? error.problem?.detail ?? "" : null);
+      setProblem(incompatible ? "" : runTargetProblemText(translate, error, alias));
     }
   }, [alias, api, translate]);
 

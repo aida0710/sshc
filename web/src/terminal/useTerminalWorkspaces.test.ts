@@ -8,7 +8,7 @@ import { useTerminalWorkspaces } from "./useTerminalWorkspaces";
 it("recovers missing workspaces after a successful empty session listing", async () => {
   const workspaces = [{ id: "default", name: "", hidden: false, builtIn: true }];
   const api: TerminalWorkspacesApi = {
-    list: vi.fn().mockRejectedValueOnce(new ApiError("remote_engine_version_mismatch", 409, null))
+    list: vi.fn().mockRejectedValueOnce(new ApiError("remote_engine_incompatible", 409, null))
       .mockResolvedValue({ workspaces, maxWorkspaces: 50 }),
     create: vi.fn(), update: vi.fn(), remove: vi.fn(),
   };
