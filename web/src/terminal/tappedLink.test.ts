@@ -55,6 +55,18 @@ describe("linkAtPoint", () => {
     } finally { terminal.dispose(); }
   });
 
+  it("プログラムが折り返したパスは各行で押せて字下げは押せない", async () => {
+    const { terminal, view } = await tappable("/tmp/123456789012345\x1b[K\r\x1b[1B    image.png", 20);
+    try {
+      const target = "/tmp/123456789012345image.png";
+      expect(linkAtPoint(view, cell(20, 1))).toMatchObject({ target });
+      expect(linkAtPoint(view, cell(5, 2))).toMatchObject({ target });
+      expect(linkAtPoint(view, cell(13, 2))).toMatchObject({ target });
+      expect(linkAtPoint(view, cell(4, 2))).toBeNull();
+      expect(linkAtPoint(view, cell(14, 2))).toBeNull();
+    } finally { terminal.dispose(); }
+  });
+
   it("画面の外を押しても何も返さない", async () => {
     const { terminal, view } = await tappable("https://example.test/a");
     try {
