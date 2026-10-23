@@ -8,6 +8,7 @@ import { useTranslate } from "../i18n/context";
 import { useTerminalSessions } from "../terminal/sessions";
 import { useSplitView } from "../terminal/splitView/useSplitView";
 import type { RunTargetsState } from "../terminal/useRunTargets";
+import { engineActionLog } from "../testing/engineActionLog";
 import { TerminalScreen } from "./TerminalScreen";
 
 const emptyList = { sessions: [], maxSessions: 50 };
@@ -31,7 +32,8 @@ function enginesApi(overrides: Partial<RemoteEnginesApi> = {}): RemoteEnginesApi
   return {
     list: vi.fn(), add: vi.fn(), remove: vi.fn(), open: vi.fn(),
     status: vi.fn(async () => ({ alias: "r540", version: "v0.54.0", vault: true, unlocked: false, passwordless: false, sessions: 0 })),
-    control: vi.fn(async () => ({ succeeded: true, output: "" })),
+    control: vi.fn(async () => ({ generation: 1 })),
+    actionLog: vi.fn(async () => engineActionLog()),
     unlockVault: vi.fn(async () => undefined),
     ...overrides,
   };

@@ -18,6 +18,7 @@ import (
 	"github.com/coder/websocket"
 
 	"sshc/internal/handoff"
+	"sshc/internal/testwait"
 )
 
 const fakeSecret = "the-remote-handoff-secret"
@@ -188,11 +189,11 @@ type handoffLink struct {
 	exitCode int
 }
 
-func (l *handoffLink) Run(ctx context.Context, command string, limit time.Duration) (RunResult, error) {
-	if command == handoffCommand {
+func (l *handoffLink) Run(ctx context.Context, request RunRequest) (RunResult, error) {
+	if request.Command == handoffCommand {
 		return RunResult{Stdout: []byte(l.handoff), ExitCode: l.exitCode}, nil
 	}
-	return l.fakeLink.Run(ctx, command, limit)
+	return l.fakeLink.Run(ctx, request)
 }
 
 func newEngineManager(t *testing.T, remote *fakeRemoteEngine, remoteVersion string) *Manager {
@@ -417,38 +418,77 @@ func TestTheRemoteEnginesOwnRefusalsAreNotMistakenForThisMachines(t *testing.T) 
 	}
 }
 
-// controlLink は、handoff を答え、それ以外のコマンドを覚えて決まった結果を返す。
+// controlLink は、handoff を答え、それ以外のコマンドを覚えて、run の結果を返す。
 type controlLink struct {
 	*handoffLink
+	mutex    sync.Mutex
 	commands []string
-	result   RunResult
+	// run は、handoff 以外のコマンドの結果である。出力は request.Observe へも書く。
+	run func(ctx context.Context, request RunRequest) (RunResult, error)
 }
 
-func (l *controlLink) Run(ctx context.Context, command string, limit time.Duration) (RunResult, error) {
-	if command == handoffCommand {
-		return l.handoffLink.Run(ctx, command, limit)
+func (l *controlLink) Run(ctx context.Context, request RunRequest) (RunResult, error) {
+	if request.Command == handoffCommand {
+		return l.handoffLink.Run(ctx, request)
 	}
-	l.commands = append(l.commands, command)
-	return l.result, nil
+	l.mutex.Lock()
+	l.commands = append(l.commands, request.Command)
+	l.mutex.Unlock()
+	return l.run(ctx, request)
+}
+
+func (l *controlLink) lastCommand() string {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	return l.commands[len(l.commands)-1]
+}
+
+// writeResult は、stdout と stderr を Observe へ書き、結果として返す run である。
+func writeResult(result RunResult) func(context.Context, RunRequest) (RunResult, error) {
+	return func(_ context.Context, request RunRequest) (RunResult, error) {
+		_, _ = request.Observe.Write(result.Stdout)
+		_, _ = request.Observe.Write(result.Stderr)
+		return result, nil
+	}
+}
+
+// newControlManager は、link を通して r540 を実行先に足した Manager を返す。
+func newControlManager(t *testing.T, remote *fakeRemoteEngine, link *controlLink) *Manager {
+	t.Helper()
+	link.handoffLink = &handoffLink{fakeLink: newFakeLink("", 0), handoff: remote.handoffDocument("v9")}
+	manager := NewManager(ManagerOptions{Store: newStore(t), LocalVersion: "v9", Connect: func(context.Context, string) (Link, error) { return link, nil }})
+	t.Cleanup(manager.Close)
+	if err := manager.AddEngine(context.Background(), "r540"); err != nil {
+		t.Fatal(err)
+	}
+	return manager
+}
+
+// waitForAction は、r540 の操作が終わるまで読み、終わった時点の記録を返す。
+func waitForAction(t *testing.T, manager *Manager) ActionLogRead {
+	t.Helper()
+	var read ActionLogRead
+	testwait.Until(t, func() bool {
+		var err error
+		read, err = manager.ActionLog("r540", 0, actionOutputCapacity)
+		return err == nil && read.Done
+	})
+	return read
 }
 
 func TestAnEngineIsUpdatedRestartedOrStoppedWithTheHostsOwnSSHCAndItsCredentialsAreDropped(t *testing.T) {
 	remote := newFakeRemoteEngine(t)
-	link := &controlLink{
-		handoffLink: &handoffLink{fakeLink: newFakeLink("", 0), handoff: remote.handoffDocument("v9")},
-		result:      RunResult{Stdout: []byte("sshc: updated\n"), Stderr: []byte("restarted"), ExitCode: 0},
-	}
-	manager := NewManager(ManagerOptions{Store: newStore(t), LocalVersion: "v9", Connect: func(context.Context, string) (Link, error) { return link, nil }})
-	defer manager.Close()
-	if err := manager.AddEngine(context.Background(), "r540"); err != nil {
-		t.Fatal(err)
-	}
+	link := &controlLink{run: writeResult(RunResult{Stdout: []byte("sshc: updated\n"), Stderr: []byte("restarted"), ExitCode: 0})}
+	manager := newControlManager(t, remote, link)
 	for action, arguments := range map[EngineAction]string{ActionUpdate: "update --yes", ActionRestart: "service restart --yes", ActionStop: `"$candidate" stop;`} {
-		result, err := manager.ControlEngine(context.Background(), "r540", action)
-		if err != nil || !result.Succeeded || result.Output != "sshc: updated\nrestarted" {
-			t.Fatalf("%s = %+v, %v", action, result, err)
+		if _, err := manager.StartAction(context.Background(), "r540", action); err != nil {
+			t.Fatalf("%s: %v", action, err)
 		}
-		if last := link.commands[len(link.commands)-1]; !strings.Contains(last, arguments) {
+		read := waitForAction(t, manager)
+		if read.Action != action || !read.Succeeded || read.Failure != nil || read.Output != "sshc: updated\nrestarted" {
+			t.Fatalf("%s = %+v", action, read)
+		}
+		if last := link.lastCommand(); !strings.Contains(last, arguments) {
 			t.Fatalf("%s ran %q, want it to contain %q", action, last, arguments)
 		}
 	}
@@ -457,7 +497,7 @@ func TestAnEngineIsUpdatedRestartedOrStoppedWithTheHostsOwnSSHCAndItsCredentials
 	if got := remote.sessions.Load(); got != 2 {
 		t.Fatalf("sessions issued = %d, want 2", got)
 	}
-	if _, err := manager.ControlEngine(context.Background(), "r540", "reboot"); !errors.Is(err, ErrUnknownAction) {
+	if _, err := manager.StartAction(context.Background(), "r540", "reboot"); !errors.Is(err, ErrUnknownAction) {
 		t.Fatalf("unknown action = %v", err)
 	}
 }

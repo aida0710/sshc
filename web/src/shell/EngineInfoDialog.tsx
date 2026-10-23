@@ -3,6 +3,7 @@ import type { RemoteEngineAction, RemoteEngineStatus } from "../api/remoteEngine
 import { useTranslate, type Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { RunTargetsState } from "../terminal/useRunTargets";
+import { EngineActionOutput } from "../terminal/EngineActionOutput";
 import { useEngineInfo } from "../terminal/useEngineInfo";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
@@ -71,17 +72,11 @@ export function EngineInfoDialog({
         </div>
         {info.actionProblem === "" ? null : <p role="alert" className="text-sm text-danger">{info.actionProblem}</p>}
         {info.lastResult === null ? null : (
-          <div className="flex flex-col gap-1">
-            <p role="status" className={`text-sm ${info.lastResult.succeeded ? "text-ink" : "text-danger"}`}>
-              {info.lastResult.succeeded ? t(actionLabels[info.lastResult.action].done) : t("engineInfo.actionFailed")}
-            </p>
-            {info.lastResult.output === "" ? null : (
-              <pre aria-label={t("engineInfo.output")} className="max-h-40 overflow-auto rounded-md bg-control p-2 font-mono text-[11px] text-ink-muted">
-                {info.lastResult.output}
-              </pre>
-            )}
-          </div>
+          <p role="status" className={`text-sm ${info.lastResult.succeeded ? "text-ink" : "text-danger"}`}>
+            {info.lastResult.succeeded ? t(actionLabels[info.lastResult.action].done) : t("engineInfo.actionFailed")}
+          </p>
         )}
+        <EngineActionOutput output={info.output} />
         <div className="flex justify-end">
           <Button ref={closeRef} disabled={busy} onClick={onClose}>{t("engineInfo.close")}</Button>
         </div>

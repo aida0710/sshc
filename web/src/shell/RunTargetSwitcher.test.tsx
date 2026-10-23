@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { RemoteEnginesApi } from "../api/remoteEngines";
+import { engineActionLog } from "../testing/engineActionLog";
 import { useRemoteVaultUnlock, type RemoteVaultUnlockState } from "../terminal/useRemoteVaultUnlock";
 import { useRunTargets, type RunTargetsState } from "../terminal/useRunTargets";
 import { EngineInfoDialog } from "./EngineInfoDialog";
@@ -19,7 +20,8 @@ function enginesApi(overrides: Partial<RemoteEnginesApi> = {}): RemoteEnginesApi
     remove: vi.fn(async () => ({ engines: [] })),
     status: vi.fn(),
     open: vi.fn(async () => ({ url: "http://127.0.0.1:61000/#bootstrap=x" })),
-    control: vi.fn(async () => ({ succeeded: true, output: "" })),
+    control: vi.fn(async () => ({ generation: 1 })),
+    actionLog: vi.fn(async () => engineActionLog()),
     unlockVault: vi.fn(async () => undefined),
     ...overrides,
   };
@@ -121,9 +123,10 @@ describe("RunTargetSwitcher", () => {
     // A compatible engine of another version answers its status; only the
     // version line says that this computer differs.
     const user = userEvent.setup();
-    const control = vi.fn(async () => ({ succeeded: true, output: "restarted sshc.service" }));
+    const control = vi.fn(async () => ({ generation: 1 }));
+    const actionLog = vi.fn(async () => engineActionLog({ action: "restart", output: "restarted sshc.service" }));
     const status = vi.fn(async () => ({ alias: "r540", version: "v0.51.0", vault: true, unlocked: false, passwordless: false, sessions: 3 }));
-    const state = targets({ api: enginesApi({ control, status }) });
+    const state = targets({ api: enginesApi({ control, actionLog, status }) });
     render(<SwitcherWithDialogs state={state} />);
     await user.click(screen.getByRole("button", { name: /^Choose where terminals run/ }));
     await user.click(screen.getByRole("button", { name: "Actions for engine r540" }));
@@ -142,7 +145,7 @@ describe("RunTargetSwitcher", () => {
 
     expect(control).toHaveBeenCalledWith("r540", "restart");
     expect(await screen.findByRole("status")).toHaveTextContent("Restarted.");
-    expect(screen.getByLabelText("Output of sshc on that host")).toHaveTextContent("restarted sshc.service");
+    expect(screen.getByRole("log", { name: "Output of sshc on that host" })).toHaveTextContent("restarted sshc.service");
   });
 
   it("unlocks the run target's Vault with the password and says when it is wrong", async () => {
@@ -211,7 +214,7 @@ describe("EngineInfoDialog", () => {
 
   it("keeps the version prompt and allows another update when the update fails", async () => {
     const user = userEvent.setup();
-    const api = enginesApi({ status: vi.fn().mockRejectedValue(incompatibleEngine()), control: vi.fn().mockResolvedValue({ succeeded: false, output: "update failed" }) });
+    const api = enginesApi({ status: vi.fn().mockRejectedValue(incompatibleEngine()), actionLog: vi.fn().mockResolvedValue(engineActionLog({ succeeded: false, output: "update failed" })) });
     render(<EngineInfoDialog alias="r540" targets={targets({ api })} onClose={vi.fn()} />);
     const dialog = screen.getByRole("dialog", { name: "Engine on r540" });
     await within(dialog).findByText("v0.51.0");

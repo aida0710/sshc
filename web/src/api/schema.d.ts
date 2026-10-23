@@ -397,8 +397,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Stops, restarts or updates the remote engine with the host's own sshc command. Every terminal on it stops. */
+        /** @description Starts stopping, restarting or updating the remote engine with the host's own sshc command. Every terminal on it stops. The command keeps running when the caller goes away; its progress and output are read from /control/log. */
         post: operations["controlRemoteEngine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/engines/{alias}/control/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The progress of the last action started on the remote engine and a bounded plain-text fragment of what the host's sshc wrote. */
+        get: operations["remoteEngineActionLog"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3208,12 +3225,23 @@ export interface components {
             passwordless: boolean;
             sessions: number;
         };
+        /** @enum {string} */
+        RemoteEngineAction: "stop" | "restart" | "update";
         RemoteEngineActionRequest: {
-            /** @enum {string} */
-            action: "stop" | "restart" | "update";
+            action: components["schemas"]["RemoteEngineAction"];
         };
-        RemoteEngineActionResult: {
+        RemoteEngineActionStarted: {
+            /** Format: uint64 */
+            generation: number;
+        };
+        RemoteEngineActionLog: {
+            /** Format: uint64 */
+            generation: number;
+            action: components["schemas"]["RemoteEngineAction"];
+            done: boolean;
             succeeded: boolean;
+            problem?: string;
+            cursor: components["schemas"]["TerminalControlCursor"];
             output: string;
         };
         RemoteEngineEntrance: {
@@ -5619,13 +5647,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Whether the host's sshc command succeeded, and the end of what it wrote */
-            200: {
+            /** @description The host's sshc command started */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RemoteEngineActionResult"];
+                    "application/json": components["schemas"]["RemoteEngineActionStarted"];
                 };
             };
             400: components["responses"]["Problem"];
@@ -5635,6 +5663,39 @@ export interface operations {
             409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    remoteEngineActionLog: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The action's progress and output from the cursor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteEngineActionLog"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     unlockRemoteEngineVault: {

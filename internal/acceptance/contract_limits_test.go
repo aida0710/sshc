@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"sshc/internal/httpserver"
 	"sshc/internal/remotesync"
 	"sshc/internal/sftp"
 	"sshc/internal/validate"
@@ -112,6 +113,9 @@ func TestAPILimitsMatchTheGoLimits(t *testing.T) {
 		{"SFTPTransferSettingsRequest", "largeFileParallelism", "maximum", sftp.MaxLargeFileParallelism},
 		{"SFTPTransferSettingsRequest", "largeFileChunkBytes", "minimum", sftp.MinLargeFileChunkBytes},
 		{"SFTPTransferSettingsRequest", "largeFileChunkBytes", "maximum", sftp.MaxLargeFileChunkBytes},
+
+		// 端末の制御文字を除くと短くはなっても長くはならないので、読む上限がそのまま文の上限になる。
+		{"RemoteEngineActionLog", "output", "maxLength", httpserver.MaxTerminalControlReadBytes},
 	} {
 		if got := openAPILimit(t, spec, limit.schema, limit.path, limit.keyword); got != limit.want {
 			t.Errorf("openapi.yaml の %s.%s の %s = %d、Go の上限は %d", limit.schema, limit.path, limit.keyword, got, limit.want)

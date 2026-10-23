@@ -7,12 +7,22 @@ const incompatibleHeading = "The sshc on bastion does not work with this compute
 const vaultPassword = "bastion vault password";
 const sessionsPath = "/api/v1/engines/bastion/terminal/sessions";
 
+// updateOutput is what the stubbed sshc on bastion writes while it updates, in
+// the two parts the log answers: the first while it still runs, the rest once
+// the test lets it end.
+const updateOutput = [
+  `sshc: update /home/me/.local/bin/sshc from ${remoteVersion} to ${localVersion} using sshc's install.sh\nsshc: updating ${remoteVersion} to ${localVersion}\n`,
+  `sshc: updated to ${localVersion}\nsshc: managed service restarted\n`,
+] as const;
+
 // refusal is what the stubbed engine on bastion answers until it is fixed:
 // an incompatible version, which updating fixes, a locked Vault, which its
 // password unlocks, or a host that cannot be reached until the test says it can.
 async function stubRunTarget(page: Page, { added = true, refusal = "version", compatibleVersion }: { added?: boolean; refusal?: "version" | "unreachable" | "locked"; compatibleVersion?: string } = {}) {
   let fixed = compatibleVersion !== undefined;
   const actions: unknown[] = [];
+  let finishUpdate = () => {};
+  const updateFinished = new Promise<void>((resolve) => { finishUpdate = resolve; });
   await page.route("**/api/v1/health", async (route) => {
     await route.fulfill({ json: { status: "ok", version: localVersion } });
   });
@@ -29,8 +39,19 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/control")) {
       actions.push(route.request().postDataJSON());
+      await route.fulfill({ status: 202, json: { generation: 1 } });
+      return;
+    }
+    if (path.endsWith("/control/log")) {
+      const cursor = Number(new URL(route.request().url()).searchParams.get("cursor") ?? "0");
+      const [running, rest] = updateOutput;
+      if (cursor < running.length) {
+        await route.fulfill({ json: actionLog({ done: false, from: 0, output: running }) });
+        return;
+      }
+      await updateFinished;
       fixed = true;
-      await route.fulfill({ json: { succeeded: true, output: "sshc updated" } });
+      await route.fulfill({ json: actionLog({ done: true, from: running.length, output: rest }) });
       return;
     }
     if (refusal === "locked" && path.endsWith("/vault/unlock")) {
@@ -57,7 +78,17 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
       throw new Error(`Unexpected remote engine request: ${path}`);
     }
   });
-  return { actions, fix: () => { fixed = true; } };
+  return { actions, fix: () => { fixed = true; }, finishUpdate };
+}
+
+// actionLog is the log of the update on bastion from the cursor at from.
+function actionLog({ done, from, output }: { done: boolean; from: number; output: string }) {
+  const next = from + output.length;
+  return {
+    generation: 1, action: "update", done, succeeded: done,
+    cursor: { requested: from, start: from, next, end: next, truncated: false },
+    output,
+  };
 }
 
 function refusalResponse(refusal: "version" | "unreachable" | "locked") {
@@ -107,9 +138,38 @@ test("updates an incompatible engine from the terminal area and recovers", async
   await screenshotInJapanese(page, "run-target-incompatible");
 
   await panel.getByRole("button", { name: "Update bastion", exact: true }).click();
+  // The first lines show while sshc on bastion still runs.
+  const output = panel.getByRole("log", { name: "Output of sshc on that host", exact: true });
+  await expect(output).toContainText(`sshc: updating ${remoteVersion} to ${localVersion}`);
+  await expect(panel.getByRole("button", { name: "Updating bastion…", exact: true })).toBeDisabled();
+  await expect(output).not.toContainText("sshc: updated to");
+  remote.finishUpdate();
   await expect(panel).toBeHidden();
   expect(remote.actions).toEqual([{ action: "update" }]);
   await expect(page.getByRole("list", { name: "Workspaces", exact: true }).getByRole("button", { name: /^Main/ }).first()).toBeVisible();
+});
+
+// Switching the language leaves the terminal screen, which would stop following
+// the update, so this screenshot starts in Japanese instead of switching later.
+test("shows the update's output in Japanese while sshc on the host runs", async ({ page, installation }) => {
+  const directory = process.env.SSHC_VISUAL_DIR;
+  test.skip(directory === undefined, "takes screenshots only when SSHC_VISUAL_DIR asks for them");
+  const remote = await stubRunTarget(page);
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await changeDisplayLanguage(page, "ja");
+  await page.getByRole("button", { name: /^ターミナルの実行先を選ぶ/ }).click();
+  await page.getByRole("list", { name: "実行中のsshcエンジン", exact: true }).getByRole("button", { name: "bastion", exact: true }).click();
+  const panel = page.getByRole("region", { name: "bastion のsshcとは組み合わせて使えません", exact: true });
+  await panel.getByRole("button", { name: "bastion を更新", exact: true }).click();
+  await expect(panel.getByRole("log", { name: "接続先の sshc の出力", exact: true })).toContainText("sshc: updating");
+  await page.screenshot({ path: `${directory}/run-target-updating.png` });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator("[data-app-navigation]")).not.toBeInViewport();
+  await page.screenshot({ path: `${directory}/run-target-updating-mobile.png` });
+  remote.finishUpdate();
+  await expect(panel).toBeHidden();
 });
 
 test("unlocks a locked vault from the terminal area without a dialog", async ({ page, installation }) => {

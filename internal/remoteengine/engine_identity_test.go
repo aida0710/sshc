@@ -12,7 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 // portSquatter は、接続先のエンジンが手放したポートを取った、接続先の別の利用者の
@@ -97,11 +96,11 @@ type movingHandoffLink struct {
 	document atomic.Value
 }
 
-func (l *movingHandoffLink) Run(ctx context.Context, command string, limit time.Duration) (RunResult, error) {
-	if command == handoffCommand {
+func (l *movingHandoffLink) Run(ctx context.Context, request RunRequest) (RunResult, error) {
+	if request.Command == handoffCommand {
 		return RunResult{Stdout: []byte(l.document.Load().(string))}, nil
 	}
-	return l.fakeLink.Run(ctx, command, limit)
+	return l.fakeLink.Run(ctx, request)
 }
 
 func TestAnEngineThatRestartedOnAnotherPortIsFoundAgainFromItsHandoff(t *testing.T) {
