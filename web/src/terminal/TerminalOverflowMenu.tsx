@@ -3,6 +3,7 @@ import { Icon } from "../ui/icons";
 import { useTranslate } from "../i18n/context";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
+import type { PaneEdge } from "./splitView/layout";
 
 export function TerminalOverflowMenu({
   osc52Enabled,
@@ -12,6 +13,8 @@ export function TerminalOverflowMenu({
   onCopyContext,
   onToggleOsc52,
   onClose,
+  onSplit,
+  canSplit = false,
   triggerRef,
 }: {
   osc52Enabled: boolean;
@@ -21,6 +24,8 @@ export function TerminalOverflowMenu({
   onCopyContext: () => void;
   onToggleOsc52: () => void | Promise<void>;
   onClose: () => void;
+  onSplit?: ((edge: PaneEdge) => void) | undefined;
+  canSplit?: boolean;
   triggerRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
@@ -46,6 +51,11 @@ export function TerminalOverflowMenu({
       aria-label={t("terminal.moreActions")}
       className="absolute right-2 top-[calc(100%-0.25rem)] z-40 w-64 rounded-md border border-control-line bg-card p-1.5 shadow-2xl"
     >
+      {onSplit === undefined ? null : (["right", "bottom"] as const).map((edge) => (
+        <button key={edge} type="button" role="menuitem" disabled={!canSplit}
+          className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:opacity-50 md:min-h-0"
+          onClick={action(() => onSplit(edge))}>{t(edge === "right" ? "splitView.right" : "splitView.below")}</button>
+      ))}
       {onQuickCommands === undefined ? null : (
         <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onQuickCommands)}>
           {t("terminal.quickCommands")}

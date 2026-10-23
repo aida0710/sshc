@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalShellProfileList, SettingsApi, TerminalSettings } from "../api/settings";
 import type { Section } from "../routing/sectionRoute";
+import { useSplitView } from "./splitView/useSplitView";
 import type { TerminalSessionsState } from "./sessions";
 
 type TerminalWorkspaceControllerOptions = {
   api: Pick<SettingsApi, "terminalSettings" | "localShellProfiles">;
   terminalSessions: TerminalSessionsState;
   enabled: boolean;
+  runTarget?: string | null;
   section: Section | null;
   navigate: (section: Section) => void;
   closeNavigation: () => void;
@@ -16,13 +18,16 @@ export function useTerminalWorkspaceController({
   api,
   terminalSessions,
   enabled,
+  runTarget = null,
   section,
   navigate,
   closeNavigation,
 }: TerminalWorkspaceControllerOptions) {
   const [settings, setSettings] = useState<TerminalSettings>({});
   const [localShellProfiles, setLocalShellProfiles] = useState<LocalShellProfileList["profiles"]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget });
+  const { selectSession: setActiveSessionId } = splitView;
+  const { activeSessionId } = splitView.state;
   const [sessionOrder, setSessionOrder] = useState<string[]>([]);
   const pendingSessionId = useRef<string | null>(null);
 
@@ -50,6 +55,8 @@ export function useTerminalWorkspaceController({
 
   useEffect(() => {
     if (activeSessionId === null) return;
+    // Split view removes ended or deleted members and selects a surviving pane.
+    if (splitView.state.root !== null && !("sessionId" in splitView.state.root)) return;
     if (terminalSessions.sessions.some((session) => session.id === activeSessionId)) {
       pendingSessionId.current = null;
       return;
@@ -58,12 +65,12 @@ export function useTerminalWorkspaceController({
     // 一覧の先頭へ勝手に戻らないようにする。
     if (pendingSessionId.current === activeSessionId) return;
     setActiveSessionId(null);
-  }, [terminalSessions.sessions, activeSessionId]);
+  }, [terminalSessions.sessions, activeSessionId, setActiveSessionId, splitView.state.root]);
 
   useEffect(() => {
     if (activeSessionId !== null || terminalSessions.sessions.length === 0) return;
     setActiveSessionId(terminalSessions.sessions[0]?.id ?? null);
-  }, [terminalSessions.sessions, activeSessionId]);
+  }, [terminalSessions.sessions, activeSessionId, setActiveSessionId]);
 
   const showSession = useCallback(
     (id: string) => {
@@ -75,7 +82,7 @@ export function useTerminalWorkspaceController({
         if (pendingSessionId.current === id) pendingSessionId.current = null;
       });
     },
-    [closeNavigation, terminalSessions, navigate],
+    [closeNavigation, terminalSessions, navigate, setActiveSessionId],
   );
 
   // The terminal screen stays drawn behind other sections while it holds a
@@ -141,6 +148,7 @@ export function useTerminalWorkspaceController({
   );
 
   return {
+    splitView,
     settings,
     localShellProfiles,
     activeSessionId,

@@ -1,3 +1,4 @@
+import type { PaneEdge } from "./splitView/layout";
 import type { ReactNode, RefObject } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
@@ -14,6 +15,8 @@ export function SessionRowMenu({
   menuRef,
   placement,
   canDuplicate,
+  canSplit = false,
+  onSplit,
   canMoveUp,
   canMoveDown,
   onRename,
@@ -29,6 +32,8 @@ export function SessionRowMenu({
   menuRef: RefObject<HTMLDivElement | null>;
   placement: SessionRowMenuPlacement;
   canDuplicate: boolean;
+  canSplit?: boolean;
+  onSplit?: (edge: PaneEdge) => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onRename: () => void;
@@ -59,6 +64,12 @@ export function SessionRowMenu({
       <SessionRowMenuItem disabled={!canDuplicate} onClick={choose(onDuplicate)}>
         {t("terminal.duplicate")}
       </SessionRowMenuItem>
+      {onSplit === undefined ? null : (
+        <>
+          <SessionRowMenuItem disabled={!canSplit} onClick={choose(() => onSplit("right"))}>{t("splitView.right")}</SessionRowMenuItem>
+          <SessionRowMenuItem disabled={!canSplit} onClick={choose(() => onSplit("bottom"))}>{t("splitView.below")}</SessionRowMenuItem>
+        </>
+      )}
       <SessionRowMenuItem disabled={!canMoveUp} onClick={choose(onMoveUp)}>{t("terminal.moveUp")}</SessionRowMenuItem>
       <SessionRowMenuItem disabled={!canMoveDown} onClick={choose(onMoveDown)}>{t("terminal.moveDown")}</SessionRowMenuItem>
       {moveTargets.length === 0 ? null : (

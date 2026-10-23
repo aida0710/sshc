@@ -12,6 +12,7 @@ const jaSidebar = [
   { text: "Terminal", items: [
     { text: "Terminalを使う", link: "/features/terminal" },
     { text: "ワークスペース", link: "/features/workspace" },
+    { text: "分割表示", link: "/features/split-view" },
     { text: "実行先", link: "/features/run-target" },
     { text: "クイックコマンド", link: "/terminal/commands" },
     { text: "タイトルと通知", link: "/terminal/notifications" },
@@ -52,6 +53,7 @@ const enSidebar = [
   { text: "Terminal", items: [
     { text: "Use the terminal", link: "/en/features/terminal" },
     { text: "Workspaces", link: "/en/features/workspace" },
+    { text: "Split view", link: "/en/features/split-view" },
     { text: "Run on", link: "/en/features/run-target" },
     { text: "Quick Commands", link: "/en/terminal/commands" },
     { text: "Titles and notifications", link: "/en/terminal/notifications" },
