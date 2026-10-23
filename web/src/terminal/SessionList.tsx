@@ -215,7 +215,7 @@ export function SessionList({
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
                 ) : null}
                 <div
-                  className={`relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors md:py-0 ${
+                  className={`relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors md:py-1 ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
                       : session.id === selected ? "bg-select-fill" : "hover:bg-hover"
