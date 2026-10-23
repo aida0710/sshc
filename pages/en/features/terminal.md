@@ -47,6 +47,8 @@ OSC 8 links and detected URLs open in the system browser. Ctrl-click (⌘-click 
 
 Click a path starting with `/` and choose **Preview** to show that file over the terminal. PNG, JPEG, GIF, WebP and BMP images up to 8 MiB are shown, and UTF-8 text that is not an image shows its beginning. The file is read only when you choose **Preview**: from the engine machine for a local shell (from the run target for a shell opened there), and from the host for an SSH session. The image line Claude Code prints when it sends one (`[image] /tmp/….png`) opens the same way.
 
+Long paths that programs such as Claude Code split at the right edge and continue on indented lines are also recognized as a single path.
+
 Names may contain Unicode characters, including Japanese. Enclose paths containing spaces in quotes, such as `"/tmp/画面 1.png"` or `'/tmp/画面 1.png'`, or escape the space with a backslash: `/tmp/画面\ 1.png`. Ambiguous unquoted output is left unlinked to avoid opening only part of a path.
 
 Paths inside backticks and paths immediately after labels or symbols, such as `Saved to:/tmp/x.png`, `保存しました：/tmp/x.png` and `→/tmp/x.png`, are also recognized. `file:///tmp/画面%201.png` opens the decoded path. File URIs with a host, such as `file://host/…`, are excluded. Trailing `:line:column` and sentence punctuation, including `。`, `、` and `）`, are removed from the path.
