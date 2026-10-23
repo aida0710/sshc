@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, failureCode } from "./client";
 import { postEmpty, postJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
@@ -10,6 +10,7 @@ export type OpenTerminalSessionRequest = components["schemas"]["OpenTerminalSess
 export type OpenTerminalSessionResponse = components["schemas"]["OpenTerminalSessionResponse"];
 export type StartTerminalForwardRequest = components["schemas"]["StartTerminalForwardRequest"];
 export type TerminalStreamTicket = components["schemas"]["TerminalStreamTicket"];
+export type TerminalDirectory = components["schemas"]["TerminalDirectory"];
 
 export type TerminalSessionsApi = {
   // streamPath is the WebSocket path a stream ticket from this API is redeemed at.
@@ -35,7 +36,15 @@ export type TerminalSessionsApi = {
   ): Promise<TerminalSessionList>;
   closeTerminalSession(id: string): Promise<TerminalSessionList>;
   moveTerminalSession(id: string, workspaceId: string): Promise<TerminalSessionList>;
+  // terminalSessionDirectory is where the program in the foreground of a local
+  // shell works, or null when the engine cannot tell (an SSH session, macOS,
+  // Windows, or a session that is not connected).
+  terminalSessionDirectory(id: string): Promise<string | null>;
 };
+
+// The engine cannot say where a session's program works; the caller falls back
+// to what the shell reported, so these are not failures to show.
+const directoryUnknownCodes = ["terminal_directory_unavailable", "terminal_session_not_found"];
 
 function validateTerminalSessionList(value: unknown): TerminalSessionList {
   return validateOpenAPISchema<TerminalSessionList>("TerminalSessionList", value);
@@ -112,6 +121,18 @@ export function createTerminalSessionsApi(base: string, streamPath: string): Ter
       return validateTerminalSessionList(
         await putJSON<unknown>(`${base}/sessions/${encodeURIComponent(id)}/title`, { title }),
       );
+    },
+    async terminalSessionDirectory(id) {
+      try {
+        const directory = validateOpenAPISchema<TerminalDirectory>("TerminalDirectory", await apiClient.read(
+          `${base}/sessions/${encodeURIComponent(id)}/directory`,
+          { locallyHandledCodes: directoryUnknownCodes },
+        ));
+        return directory.path;
+      } catch (error) {
+        if (directoryUnknownCodes.includes(failureCode(error))) return null;
+        throw error;
+      }
     },
     async moveTerminalSession(id, workspaceId) {
       return validateTerminalSessionList(

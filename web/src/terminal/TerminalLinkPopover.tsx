@@ -29,8 +29,9 @@ export function TerminalLinkPopover({
 }: {
   selection: TerminalLinkSelection;
   onClose: () => void;
-  // onPreviewPath opens a path over the terminal, from the machine the shell runs on.
-  onPreviewPath?: (path: string) => void;
+  // onPreviewPath opens a path over the terminal, from the machine the shell
+  // runs on. A relative path is resolved by the caller.
+  onPreviewPath?: (path: string, relative: boolean) => void;
   // onRemotePath sends a path of an SSH session to the SFTP screen.
   onRemotePath?: (path: string, action: RemotePathAction) => void;
 }) {
@@ -60,8 +61,8 @@ export function TerminalLinkPopover({
   }
 
   function preview() {
-    if (selection.link.kind !== "path" || onPreviewPath === undefined) return;
-    onPreviewPath(selection.link.target);
+    if (selection.link.kind === "url" || onPreviewPath === undefined) return;
+    onPreviewPath(selection.link.target, selection.link.kind === "relative-path");
     onClose();
   }
 
@@ -76,7 +77,7 @@ export function TerminalLinkPopover({
       ? [{ label: t("terminal.linkOpenBrowser"), run: openURL }]
       : [
           ...(onPreviewPath === undefined ? [] : [{ label: t("terminal.linkPreview"), run: preview }]),
-          ...(onRemotePath === undefined
+          ...(onRemotePath === undefined || selection.link.kind !== "path"
             ? []
             : [
                 { label: t("terminal.linkBrowseSFTP"), run: () => remote("browse") },
