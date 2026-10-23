@@ -23,7 +23,7 @@ Connections that LLMs and scripts open with `sshc terminal create` go into Agent
 - **Create**: **…** next to the Workspaces heading → **New workspace**
 - **See hidden workspaces**: the heading's **…** → **Show hidden workspaces**. Hidden ones appear dimmed.
 - **Open a session**: **+** on a workspace row. **New session** below the tree opens in the selected session's workspace.
-- **Move**: a session's **…** → **Move to workspace**
+- **Move**: drag a session onto another workspace's row, or onto a session inside it. Dropped on the row, it goes to the end of that workspace; dropped on a session, it goes just before it. Folded and empty workspaces take drops too. A session's **…** → **Move to workspace** does the same
 - **A workspace's …**: rename, hide or show, [send a command](/en/terminal/commands), delete
 
 Deleting a workspace closes nothing: its sessions move to Main.

@@ -39,3 +39,20 @@ export function orderWithGroupReordered(allSessionIds: readonly string[], reorde
   const next = [...reorderedGroup];
   return allSessionIds.map((id) => members.has(id) ? next.shift() ?? id : id);
 }
+
+// A session dragged into another workspace lands before the session it was
+// dropped on, or after that workspace's last session when it was dropped on the
+// workspace itself. An empty workspace has no place to give, so the session
+// keeps its place in the list.
+export function orderWithSessionMovedInto(
+  allSessionIds: readonly string[],
+  { sessionId, members, beforeId }: { sessionId: string; members: readonly string[]; beforeId: string | null },
+): string[] {
+  const rest = allSessionIds.filter((id) => id !== sessionId);
+  const before = beforeId === null ? -1 : rest.indexOf(beforeId);
+  const last = [...members].reverse().find((id) => rest.includes(id));
+  const at = before >= 0 ? before : last === undefined ? -1 : rest.indexOf(last) + 1;
+  if (at < 0) return [...allSessionIds];
+  rest.splice(at, 0, sessionId);
+  return rest;
+}

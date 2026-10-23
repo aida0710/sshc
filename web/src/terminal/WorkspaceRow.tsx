@@ -1,10 +1,14 @@
+import { useEffect, useState, type DragEvent } from "react";
 import { useTranslate } from "../i18n/context";
 import { ActionMenu, revealOnHover, type ActionMenuItem } from "../ui/ActionMenu";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
+import { dropTargetLook } from "../ui/dragAndDropLook";
 import { Icon } from "../ui/icons";
+import { sessionDragMimeType } from "./sessionDrag";
 
 // One workspace in the sidebar tree: opens and closes its sessions, starts a
-// session in it, and holds its own actions.
+// session in it, holds its own actions, and takes a session dragged onto it
+// from another workspace.
 export function WorkspaceRow({
   name,
   sessionCount,
@@ -15,6 +19,8 @@ export function WorkspaceRow({
   actions,
   onToggle,
   onNewSession,
+  acceptsSession,
+  onDropSession,
 }: {
   name: string;
   sessionCount: number;
@@ -25,10 +31,46 @@ export function WorkspaceRow({
   actions: readonly ActionMenuItem[];
   onToggle: () => void;
   onNewSession: () => void;
+  // acceptsSession is true while a session from another workspace is dragged.
+  acceptsSession: boolean;
+  onDropSession: (sessionId: string) => void;
 }) {
   const t = useTranslate();
+  const [over, setOver] = useState(false);
+
+  useEffect(() => {
+    if (!acceptsSession) setOver(false);
+  }, [acceptsSession]);
+
+  function dragOver(event: DragEvent) {
+    if (!acceptsSession || !event.dataTransfer.types.includes(sessionDragMimeType)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setOver(true);
+  }
+
+  function dragLeave(event: DragEvent) {
+    // Moving onto a button inside the row is not leaving it.
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+    setOver(false);
+  }
+
+  function drop(event: DragEvent) {
+    setOver(false);
+    if (!acceptsSession) return;
+    const sessionId = event.dataTransfer.getData(sessionDragMimeType);
+    if (sessionId === "") return;
+    event.preventDefault();
+    onDropSession(sessionId);
+  }
+
   return (
-    <div className="group/row flex items-center gap-1 rounded-md px-1 py-0.5 md:py-0">
+    <div
+      onDragOver={dragOver}
+      onDragLeave={dragLeave}
+      onDrop={drop}
+      className={`group/row flex items-center gap-1 rounded-md px-1 py-0.5 md:py-0 ${dropTargetLook({ accepts: acceptsSession, over })}`}
+    >
       <button
         type="button"
         aria-expanded={expanded}

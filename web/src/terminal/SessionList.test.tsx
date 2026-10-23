@@ -29,6 +29,9 @@ function renderList(overrides: Partial<Parameters<typeof SessionList>[0]> = {}) 
     onReorder: vi.fn(),
     moveTargets: [{ id: "default", label: "Main" }, { id: "w1", label: "sshc dev" }],
     onMoveToWorkspace: vi.fn(),
+    heldSessionId: null,
+    onHoldSession: vi.fn(),
+    onMoveIn: vi.fn(),
     ...overrides,
   };
   const { rerender } = render(<SessionList {...props} />);
