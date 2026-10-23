@@ -993,9 +993,6 @@ export const ja = {
   "terminal.jisYenBackslashLabel": "JIS配列の¥キーをバックスラッシュ（\\）として送る",
   "terminal.jisYenBackslashHint":
     "日本語キーボード向けです。IME変換中の入力は変更しません。",
-  "terminal.identifyAsITerm2Label": "ターミナルの名前を iTerm2 と答える",
-  "terminal.identifyAsITerm2Hint":
-    "Claude Code は、名前が iTerm2 のターミナルでだけ画像を表示します。名前を見て動きを変えるほかのプログラムにも iTerm2 と見なされます。",
   "terminal.fontSizeLabel": "文字の大きさ",
   "terminal.paletteLabel": "配色",
   "terminal.verbosityLabel": "接続のログ",
