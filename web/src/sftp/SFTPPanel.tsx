@@ -42,6 +42,7 @@ import { SFTPFilesystemSpace } from "./SFTPFilesystemSpace";
 import { useSFTPPermissions } from "./useSFTPPermissions";
 import { SFTPPermissionsDialog } from "./SFTPPermissionsDialog";
 import { SFTPWaitingOverlay } from "./SFTPWaitingOverlay";
+import { isImeComposing } from "../ui/imeComposition";
 
 const noHosts: HostEntry[] = [];
 
@@ -451,7 +452,7 @@ export function SFTPPanel({
       value={search.filter}
       onChange={(event) => search.setFilter(event.target.value)}
       onKeyDown={(event) => {
-        if (event.key !== "Enter" || !can?.search) return;
+        if (isImeComposing(event) || event.key !== "Enter" || !can?.search) return;
         event.preventDefault();
         void search.runSearch();
       }}

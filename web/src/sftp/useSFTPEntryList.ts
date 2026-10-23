@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type { RemoteEntry } from "./api";
+import { isImeComposing } from "../ui/imeComposition";
 
 // The parent row keeps its own key so that arrow navigation can land on it
 // without pretending that ".." is a listed entry.
@@ -211,7 +212,7 @@ export function useSFTPEntryList({
   }
 
   function handleListKeys(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (busy) return;
+    if (busy || isImeComposing(event)) return;
     if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "a") {
       event.preventDefault();
       selectAllDisplayed();

@@ -1,6 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import type { TerminalSearch } from "./useTerminalSearch";
+import { isImeComposing } from "../ui/imeComposition";
 
 const stepButton = "rounded border border-control-line px-2 py-1 transition-colors duration-150 hover:bg-hover";
 
@@ -16,6 +17,7 @@ export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; 
         value={search.query}
         onChange={(event) => search.setQuery(event.target.value)}
         onKeyDown={(event) => {
+          if (isImeComposing(event)) return;
           if (event.key === "Escape") search.close();
           else if (event.key === "Enter") search.step(event.shiftKey ? -1 : 1);
         }}
