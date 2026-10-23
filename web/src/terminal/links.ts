@@ -85,6 +85,8 @@ export function findTerminalLinks(line: string): TerminalLinkMatch[] {
     const start = (found.index ?? -1) + whole.length - text.length;
     const end = start + text.length;
     if (start < 0 || text.length > maxLinkLength || overlaps(matches, start, end)) continue;
+    // Named users require a different home lookup; do not offer a wrong path.
+    if (text.startsWith("~") && !text.startsWith("~/")) continue;
     matches.push({ kind: "relative-path", text, target: text, start, end });
   }
   return matches.sort((left, right) => left.start - right.start || left.end - right.end);

@@ -31,7 +31,7 @@ export function TerminalLinkPopover({
   onClose: () => void;
   // onPreviewPath opens a path over the terminal, from the machine the shell
   // runs on. A relative path is resolved by the caller.
-  onPreviewPath?: (path: string, relative: boolean) => void;
+  onPreviewPath?: (path: string) => void;
   // onRemotePath sends a path of an SSH session to the SFTP screen.
   onRemotePath?: (path: string, action: RemotePathAction) => void;
 }) {
@@ -62,7 +62,7 @@ export function TerminalLinkPopover({
 
   function preview() {
     if (selection.link.kind === "url" || onPreviewPath === undefined) return;
-    onPreviewPath(selection.link.target, selection.link.kind === "relative-path");
+    onPreviewPath(selection.link.target);
     onClose();
   }
 
