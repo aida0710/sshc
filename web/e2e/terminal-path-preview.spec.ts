@@ -1,16 +1,17 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Page } from "@playwright/test";
 import { expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
 import { samplePNG } from "./support/images";
-import { drawnSpan, terminalKeyboard } from "./support/terminal";
+import { drawnSpan, terminalKeyboard, terminalScreen, waitForTerminalLayout } from "./support/terminal";
 
 const visualDirectory = process.env.SSHC_VISUAL_DIR;
 
 async function previewPrintedPath(page: Page, text: string) {
   const path = drawnSpan(page, text).last();
   await expect(path).toBeVisible();
+  await waitForTerminalLayout(page);
   const bounds = await path.evaluate((element, text) => {
     const node = element.firstChild;
     if (node === null) throw new Error("the printed path has no text");
@@ -22,6 +23,8 @@ async function previewPrintedPath(page: Page, text: string) {
     return { x: rectangle.x, y: rectangle.y, width: rectangle.width, height: rectangle.height };
   }, text);
   // xterm's screen receives pointer events above its DOM text rows.
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await expect(terminalScreen(page)).toHaveClass(/xterm-cursor-pointer/u);
   await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
   const actions = page.getByRole("dialog", { name: "Terminal link actions" });
   await expect(actions.getByRole("button", { name: "Browse in SFTP" })).toHaveCount(0);
@@ -214,5 +217,77 @@ test("opens Unicode and spaced image paths from a real shell and uses the same p
     }
     await preview.getByRole("button", { name: "Close" }).click();
     await expect(preview).toBeHidden();
+  }
+});
+
+test("previews paths hard-wrapped by a real shell from every row and navigates without fragments", async ({ page, installation }) => {
+  test.skip(process.platform !== "linux", "relative paths use the foreground directory from /proc");
+  // Several short directory components exceed even a desktop terminal width
+  // without exceeding the filesystem's per-component name limit.
+  const examples = ["absolute", "home", "relative"].map((kind) => {
+    const directory = Array<string>(5).fill(`${kind}-long-folder-for-terminal-preview`).join("/");
+    const name = kind === "relative" ? "relative image.png" : `${kind}.png`;
+    const path = `${directory}/${name}`;
+    const printed = kind === "absolute" ? `${installation.home}/${path}` : kind === "home" ? `~/${path}` : `"${path}"`;
+    return { directory, name, printed };
+  });
+  for (const { directory, name } of examples) {
+    await mkdir(join(installation.home, directory), { recursive: true });
+    await writeFile(join(installation.home, directory, name), samplePNG());
+  }
+  // Four spaces exercise program-defined indentation rather than Claude Code's two.
+  const continuationIndent = "    ";
+  const script = [
+    "stty size > printed-size.txt",
+    "columns=$(awk '{print $2}' printed-size.txt)",
+    `printf '%s\\n' ${examples.map(({ printed }) => shellQuote(printed)).join(" ")} |`,
+    `awk -v columns="$columns" '{`,
+    '  remaining = $0',
+    '  printf "\\033[36m"',
+    '  while (length(remaining) > columns) {',
+    '    printf "%s\\033[K\\r\\033[1B", substr(remaining, 1, columns)',
+    `    remaining = "${continuationIndent}" substr(remaining, columns + 1)`,
+    '  }',
+    '  printf "%s\\033[0m\\r\\n", remaining',
+    "}'",
+    "printf 'paths-ready\\n'",
+  ].join("\n");
+  await writeFile(join(installation.home, "print-wrapped-paths.sh"), script);
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type("cd ~ && clear && sh print-wrapped-paths.sh");
+  await page.keyboard.press("Enter");
+  await expect(screen).toContainText("paths-ready");
+  const columns = Number((await readFile(join(installation.home, "printed-size.txt"), "utf8")).trim().split(/\s+/)[1]);
+
+  for (const [index, { directory, name, printed }] of examples.entries()) {
+    const fragments = [printed.slice(0, columns)];
+    for (let offset = columns; offset < printed.length; offset += columns - continuationIndent.length) {
+      fragments.push(printed.slice(offset, offset + columns - continuationIndent.length));
+    }
+    expect(fragments.length).toBeGreaterThan(1);
+    for (const fragment of fragments) {
+      // The closing quote is intentionally outside the clickable path.
+      await previewPrintedPath(page, fragment.replace(/"$/u, ""));
+      const preview = page.getByRole("dialog", { name: join(installation.home, directory, name), exact: true });
+      const image = preview.getByRole("img", { name, exact: true });
+      await expect(image).toBeVisible();
+      await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(48);
+      await expect(preview).toContainText(`${index + 1} / ${examples.length}`);
+      if (index < examples.length - 1) {
+        await page.keyboard.press("ArrowRight");
+        await expect(page.getByRole("dialog", { name: join(installation.home, examples[index + 1]!.directory, examples[index + 1]!.name), exact: true }).getByRole("img")).toBeVisible();
+        await page.keyboard.press("ArrowLeft");
+        await expect(image).toBeVisible();
+      }
+      if (visualDirectory !== undefined && index === 0 && fragment === fragments[0]) {
+        await page.screenshot({ path: join(visualDirectory, "terminal-hard-wrapped-path-preview.png") });
+      }
+      await preview.getByRole("button", { name: "Close" }).click();
+      await expect(preview).toBeHidden();
+    }
   }
 });
