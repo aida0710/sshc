@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -107,10 +108,14 @@ func (service *Service) Start(plan Plan) (Job, error) {
 		*job = Job{ID: hex.EncodeToString(nonce), Target: plan.Target, State: JobAccepted, StartedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(), OwnerPID: service.dependencies.PID, Plan: plan}
 		return nil
 	})
-	if err == nil {
-		service.ownedJobID = job.ID
+	if err != nil {
+		return job, err
 	}
-	return job, err
+	service.ownedJobID = job.ID
+	// ログは見るためのものなので、作れなくても更新は続ける。Log は見出しのジョブ ID が
+	// いまのジョブと違うログを返さないので、前のジョブのログが残っても取り違えない。
+	_ = createLog(LogPath(service.dependencies.StatePath), job.ID)
+	return job, nil
 }
 
 func (service *Service) ResponseSent(id string, responseError error) {
@@ -138,7 +143,7 @@ func (service *Service) ResponseSent(id string, responseError error) {
 func (service *Service) install(job Job) {
 	ctx, cancel := context.WithTimeout(service.workerContext, InstallationTimeout)
 	defer cancel()
-	installedVersion, err := service.installPlan(ctx, job.Plan)
+	installedVersion, err := service.installPlan(ctx, job)
 	if err != nil {
 		code := failureCode(err, "update_install_failed")
 		if errors.Is(ctx.Err(), context.Canceled) {
@@ -160,7 +165,8 @@ func (service *Service) install(job Job) {
 	}
 }
 
-func (service *Service) installPlan(ctx context.Context, plan Plan) (string, error) {
+func (service *Service) installPlan(ctx context.Context, job Job) (string, error) {
+	plan := job.Plan
 	installation, err := service.Inspect(ctx)
 	if err != nil {
 		return "", err
@@ -171,8 +177,13 @@ func (service *Service) installPlan(ctx context.Context, plan Plan) (string, err
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	installedVersion, err := service.dependencies.Install(ctx, plan)
+	output := OpenLog(service.dependencies.StatePath, job.ID)
+	// 再起動の helper が同じログに書き足すので、helper を起こす前に閉じる。
+	defer output.Close()
+	installedVersion, err := service.dependencies.Install(ctx, InstallRequest{Plan: plan, Output: output})
 	if err != nil {
+		// ジョブの状態には失敗の種類しか残らないので、インストーラーが返した理由を出力の続きに書く。
+		fmt.Fprintf(output, "sshc: the update failed: %v\n", err)
 		return "", err
 	}
 	if err := validateInstalledVersion(plan, installedVersion); err != nil {

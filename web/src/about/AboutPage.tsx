@@ -11,7 +11,9 @@ import { BuildDetails } from "./BuildDetails";
 import { ReleaseNotes } from "./ReleaseNotes";
 import { checkRequestFailedActivity, checkResultActivity, checkStartedActivity } from "./updateActivity";
 import { UpdateActivityLog } from "./UpdateActivityLog";
+import { UpdateOutput } from "./UpdateOutput";
 import { useUpdateActivity } from "./useUpdateActivity";
+import { useUpdateOutput } from "./useUpdateOutput";
 
 type AboutPageProps = { api?: AboutApi; updates?: UpdateApi };
 
@@ -22,6 +24,7 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
   const [checking, setChecking] = useState(false);
   const { status, setStatus } = useUpdateStatus(updates);
   const activity = useUpdateActivity(status);
+  const updateOutput = useUpdateOutput(updates, status?.job);
 
   useEffect(() => {
     let active = true;
@@ -77,6 +80,7 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
             {status?.job?.state === "restarting" ? <Button onClick={() => window.location.reload()}>{t("update.reload")}</Button> : null}
           </div>
           <UpdateActivityLog entries={activity.entries} />
+          <UpdateOutput {...updateOutput} />
         </div>
       </section>
       <ReleaseNotes releases={status?.releases ?? []} current={status?.current ?? about?.version ?? ""} latest={status?.latest} />

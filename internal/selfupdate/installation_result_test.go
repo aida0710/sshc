@@ -22,7 +22,7 @@ func TestInstalledVersionControlsRestartConfirmationWithoutChangingTheReviewedTa
 			dependencies.Inspect = func(context.Context) (Installation, error) {
 				return Installation{Manager: scenario.manager, Executable: "/fixture/sshc", Identity: "same-installation"}, nil
 			}
-			dependencies.Install = func(context.Context, Plan) (string, error) { return scenario.installedVersion, nil }
+			dependencies.Install = func(context.Context, InstallRequest) (string, error) { return scenario.installedVersion, nil }
 			restarted := make(chan Job, 1)
 			dependencies.Restart = func(_ context.Context, job Job) error { restarted <- job; return nil }
 			service := New(dependencies)

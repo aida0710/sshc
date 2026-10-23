@@ -25,6 +25,7 @@ func ownedDeviceLocalPaths() []string {
 		path.Join(storage.StateDirectoryName, selfupdate.StateFileName),
 		path.Join(storage.StateDirectoryName, selfupdate.StateFileName+selfupdate.StateLockSuffix),
 		path.Join(storage.StateDirectoryName, selfupdate.StateFileName+selfupdate.RestartLockSuffix),
+		path.Join(storage.StateDirectoryName, selfupdate.LogFileName),
 		secret.LocalKeyPath,
 		secret.SettingsPath,
 		path.Join(storage.StateDirectoryName, handoff.FileName),

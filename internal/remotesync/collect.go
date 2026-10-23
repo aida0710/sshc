@@ -45,6 +45,8 @@ var neverTravels = slices.Concat([]string{
 	path.Join(storage.StateDirectoryName, selfupdate.StateFileName),
 	path.Join(storage.StateDirectoryName, selfupdate.StateFileName+selfupdate.StateLockSuffix),
 	path.Join(storage.StateDirectoryName, selfupdate.StateFileName+selfupdate.RestartLockSuffix),
+	// インストーラーの出力は、このマシンのインストール先やプロセスの情報を含む。
+	path.Join(storage.StateDirectoryName, selfupdate.LogFileName),
 	// このマシンで消した鍵の退避先。
 	keys.TrashPathRelative,
 	// 接続履歴はこの端末での操作状態であり、別の端末へ移さない。

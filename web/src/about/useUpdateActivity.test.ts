@@ -11,9 +11,9 @@ function withJob(state: UpdateJob["state"], problem = ""): UpdateStatus {
 }
 
 describe("useUpdateActivity", () => {
-  it("adds one line per state of an update, however often the same state is polled", () => {
+  it("adds one line per step of an update, however often the same step is polled", () => {
     const { result, rerender } = renderHook(({ status }) => useUpdateActivity(status), { initialProps: { status: idle } });
-    for (const status of [withJob("installing"), withJob("installing"), withJob("restarting"), withJob("restarting")]) {
+    for (const status of [withJob("accepted"), withJob("installing"), withJob("installing"), withJob("restarting"), withJob("restarting")]) {
       rerender({ status });
     }
     expect(result.current.entries.map((entry) => entry.message)).toEqual(["update.installing", "update.restarting"]);

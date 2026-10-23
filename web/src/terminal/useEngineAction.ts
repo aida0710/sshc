@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { ApiError } from "../api/client";
 import type { RemoteEngineAction, RemoteEngineActionLog, RemoteEnginesApi } from "../api/remoteEngines";
 import type { Translate } from "../i18n/context";
+import { useCommandOutput } from "../ui/useCommandOutput";
 import { usePolling } from "../ui/usePolling";
 import { runTargetFailureText, runTargetProblemText } from "./runTargetProblem";
 
@@ -48,10 +49,9 @@ export function useEngineAction({
 }): EngineActionState {
   const [running, setRunning] = useState<RemoteEngineAction | null>(null);
   const [followed, setFollowed] = useState<FollowedAction | null>(null);
-  const [output, setOutput] = useState("");
+  const { output, nextCursor, receive, restart } = useCommandOutput(maxEngineActionOutput);
   const [lastResult, setLastResult] = useState<EngineActionResult | null>(null);
   const [actionProblem, setActionProblem] = useState("");
-  const cursor = useRef(0);
 
   const end = useCallback((result: EngineActionResult | null, problem: string) => {
     setFollowed(null);
@@ -65,8 +65,7 @@ export function useEngineAction({
     setRunning(action);
     setActionProblem("");
     setLastResult(null);
-    setOutput("");
-    cursor.current = 0;
+    restart();
     try {
       const started = await api.control(alias, action);
       setFollowed({ action, generation: started.generation });
@@ -74,13 +73,13 @@ export function useEngineAction({
       setRunning(null);
       setActionProblem(runTargetProblemText(translate, error, alias));
     }
-  }, [alias, api, translate]);
+  }, [alias, api, restart, translate]);
 
   usePolling(async (isCurrent) => {
     if (followed === null) return;
     let log: RemoteEngineActionLog;
     try {
-      log = await api.actionLog(alias, cursor.current);
+      log = await api.actionLog(alias, nextCursor());
     } catch (error) {
       // A request that never got an answer is retried on the next tick; an
       // answer refusing it means the progress is gone.
@@ -94,8 +93,7 @@ export function useEngineAction({
       end(null, runTargetFailureText(translate, "remote_engine_no_action", alias));
       return;
     }
-    cursor.current = log.cursor.next;
-    if (log.output !== "") setOutput((shown) => keepNewest(shown + log.output));
+    receive(log);
     // The end is read only once every byte before it has been shown.
     if (!log.done || log.cursor.next < log.cursor.end) return;
     if (log.problem !== undefined) {
@@ -106,8 +104,4 @@ export function useEngineAction({
   }, { intervalMs: engineActionPollMs, enabled: followed !== null, immediately: true });
 
   return { running, output, lastResult, actionProblem, run };
-}
-
-function keepNewest(output: string): string {
-  return output.length > maxEngineActionOutput ? output.slice(output.length - maxEngineActionOutput) : output;
 }

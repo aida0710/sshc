@@ -1243,6 +1243,8 @@ export const en = {
   "about.activityNoRelease": "GitHub has no published stable release.",
   "about.activityCheckFailed": "Could not check GitHub for the latest release.",
   "about.activityRequestFailed": "Could not check for the latest release. The sshc engine did not return a result.",
+  "about.updateOutput": "Update output",
+  "about.updateOutputCapped": "The output reached the 256 KiB limit. Anything written after that was not recorded.",
   "about.upToDate": "The running {version} is the latest version.",
   "about.noRelease": "Release information has not been retrieved.",
   "about.releaseNotes": "Release notes",
