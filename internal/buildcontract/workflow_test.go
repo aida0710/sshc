@@ -340,8 +340,8 @@ func validateNativeWorkflow(document workflowDocument) []string {
 
 func validateNativeMatrix(id string, job workflowJob) []string {
 	var problems []string
-	if job.RunsOn != "${{ matrix.os }}" {
-		problems = append(problems, id+" runs-on must be ${{ matrix.os }}")
+	if job.RunsOn != ownerLinuxMatrixRunner {
+		problems = append(problems, id+" runs-on must route only owner-triggered Linux jobs to r540")
 	}
 	if job.Strategy == nil {
 		return append(problems, id+" strategy is missing")
