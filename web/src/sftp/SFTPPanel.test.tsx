@@ -1288,6 +1288,57 @@ describe("SFTPPanel uploads", () => {
     expect(screen.queryByRole("combobox", { name: "Search mode" })).not.toBeInTheDocument();
   });
 
+  describe.each([false, true])("IME input with mobile layout %s", (mobile) => {
+    beforeEach(() => {
+      vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+        matches: mobile && query === mobileViewportQuery, media: query,
+        addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      })));
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it.each([
+      { isComposing: true },
+      { isComposing: false, keyCode: 229 },
+    ])("starts searching only after composition ends (%j)", async (composition) => {
+      api.search.mockResolvedValue({ path: "/remote", query: "資料", entries: [], truncated: false });
+      render(<SFTPPanel aliases={["edge"]} />);
+      await chooseHost("edge");
+      await screen.findByText("This directory is empty.");
+      if (mobile) await userEvent.click(screen.getByRole("button", { name: "Search files" }));
+      const input = screen.getByRole("searchbox", { name: "Filter entries" });
+      await userEvent.click(input);
+      fireEvent.change(input, { target: { value: "資料" } });
+      expect(fireEvent.keyDown(input, { key: "Enter", ...composition })).toBe(true);
+      expect(api.search).not.toHaveBeenCalled();
+      expect(input).toHaveFocus();
+
+      await userEvent.keyboard("{Enter}");
+      await waitFor(() => expect(api.search).toHaveBeenCalledExactlyOnceWith({
+        alias: "edge", path: "/remote", query: "資料", mode: "name", signal: expect.any(AbortSignal),
+      }));
+    });
+
+    it.each([
+      { isComposing: true },
+      { isComposing: false, keyCode: 229 },
+    ])("keeps path editing open on composition Escape (%j)", async (composition) => {
+      render(<SFTPPanel aliases={["edge"]} />);
+      await chooseHost("edge");
+      await screen.findByText("This directory is empty.");
+      await userEvent.click(screen.getByRole("button", { name: "Edit path" }));
+      const input = screen.getByRole("textbox", { name: "Remote path" });
+      fireEvent.change(input, { target: { value: "/資料" } });
+      fireEvent.keyDown(input, { key: "Escape", ...composition });
+      expect(input).toHaveFocus();
+      expect(input).toHaveValue("/資料");
+
+      await userEvent.keyboard("{Escape}");
+      expect(input).not.toBeInTheDocument();
+      expect(api.list).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("searches below the open directory and shows where each match lives", async () => {
     api.list.mockResolvedValue({
       path: "/srv",

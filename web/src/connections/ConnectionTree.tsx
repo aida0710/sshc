@@ -18,6 +18,7 @@ import { applySelectionGesture, emptyMultiSelection, keepVisible, type MultiSele
 import { GroupSheet } from "./GroupSheet";
 import { ConnectionRow } from "./ConnectionRow";
 import { listGroups, ungroupedCount } from "./groupListing";
+import { isImeComposing } from "../ui/imeComposition";
 
 export type HostSelection = { path: string; alias: string };
 
@@ -273,7 +274,7 @@ export function ConnectionTree({
   useEffect(() => {
     if (onCheckedChange === undefined || checked.keys.size === 0) return;
     const clearOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (isImeComposing(event) || event.key !== "Escape" || event.defaultPrevented) return;
       onCheckedChange(emptyMultiSelection);
       onSelectionModeChange?.(false);
     };

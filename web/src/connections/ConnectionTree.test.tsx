@@ -300,6 +300,19 @@ describe("ConnectionTree", () => {
       expect(screen.getByRole("button", { name: "nas" })).toHaveAttribute("aria-current", "true");
     });
 
+    it.each([
+      { isComposing: true },
+      { isComposing: false, keyCode: 229 },
+    ])("preserves selected connections on composition Escape (%j)", (composition) => {
+      render(<ChoosingTree />);
+      fireEvent.click(screen.getByRole("button", { name: "nas" }));
+      fireEvent.click(screen.getByRole("button", { name: "bastion" }), { ctrlKey: true });
+      fireEvent.keyDown(window, { key: "Escape", ...composition });
+      expect(chosen()).toEqual(["nas", "bastion"]);
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(chosen()).toEqual([]);
+    });
+
     it("keeps showing the one connection still chosen after Ctrl takes the open one out", () => {
       render(<ChoosingTree />);
       fireEvent.click(screen.getByRole("button", { name: "nas" }));

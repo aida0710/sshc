@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isImeComposing } from "../ui/imeComposition";
 
 // A whole number typed into the transfer settings, shown in `scale` units
 // (a MiB setting has a scale of 1 MiB) and committed in the setting's own
@@ -41,6 +42,7 @@ export function TransferIntegerSetting({ label, value, min, max, scale = 1, unit
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
+            if (isImeComposing(event)) return;
             if (event.key === "Enter") event.currentTarget.blur();
             if (event.key === "Escape") {
               setDraft(String(shownValue));

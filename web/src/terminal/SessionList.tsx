@@ -14,6 +14,7 @@ import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { useShiftKeyHeld } from "../ui/useShiftKeyHeld";
 import { TerminalProgressBar } from "./TerminalProgressBar";
+import { isImeComposing } from "../ui/imeComposition";
 
 type SessionListProps = {
   sessions: TerminalSession[];
@@ -225,6 +226,7 @@ export function SessionList({
                         onChange={(event) => setDraft(event.target.value)}
                         onBlur={() => void commitRename(session.id)}
                         onKeyDown={(event) => {
+                          if (isImeComposing(event)) return;
                           if (event.key === "Enter") void commitRename(session.id);
                           if (event.key === "Escape") setRenaming(null);
                         }}

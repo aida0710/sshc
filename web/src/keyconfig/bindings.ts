@@ -3,6 +3,7 @@ import { isValidShortcutChord } from "../rules/shortcutChord";
 import { maxShortcutKeysPerAction, shortcutActions } from "../rules/shortcuts.generated";
 import { readStoredValue } from "../ui/browserStorage";
 import { localStorageKeys } from "../ui/browserStorageKeys";
+import { isImeComposing } from "../ui/imeComposition";
 
 export { shortcutActions };
 export type ShortcutAction = (typeof shortcutActions)[number];
@@ -26,7 +27,7 @@ const changedEvent = "sshc-shortcuts-changed";
 // recorded chord is never refused on save. A '+' key cannot be told apart from
 // the separator, so it never makes a chord.
 export function shortcutKey(event: KeyboardEvent): string | null {
-  if (event.isComposing || event.keyCode === 229 || event.getModifierState("AltGraph")) return null;
+  if (isImeComposing(event) || event.getModifierState("AltGraph")) return null;
   if (["Control", "Shift", "Alt", "Meta", "Dead", "Unidentified"].includes(event.key)) return null;
   const key = event.key === " " ? "Space" : event.key.length === 1 ? event.key.toUpperCase() : event.key;
   const chord = [event.ctrlKey && "Ctrl", event.altKey && "Alt", event.shiftKey && "Shift", event.metaKey && "Meta", key].filter(Boolean).join("+");
@@ -79,7 +80,7 @@ export function matchesShortcut(event: KeyboardEvent, action: ShortcutAction, bi
   return key !== null && (bindings ?? loadBindings())[action].includes(key);
 }
 export function shortcutsBlocked(event: KeyboardEvent): boolean {
-  return event.defaultPrevented || event.isComposing || event.keyCode === 229 ||
+  return event.defaultPrevented || isImeComposing(event) ||
     (event.target instanceof Element && event.target.closest("[data-shortcut-editor]") !== null) ||
     document.querySelector('[role="dialog"][aria-modal="true"], dialog[open]') !== null;
 }

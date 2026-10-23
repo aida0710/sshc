@@ -1,6 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import type { SFTPSearchModel } from "./useSFTPSearch";
+import { isImeComposing } from "../ui/imeComposition";
 
 export function SFTPCompactSelection({ label, menuLabel, expanded, onClear, onMenu, onSearch }: {
   label: string;
@@ -31,7 +32,7 @@ export function SFTPCompactSearch({ search, recursive, disabled, onOptions }: {
       aria-label={t(search.mode === "content" ? "sftp.search.contentPlaceholder" : "sftp.filter")}
       placeholder={t(search.mode === "content" ? "sftp.search.contentPlaceholder" : "sftp.filterPlaceholder")}
       value={search.filter} onChange={(event) => search.setFilter(event.target.value)}
-      onKeyDown={(event) => { if (event.key !== "Enter") return; event.preventDefault(); if (recursive) void search.runSearch(); event.currentTarget.blur(); }}
+      onKeyDown={(event) => { if (isImeComposing(event) || event.key !== "Enter") return; event.preventDefault(); if (recursive) void search.runSearch(); event.currentTarget.blur(); }}
       className="h-12 min-w-0 flex-1 rounded border border-control-line bg-control px-2 text-base outline-none focus:border-accent" />
     {recursive ? <>
       <button type="button" aria-label={t("sftp.search.mode")} onClick={onOptions} className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name="settings" className="size-5" /></button>

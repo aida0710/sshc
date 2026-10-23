@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
@@ -123,6 +123,40 @@ describe("CommandPalette", () => {
 
     expect(onClose).toHaveBeenCalledOnce();
     expect(onConnect).toHaveBeenCalledWith("r540");
+  });
+
+  describe.each([
+    { isComposing: true },
+    { isComposing: false, keyCode: 229 },
+  ])("while the IME reports %j", (composition) => {
+    it("leaves selection and execution to the IME until composition ends", async () => {
+      const props = renderPalette();
+      const search = screen.getByRole("searchbox");
+      await waitFor(() => expect(search).toHaveFocus());
+      const selected = search.getAttribute("aria-activedescendant");
+      for (const key of ["ArrowDown", "ArrowUp", "Enter"]) {
+        expect(fireEvent.keyDown(search, { key, ...composition })).toBe(true);
+      }
+      expect(search).toHaveAttribute("aria-activedescendant", selected);
+      expect(props.onClose).not.toHaveBeenCalled();
+      expect(props.onConnect).not.toHaveBeenCalled();
+
+      await userEvent.keyboard("{Enter}");
+      expect(props.onConnect).toHaveBeenCalledExactlyOnceWith("r540");
+      expect(props.onClose).toHaveBeenCalledOnce();
+    });
+
+    it("keeps the palette open on composition Escape and closes on the next Escape", async () => {
+      const props = renderPalette();
+      const search = screen.getByRole("searchbox");
+      await waitFor(() => expect(search).toHaveFocus());
+      expect(fireEvent.keyDown(search, { key: "Escape", ...composition })).toBe(true);
+      expect(props.onClose).not.toHaveBeenCalled();
+      expect(search).toHaveFocus();
+
+      await userEvent.keyboard("{Escape}");
+      expect(props.onClose).toHaveBeenCalledOnce();
+    });
   });
 
   it("closes when the backdrop is clicked", async () => {
