@@ -128,13 +128,6 @@ export function App({
     };
   }, [runTargets.selected, vaultRevision]);
   const terminalSessions = useTerminalSessions(runTargetApis.sessions, t, state === "ready");
-  // A run target found locked asks for its Vault password at once.
-  // Cancelling it leaves the terminal area's [Unlock…] to ask again.
-  const { offer: offerVaultUnlock } = runTargets.vaultUnlock;
-  const runTargetLocked = terminalSessions.remoteRefusal?.code === "remote_engine_vault_locked";
-  useEffect(() => {
-    if (runTargetLocked && runTargets.selected !== null) offerVaultUnlock(runTargets.selected);
-  }, [offerVaultUnlock, runTargets.selected, runTargetLocked]);
   const terminalWorkspaces = useTerminalWorkspaces({
     sessions: terminalSessions.sessions,
     translate: t,
