@@ -40,8 +40,12 @@ async function runCommand(terminal: Locator, command: string) {
   await keyboard.press("Enter");
 }
 
+function sessionRow(page: Page, title: string): Locator {
+  return page.getByRole("navigation", { name: "Primary" }).getByRole("list", { name: "Open sessions" }).getByRole("listitem").filter({ has: page.getByRole("button", { name: title, exact: true }) });
+}
+
 async function dragSession(page: Page, options: { title: string; target: Locator; edge: "left" | "right" | "top" | "bottom" }) {
-  const row = page.getByRole("navigation", { name: "Primary" }).getByRole("list", { name: "Open sessions" }).getByRole("listitem").filter({ has: page.getByRole("button", { name: options.title, exact: true }) });
+  const row = sessionRow(page, options.title);
   const bounds = await options.target.boundingBox();
   if (bounds === null) throw new Error("missing pane bounds");
   const edgeInset = 8; // Stay within the pane's drop area, away from the divider.
@@ -155,7 +159,7 @@ test("splits across workspaces without changing membership and still accepts wor
   await page.getByRole("textbox", { name: "Workspace name" }).fill("Monitoring");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   const workspace = navigation.getByRole("button", { name: /^Monitoring/ });
-  const row = navigation.getByRole("list", { name: "Open sessions" }).getByRole("listitem").filter({ has: page.getByRole("button", { name: "Logs", exact: true }) });
+  const row = sessionRow(page, "Logs");
   await row.dragTo(workspace);
   await expect(workspace).toContainText("1");
   await splitWithMenu(page, "Build");
@@ -165,6 +169,96 @@ test("splits across workspaces without changing membership and still accepts wor
   await row.dragTo(navigation.getByRole("button", { name: /^Main/ }));
   await expect(workspace).toContainText("0");
   await expect(page.locator("[data-split-view-pane]")).toHaveCount(2);
+  await expect(row.locator('[data-split-group-badge="1"]')).toHaveCount(1);
+});
+
+test("keeps two split groups through standalone selection and dissolves them without closing sessions", async ({ page, installation }) => {
+  // Five real shells provide two independent groups and one standalone session.
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  const titles = ["ビルド", "アプリのログ", "テスト", "マシンの状態", "予備"];
+  const outputs = [
+    "Build completed successfully.\\nAssets are ready.",
+    "14:32:01 INFO  Listening on localhost:3000\\n14:32:04 GET   /             200\\n14:32:07 GET   /health       200",
+    "Test Files  3 passed (3)\\n     Tests  54 passed (54)\\n  Duration  1.28s",
+    "All services running.",
+    "Ready for the next command.",
+  ];
+  const ids: string[] = [];
+  for (const [index, title] of titles.entries()) {
+    const id = await openNamedShell(page, title);
+    ids.push(id);
+    // Playwright key events cannot type Japanese through xterm's composition path.
+    // Wait for computed output so command echo cannot satisfy readiness.
+    await runCommand(pane(page, id), `PS1='sshc@localhost:~/project$ '; printf '\\033[2J\\033[H${outputs[index]}\\nREADY:%s\\n' $((6 * 7))`);
+    await expect(pane(page, id)).toContainText("READY:42");
+  }
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("button", { name: "New workspace", exact: true }).click();
+  await page.getByRole("textbox", { name: "Workspace name" }).fill("検証");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  const workspace = navigation.getByRole("button", { name: /^検証/ });
+  for (const title of titles.slice(3)) await sessionRow(page, title).dragTo(workspace);
+  await expect(workspace).toContainText("2");
+  await navigation.getByRole("button", { name: titles[0]!, exact: true }).click();
+  await pane(page, ids[0]!).getByRole("button", { name: "More terminal actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Show in split view on the right", exact: true }).click();
+  await page.getByRole("dialog", { name: "Choose a session to split" }).getByRole("button", { name: titles[1]!, exact: true }).click();
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(2);
+  await navigation.getByRole("button", { name: titles[3]!, exact: true }).click();
+  await splitWithMenu(page, titles[4]!);
+  await expect(page.locator("[data-split-group]")).toHaveCount(2);
+  await expect(navigation.locator('[data-split-group-badge="1"]')).toHaveCount(2);
+  await expect(navigation.locator('[data-split-group-badge="2"]')).toHaveCount(2);
+  await navigation.getByRole("button", { name: titles[2]!, exact: true }).click();
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(1);
+  await expect(pane(page, ids[2]!)).toBeVisible();
+  await navigation.getByRole("button", { name: "Split 1", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(pane(page, ids[0]!)).toBeVisible();
+  await expect(pane(page, ids[1]!)).toBeVisible();
+  await expect(terminalKeyboard(pane(page, ids[1]!))).toBeFocused();
+  await navigation.getByRole("button", { name: titles[3]!, exact: true }).click();
+  await expect(pane(page, ids[3]!)).toHaveAttribute("data-pane-active", "true");
+  await expect(pane(page, ids[4]!)).toBeVisible();
+  await navigation.getByRole("button", { name: "Split 1", exact: true }).click();
+  await changeDisplayLanguage(page, "ja");
+  const japaneseNavigation = page.getByRole("navigation", { name: "メインナビゲーション" });
+  const groupOne = japaneseNavigation.locator('[data-split-group="1"]');
+  await groupOne.getByRole("button", { name: "分割 1のセッション名を開閉" }).click();
+  await expect(groupOne.getByText("ビルド・アプリのログ", { exact: true })).toHaveCount(0);
+  await groupOne.getByRole("button", { name: "分割 1のセッション名を開閉" }).click();
+  await expect(groupOne.getByText("ビルド・アプリのログ", { exact: true })).toBeVisible();
+  await expect(japaneseNavigation.getByRole("list", { name: "SPLIT VIEWS" })).toBeVisible();
+  await waitForTerminalLayout(page);
+  const visualDirectory = process.env.SSHC_VISUAL_DIR;
+  if (visualDirectory !== undefined) await page.screenshot({ path: `${visualDirectory}/split-groups-split-ja.png` });
+  await japaneseNavigation.getByRole("button", { name: titles[2]!, exact: true }).click();
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(1);
+  await expect(pane(page, ids[2]!).getByRole("region")).toContainText("READY:42");
+  await waitForTerminalLayout(page);
+  if (visualDirectory !== undefined) await page.screenshot({ path: `${visualDirectory}/split-groups-single-ja.png` });
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.getByRole("button", { name: "ナビゲーション", exact: true }).click();
+  await japaneseNavigation.getByRole("button", { name: "分割 2", exact: true }).click();
+  await expect(page.locator("[data-split-view-pane]:visible")).toHaveCount(1);
+  const mobilePanes = page.getByRole("navigation", { name: "分割表示のペイン" });
+  await mobilePanes.getByRole("button", { name: titles[3]!, exact: true }).click();
+  await expect(pane(page, ids[3]!)).toBeVisible();
+  await expect(pane(page, ids[4]!)).toBeHidden();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await groupOne.getByRole("button", { name: "分割 1", exact: true }).click();
+  await japaneseNavigation.getByRole("button", { name: "分割 2を解除", exact: true }).click();
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(2);
+  await expect(japaneseNavigation.locator('[data-split-group-badge="2"]')).toHaveCount(0);
+  await japaneseNavigation.getByRole("button", { name: "分割 1を解除", exact: true }).click();
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(1);
+  await expect(japaneseNavigation.getByRole("list", { name: "SPLIT VIEWS" })).toHaveCount(0);
+  await expect(japaneseNavigation.locator("[data-split-group-badge]")).toHaveCount(0);
+  for (const title of titles) await expect(japaneseNavigation.getByRole("button", { name: title, exact: true })).toBeVisible();
+  await runCommand(pane(page, ids[1]!), "printf 'SURVIVED:%s\\n' $((6 * 7))");
+  await expect(pane(page, ids[1]!)).toContainText("SURVIVED:42");
 });
 
 test("closes exited and deleted panes and clears the arrangement on reload", async ({ page, installation }) => {

@@ -27,6 +27,7 @@ type WorkspaceTreeProps = {
   // sessions are every session in list order.
   sessions: TerminalSession[];
   selected: string | null;
+  splitGroupNumberBySession?: ReadonlyMap<string, number>;
   unreadBySession?: UnreadSessions;
   onSelect: (id: string) => void;
   canSplitSession?: (id: string) => boolean;
@@ -64,6 +65,7 @@ export function WorkspaceTree({
   terminalSessions,
   sessions,
   selected,
+  splitGroupNumberBySession,
   unreadBySession = new Set(),
   onSelect,
   canSplitSession,
@@ -232,6 +234,7 @@ export function WorkspaceTree({
                   <SessionList
                     sessions={members}
                     selected={selected}
+                    {...(splitGroupNumberBySession === undefined ? {} : { splitGroupNumberBySession })}
                     atSessionLimit={atSessionLimit}
                     busy={terminalSessions.busy}
                     unreadBySession={unreadBySession}

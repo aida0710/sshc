@@ -3,6 +3,7 @@ import { sessionDragMimeType } from "../sessionDrag";
 import { nearestPaneEdge } from "./geometry";
 import { maximumSplitViewPanes, paneSessionIds, type PaneEdge } from "./layout";
 import type { SplitViewController } from "./useSplitView";
+import { maximumSplitGroups } from "./splitGroups";
 
 // Pane handles swap positions; sidebar sessions split at the nearest edge.
 const paneDragMimeType = "application/x-sshc-split-view-pane";
@@ -47,6 +48,7 @@ export function usePaneDrag(splitView: SplitViewController) {
     moving: movingSession,
     target,
     atLimit: members.length >= maximumSplitViewPanes,
+    atGroupLimit: splitView.activeGroupNumber === null && splitView.groups.length >= maximumSplitGroups,
     clear,
     dragOver,
     drop,

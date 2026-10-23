@@ -7,6 +7,7 @@ import { terminalDisplayTitle } from "../terminalPresentation";
 import { TerminalEmptyState } from "../TerminalEmptyState";
 import { splitViewGeometry } from "./geometry";
 import { maximumSplitViewPanes } from "./layout";
+import { maximumSplitGroups } from "./splitGroups";
 import { PaneToolbar } from "./PaneToolbar";
 import { usePaneDrag } from "./usePaneDrag";
 import type { SplitViewController } from "./useSplitView";
@@ -31,6 +32,12 @@ export function TerminalSplitView({ splitView, sessions, renderTerminal }: {
   const singleVisible = compact || state.focusMode;
   const sessionById = new Map(sessions.map((session) => [session.id, session]));
   const selected = state.activeSessionId;
+  function dropHint(swapping: boolean): string {
+    if (swapping) return t("splitView.swap");
+    if (drag.atLimit) return t("splitView.maxPanes", { count: maximumSplitViewPanes });
+    if (drag.atGroupLimit) return t("splitView.maxGroups", { count: maximumSplitGroups });
+    return t("splitView.drop");
+  }
   if (panes.length === 0) return <TerminalEmptyState />;
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col" onKeyDownCapture={(event) => {
@@ -103,7 +110,7 @@ export function TerminalSplitView({ splitView, sessions, renderTerminal }: {
               {renderTerminal(session, headerActions)}
               {target === null || compact ? null : (
                 <div data-pane-drop-preview={target.edge ?? "swap"} className={`pointer-events-none absolute z-20 grid place-items-center border-2 border-accent bg-accent/20 ${target.edge === null ? "inset-0" : previewClass[target.edge]}`}>
-                  <span className="rounded bg-card px-2 py-1 text-xs text-ink" role="status">{t(target.edge === null ? "splitView.swap" : drag.atLimit ? "splitView.maxPanes" : "splitView.drop", { count: maximumSplitViewPanes })}</span>
+                  <span className="rounded bg-card px-2 py-1 text-xs text-ink" role="status">{dropHint(target.edge === null)}</span>
                 </div>
               )}
             </div>

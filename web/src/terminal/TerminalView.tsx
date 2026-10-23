@@ -62,6 +62,7 @@ import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
 import { ToastMessage } from "../ui/ToastMessage";
 import { toastVisibleMs } from "../ui/ToastProvider";
+import type { PaneEdge } from "./splitView/layout";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -69,6 +70,8 @@ type TerminalViewProps = {
   active?: boolean;
   focusRequest?: number;
   headerActions?: ReactNode;
+  onSplit?: (edge: PaneEdge) => void;
+  canSplit?: boolean;
   api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
   onExit?: () => void;
   onReconnect?: () => Promise<boolean>;
@@ -115,6 +118,8 @@ export function TerminalView({
   active = true,
   focusRequest,
   headerActions,
+  onSplit,
+  canSplit = false,
   api = terminalSessionsApi,
   onExit,
   onReconnect,
@@ -556,6 +561,8 @@ export function TerminalView({
         {headerActions}
         {overflowOpen ? (
           <TerminalOverflowMenu
+            onSplit={onSplit}
+            canSplit={canSplit}
             triggerRef={overflowTrigger}
             osc52Enabled={osc52Enabled}
             onQuickCommands={runTarget !== undefined ? undefined : () => {

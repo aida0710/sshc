@@ -358,6 +358,12 @@ export function App({
             activeSessionId={activeSessionId}
             unreadBySession={unreadSessions}
             onShowSession={showSession}
+            splitView={splitView}
+            onShowSplitGroup={(number) => {
+              splitView.dispatch({ type: "select-group", number });
+              closeNavigation();
+              navigate("Terminal");
+            }}
             canSplitSession={splitView.canSplit}
             onSplitSession={(id, edge) => {
               if (activeSessionId === null) return;

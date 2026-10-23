@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import type { TerminalAppearance, TerminalSettings } from "../api/settings";
 import type { TerminalSession, TerminalSessionsApi } from "../api/terminalSessions";
 import { resolveAppearance } from "../terminal/appearance";
@@ -7,6 +7,8 @@ import type { SplitViewController } from "../terminal/splitView/useSplitView";
 import type { RemotePathAction } from "../terminal/TerminalLinkPopover";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
+import type { PaneEdge } from "../terminal/splitView/layout";
+import { SplitSessionPicker } from "../terminal/splitView/SplitSessionPicker";
 
 const TerminalView = lazy(() =>
   import("../terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
@@ -59,6 +61,7 @@ export function TerminalScreen({
     enabled: boolean,
   ) => Promise<void>;
 }) {
+  const [splitRequest, setSplitRequest] = useState<{ targetSessionId: string; edge: PaneEdge } | null>(null);
   const session = terminalSessions.sessions.find((session) => session.id === activeSessionId) ?? null;
   useEffect(() => {
     document.title = session === null ? "sshc" : `${session.presentation?.displayTitle ?? session.title} · sshc`;
@@ -86,6 +89,8 @@ export function TerminalScreen({
           active={visible && activeSessionId === session.id}
           focusRequest={splitView.state.focusRevision}
           headerActions={headerActions}
+          {...(splitView.compact ? {} : { onSplit: (edge: PaneEdge) => setSplitRequest({ targetSessionId: session.id, edge }) })}
+          canSplit={terminalSessions.sessions.some((candidate) => splitView.canSplit(candidate.id, session.id))}
           api={api}
           {...(runTarget === null ? {} : { runTarget })}
           searchShortcutActive={visible && activeSessionId === session.id}
@@ -122,5 +127,14 @@ export function TerminalScreen({
       </div>
     );
   }
-  return <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} renderTerminal={renderTerminal} />;
+  return <>
+    <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} renderTerminal={renderTerminal} />
+    {splitRequest === null ? null : <SplitSessionPicker
+      sessions={terminalSessions.sessions.filter((candidate) => splitView.canSplit(candidate.id, splitRequest.targetSessionId))}
+      onClose={() => setSplitRequest(null)}
+      onSelect={(sourceSessionId) => {
+        splitView.split({ ...splitRequest, sourceSessionId });
+        setSplitRequest(null);
+      }} />}
+  </>;
 }
