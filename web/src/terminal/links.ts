@@ -1,5 +1,7 @@
 export type TerminalLinkMatch = {
-  kind: "url" | "path";
+  // A relative path is relative to the directory the program that printed it
+  // works in; it is resolved when it is opened, not when it is found.
+  kind: "url" | "path" | "relative-path";
   text: string;
   target: string;
   start: number;
@@ -38,6 +40,10 @@ export function osc8Link(target: string, visibleText: string, start: number, end
 const maxLinkLength = 4096;
 const urlPattern = /https?:\/\/[^\s<>"'`]+/giu;
 const pathPattern = /(?:^|[\s([{=])((?:\/[A-Za-z0-9._~@%+,:=-]+)+(?::\d+(?::\d+)?)?)/gu;
+// Only images are taken from relative paths: an ordinary word such as
+// "config.yaml" or "src/main.go" in program output is far more often prose than
+// a file to open. Claude Code names an image it sent relative to its directory.
+const relativeImagePattern = /(?:^|[\s([{=])((?:\.{1,2}\/)?(?:[A-Za-z0-9._~@%+,=-]+\/)*[A-Za-z0-9._~@%+,=-]+\.(?:png|jpe?g|gif|webp|bmp))(?!\.?[A-Za-z0-9_~@%+=/-])/giu;
 
 function withoutTrailingPunctuation(value: string): string {
   let end = value.length;
@@ -72,6 +78,14 @@ export function findTerminalLinks(line: string): TerminalLinkMatch[] {
     const end = start + text.length;
     if (start < 0 || target === "" || target.length > maxLinkLength || overlaps(matches, start, end)) continue;
     matches.push({ kind: "path", text, target, start, end });
+  }
+  for (const found of line.matchAll(relativeImagePattern)) {
+    const text = found[1] ?? "";
+    const whole = found[0] ?? "";
+    const start = (found.index ?? -1) + whole.length - text.length;
+    const end = start + text.length;
+    if (start < 0 || text.length > maxLinkLength || overlaps(matches, start, end)) continue;
+    matches.push({ kind: "relative-path", text, target: text, start, end });
   }
   return matches.sort((left, right) => left.start - right.start || left.end - right.end);
 }

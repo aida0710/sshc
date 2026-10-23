@@ -744,6 +744,7 @@ export const en = {
   "terminal.linkActions": "Terminal link actions",
   "terminal.linkOpenBrowser": "Open in browser",
   "terminal.linkPreview": "Preview",
+  "terminal.relativePathUnknown": "sshc cannot tell which folder this path is relative to. A full path opens.",
   "terminal.linkBrowseSFTP": "Browse in SFTP",
   "terminal.linkEditSFTP": "Edit with SFTP",
   "terminal.linkDownloadSFTP": "Download with SFTP",

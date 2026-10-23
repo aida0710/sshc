@@ -17,7 +17,7 @@ describe("imagePathsInBuffer", () => {
       "[image] /tmp/a.png (1 KB)",
     ].join("\r\n"), 80);
     try {
-      expect(imagePathsInBuffer(terminal.buffer.active)).toEqual(["/tmp/a.png", "/tmp/b.JPG"]);
+      expect(imagePathsInBuffer(terminal.buffer.active, null)).toEqual(["/tmp/a.png", "/tmp/b.JPG"]);
     } finally { terminal.dispose(); }
   });
 
@@ -26,7 +26,15 @@ describe("imagePathsInBuffer", () => {
     const later = "/tmp/later.png";
     const terminal = await terminalWithOutput(`[image] ${path} then ${later}`);
     try {
-      expect(imagePathsInBuffer(terminal.buffer.active)).toEqual([path, later]);
+      expect(imagePathsInBuffer(terminal.buffer.active, null)).toEqual([path, later]);
+    } finally { terminal.dispose(); }
+  });
+
+  it("resolves relative image paths against the directory, and leaves them out without one", async () => {
+    const terminal = await terminalWithOutput("[image] shots/a.png (1 KB)\r\n[image] /tmp/b.png (1 KB)", 80);
+    try {
+      expect(imagePathsInBuffer(terminal.buffer.active, "/srv")).toEqual(["/srv/shots/a.png", "/tmp/b.png"]);
+      expect(imagePathsInBuffer(terminal.buffer.active, null)).toEqual(["/tmp/b.png"]);
     } finally { terminal.dispose(); }
   });
 });

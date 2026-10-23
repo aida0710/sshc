@@ -47,3 +47,27 @@ describe("findTerminalLinks", () => {
     expect(modifierOpensLink({ ctrlKey: false, metaKey: false })).toBe(false);
   });
 });
+
+describe("relative image paths", () => {
+  it("finds the relative path Claude Code prints for an image it sent", () => {
+    expect(findTerminalLinks("› [image] artifacts/advisor-setting/2026-10-23/advisor-setting.png (16KB)")).toEqual([
+      {
+        kind: "relative-path",
+        text: "artifacts/advisor-setting/2026-10-23/advisor-setting.png",
+        target: "artifacts/advisor-setting/2026-10-23/advisor-setting.png",
+        start: 10,
+        end: 66,
+      },
+    ]);
+  });
+
+  it("takes ./ and ../ and a bare file name, and leaves the sentence's full stop", () => {
+    expect(findTerminalLinks("saved ./out/a.PNG, ../b.jpeg and c.webp.").map((link) => link.target)).toEqual(["./out/a.PNG", "../b.jpeg", "c.webp"]);
+  });
+
+  it("passes other relative names, longer names and URLs by", () => {
+    expect(findTerminalLinks("edit src/main.go and a.png.bak")).toEqual([]);
+    expect(findTerminalLinks("https://example.test/img/a.png").map((link) => link.kind)).toEqual(["url"]);
+    expect(findTerminalLinks("/tmp/a.png").map((link) => link.kind)).toEqual(["path"]);
+  });
+});

@@ -54,6 +54,7 @@ import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { pathPreviewAlias } from "./pathPreviewAlias";
 import { imagePathsInBuffer } from "./imagePaths";
+import { resolveRelativePath } from "./relativePaths";
 import { FilePreviewDialog } from "../sftp/FilePreviewDialog";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
@@ -63,7 +64,7 @@ import { toastVisibleMs } from "../ui/ToastProvider";
 type TerminalViewProps = {
   session: TerminalSession;
   searchShortcutActive?: boolean;
-  api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath">;
+  api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
   onExit?: () => void;
   onReconnect?: () => Promise<boolean>;
   onStopReconnect?: () => Promise<boolean>;
@@ -466,6 +467,22 @@ export function TerminalView({
   const remoteAlias = session.kind === "ssh" ? session.alias : undefined;
   const previewAlias = pathPreviewAlias(session, runTarget);
 
+  // A relative path is relative to where the program that printed it works.
+  // The engine reads that for a local shell; an SSH session only has the
+  // directory its shell reported through OSC 7.
+  async function previewPath(path: string, relative: boolean) {
+    const engineDirectory = await api.terminalSessionDirectory(session.id).catch(() => null);
+    const directory = engineDirectory ?? (currentDirectory === "" ? null : currentDirectory);
+    if (relative && directory === null) {
+      setTerminalNotice(t("terminal.relativePathUnknown"));
+      return;
+    }
+    setPathPreview({
+      path: relative && directory !== null ? resolveRelativePath(directory, path) : path,
+      imagePaths: terminal.current === null ? [] : imagePathsInBuffer(terminal.current.buffer.active, directory),
+    });
+  }
+
   return (
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
       <div className={`relative flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 ${mobile ? "py-0" : "h-8"}`}>
@@ -594,7 +611,7 @@ export function TerminalView({
         <TerminalLinkPopover
           selection={linkSelection}
           onClose={() => setLinkSelection(null)}
-          {...(previewAlias === undefined ? {} : { onPreviewPath: (path: string) => setPathPreview({ path, imagePaths: terminal.current === null ? [] : imagePathsInBuffer(terminal.current.buffer.active) }) })}
+          {...(previewAlias === undefined ? {} : { onPreviewPath: (path: string, relative: boolean) => void previewPath(path, relative) })}
           {...(runTarget === undefined && remoteAlias !== undefined && onOpenRemotePath !== undefined
             ? { onRemotePath: (path: string, action: RemotePathAction) => onOpenRemotePath(remoteAlias, path, action) }
             : {})}
