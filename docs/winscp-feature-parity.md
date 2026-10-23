@@ -1,8 +1,10 @@
 # WinSCP機能差分台帳
 
-更新日: 2026-09-17
+更新日: 2026-10-23
 
-比較対象: sshc `agent/sftp-local-pane`（2026-09-17時点） / WinSCP 6.5.6
+比較対象: sshc main `7ebdde6f3`（2026-10-23時点） / WinSCP 6.5.6
+
+今回はsshcの実装と説明を照合した。WinSCP側の比較項目は前回の6.5.6を基準とし、新しいバージョンとの差は調べていない。
 
 ## 目的
 
@@ -17,33 +19,29 @@ WinSCPに存在する機能を漏れなく分類し、sshcで同じ利用目的�
 
 ## 結論
 
-sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ転送、複数選択、リモート編集、競合検出、バックグラウンドキューという中核を既に持つ。一方、日常のファイルマネージャーとして使う際の不足は大きく、特に次がWinSCPとの差になっている。
+sshcのSFTPは、ローカル／リモートの2ペイン、ファイル操作、内容検索、メタデータとSHA256による比較、転送の速度上限、通信断からの自動復旧に対応している。ローカルを含む比較は読み取り専用で、自動復旧も転送経路によって範囲が異なる。下の表では、こうした制限を含めて対応状況を示す。
 
-1. ディレクトリツリー、local／remoteの同期・比較
-2. 空ファイル／リンク作成、複製、任意の移動先選択、プロパティの一括変更
-3. 帯域制限
-4. 転送前オプション、timestamp／permission保持、mask、プリセット
-5. ローカルとリモートの同期、変更監視
+残っている主な機能は、ディレクトリツリー、ディレクトリの同期・ミラー・変更監視、転送ごとの設定とプリセット、外部エディタとの連携である。設定を暗号化して保存するSyncは、ここでいうディレクトリ同期とは別の機能である。
 
 ## 1. ファイルパネルとナビゲーション
 
 | WinSCP機能 | 状態 | sshcの現状 | 実装方針 |
 |---|---|---|---|
 | Explorer型の単一remote panel | 対応 | SFTP画面が相当 | 維持 |
-| Commander型のlocal／remote 2 panel | 部分対応 | 接続先メニューに固定表示した「ローカル」で、左右どちらのペインにもsshcエンジン側のファイルを表示する。ペインはリモートと同じ`SFTPPanel`で、`SFTPSource`の`can`（connect／edit／createEntries／rename／chmod／delete／search／details／browserUpload／download／dragOut／terminal）に応じて操作を出し分ける。ツールバー、絞り込み、名前・更新日時・サイズ・種別・権限の列、sort、全選択、Shift／Ctrl範囲選択、キーボード操作、右クリック／長押しメニュー、狭幅時の2行リストを共有し、行をリモートへドラッグするとput、リモートの行をローカルへ落とすとgetになる。初期位置はエンジンユーザーのホーム。上階層を含めOS権限の範囲で移動でき、file／directoryをengine queue経由で直接転送する。ブラウザのフォルダ権限は不要 | ローカル／リモートの同期・比較は未対応 |
+| Commander型のlocal／remote 2 panel | 対応 | 左右それぞれにローカルまたはリモートを表示する。ローカルはブラウザ側ではなくsshcエンジンのマシンのファイル。ファイル操作、直接転送、読み取り専用の比較に対応。スマートフォンは左右の全タブを一列にまとめ、選んだ一覧を表示する | ディレクトリ同期は別項目で管理 |
 | remote／remote 2 panel | 対応 | desktopで2つのhost／directoryを並べる。左右が独立したtab列を持ち、表示中のtab間でfile／directoryをDrag & Dropしてcopy／moveできる | 維持 |
 | `..`による親directory移動 | 対応 | リモート・ローカルとも一覧先頭の`..`行で移動する。ローカルもOSルートまで移動でき、ルートでは`..`を表示しない | 維持 |
-| path breadcrumb／直接入力 | 部分対応 | リモート・ローカルとも階層をクリックでき、パスバーの空白クリックまたは編集ボタンで絶対pathを直接入力できる。ローカルは`~/`から始まるpathも受け付ける（Windowsでは`~\`も）。現在のpathはコピーボタンで取得できる | 維持 |
+| path breadcrumb／直接入力 | 対応 | リモート・ローカルとも階層移動、パスの直接入力、コピーに対応。`~`と`~/`も使え、Windowsのローカルは`~\`も受け付ける | 維持 |
 | Back／Forward履歴 | 対応 | リモート・ローカルともhostを切り替えるまでpath履歴を保持する。ローカルは別tab表示中も履歴と一覧を保持する | 維持 |
 | Home directoryへ移動 | 対応 | serverのworking directoryを再解決して移動 | 維持 |
 | Root directoryへ移動 | 対応 | navigation buttonまたは`/`の直接入力 | 維持 |
 | directory bookmark | 未対応 | 2026-09-17に場所menuごと削除。Back／Forward履歴とpath直接入力で代替する | 持たない |
 | 最近開いたdirectory | 未対応 | bookmarkと同時に削除。tabごとのBack／Forward履歴だけを持つ | 持たない |
 | directory tree | 未対応 | 一覧だけ | desktopの任意表示として検討 |
-| remote検索 | 対応 | 絞り込み欄のEnterまたは虫眼鏡で、開いているディレクトリ配下を再帰検索する。symlinkは辿らず、200件・20,000項目・深さ32で打ち切って`truncated`を返す | 更新日時やサイズでの条件は未対応 |
-| synchronized browsing | 未対応 | local panelはあるが連動操作は未実装 | 2 panel導入後 |
+| remote検索 | 対応 | 名前の検索とUTF-8ファイルの内容検索。内容は大文字小文字を区別した固定文字列で検索し、パス・行番号・本文を表示する。リンクは辿らず、件数と読み取り量に上限がある | 更新日時やサイズでの条件は未対応 |
+| synchronized browsing | 未対応 | local panelはあるが連動操作は未実装 | 連動操作の必要性を判断 |
 | pathをclipboardへcopy | 対応 | 現在directoryと選択項目のfull pathをcopy可能 | 維持 |
-| opposite panelのpathへ移動 | 未対応 | local panelはあるが連動操作は未実装 | 2 panel導入後 |
+| opposite panelのpathへ移動 | 未対応 | local panelはあるが連動操作は未実装 | 連動操作の必要性を判断 |
 | directory stateのsession別記憶 | 部分 | URLへalias/pathを反映し、左右の全tabのalias/pathとsort、ペインの分割をこのブラウザに保存する | selectionとhistoryの再読み込み後復元は未対応 |
 | 複数SFTP tab | 対応 | 左右それぞれ最大8tab。幅を超えたtab列は横scrollし、固定した追加操作と選択tabの自動追従を持つ。各tabが自分のhost、履歴、選択を持ち、開いていた場所を再読み込み後も復元する | 維持 |
 | panel内の名前filter | 対応 | 現在directoryを名前の部分一致で絞り込み | mask式は後続 |
@@ -54,11 +52,11 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | 種類／拡張子sort | 部分 | entry typeでsort。拡張子sortなし | 拡張子sortを追加 |
 | size sort | 対応 | あり | 維持 |
 | modified time sort | 対応 | あり | 維持 |
-| permissions sort | 未対応 | modeは表示するがsort不可 | P1 |
-| owner／group sort | 未対応 | owner／groupを取得しない | SFTP属性対応後 |
-| owner／group／link target列 | 未対応 | name、modified、size、typeだけ | 列表示設定と合わせて追加 |
+| permissions sort | 未対応 | modeは表示するがsort不可 | 一覧操作の改善として検討 |
+| owner／group sort | 未対応 | 数値のUID/GIDを表示するが、並べ替えはできない | 並べ替えの必要性を判断 |
+| owner／group／link target列 | 部分 | サーバーから取得できるUID/GIDを広い一覧と詳細に表示し、リンクは名前とリンク先を表示する。狭いデスクトップの一覧では権限とUID/GIDを省略し、詳細から確認する | 列表示の任意設定は未対応 |
 | 列幅／列表示のcustomize | 未対応 | 固定 | desktop向けに追加 |
-| status barと選択数／合計size | 部分 | 選択中だけcontextual toolbarへ件数／sizeと操作を表示 | directoryの件数とsizeを下部へ表示 |
+| status barと選択数／合計size | 部分 | 選択した項目の件数・サイズを表示する。一覧の下にはサーバーが対応していれば空き容量と合計容量を表示する | ディレクトリ全体の容量は詳細から確認 |
 
 ## 2. 選択と入力操作
 
@@ -78,8 +76,8 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | context menu | 対応 | 右click／長押しで、右上の三点menuと同一のaction一覧を開く | 維持 |
 | file manager shortcut（F2/F4/F5/F7/F8等） | 部分 | F2でrename、Deleteで削除、Escで選択解除、Ctrl/Cmd+Aで全選択 | F4／F5／F7／F8は未割り当て |
 | drag and drop upload | 対応 | file／folder、空directoryを扱う | 維持 |
-| remote rowをfolderへdragして移動 | 未対応 | なし | remote move実装後 |
-| queueへdropして転送 | 未対応 | なし | local panel導入後 |
+| remote rowをfolderへdragして移動 | 未対応 | 同じ一覧内のフォルダへのdropは未対応。2ペイン間のmoveは可能 | 同じ一覧内での操作として検討 |
+| queueへdropして転送 | 未対応 | ファイル一覧へのdropで転送する | キューへのdropの必要性を判断 |
 
 ## 3. remote file操作
 
@@ -87,8 +85,8 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 |---|---|---|---|
 | folder作成 | 対応 | `+` menu | 維持 |
 | 空file作成 | 対応 | 作成menuから既存pathを上書きせずに0 byte fileを作成 | 維持 |
-| symbolic link作成／編集 | 未対応 | linkは表示するが操作不可 | SFTP symlink/readlink APIを追加 |
-| internal text editor | 対応 | UTF-8、2 MiB以下をMonaco modalで編集 | 維持 |
+| symbolic link作成／編集 | 対応 | リモートでリンクを作成し、詳細からリンク先を変更できる。既存項目を上書きせず、安全な置換に対応しないサーバーでは変更を拒否する | 維持 |
+| internal text editor | 対応 | リモート・ローカルとも2 MiB以下のUTF-8テキストをMonacoで編集。検索・置換・行への移動、保存前の競合検査に対応する | 維持 |
 | external editor／Edit With | 未対応 | browserから外部editorを起動しない | desktop native連携の判断が必要 |
 | file preview | 部分 | 詳細modalで画像とtextを表示。型はengineが先頭bytesから決める | PDFは<iframe>とCSPのblob:許可が要るため対象外 |
 | file upload | 対応 | picker／drop、競合確認、atomic publish、resume | 維持 |
@@ -105,9 +103,9 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | file名をcopy | 対応 | 単一／複数を改行区切りでcopy | 維持 |
 | full pathをcopy | 対応 | 単一／複数を改行区切りでcopy | 維持 |
 | file URL生成 | 未対応 | なし | `sftp://`とsshc内deep linkを分けて設計 |
-| properties表示 | 対応 | 詳細modalでpath、type、size、mtime、権限、revisionを表示。directoryは上限付き走査で配下の容量と件数も計算。複数選択では件数と合計size | link targetは未表示 |
+| properties表示 | 対応 | パス、種類、サイズ、更新日時、権限、revision、取得できたUID/GIDとリンク先を表示。フォルダの容量・件数は上限付きで集計する | 維持 |
 | chmod | 対応 | リモートの単一・再帰・複数選択に対応。複数選択はfile／directory別mode、全対象プランと確認modalで保護。symlinkは対象外。lsetstat拡張バージョン1が必要 | ローカルchmodは対象外 |
-| chown／chgrp | 未対応 | owner/group属性なし | capability確認付きで追加 |
+| chown／chgrp | 部分 | リモートの通常ファイルとフォルダへ数値UID/GIDを指定できる。`lsetstat@openssh.com`とサーバー側の権限が必要。リンク経由は拒否する | 名前による指定と再帰変更は未対応 |
 | timestamp変更 | 未対応 | なし | SFTP Setstat対応後 |
 | propertiesの複数／再帰適用 | 部分 | 権限はリモートの複数選択・再帰に対応。事前競合は全件未変更、実行中の失敗は部分適用を表示 | 権限以外の一括適用は未対応 |
 | lock／unlock | 未対応 | protocol lock操作なし | server capability依存として判断 |
@@ -129,19 +127,19 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | Execute now／同時数を一時超過 | 未対応 | 最大同時数を厳守 | 必要性を判断 |
 | queue processing全体の開始／停止 | 対応 | queue headerの停止／再開。停止中は待機jobを新しく開始せず、実行中のものは走り切る | 維持 |
 | Suspend All／Resume All／Cancel All | 対応 | 下部queueの操作menuから全jobへ適用 | 維持 |
-| job別speed limit | 未対応 | なし | token bucketをengine側へ追加 |
-| 全体speed limit | 未対応 | なし | job別上限と合わせて追加 |
-| 最大同時転送数の設定 | 対応 | queue headerの選択で1〜8。metadata.jsonの`fileTransfers`節に残り、engine再起動後も効く | 維持 |
-| 複数接続で複数fileを転送 | 対応 | jobごとに独立SFTP transport、既定2並列 | 接続再利用は限定的 |
-| 1 fileを複数connectionで分割 | 対応 | 512 GiBまでのupload／downloadを、既定で100 MiB以上、32 MiB単位、最大4接続で処理。開始サイズ16〜1024 MiB、接続数1〜128、chunk 8〜4096 MiBを設定でき、接続数1で無効化 | 実サーバーで継続検証 |
+| job別speed limit | 未対応 | 全転送で共有する速度上限だけを持つ | 転送ごとの設定として検討 |
+| 全体speed limit | 対応 | SettingsのSFTPでKiB/sを設定する。0は無制限。並列接続、複数job、複数画面、CLIがsshcエンジン共通の上限を使い、実行中にも適用する | job別の上限は未対応 |
+| 最大同時転送数の設定 | 対応 | SettingsのSFTPで1〜8件を設定する。metadata.jsonの`fileTransfers`に保存し、sshcエンジン再起動後も適用する | 維持 |
+| 複数接続で複数fileを転送 | 対応 | 既定では2件を同時転送。同じ接続先のSFTP接続を再利用し、未使用の接続は60秒で閉じる | 維持 |
+| 1 fileを複数connectionで分割 | 対応 | 512 GiBまでのupload／downloadに対応。初期設定は1接続で分割しない。2接続以上に設定すると、既定100 MiB以上のファイルを32 MiB単位で分割する。開始サイズ16〜1024 MiB、接続数1〜128、chunk 8〜4096 MiB。TOTP認証の接続は1接続に制限する | 実サーバーで継続検証 |
 | queueの折りたたみ | 対応 | headerを残して展開／折りたたみ | 維持 |
 | queue高さのresize | 対応 | 上端に24pxのtouch領域を持つgripを表示。mobileは画面高に応じた3段階へsnapし、desktopは96〜560pxを連続変更する。双方の高さを別々に保存し、keyboardの↑↓／Home／Endにも対応 | 維持 |
-| queue file listの展開 | 部分 | batch配下へfile jobを常時表示 | 折りたたみ可能にする |
+| queue file listの展開 | 部分 | キュー全体を折りたたみ、展開すると各ファイルの進捗と操作を表示する | batchごとの折りたたみは未対応 |
 | prompt／errorの保留表示 | 部分 | overwriteは開始前確認、errorはjob表示 | queue内で再確認待ちを扱えるようにする |
 | 完了時action（disconnect/sleep/shutdown） | 未対応 | なし | browser製品では通知／engine停止までを候補とする |
 | 再読み込み後のqueue復元 | 部分 | engine authoritative queueを2秒ごとに再取得する。engineが処理するremote↔engine-local jobはブラウザを閉じても継続する。ブラウザから選択した従来のuploadは再選択が必要 | ブラウザ選択ファイルの再接続は別途検討 |
 | process再起動後のqueue復元 | 対応 | `~/.ssh/sshc/transfers.json`へ0600・atomic保存し、待機・一時停止・再開可能jobを復元する。マシン固有のstateとして同期しない | 永続形式のmigrationが必要になった時点でschema versionを更新 |
-| transfer中の自動再接続 | 部分 | chunk通信は最大3回の短いbackoffで自動再試行し、file downloadはrevision固定のoffset resumeにも対応。job全体の失敗後はmanual retry | job全体のbounded retryを追加 |
+| transfer中の自動再接続 | 部分 | SettingsのSFTPで有効にする。既定は無効、上限1〜10回。sshcエンジン側の単一ファイル転送とremote copyは内容を照合して再開する。ブラウザ転送も種類に応じて復旧する | CLI自身の通信断と、sshcエンジン側のフォルダ転送・移動・削除は自動再試行しない。詳細は[転送マネージャー](../pages/sftp/transfers.md#通信断後の自動復旧) |
 | browser通知 | 対応 | tabがbackgroundの時、許可済みのWeb通知で完了／失敗を知らせる。Androidはnative通知を使う | 維持 |
 
 ## 5. 転送設定
@@ -150,28 +148,28 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 |---|---|---|---|
 | transfer options dialog | 未対応 | 即時queue登録 | 普段は省略可能な確認sheetを追加 |
 | destination directory／operation mask | 部分 | current path＋元file名のみ | 転送前にdestinationとrename maskを指定可能にする |
-| default transfer settings | 部分 | 最大同時file数と、大容量upload／downloadの分割開始サイズ・接続数・chunkサイズをengine設定として永続化。Webと`sshc sftp settings`から変更可能 | speed／timestamp等は未対応 |
-| per-transfer settings | 未対応 | 固定 | transfer sheetへ追加 |
+| default transfer settings | 部分 | SettingsのSFTPで同時転送数、完了項目の保持、分割転送、速度上限、自動復旧、除外ルールを変更し、sshcエンジンに保存する。CLIの`sshc sftp settings`でも共有設定を変更できる | 名前付きプリセットと転送ごとの設定画面は未対応 |
+| per-transfer settings | 部分 | CLIのget／putでは同時数や分割転送の設定をその実行だけ変更できる | Webの転送ごとの設定画面は未対応 |
 | named preset | 未対応 | なし | host／path rule付きpresetは後段 |
 | background／foreground選択 | 判断 | sshcは常にbackground | UIをblockするforegroundは導入しない |
 | binary mode | 対応 | byte streamとして転送 | 維持 |
 | text／automatic transfer mode | 未対応 | newline／encoding変換なし | 誤変換防止のため明示設定だけ検討 |
 | filename case変換 | 未対応 | 元名を保持 | operation maskと合わせて追加 |
-| invalid filename置換 | 未対応 | 保存先browser/OSに委ねる | local panel導入時 |
+| invalid filename置換 | 未対応 | 保存先browser/OSに委ねる | ローカル操作の設定として検討 |
 | upload時permission設定 | 部分 | 新規fileはserver default（umask）、上書き時は既存modeを維持。2026-09-19までは新規fileを0600にしていた | 転送optionとしての指定は未対応 |
 | timestamp保持 | 対応 | upload（Web、CLI）、CLIのget、host間copy、engine disk↔hostのput／getで元のmtimeを付ける。browserへのdownloadだけはbrowserの保存に委ねる | 維持 |
 | directory timestamp保持 | 未対応 | なし | file timestamp後 |
-| downloaded read-only保持 | 未対応 | browser保存に委ねる | native local panel導入時 |
+| downloaded read-only保持 | 未対応 | browser保存に委ねる | ローカル転送の設定として検討 |
 | permission error無視 | 未対応 | job failure | optionとして明示する場合のみ追加 |
 | total size事前計算 | 部分 | local uploadはsize既知、remote folderはZIP作成時に確定 | directory scanの進捗を追加 |
-| speed limit | 未対応 | なし | queueと共通実装 |
-| include/exclude file mask | 未対応 | 全選択対象を転送 | P1 |
+| speed limit | 対応 | sshcエンジン共通の速度上限をWebとCLIの転送に適用する。ファイル内容の通信が対象で、メタデータ通信は含めない | job別の上限は未対応 |
+| include/exclude file mask | 部分 | SettingsのSFTPに除外ルールを保存し、転送開始時のルールをjobに保持する。WebとCLIのフォルダ転送に適用する | 含める条件による絞り込みとプリセットは未対応 |
 | newer/updated only | 未対応 | target存在時はoverwrite確認 | compare/sync基盤と共通化 |
-| hidden file除外 | 未対応 | hiddenも転送 | mask presetとして追加 |
+| hidden file除外 | 部分 | 隠しファイルも通常は転送する。除外ルールで名前・パスを指定できる | 隠し属性による専用の除外設定は未対応 |
 | empty directory除外 | 未対応 | 空directoryを維持 | optionとして追加 |
 | overwrite／resume／append mode | 部分 | overwrite確認とpart resumeは対応。appendなし | overwrite policyとappendを追加 |
 | resume threshold | 未対応 | uploadは常にpart、downloadは常にspool | 固定安全方式を維持するか判断 |
-| transfer settingからautomation code生成 | 未対応 | なし | SFTP CLI実装後 |
+| transfer settingからautomation code生成 | 未対応 | なし | 既存のSFTP CLIを使った生成を検討 |
 
 ## 6. directory比較と同期
 
@@ -179,17 +177,17 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 
 | WinSCP機能 | 状態 | sshcの現状 | 実装方針 |
 |---|---|---|---|
-| local／remote directory比較 | 未対応 | local panelなし | 2 panelと同じscannerを使う |
-| 相違fileのhighlight／選択 | 部分 | remote／remote比較では左のみ・右のみ・差分・種別違いを表示し、項目を選んで左右へcopyできる | local panel導入後にlocal／remoteへ共通化 |
-| local→remote同期 | 未対応 | なし | P2 |
-| remote→local同期 | 未対応 | なし | P2 |
+| local／remote directory比較 | 対応 | ローカルとリモート、リモート同士を再帰比較する。ローカルを含む比較は読み取り専用。スマートフォンでも比較する2つのタブを選べる | 比較結果からローカルを含むコピー・同期は未対応 |
+| 相違fileのhighlight／選択 | 部分 | 左のみ・右のみ・変更あり・種別違いを表示する。リモート同士なら項目を選んで左右へコピーできる。ローカルを含む比較は差分の確認だけを行う | ローカルを含む比較結果からのコピーは未対応 |
+| local→remote同期 | 未対応 | なし | ディレクトリ同期の設計後 |
+| remote→local同期 | 未対応 | なし | ディレクトリ同期の設計後 |
 | 双方向同期 | 未対応 | なし | conflict model確立後 |
 | mirror mode | 未対応 | なし | delete preview必須で追加 |
 | timestampだけ同期 | 未対応 | なし | Setstat対応後 |
 | existing files only | 未対応 | なし | sync option |
 | selected files only | 未対応 | なし | sync option |
 | changes checklist／preview | 部分 | remote／remote比較でcopy対象を選択でき、相手側だけの項目は自動削除しない | local／remote sync planへ共通化 |
-| 比較criteria（time/size/checksum） | 部分 | remote／remoteはsize、mtime、permission、種別を比較。checksum比較はしない | checksumは明示実行として追加 |
+| 比較criteria（time/size/checksum） | 対応 | メタデータと内容（SHA256）を選べる。内容比較は同じサイズ・更新日時でも差を検出する。通常ファイルを対象に両側合計256 MiBまで読み、上限や対象外の種類は未比較と表示する | 方式を切り替えたり画面を閉じたりすると読み取りを中止する |
 | Keep remote directory up to date | 未対応 | local変更監視なし | desktop native/local bridge導入後 |
 | synchronization in background queue | 部分 | remote／remote比較で選んだcopyは共通のengine queueへ登録される。mirror planは未対応 | local／remote sync planもjob batchへ変換 |
 | remote recycle binへのbackup | 未対応 | deleteは即時 | host単位のtrash pathを設計 |
@@ -214,7 +212,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | connection tunneling | 対応 | local／remote／dynamic forwarding | 維持 |
 | initial local／remote directory | 部分 | remoteはserver home。host別override UIなし | OpenSSH metadataまたはsshc metadataで追加 |
 | last remote directory記憶 | 部分 | URL中は維持、hostの永続状態ではない | host単位でoption化 |
-| session disconnect／reconnect | 未対応 | SFTP操作ごとにtransportを開く | persistent browse sessionを採用するか判断 |
+| session disconnect／reconnect | 部分 | 接続先の選択時に接続し、保存したタブの復元時は接続ボタンを押すまで接続しない。同じ接続先のSFTP接続は操作間で再利用し、未使用なら60秒で閉じる | 常時接続の維持は行わない |
 | server/protocol information | 部分 | Diagnostics／effective configに分散 | SFTP contextから開けるsummaryを追加 |
 | session URL／code生成 | 部分 | sshc内URLはあるが共有UIなし | copy actionを追加 |
 | change password | 未対応 | なし | remote command依存のため判断 |
@@ -229,7 +227,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | file operation scripting | 対応 | `--yes --json`で非対話実行でき、終了codeで失敗を返す | operation mask等は未対応 |
 | script file／batch automation | 部分 | Snippetsと`sshc ssh --non-interactive`はremote command用 | file transfer planは未対応 |
 | .NET assembly／COM API | 判断 | なし | cross-platform REST/CLIを正本とし導入しない候補 |
-| operation code生成 | 未対応 | なし | SFTP CLI実装後 |
+| operation code生成 | 未対応 | なし | 既存のSFTP CLIを使った生成を検討 |
 | custom file commands | 部分 | Snippetsはあるがselected path連携なし | 安全なpath変数を追加 |
 | Windows shell／drag-drop integration | 判断 | browser/PWA中心 | packaged desktop連携の範囲を決める |
 | PuTTY/Pageant integration | 判断 | OpenSSH config/agentを正本にする | PuTTY固有統合は導入しない候補 |
@@ -239,46 +237,21 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | transparent remote file encryption | 未対応 | Sync snapshot暗号化だけ | SFTP転送機能としては別設計 |
 | transfer/session logging | 部分 | app logとdiagnostic report | transfer履歴と監査logを追加 |
 | XML logging | 判断 | なし | JSON structured logを採用する候補 |
-| configurable log retention | 未対応 | transfer履歴はengine終了まで | durable historyと合わせて追加 |
+| configurable log retention | 部分 | 転送キューをディスクに保存し、完了・取消項目を設定した時間で自動削除する | 独立した監査ログの保持設定は未対応 |
 | update check | 対応 | self-updateとrelease検証 | 維持 |
 | administrative restrictions/policy | 未対応 | なし | managed deployment需要で判断 |
 | selectable configuration storage | 未対応 | workspace固定 | portable modeと共通 |
 | application/file associations | 未対応 | なし | desktop packagingの範囲で判断 |
 | localization | 部分 | 日本語／英語 | 対象言語は需要に応じて追加 |
 
-## 実装順
+## 残っている作業
 
-### P0 — WinSCPらしい日常操作
+実装済みの操作を今後の作業へ重複して載せない。対応範囲の拡大は、上の表の未対応・部分の行で管理する。
 
-- Back／Forward／Home／Root、path copy
-- panel filter、range／追加選択、基本keyboard操作
-- file名／full path copy
-- queue折りたたみ／高さ変更、waiting順変更、全件pause/resume/cancel
-- queue最大同時数のUI設定
-
-### P1 — remote file managerとしての完成度
-
-- 空fileとsymbolic linkの作成
-- propertiesの複数変更、owner/group/link target
-- symbolic link作成／編集、directory picker
-- remote search、context menu、preview
-- timestamp／permission／mask／speed limitを含むtransfer option
-
-### P2 — Commander相当の転送workflow
-
-- engine-local panelの同期・比較
-- local↔remote directory compare／sync、mirror、preview
-- Keep remote directory up to date
-- SFTP CLI／JSON automation
-- automatic reconnect
-
-### P3 — 製品範囲を決めてから扱うもの
-
-- SCP、FTP/FTPS、WebDAV、汎用S3 browser
-- GSSAPI/Kerberos
-- external editor、OS shell integration、file association
-- transparent file encryption
-- managed policy、portable configuration root
+- 日常操作: ディレクトリツリー、列幅・表示列の変更、所有者・グループによる並べ替え
+- 転送設定: 転送ごとの速度上限、名前付きプリセット、任意の転送先名を作る規則
+- ディレクトリ同期: ローカルを含む比較結果からのコピー、双方向同期、ミラー、変更監視。削除を伴う操作には事前の差分確認が必要
+- 製品範囲の判断: SCP、FTP/FTPS、WebDAV、汎用S3ブラウザ、GSSAPI/Kerberos、外部エディタ、OSとの統合
 
 ## 完了条件
 
@@ -312,6 +285,10 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 - Transfer Manager UI: `web/src/sftp/TransferManagerList.tsx`
 - browser transfer scheduler: `web/src/sftp/transferManager.ts`
 - SFTP service: `internal/sftp/service.go`
+- 比較: `internal/sftp/directory_comparison.go`, `internal/sftp/comparison_content.go`, `internal/sftp/local_comparison.go`
+- 接続の再利用: `internal/sftp/remotepool.go`
+- 速度・復旧・除外: `internal/sftp/transfer_settings.go`, `internal/sftp/transfer_limiter.go`, `internal/sftp/transfer_exclusions.go`
+- リンク・所有者の変更: `internal/sftp/service_symlink.go`, `internal/sftp/service_ownership.go`
 - authoritative queue: `internal/sftp/jobs*.go`
 - API contract: `api/openapi.yaml`
 - user documentation: `pages/features/sftp.md`, `pages/sftp/transfers.md`
