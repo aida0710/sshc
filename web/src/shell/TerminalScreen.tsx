@@ -142,9 +142,14 @@ export function TerminalScreen({
     {runTarget === null || refusal === null ? null : <RunTargetRefusalPanel
       alias={runTarget}
       refusal={refusal}
+      refusedAt={terminalSessions.remoteRefusalAt}
+      api={runTargets.api}
+      localVersion={runTargets.localVersion}
+      vaultRevision={runTargets.vaultUnlock.revision}
       onReconnect={terminalSessions.refresh}
       onUseThisMachine={() => runTargets.select(null)}
-      onUnlock={() => runTargets.vaultUnlock.ask(runTarget)}
+      onUnlocked={runTargets.vaultUnlock.unlocked}
+      onOpenInNewTab={() => void runTargets.openInNewTab(runTarget)}
       onOpenEngineInfo={() => runTargets.engineInfo.ask(runTarget)} />}
     {splitRequest === null ? null : <SplitSessionPicker
       sessions={terminalSessions.sessions.filter((candidate) => splitView.canSplit(candidate.id, splitRequest.targetSessionId))}
