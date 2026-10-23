@@ -5,6 +5,8 @@ description: Group terminal sessions into named workspaces, and keep connections
 
 # Workspaces
 
+![Sessions grouped by workspace](/images/terminal-desktop.png)
+
 The sidebar shows sessions grouped by workspace. Press a workspace row to show or hide its sessions; this browser remembers which ones are folded.
 
 ## Built-in workspaces

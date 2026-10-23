@@ -5,6 +5,8 @@ description: Run terminals on the sshc engine that stays up on an SSH host, whil
 
 # Run on
 
+![Choosing where terminals run](/images/run-target-desktop.png)
+
 **Run on** at the bottom of the sidebar chooses which sshc engine your terminals run on. Keep an sshc engine running on an SSH host (an always-on server, for example), and this computer's browser can use that engine's terminals. They keep running there after the browser or this computer is closed, which suits agents left running for a long time.
 
 Only the terminals change: sessions and [workspaces](./workspace). Connections, SFTP, the vault and settings stay this computer's.
