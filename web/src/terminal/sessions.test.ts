@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -27,6 +28,59 @@ afterEach(() => {
 });
 
 describe("useTerminalSessions", () => {
+  it.each([
+    ["remote_engine_vault_locked", "vault_locked", "terminal.remoteVaultLocked"],
+    ["remote_engine_version_mismatch", "version_mismatch", "terminal.remoteVersionMismatch"],
+    ["remote_engine_unreachable", null, "terminal.remoteEngineUnavailable"],
+  ] as const)("reports %s and clears the refusal when the next listing succeeds", async (code, refusal, message) => {
+    const terminalSessions = vi.fn().mockRejectedValueOnce(new ApiError(code, 409, { code, message: "refused" })).mockResolvedValue(list);
+    const client = api({ terminalSessions });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.remoteRefusal).toBe(refusal);
+    expect(result.current.problem).toBe(message);
+    await act(async () => { await result.current.refresh(); });
+    expect(result.current.remoteRefusal).toBeNull();
+    expect(result.current.problem).toBe("");
+  });
+
+  it("does not offer the previous engine's refusal when switching to another engine", async () => {
+    const refused = api({ terminalSessions: vi.fn().mockRejectedValue(new ApiError("remote_engine_version_mismatch", 409, null)) });
+    const available = api();
+    const offer = vi.fn();
+    const { result, rerender } = renderHook(({ client }) => {
+      const sessions = useTerminalSessions(client, translate);
+      useEffect(() => { if (sessions.remoteRefusal !== null) offer(client); }, [client, sessions.remoteRefusal]);
+      return sessions;
+    }, { initialProps: { client: refused } });
+    await waitFor(() => expect(result.current.remoteRefusal).toBe("version_mismatch"));
+    rerender({ client: available });
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(offer).toHaveBeenCalledWith(refused);
+    expect(offer).not.toHaveBeenCalledWith(available);
+    expect(result.current.remoteRefusal).toBeNull();
+    expect(result.current.problem).toBe("");
+  });
+
+  it("keeps polling an empty refused list through the engine restart until it recovers", async () => {
+    vi.useFakeTimers();
+    const terminalSessions = vi.fn()
+      .mockRejectedValueOnce(new ApiError("remote_engine_version_mismatch", 409, null))
+      .mockRejectedValueOnce(new ApiError("remote_engine_not_running", 502, null))
+      .mockResolvedValue(list);
+    const client = api({ terminalSessions });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(result.current.remoteRefusal).toBe("version_mismatch");
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(terminalSessions).toHaveBeenCalledTimes(2);
+    expect(result.current.problem).toBe("terminal.remoteEngineUnavailable");
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(terminalSessions).toHaveBeenCalledTimes(3);
+    expect(result.current.remoteRefusal).toBeNull();
+    expect(result.current.problem).toBe("");
+  });
+
   it("separates the session limit from a session that could not be opened", async () => {
     const openTerminalSession = vi
       .fn()

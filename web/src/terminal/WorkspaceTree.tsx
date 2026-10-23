@@ -43,6 +43,7 @@ type WorkspaceTreeProps = {
   // onUnlockRemoteVault asks for the Vault password of the run target whose
   // sessions could not be listed because it is locked.
   onUnlockRemoteVault?: () => void;
+  onUpdateRemoteEngine?: () => void;
 };
 
 type NameRequest = { kind: "create" } | { kind: "rename"; workspace: TerminalWorkspace };
@@ -71,8 +72,14 @@ export function WorkspaceTree({
   onConnect,
   canBroadcast = true,
   onUnlockRemoteVault,
+  onUpdateRemoteEngine,
 }: WorkspaceTreeProps) {
   const t = useTranslate();
+  const refusalAction = terminalSessions.remoteRefusal === "vault_locked"
+    ? { onClick: onUnlockRemoteVault, label: t("runTarget.unlockOpen") }
+    : terminalSessions.remoteRefusal === "version_mismatch"
+      ? { onClick: onUpdateRemoteEngine, label: t("engineInfo.updateOpen") }
+      : null;
   const [showHidden, setShowHidden] = useState(() => readStoredValue(localStorageKeys.showHiddenTerminalWorkspaces) === "true");
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [pickerWorkspace, setPickerWorkspace] = useState<string | null>(null);
@@ -186,9 +193,9 @@ export function WorkspaceTree({
         <Notice tone="danger" compact>
           <span className="flex min-w-0 grow flex-col items-start gap-1.5">
             {terminalSessions.problem}
-            {terminalSessions.remoteVaultLocked && onUnlockRemoteVault !== undefined ? (
-              <button type="button" onClick={onUnlockRemoteVault} className="min-h-9 rounded border border-control-line px-2 text-ink hover:bg-hover md:min-h-6">
-                {t("runTarget.unlockOpen")}
+            {refusalAction?.onClick !== undefined ? (
+              <button type="button" onClick={refusalAction.onClick} className="min-h-9 rounded border border-control-line px-2 text-ink hover:bg-hover md:min-h-6">
+                {refusalAction.label}
               </button>
             ) : null}
           </span>

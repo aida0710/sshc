@@ -74,13 +74,15 @@ func (m *Manager) Engines() ([]string, error) {
 }
 
 // AddEngine は、alias で動いているエンジンを実行先に足す。足す前に、接続できること、
-// 接続先のエンジンが動いていて同じバージョンであることを確かめる。
+// 接続先のエンジンが動いていることを確かめる。バージョンが違うエンジンも足す。
+// 画面から更新できるのは、実行先に足したエンジンだけだからである。
 func (m *Manager) AddEngine(ctx context.Context, alias string) error {
 	engine, err := m.hostEngine(alias)
 	if err != nil {
 		return err
 	}
-	if _, err := engine.current(ctx); err != nil {
+	var mismatch *VersionMismatchError
+	if _, err := engine.current(ctx); err != nil && !errors.As(err, &mismatch) {
 		return err
 	}
 	return m.options.Store.AddEngine(alias)

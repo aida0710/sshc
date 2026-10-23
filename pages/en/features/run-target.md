@@ -34,7 +34,7 @@ The dialog shows the end of what the host's `sshc` wrote.
 
 ## Requirements and limits
 
-- sshc on the host must be the same version as on this computer. Otherwise sshc tells you to run `sshc update` there.
+- sshc on the host must be the same version as on this computer. If the versions differ, the engine information dialog opens automatically. Choose **Update** to bring the host up to this computer’s version. If you close the dialog, reopen it with **Update…** under Workspaces.
 - The host's SSH server must allow TCP forwarding to its `127.0.0.1` (`AllowTcpForwarding yes` or `local`).
 - If the host has no vault yet, create it through **Open its full screen in a new tab**.
 - Port forwarding, sending a command to several sessions, and Quick Commands work only for terminals running on this computer.

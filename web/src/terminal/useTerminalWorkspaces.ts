@@ -61,9 +61,11 @@ export function useTerminalWorkspaces({
 
   const known = new Set(workspaces.map((workspace) => workspace.id));
   const unknownWorkspace = sessions.some((session) => !known.has(session.workspaceId));
+  // A successful session listing also retries missing workspaces after a
+  // remote engine recovers, even when that engine has no sessions yet.
   useEffect(() => {
     if (enabled && (workspaces.length === 0 || unknownWorkspace)) void reload();
-  }, [enabled, reload, unknownWorkspace, workspaces.length]);
+  }, [enabled, reload, sessions, unknownWorkspace, workspaces.length]);
 
   const run = useCallback(async <T,>(request: () => Promise<T>): Promise<T | null> => {
     setProblem("");

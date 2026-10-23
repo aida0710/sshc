@@ -13,7 +13,6 @@ import { Button } from "../ui/surface";
 export function RemoteVaultUnlockDialog({
   alias,
   api,
-  localVersion,
   onUnlocked,
   onOpenInNewTab,
   onClose,
@@ -21,7 +20,6 @@ export function RemoteVaultUnlockDialog({
 }: {
   alias: string;
   api: RemoteEnginesApi;
-  localVersion: string;
   onUnlocked: () => void;
   onOpenInNewTab: () => void;
   onClose: () => void;
@@ -59,7 +57,7 @@ export function RemoteVaultUnlockDialog({
       setPassword("");
       onUnlocked();
     } catch (caught) {
-      setError(runTargetProblemText(t, caught, alias, localVersion));
+      setError(runTargetProblemText(t, caught, alias));
     } finally {
       setBusy(false);
     }

@@ -131,8 +131,12 @@ export function App({
   // A run target found locked asks for its Vault password at once.
   const { offer: offerVaultUnlock } = runTargets.vaultUnlock;
   useEffect(() => {
-    if (terminalSessions.remoteVaultLocked && runTargets.selected !== null) offerVaultUnlock(runTargets.selected);
-  }, [offerVaultUnlock, runTargets.selected, terminalSessions.remoteVaultLocked]);
+    if (terminalSessions.remoteRefusal === "vault_locked" && runTargets.selected !== null) offerVaultUnlock(runTargets.selected);
+  }, [offerVaultUnlock, runTargets.selected, terminalSessions.remoteRefusal]);
+  const { offer: offerEngineInfo } = runTargets.engineInfo;
+  useEffect(() => {
+    if (terminalSessions.remoteRefusal === "version_mismatch" && runTargets.selected !== null) offerEngineInfo(runTargets.selected);
+  }, [offerEngineInfo, runTargets.selected, terminalSessions.remoteRefusal]);
   const terminalWorkspaces = useTerminalWorkspaces({
     sessions: terminalSessions.sessions,
     translate: t,
