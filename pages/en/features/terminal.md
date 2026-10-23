@@ -9,6 +9,8 @@ Open SSH and local shells in the same interface, with search, Quick Commands, an
 
 ![A local shell open in a named workspace](/images/terminal-desktop.png)
 
+Use [Split view](./split-view) to operate several sessions side by side.
+
 ## See connection progress
 
 sshc displays name resolution, jump hosts, host-key checks, authentication, shell startup, reconnect and exit as distinct stages. It does not blindly retry host-key or authentication failures that need a decision.

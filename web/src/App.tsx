@@ -145,6 +145,7 @@ export function App({
     api: runTargetApis.workspaces,
   });
   const terminalWorkspace = useTerminalWorkspaceController({
+    runTarget: runTargets.selected,
     api: settingsApi,
     terminalSessions,
     enabled: state === "ready",
@@ -153,6 +154,7 @@ export function App({
     closeNavigation,
   });
   const {
+    splitView,
     settings: terminalSettings,
     localShellProfiles,
     activeSessionId,
@@ -356,6 +358,19 @@ export function App({
             activeSessionId={activeSessionId}
             unreadBySession={unreadSessions}
             onShowSession={showSession}
+            splitView={splitView}
+            onShowSplitGroup={(number) => {
+              splitView.dispatch({ type: "select-group", number });
+              closeNavigation();
+              navigate("Terminal");
+            }}
+            canSplitSession={splitView.canSplit}
+            onSplitSession={(id, edge) => {
+              if (activeSessionId === null) return;
+              splitView.split({ sourceSessionId: id, targetSessionId: activeSessionId, edge });
+              closeNavigation();
+              navigate("Terminal");
+            }}
             onDuplicateSession={(id) => void duplicateSession(id)}
             onReorderSessions={setSessionOrder}
             localShellProfiles={localShellProfiles}
@@ -390,6 +405,7 @@ export function App({
                   <div className={terminalFace ? "h-full" : "hidden"}>
                     <TerminalScreen
                       visible={terminalFace}
+                      splitView={splitView}
                       terminalSessions={terminalSessions}
                       activeSessionId={activeSessionId}
                       settings={terminalSettings}

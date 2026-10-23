@@ -1,3 +1,6 @@
+import type { PaneEdge } from "../terminal/splitView/layout";
+import { SplitGroupList } from "../terminal/splitView/SplitGroupList";
+import type { SplitViewController } from "../terminal/splitView/useSplitView";
 import { useBindings } from "../keyconfig/bindings";
 import {
   useSyncExternalStore,
@@ -45,6 +48,10 @@ export function AppNavigation({
   activeSessionId,
   unreadBySession,
   onShowSession,
+  splitView,
+  onShowSplitGroup,
+  canSplitSession,
+  onSplitSession,
   onDuplicateSession,
   onReorderSessions,
   localShellProfiles = [],
@@ -74,6 +81,10 @@ export function AppNavigation({
   activeSessionId: string | null;
   unreadBySession: UnreadSessions;
   onShowSession: (id: string) => void;
+  splitView: SplitViewController;
+  onShowSplitGroup: (number: number) => void;
+  canSplitSession?: (id: string) => boolean;
+  onSplitSession?: (id: string, edge: PaneEdge) => void;
   onDuplicateSession: (id: string) => void;
   onReorderSessions: (order: string[]) => void;
   localShellProfiles?: LocalShellProfile[];
@@ -167,6 +178,10 @@ export function AppNavigation({
       </div>
 
       <div data-navigation-scroll className="min-h-0 flex-1 overflow-y-auto pr-0.5 pt-2">
+        <SplitGroupList groups={splitView.groups} sessions={orderedSessions}
+          selected={section === "Terminal" ? splitView.activeGroupNumber : null}
+          onSelect={onShowSplitGroup}
+          onDissolve={(number) => splitView.dispatch({ type: "dissolve-group", number })} />
         <WorkspaceTree
           workspaces={terminalWorkspaces}
           terminalSessions={terminalSessions}
@@ -174,6 +189,9 @@ export function AppNavigation({
           selected={section === "Terminal" ? activeSessionId : null}
           unreadBySession={unreadBySession}
           onSelect={onShowSession}
+          splitGroupNumberBySession={splitView.groupNumberBySession}
+          {...(canSplitSession === undefined ? {} : { canSplitSession })}
+          {...(onSplitSession === undefined ? {} : { onSplitSession })}
           onDuplicate={onDuplicateSession}
           onReorder={onReorderSessions}
           localShellProfiles={localShellProfiles}

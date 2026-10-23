@@ -1,3 +1,4 @@
+import type { PaneEdge } from "./splitView/layout";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { TerminalForward, TerminalSession } from "../api/terminalSessions";
 import { useTranslate, type Translate } from "../i18n/context";
@@ -19,12 +20,15 @@ import { isImeComposing } from "../ui/imeComposition";
 type SessionListProps = {
   sessions: TerminalSession[];
   selected: string | null;
+  splitGroupNumberBySession?: ReadonlyMap<string, number>;
   // atSessionLimit is true while the engine holds as many live sessions as it
   // allows, counted over every workspace, so nothing can be duplicated.
   atSessionLimit: boolean;
   busy: boolean;
   unreadBySession?: UnreadSessions;
   onSelect: (id: string) => void;
+  canSplitSession?: (id: string) => boolean;
+  onSplitSession?: (id: string, edge: PaneEdge) => void;
   onClose: (id: string) => void;
   onRename: (id: string, title: string) => Promise<boolean>;
   onUnpinTitle: (id: string) => Promise<boolean>;
@@ -59,10 +63,13 @@ function describeForward(t: Translate, forward: TerminalForward): string {
 export function SessionList({
   sessions,
   selected,
+  splitGroupNumberBySession,
   atSessionLimit,
   busy,
   unreadBySession = new Set(),
   onSelect,
+  canSplitSession,
+  onSplitSession,
   onClose,
   onRename,
   onUnpinTitle,
@@ -159,6 +166,7 @@ export function SessionList({
           {sessions.map((session, index) => {
             const destination = terminalSubtitle(session, t);
             const displayTitle = terminalDisplayTitle(session);
+            const splitGroupNumber = splitGroupNumberBySession?.get(session.id);
             const unread = unreadBySession.has(session.id);
             const status = sessionStatusText(t, session);
             const marker = (
@@ -245,7 +253,15 @@ export function SessionList({
                     >
                       {marker}
                       <span className="min-w-0 grow">
-                        <span className={`block truncate text-xs md:leading-tight ${session.id === selected ? "font-semibold text-accent" : "text-ink"}`}>{displayTitle}</span>
+                        <span className={`flex items-center gap-1 text-xs md:leading-tight ${session.id === selected ? "font-semibold text-accent" : "text-ink"}`}>
+                          <span className="truncate">{displayTitle}</span>
+                          {splitGroupNumber === undefined ? null : (
+                            <span data-split-group-badge={splitGroupNumber} title={t("splitView.groupName", { number: splitGroupNumber })}
+                              aria-label={t("splitView.groupName", { number: splitGroupNumber })} className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-normal text-ink-muted">
+                              <Icon name="splitView" className="size-3" />{splitGroupNumber}
+                            </span>
+                          )}
+                        </span>
                         {details}
                       </span>
                     </button>
@@ -301,6 +317,8 @@ export function SessionList({
                     menuRef={menuRef}
                     placement={menuPlacement}
                     canDuplicate={!busy && !atSessionLimit}
+                    canSplit={canSplitSession?.(session.id) ?? false}
+                    {...(onSplitSession === undefined ? {} : { onSplit: (edge: PaneEdge) => onSplitSession(session.id, edge) })}
                     canMoveUp={index > 0}
                     canMoveDown={index < sessions.length - 1}
                     onRename={() => {

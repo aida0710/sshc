@@ -34,4 +34,4 @@ Deleting a workspace closes nothing: its sessions move to Main.
 
 The engine keeps workspace names and whether each is hidden in `~/.ssh/sshc/workspaces.json`. Which session is in which workspace lives only in the engine's memory, like the sessions themselves, and ends when the engine stops. The file is excluded from encrypted sync.
 
-The split-pane Workspace of earlier versions has been removed, and its saved layouts are not carried over.
+Use [Split view](./split-view) to arrange sessions on screen. Split arrangements are not saved.
