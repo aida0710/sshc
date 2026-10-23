@@ -27,7 +27,8 @@ concurrency:
 jobs:
   go:
     name: Go native (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
+    # ARM64専用の試験とmacOS・Windowsは元のランナーを使う。
+    runs-on: ${{ (matrix.os == 'ubuntu-24.04' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || matrix.os }}
     timeout-minutes: ${{ matrix.timeoutMinutes }}
     strategy:
       fail-fast: false
@@ -168,7 +169,7 @@ jobs:
   # NDK はリポジトリで固定したrevisionだけを使用する。
   android:
     name: Android APK
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -182,6 +183,10 @@ jobs:
           # AGP 9 の下限は 17 である。21 は Gradle 9.7 が長期に支える LTS。
           java-version: 21
           cache: gradle
+
+      - name: Android SDKを用意する
+        if: runner.environment == 'self-hosted'
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
 
       # gomobile のバージョンは go.mod の tool directive に固定する。
       - name: Install gobind
@@ -215,6 +220,7 @@ jobs:
 
   web:
     name: Web
+    # ブラウザのOS依存ライブラリの導入にsudoが必要なためGitHub側に残す。
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -274,7 +280,7 @@ jobs:
 
   pages:
     name: Documentation site
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || 'ubuntu-latest' }}
     timeout-minutes: 10
     defaults:
       run:
@@ -294,7 +300,7 @@ jobs:
   # OS ごとの go ジョブとは分離する。
   deadcode:
     name: Dead code
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -306,7 +312,7 @@ jobs:
 
   generated:
     name: Generated files
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -332,7 +338,8 @@ jobs:
   # mac など）はパッケージの取得元が amd64 と違うので、両方で作れることを確かめる。
   vpn-image:
     name: VPN image (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
+    # ARM64専用の試験とmacOS・Windowsは元のランナーを使う。
+    runs-on: ${{ (matrix.os == 'ubuntu-24.04' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -362,7 +369,7 @@ jobs:
 
   integration:
     name: Integration
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -413,7 +420,7 @@ jobs:
 
   security:
     name: Dependency security
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

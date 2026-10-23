@@ -32,7 +32,7 @@ permissions:
 jobs:
   verify-source:
     name: Verify release source
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || 'ubuntu-24.04' }}
     timeout-minutes: 5
     outputs:
       release-sha: ${{ steps.policy.outputs.release_sha }}
@@ -40,6 +40,20 @@ jobs:
       promote-latest: ${{ steps.policy.outputs.promote_latest }}
       latest-stable: ${{ steps.policy.outputs.latest_stable }}
     steps:
+      - &setup-gh
+        name: GitHub CLIを用意する
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        env:
+          # 公開処理のCLIを固定し、公式配布物のSHA-256で検証する。
+          GH_VERSION: 2.103.1
+          GH_SHA256: 57500f347b5e84efb6578c9b644eeb3b4e54046762635a939dd0ee2cca1c1add
+        run: |
+          archive="gh_${GH_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${archive}" -o "$RUNNER_TEMP/$archive"
+          printf '%s  %s\n' "$GH_SHA256" "$RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          printf '%s\n' "$RUNNER_TEMP/gh_${GH_VERSION}_linux_amd64/bin" >> "$GITHUB_PATH"
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ env.RELEASE_TAG }}
@@ -148,7 +162,7 @@ jobs:
   linux:
     name: Linux
     needs: [verify-source]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -237,7 +251,7 @@ jobs:
   android:
     name: Android
     needs: [verify-source]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -251,6 +265,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+
+      - name: Android SDKを用意する
+        if: runner.environment == 'self-hosted'
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
 
       - name: Install gobind
         run: scripts/ci/retry.sh go install golang.org/x/mobile/cmd/gobind
@@ -288,6 +306,7 @@ jobs:
   browser-demo:
     name: Browser demo
     needs: [verify-source]
+    # cpioとブラウザのOS依存ライブラリの導入にsudoが必要なためGitHub側に残す。
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -333,6 +352,7 @@ jobs:
     # tapを書き換える前に、attestation付きの完全なdraftを作る。tap成功後に残る
     # 可変処理をdraft公開の一回だけへ縮め、失敗時は同じtagの手動復旧で再構築する。
     needs: [macos, linux, windows, android, browser-demo, verify-source]
+    # 長期の署名鍵・配布用SSH鍵を扱うためGitHub側に残す。
     runs-on: ubuntu-24.04
     environment: release
     timeout-minutes: 10
@@ -609,11 +629,12 @@ jobs:
     name: Publish
     # 完全なdraftとtap更新が成功した後は、一回のAPI更新だけで公開状態へ移す。
     needs: [stage-release, verify-source]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || 'ubuntu-24.04' }}
     timeout-minutes: 5
     permissions:
       contents: write
     steps:
+      - *setup-gh
       - name: Publish the staged release without moving stable backwards
         env:
           GH_TOKEN: ${{ github.token }}
