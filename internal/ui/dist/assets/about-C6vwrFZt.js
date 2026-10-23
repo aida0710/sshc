@@ -1,0 +1,1 @@
+import{D as e,g as t}from"./surface-dG1wRi8X.js";var n={async about(){return e(`About`,await t.read(`/api/v1/about`))}};export{n as t};

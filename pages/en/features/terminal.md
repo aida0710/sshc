@@ -47,9 +47,15 @@ OSC 8 links and detected URLs open in the system browser. Ctrl-click (⌘-click 
 
 Click a path starting with `/` and choose **Preview** to show that file over the terminal. PNG, JPEG, GIF, WebP and BMP images up to 8 MiB are shown, and UTF-8 text that is not an image shows its beginning. The file is read only when you choose **Preview**: from the engine machine for a local shell (from the run target for a shell opened there), and from the host for an SSH session. The image line Claude Code prints when it sends one (`[image] /tmp/….png`) opens the same way.
 
+Names may contain Unicode characters, including Japanese. Enclose paths containing spaces in quotes, such as `"/tmp/画面 1.png"` or `'/tmp/画面 1.png'`, or escape the space with a backslash: `/tmp/画面\ 1.png`. Ambiguous unquoted output is left unlinked to avoid opening only part of a path.
+
+Paths inside backticks and paths immediately after labels or symbols, such as `Saved to:/tmp/x.png`, `保存しました：/tmp/x.png` and `→/tmp/x.png`, are also recognized. `file:///tmp/画面%201.png` opens the decoded path. File URIs with a host, such as `file://host/…`, are excluded. Trailing `:line:column` and sentence punctuation, including `。`, `、` and `）`, are removed from the path.
+
 A relative path such as `artifacts/shot.png` can be clicked too when its name is an image (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` or `.bmp`). It is opened from the working folder of the program that printed it. For a local shell on Linux, including one opened on a run target, the engine looks that folder up. For SSH sessions and local shells on macOS and Windows, sshc uses the folder the shell reported through OSC 7, and cannot open the path when the shell reports none.
 
-Image paths such as `~/shots/a.png` open from the session’s home folder: the engine machine’s home for a local shell, or the home returned by SFTP for a run target or SSH host. If the home folder cannot be read, sshc explains why the path cannot be opened. The `~user/` form is not supported.
+Image paths such as `~/shots/a.png`, `$HOME/shots/a.png` and `${HOME}/shots/a.png` open from the session’s home folder: the engine machine’s home for a local shell, or the home returned by SFTP for a run target or SSH host. If the home folder cannot be read, sshc explains why the path cannot be opened. The `~user/` form is not supported.
+
+A local shell also recognizes `C:\Users\aida\x.png` and `C:/Users/aida/x.png` once the engine is confirmed to run Windows. Windows paths are not linked in SSH sessions or shells on a run target.
 
 While a preview is open, the left and right arrow keys, or **Previous image** and **Next image**, move to the other images the same terminal printed (paths ending in `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` or `.bmp`). It is not available in an SSH session opened on a run target.
 
