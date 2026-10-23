@@ -21,7 +21,7 @@ concurrency:
 jobs:
   build:
     name: Build documentation
-    runs-on: ${{ (github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read

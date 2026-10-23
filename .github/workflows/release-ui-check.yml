@@ -16,8 +16,7 @@ jobs:
   embedded-ui:
     name: Embedded UI (${{ matrix.name }})
     # runner は release.yml の macos・linux・windows の job と揃える。
-    # ARM64専用の試験とmacOS・Windowsは元のランナーを使う。
-    runs-on: ${{ (matrix.os == 'ubuntu-24.04' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner) && 'r540-linux' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false

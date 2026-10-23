@@ -126,9 +126,9 @@ func TestReleaseWorkflowBuildsEveryPlatformNatively(t *testing.T) {
 
 	for job, runner := range map[string]string{
 		"macos":   "macos-14",
-		"linux":   ownerLinuxRunner,
+		"linux":   "ubuntu-24.04",
 		"windows": "windows-2025",
-		"android": ownerLinuxRunner,
+		"android": "ubuntu-24.04",
 	} {
 		found, present := document.Jobs[job]
 		if !present {

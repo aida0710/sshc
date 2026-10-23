@@ -97,7 +97,7 @@ func TestReleaseUICheckRunsOnTheReleaseRunners(t *testing.T) {
 	}
 	sort.Strings(want)
 
-	if job.RunsOn != ownerLinuxMatrixRunner || job.Strategy == nil {
+	if job.RunsOn != "${{ matrix.os }}" || job.Strategy == nil {
 		t.Fatal("the check does not run a matrix of runners")
 	}
 	// 1 つの OS で落ちても、ほかの OS の結果を見られるようにする。
@@ -106,11 +106,7 @@ func TestReleaseUICheckRunsOnTheReleaseRunners(t *testing.T) {
 	}
 	got := make([]string, 0, len(job.Strategy.Matrix.Include))
 	for _, entry := range job.Strategy.Matrix.Include {
-		runner := entry.OS
-		if runner == "ubuntu-24.04" {
-			runner = ownerLinuxRunner
-		}
-		got = append(got, runner)
+		got = append(got, entry.OS)
 	}
 	sort.Strings(got)
 	if !reflect.DeepEqual(got, want) {
