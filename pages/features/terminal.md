@@ -7,7 +7,7 @@ description: SSHとローカルシェルを開き、検索、再接続、文字�
 
 SSHとローカルシェルを同じ画面で開き、検索、クイックコマンド、ポート転送を利用できます。
 
-![接続中のTerminalと操作メニュー](/images/terminal-desktop.png)
+![ワークスペース内でローカルシェルを開いたTerminal](/images/terminal-desktop.png)
 
 ## 接続の進行状況を表示する
 

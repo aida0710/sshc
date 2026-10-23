@@ -5,9 +5,9 @@ description: A terminal app that uses existing OpenSSH configuration, with SSH, 
 
 # What is sshc?
 
-sshc is a terminal app that uses your existing OpenSSH configuration. Open SSH sessions and local shells in multiple panes, then use SFTP and port forwarding with the same connections. The terminal, SFTP, CLI, and encrypted sync share the same `~/.ssh/config`, `Include` files, private keys, and `known_hosts` without converting them to a proprietary format.
+sshc is a terminal app that uses your existing OpenSSH configuration. Open SSH sessions and local shells, group them into workspaces, and use SFTP and port forwarding with the same connection settings. The terminal, SFTP, CLI, and encrypted sync share the same `~/.ssh/config`, `Include` files, private keys, and `known_hosts` without converting them to a proprietary format.
 
-![An SSH connection open in the terminal](/images/terminal-desktop.png)
+![A local shell open in a named workspace](/images/terminal-desktop.png)
 
 On desktop, the left navigation opens Home, Connections, SFTP, Menu, and your live terminals. On mobile, use the menu button to open the same navigation and tap outside it to close.
 
