@@ -22,9 +22,8 @@ export type TerminalSessionsState = {
   maxSessions: number;
   busy: boolean;
   problem: string;
-  // remoteVaultLocked is true while the run target's list is refused because
-  // that engine's Vault is locked.
-  remoteVaultLocked: boolean;
+  // remoteRefusal identifies the action needed before the run target can list sessions.
+  remoteRefusal: "vault_locked" | "version_mismatch" | null;
   loaded: boolean;
   rename: (id: string, title: string) => Promise<boolean>;
   unpinTitle?: (id: string) => Promise<boolean>;
@@ -47,7 +46,12 @@ export function useTerminalSessions(
   const [maxSessions, setMaxSessions] = useState(0);
   const [pendingOperations, setPendingOperations] = useState(0);
   const [problem, setProblem] = useState("");
-  const [remoteVaultLocked, setRemoteVaultLocked] = useState(false);
+  const [listFailure, setListFailure] = useState<{ api: TerminalSessionsApi; code: string } | null>(null);
+  // Effects offering dialogs must never attribute the previous engine's refusal
+  // to the newly selected one, even before the reset effect has run.
+  const listFailureCode = listFailure?.api === api ? listFailure.code : "";
+  const remoteRefusal = listFailureCode === "remote_engine_vault_locked" ? "vault_locked"
+    : listFailureCode === "remote_engine_version_mismatch" ? "version_mismatch" : null;
   const [loaded, setLoaded] = useState(false);
   const refreshGeneration = useRequestGeneration();
   const mutationGeneration = useRequestGeneration();
@@ -90,20 +94,19 @@ export function useTerminalSessions(
       if (!isCurrent()) return;
       setSessions(listed.sessions);
       setMaxSessions(listed.maxSessions);
-      setRemoteVaultLocked(false);
+      setListFailure(null);
     } catch (error) {
       // A run-target engine that cannot be reached would otherwise look like
       // one with no sessions. This machine's own list keeps failing quietly:
       // the next poll reads it again.
       const code = failureCode(error);
       if (isCurrent() && code.startsWith("remote_engine_")) {
-        setProblem(translate(terminalProblemKey(code)));
-        setRemoteVaultLocked(code === "remote_engine_vault_locked");
+        setListFailure({ api, code });
       }
     } finally {
       if (isCurrent()) setLoaded(true);
     }
-  }, [api, enabled, refreshGeneration, translate]);
+  }, [api, enabled, refreshGeneration]);
 
   // applyMutation runs one request whose response is the listing after the
   // change. A response that lost the race to a newer mutation is discarded in
@@ -141,7 +144,7 @@ export function useTerminalSessions(
     setSessions([]);
     setMaxSessions(0);
     setProblem("");
-    setRemoteVaultLocked(false);
+    setListFailure(null);
     setLoaded(false);
   }, [api, mutationGeneration, refreshGeneration]);
 
@@ -159,10 +162,11 @@ export function useTerminalSessions(
   // Only while a session is connecting or reconnecting does the list switch to
   // the faster interval, for the reason given at connectingPollIntervalMs.
   // Terminal notifications must still be observed while the app is in the
-  // background; that is precisely when delivering them is useful.
+  // background; that is precisely when delivering them is useful. A refused
+  // empty list is retried too, so an update or Vault unlock restores it.
   usePolling(refresh, {
     intervalMs: connectionInProgress ? connectingPollIntervalMs : sessionListPollIntervalMs,
-    enabled: enabled && sessions.length > 0,
+    enabled: enabled && (sessions.length > 0 || listFailureCode !== ""),
     whileHidden: true,
   });
 
@@ -276,7 +280,11 @@ export function useTerminalSessions(
     );
   }, [beginMutation]);
 
-  return { sessions, maxSessions, busy, problem, remoteVaultLocked, loaded, rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited, moveToWorkspace };
+  return {
+    sessions, maxSessions, busy, remoteRefusal, loaded,
+    problem: listFailureCode === "" ? problem : translate(terminalProblemKey(listFailureCode)),
+    rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited, moveToWorkspace,
+  };
 }
 
 export function terminalProblemKey(code: string): MessageKey {
@@ -326,8 +334,9 @@ export function terminalProblemKey(code: string): MessageKey {
     case "remote_engine_not_running":
     case "remote_engine_unproven":
     case "remote_engine_connect_failed":
-    case "remote_engine_version_mismatch":
       return "terminal.remoteEngineUnavailable";
+    case "remote_engine_version_mismatch":
+      return "terminal.remoteVersionMismatch";
     case "reconnect_failed":
       return "terminal.reconnectFailed";
     case "reconnect_exhausted":

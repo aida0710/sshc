@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { remoteEnginesApi, type RemoteEnginesApi } from "../api/remoteEngines";
 import type { Translate } from "../i18n/context";
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
+import { failureCode } from "../api/client";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 import { runTargetProblemText } from "./runTargetProblem";
+import { useOfferedDialog, type OfferedDialogState } from "./useOfferedDialog";
 import { useRemoteVaultUnlock, type RemoteVaultUnlockState } from "./useRemoteVaultUnlock";
 
 export type RunTargetsState = {
@@ -22,6 +24,10 @@ export type RunTargetsState = {
   api: RemoteEnginesApi;
   localVersion: string;
   vaultUnlock: RemoteVaultUnlockState;
+  // engineInfo is the engine information dialog. It also opens by itself for
+  // an engine whose version differs from this machine's, which is updated
+  // from there.
+  engineInfo: OfferedDialogState;
 };
 
 // useRunTargets holds the run targets: this machine and the engines on SSH
@@ -43,7 +49,9 @@ export function useRunTargets({
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
   const vaultUnlock = useRemoteVaultUnlock();
-  const { allowOffer } = vaultUnlock;
+  const engineInfo = useOfferedDialog();
+  const { allowOffer: allowVaultOffer } = vaultUnlock;
+  const { allowOffer: allowEngineInfoOffer, ask: askEngineInfo } = engineInfo;
 
   useEffect(() => {
     if (!enabled) return;
@@ -61,12 +69,22 @@ export function useRunTargets({
 
   const select = useCallback((alias: string | null) => {
     setProblem("");
-    // Choosing a run target again asks for its Vault password again, even if
-    // the dialog was closed before.
-    if (alias !== null) allowOffer(alias);
+    // Choosing a run target again offers its dialogs again, even if they were
+    // closed before.
+    if (alias !== null) {
+      allowVaultOffer(alias);
+      allowEngineInfoOffer(alias);
+    }
     setStored(alias ?? "");
     writeStoredValue(localStorageKeys.runTarget, alias ?? "");
-  }, [allowOffer]);
+  }, [allowEngineInfoOffer, allowVaultOffer]);
+
+  // report shows why a request about an engine failed. A different version is
+  // answered with the information dialog, whose Update fixes it.
+  const report = useCallback((error: unknown, alias: string) => {
+    if (failureCode(error) === "remote_engine_version_mismatch") askEngineInfo(alias);
+    else setProblem(runTargetProblemText(translate, error, alias));
+  }, [askEngineInfo, translate]);
 
   const add = useCallback(async (alias: string) => {
     setProblem("");
@@ -77,12 +95,12 @@ export function useRunTargets({
       select(alias);
       return true;
     } catch (error) {
-      setProblem(runTargetProblemText(translate, error, alias, localVersion));
+      report(error, alias);
       return false;
     } finally {
       setBusy(false);
     }
-  }, [api, localVersion, select, translate]);
+  }, [api, report, select]);
 
   const remove = useCallback(async (alias: string) => {
     setProblem("");
@@ -91,9 +109,9 @@ export function useRunTargets({
       setEngines(listed.engines.map((engine) => engine.alias));
       if (stored === alias) select(null);
     } catch (error) {
-      setProblem(runTargetProblemText(translate, error, alias, localVersion));
+      report(error, alias);
     }
-  }, [api, localVersion, select, stored, translate]);
+  }, [api, report, select, stored]);
 
   const openInNewTab = useCallback(async (alias: string) => {
     setProblem("");
@@ -106,9 +124,9 @@ export function useRunTargets({
       else tab.location.href = entrance.url;
     } catch (error) {
       tab?.close();
-      setProblem(runTargetProblemText(translate, error, alias, localVersion));
+      report(error, alias);
     }
-  }, [api, localVersion, translate]);
+  }, [api, report]);
 
-  return { engines, selected, problem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock };
+  return { engines, selected, problem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock, engineInfo };
 }

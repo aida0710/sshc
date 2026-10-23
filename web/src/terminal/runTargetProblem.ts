@@ -3,11 +3,9 @@ import type { Translate } from "../i18n/context";
 
 // runTargetProblemText says why an engine on an SSH host could not be added,
 // opened or reached, with what to do about it on that host.
-export function runTargetProblemText(t: Translate, error: unknown, alias: string, localVersion: string): string {
+export function runTargetProblemText(t: Translate, error: unknown, alias: string): string {
   const problem = error instanceof ApiError ? error.problem : null;
   switch (failureCode(error)) {
-    case "remote_engine_version_mismatch":
-      return t("runTarget.versionMismatch", { alias, remote: problem?.detail ?? "", local: localVersion });
     case "remote_engine_not_running":
       return t("runTarget.notRunning", { alias });
     case "remote_engine_connect_failed":

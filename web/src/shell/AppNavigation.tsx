@@ -182,7 +182,10 @@ export function AppNavigation({
           hosts={hosts}
           {...(onConnect === undefined ? {} : { onConnect })}
           canBroadcast={runTargets.selected === null}
-          {...(remoteTarget === null ? {} : { onUnlockRemoteVault: () => runTargets.vaultUnlock.ask(remoteTarget) })}
+          {...(remoteTarget === null ? {} : {
+            onUnlockRemoteVault: () => runTargets.vaultUnlock.ask(remoteTarget),
+            onUpdateRemoteEngine: () => runTargets.engineInfo.ask(remoteTarget),
+          })}
         />
       </div>
 
