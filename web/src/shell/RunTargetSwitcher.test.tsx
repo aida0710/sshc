@@ -38,7 +38,7 @@ function targets(overrides: Partial<RunTargetsState> = {}): RunTargetsState {
 function vaultUnlockState(overrides: Partial<RemoteVaultUnlockState> = {}): RemoteVaultUnlockState {
   return {
     unlockFor: null, revision: 0,
-    ask: vi.fn(), offer: vi.fn(), allowOffer: vi.fn(), close: vi.fn(), unlocked: vi.fn(),
+    ask: vi.fn(), close: vi.fn(), unlocked: vi.fn(),
     ...overrides,
   };
 }
@@ -56,16 +56,9 @@ function SwitcherWithDialogs({ state }: { state: RunTargetsState }) {
 }
 
 describe("useRemoteVaultUnlock", () => {
-  it("does not offer again a dialog the user closed until the run target is chosen anew", () => {
+  it("closes the dialog and counts the unlock once the Vault is unlocked", () => {
     const { result } = renderHook(() => useRemoteVaultUnlock());
-    act(() => result.current.offer("r540"));
-    expect(result.current.unlockFor).toBe("r540");
-    act(() => result.current.close());
-    act(() => result.current.offer("r540"));
-    expect(result.current.unlockFor).toBeNull();
-
-    act(() => result.current.allowOffer("r540"));
-    act(() => result.current.offer("r540"));
+    act(() => result.current.ask("r540"));
     expect(result.current.unlockFor).toBe("r540");
     act(() => result.current.unlocked());
     expect(result.current.unlockFor).toBeNull();
