@@ -16,7 +16,7 @@ describe("TerminalLinkPopover", () => {
       <LanguageProvider>
         <TerminalLinkPopover
           selection={{
-            link: { kind: "remote-path", text: "/var/log/app.log", target: "/var/log/app.log", start: 0, end: 16 },
+            link: { kind: "path", text: "/var/log/app.log", target: "/var/log/app.log", start: 0, end: 16 },
             x: 20,
             y: 30,
           }}
@@ -29,6 +29,30 @@ describe("TerminalLinkPopover", () => {
     await userEvent.click(screen.getByRole("button", { name: "Edit with SFTP" }));
 
     expect(onRemotePath).toHaveBeenCalledWith("/var/log/app.log", "edit");
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("previews a path from a shell without offering SFTP actions", async () => {
+    const onPreviewPath = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <LanguageProvider>
+        <TerminalLinkPopover
+          selection={{
+            link: { kind: "path", text: "/tmp/shot.png", target: "/tmp/shot.png", start: 0, end: 13 },
+            x: 20,
+            y: 30,
+          }}
+          onPreviewPath={onPreviewPath}
+          onClose={onClose}
+        />
+      </LanguageProvider>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Edit with SFTP" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(onPreviewPath).toHaveBeenCalledWith("/tmp/shot.png");
     expect(onClose).toHaveBeenCalledOnce();
   });
 

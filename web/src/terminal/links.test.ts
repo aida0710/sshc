@@ -3,23 +3,25 @@ import { findTerminalLinks, linkTextNamesTarget, modifierOpensLink, osc8Link } f
 
 describe("findTerminalLinks", () => {
   it("finds http links without swallowing sentence punctuation", () => {
-    expect(findTerminalLinks("see https://example.test/a?q=1.", false)).toEqual([
+    expect(findTerminalLinks("see https://example.test/a?q=1.")).toEqual([
       { kind: "url", text: "https://example.test/a?q=1", target: "https://example.test/a?q=1", start: 4, end: 30 },
     ]);
   });
 
-  it("finds remote paths and removes source locations from the target", () => {
-    expect(findTerminalLinks("failed: /srv/app/main.go:42:7", true)).toEqual([
-      { kind: "remote-path", text: "/srv/app/main.go:42:7", target: "/srv/app/main.go", start: 8, end: 29 },
+  it("finds paths and removes source locations from the target", () => {
+    expect(findTerminalLinks("failed: /srv/app/main.go:42:7")).toEqual([
+      { kind: "path", text: "/srv/app/main.go:42:7", target: "/srv/app/main.go", start: 8, end: 29 },
     ]);
   });
 
-  it("does not turn URL path segments into remote paths", () => {
-    expect(findTerminalLinks("https://example.test/srv/file", true)).toHaveLength(1);
+  it("does not turn URL path segments into paths", () => {
+    expect(findTerminalLinks("https://example.test/srv/file")).toHaveLength(1);
   });
 
-  it("does not expose remote path actions for local shells", () => {
-    expect(findTerminalLinks("/etc/hosts", false)).toEqual([]);
+  it("finds the path of an image Claude Code sent, without its size", () => {
+    expect(findTerminalLinks("› [image] /tmp/shot.png (12 KB)")).toEqual([
+      { kind: "path", text: "/tmp/shot.png", target: "/tmp/shot.png", start: 10, end: 23 },
+    ]);
   });
 
   it("keeps the hidden OSC 8 destination separate from its visible label", () => {

@@ -84,6 +84,7 @@ describe("the catalogue", () => {
         "section.terminal",
         "section.vpn",
         "settings.heading",
+        "sftp.previewPosition",
         "sftp.settingsHeading",
         "shell.language",
         "shell.languageEnglish",

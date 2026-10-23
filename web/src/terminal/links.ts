@@ -1,5 +1,5 @@
 export type TerminalLinkMatch = {
-  kind: "url" | "remote-path";
+  kind: "url" | "path";
   text: string;
   target: string;
   start: number;
@@ -53,7 +53,7 @@ function overlaps(matches: TerminalLinkMatch[], start: number, end: number): boo
   return matches.some((match) => start < match.end && end > match.start);
 }
 
-export function findTerminalLinks(line: string, remote: boolean): TerminalLinkMatch[] {
+export function findTerminalLinks(line: string): TerminalLinkMatch[] {
   const matches: TerminalLinkMatch[] = [];
   for (const found of line.matchAll(urlPattern)) {
     const original = found[0] ?? "";
@@ -62,18 +62,16 @@ export function findTerminalLinks(line: string, remote: boolean): TerminalLinkMa
     if (start < 0 || text === "" || text.length > maxLinkLength) continue;
     matches.push({ kind: "url", text, target: text, start, end: start + text.length });
   }
-  if (remote) {
-    for (const found of line.matchAll(pathPattern)) {
-      const original = found[1] ?? "";
-      const text = withoutTrailingPunctuation(original);
-      const whole = found[0] ?? "";
-      const prefix = Math.max(0, whole.length - original.length);
-      const start = (found.index ?? -1) + prefix;
-      const target = pathTarget(text);
-      const end = start + text.length;
-      if (start < 0 || target === "" || target.length > maxLinkLength || overlaps(matches, start, end)) continue;
-      matches.push({ kind: "remote-path", text, target, start, end });
-    }
+  for (const found of line.matchAll(pathPattern)) {
+    const original = found[1] ?? "";
+    const text = withoutTrailingPunctuation(original);
+    const whole = found[0] ?? "";
+    const prefix = Math.max(0, whole.length - original.length);
+    const start = (found.index ?? -1) + prefix;
+    const target = pathTarget(text);
+    const end = start + text.length;
+    if (start < 0 || target === "" || target.length > maxLinkLength || overlaps(matches, start, end)) continue;
+    matches.push({ kind: "path", text, target, start, end });
   }
   return matches.sort((left, right) => left.start - right.start || left.end - right.end);
 }

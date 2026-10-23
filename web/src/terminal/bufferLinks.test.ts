@@ -21,7 +21,7 @@ describe("wrapped terminal links", () => {
         range: { start: { x: 1, y: 1 }, end: { x: url.length % 30, y: 3 } },
       };
       for (const row of [1, 2, 3]) {
-        expect(findBufferLinks(terminal.buffer.active, row, false)).toEqual([expected]);
+        expect(findBufferLinks(terminal.buffer.active, row)).toEqual([expected]);
       }
     } finally { terminal.dispose(); }
   });
@@ -29,7 +29,7 @@ describe("wrapped terminal links", () => {
   it("counts Japanese and emoji prefixes by terminal cells", async () => {
     const terminal = await terminalWithOutput(`説明😀 ${url}`);
     try {
-      expect(findBufferLinks(terminal.buffer.active, 2, false)[0]).toMatchObject({
+      expect(findBufferLinks(terminal.buffer.active, 2)[0]).toMatchObject({
         match: { target: url },
         // xterm's default Unicode 6 table renders this emoji in one cell.
         range: { start: { x: 7, y: 1 }, end: { x: (6 + url.length) % 30, y: 3 } },
@@ -40,9 +40,9 @@ describe("wrapped terminal links", () => {
   it("does not join explicit newlines or unrelated rows", async () => {
     const terminal = await terminalWithOutput("https://example.test/\r\nseparate\r\nplain text");
     try {
-      expect(findBufferLinks(terminal.buffer.active, 1, false)[0]?.match.target).toBe("https://example.test/");
-      expect(findBufferLinks(terminal.buffer.active, 2, false)).toEqual([]);
-      expect(findBufferLinks(terminal.buffer.active, 3, false)).toEqual([]);
+      expect(findBufferLinks(terminal.buffer.active, 1)[0]?.match.target).toBe("https://example.test/");
+      expect(findBufferLinks(terminal.buffer.active, 2)).toEqual([]);
+      expect(findBufferLinks(terminal.buffer.active, 3)).toEqual([]);
     } finally { terminal.dispose(); }
   });
 
@@ -50,7 +50,7 @@ describe("wrapped terminal links", () => {
     const target = "https://a.test/aaaa界/end";
     const terminal = await terminalWithOutput(target, 20);
     try {
-      expect(findBufferLinks(terminal.buffer.active, 2, false)[0]?.match.target).toBe(target);
+      expect(findBufferLinks(terminal.buffer.active, 2)[0]?.match.target).toBe(target);
     } finally { terminal.dispose(); }
   });
 
@@ -58,7 +58,7 @@ describe("wrapped terminal links", () => {
     const terminal = await terminalWithOutput(`${url}\r\n`);
     try {
       terminal.resize(25, 24);
-      expect(findBufferLinks(terminal.buffer.active, 3, false)[0]).toMatchObject({
+      expect(findBufferLinks(terminal.buffer.active, 3)[0]).toMatchObject({
         match: { target: url },
         range: { start: { x: 1, y: 1 }, end: { x: url.length % 25, y: 4 } },
       });
@@ -71,7 +71,7 @@ describe("wrapped terminal links", () => {
     terminal.registerLinkProvider = (registered) => { provider = registered; return { dispose() {} }; };
     const opened: string[] = [];
     const selected: string[] = [];
-    attachLinkProvider(terminal, { remote: false, open: (target) => opened.push(target), select: (link) => selected.push(link.target) });
+    attachLinkProvider(terminal, { open: (target) => opened.push(target), select: (link) => selected.push(link.target) });
     try {
       const links = await new Promise<ILink[] | undefined>((resolve) => provider?.provideLinks(2, resolve));
       expect(links).toHaveLength(1);
