@@ -163,14 +163,21 @@ describe("WorkspaceTree", () => {
     expect(props.workspaces.remove).toHaveBeenCalledWith("w1");
   });
 
-  it("creates a workspace from the heading menu", async () => {
+  it("creates a workspace from the heading button", async () => {
     const user = userEvent.setup();
     const props = renderTree();
     await user.click(screen.getByRole("button", { name: "Workspace list actions" }));
-    await user.click(screen.getByRole("menuitem", { name: "New workspace" }));
+    expect(screen.queryByRole("menuitem", { name: "New workspace" })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "New workspace" }));
     await user.type(screen.getByRole("textbox", { name: "Workspace name" }), "training");
     await user.click(screen.getByRole("button", { name: "Create" }));
     expect(props.workspaces.create).toHaveBeenCalledWith("training");
+  });
+
+  it("disables workspace creation when the workspace limit is reached", () => {
+    renderTree({ workspaces: { maxWorkspaces: workspaces.length } });
+    expect(screen.getByRole("button", { name: "New workspace" })).toBeDisabled();
   });
 
   it("moves a session dropped on another workspace to the end of it", () => {
