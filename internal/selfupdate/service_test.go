@@ -247,16 +247,20 @@ func TestStateSaveFailureAfterInstallationNeverRestarts(t *testing.T) {
 	}
 	dependencies.Restart = func(context.Context, Job) error { restarted = true; return nil }
 	service := New(dependencies)
-	plan, _ := service.Prepare(context.Background(), "v1.1.0")
-	job, _ := service.Start(plan)
+	t.Cleanup(func() { _ = service.Stop() })
+	job := startUpdateFixture(t, service)
 	service.ResponseSent(job.ID, nil)
-	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
-		if _, err := service.Status(); errors.Is(err, ErrState) {
-			if restarted {
-				t.Fatal("restarted without saving the installation result")
-			}
-			return
-		}
+	// Status can fail as soon as Install replaces the state file, before the
+	// worker tries to persist its result. Let that attempt finish without
+	// canceling it, so shutdown cannot suppress an incorrect restart.
+	service.workers.Wait()
+	if !errors.Is(service.stateError, ErrState) {
+		t.Fatalf("installation result save = %v, want %v", service.stateError, ErrState)
 	}
-	t.Fatal("state save failure was hidden")
+	if _, err := service.Status(); !errors.Is(err, ErrState) {
+		t.Fatalf("status = %v, want %v", err, ErrState)
+	}
+	if restarted {
+		t.Fatal("restarted without saving the installation result")
+	}
 }
