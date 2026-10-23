@@ -24,10 +24,14 @@ export function openTerminalURL(target: string): boolean {
 export function TerminalLinkPopover({
   selection,
   onClose,
+  onPreviewPath,
   onRemotePath,
 }: {
   selection: TerminalLinkSelection;
   onClose: () => void;
+  // onPreviewPath opens a path over the terminal, from the machine the shell runs on.
+  onPreviewPath?: (path: string) => void;
+  // onRemotePath sends a path of an SSH session to the SFTP screen.
   onRemotePath?: (path: string, action: RemotePathAction) => void;
 }) {
   const t = useTranslate();
@@ -55,8 +59,14 @@ export function TerminalLinkPopover({
     onClose();
   }
 
+  function preview() {
+    if (selection.link.kind !== "path" || onPreviewPath === undefined) return;
+    onPreviewPath(selection.link.target);
+    onClose();
+  }
+
   function remote(action: RemotePathAction) {
-    if (selection.link.kind !== "remote-path" || onRemotePath === undefined) return;
+    if (selection.link.kind !== "path" || onRemotePath === undefined) return;
     onRemotePath(selection.link.target, action);
     onClose();
   }
@@ -64,13 +74,16 @@ export function TerminalLinkPopover({
   const actions: { label: string; run: () => void }[] = [
     ...(selection.link.kind === "url"
       ? [{ label: t("terminal.linkOpenBrowser"), run: openURL }]
-      : onRemotePath === undefined
-        ? []
-        : [
-            { label: t("terminal.linkBrowseSFTP"), run: () => remote("browse") },
-            { label: t("terminal.linkEditSFTP"), run: () => remote("edit") },
-            { label: t("terminal.linkDownloadSFTP"), run: () => remote("download") },
-          ]),
+      : [
+          ...(onPreviewPath === undefined ? [] : [{ label: t("terminal.linkPreview"), run: preview }]),
+          ...(onRemotePath === undefined
+            ? []
+            : [
+                { label: t("terminal.linkBrowseSFTP"), run: () => remote("browse") },
+                { label: t("terminal.linkEditSFTP"), run: () => remote("edit") },
+                { label: t("terminal.linkDownloadSFTP"), run: () => remote("download") },
+              ]),
+        ]),
     { label: t("terminal.linkCopy"), run: copy },
   ];
 

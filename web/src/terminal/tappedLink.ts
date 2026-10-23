@@ -19,12 +19,12 @@ function covers(range: IBufferRange, column: number, line: number): boolean {
 // On touch screens the selection overlay lies over xterm's screen, so xterm's
 // own link hover and click never see a finger. A tap looks up the URL or path
 // under it here instead. OSC 8 hyperlinks live inside xterm and are not found.
-export function linkAtPoint(view: TappableTerminal, point: ScreenPoint, remote: boolean): TerminalLinkMatch | null {
+export function linkAtPoint(view: TappableTerminal, point: ScreenPoint): TerminalLinkMatch | null {
   const cells = measureCells(view);
   if (cells === null || view.cols <= 0) return null;
   const column = Math.floor((point.clientX - cells.rect.left) / (cells.rect.width / view.cols)) + 1;
   const row = Math.floor((point.clientY - cells.rect.top) / cells.cellHeight);
   if (column < 1 || column > view.cols || row < 0 || row >= view.rows) return null;
   const line = view.buffer.active.viewportY + row + 1;
-  return findBufferLinks(view.buffer.active, line, remote).find(({ range }) => covers(range, column, line))?.match ?? null;
+  return findBufferLinks(view.buffer.active, line).find(({ range }) => covers(range, column, line))?.match ?? null;
 }
