@@ -81,7 +81,7 @@ function sessionRow(name: string): HTMLElement {
 }
 
 describe("WorkspaceTree", () => {
-  it.each(["vault_locked", "version_mismatch"] as const)("offers the action for %s beside the refusal", async (remoteRefusal) => {
+  it.each(["vault_locked", "incompatible"] as const)("offers the action for %s beside the refusal", async (remoteRefusal) => {
     const user = userEvent.setup();
     const props = renderTree({ terminalSessions: { remoteRefusal, problem: "The run target refused the list." } });
     expect(screen.getByText("The run target refused the list.")).toBeInTheDocument();

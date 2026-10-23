@@ -5499,7 +5499,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The engine was reachable and running, and is now a run target. An engine of another version is added too, so that it can be updated */
+            /** @description The engine was reachable and running, and is now a run target. An engine whose run-target compatibility differs from this one is added too, so that it can be updated */
             201: {
                 headers: {
                     [name: string]: unknown;

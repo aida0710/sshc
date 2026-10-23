@@ -9,10 +9,23 @@
 - 安定バージョンのリリースでは、`scripts/release/check-pinned-installers.sh`が照合する導入例（README、`docs/release-install.md`のPowerShellの例など）で固定したバージョンがタグと同じであること
 - 公開するcommitで、`release-ui-check.yml`の3つのjobが成功していること（次の「公開の前に埋め込みUIの照合を試す」）
 - VPNコンテナのイメージが固定したUbuntuのsnapshotの時刻（`internal/vpn/container/Dockerfile`の`snapshot=`）が30日より古ければ、先に上げてmainへ入れてあること。固定した時刻より後のセキュリティ修正はイメージに入らず、Dockerfileを書き換えない限り利用者のマシンのイメージも作り直されない。baseのdigestとsuiteごとのInReleaseのSHA-256を同じ変更で書き換え（手順はDockerfileのコメント）、CIの`vpn-image` jobでamd64とarm64の両方を確かめる。`publish.sh`は30日より古いと警告を出す（失敗にはしない）
+- 前のリリースから実行先との互換の番号を上げた場合は、リリースノートの「更新後に必要な操作」に、実行先の更新が必要なことを書いてあること（次の「実行先との互換の番号」）
 - `gh auth status`が成功し、リポジトリと`release` environmentを操作できること
 - `git`、`gh`、`jq`、`curl`、`unzip`、`sha256sum`または`shasum`が利用できること
 
 導入例を照合する文書の一覧は、`scripts/release/check-pinned-installers.sh`にだけ書かれています。`publish.sh`とReleaseワークフローは、公開前にこのスクリプトを公開するタグで実行します。`internal/buildcontract`の契約テストは、`docs/releases`にある最新の安定バージョンのリリースノートのバージョンで同じスクリプトを実行します。このため、リリースノートを追加する変更で導入例のバージョンも更新してください。導入例を置く文書を増やしたときは、このスクリプトの一覧にも追加してください。
+
+## 実行先との互換の番号
+
+このマシンのsshcエンジンは、実行先（SSHの接続先で動くsshcエンジン）を、sshcのバージョンではなく互換の番号で照合します。番号は`internal/remoteengine/remote_engine.go`の`Compatibility`の1か所にだけあり、sshcエンジンはhandoffの`runTargetCompatibility`に書きます。番号が同じなら、バージョンが違っても実行先として使えます。
+
+次のどれかを、古いsshcと通じない形に変えた変更では、同じ変更で`Compatibility`を1つ上げてください。
+
+- 実行先へ取り次ぐAPI（`/api/v1/terminal/…`）の要求と答えの形
+- handoffと`/cli/`の手順（資格の受け取り方、身元の確かめ方）
+- ターミナルの入出力のストリームの形
+
+上げたリリースでは、実行先も同じリリース以降へ更新しないと接続できません。リリースノートの「更新後に必要な操作」に、実行先の更新が必要なことと、接続先で`sshc update`を実行することを書いてください。番号を上げていないリリースでは、実行先の更新は必須ではありません。
 
 ## 公開の前に埋め込みUIの照合を試す
 

@@ -302,6 +302,8 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		PID:             dependencies.PID,
 		Version:         version,
 		ProtocolVersion: handoff.ProtocolVersion,
+		// 別のマシンの sshc エンジンが、このエンジンを実行先として使えるかを確かめる。
+		RunTargetCompatibility: remoteengine.Compatibility,
 	}
 	// handoff を書けないことは致命である。書けなかった常駐は `sshc ssh <alias>` から
 	// 見えないまま動き続け、2 台目の engine が同じ handoff を書きに来る。

@@ -24,6 +24,7 @@ import (
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/platform"
+	"sshc/internal/remoteengine"
 	"sshc/internal/storage"
 )
 
@@ -475,8 +476,9 @@ func TestBuildWritesAVersionedOwnedHandoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read handoff = %v", err)
 	}
-	if document.SchemaVersion != handoff.SchemaVersion || document.ProtocolVersion != handoff.ProtocolVersion {
-		t.Errorf("versions = schema %d protocol %d", document.SchemaVersion, document.ProtocolVersion)
+	if document.SchemaVersion != handoff.SchemaVersion || document.ProtocolVersion != handoff.ProtocolVersion ||
+		document.RunTargetCompatibility != remoteengine.Compatibility {
+		t.Errorf("versions = schema %d protocol %d run target %d", document.SchemaVersion, document.ProtocolVersion, document.RunTargetCompatibility)
 	}
 	if document.URL != server.URL() || document.Owner != handoff.OwnerEngine || document.PID != 777 || document.Version != "v1.2.3" {
 		t.Errorf("document = %#v", document)

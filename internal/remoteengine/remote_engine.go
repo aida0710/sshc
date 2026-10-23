@@ -30,12 +30,23 @@ var (
 	ErrUnproven = errors.New("the remote engine could not prove that it owns its handoff")
 )
 
-// VersionMismatchError は、このマシンと接続先の sshc のバージョンが違うことを表す。画面は接続先の
-// エンジンの API をそのまま使うので、同じバージョンでなければ取り次がない。
-type VersionMismatchError struct{ Local, Remote string }
+// Compatibility は、実行先とのやり取りの互換の番号である。handoff の
+// runTargetCompatibility に書き、接続先の番号がこれと同じなら、sshc のバージョンが
+// 違っても実行先として使う。画面は接続先のエンジンの API をそのまま使うためである。
+//
+// 取り次ぐ API（httpserver の registerRemoteEngineRoutes が接続先へ渡す
+// /api/v1/terminal/… の要求と答え）、handoff と /cli/ の手順、ターミナルの入出力の
+// ストリームの形を、古い相手と通じない形に変えたときに 1 つ上げる。
+// 上げたリリースでは、実行先の sshc も更新が要る（docs/releasing.md）。
+// 0 は、番号を書かない古い sshc の handoff を読んだときの値なので使わない。
+const Compatibility = 1
 
-func (e *VersionMismatchError) Error() string {
-	return fmt.Sprintf("the remote engine runs sshc %s, this engine runs %s", e.Remote, e.Local)
+// IncompatibleEngineError は、接続先の sshc の互換の番号がこのマシンと違うことを表す。
+// 番号を書かない古い sshc も含む。Local と Remote は、それぞれの sshc のバージョンである。
+type IncompatibleEngineError struct{ Local, Remote string }
+
+func (e *IncompatibleEngineError) Error() string {
+	return fmt.Sprintf("the remote engine runs sshc %s, which is not compatible with this engine's sshc %s", e.Remote, e.Local)
 }
 
 // remoteSession は、接続先のエンジンの API を使うための資格である。CLI と同じく
@@ -142,8 +153,8 @@ func (e *remoteEngine) attach(ctx context.Context) (*remoteSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	if identity.version != e.localVersion {
-		return nil, &VersionMismatchError{Local: e.localVersion, Remote: identity.version}
+	if identity.compatibility != Compatibility {
+		return nil, &IncompatibleEngineError{Local: e.localVersion, Remote: identity.version}
 	}
 	session := &remoteSession{engineIdentity: identity, transport: newSessionTransport(e.link, identity)}
 	if err := e.openSession(ctx, session); err != nil {

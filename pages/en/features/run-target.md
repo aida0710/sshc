@@ -13,7 +13,7 @@ Only the terminals change: sessions and [workspaces](./workspace). Connections, 
 
 ## Usage
 
-1. Install the same version of sshc on the host as on this computer, and keep its engine running, for example with `sshc service install`.
+1. Install sshc on the host and keep its engine running, for example with `sshc service install`. Using the same version as on this computer is the safest choice.
 2. Connect to that host once from a terminal on this computer to confirm its host key. Save any passphrase or password it needs in Connections.
 3. Open **Run on** at the bottom of the sidebar and choose the host from **Add an engine…**.
 4. Choose the host in the list: the workspaces and sessions become that engine's, and the terminal heading says it runs there.
@@ -36,7 +36,8 @@ The dialog shows the end of what the host's `sshc` wrote.
 
 ## Requirements and limits
 
-- sshc on the host must be the same version as on this computer. If the versions differ, the engine information dialog opens automatically. Choose **Update** to bring the host up to this computer’s version. If you close the dialog, reopen it with **Update…** under Workspaces.
+- sshc on the host can be a different version from this computer’s as long as both versions talk to a run target the same way. When they differ, the version line in the engine information dialog also shows this computer’s version.
+- When a release changes how this computer talks to a run target, update the run target to that release or later too. The release notes of such a release say that run targets need updating. If sshc on the host does not work with this computer’s, the engine information dialog opens automatically. Choose **Update** to update the host. If you close the dialog, reopen it with **Update…** under Workspaces.
 - The host's SSH server must allow TCP forwarding to its `127.0.0.1` (`AllowTcpForwarding yes` or `local`).
 - If the host has no vault yet, create it through **Open its full screen in a new tab**.
 - Port forwarding, sending a command to several sessions, and Quick Commands work only for terminals running on this computer.
