@@ -1006,6 +1006,46 @@ paths:
         '502':
           $ref: '#/components/responses/Problem'
       description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/sessions/{id}/directory:
+    get:
+      operationId: remoteEngineTerminalSessionDirectory
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      responses:
+        '200':
+          description: The working directory of the program in the foreground of the session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalDirectory'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
   /api/v1/engines/{alias}/terminal/sessions/{id}:
     delete:
       operationId: remoteEngineCloseTerminalSession
@@ -1325,6 +1365,26 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TerminalControlResponse" }
         "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  # The directory a program in a local shell is working in, so a relative path
+  # it printed can be read. Only a Linux pseudo-terminal can answer.
+  /api/v1/terminal/sessions/{id}/directory:
+    get:
+      operationId: terminalSessionDirectory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          description: The working directory of the program in the foreground of the session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalDirectory" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
@@ -4502,6 +4562,12 @@ components:
           minimum: 0
           description: Monotonic end of the raw transcript; greater than next means unread bytes remain.
         truncated: { type: boolean }
+    TerminalDirectory:
+      type: object
+      additionalProperties: false
+      required: [path]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
     TerminalControlResponse:
       type: object
       additionalProperties: false

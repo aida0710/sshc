@@ -44,7 +44,7 @@ export function TerminalScreen({
   // hostVPN は、alias ごとに通るVPN経路の名前である。
   hostVPN: Map<string, string>;
   // api is the terminal API of the run target the sessions belong to.
-  api: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath">;
+  api: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
   // runTarget is the SSH alias of that engine; null for this machine.
   runTarget: string | null;
   onOpenRemotePath: (

@@ -542,6 +542,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/engines/{alias}/terminal/sessions/{id}/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
+        get: operations["remoteEngineTerminalSessionDirectory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/engines/{alias}/terminal/sessions/{id}": {
         parameters: {
             query?: never;
@@ -683,6 +700,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["controlTerminalSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminal/sessions/{id}/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["terminalSessionDirectory"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3124,6 +3157,9 @@ export interface components {
              */
             end: number;
             truncated: boolean;
+        };
+        TerminalDirectory: {
+            path: string;
         };
         TerminalControlResponse: {
             session: components["schemas"]["TerminalSession"];
@@ -5885,6 +5921,36 @@ export interface operations {
             502: components["responses"]["Problem"];
         };
     };
+    remoteEngineTerminalSessionDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The working directory of the program in the foreground of the session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalDirectory"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
     remoteEngineCloseTerminalSession: {
         parameters: {
             query?: never;
@@ -6205,6 +6271,32 @@ export interface operations {
                 };
             };
             400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    terminalSessionDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The working directory of the program in the foreground of the session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalDirectory"];
+                };
+            };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];

@@ -67,6 +67,13 @@ type ForwardController interface {
 	StopForward(id string) error
 }
 
+// DirectoryReporter は、端末でいま前面にいるプログラムの作業ディレクトリを答える
+// Process である。プログラムが出力した相対パスは、このディレクトリから見たもので
+// ある。答えられるのは Linux の擬似端末だけで、SSH の接続先のものは分からない。
+type DirectoryReporter interface {
+	ForegroundDirectory() (string, error)
+}
+
 // Readier reports when an asynchronously opened Process has completed the
 // connection work which makes it usable. A Process without this capability is
 // ready when Open returns; SSH sessions implement it because authentication
@@ -256,6 +263,7 @@ var (
 	ErrCommandTooLarge       = errors.New("the terminal command is too large")
 	ErrUnsafeInsert          = errors.New("the terminal command contains control input that cannot be inserted safely")
 	ErrForwardUnavailable    = errors.New("the terminal process cannot manage port forwards")
+	ErrDirectoryUnavailable  = errors.New("the terminal process cannot report its working directory")
 	ErrForwardNotFound       = errors.New("no such terminal port forward")
 	ErrInvalidForward        = errors.New("the terminal port forward is invalid")
 	ErrShuttingDown          = errors.New("the terminal registry is shutting down")
