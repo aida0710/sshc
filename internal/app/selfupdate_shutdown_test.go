@@ -121,7 +121,7 @@ func TestRunCancelsSelfUpdateAndKeepsTheEngineLockUntilInstallerCompletion(t *te
 			installationContext := make(chan context.Context, 1)
 			allowInstallerExit := make(chan struct{})
 			var releaseOnce sync.Once
-			updateDependencies.Install = func(ctx context.Context, _ selfupdate.Plan) (string, error) {
+			updateDependencies.Install = func(ctx context.Context, _ selfupdate.InstallRequest) (string, error) {
 				installationContext <- ctx
 				<-ctx.Done()
 				<-allowInstallerExit
@@ -228,7 +228,7 @@ func TestRunPersistsAnAcceptedUpdateAsInterruptedWhenStoppingBeforeItsResponse(t
 	listener := newUpdateShutdownListener()
 	dependencies.Listen = func(string, string) (net.Listener, error) { return listener, nil }
 	updateDependencies := shutdownUpdateFixture(t, stateDirOf(t, dependencies.Home))
-	updateDependencies.Install = func(context.Context, selfupdate.Plan) (string, error) {
+	updateDependencies.Install = func(context.Context, selfupdate.InstallRequest) (string, error) {
 		t.Error("pending response started installation")
 		return "", nil
 	}

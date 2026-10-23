@@ -1299,6 +1299,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/update/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A bounded plain-text fragment of what the installer and the restart helper wrote for the current update job. Offsets are kept in a file next to the job, so they stay valid across the engine restart that ends the update. Readable while the vault is locked after that restart. */
+        get: operations["getUpdateLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/update": {
         parameters: {
             query?: never;
@@ -2804,6 +2821,12 @@ export interface components {
             /** @enum {string} */
             state: "accepted" | "installing" | "restarting" | "succeeded" | "failed" | "restart_required";
             problem: string;
+        };
+        UpdateLog: {
+            jobId: string;
+            cursor: components["schemas"]["TerminalControlCursor"];
+            reachedCapacity: boolean;
+            output: string;
         };
         ChangeMasterPasswordRequest: {
             current: string;
@@ -7413,6 +7436,35 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    getUpdateLog: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job's output from the cursor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateLog"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
         };

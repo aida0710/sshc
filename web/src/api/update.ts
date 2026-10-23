@@ -6,12 +6,16 @@ import { validateOpenAPISchema } from "./validators.generated";
 export type UpdateStatus = components["schemas"]["UpdateStatus"];
 export type UpdateJob = components["schemas"]["UpdateJob"];
 export type UpdatePreview = components["schemas"]["UpdatePreview"];
+export type UpdateLog = components["schemas"]["UpdateLog"];
 
 export type UpdateApi = {
   updateStatus(): Promise<UpdateStatus>;
   checkUpdate(): Promise<UpdateStatus>;
   previewUpdate(target: string): Promise<UpdatePreview>;
   startUpdate(target: string, actionToken: string): Promise<UpdateJob>;
+  // updateLog reads what the installer and the restart wrote for the current
+  // job, from cursor on.
+  updateLog(cursor: number): Promise<UpdateLog>;
 };
 
 export const updateApi: UpdateApi = {
@@ -40,5 +44,13 @@ export const updateApi: UpdateApi = {
       actionToken,
       locallyHandledCodes: ["update_check_failed", "update_state_failed"],
     });
+  },
+  async updateLog(cursor) {
+    // The engine restarts at the end of an update, so a read that gets no
+    // answer is expected and retried; the About page explains a failed update.
+    const log = await apiClient.read(`/api/v1/update/log?cursor=${cursor}`, {
+      locallyHandledCodes: ["network_request_failed", "update_state_failed"],
+    });
+    return validateOpenAPISchema<UpdateLog>("UpdateLog", log);
   },
 };

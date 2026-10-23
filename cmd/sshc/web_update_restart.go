@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -50,10 +52,13 @@ func runWebUpdateRestart(paths userPaths, id string) int {
 	if err != nil || job.ID != id || job.State != selfupdate.JobRestarting || job.RestartVersion() != version {
 		return exitFailure
 	}
+	// 経過を書けなくても再起動は続ける。画面に経過が出ないだけである。
+	output := selfupdate.OpenLog(store.Path, id)
+	defer output.Close()
 	dependencies := defaultUpdateDependencies()
 	err = verifyWebUpdateRestartInstallation(ctx, job, dependencies)
 	if err == nil {
-		err = restartWebUpdateEngine(ctx, webUpdateRestartRun{paths: paths, job: job, restartService: dependencies.restartService,
+		err = restartWebUpdateEngine(ctx, webUpdateRestartRun{paths: paths, job: job, output: output, restartService: dependencies.restartService,
 			startService: webUpdateServiceStarter(),
 			client:       &http.Client{Timeout: connectTimeout},
 			startProcess: func(executable string, arguments, environment []string) error {
@@ -66,6 +71,7 @@ func runWebUpdateRestart(paths userPaths, id string) int {
 		})
 	}
 	if err != nil {
+		fmt.Fprintf(output, "sshc: the engine could not be restarted: %v\n", err)
 		_, _ = store.Change(func(stored *selfupdate.Job) error {
 			if stored.ID != id || stored.State != selfupdate.JobRestarting {
 				return selfupdate.ErrChanged
@@ -99,9 +105,11 @@ func verifyWebUpdateRestartInstallation(ctx context.Context, job selfupdate.Job,
 }
 
 type webUpdateRestartRun struct {
-	client         *http.Client
-	paths          userPaths
-	job            selfupdate.Job
+	client *http.Client
+	paths  userPaths
+	job    selfupdate.Job
+	// output は、ジョブのログである。画面がインストーラーの出力に続けて、再起動の経過を表示する。
+	output         io.Writer
 	restartService func(context.Context, string) (bool, error)
 	startService   func(context.Context, string) (bool, error)
 	startProcess   func(string, []string, []string) error
@@ -118,6 +126,7 @@ func restartWebUpdateEngine(ctx context.Context, run webUpdateRestartRun) error 
 		return selfupdate.ErrChanged
 	}
 	if run.startService == nil {
+		fmt.Fprintln(run.output, "sshc: restarting the sshc service")
 		restarted, err := run.restartService(ctx, job.Plan.Installation.Executable)
 		if err != nil || restarted {
 			return err
@@ -129,15 +138,18 @@ func restartWebUpdateEngine(ctx context.Context, run webUpdateRestartRun) error 
 	}
 	// Target the exact proved handoff. A concurrent replacement must never be
 	// stopped just because it shares the state directory.
+	fmt.Fprintf(run.output, "sshc: stopping the engine (pid %d)\n", found.PID)
 	if err := stopRunningEngine(ctx, paths.stateDir, found, client, lockEngineStart); err != nil {
 		return err
 	}
 	if run.startService != nil {
+		fmt.Fprintln(run.output, "sshc: starting the sshc service")
 		started, err := run.startService(ctx, job.Plan.Installation.Executable)
 		if err != nil || started {
 			return err
 		}
 	}
+	fmt.Fprintf(run.output, "sshc: starting the engine on port %s\n", engineURL.Port())
 	environment := replaceEnvironment(os.Environ(), map[string]string{webUpdateRestartEnvironment: ""})
 	// Keep this browser's origin even when --port overrode the saved engine settings.
 	return run.startProcess(job.Plan.Installation.Executable, []string{"engine", "--background", "--port", engineURL.Port()}, environment)

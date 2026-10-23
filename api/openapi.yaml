@@ -2119,6 +2119,36 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/update/log:
+    get:
+      operationId: getUpdateLog
+      description: >-
+        A bounded plain-text fragment of what the installer and the restart helper wrote for the current update job.
+        Offsets are kept in a file next to the job, so they stay valid across the engine restart that ends the update.
+        Readable while the vault is locked after that restart.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: { type: integer, format: uint64, minimum: 0, default: 0 }
+      - name: limit
+        in: query
+        required: false
+        schema: { type: integer, minimum: 0, maximum: 65536, default: 32768 }
+      responses:
+        "200":
+          description: The job's output from the cursor
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpdateLog" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        # update_log_missing when there is no job, or its log could not be created.
+        "404": { $ref: "#/components/responses/Problem" }
+        # terminal_cursor_ahead when the cursor is past the end of the output.
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/update:
     get:
       operationId: getUpdateStatus
@@ -4018,6 +4048,20 @@ components:
         installedVersion: { type: string, description: Stable version reported by the installed executable. }
         state: { type: string, enum: [accepted, installing, restarting, succeeded, failed, restart_required] }
         problem: { type: string }
+    UpdateLog:
+      type: object
+      additionalProperties: false
+      required: [jobId, cursor, reachedCapacity, output]
+      properties:
+        # jobId は、このログを書いたジョブである。UpdateJob の id と違えば、まだ前のジョブのログである。
+        jobId: { type: string }
+        # cursor の位置は、ジョブごとに 0 から数える。sshc エンジンが再起動しても変わらない。
+        cursor: { $ref: "#/components/schemas/TerminalControlCursor" }
+        # reachedCapacity は、出力が記録の上限（256 KiB）に達し、それより後を記録していないことを表す。
+        reachedCapacity: { type: boolean }
+        # output は、インストーラーの標準出力と標準エラー、続けて再起動の helper の経過を、
+        # 書かれた順に、端末の制御文字を除いて並べたものである。
+        output: { type: string, maxLength: 65536 }
     ChangeMasterPasswordRequest:
       type: object
       additionalProperties: false

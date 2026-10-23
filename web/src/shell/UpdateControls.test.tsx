@@ -12,6 +12,7 @@ function updater(): UpdateApi {
     checkUpdate: vi.fn(), updateStatus: vi.fn().mockResolvedValue(available),
     previewUpdate: vi.fn().mockResolvedValue({ current: "v1.0.0", target: "v1.1.0", manager: "install.sh", actionToken: "confirmed-plan", actionExpiresAt: "2026-10-07T09:00:00Z" }),
     startUpdate: vi.fn().mockResolvedValue({ id: "job-one", target: "v1.1.0", state: "accepted", problem: "" }),
+    updateLog: vi.fn(),
   };
 }
 

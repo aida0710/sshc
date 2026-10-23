@@ -2379,6 +2379,14 @@ type UpdateJob struct {
 // UpdateJobState defines model for UpdateJob.State.
 type UpdateJobState string
 
+// UpdateLog defines model for UpdateLog.
+type UpdateLog struct {
+	Cursor          TerminalControlCursor `json:"cursor"`
+	JobId           string                `json:"jobId"`
+	Output          string                `json:"output"`
+	ReachedCapacity bool                  `json:"reachedCapacity"`
+}
+
 // UpdatePasswordConfirmRoute defines model for UpdatePasswordConfirmRoute.
 type UpdatePasswordConfirmRoute struct {
 	Kind string `json:"kind"`
