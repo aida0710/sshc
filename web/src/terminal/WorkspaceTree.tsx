@@ -18,7 +18,7 @@ import type { UnreadSessions } from "./terminalNotifications";
 import type { TerminalWorkspacesState } from "./useTerminalWorkspaces";
 import { DeleteWorkspaceDialog, WorkspaceNameDialog } from "./WorkspaceDialogs";
 import { WorkspaceRow } from "./WorkspaceRow";
-import { groupSessionsByWorkspace, orderWithGroupReordered, workspaceDisplayName } from "./workspaceGrouping";
+import { groupSessionsByWorkspace, orderWithGroupReordered, orderWithSessionMovedInto, workspaceDisplayName } from "./workspaceGrouping";
 
 type WorkspaceTreeProps = {
   workspaces: TerminalWorkspacesState;
@@ -79,6 +79,8 @@ export function WorkspaceTree({
   const [nameRequest, setNameRequest] = useState<NameRequest | null>(null);
   const [deleting, setDeleting] = useState<{ workspace: TerminalWorkspace; sessionCount: number } | null>(null);
   const [broadcasting, setBroadcasting] = useState<TerminalSession[] | null>(null);
+  // heldSession is the session being dragged, so other workspaces can take it.
+  const [heldSession, setHeldSession] = useState<string | null>(null);
   const newSessionTrigger = useRef<HTMLButtonElement>(null);
 
   const groups = groupSessionsByWorkspace(workspaces.workspaces, sessions, showHidden);
@@ -90,6 +92,20 @@ export function WorkspaceTree({
   const newSessionWorkspace = groups.some((group) => group.workspace.id === selectedWorkspace)
     ? selectedWorkspace ?? defaultWorkspaceId
     : defaultWorkspaceId;
+  const heldWorkspace = heldSession === null
+    ? null
+    : groups.find((group) => group.sessions.some((session) => session.id === heldSession))?.workspace.id ?? null;
+
+  function moveSessionInto(workspaceId: string, members: readonly TerminalSession[], sessionId: string, beforeId: string | null) {
+    setHeldSession(null);
+    onReorder(orderWithSessionMovedInto(sessions.map((session) => session.id), {
+      sessionId,
+      members: members.map((session) => session.id),
+      beforeId,
+    }));
+    void terminalSessions.moveToWorkspace(sessionId, workspaceId);
+  }
+
   const localChoices = useMemo<LocalChoice[]>(() => {
     const profiles = localShellProfiles.filter((profile) => profile.id !== "default");
     return [
@@ -191,6 +207,8 @@ export function WorkspaceTree({
                 actions={workspaceActions(workspace, members)}
                 onToggle={() => toggleCollapsed(workspace.id)}
                 onNewSession={() => setPickerWorkspace(workspace.id)}
+                acceptsSession={heldWorkspace !== null && heldWorkspace !== workspace.id}
+                onDropSession={(id) => moveSessionInto(workspace.id, members, id, null)}
               />
               {expanded ? (
                 <div className="ml-3 border-l border-line pl-1">
@@ -208,6 +226,9 @@ export function WorkspaceTree({
                     onReorder={(order) => onReorder(orderWithGroupReordered(sessions.map((session) => session.id), order))}
                     moveTargets={moveTargets}
                     onMoveToWorkspace={(id, target) => void terminalSessions.moveToWorkspace(id, target)}
+                    heldSessionId={heldSession}
+                    onHoldSession={setHeldSession}
+                    onMoveIn={(id, beforeId) => moveSessionInto(workspace.id, members, id, beforeId)}
                   />
                 </div>
               ) : null}
