@@ -26,16 +26,16 @@ describe("linkAtPoint", () => {
   it("URLを押すとそのURLを返す", async () => {
     const { terminal, view } = await tappable("see https://example.test/a now");
     try {
-      expect(linkAtPoint(view, cell(10, 1), false)).toMatchObject({ kind: "url", target: "https://example.test/a" });
+      expect(linkAtPoint(view, cell(10, 1))).toMatchObject({ kind: "url", target: "https://example.test/a" });
     } finally { terminal.dispose(); }
   });
 
   it("URLの外を押しても何も返さない", async () => {
     const { terminal, view } = await tappable("see https://example.test/a now");
     try {
-      expect(linkAtPoint(view, cell(2, 1), false)).toBeNull();
-      expect(linkAtPoint(view, cell(28, 1), false)).toBeNull();
-      expect(linkAtPoint(view, cell(10, 2), false)).toBeNull();
+      expect(linkAtPoint(view, cell(2, 1))).toBeNull();
+      expect(linkAtPoint(view, cell(28, 1))).toBeNull();
+      expect(linkAtPoint(view, cell(10, 2))).toBeNull();
     } finally { terminal.dispose(); }
   });
 
@@ -43,15 +43,15 @@ describe("linkAtPoint", () => {
     const url = "https://example.test/a-long-path-that-wraps";
     const { terminal, view } = await tappable(url);
     try {
-      expect(linkAtPoint(view, cell(3, 2), false)).toMatchObject({ target: url });
+      expect(linkAtPoint(view, cell(3, 2))).toMatchObject({ target: url });
     } finally { terminal.dispose(); }
   });
 
   it("画面の外を押しても何も返さない", async () => {
     const { terminal, view } = await tappable("https://example.test/a");
     try {
-      expect(linkAtPoint(view, { clientX: 90, clientY: 60 }, false)).toBeNull();
-      expect(linkAtPoint(view, cell(5, 5), false)).toBeNull();
+      expect(linkAtPoint(view, { clientX: 90, clientY: 60 })).toBeNull();
+      expect(linkAtPoint(view, cell(5, 5))).toBeNull();
     } finally { terminal.dispose(); }
   });
 });

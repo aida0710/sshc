@@ -1,8 +1,6 @@
 import { useEffect, useId, useState, type ReactNode, type RefObject } from "react";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
-import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
-import type { MessageKey } from "../i18n/messages";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
@@ -12,47 +10,14 @@ import { formatBytes } from "../ui/format";
 import { entryKind } from "./entryKind";
 import { entryTypeLabelKeys } from "./sftpMessageKeys";
 import { symbolicModeToOctal } from "./transfers";
-
-// Long text is previewed, not edited. Rendering a whole 2 MiB file into a <pre>
-// costs more than the glance it is meant to give; the editor opens the rest.
-const previewTextLimit = 64 << 10;
-
-type PreviewState =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | { kind: "image"; url: string }
-  | { kind: "text"; contents: string; truncated: boolean }
-  | { kind: "unavailable"; reason: MessageKey };
+import { FilePreviewBody } from "./FilePreviewBody";
+import { useFilePreview } from "./useFilePreview";
 
 type DirectoryStatsState =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "loaded"; stats: RemoteDirectoryStats }
   | { kind: "unavailable" };
-
-// A data: URL keeps the image inside the policy the app already ships;
-// img-src allows data: and nothing here needs a Blob URL.
-function dataURL(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(reader.error ?? new Error("preview_unreadable"));
-    reader.readAsDataURL(blob);
-  });
-}
-
-function unavailableReason(error: unknown): MessageKey {
-  switch (failureCode(error)) {
-    case "sftp_not_utf8":
-    case "sftp_preview_type":
-      return "sftp.binaryHint";
-    case "sftp_text_too_large":
-    case "sftp_preview_too_large":
-      return "sftp.tooLargeHint";
-    default:
-      return "sftp.previewUnavailable";
-  }
-}
 
 function Property({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -92,53 +57,14 @@ export function SFTPDetailsDialog({
   const t = useTranslate();
   const headingId = useId();
   const mobileViewport = useMediaQuery(mobileViewportQuery);
-  const [preview, setPreview] = useState<PreviewState>({ kind: "idle" });
   const [directoryStats, setDirectoryStats] = useState<DirectoryStatsState>({ kind: "idle" });
   const entry = entries.length === 1 ? entries[0] ?? null : null;
   const kind = entry === null ? null : entryKind(entry);
   const previewPath = entry !== null && kind === "file" ? entry.path : null;
   const directoryPath = entry !== null && kind === "directory" && alias !== localHostAlias ? entry.path : null;
   const totalBytes = entries.reduce((sum, item) => sum + (entryKind(item) === "file" ? item.size : 0), 0);
+  const preview = useFilePreview(alias, previewPath);
   const heading = entry === null ? t("sftp.detailsForCount", { count: entries.length }) : t("sftp.detailsFor", { name: entry.name });
-
-  useEffect(() => {
-    if (previewPath === null) {
-      setPreview({ kind: "idle" });
-      return;
-    }
-    let active = true;
-    setPreview({ kind: "loading" });
-    void (async () => {
-      try {
-        const previewed = await sftpApi.previewFile(alias, previewPath);
-        const url = await dataURL(previewed.blob);
-        if (!active) return;
-        setPreview({ kind: "image", url });
-        return;
-      } catch (error) {
-        if (!active) return;
-        // Anything but "these bytes are not an image or a PDF" is final. Only
-        // that answer is worth spending a second request on text.
-        if (failureCode(error) !== "sftp_preview_type") {
-          setPreview({ kind: "unavailable", reason: unavailableReason(error) });
-          return;
-        }
-      }
-      try {
-        const file = await sftpApi.readText(alias, previewPath);
-        if (!active) return;
-        setPreview({
-          kind: "text",
-          contents: file.contents.slice(0, previewTextLimit),
-          truncated: file.contents.length > previewTextLimit,
-        });
-      } catch (error) {
-        if (!active) return;
-        setPreview({ kind: "unavailable", reason: unavailableReason(error) });
-      }
-    })();
-    return () => { active = false; };
-  }, [alias, previewPath]);
 
   useEffect(() => {
     if (directoryPath === null) {
@@ -217,17 +143,8 @@ export function SFTPDetailsDialog({
                 <li key={item.path} className="break-all font-mono text-ink-muted">{item.path}</li>
               ))}
             </ul>
-          ) : preview.kind === "loading" ? (
-            <p className="text-sm text-ink-muted">{t("sftp.previewLoading")}</p>
-          ) : preview.kind === "image" ? (
-            <img src={preview.url} alt={entry.name} className="mx-auto max-h-full max-w-full object-contain" />
-          ) : preview.kind === "text" ? (
-            <>
-              <pre className="whitespace-pre-wrap break-all font-mono text-xs text-ink">{preview.contents}</pre>
-              {preview.truncated ? <p className="mt-2 text-xs text-ink-muted">{t("sftp.previewTruncated")}</p> : null}
-            </>
-          ) : preview.kind === "unavailable" ? (
-            <p className="text-sm text-ink-muted">{t(preview.reason)}</p>
+          ) : preview.kind !== "idle" ? (
+            <FilePreviewBody preview={preview} name={entry.name} />
           ) : (
             <p className="text-sm text-ink-muted">{t(entryTypeLabelKeys[entry.type])}</p>
           )}
