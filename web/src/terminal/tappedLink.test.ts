@@ -23,6 +23,14 @@ function cell(column: number, row: number) {
 }
 
 describe("linkAtPoint", () => {
+  it("Windowsのパスはローカル読み取りを許可したときだけ押せる", async () => {
+    const { terminal, view } = await tappable("C:/Users/aida/a.png");
+    try {
+      expect(linkAtPoint(view, cell(10, 1))).toBeNull();
+      expect(linkAtPoint(view, cell(10, 1), true)).toMatchObject({ kind: "path", target: "C:/Users/aida/a.png" });
+    } finally { terminal.dispose(); }
+  });
+
   it("URLを押すとそのURLを返す", async () => {
     const { terminal, view } = await tappable("see https://example.test/a now");
     try {

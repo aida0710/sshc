@@ -18,7 +18,7 @@ export function isHomePath(path: string): boolean {
 // Home paths must never fall back to the working directory: the two can
 // belong to entirely different trees, even within the same session.
 export function resolveTerminalPath(path: string, directory: string | null, home: string | null): string | null {
-  if (path.startsWith("/")) return path;
+  if (path.startsWith("/") || /^[A-Za-z]:\//u.test(path)) return path;
   if (isHomePath(path)) return home === null ? null : resolveRelativePath(home, path.slice(2));
   if (path.startsWith("~")) return null;
   return directory === null ? null : resolveRelativePath(directory, path);
