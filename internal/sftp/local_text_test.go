@@ -110,7 +110,7 @@ func TestLocalTextSaveProtectsTransferPathsAndCancelledRequests(t *testing.T) {
 	assertLocalMutationFile(t, filename, "before")
 }
 
-func TestLocalPreviewRecognizesRasterBytesAndRefusesActiveContentAndLinks(t *testing.T) {
+func TestLocalPreviewNamesImagesFromTheirBytesAndRefusesLinks(t *testing.T) {
 	_, directory := localMutationFixture(t)
 	filename := filepath.Join(directory, "image.txt")
 	image := []byte("\x89PNG\r\n\x1a\npreview")
@@ -121,9 +121,13 @@ func TestLocalPreviewRecognizesRasterBytesAndRefusesActiveContentAndLinks(t *tes
 	if err != nil || preview.ContentType != "image/png" || !bytes.Equal(preview.Contents, image) {
 		t.Fatalf("preview = %+v, %v", preview, err)
 	}
-	writeLocalMutationFile(t, filename, `<svg onload="alert(1)"></svg>`)
+	writeLocalMutationFile(t, filename, `<svg xmlns="http://www.w3.org/2000/svg"></svg>`)
+	if preview, err := ReadLocalPreview(t.Context(), filename); err != nil || preview.ContentType != "image/svg+xml" {
+		t.Fatalf("svg = %q, %v", preview.ContentType, err)
+	}
+	writeLocalMutationFile(t, filename, `<html><script>alert(1)</script></html>`)
 	if _, err := ReadLocalPreview(t.Context(), filename); !errors.Is(err, ErrPreviewType) {
-		t.Fatalf("active content = %v", err)
+		t.Fatalf("html = %v", err)
 	}
 	link := filepath.Join(directory, "link")
 	symlinkLocalMutationFixture(t, filename, link)

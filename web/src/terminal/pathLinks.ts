@@ -1,8 +1,22 @@
 import type { TerminalLinkMatch } from "./links";
 
-// Relative names are offered only for images, so ordinary source-file names
-// in prose do not become links. The same targets feed preview navigation.
-export const imageNamePattern = /\.(?:png|jpe?g|gif|webp|bmp)$/iu;
+// Relative names are offered only when they end in a known file extension,
+// so words that merely contain a slash ("and/or") do not become links. The
+// list covers what programs such as Claude Code hand back: images, text and
+// source, documents, audio, video and archives. The same targets feed
+// preview navigation.
+const previewableExtensions = [
+  "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg",
+  "md", "markdown", "txt", "log", "csv", "tsv", "json", "jsonl", "yaml", "yml", "toml", "ini", "conf", "xml",
+  "html", "htm", "css", "js", "mjs", "cjs", "ts", "tsx", "jsx", "py", "rb", "go", "rs", "java", "kt", "swift",
+  "c", "h", "cc", "cpp", "hpp", "cs", "php", "sh", "bash", "zsh", "fish", "ps1", "sql", "lua", "r", "dart",
+  "scala", "vue", "svelte", "env", "diff", "patch",
+  "pdf",
+  "mp3", "wav", "m4a", "aac", "ogg", "oga", "opus", "flac",
+  "mp4", "m4v", "webm", "mov", "mkv", "ogv",
+  "zip", "tar", "gz", "tgz", "xz", "7z",
+];
+export const previewableNamePattern = new RegExp(`\\.(?:${previewableExtensions.join("|")})$`, "iu");
 const windowsPathPattern = /^[A-Za-z]:[/\\]/u;
 const sourceLocationPattern = /:\d+(?::\d+)?$/u;
 const homePrefixPattern = /^\$(?:HOME|\{HOME\})\//u;
@@ -105,16 +119,16 @@ function wordPath(word: PrintedWord, allowWindowsPaths: boolean): TerminalLinkMa
   if (target.startsWith("/") || windowsPathPattern.test(target)) {
     return { kind: "path", text, target, start, end: start + text.length };
   }
-  if ((target.startsWith("~") && !target.startsWith("~/")) || !imageNamePattern.test(target)) return null;
+  if ((target.startsWith("~") && !target.startsWith("~/")) || !previewableNamePattern.test(target)) return null;
   return { kind: "relative-path", text, target, start, end: start + text.length };
 }
 
 // Without quotes or escapes, a path followed by filename-like words could be
-// one path containing spaces. A complete image name already ends a candidate;
+// one path containing spaces. A complete previewable name already ends a candidate;
 // otherwise prefer no link to opening only its head or tail.
 function ambiguousPathEnd(words: PrintedWord[], index: number): number {
   const first = words[index]!;
-  if (imageNamePattern.test(first.text.replace(sourceLocationPattern, ""))) return index;
+  if (previewableNamePattern.test(first.text.replace(sourceLocationPattern, ""))) return index;
   const windows = windowsPathPattern.test(first.text);
   if (/^["'`]/u.test(first.text) || (!windows && !first.text.includes("/")) || trailingPunctuationPattern.test(first.text)) return index;
   for (let next = index + 1; next < words.length; next += 1) {

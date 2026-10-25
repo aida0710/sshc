@@ -98,6 +98,64 @@ test("previews the image a local shell printed the path of", async ({ page, inst
   await expect(preview).toBeHidden();
 });
 
+// Each label of the header fits on one line; a squeezed button used to wrap
+// its label one character per line on a phone.
+async function expectSingleLineLabels(page: Page, dialog: ReturnType<Page["getByRole"]>) {
+  for (const name of ["Previous", "Next", "Download", "Close"]) {
+    const lines = await dialog.getByRole("button", { name, exact: true }).first().evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return new Set([...range.getClientRects()].map((rectangle) => Math.round(rectangle.top))).size;
+    });
+    expect(lines, name).toBe(1);
+  }
+  await expect(dialog.getByText(/^\d+ \/ \d+$/u)).toHaveCount(1);
+  if (visualDirectory !== undefined) await page.screenshot({ path: join(visualDirectory, "terminal-file-preview-narrow.png") });
+}
+
+test("previews text, SVG and unsupported files the shell printed, and downloads any of them", async ({ page, installation }) => {
+  const notesPath = join(installation.home, "notes.md");
+  const chartPath = join(installation.home, "chart.svg");
+  const bundlePath = join(installation.home, "bundle.zip");
+  test.skip(!notesPath.startsWith("/"), "terminal paths are detected only when they start with /");
+  await writeFile(notesPath, "# Notes\n\n- first\n");
+  await writeFile(chartPath, '<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="#36c"/></svg>');
+  await writeFile(bundlePath, Buffer.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe, 0x00, 0x01]));
+  await mockShellPrinting(page, [
+    `Wrote \x1b[36m${notesPath}\x1b[0m`,
+    `Drew \x1b[36m${chartPath}\x1b[0m`,
+    `Packed \x1b[36m${bundlePath}\x1b[0m`,
+  ].join("\r\n"));
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+
+  await previewPrintedPath(page, "notes.md");
+  const notes = page.getByRole("dialog", { name: notesPath });
+  // Markdown stays source in the read-only editor.
+  await expect(notes.locator(".monaco-editor .view-lines")).toContainText("# Notes");
+  await expect(notes).toContainText("1 / 3");
+
+  await notes.getByRole("button", { name: "Next", exact: true }).click();
+  const chart = page.getByRole("dialog", { name: chartPath });
+  const drawing = chart.getByRole("img", { name: "chart.svg" });
+  await expect(drawing).toBeVisible();
+  await expect.poll(() => drawing.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(40);
+
+  await chart.getByRole("button", { name: "Next", exact: true }).click();
+  const bundle = page.getByRole("dialog", { name: bundlePath });
+  await expect(bundle.getByText("This file type can't be previewed.")).toBeVisible();
+  if (visualDirectory !== undefined) await page.screenshot({ path: join(visualDirectory, "terminal-file-preview-unsupported.png") });
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    bundle.getByRole("button", { name: "Download", exact: true }).last().click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("bundle.zip");
+  expect(await readFile(await download.path())).toEqual(await readFile(bundlePath));
+
+  await page.setViewportSize({ width: 390, height: 720 });
+  await expectSingleLineLabels(page, bundle);
+});
+
 test("previews an image a real shell printed a path relative to its directory", async ({ page, installation }) => {
   test.skip(process.platform !== "linux", "the engine reads the shell's directory from /proc");
   await mkdir(join(installation.home, "shots"), { recursive: true });

@@ -752,6 +752,38 @@ func TestDownloadProgressRequiresRevisionBoundServerSentBytesAndAllowsDurableRol
 	}
 }
 
+// The terminal's preview downloads a file it never listed, so it queues the
+// download with an unknown size; the engine learns the size when it starts
+// sending, and the download completes like any other.
+func TestFileDownloadQueuedWithoutASizeLearnsItAndCompletes(t *testing.T) {
+	manager := newTestTransferManager(t, nil)
+	input := sftp.CreateTransferJob{
+		ID: "transfer_unsized", BatchID: "batch_unsized", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/file", TotalBytes: -1,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	const revision = `"content-sha256:unsized"`
+	begun, err := manager.BeginDownload(input.ID, 8, revision, 0)
+	if err != nil || begun.TotalBytes != 8 {
+		t.Fatalf("begin = %+v, %v", begun, err)
+	}
+	if _, err := manager.RecordDownloadSent(input.ID, 8, 8, revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.AcknowledgeDownload(input.ID, 8, revision); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferCompleteAction})
+	if err != nil || completed.Status != sftp.TransferCompleted {
+		t.Fatalf("complete = %+v, %v", completed, err)
+	}
+}
+
 func TestRefusedDownloadBeginKeepsTheDurableCheckpoint(t *testing.T) {
 	manager := newTestTransferManager(t, nil)
 	input := sftp.CreateTransferJob{

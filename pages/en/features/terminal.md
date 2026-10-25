@@ -25,7 +25,7 @@ A dropped SSH session retries automatically with a growing delay. While it waits
 
 - Scrollback search with `Ctrl/Cmd+F`
 - Case, regex, match highlighting, and result navigation
-- URL and path context actions, including image previews of paths and OSC 8 links
+- URL and path context actions, including previews and downloads of paths, and OSC 8 links
 - Quick Commands and snippets
 - Pre-send review for pastes containing line breaks or control characters
 - OSC 52 clipboard, Kitty keyboard protocol and JIS keyboards
@@ -47,7 +47,7 @@ Kitty keyboard mode follows requests from the remote application. A JIS option s
 
 OSC 8 links and detected URLs open in the system browser. Ctrl-click (⌘-click on a Mac) opens one at once, except an OSC 8 link whose text is a different address from where it goes: that opens a menu showing the real destination first. A detected remote path or the current working directory reported through OSC 7 (OSC 9;9 from PowerShell or cmd on Windows) can open SFTP at the same host and directory. SFTP can also open a terminal at its displayed directory: an SSH session for a remote tab, or a local shell on the engine machine for a local tab.
 
-Click a path starting with `/` and choose **Preview** to show that file over the terminal. PNG, JPEG, GIF, WebP and BMP images up to 8 MiB are shown, and UTF-8 text that is not an image shows its beginning. The file is read only when you choose **Preview**: from the engine machine for a local shell (from the run target for a shell opened there), and from the host for an SSH session. The image line Claude Code prints when it sends one (`[image] /tmp/….png`) opens the same way.
+Click a path starting with `/` and choose **Preview** to show that file over the terminal. PNG, JPEG, GIF, WebP, BMP and SVG images up to 8 MiB are shown. UTF-8 text up to 2 MiB opens in a read-only editor, colored by its file name; Markdown is shown as source. A file that cannot be previewed, or is too large, still opens with the reason. Any file can be saved to the browser’s machine with **Download**; a file from an SSH session joins the transfer list like any other download. The file is read only when you choose **Preview**: from the engine machine for a local shell (from the run target for a shell opened there), and from the host for an SSH session. The image line Claude Code prints when it sends one (`[image] /tmp/….png`) opens the same way.
 
 Long paths that programs such as Claude Code split at the right edge and continue on indented lines are also recognized as a single path.
 
@@ -55,13 +55,13 @@ Names may contain Unicode characters, including Japanese. Enclose paths containi
 
 Paths inside backticks and paths immediately after labels or symbols, such as `Saved to:/tmp/x.png`, `保存しました：/tmp/x.png` and `→/tmp/x.png`, are also recognized. `file:///tmp/画面%201.png` opens the decoded path. File URIs with a host, such as `file://host/…`, are excluded. Trailing `:line:column` and sentence punctuation, including `。`, `、` and `）`, are removed from the path.
 
-A relative path such as `artifacts/shot.png` can be clicked too when its name is an image (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` or `.bmp`). It is opened from the working folder of the program that printed it. For a local shell on Linux, including one opened on a run target, the engine looks that folder up. For SSH sessions and local shells on macOS and Windows, sshc uses the folder the shell reported through OSC 7, and cannot open the path when the shell reports none.
+A relative path such as `artifacts/shot.png` or `report.md` can be clicked too when its name ends in a common extension: images, text and source code, PDF, audio, video and archives (for example `.png`, `.svg`, `.md`, `.py`, `.json`, `.mp3`, `.mp4` and `.zip`). It is opened from the working folder of the program that printed it. For a local shell on Linux, including one opened on a run target, the engine looks that folder up. For SSH sessions and local shells on macOS and Windows, sshc uses the folder the shell reported through OSC 7, and cannot open the path when the shell reports none.
 
-Image paths such as `~/shots/a.png`, `$HOME/shots/a.png` and `${HOME}/shots/a.png` open from the session’s home folder: the engine machine’s home for a local shell, or the home returned by SFTP for a run target or SSH host. If the home folder cannot be read, sshc explains why the path cannot be opened. The `~user/` form is not supported.
+Paths such as `~/shots/a.png`, `$HOME/shots/a.png` and `${HOME}/shots/a.png` open from the session’s home folder: the engine machine’s home for a local shell, or the home returned by SFTP for a run target or SSH host. If the home folder cannot be read, sshc explains why the path cannot be opened. The `~user/` form is not supported.
 
 A local shell also recognizes `C:\Users\aida\x.png` and `C:/Users/aida/x.png` once the engine is confirmed to run Windows. Windows paths are not linked in SSH sessions or shells on a run target.
 
-While a preview is open, the left and right arrow keys, or **Previous image** and **Next image**, move to the other images the same terminal printed (paths ending in `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` or `.bmp`). It is not available in an SSH session opened on a run target.
+While a preview is open, the left and right arrow keys, or **Previous** and **Next**, move to the other files the same terminal printed (paths ending in the extensions above). While text is shown, the arrow keys inside the editor move its cursor. It is not available in an SSH session opened on a run target.
 
 **New session** in the session list opens the same picker SFTP uses for its destination: **Local shell** at the top (one row per detected shell profile), then search, recent connections and groups for SSH hosts. Local shells use the same subsystem as SSH: search and Quick Commands both apply. On macOS and Linux, sshc supplies the terminal information needed by line editors such as zsh and fish even when the engine was started as a background service.
 

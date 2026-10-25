@@ -34,6 +34,7 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.GET("/api/v1/sftp/local/text", handlers.ReadLocalText)
 	engine.PUT("/api/v1/sftp/local/text", handlers.SaveLocalText)
 	engine.GET("/api/v1/sftp/local/preview", handlers.PreviewLocal)
+	engine.GET("/api/v1/sftp/local/download", handlers.DownloadLocal)
 	engine.POST("/api/v1/sftp/local/directories", handlers.MkdirLocal)
 	engine.POST("/api/v1/sftp/local/rename", handlers.RenameLocal)
 	engine.POST("/api/v1/sftp/local/delete-plan", handlers.PlanLocalDelete)
