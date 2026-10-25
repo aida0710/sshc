@@ -2,7 +2,7 @@ import { Terminal } from "@xterm/xterm";
 import type { ILink, ILinkProvider } from "@xterm/xterm";
 import { describe, expect, it } from "vitest";
 import { findBufferLinks } from "./bufferLinks";
-import { imagePathsInBuffer } from "./imagePaths";
+import { previewPathsInBuffer } from "./previewPaths";
 import { attachLinkProvider } from "./linkProvider";
 
 // Ink erases to the edge, returns to column one and moves down rather than
@@ -49,7 +49,7 @@ describe("program-wrapped path links", () => {
         }]);
         expect(findBufferLinks(terminal.buffer.active, index + 1)).toHaveLength(1);
       }
-      expect(imagePathsInBuffer(terminal.buffer.active, { directory: "/work", home: null })).toEqual([absolute, `/work/${relative}`]);
+      expect(previewPathsInBuffer(terminal.buffer.active, { directory: "/work", home: null })).toEqual([absolute, `/work/${relative}`]);
     } finally { terminal.dispose(); }
   });
 

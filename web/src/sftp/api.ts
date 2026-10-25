@@ -214,6 +214,12 @@ export const sftpApi = {
       locallyHandledCodes: [...connectionProblems, "sftp_not_found", "sftp_wrong_type"],
     }));
   },
+  // A file on the engine's own disk needs no transfer job: the engine sends it
+  // whole, and the browser saves it like any finished download.
+  async downloadLocalFile(localPath: string): Promise<Blob> {
+    const response = await apiClient.readResponse(`/api/v1/sftp/local/download?path=${encodeURIComponent(localPath)}`, { locallyHandledCodes: transferProblems });
+    return response.blob();
+  },
   async previewFile(alias: string, remotePath: string): Promise<RemotePreview> {
     const response = await apiClient.readResponse(pathFor(alias, "preview", remotePath), { locallyHandledCodes: previewProblems });
     return {

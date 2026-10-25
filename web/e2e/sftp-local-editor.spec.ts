@@ -13,7 +13,10 @@ test("edits an engine-local file with Ctrl+S and confirms an external overwrite"
   const pane = page.getByRole("tabpanel");
   await openLocalSFTPDirectory({ page, pane, directory: join(installation.home, ".ssh/editor-local") });
   await pane.getByRole("button", { name: "notes.txt", exact: true }).dblclick();
-  await page.getByRole("dialog", { name: "Details for notes.txt", exact: true }).getByRole("button", { name: "Edit file", exact: true }).click();
+  const details = page.getByRole("dialog", { name: "Details for notes.txt", exact: true });
+  // The details preview shows text in the read-only editor beside the properties.
+  await expect(details.locator(".monaco-editor .view-lines")).toContainText("first line");
+  await details.getByRole("button", { name: "Edit file", exact: true }).click();
   const editor = page.getByRole("dialog", { name: /editor-local\/notes.txt$/ });
   // Native EditContext exposes a textbox div and a hidden readonly textarea.
   // Use the accessible editor control in either Monaco input mode.

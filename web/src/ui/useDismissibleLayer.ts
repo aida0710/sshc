@@ -25,7 +25,7 @@ const keyboardOwnerAttribute = "data-keyboard-owner";
 // Escapeは最前面のレイヤーを閉じ、Tabはフォーカスをレイヤーの中で回す。
 export const keyboardOwnerProps = { [keyboardOwnerAttribute]: "" } as const;
 
-function insideKeyboardOwner(target: EventTarget | null): boolean {
+export function insideKeyboardOwner(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(`[${keyboardOwnerAttribute}]`) !== null;
 }
 

@@ -144,7 +144,7 @@ export function SFTPDetailsDialog({
               ))}
             </ul>
           ) : preview.kind !== "idle" ? (
-            <FilePreviewBody preview={preview} name={entry.name} />
+            <FilePreviewBody preview={preview} path={entry.path} name={entry.name} />
           ) : (
             <p className="text-sm text-ink-muted">{t(entryTypeLabelKeys[entry.type])}</p>
           )}

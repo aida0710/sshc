@@ -1,0 +1,31 @@
+import type { IBuffer } from "@xterm/xterm";
+import { findBufferLinks } from "./bufferLinks";
+import { previewableNamePattern } from "./pathLinks";
+import { resolveTerminalPath } from "./relativePaths";
+
+// previewPathsInBuffer lists the file paths in a terminal's output, oldest
+// first and each once, so the preview can step from one to the next. Relative
+// paths use directory and ~/ paths use home; unknown bases are left out.
+export function previewPathsInBuffer(buffer: IBuffer, {
+  directory, home, allowWindowsPaths = false,
+}: { directory: string | null; home: string | null; allowWindowsPaths?: boolean }): string[] {
+  const resolved = previewPathTargetsInBuffer(buffer, allowWindowsPaths)
+    .map((path) => resolveTerminalPath(path, directory, home))
+    .filter((path) => path !== null);
+  return [...new Set(resolved)];
+}
+
+// Keep the printed targets available so opening an ordinary path does not
+// need a home lookup when there are no home-relative files to navigate to.
+export function previewPathTargetsInBuffer(buffer: IBuffer, allowWindowsPaths = false): string[] {
+  const paths = new Set<string>();
+  // findBufferLinks returns the links that touch one row, so a path that wraps
+  // is found from each of its rows; the set keeps it once.
+  for (let row = 1; row <= buffer.length; row += 1) {
+    for (const { match } of findBufferLinks(buffer, row, allowWindowsPaths)) {
+      if (match.kind === "url" || !previewableNamePattern.test(match.target)) continue;
+      paths.add(match.target);
+    }
+  }
+  return [...paths];
+}

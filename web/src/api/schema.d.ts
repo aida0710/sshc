@@ -2083,6 +2083,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/local/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Sends a regular file on the sshc engine's disk for the browser to save; links refused. */
+        get: operations["downloadLocalSFTPFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/local/entries": {
         parameters: {
             query?: never;
@@ -9120,7 +9137,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Engine-local raster image with a type determined from its bytes; links refused */
+            /** @description Engine-local image (raster or SVG) with a type determined from its bytes; links refused */
             200: {
                 headers: {
                     ETag: string;
@@ -9132,6 +9149,7 @@ export interface operations {
                     "image/webp": string;
                     "image/gif": string;
                     "image/bmp": string;
+                    "image/svg+xml": string;
                 };
             };
             400: components["responses"]["Problem"];
@@ -9141,6 +9159,54 @@ export interface operations {
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
             415: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    downloadLocalSFTPFile: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: {
+                Range?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Engine-local file bytes */
+            200: {
+                headers: {
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description The requested byte range of the file */
+            206: {
+                headers: {
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            /** @description The requested range is outside the file */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             422: components["responses"]["Problem"];
         };
     };

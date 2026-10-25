@@ -3,15 +3,11 @@ import { failureCode } from "../api/client";
 import type { MessageKey } from "../i18n/messages";
 import { sftpApi } from "./api";
 
-// Long text is previewed, not edited. Rendering a whole 2 MiB file into a <pre>
-// costs more than the glance it is meant to give; the editor opens the rest.
-const previewTextLimit = 64 << 10;
-
 export type FilePreviewState =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "image"; url: string }
-  | { kind: "text"; contents: string; truncated: boolean }
+  | { kind: "text"; contents: string }
   | { kind: "unavailable"; reason: MessageKey };
 
 // A data: URL keeps the image inside the policy the app already ships;
@@ -29,9 +25,8 @@ function unavailableReason(error: unknown): MessageKey {
   switch (failureCode(error)) {
     case "sftp_not_utf8":
     case "sftp_preview_type":
-      return "sftp.binaryHint";
+      return "sftp.previewUnsupported";
     case "sftp_text_too_large":
-      return "sftp.tooLargeHint";
     case "sftp_preview_too_large":
       return "sftp.previewTooLarge";
     default:
@@ -70,11 +65,7 @@ export function useFilePreview(alias: string, path: string | null): FilePreviewS
       try {
         const file = await sftpApi.readText(alias, path);
         if (!active) return;
-        setPreview({
-          kind: "text",
-          contents: file.contents.slice(0, previewTextLimit),
-          truncated: file.contents.length > previewTextLimit,
-        });
+        setPreview({ kind: "text", contents: file.contents });
       } catch (error) {
         if (!active) return;
         setPreview({ kind: "unavailable", reason: unavailableReason(error) });
