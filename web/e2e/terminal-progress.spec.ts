@@ -41,8 +41,10 @@ test("shows the current ProxyJump hop while SSH is authenticating", async ({ pag
   await openApplication(page, installation);
   await openSection(page, "Terminal");
 
+  // Shown in the sidebar row, in place of the destination, and in the terminal pane.
   const status = "authenticating with mdx-jamstec-1 · 1/2";
-  await expect(page.getByText(status)).toHaveCount(2);
+  await expect(page.locator("[data-session-status-text]", { hasText: status })).toBeVisible();
+  await expect(page.locator("main").getByText(status)).toBeVisible();
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {

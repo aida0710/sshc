@@ -58,7 +58,7 @@ describe("SessionList", () => {
     expect(progress).toHaveAttribute("aria-valuenow", "40");
     expect(progress.firstElementChild).toHaveStyle({ width: "40%" });
     expect(within(rows[1]!).queryByRole("progressbar")).toBeNull();
-    expect(rows[0]).toHaveTextContent("connected · bastion");
+    expect(screen.getByRole("button", { name: "bastion" })).toHaveAccessibleDescription("connected");
   });
 
   it.each([
@@ -89,23 +89,41 @@ describe("SessionList", () => {
     expect(screen.queryByRole("progressbar")).toBeNull();
   });
 
-  it("keeps every session in one flat list and says the state in words", () => {
+  it("keeps every session in one flat list, with the destination on a connected row and the state in words otherwise", () => {
     renderList();
 
     const rows = screen.getAllByRole("listitem");
     expect(rows).toHaveLength(3);
-    expect(rows[0]).toHaveTextContent("connected · bastion");
-    expect(rows[1]).toHaveTextContent("connected · localhost");
-    expect(rows[2]).toHaveTextContent("exited 255 · db-primary");
+    expect(within(rows[0]!).getByText("bastion", { selector: "[data-session-destination]" })).toBeVisible();
+    expect(within(rows[1]!).getByText("localhost", { selector: "[data-session-destination]" })).toBeVisible();
+    expect(within(rows[2]!).getByText("exited 255", { selector: "[data-session-status-text]" })).toBeVisible();
+    expect(within(rows[2]!).queryByText("db-primary", { selector: "[data-session-destination]" })).toBeNull();
+    for (const [name, status] of [["bastion", "connected"], ["zsh", "connected"], ["db-primary", "exited 255"]] as const) {
+      expect(screen.getByRole("button", { name })).toHaveAccessibleDescription(status);
+    }
   });
 
   it("shows unread terminal notifications without changing the session order", () => {
-    renderList({ unreadBySession: new Set(["b", "a"]) });
+    const asking = { ...live, lastNotification: { title: "", body: "Claude needs your permission to use Bash", occurredAt: "2026-08-13T09:03:00Z" } };
+    renderList({ sessions: [asking, shell, dead], unreadBySession: new Set(["b", "a"]) });
 
     const rows = screen.getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent("bastion");
     expect(rows[1]).toHaveTextContent("zsh");
-    expect(screen.getAllByLabelText("Unread notification")).toHaveLength(2);
+    expect(within(rows[0]!).getByText("Claude needs your permission to use Bash")).toBeVisible();
+    expect(screen.getByRole("button", { name: "bastion" })).toHaveAccessibleDescription("connected · Unread notification");
+    expect(screen.getByRole("button", { name: "zsh" })).toHaveAccessibleDescription("connected · Unread notification");
+    expect(screen.getByRole("button", { name: "db-primary" })).toHaveAccessibleDescription("exited 255");
+  });
+
+  it("says what the program sent when the notification has a title and a body, and something when it has neither", () => {
+    const titled = { ...live, lastNotification: { title: "Codex", body: "Approval requested", occurredAt: "2026-08-13T09:03:00Z" } };
+    const empty = { ...shell, lastNotification: { title: "", body: "", occurredAt: "2026-08-13T09:03:00Z" } };
+    renderList({ sessions: [titled, empty], unreadBySession: new Set(["a", "b"]) });
+
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent(/Codex\s+Approval requested/);
+    expect(rows[1]).toHaveTextContent("A program in this terminal sent a notification.");
   });
 
   it("names the ProxyJump hop and authentication phase while connecting", () => {
@@ -118,13 +136,13 @@ describe("SessionList", () => {
       },
     }] });
 
-    expect(screen.getByText("authenticating with mdx-jamstec-1 · 1/2 · bastion")).toBeVisible();
+    expect(screen.getByText("authenticating with mdx-jamstec-1 · 1/2", { selector: "[data-session-status-text]" })).toBeVisible();
     expect(screen.queryByRole("progressbar")).toBeNull();
   });
 
   it("selects a session from anywhere in its main row content", async () => {
     const props = renderList();
-    const detail = screen.getByText("connected · bastion");
+    const detail = screen.getByText("bastion", { selector: "[data-session-destination]" });
 
     await userEvent.click(detail);
 

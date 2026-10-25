@@ -730,6 +730,8 @@ export const ja = {
   "terminal.connected": "接続済み",
   "terminal.longCommandCompleted": "{subject}のコマンドが{seconds}秒で完了しました。",
   "terminal.unreadNotification": "未読の通知",
+  "terminal.unreadCount": "未読の通知 {count}",
+  "terminal.openNextUnread": "次の未読の通知を開く",
   "terminal.notificationFallback": "このターミナルのプログラムから通知がありました。",
   "terminal.programProgress": "プログラムの進み具合",
   "terminal.programProgressError": "プログラムの進み具合（エラー）",

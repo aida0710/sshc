@@ -87,6 +87,18 @@ export function WorkspaceTree({
   const newSessionTrigger = useRef<HTMLButtonElement>(null);
 
   const groups = groupSessionsByWorkspace(workspaces.workspaces, sessions, showHidden);
+  // Sessions with an unread notification, in the order the sidebar shows them.
+  const unreadInOrder = groups.flatMap((group) => group.sessions).filter((session) => unreadBySession.has(session.id));
+
+  // openNextUnread opens the unread session after the selected one, going round to the first,
+  // and opens its workspace if it is folded.
+  function openNextUnread() {
+    const after = unreadInOrder.findIndex((session) => session.id === selected) + 1;
+    const next = unreadInOrder[after % unreadInOrder.length];
+    if (next === undefined) return;
+    if (collapsed.has(next.workspaceId)) toggleCollapsed(next.workspaceId);
+    onSelect(next.id);
+  }
   const live = sessions.filter((session) => session.exited === undefined).length;
   const atSessionLimit = terminalSessions.maxSessions > 0 && live >= terminalSessions.maxSessions;
   const canOpenSession = !terminalSessions.busy && !atSessionLimit;
@@ -168,20 +180,31 @@ export function WorkspaceTree({
         <span aria-hidden="true" className="block grow px-2 text-xs text-ink-faint">
           {t("workspace.heading")}
         </span>
+        {unreadInOrder.length === 0 ? null : (
+          <button
+            type="button"
+            title={t("terminal.openNextUnread")}
+            onClick={openNextUnread}
+            className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full bg-notice px-1.5 text-[11px] text-notice-ink hover:brightness-110 md:min-h-5"
+          >
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-notice-ink" />
+            {t("terminal.unreadCount", { count: String(unreadInOrder.length) })}
+          </button>
+        )}
         <button
           type="button"
           aria-label={t("workspace.create")}
           title={t("workspace.create")}
           disabled={workspaces.maxWorkspaces > 0 && workspaces.workspaces.length >= workspaces.maxWorkspaces}
           onClick={() => setNameRequest({ kind: "create" })}
-          className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-6"
+          className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5"
         >
           <Icon name="plus" className="size-3.5" />
         </button>
         <ActionMenu
           label={t("workspace.headingActions")}
           items={headingActions}
-          triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-6"
+          triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5"
           iconClassName="size-3.5"
         />
       </div>

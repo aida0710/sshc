@@ -82,7 +82,7 @@ export function WorkspaceRow({
         <span className="min-w-0 grow truncate text-xs font-normal text-ink-faint">{name}</span>
         {hidden ? <span className="sr-only">{t("workspace.hiddenMark")}</span> : null}
         {unread && !expanded ? (
-          <span aria-label={t("terminal.unreadNotification")} className="size-2 shrink-0 rounded-full bg-accent" />
+          <span aria-label={t("terminal.unreadNotification")} className="size-2 shrink-0 rounded-full bg-notice-ink" />
         ) : null}
         <span className={`shrink-0 text-[11px] text-ink-faint ${revealOnHover}`}>{sessionCount}</span>
       </button>

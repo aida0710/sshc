@@ -725,6 +725,8 @@ export const en = {
   "terminal.connected": "connected",
   "terminal.longCommandCompleted": "A command in {subject} finished after {seconds} seconds.",
   "terminal.unreadNotification": "Unread notification",
+  "terminal.unreadCount": "Unread {count}",
+  "terminal.openNextUnread": "Open the next unread notification",
   "terminal.notificationFallback": "A program in this terminal sent a notification.",
   "terminal.programProgress": "Program progress",
   "terminal.programProgressError": "Program progress (error)",
