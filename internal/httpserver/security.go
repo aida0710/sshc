@@ -209,7 +209,11 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		// 唯一のリクエストでもあるため、ここでトークンを要求すれば、得る
 		// ものなく bootstrap の順序の罠にはまるだけになる。
 		isHealth := request.Method == http.MethodGet && request.URL.Path == "/api/v1/health"
-		if (isStateChanging || claimed) && !isHealth &&
+		// <audio> と <video> は見出しを付けられない。代わりに URL のチケットが、
+		// トークンを付けた要求でだけ発行され、このセッションにだけ効く
+		// （mediaTickets）。cookie だけでは引き換えられない点はトークンと同じである。
+		isMediaStream := request.Method == http.MethodGet && c.Path() == sftpMediaRoute
+		if (isStateChanging || claimed) && !isHealth && !isMediaStream &&
 			!s.Sessions.VerifyCSRF(cookie.Value, request.Header.Get(CSRFHeader)) {
 			return problem(c, http.StatusForbidden, "invalid_csrf")
 		}
