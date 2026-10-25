@@ -53,7 +53,7 @@ import { defaultBrowserScrollbackLines } from "./browserScrollback";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { pathPreviewAlias } from "./pathPreviewAlias";
-import { imagePathsInBuffer, imagePathTargetsInBuffer } from "./imagePaths";
+import { previewPathsInBuffer, previewPathTargetsInBuffer } from "./previewPaths";
 import { isHomePath, resolveTerminalPath } from "./relativePaths";
 import { useLocalWindowsPaths } from "./useLocalWindowsPaths";
 import { pathPreviewHome } from "./pathPreviewHome";
@@ -187,7 +187,7 @@ export function TerminalView({
   const overflowTrigger = useRef<HTMLButtonElement>(null);
   const [portForwardsOpen, setPortForwardsOpen] = useState(false);
   const [linkSelection, setLinkSelection] = useState<TerminalLinkSelection | null>(null);
-  const [pathPreview, setPathPreview] = useState<{ path: string; imagePaths: string[] } | null>(null);
+  const [pathPreview, setPathPreview] = useState<{ path: string; paths: string[] } | null>(null);
   const streamLinkController = useRef<StreamLinkController | null>(null);
 
   const [modifiers, setModifiers] = useState<Modifiers>({ ctrl: false, alt: false });
@@ -496,7 +496,7 @@ export function TerminalView({
   async function previewPath(path: string) {
     if (previewAlias === undefined) return;
     const buffer = terminal.current?.buffer.active;
-    const needsHome = isHomePath(path) || (buffer !== undefined && imagePathTargetsInBuffer(buffer, allowWindowsPaths).some(isHomePath));
+    const needsHome = isHomePath(path) || (buffer !== undefined && previewPathTargetsInBuffer(buffer, allowWindowsPaths).some(isHomePath));
     const [engineDirectory, home] = await Promise.all([
       api.terminalSessionDirectory(session.id).catch(() => null),
       needsHome ? pathPreviewHome(previewAlias).catch(() => null) : null,
@@ -509,7 +509,7 @@ export function TerminalView({
     }
     setPathPreview({
       path: resolvedPath,
-      imagePaths: terminal.current === null ? [] : imagePathsInBuffer(terminal.current.buffer.active, { directory, home, allowWindowsPaths }),
+      paths: terminal.current === null ? [] : previewPathsInBuffer(terminal.current.buffer.active, { directory, home, allowWindowsPaths }),
     });
   }
 
@@ -651,7 +651,7 @@ export function TerminalView({
         />
       )}
       {previewAlias === undefined || pathPreview === null ? null : (
-        <FilePreviewDialog alias={previewAlias} path={pathPreview.path} paths={pathPreview.imagePaths} onClose={() => setPathPreview(null)} />
+        <FilePreviewDialog alias={previewAlias} path={pathPreview.path} paths={pathPreview.paths} onClose={() => setPathPreview(null)} />
       )}
       {pendingPaste === null || pendingPaste.sessionId !== session.id ? null : (
         <TerminalPasteDialog

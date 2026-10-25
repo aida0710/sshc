@@ -667,6 +667,15 @@ func TestReadPreviewNamesTheTypeFromTheBytesAndRefusesEverythingElse(t *testing.
 		}
 	})
 
+	t.Run("svg", func(t *testing.T) {
+		svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`)
+		remote := remoteWith(map[string]node{"/drawing.svg": {name: "drawing.svg", content: svg, mode: 0o644, modTime: testTime}})
+		preview, err := serviceFor(remote).ReadPreview(context.Background(), "edge", "/drawing.svg")
+		if err != nil || preview.ContentType != "image/svg+xml" {
+			t.Fatalf("ReadPreview() = %q, %v", preview.ContentType, err)
+		}
+	})
+
 	tests := []struct {
 		name     string
 		contents []byte
@@ -675,7 +684,7 @@ func TestReadPreviewNamesTheTypeFromTheBytesAndRefusesEverythingElse(t *testing.
 	}{
 		// 名前が png でも、中身が png でなければ preview にはしない。
 		{name: "html named as png", contents: []byte("<html><script>alert(1)</script>"), mode: 0o644, want: sftp.ErrPreviewType},
-		{name: "svg", contents: []byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`), mode: 0o644, want: sftp.ErrPreviewType},
+		{name: "xml that is not svg", contents: []byte(`<?xml version="1.0"?><feed></feed>`), mode: 0o644, want: sftp.ErrPreviewType},
 		{name: "utf8 text", contents: []byte("一行目\n"), mode: 0o644, want: sftp.ErrPreviewType},
 		// PDF は <iframe> でしか描けず、CSP を緩めることになるので preview しない。
 		{name: "pdf", contents: []byte("%PDF-1.7\ntrailer"), mode: 0o644, want: sftp.ErrPreviewType},

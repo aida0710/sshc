@@ -1,6 +1,6 @@
 import type { IBuffer, IBufferRange, IBufferCellPosition } from "@xterm/xterm";
 import { findTerminalLinks, type TerminalLinkMatch } from "./links";
-import { imageNamePattern } from "./pathLinks";
+import { previewableNamePattern } from "./pathLinks";
 
 // Bound work during mouse movement even when a program prints without newlines.
 const maxLogicalLineCells = 65536;
@@ -34,8 +34,8 @@ function continuationColumn(buffer: IBuffer, row: number): number | null {
 function crossesPathBoundary(match: TerminalLinkMatch, boundary: number): boolean {
   if (match.kind === "url" || match.start >= boundary || match.end <= boundary) return false;
   const prefix = match.text.slice(0, boundary - match.start);
-  // A complete image at the edge is a separate entry, not a truncated name.
-  return !imageNamePattern.test(prefix) && !/["'`\s]$/u.test(prefix);
+  // A complete file name at the edge is a separate entry, not a truncated name.
+  return !previewableNamePattern.test(prefix) && !/["'`\s]$/u.test(prefix);
 }
 
 function linksAcrossBoundaries(text: string, boundaries: number[], allowWindowsPaths: boolean): TerminalLinkMatch[] {
