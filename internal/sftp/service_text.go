@@ -29,31 +29,6 @@ func (s Service) ReadText(ctx context.Context, alias, remotePath string) (TextFi
 	return readText(ctx, remote, file)
 }
 
-// previewContentType は、先頭のバイト列だけからその型を返す。preview で
-// 描いてよい型でなければ空を返す。名前が名乗る型は使わない。拡張子は
-// 中身について何も保証しないからで、background 画像と同じ扱いである。
-//
-// 画像だけである。PDF は <iframe> でしか描けず、それには CSP へ blob: を
-// 足す必要がある。画像は data: URL で足りるので、policy はそのままでよい。
-//
-// SVG もここに無い。<img> の中では script が動かないとはいえ、中身から
-// 型が決まらない唯一の候補であり、background service も同じ理由で断る。
-func previewContentType(head []byte) string {
-	switch {
-	case len(head) >= 8 && string(head[:8]) == "\x89PNG\r\n\x1a\n":
-		return "image/png"
-	case len(head) >= 3 && head[0] == 0xFF && head[1] == 0xD8 && head[2] == 0xFF:
-		return "image/jpeg"
-	case len(head) >= 12 && string(head[:4]) == "RIFF" && string(head[8:12]) == "WEBP":
-		return "image/webp"
-	case len(head) >= 6 && (string(head[:6]) == "GIF87a" || string(head[:6]) == "GIF89a"):
-		return "image/gif"
-	case len(head) >= 2 && head[0] == 'B' && head[1] == 'M':
-		return "image/bmp"
-	}
-	return ""
-}
-
 // ReadPreview は、詳細モーダルが描ける画像を丸ごと返す。
 //
 // 型が分かるまでに読むのは先頭 previewSniffBytes だけである。preview に

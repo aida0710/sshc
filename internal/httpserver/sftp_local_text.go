@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"mime"
 	"net/http"
 	"strconv"
 
@@ -35,4 +36,20 @@ func (h SFTPHandlers) PreviewLocal(c *echo.Context) error {
 	}
 	c.Response().Header().Set("ETag", strconv.Quote(preview.Revision))
 	return c.Blob(http.StatusOK, preview.ContentType, preview.Contents)
+}
+
+// DownloadLocal はエンジンのディスクのファイルを、ブラウザが保存する形で返す。
+// ServeContent が Range にも答えるが、型は名前から推さずに固定する。
+func (h SFTPHandlers) DownloadLocal(c *echo.Context) error {
+	download, err := sshcSFTP.OpenLocalDownload(c.QueryParam("path"))
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	defer download.File.Close()
+	header := c.Response().Header()
+	header.Set("Content-Type", "application/octet-stream")
+	header.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": download.Name}))
+	header.Set("ETag", strconv.Quote(download.Revision))
+	http.ServeContent(c.Response(), c.Request(), "", download.ModTime, download.File)
+	return nil
 }

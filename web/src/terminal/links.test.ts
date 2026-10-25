@@ -19,7 +19,7 @@ describe("findTerminalLinks", () => {
     ['C:/Users/aida/x.png', null, null],
     ['$HOME/x.png', 'relative-path', '~/x.png'],
     ['~/x.PNG', 'relative-path', '~/x.PNG'],
-    ['~/x.svg', null, null],
+    ['~/x.svg', 'relative-path', '~/x.svg'],
     ['screenshot.png', 'relative-path', 'screenshot.png'],
     ['./out/x.jpeg', 'relative-path', './out/x.jpeg'],
     ['../x.webp', 'relative-path', '../x.webp'],
@@ -119,12 +119,13 @@ describe("findTerminalLinks", () => {
   });
 });
 
-describe("relative image paths", () => {
-  it("keeps ~/ image paths whole and passes named users and non-image home paths by", () => {
+describe("relative file paths", () => {
+  it("keeps ~/ paths whole and passes named users and unknown extensions by", () => {
     expect(findTerminalLinks("[image] ~/shots/a.PNG (1 KB)")).toEqual([
       { kind: "relative-path", text: "~/shots/a.PNG", target: "~/shots/a.PNG", start: 8, end: 21 },
     ]);
-    expect(findTerminalLinks("~ ~/notes.txt ~/src/main.go ~other/a.png ~other.png ~/a.png.bak")).toEqual([]);
+    expect(findTerminalLinks("~ ~/notes.bak ~other/a.png ~other.png ~/a.png.bak")).toEqual([]);
+    expect(findTerminalLinks("~/notes.txt ~/src/main.go").map((link) => link.target)).toEqual(["~/notes.txt", "~/src/main.go"]);
     expect(findTerminalLinks("./~other/a.png").map((link) => link.target)).toEqual(["./~other/a.png"]);
   });
 
@@ -144,8 +145,14 @@ describe("relative image paths", () => {
     expect(findTerminalLinks("saved ./out/a.PNG, ../b.jpeg and c.webp.").map((link) => link.target)).toEqual(["./out/a.PNG", "../b.jpeg", "c.webp"]);
   });
 
-  it("passes other relative names, longer names and URLs by", () => {
-    expect(findTerminalLinks("edit src/main.go and a.png.bak")).toEqual([]);
+  it("takes the files Claude Code hands back, not only images", () => {
+    expect(findTerminalLinks("Wrote report.md, scripts/plot.py:12 and out/chart.svg; packed dist/app.zip").map((link) => link.target))
+      .toEqual(["report.md", "scripts/plot.py", "out/chart.svg", "dist/app.zip"]);
+    expect(findTerminalLinks("recorded take.WAV and clip.mp4").map((link) => link.target)).toEqual(["take.WAV", "clip.mp4"]);
+  });
+
+  it("passes unknown extensions, words with a slash, longer names and URLs by", () => {
+    expect(findTerminalLinks("and/or a.png.bak notes.draft")).toEqual([]);
     expect(findTerminalLinks("https://example.test/img/a.png").map((link) => link.kind)).toEqual(["url"]);
     expect(findTerminalLinks("/tmp/a.png").map((link) => link.kind)).toEqual(["path"]);
   });

@@ -3249,9 +3249,9 @@ paths:
       parameters: [ { name: path, in: query, required: true, schema: { type: string } } ]
       responses:
         "200":
-          description: Engine-local raster image with a type determined from its bytes; links refused
+          description: Engine-local image (raster or SVG) with a type determined from its bytes; links refused
           headers: { ETag: { required: true, schema: { type: string } } }
-          content: { image/png: { schema: { type: string, format: binary } }, image/jpeg: { schema: { type: string, format: binary } }, image/webp: { schema: { type: string, format: binary } }, image/gif: { schema: { type: string, format: binary } }, image/bmp: { schema: { type: string, format: binary } } }
+          content: { image/png: { schema: { type: string, format: binary } }, image/jpeg: { schema: { type: string, format: binary } }, image/webp: { schema: { type: string, format: binary } }, image/gif: { schema: { type: string, format: binary } }, image/bmp: { schema: { type: string, format: binary } }, image/svg+xml: { schema: { type: string, format: binary } } }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -3259,6 +3259,29 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
         "415": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/download:
+    get:
+      operationId: downloadLocalSFTPFile
+      description: Sends a regular file on the sshc engine's disk for the browser to save; links refused.
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: Range, in: header, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: Engine-local file bytes
+          headers: { ETag: { required: true, schema: { type: string } } }
+          content: { application/octet-stream: { schema: { type: string, format: binary } } }
+        "206":
+          description: The requested byte range of the file
+          headers: { ETag: { required: true, schema: { type: string } } }
+          content: { application/octet-stream: { schema: { type: string, format: binary } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "416": { description: The requested range is outside the file }
         "422": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/local/entries:
     get:
