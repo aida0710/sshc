@@ -52,6 +52,8 @@ import { createStreamLink, type StreamLink, type StreamLinkController } from "./
 import { defaultBrowserScrollbackLines } from "./browserScrollback";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
+import { TerminalComposer } from "./TerminalComposer";
+import { planComposerSend } from "./composerSend";
 import { pathPreviewAlias } from "./pathPreviewAlias";
 import { previewPathsInBuffer, previewPathTargetsInBuffer } from "./previewPaths";
 import { isHomePath, resolveTerminalPath } from "./relativePaths";
@@ -173,7 +175,11 @@ export function TerminalView({
   const [pendingPaste, setPendingPaste] = useState<{
     sessionId: string;
     raw: string;
+    // The text came from the phone's text box: Enter follows it and the box is
+    // cleared once it is sent.
+    fromComposer?: boolean;
   } | null>(null);
+  const [composerText, setComposerText] = useState("");
   const sendPaste = useRef<(text: string) => void>(() => {});
   const allowWindowsPaths = useLocalWindowsPaths(session.kind, runTarget);
   const windowsPathsRef = useRef(allowWindowsPaths);
@@ -513,6 +519,17 @@ export function TerminalView({
     });
   }
 
+  function submitComposer() {
+    const plan = planComposerSend(composerText);
+    if (plan.kind === "confirm") {
+      setPendingPaste({ sessionId: session.id, raw: plan.text, fromComposer: true });
+      return;
+    }
+    if (plan.kind === "paste") sendPaste.current(plan.text);
+    sendInput.current("\r");
+    setComposerText("");
+  }
+
   return (
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
       <div className={`relative flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 ${mobile ? "py-0" : "h-8"}`}>
@@ -661,6 +678,10 @@ export function TerminalView({
           onPaste={(raw) => {
             setPendingPaste(null);
             sendPaste.current(raw);
+            if (pendingPaste.fromComposer === true) {
+              sendInput.current("\r");
+              setComposerText("");
+            }
           }}
         />
       )}
@@ -668,6 +689,12 @@ export function TerminalView({
         modifiers={modifiers}
         onToggle={(name) => setModifiers((current) => ({ ...current, [name]: !current[name] }))}
         onKey={(name) => send.current(name)}
+      />
+      <TerminalComposer
+        value={composerText}
+        disabled={link.phase !== "live"}
+        onChange={setComposerText}
+        onSubmit={submitComposer}
       />
     </section>
   );
