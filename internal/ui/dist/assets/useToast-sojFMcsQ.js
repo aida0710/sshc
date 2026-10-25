@@ -1,1 +1,0 @@
-import{m as e}from"./context-C0Ia3jiT.js";import{r as t}from"./index-CUQvlLc1.js";var n=e(),r=()=>void 0;function i(){return(0,n.useContext)(t)??r}export{i as t};
