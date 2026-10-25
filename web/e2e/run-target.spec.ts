@@ -238,6 +238,21 @@ test("keeps the run-target switcher usable while the panel is shown", async ({ p
   await expect(page.getByRole("button", { name: /^Choose where terminals run \(now: localhost\)/ })).toBeVisible();
 });
 
+test("keeps the navigation reachable on a phone while the panel is shown", async ({ page, installation }) => {
+  await stubRunTarget(page, { refusal: "unreachable" });
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  await chooseBastion(page);
+  await expect(page.getByRole("region", { name: "Could not connect to bastion", exact: true })).toBeVisible();
+  // The panel makes the terminal inert, so a phone keeps the app header instead of the
+  // terminal's own top bar, and the navigation (with the run-target switcher) stays one tap away.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const openNavigation = page.getByRole("button", { name: "Navigation", exact: true });
+  await expect(openNavigation).toBeVisible();
+  await openNavigation.click();
+  await expect(page.getByRole("button", { name: /^Choose where terminals run/ })).toBeVisible();
+});
+
 test("selects a newly added engine and shows it is incompatible in the terminal area", async ({ page, installation }) => {
   await stubRunTarget(page, { added: false });
   await openApplication(page, installation);
