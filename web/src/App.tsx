@@ -1,4 +1,5 @@
 import { usePresetSync } from "./keyconfig/presets";
+import { opensInThisPage } from "./ui/linkClick";
 import { useBindings } from "./keyconfig/bindings";
 import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
 import { type HealthResponse } from "./api/client";
@@ -164,6 +165,10 @@ export function App({
     reorderSessions: setSessionOrder,
     setSettings: setTerminalSettings,
   } = terminalWorkspace;
+  // A phone shows the terminal's own top bar instead of the app header and the bottom tabs only
+  // while a session can be used: with none open, or while the run target refuses (the panel makes
+  // the terminal inert), the app header keeps the navigation reachable.
+  const terminalTopBar = mobileLayout && terminalFace && activeSessionId !== null && terminalSessions.remoteRefusal === null;
 
   // SFTP and Home open terminals on this machine. With an engine on an SSH
   // host chosen, the run target goes back to this machine first and the
@@ -234,16 +239,7 @@ export function App({
     event: MouseEvent<HTMLAnchorElement>,
     target: Section,
   ) {
-    if (
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
-      return;
-    }
+    if (!opensInThisPage(event)) return;
     event.preventDefault();
     navigate(target);
   }
@@ -295,7 +291,8 @@ export function App({
           state === "ready" && vaultRecheck !== "idle" ? true : undefined
         }
       >
-        <AppHeader
+        {/* On a phone the terminal draws its own top bar (‹ opens this navigation), as in the design. */}
+        {terminalTopBar ? null : <AppHeader
           route={route}
           navigationOpen={navigationOpen}
           navigationId={navigationId}
@@ -306,7 +303,7 @@ export function App({
           inspectorToggleRef={inspectorTriggerRef}
           onToggleInspector={() => setInspectorOpen((open) => !open)}
           sectionLabels={sectionLabels}
-        />
+        />}
         {requestFailure === null ? null : (
           <ErrorDiagnosticNotice
             diagnostic={requestFailure}
@@ -413,6 +410,7 @@ export function App({
                       runTargets={runTargets}
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
+                      onOpenNavigation={() => setNavigationOpen(true)}
                     />
                   </div>
                 ) : null}
@@ -473,7 +471,7 @@ export function App({
             </InspectorPane>
           ) : null}
         </div>
-        {state === "ready" && mobileLayout ? (
+        {state === "ready" && mobileLayout && !terminalTopBar ? (
           <MobileNavigation section={section} onNavigate={navigateFromMenu} />
         ) : null}
         {state === "ready" ? <TransferNotifications /> : null}

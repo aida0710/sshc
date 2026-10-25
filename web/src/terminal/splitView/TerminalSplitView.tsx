@@ -69,7 +69,7 @@ export function TerminalSplitView({ splitView, sessions, renderTerminal }: {
         </nav>
       ) : null}
       {/* The panes are placed absolutely, so the outer half of the 8px gap is this wrapper's padding. */}
-      <div className="flex min-h-0 min-w-0 flex-1 p-1">
+      <div className={`flex min-h-0 min-w-0 flex-1 ${compact ? "" : "p-1"}`}>
         <div className="relative min-h-0 min-w-0 flex-1" data-split-view>
           {/* Moving the drag source to make room for this hint interrupts native dragging. */}
           {drag.moving === null ? null : (
@@ -102,14 +102,14 @@ export function TerminalSplitView({ splitView, sessions, renderTerminal }: {
             return (
               <div key={sessionId} data-split-view-pane={sessionId} data-pane-active={active} hidden={hidden}
                 style={singleVisible ? { inset: 0 } : style}
-                className={`absolute min-h-0 min-w-0 flex-col p-1 ${hidden ? "hidden" : "flex"}`}
+                className={`absolute min-h-0 min-w-0 flex-col ${compact ? "" : "p-1"} ${hidden ? "hidden" : "flex"}`}
                 onPointerDown={() => selectSession(sessionId, false)}
                 onFocusCapture={() => selectSession(sessionId, false)}
                 onDragEnter={(event) => drag.dragOver(event, sessionId)}
                 onDragOver={(event) => drag.dragOver(event, sessionId)}
                 onDragLeave={drag.leave}
                 onDrop={(event) => drag.drop(event, sessionId)}>
-                <div data-split-view-board className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-pane border shadow-pane ${multiple && !compact && active ? "border-accent/45" : "border-line"}`}>
+                <div data-split-view-board className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${compact ? "" : `rounded-pane border shadow-pane ${multiple && active ? "border-accent/45" : "border-line"}`}`}>
                   {renderTerminal(session, headerActions)}
                   {target === null || compact ? null : (
                     <div data-pane-drop-preview={target.edge ?? "swap"} className={`pointer-events-none absolute z-20 grid place-items-center border-2 border-accent bg-accent/20 ${target.edge === null ? "inset-0" : previewClass[target.edge]}`}>
@@ -122,7 +122,7 @@ export function TerminalSplitView({ splitView, sessions, renderTerminal }: {
           })}
           {singleVisible ? null : dividers.map(({ path, style, direction, ratio }) => (
             <div key={path.join("/")} className="pointer-events-none absolute" style={style}>
-              <SplitResizeHandle direction={direction} ratio={ratio} label={t("splitView.resize")}
+              <SplitResizeHandle direction={direction} ratio={ratio} label={t("splitView.resize")} look="gap"
                 style={direction === "horizontal" ? { position: "absolute", pointerEvents: "auto", left: `${ratio}%`, top: 0, height: "100%", transform: "translateX(-50%)" } : { position: "absolute", pointerEvents: "auto", top: `${ratio}%`, left: 0, width: "100%", transform: "translateY(-50%)" }}
                 onRatioChange={(next) => dispatch({ type: "resize", path, ratio: next })} />
             </div>

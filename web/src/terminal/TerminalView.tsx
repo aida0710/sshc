@@ -8,6 +8,7 @@ import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
 import { connectionProgressText } from "./progress";
+import { sessionShowsDestination, sessionStatusTone } from "./sessionStatus";
 import { useTerminalFont } from "./useTerminalFont";
 import { defaultTint } from "./appearance";
 import { useBackgroundImage } from "./backgroundImage";
@@ -87,6 +88,8 @@ type TerminalViewProps = {
   tint?: number;
   font?: string;
   onOpenRemotePath?: (alias: string, path: string, action: RemotePathAction) => void;
+  // onOpenNavigation opens the sidebar from the phone's top bar, which replaces the app header there.
+  onOpenNavigation?: (() => void) | undefined;
   osc52Enabled?: boolean;
   // vpnProfile は、この接続が通るVPN経路の名前である。空なら通らない。
   vpnProfile?: string;
@@ -135,6 +138,7 @@ export function TerminalView({
   background,
   tint,
   onOpenRemotePath,
+  onOpenNavigation,
   osc52Enabled: initialOsc52Enabled = false,
   vpnProfile = "",
   runTarget,
@@ -532,52 +536,73 @@ export function TerminalView({
 
   return (
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
-      <div className={`relative flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 ${mobile ? "py-0" : "h-8"}`}>
-        <span
-          aria-hidden="true"
-          className={`size-2 shrink-0 rounded-full ${
-            session.state === "exited"
-              ? "bg-ink-faint"
-              : session.state === "reconnecting" || session.state === "connecting" || link.phase !== "live"
-                ? "bg-notice-ink"
-                : "bg-live"
-          }`}
-        />
-        <div className="min-w-0 flex-1 md:flex md:items-center md:gap-2">
-          <div className="flex min-w-0 items-center gap-2 md:shrink-0">
-            <p className="min-w-0 flex-1 truncate text-xs font-semibold text-ink md:max-w-48 md:flex-none">{displayTitle}</p>
-          </div>
-          <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-muted md:flex-1">
-            <span className="min-w-0 truncate font-mono">{subtitle}</span>
-            <span role="status" className="shrink-0">{connectionStatus}</span>
-            <VPNProfileChip name={vpnProfile} />
-            {runTarget === undefined ? null : (
+      {/* The header follows the design: a 40px row on a desktop, the screen's top bar on a phone
+          (‹ opens the navigation, the title and destination, and the other actions). */}
+      <div className={`group/header relative flex shrink-0 items-center ${mobile ? "h-[54px] gap-1.5 pl-0.5 pr-1.5" : "h-10 gap-[9px] bg-term-bg pl-3.5 pr-2.5"}`}>
+        {mobile && onOpenNavigation !== undefined ? (
+          <button
+            type="button"
+            aria-label={t("shell.navigationToggle")}
+            title={t("shell.navigationToggle")}
+            onClick={onOpenNavigation}
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-muted hover:bg-hover"
+          >
+            <Icon name="chevronLeft" className="size-[22px]" />
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-[9px]">
+            <span
+              aria-hidden="true"
+              className={`size-2 shrink-0 rounded-full ${
+                session.state === "exited"
+                  ? "bg-ink-faint"
+                  : session.state === "reconnecting" || session.state === "connecting" || link.phase !== "live"
+                    ? "bg-notice-ink"
+                    : "bg-live"
+              }`}
+            />
+            <p className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-[15px]" : "max-w-48 shrink-0 text-[13px]"}`}>{displayTitle}</p>
+            {mobile ? null : <span className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{subtitle}</span>}
+            {/* While connected the dot says it; the words stay for screen readers. */}
+            <span role="status" className={sessionShowsDestination(session) && link.phase === "live" ? "sr-only" : `shrink-0 text-[11.5px] ${mobile ? "hidden" : sessionStatusTone(session)}`}>{connectionStatus}</span>
+            {mobile ? null : <VPNProfileChip name={vpnProfile} />}
+            {mobile || runTarget === undefined ? null : (
               <span className="shrink-0 rounded-full bg-accent/15 px-2 py-px font-mono text-[11px] text-accent">{t("runTarget.runningOn", { alias: runTarget })}</span>
             )}
           </div>
+          {mobile ? (
+            <p className="mt-px flex min-w-0 items-center gap-1 pl-[17px] text-xs text-ink-faint">
+              <span className="truncate">{subtitle}</span>
+              {sessionShowsDestination(session) && link.phase === "live" ? null : <span className={`shrink-0 ${sessionStatusTone(session)}`}>· {connectionStatus}</span>}
+            </p>
+          ) : null}
         </div>
-        <button
-          type="button"
-          aria-label={t("terminal.search")}
-          title={t("terminal.search")}
-          className={`flex shrink-0 items-center justify-center rounded border border-control-line text-xs text-ink-muted hover:bg-select-fill active:bg-select-fill focus:bg-select-fill focus:outline-none ${mobile ? "size-11" : "size-6"}`}
-          onClick={search.toggle}
-        >
-          <Icon name="search" className="size-3.5" />
-        </button>
+        {mobile ? null : (
+          <button
+            type="button"
+            aria-label={t("terminal.search")}
+            title={t("terminal.search")}
+            className="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-ink-faint hover:bg-hover hover:text-ink focus:bg-hover focus:outline-none"
+            onClick={search.toggle}
+          >
+            <Icon name="search" className="size-[15px]" />
+          </button>
+        )}
         <button
           ref={overflowTrigger}
           type="button"
           aria-label={t("terminal.moreActions")}
           aria-expanded={overflowOpen}
-          className={`flex shrink-0 items-center justify-center rounded border border-control-line text-ink-muted hover:bg-select-fill active:bg-select-fill focus:bg-select-fill focus:outline-none ${mobile ? "size-11" : "size-6"}`}
+          className={`flex shrink-0 items-center justify-center text-ink-faint hover:bg-hover hover:text-ink focus:bg-hover focus:outline-none ${mobile ? "size-11 rounded-lg" : "size-7 rounded-[7px]"}`}
           onClick={() => setOverflowOpen((current) => !current)}
         >
-          <Icon name="moreHorizontal" className="size-3.5" />
+          <Icon name="moreHorizontal" className={mobile ? "size-5" : "size-4"} />
         </button>
         {headerActions}
         {overflowOpen ? (
           <TerminalOverflowMenu
+            {...(mobile ? { onSearch: search.toggle } : {})}
             onSplit={onSplit}
             canSplit={canSplit}
             triggerRef={overflowTrigger}
@@ -616,7 +641,7 @@ export function TerminalView({
         {...(onReconnect === undefined ? {} : { onReconnect })}
       />
 
-      <div className="relative min-h-0 flex-1 overflow-clip bg-term-bg">
+      <div className={`relative min-h-0 flex-1 overflow-clip bg-term-bg ${mobile ? "mx-2 rounded-[14px] border border-line" : ""}`}>
         <div
           ref={host}
           data-terminal-host=""

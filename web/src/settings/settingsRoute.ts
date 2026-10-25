@@ -16,12 +16,12 @@ export type SettingsPage = (typeof settingsPages)[number];
 
 export const settingsPageMeta: Record<
   SettingsPage,
-  { path: string; label: MessageKey; description: MessageKey; icon: IconName }
+  // Appearance has no description: its two choices say what it is, as in the design.
+  { path: string; label: MessageKey; description?: MessageKey; icon: IconName }
 > = {
   Appearance: {
     path: "/settings/appearance",
     label: "appearance.heading",
-    description: "settings.appearanceDescription",
     icon: "appearance",
   },
   Engine: {

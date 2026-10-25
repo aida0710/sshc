@@ -173,7 +173,7 @@ export function SessionList({
             const isSelected = session.id === selected;
             const statusId = `session-status-${session.id}`;
             const marker = (
-              <span aria-hidden="true" className={`mt-1 size-2 shrink-0 rounded-full md:mt-0.5 ${sessionMarkerClass(session, unread)}`} />
+              <span aria-hidden="true" className={`mt-1.5 size-2 shrink-0 rounded-full ${sessionMarkerClass(session, unread)}`} />
             );
             // The dot carries the status for the eye; screen readers get it as the row's description.
             const statusDescription = (
@@ -184,7 +184,7 @@ export function SessionList({
             const details = (
               <>
                 {unread && session.lastNotification !== undefined ? (
-                  <span className="block truncate text-[11px] text-notice-ink md:leading-tight">
+                  <span className="block truncate text-[11.5px] leading-4 text-notice-ink">
                     {notificationText(t, session.lastNotification)}
                   </span>
                 ) : null}
@@ -226,7 +226,7 @@ export function SessionList({
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
                 ) : null}
                 <div
-                  className={`group/row relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors md:py-1 ${
+                  className={`group/row relative flex items-start gap-2.5 rounded-[7px] py-1.5 pl-3 pr-2 transition-colors md:min-h-[30px] md:py-[5px] ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
                       : isSelected ? "bg-select-fill" : "hover:bg-hover"
@@ -262,12 +262,12 @@ export function SessionList({
                       aria-describedby={statusId}
                       aria-current={isSelected ? "true" : undefined}
                       onClick={() => onSelect(session.id)}
-                      className={`flex min-w-0 grow items-start gap-2 text-left after:absolute after:inset-0 after:rounded-md ${rowCursor}`}
+                      className={`flex min-w-0 grow items-start gap-2.5 text-left after:absolute after:inset-0 after:rounded-[7px] ${rowCursor}`}
                     >
                       {marker}
                       <span className="min-w-0 grow">
-                        <span className="flex items-center gap-2 text-xs md:leading-tight">
-                          <span className={`min-w-0 flex-1 truncate ${isSelected ? "font-semibold text-accent" : "text-ink"}`}>{displayTitle}</span>
+                        <span className="flex items-center gap-2 text-[13px] leading-5">
+                          <span className={`min-w-0 flex-1 truncate ${isSelected ? "font-medium text-ink" : "text-ink"}`}>{displayTitle}</span>
                           {splitGroupNumber === undefined ? null : (
                             <span data-split-group-badge={splitGroupNumber} title={t("splitView.groupName", { number: splitGroupNumber })}
                               aria-label={t("splitView.groupName", { number: splitGroupNumber })} className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-normal text-ink-muted">
@@ -275,7 +275,7 @@ export function SessionList({
                             </span>
                           )}
                           {sessionShowsDestination(session)
-                            ? <span data-session-destination className="max-w-[50%] shrink-0 truncate font-mono text-[11px] text-ink-faint">{destination}</span>
+                            ? <span data-session-destination className={`max-w-[50%] shrink-0 truncate font-mono text-[11px] text-ink-faint ${isSelected ? "pointer-fine:hidden" : ""}`}>{destination}</span>
                             : <span data-session-status-text className={`max-w-[60%] shrink-0 truncate text-[11px] ${sessionStatusTone(session)}`}>{status}</span>}
                         </span>
                         {details}
@@ -285,7 +285,7 @@ export function SessionList({
                   )}
                   {/* With a mouse the actions cover the destination only on the selected or hovered row, so
                       the other rows keep it at the right edge. Touch keeps them in the row, always shown. */}
-                  <div className={`flex shrink-0 items-center gap-0.5 pointer-fine:absolute pointer-fine:right-1 pointer-fine:top-0.5 pointer-fine:rounded-md ${
+                  <div className={`flex shrink-0 items-center gap-0.5 pointer-fine:absolute pointer-fine:right-1.5 pointer-fine:top-[5px] pointer-fine:rounded-md ${
                     isSelected ? "pointer-fine:bg-select-fill" : `pointer-fine:bg-hover ${revealOnHover}`
                   }`}>
                     <button
@@ -321,7 +321,8 @@ export function SessionList({
                         }
                         setClosing(session);
                       }}
-                      className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5"
+                      // On the selected row only "…" stays; close appears with the pointer, as in the design.
+                      className={`relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5 ${isSelected ? revealOnHover : ""}`}
                     >
                       <Icon name="close" className="size-3.5" />
                     </button>

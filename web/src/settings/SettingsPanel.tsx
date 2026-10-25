@@ -2,8 +2,7 @@ import { KeyConfig } from "../keyconfig/KeyConfig";
 import { settingsApi, type SettingsApi, type TerminalSettings } from "../api/settings";
 import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault";
 import { useTranslate } from "../i18n/context";
-import { PageHeader } from "../ui/page";
-import { Card } from "../ui/surface";
+import { SettingsNavigation } from "./SettingsNavigation";
 import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
 import { SessionSettingsSection, type SessionSettingsState } from "./SessionSettingsSection";
 import { SFTPSettingsSection } from "./SFTPSettingsSection";
@@ -30,6 +29,8 @@ type SettingsPanelProps = {
   page?: SettingsPage | "All";
   onTerminalSettingsChange?: (settings: TerminalSettings) => void | Promise<void>;
   terminalSessions?: SessionSettingsState;
+  // onNavigatePage moves to another settings page from the list beside the card.
+  onNavigatePage?: (path: string) => void;
 };
 
 // The settings page is a list of independent sections; each owns its own
@@ -41,6 +42,7 @@ export function SettingsPanel({
   onVaultChanged,
   passwordless = false,
   onTerminalSettingsChange,
+  onNavigatePage,
 }: SettingsPanelProps) {
   const t = useTranslate();
   const all = page === "All";
@@ -48,11 +50,15 @@ export function SettingsPanel({
   const pageTitle = all ? "settings.heading" : settingsPageMeta[page].label;
   const pageDescription = all ? "settings.pageDescription" : settingsPageMeta[page].description;
 
+  // The list of pages on the left and the open page as one card, as in the design.
   return (
-    <div className={`mx-auto flex w-full max-w-6xl flex-col gap-6 ${mobileTouchTargets}`}>
-      <PageHeader title={t(pageTitle)} description={t(pageDescription)} />
-
-      <Card radius="md">
+    <div className="mx-auto flex min-h-full w-full max-w-6xl gap-2">
+      {onNavigatePage === undefined ? null : <SettingsNavigation current={all ? null : page} onNavigate={onNavigatePage} />}
+      <div className={`min-w-0 flex-1 overflow-hidden rounded-xl border border-line bg-sidebar shadow-pane ${mobileTouchTargets}`}>
+        <header className="px-4 pt-6 sm:px-6 lg:px-8 lg:pt-7">
+          <h2 className="text-xl font-semibold tracking-tight text-ink">{t(pageTitle)}</h2>
+          {pageDescription === undefined ? null : <p className="mt-1 text-xs leading-5 text-ink-faint">{t(pageDescription)}</p>}
+        </header>
         {shows("Appearance") ? <AppearanceSettingsSection showHeading={all} /> : null}
         {shows("Shortcuts") ? (
           <SettingsSection id="settings-shortcuts" label={t("shortcuts.heading")} icon="settings" showHeading={all}>
@@ -65,7 +71,7 @@ export function SettingsPanel({
         {shows("Notifications") ? <NotificationSettingsSection showHeading={all} /> : null}
         {terminalSessions !== undefined && shows("Connections") ? <SessionSettingsSection terminalSessions={terminalSessions} showHeading={all} /> : null}
         {shows("Password") ? <MasterPasswordSection api={api} showHeading={all} onVaultChanged={onVaultChanged} /> : null}
-      </Card>
+      </div>
     </div>
   );
 }

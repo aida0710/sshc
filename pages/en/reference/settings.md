@@ -30,6 +30,8 @@ The port and the Vault auto-lock under Engine belong to this device only. Sync d
 - Theme: match the system, light, or dark
 - Accent colour: lavender, blue, sky, pink, or mono. It marks the current item, buttons, and the focused terminal pane
 
+Each settings page lists the other settings pages on its left, so you can move between them.
+
 The theme stays in this browser and is not synced. The accent colour is stored in the sshc metadata under `~/.ssh/sshc` and synced to your other devices. Amber, green, and red are not offered because they already mean an unread notification, connected, and an error.
 
 Preferences in Menu also switches the theme and the display language (Japanese or English).

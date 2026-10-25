@@ -54,7 +54,7 @@ export function TerminalComposer({
   return (
     <form
       aria-label={t("terminal.composer")}
-      className="flex shrink-0 items-end gap-2 bg-toolbar px-2 pb-2 pt-1"
+      className="flex shrink-0 items-end gap-2 px-2.5 pb-1.5"
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit();
@@ -70,7 +70,7 @@ export function TerminalComposer({
         enterKeyHint="send"
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={keyDown}
-        className="min-h-11 grow resize-none rounded-[22px] bg-card px-4 py-2.5 text-base leading-6 text-ink placeholder:text-ink-faint focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
+        className="min-h-11 grow resize-none rounded-[22px] bg-card px-3.5 py-2.5 text-base leading-6 text-ink placeholder:text-ink-faint focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
       />
       <button
         type="submit"

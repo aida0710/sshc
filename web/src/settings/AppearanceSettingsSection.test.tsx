@@ -42,7 +42,7 @@ describe("AppearanceSettingsSection", () => {
   it("offers the five accents with lavender chosen by default", () => {
     renderSection(fakeApi());
 
-    const accents = screen.getByRole("group", { name: "Accent colour" });
+    const accents = screen.getByRole("radiogroup", { name: "Accent colour" });
     const names = within(accents).getAllByRole("radio").map((radio) => radio.closest("label")?.textContent);
     expect(names).toEqual(["Lavender", "Blue", "Sky", "Pink", "Mono"]);
     expect(within(accents).getByRole("radio", { name: "Lavender" })).toBeChecked();

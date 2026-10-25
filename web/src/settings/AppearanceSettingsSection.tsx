@@ -38,33 +38,38 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
 
   return (
     <SettingsSection id="settings-appearance" label={t("appearance.heading")} icon="appearance" showHeading={showHeading}>
-      <div className="grid max-w-2xl gap-8">
-        <fieldset>
-          <legend className="mb-3 text-sm font-medium text-ink">{t("appearance.theme")}</legend>
-          <div className="grid max-w-lg grid-cols-3 gap-3">
-            {themes.map((option) => (
-              <label key={option} className="flex min-w-0 cursor-pointer flex-col gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="appearance-theme"
-                  value={option}
-                  checked={theme === option}
-                  onChange={() => setTheme(option)}
-                  className="peer sr-only"
-                />
-                <ThemeThumbnail theme={option} />
-                <span className="flex items-center gap-2 text-ink-muted peer-checked:text-ink">
-                  {t(themeLabelKeys[option])}
-                </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend className="mb-3 text-sm font-medium text-ink">{t("appearance.accent")}</legend>
-          <div className="flex flex-wrap gap-3">
+      {/* Each choice is a row: its name on the left, the options on the right, a line between rows. */}
+      <div className={fieldRow}>
+        <div className={fieldLabel}>{t("appearance.theme")}</div>
+        <div className="grid max-w-[532px] grid-cols-3 gap-3.5" role="radiogroup" aria-label={t("appearance.theme")}>
+          {themes.map((option) => (
+            <label key={option} className="flex min-w-0 cursor-pointer flex-col gap-2 text-[13px]">
+              <input
+                type="radio"
+                name="appearance-theme"
+                value={option}
+                checked={theme === option}
+                onChange={() => setTheme(option)}
+                className="peer sr-only"
+              />
+              <ThemeThumbnail theme={option} />
+              <span className="flex items-center gap-2 text-ink-muted peer-checked:text-ink peer-checked:[&>span]:border-[5px] peer-checked:[&>span]:border-accent">
+                <span aria-hidden="true" className="size-4 shrink-0 rounded-full border-[1.5px] border-ink-faint" />
+                {t(themeLabelKeys[option])}
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className={fieldRow}>
+        <div className={fieldLabel}>
+          {t("appearance.accent")}
+          <p className="mt-1 text-xs font-normal leading-5 text-ink-faint">{t("appearance.accentHint")}</p>
+        </div>
+        <div>
+          <div className="flex flex-wrap gap-[18px]" role="radiogroup" aria-label={t("appearance.accent")}>
             {accents.map((option) => (
-              <label key={option} className="flex min-h-11 w-16 cursor-pointer flex-col items-center gap-2 text-xs text-ink-muted has-[:checked]:text-ink">
+              <label key={option} className="flex w-16 cursor-pointer flex-col items-center gap-2 text-[12.5px] text-ink-muted has-[:checked]:text-ink">
                 <input
                   type="radio"
                   name="appearance-accent"
@@ -78,18 +83,21 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
                 <span
                   aria-hidden="true"
                   data-accent={option}
-                  className="size-9 rounded-full bg-accent ring-offset-2 ring-offset-card peer-checked:ring-2 peer-checked:ring-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent"
+                  className="size-9 rounded-full bg-accent ring-offset-2 ring-offset-sidebar peer-checked:ring-2 peer-checked:ring-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent"
                 />
                 {t(accentLabelKeys[option])}
               </label>
             ))}
           </div>
           {saving.error === "" ? null : <div className="mt-4"><Notice tone="danger">{saving.error}</Notice></div>}
-        </fieldset>
+        </div>
       </div>
     </SettingsSection>
   );
 }
+
+const fieldRow = "grid gap-4 border-t border-line py-5 lg:grid-cols-[160px_minmax(0,1fr)] lg:gap-6";
+const fieldLabel = "pt-1.5 text-[13.5px] font-medium text-ink";
 
 // ThemeThumbnail is a small picture of the app in a theme: a sidebar with the
 // current item in the accent, and a terminal board. "System" shows both halves.
@@ -103,7 +111,7 @@ function ThemeThumbnail({ theme }: { theme: Theme }) {
     <span
       aria-hidden="true"
       style={{ "--thumbnail-accent": "var(--ui-accent)" } as CSSProperties}
-      className="flex h-20 overflow-hidden rounded-lg border border-line sm:h-24 peer-checked:outline-2 peer-checked:outline-offset-2 peer-checked:outline-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+      className="flex h-24 overflow-hidden rounded-[10px] border border-line peer-checked:outline-2 peer-checked:outline-offset-2 peer-checked:outline-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
     >
       {halves.map((half) => (
         <span key={half} data-theme={half} className="flex flex-1 bg-canvas">

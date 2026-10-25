@@ -583,7 +583,7 @@ export const ja = {
   "runTarget.vaultMissingBody": "{alias} のsshcエンジンのターミナルを使うには、先にそのVaultを作ります。{alias} の画面を別タブで開いて作ってください。",
   "splitView.chooseSession": "分割に追加するセッション",
   "splitView.cancel": "キャンセル",
-  "splitView.heading": "SPLIT VIEWS",
+  "splitView.heading": "Split views",
   "splitView.groupName": "分割 {number}",
   "splitView.paneCount": "{count}ペイン",
   "splitView.dissolve": "解除",
@@ -1222,6 +1222,7 @@ export const ja = {
   "appearance.heading": "Appearance",
   "appearance.theme": "テーマ",
   "appearance.accent": "さし色",
+  "appearance.accentHint": "選んでいる項目、ボタン、フォーカスの枠に使う",
   "appearance.accent.lavender": "薄紫",
   "appearance.accent.blue": "青",
   "appearance.accent.sky": "水色",
@@ -1294,8 +1295,6 @@ export const ja = {
   "settings.heading": "Settings",
   "settings.pageDescription":
     "ターミナルの動作、sshcの起動設定、このマシンに保存するデータの暗号化を設定します。",
-  "settings.appearanceDescription":
-    "テーマとさし色を設定します。テーマはこのブラウザに、さし色はsshcに保存され、同期されます。",
   "settings.engineDescription":
     "このマシンのsshcエンジンの待受ポートとVaultの自動ロックを設定します。この設定は同期されません。",
   "settings.terminalDescription":

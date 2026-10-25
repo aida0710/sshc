@@ -578,7 +578,7 @@ export const en = {
   "runTarget.vaultMissingBody": "To use the terminals of the engine on {alias}, create its vault first. Open the screen of {alias} in a new tab and create it there.",
   "splitView.chooseSession": "Choose a session to split",
   "splitView.cancel": "Cancel",
-  "splitView.heading": "SPLIT VIEWS",
+  "splitView.heading": "Split views",
   "splitView.groupName": "Split {number}",
   "splitView.paneCount": "{count} panes",
   "splitView.dissolve": "Dissolve",
@@ -1222,6 +1222,7 @@ export const en = {
   "appearance.heading": "Appearance",
   "appearance.theme": "Theme",
   "appearance.accent": "Accent colour",
+  "appearance.accentHint": "Used for the current item, buttons and the focused frame",
   "appearance.accent.lavender": "Lavender",
   "appearance.accent.blue": "Blue",
   "appearance.accent.sky": "Sky",
@@ -1294,8 +1295,6 @@ export const en = {
   "settings.heading": "Settings",
   "settings.pageDescription":
     "Configure embedded terminals, sshc's lifecycle, and protection for this machine's encrypted data.",
-  "settings.appearanceDescription":
-    "Set the theme and the accent colour. The theme stays in this browser; the accent colour is saved in sshc and synced.",
   "settings.engineDescription":
     "Configure this machine's sshc engine port and automatic vault locking. These settings are not synced.",
   "settings.terminalDescription":

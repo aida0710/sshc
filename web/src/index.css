@@ -27,6 +27,7 @@
   --ui-control: #ffffff;
   --ui-control-line: #8c949a;
   --ui-hover: #eef0f4;
+  --ui-well: #f1f2f5;
   --ui-select-fill: #eeecfa;
   --ui-ink: #1f2326;
   --ui-ink-muted: #4f575e;
@@ -86,6 +87,7 @@
   --ui-control: #1a1d22;
   --ui-control-line: #687076;
   --ui-hover: #21252a;
+  --ui-well: #1c1f24;
   --ui-select-fill: #2d2d3d;
   --ui-ink: #e8e9eb;
   --ui-ink-muted: #b6bbc1;
@@ -213,6 +215,7 @@
   --color-control: var(--ui-control);
   --color-control-line: var(--ui-control-line);
   --color-hover: var(--ui-hover);
+  --color-well: var(--ui-well);
   --color-select-fill: var(--ui-select-fill);
   --color-ink: var(--ui-ink);
   --color-ink-muted: var(--ui-ink-muted);

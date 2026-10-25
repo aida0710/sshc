@@ -230,7 +230,7 @@ test("keeps two split groups through standalone selection and dissolves them wit
   await expect(groupOne.getByText("ビルド・アプリのログ", { exact: true })).toHaveCount(0);
   await groupOne.getByRole("button", { name: "分割 1のセッション名を開閉" }).click();
   await expect(groupOne.getByText("ビルド・アプリのログ", { exact: true })).toBeVisible();
-  await expect(japaneseNavigation.getByRole("list", { name: "SPLIT VIEWS" })).toBeVisible();
+  await expect(japaneseNavigation.getByRole("list", { name: "Split views" })).toBeVisible();
   await waitForTerminalLayout(page);
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) await page.screenshot({ path: `${visualDirectory}/split-groups-split-ja.png` });
@@ -254,7 +254,7 @@ test("keeps two split groups through standalone selection and dissolves them wit
   await expect(japaneseNavigation.locator('[data-split-group-badge="2"]')).toHaveCount(0);
   await japaneseNavigation.getByRole("button", { name: "分割 1を解除", exact: true }).click();
   await expect(page.locator("[data-split-view-pane]")).toHaveCount(1);
-  await expect(japaneseNavigation.getByRole("list", { name: "SPLIT VIEWS" })).toHaveCount(0);
+  await expect(japaneseNavigation.getByRole("list", { name: "Split views" })).toHaveCount(0);
   await expect(japaneseNavigation.locator("[data-split-group-badge]")).toHaveCount(0);
   for (const title of titles) await expect(japaneseNavigation.getByRole("button", { name: title, exact: true })).toBeVisible();
   await runCommand(pane(page, ids[1]!), "printf 'SURVIVED:%s\\n' $((6 * 7))");
@@ -310,9 +310,9 @@ test("limits split view to four panes and shows the Japanese desktop layout", as
   await changeDisplayLanguage(page, "ja");
   await expect(page.getByRole("navigation", { name: "メインナビゲーション" })).toBeVisible();
   await waitForTerminalLayout(page);
-  // The existing 32px header plus the board's border must remain a single row. The board sits
-  // inside the pane's gap, so it is measured from the board, not the pane.
-  const maximumHeaderHeight = 34;
+  // The 40px header (the design's height) plus the board's border must remain a single row. The
+  // board sits inside the pane's gap, so it is measured from the board, not the pane.
+  const maximumHeaderHeight = 41;
   for (const [index, id] of ids.slice(0, 4).entries()) {
     const terminal = pane(page, id);
     await expect(terminal.getByText(titles[index]!, { exact: true })).toHaveCount(1);

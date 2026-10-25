@@ -47,7 +47,7 @@ const keys: BarKey[] = [
 const extraKeys = ["|", "-", "~", "/"];
 
 const keyShape =
-  "min-h-11 min-w-0 rounded border border-control-line font-mono text-sm text-ink active:bg-select-fill focus-visible:outline-2 focus-visible:outline-accent";
+  "h-11 min-w-0 rounded-[10px] font-mono text-[12.5px] text-ink active:bg-select-fill focus-visible:outline-2 focus-visible:outline-accent";
 
 function keepFocus(event: { preventDefault(): void }) {
   event.preventDefault();
@@ -78,8 +78,11 @@ export function KeyBar({
     <div
       ref={root}
       aria-label={t("terminal.keyBar")}
-      className="relative grid shrink-0 grid-cols-8 border-t border-line bg-toolbar px-1"
+      className="relative grid shrink-0 grid-cols-8 gap-1.5 px-2.5 pb-2 pt-2.5"
     >
+      {keys.slice(0, 2).map((key) => (
+        <BarKeyButton key={key.name} barKey={key} onPress={press} />
+      ))}
       <button
         type="button"
         data-touch-compact
@@ -91,19 +94,8 @@ export function KeyBar({
       >
         Ctrl
       </button>
-      {keys.map((key) => (
-        <button
-          key={key.name}
-          type="button"
-          data-touch-compact
-          aria-label={key.kind === "arrow" ? t(key.label) : undefined}
-          onPointerDown={keepFocus}
-          onMouseDown={keepFocus}
-          onClick={() => press(key.name)}
-          className={`${keyShape} bg-card`}
-        >
-          {key.kind === "arrow" ? <Icon name={key.icon} className="mx-auto size-4" /> : key.name}
-        </button>
+      {keys.slice(2).map((key) => (
+        <BarKeyButton key={key.name} barKey={key} onPress={press} />
       ))}
       <button
         type="button"
@@ -134,5 +126,23 @@ export function KeyBar({
         </div>
       ) : null}
     </div>
+  );
+}
+
+// BarKeyButton is one key of the bar that sends a sequence (not Ctrl, not the extra keys).
+function BarKeyButton({ barKey, onPress }: { barKey: BarKey; onPress: (name: string) => void }) {
+  const t = useTranslate();
+  return (
+    <button
+      type="button"
+      data-touch-compact
+      aria-label={barKey.kind === "arrow" ? t(barKey.label) : undefined}
+      onPointerDown={keepFocus}
+      onMouseDown={keepFocus}
+      onClick={() => onPress(barKey.name)}
+      className={`${keyShape} bg-card`}
+    >
+      {barKey.kind === "arrow" ? <Icon name={barKey.icon} className="mx-auto size-[15px]" /> : barKey.name}
+    </button>
   );
 }

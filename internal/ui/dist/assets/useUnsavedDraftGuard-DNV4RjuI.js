@@ -1,1 +1,0 @@
-import{m as e}from"./context-CRyViUZO.js";import{D as t}from"./index-CSxYs-Ye.js";var n=e();function r({dirty:e,blocker:r,onNavigationBlockerChange:i}){(0,n.useEffect)(()=>{if(!e){i?.(null);return}return i?.(r),()=>i?.(null)},[r,e,i]),t(e)}export{r as t};
