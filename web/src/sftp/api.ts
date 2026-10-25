@@ -10,6 +10,7 @@ import type { DirectoryCompareOptions, SearchOptions } from "./contentToolTypes"
 export type RemoteEntry = components["schemas"]["SFTPEntry"];
 export type LocalListing = components["schemas"]["SFTPLocalListing"];
 export type RemoteTextFile = components["schemas"]["SFTPTextFile"];
+type MediaTicket = components["schemas"]["SFTPMediaTicket"];
 export type ResumableUpload = components["schemas"]["SFTPResumableUpload"];
 export type TransferJob = components["schemas"]["SFTPTransferJob"];
 type CreateTransferJobWire = components["schemas"]["SFTPCreateTransferJobRequest"];
@@ -219,6 +220,18 @@ export const sftpApi = {
   async downloadLocalFile(localPath: string): Promise<Blob> {
     const response = await apiClient.readResponse(`/api/v1/sftp/local/download?path=${encodeURIComponent(localPath)}`, { locallyHandledCodes: transferProblems });
     return response.blob();
+  },
+  // A ticket lets <audio> and <video> read the file: they cannot send the
+  // CSRF header, so the ticket in the URL stands in for it.
+  async issueMediaTicket(alias: string, remotePath: string): Promise<string> {
+    const issued = validateOpenAPISchema<MediaTicket>("SFTPMediaTicket", await postJSON<unknown>("/api/v1/sftp/media-tickets", { alias, path: remotePath }, undefined, previewProblems));
+    return issued.ticket;
+  },
+  async revokeMediaTicket(ticket: string): Promise<void> {
+    await apiClient.mutate<unknown>(`/api/v1/sftp/media-tickets/${encodeURIComponent(ticket)}`, { method: "DELETE" }, { locallyHandledCodes: previewProblems });
+  },
+  mediaURL(ticket: string): string {
+    return `/api/v1/sftp/media/${encodeURIComponent(ticket)}`;
   },
   async previewFile(alias: string, remotePath: string): Promise<RemotePreview> {
     const response = await apiClient.readResponse(pathFor(alias, "preview", remotePath), { locallyHandledCodes: previewProblems });

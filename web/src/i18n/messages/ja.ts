@@ -382,6 +382,7 @@ export const ja = {
   "sftp.previewPosition": "{position} / {count}",
   "sftp.previewTooLarge": "ファイルが大きいため、プレビューできません。",
   "sftp.previewUnsupported": "この形式のファイルはプレビューできません。",
+  "sftp.previewMediaUnsupported": "このブラウザでは再生できない形式です。",
   "sftp.selectedItems": "選択中の項目",
   "sftp.totalSize": "合計サイズ",
   "sftp.entries": "ファイル一覧",

@@ -33,7 +33,7 @@ func (s Service) CompareDirectories(ctx context.Context, options CompareOptions)
 	}
 	defer leftTree.close()
 	var rightTree *comparisonTree
-	sharesRemote := leftAlias == rightAlias && leftAlias != localComparisonAlias
+	sharesRemote := leftAlias == rightAlias && leftAlias != LocalAlias
 	if sharesRemote {
 		// Reuse one SFTP transport, including hosts allowing only one OTP connection.
 		rightTree, err = readRemoteComparisonTree(ctx, leftTree.remote, rightRoot)
@@ -121,7 +121,7 @@ func (s Service) CompareDirectories(ctx context.Context, options CompareOptions)
 
 func (s Service) readComparisonTree(ctx context.Context, location ComparisonLocation, mode ComparisonMode) (*comparisonTree, error) {
 	alias, root := location.Alias, location.Path
-	if alias == localComparisonAlias {
+	if alias == LocalAlias {
 		return openLocalComparisonTree(ctx, root, mode)
 	}
 	remote, err := s.openRequest(ctx, alias)

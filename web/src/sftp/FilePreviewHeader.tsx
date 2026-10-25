@@ -27,7 +27,12 @@ export function FilePreviewHeader({
   const t = useTranslate();
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-toolbar px-3 py-2">
-      <h2 id={headingId} className="min-w-0 basis-full truncate font-mono text-sm font-medium md:basis-0 md:grow" title={path}>{path}</h2>
+      {/* A long path loses its start, not the file name: the right-to-left box
+          puts the ellipsis on the left, and the bdi keeps the path itself in
+          reading order. */}
+      <h2 id={headingId} dir="rtl" className="min-w-0 basis-full truncate text-left font-mono text-sm font-medium md:basis-0 md:grow" title={path}>
+        <bdi dir="ltr">{path}</bdi>
+      </h2>
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {count > 1 ? (
           <>
