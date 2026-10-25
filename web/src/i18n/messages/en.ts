@@ -378,6 +378,7 @@ export const en = {
   "sftp.previewPosition": "{position} / {count}",
   "sftp.previewTooLarge": "This file is too large to preview.",
   "sftp.previewUnsupported": "This file type can't be previewed.",
+  "sftp.previewMediaUnsupported": "This browser can't play this file.",
   "sftp.selectedItems": "Selected items",
   "sftp.totalSize": "Total size",
   "sftp.entries": "File list",

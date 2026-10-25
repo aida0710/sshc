@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -9,7 +9,10 @@ import { FilePreviewDialog } from "./FilePreviewDialog";
 import { localHostAlias } from "./localHost";
 import { sftpTransferManager } from "./transferManager";
 
-vi.mock("./api", () => ({ sftpApi: { previewFile: vi.fn(), readText: vi.fn(), downloadLocalFile: vi.fn(), saveDownload: vi.fn() } }));
+vi.mock("./api", () => ({ sftpApi: {
+  previewFile: vi.fn(), readText: vi.fn(), downloadLocalFile: vi.fn(), saveDownload: vi.fn(),
+  issueMediaTicket: vi.fn(), revokeMediaTicket: vi.fn(), mediaURL: (ticket: string) => `/media/${ticket}`,
+} }));
 vi.mock("./transferManager", () => ({ sftpTransferManager: { addDownload: vi.fn() } }));
 // jsdom cannot run Monaco. The stand-in shows what the dialog asked of it and,
 // like the editor, owns the keys pressed inside it.
@@ -22,7 +25,7 @@ vi.mock("./MonacoEditor", () => ({
 const png = { contentType: "image/png", revision: "r1", blob: new Blob([new Uint8Array([1])]) };
 
 function renderDialog(path: string, { paths, alias = "web" }: { paths?: string[]; alias?: string } = {}) {
-  render(
+  return render(
     <LanguageProvider>
       <FilePreviewDialog alias={alias} path={path} {...(paths === undefined ? {} : { paths })} onClose={() => undefined} />
     </LanguageProvider>,
@@ -130,6 +133,41 @@ describe("FilePreviewDialog", () => {
     (await screen.findByLabelText("Editor")).focus();
     await userEvent.keyboard("{ArrowRight}");
     expect(screen.getByText("1 / 2")).toBeTruthy();
+  });
+
+  it("plays audio through a ticket without reading the file first, and revokes the ticket when it closes", async () => {
+    vi.mocked(sftpApi.issueMediaTicket).mockResolvedValue("ticket-1");
+    vi.mocked(sftpApi.revokeMediaTicket).mockResolvedValue();
+    const { container, unmount } = renderDialog("/srv/take.mp3");
+
+    await vi.waitFor(() => expect(container.ownerDocument.querySelector("audio")?.getAttribute("src")).toBe("/media/ticket-1"));
+    expect(sftpApi.issueMediaTicket).toHaveBeenCalledWith("web", "/srv/take.mp3");
+    expect(sftpApi.previewFile).not.toHaveBeenCalled();
+    expect(sftpApi.readText).not.toHaveBeenCalled();
+    unmount();
+    expect(sftpApi.revokeMediaTicket).toHaveBeenCalledWith("ticket-1");
+  });
+
+  it("offers the download when the browser cannot play the video", async () => {
+    vi.mocked(sftpApi.issueMediaTicket).mockResolvedValue("ticket-2");
+    vi.mocked(sftpApi.revokeMediaTicket).mockResolvedValue();
+    renderDialog("/srv/clip.mov");
+
+    await vi.waitFor(() => expect(document.querySelector("video")).not.toBeNull());
+    fireEvent.error(document.querySelector("video")!);
+    expect(await screen.findByText("This browser can't play this file.")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Download" })).toHaveLength(2);
+  });
+
+  it("revokes the ticket of a file it steps away from", async () => {
+    vi.mocked(sftpApi.issueMediaTicket).mockResolvedValueOnce("first").mockResolvedValueOnce("second");
+    vi.mocked(sftpApi.revokeMediaTicket).mockResolvedValue();
+    renderDialog("/srv/a.mp4", { paths: ["/srv/a.mp4", "/srv/b.mp4"] });
+    await vi.waitFor(() => expect(document.querySelector("video")?.getAttribute("src")).toBe("/media/first"));
+
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    await vi.waitFor(() => expect(document.querySelector("video")?.getAttribute("src")).toBe("/media/second"));
+    expect(sftpApi.revokeMediaTicket).toHaveBeenCalledWith("first");
   });
 
   it("shows a path that is not among the steps alone", async () => {

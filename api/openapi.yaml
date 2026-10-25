@@ -3283,6 +3283,43 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "416": { description: The requested range is outside the file }
         "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/media-tickets:
+    post:
+      operationId: issueSFTPMediaTicket
+      description: Lets the preview's audio or video player read one file. The player cannot send the CSRF header, so the ticket on the media URL stands in for it, for this browser session only.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPMediaTicketRequest" } } } }
+      responses:
+        "201": { description: "Ticket for /api/v1/sftp/media/{ticket}", content: { application/json: { schema: { $ref: "#/components/schemas/SFTPMediaTicket" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "415": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/media-tickets/{ticket}:
+    delete:
+      operationId: revokeSFTPMediaTicket
+      parameters: [ { name: ticket, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "204": { description: "Revoked, or already unknown" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/media/{ticket}:
+    get:
+      operationId: streamSFTPMedia
+      description: Audio or video bytes for the preview's player, read only in the ranges asked for. The only API read that needs no CSRF header; the ticket replaces it.
+      parameters:
+        - { name: ticket, in: path, required: true, schema: { type: string } }
+        - { name: Range, in: header, required: false, schema: { type: string } }
+      responses:
+        "200": { description: The whole file, content: { audio/*: { schema: { type: string, format: binary } }, video/*: { schema: { type: string, format: binary } } } }
+        "206": { description: The requested range, content: { audio/*: { schema: { type: string, format: binary } }, video/*: { schema: { type: string, format: binary } } } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "416": { description: The requested range is outside the file }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/local/entries:
     get:
       operationId: listLocalSFTPEntries
@@ -6735,6 +6772,19 @@ components:
         entry: { $ref: "#/components/schemas/SFTPEntry" }
         contents: { type: string, maxLength: 2097152 }
         revision: { type: string }
+    SFTPMediaTicketRequest:
+      type: object
+      additionalProperties: false
+      required: [alias, path]
+      properties:
+        alias: { type: string, minLength: 1, description: "An SSH alias, or sshc://local for the engine's own disk" }
+        path: { type: string, minLength: 1 }
+    SFTPMediaTicket:
+      type: object
+      additionalProperties: false
+      required: [ticket]
+      properties:
+        ticket: { type: string, minLength: 1 }
     SFTPSaveTextRequest:
       type: object
       additionalProperties: false

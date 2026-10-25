@@ -1,5 +1,7 @@
 import { Suspense, lazy } from "react";
 import { useTranslate } from "../i18n/context";
+import { FilePreviewMedia } from "./FilePreviewMedia";
+import { FilePreviewRefusal } from "./FilePreviewRefusal";
 import { loadMonacoEditor } from "./loadMonacoEditor";
 import type { FilePreviewState } from "./useFilePreview";
 
@@ -14,8 +16,7 @@ function ignoreEdit() {}
 // colours as when they are edited. Markdown stays source: rendering it would
 // need a renderer this preview does not otherwise need.
 //
-// onDownload, when given, is offered under a refusal: a file that cannot be
-// shown here is still one click from being saved.
+// onDownload, when given, is offered under a refusal (FilePreviewRefusal).
 export function FilePreviewBody({ preview, path, name, onDownload }: {
   preview: FilePreviewState;
   path: string;
@@ -36,16 +37,9 @@ export function FilePreviewBody({ preview, path, name, onDownload }: {
           <MonacoEditor path={path} value={preview.contents} onChange={ignoreEdit} readOnly />
         </Suspense>
       );
+    case "media":
+      return <FilePreviewMedia key={preview.url} element={preview.element} url={preview.url} name={name} onDownload={onDownload} />;
     case "unavailable":
-      return (
-        <div className="grid justify-items-start gap-3">
-          <p className="text-sm text-ink-muted">{t(preview.reason)}</p>
-          {onDownload === undefined ? null : (
-            <button type="button" className="min-h-11 rounded-md border border-control-line px-3 text-sm hover:bg-select-fill md:min-h-8" onClick={onDownload}>
-              {t("sftp.download")}
-            </button>
-          )}
-        </div>
-      );
+      return <FilePreviewRefusal reason={preview.reason} onDownload={onDownload} />;
   }
 }

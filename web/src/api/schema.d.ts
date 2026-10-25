@@ -2100,6 +2100,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/media-tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Lets the preview's audio or video player read one file. The player cannot send the CSRF header, so the ticket on the media URL stands in for it, for this browser session only. */
+        post: operations["issueSFTPMediaTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/media-tickets/{ticket}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revokeSFTPMediaTicket"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/media/{ticket}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Audio or video bytes for the preview's player, read only in the ranges asked for. The only API read that needs no CSRF header; the ticket replaces it. */
+        get: operations["streamSFTPMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/local/entries": {
         parameters: {
             query?: never;
@@ -4446,6 +4496,14 @@ export interface components {
             entry: components["schemas"]["SFTPEntry"];
             contents: string;
             revision: string;
+        };
+        SFTPMediaTicketRequest: {
+            /** @description An SSH alias, or sshc://local for the engine's own disk */
+            alias: string;
+            path: string;
+        };
+        SFTPMediaTicket: {
+            ticket: string;
         };
         SFTPSaveTextRequest: {
             contents: string;
@@ -9208,6 +9266,105 @@ export interface operations {
                 content?: never;
             };
             422: components["responses"]["Problem"];
+        };
+    };
+    issueSFTPMediaTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPMediaTicketRequest"];
+            };
+        };
+        responses: {
+            /** @description Ticket for /api/v1/sftp/media/{ticket} */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPMediaTicket"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            415: components["responses"]["Problem"];
+        };
+    };
+    revokeSFTPMediaTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticket: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked, or already unknown */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    streamSFTPMedia: {
+        parameters: {
+            query?: never;
+            header?: {
+                Range?: string;
+            };
+            path: {
+                ticket: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The whole file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/*": string;
+                    "video/*": string;
+                };
+            };
+            /** @description The requested range */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/*": string;
+                    "video/*": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            /** @description The requested range is outside the file */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            502: components["responses"]["Problem"];
         };
     };
     listLocalSFTPEntries: {

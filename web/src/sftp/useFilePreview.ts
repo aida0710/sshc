@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { failureCode } from "../api/client";
 import type { MessageKey } from "../i18n/messages";
 import { sftpApi } from "./api";
+import { playableMediaKind, type PlayableMediaKind } from "./playableMedia";
 
 export type FilePreviewState =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "image"; url: string }
   | { kind: "text"; contents: string }
+  | { kind: "media"; element: PlayableMediaKind; url: string }
   | { kind: "unavailable"; reason: MessageKey };
 
 // A data: URL keeps the image inside the policy the app already ships;
@@ -34,8 +36,60 @@ function unavailableReason(error: unknown): MessageKey {
   }
 }
 
-// useFilePreview reads the file at path on alias as an image, or as text when
-// the engine says the bytes are not an image. A null path reads nothing.
+type ShowPreview = (preview: FilePreviewState) => void;
+
+// The player gets a ticket, which lives as long as the player may ask for more
+// of the file. The returned function stops the preview and revokes it.
+function startMediaPreview({ alias, path, element, show }: { alias: string; path: string; element: PlayableMediaKind; show: ShowPreview }): () => void {
+  let active = true;
+  let ticket: string | null = null;
+  void sftpApi.issueMediaTicket(alias, path).then((issued) => {
+    ticket = issued;
+    if (!active) {
+      void sftpApi.revokeMediaTicket(issued).catch(() => undefined);
+      return;
+    }
+    show({ kind: "media", element, url: sftpApi.mediaURL(issued) });
+  }, (error: unknown) => {
+    if (active) show({ kind: "unavailable", reason: unavailableReason(error) });
+  });
+  return () => {
+    active = false;
+    if (ticket !== null) void sftpApi.revokeMediaTicket(ticket).catch(() => undefined);
+  };
+}
+
+// Any other file is read as an image, or as text when the engine says the
+// bytes are not an image. The returned function stops the preview.
+function startFilePreview({ alias, path, show }: { alias: string; path: string; show: ShowPreview }): () => void {
+  let active = true;
+  void (async () => {
+    try {
+      const previewed = await sftpApi.previewFile(alias, path);
+      const url = await dataURL(previewed.blob);
+      if (active) show({ kind: "image", url });
+      return;
+    } catch (error) {
+      if (!active) return;
+      // Anything but "these bytes are not an image" is final. Only that
+      // answer is worth spending a second request on text.
+      if (failureCode(error) !== "sftp_preview_type") {
+        show({ kind: "unavailable", reason: unavailableReason(error) });
+        return;
+      }
+    }
+    try {
+      const file = await sftpApi.readText(alias, path);
+      if (active) show({ kind: "text", contents: file.contents });
+    } catch (error) {
+      if (active) show({ kind: "unavailable", reason: unavailableReason(error) });
+    }
+  })();
+  return () => { active = false; };
+}
+
+// useFilePreview shows the file at path on alias: audio and video play, and
+// other files are read as an image or as text. A null path reads nothing.
 export function useFilePreview(alias: string, path: string | null): FilePreviewState {
   const [preview, setPreview] = useState<FilePreviewState>({ kind: "idle" });
 
@@ -44,34 +98,11 @@ export function useFilePreview(alias: string, path: string | null): FilePreviewS
       setPreview({ kind: "idle" });
       return;
     }
-    let active = true;
     setPreview({ kind: "loading" });
-    void (async () => {
-      try {
-        const previewed = await sftpApi.previewFile(alias, path);
-        const url = await dataURL(previewed.blob);
-        if (!active) return;
-        setPreview({ kind: "image", url });
-        return;
-      } catch (error) {
-        if (!active) return;
-        // Anything but "these bytes are not an image" is final. Only that
-        // answer is worth spending a second request on text.
-        if (failureCode(error) !== "sftp_preview_type") {
-          setPreview({ kind: "unavailable", reason: unavailableReason(error) });
-          return;
-        }
-      }
-      try {
-        const file = await sftpApi.readText(alias, path);
-        if (!active) return;
-        setPreview({ kind: "text", contents: file.contents });
-      } catch (error) {
-        if (!active) return;
-        setPreview({ kind: "unavailable", reason: unavailableReason(error) });
-      }
-    })();
-    return () => { active = false; };
+    const element = playableMediaKind(path);
+    return element === null
+      ? startFilePreview({ alias, path, show: setPreview })
+      : startMediaPreview({ alias, path, element, show: setPreview });
   }, [alias, path]);
 
   return preview;
