@@ -9,8 +9,10 @@ import (
 	"path/filepath"
 )
 
-// The tab identity cannot collide with an SSH alias, which rejects ':' and '/'.
-const localComparisonAlias = "sshc://local"
+// LocalAlias names the engine's own disk where an alias is expected, as the
+// web client's local tab does. It cannot collide with an SSH alias, which
+// rejects ':' and '/'.
+const LocalAlias = "sshc://local"
 
 // Small batches bound listing memory and let cancellation interrupt large directories.
 const localComparisonBatchSize = 128
@@ -29,7 +31,7 @@ type localComparisonWalker struct {
 }
 
 func cleanComparisonPath(alias, value string) (string, error) {
-	if alias == localComparisonAlias {
+	if alias == LocalAlias {
 		return cleanLocalPath(value)
 	}
 	return cleanPublicPath(value, true)

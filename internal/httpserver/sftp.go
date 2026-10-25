@@ -18,6 +18,8 @@ type SFTPHandlers struct {
 	Actions   ActionHandlers
 	// Attempts は、一覧の要求が張る接続の段階と接続ログを、要求が返る前に読めるよう預かる。
 	Attempts *connectionattempt.Registry
+	// MediaTickets は、プレビューの再生部品が CSRF の見出し無しで読める音声・動画を預かる。
+	MediaTickets *mediaTickets
 }
 
 func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
@@ -35,6 +37,9 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.PUT("/api/v1/sftp/local/text", handlers.SaveLocalText)
 	engine.GET("/api/v1/sftp/local/preview", handlers.PreviewLocal)
 	engine.GET("/api/v1/sftp/local/download", handlers.DownloadLocal)
+	engine.POST("/api/v1/sftp/media-tickets", handlers.IssueMediaTicket)
+	engine.DELETE("/api/v1/sftp/media-tickets/:ticket", handlers.RevokeMediaTicket)
+	engine.GET(sftpMediaRoute, handlers.StreamMedia)
 	engine.POST("/api/v1/sftp/local/directories", handlers.MkdirLocal)
 	engine.POST("/api/v1/sftp/local/rename", handlers.RenameLocal)
 	engine.POST("/api/v1/sftp/local/delete-plan", handlers.PlanLocalDelete)

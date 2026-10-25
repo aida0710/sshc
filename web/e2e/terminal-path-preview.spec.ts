@@ -156,6 +156,55 @@ test("previews text, SVG and unsupported files the shell printed, and downloads 
   await expectSingleLineLabels(page, bundle);
 });
 
+// One second of silence as 8 kHz, 8-bit mono PCM: small, and every browser
+// decodes WAV without a codec of its own.
+function silentWAV(): Buffer {
+  const samples = 8000;
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + samples, 4);
+  header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(8000, 24);
+  header.writeUInt32LE(8000, 28);
+  header.writeUInt16LE(1, 32);
+  header.writeUInt16LE(8, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(samples, 40);
+  return Buffer.concat([header, Buffer.alloc(samples, 0x80)]);
+}
+
+test("plays audio the shell printed and offers the download for a video the browser cannot play", async ({ page, installation }) => {
+  const takePath = join(installation.home, "take.wav");
+  const clipPath = join(installation.home, "clip.mov");
+  test.skip(!takePath.startsWith("/"), "terminal paths are detected only when they start with /");
+  await writeFile(takePath, silentWAV());
+  await writeFile(clipPath, Buffer.from("not a movie"));
+  const mediaRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/v1/sftp/media/")) mediaRequests.push(request.headers()["range"] ?? "");
+  });
+  await mockShellPrinting(page, [`Recorded \x1b[36m${takePath}\x1b[0m`, `Rendered \x1b[36m${clipPath}\x1b[0m`].join("\r\n"));
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+
+  await previewPrintedPath(page, "take.wav");
+  const take = page.getByRole("dialog", { name: takePath });
+  const player = take.locator("audio");
+  await expect(player).toBeVisible();
+  // The engine answered the player's range requests well enough to read the length.
+  await expect.poll(() => player.evaluate((element: HTMLAudioElement) => element.duration)).toBeCloseTo(1, 1);
+  expect(mediaRequests.length).toBeGreaterThan(0);
+  if (visualDirectory !== undefined) await page.screenshot({ path: join(visualDirectory, "terminal-audio-preview.png") });
+
+  await take.getByRole("button", { name: "Next", exact: true }).click();
+  const clip = page.getByRole("dialog", { name: clipPath });
+  await expect(clip.getByText("This browser can't play this file.")).toBeVisible();
+  await expect(clip.getByRole("button", { name: "Download", exact: true })).toHaveCount(2);
+});
+
 test("previews an image a real shell printed a path relative to its directory", async ({ page, installation }) => {
   test.skip(process.platform !== "linux", "the engine reads the shell's directory from /proc");
   await mkdir(join(installation.home, "shots"), { recursive: true });

@@ -55,7 +55,7 @@ func newLocalMutationHTTPFixture(t *testing.T) localMutationHTTPFixture {
 	}
 	engine := echo.New()
 	engine.Use((Security{ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: sessions, Unlocked: alwaysUnlocked}).Middleware)
-	registerSFTPRoutes(engine, SFTPHandlers{Service: service, Transfers: transfers, Actions: ActionHandlers{Sessions: sessions}})
+	registerSFTPRoutes(engine, SFTPHandlers{Service: service, Transfers: transfers, Actions: ActionHandlers{Sessions: sessions}, MediaTickets: &mediaTickets{}})
 	return localMutationHTTPFixture{engine: engine, credentials: credentials, directory: directory}
 }
 
