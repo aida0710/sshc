@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { useTranslate } from "../i18n/context";
+import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FilePreviewMedia } from "./FilePreviewMedia";
 import { FilePreviewRefusal } from "./FilePreviewRefusal";
 import { loadMonacoEditor } from "./loadMonacoEditor";
@@ -23,17 +23,16 @@ export function FilePreviewBody({ preview, path, name, onDownload }: {
   name: string;
   onDownload?: () => void;
 }) {
-  const t = useTranslate();
   switch (preview.kind) {
     case "idle":
       return null;
     case "loading":
-      return <p className="text-sm text-ink-muted">{t("sftp.previewLoading")}</p>;
+      return <FilePreviewLoading />;
     case "image":
       return <img src={preview.url} alt={name} className="mx-auto max-h-full max-w-full object-contain" />;
     case "text":
       return (
-        <Suspense fallback={<p className="text-sm text-ink-muted">{t("sftp.editorLoading")}</p>}>
+        <Suspense fallback={<FilePreviewLoading />}>
           <MonacoEditor path={path} value={preview.contents} onChange={ignoreEdit} readOnly />
         </Suspense>
       );

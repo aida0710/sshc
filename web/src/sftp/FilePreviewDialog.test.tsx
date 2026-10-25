@@ -148,6 +148,33 @@ describe("FilePreviewDialog", () => {
     expect(sftpApi.revokeMediaTicket).toHaveBeenCalledWith("ticket-1");
   });
 
+  it("says it is loading until the file has been read", async () => {
+    let finish: (value: Awaited<ReturnType<typeof sftpApi.previewFile>>) => void = () => undefined;
+    vi.mocked(sftpApi.previewFile).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    renderDialog("/srv/slow.png");
+
+    expect(screen.getByRole("status").textContent).toBe("Loading preview…");
+    finish(png);
+    await screen.findByRole("img", { name: "slow.png" });
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("says the video is loading until its first frame, and again while it waits after a seek", async () => {
+    vi.mocked(sftpApi.issueMediaTicket).mockResolvedValue("ticket-3");
+    vi.mocked(sftpApi.revokeMediaTicket).mockResolvedValue();
+    renderDialog("/srv/long.mp4");
+    await vi.waitFor(() => expect(document.querySelector("video")).not.toBeNull());
+    const video = document.querySelector("video")!;
+
+    expect(screen.getByRole("status")).toBeTruthy();
+    fireEvent.loadedData(video);
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.seeking(video);
+    expect(screen.getByRole("status")).toBeTruthy();
+    fireEvent.seeked(video);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("offers the download when the browser cannot play the video", async () => {
     vi.mocked(sftpApi.issueMediaTicket).mockResolvedValue("ticket-2");
     vi.mocked(sftpApi.revokeMediaTicket).mockResolvedValue();
