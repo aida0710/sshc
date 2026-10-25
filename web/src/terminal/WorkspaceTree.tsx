@@ -165,7 +165,7 @@ export function WorkspaceTree({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center pr-1">
-        <span aria-hidden="true" className="block grow px-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-faint">
+        <span aria-hidden="true" className="block grow px-2 text-xs text-ink-faint">
           {t("workspace.heading")}
         </span>
         <button
@@ -241,7 +241,7 @@ export function WorkspaceTree({
         type="button"
         disabled={!canOpenSession}
         onClick={() => setPickerWorkspace(newSessionWorkspace)}
-        className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ink hover:bg-hover"
+        className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-accent hover:bg-hover"
       >
         <Icon name="plus" className="size-3.5" aria-hidden="true" />
         {t("terminal.newSession")}

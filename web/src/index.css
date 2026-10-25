@@ -10,26 +10,28 @@
   }
 }
 @custom-variant active (&:active:where(:not(:disabled)));
-:root {
+/* [data-theme="light"] は、ダークの画面の中にライトの見本を描くとき（設定のテーマの見本）にも使う。 */
+:root,
+[data-theme="light"] {
   color-scheme: light;
 
-  --ui-canvas: #f4f4f3;
-  --ui-sidebar: #eeeeec;
-  --ui-tree: #f7f7f5;
-  --ui-toolbar: #f0f0ee;
+  --ui-canvas: #e9ebef;
+  --ui-sidebar: #ffffff;
+  --ui-tree: #f7f8fa;
+  --ui-toolbar: #ffffff;
   --ui-card: #ffffff;
-  --ui-surface: #e8e9e7;
-  --ui-surface-subtle: #f7f7f6;
-  --ui-line: #d6d8d5;
-  --ui-hairline: #e9eae7;
+  --ui-surface: #e4e7ec;
+  --ui-surface-subtle: #f4f5f8;
+  --ui-line: #d3d7de;
+  --ui-hairline: #e6e8ec;
   --ui-control: #ffffff;
   --ui-control-line: #8c949a;
-  --ui-hover: #e9eae8;
-  --ui-select-fill: #e8edf4;
-  --ui-ink: #24282c;
-  --ui-ink-muted: #555d64;
-  --ui-ink-faint: #5b646d;
-  --ui-accent: #365f9d;
+  --ui-hover: #eef0f4;
+  --ui-select-fill: #eeecfa;
+  --ui-ink: #1f2326;
+  --ui-ink-muted: #4f575e;
+  --ui-ink-faint: #5f676e;
+  --ui-accent: #6550d0;
   --ui-accent-ink: #ffffff;
   --ui-notice: #fff6df;
   --ui-notice-line: #efd08b;
@@ -40,10 +42,11 @@
   --ui-code-fg: #d8dfe4;
   --ui-connect-mark: #596671;
   --ui-connect-star: #8b6a19;
-  --ui-brand-background: #252829;
-  --ui-brand-mark: #e3e5e5;
-  --ui-brand-cursor: #a4aaac;
+  --ui-brand-background: var(--ui-accent);
+  --ui-brand-mark: var(--ui-accent-ink);
+  --ui-brand-cursor: color-mix(in srgb, var(--ui-accent-ink) 70%, var(--ui-accent));
   --ui-card-shadow: 0 1px 2px rgb(20 24 27 / 0.06);
+  --ui-pane-shadow: 0 6px 20px rgb(20 24 40 / 0.08);
   --ui-skeleton: #e1e3e1;
   --ui-skeleton-highlight: #f7f7f6;
   --ui-term-bg: #ffffff;
@@ -71,24 +74,24 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --ui-canvas: #121416;
-  --ui-sidebar: #1a1c1f;
-  --ui-tree: #17191c;
-  --ui-toolbar: #1c1f22;
-  --ui-card: #222528;
-  --ui-surface: #2c3034;
-  --ui-surface-subtle: #1b1e21;
-  --ui-line: #3b4045;
-  --ui-hairline: #2e3337;
-  --ui-control: #1a1d20;
+  --ui-canvas: #0b0c0f;
+  --ui-sidebar: #15171b;
+  --ui-tree: #121418;
+  --ui-toolbar: #15171b;
+  --ui-card: #1c1f24;
+  --ui-surface: #262a30;
+  --ui-surface-subtle: #17191d;
+  --ui-line: #2c3138;
+  --ui-hairline: #22262b;
+  --ui-control: #1a1d22;
   --ui-control-line: #687076;
-  --ui-hover: #2d3135;
-  --ui-select-fill: #2c3643;
-  --ui-ink: #e5e7e8;
-  --ui-ink-muted: #b9bfc4;
-  --ui-ink-faint: #a1a9af;
-  --ui-accent: #a4bbdc;
-  --ui-accent-ink: #17222f;
+  --ui-hover: #21252a;
+  --ui-select-fill: #2d2d3d;
+  --ui-ink: #e8e9eb;
+  --ui-ink-muted: #b6bbc1;
+  --ui-ink-faint: #9aa0a7;
+  --ui-accent: #b5a8ff;
+  --ui-accent-ink: #15122b;
   --ui-notice: rgb(255 159 10 / 0.13);
   --ui-notice-line: rgb(255 159 10 / 0.32);
   --ui-notice-ink: #f0b429;
@@ -96,10 +99,11 @@
   --ui-live: #54c69a;
   --ui-code-bg: #0d0f10;
   --ui-code-fg: #e2e3e4;
-  --ui-brand-background: #292c2f;
-  --ui-brand-mark: #e1e3e4;
-  --ui-brand-cursor: #92989e;
+  --ui-brand-background: var(--ui-accent);
+  --ui-brand-mark: var(--ui-accent-ink);
+  --ui-brand-cursor: color-mix(in srgb, var(--ui-accent-ink) 70%, var(--ui-accent));
   --ui-card-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
+  --ui-pane-shadow: 0 10px 28px rgb(0 0 0 / 0.38);
   --ui-skeleton: #2c3034;
   --ui-skeleton-highlight: #3e444a;
 
@@ -123,6 +127,77 @@
   --ui-term-bright-magenta: #e9b3f7;
   --ui-term-bright-cyan: #8fe6ee;
   --ui-term-bright-white: #ffffff;
+}
+
+
+/* さし色。名前は metadata の appearance.accent（設定の Appearance で選ぶ）。属性が無い間（ロック
+   画面、metadata を読む前）は上の既定の薄紫になる。選択中の背景はさし色を薄く混ぜた色を固定の
+   値で持つ（web/e2e/appearance.spec.ts がこの値でコントラストを測る）。ライトでは白い文字を載せ
+   ても読める濃さの版を使う。橙・緑・赤は未読の通知・接続済み・エラーの色なので選べない。
+   設定の見本の丸も、丸に data-accent を付けてこの値で塗る（色の値を画面のコードに二重に持たない）。 */
+[data-accent="lavender"] {
+  --ui-accent: #6550d0;
+  --ui-accent-ink: #ffffff;
+  --ui-select-fill: #eeecfa;
+}
+
+[data-accent="blue"] {
+  --ui-accent: #2f5fb3;
+  --ui-accent-ink: #ffffff;
+  --ui-select-fill: #e8edf7;
+}
+
+[data-accent="sky"] {
+  --ui-accent: #0a6f9c;
+  --ui-accent-ink: #ffffff;
+  --ui-select-fill: #e4eff4;
+}
+
+[data-accent="pink"] {
+  --ui-accent: #b03a72;
+  --ui-accent-ink: #ffffff;
+  --ui-select-fill: #f6e9ef;
+}
+
+[data-accent="mono"] {
+  --ui-accent: #24282c;
+  --ui-accent-ink: #ffffff;
+  --ui-select-fill: #e7e7e8;
+}
+
+[data-theme="dark"][data-accent="lavender"],
+[data-theme="dark"] [data-accent="lavender"] {
+  --ui-accent: #b5a8ff;
+  --ui-accent-ink: #15122b;
+  --ui-select-fill: #2d2d3d;
+}
+
+[data-theme="dark"][data-accent="blue"],
+[data-theme="dark"] [data-accent="blue"] {
+  --ui-accent: #8fb3ff;
+  --ui-accent-ink: #0d1626;
+  --ui-select-fill: #272e3d;
+}
+
+[data-theme="dark"][data-accent="sky"],
+[data-theme="dark"] [data-accent="sky"] {
+  --ui-accent: #7fd0f5;
+  --ui-accent-ink: #062231;
+  --ui-select-fill: #25333c;
+}
+
+[data-theme="dark"][data-accent="pink"],
+[data-theme="dark"] [data-accent="pink"] {
+  --ui-accent: #f3a5c8;
+  --ui-accent-ink: #2e0f1e;
+  --ui-select-fill: #362c35;
+}
+
+[data-theme="dark"][data-accent="mono"],
+[data-theme="dark"] [data-accent="mono"] {
+  --ui-accent: #eceef0;
+  --ui-accent-ink: #111214;
+  --ui-select-fill: #2f3135;
 }
 
 @theme inline {
@@ -157,6 +232,16 @@
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
+  --radius-pane: 11px;
+  --shadow-pane: var(--ui-pane-shadow);
+}
+
+/* ページの左上に、さし色をうっすら入れる。サイドバーとターミナルの板は不透明なので、見えるのは
+   板の間と周りだけになる。 */
+.sshc-app {
+  background:
+    radial-gradient(900px 520px at 0% 0%, color-mix(in srgb, var(--ui-accent) 9%, transparent) 0%, transparent 70%),
+    var(--ui-canvas);
 }
 
 :root {

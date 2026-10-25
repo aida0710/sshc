@@ -1213,6 +1213,15 @@ export const ja = {
   "shell.themeSystem": "システムに合わせる",
   "shell.themeLight": "ライト",
   "shell.themeDark": "ダーク",
+  "appearance.heading": "Appearance",
+  "appearance.theme": "テーマ",
+  "appearance.accent": "さし色",
+  "appearance.accent.lavender": "薄紫",
+  "appearance.accent.blue": "青",
+  "appearance.accent.sky": "水色",
+  "appearance.accent.pink": "ピンク",
+  "appearance.accent.mono": "モノクロ",
+  "appearance.accentSaveFailed": "さし色を保存できませんでした。もう一度選んでください。",
 
   "section.home": "Home",
   "section.about": "About sshc",
@@ -1279,6 +1288,8 @@ export const ja = {
   "settings.heading": "Settings",
   "settings.pageDescription":
     "ターミナルの動作、sshcの起動設定、このマシンに保存するデータの暗号化を設定します。",
+  "settings.appearanceDescription":
+    "テーマとさし色を設定します。テーマはこのブラウザに、さし色はsshcに保存され、同期されます。",
   "settings.engineDescription":
     "このマシンのsshcエンジンの待受ポートとVaultの自動ロックを設定します。この設定は同期されません。",
   "settings.terminalDescription":

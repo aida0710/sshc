@@ -1213,6 +1213,15 @@ export const en = {
   "shell.themeSystem": "System",
   "shell.themeLight": "Light",
   "shell.themeDark": "Dark",
+  "appearance.heading": "Appearance",
+  "appearance.theme": "Theme",
+  "appearance.accent": "Accent colour",
+  "appearance.accent.lavender": "Lavender",
+  "appearance.accent.blue": "Blue",
+  "appearance.accent.sky": "Sky",
+  "appearance.accent.pink": "Pink",
+  "appearance.accent.mono": "Mono",
+  "appearance.accentSaveFailed": "The accent colour could not be saved. Choose it again.",
 
   "section.home": "Home",
   "section.about": "About sshc",
@@ -1279,6 +1288,8 @@ export const en = {
   "settings.heading": "Settings",
   "settings.pageDescription":
     "Configure embedded terminals, sshc's lifecycle, and protection for this machine's encrypted data.",
+  "settings.appearanceDescription":
+    "Set the theme and the accent colour. The theme stays in this browser; the accent colour is saved in sshc and synced.",
   "settings.engineDescription":
     "Configure this machine's sshc engine port and automatic vault locking. These settings are not synced.",
   "settings.terminalDescription":

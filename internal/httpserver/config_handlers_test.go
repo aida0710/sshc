@@ -160,12 +160,37 @@ func TestEngineSettingsStoreTheVaultAutoLockChoice(t *testing.T) {
 	}
 }
 
+func TestTheAccentIsSavedAndAnUnknownOneIsRefused(t *testing.T) {
+	harness := newConfigHarness(t)
+
+	saved := harness.call(t, http.MethodPut, "/api/v1/metadata/appearance", map[string]any{"accent": "blue"}, true, true)
+	if saved.Code != http.StatusOK {
+		t.Fatalf("save = %d, body %s", saved.Code, saved.Body.String())
+	}
+	read := harness.call(t, http.MethodGet, "/api/v1/metadata", nil, true, true)
+	var metadata struct {
+		Appearance *api.AppearanceSettings `json:"appearance"`
+	}
+	if err := json.Unmarshal(read.Body.Bytes(), &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if metadata.Appearance == nil || metadata.Appearance.Accent == nil || *metadata.Appearance.Accent != api.Blue {
+		t.Fatalf("metadata appearance = %#v, want accent blue; read %d", metadata.Appearance, read.Code)
+	}
+
+	refused := harness.call(t, http.MethodPut, "/api/v1/metadata/appearance", map[string]any{"accent": "orange"}, true, true)
+	if refused.Code != http.StatusBadRequest {
+		t.Fatalf("unknown accent = %d, want 400; body %s", refused.Code, refused.Body.String())
+	}
+}
+
 func TestTerminalAndEngineSettingsReturnTheirWireSaveResult(t *testing.T) {
 	harness := newConfigHarness(t)
 	for name, target := range map[string]string{
-		"terminal":  "/api/v1/metadata/terminal",
-		"engine":    "/api/v1/metadata/engine",
-		"shortcuts": "/api/v1/metadata/shortcuts",
+		"terminal":   "/api/v1/metadata/terminal",
+		"engine":     "/api/v1/metadata/engine",
+		"shortcuts":  "/api/v1/metadata/shortcuts",
+		"appearance": "/api/v1/metadata/appearance",
 	} {
 		t.Run(name, func(t *testing.T) {
 			body := map[string]any{}

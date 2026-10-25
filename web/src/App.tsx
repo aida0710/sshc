@@ -12,6 +12,7 @@ import type { CreationPrerequisite } from "./connections/CreateConnectionModal";
 import { LockScreen } from "./secrets/LockScreen";
 import { useLanguage } from "./i18n/context";
 import { InspectorPane, InspectorToggle } from "./ui/Inspector";
+import { useAccent } from "./theme/accentContext";
 import { useTheme } from "./theme/context";
 import { usePolling } from "./ui/usePolling";
 import { RouteSkeleton } from "./ui/RouteSkeleton";
@@ -127,6 +128,11 @@ export function App({
       vaultRevision,
     };
   }, [runTargets.selected, vaultRevision]);
+  // The accent is kept in this machine's metadata, which can be read once the engine is ready.
+  const { loadAccent } = useAccent();
+  useEffect(() => {
+    if (state === "ready") loadAccent();
+  }, [state, loadAccent]);
   const terminalSessions = useTerminalSessions(runTargetApis.sessions, t, state === "ready");
   const terminalWorkspaces = useTerminalWorkspaces({
     sessions: terminalSessions.sessions,

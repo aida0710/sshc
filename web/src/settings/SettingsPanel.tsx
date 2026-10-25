@@ -4,6 +4,7 @@ import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault"
 import { useTranslate } from "../i18n/context";
 import { PageHeader } from "../ui/page";
 import { Card } from "../ui/surface";
+import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
 import { SessionSettingsSection, type SessionSettingsState } from "./SessionSettingsSection";
 import { SFTPSettingsSection } from "./SFTPSettingsSection";
 import { EngineSettingsSection } from "./EngineSettingsSection";
@@ -52,6 +53,7 @@ export function SettingsPanel({
       <PageHeader title={t(pageTitle)} description={t(pageDescription)} />
 
       <Card radius="md">
+        {shows("Appearance") ? <AppearanceSettingsSection showHeading={all} /> : null}
         {shows("Shortcuts") ? (
           <SettingsSection id="settings-shortcuts" label={t("shortcuts.heading")} icon="settings" showHeading={all}>
             <KeyConfig />

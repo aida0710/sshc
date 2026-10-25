@@ -5,7 +5,6 @@ import { useBindings } from "../keyconfig/bindings";
 import {
   useSyncExternalStore,
   type MouseEvent,
-  type ReactNode,
   type RefObject,
 } from "react";
 import { WorkspaceTree } from "../terminal/WorkspaceTree";
@@ -165,11 +164,11 @@ export function AppNavigation({
       </button>
 
       <div className="shrink-0">
-        <NavigationGroup label={t("shell.navStart")}>
+        <ul aria-label={t("shell.navStart")} className="mb-1 md:mb-1.5">
           {startSections.map((name) => (
             <li key={name}>{navigationLink(name)}</li>
           ))}
-        </NavigationGroup>
+        </ul>
       </div>
 
       <div className="mb-1 mt-1 shrink-0 border-b border-line pb-2">
@@ -281,19 +280,5 @@ function NavigationLink({
         />
       ) : null}
     </a>
-  );
-}
-
-function NavigationGroup({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="mb-1 md:mb-1.5">
-      <span
-        aria-hidden="true"
-        className="block px-2 pb-0.5 pt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-faint"
-      >
-        {label}
-      </span>
-      <ul aria-label={label}>{children}</ul>
-    </div>
   );
 }

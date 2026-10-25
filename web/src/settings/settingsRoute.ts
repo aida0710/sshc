@@ -2,6 +2,7 @@ import type { MessageKey } from "../i18n/messages";
 import type { IconName } from "../ui/icons";
 
 export const settingsPages = [
+  "Appearance",
   "Engine",
   "Terminal",
   "SFTP",
@@ -17,6 +18,12 @@ export const settingsPageMeta: Record<
   SettingsPage,
   { path: string; label: MessageKey; description: MessageKey; icon: IconName }
 > = {
+  Appearance: {
+    path: "/settings/appearance",
+    label: "appearance.heading",
+    description: "settings.appearanceDescription",
+    icon: "appearance",
+  },
   Engine: {
     path: "/settings/engine",
     label: "engine.heading",

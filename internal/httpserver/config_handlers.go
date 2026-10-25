@@ -41,6 +41,7 @@ func registerConfigRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.GET("/api/v1/metadata", handlers.Metadata)
 	engine.PUT("/api/v1/metadata/shortcuts", handlers.SetShortcuts)
 	engine.PUT("/api/v1/metadata/terminal", handlers.SetTerminal)
+	engine.PUT("/api/v1/metadata/appearance", handlers.SetAppearance)
 	engine.GET("/api/v1/metadata/engine", handlers.Engine)
 	engine.PUT("/api/v1/metadata/engine", handlers.SetEngine)
 	registerBackgroundRoutes(engine, handlers)
@@ -241,6 +242,29 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	// これはこのアプリケーション自身の操作であり、断ればユーザーが直せる。
 	case errors.Is(err, application.ErrMetadataTerminal):
 		return problem(c, http.StatusBadRequest, "terminal_limits_out_of_range")
+	case err != nil:
+		return serviceProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, api.SettingsSaveResult{
+		TransactionId: result.TransactionID,
+		Written:       result.Written,
+	})
+}
+
+// SetAppearance は、アプリのさし色を書き戻す。テーマはブラウザだけに置くので、ここには来ない。
+func (h ConfigHandlers) SetAppearance(c *echo.Context) error {
+	var request api.AppearanceSettings
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	settings := application.AppearanceSettings{}
+	if request.Accent != nil {
+		settings.Accent = string(*request.Accent)
+	}
+	result, err := h.Service.SetAppearanceSettings(settings)
+	switch {
+	case errors.Is(err, application.ErrMetadataAppearance):
+		return problem(c, http.StatusBadRequest, "invalid_request")
 	case err != nil:
 		return serviceProblem(c, err)
 	}

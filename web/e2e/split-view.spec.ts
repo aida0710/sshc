@@ -310,15 +310,16 @@ test("limits split view to four panes and shows the Japanese desktop layout", as
   await changeDisplayLanguage(page, "ja");
   await expect(page.getByRole("navigation", { name: "メインナビゲーション" })).toBeVisible();
   await waitForTerminalLayout(page);
-  // The existing 32px header plus the pane border must remain a single row.
+  // The existing 32px header plus the board's border must remain a single row. The board sits
+  // inside the pane's gap, so it is measured from the board, not the pane.
   const maximumHeaderHeight = 34;
   for (const [index, id] of ids.slice(0, 4).entries()) {
     const terminal = pane(page, id);
     await expect(terminal.getByText(titles[index]!, { exact: true })).toHaveCount(1);
     expect(await terminalHostBottomOverflow(terminal)).toBeLessThanOrEqual(1);
-    const paneBounds = (await terminal.boundingBox())!;
+    const boardBounds = (await terminal.locator("[data-split-view-board]").boundingBox())!;
     const hostBounds = (await terminal.locator("[data-terminal-host]").boundingBox())!;
-    expect(hostBounds.y - paneBounds.y).toBeLessThanOrEqual(maximumHeaderHeight);
+    expect(hostBounds.y - boardBounds.y).toBeLessThanOrEqual(maximumHeaderHeight);
   }
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) await page.screenshot({ path: `${visualDirectory}/split-view-four-panes-ja.png` });
