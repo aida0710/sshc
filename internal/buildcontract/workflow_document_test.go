@@ -21,7 +21,9 @@ type workflowJob struct {
 	Name        string            `yaml:"name"`
 	RunsOn      string            `yaml:"runs-on"`
 	Needs       workflowNames     `yaml:"needs"`
+	If          string            `yaml:"if"`
 	Permissions map[string]string `yaml:"permissions"`
+	Env         map[string]string `yaml:"env"`
 	// Uses は、job 全体を別の workflow（reusable workflow）に任せるときの参照である。
 	Uses     string            `yaml:"uses"`
 	Strategy *workflowStrategy `yaml:"strategy"`
@@ -43,13 +45,14 @@ type workflowMatrixEntry struct {
 }
 
 type workflowStep struct {
-	Name            string         `yaml:"name"`
-	If              string         `yaml:"if"`
-	Uses            string         `yaml:"uses"`
-	Run             string         `yaml:"run"`
-	Shell           string         `yaml:"shell"`
-	With            map[string]any `yaml:"with"`
-	ContinueOnError *bool          `yaml:"continue-on-error"`
+	Name            string            `yaml:"name"`
+	If              string            `yaml:"if"`
+	Uses            string            `yaml:"uses"`
+	Run             string            `yaml:"run"`
+	Shell           string            `yaml:"shell"`
+	Env             map[string]string `yaml:"env"`
+	With            map[string]any    `yaml:"with"`
+	ContinueOnError *bool             `yaml:"continue-on-error"`
 }
 
 // workflowNames は、1つの名前でも名前の並びでも書ける値（on、needs）である。

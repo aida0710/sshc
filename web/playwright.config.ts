@@ -11,6 +11,11 @@ function workerCount(): number {
   return Math.min(process.env.CI ? 8 : 12, Math.max(2, requested));
 }
 
+// browserChannel は、使うブラウザの channel である。CI では runner に最初から入っている
+// Google Chrome（chrome）を使い、Chromium のダウンロードを待たない（ダウンロードが止まって
+// 検査ごと取り消される日があった）。手元では Playwright の Chromium を使う。
+const browserChannel = process.env.SSHC_E2E_BROWSER_CHANNEL || undefined;
+
 // E2E では秘密鍵を表示する操作があるため、trace、動画、スクリーンショットを
 // 保存しない。失敗は assertion とサーバーログから診断する。
 export default defineConfig({
@@ -29,6 +34,7 @@ export default defineConfig({
   reporter: [["list"]],
   use: {
     ...devices["Desktop Chrome"],
+    ...(browserChannel === undefined ? {} : { channel: browserChannel }),
     // Most terminal E2E assertions inspect xterm's DOM rows and selection
     // layer. Run the unsupported-WebGL fallback here; WebGL negotiation,
     // loading, and context-loss fallback have focused unit coverage.
