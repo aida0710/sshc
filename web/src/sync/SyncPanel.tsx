@@ -33,20 +33,19 @@ type SyncPanelProps = { api?: SyncPanelApi };
 function SyncFlowSteps() {
   const t = useTranslate();
   return (
-    <ol
-      aria-label={t("sync.flowHeading")}
-      className="grid overflow-hidden rounded-md border border-line bg-toolbar sm:grid-cols-3"
-    >
+    <ol aria-label={t("sync.flowHeading")} className="grid gap-2 sm:grid-cols-3">
       {["sync.flowBucket", "sync.flowKey", "sync.flowOperate"].map(
         (key, index) => (
+          // The steps show only before sync is set up, so the first one (the bucket) is the one at hand.
           <li
             key={key}
-            className="flex items-center gap-3 border-b border-hairline px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
+            aria-current={index === 0 ? "step" : undefined}
+            className={`flex min-h-11 items-center gap-2.5 rounded-[10px] px-3 text-[13px] ${index === 0 ? "bg-select-fill text-ink" : "bg-well text-ink-muted"}`}
           >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-select-fill font-mono text-xs font-semibold text-accent">
+            <span className={`flex size-[22px] shrink-0 items-center justify-center rounded-full font-mono text-[11.5px] font-semibold ${index === 0 ? "bg-accent text-accent-ink" : "bg-ink/10 text-ink"}`}>
               {index + 1}
             </span>
-            <span className="text-sm text-ink">{t(key as MessageKey)}</span>
+            {t(key as MessageKey)}
           </li>
         ),
       )}

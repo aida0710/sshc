@@ -9,7 +9,7 @@ const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 export function SyncPageFrame({ children }: { children: ReactNode }) {
   const t = useTranslate();
   return (
-    <div className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}>
+    <div className={`flex flex-col gap-[22px] ${mobileTouchTargets}`}>
       <PageHeader title={t("sync.heading")} description={t("sync.pageDescription")} />
       {children}
     </div>
