@@ -3,9 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { HostEntry, Overview } from "../api/config";
-import { ConnectionTree, type HostSelection } from "./ConnectionTree";
+import { ConnectionGroupFacets } from "./ConnectionGroupFacets";
+import { ConnectionTree, type ConnectionTreeProps, type HostSelection, type Scope } from "./ConnectionTree";
 import { dragMimeType, type DragPayload } from "./dragdrop";
 import { emptyMultiSelection } from "./multiSelection";
+import { useConnectionDrag } from "./useConnectionDrag";
 
 function host(path: string, alias: string, group?: string): HostEntry {
   return {
@@ -58,18 +60,40 @@ function transfer(payload: DragPayload) {
   };
 }
 
-describe("ConnectionTree", () => {
+// ConnectionLists puts the list of groups beside the connection list with one drag between them, as the
+// Connections page does.
+function ConnectionLists({
+  overview: shown = overview,
+  onDrop = vi.fn(),
+  movesDisabled = false,
+  ...treeProps
+}: Partial<Omit<ConnectionTreeProps, "drag">> & {
+  onDrop?: (payload: DragPayload, target: string) => void;
+  movesDisabled?: boolean;
+}) {
+  const [scope, setScope] = useState<Scope>({ kind: "all" });
+  const drag = useConnectionDrag({ movesDisabled, groupNames: shown.groups.map((group) => group.name), onDrop });
+  return (
+    <>
+      <ConnectionGroupFacets overview={shown} scope={scope} onScopeChange={setScope} drag={drag} />
+      <ConnectionTree overview={shown} selected={null} onSelect={vi.fn()} scope={scope} onScopeChange={setScope} drag={drag} {...treeProps} />
+    </>
+  );
+}
+
+describe("the connection list and the list of groups", () => {
   it("shows the complete declared hierarchy and ungrouped connections at once", () => {
     render(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
+      <ConnectionLists />,
     );
 
+    const groups = screen.getByRole("navigation", { name: "Groups" });
     const tree = screen.getByRole("navigation", { name: "Connections" });
     expect(within(tree).queryByRole("group", { name: "Arrange connections by" })).not.toBeInTheDocument();
-    expect(within(tree).getByRole("button", { name: "home" })).toBeInTheDocument();
-    expect(within(tree).getByRole("button", { name: "home/eu" })).toBeInTheDocument();
-    expect(within(tree).getByRole("button", { name: "empty" })).toBeInTheDocument();
-    expect(within(tree).getByRole("button", { name: "Ungrouped" })).toBeInTheDocument();
+    expect(within(groups).getByRole("button", { name: "home" })).toBeInTheDocument();
+    expect(within(groups).getByRole("button", { name: "home/eu" })).toBeInTheDocument();
+    expect(within(groups).getByRole("button", { name: "empty" })).toBeInTheDocument();
+    expect(within(groups).getByRole("button", { name: "Ungrouped" })).toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: "nas" })).toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: "eu-api" })).toBeInTheDocument();
     expect(within(tree).getByRole("button", { name: "bastion" })).toBeInTheDocument();
@@ -81,21 +105,21 @@ describe("ConnectionTree", () => {
   it("lets the groups column be resized from the keyboard and remembers the width", () => {
     window.localStorage.removeItem("sshc.connections.groups-width.v1");
     render(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
+      <ConnectionLists />,
     );
 
     const handle = screen.getByRole("separator", { name: "Resize the groups column" });
-    expect(handle).toHaveAttribute("aria-valuenow", "184");
+    expect(handle).toHaveAttribute("aria-valuenow", "220");
     fireEvent.keyDown(handle, { key: "ArrowRight", shiftKey: true });
-    expect(handle).toHaveAttribute("aria-valuenow", "216");
-    expect(window.localStorage.getItem("sshc.connections.groups-width.v1")).toBe("216");
+    expect(handle).toHaveAttribute("aria-valuenow", "252");
+    expect(window.localStorage.getItem("sshc.connections.groups-width.v1")).toBe("252");
     fireEvent.keyDown(handle, { key: "Home" });
     expect(handle).toHaveAttribute("aria-valuenow", "112");
   });
 
   it("keeps pattern rules out of Connections", () => {
     render(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
+      <ConnectionLists />,
     );
 
     expect(screen.queryByRole("button", { name: /Host \*/ })).not.toBeInTheDocument();
@@ -108,7 +132,7 @@ describe("ConnectionTree", () => {
     const orderOverview = { ...overview, hosts: [zeta, alpha], groups: [], metadata: { schemaVersion: 2 } };
     const user = userEvent.setup();
     render(
-      <ConnectionTree overview={orderOverview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
+      <ConnectionLists overview={orderOverview} />,
     );
 
     const order = screen.getByRole("combobox", { name: "Connection order" });
@@ -122,7 +146,7 @@ describe("ConnectionTree", () => {
 
   it("keeps filtering and visible metadata", async () => {
     render(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
+      <ConnectionLists />,
     );
 
     const nas = screen.getByRole("button", { name: "nas" });
@@ -145,7 +169,7 @@ describe("ConnectionTree", () => {
 
     try {
       render(
-        <ConnectionTree overview={repeatedOverview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
+        <ConnectionLists overview={repeatedOverview} />,
       );
 
       const projectedButtons = screen.getAllByRole("button", { name: "shared" });
@@ -166,7 +190,7 @@ describe("ConnectionTree", () => {
   it("filters grouped results by subtree, exact group, and resolved destination", async () => {
     const user = userEvent.setup();
     render(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
+      <ConnectionLists />,
     );
 
     expect(screen.getByText("tester@nas.example")).toBeInTheDocument();
@@ -199,7 +223,7 @@ describe("ConnectionTree", () => {
       group: "home",
     };
     const harness = render(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={onDrop} />,
+      <ConnectionLists onDrop={onDrop} />,
     );
     const source = screen.getByRole("button", { name: "nas" });
     const target = screen.getByRole("button", { name: "empty" });
@@ -211,7 +235,7 @@ describe("ConnectionTree", () => {
 
     onDrop.mockClear();
     harness.rerender(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={onDrop} movesDisabled />,
+      <ConnectionLists onDrop={onDrop} movesDisabled />,
     );
     const disabledSource = screen.getByRole("button", { name: "nas" });
     expect(disabledSource).not.toHaveAttribute("draggable", "true");
@@ -222,10 +246,10 @@ describe("ConnectionTree", () => {
 
   it("outlines the groups a dragged connection can land on, and fills only the one under the pointer", () => {
     render(
-      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
+      <ConnectionLists />,
     );
-    const tree = screen.getByRole("navigation", { name: "Connections" });
-    const groupButton = (name: string) => within(tree).getByRole("button", { name });
+    const groups = screen.getByRole("navigation", { name: "Groups" });
+    const groupButton = (name: string) => within(groups).getByRole("button", { name });
     // 落とし先の見た目は、グループのボタンを包む行に付く。
     const dropZone = (name: string) => groupButton(name).parentElement!;
     const source = screen.getByRole("button", { name: "nas" });
@@ -266,8 +290,7 @@ describe("ConnectionTree", () => {
       const [selected, setSelected] = useState<HostSelection | null>(null);
       const [checked, setChecked] = useState(emptyMultiSelection);
       return (
-        <ConnectionTree
-          overview={overview}
+        <ConnectionLists
           selected={selected}
           onSelect={(chosen) => setSelected(chosen.identity)}
           onDrop={onDrop}

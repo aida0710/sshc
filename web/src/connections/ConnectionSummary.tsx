@@ -80,20 +80,18 @@ export function ConnectionSummary({
   }
 
   return (
-    <section data-connection-summary aria-labelledby="connection-summary-heading" className="shrink-0 border-b border-line pb-4">
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+    <section data-connection-summary aria-labelledby="connection-summary-heading" className="shrink-0">
+      <header className="flex flex-wrap items-center gap-x-2.5 gap-y-3">
+        <OperatingSystemIcon os={state.detail.metadata.os || state.detail.metadata.detectedOS} look="accentTile" />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <OperatingSystemIcon os={state.detail.metadata.os || state.detail.metadata.detectedOS} compact />
-            <h2 id="connection-summary-heading" className="min-w-0 truncate text-xl font-semibold tracking-tight text-ink sm:text-2xl">{summary.alias}</h2>
-            {dirty ? <span className="rounded bg-notice px-2 py-1 text-xs font-medium text-notice-ink">{t("conn.summaryUnsaved")}</span> : null}
+            <h3 id="connection-summary-heading" className="min-w-0 truncate text-base font-semibold text-ink">{summary.alias}</h3>
+            {dirty ? <span className="rounded bg-notice px-2 py-0.5 text-xs font-medium text-notice-ink">{t("conn.summaryUnsaved")}</span> : null}
           </div>
-          <p className="mt-1 break-all font-mono text-sm text-ink-muted">{summary.endpoint}</p>
-          {summary.group === "" ? null : <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-muted"><Icon name="groups" className="size-3.5" /><span className="sr-only">{t("conn.summaryGroup")}: </span>{summary.group}</p>}
+          <p className="break-all font-mono text-[11.5px] text-ink-faint">{summary.endpoint}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button kind="primary" disabled={blocked || connecting || !connectAvailable} aria-describedby={blocked ? reasonId : undefined} onClick={onConnect} className="inline-flex items-center gap-2">
-            <Icon name="terminal" className="size-4" />
+          <Button disabled={blocked || connecting || !connectAvailable} aria-describedby={blocked ? reasonId : undefined} onClick={onConnect}>
             {connecting ? t("conn.opening") : t("conn.connect")}
           </Button>
           <Button
@@ -107,7 +105,8 @@ export function ConnectionSummary({
           </Button>
         </div>
       </header>
-      <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-ink-muted">
+      {summary.group === "" ? null : <p className="mt-2.5 flex items-center gap-1.5 text-xs text-ink-faint"><Icon name="groups" className="size-3.5" /><span className="sr-only">{t("conn.summaryGroup")}: </span>{summary.group}</p>}
+      <dl className="mt-2.5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-ink-faint">
         <div className="min-w-0">
           <dt className={explicitKey ? "mb-0.5 font-medium text-ink-muted" : "sr-only"}>{t("conn.summaryPrivateKey")}</dt>
           <dd className="break-all">{privateKeyText()}</dd>
@@ -121,7 +120,7 @@ export function ConnectionSummary({
           <dd>{accountPasswordText()}</dd>
         </div> : null}
       </dl>
-      {passwordConflict ? <p role="status" className="mt-3 rounded border border-notice-line bg-notice px-3 py-2 text-sm text-notice-ink">{t("conn.summaryPasswordCleanup")}</p> : null}
+      {passwordConflict ? <p role="status" className="mt-3 rounded-[9px] bg-notice px-3 py-2.5 text-[12.5px] text-notice-ink">{t("conn.summaryPasswordCleanup")}</p> : null}
       {blocked ? <p id={reasonId} className="mt-3 text-xs text-notice-ink">{blockedReason()}</p> : null}
     </section>
   );
