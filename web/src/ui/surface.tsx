@@ -7,7 +7,7 @@ import {
   useId,
 } from "react";
 import { describeControl } from "./describeControl";
-import { dangerAction, dangerTextAction, hintText, primaryAction, secondaryAction } from "./form";
+import { dangerAction, dangerTextAction, hintText, primaryAction, secondaryAction, smallSecondaryAction } from "./form";
 import { Spinner } from "./Spinner";
 
 type CardElement = "div" | "section" | "article" | "dl" | "ul";
@@ -152,7 +152,7 @@ export function Segmented<T extends string>({
     <div
       role="group"
       aria-label={label}
-      className="flex overflow-hidden rounded-md border border-line bg-control"
+      className="inline-flex rounded-md border border-line bg-well p-0.5"
     >
       {options.map((option) => (
         <button
@@ -160,9 +160,9 @@ export function Segmented<T extends string>({
           type="button"
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
-          className={`border-r border-line px-2.5 py-1 text-xs transition-colors last:border-r-0 ${
+          className={`h-[26px] rounded-[6px] px-2.5 text-[12.5px] transition-colors ${
             value === option.value
-              ? "bg-select-fill font-medium text-accent"
+              ? "bg-select-fill text-ink"
               : "text-ink-muted hover:bg-hover hover:text-ink"
           }`}
         >
@@ -173,8 +173,11 @@ export function Segmented<T extends string>({
   );
 }
 
-type ButtonProps = {
-  kind?: "primary" | "secondary" | "danger" | "dangerText";
+type ButtonProps = (
+  // small は知らせの中や状態の行の端に置く低いボタン。今は secondary だけにある。
+  | { kind?: "secondary"; small?: boolean }
+  | { kind: "primary" | "danger" | "dangerText"; small?: never }
+) & {
   // busy は、このボタンで始めた処理を待っている間。文言は変えずに回転の印を添え、
   // aria-busy を付けて押せなくする（薄くはしない。index.css の決まり）。
   busy?: boolean;
@@ -183,6 +186,7 @@ type ButtonProps = {
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {
     kind = "secondary",
+    small = false,
     busy = false,
     disabled,
     className = "",
@@ -199,7 +203,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         ? dangerAction
         : kind === "dangerText"
           ? dangerTextAction
-          : secondaryAction;
+          : small
+            ? smallSecondaryAction
+            : secondaryAction;
   // 回転の印と文言を横に並べるため、待っている間だけ flex にする。いつも flex にすると、
   // 幅いっぱいに広げたボタンの文言が左に寄る。
   const busyLayout = busy ? "inline-flex items-center justify-center gap-2" : "";

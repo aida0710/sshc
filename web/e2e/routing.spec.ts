@@ -126,7 +126,7 @@ test("keeps the back destination after rejecting navigation with an unsaved draf
   await page.goBack();
   await expect.poll(historyPoint).toBe(0);
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", level: 2 })).toBeVisible();
 });
 
 test("opens every canonical connection panel URL without starting an operation", async ({
@@ -213,5 +213,5 @@ test("keeps an unknown URL until the person chooses Home", async ({ page, instal
 
   await page.getByRole("link", { name: "Go to Home" }).click();
   expect(new URL(page.url()).pathname).toBe("/");
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", level: 2 })).toBeVisible();
 });

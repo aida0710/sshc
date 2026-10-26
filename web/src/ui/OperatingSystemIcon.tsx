@@ -24,17 +24,28 @@ export const operatingSystems = [
 
 const sources: Record<string, string> = { ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, opensuse, macos, windows, linux, amazonlinux: linux, alpine: linux };
 
-export function OperatingSystemIcon({ os, colour = "", compact = false }: { os?: HostMetadata["os"] | undefined; colour?: string; compact?: boolean }) {
+type OperatingSystemIconProps = {
+  os?: HostMetadata["os"] | undefined;
+  colour?: string;
+  compact?: boolean;
+  // tile puts the mark on a small square in the accent colour, as on the Home cards.
+  tile?: boolean;
+};
+
+export function OperatingSystemIcon({ os, colour = "", compact = false, tile = false }: OperatingSystemIconProps) {
   const t = useTranslate();
   const name = os === "server" ? t("host.osGeneric") : operatingSystems.find(([value]) => value === os)?.[1] ?? t("host.osUnknown");
   const source = sources[os ?? ""];
+  const frame = tile
+    ? "size-[34px] rounded-[9px] bg-accent/15 text-accent"
+    : `${compact ? "size-5" : "size-6"} text-ink-muted`;
   return (
     <span role="img" aria-label={name} title={name}
-      className={`relative grid ${compact ? "size-5" : "size-6"} shrink-0 place-items-center text-ink-muted`}>
+      className={`relative grid ${frame} shrink-0 place-items-center`}>
       {source === undefined ? <Icon name="connections" className={compact ? "size-4" : "size-5"} /> : (
         <span aria-hidden="true" className={`${compact ? "size-4" : "size-5"} bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]`} style={{ maskImage: `url("${source}")` }} />
       )}
-      {colour === "" ? null : <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border border-card" style={{ backgroundColor: colour }} />}
+      {colour === "" ? null : <span aria-hidden="true" className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border ${tile ? "border-well" : "border-card"}`} style={{ backgroundColor: colour }} />}
     </span>
   );
 }

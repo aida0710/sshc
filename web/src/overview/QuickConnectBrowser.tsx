@@ -109,9 +109,9 @@ export function QuickConnectBrowser({
     const lastConnected = recentConnection === undefined
       ? ""
       : t("connection.lastConnected", { at: formatDateTime(recentConnection.lastConnectedAt, locale) });
+    const groupName = server.group === "" ? t("tree.ungrouped") : server.group;
     const selected = selectedAlias === alias;
     const opening = launching === alias;
-    const panel = view === "panel";
     const connect = () => {
       if (launching !== "") return;
       setSelectedAlias(alias);
@@ -122,8 +122,8 @@ export function QuickConnectBrowser({
       <li
         key={identityKey(server.identity)}
         aria-busy={opening}
-        className={`group/row relative min-w-0 rounded-lg border transition-colors ${
-          selected || opening ? "border-accent bg-select-fill" : "border-line bg-card hover:border-control-line hover:bg-hover"
+        className={`group/row relative min-w-0 rounded-xl border transition-colors ${
+          selected || opening ? "border-accent bg-select-fill" : "border-transparent bg-well hover:border-accent/45"
         }`}
       >
         <button
@@ -149,34 +149,35 @@ export function QuickConnectBrowser({
             event.preventDefault();
             connect();
           }}
-          className={`flex w-full min-w-0 items-center gap-3 rounded-lg py-3 pl-3 pr-14 text-left disabled:cursor-wait ${
-            panel ? "min-h-24" : "min-h-20"
-          }`}
+          className="flex w-full min-w-0 items-center gap-3 rounded-xl p-3.5 pr-12 text-left disabled:cursor-wait pointer-fine:pr-3.5"
         >
-          <OperatingSystemIcon os={server.os} colour={server.colour} />
+          <OperatingSystemIcon os={server.os} colour={server.colour} tile />
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-sm font-semibold text-ink" title={alias}>{alias}</span>
+              <span className="truncate text-[13.5px] font-semibold text-ink" title={alias}>{alias}</span>
               {server.duplicateAlias ? <span role="img" aria-label={t("browser.duplicateAlias")} className="text-notice-ink"><Icon name="warning" className="size-3.5" /></span> : null}
             </span>
-            <span className="mt-1 block truncate font-mono text-xs text-ink-muted" title={target}>{target}</span>
+            <span className="mt-0.5 block truncate font-mono text-[11.5px] text-ink-faint" title={target}>{target}</span>
             <span aria-live="polite">
               {opening ? (
-                <span className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-muted">
+                <span className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-muted">
                   <Spinner className="size-3" />
                   {t("home.opening")}
                 </span>
-              ) : server.group === "" && lastConnected === "" ? null : (
-                <span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-ink-faint">
-                  {server.group === "" ? null : <span className="truncate" title={server.group}>{server.group}</span>}
-                  {server.group === "" || lastConnected === "" ? null : <span aria-hidden="true">·</span>}
-                  {lastConnected === "" ? null : <span className="truncate" title={lastConnected}>{lastConnected}</span>}
-                </span>
+              ) : lastConnected === "" ? null : (
+                <span className="mt-1 block truncate text-[11px] text-ink-faint" title={lastConnected}>{lastConnected}</span>
               )}
             </span>
           </span>
+          {/* With a mouse, the "…" button appears over the group name while the pointer is on the card. */}
+          <span
+            className="max-w-[40%] shrink-0 truncate text-[11px] text-ink-faint transition-opacity duration-150 pointer-fine:group-hover/row:opacity-0 pointer-fine:group-focus-within/row:opacity-0"
+            title={groupName}
+          >
+            {groupName}
+          </span>
         </button>
-        <div className={`pointer-events-none absolute right-2 top-2 ${revealOnHover}`}>
+        <div className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 ${revealOnHover}`}>
           <ConnectionActions
             alias={alias}
             path={server.identity.path}
@@ -195,13 +196,13 @@ export function QuickConnectBrowser({
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <label className="relative min-w-0">
           <span className="sr-only">{t("home.search")}</span>
-          <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint" />
+          <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint" />
           <input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
             placeholder={t("hostSearch.placeholder")}
-            className={`${control} min-h-10 w-full pl-9 md:min-h-0`}
+            className={`${control} min-h-10 w-full pl-8 md:min-h-0`}
           />
         </label>
         <div className="flex">
@@ -253,7 +254,7 @@ export function QuickConnectBrowser({
                     title={candidate.name}
                     aria-label={t("home.openGroup", { name: candidate.name, count: candidate.descendantCount })}
                     onClick={() => setGroupTrail([...groupTrail, candidate.name])}
-                    className="flex min-h-9 min-w-0 max-w-full items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-left transition-colors hover:border-control-line hover:bg-hover"
+                    className="flex min-h-9 min-w-0 max-w-full items-center gap-2 rounded-md bg-well px-3 py-1.5 text-left transition-colors hover:bg-hover"
                   >
                     <span
                       aria-hidden="true"
@@ -271,17 +272,17 @@ export function QuickConnectBrowser({
         </section>
       )}
 
-      <h3 className="text-xs font-semibold text-ink">{t("tree.resultCount", { visible: servers.length, total: index.servers.length })}</h3>
+      <h3 className="text-xs font-normal text-ink-faint">{t("tree.resultCount", { visible: servers.length, total: index.servers.length })}</h3>
 
       {servers.length === 0 ? (
-        <p className="border-y border-line bg-surface-subtle p-4 text-sm text-ink-muted">
+        <p className="rounded-[10px] bg-well p-4 text-sm text-ink-muted">
           {index.servers.length === 0 ? t("home.noConnections") : t("home.noMatches")}
         </p>
       ) : (
         <ul
           aria-label={t("home.connectionList")}
           className={view === "panel"
-            ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+            ? "grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3"
             : "flex flex-col gap-1"}
         >
           {servers.map(renderServer)}

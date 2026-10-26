@@ -1,1 +1,0 @@
-import{_ as e}from"./useMediaQuery-BPCjFdwA.js";import{r as t}from"./index-CBDYZa1s.js";var n=e(),r=()=>void 0;function i(){return(0,n.useContext)(t)??r}export{i as t};

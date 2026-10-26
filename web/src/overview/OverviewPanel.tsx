@@ -7,7 +7,8 @@ import { terminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
-import { SectionBar } from "../ui/SectionBar";
+import { PageHeader } from "../ui/page";
+import { PageBoard } from "../ui/PageBoard";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
 import { PanelState } from "../ui/PanelState";
 import { formatOptionalDateTime } from "../ui/format";
@@ -102,17 +103,18 @@ export function OverviewPanel({
   const attention = configurationAttention + recoveryAttention;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-canvas">
-    <SectionBar
-      title={t("home.heading")}
-      {...(overview === null ? {} : { meta: t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length }) })}
-      actions={(
-        <Button className="min-h-10 md:min-h-0" onClick={() => onNavigate("Connections")}>
-          {t("home.manageConnections")}
-        </Button>
-      )}
-    />
-    <section aria-label={t("home.heading")} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-5">
+    <PageBoard labelledBy="home-heading" className="flex flex-col gap-[18px]">
+      <PageHeader
+        title={t("home.heading")}
+        headingId="home-heading"
+        meta={overview === null ? undefined : t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
+        description={t("home.pageDescription")}
+        actions={(
+          <Button className="min-h-10 md:min-h-0" onClick={() => onNavigate("Connections")}>
+            {t("home.manageConnections")}
+          </Button>
+        )}
+      />
 
       {problem === "" ? null : <Notice tone="danger">{problem}</Notice>}
       {loading || overview === null || !listsFailed ? null : (
@@ -139,22 +141,22 @@ export function OverviewPanel({
       </section>
 
       {attention === 0 ? null : (
-        <section aria-label={t("home.attention")} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-notice-line bg-notice px-4 py-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2 text-sm text-notice-ink">
-            <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-notice-ink" />
+        <section aria-label={t("home.attention")} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[9px] bg-notice px-3 py-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5 text-[12.5px] leading-[19px] text-notice-ink">
+            <Icon name="warning" className="size-[15px] shrink-0" />
             <p>{t("home.workspaceAttention", { count: attention })}</p>
           </div>
           {configurationAttention === 0 ? null : (
-            <Button onClick={() => onNavigate("Config")}>{t("home.openConfig")}</Button>
+            <Button small onClick={() => onNavigate("Config")}>{t("home.openConfig")}</Button>
           )}
           {recoveryAttention === 0 ? null : (
-            <Button onClick={() => onNavigate("History")}>{t("home.recoverChanges")}</Button>
+            <Button small onClick={() => onNavigate("History")}>{t("home.recoverChanges")}</Button>
           )}
         </section>
       )}
 
-      <section aria-label={t("home.sync")} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3 text-xs text-ink-muted">
-        <Icon name="sync" className="size-4 shrink-0" />
+      <section aria-label={t("home.sync")} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3.5 text-[12.5px] text-ink-muted">
+        <Icon name="sync" className="size-3.5 shrink-0" />
         <p className="min-w-0 flex-1">
           {sync === null
             ? t("home.syncUnavailable")
@@ -164,9 +166,8 @@ export function OverviewPanel({
                 ? t("home.syncLast", { at: formatOptionalDateTime(sync.lastSyncedAt), count: sync.fileCount ?? 0 })
                 : t("home.syncNever")}
         </p>
-        <Button onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
+        <Button small onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
       </section>
-    </section>
-    </div>
+    </PageBoard>
   );
 }
