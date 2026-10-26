@@ -45,9 +45,11 @@ function rememberView(view: QueueView): void {
 
 // The transfer settings live in Settings > SFTP. Without a way to navigate
 // there, the settings button is left out.
-export function TransferManagerList({ openRequest = 0, onNavigateLocation }: {
+export function TransferManagerList({ openRequest = 0, onNavigateLocation, divided = false }: {
   openRequest?: number;
   onNavigateLocation?: ((url: string) => void) | undefined;
+  // divided draws a line above the queue, for when it sits under the file list in the same card.
+  divided?: boolean;
 }) {
   const t = useTranslate();
   const [view, setView] = useState<QueueView>(restoreView);
@@ -153,7 +155,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation }: {
   });
   useMenuKeyboard({ open: menuOpen, menuRef: menuPanel, onClose: () => setMenuOpen(false) });
   const content = (
-    <section className={compactViewport ? "flex min-h-0 flex-1 flex-col text-sm" : "relative shrink-0 overflow-visible border-t border-line bg-toolbar/30 text-xs"} aria-labelledby={headingId}>
+    <section className={compactViewport ? "flex min-h-0 flex-1 flex-col text-sm" : `relative shrink-0 overflow-visible text-[12.5px] ${divided ? "border-t border-line" : ""}`} aria-labelledby={headingId}>
       {compactViewport || collapsed || jobs.length === 0 ? null : (
         <div
           role="separator"
@@ -174,7 +176,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation }: {
           <span aria-hidden="true" className="h-1 w-10 rounded-full bg-control-line transition-colors group-hover:bg-ink-muted group-active:bg-accent group-focus-visible:bg-accent" />
         </div>
       )}
-      <div className={`relative flex min-w-0 shrink-0 items-center gap-2 px-3 ${compactViewport ? "min-h-14 flex-wrap border-b border-line py-1" : "min-h-9 py-1.5 md:min-h-8 md:py-1"}`}>
+      <div className={`relative flex min-w-0 shrink-0 items-center gap-2.5 ${compactViewport ? "min-h-14 flex-wrap border-b border-line px-3 py-1" : "min-h-10 px-3.5 py-1 text-ink-muted"}`}>
         {compactViewport ? <h3 id={headingId} className="min-w-0 flex-1 truncate font-medium">{t("sftp.manager.heading")}</h3> : (
         <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-describedby={`${headingId}-summary`} aria-expanded={!collapsed} aria-controls={`${headingId}-jobs`} onClick={() => changeView({ collapsed: !collapsed })} className="flex min-w-0 flex-1 items-center gap-2 rounded text-left hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent">
           <DisclosureChevron expanded={!collapsed} className="size-3" />
