@@ -304,7 +304,6 @@ export function SnippetsPanel({
       <PageHeader
         title={t("snippets.heading")}
         headingId="snippets-heading"
-        description={t("snippets.pageDescription")}
         actions={<Button onClick={() => draftDiscard.confirmBefore(() => edit(null))}>{t("snippets.new")}</Button>}
       />
       {/* The list, the editor and the targets sit side by side on a wide screen, divided by lines. */}
