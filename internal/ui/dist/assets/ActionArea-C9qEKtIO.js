@@ -1,1 +1,0 @@
-import{s as e}from"./useMediaQuery-_OHKJTGv.js";var t=e();function n({children:e,status:n}){return(0,t.jsxs)(`div`,{className:`mt-6 flex min-h-12 flex-wrap items-center justify-between gap-3 border-t border-line pt-4`,children:[(0,t.jsx)(`div`,{className:`min-w-0 flex-1`,children:n}),(0,t.jsx)(`div`,{className:`shrink-0`,children:e})]})}export{n as t};

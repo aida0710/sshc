@@ -62,8 +62,9 @@ var trustedTypesPolicyCreation = regexp.MustCompile("[`'\"]([A-Za-z][A-Za-z0-9_-
 // として読み込む埋め込み UI では付かない。
 var domPurifyPolicyName = regexp.MustCompile("[`'\"](dompurify)[`'\"]\\s*\\+")
 
-// trustedTypesPoliciesTheEmbeddedUICreates は、埋め込み UI（internal/ui/dist）の
+// trustedTypesPoliciesTheEmbeddedUICreates は、埋め込み UI（internal/ui/dist/app）の
 // スクリプトが作る Trusted Types の policy の名前を、重複を除いて並べて返す。
+// 画面はリポジトリに入っていないので、先に web をビルドしておく（CI は組み立てた画面を受け取ってから流す）。
 func trustedTypesPoliciesTheEmbeddedUICreates(t *testing.T) []string {
 	t.Helper()
 	assets, err := ui.FS()
@@ -73,6 +74,9 @@ func trustedTypesPoliciesTheEmbeddedUICreates(t *testing.T) []string {
 	scripts, err := fs.Glob(assets, "assets/*.js")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(scripts) == 0 {
+		t.Fatal("the web UI has not been built into internal/ui/dist/app; run npm run build --prefix web first")
 	}
 	var names []string
 	for _, script := range scripts {
@@ -93,8 +97,8 @@ func trustedTypesPoliciesTheEmbeddedUICreates(t *testing.T) []string {
 // trusted-types に並べる名前は、埋め込み UI が実際に作る policy と一致させる。
 // Monaco を上げて policy の名前が増えれば、許していない名前の作成が止められて
 // エディタが壊れる。使われなくなった名前を残せば、ほかのスクリプトがその名前で
-// policy を作れる。どちらもこのテストで気付けるように、web をビルドし直した
-// internal/ui/dist と照合する。
+// policy を作れる。どちらもこのテストで気付けるように、web をビルドした
+// internal/ui/dist/app と照合する。
 func TestThePagePolicyAllowsExactlyTheTrustedTypesPoliciesTheEmbeddedUICreates(t *testing.T) {
 	created := trustedTypesPoliciesTheEmbeddedUICreates(t)
 	allowed, ok := pageDirective(t, "trusted-types")

@@ -4,6 +4,8 @@
 /sshc.exe
 /dist/
 /coverage/
+# web のビルドが組み立てた画面。CI・リリース・Homebrew がそれぞれ組み立てる（internal/ui/dist/README.md）。
+/internal/ui/dist/app/
 /web/node_modules/
 /pages/node_modules/
 /pages/.vitepress/cache/

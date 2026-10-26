@@ -1,4 +1,4 @@
-.PHONY: generate test deadcode build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated verify-ui-dist integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
+.PHONY: generate test deadcode build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの実行時間。長時間試す場合は、たとえば
 # `make fuzz FUZZTIME=10m` のように上書きする。
@@ -26,9 +26,14 @@ generate:
 	go run ./internal/validate/cmd/rulegen .
 
 # push の前に走らせる検査。CI の Go native（Linux）のジョブ全体と、Web のジョブの
-# ESLint・単体テスト・型検査と、Dead code のジョブに当たる。Web のビルドと埋め込み UI
-# の検査は make verify-generated、主要画面の axe 検査は make e2e に含まれる。
+# ESLint・単体テスト・型検査と、Dead code のジョブに当たる。生成物の検査は
+# make verify-generated、主要画面の axe 検査は make e2e に含まれる。
+#
+# Go のテストのうち2つ（CSP の trusted-types と、バイナリが埋め込んだ画面を配るかの検査）は、
+# 組み立てた画面を読む。画面はリポジトリに入っていないので、無ければ先に組み立てる。
+# 有れば作り直さない。リリースの job は、workflow が1回だけ組み立てた画面を受け取って使う。
 test:
+	test -f internal/ui/dist/app/index.html || npm run build --prefix web
 	scripts/ci/check-gofmt.sh
 	go vet ./...
 	go test -count=1 ./...
@@ -60,15 +65,9 @@ fuzz:
 e2e: build
 	npm run e2e --prefix web
 
-# Web sourceから埋込み用の配布assetを再生成し、tracked fileの変更だけでなく
-# hash名を持つ新しいuntracked assetも含めて、コミット済みの内容と比較する。
-verify-ui-dist:
-	npm run build --prefix web
-	scripts/ci/check-ui-dist.sh
-
-# APIモデルと埋込みUIを再生成し、コミット済みの生成物と異なれば失敗する。
+# APIモデルを再生成し、コミット済みの生成物と異なれば失敗する。
 # api/openapi.yaml をGoとTypeScriptの共通schemaとして扱う。
-verify-generated: generate verify-ui-dist
+verify-generated: generate
 	git diff --exit-code -- cmd/sshc/cli_contract.gen.go internal/api/models.gen.go \
 		web/src/api/schema.d.ts web/src/api/validators.generated.ts \
 		web/src/rules/generated.ts web/src/rules/corpus.generated.json \
@@ -92,7 +91,10 @@ ANDROID_NDK_HOME ?= $(HOME)/Library/Android/sdk/ndk/28.2.13676358
 # AAR 内の engine バージョンは gomobile の ldflags で設定する。
 ANDROID_VERSION ?= dev
 
+# AAR はエンジンと一緒に画面を埋め込む。画面は先に組み立てておく（CI とリリースは、
+# workflow が1回だけ組み立てた画面を受け取る）。無いまま作ると、アプリが画面を出せない。
 android-bind:
+	@test -f internal/ui/dist/app/index.html || { echo "the web UI has not been built; run npm run build --prefix web first" >&2; exit 1; }
 	@# gomobile は出力先を作成しないため、事前に用意する。
 	mkdir -p android/app/libs
 	ANDROID_NDK_HOME="$(ANDROID_NDK_HOME)" PATH="$(HOME)/go/bin:$$PATH" \
@@ -106,8 +108,8 @@ android-bind:
 build-cli:
 	go run ./internal/nativebuild/cmd/nativebuild build
 
-# UI を一度ビルドし、埋め込んだ Go バイナリを各ターゲット向けに生成する。
-# 作り直した UI がコミット済みの internal/ui/dist と違えば、バイナリを作らずに止まる。
+# 組み立て済みの画面を埋め込んだ Go バイナリを、各ターゲット向けに生成する。
+# 画面は作り直さない。internal/ui/dist/app に無ければ、バイナリを作らずに止まる。
 #
 # macOS では `%u` と `%i` の展開に os/user.Current() を使うため cgo を有効にする。
 # Linux では /etc/passwd を参照できるため CGO_ENABLED=0 とする。
@@ -154,7 +156,7 @@ release-binaries:
 	go run ./internal/nativebuild/cmd/nativebuild matrix
 
 # release-cli-current は runner 自身の OS についてだけ standalone artifact を
-# 作る。UI の照合は release-binaries と同じである。package job はこの後に同じ
+# 作る。画面の扱いは release-binaries と同じである。package job はこの後に同じ
 # OS で smoke し、別 job が publish を集約する。
 release-cli-current:
 	go run ./internal/nativebuild/cmd/nativebuild release-current

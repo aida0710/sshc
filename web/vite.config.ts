@@ -5,7 +5,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
-    outDir: "../internal/ui/dist",
+    // The Go engine embeds internal/ui/dist and serves app/ (internal/ui/embed.go). Only app/ is emptied
+    // on each build; the note beside it stays so go:embed has something to embed before the first build.
+    outDir: "../internal/ui/dist/app",
     emptyOutDir: true,
   },
   test: {

@@ -227,45 +227,40 @@ func workflowRunList(t *testing.T, runs ...workflowRun) string {
 	return string(body)
 }
 
-// 公開する commit でリリースの runner の埋め込み UI の照合（release-ui-check.yml）が
-// 成功していなければ、publish.sh は tag を作らずに止まる。照合を走らせ忘れても、
-// 失敗を見落としても、公開の当日に Release の途中で止まることになるためである。
-func TestPublishTagsOnlyACommitWhoseReleaseUICheckSucceeded(t *testing.T) {
+// 公開する commit で main の CI が成功していなければ、publish.sh は tag を作らずに止まる。
+// 失敗を見落としたまま公開すると、Release の途中で止まるか、検査を経ない成果物が出る。
+func TestPublishTagsOnlyACommitWhoseMainCISucceeded(t *testing.T) {
 	for _, tool := range []string{"bash", "jq"} {
 		if _, err := exec.LookPath(tool); err != nil {
 			t.Skipf("%s is required to run publish.sh", tool)
 		}
 	}
 	jq, _ := exec.LookPath("jq")
-	const uiCheckRunID = 22
-	ciRuns := workflowRunList(t, workflowRun{
+	ciOnTheCommit := workflowRun{
 		ID: 11, HeadSHA: publishedCommit, HeadBranch: "main", Event: "push", CreatedAt: "2026-10-01T00:00:00Z",
-	})
-	uiCheckOnTheCommit := workflowRun{
-		ID: uiCheckRunID, HeadSHA: publishedCommit, HeadBranch: "main", Event: "workflow_dispatch", CreatedAt: "2026-10-01T00:10:00Z",
 	}
-	uiCheckOnAnotherCommit := uiCheckOnTheCommit
-	uiCheckOnAnotherCommit.HeadSHA = strings.Repeat("f", 40)
-	uiCheckOnAnotherBranch := uiCheckOnTheCommit
-	uiCheckOnAnotherBranch.HeadBranch = "fix/release-ui"
+	ciOnAnotherCommit := ciOnTheCommit
+	ciOnAnotherCommit.HeadSHA = strings.Repeat("f", 40)
+	ciOnAnotherBranch := ciOnTheCommit
+	ciOnAnotherBranch.HeadBranch = "fix/release-ui"
 
 	for _, test := range []struct {
-		name        string
-		uiCheckRuns string
-		conclusion  string
-		wantTag     bool
-		wantOutput  string
+		name       string
+		ciRuns     string
+		conclusion string
+		wantTag    bool
+		wantOutput string
 	}{
-		{name: "the check was never run", uiCheckRuns: workflowRunList(t),
-			wantOutput: "no Release UI check run exists for " + publishedCommit},
-		{name: "the check ran on another commit", uiCheckRuns: workflowRunList(t, uiCheckOnAnotherCommit),
-			wantOutput: "no Release UI check run exists for " + publishedCommit},
-		{name: "the check ran on another branch", uiCheckRuns: workflowRunList(t, uiCheckOnAnotherBranch),
-			wantOutput: "no Release UI check run exists for " + publishedCommit},
-		{name: "the check failed", uiCheckRuns: workflowRunList(t, uiCheckOnTheCommit), conclusion: "failure",
-			wantOutput: "Release UI check failed"},
+		{name: "CI never ran", ciRuns: workflowRunList(t),
+			wantOutput: "no main CI run exists for " + publishedCommit},
+		{name: "CI ran on another commit", ciRuns: workflowRunList(t, ciOnAnotherCommit),
+			wantOutput: "no main CI run exists for " + publishedCommit},
+		{name: "CI ran on another branch", ciRuns: workflowRunList(t, ciOnAnotherBranch),
+			wantOutput: "no main CI run exists for " + publishedCommit},
+		{name: "CI failed", ciRuns: workflowRunList(t, ciOnTheCommit), conclusion: "failure",
+			wantOutput: "main CI failed"},
 		// 通ったあとは tag を作って push する。偽の git は push を断るので、そこで止まる。
-		{name: "the check succeeded", uiCheckRuns: workflowRunList(t, uiCheckOnTheCommit), conclusion: "success",
+		{name: "CI succeeded", ciRuns: workflowRunList(t, ciOnTheCommit), conclusion: "success",
 			wantTag: true, wantOutput: "tag push failed"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -301,9 +296,7 @@ for argument in "$@"; do
 done
 case "$path" in
   */actions/workflows/ci.yml/runs) printf '%s' "$SSHC_TEST_CI_RUNS" ;;
-  */actions/workflows/release-ui-check.yml/runs) printf '%s' "$SSHC_TEST_UI_CHECK_RUNS" ;;
-  */actions/runs/11) printf '{"status":"completed","conclusion":"success"}' ;;
-  */actions/runs/22) printf '{"status":"completed","conclusion":"%s"}' "$SSHC_TEST_UI_CHECK_CONCLUSION" ;;
+  */actions/runs/11) printf '{"status":"completed","conclusion":"%s"}' "$SSHC_TEST_CI_CONCLUSION" ;;
   *) exit 1 ;;
 esac
 `,
@@ -328,9 +321,8 @@ esac
 				"SSHC_TEST_REPOSITORY="+repository,
 				"SSHC_TEST_COMMIT="+publishedCommit,
 				"SSHC_TEST_GIT_CALLS="+gitCalls,
-				"SSHC_TEST_CI_RUNS="+ciRuns,
-				"SSHC_TEST_UI_CHECK_RUNS="+test.uiCheckRuns,
-				"SSHC_TEST_UI_CHECK_CONCLUSION="+test.conclusion,
+				"SSHC_TEST_CI_RUNS="+test.ciRuns,
+				"SSHC_TEST_CI_CONCLUSION="+test.conclusion,
 			)
 			output, err := command.CombinedOutput()
 			if err == nil {
