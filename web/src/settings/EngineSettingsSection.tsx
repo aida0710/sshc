@@ -2,7 +2,8 @@ import { useCallback, useState } from "react";
 import type { SettingsApi } from "../api/settings";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { Field, control } from "../ui/form";
+import { control } from "../ui/form";
+import { FieldRow } from "../ui/FieldRow";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea } from "../ui/ActionArea";
 import { SettingsSection } from "./SettingsSection";
@@ -77,9 +78,9 @@ export function EngineSettingsSection({ api, showHeading, passwordless }: {
     : draft.vaultAutoLockMode === "restart" ? "engine.vaultAutoLockRestartWarning" : null;
   return (
     <SettingsSection id="settings-engine" label={t("engine.heading")} icon="settings" showHeading={showHeading}>
-      <div className="max-w-2xl">
+      <div>
         <SettingsLoadFailure settingsLoad={settingsLoad} title={t("engine.loadFailed")} />
-        <Field label={t("engine.portLabel")} hint={t("engine.portHint")}>
+        <FieldRow label={t("engine.portLabel")} hint={t("engine.portHint")}>
           <input
             type="number"
             min={1024}
@@ -90,51 +91,49 @@ export function EngineSettingsSection({ api, showHeading, passwordless }: {
             disabled={disabled}
             onChange={(event) => edit({ port: event.target.value })}
           />
-        </Field>
-        <div className="mt-5 border-t border-line pt-5">
-          <Field label={t("engine.vaultAutoLockLabel")} hint={t("engine.vaultAutoLockHint")}>
-            <select
-              className={control}
-              value={draft.vaultAutoLockMode}
-              disabled={autoLockDisabled}
-              onChange={(event) => edit({ vaultAutoLockMode: event.target.value as "idle" | "restart" })}
-            >
-              <option value="idle">{t("engine.vaultAutoLockIdle")}</option>
-              <option value="restart">{t("engine.vaultAutoLockRestart")}</option>
-            </select>
-          </Field>
-          {draft.vaultAutoLockMode === "idle" ? (
-            <div className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.65fr)] gap-3">
-              <Field label={t("engine.vaultAutoLockValue")}>
-                <input
-                  type="number"
-                  min={1}
-                  max={999}
-                  className={control}
-                  value={draft.vaultAutoLockValue}
-                  disabled={autoLockDisabled}
-                  onChange={(event) => edit({ vaultAutoLockValue: event.target.value })}
-                />
-              </Field>
-              <Field label={t("engine.vaultAutoLockUnit")}>
-                <select
-                  className={control}
-                  value={draft.vaultAutoLockUnit}
-                  disabled={autoLockDisabled}
-                  onChange={(event) => edit({ vaultAutoLockUnit: event.target.value as "minutes" | "hours" })}
-                >
-                  <option value="minutes">{t("engine.vaultAutoLockMinutes")}</option>
-                  <option value="hours">{t("engine.vaultAutoLockHours")}</option>
-                </select>
-              </Field>
+        </FieldRow>
+        <FieldRow label={t("engine.vaultAutoLockLabel")} hint={t("engine.vaultAutoLockHint")}>
+          <select
+            className={control}
+            value={draft.vaultAutoLockMode}
+            disabled={autoLockDisabled}
+            onChange={(event) => edit({ vaultAutoLockMode: event.target.value as "idle" | "restart" })}
+          >
+            <option value="idle">{t("engine.vaultAutoLockIdle")}</option>
+            <option value="restart">{t("engine.vaultAutoLockRestart")}</option>
+          </select>
+        </FieldRow>
+        {draft.vaultAutoLockMode === "idle" ? (
+          <FieldRow label={t("engine.vaultAutoLockValue")} interactiveChildren>
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.65fr)] gap-2">
+              <input
+                type="number"
+                min={1}
+                max={999}
+                aria-label={t("engine.vaultAutoLockValue")}
+                className={control}
+                value={draft.vaultAutoLockValue}
+                disabled={autoLockDisabled}
+                onChange={(event) => edit({ vaultAutoLockValue: event.target.value })}
+              />
+              <select
+                aria-label={t("engine.vaultAutoLockUnit")}
+                className={control}
+                value={draft.vaultAutoLockUnit}
+                disabled={autoLockDisabled}
+                onChange={(event) => edit({ vaultAutoLockUnit: event.target.value as "minutes" | "hours" })}
+              >
+                <option value="minutes">{t("engine.vaultAutoLockMinutes")}</option>
+                <option value="hours">{t("engine.vaultAutoLockHours")}</option>
+              </select>
             </div>
-          ) : null}
-          {autoLockNotice === null ? null : (
-            <div className="mt-4">
-              <Notice>{t(autoLockNotice)}</Notice>
-            </div>
-          )}
-        </div>
+          </FieldRow>
+        ) : null}
+        {autoLockNotice === null ? null : (
+          <div className="mt-2">
+            <Notice>{t(autoLockNotice)}</Notice>
+          </div>
+        )}
         <ActionArea status={save.error === ""
           ? (settingsLoad.state === "loading"
               ? <p role="status" className="text-sm text-ink-muted">{t("engine.loading")}</p>
