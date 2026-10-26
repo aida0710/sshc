@@ -1,6 +1,6 @@
 # aida0710/homebrew-tap へ同期する Formula の正本。
 # release workflow がタグと SHA-256 を更新して tap へ反映する。
-# コミット済みの internal/ui/dist を含むソースから、Node.js なしでビルドする。
+# 画面（internal/ui/dist/app）はリポジトリに入っていないので、Node.js で組み立ててからビルドする。
 # macOS の os/user.Current() に必要なため CGO は無効化しない。
 class Sshc < Formula
   desc "Manage OpenSSH configuration and connect from one window"
@@ -17,8 +17,15 @@ class Sshc < Formula
   SOURCE_COMMIT_TIME = "".freeze
 
   depends_on "go" => :build
+  depends_on "node" => :build
 
   def install
+    # 埋め込む画面を組み立てる。npm は web/ の中で走らせる（--prefix は下位命令ごとに意味が違う）。
+    cd "web" do
+      system "npm", "ci", *std_npm_args(prefix: false)
+      system "npm", "run", "build"
+    end
+
     # ./cmd/sshc をビルドし、実際のリリースバージョンを埋め込む。
     # -s -w は std_go_args が追加するため重ねて指定しない。
     system "go", "build", *std_go_args(ldflags: build_ldflags), "./cmd/sshc"

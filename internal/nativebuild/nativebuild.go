@@ -93,6 +93,8 @@ type nativeBuildDependencies struct {
 	environment []string
 	executor    nativeCommandExecutor
 	mkdirAll    func(string, os.FileMode) error
+	// statFile は、リリースの build の前に、組み立てた画面が置かれているかを確かめる。
+	statFile func(string) (os.FileInfo, error)
 	// verifyBinary はビルド済みバイナリが指定ターゲットと一致することを検証する。
 	//
 	// 検査がバイナリを読み取るため、テストでは verifyBinary を差し替えられる。
@@ -119,6 +121,7 @@ func RunNativeBuild(args []string, stdout, stderr io.Writer) error {
 		environment:  environment,
 		executor:     osNativeExecutor{stdout: stdout, stderr: stderr},
 		mkdirAll:     os.MkdirAll,
+		statFile:     os.Stat,
 		verifyBinary: VerifyBinaryArchitecture,
 	}, stdout, stderr)
 }
@@ -147,8 +150,6 @@ func runNativeBuild(args []string, dependencies nativeBuildDependencies, stdout,
 		return runBuildMatrix(args[1:], dependencies, stdout, stderr)
 	case "release-current":
 		return runCurrentRelease(args[1:], dependencies, stdout, stderr)
-	case "verify-embedded-ui":
-		return runEmbeddedUIVerification(args[1:], dependencies, stderr)
 	default:
 		return errors.New("unsupported native build command")
 	}
@@ -249,7 +250,7 @@ func runBuildMatrix(args []string, dependencies nativeBuildDependencies, stdout,
 	if err != nil {
 		return err
 	}
-	if err := rebuildEmbeddedUIAndCompare(dependencies); err != nil {
+	if err := requireBuiltUI(dependencies); err != nil {
 		return err
 	}
 	for _, request := range requests {
@@ -302,7 +303,7 @@ func runCurrentRelease(args []string, dependencies nativeBuildDependencies, stdo
 	if err != nil {
 		return err
 	}
-	if err := rebuildEmbeddedUIAndCompare(dependencies); err != nil {
+	if err := requireBuiltUI(dependencies); err != nil {
 		return err
 	}
 	for _, request := range requests {
@@ -311,26 +312,6 @@ func runCurrentRelease(args []string, dependencies nativeBuildDependencies, stdo
 		}
 	}
 	return nil
-}
-
-// runEmbeddedUIVerification は、リリースの runner と同じ手順で UI を作り直して照合するだけで、
-// バイナリは作らない。照合がその OS で通るかを、公開の前に試すための入口である
-// （.github/workflows/release-ui-check.yml、docs/releasing.md）。
-func runEmbeddedUIVerification(args []string, dependencies nativeBuildDependencies, stderr io.Writer) error {
-	flags := newNativeFlagSet("verify-embedded-ui", stderr)
-	if err := parseNativeFlags(flags, args); err != nil {
-		return err
-	}
-	return rebuildEmbeddedUIAndCompare(dependencies)
-}
-
-// rebuildEmbeddedUIAndCompare は、配布するバイナリに埋め込む UI を作り直し、コミット済みの
-// UI と同じであることを確かめる。リリースの build と、公開の前の照合が同じ手順を通る。
-func rebuildEmbeddedUIAndCompare(dependencies nativeBuildDependencies) error {
-	if err := runWebBuild(dependencies); err != nil {
-		return err
-	}
-	return verifyEmbeddedUIMatchesCommit(dependencies)
 }
 
 // npm はその package のディレクトリで走らせる。--prefix に頼らない。
@@ -348,32 +329,22 @@ func runWebBuild(dependencies nativeBuildDependencies) error {
 	})
 }
 
-// embeddedUIDirectory は、web のビルドの出力先（web/vite.config.ts の outDir）で、
-// Go のバイナリが埋め込む UI（internal/ui/embed.go）である。
-const embeddedUIDirectory = "internal/ui/dist"
+// builtUIIndex は、web のビルドが組み立てた画面の入口（web/vite.config.ts の outDir）で、
+// Go のバイナリはその置き場所ごと埋め込む（internal/ui/embed.go）。
+var builtUIIndex = filepath.Join("internal", "ui", "dist", "app", "index.html")
 
-// verifyEmbeddedUIMatchesCommit は、いま作り直した UI が、コミット済みの UI と同じで
-// あることを確かめる。配布するバイナリを作る前に呼ぶ。
+// requireBuiltUI は、配布するバイナリを作る前に、組み立てた画面が置かれていることを確かめる。
 //
-// Homebrew と APK は、コミット済みの UI をそのまま埋め込む。その UI は、CI の web job
-// が Linux で作り直して照合している。リリースの runner（macOS・Windows・Linux）で
-// 作り直した UI は、その照合を経ていない。OS ごとのネイティブの依存（rollup、
-// lightningcss など）や Node の minor の違いで出力がずれれば、同じ tag の配布物が
-// 別々の UI を持つことになる。ずれたら配布物を作らずに止める。
-//
-// 検査は scripts/ci/check-ui-dist.sh と同じ git status である。sh を通さないので、
-// Windows の runner でも同じ検査になる。
-func verifyEmbeddedUIMatchesCommit(dependencies nativeBuildDependencies) error {
-	changes, err := dependencies.executor.Output(nativeCommand{
-		name:        "git",
-		args:        []string{"status", "--porcelain=v1", "--untracked-files=all", "--", embeddedUIDirectory},
-		environment: dependencies.environment,
-	})
-	if err != nil {
-		return fmt.Errorf("compare the rebuilt embedded UI with the committed one: %w", err)
+// リリースでは画面を1回だけ組み立て、macOS・Windows・Linux・Android の job が同じものを受け取って
+// 埋め込む（.github/workflows/release.yml）。OS ごとに作り直すと、ネイティブの依存（rollup、
+// lightningcss など）や Node の違いで、同じ tag の配布物が別々の画面を持ちうる。ここでは作り直さず、
+// 置かれていなければ止める。画面の入っていないバイナリは、画面の代わりにそのことを知らせるだけになる。
+func requireBuiltUI(dependencies nativeBuildDependencies) error {
+	if dependencies.statFile == nil {
+		return errors.New("native build dependencies are incomplete")
 	}
-	if listed := strings.TrimSpace(string(changes)); listed != "" {
-		return fmt.Errorf("the embedded UI built on this runner differs from the committed %s:\n%s", embeddedUIDirectory, listed)
+	if _, err := dependencies.statFile(builtUIIndex); err != nil {
+		return fmt.Errorf("the web UI has not been built into %s; run npm run build in web/ first: %w", filepath.Dir(builtUIIndex), err)
 	}
 	return nil
 }

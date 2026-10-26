@@ -159,7 +159,6 @@ func TestOperatorReleaseScriptPreservesTheReleaseGates(t *testing.T) {
 		`actions/workflows/$workflow/runs`,
 		`.head_sha == $sha and .head_branch == "main"`,
 		`ci_run=$(main_workflow_run ci.yml)`,
-		`ui_check_run=$(main_workflow_run release-ui-check.yml)`,
 		`git tag -a "$tag" "$head_sha"`,
 		`git push origin "refs/tags/$tag"`,
 		`.environment.name == "release"`,

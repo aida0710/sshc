@@ -107,9 +107,34 @@ jobs:
           printf 'latest_stable=%s\n' "$latest_stable" >> "$GITHUB_OUTPUT"
           echo "publication policy: channel=$release_channel promote_latest=$promote_latest latest_stable=${latest_stable:-none}"
 
+  # 配布物に埋め込む画面を1回だけ組み立てる。OS ごとに組み立てると、ネイティブの依存（rollup、
+  # lightningcss など）や Node の違いで、同じ tag の配布物が別々の画面を持ちうる。macOS・Linux・
+  # Windows・Android の job は、ここで組み立てた画面を受け取って埋め込む。
+  ui:
+    name: Web UI
+    needs: [verify-source]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.verify-source.outputs.release-sha }}
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+      - run: npm ci --prefix web
+      - name: Build the web UI
+        run: npm run build --prefix web
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: web-ui
+          path: internal/ui/dist/app
+          if-no-files-found: error
+          retention-days: 1
+
   macos:
     name: macOS
-    needs: [verify-source]
+    needs: [verify-source, ui]
     runs-on: macos-14
     timeout-minutes: 30
     steps:
@@ -120,10 +145,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+      # 埋め込む画面は jobs.ui が1回だけ組み立てたもの。どの配布物も同じ画面を持つ。
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          node-version: 22
-      - run: npm ci --prefix web
+          name: web-ui
+          path: internal/ui/dist/app
 
       # Linux jobがfull suiteを一度実行する。ここでは配布対象OSに固有のPTY、path、
       # user解決を再実行し、同じWeb/deadcode/race検査を3runnerで重複させない。
@@ -147,7 +173,7 @@ jobs:
 
   linux:
     name: Linux
-    needs: [verify-source]
+    needs: [verify-source, ui]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -162,6 +188,11 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --prefix web
+      # 埋め込む画面は jobs.ui が1回だけ組み立てたもの。どの配布物も同じ画面を持つ。
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: web-ui
+          path: internal/ui/dist/app
 
       # tagがmain以外を指しても未検証の成果物を公開しないよう、full suiteは
       # Linuxで一度実行する。macOSとWindowsはOS固有のGo testだけを受け持つ。
@@ -185,7 +216,7 @@ jobs:
 
   windows:
     name: Windows
-    needs: [verify-source]
+    needs: [verify-source, ui]
     runs-on: windows-2025
     timeout-minutes: 30
     steps:
@@ -196,10 +227,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+      # 埋め込む画面は jobs.ui が1回だけ組み立てたもの。どの配布物も同じ画面を持つ。
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          node-version: 22
-      - run: npm ci --prefix web
+          name: web-ui
+          path: internal/ui/dist/app
 
       # Makefile の recipe は POSIX シェルを前提とするため、Windows では
       # nativebuild を直接実行する。成果物一覧との一致は契約テストで検証する。
@@ -236,7 +268,7 @@ jobs:
 
   android:
     name: Android
-    needs: [verify-source]
+    needs: [verify-source, ui]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -251,6 +283,11 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      # 埋め込む画面は jobs.ui が1回だけ組み立てたもの。どの配布物も同じ画面を持つ。
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: web-ui
+          path: internal/ui/dist/app
 
       - name: Install gobind
         run: scripts/ci/retry.sh go install golang.org/x/mobile/cmd/gobind
@@ -351,9 +388,11 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      # 配布物だけを集める。jobs.ui の画面（web-ui）は各 job が埋め込んだもので、公開しない。
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: incoming
+          pattern: release-*
 
       # 保護環境の秘密を使う処理をこのjobへ集約し、releaseごとの承認を1回にする。
       - name: Sign and verify the Android APK

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -353,8 +354,9 @@ func validateNativeWorkflow(document workflowDocument) []string {
 // マージできなくなる。そこで job は残し、jobs.changes の答えで手順だけを飛ばす。Linux はいつも流す。
 func validateNativeTestsGate(job workflowJob) []string {
 	var problems []string
-	if len(job.Needs) != 1 || job.Needs[0] != "changes" {
-		problems = append(problems, "jobs.go must need jobs.changes to know whether the native Go tests run")
+	// jobs.ui は、Go のテストが読む組み立てた画面を渡す（embedded_ui_workflow_test.go）。
+	if !slices.Equal(job.Needs, []string{"changes", "ui"}) {
+		problems = append(problems, "jobs.go must need jobs.changes to know whether the native Go tests run, and jobs.ui for the built web UI")
 	}
 	if job.If != "${{ !cancelled() }}" {
 		problems = append(problems, "jobs.go must run even when jobs.changes fails, with if: ${{ !cancelled() }}")
@@ -676,7 +678,7 @@ func TestNativeTestsNeededScriptSkipsOnlyWebAndDocumentChanges(t *testing.T) {
 		paths string
 		want  string
 	}{
-		{"web and documents only", "web/src/App.tsx\npages/features/menu.md\ninternal/ui/dist/index.html\nartifacts/x.png\nREADME.md\n", "false"},
+		{"web and documents only", "web/src/App.tsx\npages/features/menu.md\nartifacts/x.png\nREADME.md\n", "false"},
 		{"a Go file among them", "web/src/App.tsx\ninternal/app/app.go\n", "true"},
 		{"the workflow itself", ".github/workflows/ci.yml\n", "true"},
 		{"the module file", "go.mod\n", "true"},
