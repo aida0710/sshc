@@ -120,14 +120,16 @@ export function SectionView(props: SectionViewProps) {
       />
     );
   }
-  // Home・Connections・SFTP は、上に共通の細い帯（SectionBar）を置き、その下を画面いっぱいに使う。
   if (props.section === "Home") {
+    // Home draws its own card, with its name and count in the heading.
     return (
-      <OverviewPanel
-        onNavigate={props.navigation.onNavigate}
-        onNavigateLocation={props.navigation.onNavigateLocation}
-        onSessionOpened={props.shell.onShowSession}
-      />
+      <div className="h-full overflow-y-auto">
+        <OverviewPanel
+          onNavigate={props.navigation.onNavigate}
+          onNavigateLocation={props.navigation.onNavigateLocation}
+          onSessionOpened={props.shell.onShowSession}
+        />
+      </div>
     );
   }
   if (props.section === "Files") {

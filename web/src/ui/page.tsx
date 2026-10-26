@@ -7,6 +7,7 @@ import { mobileViewportQuery, useMediaQuery } from "./useMediaQuery";
 export function PageHeader({
   title,
   headingId,
+  meta,
   description,
   actions,
   titleOnPhone = false,
@@ -14,6 +15,8 @@ export function PageHeader({
 }: {
   title: string;
   headingId?: string;
+  // meta goes beside the name in small faint type, such as how many connections there are.
+  meta?: string | undefined;
   description?: string | undefined;
   actions?: ReactNode;
   titleOnPhone?: boolean;
@@ -23,7 +26,10 @@ export function PageHeader({
   return (
     <header className={`flex flex-wrap items-start justify-between gap-4 ${className}`}>
       <div className="min-w-0 flex-1">
-        <h2 id={headingId} className={compact && !titleOnPhone ? "sr-only" : "text-xl font-semibold leading-[29px] text-ink"}>{title}</h2>
+        <div className="flex min-w-0 items-baseline gap-2.5">
+          <h2 id={headingId} className={compact && !titleOnPhone ? "sr-only" : "text-xl font-semibold leading-[29px] text-ink"}>{title}</h2>
+          {meta === undefined ? null : <span className={compact && !titleOnPhone ? "sr-only" : "shrink-0 text-[12.5px] text-ink-faint"}>{meta}</span>}
+        </div>
         {description === undefined ? null : <p className="mt-0.5 max-w-3xl text-xs leading-[18px] text-ink-faint">{description}</p>}
       </div>
       {actions === undefined ? null : (

@@ -14,7 +14,7 @@ test("shows OS icons and editable paste and close dialogs with synthetic connect
   for (const name of ["Amazon Linux", "Fedora", "Ubuntu", "Red Hat Enterprise Linux", "Debian", "macOS", "Windows", "OS unknown"]) {
     await expect(page.getByRole("img", { name, exact: true })).toBeVisible();
   }
-  await expect(page.getByRole("img", { name: "Ubuntu", exact: true })).toHaveCSS("width", "24px");
+  await expect(page.getByRole("img", { name: "Ubuntu", exact: true })).toHaveCSS("width", "34px");
   await expect(page.getByRole("img", { name: "Ubuntu", exact: true }).locator("span").first()).toHaveCSS("width", "20px");
   const dir = process.env.SSHC_UI_VISUAL_DIR;
   if (dir !== undefined) {
