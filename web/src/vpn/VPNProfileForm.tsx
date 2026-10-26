@@ -1,9 +1,9 @@
 import { useLayoutEffect, useMemo, useState } from "react";
 import type { VPNProfile, VPNSecrets } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
-import { Field, control, hintText, sectionHeading } from "../ui/form";
+import { Field, control, hintText } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
-import { Button, Card, Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { usePendingResult } from "../ui/usePendingResult";
 import { IKEv2ProfileFields } from "./IKEv2ProfileFields";
 import { settingsSection, vpnBackendLabel, vpnBackends, type VPNBackend } from "./vpnBackends";
@@ -196,8 +196,8 @@ export function VPNProfileForm({
   }
 
   return (
-    <Card as="section" padded aria-label={heading}>
-      <p className={sectionHeading}>{heading}</p>
+    <section aria-label={heading} className="flex flex-col gap-3 border-t border-line pt-5">
+      <h3 className="text-sm font-semibold text-ink">{heading}</h3>
       <p className={hintText}>{editing === undefined ? t("vpn.addHint") : t("vpn.editHint")}</p>
       {reveal?.state === "revealing" ? <p className={hintText}>{t("vpn.secretsRevealing")}</p> : null}
       {reveal?.state === "failed" ? <Notice>{t("vpn.secretsRevealFailed", { reason: reveal.reason })}</Notice> : null}
@@ -349,6 +349,6 @@ export function VPNProfileForm({
           </Button>
         )}
       </div>
-    </Card>
+    </section>
   );
 }
