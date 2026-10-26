@@ -1,5 +1,5 @@
 import { expect, test } from "./support/environment";
-import { openApplication, openSection, sessionStatus } from "./support/environment";
+import { chooseTheme, openApplication, openSection, sessionStatus } from "./support/environment";
 import { everySection } from "./support/sectionNavigation";
 import { answerNoVPNProfiles } from "./support/vpn";
 
@@ -9,9 +9,9 @@ for (const appearance of ["light", "dark"] as const) {
     await openApplication(page, installation);
 
     await expect(page.locator("[data-session-status-badge]")).toBeVisible();
+    await chooseTheme(page, appearance);
     await openSection(page, "Menu");
     const displaySettings = page.getByRole("region", { name: "Menu" });
-    await displaySettings.getByLabel("Theme").selectOption(appearance);
     if (process.env.SSHC_VISUAL_DIR !== undefined) {
       if (process.env.SSHC_VISUAL_LOCALE === "ja") {
         await displaySettings.getByLabel("Language").selectOption("ja");
@@ -56,8 +56,7 @@ for (const appearance of ["light", "dark"] as const) {
 
   test(`structural borders and small supporting text keep their contrast in ${appearance}`, async ({ page, installation }) => {
     await openApplication(page, installation);
-    await openSection(page, "Menu");
-    await page.getByRole("region", { name: "Menu" }).getByLabel("Theme").selectOption(appearance);
+    await chooseTheme(page, appearance);
 
     const contrast = await page.evaluate(() => {
       const root = getComputedStyle(document.documentElement);
@@ -175,8 +174,7 @@ for (const appearance of ["light", "dark"] as const) {
 
 test("the connections controls are legible in light", async ({ page, installation }) => {
   await openApplication(page, installation);
-  await openSection(page, "Menu");
-  await page.getByRole("region", { name: "Menu" }).getByLabel("Theme").selectOption("light");
+  await chooseTheme(page, "light");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
   await openSection(page, "Connections");

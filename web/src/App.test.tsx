@@ -670,7 +670,7 @@ describe("App", () => {
     expect(toggle).toHaveFocus();
   });
 
-  it("offers the three appearances and remembers the chosen one", async () => {
+  it("leaves the theme to Settings → Appearance, which the Menu links to", async () => {
     const user = userEvent.setup();
     render(
       <ThemeProvider>
@@ -684,13 +684,12 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("link", { name: "Menu" }));
     const menu = await screen.findByRole("region", { name: "Menu" });
-    const control = within(menu).getByLabelText("Theme");
-    expect(control).toHaveValue("dark");
+    expect(within(menu).queryByLabelText("Theme")).not.toBeInTheDocument();
 
-    await user.selectOptions(control, "dark");
+    await user.click(within(menu).getByRole("link", { name: "Open Appearance" }));
 
-    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-    expect(window.localStorage.getItem("sshc.theme")).toBe("dark");
+    expect(window.location.pathname).toBe("/settings/appearance");
+    expect(await screen.findByRole("heading", { name: "Appearance" })).toBeInTheDocument();
   });
 
   it("shows the starting status before session setup completes", () => {
@@ -1281,9 +1280,8 @@ describe("App", () => {
     await user.click(await screen.findByRole("link", { name: "Menu" }));
     const menu = await screen.findByRole("region", { name: "Menu" });
     const groups = within(menu).getAllByRole("heading", { level: 3 });
-    expect(groups.at(-3)).toHaveTextContent("Others");
-    expect(groups.at(-2)).toHaveTextContent("Preferences");
-    expect(groups.at(-1)).toHaveTextContent("Sign out");
+    expect(groups.at(-2)).toHaveTextContent("Others");
+    expect(groups.at(-1)).toHaveTextContent("Preferences");
     await user.selectOptions(within(menu).getByLabelText("Language"), "ja");
 
     expect(window.location.pathname).toBe("/menu");
