@@ -13,8 +13,10 @@ export function BasicTOTPSection({ draft, derived, secrets, onEdit }: {
 }) {
   const t = useTranslate();
   const { credentials, credentialOptionsStatus } = secrets;
+  // The section draws the line above its first row, which as a first child draws none; pt-3 gives that row
+  // the same room as the others.
   return (
-    <div className="border-t border-line">
+    <div className="border-t border-line pt-3">
       <FieldRow label={t("conn.basicStoredTOTP")} interactiveChildren>
         <div className="flex flex-col gap-1 pt-1.5 text-[13px] text-ink-muted">
           {secrets.loading || credentialOptionsStatus === "loading" ? <p>{t("conn.createLoadingOptions")}</p> : null}
