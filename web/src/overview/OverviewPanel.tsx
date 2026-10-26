@@ -108,7 +108,6 @@ export function OverviewPanel({
         title={t("home.heading")}
         headingId="home-heading"
         meta={overview === null ? undefined : t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
-        description={t("home.pageDescription")}
         actions={(
           <Button className="min-h-10 md:min-h-0" onClick={() => onNavigate("Connections")}>
             {t("home.manageConnections")}
