@@ -620,6 +620,21 @@
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+/* A select draws the design's chevron instead of the browser's arrow, which differs by platform. Kept
+   outside the layers so its right padding wins over a control's px-* utility. The chevron's colour is
+   the theme's muted ink, written into the picture because a background image cannot use currentColor. */
+select:not([multiple]):not([size]) {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f575e' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 0.625rem center;
+  background-repeat: no-repeat;
+  background-size: 13px 13px;
+  padding-right: 1.95rem;
+}
+[data-theme="dark"] select:not([multiple]):not([size]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b6bbc1' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
 @media (max-width: 767px), (pointer: coarse) {
   /* Compact icon artwork keeps its size; the touch target is large enough. */
   :where(button:not([data-touch-compact]), [role="button"], [role="menuitem"], nav a):not(.monaco-editor *):not(.xterm *) {

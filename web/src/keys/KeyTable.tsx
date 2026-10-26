@@ -94,7 +94,7 @@ export function KeyTable({
     <table className="block w-full text-left text-sm md:table md:min-w-[56rem]">
       <caption className="sr-only">{t("keys.tableCaption")}</caption>
       <thead className="hidden md:table-header-group">
-        <tr className={`${tableHeadRow} bg-surface-subtle`}>
+        <tr className={tableHeadRow}>
           <th scope="col" className={`${tableHeadCell} w-12 pl-3`}>
             <span className="sr-only">{t("keys.colChoose")}</span>
           </th>
@@ -113,7 +113,7 @@ export function KeyTable({
             <Fragment key={item.id}>
             <tr
               data-key-related-to={relatedTo ?? undefined}
-              className={`grid grid-cols-[2.25rem_minmax(0,1fr)] border-b border-hairline align-top transition-colors last:border-b-0 md:table-row ${
+              className={`grid grid-cols-[2.25rem_minmax(0,1fr)] border-b border-line align-top transition-colors last:border-b-0 md:table-row ${
                 isSelected ? "bg-select-fill" : ""
               } ${relatedTo === null ? "" : "bg-surface-subtle"}`}
             >

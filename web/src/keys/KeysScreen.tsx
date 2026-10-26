@@ -23,8 +23,9 @@ import { KeyTrashSection } from "./KeyTrashSection";
 import { KeyGenerationSection } from "./KeyGenerationSection";
 import { useTranslate } from "../i18n/context";
 import { primaryAction } from "../ui/form";
-import { Button, Card, Notice } from "../ui/surface";
-import { PageHeader, SummaryStat, SummaryStats } from "../ui/page";
+import { Button, Notice } from "../ui/surface";
+import { Icon } from "../ui/icons";
+import { PageHeader, PageSection, SummaryStat, SummaryStats } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { keysApi, type KeyItem, type KeysApi, type RelocateKeyResponse } from "./api";
 import type {
@@ -298,12 +299,13 @@ export function KeysScreen({
   };
 
   return (
-    <section className="mx-auto flex w-full max-w-7xl flex-col gap-7 [&_button]:min-h-10 sm:[&_button]:min-h-0">
+    <section className="flex flex-col gap-[22px] [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader
         title={t("keys.heading")}
         description={t("keys.pageDescription")}
         actions={
-          <a href="#create-key-heading" className={primaryAction}>
+          <a href="#create-key-heading" className={`${primaryAction} inline-flex items-center gap-1.5`}>
+            <Icon name="plus" className="size-[15px]" />
             {t("keys.createHeading")}
           </a>
         }
@@ -327,18 +329,20 @@ export function KeysScreen({
       )}
       {moveOutcome === null ? null : <KeyMoveOutcomeNotice outcome={moveOutcome} />}
 
-      <section
-        aria-label={t("keys.metricFiles")}
-        className="flex flex-col gap-3"
+      <PageSection
+        heading={t("keys.listHeading")}
+        meta="~/.ssh"
+        actions={(
+          <KeyListToolbar
+            listFilter={listFilter}
+            onListFilterChange={setListFilter}
+            query={keyQuery}
+            onQueryChange={setKeyQuery}
+          />
+        )}
       >
-        <KeyListToolbar
-          listFilter={listFilter}
-          onListFilterChange={setListFilter}
-          query={keyQuery}
-          onQueryChange={setKeyQuery}
-        />
-        <Card radius="md">
-          <div className="flex flex-col md:flex-row">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-5 md:flex-row">
             <FolderPane
               rows={rows}
               selected={folder}
@@ -369,8 +373,8 @@ export function KeysScreen({
             onRestore={restore}
             onPurge={purge}
           />
-        </Card>
-      </section>
+        </div>
+      </PageSection>
 
       <StoredPassphrasePanel
         form={storedPassphraseForm}
