@@ -9,7 +9,7 @@ import type { MessageKey } from "../i18n/messages";
 import { PasswordField } from "../ui/PasswordField";
 import { Field, control, hintText, sectionHeading } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
-import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { PageHeader, SummaryStat, SummaryStats } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { CredentialEditDialog } from "./CredentialEditDialog";
 import { TOTPCodeCard } from "./TOTPCodeCard";
@@ -265,21 +265,16 @@ export function SecretsPanel({
           </Button>
         }
       />
-      {kind === undefined ? <MetricGrid className="sm:grid-cols-2 lg:grid-cols-4">
+      {kind === undefined ? <SummaryStats>
         {([
           [t("secrets.metricPasswords"), passwordCount],
           [t("secrets.metricPassphrases"), passphraseCount],
           [t("secrets.metricTOTP"), totpCount],
           [t("secrets.metricAssignments"), assignmentCount],
         ] as const).map(([label, value]) => (
-          <MetricCard
-            key={String(label)}
-            label={String(label)}
-            value={value}
-            compact
-          />
+          <SummaryStat key={String(label)} label={String(label)} value={value} />
         ))}
-      </MetricGrid> : null}
+      </SummaryStats> : null}
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
       {keyHostUsageComplete ? null : (
         <Notice>{t("secrets.keyHostUsageIncomplete")}</Notice>
