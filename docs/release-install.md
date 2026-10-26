@@ -8,7 +8,7 @@ sshcは、macOS、Linux、Windows向けのCLIバイナリとAndroidのAPKを配�
 brew install aida0710/tap/sshc
 ```
 
-Homebrewのformulaはソースからビルドするため、GoもHomebrewによってインストールされます。
+Homebrewのformulaはソースからビルドするため、GoとNode.js 22もHomebrewによってインストールされます（どちらもビルドのときだけ使います）。
 
 ## インストールスクリプト（macOS / Linux）
 

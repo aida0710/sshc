@@ -425,8 +425,8 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi()} />);
 
     const terminal = await screen.findByRole("region", { name: "Terminal" });
-    expect(within(terminal).getByText(/stored in the sshc metadata under ~\/\.ssh\/sshc/i)).toHaveTextContent(
-      /Theme, language and notification sounds are stored only in this browser/,
+    expect(within(terminal).getByText(/These settings sync between machines/i)).toHaveTextContent(
+      /Theme, language and notification sounds stay in this browser/,
     );
     expect(within(terminal).getByLabelText("Engine replay buffer (bytes)"))
       .toHaveAttribute("max", "4194304");

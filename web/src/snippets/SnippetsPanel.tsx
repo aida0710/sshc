@@ -487,6 +487,7 @@ export function SnippetsPanel({
               <label key={alias} className="flex min-w-0 items-center gap-2 break-all text-sm">
                 <input
                   type="checkbox"
+                  className="size-4 shrink-0 accent-accent"
                   checked={targets.includes(alias)}
                   onChange={(event) => {
                     setTargets(

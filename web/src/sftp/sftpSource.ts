@@ -135,13 +135,21 @@ export const localSource: SFTPSource = {
   rootOf: localRootOf,
   crumbs(value, home) {
     const normalized = value.replace(/\\/g, "/");
+    // Inside the home folder the trail starts at "~", as a shell prompt does; the folders above it are
+    // the same every time and only push the current one out of view.
+    if (home !== undefined && home !== "" && (normalized === home || normalized.startsWith(`${home}/`))) {
+      const below = normalized.slice(home.length).split("/").filter(Boolean);
+      return [
+        { label: "~", path: home },
+        ...below.map((part, index) => ({ label: part, path: `${home}/${below.slice(0, index + 1).join("/")}` })),
+      ];
+    }
     const root = localRootOf(normalized);
-    const label = (crumb: SFTPCrumb) => crumb.path === home ? { ...crumb, label: "~" } : crumb;
-    if (normalized === root) return [label({ label: root, path: root })];
+    if (normalized === root) return [{ label: root, path: root }];
     const parts = normalized.slice(root.length).split("/").filter(Boolean);
     return [
-      label({ label: root, path: root }),
-      ...parts.map((part, index) => label({ label: part, path: `${root}${parts.slice(0, index + 1).join("/")}` })),
+      { label: root, path: root },
+      ...parts.map((part, index) => ({ label: part, path: `${root}${parts.slice(0, index + 1).join("/")}` })),
     ];
   },
   acceptsPath: (path) => path.startsWith("/") || /^[A-Za-z]:\//.test(path),

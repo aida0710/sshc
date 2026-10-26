@@ -18,7 +18,8 @@ export function FieldRow({
   label: ReactNode;
   hint?: string | undefined;
   // warning is what is wrong with the value, in amber under the hint. The control reads it as a description
-  // and is marked invalid.
+  // and is marked invalid. It is announced politely when it changes: some warnings are there from the start
+  // (a value written in a form the editor cannot change), and an alert would interrupt as the form opens.
   warning?: string | undefined;
   // actions are buttons about the field (such as going back to the inherited value), under the hint and
   // outside the <label>, so a click on them does not land on the control.
@@ -46,7 +47,7 @@ export function FieldRow({
     <div className={`grid gap-y-1.5 border-t border-line py-3.5 first:border-t-0 first:pt-0.5 ${formColumns}`}>
       {interactiveChildren ? <div className={pair}>{name}{control}</div> : <label className={pair}>{name}{control}</label>}
       {hint === undefined ? null : <span id={hintId} className="text-xs leading-[18px] text-ink-faint lg:col-start-2">{hint}</span>}
-      {warning === undefined ? null : <span id={warningId} className="text-xs leading-[18px] text-notice-ink lg:col-start-2">{warning}</span>}
+      {warning === undefined ? null : <span id={warningId} aria-live="polite" className="text-xs leading-[18px] text-notice-ink lg:col-start-2">{warning}</span>}
       {actions === undefined ? null : <div className="flex flex-wrap gap-2 lg:col-start-2">{actions}</div>}
     </div>
   );
