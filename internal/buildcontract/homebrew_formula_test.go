@@ -54,6 +54,24 @@ func TestTheFormulaBuildsSomethingThatExists(t *testing.T) {
 	}
 }
 
+// 画面（internal/ui/dist/app）はリポジトリに入っていない。formula が組み立てずに go build すると、
+// brew で入れた sshc は画面の代わりに「画面が入っていない」と返すだけになる。brew の test do は
+// version と status しか見ないので、そこでは気付けない。
+func TestTheFormulaBuildsTheWebUIBeforeTheBinary(t *testing.T) {
+	formula := readFormula(t)
+	if !strings.Contains(formula, `depends_on "node" => :build`) {
+		t.Fatal(`formula に depends_on "node" => :build が無い`)
+	}
+	webBuild := regexp.MustCompile(`(?s)cd "web" do\s*\n\s*system "npm", "ci"[^\n]*\n\s*system "npm", "run", "build"\s*\n\s*end`).FindStringIndex(formula)
+	if webBuild == nil {
+		t.Fatal(`formula は web/ の中で npm ci と npm run build を走らせていない`)
+	}
+	goBuild := strings.Index(formula, `system "go", "build"`)
+	if goBuild < 0 || goBuild < webBuild[1] {
+		t.Fatal("formula は画面を組み立てる前に go build している")
+	}
+}
+
 func TestTheFormulaInstallsShellCompletions(t *testing.T) {
 	if !strings.Contains(readFormula(t), `generate_completions_from_executable(bin/"sshc", "completion")`) {
 		t.Error("formula が sshc completion から bash/zsh/fish の補完を生成していない")

@@ -624,6 +624,11 @@ func isUpgrade(request *http.Request) bool {
 	return false
 }
 
+// uiMissingMessage は、画面を組み立てずに作ったバイナリ（go install など）が、ページの代わりに返す文である。
+// 画面は web のビルドが internal/ui/dist/app に書き出し、バイナリがそれを埋め込む。
+const uiMissingMessage = "This sshc binary was built without its web UI. " +
+	"Install sshc from a release or Homebrew, or build it from the repository with make build."
+
 func spaHandler(assets fs.FS) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet && request.Method != http.MethodHead {
@@ -646,14 +651,14 @@ func spaHandler(assets fs.FS) http.Handler {
 
 		contents, err := fs.ReadFile(assets, name)
 		if err != nil {
-			if !acceptsHTML(request.Header.Get("Accept")) {
+			if name != "index.html" && !acceptsHTML(request.Header.Get("Accept")) {
 				http.NotFound(response, request)
 				return
 			}
 			name = "index.html"
 			contents, err = fs.ReadFile(assets, name)
 			if err != nil {
-				http.NotFound(response, request)
+				http.Error(response, uiMissingMessage, http.StatusServiceUnavailable)
 				return
 			}
 		}

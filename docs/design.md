@@ -263,7 +263,7 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
 - 設定画面の「Open connections」から、すべてのコンソール、ポート転送、リモートへ転送した agent を終了できます。engine 自体は停止しません。再接続できる操作のため、確認ダイアログは表示しません。
 - engine は実行中のターミナルから Ctrl-C、SIGTERM、またはターミナルを閉じたときの SIGHUP で停止します。開いているコンソール、転送、vault を終了した後に lock と handoff を消します。
 - **cookie はポートに紐づきません。** 同じ `127.0.0.1` の別ポートに居るサーバーがこの session の cookie を受け取りうるので、読み取りにも CSRF トークンを要求します。トークンは port-origin ごとの `sessionStorage` にあり、そこへは渡りません。
-- デスクトップパッケージは廃止し、`sshc-<OS>-<アーキ>` 形式の CLI バイナリだけを配布します。署名、公証、インストーラーは使用しません。`curl` で取得し、`chmod +x` を設定して実行できます。Homebrew formula はソースからビルドします。
+- デスクトップパッケージは廃止し、`sshc-<OS>-<アーキ>` 形式の CLI バイナリだけを配布します。署名、公証、インストーラーは使用しません。`curl` で取得し、`chmod +x` を設定して実行できます。Homebrew formula はソースからビルドし、埋め込む画面は Node.js で組み立てます（組み立てた画面はリポジトリに入れていません）。
 - GUI アプリケーションとして配布するのは Android 版だけです。Android ではストア配布と WebView へのアクセス URL の受け渡しが必要です。iOS 版はラッパー、CI、検査がない状態で `ios-bind` target だけが残っていたため廃止しました。engine 側の `mobile` は gomobile のビルド対象として iOS を扱えますが、iOS 版の配布は保証しません。
 - Android版の画面には`FLAG_SECURE`を付け、ターミナルの出力やシークレットの入力欄がスクリーンショット、画面の録画、最近使ったアプリの一覧の画像に残らないようにします。debug buildは確認の手順（`scripts/android`、`docs/manual-acceptance.md`）が`adb exec-out screencap`で画面を撮るため付けません（`res/values/window.xml`の`secure_window`）。
 - ターミナルの通知を押して開いたMainActivityは、このプロセスが出した通知のtagだけを受け取ります。MainActivityはランチャーから開くためexportedで、ほかのアプリも同じextraを付けて開けるためです。Androidの通知には、ターミナルのプログラムからの通知であることをアプリ名の横に表示し、見出しは接続エイリアスから始めます。見出しのペイン名と本文は接続先のプログラムが決めるためです。
@@ -454,7 +454,7 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
   - ターミナルのタイトルと通知を読むOSC解析（`FuzzOSCObserverChunkingIsInvariant`）。SSHサーバーから届く列の区切り方によらず同じタイトルと通知を取り出し、保持する量が上限を超えないことを確かめます
 - seedの多くは手で書いた境界の入力です。Includeパターン展開、`ssh -G`出力パーサー、`known_hosts`リーダーはtestdataの実データもseedに加え、リモートスナップショットのリーダーはテストで組み立てた正しいアーカイブをseedにします。
 - アクセス URL を表示するのは `sshc` と `sshc open` だけで、要求ごとに 1 つ発行します。`sshc engine` はアクセス URL を表示しません。旧バージョンの `--own-engine` と `-open=false` はどちらも未定義であり、alias や互換用 option もありません。
-- 配布物は UI を埋め込んだ単一バイナリです。`otool -L` はシステムライブラリのみを表示し、同梱ランタイムはありません。`make e2e` は毎回ビルドし直した実バイナリを Playwright で駆動するため、埋め込み済み UI が古いままだと E2E が失敗します。
+- 配布物は UI を埋め込んだ単一バイナリです。`otool -L` はシステムライブラリのみを表示し、同梱ランタイムはありません。組み立てた UI（`internal/ui/dist/app`）はリポジトリに入れず、CI とリリースは1回だけ組み立てたものを各 job が埋め込みます。`make e2e` は毎回画面とバイナリを作り直して Playwright で駆動します。
 - `make verify-generated` は `api/openapi.yaml` から Go と TypeScript の型を再生成し、コミット済みの生成物と一致しなければ失敗します。生成物を手で編集してはいけません。
 - 自動テストは実際の `~/.ssh`、ssh-agent、リモートホストへ一切触れません。実バイナリを起動する試験でも `HOME` は一時ディレクトリです。実際に外部へ影響する操作（実接続、実 `authorized_keys` 変更、実ホストへのホスト鍵取得）は `docs/manual-acceptance.md` の手動試験に分離しています。`internal/sshclient` は 127.0.0.1 に立てたプロセス内の SSH サーバーと実際にハンドシェイクを行いますが、そこもリモートではありません。
 - `make integration`は固定digestのOpenSSHコンテナに対してSFTP subsystemを実際に開き、64 MiB超のfixtureを含むupload／chunk pause・remote offset resume／atomic complete／cancel cleanup／Range相当のoffset downloadとSHA-256一致、file・directory download／chmod／text save／競合拒否／rename／list／deleteを往復します。環境変数がない通常の`go test ./...`ではskipし、利用者のホストへ接続しません。

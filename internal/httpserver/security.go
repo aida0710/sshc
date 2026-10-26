@@ -70,7 +70,7 @@ const (
 	// ほかのスクリプトに渡さない。
 	//
 	// 一覧は Monaco が実際に作る名前だけにする。Monaco を上げて名前が増減すると、
-	// 埋め込み UI（internal/ui/dist）と照合する
+	// 埋め込み UI（internal/ui/dist/app）と照合する
 	// TestThePagePolicyAllowsExactlyTheTrustedTypesPoliciesTheEmbeddedUICreates が落ちる。
 	monacoTrustedTypesPolicies = "defaultWorkerFactory diffEditorWidget diffReview domLineBreaksComputer dompurify " +
 		"editorGhostText editorViewLayer richScreenReaderContent standaloneColorizer stickyScrollViewLayer tokenizeToString"
