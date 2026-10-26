@@ -15,10 +15,12 @@ const mebibyte = 1 << 20;
 const maxLargeFileParallelism = 128;
 const selectClass = "h-11 rounded-md border border-control-line bg-control px-3 text-sm md:h-9 [@media(pointer:coarse)]:h-11";
 
+// SettingsGroup is a section of the form, shaped like PageSection: a line above, then its heading. The
+// legend floats so it sits under the line instead of breaking it.
 function SettingsGroup({ heading, children }: { heading: string; children: ReactNode }) {
-  return <fieldset className="min-w-0 border-t border-line pt-4">
-    <legend className="pr-3 text-sm font-medium text-ink">{heading}</legend>
-    {children}
+  return <fieldset className="min-w-0 border-t border-line pt-5">
+    <legend className="float-left mb-3 w-full text-sm font-semibold text-ink">{heading}</legend>
+    <div className="clear-left">{children}</div>
   </fieldset>;
 }
 
@@ -51,9 +53,10 @@ export function TransferSettingsForm({ settings, onCommit }: {
     void commitAndReport(change);
   }
 
-  return <div className="space-y-6" onInput={() => setCommitState((current) => current === "saved" ? "idle" : current)}>
-    {/* The line keeps its height when empty, so the controls below do not move while they are being used. */}
-    <div className="min-h-8">
+  return <div className="relative space-y-6" onInput={() => setCommitState((current) => current === "saved" ? "idle" : current)}>
+    {/* The saving line floats at the top right, beside the first heading: it takes no room when empty, and
+        the controls below do not move when it appears. */}
+    <div className="absolute right-0 top-4">
       {commitState === "saving" ? (
         <p role="status" className="flex items-center gap-2 text-xs text-ink-muted"><Spinner />{t("sftp.settingsSaving")}</p>
       ) : commitState === "saved" ? (

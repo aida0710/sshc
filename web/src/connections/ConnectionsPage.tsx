@@ -416,13 +416,17 @@ export function ConnectionsPage({
         />
       )}
     >
-      <PageHeader
-        title={t("conn.heading")}
-        headingId="connections-heading"
-        meta={t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
-        actions={newConnectionButton(true)}
-        className={headerLayout}
-      />
+      {/* On a phone the editor takes the screen; the row with New connection would stay above it and
+          cover the unsaved badge, so only the heading's name stays, for screen readers. */}
+      {compact && detailOpen ? <h2 id="connections-heading" className="sr-only">{t("conn.heading")}</h2> : (
+        <PageHeader
+          title={t("conn.heading")}
+          headingId="connections-heading"
+          meta={t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
+          actions={newConnectionButton(true)}
+          className={headerLayout}
+        />
+      )}
       <div style={{ "--list-width": `${listWidth}px` } as CSSProperties} className={columnsLayout}>
         <ConnectionListPane
           compact={compact}

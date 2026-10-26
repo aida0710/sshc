@@ -83,6 +83,8 @@ runner、ネットワーク、`sum.golang.org`などの一時的な障害で失�
 gh run rerun <run-id> --failed --repo aida0710/sshc
 ```
 
+jobのあいだで受け渡す成果物（組み立てた画面と各OSの成果物）は1日で消えます。最初の実行から1日を過ぎたら、失敗したjobだけの再実行は成果物を受け取れずに失敗するので、次の`main`のReleaseワークフローで作り直してください。
+
 元のrunを再実行できない場合は、`main`のReleaseワークフローを同じタグで実行します。ワークフローは、タグのコミットが`main`の祖先で、同じSHAでmain CIが成功していることを確かめてから作り直します。
 
 ```sh
@@ -95,7 +97,7 @@ gh workflow run release.yml --repo aida0710/sshc --ref main -f tag=<tag>
 scripts/release/publish.sh --verify-only <tag>
 ```
 
-手動で実行したReleaseワークフローは、より新しい安定バージョンが公開済みでも、古い安定バージョンを作り直せます。その場合、GitHubのlatestとHomebrew tapは新しい方を指したままです。`--verify-only`は成果物、チェックサム、attestationを検証したあと、Homebrew tapの照合で止まります。
+手動で実行したReleaseワークフローは、より新しい安定バージョンが公開済みでも、古い安定バージョンを作り直せます。ただし、組み立てた画面をリポジトリに入れていたv0.54.0までのタグは、画面の出力先が違うため作り直せません。その場合、GitHubのlatestとHomebrew tapは新しい方を指したままです。`--verify-only`は成果物、チェックサム、attestationを検証したあと、Homebrew tapの照合で止まります。
 
 latestにする安定バージョンでは、Releaseワークフローがタグのコミットにある`scripts/release/check-pinned-installers.sh`で導入例を照合します。このスクリプトを含まない古いコミットのタグは照合できないため、ワークフローは理由を表示して止まります。
 

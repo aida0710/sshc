@@ -91,7 +91,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
         <Button small disabled={blocked} onClick={() => void checkAuthentication()} className="max-w-full whitespace-normal text-left">
           {busy === "authentication" ? t("conn.checking") : t("conn.checkAuthentication")}
         </Button>
-        {disabled ? <p className={`w-full ${hintText}`}>{t("conn.summaryDraftBlocksActions")}</p> : null}
+        {/* The summary above already says why the checks wait while a draft is unsaved. */}
       </div>
 
       {reachabilityError === "" ? null : <Notice tone="danger">{reachabilityError}</Notice>}
@@ -99,7 +99,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
 
       {pendingDirectives.length === 0 ? null : (
         <div className="rounded-[9px] bg-notice p-3 text-sm">
-          <h3 className="font-medium text-notice-ink">{t("conn.checksExecutableHeading")}</h3>
+          <h4 className="font-medium text-notice-ink">{t("conn.checksExecutableHeading")}</h4>
           <p className={hintText}>{t("conn.checksExecutableHint")}</p>
           <ul className="mt-2 flex flex-col gap-2">
             {pendingDirectives.map((directive) => (
@@ -125,7 +125,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
         <div className="grid border-t border-line pt-3 sm:grid-cols-2 sm:divide-x sm:divide-line">
           {reachability === null ? null : (
             <div className="flex flex-col gap-1.5 p-3 text-sm">
-              <h3 className={sectionHeading}>{t("diag.reachability")}</h3>
+              <h4 className={sectionHeading}>{t("diag.reachability")}</h4>
               <p className="font-mono text-xs text-ink">{reachability.address}</p>
               <p className="font-medium text-ink">{describeReachability(t, reachability.outcome)}</p>
               <p className={hintText}>{t(reachabilityNoticeKey(reachability.outcome))}</p>
@@ -133,7 +133,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
           )}
           {authentication === null ? null : (
             <div className="flex flex-col gap-1.5 border-t border-line p-3 text-sm sm:border-t-0">
-              <h3 className={sectionHeading}>{t("diag.authentication")}</h3>
+              <h4 className={sectionHeading}>{t("diag.authentication")}</h4>
               <p className="font-medium text-ink">{describeAuthentication(t, authentication.outcome)}</p>
               {authentication.method === "" ? null : (
                 <p className={hintText}>{t("diag.authenticationMethod", { method: authentication.method })}</p>

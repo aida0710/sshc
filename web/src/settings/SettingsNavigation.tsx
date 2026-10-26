@@ -14,7 +14,8 @@ export function SettingsNavigation({
 }) {
   const t = useTranslate();
   return (
-    <nav aria-label={t("settings.heading")} className="hidden w-[220px] shrink-0 flex-col gap-0.5 px-2.5 py-4 md:flex">
+    // sticky: the list stays in view while a long settings page scrolls beside it.
+    <nav aria-label={t("settings.heading")} className="sticky top-2 hidden w-[220px] shrink-0 flex-col gap-0.5 self-start px-2.5 py-4 md:flex">
       <h2 className="px-2 pb-2 text-xs font-medium text-ink-faint">{t("settings.heading")}</h2>
       {settingsPages.map((page) => {
         const meta = settingsPageMeta[page];

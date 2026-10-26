@@ -313,23 +313,23 @@ export function GroupsPanel({ onInspector, onNavigationBlockerChange, onNavigate
       <section className="border-t border-line pt-5">
         <div className="pb-4">
           <h3 className="text-sm font-semibold text-ink">{t("groups.addHeading")}</h3>
-          <div className="mt-3 flex flex-wrap items-end gap-2">
-            <div className="min-w-52 flex-1">
-              <Field label={t("groups.newName")} hint={t("groups.nestingNote")}>
-                <input
-                  ref={newNameInput}
-                  id="group-name"
-                  value={newName}
-                  onChange={(event) => setNewName(event.target.value)}
-                  placeholder="work/eu"
-                  className={control}
-                />
-              </Field>
-            </div>
+          {/* The note goes under the row, so the button lines up with the field rather than with the note. */}
+          <label htmlFor="group-name" className={`mt-3 block ${fieldLabel}`}>{t("groups.newName")}</label>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <input
+              ref={newNameInput}
+              id="group-name"
+              aria-describedby="group-name-note"
+              value={newName}
+              onChange={(event) => setNewName(event.target.value)}
+              placeholder="work/eu"
+              className={`${control} min-w-52 flex-1`}
+            />
             <Button onClick={addGroup} disabled={newName === ""}>
               {t("groups.add")}
             </Button>
           </div>
+          <p id="group-name-note" className={`mt-1 ${hintText}`}>{t("groups.nestingNote")}</p>
         </div>
 
       {groups.length === 0 ? (

@@ -1,17 +1,22 @@
 import { useTranslate } from "../i18n/context";
 import { BrandMark } from "../ui/BrandMark";
+import { PageBoard } from "../ui/PageBoard";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 
-// Nothing is open: a nudge towards the first connection.
+// Nothing is open: a nudge towards the first connection, in the same card as the pages and the terminal.
 export function TerminalEmptyState() {
   const t = useTranslate();
+  // A phone has no card around the page, so the nudge gets one of its own.
+  const compact = useMediaQuery(mobileViewportQuery);
   return (
-    <div className="flex h-full items-center justify-center p-6">
-      <section className="w-full max-w-md border-y border-line bg-surface-subtle p-6 text-center" role="status">
-        <BrandMark className="mx-auto size-10" />
-        <h2 className="mt-4 text-lg font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2>
-        <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p>
-        <div aria-hidden="true" className="mx-auto mt-4 max-w-xs rounded bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink"><span className="text-live">$</span> sshc host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div>
-      </section>
-    </div>
+    // The card is not named, so it does not become a region beside the panels that explain a refused run target.
+    <PageBoard fill className="items-center justify-center p-6">
+      <div className={`flex max-w-md flex-col items-center text-center ${compact ? "w-full rounded-2xl border border-line bg-sidebar px-5 py-6 shadow-pane" : ""}`} role="status">
+        <BrandMark className="size-10" />
+        <h2 className="mt-4 text-lg font-semibold text-ink">{t("terminal.emptyHeading")}</h2>
+        <p className="mt-1.5 max-w-sm text-[13px] leading-5 text-ink-muted">{t("terminal.emptyHint")}</p>
+        <div aria-hidden="true" className="mt-4 w-full max-w-xs rounded-md bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink"><span className="text-live">$</span> sshc host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div>
+      </div>
+    </PageBoard>
   );
 }
