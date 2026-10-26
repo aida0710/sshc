@@ -5,7 +5,10 @@ import { useTranslate } from "../i18n/context";
 import { CopyButton } from "../ui/CopyButton";
 import { CheckboxField, control, hintText, sectionCard, sectionHeading } from "../ui/form";
 import { PasswordInput } from "../ui/PasswordField";
-import { Button, Card, Row } from "../ui/surface";
+import { ActionArea } from "../ui/ActionArea";
+import { FieldRow } from "../ui/FieldRow";
+import { PageSection } from "../ui/page";
+import { Button } from "../ui/surface";
 import { useGenerationForm } from "./forms";
 import type { RunKeyOperation } from "./useKeyOperation";
 import { usePendingResult } from "../ui/usePendingResult";
@@ -78,6 +81,7 @@ export function KeyGenerationSection({
 
   return (
     <>
+      <PageSection heading={t("keys.createHeading")} headingId="create-key-heading">
       <form
         aria-labelledby="create-key-heading"
         className="flex flex-col gap-3"
@@ -86,11 +90,8 @@ export function KeyGenerationSection({
           if (!submission.pending) submission.watch(submitGeneration());
         }}
       >
-        <h3 id="create-key-heading" className={sectionHeading}>
-          {t("keys.createHeading")}
-        </h3>
-        <Card>
-          <Row label={t("keys.algorithm")} stackOnNarrow>
+        <div>
+          <FieldRow label={t("keys.algorithm")}>
             <select
               className={`${control} min-h-10 sm:min-h-0`}
               value={algorithm}
@@ -105,8 +106,8 @@ export function KeyGenerationSection({
                 </option>
               ))}
             </select>
-          </Row>
-          <Row label={t("keys.createGroup")} stackOnNarrow>
+          </FieldRow>
+          <FieldRow label={t("keys.createGroup")}>
             <select
               className={`${control} min-h-10 sm:min-h-0`}
               value={createGroup}
@@ -119,23 +120,23 @@ export function KeyGenerationSection({
                 </option>
               ))}
             </select>
-          </Row>
-          <Row label={t("keys.fileName")} stackOnNarrow>
+          </FieldRow>
+          <FieldRow label={t("keys.fileName")}>
             <input
               className={`${control} min-h-10 sm:min-h-0`}
               value={fileName}
               onChange={(event) => setFileName(event.target.value)}
             />
-          </Row>
-          <Row label={t("keys.comment")} stackOnNarrow>
+          </FieldRow>
+          <FieldRow label={t("keys.comment")}>
             <input
               className={`${control} min-h-10 sm:min-h-0`}
               value={comment}
               onChange={(event) => setComment(event.target.value)}
             />
-          </Row>
+          </FieldRow>
           {inProcess && (
-            <Row label={t("keys.passphrase")} stackOnNarrow interactiveChildren>
+            <FieldRow label={t("keys.passphrase")} interactiveChildren>
               <PasswordInput
                 label={t("keys.passphrase")}
                 className={`${control} min-h-10 sm:min-h-0`}
@@ -143,9 +144,9 @@ export function KeyGenerationSection({
                 onChange={setPassphrase}
                 disabled={unencrypted}
               />
-            </Row>
+            </FieldRow>
           )}
-        </Card>
+        </div>
         {inProcess && (
           <CheckboxField
             label={t("keys.createUnencrypted")}
@@ -156,10 +157,13 @@ export function KeyGenerationSection({
             }}
           />
         )}
-        <Button kind="primary" type="submit" busy={submission.pending} className="self-start">
-          {inProcess ? t("keys.createSubmit") : t("keys.showTerminalCommand")}
-        </Button>
+        <ActionArea>
+          <Button kind="primary" type="submit" busy={submission.pending}>
+            {inProcess ? t("keys.createSubmit") : t("keys.showTerminalCommand")}
+          </Button>
+        </ActionArea>
       </form>
+      </PageSection>
 
       {generated === null ? null : (
         <section aria-live="polite" className={sectionCard}>

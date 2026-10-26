@@ -6,12 +6,15 @@ import {
   CheckboxField,
   Field,
   control,
-  sectionHeading,
+  tableCell,
+  tableCellOnWide,
   tableHeadCell,
   tableHeadRow,
 } from "../ui/form";
-import { Button, Card, Notice } from "../ui/surface";
-import { PageHeader, SummaryStat, SummaryStats } from "../ui/page";
+import { revealOnHover } from "../ui/ActionMenu";
+import { Icon } from "../ui/icons";
+import { Button, Notice } from "../ui/surface";
+import { PageHeader, PageSection, SummaryStat, SummaryStats } from "../ui/page";
 import { SortableTableHeader } from "../ui/tableSort";
 import { useTableSort, type SortValue } from "../ui/useTableSort";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -197,7 +200,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   }
 
   return (
-    <section aria-label={t("kh.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
+    <section aria-label={t("kh.heading")} className="flex flex-col gap-[22px]">
       <PageHeader title={t("kh.heading")} description={t("kh.pageDescription")} />
       {/* 読めなかった known_hosts の件数は分からないので、件数の欄ごと出さない。 */}
       {listing === null ? null : (
@@ -212,63 +215,45 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
         </SummaryStats>
       )}
 
-      {error ? (
-        <Notice tone="danger">{error}</Notice>
-      ) : null}
+      {error ? <Notice tone="danger">{error}</Notice> : null}
 
-
-      <Card as="section" radius="md" aria-labelledby="known-hosts-scan-heading">
-        <div className="flex flex-wrap items-end justify-between gap-4 bg-surface-subtle px-4 py-4">
-          <div>
-            <h3 id="known-hosts-scan-heading" className={sectionHeading}>
-              {t("kh.scanHeading")}
-            </h3>
-            <p className="mt-1 text-xs text-ink-muted">{t("kh.pageDescription")}</p>
-          </div>
-          <div className="flex min-w-64 flex-1 flex-wrap items-end gap-2 sm:max-w-xl">
-            <div className="min-w-48 flex-1">
-              <Field label={t("kh.hostToScan")}>
-                <input
-                  value={scanHost}
-                  onChange={(event) => setScanHost(event.target.value)}
-                  className={control}
-                />
-              </Field>
-            </div>
-            <Button kind="primary" busy={action.running === "scan"} disabled={action.running !== null} onClick={() => void scan()}>
-              {t("kh.scan")}
-            </Button>
-          </div>
+      <PageSection heading={t("kh.scanHeading")} headingId="known-hosts-scan-heading" hint={t("kh.scanHint")}>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            aria-label={t("kh.hostToScan")}
+            placeholder={t("kh.hostToScan")}
+            value={scanHost}
+            onChange={(event) => setScanHost(event.target.value)}
+            className={`${control} sm:max-w-[360px]`}
+          />
+          <Button kind="primary" busy={action.running === "scan"} disabled={action.running !== null} onClick={() => void scan()}>
+            {t("kh.scan")}
+          </Button>
         </div>
 
-        {scanned ? <p className="border-t border-notice-line bg-notice px-4 py-3 text-sm text-notice-ink">{t("kh.unverifiedNotice")}</p> : null}
+        {scanned ? <p className="mt-3 rounded-[9px] bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">{t("kh.unverifiedNotice")}</p> : null}
         {candidates.length > 0 ? (
-          <div className="overflow-x-auto px-4 py-3">
-            <table className="w-full text-sm">
-              <caption className="mb-2 text-left text-ink-muted">{t("kh.scanCandidates")}</caption>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <caption className="mb-2 text-left text-xs text-ink-faint">{t("kh.scanCandidates")}</caption>
               <thead>
                 <tr className={tableHeadRow}>
                   <SortableTableHeader column="host" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
                   <SortableTableHeader column="type" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
                   <SortableTableHeader column="fingerprint" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
                   <SortableTableHeader column="trust" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnTrust")}</SortableTableHeader>
-                  <th scope="col" className={tableHeadCell}>{t("kh.columnActions")}</th>
+                  <th scope="col" className={tableHeadCell}><span className="sr-only">{t("kh.columnActions")}</span></th>
                 </tr>
               </thead>
               <tbody>
                 {displayedCandidates.map((candidate) => (
                   <tr key={`${candidate.host}-${candidate.fingerprint}`} className="border-b border-line last:border-b-0">
-                    <td className="py-2 pr-3">{candidate.host}</td>
-                    <td className="py-2 pr-3 text-ink-muted">{candidate.keyType}</td>
-                    <td className="py-2 pr-3 font-mono text-xs text-ink-muted">{candidate.fingerprint}</td>
-
-                    <td className="py-2 pr-3"><span className="rounded-full bg-notice px-2 py-1 text-xs font-medium text-notice-ink">{candidateTrustText}</span></td>
-                    <td className="py-2">
-                      <Button
-                        onClick={() => openAdd(candidate)}
-                      >
-                        {t("kh.add")}
-                      </Button>
+                    <td className={tableCell}>{candidate.host}</td>
+                    <td className={`${tableCell} font-mono text-xs text-ink-muted`}>{candidate.keyType}</td>
+                    <td className={`${tableCell} font-mono text-xs text-ink-muted`}>{candidate.fingerprint}</td>
+                    <td className={tableCell}><span className="rounded-full bg-notice px-2 py-0.5 text-[11.5px] text-notice-ink">{candidateTrustText}</span></td>
+                    <td className={`${tableCell} text-right`}>
+                      <Button onClick={() => openAdd(candidate)}>{t("kh.add")}</Button>
                     </td>
                   </tr>
                 ))}
@@ -278,12 +263,14 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
         ) : null}
 
         {adding ? (
-          <div className="border-t border-notice-line bg-notice p-4 text-sm">
-            <h3 className="font-medium text-notice-ink">{t("kh.addHeading")}</h3>
-            <p className="text-ink-muted">{t("kh.addExplain", { host: adding.host })}</p>
-            <p className="text-ink-muted">
-              {adding.keyType} · {adding.fingerprint}
-            </p>
+          <div className="mt-3 flex flex-col gap-3 rounded-[10px] bg-notice p-4 text-sm">
+            <div>
+              <h4 className="font-medium text-notice-ink">{t("kh.addHeading")}</h4>
+              <p className="text-ink-muted">{t("kh.addExplain", { host: adding.host })}</p>
+              <p className="font-mono text-xs text-ink-muted">
+                {adding.keyType} · {adding.fingerprint}
+              </p>
+            </div>
             <Field label={t("kh.expectedFingerprint")}>
               <input
                 value={expectedFingerprint}
@@ -296,7 +283,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
               checked={acknowledged}
               onChange={setAcknowledged}
             />
-            <div className="mt-2 flex gap-2">
+            <div className="flex gap-2">
               <Button
                 kind="primary"
                 busy={action.running === "addToKnownHosts"}
@@ -311,76 +298,73 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
             </div>
           </div>
         ) : null}
-      </Card>
+      </PageSection>
 
-      <Card as="section" radius="md" aria-labelledby="known-hosts-trusted-heading">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line px-4 py-4">
-          <div>
-            <h3 id="known-hosts-trusted-heading" className={sectionHeading}>
-              {t("kh.trustedHeading")}
-            </h3>
-            {listing ? <p className="mt-1 font-mono text-xs text-ink-faint">{listing.path}</p> : null}
-          </div>
-          <div className="w-full sm:w-72">
-            <Field label={t("kh.search")}>
-              <input
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  void search(event.target.value);
-                }}
-                className={control}
-              />
-            </Field>
-          </div>
-        </div>
-
+      <PageSection
+        heading={t("kh.trustedHeading")}
+        headingId="known-hosts-trusted-heading"
+        meta={listing?.path}
+        actions={(
+          <span className="relative block w-full sm:w-60">
+            <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint" />
+            <input
+              aria-label={t("kh.search")}
+              placeholder={t("kh.search")}
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                void search(event.target.value);
+              }}
+              className={`${control} pl-8`}
+            />
+          </span>
+        )}
+      >
         {listing ? (
-          <div className="px-4 pb-4">
-            <table className="block w-full text-sm sm:table">
-              <caption className="sr-only">{listing.path}</caption>
-              <thead className="hidden sm:table-header-group">
-                <tr className={tableHeadRow}>
-                  <SortableTableHeader column="host" {...trustedSort.headerProps} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
-                  <SortableTableHeader column="type" {...trustedSort.headerProps} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
-                  <SortableTableHeader column="fingerprint" {...trustedSort.headerProps} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
-                  <th scope="col" className={tableHeadCell}>{t("kh.columnActions")}</th>
+          <table className="block w-full text-[13px] sm:table">
+            <caption className="sr-only">{listing.path}</caption>
+            <thead className="hidden sm:table-header-group">
+              <tr className={tableHeadRow}>
+                <SortableTableHeader column="host" {...trustedSort.headerProps} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
+                <SortableTableHeader column="type" {...trustedSort.headerProps} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
+                <SortableTableHeader column="fingerprint" {...trustedSort.headerProps} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
+                <th scope="col" className={tableHeadCell}><span className="sr-only">{t("kh.columnActions")}</span></th>
+              </tr>
+            </thead>
+            <tbody className="block sm:table-row-group">
+              {displayedEntries.map((item) => (
+                <tr key={`${item.line}-${item.digest}`} className="group/row grid gap-2 border-b border-line py-3 last:border-b-0 hover:bg-hover sm:table-row sm:py-0">
+                  <td className={`flex min-w-0 items-start justify-between gap-4 ${tableCellOnWide}`}>
+                    <span aria-hidden="true" className="shrink-0 text-xs text-ink-faint sm:hidden">{t("kh.columnHost")}</span>
+                    <span className="min-w-0 break-all text-right sm:text-left">{trustedHostText(item)}</span>
+                  </td>
+                  <td className={`flex min-w-0 items-start justify-between gap-4 font-mono text-xs text-ink-muted ${tableCellOnWide}`}>
+                    <span aria-hidden="true" className="shrink-0 font-sans text-ink-faint sm:hidden">{t("kh.columnType")}</span>
+                    <span className="min-w-0 break-all text-right sm:text-left">{item.keyType}</span>
+                  </td>
+                  <td className={`flex min-w-0 items-start justify-between gap-4 font-mono text-xs text-ink-muted ${tableCellOnWide}`}>
+                    <span aria-hidden="true" className="shrink-0 font-sans text-ink-faint sm:hidden">{t("kh.columnFingerprint")}</span>
+                    <span className="min-w-0 break-all text-right sm:text-left">{item.fingerprint}</span>
+                  </td>
+                  <td className={`flex justify-end ${tableCellOnWide} sm:text-right`}>
+                    {/* Removing is offered on the row under the pointer (always on touch), in red words only. */}
+                    <Button
+                      kind="dangerText"
+                      className={revealOnHover}
+                      onClick={() => {
+                        setDeleteError("");
+                        setPending(item);
+                      }}
+                    >
+                      {t("kh.delete")}
+                    </Button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="block sm:table-row-group">
-                {displayedEntries.map((item) => (
-                  <tr key={`${item.line}-${item.digest}`} className="grid gap-2 border-b border-line py-3 last:border-b-0 sm:table-row sm:py-0">
-                    <td className="flex min-w-0 items-start justify-between gap-4 sm:table-cell sm:py-2 sm:pr-3">
-                      <span aria-hidden="true" className="shrink-0 text-xs font-medium uppercase tracking-wide text-ink-muted sm:hidden">{t("kh.columnHost")}</span>
-                      <span className="min-w-0 break-all text-right sm:text-left">{trustedHostText(item)}</span>
-                    </td>
-                    <td className="flex min-w-0 items-start justify-between gap-4 text-ink-muted sm:table-cell sm:py-2 sm:pr-3">
-                      <span aria-hidden="true" className="shrink-0 text-xs font-medium uppercase tracking-wide sm:hidden">{t("kh.columnType")}</span>
-                      <span className="min-w-0 break-all text-right sm:text-left">{item.keyType}</span>
-                    </td>
-                    <td className="flex min-w-0 items-start justify-between gap-4 font-mono text-xs text-ink-muted sm:table-cell sm:py-3 sm:pr-3">
-                      <span aria-hidden="true" className="shrink-0 font-sans font-medium uppercase tracking-wide sm:hidden">{t("kh.columnFingerprint")}</span>
-                      <span className="min-w-0 break-all text-right sm:text-left">{item.fingerprint}</span>
-                    </td>
-                    <td className="flex justify-end sm:table-cell sm:py-2">
-                      <Button
-                        className="w-full sm:w-auto"
-                        onClick={() => {
-                          setDeleteError("");
-                          setPending(item);
-                        }}
-                      >
-                        {t("kh.delete")}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         ) : null}
-
-      </Card>
+      </PageSection>
       {pending === null ? null : (
         <ConfirmDialog
           id="known-host-delete-heading"

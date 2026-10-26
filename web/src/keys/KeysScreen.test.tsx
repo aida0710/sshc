@@ -280,12 +280,13 @@ describe("KeysScreen", () => {
     expect(within(table).getByRole("columnheader", { name: /State/ })).toHaveAttribute("aria-sort", "ascending");
   });
 
-  it("stacks key creation fields at phone widths", async () => {
+  it("puts each key creation field's name above it on narrow screens and beside it on wide ones", async () => {
     render(<KeysScreen api={buildApi()} />);
 
     const fileName = await screen.findByLabelText("File name");
-    const row = fileName.closest("label")?.parentElement;
-    expect(row).toHaveClass("flex-col", "items-stretch", "sm:flex-row", "sm:items-center");
+    const pair = fileName.closest("label");
+    expect(pair).toHaveClass("grid", "lg:grid-cols-subgrid");
+    expect(pair?.parentElement).toHaveClass("lg:grid-cols-[160px_minmax(0,1fr)]");
     expect(fileName).toHaveClass("min-h-10", "sm:min-h-0");
   });
 

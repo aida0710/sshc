@@ -8,8 +8,8 @@ export function KeyInventoryProblems({ inventory }: { inventory: KeyInventoryRes
   return (
     <>
       {inventory.unreadable.length > 0 && (
-        <section aria-labelledby="unreadable-heading" className="flex flex-col gap-2">
-          <h3 id="unreadable-heading" className="text-sm font-medium text-notice-ink">
+        <section aria-labelledby="unreadable-heading" className="flex flex-col gap-2 border-t border-line pt-5">
+          <h3 id="unreadable-heading" className="text-sm font-semibold text-notice-ink">
             {t("keys.unreadableHeading")}
           </h3>
           <p className="text-sm text-ink-muted">{t("keys.unreadableNote")}</p>
@@ -23,8 +23,8 @@ export function KeyInventoryProblems({ inventory }: { inventory: KeyInventoryRes
         </section>
       )}
       {inventory.unresolvedReferences.length > 0 && (
-        <section aria-labelledby="unresolved-heading" className="flex flex-col gap-2">
-          <h3 id="unresolved-heading" className="text-sm font-medium text-notice-ink">
+        <section aria-labelledby="unresolved-heading" className="flex flex-col gap-2 border-t border-line pt-5">
+          <h3 id="unresolved-heading" className="text-sm font-semibold text-notice-ink">
             {t("keys.unresolvedHeading")}
           </h3>
           <ul className="text-sm text-ink-muted">
