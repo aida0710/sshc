@@ -1,9 +1,10 @@
 import type { TerminalSession } from "../../api/terminalSessions";
 import { useTranslate } from "../../i18n/context";
 import { ActionMenu } from "../../ui/ActionMenu";
-import { sessionMarkerClass, sessionShowsDestination, sessionStatusText, sessionStatusTone } from "../sessionStatus";
+import { SessionDestinationLine } from "../SessionDestinationLine";
+import { sessionMarkerClass } from "../sessionStatus";
 import type { UnreadSessions } from "../terminalNotifications";
-import { terminalDisplayTitle, terminalSubtitle } from "../terminalPresentation";
+import { terminalDisplayTitle } from "../terminalPresentation";
 import { paneSessionIds } from "./layout";
 import type { SplitGroup } from "./splitGroups";
 import { SplitLayoutMap } from "./SplitLayoutMap";
@@ -75,12 +76,13 @@ function SplitGroupRow({ group, members, selected, unreadBySession, onSelect, on
           return (
             <li key={session.id}>
               <button type="button" aria-label={t("splitView.groupSession", { name, title })} onClick={() => onSelectSession(session.id)}
-                className="flex min-h-10 w-full min-w-0 items-center gap-2.5 rounded-[7px] pl-[42px] pr-2 text-left text-[12.5px] hover:bg-hover md:min-h-[26px]">
-                <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${sessionMarkerClass(session, unreadBySession.has(session.id))}`} />
-                <span className="min-w-0 flex-1 truncate text-ink">{title}</span>
-                {sessionShowsDestination(session)
-                  ? <span className="max-w-[50%] shrink-0 truncate font-mono text-[11px] text-ink-faint">{terminalSubtitle(session, t)}</span>
-                  : <span className={`max-w-[55%] shrink-0 truncate text-[11px] ${sessionStatusTone(session)}`}>{sessionStatusText(t, session)}</span>}
+                className="flex min-h-10 w-full min-w-0 items-start gap-2.5 rounded-[7px] py-1 pl-[42px] pr-2 text-left hover:bg-hover md:min-h-0 md:py-[3px]">
+                <span aria-hidden="true" className={`mt-[5px] size-2 shrink-0 rounded-full ${sessionMarkerClass(session, unreadBySession.has(session.id))}`} />
+                {/* As in the workspace rows, the name gets the whole line and the destination is under it. */}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12.5px] leading-[18px] text-ink">{title}</span>
+                  <SessionDestinationLine session={session} />
+                </span>
               </button>
             </li>
           );
