@@ -303,7 +303,7 @@ export function KeysScreen({
       <PageHeader
         title={t("keys.heading")}
         actions={
-          <a href="#create-key-heading" className={`${primaryAction} inline-flex items-center gap-1.5`}>
+          <a href="#create-key-heading" className={`${primaryAction} inline-flex min-h-11 items-center gap-1.5 md:min-h-0`}>
             <Icon name="plus" className="size-[15px]" />
             {t("keys.createHeading")}
           </a>

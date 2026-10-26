@@ -33,30 +33,25 @@ export function EntryScreen({
     </>
   );
   const footerArea = footer === undefined ? null : <div className="mt-5 border-t border-line pt-3.5">{footer}</div>;
+  // Both widths keep the same elements (the left side only loses its tint and line on a phone), so crossing
+  // the phone width does not mount the form afresh.
   return (
     <main className={`relative flex min-h-screen bg-canvas text-ink ${compact ? "flex-col justify-center gap-2.5 px-3.5 py-4" : "items-center justify-center p-6"}`}>
       {corner === undefined ? null : (
         <div className={compact ? "flex justify-end gap-2" : "absolute right-4 top-4 flex gap-2"}>{corner}</div>
       )}
-      {compact ? (
-        <section className="rounded-2xl border border-line bg-sidebar px-5 pb-[18px] pt-6 shadow-pane">
+      <section className={compact
+        ? "rounded-2xl border border-line bg-sidebar px-5 pb-[18px] pt-6 shadow-pane"
+        : "grid w-full max-w-[760px] grid-cols-[300px_minmax(0,1fr)] overflow-hidden rounded-2xl border border-line bg-sidebar shadow-pane"}>
+        <div className={compact ? "flex flex-col" : "flex flex-col border-r border-line bg-[color-mix(in_srgb,var(--ui-accent)_9%,var(--ui-sidebar))] p-8"}>
           {intro}
-          {asideNote === undefined ? null : <div className="mt-4">{asideNote}</div>}
-          <div className="mt-4">{children}</div>
+          {asideNote === undefined ? null : <div className={compact ? "mt-4" : "mt-auto pt-6"}>{asideNote}</div>}
+        </div>
+        <div className={compact ? "mt-4 flex flex-col" : "flex flex-col justify-center p-8"}>
+          {children}
           {footerArea}
-        </section>
-      ) : (
-        <section className="grid w-full max-w-[760px] grid-cols-[300px_minmax(0,1fr)] overflow-hidden rounded-2xl border border-line bg-sidebar shadow-pane">
-          <div className="flex flex-col border-r border-line bg-[color-mix(in_srgb,var(--ui-accent)_9%,var(--ui-sidebar))] p-8">
-            {intro}
-            {asideNote === undefined ? null : <div className="mt-auto pt-6">{asideNote}</div>}
-          </div>
-          <div className="flex flex-col justify-center p-8">
-            {children}
-            {footerArea}
-          </div>
-        </section>
-      )}
+        </div>
+      </section>
     </main>
   );
 }

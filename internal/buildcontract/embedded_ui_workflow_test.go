@@ -116,6 +116,14 @@ func TestReleaseBuildsTheWebUIOnceForEveryArtifact(t *testing.T) {
 	} {
 		problems = append(problems, validateBuiltUIReceiver("jobs."+id, workflow.Jobs[id], "ui", goSteps...)...)
 	}
+	// 画面はタグのコミットから組み立てる。手動の実行（workflow_dispatch）では main を取り出すので、
+	// ref が無いと main の画面がタグのバイナリに入る。
+	const releaseCommit = "${{ needs.verify-source.outputs.release-sha }}"
+	for _, step := range workflow.Jobs["ui"].Steps {
+		if strings.HasPrefix(step.Uses, "actions/checkout@") && fmt.Sprint(step.With["ref"]) != releaseCommit {
+			problems = append(problems, fmt.Sprintf("jobs.ui checks out %q, want the release commit %s", step.With["ref"], releaseCommit))
+		}
+	}
 	// 公開する成果物は release- で始まるものだけを集める。画面のファイルを公開物に混ぜない。
 	staged := false
 	for _, step := range workflow.Jobs["stage-release"].Steps {

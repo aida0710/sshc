@@ -81,6 +81,20 @@ export function ConnectionGroupFacets({
           }}
           {...drag.dropHandlers(node.name)}
         >
+          {/* 開閉の印は、行の先頭の余白にボタンの上から重ねる。行全体を1つの押せる所のままにするため。
+              見た目の順（印 → 名前）と Tab の順をそろえるため、名前のボタンより前に置く。 */}
+          {node.children.length === 0 ? null : (
+            <button
+              type="button"
+              aria-label={t(shut ? "tree.expand" : "tree.collapse", { name: node.name })}
+              aria-expanded={!shut}
+              onClick={() => toggle(node.name)}
+              style={{ insetInlineStart: `calc(${depth} * ${depthIndent} + 0.375rem)` }}
+              className="absolute top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-ink-faint hover:text-ink"
+            >
+              <DisclosureChevron expanded={!shut} className="size-3.5" />
+            </button>
+          )}
           <button
             type="button"
             aria-label={node.name}
@@ -101,19 +115,6 @@ export function ConnectionGroupFacets({
               {node.descendantCount}
             </span>
           </button>
-          {/* 開閉の印は、行の先頭の余白にボタンの上から重ねる。行全体を1つの押せる所のままにするため。 */}
-          {node.children.length === 0 ? null : (
-            <button
-              type="button"
-              aria-label={t(shut ? "tree.expand" : "tree.collapse", { name: node.name })}
-              aria-expanded={!shut}
-              onClick={() => toggle(node.name)}
-              style={{ insetInlineStart: `calc(${depth} * ${depthIndent} + 0.375rem)` }}
-              className="absolute top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-ink-faint hover:text-ink"
-            >
-              <DisclosureChevron expanded={!shut} className="size-3.5" />
-            </button>
-          )}
           {items.length === 0 ? null : (
             <div className={`absolute right-1 top-1/2 -translate-y-1/2 ${openMenu === menuKey ? "opacity-100" : revealOnHover}`}>
               <ActionMenu

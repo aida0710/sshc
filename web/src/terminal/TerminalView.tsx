@@ -565,8 +565,9 @@ export function TerminalView({
             />
             <p className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-[15px]" : "max-w-48 shrink-0 text-[13px]"}`}>{displayTitle}</p>
             {mobile ? null : <span className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{subtitle}</span>}
-            {/* While connected the dot says it; the words stay for screen readers. */}
-            <span role="status" className={sessionShowsDestination(session) && link.phase === "live" ? "sr-only" : `shrink-0 text-[11.5px] ${mobile ? "hidden" : sessionStatusTone(session)}`}>{connectionStatus}</span>
+            {/* While connected the dot says it; the words stay for screen readers. A phone has no room for them
+                either way, but they are still read out there. */}
+            <span role="status" className={(sessionShowsDestination(session) && link.phase === "live") || mobile ? "sr-only" : `shrink-0 text-[11.5px] ${sessionStatusTone(session)}`}>{connectionStatus}</span>
             {mobile ? null : <VPNProfileChip name={vpnProfile} />}
             {mobile || runTarget === undefined ? null : (
               <span className="shrink-0 rounded-full bg-accent/15 px-2 py-px font-mono text-[11px] text-accent">{t("runTarget.runningOn", { alias: runTarget })}</span>

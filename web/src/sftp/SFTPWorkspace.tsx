@@ -98,7 +98,9 @@ export function SFTPWorkspace({
   const [dirtyTabs, setDirtyTabs] = useState<Map<string, string>>(() => new Map());
   const [connectedTabs, setConnectedTabs] = useState<ReadonlySet<string>>(() => new Set());
   const [closeTabIntent, setCloseTabIntent] = useState<CloseTabIntent | null>(null);
-  const workspaceRoot = useRef<HTMLElement | null>(null);
+  // The outer element is measured: its width does not change with the padding and border the wide layout
+  // adds inside it. Measuring the card itself would flip between the layouts at widths near the threshold.
+  const workspaceRoot = useRef<HTMLDivElement | null>(null);
   const compactViewport = useCompactViewport(workspaceRoot);
   // Restoring is a one-shot per tab: once a panel has opened its remembered
   // directory, later navigation inside it must not be pulled back.
@@ -392,9 +394,9 @@ export function SFTPWorkspace({
   }
 
   return (
-    <div className={compactViewport ? "flex h-full min-h-0 flex-col" : "flex h-full min-h-0 flex-col p-2"}>
+    <div ref={workspaceRoot} className={compactViewport ? "flex h-full min-h-0 flex-col" : "flex h-full min-h-0 flex-col p-2"}>
       <h2 className="sr-only">{title}</h2>
-      <section ref={workspaceRoot} className={`flex min-h-0 min-w-0 flex-1 flex-col ${compactViewport ? "" : visibleSplit ? "gap-2" : boardLook}`} aria-label={t("sftp.tabs")}>
+      <section className={`flex min-h-0 min-w-0 flex-1 flex-col ${compactViewport ? "" : visibleSplit ? "gap-2" : boardLook}`} aria-label={t("sftp.tabs")}>
         {compactViewport && compactTabs !== null ? <SFTPTabStrip
           pane={compactTabs} compact label={t("sftp.mobileTabs")} closable={compactTabs.tabs.length > 1}
           movable={() => false} addDisabled={panes.every((pane) => pane.tabs.length >= maxTabsPerPane)}

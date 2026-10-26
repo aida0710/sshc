@@ -75,7 +75,10 @@ export function LockScreen({
       const method = "POST";
       const path = exists ? "/api/v1/passwords/unlock" : "/api/v1/passwords/initialise";
       const failureMessage = t(exists ? "lock.unlockFailed" : "lock.createFailed");
-      setDiagnostic({
+      // A mistyped or too short password is the person's own mistake, said plainly below the field; the
+      // diagnostic with the error code is for failures they cannot fix by typing again.
+      const typingMistake = code === "wrong_passphrase" || code === "passphrase_too_short";
+      setDiagnostic(typingMistake ? null : {
         code,
         status: caught instanceof ApiError ? caught.status : 0,
         method,

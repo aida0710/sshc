@@ -92,9 +92,14 @@ export function NotificationSettingsSection({ showHeading }: { showHeading: bool
       showHeading={showHeading}
     >
       <div className="grid gap-5">
-        <p className="text-sm leading-6 text-ink-muted">
-          {t(permissionMessage(permission, notificationsComeFromAndroid()))}
-        </p>
+        {/* Blocked notifications need the person to act in the browser's settings, so they get a notice. */}
+        {permission === "denied" ? (
+          <Notice>{t(permissionMessage(permission, notificationsComeFromAndroid()))}</Notice>
+        ) : (
+          <p className="text-sm leading-6 text-ink-muted">
+            {t(permissionMessage(permission, notificationsComeFromAndroid()))}
+          </p>
+        )}
         {permission === "default" || permission === "granted" || request.error !== "" ? (
           <ActionArea status={request.error === ""
             ? (permission === "granted"

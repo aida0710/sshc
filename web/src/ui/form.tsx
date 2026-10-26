@@ -4,9 +4,7 @@ import { describeControl } from "./describeControl";
 // 入力欄の幅。Tailwind はクラス名を字面で拾うので、幅ごとのクラスをここに書き切る。
 const controlWidthClasses = {
   full: "w-full",
-  medium: "w-56",
   narrow: "w-40",
-  auto: "w-auto",
 } as const;
 
 type ControlWidth = keyof typeof controlWidthClasses;
@@ -26,8 +24,6 @@ export function sizedControl(width: ControlWidth): string {
 export const control = sizedControl("full");
 
 export const narrowControl = sizedControl("narrow");
-
-export const autoControl = sizedControl("auto");
 
 // 押せないときの見た目（薄くする、載せても光らない）は index.css の :disabled の決まりが
 // どのボタンにも同じく付けるので、ここでは書かない。

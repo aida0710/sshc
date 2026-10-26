@@ -104,7 +104,7 @@ export function SFTPToolbar({
       <Icon name="chevronRight" className="size-3 shrink-0 rotate-90 text-ink-muted" />
     </button>
   ) : (
-    <div className="group/path flex min-w-0 flex-1 items-center" data-testid="sftp-current-path" data-path={path}>
+    <div className="flex min-w-0 flex-1 items-center" data-testid="sftp-current-path" data-path={path}>
       <nav aria-label={labels.path} title={path} onClick={(event) => { if (event.target === event.currentTarget && !navigationDisabled) setPathEditing(true); }}
         className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap font-mono text-[12.5px]">
         {crumbs.map((crumb, index) => <span key={crumb.path} className="flex shrink-0 items-center">

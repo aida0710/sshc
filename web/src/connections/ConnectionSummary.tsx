@@ -83,12 +83,15 @@ export function ConnectionSummary({
     <section data-connection-summary aria-labelledby="connection-summary-heading" className="shrink-0">
       <header className="flex flex-wrap items-center gap-x-2.5 gap-y-3">
         <OperatingSystemIcon os={state.detail.metadata.os || state.detail.metadata.detectedOS} look="accentTile" />
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h3 id="connection-summary-heading" className="min-w-0 truncate text-base font-semibold text-ink">{summary.alias}</h3>
-            {dirty ? <span className="rounded bg-notice px-2 py-0.5 text-xs font-medium text-notice-ink">{t("conn.summaryUnsaved")}</span> : null}
+        {/* The name keeps at least 10rem; below that the buttons move to their own line instead of
+            squeezing a long name and address into several broken lines. */}
+        <div className="min-w-40 flex-1">
+          {/* The unsaved badge moves under a long name instead of squeezing it. */}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <h3 id="connection-summary-heading" className="min-w-0 max-w-full truncate text-base font-semibold text-ink" title={summary.alias}>{summary.alias}</h3>
+            {dirty ? <span className="shrink-0 rounded bg-notice px-2 py-0.5 text-xs font-medium text-notice-ink">{t("conn.summaryUnsaved")}</span> : null}
           </div>
-          <p className="break-all font-mono text-[11.5px] text-ink-faint">{summary.endpoint}</p>
+          <p className="truncate font-mono text-[11.5px] text-ink-faint" title={summary.endpoint}>{summary.endpoint}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button disabled={blocked || connecting || !connectAvailable} aria-describedby={blocked ? reasonId : undefined} onClick={onConnect}>

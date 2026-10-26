@@ -50,7 +50,7 @@ export function SettingsPanel({
   const all = page === "All";
   const shows = (candidate: SettingsPage) => all || page === candidate;
   const pageTitle = all ? "settings.heading" : settingsPageMeta[page].label;
-  const pageDescription = all ? "settings.pageDescription" : settingsPageMeta[page].description;
+  const pageDescription = all ? undefined : settingsPageMeta[page].description;
 
   // The list of pages on the left and the open page as one card, as in the design.
   return (
