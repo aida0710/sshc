@@ -1,6 +1,7 @@
 import { useTranslate } from "../i18n/context";
-import { CheckboxField, control, hintText } from "../ui/form";
-import { PasswordField } from "../ui/PasswordField";
+import { CheckboxField, control } from "../ui/form";
+import { FieldRow, FieldRowNote } from "../ui/FieldRow";
+import { PasswordField, PasswordInput } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
 import { eligibilityText } from "./eligibilityText";
 import type { BasicDraft, BasicFormDerived, PasswordAction } from "./basicFormDraft";
@@ -24,22 +25,19 @@ export function BasicPasswordSection({
   const { vault, credentials, credentialOptionsStatus } = secrets;
   if (derived.draftHasExplicitKey) {
     return derived.passwordCleanup ? (
-      <div className="border-t border-hairline py-3">
+      <div className="border-t border-line py-3.5">
         <Notice>{t("conn.basicPasswordCleanup")}</Notice>
       </div>
     ) : null;
   }
   return (
-    <div className="border-t border-hairline py-3">
-      <div className="flex flex-col gap-3">
-        <div>
-          <p className="text-sm text-ink-muted">{t("conn.basicStoredPassword")}</p>
-          {secrets.loading || credentialOptionsStatus === "loading" ? <p className={hintText}>{t("conn.createLoadingOptions")}</p> : null}
-          {credentialOptionsStatus === "failed" ? (
-            <p className={hintText}>{t("conn.basicCredentialOptionsFailed")}</p>
-          ) : null}
+    <div className="border-t border-line">
+      <FieldRow label={t("conn.basicStoredPassword")} interactiveChildren>
+        <div className="flex flex-col gap-1 pt-1.5 text-[13px] text-ink-muted">
+          {secrets.loading || credentialOptionsStatus === "loading" ? <p>{t("conn.createLoadingOptions")}</p> : null}
+          {credentialOptionsStatus === "failed" ? <p>{t("conn.basicCredentialOptionsFailed")}</p> : null}
           {secrets.unlocked ? (
-            <p className={hintText}>
+            <p>
               {credentials.assigned
                 ? credentials.assignedCredential === ""
                   ? t("conn.basicAssignedDedicated")
@@ -48,9 +46,12 @@ export function BasicPasswordSection({
             </p>
           ) : null}
         </div>
+      </FieldRow>
 
-        {vault !== null && !vault.unlocked ? (
-          <div className="flex flex-col gap-3 rounded-lg border border-notice-line bg-notice p-3">
+      {/* Notices take the whole width: the controls' column is narrow beside the connection list. */}
+      {vault !== null && !vault.unlocked ? (
+        <div className="pb-3.5">
+          <div className="flex flex-col gap-3 rounded-[9px] bg-notice p-3">
             <p className="text-sm text-notice-ink">
               {t(vault.exists ? "conn.basicVaultLocked" : "conn.basicVaultMissing")}
             </p>
@@ -62,67 +63,74 @@ export function BasicPasswordSection({
                 onChange={(value) => onEdit({ masterConfirmation: value })}
               />
             )}
-            <Button kind="primary" disabled={!derived.canOpenVault} busy={secrets.vaultBusy} onClick={onOpenVault}>
+            <Button kind="primary" className="self-start" disabled={!derived.canOpenVault} busy={secrets.vaultBusy} onClick={onOpenVault}>
               {t(vault.exists ? "conn.createUnlockVault" : "conn.createInitialiseVault")}
             </Button>
           </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        {secrets.unlocked ? (
-          <>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium tracking-wide text-ink-muted">{t("conn.basicPasswordAction")}</span>
-              <select
-                aria-label={t("conn.basicPasswordAction")}
-                value={draft.passwordAction}
-                onChange={(event) => onChooseAction(event.target.value as PasswordAction)}
-                className={control}
-              >
-                <option value="unchanged">{t("conn.basicPasswordUnchanged")}</option>
-                <option value="dedicated_password">{t(credentials.assigned ? "conn.basicReplaceDedicated" : "conn.createDedicatedPassword")}</option>
-                <option value="saved_password">{t("conn.createSavedPassword")}</option>
-                <option value="new_shared_password">{t("conn.createNewSharedPassword")}</option>
-                {credentials.assigned ? <option value="remove">{t("conn.basicRemovePassword")}</option> : null}
-              </select>
-            </label>
+      {secrets.unlocked ? (
+        <>
+          <FieldRow label={t("conn.basicPasswordAction")}>
+            <select
+              aria-label={t("conn.basicPasswordAction")}
+              value={draft.passwordAction}
+              onChange={(event) => onChooseAction(event.target.value as PasswordAction)}
+              className={control}
+            >
+              <option value="unchanged">{t("conn.basicPasswordUnchanged")}</option>
+              <option value="dedicated_password">{t(credentials.assigned ? "conn.basicReplaceDedicated" : "conn.createDedicatedPassword")}</option>
+              <option value="saved_password">{t("conn.createSavedPassword")}</option>
+              <option value="new_shared_password">{t("conn.createNewSharedPassword")}</option>
+              {credentials.assigned ? <option value="remove">{t("conn.basicRemovePassword")}</option> : null}
+            </select>
+          </FieldRow>
 
-            {draft.passwordAction === "dedicated_password" ? (
-              <PasswordField
+          {draft.passwordAction === "dedicated_password" ? (
+            <FieldRow label={t("conn.createConnectionPassword")} hint={t("conn.basicEmptyPasswordUnchanged")} interactiveChildren>
+              <PasswordInput
                 label={t("conn.createConnectionPassword")}
                 value={draft.password}
                 onChange={(value) => onEdit({ password: value })}
-                hint={t("conn.basicEmptyPasswordUnchanged")}
               />
-            ) : draft.passwordAction === "saved_password" ? (
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium tracking-wide text-ink-muted">{t("conn.createChooseSavedPassword")}</span>
-                <select value={derived.savedCredential} onChange={(event) => onEdit({ savedCredential: event.target.value })} className={control}>
-                  {credentials.passwords.length === 0 ? <option value="">{t("conn.createNoSavedPasswords")}</option> : null}
-                  {credentials.passwords.map((credential) => <option key={credential.name} value={credential.name}>{credential.name}</option>)}
-                </select>
-              </label>
-            ) : draft.passwordAction === "new_shared_password" ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs font-medium tracking-wide text-ink-muted">{t("conn.createSavedPasswordName")}</span>
-                  <input value={draft.newCredential} onChange={(event) => onEdit({ newCredential: event.target.value })} className={control} />
-                </label>
-                <PasswordField label={t("conn.createNewPassword")} value={draft.newSharedPassword} onChange={(value) => onEdit({ newSharedPassword: value })} />
-              </div>
-            ) : draft.passwordAction === "remove" ? (
-              <CheckboxField label={t("conn.basicConfirmRemove")} checked={draft.confirmRemove} onChange={(checked) => onEdit({ confirmRemove: checked })} tone="danger" />
-            ) : null}
+            </FieldRow>
+          ) : draft.passwordAction === "saved_password" ? (
+            <FieldRow label={t("conn.createChooseSavedPassword")}>
+              <select value={derived.savedCredential} onChange={(event) => onEdit({ savedCredential: event.target.value })} className={control}>
+                {credentials.passwords.length === 0 ? <option value="">{t("conn.createNoSavedPasswords")}</option> : null}
+                {credentials.passwords.map((credential) => <option key={credential.name} value={credential.name}>{credential.name}</option>)}
+              </select>
+            </FieldRow>
+          ) : draft.passwordAction === "new_shared_password" ? (
+            <>
+              <FieldRow label={t("conn.createSavedPasswordName")}>
+                <input value={draft.newCredential} onChange={(event) => onEdit({ newCredential: event.target.value })} className={control} />
+              </FieldRow>
+              <FieldRow label={t("conn.createNewPassword")} interactiveChildren>
+                <PasswordInput label={t("conn.createNewPassword")} value={draft.newSharedPassword} onChange={(value) => onEdit({ newSharedPassword: value })} />
+              </FieldRow>
+            </>
+          ) : null}
 
-            {derived.passwordBlockers.map((blocker, index) => (
-              <Notice key={`${blocker.code}-${index}`} tone="danger">{eligibilityText(t, blocker.code)}</Notice>
-            ))}
-            {derived.passwordWarnings.map((warning, index) => (
-              <Notice key={`${warning.code}-${index}`}>{eligibilityText(t, warning.code)}</Notice>
-            ))}
-            {serverPasswordError === "" ? null : <Notice tone="danger">{serverPasswordError}</Notice>}
-          </>
-        ) : null}
-      </div>
+          {draft.passwordAction === "remove" ? (
+            <FieldRowNote>
+              <CheckboxField label={t("conn.basicConfirmRemove")} checked={draft.confirmRemove} onChange={(checked) => onEdit({ confirmRemove: checked })} tone="danger" />
+            </FieldRowNote>
+          ) : null}
+          {derived.passwordBlockers.length > 0 || derived.passwordWarnings.length > 0 || serverPasswordError !== "" ? (
+            <div className="flex flex-col gap-2 pb-3.5">
+              {derived.passwordBlockers.map((blocker, index) => (
+                <Notice key={`${blocker.code}-${index}`} tone="danger">{eligibilityText(t, blocker.code)}</Notice>
+              ))}
+              {derived.passwordWarnings.map((warning, index) => (
+                <Notice key={`${warning.code}-${index}`}>{eligibilityText(t, warning.code)}</Notice>
+              ))}
+              {serverPasswordError === "" ? null : <Notice tone="danger">{serverPasswordError}</Notice>}
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }
