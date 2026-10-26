@@ -204,17 +204,22 @@ test("quick navigation and terminal keys remain available in portrait and touch 
   await expect(keys).toBeVisible();
   await expect(page.getByRole("region", { name: "Terminal for Demo shell" })).toContainText("Mobile terminal demo");
   await capture(page, "mobile-terminal-390x640");
+  // On the terminal the screen's own top bar replaces the bottom tabs, as in the design; its
+  // ‹ opens the navigation, which has the same places.
+  await expect(navigation).toHaveCount(0);
+  const openNavigation = page.getByRole("button", { name: "Navigation", exact: true });
   for (const viewport of [{ width: 390, height: 640 }, { width: 844, height: 390 }]) {
     await page.setViewportSize(viewport);
     await expect(keys).toBeVisible();
     await expectInside(page, keys);
-    await expectInside(page, navigation);
+    await expectInside(page, openNavigation);
     await keys.getByRole("button", { name: "Up arrow", exact: true }).tap();
     await expect.poll(() => messages.some((message) => message.includes("\u001b[A"))).toBe(true);
     messages.length = 0;
   }
   await capture(page, "mobile-terminal-844x390");
-  await navigation.getByRole("link", { name: "Home", exact: true }).tap();
+  await openNavigation.tap();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home", exact: true }).tap();
   await expect(page).toHaveURL(new URL("/", installation.url).toString());
   await expect(navigation.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
 });

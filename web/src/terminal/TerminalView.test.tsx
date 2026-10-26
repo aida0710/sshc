@@ -324,6 +324,73 @@ describe("TerminalView", () => {
     expect(screen.queryByRole("dialog", { name: "Review paste to localhost" })).toBeNull();
   });
 
+  describe("the phone's text box", () => {
+    beforeEach(() => {
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: query === mobileViewportQuery,
+        media: query,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+    });
+
+    async function openComposer() {
+      renderView();
+      await waitFor(() => expect(streams).toHaveLength(1));
+      const field = screen.getByRole("textbox", { name: "Text to send to the terminal" });
+      await waitFor(() => expect(field).toBeEnabled());
+      return field;
+    }
+
+    it("sends the typed text as a paste and then presses Enter, and empties itself", async () => {
+      const field = await openComposer();
+
+      await userEvent.type(field, "printf ok");
+      await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+      expect(streams[0]!.stream.send).toHaveBeenNthCalledWith(1, "printf ok");
+      expect(streams[0]!.stream.send).toHaveBeenNthCalledWith(2, "\r");
+      expect(field).toHaveValue("");
+    });
+
+    it("presses Enter when sent empty", async () => {
+      await openComposer();
+
+      await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+      expect(streams[0]!.stream.send).toHaveBeenCalledOnce();
+      expect(streams[0]!.stream.send).toHaveBeenCalledWith("\r");
+    });
+
+    it("reviews text with a line break like a paste, and sends it with Enter only when accepted", async () => {
+      const field = await openComposer();
+      fireEvent.change(field, { target: { value: "printf one\nprintf two" } });
+
+      await userEvent.click(screen.getByRole("button", { name: "Send" }));
+      expect(await screen.findByRole("dialog", { name: "Review paste to localhost" })).toBeVisible();
+      expect(streams[0]!.stream.send).not.toHaveBeenCalled();
+
+      await userEvent.click(screen.getByRole("button", { name: "Paste" }));
+
+      expect(streams[0]!.stream.send).toHaveBeenNthCalledWith(1, "printf one\rprintf two");
+      expect(streams[0]!.stream.send).toHaveBeenNthCalledWith(2, "\r");
+      expect(field).toHaveValue("");
+    });
+
+    it("keeps the text when the review is cancelled", async () => {
+      const field = await openComposer();
+      fireEvent.change(field, { target: { value: "printf one\nprintf two" } });
+
+      await userEvent.click(screen.getByRole("button", { name: "Send" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+
+      expect(streams[0]!.stream.send).not.toHaveBeenCalled();
+      expect(field).toHaveValue("printf one\nprintf two");
+    });
+  });
+
   it("names the paste destination as the header does, the alias and not the title the terminal set", async () => {
     render(<TerminalView session={{
       ...session, kind: "ssh", alias: "osaka", title: "vim notes.md",

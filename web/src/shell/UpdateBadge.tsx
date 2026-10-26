@@ -1,4 +1,5 @@
 import { sectionPath } from "../routing/sectionRoute";
+import { opensInThisPage } from "../ui/linkClick";
 import { useId, useState, type MouseEvent, type ReactNode } from "react";
 import { updateApi, type UpdateApi } from "../api/update";
 import { useTranslate } from "../i18n/context";
@@ -62,7 +63,7 @@ export function UpdateBadge({ api = updateApi, current = "", leading, indicator,
   }
 
   function followAbout(event: MouseEvent<HTMLAnchorElement>) {
-    if (onNavigate === undefined || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (onNavigate === undefined || !opensInThisPage(event)) return;
     onNavigate(event);
   }
 
@@ -72,8 +73,8 @@ export function UpdateBadge({ api = updateApi, current = "", leading, indicator,
   const offersUpdate = status?.canUpdate === true && !isUpdateActive(status.job);
 
   return (
-    <div className="text-xs text-ink-muted">
-      <div className="flex h-10 min-w-0 items-center gap-2 px-1">
+    <div className="text-xs text-ink-faint">
+      <div className="flex h-10 min-w-0 items-center gap-2 pl-1.5 pr-1 md:h-8">
         {leading}
         {displayedCurrent === "" ? null : (
           <>

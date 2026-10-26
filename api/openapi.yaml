@@ -2969,6 +2969,24 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/metadata/appearance:
+    put:
+      operationId: setAppearanceSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AppearanceSettings" }
+      responses:
+        "200":
+          description: The choice was written
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SettingsSaveResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/metadata/engine:
     # このマシンの sshc エンジンの設定。同期する metadata.json には無く、同期しない。
     get:
@@ -5947,6 +5965,17 @@ components:
         # 通る VPN プロファイルの名前。ssh_config には書かない。OpenSSH が解釈する
         # 語ではなく、sshc だけが持つ紐付けだからである。
         vpn: { type: string, maxLength: 48 }
+    # アプリの見た目のうち、metadata に置いて同期するもの。テーマ（ライト／ダーク）は
+    # このブラウザだけの好みなので、ここには無い。
+    AppearanceSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        # 選んでいる項目・ボタン・フォーカスの枠に使う色の名前。省略は既定の lavender。
+        # 未読の通知（橙）・接続済み（緑）・エラー（赤）と見分けがつく色だけにする。
+        accent:
+          type: string
+          enum: [lavender, blue, sky, pink, mono]
     # 端末の表示設定。接続単位と全体設定を項目ごとに解決し、未設定項目はアプリの
     # テーマを使う。配色とフォントは名前で参照し、未知の名前は既定値へ戻す。
     TerminalAppearance:
@@ -6008,6 +6037,7 @@ components:
         # ここには無い。/api/v1/metadata/engine で読み書きする。
         fileTransfers: { $ref: "#/components/schemas/FileTransferSettings" }
         backgrounds: { $ref: "#/components/schemas/BackgroundSettings" }
+        appearance: { $ref: "#/components/schemas/AppearanceSettings" }
         groups: { type: array, items: { $ref: "#/components/schemas/GroupMetadata" } }
         hosts: { type: array, items: { $ref: "#/components/schemas/HostMetadata" } }
         vpnProfiles: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/VPNProfile" } }

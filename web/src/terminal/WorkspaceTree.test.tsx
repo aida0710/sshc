@@ -42,6 +42,7 @@ function renderTree(options: {
   workspaces?: Partial<TerminalWorkspacesState>;
   terminalSessions?: Partial<TerminalSessionsState>;
   aliases?: string[];
+  unread?: ReadonlySet<string>;
 } = {}) {
   const props = {
     workspaces: workspacesState(options.workspaces),
@@ -54,6 +55,7 @@ function renderTree(options: {
     onOpenShell: vi.fn(),
     onConnect: vi.fn(),
     aliases: options.aliases ?? [],
+    ...(options.unread === undefined ? {} : { unreadBySession: options.unread }),
   };
   render(<WorkspaceTree {...props} />);
   return props;
@@ -97,6 +99,40 @@ describe("WorkspaceTree", () => {
     expect(within(tree).queryByText("agent-shell")).not.toBeInTheDocument();
     expect(within(tree).getByText("main-shell")).toBeInTheDocument();
     expect(within(tree).getByText("dev-shell")).toBeInTheDocument();
+  });
+
+  it("counts unread notifications in the heading and opens the next one in sidebar order, going round", async () => {
+    const user = userEvent.setup();
+    const sessions = [session("one", "default"), session("two", "default"), session("three", "w1")];
+
+    const first = renderTree({ sessions, unread: new Set(["three", "one"]), selected: "one" });
+    await user.click(screen.getByRole("button", { name: "Unread 2" }));
+    expect(first.onSelect).toHaveBeenLastCalledWith("three");
+  });
+
+  it("goes back to the first unread session after the last one", async () => {
+    const user = userEvent.setup();
+    const sessions = [session("one", "default"), session("two", "default"), session("three", "w1")];
+
+    const props = renderTree({ sessions, unread: new Set(["three", "one"]), selected: "three" });
+    await user.click(screen.getByRole("button", { name: "Unread 2" }));
+    expect(props.onSelect).toHaveBeenLastCalledWith("one");
+  });
+
+  it("unfolds the workspace of the unread session it opens", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("sshc.terminal.collapsed-workspaces.v1", '["w1"]');
+    renderTree({ sessions: [session("one", "default"), session("three", "w1")], unread: new Set(["three"]) });
+    expect(screen.queryByText("three")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Unread 1" }));
+
+    expect(screen.getByText("three")).toBeInTheDocument();
+  });
+
+  it("says nothing about unread notifications when there are none", () => {
+    renderTree({ unread: new Set() });
+    expect(screen.queryByRole("button", { name: /^Unread/ })).not.toBeInTheDocument();
   });
 
   it("shows hidden workspaces from the heading menu and remembers it", async () => {

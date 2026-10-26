@@ -1869,6 +1869,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metadata/appearance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setAppearanceSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/metadata/engine": {
         parameters: {
             query?: never;
@@ -4026,6 +4042,10 @@ export interface components {
             osc52?: "allow" | "deny";
             vpn?: string;
         };
+        AppearanceSettings: {
+            /** @enum {string} */
+            accent?: "lavender" | "blue" | "sky" | "pink" | "mono";
+        };
         TerminalAppearance: {
             palette?: string;
             font?: string;
@@ -4061,6 +4081,7 @@ export interface components {
             embeddedTerminal?: components["schemas"]["EmbeddedTerminal"];
             fileTransfers?: components["schemas"]["FileTransferSettings"];
             backgrounds?: components["schemas"]["BackgroundSettings"];
+            appearance?: components["schemas"]["AppearanceSettings"];
             groups?: components["schemas"]["GroupMetadata"][];
             hosts?: components["schemas"]["HostMetadata"][];
             vpnProfiles?: components["schemas"]["VPNProfile"][];
@@ -8674,6 +8695,34 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TerminalSettings"];
+            };
+        };
+        responses: {
+            /** @description The choice was written */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsSaveResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    setAppearanceSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppearanceSettings"];
             };
         };
         responses: {

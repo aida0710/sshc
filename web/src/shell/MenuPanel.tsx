@@ -1,4 +1,5 @@
 import { sectionPath } from "../routing/sectionRoute";
+import { opensInThisPage } from "../ui/linkClick";
 import type { MouseEvent } from "react";
 import { useLanguage } from "../i18n/context";
 import { localeLabelKeys, locales, type Locale } from "../i18n/locale";
@@ -38,16 +39,7 @@ export function MenuPanel({
   const { theme, setTheme } = useTheme();
 
   function follow(event: MouseEvent<HTMLAnchorElement>, href: string) {
-    if (
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
-      return;
-    }
+    if (!opensInThisPage(event)) return;
     event.preventDefault();
     onNavigate(href);
   }

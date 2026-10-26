@@ -5,7 +5,6 @@ import { useBindings } from "../keyconfig/bindings";
 import {
   useSyncExternalStore,
   type MouseEvent,
-  type ReactNode,
   type RefObject,
 } from "react";
 import { WorkspaceTree } from "../terminal/WorkspaceTree";
@@ -120,11 +119,11 @@ export function AppNavigation({
       inert={mobileLayout && !navigationOpen}
       data-navigation-open={navigationOpen}
       data-app-navigation
-      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden border-r border-line bg-sidebar p-2 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:flex md:w-auto md:max-w-none md:translate-x-0 md:shadow-none ${
+      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden bg-sidebar px-2.5 pb-3 pt-3.5 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:flex md:w-auto md:max-w-none md:translate-x-0 md:shadow-none ${
         navigationOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full shadow-none"
       }`}
     >
-      <div data-navigation-heading className="mb-2 shrink-0">
+      <div data-navigation-heading className="mb-1.5 shrink-0">
         <p role="status" data-session-status className="sr-only">
           {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
         </p>
@@ -136,8 +135,9 @@ export function AppNavigation({
           leading={(
             <>
               <BrandMark className="h-6 w-6" />
-              <h1 className="font-mono text-sm font-semibold tracking-tight">{t("shell.title")}</h1>
-              <span aria-hidden="true" className="h-4 w-px bg-line" />
+              <h1 className="text-sm font-semibold text-ink">{t("shell.title")}</h1>
+              {/* The version sits at the right edge, as in the design. */}
+              <span aria-hidden="true" className="grow" />
             </>
           )}
           indicator={(
@@ -157,26 +157,26 @@ export function AppNavigation({
         type="button"
         onClick={onOpenCommandPalette}
         title={`${t("palette.open")} (${shortcuts.palette.join(" / ")})`}
-        className="mb-3 flex h-10 shrink-0 items-center gap-2 rounded-md border border-line bg-control px-2.5 text-sm text-ink-muted transition-colors hover:border-accent/60 hover:text-ink md:h-9 md:text-xs"
+        className="mb-2.5 flex h-10 shrink-0 items-center gap-2 rounded-lg bg-well px-2 text-[13px] text-ink-faint transition-colors hover:text-ink md:h-8"
       >
-        <Icon name="search" className="h-4 w-4 shrink-0" />
+        <Icon name="search" className="size-[15px] shrink-0" />
         <span className="min-w-0 flex-1 truncate text-left">{t("palette.open")}</span>
-        <kbd aria-hidden="true" className="hidden shrink-0 rounded border border-line px-1 py-0.5 font-mono text-[10px] text-ink-faint md:block">{shortcuts.palette[0]}</kbd>
+        <kbd aria-hidden="true" className="hidden shrink-0 font-mono text-[11px] text-ink-faint md:block">{shortcuts.palette[0]}</kbd>
       </button>
 
       <div className="shrink-0">
-        <NavigationGroup label={t("shell.navStart")}>
+        <ul aria-label={t("shell.navStart")} className="flex flex-col gap-0.5">
           {startSections.map((name) => (
             <li key={name}>{navigationLink(name)}</li>
           ))}
-        </NavigationGroup>
+        </ul>
       </div>
 
-      <div className="mb-1 mt-1 shrink-0 border-b border-line pb-2">
+      <div className="mt-0.5 shrink-0">
         {navigationLink("Menu")}
       </div>
 
-      <div data-navigation-scroll className="min-h-0 flex-1 overflow-y-auto pr-0.5 pt-2">
+      <div data-navigation-scroll className="min-h-0 flex-1 overflow-y-auto pr-0.5">
         <SplitGroupList groups={splitView.groups} sessions={orderedSessions}
           selected={section === "Terminal" ? splitView.activeGroupNumber : null}
           onSelect={onShowSplitGroup}
@@ -256,20 +256,19 @@ function NavigationLink({
       onClick={(event) => {
         onNavigate(event, name);
       }}
-      className={`group relative flex min-h-10 w-full items-center gap-2 overflow-hidden rounded-sm px-2 py-1 text-left text-sm transition-colors md:my-px md:min-h-8 md:gap-2.5 md:py-0.5 ${
+      className={`group relative flex min-h-10 w-full items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-left text-[13px] transition-colors md:min-h-[30px] ${
         active
-          ? "bg-select-fill font-semibold text-accent"
-          : "font-medium text-ink-muted hover:bg-hover hover:text-ink"
+          ? "bg-select-fill text-ink"
+          : "text-ink-muted hover:bg-hover hover:text-ink"
       }`}
     >
-      {active ? <span aria-hidden="true" className="absolute inset-y-1 left-0 w-0.5 bg-accent" /> : null}
       <span
         aria-hidden="true"
-        className={`grid h-6 w-6 shrink-0 place-items-center transition-colors md:h-5 md:w-5 ${
+        className={`grid size-4 shrink-0 place-items-center transition-colors ${
           active ? "text-accent" : "text-ink-muted group-hover:text-ink"
         }`}
       >
-        <Icon name={sectionIcons[name]} className="h-4 w-4" />
+        <Icon name={sectionIcons[name]} className="size-4" />
       </span>
       <span className="min-w-0 grow truncate">{t(sectionLabels[name])}</span>
       {attention ? (
@@ -281,19 +280,5 @@ function NavigationLink({
         />
       ) : null}
     </a>
-  );
-}
-
-function NavigationGroup({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="mb-1 md:mb-1.5">
-      <span
-        aria-hidden="true"
-        className="block px-2 pb-0.5 pt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-faint"
-      >
-        {label}
-      </span>
-      <ul aria-label={label}>{children}</ul>
-    </div>
   );
 }

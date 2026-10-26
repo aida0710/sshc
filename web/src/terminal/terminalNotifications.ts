@@ -31,8 +31,14 @@ export function nextTerminalNotification(
   // The pane title still follows so several agents on one host stay apart, and
   // the program's own title becomes the first line of the body.
   const subject = alias === undefined || alias === displayTitle ? displayTitle : `${alias}（${displayTitle}）`;
-  const body = last.title !== "" && last.body !== ""
-    ? `${last.title}\n${last.body}`
-    : last.title || last.body || t("terminal.notificationFallback");
-  return { title: subject, body };
+  return { title: subject, body: notificationText(t, last) };
+}
+
+// notificationText is what a terminal notification says: the program's title
+// and body on two lines, whichever it sent, or a fallback when it sent neither.
+// The desktop notification and the sidebar's unread line both show it.
+export function notificationText(t: Translate, notification: TerminalNotification): string {
+  return notification.title !== "" && notification.body !== ""
+    ? `${notification.title}\n${notification.body}`
+    : notification.title || notification.body || t("terminal.notificationFallback");
 }

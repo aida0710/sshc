@@ -192,7 +192,7 @@ test("resizes and restores the permanent desktop navigation", async ({ page, ins
   const navigation = page.getByRole("navigation", { name: "Primary" });
   const handle = page.getByRole("separator", { name: "Resize navigation" });
   await expect(navigation).toBeVisible();
-  await expect(handle).toHaveAttribute("aria-valuenow", "240");
+  await expect(handle).toHaveAttribute("aria-valuenow", "252");
 
   const handleBox = await handle.boundingBox();
   expect(handleBox).not.toBeNull();
@@ -202,15 +202,15 @@ test("resizes and restores the permanent desktop navigation", async ({ page, ins
   await page.mouse.move(handleBox.x + handleBox.width / 2 + 80, handleBox.y + handleBox.height / 2);
   await page.mouse.up();
 
-  await expect(handle).toHaveAttribute("aria-valuenow", "320");
+  await expect(handle).toHaveAttribute("aria-valuenow", "332");
   await expect
     .poll(() => navigation.evaluate((element) => Math.round(element.getBoundingClientRect().width)))
-    .toBe(320);
+    .toBe(332);
 
   await page.reload();
   await expect(page.getByRole("separator", { name: "Resize navigation" })).toHaveAttribute(
     "aria-valuenow",
-    "320",
+    "332",
   );
 
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
@@ -218,6 +218,6 @@ test("resizes and restores the permanent desktop navigation", async ({ page, ins
   await expect(page.getByRole("button", { name: "Show navigation" })).toHaveCount(0);
   await expect(page.getByRole("separator", { name: "Resize navigation" })).toHaveAttribute(
     "aria-valuenow",
-    "320",
+    "332",
   );
 });

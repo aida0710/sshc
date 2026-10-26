@@ -39,7 +39,10 @@ export function TerminalScreen({
   runTargets,
   onOpenRemotePath,
   onOSC52Change,
+  onOpenNavigation,
 }: {
+  // onOpenNavigation opens the sidebar from a phone's terminal top bar.
+  onOpenNavigation?: () => void;
   visible: boolean;
   terminalSessions: TerminalSessionsState;
   activeSessionId: string | null;
@@ -129,6 +132,7 @@ export function TerminalScreen({
           onReconnect={() => terminalSessions.reconnect(session.id)}
           onStopReconnect={() => terminalSessions.stopReconnect(session.id)}
           onOpenRemotePath={onOpenRemotePath}
+          onOpenNavigation={onOpenNavigation}
         />
         </Suspense>
       </div>

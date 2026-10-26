@@ -35,6 +35,7 @@ describe("the catalogue", () => {
     });
     expect(untranslated.sort()).toEqual(
       [
+        "appearance.heading",
         "conn.advancedDirectives",
         "conn.areaAdvanced",
         "conn.areaAnalysis",
