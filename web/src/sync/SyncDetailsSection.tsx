@@ -41,15 +41,15 @@ export function SyncDetailsSection({
 }) {
   const t = useTranslate();
   return (
-    <details className="overflow-hidden rounded-md border border-control-line bg-card">
-      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 bg-toolbar px-4 py-3 marker:hidden hover:bg-select-fill">
-        <span className="flex items-center gap-3 text-sm font-medium text-ink">
-          <DisclosureChevron className="size-4 text-ink-muted" />
+    <details className="border-t border-line pt-4">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 marker:hidden">
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+          <DisclosureChevron className="size-3.5 text-ink-muted" />
           {t("sync.detailsHeading")}
         </span>
         <span className={hintText}>{describeLastSync(t, status, locale)}</span>
       </summary>
-      <div className="grid gap-4 border-t border-line bg-surface-subtle p-4 lg:grid-cols-2">
+      <div className="grid gap-4 pt-4 lg:grid-cols-2">
         <SyncBucketStateSection
           bucketState={bucketState}
           locale={locale}

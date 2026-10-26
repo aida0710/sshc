@@ -27,7 +27,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
   return (
     <section
       aria-labelledby="sync-bucket-state-heading"
-      className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4 lg:col-span-2"
+      className="flex flex-col gap-3 rounded-[10px] bg-well p-4 lg:col-span-2"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
