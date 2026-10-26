@@ -179,7 +179,9 @@ export function AppNavigation({
       <div data-navigation-scroll className="min-h-0 flex-1 overflow-y-auto pr-0.5">
         <SplitGroupList groups={splitView.groups} sessions={orderedSessions}
           selected={section === "Terminal" ? splitView.activeGroupNumber : null}
+          unreadBySession={unreadBySession}
           onSelect={onShowSplitGroup}
+          onSelectSession={onShowSession}
           onDissolve={(number) => splitView.dispatch({ type: "dissolve-group", number })} />
         <WorkspaceTree
           workspaces={terminalWorkspaces}
@@ -188,7 +190,7 @@ export function AppNavigation({
           selected={section === "Terminal" ? activeSessionId : null}
           unreadBySession={unreadBySession}
           onSelect={onShowSession}
-          splitGroupNumberBySession={splitView.groupNumberBySession}
+          splitGroupBySession={splitView.groupBySession}
           {...(canSplitSession === undefined ? {} : { canSplitSession })}
           {...(onSplitSession === undefined ? {} : { onSplitSession })}
           onDuplicate={onDuplicateSession}

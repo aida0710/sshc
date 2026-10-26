@@ -226,10 +226,10 @@ test("keeps two split groups through standalone selection and dissolves them wit
   await changeDisplayLanguage(page, "ja");
   const japaneseNavigation = page.getByRole("navigation", { name: "メインナビゲーション" });
   const groupOne = japaneseNavigation.locator('[data-split-group="1"]');
-  await groupOne.getByRole("button", { name: "分割 1のセッション名を開閉" }).click();
-  await expect(groupOne.getByText("ビルド・アプリのログ", { exact: true })).toHaveCount(0);
-  await groupOne.getByRole("button", { name: "分割 1のセッション名を開閉" }).click();
-  await expect(groupOne.getByText("ビルド・アプリのログ", { exact: true })).toBeVisible();
+  // The group lists the sessions it holds under its row.
+  await expect(groupOne.getByRole("list", { name: "分割 1のセッション" }).getByRole("button")).toHaveText([/ビルド/, /アプリのログ/]);
+  await groupOne.getByRole("button", { name: "分割 1 の アプリのログ", exact: true }).click();
+  await expect(terminalKeyboard(pane(page, ids[1]!))).toBeFocused();
   await expect(japaneseNavigation.getByRole("list", { name: "Split views" })).toBeVisible();
   await waitForTerminalLayout(page);
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
@@ -249,10 +249,12 @@ test("keeps two split groups through standalone selection and dissolves them wit
   await expect(pane(page, ids[4]!)).toBeHidden();
   await page.setViewportSize({ width: 1280, height: 800 });
   await groupOne.getByRole("button", { name: "分割 1", exact: true }).click();
-  await japaneseNavigation.getByRole("button", { name: "分割 2を解除", exact: true }).click();
+  await japaneseNavigation.getByRole("button", { name: "分割 2の操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "解除", exact: true }).click();
   await expect(page.locator("[data-split-view-pane]")).toHaveCount(2);
   await expect(japaneseNavigation.locator('[data-split-group-badge="2"]')).toHaveCount(0);
-  await japaneseNavigation.getByRole("button", { name: "分割 1を解除", exact: true }).click();
+  await japaneseNavigation.getByRole("button", { name: "分割 1の操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "解除", exact: true }).click();
   await expect(page.locator("[data-split-view-pane]")).toHaveCount(1);
   await expect(japaneseNavigation.getByRole("list", { name: "Split views" })).toHaveCount(0);
   await expect(japaneseNavigation.locator("[data-split-group-badge]")).toHaveCount(0);
