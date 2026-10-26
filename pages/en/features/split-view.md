@@ -17,11 +17,11 @@ You can also choose **Show in split view on the right** or **Show in split view 
 
 ## Switch between splits
 
-Splitting a session displayed on its own creates a group under **SPLIT VIEWS**, above **WORKSPACES** in the sidebar. Groups are named **Split 1**, **Split 2**, and so on, in creation order. Numbers are not reused after a group is dissolved. You can keep up to eight groups, with up to four panes each. Splitting within a displayed group adds a pane to that group.
+Splitting a session displayed on its own creates a group under **Split views**, above **Workspaces** in the sidebar. Groups are named **Split 1**, **Split 2**, and so on, in creation order. Numbers are not reused after a group is dissolved. You can keep up to eight groups, with up to four panes each. Splitting within a displayed group adds a pane to that group.
 
 Select a group row to return to its arrangement. Session names appear beneath the row; use the arrow to collapse or expand them. Each grouped session also carries a small split icon and group number in the workspace tree.
 
-Selecting a grouped session in the sidebar opens its group and focuses that pane. Selecting an ungrouped session shows it alone while keeping every group available under **SPLIT VIEWS**.
+Selecting a grouped session in the sidebar opens its group and focuses that pane. Selecting an ungrouped session shows it alone while keeping every group available under **Split views**.
 
 A session can belong to only one split group. Adding it to another group removes it from the original group. If only one pane remains, the original group dissolves. Workspace membership does not change.
 

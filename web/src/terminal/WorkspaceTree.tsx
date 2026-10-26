@@ -87,6 +87,18 @@ export function WorkspaceTree({
   const newSessionTrigger = useRef<HTMLButtonElement>(null);
 
   const groups = groupSessionsByWorkspace(workspaces.workspaces, sessions, showHidden);
+  // Sessions with an unread notification, in the order the sidebar shows them.
+  const unreadInOrder = groups.flatMap((group) => group.sessions).filter((session) => unreadBySession.has(session.id));
+
+  // openNextUnread opens the unread session after the selected one, going round to the first,
+  // and opens its workspace if it is folded.
+  function openNextUnread() {
+    const after = unreadInOrder.findIndex((session) => session.id === selected) + 1;
+    const next = unreadInOrder[after % unreadInOrder.length];
+    if (next === undefined) return;
+    if (collapsed.has(next.workspaceId)) toggleCollapsed(next.workspaceId);
+    onSelect(next.id);
+  }
   const live = sessions.filter((session) => session.exited === undefined).length;
   const atSessionLimit = terminalSessions.maxSessions > 0 && live >= terminalSessions.maxSessions;
   const canOpenSession = !terminalSessions.busy && !atSessionLimit;
@@ -163,25 +175,36 @@ export function WorkspaceTree({
   ];
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center pr-1">
-        <span aria-hidden="true" className="block grow px-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-faint">
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center pb-1 pr-1 pt-[18px]">
+        <span aria-hidden="true" className="block grow px-2 text-xs text-ink-faint">
           {t("workspace.heading")}
         </span>
+        {unreadInOrder.length === 0 ? null : (
+          <button
+            type="button"
+            title={t("terminal.openNextUnread")}
+            onClick={openNextUnread}
+            className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full bg-notice px-1.5 text-[11px] text-notice-ink hover:brightness-110 md:min-h-5"
+          >
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-notice-ink" />
+            {t("terminal.unreadCount", { count: String(unreadInOrder.length) })}
+          </button>
+        )}
         <button
           type="button"
           aria-label={t("workspace.create")}
           title={t("workspace.create")}
           disabled={workspaces.maxWorkspaces > 0 && workspaces.workspaces.length >= workspaces.maxWorkspaces}
           onClick={() => setNameRequest({ kind: "create" })}
-          className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-6"
+          className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5"
         >
           <Icon name="plus" className="size-3.5" />
         </button>
         <ActionMenu
           label={t("workspace.headingActions")}
           items={headingActions}
-          triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-6"
+          triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5"
           iconClassName="size-3.5"
         />
       </div>
@@ -208,7 +231,7 @@ export function WorkspaceTree({
                 onDropSession={(id) => moveSessionInto(workspace.id, members, id, null)}
               />
               {expanded ? (
-                <div className="ml-3 border-l border-line pl-1">
+                <div className="pl-1">
                   <SessionList
                     sessions={members}
                     selected={selected}
@@ -241,7 +264,7 @@ export function WorkspaceTree({
         type="button"
         disabled={!canOpenSession}
         onClick={() => setPickerWorkspace(newSessionWorkspace)}
-        className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ink hover:bg-hover"
+        className="mt-1.5 flex min-h-10 w-full min-w-0 items-center gap-2.5 rounded-[7px] px-2 text-left text-[13px] text-accent hover:bg-hover md:min-h-[30px]"
       >
         <Icon name="plus" className="size-3.5" aria-hidden="true" />
         {t("terminal.newSession")}

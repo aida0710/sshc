@@ -784,6 +784,23 @@ test("sends a real control character from the on-screen keys", async ({ page, in
     .toBeGreaterThanOrEqual(2);
 });
 
+test("sends what was typed in the phone's text box to the shell and empties the box", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  await openLocalShell(page);
+
+  const rows = drawnRows(page);
+  await expect(rows).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const field = page.getByRole("textbox", { name: "Text to send to the terminal" });
+  await field.fill("echo composer-$((20+6))");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+
+  // The shell ran the line, so Enter followed the text.
+  await expect(rows).toContainText("composer-26", { timeout: 20_000 });
+  await expect(field).toHaveValue("");
+});
+
 test("lays a selectable layer over the terminal, outside the element that blocks it", async ({
   page,
   installation,

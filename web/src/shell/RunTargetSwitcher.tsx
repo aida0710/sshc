@@ -82,7 +82,7 @@ export function RunTargetSwitcher({
   };
 
   return (
-    <div ref={rootRef} className="relative border-t border-line px-1 pb-1 pt-2">
+    <div ref={rootRef} className="relative pt-2">
       {open ? (
         <div className="absolute bottom-full left-1 right-1 z-20 mb-1 rounded-lg border border-line bg-card p-1.5 shadow-lg">
           <p className="px-2 pb-1 pt-0.5 text-[11px] font-semibold text-ink-faint">{t("runTarget.heading")}</p>
@@ -109,11 +109,11 @@ export function RunTargetSwitcher({
         aria-expanded={open}
         aria-label={t("runTarget.choose", { name: current })}
         onClick={() => setOpen((value) => !value)}
-        className={`flex h-10 w-full items-center gap-2 rounded-md border bg-control px-2.5 text-sm md:h-8 ${open ? "border-accent" : "border-line"}`}
+        className={`flex h-10 w-full items-center gap-2 rounded-lg bg-well px-2.5 text-[12.5px] md:h-[34px] ${open ? "ring-1 ring-accent" : ""}`}
       >
         <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-live" />
-        <span className="shrink-0 text-xs text-ink-faint">{t("runTarget.label")}</span>
-        <span className="min-w-0 grow truncate text-left font-mono font-semibold text-accent">{current}</span>
+        <span className="shrink-0 text-ink-muted">{t("runTarget.label")}</span>
+        <span className="min-w-0 grow truncate text-left font-mono font-semibold text-ink">{current}</span>
         <Icon name="chevronRight" className={`size-3.5 shrink-0 text-ink-faint transition-transform ${open ? "-rotate-90" : "rotate-90"}`} />
       </button>
       <HostPickerDialog
