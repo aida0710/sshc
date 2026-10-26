@@ -158,7 +158,7 @@ function SignOutRow({ compact }: { compact: boolean }) {
         <RowIcon name="signOut" compact={compact} tone="danger" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13.5px] leading-[18px] text-danger">{t("menu.signOut")}</span>
-          <span id={hintId} className="block truncate text-xs leading-4 text-ink-faint">{t("menu.signOutHint")}</span>
+          <span id={hintId} className="block truncate text-xs leading-4 text-ink-faint">{t("menu.signOutRowHint")}</span>
         </span>
       </button>
       {error === "" ? null : <div className="px-2.5 pb-2"><Notice tone="danger" compact>{error}</Notice></div>}

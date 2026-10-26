@@ -1,1 +1,0 @@
-import{i as e}from"./context-a4nsjU6_.js";import{t}from"./icons-CpL-Fk2N.js";var n=e(),r=`[details[open]>summary_&]:rotate-90`;function i({expanded:e,className:i=`size-4`}){return(0,n.jsx)(t,{name:`chevronRight`,className:`transition-transform ${e===void 0?r:e?`rotate-90`:``} ${i}`})}export{i as t};
