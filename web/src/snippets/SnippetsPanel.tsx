@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
+import { control } from "../ui/form";
+import { PageHeader } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
 import { useAsyncOperation, type RunOptions } from "../ui/useAsyncOperation";
 import { usePendingAction } from "../ui/usePendingAction";
@@ -298,17 +300,16 @@ export function SnippetsPanel({
   }
 
   return (
-    <section
-      className="grid min-h-full min-w-0 content-start gap-4 xl:grid-cols-[16rem_minmax(0,1fr)_minmax(0,0.8fr)]"
-      aria-labelledby="snippets-heading"
-    >
+    <section aria-labelledby="snippets-heading" className="flex flex-col gap-[22px]">
+      <PageHeader
+        title={t("snippets.heading")}
+        headingId="snippets-heading"
+        description={t("snippets.pageDescription")}
+        actions={<Button onClick={() => draftDiscard.confirmBefore(() => edit(null))}>{t("snippets.new")}</Button>}
+      />
+      {/* The list, the editor and the targets sit side by side on a wide screen, divided by lines. */}
+      <div className="grid min-w-0 content-start gap-5 xl:grid-cols-[16rem_minmax(0,1fr)_minmax(0,0.8fr)]">
       <div className="flex min-w-0 flex-col gap-2">
-        <div className="flex items-center">
-          <h2 id="snippets-heading" className="grow font-medium">
-            {t("snippets.heading")}
-          </h2>
-          <Button onClick={() => draftDiscard.confirmBefore(() => edit(null))}>{t("snippets.new")}</Button>
-        </div>
         {libraryState === "failed" ? (
           <PanelState
             tone="failed"
@@ -325,7 +326,7 @@ export function SnippetsPanel({
             const next = snippets.find((snippet) => snippet.id === event.target.value) ?? null;
             draftDiscard.confirmBefore(() => edit(next));
           }}
-          className="w-full rounded border border-control-line bg-control px-3 py-2 text-sm xl:hidden"
+          className={`${control} xl:hidden`}
         >
           <option value="">{t("snippets.new")}</option>
           {snippets.map((snippet) => <option key={snippet.id} value={snippet.id}>{snippet.name}</option>)}
@@ -350,29 +351,29 @@ export function SnippetsPanel({
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-card p-4">
+      <div className="flex min-w-0 flex-col gap-3 border-t border-line pt-5 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">
         {operation.error === "" ? null : <Notice tone="danger">{operation.error}</Notice>}
-        <label className="text-xs text-ink-muted">
+        <label className="text-[12.5px] text-ink-muted">
           {t("snippets.name")}
           <input
             value={draft.name}
             onChange={(event) =>
               changeDraft({ ...draft, name: event.target.value })
             }
-            className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
+            className={`${control} mt-1 block`}
           />
         </label>
-        <label className="text-xs text-ink-muted">
+        <label className="text-[12.5px] text-ink-muted">
           {t("snippets.description")}
           <input
             value={draft.description}
             onChange={(event) =>
               changeDraft({ ...draft, description: event.target.value })
             }
-            className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
+            className={`${control} mt-1 block`}
           />
         </label>
-        <label className="text-xs text-ink-muted">
+        <label className="text-[12.5px] text-ink-muted">
           {t("snippets.command")}
           <textarea
             rows={7}
@@ -381,16 +382,16 @@ export function SnippetsPanel({
               changeDraft({ ...draft, command: event.target.value });
               setPreview(null);
             }}
-            className="mt-1 block w-full rounded border border-control-line bg-control p-2 font-mono text-sm"
+            className={`${control} mt-1 block font-mono`}
           />
         </label>
-        <p className="text-xs text-ink-muted">{t("snippets.variableHint")}</p>
+        <p className="text-[12.5px] text-ink-muted">{t("snippets.variableHint")}</p>
         {variablesFor(draft.command, draft.variables).map((variable) => (
           <div
             key={variable.name}
             className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[8rem_minmax(0,1fr)]"
           >
-            <label className="text-xs text-ink-muted">
+            <label className="text-[12.5px] text-ink-muted">
               <code>{`{{${variable.name}}}`}</code>
               <select
                 aria-label={t("snippets.variableType")}
@@ -400,7 +401,7 @@ export function SnippetsPanel({
                     type: event.target.value as SnippetVariable["type"],
                   })
                 }
-                className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
+                className={`${control} mt-1 block`}
               >
                 {(["string", "integer", "boolean", "secret"] as const).map(
                   (type) => (
@@ -412,7 +413,7 @@ export function SnippetsPanel({
               </select>
             </label>
             {variable.type === "secret" ? (
-              <div className="text-xs text-ink-muted">
+              <div className="text-[12.5px] text-ink-muted">
                 {t("snippets.value")}
                 <PasswordInput
                   label={`${variable.name} · ${t("snippets.value")}`}
@@ -421,11 +422,11 @@ export function SnippetsPanel({
                     setInputs({ ...inputs, [variable.name]: value });
                     setPreview(null);
                   }}
-                  className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
+                  className={`${control} mt-1 block`}
                 />
               </div>
             ) : (
-              <label className="text-xs text-ink-muted">
+              <label className="text-[12.5px] text-ink-muted">
                 {t("snippets.value")}
                 {variable.type === "boolean" ? (
                   <select
@@ -437,7 +438,7 @@ export function SnippetsPanel({
                       });
                       setPreview(null);
                     }}
-                    className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
+                    className={`${control} mt-1 block`}
                   >
                     <option value="" />
                     <option value="true">true</option>
@@ -454,7 +455,7 @@ export function SnippetsPanel({
                       });
                       setPreview(null);
                     }}
-                    className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
+                    className={`${control} mt-1 block`}
                   />
                 )}
               </label>
@@ -479,8 +480,8 @@ export function SnippetsPanel({
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-col gap-3">
-        <section className="rounded-lg border border-line bg-card p-4">
+      <div className="flex min-w-0 flex-col gap-4 border-t border-line pt-5 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">
+        <section>
           <h3 className="text-sm font-medium">{t("snippets.targets")}</h3>
           <div className="mt-2 grid max-h-40 grid-cols-1 gap-1 overflow-auto sm:grid-cols-2">
             {aliases.map((alias) => (
@@ -511,7 +512,7 @@ export function SnippetsPanel({
           </Button>
         </section>
         {preview === null ? null : (
-          <section className="min-w-0 rounded-lg border border-notice-line bg-notice p-4">
+          <section className="min-w-0 rounded-[10px] bg-notice p-4">
             <h3 className="text-sm font-medium">{t("snippets.confirm")}</h3>
             {preview.targets.map((target) => (
               <div key={target.targetId} className="mt-2">
@@ -541,7 +542,7 @@ export function SnippetsPanel({
           </section>
         )}
         {job === null ? null : (
-          <section className="rounded-lg border border-line bg-card p-4">
+          <section className="border-t border-line pt-4">
             <div className="flex items-center">
               <h3 className="grow text-sm font-medium">
                 {t("snippets.results")} · {t(snippetStatusLabelKey(job.status))}
@@ -580,7 +581,7 @@ export function SnippetsPanel({
             })}
           </section>
         )}
-        <section className="rounded-lg border border-line bg-card p-4">
+        <section className="border-t border-line pt-4">
           <h3 className="text-sm font-medium">{t("snippets.startup")}</h3>
           <p className="mt-1 text-xs text-ink-muted">
             {t("snippets.startupHint")}
@@ -611,7 +612,7 @@ export function SnippetsPanel({
             aria-label={t("snippets.startupHost")}
             value={startupAlias}
             onChange={(event) => setChosenStartupAlias(event.target.value)}
-            className="mt-2 w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
+            className={`${control} mt-2`}
           >
             {aliases.map((alias) => (
               <option key={alias}>{alias}</option>
@@ -640,6 +641,7 @@ export function SnippetsPanel({
             {t("snippets.clearStartup")}
           </button>
         </section>
+      </div>
       </div>
       {draftDiscard.confirming ? (
         <DiscardDraftDialog id="snippet-draft-discard-heading" onConfirm={draftDiscard.confirmDiscard} onCancel={draftDiscard.keepEditing} />

@@ -657,6 +657,7 @@ export const ja = {
   "workspace.delivered": "送信済み",
   "workspace.deliveryFailed": "送信できませんでした",
   "snippets.heading": "Snippets",
+  "snippets.pageDescription": "よく使うコマンドを名前と変数付きで保存し、選んだホストで実行します。",
   "snippets.new": "新規",
   "snippets.empty": "保存済みスニペットはありません。",
   "snippets.loadFailed": "スニペットを読み込めませんでした。",

@@ -1,8 +1,8 @@
 import type { VPNProfile, VPNProfileStatus } from "../api/vpn";
 import { useLanguage, useTranslate } from "../i18n/context";
-import { hintText, sectionHeading } from "../ui/form";
+import { hintText } from "../ui/form";
 import { formatDateTime } from "../ui/format";
-import { Button, Card } from "../ui/surface";
+import { Button } from "../ui/surface";
 import { vpnBackendLabel } from "./vpnBackends";
 import { vpnPhases } from "./vpnPhases";
 
@@ -78,7 +78,7 @@ export function VPNProfileCard({
   const reasonUnlessPending = (action: VPNProfileCardAction, reason: string | undefined) =>
     busyWith(action) ? undefined : reason;
   return (
-    <Card as="article" padded aria-label={status.profile.name}>
+    <article aria-label={status.profile.name} className="flex flex-col gap-3 border-t border-line py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="font-medium text-ink">{status.profile.name}</p>
@@ -130,7 +130,7 @@ export function VPNProfileCard({
       {status.tunnel === undefined || checking ? null : <TunnelDetail tunnel={status.tunnel} />}
 
       <ProfileConnections connections={status.connections} />
-    </Card>
+    </article>
   );
 }
 
@@ -165,13 +165,13 @@ function ProfileConnections({ connections }: { connections: string[] }) {
   const t = useTranslate();
   return (
     <div className="flex flex-col gap-2 border-t border-line pt-3">
-      <p className={sectionHeading}>{t("vpn.connections")}</p>
+      <p className="text-xs text-ink-faint">{t("vpn.connections")}</p>
       {connections.length === 0 ? (
         <p className={hintText}>{t("vpn.noConnections")}</p>
       ) : (
         <ul className="flex flex-wrap gap-2" aria-label={t("vpn.connections")}>
           {connections.map((alias) => (
-            <li key={alias} className="rounded bg-surface-subtle px-2 py-1 text-sm text-ink">
+            <li key={alias} className="rounded-md bg-well px-2 py-1 text-sm text-ink">
               {alias}
             </li>
           ))}

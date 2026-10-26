@@ -299,7 +299,7 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   const editableFiles = overview.files.filter((node) => node.editable).length;
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+    <div className="flex flex-col gap-[22px]">
       <PageHeader title={t("explorer.pageTitle")} description={t("explorer.pageDescription")} />
       <SummaryStats data-config-metrics>
         {([
@@ -330,7 +330,7 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
                 <DisclosureChevron expanded={hierarchyOpen} />
               </button>
             </div>
-            <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-xs text-ink-muted">{overview.files.length}</span>
+            <span className="font-mono text-[11.5px] text-ink-faint">{overview.files.length}</span>
           </div>
 
           <div id="config-hierarchy" className={`${hierarchyOpen ? "flex" : "hidden"} min-h-0 flex-1 flex-col lg:flex`}>
@@ -369,8 +369,8 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
                     <span className="truncate font-mono text-sm font-semibold text-ink">{file.file.path ?? file.file.absolute}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded bg-surface px-2 py-0.5 text-xs text-ink-muted">{file.editable ? t("explorer.editable") : t("explorer.readOnly")}</span>
-                    {modified ? <span className="rounded bg-notice px-2 py-0.5 text-xs font-medium text-notice-ink">{t("explorer.unsaved")}</span> : null}
+                    <span className="rounded-full bg-well px-2 py-0.5 text-[11.5px] text-ink-muted">{file.editable ? t("explorer.editable") : t("explorer.readOnly")}</span>
+                    {modified ? <span className="rounded-full bg-notice px-2 py-0.5 text-[11.5px] font-medium text-notice-ink">{t("explorer.unsaved")}</span> : null}
                   </div>
                 </div>
                 <label htmlFor="file-raw" className="sr-only">{t("explorer.fileText", { path: file.file.path ?? file.file.absolute })}</label>
