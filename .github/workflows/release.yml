@@ -243,7 +243,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           go build ./...
-          go test -v -count=1 ./...
+          go test -v -count=1 -timeout 20m ./...
 
       - name: Build the CLI for this OS
         env:
@@ -349,9 +349,12 @@ jobs:
           bash demo/scripts/build-images.sh
           npm run build --prefix web -- --base=./ --outDir ../demo/images/ui
           npm run build --prefix demo
+      # runner に最初から入っている Google Chrome で確かめ、Chromium をダウンロードしない。
+      # ダウンロードは遅い日に止まることがある（CI の a11y の検査も同じ理由でやめた）。
       - name: Verify browser SSH and SFTP
+        env:
+          SSHC_DEMO_CHROMIUM: /usr/bin/google-chrome
         run: |
-          npx --prefix demo playwright install --with-deps chromium
           node demo/scripts/serve.mjs > "$RUNNER_TEMP/demo-server.log" 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
