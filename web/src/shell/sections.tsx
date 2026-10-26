@@ -5,7 +5,6 @@ import { parseSettingsPage } from "../settings/settingsRoute";
 import type { SFTPTarget } from "../sftp/SFTPPanel";
 import { PageBoard } from "../ui/PageBoard";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
-import { SectionBar } from "../ui/SectionBar";
 import { useTranslate } from "../i18n/context";
 import { menuColumns } from "./menuEntries";
 import { MenuPanel } from "./MenuPanel";
@@ -100,7 +99,6 @@ export type SectionViewProps = {
 };
 
 export function SectionView(props: SectionViewProps) {
-  const t = useTranslate();
   if (props.section === "Terminal") {
     return null;
   }
@@ -133,11 +131,10 @@ export function SectionView(props: SectionViewProps) {
     );
   }
   if (props.section === "Files") {
-    // 帯は比較のボタンと一緒に SFTPWorkspace が描く。SFTPWorkspace を読み込むあいだも帯は出しておく。
-    // Connections と同じく余白を取らず、帯・タブ・一覧・転送マネージャーの境目は線だけにする。
+    // SFTPWorkspace draws its own cards. While it loads, an empty card holds the place.
     return (
       <div className="h-full min-h-0 overflow-hidden">
-        <Suspense fallback={<div className="flex h-full min-h-0 flex-col"><SectionBar title={t(sectionLabels.Files)} /><RouteSkeleton /></div>}>
+        <Suspense fallback={<PageBoard fill><RouteSkeleton /></PageBoard>}>
           <SectionPage {...props} />
         </Suspense>
       </div>

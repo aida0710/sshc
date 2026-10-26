@@ -457,7 +457,7 @@ export function SFTPPanel({
         void search.runSearch();
       }}
       placeholder={t(search.mode === "content" ? "sftp.search.contentPlaceholder" : "sftp.filterPlaceholder")}
-      className="h-8 w-full rounded-md border border-control-line/60 bg-control/70 py-1 pl-7 pr-2 text-xs outline-none focus:border-accent md:h-7"
+      className="h-8 w-full rounded-md border border-control-line bg-well py-1 pl-7 pr-2 text-xs outline-none focus:border-accent md:h-7"
     />
   );
   const selectionLabel = selectedEntry === null
@@ -545,13 +545,13 @@ export function SFTPPanel({
         <div
           aria-label={t(local ? "sftp.local.dropZone" : "sftp.dropZone")}
           aria-busy={busy}
-          className={`relative flex min-h-0 min-w-0 flex-col bg-card transition-shadow ${transfers.dragging ? "ring-2 ring-inset ring-accent" : ""}`}
+          className={`relative flex min-h-0 min-w-0 flex-col transition-shadow ${mobileInteraction ? "bg-card" : ""} ${transfers.dragging ? "ring-2 ring-inset ring-accent" : ""}`}
           onDragEnter={transfers.dragEnter}
           onDragOver={transfers.dragOver}
           onDragLeave={transfers.dragLeave}
           onDrop={(event) => { void transfers.acceptDrop(event); }}
         >
-          <div ref={menuRoot} hidden={mobileInteraction} className={mobileInteraction ? "hidden" : "relative flex shrink-0 items-center gap-1 border-b border-line/50 bg-toolbar/45 px-2 py-1"}>
+          <div ref={menuRoot} hidden={mobileInteraction} className={mobileInteraction ? "hidden" : "relative flex shrink-0 items-center gap-1 border-b border-line px-3 py-1.5"}>
             {selectedEntries.length > 0 && !(mobileInteraction && search.mobileSearchOpen) ? (
               <>
                 <button type="button" aria-label={t("sftp.clearSelection")} onClick={list.clearSelection} className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink ${mobileInteraction ? "size-12" : "size-10 md:size-7"}`}>
