@@ -99,7 +99,7 @@ for (const appearance of ["light", "dark"] as const) {
       .getByRole("button", { name: "bastion", exact: true })
       .click();
     const summary = page.locator("[data-connection-summary]");
-    await expect(summary).toHaveCSS("border-bottom-width", "1px");
+    await expect(page.getByRole("tablist", { name: "Connection editor" })).toHaveCSS("border-bottom-width", "1px");
     await expect(summary.getByRole("heading")).toBeVisible();
     await expect(summary.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
     await expect(page.locator("[data-connection-editor] input").first()).toHaveCSS("border-radius", "8px");
@@ -179,7 +179,7 @@ test("the connections controls are legible in light", async ({ page, installatio
 
   await openSection(page, "Connections");
   await page.getByRole("button", { name: "bastion", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "bastion", level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "bastion", level: 3 })).toBeVisible();
   await page.getByRole("button", { name: "New connection" }).click();
 
   const readable = await page.evaluate(() => {

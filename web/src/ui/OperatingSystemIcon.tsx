@@ -24,28 +24,41 @@ export const operatingSystems = [
 
 const sources: Record<string, string> = { ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, opensuse, macos, windows, linux, amazonlinux: linux, alpine: linux };
 
-type OperatingSystemIconProps = {
-  os?: HostMetadata["os"] | undefined;
-  colour?: string;
-  compact?: boolean;
-  // tile puts the mark on a small square in the accent colour, as on the Home cards.
-  tile?: boolean;
+// plain and compact are the bare mark beside text. tile puts it on a small square of the well colour, as
+// in the connection list, and accentTile on a larger square of the accent colour, as on the Home cards
+// and at the top of an open connection.
+type OperatingSystemIconLook = "plain" | "compact" | "tile" | "accentTile";
+
+const frames: Record<OperatingSystemIconLook, string> = {
+  plain: "size-6 text-ink-muted",
+  compact: "size-5 text-ink-muted",
+  tile: "size-7 rounded-md bg-well text-ink-muted",
+  accentTile: "size-[34px] rounded-[9px] bg-accent/15 text-accent",
 };
 
-export function OperatingSystemIcon({ os, colour = "", compact = false, tile = false }: OperatingSystemIconProps) {
+const marks: Record<OperatingSystemIconLook, string> = {
+  plain: "size-5",
+  compact: "size-4",
+  tile: "size-4",
+  accentTile: "size-5",
+};
+
+export function OperatingSystemIcon({ os, colour = "", look = "plain" }: {
+  os?: HostMetadata["os"] | undefined;
+  colour?: string;
+  look?: OperatingSystemIconLook;
+}) {
   const t = useTranslate();
   const name = os === "server" ? t("host.osGeneric") : operatingSystems.find(([value]) => value === os)?.[1] ?? t("host.osUnknown");
   const source = sources[os ?? ""];
-  const frame = tile
-    ? "size-[34px] rounded-[9px] bg-accent/15 text-accent"
-    : `${compact ? "size-5" : "size-6"} text-ink-muted`;
+  const onTile = look === "tile" || look === "accentTile";
   return (
     <span role="img" aria-label={name} title={name}
-      className={`relative grid ${frame} shrink-0 place-items-center`}>
-      {source === undefined ? <Icon name="connections" className={compact ? "size-4" : "size-5"} /> : (
-        <span aria-hidden="true" className={`${compact ? "size-4" : "size-5"} bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]`} style={{ maskImage: `url("${source}")` }} />
+      className={`relative grid ${frames[look]} shrink-0 place-items-center`}>
+      {source === undefined ? <Icon name="connections" className={marks[look]} /> : (
+        <span aria-hidden="true" className={`${marks[look]} bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]`} style={{ maskImage: `url("${source}")` }} />
       )}
-      {colour === "" ? null : <span aria-hidden="true" className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border ${tile ? "border-well" : "border-card"}`} style={{ backgroundColor: colour }} />}
+      {colour === "" ? null : <span aria-hidden="true" className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border ${onTile ? "border-well" : "border-card"}`} style={{ backgroundColor: colour }} />}
     </span>
   );
 }

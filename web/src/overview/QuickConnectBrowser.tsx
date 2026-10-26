@@ -151,7 +151,7 @@ export function QuickConnectBrowser({
           }}
           className="flex w-full min-w-0 items-center gap-3 rounded-xl p-3.5 pr-12 text-left disabled:cursor-wait pointer-fine:pr-3.5"
         >
-          <OperatingSystemIcon os={server.os} colour={server.colour} tile />
+          <OperatingSystemIcon os={server.os} colour={server.colour} look="accentTile" />
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-[13.5px] font-semibold text-ink" title={alias}>{alias}</span>

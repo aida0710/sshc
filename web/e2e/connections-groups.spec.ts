@@ -24,6 +24,11 @@ async function openConnections(page: Page, installation: Installation) {
   return page.getByRole("navigation", { name: "Connections" });
 }
 
+// The list of groups sits beside the Connections card, apart from the connection list.
+function groupList(page: Page) {
+  return page.getByRole("navigation", { name: "Groups" });
+}
+
 function savesTo(page: Page) {
   const requests: string[] = [];
   page.on("request", (request) => {
@@ -77,36 +82,36 @@ test("deletes the chosen connections together after confirming", async ({ page, 
 
 test("creates, renames and deletes a group from the Connections group column", async ({ page, installation }) => {
   await installWorkGroup(installation);
-  const tree = await openConnections(page, installation);
+  await openConnections(page, installation);
 
-  await tree.getByRole("button", { name: "New group" }).click();
+  await groupList(page).getByRole("button", { name: "New group" }).click();
   const create = page.getByRole("dialog", { name: "New group" });
   await create.getByLabel("Name").fill("lab");
   await create.getByRole("button", { name: "Create" }).click();
-  await expect(tree.getByRole("button", { name: "lab", exact: true })).toBeVisible();
+  await expect(groupList(page).getByRole("button", { name: "lab", exact: true })).toBeVisible();
   expect(await installation.read("config")).toContain("Include connections/lab/*.conf");
 
-  await tree.getByRole("button", { name: "lab", exact: true }).hover();
-  await tree.getByRole("button", { name: "Actions for lab" }).click();
+  await groupList(page).getByRole("button", { name: "lab", exact: true }).hover();
+  await groupList(page).getByRole("button", { name: "Actions for lab" }).click();
   await page.getByRole("menuitem", { name: "Rename" }).click();
   const rename = page.getByRole("dialog", { name: "Rename lab" });
   await rename.getByLabel("Name").fill("homelab");
   await rename.getByRole("button", { name: "Rename" }).click();
-  await expect(tree.getByRole("button", { name: "homelab", exact: true })).toBeVisible();
+  await expect(groupList(page).getByRole("button", { name: "homelab", exact: true })).toBeVisible();
 
-  await tree.getByRole("button", { name: "homelab", exact: true }).hover();
-  await tree.getByRole("button", { name: "Actions for homelab" }).click();
+  await groupList(page).getByRole("button", { name: "homelab", exact: true }).hover();
+  await groupList(page).getByRole("button", { name: "Actions for homelab" }).click();
   await page.getByRole("menuitem", { name: "Delete…" }).click();
   await page.getByRole("dialog", { name: "Delete homelab?" }).getByRole("button", { name: "Delete group" }).click();
-  await expect(tree.getByRole("button", { name: "homelab", exact: true })).toHaveCount(0);
+  await expect(groupList(page).getByRole("button", { name: "homelab", exact: true })).toHaveCount(0);
   expect(await installation.read("config")).not.toContain("connections/homelab");
 });
 
 test("saves a group's defaults from the editor shown beside its connections", async ({ page, installation }) => {
   await installWorkGroup(installation);
-  const tree = await openConnections(page, installation);
+  await openConnections(page, installation);
 
-  await tree.getByRole("button", { name: "work", exact: true }).click();
+  await groupList(page).getByRole("button", { name: "work", exact: true }).click();
   const editor = page.getByRole("region", { name: "work", exact: true });
   await editor.getByLabel("User name").fill("deploy");
   await editor.getByLabel("Jump host").fill("bastion");
@@ -120,18 +125,18 @@ test("saves a group's defaults from the editor shown beside its connections", as
 
 test("asks before dropping a group's unsaved defaults when another group is chosen", async ({ page, installation }) => {
   await installWorkGroup(installation);
-  const tree = await openConnections(page, installation);
+  await openConnections(page, installation);
 
-  await tree.getByRole("button", { name: "work", exact: true }).click();
+  await groupList(page).getByRole("button", { name: "work", exact: true }).click();
   const editor = page.getByRole("region", { name: "work", exact: true });
   await editor.getByLabel("User name").fill("deploy");
-  await tree.getByRole("button", { name: "All", exact: true }).click();
+  await groupList(page).getByRole("button", { name: "All", exact: true }).click();
   const confirm = page.getByRole("dialog", { name: "Discard changes" });
   await expect(confirm).toContainText("Discard the unsaved group settings?");
   await confirm.getByRole("button", { name: "Keep editing" }).click();
   await expect(editor.getByLabel("User name")).toHaveValue("deploy");
 
-  await tree.getByRole("button", { name: "All", exact: true }).click();
+  await groupList(page).getByRole("button", { name: "All", exact: true }).click();
   await page.getByRole("dialog", { name: "Discard changes" }).getByRole("button", { name: "Discard changes" }).click();
   await expect(editor).toHaveCount(0);
   await expect(installation.read("groups.sshc.conf")).rejects.toThrow();
@@ -156,22 +161,22 @@ test("follows the open connection and the group editor when their group is renam
   const tree = await openConnections(page, installation);
 
   await tree.getByRole("button", { name: "web", exact: true }).click();
-  await tree.getByRole("button", { name: "work", exact: true }).hover();
-  await tree.getByRole("button", { name: "Actions for work" }).click();
+  await groupList(page).getByRole("button", { name: "work", exact: true }).hover();
+  await groupList(page).getByRole("button", { name: "Actions for work" }).click();
   await page.getByRole("menuitem", { name: "Rename" }).click();
   const rename = page.getByRole("dialog", { name: "Rename work" });
   await rename.getByLabel("Name").fill("lab");
   await rename.getByRole("button", { name: "Rename" }).click();
-  await expect(tree.getByRole("button", { name: "lab", exact: true })).toBeVisible();
+  await expect(groupList(page).getByRole("button", { name: "lab", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "web", exact: true })).toBeVisible();
   await expect(page).toHaveURL(/path=connections%2Flab%2Fweb\.conf/);
 
-  await tree.getByRole("button", { name: "lab", exact: true }).hover();
-  await tree.getByRole("button", { name: "Actions for lab" }).click();
+  await groupList(page).getByRole("button", { name: "lab", exact: true }).hover();
+  await groupList(page).getByRole("button", { name: "Actions for lab" }).click();
   await page.getByRole("menuitem", { name: "Edit" }).click();
   await expect(page.getByRole("region", { name: "lab", exact: true })).toBeVisible();
-  await tree.getByRole("button", { name: "lab", exact: true }).hover();
-  await tree.getByRole("button", { name: "Actions for lab" }).click();
+  await groupList(page).getByRole("button", { name: "lab", exact: true }).hover();
+  await groupList(page).getByRole("button", { name: "Actions for lab" }).click();
   await page.getByRole("menuitem", { name: "Rename" }).click();
   const second = page.getByRole("dialog", { name: "Rename lab" });
   await second.getByLabel("Name").fill("ops");
