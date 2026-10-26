@@ -2,7 +2,7 @@ import type { MouseEvent } from "react";
 import { useTranslate } from "../i18n/context";
 import { sectionPath, type Section } from "../routing/sectionRoute";
 import { Icon } from "../ui/icons";
-import { sectionIcons, sectionLabels } from "./sections";
+import { sectionIcons, sectionLabels } from "./sectionPresentation";
 
 // The sections a phone reaches in one tap from the bar at the bottom; the
 // rest are under Menu.

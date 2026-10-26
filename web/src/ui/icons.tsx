@@ -8,6 +8,7 @@ import {
   ArrowUpDown,
   Bell,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -30,7 +31,9 @@ import {
   KeyRound,
   KeySquare,
   Keyboard,
+  Languages,
   LockKeyhole,
+  LogOut,
   Maximize,
   Menu,
   Minus,
@@ -102,6 +105,7 @@ const shapes = {
   minus: Minus,
   menu: Menu,
   search: Search,
+  chevronDown: ChevronDown,
   chevronLeft: ChevronLeft,
   chevronRight: ChevronRight,
   arrowUp: ArrowUp,
@@ -119,6 +123,8 @@ const shapes = {
   edit: Pencil,
   copy: Copy,
   check: Check,
+  language: Languages,
+  signOut: LogOut,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof shapes;

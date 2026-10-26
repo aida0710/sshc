@@ -470,7 +470,7 @@ test("keeps mobile navigation and display controls predictable at 360 and 390 pi
   await primaryNavigation.getByRole("link", { name: "Menu", exact: true }).click();
   const menu = page.getByRole("region", { name: "Menu" });
   await expect(menu.getByRole("heading", { name: "Preferences" })).toBeVisible();
-  await expect(menu.getByLabel("Theme")).toBeVisible();
+  await expect(menu.getByLabel("Theme")).toHaveCount(0);
   await expect(menu.getByLabel("Language")).toBeVisible();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     if (process.env.SSHC_VISUAL_LOCALE === "ja") {

@@ -5,7 +5,7 @@ description: Appearance, terminal, input, notifications, and local-shell setting
 
 # Settings
 
-Menu is organized into feature groups. Its Settings group links directly to Appearance, Engine, Terminal, SFTP, Keyboard shortcuts, Notifications, Open connections, and Master password. Preferences at the bottom of Menu controls the theme and display language. Connection-specific behavior lives in the connection's sshc tab.
+Menu is organized into feature groups, and each page in it has a line on what it is for. Its Settings group links directly to Appearance, Engine, Terminal, SFTP, Keyboard shortcuts, Notifications, Open connections, and Master password. Preferences at the bottom of Menu switches the display language. Connection-specific behavior lives in the connection's sshc tab.
 
 ## Keyboard shortcuts
 
@@ -34,7 +34,7 @@ Each settings page lists the other settings pages on its left, so you can move b
 
 The theme stays in this browser and is not synced. The accent colour is stored in the sshc metadata under `~/.ssh/sshc` and synced to your other devices. Amber, green, and red are not offered because they already mean an unread notification, connected, and an error.
 
-Preferences in Menu also switches the theme and the display language (Japanese or English).
+Preferences in Menu switches the display language (Japanese or English).
 
 Configure the terminal color scheme, font, background, and tint under **Settings → Terminal**.
 

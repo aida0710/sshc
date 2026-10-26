@@ -1,4 +1,4 @@
-import { clickAndAwait, expect, openSection, sessionStatus, test, openApplication } from "./support/environment";
+import { chooseTheme, clickAndAwait, expect, openSection, sessionStatus, test, openApplication } from "./support/environment";
 
 test("exchanges the fragment for a session and removes it from the address bar", async ({
   page,
@@ -141,16 +141,15 @@ test("keeps the chosen appearance, and writes nothing else", async ({ page, inst
 
   expect(await page.evaluate(() => Object.keys(window.localStorage))).toEqual(["sshc.browser.registration.v1"]);
 
-  await openSection(page, "Menu");
-  const menu = page.getByRole("region", { name: "Menu" });
-  await menu.getByLabel("Theme").selectOption("dark");
+  await chooseTheme(page, "dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
-  await menu.getByLabel("Theme").selectOption("system");
-  await menu.getByLabel("Language", { exact: true }).selectOption("ja");
+  await chooseTheme(page, "system");
+  await openSection(page, "Menu");
+  await page.getByRole("region", { name: "Menu" }).getByLabel("Language", { exact: true }).selectOption("ja");
 
   const stored = await page.evaluate(() => ({
     keys: Object.keys(window.localStorage).sort(),

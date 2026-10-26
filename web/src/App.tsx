@@ -43,7 +43,8 @@ import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceC
 import { mobileViewportQuery, useMediaQuery } from "./ui/useMediaQuery";
 import { useAppViewport } from "./ui/useAppViewport";
 import { BootstrapErrorScreen, NotFoundSection, SessionEndedScreen, VaultRecheckOverlay } from "./shell/AppFallbackScreens";
-import { SectionView, navigationId, sectionIcons, sectionLabels, startSections } from "./shell/sections";
+import { SectionView, navigationId, startSections } from "./shell/sections";
+import { sectionIcons, sectionLabels } from "./shell/sectionPresentation";
 import { TerminalScreen } from "./shell/TerminalScreen";
 import { useDeclaredConfig } from "./shell/useDeclaredConfig";
 import { useOSC52Policy } from "./shell/useOSC52Policy";

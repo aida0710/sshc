@@ -64,7 +64,6 @@ describe("the catalogue", () => {
         "menu.displaySettings",
         "menu.language",
         "menu.others",
-        "menu.theme",
         "rk.hostAlias",
         "secrets.changeHeading",
         "section.about",
