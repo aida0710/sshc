@@ -19,7 +19,7 @@ You can also choose **Show in split view on the right** or **Show in split view 
 
 Splitting a session displayed on its own creates a group under **Split views**, above **Workspaces** in the sidebar. Groups are named **Split 1**, **Split 2**, and so on, in creation order. Numbers are not reused after a group is dissolved. You can keep up to eight groups, with up to four panes each. Splitting within a displayed group adds a pane to that group.
 
-Select a group row to return to its arrangement. Session names appear beneath the row; use the arrow to collapse or expand them. Each grouped session also carries a small split icon and group number in the workspace tree.
+Select a group row to return to its arrangement. The small map at the row's left shows how its panes are arranged, and the number at its right is how many sessions it holds. Beneath the row, each session in the group has its own line (status dot, name, destination); selecting one opens the group with that pane focused. In the workspace tree, a grouped session shows a small map with its own pane highlighted.
 
 Selecting a grouped session in the sidebar opens its group and focuses that pane. Selecting an ungrouped session shows it alone while keeping every group available under **Split views**.
 
@@ -35,7 +35,7 @@ A session can belong to only one split group. Adding it to another group removes
 | Close a pane | Select **Close pane** in its heading. The session keeps running and remains in the sidebar |
 | Select another pane | Click the pane or select its session in the sidebar. Within the terminal, Ctrl+Alt+Left/Right also moves between panes |
 
-The selected pane has a colored border. Choose **Dissolve** on a group row to remove that group, or close panes until only one remains. Neither action closes the sessions themselves. When a session exits or is deleted, its pane is removed, even from a group that is not displayed. Groups with fewer than two remaining panes dissolve.
+The selected pane has a colored border. Choose **…** → **Dissolve** on a group row to remove that group, or close panes until only one remains. Neither action closes the sessions themselves. When a session exits or is deleted, its pane is removed, even from a group that is not displayed. Groups with fewer than two remaining panes dissolve.
 
 ## Mobile and persistence
 
