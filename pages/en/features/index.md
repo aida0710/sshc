@@ -79,7 +79,7 @@ The [Android app](/en/platform/android) uses the same interface for SSH, SFTP, a
 ## Updates and settings
 
 - Verified Homebrew and `install.sh` installations on macOS and Linux, and `install.ps1` installations on Windows, can update to a new stable release from the Web UI when the installation directory is writable. See [Update from the web UI](/en/guide/install#update-from-the-web-ui)
-- Choose the app theme (system, light, or dark), the display language (日本語 or English), keyboard shortcuts, and vault auto-lock in [Settings](/en/reference/settings)
+- Choose the app theme (system, light, or dark) and accent colour, the display language (日本語 or English), keyboard shortcuts, and vault auto-lock in [Settings](/en/reference/settings)
 
 ## Public demo
 

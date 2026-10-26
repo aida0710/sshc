@@ -19,11 +19,15 @@ export function SplitResizeHandle({
   label,
   onRatioChange,
   style,
+  look = "line",
 }: {
   direction: SplitDirection;
   ratio: number;
   label: string;
   style?: CSSProperties;
+  // "line" draws the divider between two panes that touch; "gap" sits in the space between
+  // two boards and shows only while the pointer is on it.
+  look?: "line" | "gap";
   onRatioChange: (ratio: number) => void;
 }) {
   const row = direction === "horizontal";
@@ -71,7 +75,7 @@ export function SplitResizeHandle({
       aria-valuenow={ratio}
       onPointerDown={beginResize}
       onKeyDown={resizeWithKeyboard}
-      className={`shrink-0 touch-none bg-line transition-colors hover:bg-accent focus:bg-accent focus:outline-none ${row ? "w-1 cursor-col-resize" : "h-1 cursor-row-resize"}`}
+      className={`shrink-0 touch-none transition-colors hover:bg-accent focus:bg-accent focus:outline-none ${look === "line" ? "bg-line" : "bg-transparent"} ${row ? "w-1 cursor-col-resize" : "h-1 cursor-row-resize"}`}
     />
   );
 }

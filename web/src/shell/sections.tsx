@@ -347,6 +347,7 @@ function PaddedSection({
         onTerminalSettingsChange={onTerminalSettingsChange}
         onVaultChanged={onVaultChanged}
         passwordless={passwordless}
+        onNavigatePage={(path) => navigation.onNavigateLocation(path)}
       />
     );
   }

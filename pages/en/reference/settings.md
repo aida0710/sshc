@@ -5,7 +5,7 @@ description: Appearance, terminal, input, notifications, and local-shell setting
 
 # Settings
 
-Menu is organized into feature groups. Its Settings group links directly to Engine, Terminal, SFTP, Keyboard shortcuts, Notifications, Open connections, and Master password. Preferences at the bottom of Menu controls the theme and display language. Connection-specific behavior lives in the connection's sshc tab.
+Menu is organized into feature groups. Its Settings group links directly to Appearance, Engine, Terminal, SFTP, Keyboard shortcuts, Notifications, Open connections, and Master password. Preferences at the bottom of Menu controls the theme and display language. Connection-specific behavior lives in the connection's sshc tab.
 
 ## Keyboard shortcuts
 
@@ -25,10 +25,16 @@ The port and the Vault auto-lock under Engine belong to this device only. Sync d
 
 ## Appearance
 
-Use Preferences for:
+**Settings → Appearance** sets the theme and the accent colour of the whole app:
 
-- System, light, or dark theme
-- Japanese or English
+- Theme: match the system, light, or dark
+- Accent colour: lavender, blue, sky, pink, or mono. It marks the current item, buttons, and the focused terminal pane
+
+Each settings page lists the other settings pages on its left, so you can move between them.
+
+The theme stays in this browser and is not synced. The accent colour is stored in the sshc metadata under `~/.ssh/sshc` and synced to your other devices. Amber, green, and red are not offered because they already mean an unread notification, connected, and an error.
+
+Preferences in Menu also switches the theme and the display language (Japanese or English).
 
 Configure the terminal color scheme, font, background, and tint under **Settings → Terminal**.
 
@@ -75,4 +81,4 @@ Choose a default shell profile and start directory. Detected choices include Pow
 
 Browser notification permission is requested only after an explicit click. Configure the sound and volume used when a terminal program sends a notification through OSC 9/99/777, and test delivery. See [Titles and notifications](/en/terminal/notifications) for details.
 
-The application theme, display language, notification sounds, browser registration, the selected shortcut preset, the navigation and connection-list widths, SFTP tab and split state, and the transfer-manager and Home view modes use browser local storage (per device and per browser; never synced). Terminal settings, including the terminal color scheme, font, background, and tint, are stored in the sshc metadata under `~/.ssh/sshc` together with connection-specific settings, and are included in backups and sync. The browser registration token is not stored in `~/.ssh` or sync snapshots; the engine keeps only its verification hash, the issue and last-use times, and the engine port. The token is replaced every time the browser re-enters after an engine restart and expires 30 days after its last use. A changed engine port or a presentation of a superseded token revokes the registration, and `sshc` (or `sshc open`) issues a fresh URL to register again. At most 16 browsers are registered; when the limit is reached, the registration unused for the longest is dropped first. The browser session itself ends after 12 hours without use or 7 days after it was issued, but a valid registration re-enters on the next load without asking. "Sign out of this browser" under Menu → Sign out removes both the session and the registration (while the vault is locked, the same button on the lock screen signs out without the master password); opening sshc again then needs the URL from `sshc` (or `sshc open`). Vault secrets and sync credentials are never written to plaintext settings.
+The application theme, display language, notification sounds, browser registration, the selected shortcut preset, the navigation and connection-list widths, SFTP tab and split state, and the transfer-manager and Home view modes use browser local storage (per device and per browser; never synced). The accent colour and terminal settings, including the terminal color scheme, font, background, and tint, are stored in the sshc metadata under `~/.ssh/sshc` together with connection-specific settings, and are included in backups and sync. The browser registration token is not stored in `~/.ssh` or sync snapshots; the engine keeps only its verification hash, the issue and last-use times, and the engine port. The token is replaced every time the browser re-enters after an engine restart and expires 30 days after its last use. A changed engine port or a presentation of a superseded token revokes the registration, and `sshc` (or `sshc open`) issues a fresh URL to register again. At most 16 browsers are registered; when the limit is reached, the registration unused for the longest is dropped first. The browser session itself ends after 12 hours without use or 7 days after it was issued, but a valid registration re-enters on the next load without asking. "Sign out of this browser" under Menu → Sign out removes both the session and the registration (while the vault is locked, the same button on the lock screen signs out without the master password); opening sshc again then needs the URL from `sshc` (or `sshc open`). Vault secrets and sync credentials are never written to plaintext settings.

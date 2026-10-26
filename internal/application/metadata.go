@@ -186,6 +186,8 @@ type Metadata struct {
 	FileTransfers *FileTransferSettings `json:"fileTransfers,omitempty"`
 	// Backgrounds は端末設定の保存で巻き戻らない独立したライブラリ設定である。
 	Backgrounds *BackgroundSettings `json:"backgrounds,omitempty"`
+	// Appearance は、アプリの見た目のうち同期するもの（さし色）である。
+	Appearance *AppearanceSettings `json:"appearance,omitempty"`
 	// VPNProfiles は、接続ごとに通せるVPN経路の定義である。秘密はVaultにあり、
 	// ここには無い。
 	VPNProfiles []VPNProfile    `json:"vpnProfiles,omitempty"`
@@ -267,6 +269,9 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	// 読まない。このマシンの設定として engine-settings.json へ移すのは、初めて起動した
 	// ときの InitialiseEngineSettings である（metadata_engine.go）。engine 節は、書き直すと
 	// 消える。VPN プロファイルに、名前から決めた識別子を与える（vpnprofile_id.go）。
+	// appearance（さし色）は v9 のまま項目を足しただけである。旧バージョンは知らない
+	// 項目として読み飛ばし、書き直すと消えるが、失うのは見た目の好みだけなので、
+	// 旧バージョンに metadata ごと読ませない境界（schema の番号）は上げない。
 	if version.SchemaVersion < 9 {
 		clearUnpinnedServerIdentities(&metadata)
 		clearForeignVPNSections(&metadata)
@@ -353,6 +358,9 @@ func ValidateMetadata(metadata Metadata) error {
 		if err := validateAppearance(settings.Appearance); err != nil {
 			return err
 		}
+	}
+	if err := validateAppearanceSettings(metadata.Appearance); err != nil {
+		return err
 	}
 	if settings := metadata.Backgrounds; settings != nil {
 		if settings.CapacityMiB < MinBackgroundCapacityMiB || settings.CapacityMiB > MaxBackgroundCapacityMiB {

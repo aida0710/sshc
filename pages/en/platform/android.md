@@ -12,9 +12,10 @@ Install the signed APK from GitHub Releases. Android 13+ back navigation closes 
 ## Mobile controls
 
 - Use **Home / Connections / SFTP / Terminal / Menu** in the bottom navigation to switch screens. The navigation and header hide while the keyboard is open, leaving more room for input.
+- On the terminal screen with a session open, a top bar with the session name and its destination replaces the bottom navigation and the header. The button at its left opens the drawer to move to another screen; **…** at its right also holds Find.
 - Connections switches between the list and editor. Rotating a phone keeps this single-pane layout.
 - Terminal scrolling continues with deceleration after a swipe. Touching again stops it; selection and leaving the screen also stop momentum. The system's reduced-motion preference is respected.
-- Ctrl, Esc, Tab, and arrows occupy one row of extra keys. Open “…” for Alt and symbols. The keys remain available in landscape and preserve terminal input focus.
+- Esc, Tab, Ctrl, and arrows occupy one row of extra keys. Open “…” for Alt and symbols. The keys remain available in landscape and preserve terminal input focus.
 - Tap a URL or path shown in the terminal to open a menu for opening it in the browser, copying it, and other actions. Tapping anywhere else opens the keyboard. OSC 8 hyperlinks printed by programs cannot be opened by tapping.
 - Dialogs and action sheets stay within the visible area above the keyboard. Long content scrolls inside them. Android Back dismisses the topmost menu before its parent dialog.
 

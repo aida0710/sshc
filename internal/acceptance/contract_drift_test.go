@@ -101,6 +101,14 @@ var servedStringEnums = map[string]func(string) bool{
 	"VaultAutoLockSettings.unit":          oneOf(application.VaultAutoLockMinutes, application.VaultAutoLockHours),
 	"PasswordEligibility.passwordBinding": oneOf(authenticationBindingStates...),
 	"PasswordEligibility.totpBinding":     oneOf(authenticationBindingStates...),
+	"AppearanceSettings.accent":           acceptedAsAccent,
+}
+
+// acceptedAsAccent は、さし色の名前を application が保存できる metadata として受け付けるかを返す。
+func acceptedAsAccent(value string) bool {
+	metadata := application.NewMetadata()
+	metadata.Appearance = &application.AppearanceSettings{Accent: value}
+	return application.ValidateMetadata(metadata) == nil
 }
 
 // authenticationBindingStates は、Vault が返す、保存した認証情報と接続先の紐付けの状態である。

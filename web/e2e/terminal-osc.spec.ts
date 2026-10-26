@@ -70,12 +70,14 @@ test("applies terminal titles to the pane and marks notifications unread", async
   await openLocalShell(page);
   await expect(terminalSessions.getByRole("listitem")).toHaveCount(2);
   const first = terminalSessions.getByRole("listitem").first();
-  await expect(first.getByLabel("Unread notification")).toBeVisible({ timeout: 20_000 });
+  await expect(first.getByText(/Build finished\s+main\.go compiled/)).toBeVisible({ timeout: 20_000 });
+  await expect(first.getByRole("button").first()).toHaveAccessibleDescription(/Unread notification/);
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/terminal-osc-unread.png`, fullPage: true });
   }
 
   // Showing the pane again reads the notification.
   await first.getByRole("button").first().click();
-  await expect(terminalSessions.getByLabel("Unread notification")).toHaveCount(0);
+  await expect(first.getByText(/Build finished/)).toHaveCount(0);
+  await expect(first.getByRole("button").first()).not.toHaveAccessibleDescription(/Unread notification/);
 });

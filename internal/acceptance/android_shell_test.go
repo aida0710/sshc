@@ -77,7 +77,7 @@ func TestTheAndroidChromeMatchesThePageToolbar(t *testing.T) {
 		selector string
 		java     string
 	}{
-		{":root", light},
+		{":root,\n[data-theme=\"light\"]", light},
 		{`[data-theme="dark"]`, dark},
 	} {
 		token := cssToken(t, css, want.selector, "--ui-toolbar")

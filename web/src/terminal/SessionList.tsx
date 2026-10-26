@@ -7,10 +7,11 @@ import { draggableCursor } from "../ui/dragAndDropLook";
 import { Icon } from "../ui/icons";
 import { describeForwardProblem } from "./forwardProblem";
 import { sessionDragMimeType } from "./sessionDrag";
-import { sessionMarkerClass, sessionStatusText } from "./sessionStatus";
+import { sessionMarkerClass, sessionShowsDestination, sessionStatusText, sessionStatusTone } from "./sessionStatus";
 import { SessionRowMenu, type SessionRowMenuPlacement, type WorkspaceMoveTarget } from "./SessionRowMenu";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
-import type { UnreadSessions } from "./terminalNotifications";
+import { notificationText, type UnreadSessions } from "./terminalNotifications";
+import { revealOnHover } from "../ui/ActionMenu";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { useShiftKeyHeld } from "../ui/useShiftKeyHeld";
@@ -169,14 +170,24 @@ export function SessionList({
             const splitGroupNumber = splitGroupNumberBySession?.get(session.id);
             const unread = unreadBySession.has(session.id);
             const status = sessionStatusText(t, session);
+            const isSelected = session.id === selected;
+            const statusId = `session-status-${session.id}`;
             const marker = (
-              <span aria-hidden="true" className={`mt-1.5 size-1.5 shrink-0 rounded-full md:mt-1 ${sessionMarkerClass(session)}`} />
+              <span aria-hidden="true" className={`mt-1.5 size-2 shrink-0 rounded-full ${sessionMarkerClass(session, unread)}`} />
+            );
+            // The dot carries the status for the eye; screen readers get it as the row's description.
+            const statusDescription = (
+              <span id={statusId} className="sr-only">
+                {unread ? `${status} · ${t("terminal.unreadNotification")}` : status}
+              </span>
             );
             const details = (
               <>
-                <p className="truncate text-[11px] text-ink-faint md:leading-tight">
-                  {t("terminal.rowDetail", { status, destination })}
-                </p>
+                {unread && session.lastNotification !== undefined ? (
+                  <span className="block truncate text-[11.5px] leading-4 text-notice-ink">
+                    {notificationText(t, session.lastNotification)}
+                  </span>
+                ) : null}
                 {(session.forwards ?? []).map((forward) => (
                   <p
                     key={`${forward.kind}:${forward.listen}:${forward.to}`}
@@ -215,10 +226,10 @@ export function SessionList({
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
                 ) : null}
                 <div
-                  className={`relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors md:py-1 ${
+                  className={`group/row relative flex items-start gap-2.5 rounded-[7px] py-1.5 pl-3 pr-2 transition-colors md:min-h-[30px] md:py-[5px] ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
-                      : session.id === selected ? "bg-select-fill" : "hover:bg-hover"
+                      : isSelected ? "bg-select-fill" : "hover:bg-hover"
                   }`}
                 >
 
@@ -241,75 +252,81 @@ export function SessionList({
                         className="w-full rounded border border-accent bg-card px-1 py-0.5 text-xs text-ink"
                       />
                         {details}
+                        {statusDescription}
                       </div>
                     </>
                   ) : (
                     <button
                       type="button"
                       aria-label={displayTitle}
-                      aria-current={session.id === selected ? "true" : undefined}
+                      aria-describedby={statusId}
+                      aria-current={isSelected ? "true" : undefined}
                       onClick={() => onSelect(session.id)}
-                      className={`flex min-w-0 grow items-start gap-2 text-left after:absolute after:inset-0 after:rounded-md ${rowCursor}`}
+                      className={`flex min-w-0 grow items-start gap-2.5 text-left after:absolute after:inset-0 after:rounded-[7px] ${rowCursor}`}
                     >
                       {marker}
                       <span className="min-w-0 grow">
-                        <span className={`flex items-center gap-1 text-xs md:leading-tight ${session.id === selected ? "font-semibold text-accent" : "text-ink"}`}>
-                          <span className="truncate">{displayTitle}</span>
+                        <span className="flex items-center gap-2 text-[13px] leading-5">
+                          <span className={`min-w-0 flex-1 truncate ${isSelected ? "font-medium text-ink" : "text-ink"}`}>{displayTitle}</span>
                           {splitGroupNumber === undefined ? null : (
                             <span data-split-group-badge={splitGroupNumber} title={t("splitView.groupName", { number: splitGroupNumber })}
                               aria-label={t("splitView.groupName", { number: splitGroupNumber })} className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-normal text-ink-muted">
                               <Icon name="splitView" className="size-3" />{splitGroupNumber}
                             </span>
                           )}
+                          {sessionShowsDestination(session)
+                            ? <span data-session-destination className={`max-w-[50%] shrink-0 truncate font-mono text-[11px] text-ink-faint ${isSelected ? "pointer-fine:hidden" : ""}`}>{destination}</span>
+                            : <span data-session-status-text className={`max-w-[60%] shrink-0 truncate text-[11px] ${sessionStatusTone(session)}`}>{status}</span>}
                         </span>
                         {details}
+                        {statusDescription}
                       </span>
                     </button>
                   )}
-                  {unread ? (
-                    <span
-                      aria-label={t("terminal.unreadNotification")}
-                      title={t("terminal.unreadNotification")}
-                      className="mt-2 size-2 shrink-0 rounded-full bg-accent"
-                    />
-                  ) : null}
-                  <button
-                    type="button"
-                    aria-label={t("terminal.rowMenu", { title: session.title })}
-                    aria-expanded={menuFor === session.id}
-                    onClick={(event) => {
-                      menuTriggerRef.current = event.currentTarget;
-                      if (menuFor === session.id) {
-                        setMenuFor(null);
-                        return;
-                      }
-                      const trigger = event.currentTarget.getBoundingClientRect();
-                      const scroll = event.currentTarget.closest("[data-navigation-scroll]")?.getBoundingClientRect();
-                      const lowerEdge = scroll?.bottom ?? window.innerHeight;
-                      const upperEdge = scroll?.top ?? 0;
-                      const spaceBelow = lowerEdge - trigger.bottom;
-                      const spaceAbove = trigger.top - upperEdge;
-                      setMenuPlacement(spaceBelow < 132 && spaceAbove > spaceBelow ? "up" : "down");
-                      setMenuFor(session.id);
-                    }}
-                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5"
-                  >
-                    <Icon name="moreHorizontal" className="size-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={t("terminal.closeSession", { title: session.title })}
-                    onClick={(event) => {
-                      if (session.exited !== undefined || event.shiftKey || shiftPressed) {
-                        onClose(session.id);
-                        return;
-                      }
-                      setClosing(session);
-                    }}
-                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5"
-                  >
-                    <Icon name="close" className="size-3.5" />
-                  </button>
+                  {/* With a mouse the actions cover the destination only on the selected or hovered row, so
+                      the other rows keep it at the right edge. Touch keeps them in the row, always shown. */}
+                  <div className={`flex shrink-0 items-center gap-0.5 pointer-fine:absolute pointer-fine:right-1.5 pointer-fine:top-[5px] pointer-fine:rounded-md ${
+                    isSelected ? "pointer-fine:bg-select-fill" : `pointer-fine:bg-hover ${revealOnHover}`
+                  }`}>
+                    <button
+                      type="button"
+                      aria-label={t("terminal.rowMenu", { title: session.title })}
+                      aria-expanded={menuFor === session.id}
+                      onClick={(event) => {
+                        menuTriggerRef.current = event.currentTarget;
+                        if (menuFor === session.id) {
+                          setMenuFor(null);
+                          return;
+                        }
+                        const trigger = event.currentTarget.getBoundingClientRect();
+                        const scroll = event.currentTarget.closest("[data-navigation-scroll]")?.getBoundingClientRect();
+                        const lowerEdge = scroll?.bottom ?? window.innerHeight;
+                        const upperEdge = scroll?.top ?? 0;
+                        const spaceBelow = lowerEdge - trigger.bottom;
+                        const spaceAbove = trigger.top - upperEdge;
+                        setMenuPlacement(spaceBelow < 132 && spaceAbove > spaceBelow ? "up" : "down");
+                        setMenuFor(session.id);
+                      }}
+                      className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5"
+                    >
+                      <Icon name="moreHorizontal" className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={t("terminal.closeSession", { title: session.title })}
+                      onClick={(event) => {
+                        if (session.exited !== undefined || event.shiftKey || shiftPressed) {
+                          onClose(session.id);
+                          return;
+                        }
+                        setClosing(session);
+                      }}
+                      // On the selected row only "…" stays; close appears with the pointer, as in the design.
+                      className={`relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5 ${isSelected ? revealOnHover : ""}`}
+                    >
+                      <Icon name="close" className="size-3.5" />
+                    </button>
+                  </div>
                 </div>
                 {menuFor === session.id ? (
                   <SessionRowMenu
