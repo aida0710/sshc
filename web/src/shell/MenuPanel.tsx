@@ -94,6 +94,7 @@ function MenuLink({ item, description, compact, onNavigate }: {
 }) {
   const { t } = useLanguage();
   const label = t(item.label);
+  const descriptionId = useId();
 
   function follow(event: MouseEvent<HTMLAnchorElement>) {
     if (!opensInThisPage(event)) return;
@@ -103,12 +104,12 @@ function MenuLink({ item, description, compact, onNavigate }: {
 
   return (
     <li>
-      <a href={item.href} aria-label={t("menu.open", { section: label })} onClick={follow}
+      <a href={item.href} aria-label={t("menu.open", { section: label })} aria-describedby={descriptionId} onClick={follow}
         className={`${rowClassName(compact)} transition-colors ${compact ? "active:bg-hover" : "hover:bg-hover"}`}>
         <RowIcon name={item.icon} compact={compact} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13.5px] leading-[18px] text-ink">{label}</span>
-          <span className={`block truncate text-xs leading-4 ${description.notice ? "text-accent" : "text-ink-faint"}`}>{description.text}</span>
+          <span id={descriptionId} className={`block truncate text-xs leading-4 ${description.notice ? "text-accent" : "text-ink-faint"}`}>{description.text}</span>
         </span>
         <Icon name="chevronRight" className="size-[15px] text-ink-faint" />
       </a>

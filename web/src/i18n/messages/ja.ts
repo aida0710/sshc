@@ -587,7 +587,7 @@ export const ja = {
   "splitView.dissolve": "解除",
   "splitView.groupActions": "{name}の操作",
   "splitView.groupSessions": "{name}のセッション",
-  "splitView.groupSession": "{name} の {title}",
+  "splitView.groupSession": "{name}の{title}",
   "splitView.maxGroups": "分割は最大{count}グループ",
   "splitView.right": "右に分割して表示",
   "splitView.below": "下に分割して表示",
@@ -1312,19 +1312,10 @@ export const ja = {
   "section.diagnostics": "Diagnostics",
   "section.settings": "Settings",
   "settings.heading": "Settings",
-  "settings.pageDescription":
-    "ターミナルの動作、sshcの起動設定、このマシンに保存するデータの暗号化を設定します。",
   "settings.engineDescription":
     "この設定は同期されません。",
   "secrets.heading": "Vault",
-  "secrets.pageDescription":
-    "名前付きのアカウントパスワード、鍵パスフレーズ、ワンタイムパスワードを管理します。値は編集時だけ表示されます。",
-  "secrets.passwordsDescription":
-    "名前付きのアカウントパスワードと割り当て先を管理します。値は編集時だけ表示されます。",
-  "secrets.passphrasesDescription":
-    "名前付きまたは鍵専用のパスフレーズを管理します。値は編集時だけ表示されます。",
-  "secrets.totpDescription":
-    "ワンタイムパスワードを登録し、現在のコードと接続先への割り当てを確認します。",
+  "secrets.valuesShownWhileEditing": "値は編集するときだけ表示されます。",
   "secrets.metricPasswords": "アカウントパスワード",
   "secrets.metricPassphrases": "鍵パスフレーズ",
   "secrets.metricTOTP": "ワンタイムパスワード",

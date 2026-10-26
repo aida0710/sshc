@@ -228,7 +228,7 @@ test("keeps two split groups through standalone selection and dissolves them wit
   const groupOne = japaneseNavigation.locator('[data-split-group="1"]');
   // The group lists the sessions it holds under its row.
   await expect(groupOne.getByRole("list", { name: "分割 1のセッション" }).getByRole("button")).toHaveText([/ビルド/, /アプリのログ/]);
-  await groupOne.getByRole("button", { name: "分割 1 の アプリのログ", exact: true }).click();
+  await groupOne.getByRole("button", { name: "分割 1のアプリのログ", exact: true }).click();
   await expect(terminalKeyboard(pane(page, ids[1]!))).toBeFocused();
   await expect(japaneseNavigation.getByRole("list", { name: "Split views" })).toBeVisible();
   await waitForTerminalLayout(page);

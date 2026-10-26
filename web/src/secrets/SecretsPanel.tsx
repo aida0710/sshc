@@ -64,12 +64,6 @@ const kinds: {
   },
 ];
 
-const kindDescriptions: Record<CredentialKind, MessageKey> = {
-  password: "secrets.passwordsDescription",
-  key_passphrase: "secrets.passphrasesDescription",
-  totp: "secrets.totpDescription",
-};
-
 function emptyCredentialList(): CredentialList {
   return {
     credentials: [],
@@ -253,7 +247,9 @@ export function SecretsPanel({
     <div className={`flex flex-col gap-[22px] ${mobileTouchTargets}`}>
       <PageHeader
         title={selectedGroup === null ? t("secrets.heading") : t(selectedGroup.heading)}
-        description={kind === undefined ? t("secrets.pageDescription") : t(kindDescriptions[kind])}
+        // The one thing the page does not show by itself: stored values stay hidden until edited. A TOTP seed
+        // is never shown, so its page needs no line.
+        description={kind === "totp" ? undefined : t("secrets.valuesShownWhileEditing")}
         actions={
           status.passwordless ? null : <Button onClick={() => void api.lockVault().then((next) => {
             setStatus(next);

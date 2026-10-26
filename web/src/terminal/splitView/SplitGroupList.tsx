@@ -75,13 +75,13 @@ function SplitGroupRow({ group, members, selected, unreadBySession, onSelect, on
           const title = terminalDisplayTitle(session);
           return (
             <li key={session.id}>
-              <button type="button" aria-label={t("splitView.groupSession", { name, title })} onClick={() => onSelectSession(session.id)}
+              <button type="button" aria-label={t("splitView.groupSession", { name, title })} aria-describedby={`split-member-${session.id}`} onClick={() => onSelectSession(session.id)}
                 className="flex min-h-10 w-full min-w-0 items-start gap-2.5 rounded-[7px] py-1 pl-[42px] pr-2 text-left hover:bg-hover md:min-h-0 md:py-[3px]">
                 <span aria-hidden="true" className={`mt-[5px] size-2 shrink-0 rounded-full ${sessionMarkerClass(session, unreadBySession.has(session.id))}`} />
                 {/* As in the workspace rows, the name gets the whole line and the destination is under it. */}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[12.5px] leading-[18px] text-ink">{title}</span>
-                  <SessionDestinationLine session={session} />
+                  <SessionDestinationLine session={session} id={`split-member-${session.id}`} />
                 </span>
               </button>
             </li>

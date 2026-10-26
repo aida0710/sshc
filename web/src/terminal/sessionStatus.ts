@@ -31,13 +31,13 @@ export function sessionMarkerClass(session: TerminalSession, unread: boolean): s
   return session.state === "exited" ? "bg-ink-faint" : "bg-live";
 }
 
-// sessionShowsDestination は、行の右に接続先を出すかである。つながっていて問題の無いときだけ
+// sessionShowsDestination は、行の2行目に接続先を出すかである。つながっていて問題の無いときだけ
 // 出し、それ以外はその場所に状態の文（sessionStatusText）を出す。
 export function sessionShowsDestination(session: TerminalSession): boolean {
   return session.problem === "" && !waitsForConnection(session) && session.state !== "exited";
 }
 
-// sessionStatusTone は、行の右に出す状態の文の色である。終わっただけなら薄く、待っているか
+// sessionStatusTone は、行の2行目に出す状態の文の色である。終わっただけなら薄く、待っているか
 // 問題があるなら注意の色にする。
 export function sessionStatusTone(session: TerminalSession): string {
   return session.problem === "" && session.state === "exited" ? "text-ink-faint" : "text-notice-ink";

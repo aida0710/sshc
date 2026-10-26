@@ -92,10 +92,10 @@ export function GroupEditor({ group, memberCount, actions, onSave, onDirtyChange
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-xs text-ink-faint">{t("groupEditor.label")}</p>
-          <h2 id="group-editor-heading" className="truncate text-base font-semibold tracking-tight text-ink">
+          <h3 id="group-editor-heading" className="truncate text-base font-semibold tracking-tight text-ink">
             {parent === "" ? null : <span className="font-normal text-ink-faint">{parent}</span>}
             {label}
-          </h2>
+          </h3>
           <p className="mt-0.5 text-xs text-ink-muted">{t("groupEditor.members", { count: memberCount })}</p>
         </div>
         <ActionMenu
@@ -106,7 +106,7 @@ export function GroupEditor({ group, memberCount, actions, onSave, onDirtyChange
       </header>
 
       <div className="flex flex-col gap-3 border-t border-line pt-5">
-        <h3 className={sectionHeading}>{t("groupEditor.defaults")}</h3>
+        <h4 className={sectionHeading}>{t("groupEditor.defaults")}</h4>
         <p className={hintText}>{t("groupEditor.defaultsHint")}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {defaultFields.map((field) => (

@@ -24,21 +24,19 @@ export const operatingSystems = [
 
 const sources: Record<string, string> = { ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, opensuse, macos, windows, linux, amazonlinux: linux, alpine: linux };
 
-// plain and compact are the bare mark beside text. tile puts it on a small square of the well colour, as
-// in the connection list, and accentTile on a larger square of the accent colour, as on the Home cards
+// plain is the bare mark beside text, as in the sshc tab. tile puts it on a small square of the well colour,
+// as in the connection list, and accentTile on a larger square of the accent colour, as on the Home cards
 // and at the top of an open connection.
-type OperatingSystemIconLook = "plain" | "compact" | "tile" | "accentTile";
+type OperatingSystemIconLook = "plain" | "tile" | "accentTile";
 
 const frames: Record<OperatingSystemIconLook, string> = {
   plain: "size-6 text-ink-muted",
-  compact: "size-5 text-ink-muted",
   tile: "size-7 rounded-md bg-well text-ink-muted",
   accentTile: "size-[34px] rounded-[9px] bg-accent/15 text-accent",
 };
 
 const marks: Record<OperatingSystemIconLook, string> = {
   plain: "size-5",
-  compact: "size-4",
   tile: "size-4",
   accentTile: "size-5",
 };

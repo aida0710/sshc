@@ -1312,19 +1312,10 @@ export const en = {
   "section.diagnostics": "Ad hoc checks",
   "section.settings": "Settings",
   "settings.heading": "Settings",
-  "settings.pageDescription":
-    "Configure embedded terminals, sshc's lifecycle, and protection for this machine's encrypted data.",
   "settings.engineDescription":
     "These settings are not synced.",
   "secrets.heading": "The vault",
-  "secrets.pageDescription":
-    "Manage named account passwords, key passphrases, and one-time password seeds. Values are shown only while editing.",
-  "secrets.passwordsDescription":
-    "Manage named account passwords and the hosts that use them. Values are shown only while editing.",
-  "secrets.passphrasesDescription":
-    "Manage named and key-specific passphrases. Values are shown only while editing.",
-  "secrets.totpDescription":
-    "Register one-time passwords, view the current code, and manage their connection assignments.",
+  "secrets.valuesShownWhileEditing": "Values are shown only while you edit them.",
   "secrets.metricPasswords": "Account passwords",
   "secrets.metricPassphrases": "Key passphrases",
   "secrets.metricTOTP": "One-time passwords",
