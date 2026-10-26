@@ -1,7 +1,8 @@
 import type { HostDetail } from "../api/config";
 import type { VPNProfile } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
-import { Field, control } from "../ui/form";
+import { control } from "../ui/form";
+import { FieldRow } from "../ui/FieldRow";
 import { Notice } from "../ui/surface";
 import { vpnDestinationHostRefusal } from "../vpn/vpnDestination";
 import { deriveBasicField } from "./basicFields";
@@ -50,8 +51,9 @@ export function HostVPNProfileField({
       : t("connection.vpnNeedsDNS", { name: chosenProfile.name });
 
   return (
-    <div className="flex flex-col gap-2">
-      <Field label={t("connection.vpnLabel")} hint={t("connection.vpnHint")} error={note}>
+    // A fragment, so the row is one of the form's rows and draws the line above it like the others.
+    <>
+      <FieldRow label={t("connection.vpnLabel")} hint={t("connection.vpnHint")} warning={note}>
         <select
           value={chosen}
           onChange={(event) => onChange(event.target.value)}
@@ -68,8 +70,8 @@ export function HostVPNProfileField({
             <option value={chosen}>{t("connection.vpnMissing", { name: chosen })}</option>
           )}
         </select>
-      </Field>
-      {chosen === saved ? null : <Notice compact>{t("connection.vpnChangeStopsAssignments")}</Notice>}
-    </div>
+      </FieldRow>
+      {chosen === saved ? null : <div className="pb-3.5"><Notice compact>{t("connection.vpnChangeStopsAssignments")}</Notice></div>}
+    </>
   );
 }

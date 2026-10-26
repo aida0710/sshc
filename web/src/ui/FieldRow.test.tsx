@@ -16,6 +16,29 @@ describe("FieldRow", () => {
     expect(port).toHaveAccessibleDescription("Empty uses this machine's fixed port.");
   });
 
+  it("reads a warning as part of the description and marks the control invalid", () => {
+    render(
+      <FieldRow label="Port" hint="Inherited from config:3" warning="Use a number from 1 to 65535.">
+        <input defaultValue="0" />
+      </FieldRow>,
+    );
+
+    const port = screen.getByLabelText("Port");
+    expect(port).toHaveAccessibleDescription("Inherited from config:3 Use a number from 1 to 65535.");
+    expect(port).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("keeps the row's actions outside the label so a click on them stays on them", () => {
+    render(
+      <FieldRow label="User" actions={<button type="button">Use the inherited user</button>}>
+        <input defaultValue="aida" />
+      </FieldRow>,
+    );
+
+    expect(screen.getByRole("button", { name: "Use the inherited user" }).closest("label")).toBeNull();
+    expect(screen.getByLabelText("User")).toHaveAccessibleName("User");
+  });
+
   it("leaves a control made of several parts to name itself", () => {
     render(
       <FieldRow label="Passphrase" interactiveChildren>
