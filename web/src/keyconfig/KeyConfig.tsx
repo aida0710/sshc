@@ -83,6 +83,8 @@ export function KeyConfig() {
     <ul className="divide-y divide-line">
       {shortcutActions.map((action) => <li key={action} className="flex flex-wrap items-center gap-3 py-3">
         <span className="min-w-40 flex-1 text-sm font-medium text-ink">{t(actionLabelKeys[action])}</span>
+        {/* The key and its clear button stay together, at the right end or on a line of their own. */}
+        <div className="ml-auto flex items-center gap-2">
         <button type="button" aria-label={t("shortcuts.assign", { action: t(actionLabelKeys[action]) })}
           className="min-h-10 min-w-48 rounded border border-line bg-control px-3 py-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-accent"
           onClick={() => { setRecording(action); setError(""); setMessage(""); }}
@@ -104,6 +106,7 @@ export function KeyConfig() {
         </button>
         <Button onClick={() => { void save({ ...bindings, [action]: [] }); }} disabled={bindings[action].length === 0}
           aria-label={t("shortcuts.clearAction", { action: t(actionLabelKeys[action]) })}>{t("shortcuts.clear")}</Button>
+        </div>
       </li>)}
     </ul>
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">

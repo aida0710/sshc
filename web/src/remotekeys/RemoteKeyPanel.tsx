@@ -351,6 +351,7 @@ export function RemoteKeyPanel({
                       <label key={host} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-select-fill">
                         <input
                           type="checkbox"
+                          className="size-4 accent-accent"
                           checked={selectedAliases.includes(host)}
                           disabled={busy}
                           onChange={() => toggleAlias(host)}

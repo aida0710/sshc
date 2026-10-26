@@ -16,7 +16,7 @@ export const ja = {
   "shortcuts.reloadRequired": "プリセットの読み込み、または保存ができませんでした。再読み込みして最新の内容を確認してください。",
   "shortcuts.reload": "再読み込み",
   "shortcuts.loading": "プリセットを読み込み中…",
-  "shortcuts.hint": "割り当て欄を押し、Ctrl・Alt・Meta（Command）を含む組み合わせ、またはファンクションキーを入力してください。Escで中止、Tabで次の項目へ移動します。プリセットの内容はマシン間で同期され、使用するプリセットはブラウザごとに保持されます。標準プリセットを編集すると、個人用プリセットが作成されます。選択中のプリセットが削除された場合は標準に戻ります。ブラウザやOSのショートカットが優先される場合があります。コピー・貼り付け・ターミナル内検索はターミナル内で有効です。",
+  "shortcuts.hint": "割り当て欄を押してから、Ctrl・Alt・Meta（Command）を含む組み合わせかファンクションキーを押します（Escで中止）。標準のプリセットを変えると、自分用のプリセットが作られます。ブラウザやOSのショートカットが優先されることがあります。",
   "shortcuts.palette": "コマンド検索",
   "shortcuts.terminalSearch": "ターミナル内検索",
   "shortcuts.copy": "選択範囲をコピー",
@@ -704,7 +704,7 @@ export const ja = {
   "snippets.cancel": "中止",
   "snippets.startup": "接続時の自動実行",
   "snippets.startupHint":
-    "選択したホストのシェル準備後に実行します。初回接続と自動再接続のたびに送るため、シークレット変数の値も暗号化した設定に保存され、リモートのシェル履歴や画面に残ることがあります。割り当てた後で接続先または認証の設定（ホスト名、ユーザー、ポート、踏み台、ProxyCommand、ForwardAgent、VPNプロファイルなど）が変わると送りません。",
+    "シェルの準備ができるたびに送ります（自動再接続を含む）。シークレット変数の値は、リモートのシェル履歴や画面に残ることがあります。接続先や認証の設定を変えると、この割り当ては止まります。",
   "snippets.startupStale":
     "停止中です。割り当てた後で接続先、認証の設定、またはVPNプロファイルが変わったため、このホストには送りません。接続先を確認してから、もう一度割り当ててください。",
   "snippets.startupStaleCount":
@@ -813,7 +813,7 @@ export const ja = {
   "terminal.localhost": "localhost",
   "terminal.emptyHeading": "開いているセッションがありません",
   "terminal.emptyHint":
-    "左の一覧から開くか、ホストの「接続」を押してください。",
+    "［新しいセッション］か、Home や Connections のホストの［接続］から開きます。",
   "terminal.forwardLocal": "{listen} → {to}を転送中",
   "terminal.forwardRemote": "SSH接続先の{listen} → {to}を転送中",
   "terminal.forwardDynamic": "{listen}でSOCKS5プロキシ",
@@ -1029,7 +1029,7 @@ export const ja = {
   "terminal.settingsLoadFailed": "ターミナル設定を読み込めませんでした。読み込めるまで保存できません。",
   "terminal.settingsLoading": "ターミナル設定を読み込んでいます…",
   "terminal.settingsStorageHint":
-    "ターミナルの外観を含むこれらの設定は、~/.ssh/sshcのメタデータに保存され、バックアップと同期の対象になります。テーマ、言語、通知音はこのブラウザにのみ保存されます。",
+    "これらの設定はマシン間で同期されます。テーマ・言語・通知音は、このブラウザだけに保存されます。",
   "terminal.maxSessionsLabel": "最大セッション数",
   "terminal.maxSessionsHint":
     "1〜200。空欄の場合は50です。上限に達すると新しいセッションを開けません。既存のセッションは自動的に閉じられません。",
@@ -2501,7 +2501,7 @@ export const ja = {
   "groups.metricGroups": "グループ",
   "groups.metricConnections": "Connections",
   "groups.metricDraft": "未保存の下書き",
-  "groups.empty": "グループはまだありません。下のフォームから作成できます。",
+  "groups.empty": "グループはまだありません。",
   "groups.nameTaken":
     "同名のグループが既に存在します。別の名前を指定してください。",
   "groups.chooseGroupAndKeyword":

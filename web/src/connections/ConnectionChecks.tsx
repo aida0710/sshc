@@ -91,7 +91,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
         <Button small disabled={blocked} onClick={() => void checkAuthentication()} className="max-w-full whitespace-normal text-left">
           {busy === "authentication" ? t("conn.checking") : t("conn.checkAuthentication")}
         </Button>
-        {disabled ? <p className={`w-full ${hintText}`}>{t("conn.summaryDraftBlocksActions")}</p> : null}
+        {/* The summary above already says why the checks wait while a draft is unsaved. */}
       </div>
 
       {reachabilityError === "" ? null : <Notice tone="danger">{reachabilityError}</Notice>}

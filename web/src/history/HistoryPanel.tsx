@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toProblem } from "../api/guards";
-import { useTranslate } from "../i18n/context";
+import { useLanguage } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { Problem } from "../api/client";
 import { configApi, type HistoryEntry, type PendingTransaction } from "../api/config";
@@ -8,6 +8,7 @@ import { Button, Notice } from "../ui/surface";
 import { PageHeader, PageSection, SummaryStat, SummaryStats } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
+import { formatDateTime } from "../ui/format";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -36,7 +37,7 @@ export function historyStatusLabelKey(status: string): MessageKey {
 }
 
 export function HistoryPanel() {
-  const t = useTranslate();
+  const { t, locale } = useLanguage();
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
   const [pending, setPending] = useState<PendingTransaction[]>([]);
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -159,7 +160,7 @@ export function HistoryPanel() {
           <ol className="divide-y divide-line">
             {entries.map((entry) => (
               <li key={entry.id} className="grid gap-4 py-3.5 md:grid-cols-[10rem_minmax(0,1fr)_auto] md:items-center">
-                <time dateTime={entry.startedAt} className="font-mono text-xs text-ink-muted">{entry.startedAt}</time>
+                <time dateTime={entry.startedAt} title={entry.startedAt} className="text-xs text-ink-muted">{formatDateTime(entry.startedAt, locale)}</time>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-medium text-ink">{t(historyOperationLabelKey(entry.operation))}</p>

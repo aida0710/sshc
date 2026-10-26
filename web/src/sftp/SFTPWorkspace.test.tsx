@@ -766,9 +766,11 @@ describe("SFTP tabs", () => {
     await userEvent.click(getHostButton());
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Local.*sshc engine/ }));
     const local = screen.getByRole("region", { name: "Local files" });
-    await waitFor(() => expect(within(local).getByRole("navigation", { name: "Local folder path" })).toHaveTextContent("//server/share/"));
+    // Inside the home folder the trail starts at "~"; above it, the share is one crumb.
+    await waitFor(() => expect(within(local).getByRole("navigation", { name: "Local folder path" })).toHaveTextContent("~"));
     await userEvent.click(within(local).getByRole("button", { name: "Parent directory" }));
     await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("//server/share/Users"));
+    await waitFor(() => expect(within(local).getByRole("navigation", { name: "Local folder path" })).toHaveTextContent("//server/share/Users"));
     await userEvent.click(within(local).getByRole("button", { name: "Parent directory" }));
     await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("//server/share/"));
     expect(within(local).queryByRole("button", { name: "Parent directory" })).not.toBeInTheDocument();

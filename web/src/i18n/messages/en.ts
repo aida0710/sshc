@@ -14,7 +14,7 @@ export const en = {
   "shortcuts.reloadRequired": "Could not save or load presets. Reload to get the latest version before editing.",
   "shortcuts.reload": "Reload",
   "shortcuts.loading": "Loading presets…",
-  "shortcuts.hint": "Click a binding, then press a key with Ctrl, Alt or Meta (Command), or a function key. Escape cancels; Tab moves to the next control. Preset contents sync between devices; the selected preset stays in this browser. Editing Default creates your own preset. Deleting a selected preset restores defaults. Browser or OS shortcuts may take priority. Copy, paste and terminal search apply inside the terminal.",
+  "shortcuts.hint": "Click a binding, then press a key with Ctrl, Alt or Meta (Command), or a function key (Escape cancels). Changing Default creates your own preset. Browser or OS shortcuts may take priority.",
   "shortcuts.palette": "Command search",
   "shortcuts.terminalSearch": "Terminal search",
   "shortcuts.copy": "Copy selection",
@@ -699,7 +699,7 @@ export const en = {
   "snippets.cancel": "Cancel",
   "snippets.startup": "Connection startup",
   "snippets.startupHint":
-    "Run this snippet after the selected host's shell is ready. It is sent on every connection and automatic reconnection, so secret variable values are stored encrypted with the binding and may remain in the remote shell history or on screen. It is not sent once the destination or authentication settings (host name, user, port, jump hosts, ProxyCommand, ForwardAgent, VPN profile, and so on) change after the assignment.",
+    "Sent every time the shell is ready, including automatic reconnections. Secret variable values may remain in the remote shell history or on screen. Changing the destination or authentication settings stops this assignment.",
   "snippets.startupStale":
     "Stopped. The destination, the authentication settings, or the VPN profile changed after this snippet was assigned, so it is not sent to this host. Check the destination and assign it again.",
   "snippets.startupStaleCount":
@@ -809,7 +809,7 @@ export const en = {
   "terminal.localhost": "localhost",
   "terminal.emptyHeading": "No session is open",
   "terminal.emptyHint":
-    "Open one from the list on the left, or press Connect on a host.",
+    "Open one with New session, or with Connect on a host in Home or Connections.",
   "terminal.forwardLocal": "forwarding {listen} → {to}",
   "terminal.forwardRemote": "remote forwarding {listen} → {to}",
   "terminal.forwardDynamic": "SOCKS5 proxy on {listen}",
@@ -1029,7 +1029,7 @@ export const en = {
   "terminal.settingsLoadFailed": "Terminal settings could not be loaded. They cannot be saved until they load.",
   "terminal.settingsLoading": "Loading terminal settings…",
   "terminal.settingsStorageHint":
-    "These settings, including terminal appearance, are stored in the sshc metadata under ~/.ssh/sshc and included in backups and sync. Theme, language and notification sounds are stored only in this browser.",
+    "These settings sync between machines. Theme, language and notification sounds stay in this browser.",
   "terminal.maxSessionsLabel": "Sessions open at once",
   "terminal.maxSessionsHint":
     "Enter a value from 1 to 200. Leave it empty to use 50. When the limit is reached, no new session can be opened; existing sessions remain open.",
@@ -2498,7 +2498,7 @@ export const en = {
   "groups.metricConnections": "Connections",
   "groups.metricDraft": "Unsaved drafts",
   "groups.empty":
-    "No group exists yet. Create one below to organise related connections and keys.",
+    "No groups yet.",
   "groups.nameTaken":
     "A group with this name already exists. Enter a different name.",
   "groups.chooseGroupAndKeyword": "Choose a group and a directive keyword.",
