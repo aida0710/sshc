@@ -85,10 +85,10 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
   return (
     <section aria-label={t("conn.checksLabel")} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button disabled={blocked} onClick={() => void checkReachability()} className="max-w-full whitespace-normal text-left text-xs">
+        <Button small disabled={blocked} onClick={() => void checkReachability()} className="max-w-full whitespace-normal text-left">
           {busy === "reachability" ? t("conn.checking") : t("conn.checkReachability")}
         </Button>
-        <Button disabled={blocked} onClick={() => void checkAuthentication()} className="max-w-full whitespace-normal text-left text-xs">
+        <Button small disabled={blocked} onClick={() => void checkAuthentication()} className="max-w-full whitespace-normal text-left">
           {busy === "authentication" ? t("conn.checking") : t("conn.checkAuthentication")}
         </Button>
         {disabled ? <p className={`w-full ${hintText}`}>{t("conn.summaryDraftBlocksActions")}</p> : null}
@@ -98,7 +98,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
       {authenticationError === "" ? null : <Notice tone="danger">{authenticationError}</Notice>}
 
       {pendingDirectives.length === 0 ? null : (
-        <div className="rounded border border-notice-line bg-notice p-3 text-sm">
+        <div className="rounded-[9px] bg-notice p-3 text-sm">
           <h3 className="font-medium text-notice-ink">{t("conn.checksExecutableHeading")}</h3>
           <p className={hintText}>{t("conn.checksExecutableHint")}</p>
           <ul className="mt-2 flex flex-col gap-2">

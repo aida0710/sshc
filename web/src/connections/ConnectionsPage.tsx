@@ -27,7 +27,9 @@ import { OrphanPanel } from "./OrphanPanel";
 import { useTranslate } from "../i18n/context";
 import type { InspectorContent } from "../ui/Inspector";
 import { Button, Notice } from "../ui/surface";
-import { SectionBar } from "../ui/SectionBar";
+import { Icon } from "../ui/icons";
+import { PageBoard } from "../ui/PageBoard";
+import { PageHeader } from "../ui/page";
 import { useUnsavedDraftGuard } from "../routing/useUnsavedDraftGuard";
 import type {
   BrowserLocation,
@@ -54,9 +56,11 @@ import { manageConnectionHandlers } from "./manageConnectionHandlers";
 import { droppedMessage } from "./movedMessage";
 import { SelectionBar } from "./SelectionBar";
 import { GroupEditor } from "./GroupEditor";
+import { ConnectionGroupFacets } from "./ConnectionGroupFacets";
+import { useConnectionDrag } from "./useConnectionDrag";
 
-// Wide enough for the group column plus an alias, host and status on one row; the editor keeps the rest.
-const connectionListWidth: StoredColumnWidth = { key: localStorageKeys.connectionListWidth, fallback: 560, minimum: 256, maximum: 720 };
+// The design's width for the connection list; the groups sit beside the card, outside it. The editor keeps the rest.
+const connectionListWidth: StoredColumnWidth = { key: localStorageKeys.connectionListWidth, fallback: 300, minimum: 256, maximum: 720 };
 
 const groupNoticeCodes = new Set([
   "group_not_declared",
@@ -220,6 +224,18 @@ export function ConnectionsPage({
     duplicateConnection: management.duplicateConnection,
   });
   const { checked, checkedHosts, clearChecked, selectionMode, groupEditorName } = listActions;
+  const drag = useConnectionDrag({
+    movesDisabled,
+    groupNames: overview?.groups.map((group) => group.name) ?? [],
+    onDrop: (payload, target) => {
+      void management.dropOnTree(payload, target).then((saved) => {
+        if (!saved) return;
+        if (payload.kind === "connections") clearChecked();
+        // 落とした行は絞り込みの外へ出て見えなくなることがあるので、動いたことを知らせる。
+        showToast(droppedMessage(t, { payload, target }), { tone: "success" });
+      });
+    },
+  });
   const detailOpen = selection !== null || (compact && listActions.editingGroup !== null);
   // 宣言だけあって metadata に設定が無いグループは、名前だけの設定から編集を始める。
   const editedGroup = groupEditorName === null
@@ -350,19 +366,22 @@ export function ConnectionsPage({
     setLaunching(false);
   }
 
+  const newConnectionButton = (enabled: boolean) => (
+    <Button kind="primary" className="inline-flex shrink-0 items-center gap-1.5" disabled={!enabled} onClick={beginCreation}>
+      <Icon name="plus" className="size-[15px]" />
+      {t("conn.new")}
+    </Button>
+  );
+  const headerLayout = "shrink-0 px-3 py-3 md:px-[26px] md:pb-[22px] md:pt-5";
+  const columnsLayout = `grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] border-t border-line ${compact ? "" : "md:grid-cols-[minmax(16rem,var(--list-width))_minmax(0,1fr)]"}`;
+
   if (overview === null) {
-    // 読み込むあいだも、帯と一覧・右側の枠は出しておく。読み込みが終わったときに画面が組み変わって見えないように。
+    // 読み込むあいだも、見出しと一覧・右側の枠は出しておく。読み込みが終わったときに画面が組み変わって見えないように。
     return (
-      <div className="flex h-full min-h-0 flex-col bg-canvas">
-        <SectionBar
-          title={t("conn.heading")}
-          actions={<Button kind="primary" className="shrink-0" disabled>{t("conn.new")}</Button>}
-        />
-        <div
-          style={{ "--list-width": `${listWidth}px` } as CSSProperties}
-          className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] ${compact ? "" : "md:grid-cols-[minmax(16rem,var(--list-width))_minmax(0,1fr)]"}`}
-        >
-          <div className="flex min-h-0 flex-col border-r border-line bg-tree">
+      <PageBoard fill labelledBy="connections-heading">
+        <PageHeader title={t("conn.heading")} headingId="connections-heading" actions={newConnectionButton(false)} className={headerLayout} />
+        <div style={{ "--list-width": `${listWidth}px` } as CSSProperties} className={columnsLayout}>
+          <div className={`flex min-h-0 flex-col ${compact ? "" : "border-r border-line"}`}>
             {problem === null ? (
               <PanelState tone="loading" title={t("conn.loading")} />
             ) : (
@@ -374,28 +393,36 @@ export function ConnectionsPage({
               />
             )}
           </div>
-          {compact ? null : <div className="hidden bg-card md:block" />}
+          {compact ? null : <div className="hidden md:block" />}
         </div>
-      </div>
+      </PageBoard>
     );
   }
 
   return (
     <>
-    <div className="flex h-full min-h-0 flex-col bg-canvas">
-      <SectionBar
+    <PageBoard
+      fill
+      labelledBy="connections-heading"
+      aside={(
+        <ConnectionGroupFacets
+          overview={overview}
+          scope={listActions.scope}
+          onScopeChange={listActions.changeScope}
+          drag={drag}
+          groupActions={(name) => listActions.groupActionItems(name)}
+          onCreateGroup={() => listActions.openCreateGroup("")}
+        />
+      )}
+    >
+      <PageHeader
         title={t("conn.heading")}
+        headingId="connections-heading"
         meta={t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
-        actions={(
-          <Button kind="primary" className="shrink-0" onClick={beginCreation}>
-            {t("conn.new")}
-          </Button>
-        )}
+        actions={newConnectionButton(true)}
+        className={headerLayout}
       />
-      <div
-        style={{ "--list-width": `${listWidth}px` } as CSSProperties}
-        className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] ${compact ? "" : "md:grid-cols-[minmax(16rem,var(--list-width))_minmax(0,1fr)]"}`}
-      >
+      <div style={{ "--list-width": `${listWidth}px` } as CSSProperties} className={columnsLayout}>
         <ConnectionListPane
           compact={compact}
           resizeHandle={compact ? null : (
@@ -412,15 +439,7 @@ export function ConnectionsPage({
           invalidLocation={invalidLocation}
           onDismissInvalidLocation={dismissInvalidLocation}
           onSelect={onSelect}
-          onDrop={(payload, target) => {
-            void management.dropOnTree(payload, target).then((saved) => {
-              if (!saved) return;
-              if (payload.kind === "connections") clearChecked();
-              // 落とした行は絞り込みの外へ出て見えなくなることがあるので、動いたことを知らせる。
-              showToast(droppedMessage(t, { payload, target }), { tone: "success" });
-            });
-          }}
-          movesDisabled={movesDisabled}
+          drag={drag}
           detailOpen={detailOpen}
           treeOptions={{
             scope: listActions.scope,
@@ -438,7 +457,7 @@ export function ConnectionsPage({
           }}
         />
         <div
-          className={`min-h-0 flex-col gap-4 overflow-y-auto bg-card p-4 lg:p-5 ${compact ? "" : "md:flex"} ${
+          className={`min-h-0 flex-col gap-4 overflow-y-auto p-4 md:px-[26px] md:py-[22px] ${compact ? "" : "md:flex"} ${
             detailOpen ? "flex" : "hidden"
           }`}
         >
@@ -548,7 +567,7 @@ export function ConnectionsPage({
         )}
         </div>
       </div>
-    </div>
+    </PageBoard>
     {creating ? (
       <CreateConnectionModal
         groups={overview.groups}

@@ -156,7 +156,7 @@ export function HostDetailPanel({
       ) : null}
 
       <div data-connection-editor className="min-w-0">
-        <div role="tablist" aria-label={t("conn.editorLabel")} className="grid grid-cols-4 border-b border-line">
+        <div role="tablist" aria-label={t("conn.editorLabel")} className="flex gap-[18px] overflow-x-auto border-b border-line">
           {areas.map((item, index) => (
             <button
               key={item.area}
@@ -168,7 +168,7 @@ export function HostDetailPanel({
               tabIndex={panel === item.area ? 0 : -1}
               onClick={() => selectArea(item.area)}
               onKeyDown={(event) => activateTabFromKeyboard(event, index, areaNames, selectArea)}
-              className={`min-h-11 whitespace-nowrap border-b-2 px-2 py-2.5 text-sm transition-colors ${panel === item.area ? "border-accent bg-select-fill font-semibold text-accent" : "border-transparent text-ink-muted hover:bg-hover hover:text-ink"}`}
+              className={`-mb-px whitespace-nowrap border-b-2 pb-[8px] text-[13px] transition-colors ${panel === item.area ? "border-accent text-ink" : "border-transparent text-ink-muted hover:text-ink"}`}
             >
               {t(item.label)}
             </button>
