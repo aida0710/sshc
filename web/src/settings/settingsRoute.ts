@@ -16,7 +16,8 @@ export type SettingsPage = (typeof settingsPages)[number];
 
 export const settingsPageMeta: Record<
   SettingsPage,
-  // Appearance has no description: its two choices say what it is, as in the design.
+  // description is only for what a person would not learn from the page itself, such as that Engine's
+  // settings stay on this machine. A line that restates what the page shows is left out.
   { path: string; label: MessageKey; description?: MessageKey; icon: IconName }
 > = {
   Appearance: {
@@ -33,13 +34,11 @@ export const settingsPageMeta: Record<
   Terminal: {
     path: "/settings/terminal",
     label: "terminal.settingsHeading",
-    description: "settings.terminalDescription",
     icon: "terminal",
   },
   SFTP: {
     path: "/settings/sftp",
     label: "sftp.settingsHeading",
-    description: "settings.sftpDescription",
     icon: "files",
   },
   Shortcuts: {
@@ -51,19 +50,16 @@ export const settingsPageMeta: Record<
   Notifications: {
     path: "/settings/notifications",
     label: "terminal.browserNotificationsHeading",
-    description: "settings.notificationsDescription",
     icon: "notification",
   },
   Connections: {
     path: "/settings/connections",
     label: "desktop.closeAllHeading",
-    description: "settings.connectionsDescription",
     icon: "disconnect",
   },
   Password: {
     path: "/settings/password",
     label: "secrets.changeHeading",
-    description: "settings.passwordDescription",
     icon: "secrets",
   },
 };

@@ -12,7 +12,7 @@ export function LicensePage() {
   const entries = catalogue.filter((entry) => `${entry.name} ${entry.version} ${entry.license} ${entry.category}`.toLocaleLowerCase().includes(needle));
   return (
     <section aria-labelledby="license-heading" className="flex flex-col gap-4">
-      <PageHeader title={t("section.license")} headingId="license-heading" description={t("license.description")} />
+      <PageHeader title={t("section.license")} headingId="license-heading" />
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         {t("license.search")}
         <input type="search" className={control} value={query} onChange={(event) => setQuery(event.target.value)} />

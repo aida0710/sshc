@@ -1,6 +1,6 @@
 export const en = {
   "shortcuts.heading": "Keyboard shortcuts",
-  "shortcuts.description": "Share shortcut presets and choose one for this browser.",
+  "shortcuts.description": "The preset you use is chosen for each browser.",
   "shortcuts.confirmDelete": "Delete this preset on all synced devices?",
   "shortcuts.deleteBody": "{name} is removed from every synced device and cannot be recovered.",
   "shortcuts.deleteEverywhere": "Delete everywhere",
@@ -652,7 +652,6 @@ export const en = {
   "workspace.delivered": "Sent",
   "workspace.deliveryFailed": "Not sent",
   "snippets.heading": "Snippets",
-  "snippets.pageDescription": "Save frequent commands with a name and variables, and run them on the hosts you choose.",
   "snippets.new": "New",
   "snippets.empty": "No snippets have been saved.",
   "snippets.loadFailed": "Snippets could not be read.",
@@ -1299,7 +1298,6 @@ export const en = {
   "menu.licenseDescription": "Licenses of the components used",
   "menu.aboutDescription": "Version and updates",
   "menu.updateAvailable": "{version} is available",
-  "license.description": "Licenses and copyright notices for sshc and its components. Full texts are available offline.",
   "license.search": "Search components or licenses",
   "license.count": "Components: {count}",
   "license.noMatches": "No matching components.",
@@ -1317,17 +1315,7 @@ export const en = {
   "settings.pageDescription":
     "Configure embedded terminals, sshc's lifecycle, and protection for this machine's encrypted data.",
   "settings.engineDescription":
-    "Configure this machine's sshc engine port and automatic vault locking. These settings are not synced.",
-  "settings.terminalDescription":
-    "Configure the behavior, appearance, and controls used by new terminals.",
-  "settings.sftpDescription":
-    "Configure speed and recovery, concurrency, split transfers, and exclusion rules for SFTP transfers.",
-  "settings.notificationsDescription":
-    "Configure browser notifications and the sound for notifications sent by terminal programs.",
-  "settings.connectionsDescription":
-    "Review the connections open in this browser and close them together.",
-  "settings.passwordDescription":
-    "Change the master password that protects encrypted data on this machine.",
+    "These settings are not synced.",
   "secrets.heading": "The vault",
   "secrets.pageDescription":
     "Manage named account passwords, key passphrases, and one-time password seeds. Values are shown only while editing.",
@@ -1562,7 +1550,7 @@ export const en = {
   "section.vpn": "VPN",
   "vpn.heading": "VPN",
   "vpn.description":
-    "Route chosen connections through a VPN of their own. The tunnel lives in a container held by the engine, so this machine's default route and DNS are untouched. Requires Docker on this machine.",
+    "Requires Docker on this machine. The VPN runs in a container held by the engine, so this machine's routing and DNS are untouched.",
   "vpn.loading": "Loading VPN profiles…",
   "vpn.failed": "The VPN operation failed.",
   "vpn.unavailable": "This machine cannot open VPN routes.",
@@ -1784,7 +1772,7 @@ export const en = {
   "history.requestRejected": "The request was rejected ({code}).",
   "history.pageTitle": "History",
   "history.pageDescription":
-    "Review every completed change, recover interrupted writes, and restore individual files without losing the newer history.",
+    "Restoring a file keeps the newer history.",
   "history.metricChanges": "Completed changes",
   "history.metricInterrupted": "Interrupted",
   "history.metricRestorable": "Restorable files",
@@ -1988,7 +1976,7 @@ export const en = {
   "sync.role.advanced": "Advanced device roles",
   "sync.role.send": "Send-only device",
   "sync.pageDescription":
-    "Synchronise an encrypted snapshot of this machine's ~/.ssh between machines through an object-storage bucket.",
+    "~/.ssh is encrypted before it is synchronised between machines through an object-storage bucket.",
   "sync.flowHeading": "Steps to start syncing",
   "sync.flowBucket": "Configure a bucket",
   "sync.flowKey": "Set the shared encryption key",
@@ -2284,7 +2272,7 @@ export const en = {
   "sync.result.completed": "Operation completed {at}",
   "diag.heading": "Ad hoc checks",
   "diag.pageDescription":
-    "Run SSH checks against a saved alias or any one-off host. Nothing is contacted until you choose a check.",
+    "Nothing is contacted until you start a check.",
   "diag.configUnreadable": "The configuration could not be read.",
   "diag.running": "Running the requested check…",
   "diag.idle": "No check is running.",
@@ -2351,8 +2339,6 @@ export const en = {
 
   "kh.heading": "Known Hosts",
   "kh.loading": "Loading known_hosts…",
-  "kh.pageDescription":
-    "Review trusted host keys, scan a destination and verify its fingerprint before adding it to known_hosts.",
   "kh.metricEntries": "Trusted entries",
   "kh.metricHashed": "Hashed hosts",
   "kh.metricCandidates": "Scan candidates",
@@ -2398,8 +2384,6 @@ export const en = {
     "The fingerprint you typed does not match this key. You typed {typed}; the scan returned {scanned}. Nothing was added.",
 
   "rk.heading": "Install Key on Server",
-  "rk.pageDescription":
-    "Review the exact authorized_keys change before installing one of your public keys on a remote account.",
   "rk.waiting": "Waiting for the server…",
   "rk.idle": "Nothing is sent to the remote host until you confirm it.",
   "rk.added": "The key was added to the remote authorized_keys file.",
@@ -2464,7 +2448,7 @@ export const en = {
   "explorer.loading": "Loading configuration files…",
   "explorer.pageTitle": "Configuration files",
   "explorer.pageDescription":
-    "Follow the Include graph, edit exact file contents and manage files in ~/.ssh without losing OpenSSH formatting.",
+    "Saving keeps your OpenSSH formatting, comments and order as they are.",
   "explorer.metricFiles": "Loaded files",
   "explorer.metricEditable": "Editable files",
   "explorer.metricDiagnostics": "Diagnostics",
@@ -2519,8 +2503,6 @@ export const en = {
 
   "groups.loading": "Loading groups…",
   "groups.pageTitle": "Groups",
-  "groups.pageDescription":
-    "Organise connections and keys into nested groups, then apply shared SSH settings to each group.",
   "groups.metricGroups": "Groups",
   "groups.metricConnections": "Connections",
   "groups.metricDraft": "Unsaved drafts",
@@ -3036,8 +3018,6 @@ export const en = {
 
   "keys.heading": "Keys",
   "keys.listHeading": "Keys",
-  "keys.pageDescription":
-    "Review private keys, public keys, certificates, and their references, then manage creation, updates, and deletion.",
   "keys.search": "Search keys",
   "keys.searchPlaceholder": "file, host or fingerprint",
   "keys.metricFiles": "Classified SSH files",

@@ -2,7 +2,7 @@ import type { MessageKey } from "./en";
 
 export const ja = {
   "shortcuts.heading": "Keyboard shortcuts",
-  "shortcuts.description": "ショートカットのプリセットを共有し、このブラウザで使うものを選びます。",
+  "shortcuts.description": "使うプリセットは、このブラウザごとに選びます。",
   "shortcuts.confirmDelete": "同期しているすべてのマシンからこのプリセットを削除しますか？",
   "shortcuts.deleteBody": "{name}は同期しているすべてのマシンから削除され、元に戻せません。",
   "shortcuts.deleteEverywhere": "すべてのマシンから削除",
@@ -657,7 +657,6 @@ export const ja = {
   "workspace.delivered": "送信済み",
   "workspace.deliveryFailed": "送信できませんでした",
   "snippets.heading": "Snippets",
-  "snippets.pageDescription": "よく使うコマンドを名前と変数付きで保存し、選んだホストで実行します。",
   "snippets.new": "新規",
   "snippets.empty": "保存済みスニペットはありません。",
   "snippets.loadFailed": "スニペットを読み込めませんでした。",
@@ -1299,7 +1298,6 @@ export const ja = {
   "menu.licenseDescription": "使用コンポーネントのライセンス",
   "menu.aboutDescription": "バージョンと更新",
   "menu.updateAvailable": "{version}が公開されています",
-  "license.description": "sshcと使用コンポーネントのライセンス・著作権表示です。全文はオフラインでも読めます。",
   "license.search": "コンポーネント・ライセンスを検索",
   "license.count": "{count}件のコンポーネント",
   "license.noMatches": "一致するコンポーネントがありません。",
@@ -1317,17 +1315,7 @@ export const ja = {
   "settings.pageDescription":
     "ターミナルの動作、sshcの起動設定、このマシンに保存するデータの暗号化を設定します。",
   "settings.engineDescription":
-    "このマシンのsshcエンジンの待受ポートとVaultの自動ロックを設定します。この設定は同期されません。",
-  "settings.terminalDescription":
-    "新しいターミナルに適用する動作、表示、操作方法を設定します。",
-  "settings.sftpDescription":
-    "SFTPの転送の速度と復旧、同時実行、分割転送、除外ルールを設定します。",
-  "settings.notificationsDescription":
-    "ブラウザ通知と、ターミナル内のプログラムからの通知音を設定します。",
-  "settings.connectionsDescription":
-    "このブラウザで開いている接続を確認し、まとめて終了します。",
-  "settings.passwordDescription":
-    "このマシンの暗号化データを保護するマスターパスワードを変更します。",
+    "この設定は同期されません。",
   "secrets.heading": "Vault",
   "secrets.pageDescription":
     "名前付きのアカウントパスワード、鍵パスフレーズ、ワンタイムパスワードを管理します。値は編集時だけ表示されます。",
@@ -1562,7 +1550,7 @@ export const ja = {
   "section.vpn": "VPN",
   "vpn.heading": "VPN",
   "vpn.description":
-    "選択した接続だけを専用のVPN経由で接続します。VPNはsshcエンジンが管理するコンテナの中で動くため、このマシンのルーティングとDNSは変わりません。Dockerが動いているマシンで使用できます。",
+    "Dockerが動いているマシンで使えます。VPNはsshcエンジンのコンテナの中で動くので、このマシンのルーティングとDNSは変わりません。",
   "vpn.loading": "VPNの設定を読み込んでいます…",
   "vpn.failed": "VPNの操作に失敗しました。",
   "vpn.unavailable": "このマシンではVPN経路を使用できません。",
@@ -1784,7 +1772,7 @@ export const ja = {
   "history.requestRejected": "要求が拒否されました（{code}）。",
   "history.pageTitle": "History",
   "history.pageDescription":
-    "完了した変更を確認できます。中断した書き込みの復旧や、ファイル単位の復元もできます（新しい履歴は失われません）。",
+    "復元しても、それより新しい履歴は失われません。",
   "history.metricChanges": "完了した変更",
   "history.metricInterrupted": "中断",
   "history.metricRestorable": "復元可能なファイル",
@@ -1993,7 +1981,7 @@ export const ja = {
   "sync.role.advanced": "同期モードの詳細設定",
   "sync.role.send": "このマシンでは送信のみ",
   "sync.pageDescription":
-    "このマシンの~/.sshを暗号化スナップショットとして保存し、オブジェクトストレージ経由でマシン間に同期します。",
+    "~/.sshを暗号化してから、オブジェクトストレージのバケット経由でマシン間に同期します。",
   "sync.flowHeading": "同期を始める手順",
   "sync.flowBucket": "バケットを設定",
   "sync.flowKey": "共通の暗号化キーを設定",
@@ -2286,7 +2274,7 @@ export const ja = {
   "sync.result.completed": "操作完了：{at}",
   "diag.heading": "Diagnostics",
   "diag.pageDescription":
-    "保存済みの接続先だけでなく、一時的に指定したホストも検査できます。検査を開始するまで接続しません。",
+    "検査を始めるまで、どのホストにも接続しません。",
   "diag.configUnreadable": "設定を読み取れませんでした。",
   "diag.running": "選択した検査を実行しています…",
   "diag.idle": "開始するまで、どの検査も実行されません。",
@@ -2353,8 +2341,6 @@ export const ja = {
 
   "kh.heading": "Known Hosts",
   "kh.loading": "known_hostsを読み込んでいます…",
-  "kh.pageDescription":
-    "信頼済みホスト鍵を確認し、接続先をスキャンして、known_hostsへ追加する前にフィンガープリントを検証します。",
   "kh.metricEntries": "信頼済みエントリ",
   "kh.metricHashed": "ハッシュ化ホスト",
   "kh.metricCandidates": "スキャン候補",
@@ -2400,8 +2386,6 @@ export const ja = {
     "入力したフィンガープリントはこの鍵と一致しません。入力値：{typed}、スキャン結果：{scanned}。何も追加していません。",
 
   "rk.heading": "Remote Keys",
-  "rk.pageDescription":
-    "公開鍵をリモートアカウントへ登録する前に、authorized_keysへ追加する内容を確認します。",
   "rk.waiting": "サーバーの応答を待っています…",
   "rk.idle": "確認するまで、リモートホストへは何も送られません。",
   "rk.added": "リモートのauthorized_keysに鍵を追加しました。",
@@ -2468,7 +2452,7 @@ export const ja = {
   "explorer.loading": "設定ファイルを読み込んでいます…",
   "explorer.pageTitle": "SSH Config",
   "explorer.pageDescription":
-    "Includeの参照関係を確認し、OpenSSHの書式を維持したまま設定ファイルと~/.ssh内のファイルを管理します。",
+    "保存しても、コメントや並びなど元の書式はそのまま残ります。",
   "explorer.metricFiles": "読み込んだファイル",
   "explorer.metricEditable": "編集可能",
   "explorer.metricDiagnostics": "診断",
@@ -2523,8 +2507,6 @@ export const ja = {
 
   "groups.loading": "グループを読み込んでいます…",
   "groups.pageTitle": "Groups",
-  "groups.pageDescription":
-    "接続と鍵を階層化して整理し、グループ単位で共通のSSH設定を適用します。",
   "groups.metricGroups": "グループ",
   "groups.metricConnections": "Connections",
   "groups.metricDraft": "未保存の下書き",
@@ -3043,8 +3025,6 @@ export const ja = {
 
   "keys.heading": "SSH Keys",
   "keys.listHeading": "鍵",
-  "keys.pageDescription":
-    "秘密鍵、公開鍵、証明書の一覧と参照元を確認し、作成・変更・削除を管理します。",
   "keys.search": "鍵を検索",
   "keys.searchPlaceholder": "ファイル、ホスト、フィンガープリント",
   "keys.metricFiles": "確認済みSSHファイル",
