@@ -25,10 +25,46 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # PR で変わったパスを見て、Windows と macOS の Go のテストが要るかを決める。画面と文書だけの
+  # PR では、この 2 つ（Windows の go test が約 10 分）が CI の時間を律速していた。
+  changes:
+    name: Changed areas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.native.outputs.needed }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # PR では merge commit を取り出すので、1 つ目の親（base）との差分が PR の変更になる。
+          fetch-depth: 2
+      - name: Decide whether the Windows and macOS Go tests run
+        id: native
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          needed=$(git diff --name-only HEAD^1 HEAD | scripts/ci/native-tests-needed.sh)
+          echo "needed=$needed" >> "$GITHUB_OUTPUT"
+
   go:
     name: Go native (${{ matrix.name }})
+    needs: changes
+    # jobs.changes が失敗しても、この job は走らせる。依存先の失敗で飛ばされた必須の検査は
+    # 成功に見えるので、テストを流さないまま PR がマージできてしまう。
+    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeoutMinutes }}
+    env:
+      # Linux はいつも、Windows と macOS は Go に関わる変更があるときだけ手順を流す（jobs.changes）。
+      # 必須の検査の名前を残すため、job ごと飛ばさずに手順を飛ばす。jobs.changes の答えが無いとき
+      # （失敗したとき）は、false ではないので流す側に倒れる。
+      NATIVE_TESTS: ${{ matrix.name == 'Linux' || needs.changes.outputs.native != 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -45,29 +81,36 @@ jobs:
             timeoutMinutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        if: ${{ env.NATIVE_TESTS == 'true' }}
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        if: ${{ env.NATIVE_TESTS == 'true' }}
         with:
           # バージョンは go.mod から来る。ツールチェーンを変えられる場所を
           # 一か所に限るためである。
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      - name: Skip the Go tests for a web-only change
+        if: ${{ env.NATIVE_TESTS != 'true' }}
+        shell: bash
+        run: echo "Only web, docs or built UI files changed; the Linux job runs the Go tests."
+
       # Windows に Unix shell fragment を解釈させない。formatter も OS ごとの
       # script を使い、違反時は対象 path だけを報告する。
       - name: gofmt (Unix)
-        if: ${{ runner.os != 'Windows' }}
+        if: ${{ runner.os != 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: bash
         run: scripts/ci/check-gofmt.sh
 
       - name: gofmt (Windows)
-        if: ${{ runner.os == 'Windows' }}
+        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: pwsh
         run: ./scripts/ci/check-gofmt.ps1
 
       # 利用者が実行するWindows PowerShell 5.1自身でinstallerを構文解析する。
       # pwsh 7だけでは5.1固有の非互換を見落とすため、shellも明示する。
       - name: Windows PowerShell installer syntax
-        if: ${{ runner.os == 'Windows' }}
+        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: powershell
         run: |
           $errors = @()
@@ -85,41 +128,41 @@ jobs:
           }
 
       - name: go vet (Unix)
-        if: ${{ runner.os != 'Windows' }}
+        if: ${{ runner.os != 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: bash
         run: go vet ./...
 
       - name: go vet (Windows)
-        if: ${{ runner.os == 'Windows' }}
+        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: pwsh
         run: go vet ./...
 
       - name: go build (Unix)
-        if: ${{ runner.os != 'Windows' }}
+        if: ${{ runner.os != 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: bash
         run: go build ./...
 
       # Android 用 build tag の整合性だけを検査する。CGO_ENABLED=0 では Android の
       # 名前解決を検証できないため、AAR と APK は android ジョブで別途ビルドする。
       - name: Android build (Unix)
-        if: ${{ runner.os != 'Windows' }}
+        if: ${{ runner.os != 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: bash
         run: GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
 
       - name: go build (Windows)
-        if: ${{ runner.os == 'Windows' }}
+        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: pwsh
         run: go build ./...
 
       - name: go test (Unix)
-        if: ${{ runner.os != 'Windows' }}
+        if: ${{ runner.os != 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: bash
         run: go test -count=1 ./...
 
       # Windows の runner は package あたり 2〜3 分かかり、遅い日は既定の 10 分に
       # 触れる（2026-09-18 に application／httpserver が timeout で落ちた）。
       - name: go test (Windows)
-        if: ${{ runner.os == 'Windows' }}
+        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
@@ -134,7 +177,7 @@ jobs:
       # で走らせ、main への push と手動実行では 3 OS すべてで走らせる。OS 固有の
       # 経路にある競合は main 側で遅れて捕まえる。
       - name: go test -race (Unix)
-        if: ${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}
+        if: ${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') && env.NATIVE_TESTS == 'true' }}
         shell: bash
         # macOS の -race では、internal/httpserver が 357〜406 秒、internal/secret が
         # 338〜374 秒かかる（2026-09-29〜30 の main の 5 回）。既定の 10 分に対して
@@ -145,7 +188,7 @@ jobs:
       # windows/amd64 は Go の race detector の対応先なので、例外を設けず、
       # go test の終了コードをそのまま返す。
       - name: go test -race (Windows)
-        if: ${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}
+        if: ${{ runner.os == 'Windows' && github.event_name != 'pull_request' && env.NATIVE_TESTS == 'true' }}
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
@@ -156,7 +199,7 @@ jobs:
       # Console出力が切り詰められても、ConPTY停止時の直前のtest名と出力を
       # 完全な形で取得できるよう、失敗したWindows runだけlogを保存する。
       - name: Upload Windows test logs
-        if: ${{ failure() && runner.os == 'Windows' }}
+        if: ${{ failure() && runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: go-test-logs-windows
@@ -266,10 +309,11 @@ jobs:
       - name: Build accessibility test engine
         run: mkdir -p ../bin && go build -o ../bin/sshc ../cmd/sshc
 
-      - name: Install Chromium for accessibility tests
-        run: npx playwright install --with-deps chromium
-
+      # runner に最初から入っている Google Chrome で走らせ、Chromium をダウンロードしない。
+      # ダウンロードは、遅い日に止まって検査ごと取り消されていた（2026-10-26）。
       - name: Accessibility tests
+        env:
+          SSHC_E2E_BROWSER_CHANNEL: chrome
         run: npm run e2e -- --project=chromium --output="$RUNNER_TEMP/playwright-results" e2e/accessibility.spec.ts
 
   pages:
