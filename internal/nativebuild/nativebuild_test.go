@@ -330,8 +330,12 @@ func TestNativeHostGuardRejectsOverrideableTargetOS(t *testing.T) {
 	}
 }
 
-func TestBuildMatrixRunsWebThenVerifiesEveryArtifact(t *testing.T) {
+// builtUIPresent stands in for os.Stat when the release builds look for the one UI the workflow built.
+func builtUIPresent(string) (os.FileInfo, error) { return nil, nil }
+
+func TestBuildMatrixBuildsAndVerifiesEveryArtifactFromTheBuiltUI(t *testing.T) {
 	executor := &recordingNativeExecutor{}
+	var looked []string
 	err := runNativeBuild([]string{
 		"matrix",
 		"--targets", "linux/amd64:0 linux/arm64:0",
@@ -343,34 +347,36 @@ func TestBuildMatrixRunsWebThenVerifiesEveryArtifact(t *testing.T) {
 		environment: []string{nativeVersionEnvironment + "=v1.2.3"},
 		executor:    executor,
 		mkdirAll:    func(string, os.FileMode) error { return nil },
+		statFile: func(name string) (os.FileInfo, error) {
+			looked = append(looked, name)
+			return nil, nil
+		},
 	}, io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("runNativeBuild() error: %v", err)
 	}
-	if len(executor.commands) != 6 {
-		t.Fatalf("commands = %#v, want web, its comparison, and two build/verifier pairs", executor.commands)
+	if want := []string{filepath.Join("internal", "ui", "dist", "app", "index.html")}; !reflect.DeepEqual(looked, want) {
+		t.Fatalf("looked for %q, want %q", looked, want)
 	}
-	if executor.commands[0].name != "npm" {
-		t.Fatalf("first command = %s, want npm", executor.commands[0].name)
+	if len(executor.commands) != 4 {
+		t.Fatalf("commands = %#v, want two build/verifier pairs and no web build", executor.commands)
 	}
-	assertComparesEmbeddedUI(t, executor.commands[1])
-	for _, index := range []int{3, 5} {
+	for _, index := range []int{1, 3} {
 		if executor.commands[index].name != "sh" {
 			t.Errorf("command %d = %s, want shell verifier", index, executor.commands[index].name)
 		}
 	}
 }
 
-// リリースの runner で作り直した UI がコミット済みの UI と違えば、配布物を作らない。
-// 同じ tag の Homebrew と APK は、コミット済みの UI を埋め込むからである。
-func TestReleaseBuildsStopWhenTheRebuiltUIDiffersFromTheCommittedOne(t *testing.T) {
+// 画面を組み立てていなければ、配布物を作らない。作ったバイナリは画面を出せないからである。
+// リリースの build は画面を作り直さない。各 job は workflow が1回だけ組み立てた画面を受け取る。
+func TestReleaseBuildsStopWhenTheWebUIWasNotBuilt(t *testing.T) {
 	for name, args := range map[string][]string{
-		"matrix":             {"matrix", "--targets", "linux/amd64:0", "--output-dir", "release output"},
-		"release-current":    {"release-current", "--arches", "amd64 arm64", "--output-dir", "release output"},
-		"verify-embedded-ui": {"verify-embedded-ui"},
+		"matrix":          {"matrix", "--targets", "linux/amd64:0", "--output-dir", "release output"},
+		"release-current": {"release-current", "--arches", "amd64 arm64", "--output-dir", "release output"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			executor := &recordingNativeExecutor{output: []byte(" M internal/ui/dist/index.html\n?? internal/ui/dist/assets/new-hash.js\n")}
+			executor := &recordingNativeExecutor{}
 			err := runNativeBuild(args, nativeBuildDependencies{
 				hostOS:      "linux",
 				hostArch:    "amd64",
@@ -378,70 +384,15 @@ func TestReleaseBuildsStopWhenTheRebuiltUIDiffersFromTheCommittedOne(t *testing.
 				environment: []string{nativeVersionEnvironment + "=v1.2.3"},
 				executor:    executor,
 				mkdirAll:    func(string, os.FileMode) error { return nil },
+				statFile:    func(string) (os.FileInfo, error) { return nil, os.ErrNotExist },
 			}, io.Discard, io.Discard)
-			if err == nil || !strings.Contains(err.Error(), "internal/ui/dist/assets/new-hash.js") {
-				t.Fatalf("runNativeBuild() error = %v, want the differing embedded UI listed", err)
+			if err == nil || !strings.Contains(err.Error(), "npm run build") {
+				t.Fatalf("runNativeBuild() error = %v, want the instruction to build the web UI", err)
 			}
-			for _, command := range executor.commands {
-				if command.name == "go" {
-					t.Fatalf("a binary was built after the UI differed: %#v", executor.commands)
-				}
+			if len(executor.commands) != 0 {
+				t.Fatalf("commands = %#v, want none before the UI is built", executor.commands)
 			}
 		})
-	}
-}
-
-// 公開の前に照合だけを試す入口（.github/workflows/release-ui-check.yml）は、リリースと
-// 同じ手順で UI を作り直して照合し、バイナリも出力先も作らない。
-func TestEmbeddedUIVerificationComparesTheRebuiltUIWithoutBuildingBinaries(t *testing.T) {
-	for _, hostOS := range []string{"darwin", "linux", "windows"} {
-		t.Run(hostOS, func(t *testing.T) {
-			executor := &recordingNativeExecutor{}
-			mkdirCalls := 0
-			err := runNativeBuild([]string{"verify-embedded-ui"}, nativeBuildDependencies{
-				hostOS:   hostOS,
-				hostArch: "amd64",
-				executor: executor,
-				mkdirAll: func(string, os.FileMode) error {
-					mkdirCalls++
-					return nil
-				},
-			}, io.Discard, io.Discard)
-			if err != nil {
-				t.Fatalf("runNativeBuild() error: %v", err)
-			}
-			if len(executor.commands) != 2 || mkdirCalls != 0 {
-				t.Fatalf("commands = %#v mkdir = %d, want only the web build and its comparison", executor.commands, mkdirCalls)
-			}
-			if command := executor.commands[0]; command.name != "npm" || !reflect.DeepEqual(command.args, []string{"run", "build"}) || command.directory != "web" {
-				t.Fatalf("first command = %s %q in %q, want npm web build in web", command.name, command.args, command.directory)
-			}
-			assertComparesEmbeddedUI(t, executor.commands[1])
-		})
-	}
-}
-
-func TestEmbeddedUIVerificationRejectsArgumentsBeforeBuildingTheUI(t *testing.T) {
-	executor := &recordingNativeExecutor{}
-	err := runNativeBuild([]string{"verify-embedded-ui", "--output-dir", "dist"}, nativeBuildDependencies{
-		hostOS:   "linux",
-		hostArch: "amd64",
-		executor: executor,
-		mkdirAll: func(string, os.FileMode) error { return nil },
-	}, io.Discard, io.Discard)
-	if err == nil {
-		t.Fatal("runNativeBuild() accepted an option the verification does not take")
-	}
-	if len(executor.commands) != 0 {
-		t.Fatalf("commands = %#v, want none", executor.commands)
-	}
-}
-
-func assertComparesEmbeddedUI(t *testing.T, command nativeCommand) {
-	t.Helper()
-	want := []string{"status", "--porcelain=v1", "--untracked-files=all", "--", "internal/ui/dist"}
-	if command.name != "git" || !reflect.DeepEqual(command.args, want) {
-		t.Fatalf("command after the web build = %s %q, want git %q", command.name, command.args, want)
 	}
 }
 
@@ -480,6 +431,7 @@ func TestReleaseCurrentUsesActualHostForBothArchitectures(t *testing.T) {
 				environment: []string{nativeVersionEnvironment + "=v2.0.0", "GOOS=freebsd"},
 				executor:    executor,
 				mkdirAll:    os.MkdirAll,
+				statFile:    builtUIPresent,
 			}, io.Discard, io.Discard)
 			if err != nil {
 				t.Fatalf("runNativeBuild() error: %v", err)
@@ -491,15 +443,11 @@ func TestReleaseCurrentUsesActualHostForBothArchitectures(t *testing.T) {
 			if got := commandOutputs(executor.commands); !reflect.DeepEqual(got, wantOutputs) {
 				t.Fatalf("outputs = %q, want %q", got, wantOutputs)
 			}
-			if len(executor.commands) != 6 {
-				t.Fatalf("commands = %d, want web build, its comparison, and two build/verifier pairs: %#v", len(executor.commands), executor.commands)
+			if len(executor.commands) != 4 {
+				t.Fatalf("commands = %d, want two build/verifier pairs and no web build: %#v", len(executor.commands), executor.commands)
 			}
-			if command := executor.commands[0]; command.name != "npm" || !reflect.DeepEqual(command.args, []string{"run", "build"}) || command.directory != "web" {
-				t.Fatalf("first command = %s %q in %q, want npm web build in web", command.name, command.args, command.directory)
-			}
-			assertComparesEmbeddedUI(t, executor.commands[1])
 			for index, command := range executor.commands {
-				if index < 2 || index%2 == 1 {
+				if index%2 == 1 {
 					continue
 				}
 				if got := recordedEnvValue(command.environment, "GOOS"); got != test.hostOS {
@@ -510,7 +458,7 @@ func TestReleaseCurrentUsesActualHostForBothArchitectures(t *testing.T) {
 				}
 			}
 			for index, architecture := range []string{"amd64", "arm64"} {
-				verify := executor.commands[3+index*2]
+				verify := executor.commands[1+index*2]
 				wantArtifact := wantOutputs[index]
 				if test.hostOS == "windows" {
 					want := []string{"-NoProfile", "-File", "scripts/verify-artifact-name.ps1", "-Artifact", wantArtifact, "-OS", "windows", "-Architecture", architecture}

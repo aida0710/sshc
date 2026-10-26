@@ -14,8 +14,8 @@ Usage:
   scripts/release/publish.sh --verify-only <tag>
 
 publish:
-  HEADとorigin/mainの一致、同じSHAのmain CIとRelease UI check（release-ui-check.yml）の
-  成功を確認してannotated tagをpushし、release environmentの保護gateを承認して
+  HEADとorigin/mainの一致、同じSHAのmain CIの成功を確認してannotated tagをpushし、
+  release environmentの保護gateを承認して
   GitHub Release完了まで待ちます。
 
 --verify-only:
@@ -282,19 +282,12 @@ wait_for_successful_run() {
 
 ci_run=$(main_workflow_run ci.yml)
 [ -n "$ci_run" ] || die "no main CI run exists for $head_sha; push main and wait for CI first"
-# Release UI checkは手で走らせるworkflowなので、走らせ忘れをCIを待つ前に知らせる。
-ui_check_run=$(main_workflow_run release-ui-check.yml)
-[ -n "$ui_check_run" ] ||
-  die "no Release UI check run exists for $head_sha; run 'gh workflow run release-ui-check.yml --ref main' and wait for it first (docs/releasing.md)"
 printf 'release: waiting for main CI run %s\n' "$ci_run"
 wait_for_successful_run "$ci_run" CI \
   "main CI failed: https://github.com/$repository/actions/runs/$ci_run; no tag was created, so fix main and run this again with $tag"
-printf 'release: waiting for Release UI check run %s\n' "$ui_check_run"
-wait_for_successful_run "$ui_check_run" 'Release UI check' \
-  "Release UI check failed: https://github.com/$repository/actions/runs/$ui_check_run; no tag was created, so find why the embedded UI differs on that runner (docs/releasing.md) and run this again with $tag"
 
 git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
-[ "$(git rev-parse refs/remotes/origin/main)" = "$head_sha" ] || die 'origin/main moved while waiting for CI and the Release UI check'
+[ "$(git rev-parse refs/remotes/origin/main)" = "$head_sha" ] || die 'origin/main moved while waiting for CI'
 git tag -a "$tag" "$head_sha" -m "sshc $tag"
 if ! git push origin "refs/tags/$tag"; then
   git tag -d "$tag" >/dev/null

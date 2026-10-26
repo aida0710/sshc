@@ -1,13 +1,12 @@
 # リリース運用
 
-`scripts/release/publish.sh`は、main CIと埋め込みUIの照合（`release-ui-check.yml`）の待機から、タグの作成、`release` environmentの承認、公開後の検証までを1つのコマンドで実行します。ビルドはGitHub Actionsで進みますが、runの監視と承認、成果物の手動確認は不要です。publish.shを実行することが、その公開の承認になります（`docs/release-install.md`の「リポジトリ管理者向けの公開保護」）。
+`scripts/release/publish.sh`は、main CIの待機から、タグの作成、`release` environmentの承認、公開後の検証までを1つのコマンドで実行します。ビルドはGitHub Actionsで進みますが、runの監視と承認、成果物の手動確認は不要です。publish.shを実行することが、その公開の承認になります（`docs/release-install.md`の「リポジトリ管理者向けの公開保護」）。
 
 ## 事前条件
 
 - リリースするコミットを`origin/main`へpush済みで、作業ツリーに未コミットの変更がないこと
 - `docs/releases/<tag>.md`を追加済みであること
 - 安定バージョンのリリースでは、`scripts/release/check-pinned-installers.sh`が照合する導入例（README、`docs/release-install.md`のPowerShellの例など）で固定したバージョンがタグと同じであること
-- 公開するcommitで、`release-ui-check.yml`の3つのjobが成功していること（次の「公開の前に埋め込みUIの照合を試す」）
 - VPNコンテナのイメージが固定したUbuntuのsnapshotの時刻（`internal/vpn/container/Dockerfile`の`snapshot=`）が30日より古ければ、先に上げてmainへ入れてあること。固定した時刻より後のセキュリティ修正はイメージに入らず、Dockerfileを書き換えない限り利用者のマシンのイメージも作り直されない。baseのdigestとsuiteごとのInReleaseのSHA-256を同じ変更で書き換え（手順はDockerfileのコメント）、CIの`vpn-image` jobでamd64とarm64の両方を確かめる。`publish.sh`は30日より古いと警告を出す（失敗にはしない）
 - 前のリリースから実行先との互換の番号を上げた場合は、リリースノートの「更新後に必要な操作」に、実行先の更新が必要なことを書いてあること（次の「実行先との互換の番号」）
 - `gh auth status`が成功し、リポジトリと`release` environmentを操作できること
@@ -27,23 +26,11 @@
 
 上げたリリースでは、実行先も同じリリース以降へ更新しないと接続できません。リリースノートの「更新後に必要な操作」に、実行先の更新が必要なことと、接続先で`sshc update`を実行することを書いてください。番号を上げていないリリースでは、実行先の更新は必須ではありません。
 
-## 公開の前に埋め込みUIの照合を試す
+## 配布物に埋め込む画面
 
-Release workflowのmacOS・Linux・Windowsのjobは、runner上で埋め込みUI（`internal/ui/dist`）を作り直し、コミット済みのものと違えばバイナリを作らずに失敗します。UIのビルドの出力がOSによって違うと、公開の当日にReleaseが止まります。
+組み立てたWeb UI（`internal/ui/dist/app`）はリポジトリに入れていません。Release workflowの`ui` jobが画面を1回だけ組み立て、macOS・Linux・Windows・Androidのjobは同じものを受け取って埋め込みます。OSごとに組み立てると、ネイティブの依存やNodeの違いで、同じタグの配布物が別々の画面を持ちうるためです。nativebuildの`release-current`と`matrix`は画面を作り直さず、置かれていなければバイナリを作らずに失敗します。
 
-`release-ui-check.yml`は、同じrunnerでこの照合だけを行うworkflowです。バイナリは作らず、公開・署名・tagの権限も持ちません。公開するcommitを`origin/main`へpushしたら、公開の前に次を実行してください。
-
-```sh
-gh workflow run release-ui-check.yml --ref main
-gh run list --workflow release-ui-check.yml --branch main --limit 1 --json databaseId,headSha,status
-gh run watch <databaseId> --exit-status
-```
-
-`gh run list`に新しいrunが出るまで、数秒かかることがあります。`headSha`が公開するcommitと同じであることを確認してください。
-
-3つのjobがすべて成功したら、公開へ進んでください。失敗したjobのログには、コミット済みのものと違ったファイルが`git status --porcelain`の形式で表示されます。その場合は公開せず、差分の原因を調べてください。
-
-`publish.sh`も、公開するcommitでこのworkflowが成功したことを、main CIと同じやり方（同じSHAで`main`から走ったrunのうち、いちばん新しいもの）で確かめます。runが無ければ、main CIを待つ前にタグを作らずに終了します。runが実行中なら終わるまで待ち、失敗していればタグを作らずに終了します。
+Homebrewのformulaは、タグのソースからNode.jsで画面を組み立ててからビルドします（`packaging/homebrew/sshc.rb`）。
 
 ## 公開
 
@@ -53,14 +40,14 @@ scripts/release/publish.sh v0.33.2
 
 スクリプトは次を順番に行います。
 
-1. HEADと`origin/main`が同じで、同じSHAでmain CIと`release-ui-check.yml`が成功したことを照合
+1. HEADと`origin/main`が同じで、同じSHAでmain CIが成功したことを照合
 2. 注釈付きタグを作成してpush
 3. Releaseワークフローのrunを見つけ、`release` environmentだけを実行者の認証情報で承認（確認の入力は求めない）
 4. ワークフローのすべてのjobが成功するまで、状態の変化を表示
 5. Immutable Release、11個の成果物（デモ一式のtar.gzとmanifestを含む）、`checksums.txt`、すべてのattestation、APK、このマシン向けのバイナリが報告するバージョン、Releaseの本文を検証
 6. 安定バージョンでは、Homebrewのformulaが指すタグとソースのSHA-256を検証
 
-main CI、`release-ui-check.yml`、Releaseワークフローのどれかが失敗した場合、タグを動かしたり削除したりせず終了します。対処は次の「失敗したとき」を参照してください。
+main CIかReleaseワークフローが失敗した場合、タグを動かしたり削除したりせず終了します。対処は次の「失敗したとき」を参照してください。
 
 ## 失敗したとき
 
@@ -71,8 +58,6 @@ main CI、`release-ui-check.yml`、Releaseワークフローのどれかが失�
 次の場合、タグはまだ作成されていません。それぞれの対処をしてから、同じバージョンで`scripts/release/publish.sh <tag>`をもう一度実行します。
 
 - main CIの失敗: mainを直してpushする
-- `release-ui-check.yml`のrunが無い: 「公開の前に埋め込みUIの照合を試す」の手順で走らせる
-- `release-ui-check.yml`の失敗: 失敗したjobのログで、コミット済みのものと違ったファイルを調べて直す
 - CIを待つあいだの`origin/main`の更新: 公開するcommitを選び直す
 - タグのpushの失敗: 原因を取り除く。publish.shは、作成したローカルのタグを削除してから終了します
 

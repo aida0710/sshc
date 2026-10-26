@@ -52,11 +52,38 @@ jobs:
           needed=$(git diff --name-only HEAD^1 HEAD | scripts/ci/native-tests-needed.sh)
           echo "needed=$needed" >> "$GITHUB_OUTPUT"
 
+  # 埋め込む画面を1回だけ組み立て、Go のテストと Android の job へ渡す。画面はリポジトリに
+  # 入れていない（internal/ui/dist/README.md）。Go のテストのうち2つが、組み立てた画面を読む。
+  ui:
+    name: Web UI build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Build the web UI
+        run: npm run build
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: web-ui
+          path: internal/ui/dist/app
+          if-no-files-found: error
+          retention-days: 1
+
   go:
     name: Go native (${{ matrix.name }})
-    needs: changes
+    needs: [changes, ui]
     # jobs.changes が失敗しても、この job は走らせる。依存先の失敗で飛ばされた必須の検査は
-    # 成功に見えるので、テストを流さないまま PR がマージできてしまう。
+    # 成功に見えるので、テストを流さないまま PR がマージできてしまう。jobs.ui が失敗したときは、
+    # 画面を受け取る手順で落ちる。
     if: ${{ !cancelled() }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeoutMinutes }}
@@ -89,11 +116,17 @@ jobs:
           # 一か所に限るためである。
           go-version-file: go.mod
           cache-dependency-path: go.sum
+      # CSP の trusted-types の検査と、バイナリが埋め込んだ画面を配るかの検査は、組み立てた画面を読む。
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        if: ${{ env.NATIVE_TESTS == 'true' }}
+        with:
+          name: web-ui
+          path: internal/ui/dist/app
 
       - name: Skip the Go tests for a web-only change
         if: ${{ env.NATIVE_TESTS != 'true' }}
         shell: bash
-        run: echo "Only web, docs or built UI files changed; the Linux job runs the Go tests."
+        run: echo "Only web or docs changed; the Linux job runs the Go tests."
 
       # Windows に Unix shell fragment を解釈させない。formatter も OS ごとの
       # script を使い、違反時は対象 path だけを報告する。
@@ -211,10 +244,16 @@ jobs:
   # NDK はリポジトリで固定したrevisionだけを使用する。
   android:
     name: Android APK
+    needs: ui
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # AAR はエンジンと一緒に画面を埋め込む（jobs.ui が組み立てたもの）。
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: web-ui
+          path: internal/ui/dist/app
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
@@ -298,11 +337,6 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      # Buildが書き出したhash付きassetも含め、Go binaryへ埋め込む配布物が
-      # Web sourceと一致することを同じjob内で確認する。
-      - name: Verify embedded UI assets
-        run: ../scripts/ci/check-ui-dist.sh
 
       # axe は実際に配布するUIをsshc engineから開いて検査する。全E2Eはローカルに
       # 残し、主要画面の重大なWCAG違反だけをPRごとに短時間で検出する。
