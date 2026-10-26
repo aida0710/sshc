@@ -20,6 +20,7 @@ import {
   Ellipsis,
   File,
   FileCog,
+  FileQuestionMark,
   Files,
   Folder,
   FolderOpen,
@@ -37,6 +38,8 @@ import {
   Maximize,
   Menu,
   Minus,
+  Monitor,
+  Moon,
   Palette,
   PanelRight,
   Pause,
@@ -52,6 +55,7 @@ import {
   Settings,
   ShieldCheck,
   Smartphone,
+  Sun,
   SquareTerminal,
   Trash2,
   TriangleAlert,
@@ -125,6 +129,10 @@ const shapes = {
   check: Check,
   language: Languages,
   signOut: LogOut,
+  themeSystem: Monitor,
+  themeLight: Sun,
+  themeDark: Moon,
+  pageNotFound: FileQuestionMark,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof shapes;

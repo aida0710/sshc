@@ -86,7 +86,6 @@ describe("the catalogue", () => {
         "settings.heading",
         "sftp.previewPosition",
         "sftp.settingsHeading",
-        "shell.language",
         "shell.languageEnglish",
         "shell.languageJapanese",
         "shell.navVault",

@@ -1208,11 +1208,9 @@ export const ja = {
   "inspector.noNotices": "この接続に関する注意事項はありません。",
   "inspector.noInherited":
     "この接続の値はすべて同じHostブロック内で定義されています。",
-  "shell.language": "Lang",
   "shell.languageMenu": "言語メニュー",
   "shell.languageEnglish": "English",
   "shell.languageJapanese": "日本語",
-  "shell.theme": "外観",
   "shell.themeMenu": "テーマメニュー",
   "shell.themeSystem": "システムに合わせる",
   "shell.themeLight": "ライト",
