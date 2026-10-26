@@ -1,6 +1,8 @@
 import type { KeyInventoryResponse } from "./api";
 import { useTranslate } from "../i18n/context";
-import { sectionHeading, tableHeadCell, tableHeadRow } from "../ui/form";
+import { tableHeadCell, tableHeadRow } from "../ui/form";
+import { Icon } from "../ui/icons";
+import { PageSection } from "../ui/page";
 import { SortableTableHeader } from "../ui/tableSort";
 import { useTableSort, type SortValue } from "../ui/useTableSort";
 
@@ -27,10 +29,8 @@ export function AgentSection({ inventory }: {
   const t = useTranslate();
   const agentSort = useTableSort<AgentSort>("algorithm");
   return (
-    <section aria-labelledby="agent-heading" className="flex flex-col gap-2">
-      <h3 id="agent-heading" className={sectionHeading}>
-        {t("keys.agentHeading")}
-      </h3>
+    <PageSection heading={t("keys.agentHeading")} headingId="agent-heading">
+      <div className="flex flex-col gap-2">
       {inventory.agentAvailable ? (
         inventory.agentIdentities.length === 0 ? (
           <p className="text-sm text-ink-muted">{t("keys.agentEmpty")}</p>
@@ -69,7 +69,8 @@ export function AgentSection({ inventory }: {
           </table>
         )
       ) : (
-        <p className="text-sm text-notice-ink">
+        <p className="flex gap-2.5 rounded-[9px] bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">
+          <Icon name="warning" className="mt-0.5 size-[15px]" />
           {t("keys.agentUnavailable")}
         </p>
       )}
@@ -95,6 +96,7 @@ export function AgentSection({ inventory }: {
           </ul>
         </>
       )}
-    </section>
+      </div>
+    </PageSection>
   );
 }

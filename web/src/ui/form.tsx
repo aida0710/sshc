@@ -43,6 +43,11 @@ export const dangerAction =
   "whitespace-nowrap rounded-md border border-line px-3.5 py-[5px] text-[13px] leading-5 text-danger " +
   "transition-colors duration-150 hover:border-danger/50 hover:bg-danger/10";
 
+// dangerTextAction is a removal offered in a list row: red words only, so a list of rows is not a column
+// of red boxes. A dialog that confirms the removal uses dangerAction.
+export const dangerTextAction =
+  "whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-danger transition-colors duration-150 hover:bg-danger/10";
+
 export const fieldLabel = "text-[12.5px] text-ink-muted";
 export const hintText = "text-xs text-ink-muted";
 export const sectionCard =
@@ -51,7 +56,11 @@ export const sectionHeading = "text-sm font-medium text-ink";
 
 export const tableHeadRow =
   "border-b border-line text-xs text-ink-faint";
-export const tableHeadCell = "py-2 pr-3 text-left font-normal";
+export const tableHeadCell = "px-2.5 pb-2 text-left font-normal";
+// tableCell is a cell of a list row, spaced as in the design. tableCellOnWide applies the same spacing
+// only where the row is a table row; a phone lays such rows out as stacked label and value pairs.
+export const tableCell = "px-2.5 py-[9px] align-middle";
+export const tableCellOnWide = "sm:table-cell sm:px-2.5 sm:py-[9px] sm:align-middle";
 
 type FieldProps = {
   label: string;

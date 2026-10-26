@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
-import { sectionHeading } from "../ui/form";
 import { dropTargetLook } from "../ui/dragAndDropLook";
 import { sameFolder, type Folder, type FolderRow, type MoveTarget } from "./organizer";
 
@@ -29,12 +28,12 @@ export function FolderPane({ rows, selected, dragging, onSelect, onDropInto }: F
   return (
     <nav
       aria-label={t("keys.foldersLabel")}
-      className="w-full shrink-0 bg-surface-subtle p-3 md:w-52 md:self-stretch md:border-r md:border-line"
+      className="w-full shrink-0 md:w-[188px]"
     >
-      <h3 className={`${sectionHeading} px-2 py-1 text-xs uppercase tracking-wider text-ink-muted`}>
+      <h4 className="px-2.5 pb-1.5 text-xs text-ink-faint">
         {t("keys.folders")}
-      </h3>
-      <ul className="mt-1 flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
+      </h4>
+      <ul className="flex gap-0.5 overflow-x-auto md:flex-col md:overflow-visible">
         {rows.map((row) => {
           const target = dropTargetOf(row.folder);
           const current = sameFolder(row.folder, selected);
@@ -65,19 +64,13 @@ export function FolderPane({ rows, selected, dragging, onSelect, onDropInto }: F
                         onDropInto(target);
                       }
                 }
-                style={{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }}
-                className={`flex min-w-max items-center justify-between gap-3 rounded-lg py-2 pr-2 text-left text-sm md:w-full md:min-w-0 ${
-                  current ? "bg-card font-semibold text-ink shadow-sm" : "text-ink-muted hover:bg-select-fill hover:text-ink"
+                style={{ paddingLeft: `${0.625 + row.depth * 0.75}rem` }}
+                className={`flex min-h-[30px] min-w-max items-center justify-between gap-3 rounded-[7px] pr-2.5 text-left text-[13px] md:w-full md:min-w-0 ${
+                  current ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-hover hover:text-ink"
                 } ${dropTargetLook({ accepts: dragging && target !== null, over: over === key })}`}
               >
-                <span className="flex min-w-0 items-center gap-2">
-                  <span
-                    aria-hidden="true"
-                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${current ? "bg-accent" : "bg-ink-faint"}`}
-                  />
-                  <span className="truncate">{labelOf(row.folder, t)}</span>
-                </span>
-                <span className="shrink-0 rounded-full bg-surface px-1.5 py-0.5 text-[11px] tabular-nums text-ink-muted">
+                <span className="truncate">{labelOf(row.folder, t)}</span>
+                <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-ink-faint">
                   {row.count}
                 </span>
               </button>
