@@ -3,6 +3,7 @@ import { OverviewPanel } from "../overview/OverviewPanel";
 import type { Section } from "../routing/sectionRoute";
 import { parseSettingsPage } from "../settings/settingsRoute";
 import type { SFTPTarget } from "../sftp/SFTPPanel";
+import { PageBoard } from "../ui/PageBoard";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
 import { SectionBar } from "../ui/SectionBar";
 import { useTranslate } from "../i18n/context";
@@ -135,7 +136,7 @@ export function SectionView(props: SectionViewProps) {
     return (
       <div className="h-full min-h-0 overflow-hidden">
         <Suspense fallback={<div className="flex h-full min-h-0 flex-col"><SectionBar title={t(sectionLabels.Files)} /><RouteSkeleton /></div>}>
-          <PaddedSection {...props} />
+          <SectionPage {...props} />
         </Suspense>
       </div>
     );
@@ -148,14 +149,24 @@ export function SectionView(props: SectionViewProps) {
       </div>
     );
   }
+  if (props.section === "Settings") {
+    // Settings draws its own card, with its list of pages beside it.
+    return (
+      <div className="h-full overflow-y-auto">
+        <SectionPage {...props} />
+      </div>
+    );
+  }
   return (
-    <div className="h-full overflow-y-auto p-4 md:p-5">
-      {<PaddedSection {...props} />}
+    <div className="h-full overflow-y-auto">
+      <PageBoard>
+        <SectionPage {...props} />
+      </PageBoard>
     </div>
   );
 }
 
-function PaddedSection({
+function SectionPage({
   section,
   navigation,
   handoff,

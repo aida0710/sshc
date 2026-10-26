@@ -5,6 +5,8 @@ import { localeLabelKeys, locales, type Locale } from "../i18n/locale";
 import { useSignOutConfirmation } from "../session/useSignOutConfirmation";
 import { Icon, type IconName } from "../ui/icons";
 import { opensInThisPage } from "../ui/linkClick";
+import { PageHeader } from "../ui/page";
+import { PageBoard } from "../ui/PageBoard";
 import { Notice } from "../ui/surface";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import type { MenuGroup, MenuItem } from "./menuEntries";
@@ -49,22 +51,11 @@ export function MenuPanel({
     </div>
   ));
 
-  if (compact) {
-    // The phone's top bar already says "Menu", so the heading is only for screen readers.
-    return (
-      <section aria-labelledby="menu-heading" className="flex flex-col gap-[18px] px-3 pb-[18px] pt-3.5">
-        <h2 id="menu-heading" className="sr-only">{t("section.menu")}</h2>
-        {groups}
-      </section>
-    );
-  }
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-6xl p-2">
-      <section aria-labelledby="menu-heading" className="@container min-w-0 flex-1 rounded-xl border border-line bg-sidebar px-8 py-[26px] shadow-pane">
-        <h2 id="menu-heading" className="mb-[18px] text-xl font-semibold leading-[29px] text-ink">{t("section.menu")}</h2>
-        <div className="grid items-start gap-x-7 gap-y-[18px] @2xl:grid-cols-2 @4xl:grid-cols-3">{groups}</div>
-      </section>
-    </div>
+    <PageBoard labelledBy="menu-heading" className={compact ? "flex flex-col gap-[18px]" : ""}>
+      <PageHeader title={t("section.menu")} headingId="menu-heading" className="mb-[18px]" />
+      {compact ? groups : <div className="grid items-start gap-x-7 gap-y-[18px] @2xl:grid-cols-2 @4xl:grid-cols-3">{groups}</div>}
+    </PageBoard>
   );
 }
 
@@ -83,12 +74,12 @@ function MenuGroupSection({ label, compact, children }: { label: string; compact
 // The row's look, shared by the links and the two controls under Preferences. On a phone a select is
 // 44px tall (index.css), so the Language row passes tighter padding to stay 56px like the others.
 function rowClassName(compact: boolean, phonePadding = "py-2") {
-  return compact ? `flex min-h-14 items-center gap-3 px-3 ${phonePadding}` : "flex min-h-[46px] items-center gap-3 rounded-lg px-2.5 py-1.5";
+  return compact ? `flex min-h-14 items-center gap-3 px-3 ${phonePadding}` : "flex min-h-[46px] items-center gap-3 rounded-md px-2.5 py-1.5";
 }
 
 function RowIcon({ name, compact, tone = "plain" }: { name: IconName; compact: boolean; tone?: "plain" | "danger" }) {
   return (
-    <span className={`grid shrink-0 place-items-center rounded-lg ${compact ? "size-8" : "size-[30px]"} ${tone === "danger" ? "bg-danger/12 text-danger" : "bg-well text-ink-muted"}`}>
+    <span className={`grid shrink-0 place-items-center rounded-md ${compact ? "size-8" : "size-[30px]"} ${tone === "danger" ? "bg-danger/12 text-danger" : "bg-well text-ink-muted"}`}>
       <Icon name={name} className="size-4" />
     </span>
   );
@@ -135,7 +126,7 @@ function LanguageRow({ compact }: { compact: boolean }) {
         {/* The browser's own arrow differs by platform, so the select draws the same chevron as the design. */}
         <span className="relative">
           <select id={selectId} value={locale} onChange={(event) => setLocale(event.target.value as Locale)}
-            className="h-[30px] appearance-none rounded-lg border border-line bg-well pl-2.5 pr-[31px] text-[13px] text-ink">
+            className="h-[30px] appearance-none rounded-md border border-line bg-well pl-2.5 pr-[31px] text-[13px] text-ink">
             {locales.map((candidate) => <option key={candidate} value={candidate}>{t(localeLabelKeys[candidate])}</option>)}
           </select>
           <Icon name="chevronDown" className="pointer-events-none absolute right-2.5 top-1/2 size-[13px] -translate-y-1/2 text-ink-muted" />

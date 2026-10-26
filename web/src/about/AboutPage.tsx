@@ -6,6 +6,7 @@ import { UpdateControls } from "../shell/UpdateControls";
 import { explainedUpdateReason, updateMessage } from "../shell/updateMessage";
 import { isUpdateActive, useUpdateStatus } from "../shell/useUpdateStatus";
 import { formatDateTime } from "../ui/format";
+import { PageHeader } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
 import { BuildDetails } from "./BuildDetails";
 import { ReleaseNotes } from "./ReleaseNotes";
@@ -77,9 +78,7 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
 
   return (
     <section aria-labelledby="about-heading" className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <header className="border-b border-line pb-3">
-        <h2 id="about-heading" className="text-xl font-semibold text-ink">{t("section.about")}</h2>
-      </header>
+      <PageHeader title={t("section.about")} headingId="about-heading" />
       <div className="rounded border border-line bg-card p-4">
         {loadFailed ? <Notice tone="danger">{t("about.loadFailed")}</Notice> : about === null ? <p role="status">{t("about.loading")}</p> : <BuildDetails about={about} />}
       </div>

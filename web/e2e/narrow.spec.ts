@@ -502,12 +502,13 @@ test("keeps the removed connection view switch absent and Config structure align
 
   const metrics = page.locator("[data-config-metrics]");
   await expect(metrics.locator(":scope > div")).toHaveCount(3);
-  const boundaries = await metrics.locator(":scope > div").evaluateAll((cells) => cells.slice(0, -1).map((cell, index) => {
-    const next = cells[index + 1]!;
-    return Number.parseFloat(getComputedStyle(cell).borderRightWidth) +
-      Number.parseFloat(getComputedStyle(next).borderLeftWidth);
+  // The counts are separate chips: each one ends before the next begins, or the next wraps below it.
+  const separated = await metrics.locator(":scope > div").evaluateAll((chips) => chips.slice(0, -1).every((chip, index) => {
+    const box = chip.getBoundingClientRect();
+    const next = chips[index + 1]!.getBoundingClientRect();
+    return next.left >= box.right + 4 || next.top >= box.bottom;
   }));
-  expect(boundaries.every((width) => width >= 1)).toBe(true);
+  expect(separated).toBe(true);
 
   await page.getByRole("button", { name: "Include階層", exact: true }).click();
   const alignment = await page.getByRole("button", { name: "conf.d/20-lab.conf" }).evaluate((button) => {

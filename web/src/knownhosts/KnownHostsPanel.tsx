@@ -11,7 +11,7 @@ import {
   tableHeadRow,
 } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
-import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { PageHeader, SummaryStat, SummaryStats } from "../ui/page";
 import { SortableTableHeader } from "../ui/tableSort";
 import { useTableSort, type SortValue } from "../ui/useTableSort";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -201,15 +201,15 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
       <PageHeader title={t("kh.heading")} description={t("kh.pageDescription")} />
       {/* 読めなかった known_hosts の件数は分からないので、件数の欄ごと出さない。 */}
       {listing === null ? null : (
-        <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
+        <SummaryStats>
           {([
             [t("kh.metricEntries"), listing.entries.length],
             [t("kh.metricHashed"), listing.entries.filter((entry) => entry.hashed).length],
             [t("kh.metricCandidates"), candidates.length],
           ] as const).map(([label, value], index) => (
-            <MetricCard key={String(label)} label={String(label)} value={value} compact attention={index === 2 && candidates.length > 0} />
+            <SummaryStat key={String(label)} label={String(label)} value={value} attention={index === 2 && candidates.length > 0} />
           ))}
-        </MetricGrid>
+        </SummaryStats>
       )}
 
       {error ? (

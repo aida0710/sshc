@@ -18,7 +18,7 @@ import { useTranslate } from "../i18n/context";
 import { Button, Card, Notice } from "../ui/surface";
 import type { InspectorContent } from "../ui/Inspector";
 import { GroupInspector } from "./GroupInspector";
-import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { PageHeader, SummaryStat, SummaryStats } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
 import type { NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
@@ -286,15 +286,15 @@ export function GroupsPanel({ onInspector, onNavigationBlockerChange, onNavigate
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader title={t("groups.pageTitle")} description={t("groups.pageDescription")} />
-      <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
+      <SummaryStats>
         {([
           [t("groups.metricGroups"), groups.length],
           [t("groups.metricConnections"), hosts.filter((host) => host.identity.alias !== "").length],
           [t("groups.metricDraft"), unsaved ? 1 : 0],
         ] as const).map(([label, value], index) => (
-          <MetricCard key={String(label)} label={String(label)} value={value} compact attention={unsaved && index === 2} />
+          <SummaryStat key={String(label)} label={String(label)} value={value} attention={unsaved && index === 2} />
         ))}
-      </MetricGrid>
+      </SummaryStats>
       <details className="rounded-lg border border-line bg-surface-subtle px-4 py-3">
         <DisclosureSummary className="text-sm font-medium text-ink">{t("groups.howItWorks")}</DisclosureSummary>
         <div className="mt-3 border-t border-line pt-3">
