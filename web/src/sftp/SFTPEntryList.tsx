@@ -16,6 +16,10 @@ function entrySize(entry: RemoteEntry): string {
   return entryKind(entry) === "file" ? formatBytes(entry.size) : "—";
 }
 
+// The cells of the wide table: 7px above and below each row, as in the design.
+const headerCell = "px-2 pb-2 pt-2.5 font-normal";
+const bodyCell = "px-2 py-[7px]";
+
 function entryIcon(entry: RemoteEntry) {
   return entryKind(entry) === "directory" ? "folder" : "file";
 }
@@ -32,7 +36,7 @@ function ParentRowLabel() {
   const t = useTranslate();
   return (
     <>
-      <Icon name="groups" className="size-4 text-ink-muted" />
+      <Icon name="folder" className="size-[15px] shrink-0 text-accent" />
       <span aria-hidden="true" className="font-mono">..</span>
       <span className="sr-only">{t("sftp.parentDirectory")}</span>
     </>
@@ -169,8 +173,8 @@ export function SFTPEntryList({
   return (
     <table className={`w-full text-left text-sm ${compact ? "table-fixed" : "min-w-[44rem]"}`}>
       {compact ? <colgroup><col className="w-9" /><col /><col className="w-36" /><col className="w-20" /><col className="w-20" /></colgroup> : null}
-      <thead className="sticky top-0 bg-toolbar/75 text-xs text-ink-muted"><tr>
-        <th scope="col" className="w-9 px-2 py-1.5 md:py-1">
+      <thead className="sticky top-0 z-[1] bg-sidebar text-xs text-ink-faint"><tr>
+        <th scope="col" className="w-9 py-2 pl-3.5 pr-2 font-normal">
           <input
             ref={selectAll}
             type="checkbox"
@@ -180,24 +184,24 @@ export function SFTPEntryList({
             className="size-4 accent-accent"
           />
         </th>
-        <SortableTableHeader column="name" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 md:py-1">{t("sftp.name")}</SortableTableHeader>
-        <SortableTableHeader column="modified" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 md:py-1">{t("sftp.modified")}</SortableTableHeader>
-        <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 text-right md:py-1" buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
-        <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="w-24 whitespace-nowrap px-2 py-1.5 md:py-1">{t("sftp.type")}</SortableTableHeader>
+        <SortableTableHeader column="name" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={headerCell}>{t("sftp.name")}</SortableTableHeader>
+        <SortableTableHeader column="modified" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={headerCell}>{t("sftp.modified")}</SortableTableHeader>
+        <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} text-right`} buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
+        <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} w-24 whitespace-nowrap`}>{t("sftp.type")}</SortableTableHeader>
         {tableOwnership ? <>
-        <SortableTableHeader column="uid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 md:py-1">{t("sftp.uid")}</SortableTableHeader>
-        <SortableTableHeader column="gid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className="px-2 py-1.5 md:py-1">{t("sftp.gid")}</SortableTableHeader>
+        <SortableTableHeader column="uid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={headerCell}>{t("sftp.uid")}</SortableTableHeader>
+        <SortableTableHeader column="gid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={headerCell}>{t("sftp.gid")}</SortableTableHeader>
         </> : null}
-        {compact ? null : <th scope="col" className="w-28 whitespace-nowrap px-2 py-1.5 md:py-1">{t("sftp.permissions")}</th>}
+        {compact ? null : <th scope="col" className={`${headerCell} w-28 whitespace-nowrap`}>{t("sftp.permissions")}</th>}
       </tr></thead>
       <tbody>
         {parentRowVisible ? (
-          <tr data-row-key={parentRowKey} className="border-t border-line/40 hover:bg-hover/60">
-            <td className="px-2 py-1 md:py-0.5" colSpan={compact ? 5 : tableOwnership ? 8 : 6}>
+          <tr data-row-key={parentRowKey} className="border-t border-line hover:bg-hover">
+            <td className={`${bodyCell} pl-3.5`} colSpan={compact ? 5 : tableOwnership ? 8 : 6}>
               <button
                 type="button"
                 {...parentButtonProps}
-                className="flex w-full items-center gap-2 rounded py-0.5 text-left text-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                className="flex w-full items-center gap-2 rounded text-left text-[13px] leading-5 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
               >
                 <ParentRowLabel />
               </button>
@@ -213,32 +217,32 @@ export function SFTPEntryList({
             onContextMenu={(event) => rowContextMenu(event, entry)}
             draggable={rowDraggable(entry)}
             onDragStart={(event) => onDragStart?.(event, entry)}
-            className={`${rowCursor(entry)} border-t border-line/40 transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : "hover:bg-hover/55"}`}
+            className={`${rowCursor(entry)} border-t border-line transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill" : "hover:bg-hover"}`}
           >
-            <td className="w-9 px-2 py-1 md:py-0.5">
+            <td className={`${bodyCell} w-9 pl-3.5`}>
               <input type="checkbox" {...entryCheckboxProps(entry)} onDoubleClick={(event) => event.stopPropagation()} />
             </td>
-            <td className="max-w-64 px-2 py-1 md:py-0.5">
+            <td className={`${bodyCell} max-w-64`}>
               <button
                 type="button"
                 {...entryButtonProps(entry)}
                 className={`flex w-full min-w-0 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${rowCursor(entry)}`}
               >
-                <Icon name={entryIcon(entry)} className="size-4 text-ink-muted" />
+                <Icon name={entryIcon(entry)} className={`size-[15px] shrink-0 ${entryKind(entry) === "directory" ? "text-accent" : "text-ink-muted"}`} />
                 <span className="min-w-0 grow">
-                  <span className="block truncate font-mono text-sm font-medium leading-4 text-ink"><EntryName entry={entry} /></span>
+                  <span className="block truncate text-[13px] leading-5 text-ink"><EntryName entry={entry} /></span>
                   {entryContext === undefined ? null : <span className="block truncate font-mono text-[10px] leading-3 text-ink-muted">{entryContext(entry)}</span>}
                 </span>
               </button>
             </td>
-            <td className="truncate whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5" title={new Date(entry.modifiedAt).toLocaleString(locale)}>{formatDateTime(entry.modifiedAt, locale)}</td>
-            <td className="whitespace-nowrap px-2 py-1 text-right text-xs text-ink-muted md:py-0.5">{entrySize(entry)}</td>
-            <td className="w-24 whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5">{t(entryTypeLabelKeys[entry.type])}</td>
+            <td className={`${bodyCell} truncate whitespace-nowrap text-xs text-ink-faint`} title={new Date(entry.modifiedAt).toLocaleString(locale)}>{formatDateTime(entry.modifiedAt, locale)}</td>
+            <td className={`${bodyCell} whitespace-nowrap text-right font-mono text-xs text-ink-muted`}>{entrySize(entry)}</td>
+            <td className={`${bodyCell} w-24 whitespace-nowrap text-xs text-ink-muted`}>{t(entryTypeLabelKeys[entry.type])}</td>
             {tableOwnership ? <>
-            <td className="px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.uid ?? "—"}</td>
-            <td className="px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.gid ?? "—"}</td>
+            <td className={`${bodyCell} font-mono text-xs text-ink-muted`}>{entry.uid ?? "—"}</td>
+            <td className={`${bodyCell} font-mono text-xs text-ink-muted`}>{entry.gid ?? "—"}</td>
             </> : null}
-            {compact ? null : <td className="w-28 whitespace-nowrap px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.mode}</td>}
+            {compact ? null : <td className={`${bodyCell} w-28 whitespace-nowrap font-mono text-xs text-ink-muted`}>{entry.mode}</td>}
           </tr>
         ))}
       </tbody>

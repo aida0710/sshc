@@ -104,40 +104,41 @@ export function SFTPToolbar({
       <Icon name="chevronRight" className="size-3 shrink-0 rotate-90 text-ink-muted" />
     </button>
   ) : (
-    <div className="flex min-w-0 flex-1 items-center rounded bg-control/60" data-testid="sftp-current-path" data-path={path}>
+    <div className="group/path flex min-w-0 flex-1 items-center" data-testid="sftp-current-path" data-path={path}>
       <nav aria-label={labels.path} title={path} onClick={(event) => { if (event.target === event.currentTarget && !navigationDisabled) setPathEditing(true); }}
-        className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap px-1 font-mono text-xs">
+        className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap font-mono text-[12.5px]">
         {crumbs.map((crumb, index) => <span key={crumb.path} className="flex shrink-0 items-center">
-          {index > 0 ? <Icon name="chevronRight" className="size-3 text-ink-faint" /> : null}
-          {index === crumbs.length - 1 ? <span aria-current="location" className="max-w-40 truncate px-1 py-2 font-medium" title={crumb.path}>{crumb.label}</span>
+          {/* A root such as "/" or "C:/" already ends in a slash, so the next name follows it directly. */}
+          {index > 0 && !crumbs[index - 1]!.label.endsWith("/") ? <span aria-hidden="true" className="px-0.5 text-ink-faint">/</span> : null}
+          {index === crumbs.length - 1 ? <span aria-current="location" className="max-w-40 truncate px-1 py-1.5 font-medium text-ink" title={crumb.path}>{crumb.label}</span>
             : <button type="button" disabled={navigationDisabled} onClick={() => void browser.load(crumb.path)}
-              className="max-w-28 truncate rounded px-1 py-2 text-ink-muted hover:bg-hover" title={crumb.path}>{crumb.label}</button>}
+              className="max-w-28 truncate rounded px-1 py-1.5 text-ink-muted hover:bg-hover hover:text-ink" title={crumb.path}>{crumb.label}</button>}
         </span>)}
       </nav>
       <button type="button" aria-label={labels.editPath} title={labels.editPath} disabled={navigationDisabled} onClick={() => setPathEditing(true)}
-        className="flex min-h-9 min-w-9 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover"><Icon name="edit" className="size-3.5" /></button>
+        className="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-ink-faint hover:bg-hover hover:text-ink"><Icon name="edit" className="size-3.5" /></button>
     </div>
   );
 
   return (
-    <div className="flex min-w-0 shrink-0 items-center gap-1 border-b border-line/50 py-1">
+    <div className={`flex min-w-0 shrink-0 items-center border-b border-line ${mobile ? "gap-1 py-1" : "gap-1.5 bg-well px-3 py-2"}`}>
       <SFTPHostPicker aliases={aliases} {...(hosts === undefined ? {} : { hosts })} value={alias}
         disabled={locked} onChange={onHostChange} compact={mobile} includeLocal
         hideTrigger={hostPickerRequest !== undefined} {...(hostPickerRequest === undefined ? {} : { openRequest: hostPickerRequest })} />
       {content ?? <>
         <button type="button" aria-label={t(mobile ? "sftp.parentDirectory" : "sftp.back")} title={t(mobile ? "sftp.parentDirectory" : "sftp.back")}
           disabled={busy || locked || (mobile ? !canParent : !browser.canBack)} onClick={() => { if (mobile) onParent?.(); else void browser.back(); }}
-          className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover ${mobile ? "size-12" : "size-9"}`}>
-          <Icon name={mobile ? "arrowUp" : "arrowLeft"} className="size-4" />
+          className={`flex shrink-0 items-center justify-center text-ink-muted hover:bg-hover ${mobile ? "size-12 rounded" : "size-7 rounded-[7px]"}`}>
+          <Icon name={mobile ? "arrowUp" : "arrowLeft"} className={mobile ? "size-4" : "size-[15px]"} />
         </button>
         {mobile ? null : <button type="button" aria-label={t("sftp.forward")} title={t("sftp.forward")}
           disabled={busy || locked || !browser.canForward} onClick={() => void browser.forward()}
-          className="flex size-9 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover"><Icon name="arrowRight" className="size-4" /></button>}
+          className="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-ink-muted hover:bg-hover"><Icon name="arrowRight" className="size-[15px]" /></button>}
         {pathField}
         <VPNProfileChip name={vpnProfile} className="max-w-24 truncate" />
         {mobile || pathEditing ? null : <button type="button" aria-label={t("sftp.refreshDirectory")} title={t("sftp.refreshDirectory")}
           disabled={navigationDisabled} onClick={refresh}
-          className="flex size-9 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover"><Icon name="sync" className="size-4" /></button>}
+          className="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-ink-muted hover:bg-hover"><Icon name="sync" className="size-[15px]" /></button>}
         {pathEditing ? null : <>{leading}<div className="flex shrink-0 items-center gap-1">{actions}</div></>}
       </>}
     </div>
