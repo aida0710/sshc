@@ -3034,6 +3034,7 @@ export const en = {
   "host.rename": "Rename",
 
   "keys.heading": "Keys",
+  "keys.listHeading": "Keys",
   "keys.pageDescription":
     "Review private keys, public keys, certificates, and their references, then manage creation, updates, and deletion.",
   "keys.search": "Search keys",

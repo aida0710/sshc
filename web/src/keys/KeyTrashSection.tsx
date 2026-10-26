@@ -47,7 +47,7 @@ export function KeyTrashSection({ trash, onRestore, onPurge }: {
   }
   return (
     <>
-          <details className="border-t border-line bg-surface-subtle p-4">
+          <details className="border-t border-line pt-3">
             <DisclosureSummary className="text-sm font-medium text-ink">
               {t("keys.trashSummary", { count: trash.entries.length })}
             </DisclosureSummary>

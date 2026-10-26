@@ -7,9 +7,9 @@ import {
   control,
   hintText,
   sectionCard,
-  sectionHeading,
 } from "../ui/form";
-import { Button, Card, Notice, Row } from "../ui/surface";
+import { FieldRow } from "../ui/FieldRow";
+import { Button, Notice } from "../ui/surface";
 import { PasswordInput } from "../ui/PasswordField";
 import type {
   useAgentForm,
@@ -64,25 +64,25 @@ export function RelocateForm({
   return (
     <form
       aria-labelledby="relocate-heading"
-      className="flex flex-col gap-3"
+      className="flex flex-col gap-3 border-t border-line pt-5"
       onSubmit={(event) => {
         event.preventDefault();
         if (!submission.pending) submission.watch(onSubmit(item));
       }}
     >
-      <h3 id="relocate-heading" className={sectionHeading}>
+      <h3 id="relocate-heading" className="text-sm font-semibold text-ink">
         {t("keys.relocateHeading", { path: item.relativePath })}
       </h3>
       <p className="text-sm text-ink-muted">{t("keys.relocateNote")}</p>
-      <Card>
-        <Row label={t("keys.relocateNewName")}>
+      <div>
+        <FieldRow label={t("keys.relocateNewName")}>
           <input
             className={control}
             value={form.newName}
             onChange={(event) => form.setNewName(event.target.value)}
           />
-        </Row>
-        <Row label={t("keys.relocateGroup")}>
+        </FieldRow>
+        <FieldRow label={t("keys.relocateGroup")}>
           <select
             className={control}
             value={form.newGroup}
@@ -95,8 +95,8 @@ export function RelocateForm({
               </option>
             ))}
           </select>
-        </Row>
-      </Card>
+        </FieldRow>
+      </div>
       <div className="flex gap-2">
         <Button kind="primary" type="submit" busy={submission.pending}>
           {t("keys.relocateSubmit")}
@@ -121,33 +121,33 @@ export function PassphraseForm({
   return (
     <form
       aria-labelledby="passphrase-heading"
-      className="flex flex-col gap-3"
+      className="flex flex-col gap-3 border-t border-line pt-5"
       onSubmit={(event) => {
         event.preventDefault();
         if (!submission.pending) submission.watch(onSubmit(item));
       }}
     >
-      <h3 id="passphrase-heading" className={sectionHeading}>
+      <h3 id="passphrase-heading" className="text-sm font-semibold text-ink">
         {t("keys.passphraseHeading", { path: item.relativePath })}
       </h3>
       <p className="text-sm text-ink-muted">{t("keys.passphraseNote")}</p>
-      <Card>
-        <Row label={t("keys.currentPassphrase")} interactiveChildren>
+      <div>
+        <FieldRow label={t("keys.currentPassphrase")} interactiveChildren>
           <PasswordInput
             label={t("keys.currentPassphrase")}
             value={form.currentPassphrase}
             onChange={form.setCurrentPassphrase}
           />
-        </Row>
-        <Row label={t("keys.newPassphrase")} interactiveChildren>
+        </FieldRow>
+        <FieldRow label={t("keys.newPassphrase")} interactiveChildren>
           <PasswordInput
             label={t("keys.newPassphrase")}
             value={form.newPassphrase}
             onChange={form.setNewPassphrase}
             disabled={form.removePassphrase}
           />
-        </Row>
-      </Card>
+        </FieldRow>
+      </div>
       <CheckboxField
         label={t("keys.removePassphrase")}
         checked={form.removePassphrase}
@@ -187,19 +187,19 @@ export function AgentForm({
   return (
     <form
       aria-labelledby="agent-register-heading"
-      className="flex flex-col gap-3"
+      className="flex flex-col gap-3 border-t border-line pt-5"
       onSubmit={(event) => {
         event.preventDefault();
         if (!submission.pending) submission.watch(onSubmit(item));
       }}
     >
-      <h3 id="agent-register-heading" className={sectionHeading}>
+      <h3 id="agent-register-heading" className="text-sm font-semibold text-ink">
         {t("keys.registerHeading", { path: item.relativePath })}
       </h3>
       <p className="text-sm text-ink-muted">{t("keys.registerNote")}</p>
-      <Card>
+      <div>
         {item.encrypted && (
-          <Row
+          <FieldRow
             label={t("keys.keyPassphrase")}
             interactiveChildren
             {...(!stored ? {} : { hint: t("keys.typedWins") })}
@@ -209,9 +209,9 @@ export function AgentForm({
               value={form.agentPassphrase}
               onChange={form.setAgentPassphrase}
             />
-          </Row>
+          </FieldRow>
         )}
-        <Row label={t("keys.lifetime")}>
+        <FieldRow label={t("keys.lifetime")}>
           <select
             className={control}
             value={String(form.agentLifetime)}
@@ -224,8 +224,8 @@ export function AgentForm({
             <option value="14400">{t("keys.lifetimeFourHours")}</option>
             <option value="43200">{t("keys.lifetimeTwelveHours")}</option>
           </select>
-        </Row>
-      </Card>
+        </FieldRow>
+      </div>
 
       {item.encrypted && stored && (
         <p className={hintText}>
@@ -238,7 +238,7 @@ export function AgentForm({
       )}
       {item.encrypted && phrases.length > 0 && (
         <div className="flex flex-wrap items-end gap-3">
-          <Row label={t("keys.useStoredPassphrase")}>
+          <FieldRow label={t("keys.useStoredPassphrase")}>
             <select
               className={control}
               value={chosenPhrase}
@@ -251,7 +251,7 @@ export function AgentForm({
                 </option>
               ))}
             </select>
-          </Row>
+          </FieldRow>
           <Button
             disabled={chosenPhrase === ""}
             onClick={() => onAssignPhrase(item)}
@@ -294,7 +294,7 @@ export function StoredPassphrasePanel({
       aria-labelledby="stored-passphrase-heading"
       className={sectionCard}
     >
-      <h3 id="stored-passphrase-heading" className={sectionHeading}>
+      <h3 id="stored-passphrase-heading" className="text-sm font-semibold text-ink">
         {t("keys.storedPassphraseHeading", { path: item.relativePath })}
       </h3>
       <p className={hintText}>{t("keys.storedPassphraseNote")}</p>
@@ -383,7 +383,7 @@ export function TrashConfirmation({
   if (item === null) return null;
   return (
     <section aria-labelledby="trash-confirm-heading" className={sectionCard}>
-      <h3 id="trash-confirm-heading" className={sectionHeading}>
+      <h3 id="trash-confirm-heading" className="text-sm font-semibold text-ink">
         {t("keys.trashConfirmHeading", { path: item.relativePath })}
       </h3>
       <p className="text-sm text-ink">{t("keys.trashExplain")}</p>
@@ -437,7 +437,7 @@ export function RelocateResult({
       aria-labelledby="relocate-result-heading"
       className="flex flex-col gap-2 text-sm"
     >
-      <h3 id="relocate-result-heading" className={sectionHeading}>
+      <h3 id="relocate-result-heading" className="text-sm font-semibold text-ink">
         {result.blockers.length > 0
           ? t("keys.relocateRefused")
           : t("keys.relocateDone", { path: result.relativePath })}

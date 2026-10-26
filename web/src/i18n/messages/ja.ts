@@ -3041,6 +3041,7 @@ export const ja = {
   "host.rename": "変更",
 
   "keys.heading": "SSH Keys",
+  "keys.listHeading": "鍵",
   "keys.pageDescription":
     "秘密鍵、公開鍵、証明書の一覧と参照元を確認し、作成・変更・削除を管理します。",
   "keys.search": "鍵を検索",

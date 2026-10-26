@@ -18,7 +18,8 @@ import {
 } from "../ui/browserNotifications";
 import { Field, control } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
-import { ActionArea, SettingsSection } from "./SettingsSection";
+import { ActionArea } from "../ui/ActionArea";
+import { SettingsSection } from "./SettingsSection";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 
 const soundLabelKeys: Record<NotificationSoundPreset, MessageKey> = {
