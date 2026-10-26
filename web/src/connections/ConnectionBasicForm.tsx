@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useId, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Problem } from "../api/client";
 import type { HostDetail, UpdateConnectionRequest } from "../api/config";
 import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
@@ -6,6 +6,7 @@ import { useTranslate } from "../i18n/context";
 import { keysApi, type KeysApi } from "../keys/api";
 import { control, sectionHeading } from "../ui/form";
 import { Notice } from "../ui/surface";
+import { FieldRow } from "../ui/FieldRow";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import type { BasicFieldState } from "./basicFields";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
@@ -63,31 +64,28 @@ function ConnectionField({ field, label, error, inheritLabel, onChange, onInheri
   numeric?: boolean;
 }) {
   const t = useTranslate();
-  const id = useId();
   const hint = field.state.origin === "direct" ? "" : sourceText(field.state, t);
   const warning = field.state.origin === "complex" ? t("conn.basicComplex", { keyword: field.state.keyword }) : error;
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm text-ink-muted">{label}</label>
+    <FieldRow
+      label={label}
+      hint={hint === "" ? undefined : hint}
+      warning={warning === "" ? undefined : warning}
+      actions={field.state.origin === "direct" ? (
+        <button type="button" aria-pressed={field.inherit} onClick={onInherit} className={`rounded py-0.5 text-left text-xs underline-offset-4 hover:text-accent hover:underline ${field.inherit ? "font-medium text-notice-ink" : "text-ink-muted"}`}>
+          {field.inherit ? t("conn.basicKeepDirect") : inheritLabel}
+        </button>
+      ) : undefined}
+    >
       <input
-        id={id}
         type={numeric ? "number" : "text"}
         {...(numeric ? { min: 1, max: 65535 } : {})}
         value={field.value}
         disabled={!field.state.editable || field.state.origin === "complex"}
         onChange={(event) => onChange(event.target.value)}
-        aria-invalid={warning !== "" || undefined}
-        aria-describedby={hint !== "" || warning !== "" ? `${id}-detail` : undefined}
         className={control}
       />
-      {hint === "" && warning === "" ? null : <div id={`${id}-detail`} className="space-y-1 text-xs">
-        {hint === "" ? null : <p className="text-ink-muted">{hint}</p>}
-        {warning === "" ? null : <p className="text-notice-ink">{warning}</p>}
-      </div>}
-      {field.state.origin === "direct" ? <button type="button" aria-pressed={field.inherit} onClick={onInherit} className={`self-start rounded py-1 text-left text-xs underline-offset-4 hover:text-accent hover:underline ${field.inherit ? "font-medium text-notice-ink" : "text-ink-muted"}`}>
-        {field.inherit ? t("conn.basicKeepDirect") : inheritLabel}
-      </button> : null}
-    </div>
+    </FieldRow>
   );
 }
 
@@ -270,16 +268,14 @@ export function ConnectionBasicForm({
       <fieldset disabled={disabled} className="contents">
       <section className="flex flex-col gap-2" aria-labelledby="basic-connection-heading">
         <h3 id="basic-connection-heading" className={sectionHeading}>{t("conn.basicConnection")}</h3>
-        <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <ConnectionField {...field("hostName")} label={t("conn.basicHostName")} error={derived.hostError || serverHostError} inheritLabel={t("conn.basicUseInheritedHost")} />
-          </div>
+        <div>
+          <ConnectionField {...field("hostName")} label={t("conn.basicHostName")} error={derived.hostError || serverHostError} inheritLabel={t("conn.basicUseInheritedHost")} />
           <ConnectionField {...field("user")} label={t("conn.basicUser")} error={derived.userError || serverUserError} inheritLabel={t("conn.basicUseInheritedUser")} />
           <ConnectionField {...field("port")} label={t("conn.basicPort")} error={derived.portError || serverPortError} inheritLabel={t("conn.basicUseInheritedPort")} numeric />
         </div>
       </section>
 
-      <section className="flex flex-col gap-3 border-t border-line pt-4" aria-labelledby="basic-auth-heading">
+      <section className="flex flex-col gap-2 border-t border-line pt-4" aria-labelledby="basic-auth-heading">
         <h3 id="basic-auth-heading" className={sectionHeading}>{t("conn.basicAuthentication")}</h3>
         <div>
           <BasicPrivateKeyField
