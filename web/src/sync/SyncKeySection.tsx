@@ -1,7 +1,7 @@
 import type { SyncStatus } from "../api/sync";
 import { useTranslate } from "../i18n/context";
-import { CheckboxField, sectionHeading } from "../ui/form";
-import { Icon } from "../ui/icons";
+import { CheckboxField } from "../ui/form";
+import { PageSection } from "../ui/page";
 import { PasswordInput } from "../ui/PasswordField";
 import { Button } from "../ui/surface";
 import type { SyncSetupForm } from "./useSyncSetupForm";
@@ -19,26 +19,20 @@ export function SyncKeySection({ status, busy, form, onSave }: {
   const t = useTranslate();
   const { chooseOwn, setChooseOwn, ownKey, setOwnKey, confirmHistoryLoss, setConfirmHistoryLoss } = form;
   return (
-    <section
-      aria-labelledby="sync-key-heading"
-      className="overflow-hidden rounded-md border border-line bg-card"
-    >
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Icon name="sync" className="h-4 w-4 text-ink-muted" />
-          <h3 id="sync-key-heading" className={sectionHeading}>
-            {t("sync.key")}
-          </h3>
-        </div>
+    <PageSection
+      heading={t("sync.key")}
+      headingId="sync-key-heading"
+      actions={(
         <span
-          className={`rounded-full px-2 py-1 text-xs font-medium ${status.keyConfigured ? "bg-select-fill text-accent" : "bg-notice text-notice-ink"}`}
+          className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-medium ${status.keyConfigured ? "bg-select-fill text-accent" : "bg-notice text-notice-ink"}`}
         >
           {status.keyConfigured
             ? t("sync.keyReady")
             : t("sync.keyNeeded")}
         </span>
-      </header>
-      <div className="flex flex-col gap-3 p-4">
+      )}
+    >
+      <div className="flex flex-col gap-3">
         <p className="text-sm leading-6 text-ink-muted">
           {t("sync.keyHint")}
         </p>
@@ -73,6 +67,6 @@ export function SyncKeySection({ status, busy, form, onSave }: {
           </Button>
         </div>
       </div>
-    </section>
+    </PageSection>
   );
 }

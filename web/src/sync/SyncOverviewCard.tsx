@@ -1,7 +1,8 @@
 import type { SyncStatus } from "../api/sync";
 import { useLanguage } from "../i18n/context";
-import { CheckboxField, hintText, sectionHeading } from "../ui/form";
-import { Button, Card, Notice } from "../ui/surface";
+import { CheckboxField, hintText } from "../ui/form";
+import { PageSection } from "../ui/page";
+import { Button, Notice } from "../ui/surface";
 import { usePendingAction } from "../ui/usePendingAction";
 import { describeLastSync } from "./describeLastSync";
 import { SyncErrorNotice } from "./SyncErrorNotice";
@@ -41,17 +42,16 @@ export function SyncOverviewCard({
   // だけに出す。失敗は SyncPanel が文にして出すので、pending.start は断られても reject しない。
   const pending = usePendingAction<OverviewAction>();
   return (
-    <Card as="section" radius="md">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
-        <div>
-          <h3 className={sectionHeading}>{t("sync.overviewHeading")}</h3>
-          <p className={`mt-1 ${hintText}`}>{describeLastSync(t, status, locale)}</p>
-        </div>
-        <span className="rounded-full bg-select-fill px-2 py-1 text-xs font-medium text-accent">
+    <PageSection
+      heading={t("sync.overviewHeading")}
+      hint={describeLastSync(t, status, locale)}
+      actions={(
+        <span className="rounded-full bg-select-fill px-2.5 py-0.5 text-[11.5px] font-medium text-accent">
           {t(syncDirectionLabelKeys[status.direction])}
         </span>
-      </header>
-      <div className="flex flex-col gap-4 p-4">
+      )}
+    >
+      <div className="flex flex-col gap-4">
         <CheckboxField
             label={t("sync.autoEnable")}
             hint={t(syncAutoHintKeys[status.direction])}
@@ -139,6 +139,6 @@ export function SyncOverviewCard({
           )}
         </div>
       </div>
-    </Card>
+    </PageSection>
   );
 }

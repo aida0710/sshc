@@ -16,7 +16,8 @@ import {
   showBrowserNotification,
   type BrowserNotificationPermission,
 } from "../ui/browserNotifications";
-import { Field, control } from "../ui/form";
+import { control } from "../ui/form";
+import { FieldRow } from "../ui/FieldRow";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea } from "../ui/ActionArea";
 import { SettingsSection } from "./SettingsSection";
@@ -90,7 +91,7 @@ export function NotificationSettingsSection({ showHeading }: { showHeading: bool
       icon="notification"
       showHeading={showHeading}
     >
-      <div className="grid max-w-2xl gap-5">
+      <div className="grid gap-5">
         <p className="text-sm leading-6 text-ink-muted">
           {t(permissionMessage(permission, notificationsComeFromAndroid()))}
         </p>
@@ -114,8 +115,8 @@ export function NotificationSettingsSection({ showHeading }: { showHeading: bool
             ) : null}
           </ActionArea>
         ) : null}
-        <div className="grid gap-4 border-t border-line pt-5 sm:grid-cols-2">
-          <Field label={t("terminal.notificationSound")} hint={t("terminal.notificationSoundHint")}>
+        <div className="border-t border-line pt-5">
+          <FieldRow label={t("terminal.notificationSound")} hint={t("terminal.notificationSoundHint")}>
             <div className="flex gap-2">
               <select
                 className={control}
@@ -136,8 +137,8 @@ export function NotificationSettingsSection({ showHeading }: { showHeading: bool
                 {t("terminal.notificationPreview")}
               </Button>
             </div>
-          </Field>
-          <Field
+          </FieldRow>
+          <FieldRow
             label={t("terminal.notificationVolume")}
             hint={t("terminal.notificationVolumeHint", { volume: String(sounds.volume) })}
           >
@@ -149,9 +150,9 @@ export function NotificationSettingsSection({ showHeading }: { showHeading: bool
               step={5}
               value={sounds.volume}
               onChange={(event) => changeSounds({ ...sounds, volume: Number(event.target.value) })}
-              className="h-9 w-full accent-accent"
+              className="h-9 w-full max-w-md accent-accent"
             />
-          </Field>
+          </FieldRow>
         </div>
       </div>
     </SettingsSection>
