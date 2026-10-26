@@ -39,8 +39,8 @@ export function useSplitView({ sessions, runTarget }: { sessions: TerminalSessio
     if (compact || !liveSessionIds.has(sourceSessionId) || !liveSessionIds.has(targetSessionId)) return;
     dispatch({ type: "split", sourceSessionId, targetSessionId, edge });
   }
-  const groupNumberBySession = new Map(groupState.groups.flatMap((group) => paneSessionIds(group.view.root).map((id) => [id, group.number] as const)));
-  return { state, groups: groupState.groups, activeGroupNumber: groupState.activeGroupNumber, groupNumberBySession, compact, dispatch, selectSession, canSplit, split };
+  const groupBySession = new Map(groupState.groups.flatMap((group) => paneSessionIds(group.view.root).map((id) => [id, group] as const)));
+  return { state, groups: groupState.groups, activeGroupNumber: groupState.activeGroupNumber, groupBySession, compact, dispatch, selectSession, canSplit, split };
 }
 
 export type SplitViewController = ReturnType<typeof useSplitView>;

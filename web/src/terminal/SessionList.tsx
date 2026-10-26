@@ -1,4 +1,6 @@
 import type { PaneEdge } from "./splitView/layout";
+import { SplitLayoutMap } from "./splitView/SplitLayoutMap";
+import type { SplitGroup } from "./splitView/splitGroups";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { TerminalForward, TerminalSession } from "../api/terminalSessions";
 import { useTranslate, type Translate } from "../i18n/context";
@@ -21,7 +23,7 @@ import { isImeComposing } from "../ui/imeComposition";
 type SessionListProps = {
   sessions: TerminalSession[];
   selected: string | null;
-  splitGroupNumberBySession?: ReadonlyMap<string, number>;
+  splitGroupBySession?: ReadonlyMap<string, SplitGroup>;
   // atSessionLimit is true while the engine holds as many live sessions as it
   // allows, counted over every workspace, so nothing can be duplicated.
   atSessionLimit: boolean;
@@ -64,7 +66,7 @@ function describeForward(t: Translate, forward: TerminalForward): string {
 export function SessionList({
   sessions,
   selected,
-  splitGroupNumberBySession,
+  splitGroupBySession,
   atSessionLimit,
   busy,
   unreadBySession = new Set(),
@@ -167,7 +169,7 @@ export function SessionList({
           {sessions.map((session, index) => {
             const destination = terminalSubtitle(session, t);
             const displayTitle = terminalDisplayTitle(session);
-            const splitGroupNumber = splitGroupNumberBySession?.get(session.id);
+            const splitGroup = splitGroupBySession?.get(session.id);
             const unread = unreadBySession.has(session.id);
             const status = sessionStatusText(t, session);
             const isSelected = session.id === selected;
@@ -267,13 +269,17 @@ export function SessionList({
                       {marker}
                       <span className="min-w-0 grow">
                         <span className="flex items-center gap-2 text-[13px] leading-5">
-                          <span className={`min-w-0 flex-1 truncate ${isSelected ? "font-medium text-ink" : "text-ink"}`}>{displayTitle}</span>
-                          {splitGroupNumber === undefined ? null : (
-                            <span data-split-group-badge={splitGroupNumber} title={t("splitView.groupName", { number: splitGroupNumber })}
-                              aria-label={t("splitView.groupName", { number: splitGroupNumber })} className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-normal text-ink-muted">
-                              <Icon name="splitView" className="size-3" />{splitGroupNumber}
-                            </span>
-                          )}
+                          {/* The split map follows the name, so it stays visible beside the selected row's "…". */}
+                          <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <span className={`min-w-0 truncate ${isSelected ? "font-medium text-ink" : "text-ink"}`}>{displayTitle}</span>
+                            {splitGroup === undefined ? null : (
+                              // Where this session sits in its split, drawn small; the name is for screen readers.
+                              <span data-split-group-badge={splitGroup.number} title={t("splitView.groupName", { number: splitGroup.number })}
+                                aria-label={t("splitView.groupName", { number: splitGroup.number })} className="inline-flex shrink-0 items-center">
+                                <SplitLayoutMap root={splitGroup.view.root} highlight={session.id} className="h-[11px] w-4" />
+                              </span>
+                            )}
+                          </span>
                           {sessionShowsDestination(session)
                             ? <span data-session-destination className={`max-w-[50%] shrink-0 truncate font-mono text-[11px] text-ink-faint ${isSelected ? "pointer-fine:hidden" : ""}`}>{destination}</span>
                             : <span data-session-status-text className={`max-w-[60%] shrink-0 truncate text-[11px] ${sessionStatusTone(session)}`}>{status}</span>}

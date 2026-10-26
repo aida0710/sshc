@@ -1,4 +1,5 @@
 import type { PaneEdge } from "./splitView/layout";
+import type { SplitGroup } from "./splitView/splitGroups";
 import { useMemo, useRef, useState } from "react";
 import type { HostEntry } from "../api/config";
 import type { LocalShellProfile } from "../api/settings";
@@ -27,7 +28,7 @@ type WorkspaceTreeProps = {
   // sessions are every session in list order.
   sessions: TerminalSession[];
   selected: string | null;
-  splitGroupNumberBySession?: ReadonlyMap<string, number>;
+  splitGroupBySession?: ReadonlyMap<string, SplitGroup>;
   unreadBySession?: UnreadSessions;
   onSelect: (id: string) => void;
   canSplitSession?: (id: string) => boolean;
@@ -61,7 +62,7 @@ export function WorkspaceTree({
   terminalSessions,
   sessions,
   selected,
-  splitGroupNumberBySession,
+  splitGroupBySession,
   unreadBySession = new Set(),
   onSelect,
   canSplitSession,
@@ -235,7 +236,7 @@ export function WorkspaceTree({
                   <SessionList
                     sessions={members}
                     selected={selected}
-                    {...(splitGroupNumberBySession === undefined ? {} : { splitGroupNumberBySession })}
+                    {...(splitGroupBySession === undefined ? {} : { splitGroupBySession })}
                     atSessionLimit={atSessionLimit}
                     busy={terminalSessions.busy}
                     unreadBySession={unreadBySession}
