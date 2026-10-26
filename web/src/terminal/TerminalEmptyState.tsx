@@ -1,14 +1,17 @@
 import { useTranslate } from "../i18n/context";
 import { BrandMark } from "../ui/BrandMark";
 import { PageBoard } from "../ui/PageBoard";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 
 // Nothing is open: a nudge towards the first connection, in the same card as the pages and the terminal.
 export function TerminalEmptyState() {
   const t = useTranslate();
+  // A phone has no card around the page, so the nudge gets one of its own.
+  const compact = useMediaQuery(mobileViewportQuery);
   return (
     // The card is not named, so it does not become a region beside the panels that explain a refused run target.
     <PageBoard fill className="items-center justify-center p-6">
-      <div className="flex max-w-md flex-col items-center text-center" role="status">
+      <div className={`flex max-w-md flex-col items-center text-center ${compact ? "w-full rounded-2xl border border-line bg-sidebar px-5 py-6 shadow-pane" : ""}`} role="status">
         <BrandMark className="size-10" />
         <h2 className="mt-4 text-lg font-semibold text-ink">{t("terminal.emptyHeading")}</h2>
         <p className="mt-1.5 max-w-sm text-[13px] leading-5 text-ink-muted">{t("terminal.emptyHint")}</p>

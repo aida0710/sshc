@@ -86,8 +86,9 @@ export function ConnectionSummary({
         {/* The name keeps at least 10rem; below that the buttons move to their own line instead of
             squeezing a long name and address into several broken lines. */}
         <div className="min-w-40 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <h3 id="connection-summary-heading" className="min-w-0 truncate text-base font-semibold text-ink" title={summary.alias}>{summary.alias}</h3>
+          {/* The unsaved badge moves under a long name instead of squeezing it. */}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <h3 id="connection-summary-heading" className="min-w-0 max-w-full truncate text-base font-semibold text-ink" title={summary.alias}>{summary.alias}</h3>
             {dirty ? <span className="shrink-0 rounded bg-notice px-2 py-0.5 text-xs font-medium text-notice-ink">{t("conn.summaryUnsaved")}</span> : null}
           </div>
           <p className="truncate font-mono text-[11.5px] text-ink-faint" title={summary.endpoint}>{summary.endpoint}</p>

@@ -813,7 +813,7 @@ export const ja = {
   "terminal.localhost": "localhost",
   "terminal.emptyHeading": "開いているセッションがありません",
   "terminal.emptyHint":
-    "［新しいセッション］か、Home や Connections のホストの［接続］から開きます。",
+    "［新しいセッション］か、HomeやConnectionsのホストの［接続］から開きます。",
   "terminal.forwardLocal": "{listen} → {to}を転送中",
   "terminal.forwardRemote": "SSH接続先の{listen} → {to}を転送中",
   "terminal.forwardDynamic": "{listen}でSOCKS5プロキシ",
