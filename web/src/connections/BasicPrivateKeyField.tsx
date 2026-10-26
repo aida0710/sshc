@@ -3,8 +3,9 @@ import { DisclosureSummary } from "../ui/DisclosureSummary";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import { useTranslate } from "../i18n/context";
 import { control, hintText } from "../ui/form";
-import { PasswordField } from "../ui/PasswordField";
-import { Notice, Row } from "../ui/surface";
+import { FieldRow, FieldRowNote } from "../ui/FieldRow";
+import { PasswordInput } from "../ui/PasswordField";
+import { Notice } from "../ui/surface";
 import { customKeyId, type BasicDraft, type BasicFormDerived, type KeySelection } from "./basicFormDraft";
 import type { ConnectionSecretsModel } from "./useConnectionSecrets";
 
@@ -31,14 +32,16 @@ export function BasicPrivateKeyField({
   const { selectedPrivateKey, identityFileChange } = derived;
   return (
     <>
-      <Row
+      <FieldRow
         label={t("conn.basicPrivateKey")}
         warning={serverKeyError || undefined}
         hint={keyState === "custom"
           ? t("conn.basicCustomKey", { path: customKey })
           : keyState === "complex"
             ? t("conn.basicComplexKey")
-            : undefined}
+            : selectedPrivateKey !== undefined && !selectedPrivateKey.encrypted
+              ? t("conn.basicKeyPassphraseUnencrypted")
+              : undefined}
       >
         <select
           aria-label={t("conn.basicPrivateKey")}
@@ -55,70 +58,68 @@ export function BasicPrivateKeyField({
             </option>
           ))}
         </select>
-      </Row>
+      </FieldRow>
       {preferredKey !== null && identityFileChange?.action === "set" &&
       identityFileChange.keyId === preferredKey.privateKeyId ? (
-        <p className="border-t border-hairline px-3 py-2 text-xs text-notice-ink">
-          {t("conn.basicGeneratedKeyStaged", { path: preferredKey.privateRelativePath })}
-        </p>
+        <FieldRowNote>
+          <p className="text-xs text-notice-ink">
+            {t("conn.basicGeneratedKeyStaged", { path: preferredKey.privateRelativePath })}
+          </p>
+        </FieldRowNote>
       ) : null}
 
       {secrets.unlocked && keyState === "editable" && selectedPrivateKey !== undefined && selectedPrivateKey.encrypted ? (
         <details
           open={passphraseOpen}
           onToggle={(event) => onPassphraseOpenChange(event.currentTarget.open)}
-          className="border-t border-hairline"
+          className="border-t border-line"
         >
-          <DisclosureSummary className="px-3 py-3 text-sm font-medium text-ink">
+          <DisclosureSummary className="py-3.5 text-[13.5px] font-medium text-ink">
             {t("conn.basicManageKeyPassphrase")}
           </DisclosureSummary>
-          <div className="flex flex-col gap-3 border-t border-hairline py-3">
-            <div>
-              <p className="text-sm text-ink-muted">{t("conn.basicKeyPassphraseHeading")}</p>
+          <FieldRowNote>
+            <p className="text-[13px] text-ink-muted">{t("conn.basicKeyPassphraseHeading")}</p>
+            <p className={hintText}>
+              {derived.dedicatedKeyPassphrase
+                  ? t("conn.basicKeyPassphraseDedicated")
+                  : derived.namedKeyPassphrase !== undefined
+                    ? t("conn.basicKeyPassphraseShared", { name: derived.namedKeyPassphrase.name })
+                    : t("conn.basicKeyPassphraseNone")}
+            </p>
+            {derived.namedKeyPassphrase !== undefined && derived.otherNamedKeyUses.length > 0 ? (
               <p className={hintText}>
-                {derived.dedicatedKeyPassphrase
-                    ? t("conn.basicKeyPassphraseDedicated")
-                    : derived.namedKeyPassphrase !== undefined
-                      ? t("conn.basicKeyPassphraseShared", { name: derived.namedKeyPassphrase.name })
-                      : t("conn.basicKeyPassphraseNone")}
+                {t("conn.basicKeyPassphraseSharedOthers", { count: derived.otherNamedKeyUses.length })}
               </p>
-              {derived.namedKeyPassphrase !== undefined && derived.otherNamedKeyUses.length > 0 ? (
-                <p className={hintText}>
-                  {t("conn.basicKeyPassphraseSharedOthers", { count: derived.otherNamedKeyUses.length })}
-                </p>
-              ) : null}
-              {derived.namedKeyPassphrase !== undefined ? (
-                <p className={hintText}>{t("conn.basicKeyPassphraseDetach")}</p>
-              ) : null}
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <PasswordField
-                label={t("conn.basicNewKeyPassphrase")}
-                value={draft.keyPassphrase}
-                onChange={(value) => onEdit({ keyPassphrase: value })}
-              />
-              <PasswordField
-                label={t("conn.basicConfirmKeyPassphrase")}
-                value={draft.keyPassphraseConfirmation}
-                onChange={(value) => onEdit({ keyPassphraseConfirmation: value })}
-              />
-            </div>
-            {derived.hasKeyPassphraseDraft && !derived.keyPassphraseValid ? (
-              <Notice tone="danger">{t("conn.basicKeyPassphraseMismatch")}</Notice>
             ) : null}
-            <p className={hintText}>{t("conn.basicKeyPassphraseStoredNote")}</p>
-            {serverKeyPassphraseError === "" ? null : (
-              <Notice tone="danger">{serverKeyPassphraseError}</Notice>
-            )}
-          </div>
+            {derived.namedKeyPassphrase !== undefined ? (
+              <p className={hintText}>{t("conn.basicKeyPassphraseDetach")}</p>
+            ) : null}
+          </FieldRowNote>
+          <FieldRow label={t("conn.basicNewKeyPassphrase")} interactiveChildren>
+            <PasswordInput
+              label={t("conn.basicNewKeyPassphrase")}
+              value={draft.keyPassphrase}
+              onChange={(value) => onEdit({ keyPassphrase: value })}
+            />
+          </FieldRow>
+          <FieldRow label={t("conn.basicConfirmKeyPassphrase")} hint={t("conn.basicKeyPassphraseStoredNote")} interactiveChildren>
+            <PasswordInput
+              label={t("conn.basicConfirmKeyPassphrase")}
+              value={draft.keyPassphraseConfirmation}
+              onChange={(value) => onEdit({ keyPassphraseConfirmation: value })}
+            />
+          </FieldRow>
+          {(derived.hasKeyPassphraseDraft && !derived.keyPassphraseValid) || serverKeyPassphraseError !== "" ? (
+            <div className="flex flex-col gap-2 pb-3.5">
+              {derived.hasKeyPassphraseDraft && !derived.keyPassphraseValid ? (
+                <Notice tone="danger">{t("conn.basicKeyPassphraseMismatch")}</Notice>
+              ) : null}
+              {serverKeyPassphraseError === "" ? null : (
+                <Notice tone="danger">{serverKeyPassphraseError}</Notice>
+              )}
+            </div>
+          ) : null}
         </details>
-      ) : null}
-
-      {selectedPrivateKey !== undefined && !selectedPrivateKey.encrypted ? (
-        <p className={`border-t border-hairline py-3 ${hintText}`}>
-          {t("conn.basicKeyPassphraseUnencrypted")}
-        </p>
       ) : null}
     </>
   );

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HostDetail, HostMetadata } from "../api/config";
 import type { VPNProfile } from "../api/vpn";
-import { Field, control, fieldLabel, hintText, sectionHeading } from "../ui/form";
+import { control, fieldLabel, hintText, sectionHeading } from "../ui/form";
+import { FieldRow } from "../ui/FieldRow";
 import { Button, Notice } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import { identityKey } from "./connectionBrowser";
@@ -94,28 +95,28 @@ export function HostInspector({
 
         {/* 項目は Basic と同じく枠で囲まずに並べる。sshc タブだけ背景の付いた枠に入れると、
             タブを切り替えたときに見た目と横幅がそろわない。 */}
-        <fieldset disabled={disabled || saving} className="flex min-w-0 flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <Field label={t("host.colour")}>
-            <input
-              type="color"
-              value={
-                draft.colour === undefined || draft.colour === ""
-                  ? "#8e8e93" /* palette-exempt: ネイティブコントロール自身の中立色 */
-                  : draft.colour
-              }
-              onChange={(event) => setDraft({ ...draft, colour: event.target.value })}
-              className="h-8 w-14 rounded border border-control-line bg-control"
-            />
-          </Field>
-          {draft.colour === undefined || draft.colour === "" ? null : (
-            <Button className="self-start" onClick={() => setDraft({ ...draft, colour: "" })}>
+        <fieldset disabled={disabled || saving} className="flex min-w-0 flex-col">
+        <FieldRow
+          label={t("host.colour")}
+          actions={draft.colour === undefined || draft.colour === "" ? undefined : (
+            <Button small onClick={() => setDraft({ ...draft, colour: "" })}>
               {t("host.clearColour")}
             </Button>
           )}
-        </div>
+        >
+          <input
+            type="color"
+            value={
+              draft.colour === undefined || draft.colour === ""
+                ? "#8e8e93" /* palette-exempt: ネイティブコントロール自身の中立色 */
+                : draft.colour
+            }
+            onChange={(event) => setDraft({ ...draft, colour: event.target.value })}
+            className="h-8 w-14 rounded border border-control-line bg-control"
+          />
+        </FieldRow>
 
-        <Field label={t("host.os")} hint={t("host.osHint")} interactiveChildren>
+        <FieldRow label={t("host.os")} hint={t("host.osHint")} interactiveChildren>
           <div className="flex items-center gap-2">
             <OperatingSystemIcon os={draft.os || draft.detectedOS || ""} />
             <select aria-label={t("host.os")} value={draft.os ?? ""}
@@ -125,27 +126,27 @@ export function HostInspector({
               {operatingSystems.map(([value, label]) => <option key={value} value={value}>{value === "server" ? t("host.osGeneric") : label}</option>)}
             </select>
           </div>
-        </Field>
+        </FieldRow>
 
-        <Field label={t("connection.paletteLabel")} hint={t("connection.paletteHint")}>
+        <FieldRow label={t("connection.paletteLabel")} hint={t("connection.paletteHint")}>
           <AppearancePicker
             choices={palettes}
             value={draft.appearance?.palette ?? ""}
             onChange={(chosen) => setDraft(chooseAppearance(draft, { palette: chosen }))}
             unchosen={t("terminal.paletteFollowsOverall")}
           />
-        </Field>
+        </FieldRow>
 
-        <Field label={t("connection.fontLabel")} hint={t("connection.fontHint")}>
+        <FieldRow label={t("connection.fontLabel")} hint={t("connection.fontHint")}>
           <AppearancePicker
             choices={fonts}
             value={draft.appearance?.font ?? ""}
             onChange={(chosen) => setDraft(chooseAppearance(draft, { font: chosen }))}
             unchosen={t("terminal.fontFollowsOverall")}
           />
-        </Field>
+        </FieldRow>
 
-        <Field label={t("connection.backgroundLabel")} hint={t("connection.backgroundHint")} interactiveChildren>
+        <FieldRow label={t("connection.backgroundLabel")} hint={t("connection.backgroundHint")} interactiveChildren>
           <BackgroundPicker
             value={draft.appearance?.background ?? ""}
             onChange={(chosen) => setDraft(chooseAppearance(draft, { background: chosen }))}
@@ -153,9 +154,9 @@ export function HostInspector({
             onTintChange={(chosen) => setDraft(chooseAppearance(draft, { backgroundTint: chosen }))}
             unchosen={t("terminal.backgroundFollowsOverall")}
           />
-        </Field>
+        </FieldRow>
 
-        <Field label={t("connection.encodingLabel")} hint={t("connection.encodingHint")}>
+        <FieldRow label={t("connection.encodingLabel")} hint={t("connection.encodingHint")}>
           <select
             value={draft.encoding ?? ""}
             onChange={(event) =>
@@ -167,9 +168,9 @@ export function HostInspector({
             <option value="euc-jp">{t("connection.encodingEUCJP")}</option>
             <option value="iso-2022-jp">{t("connection.encodingISO2022JP")}</option>
           </select>
-        </Field>
+        </FieldRow>
 
-        <Field label={t("connection.osc52Label")} hint={t("connection.osc52Hint")}>
+        <FieldRow label={t("connection.osc52Label")} hint={t("connection.osc52Hint")}>
           <select
             value={draft.osc52 ?? ""}
             onChange={(event) =>
@@ -180,7 +181,7 @@ export function HostInspector({
             <option value="allow">{t("connection.osc52Allow")}</option>
             <option value="deny">{t("connection.osc52Deny")}</option>
           </select>
-        </Field>
+        </FieldRow>
 
         <HostVPNProfileField
           detail={detail}
@@ -190,7 +191,7 @@ export function HostInspector({
           onChange={(profile) => setDraft(withOptionalChoice(draft, "vpn", profile))}
         />
 
-        <Field label={t("host.tags")}>
+        <FieldRow label={t("host.tags")}>
           <input
             value={tagsText}
             onChange={(event) => {
@@ -199,16 +200,16 @@ export function HostInspector({
             }}
             className={control}
           />
-        </Field>
+        </FieldRow>
 
-        <Field label={t("host.displayOrder")}>
+        <FieldRow label={t("host.displayOrder")}>
           <input
             type="number"
             value={String(draft.order ?? 0)}
             onChange={(event) => setDraft({ ...draft, order: Number(event.target.value) || 0 })}
             className={control}
           />
-        </Field>
+        </FieldRow>
         </fieldset>
 
         {saveFailed ? <Notice tone="danger">{t("inspector.hostSaveFailed")}</Notice> : null}

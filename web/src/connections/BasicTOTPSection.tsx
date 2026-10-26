@@ -1,5 +1,6 @@
 import { useTranslate } from "../i18n/context";
-import { control, hintText } from "../ui/form";
+import { control } from "../ui/form";
+import { FieldRow } from "../ui/FieldRow";
 import type { BasicDraft, BasicFormDerived, TOTPAction } from "./basicFormDraft";
 import type { ConnectionSecretsModel } from "./useConnectionSecrets";
 
@@ -12,71 +13,61 @@ export function BasicTOTPSection({ draft, derived, secrets, onEdit }: {
 }) {
   const t = useTranslate();
   const { credentials, credentialOptionsStatus } = secrets;
+  // The section draws the line above its first row, which as a first child draws none; pt-3 gives that row
+  // the same room as the others.
   return (
-    <div className="border-t border-hairline py-3">
-      <div className="flex flex-col gap-3">
-        <div>
-          <p className="text-sm text-ink-muted">{t("conn.basicStoredTOTP")}</p>
-          {secrets.loading || credentialOptionsStatus === "loading" ? (
-            <p className={hintText}>{t("conn.createLoadingOptions")}</p>
-          ) : null}
-          {credentialOptionsStatus === "failed" ? (
-            <p className={hintText}>{t("conn.basicCredentialOptionsFailed")}</p>
-          ) : null}
+    <div className="border-t border-line pt-3">
+      <FieldRow label={t("conn.basicStoredTOTP")} interactiveChildren>
+        <div className="flex flex-col gap-1 pt-1.5 text-[13px] text-ink-muted">
+          {secrets.loading || credentialOptionsStatus === "loading" ? <p>{t("conn.createLoadingOptions")}</p> : null}
+          {credentialOptionsStatus === "failed" ? <p>{t("conn.basicCredentialOptionsFailed")}</p> : null}
           {secrets.unlocked ? (
-            <p className={hintText}>
+            <p>
               {credentials.assignedTOTP === ""
                 ? t("conn.basicNoTOTP")
                 : t("conn.basicAssignedTOTP", { name: credentials.assignedTOTP })}
             </p>
           ) : null}
         </div>
+      </FieldRow>
 
-        {secrets.unlocked ? (
-          <>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium tracking-wide text-ink-muted">
-                {t("conn.basicTOTPAction")}
-              </span>
+      {secrets.unlocked ? (
+        <>
+          <FieldRow label={t("conn.basicTOTPAction")} hint={draft.totpAction === "saved_totp" ? undefined : t("conn.basicTOTPNote")}>
+            <select
+              aria-label={t("conn.basicTOTPAction")}
+              value={draft.totpAction}
+              onChange={(event) => onEdit({ totpAction: event.target.value as TOTPAction })}
+              className={control}
+            >
+              <option value="unchanged">{t("conn.basicTOTPUnchanged")}</option>
+              <option value="saved_totp">{t("conn.basicUseSavedTOTP")}</option>
+              {credentials.assignedTOTP === "" ? null : (
+                <option value="remove">{t("conn.basicRemoveTOTP")}</option>
+              )}
+            </select>
+          </FieldRow>
+
+          {draft.totpAction === "saved_totp" ? (
+            <FieldRow label={t("conn.basicChooseSavedTOTP")} hint={t("conn.basicTOTPNote")}>
               <select
-                aria-label={t("conn.basicTOTPAction")}
-                value={draft.totpAction}
-                onChange={(event) => onEdit({ totpAction: event.target.value as TOTPAction })}
+                value={derived.savedTOTP}
+                onChange={(event) => onEdit({ savedTOTP: event.target.value })}
                 className={control}
               >
-                <option value="unchanged">{t("conn.basicTOTPUnchanged")}</option>
-                <option value="saved_totp">{t("conn.basicUseSavedTOTP")}</option>
-                {credentials.assignedTOTP === "" ? null : (
-                  <option value="remove">{t("conn.basicRemoveTOTP")}</option>
-                )}
+                {credentials.totps.length === 0 ? (
+                  <option value="">{t("conn.basicNoSavedTOTPs")}</option>
+                ) : null}
+                {credentials.totps.map((credential) => (
+                  <option key={credential.name} value={credential.name}>
+                    {credential.name}
+                  </option>
+                ))}
               </select>
-            </label>
-
-            {draft.totpAction === "saved_totp" ? (
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium tracking-wide text-ink-muted">
-                  {t("conn.basicChooseSavedTOTP")}
-                </span>
-                <select
-                  value={derived.savedTOTP}
-                  onChange={(event) => onEdit({ savedTOTP: event.target.value })}
-                  className={control}
-                >
-                  {credentials.totps.length === 0 ? (
-                    <option value="">{t("conn.basicNoSavedTOTPs")}</option>
-                  ) : null}
-                  {credentials.totps.map((credential) => (
-                    <option key={credential.name} value={credential.name}>
-                      {credential.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <p className={hintText}>{t("conn.basicTOTPNote")}</p>
-          </>
-        ) : null}
-      </div>
+            </FieldRow>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }
