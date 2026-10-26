@@ -45,13 +45,14 @@ type workflowMatrixEntry struct {
 }
 
 type workflowStep struct {
-	Name            string         `yaml:"name"`
-	If              string         `yaml:"if"`
-	Uses            string         `yaml:"uses"`
-	Run             string         `yaml:"run"`
-	Shell           string         `yaml:"shell"`
-	With            map[string]any `yaml:"with"`
-	ContinueOnError *bool          `yaml:"continue-on-error"`
+	Name            string            `yaml:"name"`
+	If              string            `yaml:"if"`
+	Uses            string            `yaml:"uses"`
+	Run             string            `yaml:"run"`
+	Shell           string            `yaml:"shell"`
+	Env             map[string]string `yaml:"env"`
+	With            map[string]any    `yaml:"with"`
+	ContinueOnError *bool             `yaml:"continue-on-error"`
 }
 
 // workflowNames は、1つの名前でも名前の並びでも書ける値（on、needs）である。

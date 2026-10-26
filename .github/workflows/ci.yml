@@ -127,13 +127,6 @@ jobs:
             exit 1
           }
 
-      # Defender のリアルタイム検査は、テストが作っては消す一時ファイルを毎回調べ、Windows の
-      # go test を遅くする。使い捨ての CI の runner なので止める（2026-10-26 に利用者が了承）。
-      - name: Stop Windows Defender real-time scanning
-        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
-        shell: pwsh
-        run: Set-MpPreference -DisableRealtimeMonitoring $true
-
       - name: go vet (Unix)
         if: ${{ runner.os != 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: bash
@@ -316,29 +309,11 @@ jobs:
       - name: Build accessibility test engine
         run: mkdir -p ../bin && go build -o ../bin/sshc ../cmd/sshc
 
-      # Chromium のダウンロードは、遅い日に止まったまま進まない（2026-10-26 に 15 分で job ごと
-      # 取り消され、5 分の時間切れでも落ちた）。Playwright の版ごとにキャッシュし、取りに行くときは
-      # 1 回 210 秒で打ち切って 3 回まで入れ直す。
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
-
-      - name: Install Chromium for accessibility tests
-        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
-        timeout-minutes: 12
-        env:
-          SSHC_RETRY_ATTEMPTS: "3"
-        run: ../scripts/ci/retry.sh timeout 210 npx playwright install --with-deps chromium
-
-      - name: Install Chromium system packages
-        if: ${{ steps.playwright-cache.outputs.cache-hit == 'true' }}
-        timeout-minutes: 5
-        run: npx playwright install-deps chromium
-
+      # runner に最初から入っている Google Chrome で走らせ、Chromium をダウンロードしない。
+      # ダウンロードは、遅い日に止まって検査ごと取り消されていた（2026-10-26）。
       - name: Accessibility tests
+        env:
+          SSHC_E2E_BROWSER_CHANNEL: chrome
         run: npm run e2e -- --project=chromium --output="$RUNNER_TEMP/playwright-results" e2e/accessibility.spec.ts
 
   pages:

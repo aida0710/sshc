@@ -72,9 +72,8 @@ func TestCIWorkflowRunsFocusedAccessibilitySuite(t *testing.T) {
 	}
 
 	wants := map[string]string{
-		"Build accessibility test engine":          "go build -o ../bin/sshc ../cmd/sshc",
-		"Install Chromium for accessibility tests": "playwright install --with-deps chromium",
-		"Accessibility tests":                      "e2e/accessibility.spec.ts",
+		"Build accessibility test engine": "go build -o ../bin/sshc ../cmd/sshc",
+		"Accessibility tests":             "e2e/accessibility.spec.ts",
 	}
 	for name, command := range wants {
 		step, found := namedStep(web, name)
@@ -84,6 +83,17 @@ func TestCIWorkflowRunsFocusedAccessibilitySuite(t *testing.T) {
 		}
 		if !strings.Contains(step.Run, command) {
 			t.Errorf("jobs.web step %q does not contain %q", name, command)
+		}
+	}
+
+	// runner に入っている Google Chrome を使い、Chromium をダウンロードしない。ダウンロードは
+	// 遅い日に止まって、検査ごと取り消されていた。
+	if step, found := namedStep(web, "Accessibility tests"); found && step.Env["SSHC_E2E_BROWSER_CHANNEL"] != "chrome" {
+		t.Error("jobs.web Accessibility tests must run in the runner's Google Chrome (SSHC_E2E_BROWSER_CHANNEL: chrome)")
+	}
+	for _, step := range web.Steps {
+		if strings.Contains(step.Run, "playwright install") {
+			t.Errorf("jobs.web step %q downloads a browser; use the runner's Google Chrome", step.Name)
 		}
 	}
 }
