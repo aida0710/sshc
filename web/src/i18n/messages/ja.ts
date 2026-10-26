@@ -2358,6 +2358,7 @@ export const ja = {
   "kh.metricHashed": "ハッシュ化ホスト",
   "kh.metricCandidates": "スキャン候補",
   "kh.scanHeading": "ホストをスキャン",
+  "kh.scanHint": "接続先の鍵を取得し、追加する前にフィンガープリントを確認します。",
   "kh.trustedHeading": "信頼済みホスト鍵",
   "kh.columnHost": "ホスト",
   "kh.columnType": "鍵種別",

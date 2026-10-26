@@ -2356,6 +2356,7 @@ export const en = {
   "kh.metricHashed": "Hashed hosts",
   "kh.metricCandidates": "Scan candidates",
   "kh.scanHeading": "Scan a host",
+  "kh.scanHint": "Fetch a host's keys and check the fingerprint before adding them.",
   "kh.trustedHeading": "Trusted host keys",
   "kh.columnHost": "Host",
   "kh.columnType": "Key type",
