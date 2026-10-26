@@ -1,14 +1,14 @@
 import { Suspense, lazy } from "react";
 import { OverviewPanel } from "../overview/OverviewPanel";
-import { sectionPath, type Section } from "../routing/sectionRoute";
-import { parseSettingsPage, settingsPageMeta, settingsPages } from "../settings/settingsRoute";
-import type { IconName } from "../ui/icons";
-import type { MessageKey } from "../i18n/messages";
+import type { Section } from "../routing/sectionRoute";
+import { parseSettingsPage } from "../settings/settingsRoute";
 import type { SFTPTarget } from "../sftp/SFTPPanel";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
 import { SectionBar } from "../ui/SectionBar";
 import { useTranslate } from "../i18n/context";
-import { MenuPanel, type MenuGroup } from "./MenuPanel";
+import { menuColumns } from "./menuEntries";
+import { MenuPanel } from "./MenuPanel";
+import { sectionLabels } from "./sectionPresentation";
 import type { Declared, Handoff, Navigation, Shell } from "./sectionProps";
 
 const AboutPage = lazy(() => import("../about/AboutPage").then((module) => ({ default: module.AboutPage })));
@@ -81,118 +81,10 @@ const SnippetsPanel = lazy(() =>
   })),
 );
 
-export const sectionLabels: Record<Section, MessageKey> = {
-  Home: "section.home",
-  Menu: "section.menu",
-  Connections: "section.connections",
-  Terminal: "section.terminal",
-  Files: "section.files",
-  Snippets: "section.snippets",
-  Config: "section.config",
-  Groups: "section.groups",
-  Keys: "section.keys",
-  "Known Hosts": "section.knownHosts",
-  "Remote Keys": "section.remoteKeys",
-  Diagnostics: "section.diagnostics",
-  Passwords: "section.passwords",
-  "Key Passphrases": "section.keyPassphrases",
-  OTP: "section.otp",
-  Settings: "section.settings",
-  Sync: "section.sync",
-  VPN: "section.vpn",
-  History: "section.history",
-  License: "section.license",
-  About: "section.about",
-};
-
-export const sectionIcons: Record<Section, IconName> = {
-  Home: "home",
-  Menu: "menu",
-  Connections: "connections",
-  Terminal: "terminal",
-  Files: "files",
-  Snippets: "snippets",
-  Config: "config",
-  Groups: "groups",
-  Keys: "keys",
-  "Known Hosts": "knownHosts",
-  "Remote Keys": "remoteKeys",
-  Diagnostics: "diagnostics",
-  Passwords: "passwords",
-  "Key Passphrases": "passphrases",
-  OTP: "otp",
-  Settings: "settings",
-  Sync: "sync",
-  VPN: "vpn",
-  History: "history",
-  License: "license",
-  About: "info",
-};
-
 export const startSections: Section[] = ["Home", "Connections", "Files"];
 
 // The id the header's toggle points at with aria-controls.
 export const navigationId = "primary-navigation";
-
-const navGroups: { label: MessageKey; sections: Section[] }[] = [
-  { label: "shell.navStart", sections: startSections },
-  { label: "shell.navConnections", sections: ["Config", "Groups"] },
-  {
-    label: "shell.navKeysHosts",
-    sections: ["Keys", "Known Hosts", "Remote Keys"],
-  },
-  {
-    label: "shell.navMaintenance",
-    sections: [
-      "Diagnostics",
-      "Snippets",
-      "Settings",
-      "Sync",
-      "VPN",
-      "History",
-    ],
-  },
-];
-
-function sectionMenuItems(sections: Section[]) {
-  return sections.map((section) => ({
-    key: section,
-    label: sectionLabels[section],
-    icon: sectionIcons[section],
-    href: sectionPath(section),
-  }));
-}
-
-const menuGroups: MenuGroup[] = [
-  ...navGroups.slice(1, 3).map((group) => ({
-    label: group.label,
-    items: sectionMenuItems(group.sections),
-  })),
-  {
-    label: "shell.navVault",
-    items: sectionMenuItems(["Passwords", "Key Passphrases", "OTP"]),
-  },
-  {
-    label: "section.settings",
-    items: settingsPages.map((page) => ({
-      key: page,
-      label: settingsPageMeta[page].label,
-      icon: settingsPageMeta[page].icon,
-      href: settingsPageMeta[page].path,
-    })),
-  },
-  {
-    label: "shell.navMaintenance",
-    items: sectionMenuItems([
-      "Diagnostics",
-      "Snippets",
-      "Sync",
-      "VPN",
-      "History",
-    ]),
-  },
-];
-
 
 // Which section fills the main pane. The terminal is not a section of its
 // own: it stays mounted behind whatever is shown, so it is drawn elsewhere.
@@ -248,6 +140,14 @@ export function SectionView(props: SectionViewProps) {
       </div>
     );
   }
+  if (props.section === "Menu") {
+    // The Menu keeps its own margins: 8px around its card on a wide screen, as in the design.
+    return (
+      <div className="h-full overflow-y-auto">
+        <MenuPanel columns={menuColumns} onNavigate={props.navigation.onNavigateLocation} />
+      </div>
+    );
+  }
   return (
     <div className="h-full overflow-y-auto p-4 md:p-5">
       {<PaddedSection {...props} />}
@@ -277,14 +177,6 @@ function PaddedSection({
   } = shell;
   if (section === "About") return <AboutPage />;
   if (section === "License") return <LicensePage />;
-  if (section === "Menu") {
-    return (
-      <MenuPanel
-        groups={menuGroups}
-        onNavigate={onNavigateLocation}
-      />
-    );
-  }
   if (section === "Config") {
     return (
       <ConfigExplorer

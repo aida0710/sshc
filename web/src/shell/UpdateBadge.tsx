@@ -5,7 +5,7 @@ import { updateApi, type UpdateApi } from "../api/update";
 import { useTranslate } from "../i18n/context";
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
 import { localStorageKeys } from "../ui/browserStorageKeys";
-import { isUpdateActive, useUpdateStatus } from "./useUpdateStatus";
+import { availableRelease, isUpdateActive, useUpdateStatus } from "./useUpdateStatus";
 import { UpdateResultDialog } from "./UpdateResultDialog";
 import { isSafeHttpURL } from "../terminal/links";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
@@ -44,7 +44,7 @@ export function UpdateBadge({ api = updateApi, current = "", leading, indicator,
   }
   const versionLabel = t("update.version", { version: displayedCurrent });
   const reason = status === null ? undefined : explainedUpdateReason(status);
-  const release = status?.available === true && status.latest !== undefined ? status.latest : undefined;
+  const release = availableRelease(status);
   const releasePage = status?.pageUrl !== undefined && isSafeHttpURL(status.pageUrl) ? status.pageUrl : undefined;
   const hasDetails = reason !== undefined || release !== undefined;
   // The notice of a release stays open until it is folded; a newer release unfolds it.
