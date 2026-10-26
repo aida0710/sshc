@@ -66,6 +66,7 @@ import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion"
 import { ToastMessage } from "../ui/ToastMessage";
 import { toastVisibleMs } from "../ui/ToastProvider";
 import type { PaneEdge } from "./splitView/layout";
+import { isTypingElsewhere } from "./terminalFocus";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -333,7 +334,7 @@ export function TerminalView({
       onLink: setLink,
       onAttached: () => {
         sent = "";
-        if (activeRef.current && !coarse && session.state !== "exited" && !search.hasFocus()) {
+        if (activeRef.current && !coarse && session.state !== "exited" && !search.hasFocus() && !isTypingElsewhere(region.current)) {
           view.focus();
         }
         fitAndSync();
