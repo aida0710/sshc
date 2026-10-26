@@ -35,9 +35,14 @@ export const primaryAction =
   "whitespace-nowrap rounded-md bg-accent px-3.5 py-1.5 text-[13px] font-medium leading-5 text-accent-ink " +
   "transition-[background-color,box-shadow,filter] duration-150 hover:brightness-110 active:brightness-95";
 
-export const secondaryAction =
-  "whitespace-nowrap rounded-md border border-line bg-well px-3.5 py-[5px] text-[13px] leading-5 text-ink " +
+const secondaryLook =
+  "whitespace-nowrap rounded-md border border-line bg-well leading-5 text-ink " +
   "transition-colors duration-150 hover:border-accent/50 hover:bg-hover active:bg-select-fill";
+
+export const secondaryAction = `${secondaryLook} px-3.5 py-[5px] text-[13px]`;
+
+// smallSecondaryAction is 26px tall, for a button inside a notice or at the end of a status line.
+export const smallSecondaryAction = `${secondaryLook} px-2.5 py-[2px] text-xs`;
 
 export const dangerAction =
   "whitespace-nowrap rounded-md border border-line px-3.5 py-[5px] text-[13px] leading-5 text-danger " +

@@ -1521,6 +1521,7 @@ export const ja = {
   "section.history": "History",
 
   "home.heading": "Home",
+  "home.pageDescription": "よく使う接続先を開きます。",
   "home.manageConnections": "Connectionsを管理",
   "home.groups": "グループ",
   "home.attention": "確認が必要",
