@@ -1208,11 +1208,9 @@ export const en = {
   "inspector.noNotices": "Nothing to report for this connection.",
   "inspector.noInherited":
     "All values for this connection are defined in its own block.",
-  "shell.language": "Lang",
   "shell.languageMenu": "Lang menu",
   "shell.languageEnglish": "English",
   "shell.languageJapanese": "日本語",
-  "shell.theme": "Appearance",
   "shell.themeMenu": "Theme menu",
   "shell.themeSystem": "System",
   "shell.themeLight": "Light",

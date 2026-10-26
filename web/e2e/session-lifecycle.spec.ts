@@ -42,7 +42,8 @@ test("replaces the entire shell with a centered recovery screen when its session
   await expect(page.getByRole("heading", { name: "Session ended" })).toBeVisible();
   await expect(page.getByRole("alert")).toContainText("Reload to recover the local session automatically");
   await expect(page.getByRole("navigation", { name: "Primary" })).toHaveCount(0);
-  const recovery = page.getByRole("heading", { name: "Session ended" }).locator("..");
+  // The card is wide, with the heading on its left side, so the whole card is what sits in the middle.
+  const recovery = page.getByRole("heading", { name: "Session ended" }).locator("xpath=ancestor::section[1]");
   const box = await recovery.boundingBox();
   expect(box).not.toBeNull();
   if (box !== null) {
