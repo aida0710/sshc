@@ -252,7 +252,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
   }
 
   return (
-    <section className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+    <section className="flex flex-col gap-[22px]">
       <PageHeader title={t("vpn.heading")} description={t("vpn.description")} />
 
       {overview.available || overview.checking ? null : <VPNUnavailableNotice overview={overview} />}

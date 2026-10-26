@@ -12,10 +12,9 @@ import {
   fieldLabel,
   hintText,
   narrowControl,
-  sectionHeading,
 } from "../ui/form";
 import { useTranslate } from "../i18n/context";
-import { Button, Card, Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import type { InspectorContent } from "../ui/Inspector";
 import { GroupInspector } from "./GroupInspector";
 import { PageHeader, SummaryStat, SummaryStats } from "../ui/page";
@@ -284,7 +283,7 @@ export function GroupsPanel({ onInspector, onNavigationBlockerChange, onNavigate
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
+    <div className="flex flex-col gap-[22px] [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader title={t("groups.pageTitle")} description={t("groups.pageDescription")} />
       <SummaryStats>
         {([
@@ -295,9 +294,9 @@ export function GroupsPanel({ onInspector, onNavigationBlockerChange, onNavigate
           <SummaryStat key={String(label)} label={String(label)} value={value} attention={unsaved && index === 2} />
         ))}
       </SummaryStats>
-      <details className="rounded-lg border border-line bg-surface-subtle px-4 py-3">
+      <details className="border-t border-line pt-4">
         <DisclosureSummary className="text-sm font-medium text-ink">{t("groups.howItWorks")}</DisclosureSummary>
-        <div className="mt-3 border-t border-line pt-3">
+        <div className="mt-3 rounded-[10px] bg-well px-3 py-2.5">
           <p className="text-sm text-ink-muted">
             {t("groups.directoryNote", { connections: "connections", keys: "keys" })}
           </p>
@@ -311,9 +310,9 @@ export function GroupsPanel({ onInspector, onNavigationBlockerChange, onNavigate
 
       <NoticeList notices={groupNotices} />
 
-      <Card as="section" radius="md">
-        <div className="border-b border-line bg-surface-subtle px-4 py-3">
-          <h3 className={sectionHeading}>{t("groups.addHeading")}</h3>
+      <section className="border-t border-line pt-5">
+        <div className="pb-4">
+          <h3 className="text-sm font-semibold text-ink">{t("groups.addHeading")}</h3>
           <div className="mt-3 flex flex-wrap items-end gap-2">
             <div className="min-w-52 flex-1">
               <Field label={t("groups.newName")} hint={t("groups.nestingNote")}>
@@ -334,15 +333,15 @@ export function GroupsPanel({ onInspector, onNavigationBlockerChange, onNavigate
         </div>
 
       {groups.length === 0 ? (
-        <p className="p-5 text-sm text-ink-muted">{t("groups.empty")}</p>
+        <p className="border-t border-line py-4 text-sm text-ink-muted">{t("groups.empty")}</p>
       ) : null}
-      <ul aria-label={t("groups.listLabel")} className="divide-y divide-line">
+      <ul aria-label={t("groups.listLabel")} className="divide-y divide-line border-t border-line">
         {groups.map((group) => (
           <li
             key={group.name}
             onFocus={() => setSelected(group.name)}
             onClick={() => setSelected(group.name)}
-            className={`relative px-4 py-3 transition-colors ${
+            className={`relative py-3.5 transition-colors ${
               selected === group.name ? "bg-select-fill" : "hover:bg-surface-subtle"
             }`}
             style={{ marginInlineStart: `${(depthOf(group.name) - 1) * 1.5}rem` }}
@@ -382,7 +381,7 @@ export function GroupsPanel({ onInspector, onNavigationBlockerChange, onNavigate
             {(group.settings ?? []).length === 0 ? null : (
               <ul className="mt-2 ml-[1.125rem] flex flex-wrap gap-1.5 font-mono text-xs text-ink-muted">
                 {(group.settings ?? []).map((setting, index) => (
-                  <li key={`${setting.keyword}-${index}`} className="rounded-md bg-surface px-2 py-1">{`${setting.keyword} ${formatDirectiveValues(setting.keyword, setting.values) ?? ""}`}</li>
+                  <li key={`${setting.keyword}-${index}`} className="rounded-md bg-well px-2 py-1">{`${setting.keyword} ${formatDirectiveValues(setting.keyword, setting.values) ?? ""}`}</li>
                 ))}
               </ul>
             )}
@@ -439,7 +438,7 @@ export function GroupsPanel({ onInspector, onNavigationBlockerChange, onNavigate
               <div
                 role="group"
                 aria-label={t("groups.removeInto", { name: group.name })}
-                className="mt-3 flex flex-col gap-2 rounded border border-control-line bg-card/30 p-3"
+                className="mt-3 flex flex-col gap-2 rounded-[10px] bg-well p-3"
               >
                 <p className="text-sm text-ink">
                   {membersOf(group.name).length === 0
@@ -491,12 +490,12 @@ export function GroupsPanel({ onInspector, onNavigationBlockerChange, onNavigate
           </li>
         ))}
       </ul>
-      </Card>
+      </section>
 
 
       {selected === "" ? null : (
-      <Card as="section" radius="md" className="flex flex-col gap-4 p-4">
-        <h3 className={sectionHeading}>{t("groups.settingHeadingFor", { name: selected })}</h3>
+      <section className="flex flex-col gap-4 border-t border-line pt-5">
+        <h3 className="text-sm font-semibold text-ink">{t("groups.settingHeadingFor", { name: selected })}</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("groups.directive")}>
             <input
@@ -520,14 +519,14 @@ export function GroupsPanel({ onInspector, onNavigationBlockerChange, onNavigate
         <Button onClick={addSetting} className="self-start">
           {t("groups.addSetting")}
         </Button>
-      </Card>
+      </section>
       )}
 
 
       {unsaved ? (
         <section
           aria-label={t("groups.unsavedBarLabel")}
-          className="flex flex-wrap items-center gap-3 rounded-md border border-notice-line bg-notice p-3"
+          className="flex flex-wrap items-center gap-3 rounded-[10px] bg-notice p-3"
         >
           <p className="min-w-0 grow text-sm text-notice-ink">{t("groups.unsavedBarNote")}</p>
           <Button onClick={() => void run("preview")}>

@@ -652,6 +652,7 @@ export const en = {
   "workspace.delivered": "Sent",
   "workspace.deliveryFailed": "Not sent",
   "snippets.heading": "Snippets",
+  "snippets.pageDescription": "Save frequent commands with a name and variables, and run them on the hosts you choose.",
   "snippets.new": "New",
   "snippets.empty": "No snippets have been saved.",
   "snippets.loadFailed": "Snippets could not be read.",
