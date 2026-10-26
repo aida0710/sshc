@@ -48,7 +48,7 @@ export function ConnectionRow({
   const highlighted = choosing ? chosen : opened;
   return (
     <li
-      className="group/row relative border-b border-hairline last:border-b-0"
+      className="group/row relative"
       onContextMenu={menuItems.length === 0 ? undefined : (event) => {
         // タッチの長押しは選択に使うので、メニューは開かない。
         if ((event.nativeEvent as globalThis.PointerEvent).pointerType === "touch") return;
@@ -75,9 +75,9 @@ export function ConnectionRow({
         onPointerCancel={onPointerEnd}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        className={`min-h-14 w-full select-none border-l-[3px] px-3 py-2.5 pr-11 text-left text-sm transition-colors ${draggable ? draggableCursor : ""} ${highlighted ? "border-accent bg-select-fill text-ink" : "border-transparent text-ink-muted hover:bg-hover hover:text-ink"}`}
+        className={`w-full select-none rounded-md py-[7px] pl-3.5 text-left text-[13px] text-ink transition-colors ${menuItems.length === 0 ? "pr-3.5" : "pr-11 pointer-fine:pr-3.5"} ${draggable ? draggableCursor : ""} ${highlighted ? "bg-select-fill" : "hover:bg-hover"}`}
       >
-        <span className="flex min-w-0 items-center gap-2">
+        <span className="flex min-w-0 items-center gap-2.5">
           {showCheckbox ? (
             <span
               aria-hidden="true"
@@ -86,13 +86,13 @@ export function ConnectionRow({
               {chosen ? <Icon name="check" className="size-3.5" /> : null}
             </span>
           ) : null}
-          <OperatingSystemIcon os={os} colour={colour} compact />
+          <OperatingSystemIcon os={os} colour={colour} look="tile" />
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className={`truncate ${highlighted ? "font-semibold" : "font-medium"}`}>{host.identity.alias}</span>
+              <span className="truncate">{host.identity.alias}</span>
               {duplicateAlias ? <Icon name="warning" className="size-3.5 text-notice-ink" /> : null}
             </span>
-            <span className={`mt-0.5 block truncate font-mono text-xs leading-4 ${highlighted ? "text-ink-muted" : "text-ink-faint"}`}>
+            <span className="block truncate font-mono text-[11px] leading-4 text-ink-faint">
               {targetFor(host)}
               {/* 同じ名前の接続先が並ぶときは、どのファイルの行かを添えて見分けられるようにする。 */}
               {duplicateAlias ? ` · ${host.file.path ?? host.file.absolute}:${host.line}` : null}
@@ -106,13 +106,15 @@ export function ConnectionRow({
         </span>
       </button>
       {menuItems.length === 0 ? null : (
-        <div className={`absolute right-2 top-1/2 -translate-y-1/2 ${menuOpen ? "opacity-100" : revealOnHover}`}>
+        // マウスでは、乗せているあいだ「…」が行の端に行と同じ地の色で重なる（サイドバーのセッションの行と同じ）。
+        // タッチでは「…」の分を空けておく。
+        <div className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-md ${highlighted ? "pointer-fine:bg-select-fill" : "pointer-fine:bg-hover"} ${menuOpen ? "opacity-100" : revealOnHover}`}>
           <ActionMenu
             label={t("tree.connectionActions", { alias: host.identity.alias })}
             items={menuItems}
             open={menuOpen}
             onOpenChange={onMenuOpenChange}
-            triggerClassName="flex size-8 items-center justify-center rounded-md text-ink-muted hover:bg-card hover:text-ink"
+            triggerClassName="flex size-8 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
           />
         </div>
       )}

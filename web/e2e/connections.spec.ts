@@ -36,6 +36,7 @@ test("separates classification, filtered results, and connection detail without 
   await openApplication(page, installation);
   await openSection(page, "Connections");
   const browser = page.getByRole("navigation", { name: "Connections" });
+  const groups = page.getByRole("navigation", { name: "Groups" });
   const results = page.getByRole("region", { name: "Connection results" });
 
   await expect(browser.getByRole("group", { name: "Arrange connections by" })).toHaveCount(0);
@@ -44,20 +45,21 @@ test("separates classification, filtered results, and connection detail without 
   await expect(results.getByRole("region", { name: "home group, 1 connections" })).toBeVisible();
   await expect(results.getByRole("region", { name: "home/eu group, 1 connections" })).toBeVisible();
   await expect(results.getByRole("region", { name: "Ungrouped group, 1 connections" })).toBeVisible();
-  const headerHeight = await page.locator("[data-section-bar]").evaluate((element) =>
+  // The heading, its count and New connection share one row above the lists.
+  const headerHeight = await page.locator("header", { has: page.getByRole("heading", { name: "Connections", exact: true }) }).evaluate((element) =>
     element.getBoundingClientRect().height,
   );
-  expect(headerHeight).toBeLessThanOrEqual(60);
+  expect(headerHeight).toBeLessThanOrEqual(80);
 
-  await browser.getByRole("button", { name: "home", exact: true }).click();
+  await groups.getByRole("button", { name: "home", exact: true }).click();
   await expect(results.getByRole("button", { name: "nas", exact: true })).toBeVisible();
   await expect(results.getByRole("button", { name: "eu-api", exact: true })).toBeVisible();
   await expect(results.getByRole("button", { name: "bastion", exact: true })).toHaveCount(0);
-  await browser.getByRole("button", { name: "home/eu", exact: true }).click();
+  await groups.getByRole("button", { name: "home/eu", exact: true }).click();
   await expect(results.getByRole("region", { name: "home/eu group, 1 connections" })).toBeVisible();
   await expect(results.getByRole("button", { name: "nas", exact: true })).toHaveCount(0);
 
-  await browser.getByRole("button", { name: "All", exact: true }).click();
+  await groups.getByRole("button", { name: "All", exact: true }).click();
   await browser.getByRole("searchbox", { name: "Filter connections" }).fill("198.51.100.20");
   await expect(results.getByRole("button", { name: "nas", exact: true })).toBeVisible();
   await browser.getByRole("searchbox", { name: "Filter connections" }).fill("");
@@ -308,11 +310,12 @@ test("keeps a Basic draft while changing group scope and asks before a connectio
   await openBastion(page, installation.url);
   await page.getByLabel("Port", { exact: true }).fill("2244");
   const browser = page.getByRole("navigation", { name: "Connections" });
+  const groups = page.getByRole("navigation", { name: "Groups" });
 
-  await browser.getByRole("button", { name: "Ungrouped", exact: true }).click();
+  await groups.getByRole("button", { name: "Ungrouped", exact: true }).click();
   expect(new URL(page.url()).pathname).toBe("/connections/servers");
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
-  await browser.getByRole("button", { name: "All", exact: true }).click();
+  await groups.getByRole("button", { name: "All", exact: true }).click();
   expect(new URL(page.url()).pathname).toBe("/connections/servers");
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
 
@@ -777,7 +780,8 @@ test("shows an empty group in the management tree and moves an ungrouped connect
 
   await openSection(page, "Connections");
   const browser = page.getByRole("navigation", { name: "Connections" });
-  await expect(browser.getByRole("button", { name: "work", exact: true })).toBeVisible();
+  const groups = page.getByRole("navigation", { name: "Groups" });
+  await expect(groups.getByRole("button", { name: "work", exact: true })).toBeVisible();
 
   await browser.getByRole("button", { name: "bastion", exact: true }).click();
   await page.getByRole("button", { name: "Manage connection" }).click();
@@ -789,7 +793,7 @@ test("shows an empty group in the management tree and moves an ungrouped connect
   }).toPass();
   expect(await installation.read("config")).not.toContain("Host bastion\n");
 
-  await expect(browser.getByRole("button", { name: "work", exact: true })).toBeVisible();
+  await expect(groups.getByRole("button", { name: "work", exact: true })).toBeVisible();
   await expect(browser.getByRole("button", { name: "bastion", exact: true })).toHaveAttribute("aria-current", "true");
 });
 

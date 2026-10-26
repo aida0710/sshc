@@ -212,7 +212,7 @@ describe("ConnectionsPage", () => {
   });
 
   it("offers a resizable divider between the connection list and the detail pane", async () => {
-    window.localStorage.removeItem("sshc.connections.list-width.v1");
+    window.localStorage.removeItem("sshc.connections.list-width.v2");
     render(
       <ConnectionsPage
         {...terminalSessionProps}
@@ -221,13 +221,13 @@ describe("ConnectionsPage", () => {
       />,
     );
     const handle = await screen.findByRole("separator", { name: "Resize the connection list" });
-    expect(handle).toHaveAttribute("aria-valuenow", "560");
+    expect(handle).toHaveAttribute("aria-valuenow", "300");
     Object.defineProperty(handle, "setPointerCapture", { value: vi.fn(), configurable: true });
-    fireEvent.pointerDown(handle, { button: 0, pointerId: 3, clientX: 560 });
-    fireEvent.pointerMove(handle, { pointerId: 3, clientX: 620 });
-    fireEvent.pointerUp(handle, { pointerId: 3, clientX: 620 });
-    await waitFor(() => expect(handle).toHaveAttribute("aria-valuenow", "620"));
-    expect(window.localStorage.getItem("sshc.connections.list-width.v1")).toBe("620");
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 3, clientX: 300 });
+    fireEvent.pointerMove(handle, { pointerId: 3, clientX: 360 });
+    fireEvent.pointerUp(handle, { pointerId: 3, clientX: 360 });
+    await waitFor(() => expect(handle).toHaveAttribute("aria-valuenow", "360"));
+    expect(window.localStorage.getItem("sshc.connections.list-width.v2")).toBe("360");
   });
 
   it("opens a connection and tab from the URL", async () => {
