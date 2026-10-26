@@ -70,14 +70,14 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
 
   return (
     <details
-      className="overflow-hidden rounded-md border border-control-line bg-card"
+      className="border-t border-line pt-4"
       onToggle={(event) => {
         if (event.currentTarget.open) void load();
       }}
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-toolbar px-4 py-3 marker:hidden hover:bg-select-fill">
-        <span className="flex min-w-0 items-center gap-3 text-sm font-medium text-ink">
-          <DisclosureChevron className="size-4 text-ink-muted" />
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden">
+        <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-ink">
+          <DisclosureChevron className="size-3.5 text-ink-muted" />
           {t("sync.exclusions.heading")}
         </span>
         <span className={hintText}>
