@@ -156,7 +156,7 @@ export function HostDetailPanel({
       ) : null}
 
       <div data-connection-editor className="min-w-0">
-        <div role="tablist" aria-label={t("conn.editorLabel")} className="flex gap-[18px] overflow-x-auto border-b border-line">
+        <div role="tablist" aria-label={t("conn.editorLabel")} className="flex gap-[18px] border-b border-line">
           {areas.map((item, index) => (
             <button
               key={item.area}

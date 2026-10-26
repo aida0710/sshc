@@ -377,6 +377,7 @@ export function ConnectionsPage({
 
   if (overview === null) {
     // 読み込むあいだも、見出しと一覧・右側の枠は出しておく。読み込みが終わったときに画面が組み変わって見えないように。
+    // 板の横のグループの列は、グループを読み終えてから出る。
     return (
       <PageBoard fill labelledBy="connections-heading">
         <PageHeader title={t("conn.heading")} headingId="connections-heading" actions={newConnectionButton(false)} className={headerLayout} />
