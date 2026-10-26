@@ -268,27 +268,29 @@ export function SessionList({
                     >
                       {marker}
                       <span className="min-w-0 grow">
-                        {/* The name gets the whole first line; the destination (or the state) is the second. */}
-                        <span className="flex min-w-0 items-center gap-1.5 text-[13px] leading-5">
-                          <span className={`min-w-0 truncate ${isSelected ? "font-medium text-ink" : "text-ink"}`}>{displayTitle}</span>
-                          {splitGroup === undefined ? null : (
-                            // Where this session sits in its split, drawn small; the name is for screen readers.
-                            <span data-split-group-badge={splitGroup.number} title={t("splitView.groupName", { number: splitGroup.number })}
-                              aria-label={t("splitView.groupName", { number: splitGroup.number })} className="inline-flex shrink-0 items-center">
-                              <SplitLayoutMap root={splitGroup.view.root} highlight={session.id} className="h-[11px] w-4" />
-                            </span>
-                          )}
+                        <span className="flex items-center gap-2 text-[13px] leading-5">
+                          {/* The split map follows the name, so it stays visible beside the selected row's "…". */}
+                          <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <span className={`min-w-0 truncate ${isSelected ? "font-medium text-ink" : "text-ink"}`}>{displayTitle}</span>
+                            {splitGroup === undefined ? null : (
+                              // Where this session sits in its split, drawn small; the name is for screen readers.
+                              <span data-split-group-badge={splitGroup.number} title={t("splitView.groupName", { number: splitGroup.number })}
+                                aria-label={t("splitView.groupName", { number: splitGroup.number })} className="inline-flex shrink-0 items-center">
+                                <SplitLayoutMap root={splitGroup.view.root} highlight={session.id} className="h-[11px] w-4" />
+                              </span>
+                            )}
+                          </span>
+                          {sessionShowsDestination(session)
+                            ? <span data-session-destination className={`max-w-[50%] shrink-0 truncate font-mono text-[11px] text-ink-faint ${isSelected ? "pointer-fine:hidden" : ""}`}>{destination}</span>
+                            : <span data-session-status-text className={`max-w-[60%] shrink-0 truncate text-[11px] ${sessionStatusTone(session)}`}>{status}</span>}
                         </span>
-                        {sessionShowsDestination(session)
-                          ? <span data-session-destination className="block truncate font-mono text-[11px] leading-4 text-ink-faint">{destination}</span>
-                          : <span data-session-status-text className={`block truncate text-[11px] leading-4 ${sessionStatusTone(session)}`}>{status}</span>}
                         {details}
                         {statusDescription}
                       </span>
                     </button>
                   )}
-                  {/* With a mouse the actions show only on the selected or hovered row, over the end of the
-                      name line. Touch keeps them in the row, always shown. */}
+                  {/* With a mouse the actions cover the destination only on the selected or hovered row, so
+                      the other rows keep it at the right edge. Touch keeps them in the row, always shown. */}
                   <div className={`flex shrink-0 items-center gap-0.5 pointer-fine:absolute pointer-fine:right-1.5 pointer-fine:top-[5px] pointer-fine:rounded-md ${
                     isSelected ? "pointer-fine:bg-select-fill" : `pointer-fine:bg-hover ${revealOnHover}`
                   }`}>

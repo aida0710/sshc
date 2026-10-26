@@ -9,11 +9,11 @@ description: Group terminal sessions into named workspaces, and keep connections
 
 The sidebar shows sessions grouped by workspace. Press a workspace row to show or hide its sessions; this browser remembers which ones are folded.
 
-Each session row has a dot for its state, the session name on its first line and the destination on its second, so the name has the whole width.
+Each session row is one line: a dot for its state and the destination at the right edge.
 
 - **Dot**: green when connected, an amber ring while connecting or reconnecting, faint when it has exited. A filled amber dot means an unread notification
-- **Second line**: the destination while connected. While connecting, reconnecting, after it exits, or when there is a problem, the state takes that place ("reconnecting 2/5", "exited 255", and so on)
-- **Unread notifications**: a session whose program (Claude Code, Codex, ...) sent a notification shows its text under the destination until you open the session. The count in the "Workspaces" heading, such as **Unread 2**, opens the unread sessions in sidebar order
+- **Right edge**: the destination while connected. While connecting, reconnecting, after it exits, or when there is a problem, the state takes that place ("reconnecting 2/5", "exited 255", and so on)
+- **Unread notifications**: a session whose program (Claude Code, Codex, ...) sent a notification shows its text on a second line until you open the session. The count in the "Workspaces" heading, such as **Unread 2**, opens the unread sessions in sidebar order
 - **… and ×**: with a mouse, they appear only on the selected row and the row under the pointer
 
 ## Built-in workspaces
