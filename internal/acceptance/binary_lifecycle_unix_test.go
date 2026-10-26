@@ -44,12 +44,13 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 		t.Fatalf("go build = %v\n%s", err, output)
 	}
 
-	embedded, err := os.ReadFile(filepath.Join(repository, "internal", "ui", "dist", "index.html"))
+	// 画面はリポジトリに入っていない。web のビルドが書き出したものを、バイナリが埋め込む。
+	embedded, err := os.ReadFile(filepath.Join(repository, "internal", "ui", "dist", "app", "index.html"))
 	if err != nil {
-		t.Fatalf("the committed UI distribution is missing: %v", err)
+		t.Fatalf("the web UI has not been built (run npm run build --prefix web first): %v", err)
 	}
 	if len(embedded) == 0 {
-		t.Fatal("the committed UI distribution is empty")
+		t.Fatal("the built web UI is empty")
 	}
 
 	home := t.TempDir()

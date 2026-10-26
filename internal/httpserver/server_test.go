@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/fstest"
@@ -331,6 +332,50 @@ func TestServerSPAFallbackRequiresHTMLNavigation(t *testing.T) {
 			}
 			if got := response.Body.String(); test.checkBody && got != test.wantBody {
 				t.Fatalf("body = %q, want %q", got, test.wantBody)
+			}
+		})
+	}
+}
+
+func TestServerExplainsABinaryBuiltWithoutTheWebUI(t *testing.T) {
+	manager, _, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x84}, 96)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := New(Options{
+		Listener: fakeListener{address: &net.TCPAddr{IP: net.IP{127, 0, 0, 1}, Port: 43124}},
+		Sessions: manager,
+		// The note internal/ui/dist/README.md is all a binary built before npm run build embeds.
+		UI: fstest.MapFS{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name       string
+		path       string
+		accept     string
+		wantStatus int
+	}{
+		{name: "the root from curl", path: "/", accept: "*/*", wantStatus: http.StatusServiceUnavailable},
+		{name: "a page from a browser", path: "/connections", accept: "text/html", wantStatus: http.StatusServiceUnavailable},
+		{name: "a missing asset", path: "/assets/index.js", accept: "*/*", wantStatus: http.StatusNotFound},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, test.path, nil)
+			request.Host = "127.0.0.1:43124"
+			request.Header.Set("Accept", test.accept)
+			request.Header.Set("Sec-Fetch-Site", "same-origin")
+			response := httptest.NewRecorder()
+			server.http.Handler.ServeHTTP(response, request)
+
+			if response.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", response.Code, test.wantStatus)
+			}
+			if test.wantStatus == http.StatusServiceUnavailable && !strings.Contains(response.Body.String(), "built without its web UI") {
+				t.Fatalf("body = %q, want the note that the web UI is missing", response.Body.String())
 			}
 		})
 	}
