@@ -13,10 +13,12 @@ type PasswordFieldProps = {
   autoFocus?: boolean;
   disabled?: boolean;
   initialShown?: boolean;
+  // inputClassName replaces the field's look, as the lock screen does for its larger fields.
+  inputClassName?: string;
 };
 
 // Field が結び付ける hint と誤りの id（DescribableControlProps）は、中の <input> へ渡す。
-type PasswordInputProps = Omit<PasswordFieldProps, "hint" | "error"> & DescribableControlProps & {
+type PasswordInputProps = Omit<PasswordFieldProps, "hint" | "error" | "inputClassName"> & DescribableControlProps & {
   className?: string;
   placeholder?: string;
 };
@@ -35,8 +37,9 @@ export function PasswordInput({
 }: PasswordInputProps): ReactNode {
   const t = useTranslate();
   const [shown, setShown] = useState(initialShown);
+  // The show button sits inside the field's right end, as in the design.
   return (
-    <div className="flex w-full min-w-0 items-center gap-2">
+    <div className="relative flex w-full min-w-0 items-center">
       <input
         type={shown ? "text" : "password"}
         aria-label={label}
@@ -50,7 +53,7 @@ export function PasswordInput({
         disabled={disabled}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className={`${className} min-w-0 grow`}
+        className={`${className} min-w-0 grow pr-14`}
       />
       <button
         type="button"
@@ -60,7 +63,7 @@ export function PasswordInput({
         aria-label={t(shown ? "password.hideNamed" : "password.showNamed", {
           label,
         })}
-        className="whitespace-nowrap rounded border border-control-line px-2 py-1.5 text-xs text-ink-muted hover:bg-select-fill"
+        className="absolute right-1 top-1/2 -translate-y-1/2 whitespace-nowrap rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink"
       >
         {shown ? t("password.hide") : t("password.show")}
       </button>
@@ -77,6 +80,7 @@ export function PasswordField({
   autoFocus,
   disabled = false,
   initialShown = false,
+  inputClassName,
 }: PasswordFieldProps): ReactNode {
   return (
     <Field
@@ -92,6 +96,7 @@ export function PasswordField({
         {...(autoFocus === undefined ? {} : { autoFocus })}
         disabled={disabled}
         initialShown={initialShown}
+        {...(inputClassName === undefined ? {} : { className: inputClassName })}
       />
     </Field>
   );

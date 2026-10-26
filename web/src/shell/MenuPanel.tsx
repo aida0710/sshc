@@ -3,6 +3,7 @@ import { updateApi as defaultUpdateApi, type UpdateApi } from "../api/update";
 import { useLanguage } from "../i18n/context";
 import { localeLabelKeys, locales, type Locale } from "../i18n/locale";
 import { useSignOutConfirmation } from "../session/useSignOutConfirmation";
+import { ChevronSelect } from "../ui/ChevronSelect";
 import { Icon, type IconName } from "../ui/icons";
 import { opensInThisPage } from "../ui/linkClick";
 import { PageHeader } from "../ui/page";
@@ -123,14 +124,9 @@ function LanguageRow({ compact }: { compact: boolean }) {
       <div className={rowClassName(compact, "py-1.5")}>
         <RowIcon name="language" compact={compact} />
         <label htmlFor={selectId} className="min-w-0 flex-1 text-[13.5px] text-ink">{t("menu.language")}</label>
-        {/* The browser's own arrow differs by platform, so the select draws the same chevron as the design. */}
-        <span className="relative">
-          <select id={selectId} value={locale} onChange={(event) => setLocale(event.target.value as Locale)}
-            className="h-[30px] appearance-none rounded-md border border-line bg-well pl-2.5 pr-[31px] text-[13px] text-ink">
-            {locales.map((candidate) => <option key={candidate} value={candidate}>{t(localeLabelKeys[candidate])}</option>)}
-          </select>
-          <Icon name="chevronDown" className="pointer-events-none absolute right-2.5 top-1/2 size-[13px] -translate-y-1/2 text-ink-muted" />
-        </span>
+        <ChevronSelect id={selectId} value={locale} onChange={(event) => setLocale(event.target.value as Locale)} className="bg-well">
+          {locales.map((candidate) => <option key={candidate} value={candidate}>{t(localeLabelKeys[candidate])}</option>)}
+        </ChevronSelect>
       </div>
     </li>
   );

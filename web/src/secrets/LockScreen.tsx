@@ -1,17 +1,19 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ApiError, type RequestFailureDiagnostic } from "../api/client";
 import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault";
 import { useLanguage } from "../i18n/context";
-import { localeLabelKeys, locales, type Locale } from "../i18n/locale";
-import type { MessageKey } from "../i18n/messages";
-import { useTheme } from "../theme/context";
-import { themes, type Theme } from "../theme/theme";
-import { autoControl, CheckboxField } from "../ui/form";
+import { CheckboxField, control } from "../ui/form";
+import { EntryPreferences } from "../ui/EntryPreferences";
+import { EntryScreen } from "../ui/EntryScreen";
+import { Icon } from "../ui/icons";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
 import { ErrorDiagnosticNotice } from "../shell/ErrorDiagnosticNotice";
 import { SignOutButton } from "../session/SignOutButton";
 import { isAcceptedButShort, meetsMasterPasswordMinimum } from "./masterPasswordLength";
+
+// The lock screen's fields and button are taller than a page's, as in the design.
+const largeField = `${control} h-[38px] text-sm`;
 
 type LockScreenProps = {
   exists: boolean;
@@ -27,12 +29,6 @@ type LockScreenProps = {
   api?: Pick<VaultApi, "passwordVault" | "initialiseVault" | "unlockVault" | "recoverCompatibleVault" | "resetUnsupportedVault">;
 };
 
-const themeLabels: Record<Theme, MessageKey> = {
-  system: "shell.themeSystem",
-  light: "shell.themeLight",
-  dark: "shell.themeDark",
-};
-
 export function LockScreen({
   exists,
   passwordless = false,
@@ -43,8 +39,7 @@ export function LockScreen({
   offerSignOut = false,
   api = vaultApi,
 }: LockScreenProps) {
-  const { locale, setLocale, t } = useLanguage();
-  const { theme, setTheme } = useTheme();
+  const { t } = useLanguage();
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
@@ -205,98 +200,82 @@ export function LockScreen({
     }
   }
 
+  const noRecovery = exists || noPassword ? undefined : (
+    <p className="flex gap-2.5 rounded-[9px] bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">
+      <Icon name="warning" className="mt-0.5 size-[15px]" />
+      {t("lock.noRecovery")}
+    </p>
+  );
   return (
-    <main className="flex min-h-screen items-center justify-center bg-canvas p-4 md:p-6">
-      <section className="w-full max-w-3xl overflow-hidden rounded-lg border border-control-line bg-card shadow-2xl">
-        <header className="flex flex-wrap items-center justify-end gap-3 border-b border-control-line bg-toolbar px-4 py-3">
-          <label className="flex items-center gap-2 text-xs font-medium text-ink-muted">
-            <span>{t("shell.theme")}</span>
-            <select
-              aria-label={t("shell.themeMenu")}
-              value={theme}
-              onChange={(event) => setTheme(event.target.value as Theme)}
-              className={`${autoControl} min-h-9`}
-            >
-              {themes.map((candidate) => (
-                <option key={candidate} value={candidate}>{t(themeLabels[candidate])}</option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-xs font-medium text-ink-muted">
-            <span>{t("shell.language")}</span>
-            <select
-              aria-label={t("shell.languageMenu")}
-              value={locale}
-              onChange={(event) => setLocale(event.target.value as Locale)}
-              className={`${autoControl} min-h-9`}
-            >
-              {locales.map((candidate) => (
-                <option key={candidate} value={candidate}>{t(localeLabelKeys[candidate])}</option>
-              ))}
-            </select>
-          </label>
-        </header>
+    <EntryScreen
+      heading={t("shell.title")}
+      description={exists ? t(noPassword ? "lock.explainPasswordless" : "lock.explainOpen") : t("lock.explainNew")}
+      asideNote={noRecovery}
+      corner={<EntryPreferences />}
+      footer={offerSignOut ? <SignOutButton /> : undefined}
+    >
+      <form
+        className="flex flex-col gap-3.5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
         {diagnostic === null ? null : (
           <ErrorDiagnosticNotice diagnostic={diagnostic} version={version} onClose={() => setDiagnostic(null)} />
         )}
-        <div className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(20rem,1.1fr)]">
-          <div className="flex min-h-60 flex-col justify-center gap-8 border-b border-control-line bg-toolbar p-7 md:border-b-0 md:border-r md:p-10">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-ink">{t("shell.title")}</h1>
-              <p className="mt-2 text-sm leading-6 text-ink-muted">
-                {exists ? t(noPassword ? "lock.explainPasswordless" : "lock.explainOpen") : t("lock.explainNew")}
-              </p>
-            </div>
-          </div>
-
-          <form
-            className="flex flex-col justify-center gap-4 p-7 md:p-10"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submit();
-            }}
-          >
-            {exists || noPassword ? null : (
-              <p className="rounded-lg bg-notice px-3 py-2 text-sm text-notice-ink">{t("lock.noRecovery")}</p>
-            )}
-            {error === "" ? null : <Notice tone="danger">{error}</Notice>}
-            {versionMismatch === null ? null : (
-              <div className="flex flex-col gap-3 rounded-md border border-control-line bg-toolbar p-4">
-                <p className="text-sm leading-6 text-ink-muted">{t("lock.schemaRecoveryHint")}</p>
-                <Button type="button" disabled={busy || tooShort} onClick={() => void recoverCompatibleBackup()}>
-                  {t("lock.restoreCompatibleBackup")}
-                </Button>
-                <CheckboxField label={t("lock.resetUnsupportedAcknowledge")} checked={resetAcknowledged} onChange={setResetAcknowledged} tone="danger" />
-                <Button
-                  kind="danger"
-                  type="button"
-                  disabled={busy || tooShort || !resetAcknowledged}
-                  onClick={() => void resetUnsupportedVault()}
-                >
-                  {t("lock.resetUnsupported")}
-                </Button>
-              </div>
-            )}
-            {exists ? null : <CheckboxField label={t("lock.withoutPassword")} checked={withoutPassword} onChange={setWithoutPassword} />}
-            {noPassword ? <p className="text-sm text-ink-muted">{t("lock.withoutPasswordHint")}</p> : <>
-            <PasswordField label={t("lock.password")} value={password} onChange={setPassword} autoFocus />
-            {exists ? null : (
-              <PasswordField label={t("lock.confirm")} value={confirmation} onChange={setConfirmation} />
-            )}
-            </>}
-            {!exists && !noPassword && isAcceptedButShort(password, minPassphraseLength) ? <p className="text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
-            <Button kind="primary" className="self-start" type="submit" disabled={busy || tooShort || mismatched}>
-              {exists ? t("lock.open") : t("lock.create")}
+        {error === "" ? null : <Notice tone="danger">{error}</Notice>}
+        {versionMismatch === null ? null : (
+          <div className="flex flex-col gap-3 rounded-[10px] bg-well p-4">
+            <p className="text-sm leading-6 text-ink-muted">{t("lock.schemaRecoveryHint")}</p>
+            <Button type="button" disabled={busy || tooShort} onClick={() => void recoverCompatibleBackup()}>
+              {t("lock.restoreCompatibleBackup")}
             </Button>
-          </form>
-        </div>
-        {offerSignOut ? (
-          <footer className="flex flex-col gap-3 border-t border-control-line px-7 py-5 md:px-10">
-            <p className="text-sm leading-6 text-ink-muted">{t("menu.signOutHint")}</p>
-            <SignOutButton />
-          </footer>
-        ) : null}
-      </section>
-    </main>
+            <CheckboxField label={t("lock.resetUnsupportedAcknowledge")} checked={resetAcknowledged} onChange={setResetAcknowledged} tone="danger" />
+            <Button
+              kind="danger"
+              type="button"
+              disabled={busy || tooShort || !resetAcknowledged}
+              onClick={() => void resetUnsupportedVault()}
+            >
+              {t("lock.resetUnsupported")}
+            </Button>
+          </div>
+        )}
+        {exists ? null : <PasswordlessSwitch checked={withoutPassword} onChange={setWithoutPassword} />}
+        {noPassword ? (exists ? <p className="text-sm text-ink-muted">{t("lock.withoutPasswordHint")}</p> : null) : <>
+          <PasswordField label={t("lock.password")} value={password} onChange={setPassword} autoFocus inputClassName={largeField} />
+          {exists ? null : (
+            <PasswordField label={t("lock.confirm")} value={confirmation} onChange={setConfirmation} inputClassName={largeField} />
+          )}
+        </>}
+        {!exists && !noPassword && isAcceptedButShort(password, minPassphraseLength) ? <p className="text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
+        <Button kind="primary" className="h-[38px] w-full text-sm" type="submit" disabled={busy || tooShort || mismatched}>
+          {exists ? t("lock.open") : t("lock.create")}
+        </Button>
+      </form>
+    </EntryScreen>
+  );
+}
+
+// PasswordlessSwitch is the choice to use the vault without a master password, drawn as a switch in a
+// tinted row as in the design. The checkbox stays a checkbox for assistive technology. Its explanation
+// shows once it is on, where the password fields were.
+function PasswordlessSwitch({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  const { t } = useLanguage();
+  const hintId = useId();
+  return (
+    <div className="rounded-[10px] bg-well px-3 py-2.5">
+      <label className="flex cursor-pointer items-center gap-2.5 text-[13px] text-ink">
+        {/* The checkbox lies transparent over the drawn switch, so pressing the switch presses the checkbox. */}
+        <span className="relative h-[18px] w-[30px] shrink-0">
+          <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)}
+            aria-describedby={checked ? hintId : undefined} className="peer absolute inset-0 z-10 m-0 cursor-pointer opacity-0" />
+          <span aria-hidden="true" className="absolute inset-0 rounded-full bg-ink/20 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-3.5 after:rounded-full after:bg-sidebar after:transition-transform peer-checked:bg-accent peer-checked:after:translate-x-3 peer-focus-visible:ring-[3px] peer-focus-visible:ring-accent/30" />
+        </span>
+        {t("lock.withoutPassword")}
+      </label>
+      {checked ? <p id={hintId} className="mt-1 pl-10 text-[11.5px] leading-[17px] text-ink-faint">{t("lock.withoutPasswordHint")}</p> : null}
+    </div>
   );
 }
