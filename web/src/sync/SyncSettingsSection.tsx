@@ -1,58 +1,18 @@
-import { useId, type ReactNode } from "react";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import type { SyncDirection, SyncStatus } from "../api/sync";
 import { useTranslate } from "../i18n/context";
-import { describeControl } from "../ui/describeControl";
-import { CheckboxField, control, hintText, sectionHeading } from "../ui/form";
-import { Icon } from "../ui/icons";
+import { CheckboxField, control } from "../ui/form";
+import { FieldRow } from "../ui/FieldRow";
+import { PageSection } from "../ui/page";
 import { PasswordInput } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
 import { SyncKeySection } from "./SyncKeySection";
 import { syncDirectionHintKeys, syncSetupStateKeys } from "./syncMessageKeys";
 import type { SyncSetupForm } from "./useSyncSetupForm";
 
-function SyncRow({
-  label,
-  children,
-  hint,
-  interactiveChildren = false,
-}: {
-  label: string;
-  children: ReactNode;
-  hint?: string;
-  interactiveChildren?: boolean;
-}) {
-  const hintId = useId();
-  const contents = (
-    <>
-      <span className="w-full shrink-0 text-sm text-ink-muted sm:w-32">
-        {label}
-      </span>
-      <span className="flex min-w-0 flex-1 justify-start sm:ml-auto sm:justify-end">
-        {describeControl(children, { descriptionIds: [hint === undefined ? undefined : hintId] })}
-      </span>
-    </>
-  );
-  return (
-    <div className="border-t border-hairline first:border-t-0">
-      {interactiveChildren ? (
-        <div className="flex flex-col items-stretch gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-3 sm:py-2">
-          {contents}
-        </div>
-      ) : (
-        <label className="flex flex-col items-stretch gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-3 sm:py-2">
-          {contents}
-        </label>
-      )}
-      {hint === undefined ? null : (
-        <p id={hintId} className={`px-3 pb-3 sm:pb-2 ${hintText}`}>{hint}</p>
-      )}
-    </div>
-  );
-}
-
 // Bucket settings and the shared key. Until sync is configured this is the
-// whole screen; afterwards it folds away behind "manage settings".
+// whole screen; afterwards it folds away behind "manage settings". Only then is it a <details>: one
+// without a summary gets the browser's own "Details" toggle, which would hide the whole setup.
 export function SyncSettingsSection({ status, busy, form, onCheckSetup, onCompleteSetup, onSaveKey }: {
   status: SyncStatus;
   busy: boolean;
@@ -89,41 +49,14 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
     setEditingSettings,
     setSettingsOpen,
   } = form;
-  return (
-    <details
-      open={!status.configured || settingsOpen}
-      onToggle={(event) => {
-        if (status.configured) setSettingsOpen(event.currentTarget.open);
-      }}
-      className={
-        status.configured
-          ? "overflow-hidden rounded-md border border-control-line bg-card"
-          : ""
-      }
-    >
-      {status.configured ? (
-        <summary className="flex cursor-pointer list-none items-center gap-3 bg-toolbar px-4 py-3 text-sm font-medium text-ink marker:hidden hover:bg-select-fill">
-          <DisclosureChevron className="size-4 text-ink-muted" />
-          <span>{t("sync.manageSettings")}</span>
-        </summary>
-      ) : null}
-      <div
-        className={
-          status.configured
-            ? "flex flex-col gap-4 border-t border-line bg-surface-subtle p-4"
-            : "flex flex-col gap-6"
-        }
-      >
-        <p className={`rounded-md bg-toolbar px-4 py-3 ${hintText}`}>
+  const body = (
+      <div className={status.configured ? "flex flex-col gap-5 pt-4" : "flex flex-col gap-[22px]"}>
+        <p className="rounded-[9px] bg-well px-3 py-2.5 text-xs leading-[18px] text-ink-muted">
           {t("sync.warning")}
         </p>
-        <section className="overflow-hidden rounded-md border border-line bg-card">
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Icon name="remoteKeys" className="h-4 w-4 text-ink-muted" />
-              <h3 className={sectionHeading}>{t("sync.bucketHeading")}</h3>
-            </div>
-            {status.configured ? (
+        <PageSection
+          heading={t("sync.bucketHeading")}
+          actions={status.configured ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="font-mono text-xs text-ink-muted">
                   {[status.endpoint, status.bucket, status.path]
@@ -141,16 +74,16 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                 ) : null}
               </div>
             ) : (
-              <p className="text-xs text-ink-muted">
+              <span className="rounded-full bg-well px-2.5 py-0.5 text-[11.5px] text-ink-muted">
                 {t("sync.notConfigured")}
-              </p>
+              </span>
             )}
-          </header>
+        >
 
           {!status.configured || editingSettings ? (
             <>
-              <div className="px-1 py-2 sm:px-3">
-                <SyncRow
+              <div>
+                <FieldRow
                   label={t("sync.endpoint")}
                   hint={t("sync.endpointHint")}
                 >
@@ -160,39 +93,39 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                     placeholder="https://<account>.r2.cloudflarestorage.com"
                     className={control}
                   />
-                </SyncRow>
-                <SyncRow label={t("sync.bucket")}>
+                </FieldRow>
+                <FieldRow label={t("sync.bucket")}>
                   <input
                     value={bucket}
                     onChange={(event) => setBucket(event.target.value)}
                     className={control}
                   />
-                </SyncRow>
+                </FieldRow>
 
-                <SyncRow label={t("sync.path")} hint={t("sync.pathHint")}>
+                <FieldRow label={t("sync.path")} hint={t("sync.pathHint")}>
                   <input
                     value={path}
                     onChange={(event) => setPath(event.target.value)}
                     className={control}
                   />
-                </SyncRow>
+                </FieldRow>
 
-                <SyncRow label={t("sync.region")} hint={t("sync.regionHint")}>
+                <FieldRow label={t("sync.region")} hint={t("sync.regionHint")}>
                   <input
                     value={region}
                     onChange={(event) => setRegion(event.target.value)}
                     className={control}
                   />
-                </SyncRow>
-                <SyncRow label={t("sync.accessKeyId")}>
+                </FieldRow>
+                <FieldRow label={t("sync.accessKeyId")}>
                   <input
                     value={accessKeyId}
                     onChange={(event) => setAccessKeyId(event.target.value)}
                     className={control}
                   />
-                </SyncRow>
+                </FieldRow>
 
-                <SyncRow
+                <FieldRow
                   label={t("sync.secretAccessKey")}
                   hint={t("sync.credentialsNote")}
                   interactiveChildren
@@ -202,9 +135,9 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                     value={secretAccessKey}
                     onChange={setSecretAccessKey}
                   />
-                </SyncRow>
+                </FieldRow>
 
-                <SyncRow
+                <FieldRow
                   label={t("sync.direction")}
                   hint={t(syncDirectionHintKeys[direction])}
                 >
@@ -221,9 +154,9 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                       <option value="push">{t("sync.role.send")}</option>
                     </optgroup>
                   </select>
-                </SyncRow>
+                </FieldRow>
               </div>
-              <div className="flex flex-col gap-3 border-t border-line bg-toolbar px-4 py-3">
+              <div className="mt-1 flex flex-col gap-3 border-t border-line pt-4">
                 {setupCheck === null ? null : (
                   <Notice
                     tone={
@@ -238,7 +171,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                 )}
                 {setupCheck === null ||
                 setupCheck.state === "incomplete" ? null : (
-                  <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-3">
+                  <div className="flex flex-col gap-3 rounded-[10px] bg-well p-3">
                     <p className="text-sm text-ink">
                       {setupCheck.state === "existing"
                         ? t("sync.setup.existingKey")
@@ -267,7 +200,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                     </Button>
                   </div>
                 )}
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
                   <Button
                     disabled={
                       busy ||
@@ -292,12 +225,25 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
               </div>
             </>
           ) : null}
-        </section>
+        </PageSection>
 
         {status.configured ? (
           <SyncKeySection status={status} busy={busy} form={form} onSave={onSaveKey} />
         ) : null}
       </div>
+  );
+  if (!status.configured) return body;
+  return (
+    <details
+      open={settingsOpen}
+      onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
+      className="border-t border-line pt-4"
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] text-ink-muted marker:hidden hover:text-ink">
+        <DisclosureChevron className="size-3.5" />
+        {t("sync.manageSettings")}
+      </summary>
+      {body}
     </details>
   );
 }

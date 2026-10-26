@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { failureCode } from "../api/client";
 import type { PasswordVaultStatus, VaultApi } from "../api/vault";
 import { useTranslate } from "../i18n/context";
-import { PasswordField } from "../ui/PasswordField";
+import { FieldRow } from "../ui/FieldRow";
+import { PasswordInput } from "../ui/PasswordField";
 import { CheckboxField } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea } from "../ui/ActionArea";
@@ -74,32 +75,38 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
   const canChange = passwordless !== null && (draft.withoutPassword || strong);
   return (
     <SettingsSection id="settings-password" label={t("secrets.changeHeading")} icon="secrets" showHeading={showHeading}>
-      <div className="max-w-2xl">
-        <p className="mb-5 text-sm leading-6 text-ink-muted">{t("secrets.changeNote")}</p>
+      <div>
+        <p className="mb-4 text-xs leading-[18px] text-ink-faint">{t("secrets.changeNote")}</p>
         <CheckboxField label={t("lock.withoutPassword")} checked={draft.withoutPassword} onChange={(checked) => edit({ withoutPassword: checked })} />
         {draft.withoutPassword ? <p className="mb-3 text-sm text-ink-muted">{t("lock.withoutPasswordHint")}</p> : null}
-        <div className="grid gap-4 sm:grid-cols-2">
-          {passwordless === false ? <div className="sm:col-span-2">
-            <PasswordField
-              label={t("secrets.currentMaster")}
-              value={draft.current}
-              onChange={(value) => edit({ current: value })}
-              disabled={save.busy}
-            />
-          </div> : null}
+        <div className="mt-3">
+          {passwordless === false ? (
+            <FieldRow label={t("secrets.currentMaster")} interactiveChildren>
+              <PasswordInput
+                label={t("secrets.currentMaster")}
+                value={draft.current}
+                onChange={(value) => edit({ current: value })}
+                disabled={save.busy}
+              />
+            </FieldRow>
+          ) : null}
           {draft.withoutPassword ? null : <>
-          <PasswordField
-            label={t("secrets.newMaster")}
-            value={draft.next}
-            onChange={(value) => edit({ next: value })}
-            disabled={save.busy}
-          />
-          <PasswordField
-            label={t("secrets.confirmMaster")}
-            value={draft.confirm}
-            onChange={(value) => edit({ confirm: value })}
-            disabled={save.busy}
-          />
+            <FieldRow label={t("secrets.newMaster")} interactiveChildren>
+              <PasswordInput
+                label={t("secrets.newMaster")}
+                value={draft.next}
+                onChange={(value) => edit({ next: value })}
+                disabled={save.busy}
+              />
+            </FieldRow>
+            <FieldRow label={t("secrets.confirmMaster")} interactiveChildren>
+              <PasswordInput
+                label={t("secrets.confirmMaster")}
+                value={draft.confirm}
+                onChange={(value) => edit({ confirm: value })}
+                disabled={save.busy}
+              />
+            </FieldRow>
           </>}
         </div>
         {!draft.withoutPassword && isAcceptedButShort(draft.next, minPassphraseLength) ? <p className="mt-3 text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
