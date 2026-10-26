@@ -17,10 +17,13 @@ class Sshc < Formula
   SOURCE_COMMIT_TIME = "".freeze
 
   depends_on "go" => :build
-  depends_on "node" => :build
+  # 画面は CI・リリースと同じ Node 22 で組み立てる。Node が違うと組み立ての結果が変わる。
+  depends_on "node@22" => :build
 
   def install
     # 埋め込む画面を組み立てる。npm は web/ の中で走らせる（--prefix は下位命令ごとに意味が違う）。
+    # node@22 は keg-only なので、その bin を PATH の先頭に置く。
+    ENV.prepend_path "PATH", Formula["node@22"].opt_bin
     cd "web" do
       system "npm", "ci", *std_npm_args(prefix: false)
       system "npm", "run", "build"

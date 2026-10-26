@@ -59,8 +59,9 @@ func TestTheFormulaBuildsSomethingThatExists(t *testing.T) {
 // version と status しか見ないので、そこでは気付けない。
 func TestTheFormulaBuildsTheWebUIBeforeTheBinary(t *testing.T) {
 	formula := readFormula(t)
-	if !strings.Contains(formula, `depends_on "node" => :build`) {
-		t.Fatal(`formula に depends_on "node" => :build が無い`)
+	// CI とリリースと同じ Node 22 で組み立てる。Node が違うと組み立ての結果が変わる。
+	if !strings.Contains(formula, `depends_on "node@22" => :build`) || !strings.Contains(formula, `ENV.prepend_path "PATH", Formula["node@22"].opt_bin`) {
+		t.Fatal(`formula は node@22 で画面を組み立てていない（depends_on "node@22" => :build と、その bin を PATH の先頭に置く行が要る）`)
 	}
 	webBuild := regexp.MustCompile(`(?s)cd "web" do\s*\n\s*system "npm", "ci"[^\n]*\n\s*system "npm", "run", "build"\s*\n\s*end`).FindStringIndex(formula)
 	if webBuild == nil {
