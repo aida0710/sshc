@@ -32,11 +32,20 @@ function tabLabels(tab: SFTPTab, unnamed: string, localName: string) {
 // host under the folder inside its 44px tab.
 const tabLayout = {
   compact: "min-h-11 flex-col justify-center",
-  regular: "min-h-7 items-center gap-1.5 [@media(pointer:coarse)]:min-h-10",
+  regular: "min-h-[30px] items-center gap-1.5 [@media(pointer:coarse)]:min-h-10",
 };
 const controlSize = {
   compact: "min-h-11 w-11",
-  regular: "min-h-7 w-7 [@media(pointer:coarse)]:min-h-10 [@media(pointer:coarse)]:w-8",
+  regular: "min-h-[30px] w-6 [@media(pointer:coarse)]:min-h-10 [@media(pointer:coarse)]:w-8",
+};
+// On a wide screen the selected tab takes the colour of the path bar under it, so the two read as one piece.
+const stripLook = {
+  compact: "gap-1 border-b border-line/70 bg-toolbar px-1 py-0.5",
+  regular: "gap-1.5 px-3 pt-2.5",
+};
+const tabLook = {
+  compact: { selected: "rounded bg-card shadow-sm", other: "rounded hover:bg-card/50" },
+  regular: { selected: "rounded-t-md bg-well", other: "rounded-md hover:bg-hover" },
 };
 
 // Tabs share one width so changing hosts and directories does not reflow the
@@ -104,12 +113,12 @@ export function SFTPTabStrip({
   }
 
   return (
-    <div data-sftp-pane-tabs={pane.id} className="flex min-w-0 shrink-0 items-stretch gap-1 border-b border-line/70 bg-toolbar px-1 py-0.5">
+    <div data-sftp-pane-tabs={pane.id} className={`flex min-w-0 shrink-0 items-stretch ${stripLook[size]}`}>
       <div
         ref={scroller}
         role="tablist"
         aria-label={label}
-        className="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={`flex min-w-0 items-stretch gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${compact ? "flex-1" : "shrink"}`}
       >
         {pane.tabs.map((tab, index) => {
           const labels = tabLabels(tab, t("sftp.newTab"), t("sftp.local.connection"));
@@ -121,7 +130,7 @@ export function SFTPTabStrip({
               draggable={draggable}
               onDragStart={draggable ? (event) => beginDrag(event, tab) : undefined}
               onDragEnd={draggable ? onDragEnd : undefined}
-              className={`group relative flex w-52 shrink-0 items-stretch rounded ${selected ? "bg-card shadow-sm" : "hover:bg-card/50"} ${draggable ? draggableCursor : ""}`}
+              className={`group relative flex w-52 shrink-0 items-stretch ${selected ? tabLook[size].selected : tabLook[size].other} ${draggable ? draggableCursor : ""}`}
             >
               <button
                 type="button"
@@ -135,9 +144,10 @@ export function SFTPTabStrip({
                 title={labels.title || labels.name}
                 onClick={() => onSelect(tab.id)}
                 onKeyDown={(event) => keyDown(event, tab, index)}
-                className={`flex min-w-0 flex-1 rounded px-2 py-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${tabLayout[size]} ${selected ? "text-ink" : "text-ink-muted"}`}
+                className={`flex min-w-0 flex-1 rounded py-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${compact ? "px-2" : "pl-3 pr-1"} ${tabLayout[size]} ${selected ? "text-ink" : "text-ink-muted"}`}
               >
-                <span className={`block min-w-0 truncate text-sm font-medium leading-4 ${compact ? "w-full" : ""}`}>{labels.folder}</span>
+                {compact || tab.alias === "" ? null : <Icon name={tab.alias === localHostAlias ? "files" : "connections"} className="size-[13px] shrink-0" />}
+                <span className={`block min-w-0 truncate leading-4 ${compact ? "w-full text-sm font-medium" : "text-[12.5px]"}`}>{labels.folder}</span>
                 {labels.host === "" ? null : <span className={`block min-w-0 truncate text-[11px] leading-3.5 text-ink-muted ${compact ? "mt-0.5 w-full" : "max-w-[50%] shrink-0"}`}>{labels.host}</span>}
               </button>
               {selected && onChangeHost !== undefined ? (
@@ -173,7 +183,7 @@ export function SFTPTabStrip({
         aria-label={t("sftp.newTab")}
         disabled={addDisabled}
         onClick={onAdd}
-        className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-card/50 hover:text-ink ${controlSize[size]}`}
+        className={`flex shrink-0 items-center justify-center text-ink-muted hover:text-ink ${compact ? "rounded hover:bg-card/50 min-h-11 w-11" : "min-h-[30px] w-7 rounded-[7px] hover:bg-hover [@media(pointer:coarse)]:min-h-10 [@media(pointer:coarse)]:w-10"}`}
       >
         <Icon name="plus" className={compact ? "size-5" : "size-4"} />
       </button>
