@@ -43,7 +43,7 @@ export const dangerAction =
   "whitespace-nowrap rounded-md border border-line px-3.5 py-[5px] text-[13px] leading-5 text-danger " +
   "transition-colors duration-150 hover:border-danger/50 hover:bg-danger/10";
 
-export const fieldLabel = "text-xs font-medium tracking-wide text-ink-muted";
+export const fieldLabel = "text-[12.5px] text-ink-muted";
 export const hintText = "text-xs text-ink-muted";
 export const sectionCard =
   "flex flex-col gap-4 rounded-lg border border-line bg-card p-4";

@@ -1191,7 +1191,7 @@ describe("App", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Reload to recover the local session automatically");
-    expect(alert.closest("main")).toHaveClass("min-h-screen", "place-items-center");
+    expect(alert.closest("main")).toHaveClass("min-h-screen", "items-center", "justify-center");
     expect(screen.getByRole("button", { name: "Reload session" })).toBeVisible();
   });
 
