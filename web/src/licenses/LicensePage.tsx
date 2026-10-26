@@ -3,6 +3,7 @@ import { DisclosureSummary } from "../ui/DisclosureSummary";
 import catalogue from "./catalogue.generated.json";
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
+import { PageHeader } from "../ui/page";
 
 export function LicensePage() {
   const t = useTranslate();
@@ -11,10 +12,7 @@ export function LicensePage() {
   const entries = catalogue.filter((entry) => `${entry.name} ${entry.version} ${entry.license} ${entry.category}`.toLocaleLowerCase().includes(needle));
   return (
     <section aria-labelledby="license-heading" className="mx-auto flex w-full max-w-5xl flex-col gap-4">
-      <header className="border-b border-line pb-3">
-        <h2 id="license-heading" className="text-xl font-semibold text-ink">{t("section.license")}</h2>
-        <p className="mt-2 text-sm text-ink-muted">{t("license.description")}</p>
-      </header>
+      <PageHeader title={t("section.license")} headingId="license-heading" description={t("license.description")} />
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         {t("license.search")}
         <input type="search" className={control} value={query} onChange={(event) => setQuery(event.target.value)} />

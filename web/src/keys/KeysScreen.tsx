@@ -24,8 +24,7 @@ import { KeyGenerationSection } from "./KeyGenerationSection";
 import { useTranslate } from "../i18n/context";
 import { primaryAction } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
-import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
-import { Icon } from "../ui/icons";
+import { PageHeader, SummaryStat, SummaryStats } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { keysApi, type KeyItem, type KeysApi, type RelocateKeyResponse } from "./api";
 import type {
@@ -309,11 +308,11 @@ export function KeysScreen({
           </a>
         }
       />
-      <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
-        <MetricCard label={t("keys.metricFiles")} value={inventory.items.length} icon={<Icon name="keys" className="h-5 w-5" />} />
-        <MetricCard label={t("keys.metricPrivate")} value={inventory.items.filter((item) => item.kind === "private_key").length} />
-        <MetricCard label={t("keys.metricAttention")} value={keyAttention} attention={keyAttention > 0} />
-      </MetricGrid>
+      <SummaryStats>
+        <SummaryStat label={t("keys.metricFiles")} value={inventory.items.length} />
+        <SummaryStat label={t("keys.metricPrivate")} value={inventory.items.filter((item) => item.kind === "private_key").length} />
+        <SummaryStat label={t("keys.metricAttention")} value={keyAttention} attention={keyAttention > 0} />
+      </SummaryStats>
       {failure !== "" && <Notice tone="danger">{failure}</Notice>}
 
       {chosen.size === 0 ? null : (

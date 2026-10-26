@@ -5,7 +5,7 @@ import type { MessageKey } from "../i18n/messages";
 import type { Problem } from "../api/client";
 import { configApi, type HistoryEntry, type PendingTransaction } from "../api/config";
 import { Button, Card, Notice } from "../ui/surface";
-import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { PageHeader, SummaryStat, SummaryStats } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
 
@@ -100,15 +100,15 @@ export function HistoryPanel() {
   return (
     <div className={`mx-auto flex w-full max-w-6xl flex-col gap-6 ${mobileTouchTargets}`}>
       <PageHeader title={t("history.pageTitle")} description={t("history.pageDescription")} />
-      <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
+      <SummaryStats>
         {([
           [t("history.metricChanges"), entries.length, false],
           [t("history.metricInterrupted"), pending.length, pending.length > 0],
           [t("history.metricRestorable"), restorableCount, false],
         ] as const).map(([label, value, attention]) => (
-          <MetricCard key={String(label)} label={String(label)} value={value} compact attention={Boolean(attention)} />
+          <SummaryStat key={String(label)} label={String(label)} value={value} attention={Boolean(attention)} />
         ))}
-      </MetricGrid>
+      </SummaryStats>
       {problem === null ? null : (
         <Notice tone="danger">{t("history.requestRejected", { code: problem.code })}</Notice>
       )}

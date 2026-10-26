@@ -12,6 +12,8 @@ import { NotificationSettingsSection } from "./NotificationSettingsSection";
 import { SettingsSection } from "./SettingsSection";
 import { TerminalSettingsSection } from "./TerminalSettingsSection";
 import { settingsPageMeta, type SettingsPage } from "./settingsRoute";
+import { PageHeader } from "../ui/page";
+import { PageBoard } from "../ui/PageBoard";
 
 // Settings also change the master password, which belongs to the vault.
 export type SettingsPanelApi = SettingsApi & Pick<VaultApi, "passwordVault" | "changeMasterPassword">;
@@ -52,26 +54,23 @@ export function SettingsPanel({
 
   // The list of pages on the left and the open page as one card, as in the design.
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-6xl gap-2">
-      {onNavigatePage === undefined ? null : <SettingsNavigation current={all ? null : page} onNavigate={onNavigatePage} />}
-      <div className={`min-w-0 flex-1 overflow-hidden rounded-xl border border-line bg-sidebar shadow-pane ${mobileTouchTargets}`}>
-        <header className="px-4 pt-6 sm:px-6 lg:px-8 lg:pt-7">
-          <h2 className="text-xl font-semibold tracking-tight text-ink">{t(pageTitle)}</h2>
-          {pageDescription === undefined ? null : <p className="mt-1 text-xs leading-5 text-ink-faint">{t(pageDescription)}</p>}
-        </header>
-        {shows("Appearance") ? <AppearanceSettingsSection showHeading={all} /> : null}
-        {shows("Shortcuts") ? (
-          <SettingsSection id="settings-shortcuts" label={t("shortcuts.heading")} icon="settings" showHeading={all}>
-            <KeyConfig />
-          </SettingsSection>
-        ) : null}
-        {shows("Engine") ? <EngineSettingsSection api={api} showHeading={all} passwordless={passwordless} /> : null}
-        {shows("Terminal") ? <TerminalSettingsSection api={api} showHeading={all} onSettingsChange={onTerminalSettingsChange} /> : null}
-        {shows("SFTP") ? <SFTPSettingsSection showHeading={all} /> : null}
-        {shows("Notifications") ? <NotificationSettingsSection showHeading={all} /> : null}
-        {terminalSessions !== undefined && shows("Connections") ? <SessionSettingsSection terminalSessions={terminalSessions} showHeading={all} /> : null}
-        {shows("Password") ? <MasterPasswordSection api={api} showHeading={all} onVaultChanged={onVaultChanged} /> : null}
-      </div>
-    </div>
+    <PageBoard
+      aside={onNavigatePage === undefined ? null : <SettingsNavigation current={all ? null : page} onNavigate={onNavigatePage} />}
+      className={mobileTouchTargets}
+    >
+      <PageHeader title={t(pageTitle)} description={pageDescription === undefined ? undefined : t(pageDescription)} titleOnPhone />
+      {shows("Appearance") ? <AppearanceSettingsSection showHeading={all} /> : null}
+      {shows("Shortcuts") ? (
+        <SettingsSection id="settings-shortcuts" label={t("shortcuts.heading")} icon="settings" showHeading={all}>
+          <KeyConfig />
+        </SettingsSection>
+      ) : null}
+      {shows("Engine") ? <EngineSettingsSection api={api} showHeading={all} passwordless={passwordless} /> : null}
+      {shows("Terminal") ? <TerminalSettingsSection api={api} showHeading={all} onSettingsChange={onTerminalSettingsChange} /> : null}
+      {shows("SFTP") ? <SFTPSettingsSection showHeading={all} /> : null}
+      {shows("Notifications") ? <NotificationSettingsSection showHeading={all} /> : null}
+      {terminalSessions !== undefined && shows("Connections") ? <SessionSettingsSection terminalSessions={terminalSessions} showHeading={all} /> : null}
+      {shows("Password") ? <MasterPasswordSection api={api} showHeading={all} onVaultChanged={onVaultChanged} /> : null}
+    </PageBoard>
   );
 }
