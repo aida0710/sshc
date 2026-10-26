@@ -251,7 +251,7 @@ export function RemoteKeyPanel({
 
   return (
     <section aria-label={t("rk.heading")} className="flex flex-col gap-[22px] [&_button]:min-h-10 sm:[&_button]:min-h-0">
-      <PageHeader title={t("rk.heading")} description={t("rk.pageDescription")} />
+      <PageHeader title={t("rk.heading")} />
 
       <p aria-live="polite" className="rounded-[9px] bg-well px-3 py-2.5 text-[12.5px] text-ink-muted">
         {busy ? t("rk.waiting") : t("rk.idle")}

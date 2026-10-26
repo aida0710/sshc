@@ -302,7 +302,6 @@ export function KeysScreen({
     <section className="flex flex-col gap-[22px] [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader
         title={t("keys.heading")}
-        description={t("keys.pageDescription")}
         actions={
           <a href="#create-key-heading" className={`${primaryAction} inline-flex items-center gap-1.5`}>
             <Icon name="plus" className="size-[15px]" />

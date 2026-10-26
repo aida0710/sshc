@@ -284,7 +284,7 @@ export function GroupsPanel({ onInspector, onNavigationBlockerChange, onNavigate
 
   return (
     <div className="flex flex-col gap-[22px] [&_button]:min-h-10 sm:[&_button]:min-h-0">
-      <PageHeader title={t("groups.pageTitle")} description={t("groups.pageDescription")} />
+      <PageHeader title={t("groups.pageTitle")} />
       <SummaryStats>
         {([
           [t("groups.metricGroups"), groups.length],
