@@ -21,7 +21,9 @@ type workflowJob struct {
 	Name        string            `yaml:"name"`
 	RunsOn      string            `yaml:"runs-on"`
 	Needs       workflowNames     `yaml:"needs"`
+	If          string            `yaml:"if"`
 	Permissions map[string]string `yaml:"permissions"`
+	Env         map[string]string `yaml:"env"`
 	// Uses は、job 全体を別の workflow（reusable workflow）に任せるときの参照である。
 	Uses     string            `yaml:"uses"`
 	Strategy *workflowStrategy `yaml:"strategy"`

@@ -338,6 +338,35 @@ func validateNativeWorkflow(document workflowDocument) []string {
 	return problems
 }
 
+// validateNativeTestsGate は、画面だけの PR で Windows と macOS の Go のテストを飛ばす仕組みを
+// 確かめる。必須の検査（Go native (Windows) など）は、job ごと消すと PR が「待ち」のまま
+// マージできなくなる。そこで job は残し、jobs.changes の答えで手順だけを飛ばす。Linux はいつも流す。
+func validateNativeTestsGate(job workflowJob) []string {
+	var problems []string
+	if len(job.Needs) != 1 || job.Needs[0] != "changes" {
+		problems = append(problems, "jobs.go must need jobs.changes to know whether the native Go tests run")
+	}
+	if job.If != "${{ !cancelled() }}" {
+		problems = append(problems, "jobs.go must run even when jobs.changes fails, with if: ${{ !cancelled() }}")
+	}
+	if job.Env["NATIVE_TESTS"] != nativeTestsExpression {
+		problems = append(problems, fmt.Sprintf("jobs.go env.NATIVE_TESTS = %q, want %q", job.Env["NATIVE_TESTS"], nativeTestsExpression))
+	}
+	for _, step := range job.Steps {
+		if step.If == "" {
+			problems = append(problems, fmt.Sprintf("jobs.go step %q must say whether it runs for a web-only change", stepLabel(step)))
+		}
+	}
+	return problems
+}
+
+func stepLabel(step workflowStep) string {
+	if step.Name != "" {
+		return step.Name
+	}
+	return step.Uses
+}
+
 func validateNativeMatrix(id string, job workflowJob) []string {
 	var problems []string
 	if job.RunsOn != "${{ matrix.os }}" {
@@ -378,19 +407,34 @@ func validateNativeMatrix(id string, job workflowJob) []string {
 	return problems
 }
 
+// nativeTestsGate は、jobs.go の各手順の条件の終わりに付く「Go に関わる変更があるときだけ」で
+// ある。NATIVE_TESTS は、Linux ではいつも、Windows と macOS では jobs.changes が要ると決めたときに
+// true になる。
+const nativeTestsGate = " && env.NATIVE_TESTS == 'true'"
+
+// nativeTestsExpression は、jobs.go の env.NATIVE_TESTS に書く式である。
+// jobs.changes が失敗して答えが空のときも流れるよう、'true' ではなく 'false' と比べる。
+const nativeTestsExpression = "${{ matrix.name == 'Linux' || needs.changes.outputs.native != 'false' }}"
+
+// gated は、手順の条件 "${{ ... }}" に nativeTestsGate を足す。
+func gated(condition string) string {
+	return strings.TrimSuffix(condition, " }}") + nativeTestsGate + " }}"
+}
+
 func validateGoSteps(job workflowJob) []string {
 	var problems []string
 	problems = append(problems, validateSeparatedRunShells("jobs.go", job)...)
+	problems = append(problems, validateNativeTestsGate(job)...)
 	for _, required := range []runContract{
-		{run: "scripts/ci/check-gofmt.sh", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
-		{run: "./scripts/ci/check-gofmt.ps1", condition: "${{ runner.os == 'Windows' }}", shell: "pwsh"},
-		{run: "go vet ./...", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
-		{run: "go vet ./...", condition: "${{ runner.os == 'Windows' }}", shell: "pwsh"},
-		{run: "go build ./...", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
-		{run: "go build ./...", condition: "${{ runner.os == 'Windows' }}", shell: "pwsh"},
-		{run: "go test -count=1 ./...", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
+		{run: "scripts/ci/check-gofmt.sh", condition: gated("${{ runner.os != 'Windows' }}"), shell: "bash"},
+		{run: "./scripts/ci/check-gofmt.ps1", condition: gated("${{ runner.os == 'Windows' }}"), shell: "pwsh"},
+		{run: "go vet ./...", condition: gated("${{ runner.os != 'Windows' }}"), shell: "bash"},
+		{run: "go vet ./...", condition: gated("${{ runner.os == 'Windows' }}"), shell: "pwsh"},
+		{run: "go build ./...", condition: gated("${{ runner.os != 'Windows' }}"), shell: "bash"},
+		{run: "go build ./...", condition: gated("${{ runner.os == 'Windows' }}"), shell: "pwsh"},
+		{run: "go test -count=1 ./...", condition: gated("${{ runner.os != 'Windows' }}"), shell: "bash"},
 		// race は PR では Linux だけ、main への push ではすべての OS で走る。
-		{run: "go test -count=1 -race -timeout 20m ./...", condition: "${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}", shell: "bash"},
+		{run: "go test -count=1 -race -timeout 20m ./...", condition: gated("${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}"), shell: "bash"},
 	} {
 		if !hasRunContract(job, required) {
 			problems = append(problems, fmt.Sprintf("jobs.go lacks run=%q if=%q shell=%q", required.run, required.condition, required.shell))
@@ -399,13 +443,13 @@ func validateGoSteps(job workflowJob) []string {
 
 	problems = append(problems, validateWindowsLoggedTest(job, windowsLoggedTest{
 		name:         "go test (Windows)",
-		condition:    "${{ runner.os == 'Windows' }}",
+		condition:    gated("${{ runner.os == 'Windows' }}"),
 		command:      "& go test -v -count=1 -timeout 20m ./... 2>&1 | Tee-Object -FilePath",
 		exitVariable: "$testExit",
 	})...)
 	problems = append(problems, validateWindowsLoggedTest(job, windowsLoggedTest{
 		name:         "go test -race (Windows)",
-		condition:    "${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}",
+		condition:    gated("${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}"),
 		command:      "& go test -v -count=1 -race -timeout 20m ./... 2>&1 | Tee-Object -FilePath",
 		exitVariable: "$raceExit",
 	})...)
@@ -479,13 +523,18 @@ func validateSeparatedRunShells(id string, job workflowJob) []string {
 			continue
 		}
 		switch step.If {
-		case "${{ runner.os != 'Windows' }}",
+		// 画面だけの変更で Go のテストを飛ばしたことを知らせる echo だけは、どの OS でも bash で走る。
+		case "${{ env.NATIVE_TESTS != 'true' }}":
+			if step.Shell != "bash" || !strings.HasPrefix(strings.TrimSpace(step.Run), "echo ") {
+				problems = append(problems, fmt.Sprintf("%s step %q must only echo, in bash", id, step.Name))
+			}
+		case gated("${{ runner.os != 'Windows' }}"),
 			// race は PR では Linux だけに絞るが、Unix の command であることは変わらない。
-			"${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}":
+			gated("${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}"):
 			if step.Shell != "bash" {
 				problems = append(problems, fmt.Sprintf("%s step %q must use bash for its Unix-only command", id, step.Name))
 			}
-		case "${{ runner.os == 'Windows' }}", "${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}":
+		case gated("${{ runner.os == 'Windows' }}"), gated("${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}"):
 			// The public installer explicitly supports the inbox Windows PowerShell
 			// 5.1. Its syntax check must use that executable; every build/test step
 			// continues to use the pinned pwsh runtime on the runner.
@@ -576,4 +625,64 @@ func runCommandOutput(t *testing.T, directory, name string, args ...string) []by
 		t.Fatalf("run %s: %v", name, err)
 	}
 	return output
+}
+
+// jobs.changes は、PR の merge commit と 1 つ目の親（base）との差分を native-tests-needed.sh に
+// 渡し、Windows と macOS の Go のテストが要るかを jobs.go へ渡す。
+func TestCIWorkflowDecidesTheNativeGoTestsFromThePullRequestDiff(t *testing.T) {
+	document := readWorkflowDocument(t)
+	job, ok := document.Jobs["changes"]
+	if !ok {
+		t.Fatal("jobs.changes is missing")
+	}
+	step, found := namedStep(job, "Decide whether the Windows and macOS Go tests run")
+	if !found {
+		t.Fatal("jobs.changes has no step deciding the native Go tests")
+	}
+	for _, fragment := range []string{
+		`if [ "$EVENT_NAME" != "pull_request" ]; then`,
+		`git diff --name-only HEAD^1 HEAD | scripts/ci/native-tests-needed.sh`,
+		`>> "$GITHUB_OUTPUT"`,
+	} {
+		if !strings.Contains(step.Run, fragment) {
+			t.Errorf("the deciding step lacks %q", fragment)
+		}
+	}
+	for _, checkout := range job.Steps {
+		if strings.HasPrefix(checkout.Uses, "actions/checkout@") && fmt.Sprint(checkout.With["fetch-depth"]) != "2" {
+			t.Errorf("jobs.changes checkout fetch-depth = %v, want 2 to reach the merge commit's base", checkout.With["fetch-depth"])
+		}
+	}
+}
+
+// native-tests-needed.sh は、画面・文書・組み立てた画面のファイル・確認用の画像・Markdown だけの
+// 変更なら false、それ以外が 1 つでもあるか、パスを受け取れなかったら true を返す。
+func TestNativeTestsNeededScriptSkipsOnlyWebAndDocumentChanges(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the script runs on the Linux runner")
+	}
+	cases := []struct {
+		name  string
+		paths string
+		want  string
+	}{
+		{"web and documents only", "web/src/App.tsx\npages/features/menu.md\ninternal/ui/dist/index.html\nartifacts/x.png\nREADME.md\n", "false"},
+		{"a Go file among them", "web/src/App.tsx\ninternal/app/app.go\n", "true"},
+		{"the workflow itself", ".github/workflows/ci.yml\n", "true"},
+		{"the module file", "go.mod\n", "true"},
+		{"nothing given", "", "true"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			command := exec.Command("bash", filepath.Join("..", "..", "scripts", "ci", "native-tests-needed.sh"))
+			command.Stdin = strings.NewReader(testCase.paths)
+			output, err := command.Output()
+			if err != nil {
+				t.Fatalf("run script: %v", err)
+			}
+			if got := strings.TrimSpace(string(output)); got != testCase.want {
+				t.Fatalf("native tests needed = %q, want %q", got, testCase.want)
+			}
+		})
+	}
 }
