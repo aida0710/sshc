@@ -19,7 +19,7 @@ You can also choose **Show in split view on the right** or **Show in split view 
 
 Splitting a session displayed on its own creates a group under **Split views**, above **Workspaces** in the sidebar. Groups are named **Split 1**, **Split 2**, and so on, in creation order. Numbers are not reused after a group is dissolved. You can keep up to eight groups, with up to four panes each. Splitting within a displayed group adds a pane to that group.
 
-Select a group row to return to its arrangement. The small map at the row's left shows how its panes are arranged, and the number at its right is how many sessions it holds. Beneath the row, each session in the group has its own line (status dot, name, destination); selecting one opens the group with that pane focused. In the workspace tree, a grouped session shows a small map with its own pane highlighted.
+Select a group row to return to its arrangement. The small map at the row's left shows how its panes are arranged, and the number at its right is how many sessions it holds. Beneath the row, each session in the group has its own row: a status dot and its name, with the destination under the name. Selecting one opens the group with that pane focused. In the workspace tree, a grouped session shows a small map with its own pane highlighted.
 
 Selecting a grouped session in the sidebar opens its group and focuses that pane. Selecting an ungrouped session shows it alone while keeping every group available under **Split views**.
 

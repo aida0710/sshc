@@ -9,9 +9,10 @@ import { draggableCursor } from "../ui/dragAndDropLook";
 import { Icon } from "../ui/icons";
 import { describeForwardProblem } from "./forwardProblem";
 import { sessionDragMimeType } from "./sessionDrag";
-import { sessionMarkerClass, sessionShowsDestination, sessionStatusText, sessionStatusTone } from "./sessionStatus";
+import { SessionDestinationLine } from "./SessionDestinationLine";
+import { sessionMarkerClass, sessionStatusText } from "./sessionStatus";
 import { SessionRowMenu, type SessionRowMenuPlacement, type WorkspaceMoveTarget } from "./SessionRowMenu";
-import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
+import { terminalDisplayTitle } from "./terminalPresentation";
 import { notificationText, type UnreadSessions } from "./terminalNotifications";
 import { revealOnHover } from "../ui/ActionMenu";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
@@ -167,7 +168,6 @@ export function SessionList({
           onDrop={() => drop(null)}
         >
           {sessions.map((session, index) => {
-            const destination = terminalSubtitle(session, t);
             const displayTitle = terminalDisplayTitle(session);
             const splitGroup = splitGroupBySession?.get(session.id);
             const unread = unreadBySession.has(session.id);
@@ -175,7 +175,7 @@ export function SessionList({
             const isSelected = session.id === selected;
             const statusId = `session-status-${session.id}`;
             const marker = (
-              <span aria-hidden="true" className={`mt-1.5 size-2 shrink-0 rounded-full ${sessionMarkerClass(session, unread)}`} />
+              <span aria-hidden="true" className={`mt-[5px] size-2 shrink-0 rounded-full ${sessionMarkerClass(session, unread)}`} />
             );
             // The dot carries the status for the eye; screen readers get it as the row's description.
             const statusDescription = (
@@ -228,7 +228,7 @@ export function SessionList({
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
                 ) : null}
                 <div
-                  className={`group/row relative flex items-start gap-2.5 rounded-[7px] py-1.5 pl-3 pr-2 transition-colors md:min-h-[30px] md:py-[5px] ${
+                  className={`group/row relative flex items-start gap-2.5 rounded-[7px] py-1.5 pl-3 pr-2 transition-colors md:min-h-[30px] md:py-[3px] ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
                       : isSelected ? "bg-select-fill" : "hover:bg-hover"
@@ -268,30 +268,26 @@ export function SessionList({
                     >
                       {marker}
                       <span className="min-w-0 grow">
-                        <span className="flex items-center gap-2 text-[13px] leading-5">
-                          {/* The split map follows the name, so it stays visible beside the selected row's "…". */}
-                          <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                            <span className={`min-w-0 truncate ${isSelected ? "font-medium text-ink" : "text-ink"}`}>{displayTitle}</span>
-                            {splitGroup === undefined ? null : (
-                              // Where this session sits in its split, drawn small; the name is for screen readers.
-                              <span data-split-group-badge={splitGroup.number} title={t("splitView.groupName", { number: splitGroup.number })}
-                                aria-label={t("splitView.groupName", { number: splitGroup.number })} className="inline-flex shrink-0 items-center">
-                                <SplitLayoutMap root={splitGroup.view.root} highlight={session.id} className="h-[11px] w-4" />
-                              </span>
-                            )}
-                          </span>
-                          {sessionShowsDestination(session)
-                            ? <span data-session-destination className={`max-w-[50%] shrink-0 truncate font-mono text-[11px] text-ink-faint ${isSelected ? "pointer-fine:hidden" : ""}`}>{destination}</span>
-                            : <span data-session-status-text className={`max-w-[60%] shrink-0 truncate text-[11px] ${sessionStatusTone(session)}`}>{status}</span>}
+                        {/* The name gets the whole first line; the destination (or the state) is the second. */}
+                        <span className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px]">
+                          <span className={`min-w-0 truncate ${isSelected ? "font-medium text-ink" : "text-ink"}`}>{displayTitle}</span>
+                          {splitGroup === undefined ? null : (
+                            // Where this session sits in its split, drawn small; the name is for screen readers.
+                            <span data-split-group-badge={splitGroup.number} title={t("splitView.groupName", { number: splitGroup.number })}
+                              aria-label={t("splitView.groupName", { number: splitGroup.number })} className="inline-flex shrink-0 items-center">
+                              <SplitLayoutMap root={splitGroup.view.root} highlight={session.id} className="h-[11px] w-4" />
+                            </span>
+                          )}
                         </span>
+                        <SessionDestinationLine session={session} />
                         {details}
                         {statusDescription}
                       </span>
                     </button>
                   )}
-                  {/* With a mouse the actions cover the destination only on the selected or hovered row, so
-                      the other rows keep it at the right edge. Touch keeps them in the row, always shown. */}
-                  <div className={`flex shrink-0 items-center gap-0.5 pointer-fine:absolute pointer-fine:right-1.5 pointer-fine:top-[5px] pointer-fine:rounded-md ${
+                  {/* With a mouse the actions show only on the selected or hovered row, over the end of the
+                      name line. Touch keeps them in the row, always shown. */}
+                  <div className={`flex shrink-0 items-center gap-0.5 pointer-fine:absolute pointer-fine:right-1.5 pointer-fine:top-[2px] pointer-fine:rounded-md ${
                     isSelected ? "pointer-fine:bg-select-fill" : `pointer-fine:bg-hover ${revealOnHover}`
                   }`}>
                     <button
