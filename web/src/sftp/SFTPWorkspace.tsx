@@ -6,7 +6,6 @@ import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { SplitResizeHandle } from "../ui/SplitResizeHandle";
 import { useCompactViewport } from "../ui/useMediaQuery";
-import { SectionBar } from "../ui/SectionBar";
 import { Button } from "../ui/surface";
 import { SFTPPanel, type SFTPTarget } from "./SFTPPanel";
 import type { RestoredSFTPLocation } from "./useSFTPBrowser";
@@ -54,10 +53,14 @@ function useCallbackPerTab<T>(handle: (tabId: string, value: T) => void) {
   return { forTab, forget };
 }
 
-// The workspace lays one or two panes side by side under the SFTP section bar.
-// Each pane has its own tab strip; a tab dragged onto a pane moves there, and a
-// tab dragged beside the only pane opens the second one. The transfer queue is
-// global to the engine and is drawn once below the panes.
+// The workspace lays one or two panes side by side. Each pane has its own tab
+// strip; a tab dragged onto a pane moves there, and a tab dragged beside the only
+// pane opens the second one. The transfer queue is global to the engine and is
+// drawn once below the panes.
+//
+// On a wide screen one pane and the transfer queue share one rounded card, as the
+// pages do. Two panes each get a card, side by side like a split terminal, and the
+// transfer queue gets its own card below them.
 export function SFTPWorkspace({
   title,
   aliases,
@@ -69,7 +72,7 @@ export function SFTPWorkspace({
   onNavigateLocation,
   onOpenTerminal,
 }: {
-  // title is the section name shown in the bar above the panes.
+  // title is the section name. The tab strips say where each pane is, so it is only read out as the heading.
   title: string;
   aliases: string[];
   // hostVPN は、alias ごとに通るVPN経路の名前である。
@@ -283,13 +286,16 @@ export function SFTPWorkspace({
   }
 
   const canCompare = comparisonTabs.length > 1;
-  // On a phone the section bar would take a whole row for this one button, so it stays at the end of the tab strip.
+  // Compare sits at the end of the last pane's tab strip, the right edge of the workspace.
   const comparisonAction = compactViewport ? null : (
-    <Button aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")} disabled={!canCompare}
-      onClick={requestComparison} className="flex items-center gap-1.5">
-      <Icon name="arrowLeftRight" className="size-4" />{t("sftp.compare.action")}
+    <Button small aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")} disabled={!canCompare}
+      onClick={requestComparison} className="my-auto ml-auto inline-flex shrink-0 items-center gap-1.5">
+      <Icon name="arrowLeftRight" className="size-[13px]" />{t("sftp.compare.action")}
     </Button>
   );
+  // The transfer queue's card does not clip: its resize grip reaches above its top edge.
+  const boardFrame = "rounded-xl border border-line bg-sidebar shadow-pane";
+  const boardLook = `overflow-hidden ${boardFrame}`;
   const compactComparisonButton = (
     <button type="button" aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")}
       disabled={!canCompare} onClick={requestComparison}
@@ -308,11 +314,11 @@ export function SFTPWorkspace({
     return (
       <Fragment key={pane.id}>
         {index > 0 && visibleSplit ? (
-          <SplitResizeHandle direction="horizontal" ratio={splitRatio} label={t("sftp.resizePanes")} onRatioChange={changeSplitRatio} />
+          <SplitResizeHandle direction="horizontal" look="gap" ratio={splitRatio} label={t("sftp.resizePanes")} onRatioChange={changeSplitRatio} />
         ) : null}
         <div
           data-sftp-pane={pane.id}
-          className="flex min-h-0 min-w-0 flex-col"
+          className={`flex min-h-0 min-w-0 flex-col ${visibleSplit ? boardLook : ""}`}
           style={{ flexBasis: visibleSplit ? `${index === 0 ? splitRatio : 100 - splitRatio}%` : "100%" }}
           hidden={concealed}
           aria-label={t(index === 0 ? "sftp.firstPane" : "sftp.secondPane")}
@@ -332,6 +338,7 @@ export function SFTPWorkspace({
             onDragStart={setDraggedTabId}
             onDragEnd={() => setDraggedTabId(null)}
             onMove={moveTabWithKeyboard}
+            trailing={index === panes.length - 1 ? comparisonAction : null}
           />}
           <div data-sftp-pane-content={pane.id} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {pane.tabs.map((tab) => {
@@ -385,9 +392,9 @@ export function SFTPWorkspace({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <SectionBar title={title} actions={comparisonAction} />
-      <section ref={workspaceRoot} className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label={t("sftp.tabs")}>
+    <div className={compactViewport ? "flex h-full min-h-0 flex-col" : "flex h-full min-h-0 flex-col p-2"}>
+      <h2 className="sr-only">{title}</h2>
+      <section ref={workspaceRoot} className={`flex min-h-0 min-w-0 flex-1 flex-col ${compactViewport ? "" : visibleSplit ? "gap-2" : boardLook}`} aria-label={t("sftp.tabs")}>
         {compactViewport && compactTabs !== null ? <SFTPTabStrip
           pane={compactTabs} compact label={t("sftp.mobileTabs")} closable={compactTabs.tabs.length > 1}
           movable={() => false} addDisabled={panes.every((pane) => pane.tabs.length >= maxTabsPerPane)}
@@ -395,10 +402,14 @@ export function SFTPWorkspace({
           canChangeHost={(tab) => !dirtyTabs.has(tab.id)} onSelect={selectFileTab} onClose={requestCloseTab}
           onAdd={openFileTab} onDragStart={setDraggedTabId} onDragEnd={() => setDraggedTabId(null)} onMove={moveTabWithKeyboard}
         /> : null}
-        <div className="flex min-h-0 min-w-0 flex-1">
+        <div className={`flex min-h-0 min-w-0 flex-1 ${visibleSplit ? "gap-0.5" : ""}`}>
           {panes.map(renderPane)}
         </div>
-        <TransferManagerList openRequest={openQueueRequest} onNavigateLocation={onNavigateLocation} />
+        {/* The queue keeps one place in the tree whatever the layout. Mounted afresh, it would act on the last
+            open request again and pop its sheet open on a phone. */}
+        <div className={`flex shrink-0 flex-col ${visibleSplit ? boardFrame : ""}`}>
+          <TransferManagerList divided={!visibleSplit} openRequest={openQueueRequest} onNavigateLocation={onNavigateLocation} />
+        </div>
         {closeTabIntent?.kind === "unsaved" ? (
           <ConfirmDialog
             id="sftp-close-dirty-tab"
