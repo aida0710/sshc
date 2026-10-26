@@ -9,7 +9,7 @@ import { SavePreviewPanel } from "../connections/SavePreview";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { Icon } from "../ui/icons";
 import { hintText, sectionHeading } from "../ui/form";
-import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { PageHeader, SummaryStat, SummaryStats } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { useToast } from "../ui/useToast";
@@ -301,15 +301,15 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <PageHeader title={t("explorer.pageTitle")} description={t("explorer.pageDescription")} />
-      <MetricGrid data-config-metrics className="grid-cols-3 divide-x divide-hairline sm:grid-cols-3 lg:grid-cols-3">
+      <SummaryStats data-config-metrics>
         {([
           [t("explorer.metricFiles"), overview.files.length, false],
           [t("explorer.metricEditable"), editableFiles, false],
           [t("explorer.metricDiagnostics"), overview.diagnostics.length, overview.diagnostics.length > 0],
         ] as const).map(([label, value, attention]) => (
-          <MetricCard key={String(label)} label={String(label)} value={value} compact attention={Boolean(attention)} className="min-w-0 flex-col items-start sm:flex-row sm:items-center" />
+          <SummaryStat key={String(label)} label={String(label)} value={value} attention={Boolean(attention)} />
         ))}
-      </MetricGrid>
+      </SummaryStats>
 
       {jump === "" ? null : <p aria-live="polite" className={hintText}>{jump}</p>}
 

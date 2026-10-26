@@ -18,10 +18,8 @@ export function SettingsSection({
 }) {
   return (
     <section id={id} aria-label={label} className="scroll-mt-6 border-b border-line last:border-b-0">
-      <div className={showHeading
-        ? "grid gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-8 lg:py-8"
-        : "px-4 py-6 sm:px-6 lg:px-8 lg:py-8"}
-      >
+      {/* The page's card already keeps the margins; a section only spaces itself from its neighbours. */}
+      <div className={showHeading ? "grid gap-5 py-6 lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-8 lg:py-8" : "py-6 lg:py-7"}>
         {showHeading ? (
           <header className="flex items-center gap-3 self-start lg:sticky lg:top-6">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-select-fill text-accent">

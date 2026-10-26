@@ -1,22 +1,31 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import { mobileViewportQuery, useMediaQuery } from "./useMediaQuery";
 
+// PageHeader is the top of a page: its name, a line on what it is for, and its main actions on the right.
+// On a phone the app's top bar already shows the section's name, so the heading is only for screen
+// readers there, unless the page is named apart from its section (titleOnPhone, as in Settings).
 export function PageHeader({
   title,
+  headingId,
   description,
   actions,
+  titleOnPhone = false,
+  className = "",
 }: {
   title: string;
-  description: string;
+  headingId?: string;
+  description?: string | undefined;
   actions?: ReactNode;
+  titleOnPhone?: boolean;
+  className?: string;
 }) {
+  const compact = useMediaQuery(mobileViewportQuery);
   return (
-    <header className="flex flex-wrap items-end justify-between gap-3 border-b border-line pb-3">
-      <div className="min-w-0">
-        <h2 className="text-xl font-semibold tracking-tight text-ink">{title}</h2>
-        <p className="mt-1 max-w-3xl text-sm leading-5 text-ink-muted">{description}</p>
+    <header className={`flex flex-wrap items-start justify-between gap-4 ${className}`}>
+      <div className="min-w-0 flex-1">
+        <h2 id={headingId} className={compact && !titleOnPhone ? "sr-only" : "text-xl font-semibold leading-[29px] text-ink"}>{title}</h2>
+        {description === undefined ? null : <p className="mt-0.5 max-w-3xl text-xs leading-[18px] text-ink-faint">{description}</p>}
       </div>
-
-
       {actions === undefined ? null : (
         <div className="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto sm:shrink-0">{actions}</div>
       )}
@@ -24,45 +33,21 @@ export function PageHeader({
   );
 }
 
-export function MetricCard({
-  label,
-  value,
-  detail,
-  attention = false,
-  compact = false,
-  icon,
-  className = "",
-}: {
-  label: string;
-  value: string | number;
-  detail?: string;
-  attention?: boolean;
-  compact?: boolean;
-  icon?: ReactNode;
-  className?: string;
-}) {
+// SummaryStats is the row of small counts under a page's heading.
+export function SummaryStats({ children, className = "", ...rest }: ComponentPropsWithoutRef<"dl">) {
   return (
-    <div className={`${compact ? "flex items-center justify-between gap-4 px-4 py-2.5" : icon === undefined ? "px-4 py-3.5" : "flex items-center gap-3 px-4 py-3.5"} ${attention ? "bg-notice" : "bg-card"} ${className}`}>
-      {icon === undefined ? null : <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface text-accent">{icon}</span>}
-      <div className={icon === undefined ? "contents" : "min-w-0 grow"}>
-        <dt className={`text-xs font-medium tracking-wide ${attention ? "text-notice-ink" : "text-ink-muted"}`}>
-          {label}
-        </dt>
-        <dd className={`${compact ? "font-mono text-sm" : "mt-1 text-xl tracking-tight"} font-semibold ${attention ? "text-notice-ink" : "text-ink"}`}>{value}</dd>
-        {detail === undefined ? null : <p className="mt-1 text-xs text-ink-muted">{detail}</p>}
-      </div>
-    </div>
+    <dl className={`flex flex-wrap gap-2 ${className}`} {...rest}>
+      {children}
+    </dl>
   );
 }
 
-export function MetricGrid({
-  children,
-  className = "",
-  ...rest
-}: ComponentPropsWithoutRef<"dl">) {
+// SummaryStat is one of those counts. attention paints it amber, for a count that asks for a look.
+export function SummaryStat({ label, value, attention = false }: { label: string; value: string | number; attention?: boolean }) {
   return (
-    <dl className={`sshc-card grid gap-px overflow-hidden rounded-lg bg-line sm:grid-cols-2 lg:grid-cols-3 ${className}`} {...rest}>
-      {children}
-    </dl>
+    <div className={`inline-flex h-[30px] items-center gap-2 rounded-md px-3 text-[12.5px] ${attention ? "bg-notice text-notice-ink" : "bg-well text-ink-muted"}`}>
+      <dt>{label}</dt>
+      <dd className={`font-mono text-[13px] font-semibold ${attention ? "text-notice-ink" : "text-ink"}`}>{value}</dd>
+    </div>
   );
 }

@@ -11,9 +11,11 @@ const controlWidthClasses = {
 
 type ControlWidth = keyof typeof controlWidthClasses;
 
+// The border keeps the stronger control line: appearance.spec holds it to a 2.5:1 contrast, so a field
+// is found without its label.
 const controlLook =
-  "rounded-md border border-control-line bg-control px-2 py-1.5 text-sm text-ink " +
-  "placeholder:text-ink-faint focus:border-accent focus:outline-none " +
+  "rounded-md border border-control-line bg-control px-2.5 py-[5px] text-[13px] leading-5 text-ink " +
+  "placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/20 " +
   "disabled:border-line disabled:text-ink-faint";
 
 // sizedControl は、共通の入力欄の見た目を、指定の幅で返す。
@@ -30,15 +32,15 @@ export const autoControl = sizedControl("auto");
 // 押せないときの見た目（薄くする、載せても光らない）は index.css の :disabled の決まりが
 // どのボタンにも同じく付けるので、ここでは書かない。
 export const primaryAction =
-  "whitespace-nowrap rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink " +
+  "whitespace-nowrap rounded-md bg-accent px-3.5 py-1.5 text-[13px] font-medium leading-5 text-accent-ink " +
   "transition-[background-color,box-shadow,filter] duration-150 hover:brightness-110 active:brightness-95";
 
 export const secondaryAction =
-  "whitespace-nowrap rounded-md border border-control-line bg-card px-3 py-1.5 text-sm text-ink " +
+  "whitespace-nowrap rounded-md border border-line bg-well px-3.5 py-[5px] text-[13px] leading-5 text-ink " +
   "transition-colors duration-150 hover:border-accent/50 hover:bg-hover active:bg-select-fill";
 
 export const dangerAction =
-  "whitespace-nowrap rounded-md border border-control-line px-3 py-1.5 text-sm text-danger " +
+  "whitespace-nowrap rounded-md border border-line px-3.5 py-[5px] text-[13px] leading-5 text-danger " +
   "transition-colors duration-150 hover:border-danger/50 hover:bg-danger/10";
 
 export const fieldLabel = "text-xs font-medium tracking-wide text-ink-muted";
@@ -48,8 +50,8 @@ export const sectionCard =
 export const sectionHeading = "text-sm font-medium text-ink";
 
 export const tableHeadRow =
-  "border-b border-line text-xs uppercase tracking-wide text-ink-muted";
-export const tableHeadCell = "py-2 pr-3 text-left font-medium";
+  "border-b border-line text-xs text-ink-faint";
+export const tableHeadCell = "py-2 pr-3 text-left font-normal";
 
 type FieldProps = {
   label: string;
