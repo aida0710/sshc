@@ -290,6 +290,16 @@ export async function openSettingsPage(
   await page.getByRole("link", { name: `Open ${name}`, exact: true }).click();
 }
 
+// chooseTheme picks the theme on Settings → Appearance, the one place the signed-in app offers it.
+export async function chooseTheme(page: Page, theme: "system" | "light" | "dark"): Promise<void> {
+  const labels = { system: "System", light: "Light", dark: "Dark" } as const;
+  await openSection(page, "Appearance");
+  // The radio itself is visually hidden behind its picture, so the choice is made by pressing its label.
+  const themes = page.getByRole("radiogroup", { name: "Theme" });
+  await themes.locator("label").filter({ hasText: labels[theme] }).click();
+  await expect(themes.getByRole("radio", { name: labels[theme] })).toBeChecked();
+}
+
 export async function changeDisplayLanguage(
   page: Page,
   locale: "en" | "ja",

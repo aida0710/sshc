@@ -1,154 +1,168 @@
-import { sectionPath } from "../routing/sectionRoute";
-import { opensInThisPage } from "../ui/linkClick";
-import type { MouseEvent } from "react";
+import { useId, type MouseEvent, type ReactNode } from "react";
+import { updateApi as defaultUpdateApi, type UpdateApi } from "../api/update";
 import { useLanguage } from "../i18n/context";
 import { localeLabelKeys, locales, type Locale } from "../i18n/locale";
-import type { MessageKey } from "../i18n/messages";
-import { useTheme } from "../theme/context";
-import { themes, type Theme } from "../theme/theme";
-import { autoControl } from "../ui/form";
+import { useSignOutConfirmation } from "../session/useSignOutConfirmation";
 import { Icon, type IconName } from "../ui/icons";
-import { SignOutButton } from "../session/SignOutButton";
+import { opensInThisPage } from "../ui/linkClick";
+import { Notice } from "../ui/surface";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import type { MenuGroup, MenuItem } from "./menuEntries";
+import { availableRelease, useUpdateStatus } from "./useUpdateStatus";
 
-export type MenuItem = {
-  key: string;
-  label: MessageKey;
-  icon: IconName;
-  href: string;
-};
-
-export type MenuGroup = {
-  label: MessageKey;
-  items: MenuItem[];
-};
-
-const themeLabels: Record<Theme, MessageKey> = {
-  system: "shell.themeSystem",
-  light: "shell.themeLight",
-  dark: "shell.themeDark",
-};
-
+// MenuPanel lists every page the sidebar does not, each with a line on what it is for. On a wide
+// screen it is one card, like Settings, with the groups in columns; on a phone each group is a card.
 export function MenuPanel({
-  groups,
+  columns,
   onNavigate,
+  api = defaultUpdateApi,
 }: {
-  groups: MenuGroup[];
+  columns: MenuGroup[][];
+  onNavigate: (href: string) => void;
+  api?: UpdateApi;
+}) {
+  const { t } = useLanguage();
+  const compact = useMediaQuery(mobileViewportQuery);
+  const release = availableRelease(useUpdateStatus(api).status);
+
+  // About tells of a published version in place of its usual line, so the Menu shows it without a badge.
+  function describe(item: MenuItem) {
+    if (item.key === "About" && release !== undefined) return { text: t("menu.updateAvailable", { version: release }), notice: true };
+    return { text: t(item.description), notice: false };
+  }
+
+  const groups = columns.map((column, index) => (
+    <div key={index} className="flex min-w-0 flex-col gap-[18px]">
+      {column.map((group) => (
+        <MenuGroupSection key={group.label} label={t(group.label)} compact={compact}>
+          {group.items.map((item) => (
+            <MenuLink key={item.key} item={item} description={describe(item)} compact={compact} onNavigate={onNavigate} />
+          ))}
+        </MenuGroupSection>
+      ))}
+      {index === columns.length - 1 ? (
+        <MenuGroupSection label={t("menu.displaySettings")} compact={compact}>
+          <LanguageRow compact={compact} />
+          <SignOutRow compact={compact} />
+        </MenuGroupSection>
+      ) : null}
+    </div>
+  ));
+
+  if (compact) {
+    // The phone's top bar already says "Menu", so the heading is only for screen readers.
+    return (
+      <section aria-labelledby="menu-heading" className="flex flex-col gap-[18px] px-3 pb-[18px] pt-3.5">
+        <h2 id="menu-heading" className="sr-only">{t("section.menu")}</h2>
+        {groups}
+      </section>
+    );
+  }
+  return (
+    <div className="mx-auto flex min-h-full w-full max-w-6xl p-2">
+      <section aria-labelledby="menu-heading" className="@container min-w-0 flex-1 rounded-xl border border-line bg-sidebar px-8 py-[26px] shadow-pane">
+        <h2 id="menu-heading" className="mb-[18px] text-xl font-semibold leading-[29px] text-ink">{t("section.menu")}</h2>
+        <div className="grid items-start gap-x-7 gap-y-[18px] @2xl:grid-cols-2 @4xl:grid-cols-3">{groups}</div>
+      </section>
+    </div>
+  );
+}
+
+function MenuGroupSection({ label, compact, children }: { label: string; compact: boolean; children: ReactNode }) {
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId}>
+      <h3 id={headingId} className={`pb-1.5 text-xs leading-[17px] text-ink-faint ${compact ? "px-1.5" : "px-2.5"}`}>{label}</h3>
+      <ul className={compact ? "overflow-hidden rounded-[14px] border border-line bg-sidebar [&>li+li>:first-child]:border-t [&>li+li>:first-child]:border-line" : ""}>
+        {children}
+      </ul>
+    </section>
+  );
+}
+
+// The row's look, shared by the links and the two controls under Preferences. On a phone a select is
+// 44px tall (index.css), so the Language row passes tighter padding to stay 56px like the others.
+function rowClassName(compact: boolean, phonePadding = "py-2") {
+  return compact ? `flex min-h-14 items-center gap-3 px-3 ${phonePadding}` : "flex min-h-[46px] items-center gap-3 rounded-lg px-2.5 py-1.5";
+}
+
+function RowIcon({ name, compact, tone = "plain" }: { name: IconName; compact: boolean; tone?: "plain" | "danger" }) {
+  return (
+    <span className={`grid shrink-0 place-items-center rounded-lg ${compact ? "size-8" : "size-[30px]"} ${tone === "danger" ? "bg-danger/12 text-danger" : "bg-well text-ink-muted"}`}>
+      <Icon name={name} className="size-4" />
+    </span>
+  );
+}
+
+function MenuLink({ item, description, compact, onNavigate }: {
+  item: MenuItem;
+  description: { text: string; notice: boolean };
+  compact: boolean;
   onNavigate: (href: string) => void;
 }) {
-  const { t, locale, setLocale } = useLanguage();
-  const { theme, setTheme } = useTheme();
+  const { t } = useLanguage();
+  const label = t(item.label);
 
-  function follow(event: MouseEvent<HTMLAnchorElement>, href: string) {
+  function follow(event: MouseEvent<HTMLAnchorElement>) {
     if (!opensInThisPage(event)) return;
     event.preventDefault();
-    onNavigate(href);
+    onNavigate(item.href);
   }
 
   return (
-    <section aria-labelledby="menu-heading" className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-      <div className="border-b border-line pb-3">
-        <h2 id="menu-heading" className="text-xl font-semibold tracking-tight text-ink">
-          {t("section.menu")}
-        </h2>
-      </div>
+    <li>
+      <a href={item.href} aria-label={t("menu.open", { section: label })} onClick={follow}
+        className={`${rowClassName(compact)} transition-colors ${compact ? "active:bg-hover" : "hover:bg-hover"}`}>
+        <RowIcon name={item.icon} compact={compact} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] leading-[18px] text-ink">{label}</span>
+          <span className={`block truncate text-xs leading-4 ${description.notice ? "text-accent" : "text-ink-faint"}`}>{description.text}</span>
+        </span>
+        <Icon name="chevronRight" className="size-[15px] text-ink-faint" />
+      </a>
+    </li>
+  );
+}
 
-      <div className="grid items-start gap-x-8 gap-y-7 lg:grid-cols-2 xl:grid-cols-3">
-        {groups.map((group) => (
-          <section key={group.label} aria-labelledby={`menu-${group.label}`}>
-            <h3
-              id={`menu-${group.label}`}
-              className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint"
-            >
-              {t(group.label)}
-            </h3>
-            <ul className="mt-2 overflow-hidden rounded border border-line bg-card">
-              {group.items.map((item, index) => {
-                const label = t(item.label);
-                return (
-                  <li key={item.key} className={index === 0 ? "" : "border-t border-line"}>
-                    <a
-                      href={item.href}
-                      aria-label={t("menu.open", { section: label })}
-                      onClick={(event) => follow(event, item.href)}
-                      className="group flex min-h-14 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-hover"
-                    >
-                      <span className="grid size-8 shrink-0 place-items-center rounded bg-control text-ink-muted group-hover:text-ink">
-                        <Icon name={item.icon} className="size-4" />
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{label}</span>
-                      <Icon name="chevronRight" className="size-4 shrink-0 text-ink-faint group-hover:text-ink-muted" />
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))}
-        <section aria-labelledby="menu-others">
-          <h3 id="menu-others" className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">{t("menu.others")}</h3>
-          <ul className="mt-2 overflow-hidden rounded border border-line bg-card">
-            {(["License", "About"] as const).map((section) => {
-              const label = section === "License" ? "section.license" : "section.about";
-              return <li key={section} className="border-t border-line first:border-t-0">
-                <a href={sectionPath(section)} onClick={(event) => follow(event, sectionPath(section))}
-                  aria-label={t("menu.open", { section: t(label) })}
-                  className="flex min-h-14 items-center gap-3 px-3 py-2.5 hover:bg-hover">
-                  <span className="grid size-8 shrink-0 place-items-center rounded bg-control text-ink-muted"><Icon name={section === "License" ? "license" : "info"} className="size-4" /></span>
-                  <span className="flex-1 text-sm font-medium text-ink">{t(label)}</span>
-                  <Icon name="chevronRight" className="size-4 text-ink-faint" />
-                </a>
-              </li>;
-            })}
-          </ul>
-        </section>
-        <section aria-labelledby="menu-display-settings">
-          <h3
-            id="menu-display-settings"
-            className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint"
-          >
-            {t("menu.displaySettings")}
-          </h3>
-          <div className="mt-2 grid gap-4 rounded border border-line bg-card p-4">
-            <label className="grid gap-1.5 text-xs font-medium text-ink-muted">
-              {t("menu.theme")}
-              <select
-                aria-label={t("menu.theme")}
-                value={theme}
-                onChange={(event) => setTheme(event.target.value as Theme)}
-                className={`${autoControl} h-10 w-full text-sm`}
-              >
-                {themes.map((candidate) => (
-                  <option key={candidate} value={candidate}>
-                    {t(themeLabels[candidate])}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1.5 text-xs font-medium text-ink-muted">
-              {t("menu.language")}
-              <select
-                aria-label={t("menu.language")}
-                value={locale}
-                onChange={(event) => setLocale(event.target.value as Locale)}
-                className={`${autoControl} h-10 w-full text-sm`}
-              >
-                {locales.map((candidate) => (
-                  <option key={candidate} value={candidate}>
-                    {t(localeLabelKeys[candidate])}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </section>
-        <section aria-labelledby="menu-sign-out" className="lg:col-span-2 xl:col-span-3">
-          <h3 id="menu-sign-out" className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">{t("menu.signOutHeading")}</h3>
-          <p className="mt-2 text-sm leading-6 text-ink-muted">{t("menu.signOutHint")}</p>
-          <div className="mt-3">
-            <SignOutButton />
-          </div>
-        </section>
+function LanguageRow({ compact }: { compact: boolean }) {
+  const { t, locale, setLocale } = useLanguage();
+  const selectId = useId();
+  return (
+    <li>
+      <div className={rowClassName(compact, "py-1.5")}>
+        <RowIcon name="language" compact={compact} />
+        <label htmlFor={selectId} className="min-w-0 flex-1 text-[13.5px] text-ink">{t("menu.language")}</label>
+        {/* The browser's own arrow differs by platform, so the select draws the same chevron as the design. */}
+        <span className="relative">
+          <select id={selectId} value={locale} onChange={(event) => setLocale(event.target.value as Locale)}
+            className="h-[30px] appearance-none rounded-lg border border-line bg-well pl-2.5 pr-[31px] text-[13px] text-ink">
+            {locales.map((candidate) => <option key={candidate} value={candidate}>{t(localeLabelKeys[candidate])}</option>)}
+          </select>
+          <Icon name="chevronDown" className="pointer-events-none absolute right-2.5 top-1/2 size-[13px] -translate-y-1/2 text-ink-muted" />
+        </span>
       </div>
-    </section>
+    </li>
+  );
+}
+
+function SignOutRow({ compact }: { compact: boolean }) {
+  const { t } = useLanguage();
+  const hintId = useId();
+  const { requestSignOut, busy, error, confirmation } = useSignOutConfirmation();
+  // Kept apart from Language on a wide screen, so the two are not pressed by mistake.
+  return (
+    <li className={compact ? "" : "mt-2.5"}>
+      {/* The row is already a large target, so it opts out of the phone's 44px minimum (index.css). */}
+      <button type="button" data-touch-compact aria-label={t("menu.signOut")} aria-describedby={hintId} disabled={busy} onClick={requestSignOut}
+        className={`${rowClassName(compact)} w-full text-left transition-colors hover:bg-danger/10 disabled:opacity-60`}>
+        <RowIcon name="signOut" compact={compact} tone="danger" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] leading-[18px] text-danger">{t("menu.signOut")}</span>
+          <span id={hintId} className="block truncate text-xs leading-4 text-ink-faint">{t("menu.signOutRowHint")}</span>
+        </span>
+      </button>
+      {error === "" ? null : <div className="px-2.5 pb-2"><Notice tone="danger" compact>{error}</Notice></div>}
+      {confirmation}
+    </li>
   );
 }

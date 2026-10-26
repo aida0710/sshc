@@ -13,6 +13,11 @@ export function isUpdateActive(job: UpdateJob | undefined): boolean {
   return job !== undefined && ["accepted", "installing", "restarting"].includes(job.state);
 }
 
+// availableRelease is the newer version that has been published, if there is one.
+export function availableRelease(status: UpdateStatus | null): string | undefined {
+  return status?.available === true && status.latest !== undefined ? status.latest : undefined;
+}
+
 export function useUpdateStatus(api: UpdateApi, enabled = true) {
   const [status, receiveStatus] = useState<UpdateStatus | null>(null);
   const setStatus = useCallback((next: UpdateStatus) => {
