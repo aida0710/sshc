@@ -1,8 +1,9 @@
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
+import { Icon } from "../ui/icons";
 import type { ListFilter } from "./organizer";
 
-// KeyListToolbar は、鍵の一覧の上に置く、表示する種類の切り替えと検索欄である。
+// KeyListToolbar は、鍵の一覧の節の見出しの右に置く、表示する種類の切り替えと検索欄である。
 export function KeyListToolbar({
   listFilter,
   onListFilterChange,
@@ -16,9 +17,7 @@ export function KeyListToolbar({
 }) {
   const t = useTranslate();
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <p className="font-mono text-xs font-medium text-ink-muted">~/.ssh</p>
-      <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+    <div className="flex w-full flex-wrap gap-2 sm:w-auto">
         <label>
           <span className="sr-only">{t("keys.listFilter")}</span>
           <select
@@ -30,17 +29,17 @@ export function KeyListToolbar({
             <option value="all">{t("keys.listFilterAll")}</option>
           </select>
         </label>
-        <label className="min-w-0 grow sm:w-72 sm:grow-0">
+        <label className="relative min-w-0 grow sm:w-64 sm:grow-0">
           <span className="sr-only">{t("keys.search")}</span>
+          <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint" />
           <input
             type="search"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder={t("keys.searchPlaceholder")}
-            className={control}
+            className={`${control} pl-8`}
           />
         </label>
-      </div>
     </div>
   );
 }

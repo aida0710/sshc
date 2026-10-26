@@ -5,7 +5,8 @@ import { useTranslate } from "../i18n/context";
 import { PasswordField } from "../ui/PasswordField";
 import { CheckboxField } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
-import { ActionArea, SettingsSection } from "./SettingsSection";
+import { ActionArea } from "../ui/ActionArea";
+import { SettingsSection } from "./SettingsSection";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { isAcceptedButShort, meetsMasterPasswordMinimum } from "../secrets/masterPasswordLength";
 

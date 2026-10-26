@@ -2358,6 +2358,7 @@ export const ja = {
   "kh.metricHashed": "ハッシュ化ホスト",
   "kh.metricCandidates": "スキャン候補",
   "kh.scanHeading": "ホストをスキャン",
+  "kh.scanHint": "接続先の鍵を取得し、追加する前にフィンガープリントを確認します。",
   "kh.trustedHeading": "信頼済みホスト鍵",
   "kh.columnHost": "ホスト",
   "kh.columnType": "鍵種別",
@@ -3040,6 +3041,7 @@ export const ja = {
   "host.rename": "変更",
 
   "keys.heading": "SSH Keys",
+  "keys.listHeading": "鍵",
   "keys.pageDescription":
     "秘密鍵、公開鍵、証明書の一覧と参照元を確認し、作成・変更・削除を管理します。",
   "keys.search": "鍵を検索",

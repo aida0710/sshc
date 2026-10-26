@@ -4,7 +4,8 @@ import type { TerminalSessionsState } from "../terminal/sessions";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Button } from "../ui/surface";
 import { usePendingResult } from "../ui/usePendingResult";
-import { ActionArea, SettingsSection } from "./SettingsSection";
+import { ActionArea } from "../ui/ActionArea";
+import { SettingsSection } from "./SettingsSection";
 
 export type SessionSettingsState = Pick<TerminalSessionsState, "sessions" | "busy" | "closeAll">;
 
