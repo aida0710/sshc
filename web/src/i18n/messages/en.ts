@@ -1521,7 +1521,6 @@ export const en = {
   "section.history": "History",
 
   "home.heading": "Home",
-  "home.pageDescription": "Open the connections you use often.",
   "home.manageConnections": "Manage connections",
   "home.groups": "Groups",
   "home.attention": "Needs attention",
