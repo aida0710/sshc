@@ -201,7 +201,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
 
   return (
     <section aria-label={t("kh.heading")} className="flex flex-col gap-[22px]">
-      <PageHeader title={t("kh.heading")} description={t("kh.pageDescription")} />
+      <PageHeader title={t("kh.heading")} />
       {/* 読めなかった known_hosts の件数は分からないので、件数の欄ごと出さない。 */}
       {listing === null ? null : (
         <SummaryStats>
