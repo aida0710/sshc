@@ -7,9 +7,9 @@ import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault"
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { PasswordField } from "../ui/PasswordField";
-import { Field, control, hintText, sectionHeading } from "../ui/form";
-import { Button, Card, Notice } from "../ui/surface";
-import { PageHeader, SummaryStat, SummaryStats } from "../ui/page";
+import { Field, control, hintText } from "../ui/form";
+import { Button, Notice } from "../ui/surface";
+import { PageHeader, PageSection, SummaryStat, SummaryStats } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { CredentialEditDialog } from "./CredentialEditDialog";
 import { TOTPCodeCard } from "./TOTPCodeCard";
@@ -90,7 +90,7 @@ function UsageDisclosure({ label, values, emptyLabel, onRemove, removeLabel, own
   const t = useTranslate();
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="rounded-md bg-surface-subtle">
+    <div className="rounded-[9px] bg-well">
       <button
         type="button"
         aria-expanded={expanded}
@@ -100,7 +100,7 @@ function UsageDisclosure({ label, values, emptyLabel, onRemove, removeLabel, own
       >
         <DisclosureChevron expanded={expanded} className="size-3.5" />
         <span className="min-w-0 flex-1 font-medium">{label}</span>
-        <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-xs tabular-nums text-ink-faint">{values.length}</span>
+        <span className="font-mono text-xs tabular-nums text-ink-faint">{values.length}</span>
       </button>
       {expanded ? (
         <div className="border-t border-line px-3 py-3">
@@ -250,9 +250,7 @@ export function SecretsPanel({
     : kinds.find((candidate) => candidate.kind === kind) ?? null;
 
   return (
-    <div
-      className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}
-    >
+    <div className={`flex flex-col gap-[22px] ${mobileTouchTargets}`}>
       <PageHeader
         title={selectedGroup === null ? t("secrets.heading") : t(selectedGroup.heading)}
         description={kind === undefined ? t("secrets.pageDescription") : t(kindDescriptions[kind])}
@@ -288,35 +286,22 @@ export function SecretsPanel({
         const dedicated =
           group.kind === "key_passphrase" ? dedicatedKeyPassphrases : [];
         return (
-          <Card
-            as="section"
+          <PageSection
             key={group.kind}
-            aria-label={t(group.heading)}
-            radius="md"
+            heading={t(group.heading)}
+            meta={String(mine.length + dedicated.length)}
           >
-            <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Icon
-                  name={group.kind === "key_passphrase" ? "keys" : "connections"}
-                  className="h-4 w-4 text-ink-muted"
-                />
-                <h3 className={sectionHeading}>{t(group.heading)}</h3>
-              </div>
-              <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-xs text-ink-muted">
-                {mine.length + dedicated.length}
-              </span>
-            </header>
             {mine.length === 0 && dedicated.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-ink-muted">
+              <p className="py-2 text-sm text-ink-muted">
                 {t("secrets.none")}
               </p>
             ) : (
               <ul className="divide-y divide-line">
                 {mine.map((credential) => (
                   <li key={credential.name}>
-                    <article aria-label={credential.name} className="px-4 py-4">
+                    <article aria-label={credential.name} className="py-3.5">
                       <div className="flex min-w-0 items-start gap-3">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-select-fill text-ink-muted">
+                        <span className="flex size-[30px] shrink-0 items-center justify-center rounded-md bg-well text-ink-muted">
                           <Icon
                             name={
                               group.kind === "key_passphrase" ? "keys" : "secrets"
@@ -384,9 +369,9 @@ export function SecretsPanel({
                 ))}
                 {dedicated.map((credential) => (
                   <li key={credential.key}>
-                    <article aria-label={credential.key} className="px-4 py-4">
+                    <article aria-label={credential.key} className="py-3.5">
                       <div className="flex min-w-0 items-start gap-3">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-select-fill text-ink-muted">
+                        <span className="flex size-[30px] shrink-0 items-center justify-center rounded-md bg-well text-ink-muted">
                           <Icon name="keys" className="h-4 w-4" />
                         </span>
                         <div className="min-w-0 flex-1">
@@ -430,12 +415,11 @@ export function SecretsPanel({
             )}
 
             {group.kind !== "totp" ? null : (
-              <div className="border-t border-line bg-surface-subtle px-4 py-4">
-                <p className={hintText}>{t("secrets.totpAssignInConnection")}</p>
-              </div>
+              <p className="mt-3 text-xs leading-[18px] text-ink-faint">{t("secrets.totpAssignInConnection")}</p>
             )}
 
-            <div className="grid items-end gap-3 border-t border-line bg-toolbar px-4 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+            {/* Adding stays on one row (name, value, button), so the page does not grow tall. */}
+            <div className="mt-4 grid items-end gap-3 border-t border-line pt-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
               <Field label={t(group.nameLabel)}>
                 <input
                   value={draft.name}
@@ -478,7 +462,7 @@ export function SecretsPanel({
                 {t(group.store)}
               </Button>
             </div>
-          </Card>
+          </PageSection>
         );
       })}
 

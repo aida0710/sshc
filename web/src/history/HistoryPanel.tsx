@@ -4,8 +4,8 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { Problem } from "../api/client";
 import { configApi, type HistoryEntry, type PendingTransaction } from "../api/config";
-import { Button, Card, Notice } from "../ui/surface";
-import { PageHeader, SummaryStat, SummaryStats } from "../ui/page";
+import { Button, Notice } from "../ui/surface";
+import { PageHeader, PageSection, SummaryStat, SummaryStats } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
 
@@ -98,7 +98,7 @@ export function HistoryPanel() {
   const restorableCount = entries.reduce((count, entry) => count + (entry.restorable?.length ?? 0), 0);
 
   return (
-    <div className={`mx-auto flex w-full max-w-6xl flex-col gap-6 ${mobileTouchTargets}`}>
+    <div className={`flex flex-col gap-[22px] ${mobileTouchTargets}`}>
       <PageHeader title={t("history.pageTitle")} description={t("history.pageDescription")} />
       <SummaryStats>
         {([
@@ -115,10 +115,10 @@ export function HistoryPanel() {
       {message === "" ? null : <Notice tone="success">{message}</Notice>}
 
       {pending.length === 0 ? null : (
-        <Card as="section" aria-labelledby="pending-heading" radius="md" tone="notice">
+        <section aria-labelledby="pending-heading" className="rounded-[12px] bg-notice">
           <header className="flex items-center gap-2 border-b border-notice-line px-4 py-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-card text-notice-ink">
-              <Icon name="history" className="h-4 w-4" />
+            <span className="flex size-[30px] items-center justify-center rounded-md bg-card text-notice-ink">
+              <Icon name="history" className="size-4" />
             </span>
             <h3 id="pending-heading" className="text-sm font-semibold text-notice-ink">{t("history.interrupted")}</h3>
           </header>
@@ -149,28 +149,21 @@ export function HistoryPanel() {
               </article>
             ))}
           </div>
-        </Card>
+        </section>
       )}
 
-      <Card as="section" aria-labelledby="history-heading" radius="md">
-        <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Icon name="history" className="h-4 w-4 text-ink-muted" />
-            <h3 id="history-heading" className="text-sm font-semibold text-ink">{t("history.completed")}</h3>
-          </div>
-          <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-xs text-ink-muted">{entries.length}</span>
-        </header>
+      <PageSection heading={t("history.completed")} headingId="history-heading" meta={String(entries.length)}>
         {entries.length === 0 ? (
           <PanelState tone="empty" title={t("history.empty")} />
         ) : (
           <ol className="divide-y divide-line">
             {entries.map((entry) => (
-              <li key={entry.id} className="grid gap-4 px-4 py-4 md:grid-cols-[10rem_minmax(0,1fr)_auto] md:items-center">
+              <li key={entry.id} className="grid gap-4 py-3.5 md:grid-cols-[10rem_minmax(0,1fr)_auto] md:items-center">
                 <time dateTime={entry.startedAt} className="font-mono text-xs text-ink-muted">{entry.startedAt}</time>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-medium text-ink">{t(historyOperationLabelKey(entry.operation))}</p>
-                    <span className="rounded-md bg-select-fill px-2 py-0.5 text-[11px] text-ink-muted">{t(historyStatusLabelKey(entry.status))}</span>
+                    <span className="rounded-full bg-well px-2 py-0.5 text-[11.5px] text-ink-muted">{t(historyStatusLabelKey(entry.status))}</span>
                   </div>
                   <p className="mt-1 truncate font-mono text-xs text-ink-faint">{entry.paths.join(", ")}</p>
                 </div>
@@ -185,8 +178,8 @@ export function HistoryPanel() {
             ))}
           </ol>
         )}
-        <p className="border-t border-line bg-toolbar px-4 py-3 text-xs text-ink-faint">{t("history.backupRetention")}</p>
-      </Card>
+        <p className="mt-3 text-xs leading-[18px] text-ink-faint">{t("history.backupRetention")}</p>
+      </PageSection>
     </div>
   );
 }

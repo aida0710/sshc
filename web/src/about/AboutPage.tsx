@@ -77,13 +77,13 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
   }
 
   return (
-    <section aria-labelledby="about-heading" className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+    <section aria-labelledby="about-heading" className="flex flex-col gap-[22px]">
       <PageHeader title={t("section.about")} headingId="about-heading" />
-      <div className="rounded border border-line bg-card p-4">
+      <div className="border-t border-line pt-5">
         {loadFailed ? <Notice tone="danger">{t("about.loadFailed")}</Notice> : about === null ? <p role="status">{t("about.loading")}</p> : <BuildDetails about={about} />}
       </div>
-      <section aria-labelledby="about-update-heading" className="rounded border border-line bg-card p-4">
-        <h3 id="about-update-heading" className="mb-3 font-semibold text-ink">{t("about.updates")}</h3>
+      <section aria-labelledby="about-update-heading" className="border-t border-line pt-5">
+        <h3 id="about-update-heading" className="mb-3 text-sm font-semibold text-ink">{t("about.updates")}</h3>
         <div className="grid gap-3 text-sm text-ink-muted">
           {currentState === null ? null : <p role="status">{currentState}</p>}
           <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">

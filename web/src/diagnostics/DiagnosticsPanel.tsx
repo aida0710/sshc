@@ -16,8 +16,8 @@ import {
   describeReachability,
   reachabilityNoticeKey,
 } from "./diagnosticLabels";
-import { Button, Card, Notice } from "../ui/surface";
-import { PageHeader } from "../ui/page";
+import { Button, Notice } from "../ui/surface";
+import { PageHeader, PageSection } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
@@ -107,7 +107,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
   return (
     <section
       aria-label={embedded ? t("diag.forHost", { host: host ?? "" }) : undefined}
-      className={`${embedded ? "flex flex-col gap-4" : "mx-auto flex w-full max-w-5xl flex-col gap-6"} ${mobileTouchTargets}`}
+      className={`${embedded ? "flex flex-col gap-4" : "flex flex-col gap-[22px]"} ${mobileTouchTargets}`}
     >
       {embedded ? null : (
         <PageHeader title={t("diag.heading")} description={t("diag.pageDescription")} />
@@ -117,12 +117,12 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
         <Notice tone="danger">{check.error}</Notice>
       ) : null}
 
-      <Card as="section" radius="md" aria-label={t("diag.heading")}>
-        <div className="flex flex-col gap-4 bg-toolbar px-4 py-4 sm:px-5">
+      <section aria-label={t("diag.heading")} className={embedded ? "" : "border-t border-line pt-5"}>
+        <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3">
             {embedded ? (
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">{t("diag.hostAlias")}</p>
+                <p className="text-xs text-ink-faint">{t("diag.hostAlias")}</p>
                 <p className="mt-1 truncate font-mono text-base font-semibold text-ink">{alias}</p>
               </div>
             ) : (
@@ -159,18 +159,11 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
             {check.busy ? t("diag.running") : alias === "" ? t("diag.needsAlias") : t("diag.idle")}
           </p>
         </div>
-      </Card>
+      </section>
 
       {config ? (
-        <Card as="section" radius="md">
-          <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Icon name="config" className="h-4 w-4 text-ink-muted" />
-              <h3 className={sectionHeading}>{t("diag.configuration")}</h3>
-            </div>
-            <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-xs text-ink-muted">{config.files.length}</span>
-          </header>
-          <ul className="divide-y divide-hairline px-4">
+        <PageSection heading={t("diag.configuration")} meta={String(config.files.length)}>
+          <ul className="divide-y divide-line">
             {config.files.map((file) => (
               <li key={file.path} className="flex items-center gap-2 py-2.5 font-mono text-xs text-ink-muted">
                 <span className={`h-1.5 w-1.5 rounded-full ${file.missing ? "bg-notice-ink" : "bg-live"}`} />
@@ -180,7 +173,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
             ))}
           </ul>
           {config.diagnostics.length > 0 ? (
-            <ul className="border-t border-line bg-surface-subtle px-4 py-3">
+            <ul className="mt-2 rounded-[9px] bg-well px-3 py-2">
               {config.diagnostics.map((diagnostic, index) => (
                 <li
                   key={`${diagnostic.code}-${index}`}
@@ -197,12 +190,12 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
               ))}
             </ul>
           ) : null}
-        </Card>
+        </PageSection>
       ) : null}
 
-      {hasResults ? <Card radius="md">
+      {hasResults ? <div className="flex flex-col border-t border-line">
       {directives.length > 0 ? (
-        <section className="border-b border-notice-line bg-notice px-4 py-4 text-sm">
+        <section className="mt-5 rounded-[10px] bg-notice px-4 py-4 text-sm">
           <h3 className="font-medium text-notice-ink">{t("diag.canRunCommand")}</h3>
           <p className="text-ink-muted">{t("conn.analysisTokenWarning")}</p>
           <ul className="mt-2 flex flex-col gap-1">
@@ -224,7 +217,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
 
 
       {effective && effective.sources.length > 0 ? (
-        <section className="px-4 py-4">
+        <section className="py-4">
           <p className="mb-2 flex items-center justify-end gap-1 text-xs text-ink-muted md:hidden">
             {t("diag.tableScrollHint")}
             <Icon name="arrowRight" className="size-3.5" />
@@ -265,7 +258,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
 
 
       {effective && effective.route.length > 0 ? (
-        <section className="border-t border-line px-4 py-4 text-sm">
+        <section className="border-t border-line py-4 text-sm">
           <div className="mb-3 flex items-center gap-2">
             <Icon name="connections" className="h-4 w-4 text-ink-muted" />
             <h3 className={sectionHeading}>{t("diag.route")}</h3>
@@ -296,7 +289,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
 
 
       {effective && effective.complexities.length > 0 ? (
-        <section className="border-t border-notice-line bg-notice px-4 py-4 text-sm">
+        <section className="my-3 rounded-[10px] bg-notice px-4 py-4 text-sm">
           <h3 className="font-medium text-notice-ink">{t("diag.notSimple")}</h3>
           <p className="text-ink-muted">{t("diag.notSimpleDetail")}</p>
           <ul className="mt-2 flex flex-col gap-1">
@@ -314,7 +307,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
 
       {reach || auth ? <div className="grid border-t border-line md:grid-cols-2 md:divide-x md:divide-line">
         {reach ? (
-          <section className="flex flex-col gap-2 px-4 py-4 text-sm">
+          <section className="flex flex-col gap-2 py-4 text-sm md:pr-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className={sectionHeading}>{t("diag.reachability")}</h3>
               <span className="h-2 w-2 rounded-full bg-live" />
@@ -326,7 +319,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
         ) : null}
 
         {auth ? (
-          <section className="flex flex-col gap-2 border-t border-line px-4 py-4 text-sm md:border-t-0">
+          <section className="flex flex-col gap-2 border-t border-line py-4 text-sm md:border-t-0 md:pl-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className={sectionHeading}>{t("diag.authentication")}</h3>
               <span className={`h-2 w-2 rounded-full ${auth.authenticated ? "bg-live" : "bg-notice-ink"}`} />
@@ -341,7 +334,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
           </section>
         ) : null}
       </div> : null}
-      </Card> : null}
+      </div> : null}
 
     </section>
   );

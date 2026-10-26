@@ -11,7 +11,7 @@ import {
   type RemoteKeysApi,
 } from "./api";
 import { CopyButton } from "../ui/CopyButton";
-import { Button, Card, Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { CheckboxField, Field, control } from "../ui/form";
 import { PageHeader } from "../ui/page";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
@@ -250,10 +250,10 @@ export function RemoteKeyPanel({
     (unavoidable.length > 0 && !acknowledged);
 
   return (
-    <section aria-label={t("rk.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
+    <section aria-label={t("rk.heading")} className="flex flex-col gap-[22px] [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader title={t("rk.heading")} description={t("rk.pageDescription")} />
 
-      <p aria-live="polite" className="rounded-lg bg-surface-subtle px-3 py-2 text-sm text-ink-muted">
+      <p aria-live="polite" className="rounded-[9px] bg-well px-3 py-2.5 text-[12.5px] text-ink-muted">
         {busy ? t("rk.waiting") : t("rk.idle")}
       </p>
       {error ? (
@@ -261,11 +261,12 @@ export function RemoteKeyPanel({
       ) : null}
 
 
-      <Card as="section" radius="md">
+      {/* The two steps sit side by side on a wide screen, so the page does not grow tall. */}
+      <section className="border-t border-line pt-5">
         <div className="grid lg:grid-cols-2">
-          <div className="border-b border-line p-5 lg:border-b-0 lg:border-r">
+          <div className="border-b border-line pb-5 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6">
             <div className="mb-4 flex items-center gap-3">
-              <span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-full bg-accent text-xs font-semibold text-accent-ink">1</span>
+              <span aria-hidden="true" className="grid size-[22px] place-items-center rounded-full bg-accent font-mono text-[11.5px] font-semibold text-accent-ink">1</span>
               <h3 className="text-sm font-semibold text-ink">{t("rk.pickFromSsh")}</h3>
             </div>
             <div className="flex flex-col gap-4">
@@ -296,9 +297,9 @@ export function RemoteKeyPanel({
             </div>
           </div>
 
-          <div className="p-5">
+          <div className="pt-5 lg:pl-6 lg:pt-0">
             <div className="mb-4 flex items-center gap-3">
-              <span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-full bg-surface text-xs font-semibold text-ink-muted">2</span>
+              <span aria-hidden="true" className="grid size-[22px] place-items-center rounded-full bg-ink/10 font-mono text-[11.5px] font-semibold text-ink">2</span>
               <h3 className="text-sm font-semibold text-ink">{t("rk.hostAlias")}</h3>
             </div>
             <div className="flex flex-col gap-3">
@@ -320,7 +321,7 @@ export function RemoteKeyPanel({
                 <p className="text-xs text-ink-muted">{t("rk.hostTypeHint")}</p>
               ) : (
                 <div className="overflow-hidden rounded-md border border-line">
-                  <div className="flex items-center justify-between gap-2 border-b border-line bg-surface-subtle px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 border-b border-line bg-well px-3 py-2">
                     <span className="text-xs text-ink-muted">
                       {t("rk.hostsSelected", { count: selectedAliases.length })}
                     </span>
@@ -364,7 +365,7 @@ export function RemoteKeyPanel({
           </div>
         </div>
 
-        <div className="border-t border-line bg-surface-subtle p-5">
+        <div className="mt-5 border-t border-line pt-5">
           <Field label={t("rk.publicKeyLine")}>
             <textarea
               value={publicKey}
@@ -376,7 +377,7 @@ export function RemoteKeyPanel({
           </Field>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-4">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <div className="flex items-center gap-2 text-xs text-ink-muted">
             <span aria-hidden="true" className={`h-2 w-2 rounded-full ${plannedTargets.length === 0 ? "bg-ink-faint" : "bg-live"}`} />
             {plannedTargets.length === 0
@@ -392,12 +393,12 @@ export function RemoteKeyPanel({
             )}
           </div>
         </div>
-      </Card>
+      </section>
 
       {plannedTargets.length > 0 ? (
-        <Card as="section" aria-labelledby="remote-key-plan-heading" radius="md" className="text-sm">
-          <div className="flex items-center gap-3 border-b border-line bg-surface-subtle px-5 py-4">
-            <span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-full bg-live text-xs font-semibold text-accent-ink">3</span>
+        <section aria-labelledby="remote-key-plan-heading" className="border-t border-line pt-5 text-sm">
+          <div className="mb-2 flex items-center gap-3">
+            <span aria-hidden="true" className="grid size-[22px] place-items-center rounded-full bg-live font-mono text-[11.5px] font-semibold text-accent-ink">3</span>
             <h3 id="remote-key-plan-heading" className="font-semibold">
               {plannedTargets.length === 1
                 ? t("rk.confirmHeading")
@@ -414,7 +415,7 @@ export function RemoteKeyPanel({
             ))}
           </div>
           {unavoidable.length > 0 ? (
-            <div className="border-t border-notice-line bg-notice p-4">
+            <div className="mt-3 rounded-[10px] bg-notice p-4">
               <h4 className="font-medium text-notice-ink">{t("rk.connectingRuns")}</h4>
               <ul className="mt-2 flex flex-col gap-2">
                 {unavoidable.map(({ alias, directive }) => (
@@ -429,15 +430,15 @@ export function RemoteKeyPanel({
               <CheckboxField className="mt-2" label={t("rk.acknowledgeRuns")} checked={acknowledged} onChange={setAcknowledged} tone="notice" />
             </div>
           ) : null}
-        </Card>
+        </section>
       ) : null}
 
       {results.length > 0 ? (
-        <Card as="section" radius="md" className="text-sm">
-          <h3 className="px-4 pt-4 font-semibold text-live">{t("rk.result")}</h3>
+        <section className="border-t border-line pt-5 text-sm">
+          <h3 className="font-semibold text-live">{t("rk.result")}</h3>
           <ul className="mt-2 divide-y divide-line">
             {results.map((result) => (
-              <li key={result.alias} className="grid gap-1 px-4 py-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
+              <li key={result.alias} className="grid gap-1 py-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
                 <span className="font-mono font-medium">{result.alias}</span>
                 <div>
                   {result.response === undefined ? (
@@ -456,7 +457,7 @@ export function RemoteKeyPanel({
               </li>
             ))}
           </ul>
-        </Card>
+        </section>
       ) : null}
     </section>
   );
@@ -466,7 +467,7 @@ function RemoteKeyPlanCard({ plan, manual }: { plan: RemoteKeyPlan; manual: bool
   const t = useTranslate();
   return (
     <article aria-label={t("rk.planFor", { alias: plan.alias })}>
-      <h4 className="border-b border-hairline px-5 py-3 font-mono font-semibold text-ink">{plan.alias}</h4>
+      <h4 className="border-b border-hairline py-3 font-mono font-semibold text-ink">{plan.alias}</h4>
       <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <dl className="border-b border-line lg:border-b-0 lg:border-r">
           {[
@@ -479,13 +480,13 @@ function RemoteKeyPlanCard({ plan, manual }: { plan: RemoteKeyPlan; manual: bool
             [t("rk.keyFile"), plan.keyPath],
             [t("rk.fingerprint"), plan.fingerprint],
           ].map(([caption, value]) => (
-            <div key={caption} className="grid gap-1 border-t border-hairline px-5 py-3 first:border-t-0 sm:grid-cols-[9rem_minmax(0,1fr)]">
+            <div key={caption} className="grid gap-1 border-t border-hairline py-3 pr-5 first:border-t-0 sm:grid-cols-[9rem_minmax(0,1fr)]">
               <dt className="text-xs font-medium text-ink-muted">{caption}</dt>
               <dd className="min-w-0 break-all font-mono text-xs">{value}</dd>
             </div>
           ))}
         </dl>
-        <div className="p-5">
+        <div className="py-5 lg:pl-5">
           <p>{t("rk.appendTo", {
             remotePath: plan.remotePath,
             account: plan.user === "" ? t("rk.theRemoteAccount") : t("rk.usersAccount", { user: plan.user }),
@@ -501,7 +502,7 @@ function RemoteKeyPlanCard({ plan, manual }: { plan: RemoteKeyPlan; manual: bool
           </pre>
           <div className="mt-1"><CopyButton value={plan.routine} label="copy.remoteCommand" /></div>
           {manual ? (
-            <div className="mt-4 rounded-lg bg-surface-subtle p-3">
+            <div className="mt-4 rounded-[10px] bg-well p-3">
               <h5 className="font-medium text-notice-ink">{t("rk.manualHeading")}</h5>
               <ol className="mt-1 list-decimal pl-5">
                 {plan.manual.map((step) => <li key={step}>{step}</li>)}
