@@ -1,0 +1,1 @@
+import{D as e,g as t}from"./surface-CL453LeM.js";var n={async about(){return e(`About`,await t.read(`/api/v1/about`))}};export{n as t};
