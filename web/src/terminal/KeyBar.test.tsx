@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { applyModifiers, encodeKey, KeyBar } from "./KeyBar";
 import { mobileViewportQuery } from "../ui/useMediaQuery";
+import { modifierDoubleTapMilliseconds, releasedModifiers, type Modifiers } from "./modifierLatch";
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-function showMobileKeyBar() {
+function showMobileKeyBar(modifiers: Modifiers = releasedModifiers) {
   vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
     matches: query === mobileViewportQuery,
     media: query,
@@ -13,9 +14,9 @@ function showMobileKeyBar() {
     addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(), onchange: null,
   })));
   const onKey = vi.fn();
-  const onToggle = vi.fn();
-  render(<KeyBar modifiers={{ ctrl: false, alt: false }} onKey={onKey} onToggle={onToggle} />);
-  return { onKey, onToggle };
+  const onTap = vi.fn();
+  render(<KeyBar modifiers={modifiers} onKey={onKey} onTap={onTap} />);
+  return { onKey, onTap };
 }
 
 describe("mobile key bar", () => {
@@ -46,12 +47,26 @@ describe("mobile key bar", () => {
     input.remove();
   });
 
-  it("toggles Alt from extra keys and dismisses the popup", () => {
-    const { onToggle } = showMobileKeyBar();
-    fireEvent.click(screen.getByRole("button", { name: "Extra keys" }));
-    fireEvent.click(screen.getByRole("button", { name: "Alt" }));
-    expect(onToggle).toHaveBeenCalledWith("alt");
-    expect(screen.getByRole("button", { name: "Extra keys" })).toHaveAttribute("aria-expanded", "false");
+  it("keeps the popup open for a second tap on Alt, then dismisses it", () => {
+    vi.useFakeTimers();
+    try {
+      const { onTap } = showMobileKeyBar();
+      fireEvent.click(screen.getByRole("button", { name: "Extra keys" }));
+      fireEvent.click(screen.getByRole("button", { name: "Alt" }));
+      fireEvent.click(screen.getByRole("button", { name: "Alt" }));
+      expect(onTap).toHaveBeenCalledTimes(2);
+      expect(onTap).toHaveBeenCalledWith("alt");
+      act(() => { vi.advanceTimersByTime(modifierDoubleTapMilliseconds); });
+      expect(screen.getByRole("button", { name: "Extra keys" })).toHaveAttribute("aria-expanded", "false");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("tells a modifier held for one key from a locked one", () => {
+    showMobileKeyBar({ ctrl: "locked", alt: "once" });
+    expect(screen.getByRole("button", { name: "Ctrl (locked)" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Extra keys" })).toHaveTextContent("Alt");
   });
 });
 

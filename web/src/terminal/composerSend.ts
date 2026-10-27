@@ -13,7 +13,13 @@ export type ComposerSend =
   // Ask first, as for a risky paste; send and press Enter only if accepted.
   | { kind: "confirm"; text: string };
 
-export function planComposerSend(text: string): ComposerSend {
+// bracketedPaste is whether the program in the terminal enabled bracketed
+// paste. It then takes the text as one piece and a line break does not run
+// anything, so lines typed in the box are sent without asking. Control
+// characters are still asked about: one could end the bracketed paste early.
+export function planComposerSend(text: string, { bracketedPaste }: { bracketedPaste: boolean }): ComposerSend {
   if (text === "") return { kind: "enter" };
-  return inspectTerminalPaste(text).requiresConfirmation ? { kind: "confirm", text } : { kind: "paste", text };
+  const { risks } = inspectTerminalPaste(text);
+  const asked = bracketedPaste ? risks.filter((risk) => risk !== "line-break") : risks;
+  return asked.length > 0 ? { kind: "confirm", text } : { kind: "paste", text };
 }

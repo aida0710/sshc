@@ -785,6 +785,37 @@ test("sends a real control character from the on-screen keys", async ({ page, in
     .toBeGreaterThanOrEqual(2);
 });
 
+test("keeps Ctrl held after a double tap until it is tapped again", async ({ page, installation }) => {
+  test.skip(
+    process.platform === "win32",
+    "on-screen keys are a touch affordance; make e2e on Linux or macOS covers this path",
+  );
+  await openApplication(page, installation);
+
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  await openLocalShell(page);
+
+  const rows = drawnRows(page);
+  await expect(rows).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const keys = page.getByLabel("On-screen keys");
+  await keys.getByRole("button", { name: "Ctrl", exact: true }).dblclick();
+  const locked = keys.getByRole("button", { name: "Ctrl (locked)", exact: true });
+  await expect(locked).toHaveAttribute("aria-pressed", "true");
+
+  // Two Ctrl keys in a row: Ctrl+U clears the line, and Ctrl stays for Ctrl+L.
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type("u");
+  await page.keyboard.type("l");
+  await expect(locked).toBeVisible();
+
+  await locked.click();
+  await expect(keys.getByRole("button", { name: "Ctrl", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type("echo ctrl-$((40+2))");
+  await page.keyboard.press("Enter");
+  await expect(rows).toContainText("ctrl-42", { timeout: 20_000 });
+});
+
 test("sends what was typed in the phone's text box to the shell and empties the box", async ({ page, installation }) => {
   await openApplication(page, installation);
 

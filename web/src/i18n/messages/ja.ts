@@ -895,6 +895,7 @@ export const ja = {
   "terminal.keyArrowUp": "上矢印",
   "terminal.keyArrowDown": "下矢印",
   "terminal.keyArrowRight": "右矢印",
+  "terminal.modifierLocked": "{key}（固定中）",
   "shell.mobileNavigation": "クイックナビゲーション",
   "sftp.mobile.actions": "フォルダ操作",
   "sftp.mobile.search": "ファイルを検索",
@@ -1049,6 +1050,9 @@ export const ja = {
   "terminal.jisYenBackslashLabel": "JIS配列の¥キーをバックスラッシュ（\\）として送る",
   "terminal.jisYenBackslashHint":
     "日本語キーボード向けです。IME変換中の入力は変更しません。",
+  "terminal.composerEnterSendsLabel": "スマホの入力欄でEnterを押したら送信する",
+  "terminal.composerEnterSendsHint":
+    "オフのときは、Enterで改行し、入力欄の横のボタンで送信します。",
   "terminal.fontSizeLabel": "文字の大きさ",
   "terminal.paletteLabel": "配色",
   "terminal.verbosityLabel": "接続のログ",
