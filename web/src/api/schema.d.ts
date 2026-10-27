@@ -4211,6 +4211,7 @@ export interface components {
             webgl?: boolean;
             osc52?: boolean;
             jisYenBackslash?: boolean;
+            composerEnterSends?: boolean;
             localShellProfile?: string;
             startDirectory?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
@@ -4228,6 +4229,7 @@ export interface components {
             webgl?: boolean;
             osc52?: boolean;
             jisYenBackslash?: boolean;
+            composerEnterSends?: boolean;
             localShellProfile?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
         };

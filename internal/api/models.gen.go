@@ -2290,6 +2290,7 @@ type TerminalSessionList struct {
 type TerminalSettings struct {
 	Appearance             *TerminalAppearance `json:"appearance,omitempty"`
 	BrowserScrollbackLines *int                `json:"browserScrollbackLines,omitempty"`
+	ComposerEnterSends     *bool               `json:"composerEnterSends,omitempty"`
 	CopyOnSelect           *bool               `json:"copyOnSelect,omitempty"`
 	FontSize               *int                `json:"fontSize,omitempty"`
 	JisYenBackslash        *bool               `json:"jisYenBackslash,omitempty"`

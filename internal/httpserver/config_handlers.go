@@ -211,6 +211,9 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	if request.JisYenBackslash != nil {
 		settings.JISYenBackslash = *request.JisYenBackslash
 	}
+	if request.ComposerEnterSends != nil {
+		settings.ComposerEnterSends = *request.ComposerEnterSends
+	}
 	if request.LocalShellProfile != nil {
 		settings.LocalShellProfile = *request.LocalShellProfile
 	}

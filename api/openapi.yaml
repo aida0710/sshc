@@ -6302,6 +6302,8 @@ components:
         webgl: { type: boolean }
         osc52: { type: boolean }
         jisYenBackslash: { type: boolean }
+        # スマホの入力欄で Enter を押したときに送るか。無いときは改行し、送るのは横のボタンである。
+        composerEnterSends: { type: boolean }
         localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
         # ローカルシェルの開始ディレクトリ。`~` を維持し、空なら home を使う。
         startDirectory: { type: string, maxLength: 4096 }
@@ -6339,6 +6341,8 @@ components:
         webgl: { type: boolean }
         osc52: { type: boolean }
         jisYenBackslash: { type: boolean }
+        # スマホの入力欄で Enter を押したときに送るか。無いときは改行し、送るのは横のボタンである。
+        composerEnterSends: { type: boolean }
         localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
     # このマシンの sshc エンジンの設定。同期しない。
