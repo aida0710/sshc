@@ -14,9 +14,9 @@ Usage:
   scripts/release/publish.sh --verify-only <tag>
 
 publish:
-  HEADとorigin/mainの一致と、同じSHAのmain CIが始まっていて失敗していないことを確認して
-  annotated tagをpushし、release environmentの保護gateを承認してGitHub Release完了まで
-  待ちます。main CIの成功は、Releaseワークフローが公開の前に待ちます。
+  HEADとorigin/mainの一致、同じSHAのmain CIの成功を確認してannotated tagをpushし、
+  release environmentの保護gateを承認して
+  GitHub Release完了まで待ちます。
 
 --verify-only:
   既存Releaseのchecksum、attestation、実行したバイナリのバージョン、APK、本文、Homebrew tapを検証します。
@@ -261,20 +261,33 @@ main_workflow_run() {
     '
 }
 
-# main CI の成功は待たない。Release ワークフローがビルドを main CI と並べて進め、公開の前
-# （main-ci job）で成功を待つ。ここでは、main CI が始まっていて、まだ失敗していないことだけを
-# 確かめる。失敗が分かっているコミットにタグを打つと、その版は公開できないまま残る。
-ci_run=$(main_workflow_run ci.yml)
-[ -n "$ci_run" ] || die "no main CI run exists for $head_sha; push main and wait for CI to start first"
-ci_state=$(gh api "repos/$repository/actions/runs/$ci_run" | jq -r '.status + ":" + (.conclusion // "")')
-case "$ci_state" in
-  completed:success) printf 'release: main CI run %s succeeded\n' "$ci_run" ;;
-  completed:*)
-    die "main CI failed: https://github.com/$repository/actions/runs/$ci_run; no tag was created, so fix main and run this again with $tag"
-    ;;
-  *) printf 'release: main CI run %s is %s; the release workflow waits for it before publishing\n' "$ci_run" "$ci_state" ;;
-esac
+# wait_for_successful_run は、runが終わるまで状態の変化を「release: <label> <状態>」で表示し、
+# 成功しなければfailureの文で終える。
+wait_for_successful_run() {
+  local run_id=$1 label=$2 failure=$3 run state last_state=
+  while :; do
+    run=$(gh api "repos/$repository/actions/runs/$run_id")
+    state=$(printf '%s' "$run" | jq -r '.status + ":" + (.conclusion // "")')
+    if [ "$state" != "$last_state" ]; then
+      printf 'release: %s %s\n' "$label" "$state"
+      last_state=$state
+    fi
+    case "$state" in
+      completed:success) return 0 ;;
+      completed:*) die "$failure" ;;
+    esac
+    sleep "$poll_seconds"
+  done
+}
 
+ci_run=$(main_workflow_run ci.yml)
+[ -n "$ci_run" ] || die "no main CI run exists for $head_sha; push main and wait for CI first"
+printf 'release: waiting for main CI run %s\n' "$ci_run"
+wait_for_successful_run "$ci_run" CI \
+  "main CI failed: https://github.com/$repository/actions/runs/$ci_run; no tag was created, so fix main and run this again with $tag"
+
+git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+[ "$(git rev-parse refs/remotes/origin/main)" = "$head_sha" ] || die 'origin/main moved while waiting for CI'
 git tag -a "$tag" "$head_sha" -m "sshc $tag"
 if ! git push origin "refs/tags/$tag"; then
   git tag -d "$tag" >/dev/null
@@ -331,7 +344,7 @@ while :; do
     completed:success) break ;;
     completed:*)
       gh run view "$release_run" --repo "$repository" --log-failed || true
-      die "release workflow failed: https://github.com/$repository/actions/runs/$release_run; if main CI failed on a flaky check, rerun its failed jobs and then the failed jobs of the release workflow; if the tagged commit is sound, rebuild $tag as docs/releasing.md describes instead of making a new version"
+      die "release workflow failed: https://github.com/$repository/actions/runs/$release_run; if the tagged commit is sound, rebuild $tag as docs/releasing.md describes instead of making a new version"
       ;;
   esac
   sleep "$poll_seconds"
