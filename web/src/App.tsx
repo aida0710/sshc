@@ -174,6 +174,7 @@ export function App({
   // while a session can be used: with none open, or while the run target refuses (the panel makes
   // the terminal inert), the app header keeps the navigation reachable.
   const terminalTopBar = mobileLayout && terminalFace && activeSessionId !== null && terminalSessions.remoteRefusal === null;
+  const mobileNavigationShown = state === "ready" && mobileLayout && !terminalTopBar;
 
   // A page's heading shows the inspector's toggle among its actions on a wide screen, and puts its actions
   // in the top bar on a phone, where its name is hidden (see pageChrome).
@@ -306,7 +307,7 @@ export function App({
   if (state === "session-ended") return <SessionEndedScreen />;
 
   return (
-    <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout}>
+    <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout} data-mobile-navigation={mobileNavigationShown}>
       <div
         className="contents"
         inert={state === "ready" && vaultRecheck !== "idle"}
@@ -488,9 +489,7 @@ export function App({
             </InspectorPane>
           ) : null}
         </div>
-        {state === "ready" && mobileLayout && !terminalTopBar ? (
-          <MobileNavigation section={section} onNavigate={navigateFromMenu} />
-        ) : null}
+        {mobileNavigationShown ? <MobileNavigation section={section} onNavigate={navigateFromMenu} /> : null}
         {state === "ready" ? <TransferNotifications /> : null}
         {/* Asked of the engine in use: a run target asks the first time it is used after
             it restarted, once its Vault is unlocked (it lists its sessions again). */}

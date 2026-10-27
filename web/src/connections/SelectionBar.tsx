@@ -11,12 +11,12 @@ type SelectionBarProps = {
 };
 
 // SelectionBar は、選んだ接続先への操作を1行に並べる。
-// 案Bでは一覧の上に、スマホでは一覧の下に置く。
+// 案Bでは一覧の上に、スマホでは一覧の下に置く。スマホでは下の丸いバーがこの帯の上に浮くので、帯の地をバーの下まで伸ばす。
 export function SelectionBar({ count, placement, onMove, onDelete, onClear }: SelectionBarProps) {
   const t = useTranslate();
   const frame = placement === "top"
     ? "border-b border-accent/40 bg-select-fill"
-    : "sticky bottom-0 z-[2] border-t border-line bg-card pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgb(0_0_0/0.08)]";
+    : "sticky bottom-0 z-[2] border-t border-line bg-card pb-[calc(0.5rem+var(--mobile-navigation-inset))] shadow-[0_-4px_12px_rgb(0_0_0/0.08)]";
   return (
     <div role="toolbar" aria-label={t("tree.selectedCount", { count })} className={`flex shrink-0 items-center gap-2 px-3 py-2 ${frame}`}>
       <span className="min-w-0 flex-1 whitespace-nowrap text-sm font-medium text-ink">{t("tree.selectedCount", { count })}</span>

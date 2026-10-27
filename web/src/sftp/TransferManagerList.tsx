@@ -229,21 +229,25 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
   if (!compactViewport) return content;
   return (
     <>
-      <button
-        ref={dockTrigger}
-        type="button"
-        aria-label={t("sftp.manager.expand")}
-        aria-describedby={`${headingId}-dock-summary`}
-        aria-haspopup="dialog"
-        aria-expanded={sheetOpen}
-        onClick={() => setSheetOpen(true)}
-        className="relative flex min-h-11 shrink-0 items-center gap-2 border-t border-line bg-toolbar/50 px-3 py-1 text-left text-xs active:bg-select-fill"
-      >
-        <Icon name="chevronRight" className="size-3 -rotate-90 text-ink-muted" />
-        <span className="sr-only">{t("sftp.manager.heading")}</span>
-        <TransferQueueSummary summary={summary} id={`${headingId}-dock-summary`} compact />
-        {summary.totalBytes > 0 ? <span aria-hidden="true" className="absolute bottom-0 left-0 h-0.5 rounded-full bg-accent transition-[width]" style={{ width: `${summary.progress}%` }} /> : null}
-      </button>
+      {/* The dock ends the screen, so the floating bottom bar sits over the space below it: that space is in
+          the file list's colour, and the page shows no band of its own around the bar. */}
+      <div className="shrink-0 border-t border-line bg-sidebar pb-(--mobile-navigation-inset)">
+        <button
+          ref={dockTrigger}
+          type="button"
+          aria-label={t("sftp.manager.expand")}
+          aria-describedby={`${headingId}-dock-summary`}
+          aria-haspopup="dialog"
+          aria-expanded={sheetOpen}
+          onClick={() => setSheetOpen(true)}
+          className="relative flex min-h-11 w-full items-center gap-2 px-3 py-1 text-left text-xs active:bg-select-fill"
+        >
+          <Icon name="chevronRight" className="size-3 -rotate-90 text-ink-muted" />
+          <span className="sr-only">{t("sftp.manager.heading")}</span>
+          <TransferQueueSummary summary={summary} id={`${headingId}-dock-summary`} compact />
+          {summary.totalBytes > 0 ? <span aria-hidden="true" className="absolute bottom-0 left-0 h-0.5 rounded-full bg-accent transition-[width]" style={{ width: `${summary.progress}%` }} /> : null}
+        </button>
+      </div>
       <ModalShell open={sheetOpen} labelledBy={headingId} onDismiss={dismissSheet} closeOnOutside initialFocusRef={closeSheet} returnFocusRef={dockTrigger} placement="sheet" panelClassName="flex h-[min(36rem,85dvh)] max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl">
         {content}
       </ModalShell>

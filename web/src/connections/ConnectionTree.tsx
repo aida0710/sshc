@@ -304,7 +304,7 @@ export function ConnectionTree({
           {!drag.movesDisabled ? <p className="sr-only">{t("tree.dragGroupHint")}</p> : null}
         </header>
         {topBar}
-        {visible.length === 0 ? <p role="status" className="p-5 text-sm text-ink-muted">{t("tree.noMatch")}</p> : <div data-connection-results className="min-h-0 flex-1 overflow-y-auto pb-2">{resultSections.map(renderResultSection)}</div>}
+        {visible.length === 0 ? <p role="status" className="p-5 text-sm text-ink-muted">{t("tree.noMatch")}</p> : <div data-connection-results className={`min-h-0 flex-1 overflow-y-auto ${bottomBar === null ? "pb-[calc(0.5rem+var(--mobile-navigation-inset))] scroll-pb-(--mobile-navigation-inset)" : "pb-2"}`}>{resultSections.map(renderResultSection)}</div>}
         {bottomBar}
       </section>
       {groupSheetOpen ? (

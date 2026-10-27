@@ -17,10 +17,12 @@ export function MobileNavigation({
 }) {
   const t = useTranslate();
   return (
-    // A rounded bar held off the screen's edges. Only the icons show: the bar at the top already names the
-    // current section, so each name is kept for screen readers and as a tooltip.
-    <nav aria-label={t("shell.mobileNavigation")} className="sshc-mobile-navigation shrink-0 px-3 pt-1.5">
-      <div className="flex h-14 items-center justify-between rounded-full border border-line bg-card px-2 shadow-pane">
+    // A rounded bar held off the screen's edges, floating over the page rather than taking a band of its own:
+    // the page shows around it, and scrolls its last line clear of it (--mobile-navigation-inset). Only the
+    // icons show: the bar at the top already names the current section, so each name is kept for screen
+    // readers and as a tooltip. It stays under the inspector (z-10), which covers the page on a phone.
+    <nav aria-label={t("shell.mobileNavigation")} className="sshc-mobile-navigation pointer-events-none absolute inset-x-0 bottom-0 z-[5] px-3">
+      <div className="pointer-events-auto flex h-14 items-center justify-between rounded-full border border-line bg-card px-2 shadow-pane">
         {mobileNavigationSections.map((name) => {
           const current = section === name;
           const label = t(sectionLabels[name]);

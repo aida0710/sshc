@@ -462,7 +462,7 @@ export function ConnectionsPage({
           }}
         />
         <div
-          className={`min-h-0 flex-col gap-4 overflow-y-auto p-4 md:px-[26px] md:py-[22px] ${compact ? "" : "md:flex"} ${
+          className={`min-h-0 flex-col gap-4 overflow-y-auto p-4 pb-[calc(1rem+var(--mobile-navigation-inset))] scroll-pb-(--mobile-navigation-inset) md:px-[26px] md:pt-[22px] md:pb-[calc(22px+var(--mobile-navigation-inset))] ${compact ? "" : "md:flex"} ${
             detailOpen ? "flex" : "hidden"
           }`}
         >
