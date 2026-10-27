@@ -21,20 +21,22 @@ function startLink(terminalStreamTicket: TicketIssuer = async () => ({ streamTic
   const links: StreamLink[] = [];
   const ticket = vi.fn(terminalStreamTicket);
   const onExit = vi.fn();
+  const onOutput = vi.fn();
+  const onClose = vi.fn();
   const controller = createStreamLink({
     sessionId: "a",
     api: { streamPath: "/terminal/stream", terminalStreamTicket: ticket },
     onLink: (link) => links.push(link),
     onAttached: vi.fn(),
     onReplay: vi.fn(),
-    onOutput: vi.fn(),
+    onOutput,
     onExit,
     onShellReplaced: vi.fn(),
-    onClose: vi.fn(),
+    onClose,
   });
   controller.connect();
   started.push(controller);
-  return { controller, links, ticket, onExit };
+  return { controller, links, ticket, onExit, onOutput, onClose };
 }
 
 function lastLink(links: StreamLink[]): StreamLink | undefined {
@@ -202,6 +204,34 @@ describe("createStreamLink", () => {
     expect(streams).toHaveLength(2);
     expect(links).toContainEqual({ phase: "connecting", attempt: 1 });
     expect(lastLink(links)).toEqual({ phase: "live" });
+  });
+
+  it("keeps typing into the live stream while it is attached afresh, and reads what it missed from the new one", async () => {
+    let issue: (value: { streamTicket: string }) => void = () => {};
+    const tickets = [Promise.resolve({ streamTicket: "first" }), new Promise<{ streamTicket: string }>((resolve) => { issue = resolve; })];
+    const { controller, links, onOutput, onClose } = startLink(() => tickets.shift()!);
+    await vi.advanceTimersByTimeAsync(0);
+    const first = streams[0]!;
+    first.handlers.onOutput(new Uint8Array([1, 2, 3]));
+    const linksBefore = links.length;
+
+    window.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Until the new stream is attached, the old one takes input and the screen keeps showing it live.
+    expect(controller.currentStream()).toBe(first.stream);
+    expect(links.slice(linksBefore)).toEqual([]);
+    // What the old stream receives now is read again from the new one, so it is not shown twice.
+    first.handlers.onOutput(new Uint8Array([4]));
+    expect(onOutput).toHaveBeenCalledTimes(1);
+
+    issue({ streamTicket: "second" });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(controller.currentStream()).toBe(streams[1]!.stream);
+    expect(first.stream.close).toHaveBeenCalledOnce();
+    first.handlers.onClose();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("keeps a stopped link stopped when the page or the network comes back", async () => {

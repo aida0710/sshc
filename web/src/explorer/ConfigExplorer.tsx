@@ -270,6 +270,12 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   }
 
   function submitPathTask(task: ConfigPathTask) {
+    // 名前を変えたファイルは開き直すので、欄を開いたあとに始めた編集は消える。消さずに、欄の下で
+    // 先に保存するか開き直すよう伝える。
+    if (task === "rename" && modified) {
+      setPathProblem(t("explorer.saveOrDiscardFirst"));
+      return;
+    }
     if (task === "createFile") draftDiscard.confirmBefore(() => void createFile());
     else if (task === "createDirectory") void createDirectory();
     else if (task === "deleteDirectory") void deleteDirectory();
@@ -346,13 +352,15 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   const openPath = file?.file.path ?? file?.file.absolute ?? "";
   const editableFiles = overview.files.filter((node) => node.editable).length;
   const fileLocked = file === null || file.file.path === undefined || !file.editable || modified;
+  const fileLockedReason = modified ? t("explorer.saveOrDiscardFirst") : undefined;
   const fileActions: ActionMenuItem[] = [
-    { label: t("explorer.renameFile"), onSelect: () => beginPathTask("rename"), disabled: fileLocked || busy },
+    { label: t("explorer.renameFile"), onSelect: () => beginPathTask("rename"), disabled: fileLocked || busy, title: fileLockedReason },
     { label: t("explorer.createDirectory"), onSelect: () => beginPathTask("createDirectory"), disabled: busy },
     {
       label: t("explorer.deleteFile"),
       tone: "danger",
       disabled: fileLocked || busy,
+      title: fileLockedReason,
       onSelect: () => {
         setProblem(null);
         setConfirmingDelete(true);

@@ -176,7 +176,9 @@ export function AppNavigation({
         {navigationLink("Menu")}
       </div>
 
-      <div data-navigation-scroll className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+      {/* The Workspaces heading sticks to the top of this list (see WorkspaceTree). The scroll padding is its
+          height, so a row brought into view by the keyboard stops below it rather than under it. */}
+      <div data-navigation-scroll className="min-h-0 flex-1 scroll-pt-12 overflow-y-auto pr-0.5 md:scroll-pt-9">
         <SplitGroupList groups={splitView.groups} sessions={orderedSessions}
           selected={section === "Terminal" ? splitView.activeGroupNumber : null}
           unreadBySession={unreadBySession}

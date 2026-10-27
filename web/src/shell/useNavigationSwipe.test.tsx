@@ -111,6 +111,32 @@ describe("useNavigationSwipe", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
+  it("hands the panel back to the stylesheet when the finger left it where it settles", () => {
+    const { onOpenChange, panel } = renderHarness();
+    const page = screen.getByText("page");
+
+    // Dragged all the way out: nothing is left to animate, so no transition would end.
+    swipe(page, [10, 400], [10 + panelWidth + 40, 400]);
+
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+    expect(panel.style.transform).toBe("");
+    expect(panel.dataset.navigationDragging).toBeUndefined();
+  });
+
+  it("does not let a second finger leave the panel half out", () => {
+    const { onOpenChange, panel } = renderHarness();
+    const page = screen.getByText("page");
+
+    touch(page, "touchstart", 100, 400, 0);
+    touch(page, "touchmove", 200, 400, 100);
+    touch(page, "touchstart", 150, 500, 150);
+    touch(page, "touchmove", 260, 400, 200);
+    touch(page, "touchend", 260, 400, 260);
+
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+    expect(panel.style.transform).toBe("");
+  });
+
   it("closes the open navigation with a swipe to the left", () => {
     const { onOpenChange } = renderHarness(true);
 

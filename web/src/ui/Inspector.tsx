@@ -48,18 +48,22 @@ export function InspectorToggle({
 }
 
 // InspectorPane is the details pane. On a wide screen it is a column beside the page; narrower, it covers
-// the page, and below the top bar (h-12) where there is one, so the bar's toggle can close it again.
+// the page, and below the top bar (h-12) where there is one. Covering the page, it also covers the page's
+// own toggle when there is no top bar (a PC window under 1024px), so it carries a close button of its own.
 export function InspectorPane({
   label,
   underTopBar,
+  onClose,
   children,
   paneRef,
 }: {
   label: string;
   underTopBar: boolean;
+  onClose: () => void;
   children: ReactNode;
   paneRef?: RefObject<HTMLElement | null>;
 }) {
+  const t = useTranslate();
   return (
     <aside
       ref={paneRef}
@@ -68,6 +72,17 @@ export function InspectorPane({
       aria-label={label}
       className={`fixed inset-x-0 bottom-0 z-10 overflow-y-auto bg-sidebar p-3 lg:relative lg:inset-auto lg:z-auto lg:border-l lg:border-line ${underTopBar ? "top-12" : "top-0"}`}
     >
+      <div className="sticky top-0 z-[1] -mx-3 -mt-3 mb-1 flex justify-end bg-sidebar px-2 pt-2 lg:hidden">
+        <button
+          type="button"
+          aria-label={t("shell.inspectorHideNamed", { label })}
+          title={t("shell.inspectorHideNamed", { label })}
+          onClick={onClose}
+          className="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+        >
+          <Icon name="close" className="size-4" />
+        </button>
+      </div>
       {children}
     </aside>
   );

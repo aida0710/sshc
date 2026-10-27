@@ -50,6 +50,9 @@ export type StreamLinkController = {
 // a sleep it may lead nowhere, and attaching again resumes from the same byte.
 export function createStreamLink(options: StreamLinkOptions): StreamLinkController {
   let stream: TerminalStream | null = null;
+  // replacing is a live stream being attached afresh. It takes what is typed until the new stream is
+  // attached, so nothing typed in between is dropped, and is closed then.
+  let replacing: TerminalStream | null = null;
   let closed = false;
   let stopped = false;
   let attempts = 0;
@@ -59,42 +62,64 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
 
   const halted = () => closed || stopped;
 
-  const connect = () => {
+  // muted holds the streams whose output is no longer wanted: a stream being replaced stops counting the
+  // bytes it receives, and the new stream reads them again from the same place.
+  const muted = new WeakSet<object>();
+
+  const releaseReplaced = () => {
+    const stale = replacing;
+    replacing = null;
+    stale?.close();
+  };
+
+  // connect attaches a stream. quiet is for attaching afresh a link that looks live: the screen keeps
+  // showing it as live meanwhile.
+  const connect = (quiet = false) => {
     clearInterval(countdown);
     waiting = false;
     stopped = false;
     attempts += 1;
-    options.onLink({ phase: "connecting", attempt: attempts });
+    if (!quiet) options.onLink({ phase: "connecting", attempt: attempts });
     void options.api
       .terminalStreamTicket(options.sessionId, cursor)
       .then((issued) => {
         if (halted()) return;
         attachedAt = Date.now();
-        stream = openStream(issued.streamTicket, options.api.streamPath, {
+        const attached: TerminalStream = openStream(issued.streamTicket, options.api.streamPath, {
           onReplay: (replay) => {
+            if (muted.has(attached)) return;
             cursor = replay.start;
             options.onReplay(replay);
           },
           onOutput: (chunk) => {
+            if (muted.has(attached)) return;
             options.onOutput(chunk);
             cursor = (cursor ?? 0) + chunk.byteLength;
           },
-          onShellReplaced: options.onShellReplaced,
+          onShellReplaced: () => {
+            if (!muted.has(attached)) options.onShellReplaced();
+          },
           onExit: (exit) => {
+            if (muted.has(attached)) return;
             stopped = true;
             options.onLink({ phase: "live" });
             options.onExit(exit);
           },
           onClose: () => {
+            if (muted.has(attached)) return;
             stream = null;
             options.onClose();
             waitAndReconnect();
           },
         });
+        stream = attached;
+        releaseReplaced();
         options.onLink({ phase: "live" });
         options.onAttached();
       })
       .catch((error: unknown) => {
+        // The stream being replaced could not be attached afresh, so it most likely leads nowhere.
+        releaseReplaced();
         if (halted()) return;
         if (failureCode(error) === "terminal_session_not_found") {
           options.onLink({ phase: "stopped", gone: true });
@@ -132,12 +157,13 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
       return;
     }
     if (stream === null) return;
-    const stale = stream;
+    // The live stream keeps taking what is typed until the new one is attached. Replacing it on purpose
+    // does not count as a drop: the next attempt is the first again.
+    muted.add(stream);
+    replacing = stream;
     stream = null;
-    // Closing it on purpose does not count as a drop: the next attempt is the first again.
-    stale.close();
     attempts = 0;
-    connect();
+    connect(true);
   };
   const stopWatchingResumes = whenPageResumes(attachAfresh);
 
@@ -149,11 +175,12 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
       clearInterval(countdown);
       options.onLink({ phase: "stopped", gone: false });
     },
-    currentStream: () => stream,
+    currentStream: () => stream ?? replacing,
     close: () => {
       closed = true;
       clearInterval(countdown);
       stopWatchingResumes();
+      releaseReplaced();
       stream?.close();
     },
   };

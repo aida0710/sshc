@@ -8,7 +8,8 @@ import { rowAssignmentText, rowHosts, type CredentialRow as Row } from "./creden
 import { TOTPCurrentCode, TOTPNeighbourCodes } from "./TOTPCode";
 import { useTOTPCodes } from "./useTOTPCodes";
 
-// What a row can open under itself. Only one is open on a page at a time.
+// What a row can open under itself. Only one row has one open at a time; the add form above the list is
+// apart from them, so neither closes the other and loses what was typed.
 export type RowPanel = "codes" | "hosts" | "edit";
 
 export type RowActions = {
@@ -68,7 +69,7 @@ function RowLayout({ row, keyHostUsageComplete, panel, editPanel, actions, code,
   const t = useTranslate();
   const assignment = rowAssignmentText(row, keyHostUsageComplete, t);
   const hosts = rowHosts(row);
-  const menu = rowMenu({ row, hosts, panel, hasCode: code !== null, actions, t });
+  const menu = rowMenu({ row, hosts, panel, hasCode: code !== null, neighboursReady: neighbours !== null, actions, t });
   const open = panel === "codes" ? neighbours : panel === "hosts" ? <AssignedHosts hosts={hosts} onUnassign={actions.onUnassignTOTP} /> : panel === "edit" ? editPanel : null;
   return (
     <li className="border-t border-line first:border-t-0">
@@ -91,18 +92,24 @@ function RowLayout({ row, keyHostUsageComplete, panel, editPanel, actions, code,
   );
 }
 
-function rowMenu({ row, hosts, panel, hasCode, actions, t }: {
+function rowMenu({ row, hosts, panel, hasCode, neighboursReady, actions, t }: {
   row: Row;
   hosts: string[];
   panel: RowPanel | null;
   hasCode: boolean;
+  // The codes around the current one come with it; until they have, there is nothing to open.
+  neighboursReady: boolean;
   actions: RowActions;
   t: ReturnType<typeof useTranslate>;
 }): ActionMenuItem[] {
   const toggle = (next: RowPanel) => () => actions.onOpenPanel(panel === next ? null : next);
   const items: ActionMenuItem[] = [];
   if (hasCode) {
-    items.push({ label: t(panel === "codes" ? "secrets.hideNeighbourCodes" : "secrets.showNeighbourCodes"), onSelect: toggle("codes") });
+    items.push({
+      label: t(panel === "codes" ? "secrets.hideNeighbourCodes" : "secrets.showNeighbourCodes"),
+      onSelect: toggle("codes"),
+      disabled: !neighboursReady,
+    });
     items.push({ label: t("secrets.assignedHostsCount", { count: hosts.length }), onSelect: toggle("hosts") });
   }
   if (row.source === "named") items.push({ label: t("secrets.editShort"), onSelect: toggle("edit") });
