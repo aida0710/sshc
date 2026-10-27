@@ -30,6 +30,7 @@ import { Button, Notice } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { PageBoard } from "../ui/PageBoard";
 import { PageHeader } from "../ui/page";
+import { workspaceColumnsLayout, workspaceDetailPane, workspaceHeaderLayout } from "../ui/workspaceLayout";
 import { useUnsavedDraftGuard } from "../routing/useUnsavedDraftGuard";
 import type {
   BrowserLocation,
@@ -372,16 +373,14 @@ export function ConnectionsPage({
       {t("conn.new")}
     </Button>
   );
-  const headerLayout = "shrink-0 px-3 py-3 md:px-[26px] md:pb-[22px] md:pt-5";
-  const columnsLayout = `grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] border-t border-line ${compact ? "" : "md:grid-cols-[minmax(16rem,var(--list-width))_minmax(0,1fr)]"}`;
 
   if (overview === null) {
     // 読み込むあいだも、見出しと一覧・右側の枠は出しておく。読み込みが終わったときに画面が組み変わって見えないように。
     // 板の横のグループの列は、グループを読み終えてから出る。
     return (
       <PageBoard fill labelledBy="connections-heading">
-        <PageHeader title={t("conn.heading")} headingId="connections-heading" actions={newConnectionButton(false)} className={headerLayout} />
-        <div style={{ "--list-width": `${listWidth}px` } as CSSProperties} className={columnsLayout}>
+        <PageHeader title={t("conn.heading")} headingId="connections-heading" actions={newConnectionButton(false)} className={workspaceHeaderLayout} />
+        <div style={{ "--list-width": `${listWidth}px` } as CSSProperties} className={workspaceColumnsLayout(compact)}>
           <div className={`flex min-h-0 flex-col ${compact ? "" : "border-r border-line"}`}>
             {problem === null ? (
               <PanelState tone="loading" title={t("conn.loading")} />
@@ -424,10 +423,10 @@ export function ConnectionsPage({
           headingId="connections-heading"
           meta={t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
           actions={newConnectionButton(true)}
-          className={headerLayout}
+          className={workspaceHeaderLayout}
         />
       )}
-      <div style={{ "--list-width": `${listWidth}px` } as CSSProperties} className={columnsLayout}>
+      <div style={{ "--list-width": `${listWidth}px` } as CSSProperties} className={workspaceColumnsLayout(compact)}>
         <ConnectionListPane
           compact={compact}
           resizeHandle={compact ? null : (
@@ -461,11 +460,7 @@ export function ConnectionsPage({
             bottomBar: compact && selectionMode ? selectionBar("bottom") : null,
           }}
         />
-        <div
-          className={`min-h-0 flex-col gap-4 overflow-y-auto p-4 pb-[calc(1rem+var(--mobile-navigation-inset))] scroll-pb-(--mobile-navigation-inset) md:px-[26px] md:pt-[22px] md:pb-[calc(22px+var(--mobile-navigation-inset))] ${compact ? "" : "md:flex"} ${
-            detailOpen ? "flex" : "hidden"
-          }`}
-        >
+        <div className={`gap-4 ${workspaceDetailPane(compact, detailOpen)}`}>
 
         <Button
           className={`w-fit ${compact ? "" : "md:hidden"}`}

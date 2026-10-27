@@ -1,8 +1,23 @@
 import type { FileNode } from "../api/config";
-import { useTranslate } from "../i18n/context";
+import { useTranslate, type Translate } from "../i18n/context";
 import { Icon } from "../ui/icons";
+import { configTreeRows } from "./configTree";
 
-// ConfigFileList は、Include をたどって読み込まれる設定ファイルの一覧である。
+// 一段深くなるごとの字下げと、Include の行をファイル名の頭にそろえる字下げ（試作の Include階層と同じ）。
+const depthIndentPx = 14;
+const includeIndentPx = 26;
+
+// fileNotes は、ファイルの行の下に出す、知っておくべき状態（無い・何度も読まれる・書き込めない）である。
+// 編集できるのは普通のことなので書かない。
+function fileNotes(t: Translate, node: FileNode): string {
+  return [
+    node.missing === true ? t("explorer.missing") : "",
+    node.loads > 1 ? t("explorer.readTimes", { count: node.loads }) : "",
+    node.editable ? "" : t("explorer.readOnly"),
+  ].filter(Boolean).join(" · ");
+}
+
+// ConfigFileList は、Include をたどって読み込まれる設定ファイルを、読み込んだ Include の下に字下げして並べる。
 // ~/.ssh の外のファイルは開けないので、パスと理由だけを出す。
 export function ConfigFileList({
   files,
@@ -15,70 +30,61 @@ export function ConfigFileList({
 }) {
   const t = useTranslate();
   return (
-    <ul className="flex max-h-96 flex-col gap-0.5 overflow-y-auto p-2 lg:max-h-none lg:flex-1">
-      {files.map((node) => {
-        const current = (node.file.path ?? node.file.absolute) === openPath;
-        const state = t("explorer.fileState", {
-          missing: node.missing === true ? t("explorer.missing") : "",
-          loads: node.loads > 1 ? t("explorer.readTimes", { count: node.loads }) : "",
-          editable: node.editable ? t("explorer.editable") : t("explorer.readOnly"),
-        });
-        // 開けるファイルの行だけが、載せたときに背景の色を変える。~/.ssh の外のファイルは押せない。
-        const rowHover = node.file.path === undefined ? "" : "transition-colors duration-150 hover:bg-hover";
-        return (
-          <li key={node.file.absolute} className={`rounded-lg ${current ? "bg-select-fill" : rowHover}`}>
-            <div className="flex items-start gap-2.5 px-2.5 py-2">
-              <span
-                data-config-node-icon
-                aria-hidden="true"
-                className={`mt-5 shrink-0 md:mt-2.5 [@media(pointer:coarse)]:mt-[1.375rem] ${current ? "text-accent" : "text-ink-faint"}`}
-              >
-                <Icon name="config" className="h-4 w-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                {node.file.path === undefined ? (
-                  <p className="text-sm text-ink-muted">
-                    <span className="block break-all font-mono text-xs">{node.file.absolute}</span>
-                    <span className="mt-1 block text-xs leading-5 text-notice-ink">{t("explorer.externalFile")}</span>
-                  </p>
-                ) : (
-                  <button
-                    type="button"
-                    aria-current={current ? "true" : "false"}
-                    onClick={() => onOpen(node.file.path ?? "")}
-                    className={`block min-h-10 w-full truncate text-left font-mono text-sm transition-colors duration-150 md:min-h-0 ${current ? "font-semibold text-ink" : "text-ink-muted hover:text-ink"}`}
-                  >
-                    {node.file.path}
-                  </button>
+    <ul className="flex flex-col gap-0.5">
+      {configTreeRows(files).map((row) => {
+        if (row.kind === "include") {
+          const { include } = row;
+          return (
+            <li
+              key={`${row.owner.file.absolute}:${include.line}:${include.pattern}`}
+              style={{ marginLeft: row.depth * depthIndentPx + includeIndentPx }}
+              className="px-2.5 pb-1.5 pt-0.5"
+            >
+              <div className="min-w-0 overflow-hidden text-xs">
+                <span className="block break-all font-mono text-ink-faint">{include.pattern}</span>
+                {include.condition === undefined ? null : (
+                  <span className="mt-0.5 block break-words text-notice-ink">
+                    {t("explorer.insideCondition", { condition: include.condition })}
+                  </span>
                 )}
-                <p className="mt-0.5 text-xs text-ink-faint">{state}</p>
-                {(node.includes ?? []).map((include) => (
-                  <div
-                    key={`${node.file.absolute}:${include.line}:${include.pattern}`}
-                    className="mt-2 min-w-0 overflow-hidden rounded-md bg-surface-subtle px-2 py-1.5 text-xs text-ink-muted"
-                  >
-                    <span className="block break-all font-mono leading-5">{include.pattern}</span>
-                    {include.condition === undefined ? null : (
-                      <span className="mt-0.5 block break-words leading-5 text-notice-ink">
-                        {t("explorer.insideCondition", { condition: include.condition })}
-                      </span>
-                    )}
-                    <ul className="mt-1">
-                      {(include.matches ?? []).map((match) => (
-                        <li
-                          key={match.absolute}
-                          className="flex min-w-0 items-center gap-1 font-mono text-ink-faint"
-                          title={match.path ?? match.absolute}
-                        >
-                          <Icon name="arrowRight" className="size-3" />
-                          <span className="truncate">{match.path ?? match.absolute}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
               </div>
-            </div>
+            </li>
+          );
+        }
+        const { node } = row;
+        const indent = { marginLeft: row.depth * depthIndentPx };
+        if (node.file.path === undefined) {
+          return (
+            <li key={node.file.absolute} style={indent} className="flex items-start gap-2 px-2.5 py-2">
+              <Icon name="config" className="mt-px size-[15px] shrink-0 text-ink-faint" />
+              <p className="min-w-0 text-xs">
+                <span className="block break-all font-mono text-ink-muted">{node.file.absolute}</span>
+                <span className="mt-1 block leading-5 text-notice-ink">{t("explorer.externalFile")}</span>
+              </p>
+            </li>
+          );
+        }
+        const path = node.file.path;
+        const current = path === openPath;
+        const notes = fileNotes(t, node);
+        return (
+          <li
+            key={node.file.absolute}
+            style={indent}
+            className={`rounded-lg ${current ? "bg-select-fill" : "transition-colors duration-150 hover:bg-hover"}`}
+          >
+            <button
+              type="button"
+              aria-current={current ? "true" : "false"}
+              onClick={() => onOpen(path)}
+              className="flex min-h-10 w-full min-w-0 items-center gap-2 px-2.5 py-2 text-left md:min-h-0"
+            >
+              <span data-config-node-icon aria-hidden="true" className={`shrink-0 ${current ? "text-ink" : "text-ink-muted"}`}>
+                <Icon name="config" className="size-[15px]" />
+              </span>
+              <span className={`min-w-0 truncate font-mono text-[13px] text-ink ${current ? "font-semibold" : ""}`}>{path}</span>
+            </button>
+            {notes === "" ? null : <p className="-mt-1 pb-2 pl-[35px] pr-2.5 text-xs text-ink-faint">{notes}</p>}
           </li>
         );
       })}

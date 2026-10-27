@@ -28,7 +28,7 @@ it("asks before another snippet replaces an unsaved edit, and keeps the edit whe
 
   expect(screen.getByRole("textbox", { name: "Command" })).toHaveValue("df -h /var");
 
-  await user.selectOptions(screen.getByRole("combobox", { name: "Snippets" }), "two");
+  await user.click(screen.getByRole("button", { name: /Check memory/ }));
   await user.click(screen.getByRole("button", { name: "Discard" }));
 
   expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Check memory");
@@ -39,9 +39,10 @@ it("asks before a new snippet replaces what was typed for another new one", asyn
   const user = userEvent.setup();
   render(<SnippetsPanel aliases={["test-host"]} />);
   await screen.findByRole("button", { name: /Check disk/ });
+  await user.click(screen.getAllByRole("button", { name: "Add snippet" })[0]!);
   await user.type(screen.getByRole("textbox", { name: "Name" }), "Restart web");
 
-  await user.click(screen.getByRole("button", { name: "New" }));
+  await user.click(screen.getByRole("button", { name: "Add snippet" }));
 
   expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
   expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Restart web");

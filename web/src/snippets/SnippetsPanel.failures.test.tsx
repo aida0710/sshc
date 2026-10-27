@@ -25,10 +25,10 @@ it("says the library could not be read instead of calling it empty, and reads it
   render(<SnippetsPanel aliases={["test-host"]} />);
 
   expect(await screen.findByText("Snippets could not be read.")).toBeInTheDocument();
-  expect(screen.queryByText("No snippets have been saved.")).not.toBeInTheDocument();
+  expect(screen.queryByText("No snippets yet")).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Try again" }));
-  expect(await screen.findByRole("option", { name: "Check disk" })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: /Check disk/ })).toBeInTheDocument();
   expect(screen.queryByText("Snippets could not be read.")).not.toBeInTheDocument();
 });
 
@@ -37,7 +37,8 @@ it("explains a refused save in words instead of showing the failure code", async
   vi.mocked(snippetsApi.create).mockRejectedValue(new ApiError("invalid_snippet", 400, null));
   const user = userEvent.setup();
   render(<SnippetsPanel aliases={["test-host"]} />);
-  await screen.findByRole("option", { name: "Check disk" });
+  await screen.findByRole("button", { name: /Check disk/ });
+  await user.click(screen.getAllByRole("button", { name: "Add snippet" })[0]!);
 
   await user.type(screen.getByRole("textbox", { name: "Name" }), "Broken");
   await user.type(screen.getByRole("textbox", { name: "Command" }), "echo {{");

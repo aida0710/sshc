@@ -664,8 +664,15 @@ export const ja = {
   "workspace.delivered": "送信済み",
   "workspace.deliveryFailed": "送信できませんでした",
   "snippets.heading": "Snippets",
-  "snippets.new": "新規",
+  "snippets.new": "スニペットを追加",
+  "snippets.count": "{count}件",
   "snippets.empty": "保存済みスニペットはありません。",
+  "snippets.emptyHeading": "スニペットはまだありません",
+  "snippets.chooseHeading": "スニペットを選択",
+  "snippets.newHeading": "新しいスニペット",
+  "snippets.filter": "名前やコマンドで絞り込み",
+  "snippets.noMatch": "一致するスニペットはありません。",
+  "snippets.allSnippets": "スニペット一覧",
   "snippets.loadFailed": "スニペットを読み込めませんでした。",
   "snippets.loading": "スニペットを読み込んでいます…",
   "snippets.failed": "スニペットの操作に失敗しました。",
@@ -693,6 +700,7 @@ export const ja = {
   "snippets.deleteBody": "このスニペットはすべての対象ホストから消え、元に戻せません。",
   "snippets.confirmDelete": "削除する",
   "snippets.deleteCancel": "キャンセル",
+  "snippets.runHeading": "実行する",
   "snippets.targets": "対象ホスト",
   "snippets.preview": "実行内容を確認",
   "snippets.confirm": "実際のコマンドを確認",
@@ -710,8 +718,11 @@ export const ja = {
   "snippets.problem.runFailed": "コマンドを実行できませんでした",
   "snippets.cancel": "中止",
   "snippets.startup": "接続時の自動実行",
+  "snippets.startupTarget": "接続先",
   "snippets.startupHint":
-    "シェルの準備ができるたびに送ります（自動再接続を含む）。シークレット変数の値は、リモートのシェル履歴や画面に残ることがあります。接続先や認証の設定を変えると、この割り当ては止まります。",
+    "シェルの準備ができるたびに送ります（自動再接続を含む）。接続先や認証の設定を変えると止まります。",
+  "snippets.startupHintWithSecret":
+    "シェルの準備ができるたびに送ります（自動再接続を含む）。シークレット変数の値は、リモートのシェル履歴や画面に残ることがあります。接続先や認証の設定を変えると止まります。",
   "snippets.startupStale":
     "停止中です。割り当てた後で接続先、認証の設定、またはVPNプロファイルが変わったため、このホストには送りません。接続先を確認してから、もう一度割り当ててください。",
   "snippets.startupStaleCount":
@@ -2458,31 +2469,32 @@ export const ja = {
 
   "explorer.loading": "設定ファイルを読み込んでいます…",
   "explorer.pageTitle": "SSH Config",
-  "explorer.pageDescription":
+  "explorer.formatKept":
     "保存しても、コメントや並びなど元の書式はそのまま残ります。",
-  "explorer.metricFiles": "読み込んだファイル",
-  "explorer.metricEditable": "編集可能",
-  "explorer.metricDiagnostics": "診断",
+  "explorer.summary": "読み込んだファイル{files}件・編集可能{editable}件・診断{diagnostics}件",
+  "explorer.allFiles": "ファイル一覧",
   "explorer.hierarchy": "Include階層",
   "explorer.externalFile":
     "このファイルは~/.sshの外にあります。読み取って表示するだけで、書き込みは行いません。",
   "explorer.insideCondition": "{condition}ブロック内",
-  "explorer.fileState": "{missing}{loads}{editable}",
-  "explorer.missing": "存在しません · ",
-  "explorer.readTimes": "{count}回読み込まれます · ",
+  "explorer.missing": "存在しません",
+  "explorer.readTimes": "{count}回読み込まれます",
   "explorer.editable": "編集可能",
   "explorer.readOnly": "読み取り専用",
+  "explorer.fileActions": "{path}の操作",
   "explorer.newFilePath": "新しいファイルのパス",
+  "explorer.directoryPath": "ディレクトリのパス",
   "explorer.pathOutsideSSHDirectory": "~/.sshの外のパスは使えません。~/.sshからの相対パス（例: conf.d/30-lab.conf）か、~/.ssh/で始まるパスを入力してください。",
-  "explorer.sshDirectoryFiles": "~/.sshのファイル",
-  "explorer.directoryHelp": "ファイルとディレクトリの操作",
   "explorer.createFile": "ファイルを作成",
   "explorer.createDirectory": "ディレクトリを作成",
   "explorer.deleteDirectory": "ディレクトリを削除",
-  "explorer.directoryNote":
-    "ディレクトリを作成・削除できます。削除できるのは空のディレクトリだけなので、先に中のファイルを削除してください。ファイルを削除すると、そのファイルを直接参照するInclude行も削除されます。宣言済みグループはグループ画面で管理してください。",
-  "explorer.fileOperations": "このファイル",
-  "explorer.fileOperationsNote":
+  "explorer.submitCreate": "作成",
+  "explorer.submitDelete": "削除",
+  "explorer.submitRename": "変更",
+  "explorer.cancelPathTask": "キャンセル",
+  "explorer.createDirectoryNote": "宣言済みグループのディレクトリは、［Groups］で管理してください。",
+  "explorer.deleteDirectoryNote": "削除できるのは空のディレクトリだけです。先に中のファイルを削除してください。",
+  "explorer.renameNote":
     "ファイル名を変更すると、このファイルを直接参照するInclude行も同時に書き換えます。ワイルドカードのパターンは変更せず、新しいパスが一致しない場合は警告します。",
   "explorer.renameTo": "新しいパス",
   "explorer.renameFile": "ファイル名を変更",
@@ -2491,12 +2503,10 @@ export const ja = {
   "explorer.cancelDelete": "キャンセル",
   "explorer.deleteIsRecoverable":
     "削除すると、このファイルを直接参照するInclude行も削除します。バックアップは保存されるため、履歴から復元できます。",
-  "explorer.saveOrDiscardFirst":
-    "未保存の編集があります。名前の変更や削除の前に保存するか、ファイルを開き直してください。",
   "explorer.newFileNote":
     "新しいファイルをOpenSSHに読み込ませるには、~/.ssh/configのIncludeから参照してください。接続をグループ間で移動するには、［Connections］を使用します。",
-  "explorer.diagnostics": "診断",
-  "explorer.noIncludeProblem": "Includeの問題は検出されていません。",
+  "explorer.diagnosticsCount": "診断{count}件",
+  "explorer.noIncludeProblem": "Includeの問題はありません",
   "explorer.opened": "{path}の{line}行目を開きました。",
   "explorer.selectFile": "全文を編集するファイルを選んでください。",
   "explorer.emptyHeading": "設定ファイルを選択",

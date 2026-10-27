@@ -19,9 +19,11 @@ beforeEach(() => {
 });
 
 async function chooseAlpha(user: ReturnType<typeof userEvent.setup>) {
-  const chooser = await screen.findByRole("combobox", { name: "Snippets" });
-  await screen.findByRole("option", { name: "Alpha" });
-  await user.selectOptions(chooser, "alpha");
+  await user.click(await screen.findByRole("button", { name: /Alpha/ }));
+}
+
+async function openCheckDisk(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: /Check disk/ }));
 }
 
 it("sets the startup snippet on the first host when the host list arrives after the panel", async () => {
@@ -56,7 +58,9 @@ it("shows a startup assignment as stopped once its destination changed", async (
     snippets,
     startup: [{ alias: "test-host", snippetId: "one", stale: true }],
   } as never);
+  const user = userEvent.setup();
   render(<SnippetsPanel aliases={["test-host"]} />);
+  await openCheckDisk(user);
   expect(
     await screen.findByText(
       /The destination, the authentication settings, or the VPN profile changed after this snippet was assigned/,
@@ -69,8 +73,10 @@ it("does not warn about a startup assignment whose destination is unchanged", as
     snippets,
     startup: [{ alias: "test-host", snippetId: "one", stale: false }],
   } as never);
+  const user = userEvent.setup();
   render(<SnippetsPanel aliases={["test-host"]} />);
-  await screen.findByRole("option", { name: "Check disk" });
+  await openCheckDisk(user);
+  expect(screen.getByRole("combobox", { name: "Host for the startup snippet" })).toHaveValue("test-host");
   expect(screen.queryByText(/changed after this snippet was assigned/)).not.toBeInTheDocument();
   expect(screen.queryByRole("list", { name: "Hosts with a stopped assignment" }))
     .not.toBeInTheDocument();
@@ -89,6 +95,7 @@ it("lists every host whose startup assignment stopped, whichever host is selecte
   } as never);
   const user = userEvent.setup();
   render(<SnippetsPanel aliases={["db", "web", "batch"]} />);
+  await openCheckDisk(user);
 
   const stopped = await screen.findByRole("list", { name: "Hosts with a stopped assignment" });
   expect(within(stopped).getAllByRole("listitem").map((item) => item.textContent))
@@ -97,10 +104,6 @@ it("lists every host whose startup assignment stopped, whichever host is selecte
     .toBeInTheDocument();
   expect(screen.queryByText(/changed after this snippet was assigned/)).not.toBeInTheDocument();
 
-  const hosts = screen.getAllByRole("combobox").find((select) =>
-    within(select).queryByRole("option", { name: "batch" }) !== null,
-  );
-  if (hosts === undefined) throw new Error("the startup host selector is missing");
-  await user.selectOptions(hosts, "batch");
+  await user.selectOptions(screen.getByRole("combobox", { name: "Host for the startup snippet" }), "batch");
   expect(screen.getByText(/changed after this snippet was assigned/)).toBeInTheDocument();
 });

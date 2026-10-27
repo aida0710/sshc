@@ -25,7 +25,7 @@ it("says the library is loading instead of showing an empty list", async () => {
 
   expect(screen.getByRole("status")).toHaveTextContent("Loading snippets");
   await act(async () => answer());
-  expect(await screen.findByRole("option", { name: "Check disk" })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: /Check disk/ })).toBeInTheDocument();
   expect(screen.queryByText("Loading snippets…")).not.toBeInTheDocument();
 });
 
@@ -40,7 +40,8 @@ it("shows the save working, then says the snippet was saved until the next edit"
   }));
   const user = userEvent.setup();
   render(<SnippetsPanel aliases={["test-host"]} />);
-  await screen.findByRole("option", { name: "Check disk" });
+  await screen.findByRole("button", { name: /Check disk/ });
+  await user.click(screen.getAllByRole("button", { name: "Add snippet" })[0]!);
 
   await user.type(screen.getByRole("textbox", { name: "Name" }), restartWeb.name);
   await user.type(screen.getByRole("textbox", { name: "Command" }), restartWeb.command);
