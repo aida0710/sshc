@@ -52,7 +52,7 @@ export function AppHeader({
           : t("shell.pageNotFound")}
       </p>
 
-      <div ref={actionsSlotRef} className="flex shrink-0 items-center gap-2 empty:hidden" />
+      <div ref={actionsSlotRef} data-page-actions className="flex shrink-0 items-center gap-2 empty:hidden" />
 
       {inspector === null ? null : (
         <span className="shrink-0 [&>button]:h-10 [&>button]:min-w-10 [&>button]:justify-center">

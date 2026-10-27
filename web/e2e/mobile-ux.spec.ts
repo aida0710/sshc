@@ -224,6 +224,23 @@ test("quick navigation and terminal keys remain available in portrait and touch 
   await expect(navigation.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
 });
 
+test("a page's button in the top bar is drawn small and still answers a tap just below it", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  await openApplication(page, installation);
+  await page.goto(new URL("/connections", page.url()).href);
+  const topBar = page.locator("[data-app-header]");
+  const add = topBar.getByRole("button", { name: "Add connection", exact: true });
+  await expect(add).toBeVisible();
+  const bar = (await topBar.boundingBox())!;
+  const button = (await add.boundingBox())!;
+  // The bar is 48px tall; the button leaves room around it instead of filling it.
+  expect(button.height).toBeLessThanOrEqual(32);
+  expect(button.height).toBeLessThan(bar.height - 12);
+  // The place to press still reaches past the drawn button, as tall as a touch target should be.
+  await page.touchscreen.tap(button.x + button.width / 2, button.y + button.height + 6);
+  await expect(page.getByRole("dialog", { name: "Create connection" })).toBeVisible();
+});
+
 // swipe drags one finger across the screen through real touch events, in small steps as a finger moves.
 async function swipe(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
   const client = await page.context().newCDPSession(page);
