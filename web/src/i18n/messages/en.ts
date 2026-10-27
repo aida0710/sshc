@@ -891,6 +891,7 @@ export const en = {
   "terminal.keyArrowUp": "Up arrow",
   "terminal.keyArrowDown": "Down arrow",
   "terminal.keyArrowRight": "Right arrow",
+  "terminal.modifierLocked": "{key} (locked)",
   "shell.mobileNavigation": "Quick navigation",
   "sftp.mobile.actions": "Folder actions",
   "sftp.mobile.search": "Search files",
@@ -1049,6 +1050,9 @@ export const en = {
   "terminal.jisYenBackslashLabel": "Send the JIS ¥ key as backslash",
   "terminal.jisYenBackslashHint":
     "Useful with Japanese keyboards. IME composition is not modified.",
+  "terminal.composerEnterSendsLabel": "Send with Enter in the phone's text box",
+  "terminal.composerEnterSendsHint":
+    "When off, Enter starts a new line and the button beside the box sends.",
   "terminal.fontSizeLabel": "Font size",
   "terminal.paletteLabel": "Colour scheme",
   "terminal.verbosityLabel": "Connection log",
