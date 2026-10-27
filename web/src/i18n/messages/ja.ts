@@ -817,7 +817,6 @@ export const ja = {
   "terminal.command.reviewExpired": "確認の有効期限が切れました。もう一度確認してください。",
   "terminal.linkActions": "ターミナルリンクの操作",
   "terminal.linkOpenBrowser": "ブラウザで開く",
-  "terminal.linkPreview": "プレビュー",
   "terminal.relativePathUnknown": "どのフォルダから見たパスか分からないため開けません。フルパスなら開けます。",
   "terminal.homePathUnknown": "このパスを開けません。セッションのホームフォルダを取得できませんでした。フルパスで試してください。",
   "terminal.linkBrowseSFTP": "SFTPで表示",

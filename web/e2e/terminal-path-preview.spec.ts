@@ -25,15 +25,14 @@ async function previewPrintedPath(page: Page, text: string) {
   // xterm's screen receives pointer events above its DOM text rows.
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
   await expect(terminalScreen(page)).toHaveClass(/xterm-cursor-pointer/u);
+  // A click opens the preview at once, without a menu to choose it from first.
   await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-  const actions = page.getByRole("dialog", { name: "Terminal link actions" });
-  await expect(actions.getByRole("button", { name: "Browse in SFTP" })).toHaveCount(0);
-  await actions.getByRole("button", { name: "Preview" }).click();
+  await expect(page.getByRole("dialog", { name: "Terminal link actions" })).toHaveCount(0);
 }
 
 // The engine's terminal list and stream are replaced so the shell prints one
 // known line; the preview itself is read by the real engine from its machine.
-async function mockShellPrinting(page: Page, output: string) {
+async function mockShellPrinting(page: Page, output: string, session: Record<string, unknown> = {}) {
   await page.route("**/api/v1/terminal/sessions**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/stream")) {
@@ -50,7 +49,7 @@ async function mockShellPrinting(page: Page, output: string) {
       body: JSON.stringify({
         sessions: [{
           id: "image-path", kind: "shell", workspaceId: "default", title: "claude", startedAt: "2026-10-23T00:00:00Z",
-          state: "connected", problem: "", forwards: [],
+          state: "connected", problem: "", forwards: [], ...session,
         }],
         maxSessions: 50,
       }),
@@ -96,6 +95,25 @@ test("previews the image a local shell printed the path of", async ({ page, inst
 
   await preview.getByRole("button", { name: "Close" }).click();
   await expect(preview).toBeHidden();
+});
+
+test("keeps copying the path and SFTP for a file an SSH session printed in the preview's menu", async ({ page, installation }) => {
+  await mockShellPrinting(page, "Wrote \x1b[36m/srv/app/report.md\x1b[0m", { kind: "ssh", alias: "nas", title: "nas" });
+  // The host is not reachable from the test; the menu does not wait for the file.
+  await page.route("**/api/v1/sftp/**/preview**", (route) => route.fulfill({
+    status: 502, contentType: "application/json", body: JSON.stringify({ code: "sftp_connect_failed" }),
+  }));
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+
+  await previewPrintedPath(page, "report.md");
+  const preview = page.getByRole("dialog", { name: "/srv/app/report.md" });
+  await preview.getByRole("button", { name: "Actions for report.md" }).click();
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Browse in SFTP", "Edit with SFTP", "Download with SFTP", "Copy full path"]);
+  await menu.getByRole("menuitem", { name: "Browse in SFTP" }).click();
+  await expect(preview).toBeHidden();
+  await expect(page).toHaveURL(/\/files/u);
 });
 
 // Each label of the header fits on one line; a squeezed button used to wrap

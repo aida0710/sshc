@@ -197,6 +197,33 @@ describe("FilePreviewDialog", () => {
     expect(sftpApi.revokeMediaTicket).toHaveBeenCalledWith("first");
   });
 
+  it("offers what else the shown file can do in its menu, for the file it has stepped to", async () => {
+    vi.mocked(sftpApi.previewFile).mockResolvedValue(png);
+    const chosen = vi.fn();
+    render(
+      <LanguageProvider>
+        <FilePreviewDialog
+          alias="web"
+          path="/tmp/a.png"
+          paths={["/tmp/a.png", "/tmp/b.png"]}
+          actions={(path) => [{ label: "Edit with SFTP", onSelect: () => chosen(path) }]}
+          onClose={() => undefined}
+        />
+      </LanguageProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    await userEvent.click(screen.getByRole("button", { name: "Actions for b.png" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Edit with SFTP" }));
+    expect(chosen).toHaveBeenCalledWith("/tmp/b.png");
+  });
+
+  it("shows no menu when the caller offers nothing more", () => {
+    vi.mocked(sftpApi.previewFile).mockResolvedValue(png);
+    renderDialog("/tmp/a.png");
+    expect(screen.queryByRole("button", { name: "Actions for a.png" })).toBeNull();
+  });
+
   it("shows a path that is not among the steps alone", async () => {
     vi.mocked(sftpApi.previewFile).mockResolvedValue(png);
     renderDialog("/srv/plot", { paths: ["/tmp/a.png"] });

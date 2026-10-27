@@ -37,6 +37,17 @@ describe("findTerminalLinks", () => {
     ['/tmp/画面.png:12:3。）', 'path', '/tmp/画面.png'],
     ['artifacts/画面.png:12:3、', 'relative-path', 'artifacts/画面.png'],
     ['/tmp/e\u0301/😀.png', 'path', '/tmp/e\u0301/😀.png'],
+    // What Claude Code prints: its tool calls, and Japanese prose with no space around a path.
+    ['⏺ Read(web/src/app.tsx)', 'relative-path', 'web/src/app.tsx'],
+    ['⏺ Update(docs/画面.md)', 'relative-path', 'docs/画面.md'],
+    ['「artifacts/a.png」を見てください', 'relative-path', 'artifacts/a.png'],
+    ['保存先：/tmp/a.png（PC）', 'path', '/tmp/a.png'],
+    ['画像は~/shots/a.pngに保存しました。', 'relative-path', '~/shots/a.png'],
+    ['画像を/home/aida/a.pngに置きました', 'path', '/home/aida/a.png'],
+    ['`~/notes/worklog.md`の08:18の項', 'relative-path', '~/notes/worklog.md'],
+    ['web/src/app.tsx:42で直した', 'relative-path', 'web/src/app.tsx'],
+    ['dir(1)/x.png', 'relative-path', 'dir(1)/x.png'],
+    ['画像/a.png', 'relative-path', '画像/a.png'],
   ])('detects the complete path in %s', (line, kind, target) => {
     const links = findTerminalLinks(line);
     expect(links.map(({ kind, target }) => ({ kind, target }))).toEqual(kind === null ? [] : [{ kind, target }]);

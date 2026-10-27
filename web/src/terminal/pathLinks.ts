@@ -17,10 +17,32 @@ const previewableExtensions = [
   "zip", "tar", "gz", "tgz", "xz", "7z",
 ];
 export const previewableNamePattern = new RegExp(`\\.(?:${previewableExtensions.join("|")})$`, "iu");
+// Japanese prose puts no space around a path, so a name with a known extension may run straight into the
+// words after it ("shot.pngに保存しました", "a.png（PC）"). Such a path ends at its extension, with a
+// :line:column and a closing quote kept, where a non-ASCII character follows. ASCII may go on a path, a query
+// or a longer name ("x.png.bak"), so it never ends one.
+const previewableNameBeforeProse = new RegExp(
+  `\\.(?:${previewableExtensions.join("|")})(?::\\d+(?::\\d+)?)?["'\`]?(?=\\P{ASCII})`,
+  "iu",
+);
+// The prose before a path can touch it too ("画像は~/shots/a.png"). A home path cannot start in the middle of a
+// name, so it starts after the prose. A path from the root is told from a relative folder with a Unicode name
+// ("画像/a.png") only by starting at one of the folders an absolute path usually starts with.
+const pathAfterProse = /\P{ASCII}(?=~\/|\$(?:HOME|\{HOME\})\/|\/(?:home|Users|tmp|var|etc|opt|usr|srv|mnt|root|private|Volumes)\/)/u;
+// A tool call such as Claude Code's Read(src/app.ts), or a Japanese bracket, opens right before a relative
+// path. The bracket must stay open up to the first slash, so a folder named "dir(1)" is kept whole.
+const openingBeforeRelativePath = /^[^/\\]*[([{<（「『](?=[^/\\)\]}>）」』]*[/\\])/u;
 const windowsPathPattern = /^[A-Za-z]:[/\\]/u;
 const sourceLocationPattern = /:\d+(?::\d+)?$/u;
 const homePrefixPattern = /^\$(?:HOME|\{HOME\})\//u;
 const trailingPunctuationPattern = /[.,;!?)\]}。、）]+$/u;
+
+// endBeforeProse cuts the words that follow a previewable name without a space (see previewableNameBeforeProse).
+function endBeforeProse(text: string): string {
+  if (previewableNamePattern.test(text.replace(sourceLocationPattern, ""))) return text;
+  const found = previewableNameBeforeProse.exec(text);
+  return found === null ? text : text.slice(0, found.index + found[0].length);
+}
 
 export function withoutTrailingPunctuation(value: string, kind: "url" | "path"): string {
   // A closing bracket may wrap a printed path, but also belongs to IPv6 URLs.
@@ -86,15 +108,17 @@ function fileURIPath(value: string, allowWindowsPaths: boolean): string | null {
 
 function wordPath(word: PrintedWord, allowWindowsPaths: boolean): TerminalLinkMatch | null {
   if (!word.complete) return null;
-  let text = withoutTrailingPunctuation(word.text, "path");
+  let text = endBeforeProse(withoutTrailingPunctuation(word.text, "path"));
   let start = word.start;
   // Labels may touch an explicit path, but foo:bar.png and URI path segments
   // are whole words, not relative files. Drive letters must be checked first.
   if (!windowsPathPattern.test(text) && !/^["'`]/u.test(text) && !/^[a-z][a-z\d+.-]*:\/\//iu.test(text)) {
-    const prefix = /(?:^|[:：=→←↑↓⇒➜▶([{<])(?=[A-Za-z]:[/\\]|\/|~\/|\$(?:HOME|\{HOME\})\/)/u.exec(text);
+    const prefix = /(?:^|[:：=→←↑↓⇒➜▶([{<（「『])(?=[A-Za-z]:[/\\]|\/|~\/|\$(?:HOME|\{HOME\})\/)/u.exec(text) ?? pathAfterProse.exec(text);
     const firstSlash = text.search(/[/\\]/u);
     const hasPrefix = prefix !== null && (firstSlash < 0 || prefix.index < firstSlash);
-    const offset = hasPrefix ? prefix.index + prefix[0].length : (/^[([{<→←]+/u.exec(text)?.[0].length ?? 0);
+    const offset = hasPrefix
+      ? prefix.index + prefix[0].length
+      : (openingBeforeRelativePath.exec(text) ?? /^[([{<→←]+/u.exec(text))?.[0].length ?? 0;
     text = text.slice(offset);
     start += offset;
   }
@@ -128,7 +152,7 @@ function wordPath(word: PrintedWord, allowWindowsPaths: boolean): TerminalLinkMa
 // otherwise prefer no link to opening only its head or tail.
 function ambiguousPathEnd(words: PrintedWord[], index: number): number {
   const first = words[index]!;
-  if (previewableNamePattern.test(first.text.replace(sourceLocationPattern, ""))) return index;
+  if (endBeforeProse(first.text) !== first.text || previewableNamePattern.test(first.text.replace(sourceLocationPattern, ""))) return index;
   const windows = windowsPathPattern.test(first.text);
   if (/^["'`]/u.test(first.text) || (!windows && !first.text.includes("/")) || trailingPunctuationPattern.test(first.text)) return index;
   for (let next = index + 1; next < words.length; next += 1) {

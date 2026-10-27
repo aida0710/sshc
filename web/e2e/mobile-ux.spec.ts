@@ -1,7 +1,9 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, openApplication, test } from "./support/environment";
+import { samplePNG } from "./support/images";
+import { drawnSpan } from "./support/terminal";
 
 // All screenshots are opt-in and contain only the isolated installation's
 // example hosts and synthetic SFTP/terminal data. Never capture real servers.
@@ -239,6 +241,32 @@ test("a page's button in the top bar is drawn small and still answers a tap just
   // The place to press still reaches past the drawn button, as tall as a touch target should be.
   await page.touchscreen.tap(button.x + button.width / 2, button.y + button.height + 6);
   await expect(page.getByRole("dialog", { name: "Create connection" })).toBeVisible();
+});
+
+test("a tap on a file path the terminal printed opens its preview at once", async ({ page, installation }) => {
+  const imagePath = join(installation.home, "shot.png");
+  test.skip(!imagePath.startsWith("/"), "terminal paths are detected only when they start with /");
+  await writeFile(imagePath, samplePNG());
+  await page.route("**/api/v1/terminal/sessions**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/stream")) return route.fulfill({ status: 201, json: { streamTicket: "mobile-path-ticket" } });
+    if (path.endsWith("/directory")) return route.fulfill({ json: { path: installation.home } });
+    return route.fulfill({ json: { sessions: [{ id: "mobile-path-shell", kind: "shell", workspaceId: "default", title: "claude", startedAt: "2026-09-12T00:00:00Z", state: "connected", problem: "", forwards: [] }], maxSessions: 12 } });
+  });
+  await page.routeWebSocket("**/terminal/stream?**", (socket) => {
+    socket.send(Buffer.from(`Saved \x1b[36m${imagePath}\x1b[0m\r\n$ `));
+  });
+  await openApplication(page, installation);
+  await page.goto(new URL("/terminal", page.url()).href);
+  const printed = drawnSpan(page, "shot.png").last();
+  await expect(printed).toBeVisible();
+  const bounds = await printed.boundingBox();
+  if (bounds === null) throw new Error("the printed path is not on screen");
+
+  await page.touchscreen.tap(bounds.x + bounds.width - 4, bounds.y + bounds.height / 2);
+
+  await expect(page.getByRole("dialog", { name: imagePath }).getByRole("img", { name: "shot.png" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Terminal link actions" })).toHaveCount(0);
 });
 
 // swipe drags one finger across the screen through real touch events, in small steps as a finger moves.
