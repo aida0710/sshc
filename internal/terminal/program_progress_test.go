@@ -34,9 +34,12 @@ func TestOSCProgressAppliesTheBrowserStateTransitions(t *testing.T) {
 	for _, terminator := range []string{"\a", "\x1b\\"} {
 		t.Run(terminator, func(t *testing.T) {
 			var progress *ProgramProgress
-			observer := newOSCObserver(nil, func(title, body string) {
-				t.Fatalf("progress emitted a notification: %q %q", title, body)
-			}, func(value *ProgramProgress) { progress = value })
+			observer := newOSCObserver(oscReports{
+				Notify: func(title, body string) {
+					t.Fatalf("progress emitted a notification: %q %q", title, body)
+				},
+				Progress: func(value *ProgramProgress) { progress = value },
+			})
 			for _, step := range steps {
 				t.Run(step.name, func(t *testing.T) {
 					// Splitting at every byte covers OSC payloads and both terminators.
@@ -56,7 +59,7 @@ func TestCommandCompletionClearsProgressAndItsRememberedPercentage(t *testing.T)
 	for _, completion := range []string{"D", "D;0", "D;1;extra"} {
 		t.Run(completion, func(t *testing.T) {
 			var progress *ProgramProgress
-			observer := newOSCObserver(nil, nil, func(value *ProgramProgress) { progress = value })
+			observer := newOSCObserver(oscReports{Progress: func(value *ProgramProgress) { progress = value }})
 			observer.Observe([]byte("\x1b]9;4;1;60\a\x1b]133;A\a\x1b]133;B\a\x1b]133;C\a\x1b]133;Done\a"))
 			if progress == nil || progress.Percent != 60 {
 				t.Fatalf("non-completion marker cleared progress: %+v", progress)

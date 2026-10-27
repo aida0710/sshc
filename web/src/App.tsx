@@ -51,6 +51,7 @@ import { useOSC52Policy } from "./shell/useOSC52Policy";
 import { useSectionHandoffs } from "./shell/useSectionHandoffs";
 import { useShellLayers } from "./shell/useShellLayers";
 import { useAppShortcuts } from "./shell/useAppShortcuts";
+import { TerminalRestorePrompt } from "./terminal/TerminalRestorePrompt";
 
 const transferReconcileIntervalMs = 2_000;
 
@@ -476,6 +477,7 @@ export function App({
           <MobileNavigation section={section} onNavigate={navigateFromMenu} />
         ) : null}
         {state === "ready" ? <TransferNotifications /> : null}
+        {state === "ready" ? <TerminalRestorePrompt onRestored={terminalSessions.refresh} /> : null}
         {state === "ready" ? (
           <CommandPalette
             open={commandPaletteOpen}

@@ -38,7 +38,7 @@ const (
 	// maxKittyPendingIdentifiers * 2 * maxKittyChunkBytes (title and body).
 	maxKittyPendingIdentifiers = 8
 	// maxOSCNumberDigits bounds the number read before ';'. Every number this
-	// observer handles (0, 1, 2, 9, 99, 133, 777) fits; a longer one is skipped to the
+	// observer handles (0, 1, 2, 7, 9, 99, 133, 777) fits; a longer one is skipped to the
 	// end of its sequence without buffering a payload.
 	maxOSCNumberDigits = 4
 )
@@ -55,8 +55,8 @@ const (
 	oscDiscardEscape
 )
 
-// oscObserver watches the output stream for titles, notifications and program
-// progress. It never removes bytes: the browser terminal still receives
+// oscObserver watches the output stream for titles, notifications, program
+// progress and the working directory a shell reports. It never removes bytes: the browser terminal still receives
 // everything and applies these sequences itself. The engine only records what
 // it saw so the session list, other tabs and headless clients can show it.
 type oscObserver struct {
@@ -64,10 +64,16 @@ type oscObserver struct {
 	number          []byte
 	payload         []byte
 	chunks          map[string]*kittyNotification
-	onTitle         func(title string)
-	onNotify        func(title, body string)
-	onProgress      func(*ProgramProgress)
+	reports         oscReports
 	programProgress *ProgramProgress
+}
+
+// oscReports receives what the observer saw. A nil field ignores that kind.
+type oscReports struct {
+	Title     func(title string)
+	Notify    func(title, body string)
+	Progress  func(*ProgramProgress)
+	Directory func(directory string)
 }
 
 type kittyNotification struct {
@@ -75,8 +81,8 @@ type kittyNotification struct {
 	body  string
 }
 
-func newOSCObserver(onTitle func(string), onNotify func(title, body string), onProgress func(*ProgramProgress)) *oscObserver {
-	return &oscObserver{onTitle: onTitle, onNotify: onNotify, onProgress: onProgress}
+func newOSCObserver(reports oscReports) *oscObserver {
+	return &oscObserver{reports: reports}
 }
 
 // Observe scans one chunk. Sequences may span chunk boundaries.
@@ -173,8 +179,12 @@ func (o *oscObserver) complete() {
 	o.reset()
 	switch number {
 	case "0", "1", "2":
-		if o.onTitle != nil {
-			o.onTitle(cleanDisplayText(payload, MaxTitle))
+		if o.reports.Title != nil {
+			o.reports.Title(cleanDisplayText(payload, MaxTitle))
+		}
+	case "7":
+		if directory, ok := parseOSC7Directory(payload); ok && o.reports.Directory != nil {
+			o.reports.Directory(directory)
 		}
 	case "9":
 		if strings.HasPrefix(payload, "4;") {
@@ -196,8 +206,8 @@ func (o *oscObserver) complete() {
 
 func (o *oscObserver) reportProgramProgress(progress *ProgramProgress) {
 	o.programProgress = progress
-	if o.onProgress != nil {
-		o.onProgress(progress)
+	if o.reports.Progress != nil {
+		o.reports.Progress(progress)
 	}
 }
 
@@ -311,8 +321,8 @@ func (o *oscObserver) emit(title, body string) {
 	if title == "" && body == "" {
 		return
 	}
-	if o.onNotify != nil {
-		o.onNotify(title, body)
+	if o.reports.Notify != nil {
+		o.reports.Notify(title, body)
 	}
 }
 
