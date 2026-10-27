@@ -16,10 +16,10 @@ import {
   RelocateForm,
   RelocateResult,
   StoredPassphrasePanel,
-  TrashConfirmation,
 } from "./KeyForms";
 import { AgentSection } from "./AgentSection";
-import { KeyTrashSection } from "./KeyTrashSection";
+import { KeyTrashConfirmation } from "./KeyTrashConfirmation";
+import { KeyTrashTable } from "./KeyTrashTable";
 import { KeyGenerationSection } from "./KeyGenerationSection";
 import { useTranslate } from "../i18n/context";
 import { primaryAction } from "../ui/form";
@@ -40,6 +40,7 @@ import {
   folderRows,
   groupOfKeyPath,
   itemsInFolder,
+  keyItemGroups,
   moveInto,
   relocateStem,
   shownItems,
@@ -59,6 +60,8 @@ export { keySecretsApi, type KeySecretsApi } from "./secretsApi";
 type KeysScreenProps = {
   api?: KeysApi;
   onInspector?: (content: InspectorContent) => void;
+  // onShowInspector opens the details pane, when a key is chosen from the table.
+  onShowInspector?: () => void;
   groups?: string[];
   secrets?: KeySecretsApi;
   onAssignGeneratedKey?: (key: GeneratedPrivateKeyHandoff) => void;
@@ -71,6 +74,7 @@ const certificateClockRefreshMs = 60_000;
 
 export function KeysScreen({
   onInspector,
+  onShowInspector,
   api = keysApi,
   groups = [],
   secrets = keySecretsApi,
@@ -113,8 +117,6 @@ export function KeysScreen({
     setListFilter,
     keyQuery,
     setKeyQuery,
-    detailsFor,
-    setDetailsFor,
     selectedKey,
     setSelectedKey,
   } = useOrganiser();
@@ -146,15 +148,20 @@ export function KeysScreen({
 
   const now = useCurrentTime(certificateClockRefreshMs);
 
+  // Only one panel opens under the rows at a time: a form, or a key's text.
   function closeAllForms() {
     closePassphraseForm();
     closeAgentForm();
     closeStoredPassphraseForm();
+    closeRelocateForm();
+    setRowPanel(null);
   }
 
   const rowActions: KeyRowActions = {
-    onSelect: (item) =>
-      setSelectedKey((current) => (current === item.id ? null : item.id)),
+    onSelect: (item) => {
+      setSelectedKey(item.id);
+      onShowInspector?.();
+    },
     onToggleChosen: (item, picked) => {
       const next = new Set(chosen);
       if (picked) next.add(item.id);
@@ -164,6 +171,7 @@ export function KeysScreen({
     onBeginDrag: beginDrag,
     onEndDrag: () => setDragging(false),
     onReveal: (item) => {
+      closeAllForms();
       setRowPanel({ kind: "reveal", item });
     },
     onShowPublicKey: (item) => void showPublicKey(item),
@@ -181,12 +189,6 @@ export function KeysScreen({
       closeAllForms();
       void removeFromAgent(item.id);
     },
-    onToggleDetails: (item) => {
-      const closing = detailsFor === item.id;
-      setDetailsFor(closing ? "" : item.id);
-      setRowPanel(null);
-      closeAllForms();
-    },
     onChangePassphrase: (item) => {
       closeAllForms();
       setChangingPassphrase(item);
@@ -200,6 +202,7 @@ export function KeysScreen({
     },
     onMoveToTrash: (item) => {
       closeAllForms();
+      clearFailure();
       setPendingTrash(item);
     },
   };
@@ -213,15 +216,16 @@ export function KeysScreen({
       onInspector(null);
       return;
     }
+    const related = keyItemGroups(inventory?.items ?? []).find((group) => group.primary.id === item.id)?.related ?? [];
     onInspector({
       label: t("keys.inspectorLabel"),
       attention: item.permissionRisk,
-      body: <KeyInspector item={item} now={now} />,
+      body: <KeyInspector item={item} related={related} now={now} />,
     });
   }, [selectedKey, inventory, onInspector, t, now]);
 
   async function showPublicKey(item: KeyItem) {
-    setRowPanel(null);
+    closeAllForms();
     await runKeyOperation(async () => {
       const response = await api.publicKey(item.id);
       setRowPanel({
@@ -287,15 +291,49 @@ export function KeysScreen({
 
   const searching = keyQuery.trim() !== "";
   const shown = shownItems(inventory.items, listFilter);
-  const rows = folderRows(shown, groups);
+  const rows = folderRows(shown, groups, trash.entries.length);
   const visibleItems = searchKeyItems(itemsInFolder(shown, folder), keyQuery);
   const keyAttention =
     inventory.unreadable.length +
     inventory.unresolvedReferences.length +
     inventory.items.filter((item) => item.permissionRisk).length;
-  const inlineKeyPanel = rowPanel === null ? null : {
-    itemId: rowPanel.item.id,
-    content: <KeyRowPanel panel={rowPanel} api={api} onClose={() => setRowPanel(null)} />,
+  const panelItem =
+    rowPanel?.item ??
+    passphraseForm.changingPassphrase ??
+    agentForm.registering ??
+    storedPassphraseForm.managingPassphrase ??
+    relocateForm.relocating;
+  // A public key or certificate read from its private key's menu opens under that key's row, since it has
+  // no row of its own unless a search lists it.
+  const primaryOfRelated = new Map(
+    keyItemGroups(visibleItems).flatMap((group) => group.related.map((item) => [item.id, group.primary.id] as const)),
+  );
+  const panelRow = panelItem === null ? "" : searching ? panelItem.id : primaryOfRelated.get(panelItem.id) ?? panelItem.id;
+  // Each form draws nothing unless it is the one open, so the panel holds just that one.
+  const inlineKeyPanel = panelItem === null ? null : {
+    itemId: panelRow,
+    content: (
+      <>
+        {rowPanel === null ? null : <KeyRowPanel panel={rowPanel} api={api} onClose={() => setRowPanel(null)} />}
+        <StoredPassphrasePanel
+          form={storedPassphraseForm}
+          storedPhrases={storedPhrases}
+          onAssign={(item) => void assignPhrase(item)}
+          onUnassign={(item) => void unassignPhrase(item)}
+          onStoreAndAssign={storeAndAssignPhrase}
+        />
+        <AgentForm
+          form={agentForm}
+          storedPhrases={storedPhrases}
+          onSubmit={registerWithAgent}
+          onAssignPhrase={(item) => void assignPhrase(item)}
+        />
+        <RelocateForm form={relocateForm} groups={groups} onSubmit={submitRelocation} />
+        {/* A refused move keeps its form open, with the reasons under it. */}
+        {relocateForm.relocating === null ? null : <RelocateResult result={relocated} onClose={() => setRelocated(null)} />}
+        <PassphraseForm form={passphraseForm} onSubmit={changePassphrase} />
+      </>
+    ),
   };
 
   return (
@@ -327,11 +365,12 @@ export function KeysScreen({
         />
       )}
       {moveOutcome === null ? null : <KeyMoveOutcomeNotice outcome={moveOutcome} />}
+      {relocateForm.relocating === null ? <RelocateResult result={relocated} onClose={() => setRelocated(null)} /> : null}
 
       <PageSection
         heading={t("keys.listHeading")}
         meta="~/.ssh"
-        actions={(
+        actions={folder.kind === "trash" ? undefined : (
           <KeyListToolbar
             listFilter={listFilter}
             onListFilterChange={setListFilter}
@@ -340,8 +379,10 @@ export function KeysScreen({
           />
         )}
       >
-        <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-5 md:flex-row">
+        {/* keylist decides whether the groups fit beside the table; keytable whether the table has room for
+            its columns (KeyTable, KeyTrashTable). */}
+        <div className="@container/keylist">
+          <div className="flex flex-col gap-3 @3xl/keylist:flex-row @3xl/keylist:items-start @3xl/keylist:gap-5">
             <FolderPane
               rows={rows}
               selected={folder}
@@ -352,67 +393,37 @@ export function KeysScreen({
               }}
               onDropInto={(target) => void moveChosen(target)}
             />
-            <div className="min-w-0 grow md:overflow-x-auto">
-              <KeyTable
-                items={visibleItems}
-                inventory={inventory}
-                chosen={chosen}
-                selected={selectedKey}
-                detailsFor={detailsFor}
-                now={now}
-                revealRelated={searching}
-                inlinePanel={inlineKeyPanel}
-                actions={rowActions}
-              />
+            <div className="@container/keytable min-w-0 grow">
+              {folder.kind === "trash" ? (
+                <KeyTrashTable trash={trash} onRestore={restore} onPurge={purge} />
+              ) : (
+                <KeyTable
+                  items={visibleItems}
+                  inventory={inventory}
+                  chosen={chosen}
+                  selected={selectedKey}
+                  now={now}
+                  revealRelated={searching}
+                  inlinePanel={inlineKeyPanel}
+                  actions={rowActions}
+                />
+              )}
             </div>
           </div>
-
-          <KeyTrashSection
-            trash={trash}
-            onRestore={restore}
-            onPurge={purge}
-          />
         </div>
       </PageSection>
 
-      <StoredPassphrasePanel
-        form={storedPassphraseForm}
-        storedPhrases={storedPhrases}
-        onAssign={(item) => void assignPhrase(item)}
-        onUnassign={(item) => void unassignPhrase(item)}
-        onStoreAndAssign={storeAndAssignPhrase}
-      />
-
-      <TrashConfirmation
+      <KeyTrashConfirmation
         item={pendingTrash}
         members={pendingTrash === null ? [] : trashMembers(pendingTrash)}
-        onConfirm={(id) => void moveToTrash(id)}
+        error={failure}
+        onConfirm={moveToTrash}
         onCancel={() => setPendingTrash(null)}
       />
 
       <KeyInventoryProblems inventory={inventory} />
 
       <AgentSection inventory={inventory} />
-
-      <AgentForm
-        form={agentForm}
-        storedPhrases={storedPhrases}
-        onSubmit={registerWithAgent}
-        onAssignPhrase={(item) => void assignPhrase(item)}
-      />
-
-      <RelocateForm
-        form={relocateForm}
-        groups={groups}
-        onSubmit={submitRelocation}
-      />
-
-      <RelocateResult result={relocated} onClose={() => setRelocated(null)} />
-
-      <PassphraseForm
-        form={passphraseForm}
-        onSubmit={changePassphrase}
-      />
 
       <KeyGenerationSection
         api={api}

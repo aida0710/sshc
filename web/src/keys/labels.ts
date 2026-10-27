@@ -28,6 +28,22 @@ export function describeKeyKind(kind: string, t: Translate): string {
   return t(keyKindLabels[kind] ?? "keys.kind.other");
 }
 
+// The engine names algorithms as internal/keys/material.go does; the page writes them as OpenSSH users
+// know them. Ed25519 keys are always 256 bits, so only the others carry their size.
+const algorithmNames: Record<string, string> = {
+  ed25519: "Ed25519",
+  "ed25519-sk": "Ed25519-SK",
+  rsa: "RSA",
+  ecdsa: "ECDSA",
+  "ecdsa-sk": "ECDSA-SK",
+};
+
+export function describeAlgorithm(algorithm: string, bits: number): string {
+  if (algorithm === "") return "";
+  const name = algorithmNames[algorithm] ?? algorithm.toUpperCase();
+  return bits > 0 && !algorithm.startsWith("ed25519") ? `${name} ${bits}` : name;
+}
+
 const blockerLabels: Record<string, MessageKey> = {
   key_destination_occupied: "keys.blockerTargetOccupied",
   key_reference_unresolved: "keys.blockerUnresolved",

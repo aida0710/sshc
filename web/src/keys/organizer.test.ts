@@ -5,6 +5,7 @@ import {
   includeKeyPairContext,
   itemsInFolder,
   keyItemGroups,
+  keyListPath,
   moveInto,
   sameFolder,
   shownItems,
@@ -55,7 +56,7 @@ describe("folderRows", () => {
       item("id_loose"),
     ];
 
-    const rows = folderRows(items, ["work", "work/ci", "empty"]);
+    const rows = folderRows(items, ["work", "work/ci", "empty"], 3);
 
     expect(rows.map((row) => [row.folder.kind === "group" ? row.folder.name : row.folder.kind, row.count])).toEqual([
       ["all", 4],
@@ -63,11 +64,30 @@ describe("folderRows", () => {
       ["work", 2],
       ["work/ci", 1],
       ["ungrouped", 1],
+      ["trash", 3],
     ]);
   });
 
+  it("counts a key with its public key and certificate as the one row the table shows", () => {
+    const privateKey = item("id_work");
+    const publicKey = { ...item("id_work.pub"), kind: "public_key", fingerprint: privateKey.fingerprint };
+    const certificate = {
+      ...item("id_work-cert.pub"),
+      kind: "certificate",
+      fingerprint: "SHA256:certificate",
+      certificate: {
+        keyId: "aida", principals: ["aida"], validBefore: 0, neverExpires: true,
+        signedKeyType: "ssh-ed25519", signedKeyFingerprint: privateKey.fingerprint,
+      },
+    };
+
+    const rows = folderRows([privateKey, publicKey, certificate], [], 0);
+
+    expect(rows.find((row) => row.folder.kind === "all")?.count).toBe(1);
+  });
+
   it("puts a parent before its children and reports the depth", () => {
-    const rows = folderRows([], ["b", "a/deep", "a"]);
+    const rows = folderRows([], ["b", "a/deep", "a"], 0);
     const groups = rows.filter((row) => row.folder.kind === "group");
 
     expect(groups.map((row) => (row.folder.kind === "group" ? row.folder.name : ""))).toEqual(["a", "a/deep", "b"]);
@@ -75,7 +95,7 @@ describe("folderRows", () => {
   });
 
   it("does not invent a folder from a path nothing declares", () => {
-    const rows = folderRows([item("keys/ghost/id_a")], []);
+    const rows = folderRows([item("keys/ghost/id_a")], [], 0);
 
     expect(rows.some((row) => row.folder.kind === "group")).toBe(false);
     expect(rows.find((row) => row.folder.kind === "ungrouped")?.count).toBe(0);
@@ -252,5 +272,17 @@ describe("keyItemGroups", () => {
       "private",
       "public",
     ]);
+  });
+});
+
+describe("keyListPath", () => {
+  it("names a key in a group without the keys/ that holds every group", () => {
+    expect(keyListPath("keys/work/deploy_ed25519")).toBe("work/deploy_ed25519");
+    expect(keyListPath("keys/work/ci/id_c")).toBe("work/ci/id_c");
+  });
+
+  it("keeps the path of a key outside any group", () => {
+    expect(keyListPath("id_ed25519")).toBe("id_ed25519");
+    expect(keyListPath("work/github_ed25519")).toBe("work/github_ed25519");
   });
 });

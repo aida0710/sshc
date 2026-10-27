@@ -181,6 +181,7 @@ function SectionPage({
     onVaultChanged,
     passwordless,
     onInspector,
+    onShowInspector,
     terminalSessions,
     onOpenTerminal,
     onTerminalSettingsChange,
@@ -271,6 +272,7 @@ function SectionPage({
     return (
       <KeysScreen
         onInspector={onInspector}
+        onShowInspector={onShowInspector}
         groups={declared.groups}
         onAssignGeneratedKey={handoff.onAssignGeneratedKey}
         onInstallGeneratedKey={handoff.onInstallGeneratedKey}

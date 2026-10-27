@@ -47,12 +47,16 @@ export function InspectorToggle({
   );
 }
 
+// InspectorPane is the details pane. On a wide screen it is a column beside the page; narrower, it covers
+// the page, and below the top bar (h-12) where there is one, so the bar's toggle can close it again.
 export function InspectorPane({
   label,
+  underTopBar,
   children,
   paneRef,
 }: {
   label: string;
+  underTopBar: boolean;
   children: ReactNode;
   paneRef?: RefObject<HTMLElement | null>;
 }) {
@@ -62,7 +66,7 @@ export function InspectorPane({
       tabIndex={-1}
       id={inspectorId}
       aria-label={label}
-      className="fixed inset-0 z-10 overflow-y-auto bg-sidebar p-3 lg:relative lg:z-auto lg:border-l lg:border-line"
+      className={`fixed inset-x-0 bottom-0 z-10 overflow-y-auto bg-sidebar p-3 lg:relative lg:inset-auto lg:z-auto lg:border-l lg:border-line ${underTopBar ? "top-12" : "top-0"}`}
     >
       {children}
     </aside>
