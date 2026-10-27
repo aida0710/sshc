@@ -8,6 +8,7 @@ import { themes, type Theme } from "../theme/theme";
 import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { SettingsSection } from "./SettingsSection";
+import { formColumns } from "../ui/FieldRow";
 
 const themeLabelKeys: Record<Theme, MessageKey> = {
   system: "shell.themeSystem",
@@ -96,7 +97,7 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
   );
 }
 
-const fieldRow = "grid gap-4 border-t border-line py-5 lg:grid-cols-[160px_minmax(0,1fr)] lg:gap-6";
+const fieldRow = `grid gap-4 border-t border-line py-5 lg:gap-6 ${formColumns}`;
 const fieldLabel = "pt-1.5 text-[13.5px] font-medium text-ink";
 
 // ThemeThumbnail is a small picture of the app in a theme: a sidebar with the
