@@ -35,7 +35,6 @@ func (e AboutManager) Valid() bool {
 // Defines values for AppearanceSettingsAccent.
 const (
 	Blue     AppearanceSettingsAccent = "blue"
-	Custom   AppearanceSettingsAccent = "custom"
 	Lavender AppearanceSettingsAccent = "lavender"
 	Mono     AppearanceSettingsAccent = "mono"
 	Pink     AppearanceSettingsAccent = "pink"
@@ -46,8 +45,6 @@ const (
 func (e AppearanceSettingsAccent) Valid() bool {
 	switch e {
 	case Blue:
-		return true
-	case Custom:
 		return true
 	case Lavender:
 		return true

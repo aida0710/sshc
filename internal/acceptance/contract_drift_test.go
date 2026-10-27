@@ -105,10 +105,9 @@ var servedStringEnums = map[string]func(string) bool{
 }
 
 // acceptedAsAccent は、さし色の名前を application が保存できる metadata として受け付けるかを返す。
-// custom は色と組みでしか保存できないので、どの名前にも読める色を添えて確かめる。
 func acceptedAsAccent(value string) bool {
 	metadata := application.NewMetadata()
-	metadata.Appearance = &application.AppearanceSettings{Accent: value, AccentColor: "#3fa86b"}
+	metadata.Appearance = &application.AppearanceSettings{Accent: value}
 	return application.ValidateMetadata(metadata) == nil
 }
 
