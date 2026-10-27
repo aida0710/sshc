@@ -37,6 +37,8 @@ type workflowStrategy struct {
 
 type workflowMatrix struct {
 	Include []workflowMatrixEntry `yaml:"include"`
+	// Shard は、画面の単体テストを分けて流す番号の並びである（jobs.web-unit）。
+	Shard []int `yaml:"shard"`
 }
 
 type workflowMatrixEntry struct {
