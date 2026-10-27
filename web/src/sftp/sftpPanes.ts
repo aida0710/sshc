@@ -11,8 +11,9 @@ export const maxPanes = 2;
 export type SFTPTab = { id: string; alias: string; path: string; sort: SFTPSortState };
 export type SFTPPane = { id: string; tabs: SFTPTab[]; activeId: string };
 export type PaneSide = "left" | "right";
-// Where a tab is dropped: onto another pane, or beside the only pane to open a second one.
-export type TabDestination = { paneId: string } | { side: PaneSide };
+// Where a tab is dropped: into a pane (at index among its tabs, or at its end), or beside the only pane to
+// open a second one.
+export type TabDestination = { paneId: string; index?: number } | { side: PaneSide };
 
 export function blankTab(): SFTPTab {
   return { id: newIdentifier(), alias: "", path: "", sort: { key: "name", direction: "ascending" } };
@@ -101,8 +102,33 @@ export function resortTab(panes: SFTPPane[], tabId: string, sort: SFTPSortState)
   return updateTab(panes, tabId, (tab) => ({ ...tab, sort }));
 }
 
+// reorderTab moves a tab within its own pane, to sit before the tab now at index. The index counts the
+// tabs as they are before the move, as a drop marker between two tabs does.
+function reorderTab(panes: SFTPPane[], pane: SFTPPane, tabId: string, index: number | undefined): SFTPPane[] {
+  const from = pane.tabs.findIndex((tab) => tab.id === tabId);
+  const tab = pane.tabs[from];
+  if (tab === undefined || index === undefined) return panes;
+  const to = index > from ? index - 1 : index;
+  if (to === from) return panes;
+  const rest = pane.tabs.filter((candidate) => candidate.id !== tabId);
+  return replacePane(panes, { ...pane, tabs: insertedAt(rest, tab, to) });
+}
+
+// swapPanes puts the two panes the other way round. Each keeps its tabs and its selection.
+export function swapPanes(panes: SFTPPane[]): SFTPPane[] {
+  const [first, second] = panes;
+  if (first === undefined || second === undefined || panes.length !== 2) return panes;
+  return [second, first];
+}
+
 export function canSplit(panes: SFTPPane[]): boolean {
   return panes.length < maxPanes;
+}
+
+// insertedAt is tabs with tab placed before the tab now at index (or at the end).
+function insertedAt(tabs: SFTPTab[], tab: SFTPTab, index: number | undefined): SFTPTab[] {
+  const at = index === undefined ? tabs.length : Math.max(0, Math.min(index, tabs.length));
+  return [...tabs.slice(0, at), tab, ...tabs.slice(at)];
 }
 
 export function moveTab(panes: SFTPPane[], tabId: string, destination: TabDestination): SFTPPane[] {
@@ -110,10 +136,12 @@ export function moveTab(panes: SFTPPane[], tabId: string, destination: TabDestin
   if (found === null) return panes;
   if ("paneId" in destination) {
     const target = panes.find((pane) => pane.id === destination.paneId);
-    if (target === undefined || target.id === found.pane.id || target.tabs.length >= maxTabsPerPane) return panes;
+    if (target === undefined) return panes;
+    if (target.id === found.pane.id) return reorderTab(panes, found.pane, tabId, destination.index);
+    if (target.tabs.length >= maxTabsPerPane) return panes;
     return withoutEmptyPanes(panes.map((pane) => {
       if (pane.id === found.pane.id) return withoutTab(pane, tabId);
-      if (pane.id === target.id) return { ...pane, tabs: [...pane.tabs, found.tab], activeId: found.tab.id };
+      if (pane.id === target.id) return { ...pane, tabs: insertedAt(pane.tabs, found.tab, destination.index), activeId: found.tab.id };
       return pane;
     }));
   }
