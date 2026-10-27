@@ -1,19 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { toProblem } from "../api/guards";
-import { Button, Card } from "../ui/surface";
+import { Button } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import type { Problem } from "../api/client";
 import { configApi, type FileContents, type Overview, type SavePreview } from "../api/config";
 import { SavePreviewPanel } from "../connections/SavePreview";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
+import type { ActionMenuItem } from "../ui/ActionMenu";
+import { EmptyState } from "../ui/EmptyState";
 import { Icon } from "../ui/icons";
-import { hintText, sectionHeading } from "../ui/form";
-import { PageHeader, SummaryStat, SummaryStats } from "../ui/page";
+import { PageBoard } from "../ui/PageBoard";
+import { PageHeader } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { useToast } from "../ui/useToast";
 import { usePendingAction } from "../ui/usePendingAction";
+import {
+  fixedListWidthStyle,
+  workspaceColumnsLayout,
+  workspaceDetailPane,
+  workspaceHeaderLayout,
+  workspaceListPane,
+} from "../ui/workspaceLayout";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
 import type { BrowserLocation, NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
@@ -21,16 +30,16 @@ import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmat
 import { sectionPath } from "../routing/sectionRoute";
 import { ConfigFileList } from "./ConfigFileList";
 import { sshDirectoryPath } from "./sshDirectoryPath";
-import { ConfigPathActions, type ConfigPathAction } from "./ConfigPathActions";
 import { ConfigDiagnostics } from "./ConfigDiagnostics";
-import { ConfigFileOperations, type ConfigFileAction } from "./ConfigFileOperations";
+import { ConfigFileHead } from "./ConfigFileHead";
+import { ConfigPathForm, type ConfigPathTask } from "./ConfigPathForm";
 
 // request numbers each handoff, so the handoff that was taken is the one cleared.
 export type FileTarget = { path: string; line: number; request: number };
 
 // ConfigOperation は、SSH Config の画面が走らせるプレビューと書き込みである。一度に一つだけ
 // 走らせ、押したボタンだけに回転の印を出し、ほかの操作のボタンは終わるまで止める。
-type ConfigOperation = "preview" | "save" | ConfigPathAction | ConfigFileAction;
+type ConfigOperation = "preview" | "save" | "delete" | ConfigPathTask;
 
 type ConfigExplorerProps = {
   target?: FileTarget | null;
@@ -55,18 +64,19 @@ function lineRange(contents: string, line: number): { start: number; end: number
 
 export function ConfigExplorer({ target = null, onTargetHandled = () => undefined, onNavigationBlockerChange, onNavigateLocation }: ConfigExplorerProps) {
   const t = useTranslate();
+  const compact = useMediaQuery(mobileViewportQuery);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [file, setFile] = useState<FileContents | null>(null);
   const [draft, setDraft] = useState("");
   const [preview, setPreview] = useState<SavePreview | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [newPath, setNewPath] = useState("");
+  const [pathTask, setPathTask] = useState<ConfigPathTask | null>(null);
+  const [pathInput, setPathInput] = useState("");
   const [pathProblem, setPathProblem] = useState("");
-  const [renameTo, setRenameTo] = useState("");
-  const [renameProblem, setRenameProblem] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [jump, setJump] = useState("");
-  const [hierarchyOpen, setHierarchyOpen] = useState(false);
+  // showingFile は、スマホで一覧の代わりに開いたファイルを見せているかである。PCでは両方を並べる。
+  const [showingFile, setShowingFile] = useState(false);
   const [opening, setOpening] = useState(false);
   const pending = usePendingAction<ConfigOperation>();
   const busy = pending.running !== null;
@@ -100,14 +110,15 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
     onTargetHandled(target.request);
     autoOpened.current = true;
     setPendingJump(target);
-    requestOpenRef.current(target.path);
+    requestOpenRef.current(target.path, { show: true });
   }, [onTargetHandled, target]);
 
+  // 入口のファイルは、PCでは開いた状態で見せるために読んでおく。スマホでは一覧のまま、選んだときに見せる。
   useEffect(() => {
     if (autoOpened.current || overview === null || file !== null) return;
     if (overview.entry.path === undefined) return;
     autoOpened.current = true;
-    requestOpenRef.current(overview.entry.path);
+    requestOpenRef.current(overview.entry.path, { show: false });
   }, [file, overview]);
 
   useEffect(() => {
@@ -121,10 +132,22 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
     setJump(t("explorer.opened", { path: pendingJump.path, line: pendingJump.line }));
   }, [file, pendingJump, t]);
 
+  function closePathTask() {
+    setPathTask(null);
+    setPathInput("");
+    setPathProblem("");
+  }
+
+  function beginPathTask(task: ConfigPathTask) {
+    setPathTask(task);
+    setPathInput("");
+    setPathProblem("");
+    setShowingFile(true);
+  }
+
   async function open(path: string) {
     const isCurrent = openGeneration.begin();
     setOpening(true);
-    setHierarchyOpen(false);
     setFile(null);
     setDraft("");
     try {
@@ -134,7 +157,7 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
       setDraft(loaded.contents);
       setPreview(null);
       setProblem(null);
-      setRenameTo("");
+      closePathTask();
       setConfirmingDelete(false);
     } catch (error) {
       if (!isCurrent()) return;
@@ -163,10 +186,22 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
     showToast(message, { tone: "success" });
   }
 
+  // typedPath は、欄の値を ~/.ssh からの相対パスにする。~/.ssh の外を指していれば、
+  // 欄の下に理由を出して null を返す。
+  function typedPath(): string | null {
+    const resolved = sshDirectoryPath(pathInput);
+    if ("outside" in resolved) {
+      setPathProblem(t("explorer.pathOutsideSSHDirectory"));
+      return null;
+    }
+    setPathProblem("");
+    return resolved.relative === "" ? null : resolved.relative;
+  }
+
   async function renameFile() {
     if (file === null || file.file.path === undefined) return;
     const path = file.file.path;
-    const destinationPath = toSSHDirectoryPath(renameTo, setRenameProblem);
+    const destinationPath = typedPath();
     if (destinationPath === null) return;
     await perform("rename", async () => {
       const result = await configApi.save({
@@ -177,7 +212,6 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
       });
       reportWritten(t("explorer.renamedFile", { path: destinationPath }));
       setPreview(result.preview);
-      setRenameTo("");
       await reload();
       await open(destinationPath);
     });
@@ -201,51 +235,45 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
     });
   }
 
-  // toSSHDirectoryPath は、欄の値を ~/.ssh からの相対パスにする。~/.ssh の外を指していれば、
-  // report で欄の下に理由を出して null を返す。
-  function toSSHDirectoryPath(typed: string, report: (problem: string) => void): string | null {
-    const resolved = sshDirectoryPath(typed);
-    if ("outside" in resolved) {
-      report(t("explorer.pathOutsideSSHDirectory"));
-      return null;
-    }
-    report("");
-    return resolved.relative === "" ? null : resolved.relative;
-  }
-
   // 作ったファイルを開くので、いまの下書きは消える。呼び手が先に破棄を確かめる。
   async function createFile() {
-    const path = toSSHDirectoryPath(newPath, setPathProblem);
+    const path = typedPath();
     if (path === null) return;
     await perform("createFile", async () => {
       await configApi.save({ kind: "file_raw", path, base: "", raw: "# created by sshc\n" });
       reportWritten(t("explorer.createdFile", { path }));
-      setNewPath("");
       await reload();
       await open(path);
     });
   }
 
   async function createDirectory() {
-    const path = toSSHDirectoryPath(newPath, setPathProblem);
+    const path = typedPath();
     if (path === null) return;
     await perform("createDirectory", async () => {
       await configApi.save({ kind: "directory_create", path });
       reportWritten(t("explorer.createdDirectory", { path }));
-      setNewPath("");
+      closePathTask();
       await reload();
     });
   }
 
   async function deleteDirectory() {
-    const path = toSSHDirectoryPath(newPath, setPathProblem);
+    const path = typedPath();
     if (path === null) return;
     await perform("deleteDirectory", async () => {
       await configApi.save({ kind: "directory_delete", path });
       reportWritten(t("explorer.deletedDirectory", { path }));
-      setNewPath("");
+      closePathTask();
       await reload();
     });
+  }
+
+  function submitPathTask(task: ConfigPathTask) {
+    if (task === "createFile") draftDiscard.confirmBefore(() => void createFile());
+    else if (task === "createDirectory") void createDirectory();
+    else if (task === "deleteDirectory") void deleteDirectory();
+    else void renameFile();
   }
 
   async function run(action: "preview" | "save") {
@@ -279,156 +307,142 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   });
 
   // 開いているファイル自身をもう一度開いても読み直さない。読み直すと手編集の下書きが
-  // 消える。別のファイルを開くときは、下書きを捨ててよいかを先に確かめる。
-  function requestOpen(path: string) {
+  // 消える。別のファイルを開くときは、下書きを捨ててよいかを先に確かめる。show は、
+  // スマホで一覧の代わりにそのファイルを見せるかである。
+  function requestOpen(path: string, { show }: { show: boolean }) {
+    if (show) setShowingFile(true);
     if (file !== null && file.file.path === path) return;
     draftDiscard.confirmBefore(() => void open(path));
   }
   const requestOpenRef = useRef(requestOpen);
   requestOpenRef.current = requestOpen;
 
+  const createButton = (enabled: boolean) => (
+    <Button className="inline-flex shrink-0 items-center gap-1.5" disabled={!enabled} onClick={() => beginPathTask("createFile")}>
+      <Icon name="plus" className="size-[15px]" />
+      {t("explorer.createFile")}
+    </Button>
+  );
+
   if (overview === null) {
-    return problem === null ? (
-      <PanelState tone="loading" title={t("explorer.loading")} />
-    ) : (
-      <PanelState tone="failed" title={problem.message} {...(problem.detail === undefined ? {} : { detail: problem.detail })} action={<Button onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>} />
+    // 読み込むあいだも見出しと2つの列を出しておき、読み終えたときに画面が組み変わって見えないようにする。
+    return (
+      <PageBoard fill labelledBy="config-heading">
+        <PageHeader title={t("explorer.pageTitle")} headingId="config-heading" actions={createButton(false)} className={workspaceHeaderLayout} />
+        <div style={fixedListWidthStyle} className={workspaceColumnsLayout(compact)}>
+          <div className={workspaceListPane(compact, false)}>
+            {problem === null ? (
+              <PanelState tone="loading" title={t("explorer.loading")} />
+            ) : (
+              <PanelState tone="failed" title={problem.message} {...(problem.detail === undefined ? {} : { detail: problem.detail })} action={<Button onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>} />
+            )}
+          </div>
+          {compact ? null : <div className="hidden md:block" />}
+        </div>
+      </PageBoard>
     );
   }
 
   const openPath = file?.file.path ?? file?.file.absolute ?? "";
   const editableFiles = overview.files.filter((node) => node.editable).length;
+  const fileLocked = file === null || file.file.path === undefined || !file.editable || modified;
+  const fileActions: ActionMenuItem[] = [
+    { label: t("explorer.renameFile"), onSelect: () => beginPathTask("rename"), disabled: fileLocked || busy },
+    { label: t("explorer.createDirectory"), onSelect: () => beginPathTask("createDirectory"), disabled: busy },
+    {
+      label: t("explorer.deleteFile"),
+      tone: "danger",
+      disabled: fileLocked || busy,
+      onSelect: () => {
+        setProblem(null);
+        setConfirmingDelete(true);
+      },
+    },
+    { label: t("explorer.deleteDirectory"), tone: "danger", onSelect: () => beginPathTask("deleteDirectory"), disabled: busy },
+  ];
+  // 削除の確認ダイアログは、同じ失敗を自分の中に出す。背面にも出すと、スクリーンリーダーが同じ文を 2 回読み上げる。
+  const shownProblem = confirmingDelete ? null : problem;
+  const hasResult = preview !== null || (problem?.conflict ?? null) !== null || shownProblem !== null;
 
   return (
-    <div className="flex flex-col gap-[22px]">
-      <PageHeader title={t("explorer.pageTitle")} description={t("explorer.pageDescription")} />
-      <SummaryStats data-config-metrics>
-        {([
-          [t("explorer.metricFiles"), overview.files.length, false],
-          [t("explorer.metricEditable"), editableFiles, false],
-          [t("explorer.metricDiagnostics"), overview.diagnostics.length, overview.diagnostics.length > 0],
-        ] as const).map(([label, value, attention]) => (
-          <SummaryStat key={String(label)} label={String(label)} value={value} attention={Boolean(attention)} />
-        ))}
-      </SummaryStats>
-
-      {jump === "" ? null : <p aria-live="polite" className={hintText}>{jump}</p>}
-
-      <Card data-config-explorer radius="md" className="grid min-h-0 grid-cols-1 lg:grid-cols-[19rem_minmax(0,1fr)]">
-        <section aria-labelledby="explorer-heading" className="flex min-h-0 flex-col bg-tree lg:border-r lg:border-line">
-          <div data-explorer-header="tree" className="flex min-h-12 items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <Icon name="config" className="h-4 w-4 text-ink-muted" />
-              <h3 id="explorer-heading" className={`${sectionHeading} hidden lg:block`}>{t("explorer.hierarchy")}</h3>
-              <button
-                type="button"
-                aria-expanded={hierarchyOpen}
-                aria-controls="config-hierarchy"
-                onClick={() => setHierarchyOpen((current) => !current)}
-                className="flex items-center gap-2 text-left text-sm font-semibold text-ink lg:hidden"
-              >
-                {t("explorer.hierarchy")}
-                <DisclosureChevron expanded={hierarchyOpen} />
-              </button>
+    <>
+      <PageBoard fill labelledBy="config-heading">
+        {compact && showingFile ? <h2 id="config-heading" className="sr-only">{t("explorer.pageTitle")}</h2> : (
+          <PageHeader
+            title={t("explorer.pageTitle")}
+            headingId="config-heading"
+            meta={t("explorer.summary", { files: overview.files.length, editable: editableFiles, diagnostics: overview.diagnostics.length })}
+            actions={createButton(true)}
+            className={workspaceHeaderLayout}
+          />
+        )}
+        <div style={fixedListWidthStyle} className={workspaceColumnsLayout(compact)}>
+          <section aria-labelledby="explorer-heading" className={workspaceListPane(compact, showingFile)}>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2 pt-3.5">
+              <h3 id="explorer-heading" className="px-2.5 pb-1 pt-2.5 text-xs text-ink-faint">{t("explorer.hierarchy")}</h3>
+              <ConfigFileList files={overview.files} openPath={openPath} onOpen={(path) => requestOpen(path, { show: true })} />
             </div>
-            <span className="font-mono text-[11.5px] text-ink-faint">{overview.files.length}</span>
-          </div>
-
-          <div id="config-hierarchy" className={`${hierarchyOpen ? "flex" : "hidden"} min-h-0 flex-1 flex-col lg:flex`}>
-            <ConfigFileList files={overview.files} openPath={openPath} onOpen={requestOpen} />
-            <ConfigPathActions
-              path={newPath}
-              problem={pathProblem}
-              busy={busy}
-              busyWith={busyWith}
-              onPathChange={(path) => { setNewPath(path); setPathProblem(""); }}
-              onCreateFile={() => draftDiscard.confirmBefore(() => void createFile())}
-              onCreateDirectory={() => void createDirectory()}
-              onDeleteDirectory={() => void deleteDirectory()}
-            />
             <ConfigDiagnostics diagnostics={overview.diagnostics} />
-          </div>
-        </section>
+          </section>
 
-        <section aria-busy={opening} className="flex min-w-0 flex-col border-t border-line lg:border-t-0">
-          {opening ? <PanelState tone="loading" title={t("explorer.loading")} className="min-h-48 flex-1" /> : file === null ? (
-            <PanelState
-              tone="empty"
-              title={t("explorer.emptyHeading")}
-              detail={t("explorer.selectFile")}
-              className="min-h-96 flex-1 bg-surface-subtle"
-              icon={<span className="flex h-12 w-12 items-center justify-center rounded-md bg-surface text-ink-faint">
-                <Icon name="config" className="h-6 w-6" />
-              </span>}
-            />
-          ) : (
-            <>
-              <div className="flex min-h-0 flex-1 flex-col">
-                <div data-explorer-header="file" className="flex min-h-12 flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-2">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${modified ? "bg-notice-ink" : file.editable ? "bg-live" : "bg-ink-faint"}`} />
-                    <span className="truncate font-mono text-sm font-semibold text-ink">{file.file.path ?? file.file.absolute}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-well px-2 py-0.5 text-[11.5px] text-ink-muted">{file.editable ? t("explorer.editable") : t("explorer.readOnly")}</span>
-                    {modified ? <span className="rounded-full bg-notice px-2 py-0.5 text-[11.5px] font-medium text-notice-ink">{t("explorer.unsaved")}</span> : null}
-                  </div>
-                </div>
+          <section aria-busy={opening} className={workspaceDetailPane(compact, showingFile)}>
+            {compact ? (
+              <Button className="mb-3 w-fit" onClick={() => setShowingFile(false)}>{t("explorer.allFiles")}</Button>
+            ) : null}
+            {file === null || opening ? null : (
+              <ConfigFileHead
+                file={file}
+                modified={modified}
+                actions={fileActions}
+                previewing={busyWith("preview")}
+                saving={busyWith("save")}
+                busy={busy}
+                onPreview={() => void run("preview")}
+                onSave={() => void run("save")}
+              />
+            )}
+            {pathTask === null ? null : (
+              <ConfigPathForm
+                task={pathTask}
+                path={pathInput}
+                currentPath={file?.file.path ?? ""}
+                problem={pathProblem}
+                submitting={busyWith(pathTask)}
+                busy={busy}
+                onPathChange={(path) => {
+                  setPathInput(path);
+                  setPathProblem("");
+                }}
+                onSubmit={() => submitPathTask(pathTask)}
+                onCancel={closePathTask}
+              />
+            )}
+            {jump === "" ? null : <p aria-live="polite" className="mb-2 text-xs text-ink-faint">{jump}</p>}
+            {hasResult ? (
+              <div className="mb-4">
+                <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={shownProblem} />
+              </div>
+            ) : null}
+            {opening ? <PanelState tone="loading" title={t("explorer.loading")} className="flex-1" /> : file === null ? (
+              <EmptyState icon="config" title={t("explorer.emptyHeading")} detail={t("explorer.selectFile")} />
+            ) : (
+              <>
                 <label htmlFor="file-raw" className="sr-only">{t("explorer.fileText", { path: file.file.path ?? file.file.absolute })}</label>
                 <textarea
                   id="file-raw"
                   ref={editorRef}
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
-                  rows={24}
                   spellCheck={false}
                   disabled={!file.editable}
-                  className="min-h-96 w-full flex-1 resize-y border-0 bg-control p-4 font-mono text-xs leading-6 text-ink focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent disabled:bg-surface-subtle disabled:text-ink-faint"
+                  className="min-h-80 w-full flex-1 resize-none rounded-[10px] border border-line bg-well px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.75] text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/20 disabled:text-ink-faint md:min-h-64"
                 />
-                <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 border-t border-line bg-toolbar px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:static md:z-auto md:py-3">
-                  <Button
-                    className="min-h-10 md:min-h-0"
-                    busy={busyWith("preview")}
-                    disabled={busy}
-                    onClick={() => void run("preview")}
-                  >
-                    {t("explorer.preview")}
-                  </Button>
-                  <Button
-                    kind="primary"
-                    className="min-h-10 md:min-h-0"
-                    busy={busyWith("save")}
-                    disabled={!file.editable || busy}
-                    onClick={() => void run("save")}
-                  >
-                    {t("explorer.saveFile")}
-                  </Button>
-                </div>
-              </div>
-
-              {file.file.path === undefined || !file.editable ? null : (
-                <ConfigFileOperations
-                  path={file.file.path}
-                  modified={modified}
-                  renameTo={renameTo}
-                  renameProblem={renameProblem}
-                  busy={busy}
-                  busyWith={busyWith}
-                  onRenameToChange={(path) => { setRenameTo(path); setRenameProblem(""); }}
-                  onRename={() => void renameFile()}
-                  onDelete={() => {
-                    setProblem(null);
-                    setConfirmingDelete(true);
-                  }}
-                />
-              )}
-            </>
-          )}
-        </section>
-      </Card>
-
-      {/* 削除の確認ダイアログは、同じ失敗を自分の中に出す。背面にも出すと、
-          スクリーンリーダーが同じ文を 2 回読み上げる。 */}
-      <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={confirmingDelete ? null : problem} />
+                <p className="mt-2.5 shrink-0 text-xs text-ink-faint">{t("explorer.formatKept")}</p>
+              </>
+            )}
+          </section>
+        </div>
+      </PageBoard>
       {draftDiscard.confirming ? (
         <DiscardDraftDialog id="config-draft-discard-heading" onConfirm={draftDiscard.confirmDiscard} onCancel={draftDiscard.keepEditing} />
       ) : null}
@@ -444,6 +458,6 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
           error={problem === null ? "" : saveProblemMessage(problem, t)}
         />
       ) : null}
-    </div>
+    </>
   );
 }

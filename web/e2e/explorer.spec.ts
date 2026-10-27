@@ -71,8 +71,10 @@ test("renames an included file and carries the Include that named it", async ({
   await openSection(page, "Config");
   await page.getByRole("button", { name: "work/lon.conf" }).click();
 
+  await page.getByRole("button", { name: "Actions for work/lon.conf" }).click();
+  await page.getByRole("menuitem", { name: "Rename file" }).click();
   await page.getByLabel("New path").fill("work/london.conf");
-  expect(await clickAndAwait(page, "Rename file", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Rename", "/api/v1/config/save")).toBe(200);
 
   expect(await installation.read("work/london.conf")).toBe("Host lon\n\tHostName 198.51.100.7\n");
   const entry = await installation.read("config");
@@ -100,7 +102,8 @@ test("deletes a file after a confirmation and offers it back in History", async 
   await openSection(page, "Config");
   await page.getByRole("button", { name: "work/lon.conf" }).click();
 
-  await page.getByRole("button", { name: "Delete file" }).click();
+  await page.getByRole("button", { name: "Actions for work/lon.conf" }).click();
+  await page.getByRole("menuitem", { name: "Delete file" }).click();
   expect(await clickAndAwait(page, "Delete it", "/api/v1/config/save")).toBe(200);
 
   await expect
@@ -123,14 +126,23 @@ test("makes a directory and removes it", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSection(page, "Config");
 
-  const path = page.getByLabel("New file path");
-  await path.fill("conf.d/eu");
-  expect(await clickAndAwait(page, "Create directory", "/api/v1/config/save")).toBe(200);
+  const chooseAction = async (action: string) => {
+    await page.getByRole("button", { name: "Actions for config" }).click();
+    await page.getByRole("menuitem", { name: action }).click();
+  };
+  const path = page.getByLabel("Directory path");
 
+  await chooseAction("Create directory");
   await path.fill("conf.d/eu");
-  expect(await clickAndAwait(page, "Delete directory", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Create", "/api/v1/config/save")).toBe(200);
+  await expect(path).toBeHidden();
 
+  await chooseAction("Delete directory");
   await path.fill("conf.d/eu");
-  expect(await clickAndAwait(page, "Delete directory", "/api/v1/config/save")).toBe(404);
+  expect(await clickAndAwait(page, "Delete", "/api/v1/config/save")).toBe(200);
+
+  await chooseAction("Delete directory");
+  await path.fill("conf.d/eu");
+  expect(await clickAndAwait(page, "Delete", "/api/v1/config/save")).toBe(404);
   await expect(page.getByRole("alert")).toBeVisible();
 });

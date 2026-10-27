@@ -1,6 +1,7 @@
 package application
 
 import (
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -258,6 +259,29 @@ func TestDirectoryCreateMakesOneAndRefusesAnExistingPath(t *testing.T) {
 	}
 	if _, err := service.Save(EditRequest{Kind: EditDirectoryCreate, Path: "conf.d/eu"}); !errors.Is(err, ErrDestinationExists) {
 		t.Errorf("creating it twice = %v, want ErrDestinationExists", err)
+	}
+}
+
+// The API promises diffs as a list: the screen refuses a preview whose diffs are null, and would call a
+// directory that was made or removed a failure.
+func TestDirectoryOperationsReportAnEmptyListOfDiffs(t *testing.T) {
+	service, _ := newTestService(t)
+
+	for _, request := range []EditRequest{
+		{Kind: EditDirectoryCreate, Path: "conf.d/eu"},
+		{Kind: EditDirectoryDelete, Path: "conf.d/eu"},
+	} {
+		result, err := service.Save(request)
+		if err != nil {
+			t.Fatalf("Save(%s) = %v", request.Kind, err)
+		}
+		encoded, err := json.Marshal(result.Preview)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(encoded), `"diffs":[]`) {
+			t.Errorf("%s preview = %s, want an empty list of diffs", request.Kind, encoded)
+		}
 	}
 }
 

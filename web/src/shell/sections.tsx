@@ -134,8 +134,9 @@ export function SectionView(props: SectionViewProps) {
       </div>
     );
   }
-  if (props.section === "Files") {
-    // SFTPWorkspace draws its own cards. While it loads, an empty card holds the place.
+  if (props.section === "Files" || props.section === "Config" || props.section === "Snippets") {
+    // These workspaces draw their own cards, filling the pane like Connections. While one loads, an
+    // empty card holds the place.
     return (
       <div className="h-full min-h-0 overflow-hidden">
         <Suspense fallback={<PageBoard fill><RouteSkeleton /></PageBoard>}>

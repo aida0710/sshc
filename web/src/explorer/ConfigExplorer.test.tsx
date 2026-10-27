@@ -42,6 +42,12 @@ const overview = {
   notices: [],
 };
 
+// chooseFileAction opens the "…" menu of the open file and chooses one of its actions.
+async function chooseFileAction(user: ReturnType<typeof userEvent.setup>, path: string, action: string) {
+  await user.click(await screen.findByRole("button", { name: `Actions for ${path}` }));
+  await user.click(screen.getByRole("menuitem", { name: action }));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(configApi.overview).mockResolvedValue(overview as never);
@@ -55,15 +61,11 @@ beforeEach(() => {
 });
 
 describe("ConfigExplorer", () => {
-  it("collapses the mobile hierarchy immediately and reports the pending file load", async () => {
+  it("reports the pending file load while another file opens", async () => {
     const user = userEvent.setup();
     let complete: (() => void) | undefined;
     render(<ConfigExplorer />);
     await screen.findByLabelText(/File text.*config/);
-    const hierarchy = screen.getByRole("button", { name: "Include hierarchy" });
-    expect(hierarchy).toHaveAttribute("aria-expanded", "false");
-    await user.click(hierarchy);
-    expect(hierarchy).toHaveAttribute("aria-expanded", "true");
     vi.mocked(configApi.file).mockImplementationOnce((path) => new Promise((resolve) => {
       complete = () => resolve({
         file: { path, absolute: `/home/tester/.ssh/${path}` },
@@ -71,7 +73,6 @@ describe("ConfigExplorer", () => {
       });
     }));
     await user.click(screen.getByRole("button", { name: "conf.d/10-home.conf" }));
-    expect(hierarchy).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
     expect(screen.queryByLabelText(/File text/)).not.toBeInTheDocument();
     complete?.();
@@ -83,7 +84,6 @@ describe("ConfigExplorer", () => {
 
     await waitFor(() => expect(configApi.file).toHaveBeenCalledWith("config"));
     expect(await screen.findByLabelText(/File text.*config/)).toHaveValue("Include conf.d/*.conf\n");
-    expect(screen.getByRole("button", { name: "Save file" }).parentElement).toHaveClass("sticky", "bottom-0", "md:static");
   });
 
   it("keeps the latest file selection when the automatic entry load returns late", async () => {
@@ -129,15 +129,20 @@ describe("ConfigExplorer", () => {
     expect(screen.getByText(/include_no_match/)).toBeInTheDocument();
   });
 
-  it("shows the three counts as small chips that wrap, and centers file icons on their labels", async () => {
+  it("sums up the files and diagnostics beside the heading", async () => {
     render(<ConfigExplorer />);
 
-    const metrics = (await screen.findByText("Loaded files")).closest("dl");
-    expect(metrics).toHaveClass("flex", "flex-wrap");
-    expect(metrics?.children).toHaveLength(3);
+    expect(await screen.findByText("Loaded files 3 · Editable 2 · Diagnostics 1")).toBeInTheDocument();
+  });
 
-    const file = screen.getByRole("button", { name: "conf.d/10-home.conf" }).closest("li");
-    expect(file?.querySelector("[data-config-node-icon]")).toHaveClass("mt-5", "md:mt-2.5");
+  it("indents a file under the Include that reads it, and notes only what is unusual about a file", async () => {
+    render(<ConfigExplorer />);
+
+    const entry = (await screen.findByRole("button", { name: "config" })).closest("li");
+    const included = screen.getByRole("button", { name: "conf.d/10-home.conf" }).closest("li");
+    expect(entry).toHaveStyle({ marginLeft: "0px" });
+    expect(included).toHaveStyle({ marginLeft: "14px" });
+    expect(within(screen.getByRole("region", { name: "Include hierarchy" })).queryByText("editable")).not.toBeInTheDocument();
   });
 
   it("wraps long Include paths and conditions inside the hierarchy card", async () => {
@@ -190,11 +195,12 @@ describe("ConfigExplorer", () => {
     const user = userEvent.setup();
     render(<ConfigExplorer />);
 
-    expect(await screen.findByRole("button", { name: "Create file" })).toBeDisabled();
+    await user.click(await screen.findByRole("button", { name: "Create file" }));
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
 
     await user.type(screen.getByLabelText("New file path"), "conf.d/30-lab.conf");
 
-    expect(screen.getByRole("button", { name: "Create file" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
   });
 
   it("creates a folder typed from ~/.ssh in ~/.ssh instead of nesting another ~ inside it", async () => {
@@ -204,8 +210,9 @@ describe("ConfigExplorer", () => {
     });
     render(<ConfigExplorer />);
 
-    await user.type(await screen.findByLabelText("New file path"), "~/.ssh/conf.d");
-    await user.click(screen.getByRole("button", { name: "Create directory" }));
+    await chooseFileAction(user, "config", "Create directory");
+    await user.type(screen.getByLabelText("Directory path"), "~/.ssh/conf.d");
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({ kind: "directory_create", path: "conf.d" }));
   });
@@ -214,9 +221,10 @@ describe("ConfigExplorer", () => {
     const user = userEvent.setup();
     render(<ConfigExplorer />);
 
-    const field = await screen.findByLabelText("New file path");
+    await chooseFileAction(user, "config", "Create directory");
+    const field = screen.getByLabelText("Directory path");
     await user.type(field, "~/notes");
-    await user.click(screen.getByRole("button", { name: "Create directory" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(screen.getByRole("alert")).toHaveTextContent("Paths outside ~/.ssh cannot be used.");
     expect(field).toHaveAttribute("aria-invalid", "true");
@@ -232,16 +240,17 @@ describe("ConfigExplorer", () => {
     });
     render(<ConfigExplorer />);
     await user.click(await screen.findByRole("button", { name: "conf.d/10-home.conf" }));
-    const field = await screen.findByLabelText("New path");
+    await chooseFileAction(user, "conf.d/10-home.conf", "Rename file");
+    const field = screen.getByLabelText("New path");
 
     await user.type(field, "~/other.conf");
-    await user.click(screen.getByRole("button", { name: "Rename file" }));
+    await user.click(screen.getByRole("button", { name: "Rename" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Paths outside ~/.ssh cannot be used.");
     expect(configApi.save).not.toHaveBeenCalled();
 
     await user.clear(field);
     await user.type(field, "~/.ssh/conf.d/11-home.conf");
-    await user.click(screen.getByRole("button", { name: "Rename file" }));
+    await user.click(screen.getByRole("button", { name: "Rename" }));
     await waitFor(() => expect(configApi.save).toHaveBeenCalledWith(expect.objectContaining({
       kind: "file_rename", path: "conf.d/10-home.conf", destinationPath: "conf.d/11-home.conf",
     })));
@@ -300,11 +309,12 @@ describe("ConfigExplorer", () => {
     });
     render(<ToastProvider><ConfigExplorer /></ToastProvider>);
 
-    await user.type(await screen.findByLabelText("New file path"), "conf.d/eu");
-    await user.click(screen.getByRole("button", { name: "Create directory" }));
+    await chooseFileAction(user, "config", "Create directory");
+    await user.type(screen.getByLabelText("Directory path"), "conf.d/eu");
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(await screen.findByText("Created the directory conf.d/eu.")).toBeInTheDocument();
-    expect(screen.getByLabelText("New file path")).toHaveValue("");
+    expect(screen.queryByLabelText("Directory path")).not.toBeInTheDocument();
   });
 
   it("highlights a file row that can be opened when the pointer rests on it, but not one outside ~/.ssh", async () => {
@@ -326,7 +336,7 @@ describe("ConfigExplorer", () => {
 
     await user.click(await screen.findByRole("button", { name: "conf.d/10-home.conf" }));
     await screen.findByLabelText(/File text/);
-    await user.click(screen.getByRole("button", { name: "Delete file" }));
+    await chooseFileAction(user, "conf.d/10-home.conf", "Delete file");
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "Delete it" }));
 
@@ -334,6 +344,46 @@ describe("ConfigExplorer", () => {
     expect(failure).toHaveTextContent("The file changed outside this application. Nothing was written.");
     expect(screen.getAllByRole("alert")).toEqual([failure]);
     expect(screen.getByRole("dialog")).toBe(dialog);
+  });
+
+  it("keeps renaming and deleting the file out of reach while the draft is unsaved, but not the directory actions", async () => {
+    const user = userEvent.setup();
+    render(<ConfigExplorer />);
+    await user.type(await screen.findByLabelText(/File text.*config/), "Host lab");
+
+    await user.click(screen.getByRole("button", { name: "Actions for config" }));
+
+    expect(screen.getByRole("menuitem", { name: "Rename file" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Delete file" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Create directory" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Delete directory" })).toBeEnabled();
+  });
+
+  it("deletes an empty directory typed after choosing Delete directory, and closes the field", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.save).mockResolvedValue({
+      transactionId: "t1", written: ["conf.d/eu"], preview: { operation: "config.directory_delete", diffs: [] },
+    });
+    render(<ConfigExplorer />);
+
+    await chooseFileAction(user, "config", "Delete directory");
+    await user.type(screen.getByLabelText("Directory path"), "conf.d/eu");
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({ kind: "directory_delete", path: "conf.d/eu" }));
+    expect(screen.queryByLabelText("Directory path")).not.toBeInTheDocument();
+  });
+
+  it("closes the path field on Cancel without sending anything", async () => {
+    const user = userEvent.setup();
+    render(<ConfigExplorer />);
+
+    await user.click(await screen.findByRole("button", { name: "Create file" }));
+    await user.type(screen.getByLabelText("New file path"), "conf.d/30-lab.conf");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByLabelText("New file path")).not.toBeInTheDocument();
+    expect(configApi.save).not.toHaveBeenCalled();
   });
 
   it("opens a target file and selects the targeted line", async () => {
@@ -370,8 +420,9 @@ describe("ConfigExplorer", () => {
 
     render(<ConfigExplorer />);
 
-    await user.type(await screen.findByLabelText("New file path"), "conf.d/30-lab.conf");
-    await user.click(screen.getByRole("button", { name: "Create file" }));
+    await user.click(await screen.findByRole("button", { name: "Create file" }));
+    await user.type(screen.getByLabelText("New file path"), "conf.d/30-lab.conf");
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
       kind: "file_raw",
@@ -428,9 +479,10 @@ describe("ConfigExplorer", () => {
     const user = userEvent.setup();
     render(<ConfigExplorer />);
     await user.type(await screen.findByLabelText(/File text.*config/), "Host lab");
+    await user.click(screen.getByRole("button", { name: "Create file" }));
     await user.type(screen.getByLabelText("New file path"), "conf.d/30-lab.conf");
 
-    await user.click(screen.getByRole("button", { name: "Create file" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
     expect(configApi.save).not.toHaveBeenCalled();
@@ -454,5 +506,31 @@ describe("ConfigExplorer", () => {
     await user.click(screen.getByRole("button", { name: "Discard" }));
 
     expect(onNavigateLocation).toHaveBeenCalledWith("/keys");
+  });
+
+  describe("on a phone", () => {
+    beforeEach(() => {
+      vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+        matches: true,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })));
+    });
+
+    it("shows the file chosen from the list in its place, and goes back to the list keeping the draft", async () => {
+      const user = userEvent.setup();
+      render(<ConfigExplorer />);
+      expect(await screen.findByRole("button", { name: "Create file" })).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "config" }));
+      expect(screen.queryByRole("button", { name: "Create file" })).toBeNull();
+      await user.type(screen.getByLabelText(/File text.*config/), "Host lab");
+
+      await user.click(screen.getByRole("button", { name: "All files" }));
+      expect(screen.getByRole("button", { name: "Create file" })).toBeInTheDocument();
+      expect(screen.getByLabelText(/File text.*config/)).toHaveValue("Include conf.d/*.conf\nHost lab");
+      expect(configApi.file).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -156,13 +156,10 @@ for (const appearance of ["light", "dark"] as const) {
     }
 
     await openSection(page, "Config");
-    const explorer = page.locator("[data-config-explorer]");
-    await expect(explorer).toHaveCSS("border-left-width", "1px");
-    await expect(explorer).toHaveCSS("border-right-width", "1px");
-    await expect(explorer).toHaveCSS("border-radius", "12px");
-    const treeHeader = await page.locator('[data-explorer-header="tree"]').boundingBox();
-    const fileHeader = await page.locator('[data-explorer-header="file"]').boundingBox();
-    expect(treeHeader?.height).toBe(fileHeader?.height);
+    // The editor is the one framed area in the Config workspace, so its edge has to show in both themes.
+    const editor = page.getByLabel(/File text/);
+    await expect(editor).toHaveCSS("border-top-width", "1px");
+    await expect(editor).toHaveCSS("border-radius", "10px");
     if (process.env.SSHC_VISUAL_DIR !== undefined) {
       await page.screenshot({
         path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-config-explorer-${appearance}.png`,
