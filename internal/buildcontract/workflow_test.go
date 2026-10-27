@@ -42,13 +42,26 @@ func TestCIWorkflowBuildsTheVPNImageOnBothArchitectures(t *testing.T) {
 	// 出せなかったとき（空のとき）は、'false' ではないので走る側に倒れる。
 	const whenNeeded = "${{ steps.vpn.outputs.needed != 'false' }}"
 	for _, want := range []struct{ name, run string }{
-		{"Build the VPN container image", "docker build internal/vpn/container"},
+		{"Choose the image tag the engine uses", `echo "tag=sshc-vpn-test:$(scripts/ci/vpn-image-tag.sh)" >> "$GITHUB_OUTPUT"`},
 		{"Connect through IKEv2/IPsec and L2TP/IPsec in the VPN container", "go test ./internal/vpn -run 'IKEv2|L2TP' -count=1 -timeout 15m"},
 	} {
 		step, found := namedStep(job, want.name)
 		if !found || strings.TrimSpace(step.Run) != want.run || step.If != whenNeeded {
 			t.Errorf("jobs.vpn-image must run %q as the step %q with if %s", want.run, want.name, whenNeeded)
 		}
+	}
+	// イメージは main が保存したものをキャッシュから読み込み、無いときだけエンジンが付けるタグで
+	// 組み立てる。Ubuntu の snapshot の障害で CI が落ちないためと、結合テストが組み立て直さない
+	// ためである。
+	restore, found := namedStep(job, "Restore the VPN container image")
+	if !found || restore.If != whenNeeded || !strings.HasPrefix(restore.Uses, "actions/cache/restore@") ||
+		restore.With["key"] != "vpn-image-${{ matrix.name }}-${{ steps.image.outputs.tag }}" {
+		t.Error("jobs.vpn-image must restore the image saved under its tag before building it")
+	}
+	build, found := namedStep(job, "Build the VPN container image")
+	if !found || strings.TrimSpace(build.Run) != `docker build --tag "$TAG" internal/vpn/container` ||
+		build.If != "${{ steps.vpn.outputs.needed != 'false' && steps.image-cache.outputs.cache-hit != 'true' }}" {
+		t.Error("jobs.vpn-image must build the image under the engine's tag only when the cache has none")
 	}
 	decide, found := namedStep(job, "Decide whether the VPN image check runs")
 	if !found || !strings.Contains(decide.Run, "git diff --name-only HEAD^1 HEAD | scripts/ci/vpn-image-tests-needed.sh") {
@@ -661,13 +674,17 @@ func validateGoBuildCache(job workflowJob) []string {
 	return problems
 }
 
+// mainPushOnly は、main への push のときだけ走る手順（キャッシュの保存の前の整理）が
+// OS の条件に足す条件である。OS の分け方は、ほかの手順と同じ決まりで確かめる。
+const mainPushOnly = " && github.event_name == 'push' && github.ref == 'refs/heads/main'"
+
 func validateSeparatedRunShells(id string, job workflowJob) []string {
 	var problems []string
 	for _, step := range job.Steps {
 		if step.Run == "" {
 			continue
 		}
-		switch step.If {
+		switch strings.Replace(step.If, mainPushOnly, "", 1) {
 		// 画面だけの変更で Go のテストを飛ばしたことを知らせる echo だけは、どの OS でも bash で走る。
 		case "${{ env.NATIVE_TESTS != 'true' }}":
 			if step.Shell != "bash" || !strings.HasPrefix(strings.TrimSpace(step.Run), "echo ") {
