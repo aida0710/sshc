@@ -14,6 +14,8 @@ export type ActionMenuItem = {
   onSelect: () => void;
   tone?: "danger";
   disabled?: boolean;
+  // title says why a disabled item cannot be chosen yet.
+  title?: string | undefined;
 };
 
 type ActionMenuProps = {
@@ -83,6 +85,7 @@ export function ActionMenu({ label, items, triggerClassName, iconClassName = "si
               type="button"
               role="menuitem"
               disabled={item.disabled}
+              title={item.title}
               onClick={() => select(item)}
               className={`block min-h-10 w-full rounded-md px-3 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0 ${item.tone === "danger" ? "text-danger" : "text-ink"}`}
             >
