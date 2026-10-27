@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { accentOptions, customAccent, type Accent } from "../theme/accent";
+import { chosenOption, customAccent, presetAccents, type AccentOption } from "../theme/accent";
 import { parseAccentColor } from "../theme/accentColor";
 import { useAccent } from "../theme/accentContext";
 import { useTheme } from "../theme/context";
@@ -18,7 +18,7 @@ const themeLabelKeys: Record<Theme, MessageKey> = {
   dark: "shell.themeDark",
 };
 
-const accentLabelKeys: Record<Accent, MessageKey> = {
+const accentLabelKeys: Record<AccentOption, MessageKey> = {
   lavender: "appearance.accent.lavender",
   blue: "appearance.accent.blue",
   sky: "appearance.accent.sky",
@@ -26,6 +26,8 @@ const accentLabelKeys: Record<Accent, MessageKey> = {
   mono: "appearance.accent.mono",
   custom: "appearance.accent.custom",
 };
+
+const accentOptions: readonly AccentOption[] = [...presetAccents, customAccent];
 
 // A custom accent chosen for the first time starts from the colour on screen, so that choosing it changes
 // nothing until the colour is moved. The preset values are #rrggbb in index.css; without the stylesheet
@@ -40,12 +42,13 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
   const t = useTranslate();
   const { theme, setTheme } = useTheme();
   const { accent, customColor, chooseAccent, previewCustomColor, chooseCustomColor } = useAccent();
+  const chosen = chosenOption({ accent, customColor });
   const saving = useAsyncOperation();
   const describeFailure = { describe: () => t("appearance.accentSaveFailed") };
 
-  function choose(next: Accent) {
-    if (next === accent) return;
-    if (next === customAccent && customColor === null) {
+  function choose(next: AccentOption) {
+    if (next === chosen) return;
+    if (next === customAccent) {
       void saving.run(() => chooseCustomColor(accentColorOnScreen()), describeFailure);
       return;
     }
@@ -94,7 +97,7 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
                   type="radio"
                   name="appearance-accent"
                   value={option}
-                  checked={accent === option}
+                  checked={chosen === option}
                   disabled={saving.busy}
                   onChange={() => choose(option)}
                   className="peer sr-only"
@@ -112,7 +115,7 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
               </label>
             ))}
           </div>
-          {accent === customAccent && customColor !== null ? (
+          {customColor !== null ? (
             <CustomAccentColor color={customColor} disabled={saving.busy} onPreview={previewCustomColor} onChoose={chooseColor} />
           ) : null}
           {saving.error === "" ? null : <div className="mt-4"><Notice tone="danger">{saving.error}</Notice></div>}

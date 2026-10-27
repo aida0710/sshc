@@ -75,23 +75,7 @@ func TestTheAccentSurvivesEncodingTheMetadata(t *testing.T) {
 	}
 }
 
-func TestACustomAccentKeepsItsColour(t *testing.T) {
-	service, _ := newTerminalService(t)
-
-	if _, err := service.SetAppearanceSettings(AppearanceSettings{Accent: "custom", AccentColor: "#3fa86b"}); err != nil {
-		t.Fatal(err)
-	}
-
-	stored, _, err := service.metadata.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.Appearance == nil || stored.Appearance.Accent != "custom" || stored.Appearance.AccentColor != "#3fa86b" {
-		t.Fatalf("stored appearance = %+v, want custom #3fa86b", stored.Appearance)
-	}
-}
-
-func TestACustomColourStaysWhileAPresetAccentIsChosen(t *testing.T) {
+func TestACustomColourIsStoredBesideThePresetAnOlderSshcStillAccepts(t *testing.T) {
 	service, _ := newTerminalService(t)
 
 	if _, err := service.SetAppearanceSettings(AppearanceSettings{Accent: "blue", AccentColor: "#3fa86b"}); err != nil {
@@ -103,16 +87,16 @@ func TestACustomColourStaysWhileAPresetAccentIsChosen(t *testing.T) {
 		t.Fatal(err)
 	}
 	if stored.Appearance == nil || stored.Appearance.Accent != "blue" || stored.Appearance.AccentColor != "#3fa86b" {
-		t.Fatalf("stored appearance = %+v, want blue with #3fa86b kept", stored.Appearance)
+		t.Fatalf("stored appearance = %+v, want blue with #3fa86b", stored.Appearance)
 	}
 }
 
-func TestACustomAccentWithoutAColourOrWithAnUnreadableOneIsRefused(t *testing.T) {
+func TestAnAccentNameOlderSshcDoesNotKnowOrAnUnreadableColourIsRefused(t *testing.T) {
 	for _, settings := range []AppearanceSettings{
-		{Accent: "custom"},
-		{Accent: "custom", AccentColor: "green"},
-		{Accent: "custom", AccentColor: "#3FA86B"},
-		{Accent: "custom", AccentColor: "#3fa86"},
+		{Accent: "custom", AccentColor: "#3fa86b"},
+		{AccentColor: "green"},
+		{AccentColor: "#3FA86B"},
+		{AccentColor: "#3fa86"},
 		{Accent: "lavender", AccentColor: "#3fa86b80"},
 	} {
 		service, _ := newTerminalService(t)
