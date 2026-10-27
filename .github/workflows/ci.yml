@@ -585,14 +585,15 @@ jobs:
         env:
           TAG: ${{ steps.image.outputs.tag }}
         run: docker build --tag "$TAG" internal/vpn/container
-      # 保存は main への push だけにする。PR のキャッシュはほかの PR から使えない。
+      # 保存は main だけにする。PR のキャッシュはほかの PR から使えない。手動の実行（いつも
+      # イメージを確かめる）でも保存するので、キャッシュが無いときは main で手動で流して作れる。
       - name: Write the VPN container image for the cache
-        if: ${{ steps.vpn.outputs.needed != 'false' && steps.image-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        if: ${{ steps.vpn.outputs.needed != 'false' && steps.image-cache.outputs.cache-hit != 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
         env:
           TAG: ${{ steps.image.outputs.tag }}
         run: docker save --output "$RUNNER_TEMP/vpn-image.tar" "$TAG"
       - name: Save the VPN container image
-        if: ${{ steps.vpn.outputs.needed != 'false' && steps.image-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        if: ${{ steps.vpn.outputs.needed != 'false' && steps.image-cache.outputs.cache-hit != 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/vpn-image.tar
