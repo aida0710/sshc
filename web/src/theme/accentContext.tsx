@@ -36,7 +36,7 @@ function settingsFrom(choice: AccentChoice): AppearanceSettings {
 // machine's metadata, next to ThemeProvider which does the same for the theme.
 export function AccentProvider({ api, children }: { api: AppearanceApi; children: ReactNode }) {
   const [choice, setChoice] = useState<AccentChoice>(defaultAccentChoice);
-  // saved is the last choice the engine holds, put back when a save fails or a preview is abandoned.
+  // saved is the last choice the engine holds, put back when a save fails.
   const saved = useRef<AccentChoice>(defaultAccentChoice);
   // A colour the user chose wins over a read that was still on its way.
   const chosen = useRef(false);
