@@ -36,6 +36,8 @@ type SecretsPanelProps = {
 
 const kinds: {
   kind: CredentialKind;
+  // pageTitle names the page that shows only this kind: the same English name as in Menu and the top bar.
+  pageTitle: MessageKey;
   heading: MessageKey;
   nameLabel: MessageKey;
   valueLabel: MessageKey;
@@ -43,6 +45,7 @@ const kinds: {
 }[] = [
   {
     kind: "password",
+    pageTitle: "section.passwords",
     heading: "secrets.passwordsHeading",
     nameLabel: "secrets.newPasswordName",
     valueLabel: "secrets.newPasswordValue",
@@ -50,6 +53,7 @@ const kinds: {
   },
   {
     kind: "key_passphrase",
+    pageTitle: "section.keyPassphrases",
     heading: "secrets.passphrasesHeading",
     nameLabel: "secrets.newPassphraseName",
     valueLabel: "secrets.newPassphraseValue",
@@ -57,6 +61,7 @@ const kinds: {
   },
   {
     kind: "totp",
+    pageTitle: "section.otp",
     heading: "secrets.totpHeading",
     nameLabel: "secrets.newTOTPName",
     valueLabel: "secrets.newTOTPValue",
@@ -246,7 +251,7 @@ export function SecretsPanel({
   return (
     <div className={`flex flex-col gap-[22px] ${mobileTouchTargets}`}>
       <PageHeader
-        title={selectedGroup === null ? t("secrets.heading") : t(selectedGroup.heading)}
+        title={selectedGroup === null ? t("secrets.heading") : t(selectedGroup.pageTitle)}
         // The one thing the page does not show by itself: stored values stay hidden until edited. A TOTP seed
         // is never shown, so its page needs no line.
         description={kind === "totp" ? undefined : t("secrets.valuesShownWhileEditing")}
