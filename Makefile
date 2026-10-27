@@ -301,6 +301,13 @@ integration-down:
 # integration-up が起動した S3 互換サーバーと OpenSSH sshd に対して、条件付き
 # PUT、SSH 認証、プロセス内 SSH クライアントとの相互運用を検証する。
 # 外部サービスが必要なため `go test ./...` には含めない。
+# INTEGRATION_TESTS は、本物の S3 互換サーバーと OpenSSH を使うテストの名前である。
+# それらは *integration_test.go に置く決まりで、同じパッケージのほかのテストは
+# Go native の job が流し終えているので、ここでは流し直さない。sshdconformance は
+# パッケージごと本物の sshd を使うので、絞らずに流す。
+INTEGRATION_PACKAGES := ./internal/objectstore ./internal/remotesync ./internal/sftp
+INTEGRATION_TESTS := $(shell sed -n 's/^func \(Test[A-Za-z0-9_]*\)(t \*testing\.T).*/\1/p' $(foreach package,$(INTEGRATION_PACKAGES),$(wildcard $(package:./%=%)/*integration_test.go)) | paste -sd'|' -)
+
 integration: build
 	SSHC_TEST_S3_ENDPOINT=http://127.0.0.1:$(S3_PORT) \
 	SSHC_TEST_S3_KEY=$(S3_KEY) \
@@ -312,7 +319,14 @@ integration: build
 	SSHC_TEST_SSH_KEY="$(CURDIR)/.integration-key/id_integration" \
 	SSHC_TEST_SSH_KEY_PASSPHRASE="$(SSH_KEY_PASSPHRASE)" \
 	SSHC_TEST_FORWARD_DEST_ADDR=sshc-sshd-destination:2222 \
-	go test ./internal/objectstore ./internal/remotesync ./internal/sftp ./internal/sshdconformance -count=1 -v
+	go test $(INTEGRATION_PACKAGES) -run '^($(INTEGRATION_TESTS))$$' -count=1 -v
+	SSHC_TEST_SSH_ADDR=127.0.0.1:$(SSHD_PORT) \
+	SSHC_TEST_SSH_USER=$(SSH_USER) \
+	SSHC_TEST_SSH_PASSWORD=$(SSH_PASS) \
+	SSHC_TEST_SSH_KEY="$(CURDIR)/.integration-key/id_integration" \
+	SSHC_TEST_SSH_KEY_PASSPHRASE="$(SSH_KEY_PASSPHRASE)" \
+	SSHC_TEST_FORWARD_DEST_ADDR=sshc-sshd-destination:2222 \
+	go test ./internal/sshdconformance -count=1 -v
 	SSHC_TEST_PROXY_JUMP_ADDR=127.0.0.1:$(SSHD_PORT) \
 	SSHC_TEST_PROXY_JUMP_USER=$(SSH_USER) \
 	SSHC_TEST_PROXY_JUMP_PASSWORD=$(SSH_PASS) \
