@@ -283,6 +283,9 @@
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   background: var(--ui-canvas);
   color: var(--ui-ink);
+  /* 横に払う操作（タッチの画面・タッチパッド）を、ブラウザの「戻る」「進む」にしない。sshc は 1 ページの
+     アプリで、戻るとページごと Back-Forward Cache に入り、すべてのターミナルの接続が切られる。 */
+  overscroll-behavior-x: none;
   --ui-scrollbar-thumb: color-mix(in srgb, var(--ui-ink-muted) 38%, transparent);
   --ui-scrollbar-thumb-hover: color-mix(in srgb, var(--ui-ink-muted) 68%, transparent);
 }
