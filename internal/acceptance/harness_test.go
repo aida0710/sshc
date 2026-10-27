@@ -777,6 +777,7 @@ func mustJSON(t testing.TB, value any) []byte {
 }
 
 func TestHarnessStartsTheProductionServerAgainstAnIsolatedHome(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	response := f.do(http.MethodGet, "/api/v1/health", nil)
 	if response.StatusCode != http.StatusOK {

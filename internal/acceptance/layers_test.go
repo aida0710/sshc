@@ -74,6 +74,7 @@ func isOSAbstraction(imported string) bool {
 // config の型とローカルのアカウントを知っていた。層の分け方と実際の依存が
 // 食い違っても、散文では気付けない。
 func TestLowerLayersImportOnlyTheirOwnLayerAndTheOSAbstraction(t *testing.T) {
+	t.Parallel()
 	var found []string
 	productionGoFiles(t, func(relative, contents string) {
 		importer := "sshc/" + path.Dir(relative)
@@ -116,6 +117,7 @@ var configEngine = []string{
 // 通っており、選んだ先と繋がる先が食い違っていた。設定の上限のような定数ひとつの
 // ために import しても、同じ経路が開く。
 func TestEntryPointsDoNotResolveTheConfigThemselves(t *testing.T) {
+	t.Parallel()
 	var found []string
 	productionGoFiles(t, func(relative, contents string) {
 		entryPoint := slices.ContainsFunc(entryPointDirectories, func(directory string) bool {

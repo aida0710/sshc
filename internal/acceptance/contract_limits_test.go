@@ -84,6 +84,7 @@ func schemaLimit(t *testing.T, node map[string]any, location, keyword string) in
 // Go だけを変えると、画面がサーバーより厳しくなるか、サーバーの返す値を画面が
 // 断るようになる。
 func TestAPILimitsMatchTheGoLimits(t *testing.T) {
+	t.Parallel()
 	spec := openAPISpec(t)
 	for _, limit := range []struct {
 		schema, path, keyword string
@@ -127,6 +128,7 @@ func TestAPILimitsMatchTheGoLimits(t *testing.T) {
 // alias の長さの上限は validate.MaxAliasLength ひとつである。API のどこかだけ長くすると、
 // サーバーが受け付けない alias を画面が送れてしまう。
 func TestEveryAPIAliasHasTheAliasLengthLimit(t *testing.T) {
+	t.Parallel()
 	spec := openAPISpec(t)
 	schemas := spec["components"].(map[string]any)["schemas"].(map[string]any)
 	for schemaName, schema := range schemas {
@@ -148,6 +150,7 @@ func TestEveryAPIAliasHasTheAliasLengthLimit(t *testing.T) {
 // （internal/vpn/testdata/profile-cases.json）の limit に書いてある。その値が API の
 // VPNProfile と同じであることを確かめる。
 func TestAPIVPNProfileLimitsMatchTheSharedCases(t *testing.T) {
+	t.Parallel()
 	body, err := os.ReadFile(filepath.Join("..", "vpn", "testdata", "profile-cases.json"))
 	if err != nil {
 		t.Fatal(err)

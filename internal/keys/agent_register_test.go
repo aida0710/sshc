@@ -92,6 +92,7 @@ func writeOtherKey(t *testing.T, root string) string {
 // 走査のあとで鍵がワークスペースの外の鍵へのシンボリックリンクに差し替わっても、
 // 登録はリンクをたどらず、agent へは何も渡さない。
 func TestRegisterDoesNotFollowAKeyReplacedByASymlinkAfterTheScan(t *testing.T) {
+	t.Parallel()
 	agent := &fakeAgent{available: true}
 	outside := writeOtherKey(t, t.TempDir())
 	service := newRegisterRaceService(t, agent, func(keyPath string) {
@@ -114,6 +115,7 @@ func TestRegisterDoesNotFollowAKeyReplacedByASymlinkAfterTheScan(t *testing.T) {
 
 // 走査のあとで鍵が別の鍵に書き換わったら、走査で確かめたものと違う鍵を登録しない。
 func TestRegisterRefusesAKeyThatChangedAfterTheScan(t *testing.T) {
+	t.Parallel()
 	agent := &fakeAgent{available: true}
 	service := newRegisterRaceService(t, agent, func(keyPath string) {
 		other, err := os.ReadFile(writeOtherKey(t, t.TempDir()))

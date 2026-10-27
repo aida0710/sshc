@@ -173,6 +173,7 @@ func (f *fixture) sendGuarded(t testing.TB, route guardedRoute, target, presente
 }
 
 func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	routes := guardedRoutes(f)
 
@@ -338,6 +339,7 @@ var credentialMaterialRoutes = map[string]string{
 }
 
 func TestNoResponseCarriesASecretItIsNotEntitledTo(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 
 	type observation struct {
@@ -467,6 +469,7 @@ func normaliseObservationKey(key, keyID string) string {
 }
 
 func TestNoLogLineCarriesASecret(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 
 	// reveal を先に行うのは、response sweep と同じ理由による:
@@ -521,6 +524,7 @@ func TestNoLogLineCarriesASecret(t *testing.T) {
 // これは、scrape がサーバーの書き込み先と同じ stream を読んでいることを
 // 証明するもので、将来 secret をログしてしまう handler は暗黙に見逃されず捕まる。
 func TestTheLogScrapeWouldNoticeASecret(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	if _, err := f.logs.Write([]byte("level=INFO msg=\"planted\" token=" + f.canaries.SessionID + "\n")); err != nil {
 		t.Fatal(err)
@@ -541,6 +545,7 @@ func TestTheLogScrapeWouldNoticeASecret(t *testing.T) {
 // 残さず、そのため決して元に戻せなかった。これを安全にしているのは、
 // ディレクトリ全体が ciphertext であり、復元は vault を経て戻ってくることである。
 func TestNothingInTheBackupDirectoryIsReadable(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 
 	base := string(f.read("config"))

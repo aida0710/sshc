@@ -41,6 +41,7 @@ func hasTransportProblemCode(body string) bool {
 }
 
 func TestEveryAPIRouteRefusesTheWrongHostOriginAndFetchSite(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	for _, route := range f.apiRoutes() {
 		path := f.concretePath(route.Path)
@@ -100,6 +101,7 @@ func TestEveryAPIRouteRefusesTheWrongHostOriginAndFetchSite(t *testing.T) {
 // The historical test name is a design-proof identifier. "Bootstrap" here covers both
 // one-time bootstrap and registered-browser recovery, the two session entry routes.
 func TestEveryAPIRouteExceptBootstrapRequiresASession(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	for _, route := range f.apiRoutes() {
 		if route.Path == "/api/v1/session/bootstrap" || route.Path == "/api/v1/session/recover" {
@@ -131,6 +133,7 @@ func TestEveryAPIRouteExceptBootstrapRequiresASession(t *testing.T) {
 // それ自体が site なので、同じアドレスの別のポートで動くサーバーがこの
 // cookie を受け取る。受け取っても、token は受け取らない。
 func TestEveryAPIRouteThatChangesSomethingRequiresTheCSRFHeader(t *testing.T) {
+	t.Parallel()
 	// 除外はsession entryだけで、いずれもCSRF tokenをまだ持てない要求である。
 	//
 	// 一覧にして持つのは、3 つ目が足された日に気づくためである。除外を
@@ -166,6 +169,7 @@ func TestEveryAPIRouteThatChangesSomethingRequiresTheCSRFHeader(t *testing.T) {
 }
 
 func TestEveryAPIResponseIsNoStoreAndCarriesTheExactPolicy(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	for _, route := range f.apiRoutes() {
 		path := f.concretePath(route.Path)
@@ -220,6 +224,7 @@ func TestEveryAPIResponseIsNoStoreAndCarriesTheExactPolicy(t *testing.T) {
 }
 
 func TestBootstrapTokenIsSingleUse(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	response := f.do(http.MethodPost, "/api/v1/session/bootstrap", nil, func(request *http.Request) {
 		request.Header.Set("X-SSHC-Bootstrap", f.canaries.Bootstrap)
@@ -239,6 +244,7 @@ func TestBootstrapTokenIsSingleUse(t *testing.T) {
 }
 
 func TestServerRefusesEveryListenerThatIsNotUnmappedLoopbackIPv4(t *testing.T) {
+	t.Parallel()
 	manager, _, err := session.NewManager(strings.NewReader(strings.Repeat("k", 512)))
 	if err != nil {
 		t.Fatal(err)
@@ -284,6 +290,7 @@ func (stubListener) Close() error              { return nil }
 func (l stubListener) Addr() net.Addr          { return l.address }
 
 func TestRouteTableMatchesTheOpenAPIContract(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 
 	contents, err := os.ReadFile(filepath.Join("..", "..", "api", "openapi.yaml"))

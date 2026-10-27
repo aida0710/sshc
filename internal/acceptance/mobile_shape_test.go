@@ -48,6 +48,7 @@ func nilledByMobile(t *testing.T) []string {
 }
 
 func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
+	t.Parallel()
 	// この検査が扱いを知っているもの。mobile が新しく nil を渡し始めたら、
 	// ここに足すまで赤くなる。
 	handled := map[string]bool{

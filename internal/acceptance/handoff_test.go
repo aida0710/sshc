@@ -13,6 +13,7 @@ import (
 // 実行中のアプリケーションは handoff を残し、それを読むのが
 // `sshc ssh <alias>` である。これはそのコマンドと同じリクエストを駆動する。
 func TestTheHandoffLetsTheCommandLineAskForOneConnection(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 
 	stateDir := filepath.Join(f.root, "sshc")
