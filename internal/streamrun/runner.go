@@ -430,7 +430,7 @@ func (run *scriptRun) readWhileSettling(stepCtx context.Context, index int) (arr
 		overflow = run.appendRead(item.data)
 	}
 	if item.err != nil {
-		return false, false, readFailedError(index)
+		return false, false, run.stepFailure(stepCtx, readFailedError(index), "expected output did not settle before timeout")
 	}
 	return len(item.data) > 0, overflow, nil
 }
@@ -450,8 +450,12 @@ func (run *scriptRun) appendRead(data []byte) (overflow bool) {
 // stepFailure は、段の入出力の失敗を返す。段の期限か Run 全体の期限が先に切れていたら、
 // 入出力が失敗した原因はそちらなので timeout（呼び出し元が止めたならその err）を返す。
 // 段の context を解放すると Err が必ず Canceled になるので、解放より前に呼ぶ。
+//
+// 呼び出し元の取り消しは、段の context より先に入出力を止めることがある。Telnet と
+// Serial は呼び出し元の context の AfterFunc で接続を閉じるので、その読み込みの失敗は、
+// 取り消しが段の context に伝わる前に届きうる。そのため呼び出し元も直接確かめる。
 func (run *scriptRun) stepFailure(stepCtx context.Context, failure *Error, timeoutMessage string) error {
-	if stepCtx.Err() != nil {
+	if stepCtx.Err() != nil || run.caller.Err() != nil {
 		return timeoutOrCancellation(run.caller, failure.Step, timeoutMessage)
 	}
 	return failure
