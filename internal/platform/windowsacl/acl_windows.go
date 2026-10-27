@@ -5,7 +5,6 @@ package windowsacl
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"runtime"
 	"unsafe"
@@ -124,11 +123,7 @@ func restrictNativeHandle(handle windows.Handle, directory bool) error {
 		return err
 	}
 	if !restricted {
-		observed := "unreadable"
-		if reread, readErr := windows.GetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION); readErr == nil && reread != nil {
-			observed = reread.String()
-		}
-		return fmt.Errorf("DEBUG verify after set (directory=%v, observed %s): %w", directory, observed, ErrInvalidACL)
+		return ErrInvalidACL
 	}
 	return nil
 }

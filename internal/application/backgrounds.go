@@ -254,12 +254,12 @@ func readImageHeader(imageBody io.Reader) ([]byte, error) {
 func (s *Service) stageBackground(wholeBody io.Reader) (*storage.StagedFile, error) {
 	existing, err := s.Backgrounds()
 	if err != nil {
-		return nil, fmt.Errorf("DEBUG stage list: %w", err)
+		return nil, err
 	}
 	remaining := s.BackgroundUsage(existing).RemainingBytes
 	root := s.backgroundsRoot()
 	if err := s.workspace.EnsureDirectory(root); err != nil {
-		return nil, fmt.Errorf("DEBUG ensure directory: %w", err)
+		return nil, err
 	}
 	staged, err := s.workspace.FileSystem().StageFile(storage.StageRequest{
 		Directory:  root,
@@ -274,7 +274,7 @@ func (s *Service) stageBackground(wholeBody io.Reader) (*storage.StagedFile, err
 	case errors.Is(err, storage.ErrSourceUnreadable):
 		return nil, fmt.Errorf("%w: %w", ErrBackgroundUnreadable, err)
 	case err != nil:
-		return nil, fmt.Errorf("DEBUG stage file: %w", err)
+		return nil, err
 	}
 	return staged, nil
 }
@@ -318,7 +318,7 @@ func (s *Service) publishBackground(staged *storage.StagedFile, stem, extension 
 
 	existing, err := s.Backgrounds()
 	if err != nil {
-		return "", fmt.Errorf("DEBUG publish list: %w", err)
+		return "", err
 	}
 	if staged.Size() > s.BackgroundUsage(existing).RemainingBytes {
 		return "", ErrBackgroundsFull
@@ -329,7 +329,7 @@ func (s *Service) publishBackground(staged *storage.StagedFile, stem, extension 
 		return "", err
 	}
 	if err := staged.Publish(target); err != nil {
-		return "", fmt.Errorf("DEBUG publish: %w", err)
+		return "", err
 	}
 	return name, nil
 }
