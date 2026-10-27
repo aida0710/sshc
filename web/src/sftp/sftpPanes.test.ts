@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addTab, blankTab, closeTab, maxTabsPerPane, moveTab, paneOf, selectTab, type SFTPPane, type SFTPTab } from "./sftpPanes";
+import { addTab, blankTab, closeTab, maxTabsPerPane, moveTab, paneOf, selectTab, swapPanes, type SFTPPane, type SFTPTab } from "./sftpPanes";
 
 function tab(alias: string, path = "/"): SFTPTab {
   return { ...blankTab(), alias, path };
@@ -52,6 +52,46 @@ describe("SFTP panes", () => {
     expect(merged).toHaveLength(1);
     expect(names(merged[0])).toEqual(["edge", "nas"]);
     expect(merged[0]?.activeId).toBe(nas.id);
+  });
+
+  it("moves a tab into the other pane at the place it was dropped", () => {
+    const edge = tab("edge");
+    const nas = tab("nas");
+    const miyabi = tab("miyabi");
+    const panes = [paneOf([edge, nas]), paneOf([miyabi])];
+
+    const moved = moveTab(panes, miyabi.id, { paneId: panes[0]!.id, index: 1 });
+
+    expect(moved).toHaveLength(1);
+    expect(names(moved[0])).toEqual(["edge", "miyabi", "nas"]);
+    expect(moved[0]?.activeId).toBe(miyabi.id);
+  });
+
+  it("reorders a tab within its pane, counting the place among the tabs before the move", () => {
+    const [a, b, c, d] = [tab("a"), tab("b"), tab("c"), tab("d")];
+    const panes = [paneOf([a, b, c, d], b.id)];
+    const paneId = panes[0]!.id;
+
+    expect(names(moveTab(panes, a.id, { paneId, index: 3 })[0])).toEqual(["b", "c", "a", "d"]);
+    expect(names(moveTab(panes, d.id, { paneId, index: 0 })[0])).toEqual(["d", "a", "b", "c"]);
+    expect(names(moveTab(panes, b.id, { paneId, index: 4 })[0])).toEqual(["a", "c", "d", "b"]);
+    expect(moveTab(panes, b.id, { paneId, index: 4 })[0]?.activeId).toBe(b.id);
+    expect(moveTab(panes, b.id, { paneId, index: 2 })).toBe(panes);
+    expect(moveTab(panes, b.id, { paneId })).toBe(panes);
+  });
+
+  it("swaps two panes, each keeping its tabs and selection", () => {
+    const edge = tab("edge");
+    const nas = tab("nas");
+    const miyabi = tab("miyabi");
+    const panes = [paneOf([edge, nas], nas.id), paneOf([miyabi])];
+
+    const swapped = swapPanes(panes);
+
+    expect(names(swapped[0])).toEqual(["miyabi"]);
+    expect(names(swapped[1])).toEqual(["edge", "nas"]);
+    expect(swapped[1]?.activeId).toBe(nas.id);
+    expect(swapPanes([paneOf([edge])])).toHaveLength(1);
   });
 
   it("keeps a tab where it is when the other pane is full", () => {
