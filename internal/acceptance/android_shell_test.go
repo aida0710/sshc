@@ -67,6 +67,7 @@ func androidChromeColours(t *testing.T, java string) (dark, light string) {
 //
 // MainActivity は Web UI の CSS 変数を直接参照できないため、両方の値を検証する。
 func TestTheAndroidChromeMatchesThePageToolbar(t *testing.T) {
+	t.Parallel()
 	css := readRepoFile(t, "web", "src", "index.css")
 	java := readRepoFile(t, "android", "app", "src", "main", "java",
 		"com", "github", "aida0710", "sshc", "MainActivity.java")
@@ -100,6 +101,7 @@ func TestTheAndroidChromeMatchesThePageToolbar(t *testing.T) {
 //
 // Java 側に独自の失敗種別が再導入されないことを検証する。
 func TestTheAndroidShellReadsTheFailureKindsFromGo(t *testing.T) {
+	t.Parallel()
 	java := readRepoFile(t, "android", "app", "src", "main", "java",
 		"com", "github", "aida0710", "sshc", "MainActivity.java")
 
@@ -126,6 +128,7 @@ func TestTheAndroidShellReadsTheFailureKindsFromGo(t *testing.T) {
 }
 
 func TestTheAndroidFailureScreenUsesOnlySanitizedDiagnostics(t *testing.T) {
+	t.Parallel()
 	service := readRepoFile(t, "android", "app", "src", "main", "java",
 		"com", "github", "aida0710", "sshc", "EngineService.java")
 	activity := readRepoFile(t, "android", "app", "src", "main", "java",
@@ -149,6 +152,7 @@ func TestTheAndroidFailureScreenUsesOnlySanitizedDiagnostics(t *testing.T) {
 // OnBackPressedDispatcherへ一本化し、WebViewの履歴をroute履歴として使い、
 // ホームでだけtaskを背面へ送る形を固定する。
 func TestTheAndroidShellRoutesModernBackNavigationThroughTheWebView(t *testing.T) {
+	t.Parallel()
 	manifest := readRepoFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
 	activity := readRepoFile(t, "android", "app", "src", "main", "java",
 		"com", "github", "aida0710", "sshc", "MainActivity.java")
@@ -181,6 +185,7 @@ func TestTheAndroidShellRoutesModernBackNavigationThroughTheWebView(t *testing.T
 // WebViewの既定実装ではfile inputをキャンセルするため、Android shellが
 // 選択・保存・renderer異常・通知permissionを明示的に仲介する形を固定する。
 func TestTheAndroidShellBridgesDeviceSpecificWebFeatures(t *testing.T) {
+	t.Parallel()
 	manifest := readRepoFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
 	activity := readRepoFile(t, "android", "app", "src", "main", "java",
 		"com", "github", "aida0710", "sshc", "MainActivity.java")
@@ -223,6 +228,7 @@ func TestTheAndroidShellBridgesDeviceSpecificWebFeatures(t *testing.T) {
 // ランチャーや通知から戻っただけでMainActivityを積み増したり、同じengineの
 // WebViewを読み直したりしない。入力途中のフォームを通常のアプリ切り替えで失わないための境界。
 func TestTheAndroidShellKeepsTheVisibleWebViewAcrossAppSwitches(t *testing.T) {
+	t.Parallel()
 	manifest := readRepoFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
 	activity := readRepoFile(t, "android", "app", "src", "main", "java",
 		"com", "github", "aida0710", "sshc", "MainActivity.java")

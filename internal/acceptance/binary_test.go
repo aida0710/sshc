@@ -15,6 +15,7 @@ import (
 // 上がれなくなる。旧バージョンからの移行を持たない以上、暗黙に常駐するより未定義の
 // フラグとして直ちに拒む。
 func TestLegacyOpenFlagIsRejected(t *testing.T) {
+	t.Parallel()
 	repository := filepath.Join("..", "..")
 	binary := filepath.Join(t.TempDir(), builtBinaryName)
 	build := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/sshc")
@@ -48,6 +49,7 @@ func TestLegacyOpenFlagIsRejected(t *testing.T) {
 // suite を artefact の外に保つ。internal/acceptance は構造上
 // test-only だが、将来ヘルパーが非テストファイルへ移されれば、それは暗黙に崩れる。
 func TestNoTestOnlyPackageReachesTheShippedBinary(t *testing.T) {
+	t.Parallel()
 	list := exec.Command("go", "list", "-deps", "./cmd/sshc")
 	list.Dir = filepath.Join("..", "..")
 	output, err := list.CombinedOutput()
@@ -75,6 +77,7 @@ func TestNoTestOnlyPackageReachesTheShippedBinary(t *testing.T) {
 // TestNoTestOnlyPackageReachesTheAndroidLibrary は、AAR についても同じことを言う。
 // 出荷物が 2 つになったので、規則も 2 つに対して立てる。
 func TestNoTestOnlyPackageReachesTheAndroidLibrary(t *testing.T) {
+	t.Parallel()
 	list := exec.Command("go", "list", "-deps", "./mobile")
 	list.Dir = filepath.Join("..", "..")
 	output, err := list.CombinedOutput()

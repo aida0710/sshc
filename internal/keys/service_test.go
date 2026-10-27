@@ -71,6 +71,7 @@ func serviceForSharedWorkspace(workspace *storage.Workspace, manager *storage.Ma
 }
 
 func TestConcurrentTrashAndPassphraseChangeCannotSplitKeyPair(t *testing.T) {
+	t.Parallel()
 	initial, workspace := newTestService(t)
 	generated, err := initial.Generate(GenerateRequest{
 		Algorithm:   AlgorithmEd25519,
@@ -177,6 +178,7 @@ func assertNoKeyMaterialInBackups(t *testing.T, workspace *storage.Workspace) {
 }
 
 func TestGenerateWritesAnEncryptedPairThroughATransaction(t *testing.T) {
+	t.Parallel()
 	service, workspace := newTestService(t)
 
 	result, err := service.Generate(GenerateRequest{
@@ -231,6 +233,7 @@ func TestGenerateWritesAnEncryptedPairThroughATransaction(t *testing.T) {
 }
 
 func TestGenerateRefusesUnsafeAndAmbiguousRequests(t *testing.T) {
+	t.Parallel()
 	service, workspace := newTestService(t)
 	if err := os.WriteFile(filepath.Join(workspace.Root(), "taken"), []byte("existing\n"), 0o600); err != nil {
 		t.Fatalf("write existing file: %v", err)
@@ -291,6 +294,7 @@ func TestGenerateRefusesUnsafeAndAmbiguousRequests(t *testing.T) {
 }
 
 func TestGenerateAcceptsAnExplicitlyUnencryptedKey(t *testing.T) {
+	t.Parallel()
 	service, workspace := newTestService(t)
 
 	result, err := service.Generate(GenerateRequest{
@@ -315,6 +319,7 @@ func TestGenerateAcceptsAnExplicitlyUnencryptedKey(t *testing.T) {
 }
 
 func TestChangePassphraseRewritesTheKeyAndKeepsItsComment(t *testing.T) {
+	t.Parallel()
 	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm:  AlgorithmEd25519,
@@ -377,6 +382,7 @@ func TestChangePassphraseRewritesTheKeyAndKeepsItsComment(t *testing.T) {
 // パスフレーズの変更も置き換える前の秘密鍵を世代バックアップに残すが、控えは
 // Vaultの鍵で封じる。平文の鍵がbackupsに残ってはならない。
 func TestChangePassphraseKeepsKeyMaterialOutOfTheBackupDirectory(t *testing.T) {
+	t.Parallel()
 	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm:  AlgorithmEd25519,
@@ -397,6 +403,7 @@ func TestChangePassphraseKeepsKeyMaterialOutOfTheBackupDirectory(t *testing.T) {
 }
 
 func TestRevealReturnsTheKeyAndRecordsAnAuditFact(t *testing.T) {
+	t.Parallel()
 	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm:  AlgorithmEd25519,
@@ -461,6 +468,7 @@ func TestRevealReturnsTheKeyAndRecordsAnAuditFact(t *testing.T) {
 // カタログはプログラムを一つも起動しない。並べているのはここで生成できる
 // 鍵であり、それを知っているのはこのプロセス自身である。
 func TestAlgorithmsStartNoProcess(t *testing.T) {
+	t.Parallel()
 	service, _ := newTestService(t)
 
 	catalogue := service.Algorithms(context.Background())
@@ -473,6 +481,7 @@ func TestAlgorithmsStartNoProcess(t *testing.T) {
 // 変われば、そのダイジェストも変わらなければならない。さもなければ、ある鍵を確認
 // したユーザーが、それを置き換えた何かを承認したことになってしまう。
 func TestConfirmationEvidenceTracksWhatTheUserWasShown(t *testing.T) {
+	t.Parallel()
 	service, workspace := newTestService(t)
 	generateWorkKey(t, service)
 
@@ -533,6 +542,7 @@ func TestConfirmationEvidenceTracksWhatTheUserWasShown(t *testing.T) {
 }
 
 func TestConfirmationEvidenceForATrashEntryTracksItsListing(t *testing.T) {
+	t.Parallel()
 	service, workspace := newTestService(t)
 	generateWorkKey(t, service)
 	trashed, err := service.Trash(ItemID("id_work"))
@@ -619,6 +629,7 @@ func generateWorkKey(t *testing.T, service *Service) {
 }
 
 func TestRegisterSendsTheKeyContentsNamedByItsPathAndThePassphraseToTheAgentOnly(t *testing.T) {
+	t.Parallel()
 	agent := &fakeAgent{
 		available:  true,
 		identities: []platform.AgentIdentity{{Bits: 256, Fingerprint: "SHA256:abcdef", Comment: "aida@laptop", Algorithm: "ED25519"}},
@@ -697,6 +708,7 @@ func TestRegisterSendsTheKeyContentsNamedByItsPathAndThePassphraseToTheAgentOnly
 }
 
 func TestRegisterRefusesTrashedAndUnknownKeys(t *testing.T) {
+	t.Parallel()
 	agent := &fakeAgent{available: true}
 	service, _ := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
@@ -716,6 +728,7 @@ func TestRegisterRefusesTrashedAndUnknownKeys(t *testing.T) {
 }
 
 func TestRegisterAndIdentitiesReportAnUnreachableAgentHonestly(t *testing.T) {
+	t.Parallel()
 	withoutAgent, _ := newTestService(t)
 	generateWorkKey(t, withoutAgent)
 	if _, err := withoutAgent.Register(context.Background(), RegisterRequest{KeyID: ItemID("id_work")}); !errors.Is(err, platform.ErrAgentUnavailable) {
@@ -748,6 +761,7 @@ func TestRegisterAndIdentitiesReportAnUnreachableAgentHonestly(t *testing.T) {
 
 // エージェントが拒否した登録が、起きた登録として記録されてはならない。
 func TestRegisterRecordsNothingWhenTheAgentRefuses(t *testing.T) {
+	t.Parallel()
 	agent := &fakeAgent{available: true, addError: platform.ErrAgentRejected}
 	service, workspace := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
@@ -771,6 +785,7 @@ func TestRegisterRecordsNothingWhenTheAgentRefuses(t *testing.T) {
 }
 
 func TestValidateFileNameRefusesNamesTheApplicationDependsOn(t *testing.T) {
+	t.Parallel()
 	reserved := []string{"config", "known_hosts", "authorized_keys", "sshc", "environment", "rc"}
 	for _, name := range reserved {
 		if err := ValidateFileName(name); !errors.Is(err, ErrInvalidFileName) {
@@ -792,6 +807,7 @@ func TestValidateFileNameRefusesNamesTheApplicationDependsOn(t *testing.T) {
 // ここのテストは、その検査を、ファイル名ではなく分類器の判断に対して
 // 縛る。
 func TestPublicKeyReadsThePublicHalfAndRefusesThePrivateOne(t *testing.T) {
+	t.Parallel()
 	service, _ := newTestService(t)
 
 	generated, err := service.Generate(GenerateRequest{
@@ -837,6 +853,7 @@ func TestPublicKeyReadsThePublicHalfAndRefusesThePrivateOne(t *testing.T) {
 }
 
 func TestPublicKeyRefusesAPrivateKeyWearingAPublicName(t *testing.T) {
+	t.Parallel()
 	service, workspace := newTestService(t)
 
 	// 分類は内容と権限によるもので、接尾辞によることは決してない。id_decoy.pub として
@@ -910,6 +927,7 @@ func newGroupKeyService(t *testing.T, groups ...string) (*Service, *storage.Work
 }
 
 func TestGenerateWritesIntoTheGroupDirectory(t *testing.T) {
+	t.Parallel()
 	service, workspace := newGroupKeyService(t, "work")
 
 	result, err := service.Generate(GenerateRequest{
@@ -936,6 +954,7 @@ func TestGenerateWritesIntoTheGroupDirectory(t *testing.T) {
 }
 
 func TestGenerateRefusesAGroupNothingDeclares(t *testing.T) {
+	t.Parallel()
 	service, workspace := newGroupKeyService(t, "work")
 
 	if _, err := service.Generate(GenerateRequest{
@@ -953,6 +972,7 @@ func TestGenerateRefusesAGroupNothingDeclares(t *testing.T) {
 }
 
 func TestGenerateStillRefusesAReservedFileNameInsideAGroup(t *testing.T) {
+	t.Parallel()
 	service, _ := newGroupKeyService(t, "work")
 
 	// 予約名のルールは、このアプリケーションが依存する名前についてのものであり、
@@ -970,6 +990,7 @@ func TestGenerateStillRefusesAReservedFileNameInsideAGroup(t *testing.T) {
 }
 
 func TestHardwareCommandNamesTheGroupDirectory(t *testing.T) {
+	t.Parallel()
 	service, workspace := newGroupKeyService(t, "work")
 
 	command, err := service.HardwareCommand(AlgorithmEd25519SK, "id_yubikey", "work", "aida@laptop")
@@ -994,6 +1015,7 @@ func TestHardwareCommandNamesTheGroupDirectory(t *testing.T) {
 // には届かない。したがって、ハードウェアの経路が必要とするシェル引用のルールは
 // これには当てはまらない。"work laptop" は、ユーザーが実際に打ち込むものである。
 func TestValidateCommentAcceptsAnOrdinaryComment(t *testing.T) {
+	t.Parallel()
 	for _, comment := range []string{"work laptop", "aida@mbp", "", "backup key 2026"} {
 		if err := ValidateComment(comment); err != nil {
 			t.Errorf("ValidateComment(%q) = %v, want nil", comment, err)
@@ -1002,6 +1024,7 @@ func TestValidateCommentAcceptsAnOrdinaryComment(t *testing.T) {
 }
 
 func TestValidateCommentStillRefusesWhatWouldBreakAFile(t *testing.T) {
+	t.Parallel()
 	for _, comment := range []string{"two\nlines", "nul\x00byte", "carriage\rreturn"} {
 		if err := ValidateComment(comment); err == nil {
 			t.Errorf("ValidateComment(%q) = nil, want a refusal", comment)
@@ -1012,6 +1035,7 @@ func TestValidateCommentStillRefusesWhatWouldBreakAFile(t *testing.T) {
 // ハードウェアの経路は、ユーザーが実行するための ssh-keygen コマンドラインを
 // 組み立てるので、より厳しいルールを保つ。
 func TestHardwareCommentKeepsTheShellSafeRule(t *testing.T) {
+	t.Parallel()
 	if err := ValidateHardwareComment("work laptop"); err == nil {
 		t.Error("ValidateHardwareComment accepted a space, which would need quoting in the shown command")
 	}
@@ -1025,6 +1049,7 @@ func TestHardwareCommentKeepsTheShellSafeRule(t *testing.T) {
 // そこにあって認証に使え、エージェントの保持内容を並べる画面には、その一覧を出す
 // こと以外にできることがなかった。
 func TestDeregisterTakesTheKeyBackOutOfTheAgent(t *testing.T) {
+	t.Parallel()
 	agent := &fakeAgent{available: true}
 	service, workspace := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
@@ -1051,6 +1076,7 @@ func TestDeregisterTakesTheKeyBackOutOfTheAgent(t *testing.T) {
 }
 
 func TestDeregisterRefusesAKeyThatIsNotThere(t *testing.T) {
+	t.Parallel()
 	agent := &fakeAgent{available: true}
 	service, _ := newServiceWithAgent(t, agent)
 
@@ -1060,6 +1086,7 @@ func TestDeregisterRefusesAKeyThatIsNotThere(t *testing.T) {
 }
 
 func TestDeregisterSaysSoWhenThereIsNoAgent(t *testing.T) {
+	t.Parallel()
 	agent := &fakeAgent{available: false}
 	service, _ := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
@@ -1076,6 +1103,7 @@ func TestDeregisterSaysSoWhenThereIsNoAgent(t *testing.T) {
 // かは secret パッケージの領分であり、このパッケージはそれを尋ねるために import
 // してはならない。
 func TestRegisterUsesAStoredPassphraseWhenNoneIsTyped(t *testing.T) {
+	t.Parallel()
 	agent := &fakeAgent{available: true}
 	service, workspace := newServiceWithAgent(t, agent)
 	_ = workspace
@@ -1097,6 +1125,7 @@ func TestRegisterUsesAStoredPassphraseWhenNoneIsTyped(t *testing.T) {
 // 打ち込まれたパスフレーズが常に勝つ。キーボードの前にいるユーザーの方が、ファイルよりも
 // 新しいからだ。
 func TestATypedPassphraseBeatsTheStoredOne(t *testing.T) {
+	t.Parallel()
 	agent := &fakeAgent{available: true}
 	service, _ := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
@@ -1114,6 +1143,7 @@ func TestATypedPassphraseBeatsTheStoredOne(t *testing.T) {
 
 // 何も保存されていない状態の振る舞いは、何も保存できなかった頃と同じで、いまもそうだ。
 func TestRegisterWithoutAStoredPassphraseSendsWhatItWasGiven(t *testing.T) {
+	t.Parallel()
 	agent := &fakeAgent{available: true}
 	service, _ := newServiceWithAgent(t, agent)
 	generateWorkKey(t, service)
@@ -1129,6 +1159,7 @@ func TestRegisterWithoutAStoredPassphraseSendsWhatItWasGiven(t *testing.T) {
 }
 
 func TestVerifyPassphraseAcceptsOnlyTheCurrentEncryptedPrivateKeyAndWipesInput(t *testing.T) {
+	t.Parallel()
 	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm: AlgorithmEd25519, FileName: "id_verify", Comment: "verify",
@@ -1160,6 +1191,7 @@ func TestVerifyPassphraseAcceptsOnlyTheCurrentEncryptedPrivateKeyAndWipesInput(t
 }
 
 func TestVerifyPassphraseRejectsWrongValueAndWipesInput(t *testing.T) {
+	t.Parallel()
 	service, _ := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm: AlgorithmEd25519, FileName: "id_verify", Comment: "verify",
@@ -1178,6 +1210,7 @@ func TestVerifyPassphraseRejectsWrongValueAndWipesInput(t *testing.T) {
 }
 
 func TestVerifyPassphraseRejectsUnencryptedMissingAndNonPrivateFiles(t *testing.T) {
+	t.Parallel()
 	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm: AlgorithmEd25519, FileName: "id_plain", Comment: "plain", Unencrypted: true,
@@ -1212,6 +1245,7 @@ func TestVerifyPassphraseRejectsUnencryptedMissingAndNonPrivateFiles(t *testing.
 }
 
 func TestVerifyPassphraseRevalidationRejectsChangedOrMissingKeyBytes(t *testing.T) {
+	t.Parallel()
 	service, workspace := newTestService(t)
 	if _, err := service.Generate(GenerateRequest{
 		Algorithm: AlgorithmEd25519, FileName: "id_verify", Comment: "verify",
@@ -1250,6 +1284,7 @@ func TestVerifyPassphraseRevalidationRejectsChangedOrMissingKeyBytes(t *testing.
 // ここは、事故が最も回復しにくい書き込みでもある。新しいパスフレーズを打ち間違え
 // れば、その鍵は誰にも開けない鍵になる。
 func TestChangingAPassphraseKeepsASealedBackup(t *testing.T) {
+	t.Parallel()
 	workspace := newTestWorkspace(t)
 	clock := steppingClock(time.Date(2026, 8, 5, 9, 0, 0, 0, time.UTC))
 	manager := storage.NewManager(workspace, clock, rand.Reader)
@@ -1341,6 +1376,7 @@ var testSealMarker = []byte("sealed:")
 // nil を渡すことに意味がある。available を false にした fake は「居るが
 // 応答しない」であって、「そもそも居ない」ではない。Android は後者である。
 func TestAgentIdentitiesSayNoAgentWhenNoneIsWired(t *testing.T) {
+	t.Parallel()
 	service, _ := newServiceWithAgent(t, nil)
 	identities, available := service.AgentIdentities(context.Background())
 	if available {
@@ -1357,6 +1393,7 @@ func TestAgentIdentitiesSayNoAgentWhenNoneIsWired(t *testing.T) {
 // 要る `keys/` と同じ場所を取り合う。予約語の一覧が internal/keys と
 // internal/application に分かれていた間、鍵の側にはこの 2 つが無かった。
 func TestAKeyCannotTakeTheNameOfADirectoryWeCreate(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"keys", "connections", "config", "known_hosts2", "rc"} {
 		if err := ValidateFileName(name); err == nil {
 			t.Errorf("ValidateFileName(%q) = nil, want a refusal", name)

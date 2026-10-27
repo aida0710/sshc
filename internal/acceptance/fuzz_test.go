@@ -124,6 +124,7 @@ func makefileFuzzTargets(t *testing.T) map[string]bool {
 }
 
 func TestMakefileFuzzTargetsCoverEveryFuzzFunction(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..")
 	declared := makefileFuzzTargets(t)
 
@@ -180,6 +181,7 @@ var documentedFuzzTargetPattern = regexp.MustCompile("`(Fuzz[A-Za-z0-9_]*)`")
 // docs/design.md の fuzz の対象の一覧から target が抜けると、読んだ人はその入力
 // （たとえば SSH サーバーが送る OSC 列）が fuzz されていないと誤解して範囲を判断する。
 func TestDesignDocumentNamesEveryFuzzTarget(t *testing.T) {
+	t.Parallel()
 	namesRunByMake := map[string]bool{}
 	for target := range makefileFuzzTargets(t) {
 		_, name, ok := strings.Cut(target, ":")

@@ -25,6 +25,7 @@ import (
 //
 // 散文では守れないので、ここで数える。
 func TestOnlyProvenanceUsesTheProjection(t *testing.T) {
+	t.Parallel()
 	// 許されるのは、結果を出所として使う場所だけである。
 	allowed := map[string]int{
 		// Inspect が画面へ「どの行が書いたか」を並べる。値はここから取らない。

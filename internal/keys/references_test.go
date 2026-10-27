@@ -11,6 +11,7 @@ import (
 )
 
 func TestBuildReferenceIndexFindsHostsThatNameAKey(t *testing.T) {
+	t.Parallel()
 	workspace := newTestWorkspace(t)
 	privateKey, publicKey, _ := newKeyPairFixture(t, "")
 	writeFixture(t, workspace, "work", privateKey, 0o600)
@@ -74,6 +75,7 @@ func TestBuildReferenceIndexFindsHostsThatNameAKey(t *testing.T) {
 }
 
 func TestAttachReferencesNeverPointsAtEngineState(t *testing.T) {
+	t.Parallel()
 	workspace := newTestWorkspace(t)
 	privateKey, _, _ := newKeyPairFixture(t, "")
 	writeFixture(t, workspace, "work", privateKey, 0o600)
@@ -127,6 +129,7 @@ func TestAttachReferencesNeverPointsAtEngineState(t *testing.T) {
 // 組み立てるのとまったく同じである。このパッケージの他のテストはすべて一時
 // ディレクトリを先に解決するので、これに気づくものがひとつもない。
 func TestBuildReferenceIndexResolvesAKeyUnderASymlinkedHome(t *testing.T) {
+	t.Parallel()
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

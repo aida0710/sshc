@@ -26,6 +26,7 @@ func (fake fakeToolchain) resolve(path string) (string, error) {
 // 一覧に載っているものは必ず作れなければならない。載っているのに作れない
 // 項目は、画面のボタンが必ず失敗するということである。
 func TestEveryInProcessVariantCanActuallyBeGenerated(t *testing.T) {
+	t.Parallel()
 	catalogue := CatalogueReader{}.Read(context.Background())
 	if len(catalogue.Variants) == 0 {
 		t.Fatal("the catalogue is empty")
@@ -44,6 +45,7 @@ func TestEveryInProcessVariantCanActuallyBeGenerated(t *testing.T) {
 // インストール済みの OpenSSH には尋ねない。ここが並べているのは
 // 「ここで生成できる鍵」であり、あちらが何に対応しているかは別の問いである。
 func TestTheCatalogueDoesNotDependOnTheInstalledOpenSSH(t *testing.T) {
+	t.Parallel()
 	without := CatalogueReader{}.Read(context.Background())
 	broken := CatalogueReader{Toolchain: fakeToolchain{err: errors.New("no programs here")}}.
 		Read(context.Background())
@@ -62,6 +64,7 @@ func TestTheCatalogueDoesNotDependOnTheInstalledOpenSSH(t *testing.T) {
 // ハードウェア鍵だけは ssh-keygen が要る。無ければ出さない。押せば必ず失敗する
 // ボタンを画面に出さない。
 func TestHardwareVariantsAppearOnlyWhenKeygenIsAvailable(t *testing.T) {
+	t.Parallel()
 	present := CatalogueReader{Toolchain: fakeToolchain{}}.Read(context.Background())
 	found := map[Algorithm]bool{}
 	for _, variant := range present.Variants {
@@ -84,6 +87,7 @@ func TestHardwareVariantsAppearOnlyWhenKeygenIsAvailable(t *testing.T) {
 }
 
 func TestHardwareCommandProducesAnUnambiguousArgumentList(t *testing.T) {
+	t.Parallel()
 	command, err := HardwareCommand(AlgorithmEd25519SK, "id_yubikey", "aida@laptop", testSSHDirectory)
 	if err != nil {
 		t.Fatalf("HardwareCommand error = %v", err)
@@ -125,6 +129,7 @@ func TestHardwareCommandProducesAnUnambiguousArgumentList(t *testing.T) {
 // Toolchain は interface なので、ツールが無いことは nil で表される。Android は
 // この分岐が本番で使われる最初の場所であり、寄りかかる前にここで固定する。
 func TestCatalogueOffersNoHardwareKeyWithoutAToolchain(t *testing.T) {
+	t.Parallel()
 	catalogue := CatalogueReader{Toolchain: nil}.Read(context.Background())
 	if len(catalogue.Variants) == 0 {
 		t.Fatal("a machine without ssh-keygen can still generate keys in process")

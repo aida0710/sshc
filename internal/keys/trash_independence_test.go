@@ -19,6 +19,7 @@ import (
 // 解決の失敗を飲んで走査の結果だけを返すので、どちらの実装でも落ちない。
 // 確かめられるのは「呼んでいないこと」そのものである。
 func TestListingTheTrashDoesNotResolveTheConfiguration(t *testing.T) {
+	t.Parallel()
 	set := token.NewFileSet()
 	file, err := parser.ParseFile(set, "trash.go", nil, 0)
 	if err != nil {

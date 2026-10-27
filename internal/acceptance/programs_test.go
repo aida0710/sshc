@@ -112,6 +112,7 @@ var allowedToStartPrograms = []string{
 // ここが赤くなったら、外部プログラムを起動する場所が増えたということである。
 // それ自体は悪いことではないが、気づかずに増えることは悪い。
 func TestOnlyTheNamedSubsystemsStartAProgram(t *testing.T) {
+	t.Parallel()
 	repository := filepath.Join("..", "..")
 	var found []string
 
@@ -174,6 +175,7 @@ func TestOnlyTheNamedSubsystemsStartAProgram(t *testing.T) {
 // 上の検査は「どこから起動するか」を固定する。こちらは「何を起動するか」を見る。
 // 片方だけでは、許された場所から ssh を起動する変更が通ってしまう。
 func TestNoSubsystemNamesAnOpenSSHProgramToRun(t *testing.T) {
+	t.Parallel()
 	repository := filepath.Join("..", "..")
 	programs := []string{`"ssh"`, `"ssh-add"`, `"ssh-keyscan"`, `"ssh-agent"`}
 

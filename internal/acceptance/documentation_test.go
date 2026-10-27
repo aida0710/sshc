@@ -61,6 +61,7 @@ func currentUsageDocuments(t *testing.T) [][]string {
 
 // 削除済みのコマンドを現行手順として案内していないことを検証する。
 func TestNoDocumentationTeachesTheRemovedEntryPoints(t *testing.T) {
+	t.Parallel()
 	removedEntryPoints := []string{
 		"--own-engine", "-open=false", "sshc engine start", "make desktop-dist",
 		// SSH接続はtransportの`ssh`を必ず書く。省略した形は unknown command で断られる。
@@ -100,6 +101,7 @@ func removedEntryPointsTaughtIn(contents string, removedEntryPoints []string) []
 
 // 「旧バージョン」を書いたページでも、ほかの行で削除済みのコマンドを案内していれば見つける。
 func TestARemovedEntryPointIsExcusedOnlyOnTheLineThatCallsItOld(t *testing.T) {
+	t.Parallel()
 	page := "旧バージョンの`sshc <接続先>`は使えません。\n\n接続するには`sshc <接続先>`を実行します。\n"
 	taught := removedEntryPointsTaughtIn(page, []string{"sshc <接続先>"})
 	want := []string{`"sshc <接続先>" on line 3`}
@@ -110,6 +112,7 @@ func TestARemovedEntryPointIsExcusedOnlyOnTheLineThatCallsItOld(t *testing.T) {
 
 // engine の起動方法と CLI の役割が明記されていることを検証する。
 func TestTheReadmeSaysWhoOwnsTheEngine(t *testing.T) {
+	t.Parallel()
 	readme := repositoryFile(t, "README.md")
 
 	for phrase, why := range map[string]string{
@@ -133,6 +136,7 @@ func TestTheReadmeSaysWhoOwnsTheEngine(t *testing.T) {
 
 // Vault のタイムアウトと入力経路が実装と一致することを検証する。
 func TestTheReadmeStatesTheVaultRules(t *testing.T) {
+	t.Parallel()
 	readme := repositoryFile(t, "README.md")
 
 	stated := fmt.Sprintf("%d時間", int(secret.IdleTimeout.Hours()))
@@ -156,6 +160,7 @@ func TestTheReadmeStatesTheVaultRules(t *testing.T) {
 
 // 裏で起動した engine はログインし直すと残らないので、ログイン時の起動方法を明記する。
 func TestTheReadmeSaysHowToStartTheEngineAtLogin(t *testing.T) {
+	t.Parallel()
 	readme := repositoryFile(t, "README.md")
 
 	for phrase, why := range map[string]string{
