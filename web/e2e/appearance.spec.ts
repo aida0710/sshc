@@ -180,7 +180,7 @@ test("the connections controls are legible in light", async ({ page, installatio
   await openSection(page, "Connections");
   await page.getByRole("button", { name: "bastion", exact: true }).click();
   await expect(page.getByRole("heading", { name: "bastion", level: 3 })).toBeVisible();
-  await page.getByRole("button", { name: "New connection" }).click();
+  await page.getByRole("button", { name: "Add connection" }).click();
 
   const readable = await page.evaluate(() => {
     const results: { where: string; colour: string; background: string }[] = [];

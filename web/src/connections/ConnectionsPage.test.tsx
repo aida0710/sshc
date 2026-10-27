@@ -1152,7 +1152,7 @@ describe("ConnectionsPage", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "New connection" }));
+    await user.click(await screen.findByRole("button", { name: "Add connection" }));
     await user.type(await screen.findByLabelText("Connection name"), "build01");
     await user.type(screen.getByLabelText("Host name or IP address"), "build.example.com");
     await user.type(await screen.findByLabelText("Connection password"), "connection-only");

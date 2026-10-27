@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!--
-      画面に FLAG_SECURE を付けるか。ターミナルの出力やシークレットの入力欄が、スクリーンショット、
-      画面の録画、最近使ったアプリの一覧の画像に残らないようにする。debug ビルドは
-      adb の screencap で確認の画像を撮るので付けない（app/src/debug/res/values/window.xml）。
-    -->
-    <bool name="secure_window">true</bool>
-</resources>
