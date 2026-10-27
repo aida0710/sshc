@@ -4,13 +4,12 @@ import { settingsApi, type SettingsApi, type TerminalBackground } from "../api/s
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { control } from "../ui/form";
+import { control, sizedControl } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { InputDialog } from "../ui/InputDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
 import { Button } from "../ui/surface";
-import { formatBytes } from "../ui/format";
 import { usePendingAction } from "../ui/usePendingAction";
 import { BackgroundCapacity } from "./BackgroundCapacity";
 import { BackgroundCard } from "./BackgroundCard";
@@ -155,14 +154,14 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
   const selected = stored.find((image) => image.name === value);
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-md bg-surface-subtle p-2.5 sm:flex-nowrap">
-        {selected === undefined ? (
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-md bg-control text-ink-faint"><Icon name="image" className="size-5" /></div>
-        ) : <BackgroundThumbnail name={selected.name} chosen className="size-14 rounded-md" />}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-ink">{selected?.name ?? unchosen}</p>
-          <p className="mt-0.5 text-xs text-ink-faint">{selected === undefined ? t("terminal.backgroundNotSelected") : formatBytes(selected.bytes)}</p>
-        </div>
+      {/* The chosen image reads like a field: its name (or that there is none) in the box, the buttons beside it. */}
+      <div className="flex min-w-0 items-stretch gap-2">
+        <span className={`${sizedControl("w-[220px]")} flex min-w-0 shrink items-center gap-2`}>
+          {selected === undefined ? null : (
+            <span aria-hidden="true" className="shrink-0"><BackgroundThumbnail name={selected.name} chosen className="size-5 rounded" /></span>
+          )}
+          <span className={`truncate ${selected === undefined ? "text-ink-faint" : "text-ink"}`}>{selected?.name ?? unchosen}</span>
+        </span>
         <Button ref={openButton} onClick={() => { setDraft(value); setProblem(""); setLibraryOpen(true); }}>{t("terminal.backgroundChoose")}</Button>
         {value === "" ? null : <Button onClick={() => onChange("")}>{t("terminal.backgroundClear")}</Button>}
       </div>

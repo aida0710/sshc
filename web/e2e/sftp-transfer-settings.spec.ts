@@ -18,12 +18,12 @@ test("saves the aggregate speed limit and bounded recovery settings across a rel
   expect((await speedSaved).status()).toBe(200);
   await expect(speed).toHaveValue("128");
 
-  const recovery = page.getByRole("checkbox", { name: "Recover after connection loss", exact: true });
+  const recovery = page.getByRole("checkbox", { name: "Resume automatically", exact: true });
   const recoverySaved = page.waitForResponse((response) => response.url().endsWith("/api/v1/sftp/transfers/settings") && response.request().method() === "PUT");
   await recovery.click();
   expect((await recoverySaved).status()).toBe(200);
   await expect(recovery).toBeChecked();
-  const attempts = page.getByRole("spinbutton", { name: "Maximum reconnect attempts", exact: true });
+  const attempts = page.getByRole("spinbutton", { name: "Reconnect limit", exact: true });
   await expect(attempts).toHaveValue("3");
   const attemptsSaved = page.waitForResponse((response) => response.url().endsWith("/api/v1/sftp/transfers/settings") && response.request().method() === "PUT");
   await attempts.fill("2");

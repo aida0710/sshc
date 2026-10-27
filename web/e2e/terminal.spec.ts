@@ -53,13 +53,19 @@ async function seedTerminalSettings(installation: Installation) {
   );
 }
 
+// openLoadedTerminalSettings leaves Settings > Terminal on its Connection tab, where the sentinel is.
 async function openLoadedTerminalSettings(page: Page): Promise<Locator> {
   await openSettingsPage(page, "Terminal");
   const region = page.getByRole("region", { name: "Terminal" });
+  await openTerminalSettingsTab(region, "Connection");
   // The sentinel proves that the Settings effect has applied its metadata GET.
   // Without this gate, a slow initial GET can overwrite a value filled by the test.
   await expect(region.getByLabel("Sessions open at once")).toHaveValue("2");
   return region;
+}
+
+async function openTerminalSettingsTab(region: Locator, name: "Display" | "Connection" | "Behaviour"): Promise<void> {
+  await region.getByRole("tab", { name, exact: true }).click();
 }
 
 async function saveTerminalSettings(page: Page, region: Locator): Promise<Response> {
@@ -250,6 +256,7 @@ test("starts local shells where the setting says", async ({ page, installation }
   await openApplication(page, installation);
 
   const region = await openLoadedTerminalSettings(page);
+  await openTerminalSettingsTab(region, "Behaviour");
   await region.getByLabel("Starting directory").fill("~/workspace");
   await saveTerminalSettings(page, region);
 
@@ -478,6 +485,7 @@ test("can turn automatic selection copy off for an already open session", async 
   await expect(screen).toContainText("copy-setting-canary", { timeout: 20_000 });
 
   const settings = await openLoadedTerminalSettings(page);
+  await openTerminalSettingsTab(settings, "Behaviour");
   await settings.getByRole("checkbox", { name: "Copy selected text automatically" }).uncheck();
   await saveTerminalSettings(page, settings);
 
@@ -727,6 +735,7 @@ test("paints the terminal in the colour scheme that was chosen", async ({ page, 
   const beforeRed = await drawnRed();
 
   const settings = await openLoadedTerminalSettings(page);
+  await openTerminalSettingsTab(settings, "Display");
   await settings.getByLabel("Colour scheme").selectOption("dracula");
   await saveTerminalSettings(page, settings);
 
@@ -749,6 +758,7 @@ test("loads the font it ships and hands it to the terminal", async ({ page, inst
   expect(await family()).not.toContain("JetBrains Mono");
 
   const settings = await openLoadedTerminalSettings(page);
+  await openTerminalSettingsTab(settings, "Display");
   await settings.getByLabel("Font family").selectOption("jetbrains-mono");
   await saveTerminalSettings(page, settings);
 
@@ -778,6 +788,7 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   });
 
   const settings = await openLoadedTerminalSettings(page);
+  await openTerminalSettingsTab(settings, "Display");
   await settings.getByRole("button", { name: "Change", exact: true }).click();
   const library = page.getByRole("dialog", { name: "Background image library" });
   await library.locator('input[type="file"]').setInputFiles({
@@ -801,6 +812,7 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   expect(wiring.viewport).toBe("rgba(0, 0, 0, 0)");
 
   const cleared = await openLoadedTerminalSettings(page);
+  await openTerminalSettingsTab(cleared, "Display");
   await cleared.getByRole("button", { name: "Clear", exact: true }).click();
   const saved = await saveTerminalSettings(page, cleared);
   expect(saved.request().postDataJSON()).not.toHaveProperty("appearance");

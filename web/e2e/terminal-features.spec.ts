@@ -167,15 +167,19 @@ test("keeps terminal actions compact and exposes terminal settings", async ({ pa
   await page.keyboard.press("Escape");
   await openSettingsPage(page, "Terminal");
   const settings = page.getByRole("region", { name: "Terminal" });
+  await settings.getByRole("tab", { name: "Connection", exact: true }).click();
   await expect(settings.getByLabel("Browser scrollback (lines)")).toBeVisible();
+
+  if (visualDirectory !== undefined) {
+    await page.screenshot({ path: join(visualDirectory, "terminal-settings-desktop.png"), fullPage: true });
+  }
+
+  await settings.getByRole("tab", { name: "Behaviour", exact: true }).click();
   await expect(settings.getByLabel("Default local shell")).toBeVisible();
   await expect(settings.getByText("Allow OSC 52 clipboard writes by default")).toBeVisible();
   await expect(settings.getByText("Send the JIS ¥ key as backslash")).toBeVisible();
 
   if (visualDirectory !== undefined) {
-    await settings.getByLabel("Browser scrollback (lines)").scrollIntoViewIfNeeded();
-    await page.screenshot({ path: join(visualDirectory, "terminal-settings-desktop.png"), fullPage: true });
-    await settings.getByText("Send the JIS ¥ key as backslash").scrollIntoViewIfNeeded();
     await page.screenshot({ path: join(visualDirectory, "terminal-input-settings-desktop.png"), fullPage: true });
   }
 
