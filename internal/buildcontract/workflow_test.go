@@ -50,14 +50,18 @@ func TestCIWorkflowBuildsTheVPNImageOnBothArchitectures(t *testing.T) {
 			t.Errorf("jobs.vpn-image must run %q as the step %q with if %s", want.run, want.name, whenNeeded)
 		}
 	}
-	// イメージは main が保存したレイヤーのキャッシュから組み立て、エンジンが付けるタグで読み込む。
-	// Ubuntu の snapshot の障害で CI が落ちないためと、結合テストが組み立て直さないためである。
-	build, found := namedStep(job, "Build the VPN container image from the layer cache")
-	if !found || build.If != whenNeeded || !strings.HasPrefix(build.Uses, "docker/build-push-action@") ||
-		build.With["context"] != "internal/vpn/container" || build.With["load"] != true ||
-		build.With["tags"] != "${{ steps.image.outputs.tag }}" ||
-		!strings.HasPrefix(fmt.Sprint(build.With["cache-from"]), "type=gha,") {
-		t.Error("jobs.vpn-image must build internal/vpn/container from the gha layer cache and load it under the engine's tag")
+	// イメージは main が保存したものをキャッシュから読み込み、無いときだけエンジンが付けるタグで
+	// 組み立てる。Ubuntu の snapshot の障害で CI が落ちないためと、結合テストが組み立て直さない
+	// ためである。
+	restore, found := namedStep(job, "Restore the VPN container image")
+	if !found || restore.If != whenNeeded || !strings.HasPrefix(restore.Uses, "actions/cache/restore@") ||
+		restore.With["key"] != "vpn-image-${{ matrix.name }}-${{ steps.image.outputs.tag }}" {
+		t.Error("jobs.vpn-image must restore the image saved under its tag before building it")
+	}
+	build, found := namedStep(job, "Build the VPN container image")
+	if !found || strings.TrimSpace(build.Run) != `docker build --tag "$TAG" internal/vpn/container` ||
+		build.If != "${{ steps.vpn.outputs.needed != 'false' && steps.image-cache.outputs.cache-hit != 'true' }}" {
+		t.Error("jobs.vpn-image must build the image under the engine's tag only when the cache has none")
 	}
 	decide, found := namedStep(job, "Decide whether the VPN image check runs")
 	if !found || !strings.Contains(decide.Run, "git diff --name-only HEAD^1 HEAD | scripts/ci/vpn-image-tests-needed.sh") {

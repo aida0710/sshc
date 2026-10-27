@@ -559,29 +559,44 @@ jobs:
           fi
           needed=$(git diff --name-only HEAD^1 HEAD | scripts/ci/vpn-image-tests-needed.sh)
           echo "needed=$needed" >> "$GITHUB_OUTPUT"
-      # イメージは、main が保存したレイヤーのキャッシュから組み立てる。Dockerfile は Ubuntu の
-      # snapshot の時刻とパッケージを固定しているので、同じ Dockerfile なら中身も同じである。
-      # 毎回 snapshot.ubuntu.com から取ると、その障害で CI が落ち、run 全体の成功を待つ
-      # Release の公開も止まる（2026-10-27 の main の失敗4回はすべてこれだった）。
-      # 組み立てたイメージは、エンジンが付けるタグで読み込む。結合テストはそれを見つけて使い、
-      # 組み立て直さない（ensureImage）。
+      # イメージは、main が保存したもの（docker save のファイル）をキャッシュから読み込む。
+      # Dockerfile は Ubuntu の snapshot の時刻とパッケージを固定しているので、タグ（中身から
+      # 決まる）が同じなら中身も同じである。毎回 snapshot.ubuntu.com から組み立てると、その
+      # 障害で CI が落ち、run 全体の成功を待つ Release の公開も止まる（2026-10-27 の main の
+      # 失敗4回はすべてこれだった）。読み込んだイメージはエンジンが付けるタグなので、結合
+      # テストはそれを見つけて使い、組み立て直さない（ensureImage）。
+      # リポジトリは GitHub のアクションしか許していないので、buildx のアクションは使わない。
       - name: Choose the image tag the engine uses
         if: ${{ steps.vpn.outputs.needed != 'false' }}
         id: image
         run: echo "tag=sshc-vpn-test:$(scripts/ci/vpn-image-tag.sh)" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Restore the VPN container image
         if: ${{ steps.vpn.outputs.needed != 'false' }}
-      - name: Build the VPN container image from the layer cache
-        if: ${{ steps.vpn.outputs.needed != 'false' }}
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        id: image-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          context: internal/vpn/container
-          load: true
-          provenance: false
-          tags: ${{ steps.image.outputs.tag }}
-          cache-from: type=gha,scope=vpn-image-${{ matrix.name }}
-          # 保存は main への push だけにする。PR のキャッシュはほかの PR から使えない。
-          cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('type=gha,mode=max,scope=vpn-image-{0}', matrix.name) || '' }}
+          path: ${{ runner.temp }}/vpn-image.tar
+          key: vpn-image-${{ matrix.name }}-${{ steps.image.outputs.tag }}
+      - name: Load the VPN container image
+        if: ${{ steps.vpn.outputs.needed != 'false' && steps.image-cache.outputs.cache-hit == 'true' }}
+        run: docker load --input "$RUNNER_TEMP/vpn-image.tar"
+      - name: Build the VPN container image
+        if: ${{ steps.vpn.outputs.needed != 'false' && steps.image-cache.outputs.cache-hit != 'true' }}
+        env:
+          TAG: ${{ steps.image.outputs.tag }}
+        run: docker build --tag "$TAG" internal/vpn/container
+      # 保存は main への push だけにする。PR のキャッシュはほかの PR から使えない。
+      - name: Write the VPN container image for the cache
+        if: ${{ steps.vpn.outputs.needed != 'false' && steps.image-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        env:
+          TAG: ${{ steps.image.outputs.tag }}
+        run: docker save --output "$RUNNER_TEMP/vpn-image.tar" "$TAG"
+      - name: Save the VPN container image
+        if: ${{ steps.vpn.outputs.needed != 'false' && steps.image-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/vpn-image.tar
+          key: vpn-image-${{ matrix.name }}-${{ steps.image.outputs.tag }}
       # IKEv2/IPsec は、トンネルをカーネルの XFRM インターフェースに結び付ける。
       # runner のカーネル（amd64 と arm64）で、テストの中で立てた strongSwan の
       # サーバーへ実際に接続できることを確かめる。L2TP/IPsec は、既定の暗号スイートで
