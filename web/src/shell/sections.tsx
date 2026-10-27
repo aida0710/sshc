@@ -98,6 +98,10 @@ export type SectionViewProps = {
   onSftpTargetHandled: (request: number) => void;
 };
 
+// pageScroller is what scrolls a page. On a phone the bottom bar floats over its end, so the end is padded
+// to scroll clear of the bar, and scrolling something into view (a form opened in a row) stops above it.
+const pageScroller = "h-full overflow-y-auto pb-(--mobile-navigation-inset) scroll-pb-(--mobile-navigation-inset)";
+
 export function SectionView(props: SectionViewProps) {
   if (props.section === "Terminal") {
     return null;
@@ -121,7 +125,7 @@ export function SectionView(props: SectionViewProps) {
   if (props.section === "Home") {
     // Home draws its own card, with its name and count in the heading.
     return (
-      <div className="h-full overflow-y-auto">
+      <div className={pageScroller}>
         <OverviewPanel
           onNavigate={props.navigation.onNavigate}
           onNavigateLocation={props.navigation.onNavigateLocation}
@@ -143,7 +147,7 @@ export function SectionView(props: SectionViewProps) {
   if (props.section === "Menu") {
     // The Menu keeps its own margins: 8px around its card on a wide screen, as in the design.
     return (
-      <div className="h-full overflow-y-auto">
+      <div className={pageScroller}>
         <MenuPanel columns={menuColumns} onNavigate={props.navigation.onNavigateLocation} />
       </div>
     );
@@ -151,13 +155,13 @@ export function SectionView(props: SectionViewProps) {
   if (props.section === "Settings") {
     // Settings draws its own card, with its list of pages beside it.
     return (
-      <div className="h-full overflow-y-auto">
+      <div className={pageScroller}>
         <SectionPage {...props} />
       </div>
     );
   }
   return (
-    <div className="h-full overflow-y-auto">
+    <div className={pageScroller}>
       <PageBoard>
         <SectionPage {...props} />
       </PageBoard>
