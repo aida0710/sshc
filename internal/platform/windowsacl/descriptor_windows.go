@@ -100,6 +100,18 @@ func isDescriptorRestricted(descriptor *windows.SECURITY_DESCRIPTOR, userSID *wi
 	return true, nil
 }
 
+// NewPrivateSecurityDescriptor は、ファイル（directory が false）かディレクトリを作るときに
+// NtCreateFile の OBJECT_ATTRIBUTES.SecurityDescriptor へ渡す、非公開の記述子である。
+//
+// 作ってから締めると、締めるまでのあいだは親から受け継いだ保護されていない DACL になる。
+// その間に、ほかの書き手が親か祖先を締め直す SetSecurityInfo の継承の伝搬がそれを読むと、
+// 締めた後に受け継いだ DACL を書き戻し、保護が外れる（同じフォルダへの同時の書き込みで
+// 起きた）。作るときから保護しておけば、伝搬は保護された DACL に親の ACE を持ち込まない。
+func NewPrivateSecurityDescriptor(directory bool) (*windows.SECURITY_DESCRIPTOR, error) {
+	descriptor, _, err := newPrivateSecurityDescriptor(directory)
+	return descriptor, err
+}
+
 func newPrivateSecurityDescriptor(directory bool) (*windows.SECURITY_DESCRIPTOR, *windows.SID, error) {
 	userSID, err := currentUserSID()
 	if err != nil {
