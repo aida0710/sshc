@@ -691,8 +691,9 @@ select:not([multiple]):not([size]) {
 
 /* The same condition as the mobile-layout variant: a touch screen as large as a PC's keeps the PC's sizes. */
 @media (max-width: 767px), (pointer: coarse) and (max-width: 1023px) {
-  /* Compact icon artwork keeps its size; the touch target is large enough. */
-  :where(button:not([data-touch-compact]), [role="button"], [role="menuitem"], nav a):not(.monaco-editor *):not(.xterm *) {
+  /* Compact icon artwork keeps its size; the touch target is large enough. The top bar's page actions
+     reach 44px another way (below). */
+  :where(button:not([data-touch-compact]), [role="button"], [role="menuitem"], nav a):not(.monaco-editor *):not(.xterm *):not([data-page-actions] *) {
     min-height: 44px;
     min-width: 44px;
     touch-action: manipulation;
@@ -706,6 +707,27 @@ select:not([multiple]):not([size]) {
   }
   [data-modal-placement="sheet"] .sshc-modal-panel {
     animation-name: sshc-sheet-enter;
+  }
+  /* A page's heading actions in the top bar (AppHeader) are drawn 30px tall so they do not fill the 48px
+     bar. The ::after reaches past the button, up to half the gap beside it, so the place to press stays
+     44px tall. */
+  [data-page-actions] :where(button, a) {
+    position: relative;
+    height: 30px;
+    min-height: 30px;
+    touch-action: manipulation;
+    padding-inline: 10px;
+    gap: 4px;
+    font-size: 12.5px;
+  }
+  [data-page-actions] :where(button, a)::after {
+    content: "";
+    position: absolute;
+    inset: -8px -4px;
+  }
+  [data-page-actions] :where(button, a) svg {
+    width: 13px;
+    height: 13px;
   }
 }
 /* 押した瞬間・開いた瞬間の反応は、マウスでもタッチでも同じにする。押した瞬間は filter ではなく
