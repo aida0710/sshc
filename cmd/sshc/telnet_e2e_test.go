@@ -5,21 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"sshc/internal/iowrite"
-)
-
-const (
-	testTelnetWILL = byte(251)
-	testTelnetDO   = byte(253)
-	testTelnetIAC  = byte(255)
-	testTelnetECHO = byte(1)
+	"sshc/internal/telnet/telnettest"
 )
 
 // TestRunTelnetEndToEnd uses the public argv shape, the production Telnet
@@ -118,6 +110,53 @@ func TestRunTelnetEndToEnd(t *testing.T) {
 	}
 }
 
+// sshc は、古い入力を読み捨てる無音の間にサーバの交渉が届かなければ、返事より先に
+// 送信文を送る。Telnet ではこの順番も正しいので、あとから届いた WILL ECHO に応答の途中で
+// 返事をし、会話を最後まで続ける。負荷の高い CI でサーバの WILL が遅れたときの順番である。
+func TestRunTelnetEndToEndAnswersANegotiationThatArrivesAfterTheCommand(t *testing.T) {
+	listener := listenLoopback(t)
+	serverErr := make(chan error, 1)
+	go func() { serverErr <- serveTelnetNegotiatingAfterTheCommand(listener) }()
+
+	address := listener.Addr().String()
+	called, err := parseInvocation([]string{
+		"sshc", "telnet", address, "--non-interactive",
+		"--connect-timeout", "2s",
+		"--timeout", "2s",
+		"--settle", "0",
+		"--expect", `router# $`,
+		"--json",
+		"--", "show", "version",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	var stdout, stderr bytes.Buffer
+	code := runTransportInvocation(ctx, *called.Transport, nil, &stdout, &stderr)
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("code = %d, stderr = %q, stdout = %q", code, stderr.String(), stdout.String())
+	}
+	var report transportRunReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("decode JSON report: %v; output = %q", err, stdout.String())
+	}
+	if !report.Success || !report.Matched || report.StepsCompleted != 2 || report.Transcript != "version 1\r\nrouter# " {
+		t.Fatalf("report = %#v", report)
+	}
+
+	select {
+	case err := <-serverErr:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("Telnet test server did not stop")
+	}
+}
+
 func TestRunTelnetEndToEndTimesOutWhenPeerStopsResponding(t *testing.T) {
 	listener := listenLoopback(t)
 	serverErr := make(chan error, 1)
@@ -194,10 +233,8 @@ func serveTelnetConversation(listener net.Listener, firstWritten chan<- struct{}
 	if err := connection.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
 		return err
 	}
-	if err := negotiateEcho(connection); err != nil {
-		return err
-	}
-	command, err := readThrough(connection, "\r\n", 1<<10)
+	server := telnettest.NewServerConn(connection)
+	command, err := server.ReadLineAfterOfferingEcho()
 	if err != nil {
 		return err
 	}
@@ -209,7 +246,42 @@ func serveTelnetConversation(listener net.Listener, firstWritten chan<- struct{}
 	}
 	close(firstWritten)
 	<-continueResponse
-	return iowrite.WriteAll(connection, []byte("sion 1\r\nrouter# "))
+	if err := iowrite.WriteAll(connection, []byte("sion 1\r\nrouter# ")); err != nil {
+		return err
+	}
+	return server.DrainUntilClosed()
+}
+
+// serveTelnetNegotiatingAfterTheCommand は、送信文を受け取ってから ECHO を申し出る。
+// sshc が古い入力を読み捨てる無音の間（staleInputQuiet）よりサーバの WILL が遅れ、
+// sshc が交渉の返事より先に送信文を送る順番を、毎回作る。
+func serveTelnetNegotiatingAfterTheCommand(listener net.Listener) error {
+	connection, err := listener.Accept()
+	if err != nil {
+		return err
+	}
+	defer connection.Close()
+	if err := connection.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		return err
+	}
+	server := telnettest.NewServerConn(connection)
+	command, err := server.ReadLine()
+	if err != nil {
+		return err
+	}
+	if command != "show version\r\n" {
+		return fmt.Errorf("Telnet command = %q", command)
+	}
+	if err := server.OfferEcho(); err != nil {
+		return err
+	}
+	if err := server.AwaitEchoAccepted(); err != nil {
+		return err
+	}
+	if err := iowrite.WriteAll(connection, []byte("version 1\r\nrouter# ")); err != nil {
+		return err
+	}
+	return server.DrainUntilClosed()
 }
 
 func serveSilentTelnetPeer(listener net.Listener, commandReceived chan<- struct{}, release <-chan struct{}) error {
@@ -221,10 +293,7 @@ func serveSilentTelnetPeer(listener net.Listener, commandReceived chan<- struct{
 	if err := connection.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
 		return err
 	}
-	if err := negotiateEcho(connection); err != nil {
-		return err
-	}
-	command, err := readThrough(connection, "\r\n", 1<<10)
+	command, err := telnettest.NewServerConn(connection).ReadLineAfterOfferingEcho()
 	if err != nil {
 		return err
 	}
@@ -234,34 +303,4 @@ func serveSilentTelnetPeer(listener net.Listener, commandReceived chan<- struct{
 	close(commandReceived)
 	<-release
 	return nil
-}
-
-func negotiateEcho(connection net.Conn) error {
-	if err := iowrite.WriteAll(connection, []byte{testTelnetIAC, testTelnetWILL, testTelnetECHO}); err != nil {
-		return err
-	}
-	reply := make([]byte, 3)
-	if _, err := io.ReadFull(connection, reply); err != nil {
-		return err
-	}
-	want := []byte{testTelnetIAC, testTelnetDO, testTelnetECHO}
-	if !bytes.Equal(reply, want) {
-		return fmt.Errorf("Telnet negotiation reply = %v, want %v", reply, want)
-	}
-	return nil
-}
-
-func readThrough(reader io.Reader, suffix string, limit int) (string, error) {
-	var collected strings.Builder
-	buffer := make([]byte, 1)
-	for collected.Len() < limit {
-		if _, err := io.ReadFull(reader, buffer); err != nil {
-			return "", err
-		}
-		collected.WriteByte(buffer[0])
-		if strings.HasSuffix(collected.String(), suffix) {
-			return collected.String(), nil
-		}
-	}
-	return "", fmt.Errorf("input exceeded %d bytes", limit)
 }
