@@ -67,9 +67,9 @@ func TestCIWorkflowLeavesTheFullEndToEndSuiteForLocalRuns(t *testing.T) {
 
 func TestCIWorkflowRunsFocusedAccessibilitySuite(t *testing.T) {
 	document := readWorkflowDocument(t)
-	web, present := document.Jobs["web"]
+	web, present := document.Jobs["web-checks"]
 	if !present {
-		t.Fatal("jobs.web is missing")
+		t.Fatal("jobs.web-checks is missing")
 	}
 
 	wants := map[string]string{
@@ -79,23 +79,74 @@ func TestCIWorkflowRunsFocusedAccessibilitySuite(t *testing.T) {
 	for name, command := range wants {
 		step, found := namedStep(web, name)
 		if !found {
-			t.Errorf("jobs.web has no %q step", name)
+			t.Errorf("jobs.web-checks has no %q step", name)
 			continue
 		}
 		if !strings.Contains(step.Run, command) {
-			t.Errorf("jobs.web step %q does not contain %q", name, command)
+			t.Errorf("jobs.web-checks step %q does not contain %q", name, command)
 		}
 	}
 
 	// runner に入っている Google Chrome を使い、Chromium をダウンロードしない。ダウンロードは
 	// 遅い日に止まって、検査ごと取り消されていた。
 	if step, found := namedStep(web, "Accessibility tests"); found && step.Env["SSHC_E2E_BROWSER_CHANNEL"] != "chrome" {
-		t.Error("jobs.web Accessibility tests must run in the runner's Google Chrome (SSHC_E2E_BROWSER_CHANNEL: chrome)")
+		t.Error("jobs.web-checks Accessibility tests must run in the runner's Google Chrome (SSHC_E2E_BROWSER_CHANNEL: chrome)")
 	}
 	for _, step := range web.Steps {
 		if strings.Contains(step.Run, "playwright install") {
-			t.Errorf("jobs.web step %q downloads a browser; use the runner's Google Chrome", step.Name)
+			t.Errorf("jobs.web-checks step %q downloads a browser; use the runner's Google Chrome", step.Name)
 		}
+	}
+}
+
+// 画面の単体テストは、ファイルで分けて並べて流す（jobs.web-unit）。shard は 1 から数えて
+// 抜けが無く、各 job は自分の番号と総数を vitest へ渡す。抜けがあれば、その分のテストが
+// どこでも流れない。
+func TestCIWorkflowSplitsTheWebUnitTestsWithoutLeavingAnyOut(t *testing.T) {
+	document := readWorkflowDocument(t)
+	unit, present := document.Jobs["web-unit"]
+	if !present {
+		t.Fatal("jobs.web-unit is missing")
+	}
+	if unit.Strategy == nil || unit.Strategy.FailFast == nil || *unit.Strategy.FailFast {
+		t.Fatal("jobs.web-unit must be a matrix with fail-fast: false")
+	}
+	shards := unit.Strategy.Matrix.Shard
+	if len(shards) < 2 {
+		t.Fatalf("jobs.web-unit shards = %v, want at least two", shards)
+	}
+	for index, shard := range shards {
+		if shard != index+1 {
+			t.Fatalf("jobs.web-unit shards = %v, want 1 to %d without gaps", shards, len(shards))
+		}
+	}
+	step, found := namedStep(unit, "Unit tests")
+	if !found || strings.TrimSpace(step.Run) != "npm test -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}" {
+		t.Error("jobs.web-unit must run npm test with its own shard out of the matrix total")
+	}
+}
+
+// 必須の検査「Web」は、分けた画面の job をまとめる。どれかが成功以外で終われば失敗し、
+// 依存先の失敗で飛ばされないよう !cancelled() で必ず走る。
+func TestCIWorkflowReportsWebOnlyWhenEveryWebJobSucceeded(t *testing.T) {
+	document := readWorkflowDocument(t)
+	web, present := document.Jobs["web"]
+	if !present {
+		t.Fatal("jobs.web is missing")
+	}
+	if web.Name != "Web" {
+		t.Errorf("jobs.web name = %q, want the required check name Web", web.Name)
+	}
+	if !slices.Equal(web.Needs, []string{"web-checks", "web-unit"}) {
+		t.Errorf("jobs.web needs = %v, want [web-checks web-unit]", web.Needs)
+	}
+	if web.If != "${{ !cancelled() }}" {
+		t.Errorf("jobs.web if = %q, want ${{ !cancelled() }} so that a failed web job fails Web instead of skipping it", web.If)
+	}
+	step, found := namedStep(web, "Require every web job to succeed")
+	if !found || step.Env["RESULTS"] != "${{ join(needs.*.result, ' ') }}" ||
+		!strings.Contains(step.Run, `if [ "$result" != success ]; then`) || !strings.Contains(step.Run, "exit 1") {
+		t.Error("jobs.web must fail unless every needed web job succeeded")
 	}
 }
 
@@ -336,7 +387,7 @@ func validateNativeWorkflow(document workflowDocument) []string {
 	if _, ok := document.Jobs["macos"]; ok {
 		problems = append(problems, "the old jobs.macos duplicate must be folded into jobs.go")
 	}
-	for _, id := range []string{"web", "generated", "integration", "security", "android", "deadcode"} {
+	for _, id := range []string{"web", "web-checks", "generated", "integration", "security", "android", "deadcode"} {
 		job, ok := document.Jobs[id]
 		if !ok {
 			problems = append(problems, "single-instance job "+id+" is missing")
