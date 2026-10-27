@@ -1,21 +1,20 @@
 import { LockScreen } from "./LockScreen";
-import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { useCallback, useEffect, useState } from "react";
 import { failureCode } from "../api/client";
 import { credentialsApi, type CredentialList, type CredentialKind, type CredentialsApi } from "../api/credentials";
 import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { PasswordField } from "../ui/PasswordField";
-import { Field, control, hintText } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
-import { PageHeader, PageSection, SummaryStat, SummaryStats } from "../ui/page";
+import { PageHeader, phoneCardFrame } from "../ui/page";
 import { Icon } from "../ui/icons";
-import { CredentialEditDialog } from "./CredentialEditDialog";
-import { TOTPCodeCard } from "./TOTPCodeCard";
 import { PanelState } from "../ui/PanelState";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { ActionMenu } from "../ui/ActionMenu";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { CredentialAddPanel } from "./CredentialAddPanel";
+import { CredentialEditPanel } from "./CredentialEditPanel";
+import { CredentialRow, plainColumns, totpColumns, type RowPanel } from "./CredentialRow";
+import { credentialRows, type CredentialRow as Row } from "./credentialRows";
 
 // The secrets screen edits credentials, and opens, locks and re-keys the
 // vault that holds them.
@@ -29,45 +28,18 @@ const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 type PendingDeletion = { name: string; perform: () => Promise<unknown> };
 
 type SecretsPanelProps = {
+  kind: CredentialKind;
   api?: SecretsApi;
   onLock?: () => void;
-  kind?: CredentialKind;
 };
 
-const kinds: {
-  kind: CredentialKind;
-  // pageTitle names the page that shows only this kind: the same English name as in Menu and the top bar.
-  pageTitle: MessageKey;
-  heading: MessageKey;
-  nameLabel: MessageKey;
-  valueLabel: MessageKey;
-  store: MessageKey;
-}[] = [
-  {
-    kind: "password",
-    pageTitle: "section.passwords",
-    heading: "secrets.passwordsHeading",
-    nameLabel: "secrets.newPasswordName",
-    valueLabel: "secrets.newPasswordValue",
-    store: "secrets.storePassword",
-  },
-  {
-    kind: "key_passphrase",
-    pageTitle: "section.keyPassphrases",
-    heading: "secrets.passphrasesHeading",
-    nameLabel: "secrets.newPassphraseName",
-    valueLabel: "secrets.newPassphraseValue",
-    store: "secrets.storePassphrase",
-  },
-  {
-    kind: "totp",
-    pageTitle: "section.otp",
-    heading: "secrets.totpHeading",
-    nameLabel: "secrets.newTOTPName",
-    valueLabel: "secrets.newTOTPValue",
-    store: "secrets.storeTOTP",
-  },
-];
+// Each kind has a page of its own. title is the same English name as in Menu and the top bar; heading names
+// the list for screen readers; assignmentColumn heads the column that says where each one is used.
+const pages: Record<CredentialKind, { title: MessageKey; heading: MessageKey; assignmentColumn: MessageKey }> = {
+  password: { title: "section.passwords", heading: "secrets.passwordsHeading", assignmentColumn: "secrets.assignedHosts" },
+  key_passphrase: { title: "section.keyPassphrases", heading: "secrets.passphrasesHeading", assignmentColumn: "secrets.colKeysAndHosts" },
+  totp: { title: "section.otp", heading: "secrets.totpHeading", assignmentColumn: "secrets.assignedHosts" },
+};
 
 function emptyCredentialList(): CredentialList {
   return {
@@ -77,102 +49,21 @@ function emptyCredentialList(): CredentialList {
   };
 }
 
-type UsageListProps = {
-  label: string;
-  values: string[];
-  emptyLabel: string;
-  onRemove?: (value: string) => void;
-  removeLabel?: (value: string) => string;
-};
-
-function UsageDisclosure({ label, values, emptyLabel, onRemove, removeLabel, owner }: UsageListProps & { owner: string }) {
-  const t = useTranslate();
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div className="rounded-[9px] bg-well">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-label={t(expanded ? "secrets.usageCollapse" : "secrets.usageExpand", { label, name: owner })}
-        className="flex min-h-10 w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-muted hover:bg-select-fill hover:text-ink"
-        onClick={() => setExpanded((current) => !current)}
-      >
-        <DisclosureChevron expanded={expanded} className="size-3.5" />
-        <span className="min-w-0 flex-1 font-medium">{label}</span>
-        <span className="font-mono text-xs tabular-nums text-ink-faint">{values.length}</span>
-      </button>
-      {expanded ? (
-        <div className="border-t border-line px-3 py-3">
-          {values.length === 0 ? (
-            <p className={hintText}>{emptyLabel}</p>
-          ) : (
-            <ul aria-label={label} className="flex flex-wrap gap-2">
-              {values.map((value) => (
-                <li
-                  key={value}
-                  className="flex items-center gap-1 rounded-md bg-tree px-2 py-1 font-mono text-xs text-ink"
-                >
-                  <span>{value}</span>
-                  {onRemove === undefined ? null : (
-                    <button
-                      type="button"
-                      className="ml-1 text-ink-muted hover:text-danger"
-                      aria-label={removeLabel?.(value) ?? value}
-                      onClick={() => onRemove(value)}
-                    >
-                      <Icon name="close" className="size-3" />
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-type CredentialActionsProps = {
-  name: string;
-  edit?: { label: string; onSelect: () => void };
-  remove: { label: string; onSelect: () => void };
-};
-
-function CredentialActions({ name, edit, remove }: CredentialActionsProps) {
-  const t = useTranslate();
-  return (
-    <ActionMenu
-      label={t("secrets.actions", { name })}
-      triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink"
-      iconClassName="size-5"
-      items={[...(edit === undefined ? [] : [edit]), { ...remove, tone: "danger" }]}
-    />
-  );
-}
-
-function keyBasename(key: string): string {
-  const components = key.split("/").filter(Boolean);
-  return components[components.length - 1] ?? key;
-}
-
+// SecretsPanel is one Vault page: the saved credentials of one kind, one row each, with ［＋ 追加］ opening the
+// form above the list and each row's menu opening what it needs under the row.
 export function SecretsPanel({
+  kind,
   api = secretsApi,
   onLock,
-  kind,
 }: SecretsPanelProps) {
   const t = useTranslate();
+  const compact = useMediaQuery(mobileViewportQuery);
   const [status, setStatus] = useState<PasswordVaultStatus | null>(null);
   const [credentialList, setCredentialList] =
     useState<CredentialList>(emptyCredentialList);
-  const [drafts, setDrafts] = useState<
-    Record<string, { name: string; secret: string }>
-  >({});
   const [error, setError] = useState("");
-  const [editing, setEditing] = useState<{
-    kind: CredentialKind;
-    name: string;
-  } | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [openPanel, setOpenPanel] = useState<{ rowId: string; panel: RowPanel } | null>(null);
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null);
 
   const reload = useCallback(async () => {
@@ -209,10 +100,6 @@ export function SecretsPanel({
     }
   }
 
-  function draftFor(kind: CredentialKind) {
-    return drafts[kind] ?? { name: "", secret: "" };
-  }
-
   if (status === null) {
     return error === "" ? (
       <PanelState tone="loading" title={t("secrets.loading")} />
@@ -225,261 +112,119 @@ export function SecretsPanel({
     return <LockScreen exists={status.exists} passwordless={status.passwordless ?? false} minPassphraseLength={status.minPassphraseLength} api={api} onOpen={() => void reload()} />;
   }
 
-  const { credentials, dedicatedKeyPassphrases, keyHostUsageComplete } =
-    credentialList;
-  const passwordCount = credentials.filter(
-    (credential) => credential.kind === "password",
-  ).length;
-  const passphraseCount =
-    credentials.filter((credential) => credential.kind === "key_passphrase")
-      .length + dedicatedKeyPassphrases.length;
-  const totpCount = credentials.filter(
-    (credential) => credential.kind === "totp",
-  ).length;
-  const assignmentCount =
-    credentials.reduce(
-      (count, credential) => count + credential.uses.length,
-      0,
-    ) + dedicatedKeyPassphrases.length;
-  const visibleKinds = kind === undefined
-    ? kinds
-    : kinds.filter((candidate) => candidate.kind === kind);
-  const selectedGroup = kind === undefined
-    ? null
-    : kinds.find((candidate) => candidate.kind === kind) ?? null;
+  const page = pages[kind];
+  const rows = credentialRows(credentialList, kind);
+  const columns = kind === "totp" ? totpColumns : plainColumns;
+
+  function lockVault() {
+    void api.lockVault().then((next) => {
+      setStatus(next);
+      if (!next.unlocked) onLock?.();
+    }).catch(() => setError(t("secrets.failed")));
+  }
+
+  function deletionOf(row: Row): PendingDeletion {
+    return row.source === "named"
+      ? { name: row.name, perform: () => api.deleteCredential(kind, row.name) }
+      : { name: row.name, perform: () => api.unassignCredential("key_passphrase", row.passphrase.key) };
+  }
 
   return (
     <div className={`flex flex-col gap-[22px] ${mobileTouchTargets}`}>
       <PageHeader
-        title={selectedGroup === null ? t("secrets.heading") : t(selectedGroup.pageTitle)}
+        title={t(page.title)}
+        meta={t("secrets.count", { count: rows.length })}
         // The one thing the page does not show by itself: stored values stay hidden until edited. A TOTP seed
         // is never shown, so its page needs no line.
         description={kind === "totp" ? undefined : t("secrets.valuesShownWhileEditing")}
         actions={
-          status.passwordless ? null : <Button onClick={() => void api.lockVault().then((next) => {
-            setStatus(next);
-            if (!next.unlocked) onLock?.();
-          }).catch(() => setError(t("secrets.failed")))}>
-            {t("secrets.lock")}
-          </Button>
+          <>
+            {status.passwordless ? null : compact ? (
+              <Button aria-label={t("secrets.lock")} title={t("secrets.lock")} onClick={lockVault} className="inline-flex items-center justify-center px-2.5">
+                <Icon name="secrets" className="size-4" />
+              </Button>
+            ) : (
+              <Button onClick={lockVault} className="inline-flex items-center gap-1.5">
+                <Icon name="secrets" className="size-4" />
+                {t("secrets.lock")}
+              </Button>
+            )}
+            <Button kind="primary" onClick={() => { setOpenPanel(null); setAdding(true); }} className="inline-flex items-center gap-1.5">
+              <Icon name="plus" className="size-4" />
+              {t("secrets.add")}
+            </Button>
+          </>
         }
       />
-      {kind === undefined ? <SummaryStats>
-        {([
-          [t("secrets.metricPasswords"), passwordCount],
-          [t("secrets.metricPassphrases"), passphraseCount],
-          [t("secrets.metricTOTP"), totpCount],
-          [t("secrets.metricAssignments"), assignmentCount],
-        ] as const).map(([label, value]) => (
-          <SummaryStat key={String(label)} label={String(label)} value={value} />
-        ))}
-      </SummaryStats> : null}
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
-      {keyHostUsageComplete ? null : (
+      {kind === "key_passphrase" && !credentialList.keyHostUsageComplete ? (
         <Notice>{t("secrets.keyHostUsageIncomplete")}</Notice>
-      )}
+      ) : null}
 
-      {visibleKinds.map((group) => {
-        const draft = draftFor(group.kind);
-        const mine = credentials.filter(
-          (credential) => credential.kind === group.kind,
-        );
-        const dedicated =
-          group.kind === "key_passphrase" ? dedicatedKeyPassphrases : [];
-        return (
-          <PageSection
-            key={group.kind}
-            heading={t(group.heading)}
-            meta={String(mine.length + dedicated.length)}
-          >
-            {mine.length === 0 && dedicated.length === 0 ? (
-              <p className="py-2 text-sm text-ink-muted">
-                {t("secrets.none")}
-              </p>
-            ) : (
-              <ul className="divide-y divide-line">
-                {mine.map((credential) => (
-                  <li key={credential.name}>
-                    <article aria-label={credential.name} className="py-3.5">
-                      <div className="flex min-w-0 items-start gap-3">
-                        <span className="flex size-[30px] shrink-0 items-center justify-center rounded-md bg-well text-ink-muted">
-                          <Icon
-                            name={
-                              group.kind === "key_passphrase" ? "keys" : "secrets"
-                            }
-                            className="h-4 w-4"
-                          />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
-                            <h4 className="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-ink">
-                              {credential.name}
-                            </h4>
-                            {credential.kind === "totp" ? (
-                              <TOTPCodeCard name={credential.name} api={api} />
-                            ) : null}
-                          </div>
-                          <div className="mt-3 flex flex-col gap-2">
-                            {credential.kind === "key_passphrase" ? (
-                              <UsageDisclosure
-                                owner={credential.name}
-                                label={t("secrets.keys")}
-                                values={credential.uses}
-                                emptyLabel={t("secrets.noKeys")}
-                              />
-                            ) : null}
-                            <UsageDisclosure
-                              owner={credential.name}
-                              label={t("secrets.assignedHosts")}
-                              values={credential.hosts}
-                              emptyLabel={credential.kind === "key_passphrase" && !keyHostUsageComplete
-                                ? t("secrets.keyHostsUnavailable")
-                                : t("secrets.noAssignedHosts")}
-                              {...(credential.kind === "totp"
-                                ? {
-                                    onRemove: (host: string) => {
-                                      void run(
-                                        () => api.unassignCredential("totp", host),
-                                        t("secrets.unassignTOTPFailed"),
-                                      );
-                                    },
-                                    removeLabel: (host: string) => t("secrets.unassignTOTP", { host }),
-                                  }
-                                : {})}
-                            />
-                          </div>
-                        </div>
-                        <CredentialActions
-                          name={credential.name}
-                          edit={{
-                            label: t("secrets.edit", { name: credential.name }),
-                            onSelect: () => setEditing({ kind: group.kind, name: credential.name }),
+      <div>
+        {adding ? (
+          <CredentialAddPanel
+            kind={kind}
+            onCancel={() => setAdding(false)}
+            onStore={async (name, secret) => {
+              const stored = await run(() => api.storeCredential(kind, name, secret), t("secrets.storeFailed"));
+              if (stored) setAdding(false);
+              return stored;
+            }}
+          />
+        ) : null}
+        <section aria-label={t(page.heading)} className={compact ? `${phoneCardFrame} pl-3.5 pr-1.5` : ""}>
+          {rows.length === 0 ? (
+            <p className="py-4 text-sm text-ink-muted">{t("secrets.none")}</p>
+          ) : (
+            <>
+              <div aria-hidden="true" className={`hidden gap-x-3 border-b border-line pb-2 text-xs text-ink-faint @2xl:grid ${columns}`}>
+                <span>{t("secrets.colName")}</span>
+                <span>{t(page.assignmentColumn)}</span>
+                {kind === "totp" ? <span>{t("secrets.colCode")}</span> : null}
+              </div>
+              <ul>
+                {rows.map((row) => {
+                  const panel = openPanel?.rowId === row.id ? openPanel.panel : null;
+                  return (
+                    <CredentialRow
+                      key={row.id}
+                      row={row}
+                      keyHostUsageComplete={credentialList.keyHostUsageComplete}
+                      panel={panel}
+                      api={api}
+                      editPanel={panel === "edit" ? (
+                        <CredentialEditPanel
+                          kind={kind}
+                          name={row.name}
+                          api={api}
+                          onSaved={(list) => {
+                            setCredentialList(list);
+                            setError("");
                           }}
-                          remove={{
-                            label: t("secrets.delete", { name: credential.name }),
-                            onSelect: () =>
-                              setPendingDeletion({
-                                name: credential.name,
-                                perform: () => api.deleteCredential(group.kind, credential.name),
-                              }),
-                          }}
+                          onClose={() => setOpenPanel(null)}
                         />
-                      </div>
-                    </article>
-                  </li>
-                ))}
-                {dedicated.map((credential) => (
-                  <li key={credential.key}>
-                    <article aria-label={credential.key} className="py-3.5">
-                      <div className="flex min-w-0 items-start gap-3">
-                        <span className="flex size-[30px] shrink-0 items-center justify-center rounded-md bg-well text-ink-muted">
-                          <Icon name="keys" className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <h4 className="truncate font-semibold text-ink">
-                            {keyBasename(credential.key)}
-                          </h4>
-                          <p className={hintText}>{t("secrets.dedicated")}</p>
-                          <div className="mt-3 flex flex-col gap-2">
-                            <UsageDisclosure
-                              owner={credential.key}
-                              label={t("secrets.keys")}
-                              values={[credential.key]}
-                              emptyLabel={t("secrets.noKeys")}
-                            />
-                            <UsageDisclosure
-                              owner={credential.key}
-                              label={t("secrets.assignedHosts")}
-                              values={credential.hosts}
-                              emptyLabel={keyHostUsageComplete
-                                ? t("secrets.noAssignedHosts")
-                                : t("secrets.keyHostsUnavailable")}
-                            />
-                          </div>
-                        </div>
-                        <CredentialActions
-                          name={credential.key}
-                          remove={{
-                            label: t("secrets.removeDedicated", { key: credential.key }),
-                            onSelect: () =>
-                              setPendingDeletion({
-                                name: keyBasename(credential.key),
-                                perform: () => api.unassignCredential("key_passphrase", credential.key),
-                              }),
-                          }}
-                        />
-                      </div>
-                    </article>
-                  </li>
-                ))}
+                      ) : null}
+                      actions={{
+                        onOpenPanel: (next) => {
+                          setAdding(false);
+                          setOpenPanel(next === null ? null : { rowId: row.id, panel: next });
+                        },
+                        onDelete: () => setPendingDeletion(deletionOf(row)),
+                        onUnassignTOTP: (host) => void run(() => api.unassignCredential("totp", host), t("secrets.unassignTOTPFailed")),
+                      }}
+                    />
+                  );
+                })}
               </ul>
-            )}
+            </>
+          )}
+        </section>
+        {kind === "totp" ? (
+          <p className="mt-3 text-xs leading-[18px] text-ink-faint">{t("secrets.totpCopyHint")}{t("secrets.totpAssignInConnection")}</p>
+        ) : null}
+      </div>
 
-            {group.kind !== "totp" ? null : (
-              <p className="mt-3 text-xs leading-[18px] text-ink-faint">{t("secrets.totpAssignInConnection")}</p>
-            )}
-
-            {/* Adding stays on one row (name, value, button), so the page does not grow tall. */}
-            <div className="mt-4 grid items-end gap-3 border-t border-line pt-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-              <Field label={t(group.nameLabel)}>
-                <input
-                  value={draft.name}
-                  onChange={(event) =>
-                    setDrafts({
-                      ...drafts,
-                      [group.kind]: { ...draft, name: event.target.value },
-                    })
-                  }
-                  className={control}
-                />
-              </Field>
-              <PasswordField
-                label={t(group.valueLabel)}
-                value={draft.secret}
-                onChange={(value) =>
-                  setDrafts({
-                    ...drafts,
-                    [group.kind]: { ...draft, secret: value },
-                  })
-                }
-              />
-              <Button
-                kind="primary"
-                disabled={draft.name === "" || draft.secret === ""}
-                onClick={() =>
-                  void run(
-                    () =>
-                      api.storeCredential(group.kind, draft.name, draft.secret),
-                    t("secrets.storeFailed"),
-                  ).then((stored) => {
-                    if (!stored) return;
-                    setDrafts((current) => ({
-                      ...current,
-                      [group.kind]: { name: "", secret: "" },
-                    }));
-                  })
-                }
-              >
-                {t(group.store)}
-              </Button>
-            </div>
-          </PageSection>
-        );
-      })}
-
-      {editing === null ? null : (
-        <CredentialEditDialog
-          kind={editing.kind}
-          name={editing.name}
-          api={api}
-          onSaved={(list) => {
-            setCredentialList(list);
-            setError("");
-            setEditing(null);
-          }}
-          onClose={() => setEditing(null)}
-        />
-      )}
       {pendingDeletion === null ? null : (
         <ConfirmDialog
           id="secrets-delete-heading"
@@ -490,6 +235,7 @@ export function SecretsPanel({
           onCancel={() => setPendingDeletion(null)}
           onConfirm={() => {
             setPendingDeletion(null);
+            setOpenPanel(null);
             void run(pendingDeletion.perform, t("secrets.deleteFailed"));
           }}
         />
