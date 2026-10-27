@@ -16,9 +16,10 @@ import (
 // 重なりは確率でしか起きないので、何度も繰り返す。
 const firstWriteRaceIterations = 300
 
-// まだ無いフォルダへ2つの書き手が同時に書く（MkdirAll のあと一時ファイルを作る）と、
-// どちらも成功し、作った一時ファイルはどちらも非公開である。背景の画像を同時に2枚
-// 受け取ったときの形である。
+// まだ無いフォルダへ2つの書き手が同時に書いても、どちらも成功し、作ったフォルダと一時
+// ファイルは非公開のままである。背景の画像を同時に2枚受け取ったときの形で、各書き手は
+// Workspace.EnsureDirectory と同じく既にある親を締め直してから、フォルダを作って書く。
+// 親を締め直す SetSecurityInfo は、継承を配下へ伝搬する。
 func TestTwoWritersCreatingTheSameDirectoryBothWritePrivateFiles(t *testing.T) {
 	fileSystem := OSFileSystem{}
 	base := filepath.Join(t.TempDir(), "state")
@@ -32,7 +33,7 @@ func TestTwoWritersCreatingTheSameDirectoryBothWritePrivateFiles(t *testing.T) {
 		outcomes := make([]error, 2)
 		for writer := range outcomes {
 			waiting.Go(func() {
-				outcomes[writer] = writeOnePrivateFile(fileSystem, directory)
+				outcomes[writer] = writeOnePrivateFile(fileSystem, base, directory)
 			})
 		}
 		waiting.Wait()
@@ -47,7 +48,10 @@ func TestTwoWritersCreatingTheSameDirectoryBothWritePrivateFiles(t *testing.T) {
 	}
 }
 
-func writeOnePrivateFile(fileSystem OSFileSystem, directory string) error {
+func writeOnePrivateFile(fileSystem OSFileSystem, parent, directory string) error {
+	if err := fileSystem.MkdirAll(parent, DirectoryPermission); err != nil {
+		return fmt.Errorf("MkdirAll of the parent: %w", err)
+	}
 	if err := fileSystem.MkdirAll(directory, DirectoryPermission); err != nil {
 		return fmt.Errorf("MkdirAll: %w", err)
 	}
