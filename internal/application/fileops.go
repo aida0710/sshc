@@ -378,6 +378,7 @@ func (s *Service) planDirectoryCreate(graph *config.Graph, request EditRequest) 
 		baseline:    diagnosticBaseline(graph),
 		preview: SavePreview{
 			Operation: "config." + string(EditDirectoryCreate),
+			Diffs:     []FileDiff{},
 			Notices:   []Notice{{Code: NoticeDirectoryCreated, Path: request.Path}},
 		},
 	}, nil
@@ -409,6 +410,7 @@ func (s *Service) planDirectoryDelete(graph *config.Graph, request EditRequest) 
 		baseline:          diagnosticBaseline(graph),
 		preview: SavePreview{
 			Operation: "config." + string(EditDirectoryDelete),
+			Diffs:     []FileDiff{},
 			Notices:   []Notice{{Code: NoticeDirectoryRemoved, Path: request.Path}},
 		},
 	}, nil

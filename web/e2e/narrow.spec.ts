@@ -498,22 +498,11 @@ test("keeps the removed connection view switch absent and Config structure align
   }
 
   await page.goto(new URL("/config", page.url()).href);
-  await expect(page.getByRole("heading", { name: "SSH Config", exact: true }).first()).toBeVisible();
-
-  const metrics = page.locator("[data-config-metrics]");
-  await expect(metrics.locator(":scope > div")).toHaveCount(3);
-  // The counts are separate chips: each one ends before the next begins, or the next wraps below it.
-  const separated = await metrics.locator(":scope > div").evaluateAll((chips) => chips.slice(0, -1).every((chip, index) => {
-    const box = chip.getBoundingClientRect();
-    const next = chips[index + 1]!.getBoundingClientRect();
-    return next.left >= box.right + 4 || next.top >= box.bottom;
-  }));
-  expect(separated).toBe(true);
-
-  await page.getByRole("button", { name: "Include階層", exact: true }).click();
-  const alignment = await page.getByRole("button", { name: "conf.d/20-lab.conf" }).evaluate((button) => {
-    const row = button.closest("li")?.firstElementChild;
-    const icon = row?.querySelector("[data-config-node-icon]");
+  // A phone shows the Include hierarchy first, and the chosen file in its place, as Connections does.
+  await expect(page.getByRole("heading", { name: "Include階層", exact: true })).toBeVisible();
+  const file = page.getByRole("button", { name: "conf.d/20-lab.conf" });
+  const alignment = await file.evaluate((button) => {
+    const icon = button.querySelector("[data-config-node-icon]");
     const content = icon?.nextElementSibling;
     if (icon === null || icon === undefined || content === null || content === undefined) return null;
     const iconBox = icon.getBoundingClientRect();
@@ -524,13 +513,20 @@ test("keeps the removed connection view switch absent and Config structure align
   expect(alignment!).toBeLessThanOrEqual(2);
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
-    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-config-mobile-metrics.png`, fullPage: true });
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-config-mobile-list.png`, fullPage: true });
   }
+
+  await file.click();
+  const backToFiles = page.getByRole("button", { name: "ファイル一覧", exact: true });
+  await expect(backToFiles).toBeVisible();
+  const editor = page.getByLabel(/ファイル本文.*conf\.d\/20-lab\.conf/);
+  await expect(editor).toBeVisible();
+  await expectNoHorizontalOverflow(page, "Config file on a phone");
 
   const appHeader = page.locator("[data-app-header]");
   await expect(appHeader).toHaveCSS("position", "sticky");
   const before = await appHeader.boundingBox();
-  await metrics.evaluate((element) => {
+  await editor.evaluate((element) => {
     let ancestor = element.parentElement;
     while (ancestor !== null && getComputedStyle(ancestor).overflowY !== "auto") ancestor = ancestor.parentElement;
     if (ancestor !== null) ancestor.scrollTop = ancestor.scrollHeight;
@@ -540,6 +536,9 @@ test("keeps the removed connection view switch absent and Config structure align
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-config-mobile-sticky.png`, fullPage: true });
   }
+
+  await backToFiles.click();
+  await expect(file).toBeVisible();
 });
 
 test("keeps every section inside 360 pixels", async ({ page, installation }) => {
