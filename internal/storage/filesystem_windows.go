@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"unsafe"
 
@@ -81,16 +82,23 @@ func makePrivateDirectories(path string, permission fs.FileMode) error {
 	return nil
 }
 
+// createRelativeDirectoryNoReparse は、ディレクトリを作るときから非公開にする
+// （windowsacl.NewPrivateSecurityDescriptor）。
 func createRelativeDirectoryNoReparse(parent windows.Handle, name string) (windows.Handle, error) {
 	objectName, err := windows.NewNTUnicodeString(name)
 	if err != nil {
 		return 0, err
 	}
+	descriptor, err := windowsacl.NewPrivateSecurityDescriptor(true)
+	if err != nil {
+		return 0, err
+	}
 	attributes := &windows.OBJECT_ATTRIBUTES{
-		Length:        uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
-		RootDirectory: parent,
-		ObjectName:    objectName,
-		Attributes:    windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
+		Length:             uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
+		RootDirectory:      parent,
+		ObjectName:         objectName,
+		Attributes:         windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
+		SecurityDescriptor: descriptor,
 	}
 	var handle windows.Handle
 	var status windows.IO_STATUS_BLOCK
@@ -107,6 +115,7 @@ func createRelativeDirectoryNoReparse(parent windows.Handle, name string) (windo
 		0,
 		0,
 	)
+	runtime.KeepAlive(descriptor)
 	if err != nil {
 		return 0, mapNtError(err)
 	}
@@ -160,16 +169,23 @@ func createPrivateTempRelative(parent windows.Handle, directory, prefix string) 
 	return nil, fmt.Errorf("create private Windows temp: collision limit exceeded")
 }
 
+// createRelativeNoReparse は、ファイルを作るときから非公開にする
+// （windowsacl.NewPrivateSecurityDescriptor）。
 func createRelativeNoReparse(parent windows.Handle, name string) (windows.Handle, error) {
 	objectName, err := windows.NewNTUnicodeString(name)
 	if err != nil {
 		return 0, err
 	}
+	descriptor, err := windowsacl.NewPrivateSecurityDescriptor(false)
+	if err != nil {
+		return 0, err
+	}
 	attributes := &windows.OBJECT_ATTRIBUTES{
-		Length:        uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
-		RootDirectory: parent,
-		ObjectName:    objectName,
-		Attributes:    windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
+		Length:             uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
+		RootDirectory:      parent,
+		ObjectName:         objectName,
+		Attributes:         windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
+		SecurityDescriptor: descriptor,
 	}
 	var handle windows.Handle
 	var status windows.IO_STATUS_BLOCK
@@ -186,6 +202,7 @@ func createRelativeNoReparse(parent windows.Handle, name string) (windows.Handle
 		0,
 		0,
 	)
+	runtime.KeepAlive(descriptor)
 	if err != nil {
 		return 0, mapNtError(err)
 	}
