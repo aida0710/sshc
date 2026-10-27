@@ -14,6 +14,9 @@ vi.mock("./stream", () => ({
 
 type TicketIssuer = (id: string, cursor?: number) => Promise<{ streamTicket: string }>;
 
+// Every link watches the page for resumes until it is closed, so each test's links are closed after it.
+const started: { close: () => void }[] = [];
+
 function startLink(terminalStreamTicket: TicketIssuer = async () => ({ streamTicket: "one-time" })) {
   const links: StreamLink[] = [];
   const ticket = vi.fn(terminalStreamTicket);
@@ -30,6 +33,7 @@ function startLink(terminalStreamTicket: TicketIssuer = async () => ({ streamTic
     onClose: vi.fn(),
   });
   controller.connect();
+  started.push(controller);
   return { controller, links, ticket, onExit };
 }
 
@@ -52,6 +56,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const controller of started.splice(0)) controller.close();
   vi.useRealTimers();
 });
 
@@ -152,6 +157,76 @@ describe("createStreamLink", () => {
 
     expect(onExit).toHaveBeenCalledOnce();
     expect(lastLink(links)).toEqual({ phase: "live" });
+    expect(ticket).toHaveBeenCalledTimes(1);
+  });
+
+  it("attaches at once when the page comes back from the back-forward cache instead of waiting out the delay", async () => {
+    const { links, ticket } = startLink();
+    await vi.advanceTimersByTimeAsync(0);
+    streams[0]!.handlers.onClose();
+    expect(lastLink(links)).toMatchObject({ phase: "waiting" });
+
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(ticket).toHaveBeenCalledTimes(2);
+    expect(lastLink(links)).toEqual({ phase: "live" });
+  });
+
+  it("attaches at once when the network comes back", async () => {
+    let online = false;
+    const { ticket } = startLink(async () => {
+      if (!online) throw new Error("offline");
+      return { streamTicket: "one-time" };
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    online = true;
+    window.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(ticket).toHaveBeenCalledTimes(2);
+    expect(streams).toHaveLength(1);
+  });
+
+  it("attaches a live link afresh when the network comes back, since the old one may lead nowhere", async () => {
+    const { links, ticket } = startLink();
+    await vi.advanceTimersByTimeAsync(0);
+    const first = streams[0]!;
+
+    window.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(first.stream.close).toHaveBeenCalledOnce();
+    expect(ticket).toHaveBeenCalledTimes(2);
+    expect(streams).toHaveLength(2);
+    expect(links).toContainEqual({ phase: "connecting", attempt: 1 });
+    expect(lastLink(links)).toEqual({ phase: "live" });
+  });
+
+  it("keeps a stopped link stopped when the page or the network comes back", async () => {
+    const { controller, ticket } = startLink(async () => {
+      throw new Error("offline");
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    controller.stopRetrying();
+
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    window.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(ticket).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not attach again for a page shown for the first time", async () => {
+    const { ticket } = startLink(async () => {
+      throw new Error("offline");
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: false }));
+    await vi.advanceTimersByTimeAsync(0);
+
     expect(ticket).toHaveBeenCalledTimes(1);
   });
 
