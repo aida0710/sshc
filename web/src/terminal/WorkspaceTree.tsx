@@ -177,8 +177,10 @@ export function WorkspaceTree({
 
   return (
     <div className="flex flex-col gap-0.5">
-      {/* On a phone the heading's buttons are 44px touch targets, which already space it from the first workspace. */}
-      <div className="flex items-center pr-1 pt-[18px] md:pb-2.5">
+      {/* The heading stays at the top of the sidebar's list while the sessions scroll under it, so its
+          buttons are always in reach. On a phone they are 44px touch targets, which already space it from
+          the first workspace. */}
+      <div className="sticky top-0 z-[2] mt-3.5 flex items-center bg-sidebar pr-1 pt-1 md:pb-2.5">
         <span aria-hidden="true" className="block grow px-2 text-xs text-ink-faint">
           {t("workspace.heading")}
         </span>

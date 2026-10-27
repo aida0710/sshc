@@ -21,6 +21,31 @@ test("reveals workspace counts together with actions on hover and keyboard focus
   await expect(count).toHaveCSS("opacity", "1");
 });
 
+test("keeps the Workspaces heading at the top of the sidebar while the workspaces scroll", async ({ page, installation }) => {
+  const workspaces = [
+    { id: "default", name: "", hidden: false, builtIn: true },
+    ...Array.from({ length: 14 }, (_, index) => ({ id: `w${index}`, name: `Workspace ${index + 1}`, hidden: false, builtIn: false })),
+  ];
+  await page.route(/\/api\/v1\/terminal\/workspaces$/, (route) =>
+    route.request().method() === "GET" ? route.fulfill({ json: { workspaces, maxWorkspaces: 50 } }) : route.fallback());
+  await page.setViewportSize({ width: 1280, height: 520 });
+  await openApplication(page, installation);
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await expect(navigation.getByRole("button", { name: /^Workspace 14/ })).toBeAttached();
+  const scroller = page.locator("[data-navigation-scroll]");
+  const heading = navigation.getByRole("button", { name: "New workspace" });
+
+  await scroller.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+
+  const scrollerBox = await scroller.boundingBox();
+  const headingBox = await heading.boundingBox();
+  expect(scrollerBox).not.toBeNull();
+  expect(headingBox).not.toBeNull();
+  expect(headingBox!.y).toBeGreaterThanOrEqual(scrollerBox!.y);
+  expect(headingBox!.y).toBeLessThan(scrollerBox!.y + 30);
+  await expect(heading).toBeInViewport();
+});
+
 test.describe("touch sidebar", () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 800 } });
 
