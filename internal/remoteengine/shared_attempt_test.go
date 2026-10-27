@@ -51,8 +51,10 @@ func TestCallersArrivingDuringAnAttemptShareItsResult(t *testing.T) {
 
 func TestACallerThatGivesUpDoesNotCancelTheAttemptOthersWaitFor(t *testing.T) {
 	var attempts sharedAttempt[string]
+	var started atomic.Int32
 	release := make(chan struct{})
 	start := func(ctx context.Context) (string, error) {
+		started.Add(1)
 		select {
 		case <-release:
 			return "link", nil
@@ -79,6 +81,9 @@ func TestACallerThatGivesUpDoesNotCancelTheAttemptOthersWaitFor(t *testing.T) {
 	close(release)
 	if value := <-patient; value != "link" {
 		t.Fatalf("the remaining caller got %q, want the attempt's result", value)
+	}
+	if started.Load() != 1 {
+		t.Fatalf("started %d attempts, want the one the impatient caller began to carry on", started.Load())
 	}
 }
 

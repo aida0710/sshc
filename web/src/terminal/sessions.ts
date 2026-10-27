@@ -150,6 +150,9 @@ export function useTerminalSessions(
     setMaxSessions(0);
     setProblem("");
     setListFailure(null);
+    // An open still waiting belongs to the previous engine; the new one is not
+    // being connected to.
+    setPendingOpens(0);
     setLoaded(false);
   }, [api, mutationGeneration, refreshGeneration]);
 
