@@ -176,6 +176,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		Store:                      remoteengine.NewStore(services.workspace),
 		LocalVersion:               version,
 		PeerMayBelongToAnotherUser: loopbackpeer.MayBelongToAnotherUser,
+		Logger:                     dependencies.Logger,
 	})
 	wanted := dependencies.Port
 	if wanted == 0 {

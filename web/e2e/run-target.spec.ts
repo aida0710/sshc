@@ -72,6 +72,9 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
       await route.fulfill({ json: { alias: "bastion", version: compatibleVersion ?? localVersion, vault: true, unlocked: true, passwordless: true, sessions: 0 } });
     } else if (path.endsWith("/terminal/sessions")) {
       await route.fulfill({ json: { sessions: [], maxSessions: 50 } });
+    } else if (path.endsWith("/terminal/restore")) {
+      // The engine on bastion has nothing to reopen.
+      await route.fulfill({ json: { sessions: [] } });
     } else if (path.endsWith("/terminal/workspaces")) {
       await route.fulfill({ json: { workspaces: [{ id: "default", name: "", hidden: false, builtIn: true }], maxWorkspaces: 50 } });
     } else {
@@ -196,7 +199,7 @@ test("shows an unreachable host in the terminal area and goes away on Reconnect 
   await chooseBastion(page);
   const panel = page.getByRole("region", { name: "Could not connect to bastion", exact: true });
   await expect(panel.getByText("The engine terminals run on cannot be reached. Reconnect, or switch back to localhost.", { exact: true })).toBeVisible();
-  await expect(panel.getByText("Retrying every 2 s", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Tries again 2 s after each attempt ends", { exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("alert")).toHaveCount(0);
   await panel.getByRole("button", { name: "Details", exact: true }).click();
   await expect(panel.getByText("remote_engine_unreachable", { exact: true })).toBeVisible();
@@ -278,4 +281,43 @@ test("uses a compatible engine of another version without a panel", async ({ pag
   const information = page.getByRole("dialog", { name: "Engine on bastion", exact: true });
   await expect(information.getByRole("definition").filter({ hasText: remoteVersion })).toBeVisible();
   await expect(information.getByText(`this computer runs ${localVersion}`, { exact: true })).toBeVisible();
+});
+
+test("says the host is being reached while a session opens, and why it could not be", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion });
+  // Opening waits on the SSH connection to bastion, which here never succeeds.
+  let answerOpen = () => {};
+  const openAnswered = new Promise<void>((resolve) => { answerOpen = resolve; });
+  await page.route(`**${sessionsPath}`, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    await openAnswered;
+    await route.fulfill(refusalResponse("unreachable"));
+  });
+  await openApplication(page, installation);
+  // Screenshots are taken in Japanese, so the labels follow the language.
+  const japanese = process.env.SSHC_VISUAL_DIR !== undefined;
+  await chooseBastion(page);
+  if (japanese) await changeDisplayLanguage(page, "ja");
+
+  const navigation = page.getByRole("navigation", { name: japanese ? "メインナビゲーション" : "Primary" });
+  await navigation.getByRole("button", { name: japanese ? "新しいセッション" : "New session", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Local shell, localhost/ }).click();
+
+  const connecting = page.getByRole("heading", { name: japanese ? "bastionに接続しています" : "Connecting to bastion", exact: true });
+  await expect(connecting).toBeVisible();
+  await expect(page).toHaveURL(/\/terminal$/);
+  if (japanese) {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/run-target-connecting.png` });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/run-target-connecting-mobile.png` });
+    await page.setViewportSize({ width: 1280, height: 800 });
+  }
+
+  answerOpen();
+  await expect(page.getByRole("region", { name: japanese ? "bastion に接続できませんでした" : "Could not connect to bastion", exact: true })).toBeVisible();
+  await expect(connecting).toBeHidden();
 });

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"slices"
 	"sync"
+	"time"
 )
 
 var (
@@ -33,6 +35,8 @@ type ManagerOptions struct {
 	// PeerMayBelongToAnotherUser は、TCP の接続が、このマシンの別の OS ユーザーのもの
 	// かもしれないかを返す。nil なら確かめない。
 	PeerMayBelongToAnotherUser func(client, server netip.AddrPort) bool
+	// Logger は、接続先への SSH の接続の試みと結果を書く。nil なら書かない。
+	Logger *slog.Logger
 }
 
 // remoteHost は、接続先ひとつについてこのエンジンが持つものである。SSH の接続はひとつで、
@@ -46,6 +50,8 @@ type remoteHost struct {
 // Manager は、接続先のエンジンへの中継と取り次ぎを持つ。寿命はこのマシンのエンジンと同じである。
 type Manager struct {
 	options ManagerOptions
+	// answerLimit は forwardedAnswerLimit である。試験だけが短くする。
+	answerLimit time.Duration
 
 	mutex  sync.Mutex
 	hosts  map[string]*remoteHost
@@ -62,7 +68,8 @@ type Manager struct {
 func NewManager(options ManagerOptions) *Manager {
 	actionContext, stopActions := context.WithCancel(context.Background())
 	return &Manager{
-		options: options, hosts: map[string]*remoteHost{}, actions: map[string]*actionLog{},
+		options: options, answerLimit: forwardedAnswerLimit,
+		hosts: map[string]*remoteHost{}, actions: map[string]*actionLog{},
 		actionContext: actionContext, stopActions: stopActions,
 	}
 }
@@ -72,11 +79,28 @@ func (m *Manager) host(alias string) *remoteHost {
 	target := m.hosts[alias]
 	if target == nil {
 		target = &remoteHost{link: newHostLink(func(ctx context.Context) (Link, error) {
-			return m.options.Connect(ctx, alias)
+			return m.connect(ctx, alias)
 		})}
 		m.hosts[alias] = target
 	}
 	return target
+}
+
+// connect は、alias へ SSH の接続を開き、試みと結果をログに書く。接続先が応答しないとき、
+// 画面に出る一行だけでは、いつ何回試してどれだけ待ったかが分からないからである。
+func (m *Manager) connect(ctx context.Context, alias string) (Link, error) {
+	started := time.Now()
+	link, err := m.options.Connect(ctx, alias)
+	if m.options.Logger == nil {
+		return link, err
+	}
+	elapsed := time.Since(started).Round(time.Millisecond)
+	if err != nil {
+		m.options.Logger.Warn("could not connect to the remote host", "alias", alias, "elapsed", elapsed, "error", err)
+	} else {
+		m.options.Logger.Info("connected to the remote host", "alias", alias, "elapsed", elapsed)
+	}
+	return link, err
 }
 
 // Engines は、実行先に足したエンジンの alias を、足した順に返す。
@@ -161,17 +185,29 @@ func (m *Manager) hostEngine(alias string) (*remoteEngine, error) {
 //
 // 開くたびに、接続先で入口の URL を発行させ直す。URL は一度しか使えず、接続先の
 // エンジンが起動し直していればポートも変わっているからである。
+//
+// 入口の発行は SSH で接続先へ行くので、mutex の外で行う。持ったままだと、接続先が
+// 応答しないあいだ、ほかの接続先の要求もエンジンの停止も待たされる。
 func (m *Manager) Open(ctx context.Context, alias string) (string, error) {
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
 	if m.closed {
+		m.mutex.Unlock()
 		return "", ErrClosed
 	}
 	target := m.host(alias)
+	m.mutex.Unlock()
+
+	opened, remote, err := m.issueEntrance(ctx, target.link)
+
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	if m.closed || m.hosts[alias] != target {
+		// 発行を待つあいだに、エンジンが止まりかけたか、接続先が外された。
+		return "", ErrClosed
+	}
 	if target.relay == nil {
 		target.relay = newRelay(target.link)
 	}
-	opened, remote, err := m.issueEntrance(ctx, target.link)
 	if err != nil {
 		m.dropIdleRelay(alias, target)
 		return "", err
