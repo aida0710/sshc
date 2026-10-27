@@ -595,6 +595,10 @@
 .sshc-app[data-mobile="true"] [data-navigation-open="true"] {
   transform: translateX(0);
 }
+/* 指でメニューを引き出している間も、開いたときと同じ影で板の端を見せる（shadow-2xl と同じ値）。 */
+.sshc-app[data-mobile="true"] [data-navigation-dragging] {
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+}
 .sshc-app[data-mobile="true"] [data-app-navigation] > [role="separator"] {
   display: none;
 }
