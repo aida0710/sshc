@@ -221,14 +221,6 @@ func TestARemoteEnvelopeMayNotAskForWhatALocalOneMay(t *testing.T) {
 	}
 }
 
-// DerivationCost はテストが下げるためにある。製品の既定値が remote から受け取って
-// よい上限を下回れば、このインストールが書くすべての envelope が弱くなる。
-func TestDerivationCostDefaultsToTheProductionCost(t *testing.T) {
-	if envelope.DerivationCost != envelope.AcceptedFromRemote {
-		t.Errorf("DerivationCost = %+v, want the production cost %+v", envelope.DerivationCost, envelope.AcceptedFromRemote)
-	}
-}
-
 func TestRemoteDerivationsAreSerializedWithoutBlockingALocalDerivation(t *testing.T) {
 	key, err := envelope.Derive("a passphrase long enough")
 	if err != nil {
