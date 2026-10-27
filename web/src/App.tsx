@@ -14,6 +14,7 @@ import type { CreationPrerequisite } from "./connections/CreateConnectionModal";
 import { LockScreen } from "./secrets/LockScreen";
 import { useLanguage } from "./i18n/context";
 import { InspectorPane, InspectorToggle } from "./ui/Inspector";
+import { PageChromeContext, type PageChrome } from "./ui/pageChrome";
 import { useAccent } from "./theme/accentContext";
 import { useTheme } from "./theme/context";
 import { usePolling } from "./ui/usePolling";
@@ -174,6 +175,24 @@ export function App({
   // the terminal inert), the app header keeps the navigation reachable.
   const terminalTopBar = mobileLayout && terminalFace && activeSessionId !== null && terminalSessions.remoteRefusal === null;
 
+  // A page's heading shows the inspector's toggle among its actions on a wide screen, and puts its actions
+  // in the top bar on a phone, where its name is hidden (see pageChrome).
+  const [phoneActionsSlot, setPhoneActionsSlot] = useState<HTMLDivElement | null>(null);
+  const pageChrome = useMemo<PageChrome>(() => ({
+    inspectorToggle: inspector === null || mobileLayout ? null : (
+      <span className="shrink-0 [&>button]:h-8">
+        <InspectorToggle
+          label={inspector.label}
+          open={inspectorOpen}
+          attention={inspector.attention}
+          buttonRef={inspectorTriggerRef}
+          onToggle={() => setInspectorOpen((open) => !open)}
+        />
+      </span>
+    ),
+    phoneActionsSlot: mobileLayout ? phoneActionsSlot : null,
+  }), [inspector, inspectorOpen, inspectorTriggerRef, mobileLayout, phoneActionsSlot, setInspectorOpen]);
+
   // SFTP and Home open terminals on this machine. With an engine on an SSH
   // host chosen, the run target goes back to this machine first and the
   // session is opened once its terminal API is the one in use.
@@ -304,8 +323,9 @@ export function App({
           onToggleNavigation={() => setNavigationOpen((open) => !open)}
           inspector={inspector}
           inspectorOpen={inspectorOpen}
-          inspectorToggleRef={inspectorTriggerRef}
+          {...(mobileLayout ? { inspectorToggleRef: inspectorTriggerRef } : {})}
           onToggleInspector={() => setInspectorOpen((open) => !open)}
+          actionsSlotRef={setPhoneActionsSlot}
           sectionLabels={sectionLabels}
         />}
         {requestFailure === null ? null : (
@@ -380,16 +400,6 @@ export function App({
           />
 
           <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
-            {inspector === null ? null : (
-              <span className="absolute right-2 top-2 z-10 hidden md:block [&>button]:h-8 [&>button]:w-8 [&>button]:justify-center [&>button>span]:hidden">
-                <InspectorToggle
-                  label={inspector.label}
-                  open={inspectorOpen}
-                  attention={inspector.attention}
-                  onToggle={() => setInspectorOpen((open) => !open)}
-                />
-              </span>
-            )}
             <SectionNotices
               section={section}
               vaultMigration={vaultMigration}
@@ -419,50 +429,52 @@ export function App({
                   </div>
                 ) : null}
                 {route.kind === "section" ? (
-                  <Suspense fallback={<RouteSkeleton />}>
-                    <SectionView
-                      key={route.section}
-                      section={route.section}
-                      navigation={{
-                        location,
-                        fileTarget: handoffs.fileTarget,
-                        onFileTargetHandled: handoffs.consumeFileTarget,
-                        onNavigate: navigate,
-                        onNavigateLocation: navigateLocation,
-                        onNavigateForCreation: (target: CreationPrerequisite) =>
-                          navigate(target),
-                        onOpenFile: handoffs.openFile,
-                        onNavigationBlockerChange: setNavigationBlocker,
-                      }}
-                      handoff={{
-                        connectionKey: handoffs.connectionKey,
-                        publicKey: handoffs.publicKey,
-                        connectionDraft: handoffs.connectionDraft,
-                        onAssignGeneratedKey: handoffs.assignGeneratedKey,
-                        onInstallGeneratedKey: handoffs.installGeneratedKey,
-                        onConnectionKeyApplied: handoffs.consumeConnectionKey,
-                        onPublicKeyHandled: handoffs.consumePublicKey,
-                        onConnectionDraftChange: handoffs.setConnectionDraft,
-                      }}
-                      shell={{
-                        onLock: session.lock,
-                        onVaultChanged: session.openVault,
-                        passwordless: session.passwordless,
-                        onInspector: setInspector,
-                        terminalSessions,
-                        onShowSession: showLocalSession,
-                        onOpenSSHSession: openSSHSession,
-                        onOpenTerminal: openSFTPTerminal,
-                        onTerminalSettingsChange: async (settings) => {
-                          setTerminalSettings(settings);
-                          await terminalSessions.refresh();
-                        },
-                      }}
-                      declared={{ groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN }}
-                      sftpTarget={handoffs.sftpTarget}
-                      onSftpTargetHandled={handoffs.consumeSftpTarget}
-                    />
-                  </Suspense>
+                  <PageChromeContext.Provider value={pageChrome}>
+                    <Suspense fallback={<RouteSkeleton />}>
+                      <SectionView
+                        key={route.section}
+                        section={route.section}
+                        navigation={{
+                          location,
+                          fileTarget: handoffs.fileTarget,
+                          onFileTargetHandled: handoffs.consumeFileTarget,
+                          onNavigate: navigate,
+                          onNavigateLocation: navigateLocation,
+                          onNavigateForCreation: (target: CreationPrerequisite) =>
+                            navigate(target),
+                          onOpenFile: handoffs.openFile,
+                          onNavigationBlockerChange: setNavigationBlocker,
+                        }}
+                        handoff={{
+                          connectionKey: handoffs.connectionKey,
+                          publicKey: handoffs.publicKey,
+                          connectionDraft: handoffs.connectionDraft,
+                          onAssignGeneratedKey: handoffs.assignGeneratedKey,
+                          onInstallGeneratedKey: handoffs.installGeneratedKey,
+                          onConnectionKeyApplied: handoffs.consumeConnectionKey,
+                          onPublicKeyHandled: handoffs.consumePublicKey,
+                          onConnectionDraftChange: handoffs.setConnectionDraft,
+                        }}
+                        shell={{
+                          onLock: session.lock,
+                          onVaultChanged: session.openVault,
+                          passwordless: session.passwordless,
+                          onInspector: setInspector,
+                          terminalSessions,
+                          onShowSession: showLocalSession,
+                          onOpenSSHSession: openSSHSession,
+                          onOpenTerminal: openSFTPTerminal,
+                          onTerminalSettingsChange: async (settings) => {
+                            setTerminalSettings(settings);
+                            await terminalSessions.refresh();
+                          },
+                        }}
+                        declared={{ groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN }}
+                        sftpTarget={handoffs.sftpTarget}
+                        onSftpTargetHandled={handoffs.consumeSftpTarget}
+                      />
+                    </Suspense>
+                  </PageChromeContext.Provider>
                 ) : (
                   <NotFoundSection pathname={route.pathname} onGoHome={(event) => followSectionLink(event, "Home")} />
                 )}

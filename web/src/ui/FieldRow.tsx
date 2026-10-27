@@ -1,8 +1,10 @@
 import { useId, type ReactNode } from "react";
 import { describeControl } from "./describeControl";
 
-// The two columns of a form: the names, then the controls. FieldRowNote lines up with the second.
-const formColumns = "lg:grid-cols-[160px_minmax(0,1fr)] lg:gap-x-6";
+// The two columns of a form: the names, then the controls. FieldRowNote lines up with the second. The names'
+// column fits twelve characters, so names such as 現在のマスターパスワード do not break mid-word. Other
+// name-and-value rows (FactRows, Appearance) use the same columns so the pages line up.
+export const formColumns = "lg:grid-cols-[184px_minmax(0,1fr)] lg:gap-x-6";
 
 // FieldRow is one input of a form, as in the design: its name on the left, the control and a hint on the
 // right, and a line above it unless it is the first row. Narrow screens put the name above the control.
