@@ -68,7 +68,7 @@ test("stops the automatic reconnect loop from the pane", async ({ page, installa
   await openSection(page, "Terminal");
 
   const screen = page.getByRole("region", { name: /^Terminal for / });
-  await expect(screen.getByText("reconnecting 3/5")).toBeVisible();
+  await expect(screen.getByText(/^reconnecting 3\/5 · /)).toBeVisible();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/reconnect-stop-banner.png`, fullPage: true });
   }

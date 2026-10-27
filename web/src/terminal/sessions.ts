@@ -26,6 +26,9 @@ export type TerminalSessionsState = {
   // null while it lists them. remoteRefusalAt is when it last refused.
   remoteRefusal: ApiError | null;
   remoteRefusalAt: Date | null;
+  // opening is true while a session is being opened. On a run target that may
+  // last as long as the SSH connection to it takes to fail.
+  opening: boolean;
   loaded: boolean;
   rename: (id: string, title: string) => Promise<boolean>;
   unpinTitle?: (id: string) => Promise<boolean>;
@@ -47,6 +50,7 @@ export function useTerminalSessions(
   const [sessions, setSessions] = useState<TerminalSession[]>([]);
   const [maxSessions, setMaxSessions] = useState(0);
   const [pendingOperations, setPendingOperations] = useState(0);
+  const [pendingOpens, setPendingOpens] = useState(0);
   const [problem, setProblem] = useState("");
   const [listFailure, setListFailure] = useState<{ api: TerminalSessionsApi; error: ApiError; at: Date } | null>(null);
   // The terminal area must never attribute the previous engine's refusal
@@ -164,16 +168,19 @@ export function useTerminalSessions(
   // the faster interval, for the reason given at connectingPollIntervalMs.
   // Terminal notifications must still be observed while the app is in the
   // background; that is precisely when delivering them is useful. A refused
-  // empty list is retried too, so an update or Vault unlock restores it.
+  // empty list is retried too, so an update or Vault unlock restores it, but
+  // only while the page is shown: each retry may wait on an SSH connection to
+  // a host that does not answer, and nothing in a hidden page needs it.
   usePolling(refresh, {
     intervalMs: connectionInProgress ? connectingPollIntervalMs : sessionListPollIntervalMs,
     enabled: enabled && (sessions.length > 0 || remoteRefusal !== null),
-    whileHidden: true,
+    whileHidden: sessions.length > 0,
   });
 
   const open = useCallback(
     async (request: OpenTerminalSessionRequest): Promise<TerminalSession | null> => {
       beginOperation();
+      setPendingOpens((current) => current + 1);
       setProblem("");
       try {
         const opened = await api.openTerminalSession(request);
@@ -193,8 +200,15 @@ export function useTerminalSessions(
         return opened.session;
       } catch (error) {
         setProblem(translate(terminalProblemKey(failureCode(error))));
+        // A run target that could not be reached is shown where the session
+        // would have appeared, as when its list cannot be read, rather than
+        // only as a line in the sidebar.
+        if (error instanceof ApiError && error.code.startsWith("remote_engine_")) {
+          setListFailure({ api, error, at: new Date() });
+        }
         return null;
       } finally {
+        setPendingOpens((current) => Math.max(0, current - 1));
         finishOperation();
       }
     },
@@ -282,7 +296,7 @@ export function useTerminalSessions(
   }, [beginMutation]);
 
   return {
-    sessions, maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, loaded,
+    sessions, maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded,
     rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited, moveToWorkspace,
   };
 }

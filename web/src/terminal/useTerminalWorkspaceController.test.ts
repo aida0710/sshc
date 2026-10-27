@@ -158,4 +158,23 @@ describe("useTerminalWorkspaceController", () => {
     await act(() => result.current.duplicateSession("plain"));
     expect(open).toHaveBeenLastCalledWith({ kind: "ssh", alias: "plain", workspaceId: "default" });
   });
+  it("shows the terminal screen at once when a session opens on a run target", async () => {
+    let finish: (session: TerminalSession | null) => void = () => undefined;
+    const open = vi.fn(() => new Promise<TerminalSession | null>((resolve) => { finish = resolve; }));
+    const navigate = vi.fn();
+    const { result } = renderHook(() => useTerminalWorkspaceController({
+      api,
+      runTarget: "r540",
+      terminalSessions: { sessions: [], refresh: vi.fn().mockResolvedValue(undefined), open } as unknown as TerminalSessionsState,
+      enabled: true,
+      section: "Home",
+      navigate,
+      closeNavigation: () => undefined,
+    }));
+
+    let opening: Promise<void> = Promise.resolve();
+    act(() => { opening = result.current.openSSHSession("db"); });
+    expect(navigate).toHaveBeenCalledWith("Terminal");
+    await act(async () => { finish(null); await opening; });
+  });
 });

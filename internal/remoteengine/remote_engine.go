@@ -89,9 +89,13 @@ func newSessionTransport(link *hostLink, identity engineIdentity) *http.Transpor
 type remoteEngine struct {
 	link         *hostLink
 	localVersion string
+	// attaching は、同時に来た要求に、ひとつの資格の受け取りを待たせる。
+	attaching sharedAttempt[*remoteSession]
 
 	mutex   sync.Mutex
 	session *remoteSession
+	// generation は、資格を捨てるたびに増える。捨てたあとに終わった受け取りを持たない。
+	generation uint64
 }
 
 func newRemoteEngine(link *hostLink, localVersion string) *remoteEngine {
@@ -101,18 +105,27 @@ func newRemoteEngine(link *hostLink, localVersion string) *remoteEngine {
 }
 
 // current は、使える資格を返す。まだ無ければ、接続先で handoff を読んで受け取る。
+//
+// 受け取りはロックの外で行い、そのあいだに来た要求は同じ受け取りを待つ。
 func (e *remoteEngine) current(ctx context.Context) (*remoteSession, error) {
 	e.mutex.Lock()
-	defer e.mutex.Unlock()
-	if e.session != nil {
-		return e.session, nil
+	session, generation := e.session, e.generation
+	e.mutex.Unlock()
+	if session != nil {
+		return session, nil
 	}
-	session, err := e.attach(ctx)
-	if err != nil {
-		return nil, err
-	}
-	e.session = session
-	return session, nil
+	return e.attaching.do(ctx, func(ctx context.Context) (*remoteSession, error) {
+		session, err := e.attach(ctx)
+		if err != nil {
+			return nil, err
+		}
+		e.mutex.Lock()
+		defer e.mutex.Unlock()
+		if e.generation == generation {
+			e.session = session
+		}
+		return session, nil
+	})
 }
 
 // forget は、断られた資格を捨てる。次の要求で受け取り直す。
@@ -121,6 +134,7 @@ func (e *remoteEngine) forget(stale *remoteSession) {
 	defer e.mutex.Unlock()
 	if e.session == stale {
 		e.session = nil
+		e.generation++
 		stale.transport.CloseIdleConnections()
 	}
 }
@@ -133,6 +147,7 @@ func (e *remoteEngine) forgetAny() {
 		e.session.transport.CloseIdleConnections()
 		e.session = nil
 	}
+	e.generation++
 }
 
 // closeIdleConnections は、待機中の HTTP の接続を捨てる。SSH の接続が終わると、その上の

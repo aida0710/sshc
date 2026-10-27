@@ -511,7 +511,7 @@ describe("TerminalView", () => {
       reconnect: { attempt: 2, limit: 5, retryAt: "2026-09-18T00:00:10Z", problem: "reconnect_failed" },
     }} api={{ streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} onStopReconnect={onStopReconnect} />);
 
-    expect(screen.getByText("reconnecting 2/5")).toBeVisible();
+    expect(screen.getByText("reconnecting 2/5 · connecting")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Stop reconnecting" }));
     expect(onStopReconnect).toHaveBeenCalledOnce();
   });

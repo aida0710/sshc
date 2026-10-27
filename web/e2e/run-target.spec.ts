@@ -72,6 +72,9 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
       await route.fulfill({ json: { alias: "bastion", version: compatibleVersion ?? localVersion, vault: true, unlocked: true, passwordless: true, sessions: 0 } });
     } else if (path.endsWith("/terminal/sessions")) {
       await route.fulfill({ json: { sessions: [], maxSessions: 50 } });
+    } else if (path.endsWith("/terminal/restore")) {
+      // The engine on bastion has nothing to reopen.
+      await route.fulfill({ json: { sessions: [] } });
     } else if (path.endsWith("/terminal/workspaces")) {
       await route.fulfill({ json: { workspaces: [{ id: "default", name: "", hidden: false, builtIn: true }], maxWorkspaces: 50 } });
     } else {
@@ -196,7 +199,7 @@ test("shows an unreachable host in the terminal area and goes away on Reconnect 
   await chooseBastion(page);
   const panel = page.getByRole("region", { name: "Could not connect to bastion", exact: true });
   await expect(panel.getByText("The engine terminals run on cannot be reached. Reconnect, or switch back to localhost.", { exact: true })).toBeVisible();
-  await expect(panel.getByText("Retrying every 2 s", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Tries again 2 s after each attempt ends", { exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("alert")).toHaveCount(0);
   await panel.getByRole("button", { name: "Details", exact: true }).click();
   await expect(panel.getByText("remote_engine_unreachable", { exact: true })).toBeVisible();

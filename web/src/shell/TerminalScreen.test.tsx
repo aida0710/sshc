@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -107,7 +108,7 @@ describe("TerminalScreen while the run target refuses its session list", () => {
     expect(within(panel).getByRole("heading", { name: heading })).toBeInTheDocument();
     if (text !== null) expect(within(panel).getByText(text)).toBeInTheDocument();
     expect(buttonNames(panel)).toEqual(["Reconnect now", "Switch back to localhost", "Details", "Engine information…"]);
-    expect(within(panel).getByText("Retrying every 2 s")).toBeInTheDocument();
+    expect(within(panel).getByText("Tries again 2 s after each attempt ends")).toBeInTheDocument();
     expect(panel.querySelector("time")).not.toBeNull();
   });
 
@@ -205,5 +206,47 @@ describe("TerminalScreen while the run target refuses its session list", () => {
     render(<Screen api={sessionsApi(terminalSessions)} targets={runTargets(null)} />);
     await waitFor(() => expect(terminalSessions).toHaveBeenCalled());
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
+  });
+});
+
+// OpeningScreen opens a session on the run target as soon as it is drawn, as the
+// sidebar does after switching to the terminal screen.
+function OpeningScreen({ api, targets }: { api: TerminalSessionsApi; targets: RunTargetsState }) {
+  const t = useTranslate();
+  const terminalSessions = useTerminalSessions(api, t);
+  const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget: targets.selected });
+  const { open } = terminalSessions;
+  useEffect(() => { void open({ kind: "ssh", alias: "db" }); }, [open]);
+  return (
+    <TerminalScreen
+      visible
+      terminalSessions={terminalSessions}
+      activeSessionId={null}
+      splitView={splitView}
+      settings={{ appearance: { palette: "", font: "", background: "" } }}
+      hostAppearance={new Map()}
+      hostOSC52={new Map()}
+      hostVPN={new Map()}
+      api={api}
+      runTargets={targets}
+      onOpenRemotePath={vi.fn()}
+      onOSC52Change={vi.fn(async () => undefined)}
+    />
+  );
+}
+
+describe("TerminalScreen while a session opens on a run target", () => {
+  it("says the host is being reached and then why it could not be", async () => {
+    let refuse: (error: unknown) => void = () => undefined;
+    const api = sessionsApi(vi.fn().mockResolvedValue(emptyList));
+    api.openTerminalSession = vi.fn(() => new Promise<never>((_, reject) => { refuse = reject; }));
+    render(<OpeningScreen api={api} targets={runTargets("r540")} />);
+
+    expect(await screen.findByRole("heading", { name: "Connecting to r540" })).toBeInTheDocument();
+    refuse(refusal("remote_engine_unreachable"));
+
+    const panel = await screen.findByRole("region");
+    expect(panel).toHaveAccessibleName("Could not connect to r540");
+    expect(screen.queryByText("Connecting to r540")).not.toBeInTheDocument();
   });
 });
