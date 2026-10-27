@@ -33,7 +33,7 @@ export function PageHeader({
         {description === undefined ? null : <p className="mt-0.5 max-w-3xl text-xs leading-[18px] text-ink-faint">{description}</p>}
       </div>
       {actions === undefined ? null : (
-        <div className="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto sm:shrink-0">{actions}</div>
+        <div className="flex w-full min-w-0 flex-wrap justify-end gap-2 sm:w-auto sm:shrink-0">{actions}</div>
       )}
     </header>
   );
