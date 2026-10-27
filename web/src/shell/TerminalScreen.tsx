@@ -9,6 +9,7 @@ import type { TerminalSessionsState } from "../terminal/sessions";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
 import type { PaneEdge } from "../terminal/splitView/layout";
 import { SplitSessionPicker } from "../terminal/splitView/SplitSessionPicker";
+import { RunTargetConnectingPanel } from "../terminal/RunTargetConnectingPanel";
 import { RunTargetRefusalPanel } from "../terminal/RunTargetRefusalPanel";
 import type { RunTargetsState } from "../terminal/useRunTargets";
 
@@ -144,6 +145,7 @@ export function TerminalScreen({
     <div className="h-full" inert={refusal !== null}>
       <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} renderTerminal={renderTerminal} />
     </div>
+    {runTarget !== null && refusal === null && terminalSessions.opening ? <RunTargetConnectingPanel alias={runTarget} /> : null}
     {runTarget === null || refusal === null ? null : <RunTargetRefusalPanel
       alias={runTarget}
       refusal={refusal}

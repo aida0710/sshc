@@ -1091,3 +1091,26 @@ func TestAManualReconnectThatCannotOpenReportsConnectFailed(t *testing.T) {
 		t.Fatalf("problem = %q, want connect_failed", problem)
 	}
 }
+
+func TestOnlyTheFirstReconnectWaitSaysTheConnectionDropped(t *testing.T) {
+	spy := &openSpy{failUpTo: 2}
+	registry, _ := newRegistry(terminal.DefaultLimits())
+	registry.ReconnectDelay = func(int) time.Duration { return time.Millisecond }
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spy.at(0).exit(transportLost)
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateConnected && spy.count() == 3 })
+
+	output := string(snapshotOf(session))
+	if strings.Count(output, "SSH接続が切れました") != 1 || strings.Count(output, "再接続できませんでした") != 1 {
+		t.Fatalf("reconnect notices = %q, want one drop and one failed attempt", output)
+	}
+	if err := registry.Close(session.ID()); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Until(t, func() bool { return !session.Live() })
+}

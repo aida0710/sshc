@@ -37,6 +37,8 @@ type fakeRemoteEngine struct {
 	sessions atomic.Int32
 	// expired が立つと、今の cookie を一度だけ断る（CLI のセッションの期限切れ）。
 	expired atomic.Bool
+	// stalled が立つと、セッションの一覧に答えない（黙って切れた SSH の接続を真似る）。
+	stalled atomic.Bool
 	mutex   sync.Mutex
 	cookie  string
 	csrf    string
@@ -109,6 +111,10 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(Status{Version: "v9", Vault: true, Unlocked: true, Sessions: 3})
 	case "/api/v1/terminal/sessions":
 		if !f.authorized(w, r) {
+			return
+		}
+		if f.stalled.Load() {
+			<-r.Context().Done()
 			return
 		}
 		body, _ := io.ReadAll(r.Body)

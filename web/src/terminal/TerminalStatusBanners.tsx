@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { terminalProblemKey } from "./sessions";
@@ -21,6 +21,34 @@ function StreamLinkMessage({ link }: { link: Exclude<StreamLink, { phase: "live"
         {t("terminal.linkWaiting", { seconds: String(link.seconds), attempt: String(link.attempt) })}
       </span>
       <span className="sr-only">{t("terminal.linkWaitingAnnouncement", { attempt: String(link.attempt) })}</span>
+    </>
+  );
+}
+
+// The countdown to the next reconnect attempt is redrawn this often.
+const reconnectCountdownTickMs = 1_000;
+
+// ReconnectMessage says which attempt the engine is on and whether it is
+// waiting for the next one (with the seconds left) or connecting now. A
+// connection attempt can take until the SSH timeout, so "waiting" and
+// "connecting" are told apart rather than shown as one count.
+function ReconnectMessage({ reconnect }: { reconnect: TerminalSession["reconnect"] }) {
+  const t = useTranslate();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), reconnectCountdownTickMs);
+    return () => window.clearInterval(timer);
+  }, []);
+  const attempt = String(reconnect?.attempt ?? 1);
+  const limit = String(reconnect?.limit ?? 1);
+  const retryAt = reconnect === undefined ? Number.NaN : Date.parse(reconnect.retryAt);
+  const seconds = Math.ceil((retryAt - now) / 1_000);
+  if (!Number.isFinite(seconds) || seconds <= 0) return t("terminal.reconnectingNow", { attempt, limit });
+  // 秒読みは毎秒変わるので読み上げず、試行の回数が変わったときだけ読み上げる。
+  return (
+    <>
+      <span aria-hidden="true">{t("terminal.reconnectingIn", { attempt, limit, seconds: String(seconds) })}</span>
+      <span className="sr-only">{t("terminal.reconnectingAttempt", { attempt, limit })}</span>
     </>
   );
 }
@@ -86,10 +114,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
       {session.state !== "reconnecting" ? null : (
         <div role="status" className={`flex flex-wrap items-center gap-2 ${notice}`}>
           <p className="min-w-0 grow">
-            {t("terminal.reconnectingAttempt", {
-              attempt: String(session.reconnect?.attempt ?? 1),
-              limit: String(session.reconnect?.limit ?? 1),
-            })}
+            <ReconnectMessage reconnect={session.reconnect} />
           </p>
           {onStopReconnect === undefined ? null : (
             <button

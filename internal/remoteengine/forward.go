@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 )
 
 // maxForwardedBody は、取り次ぐターミナルの API の要求の本文の上限である。取り次ぐのは
@@ -18,6 +19,11 @@ const maxForwardedBody = 1 << 20
 
 // RemoteStreamPath は、接続先のエンジンのターミナルの入出力の WebSocket である。
 const RemoteStreamPath = "/terminal/stream"
+
+// forwardedAnswerLimit は、取り次いだ要求に接続先のエンジンが答え終えるまでの上限である。
+// 取り次ぐのはセッションの一覧や作成のような、すぐ答える要求だけである（作成も SSH の接続を
+// 待たずに返る）。上限が無いと、黙って切れた SSH の接続の上で、画面が何も出さずに待ち続ける。
+const forwardedAnswerLimit = 20 * time.Second
 
 // ErrRequestTooLarge は、取り次ぐ要求の本文が maxForwardedBody を超えたことを表す。
 var ErrRequestTooLarge = errors.New("the request body is too large to forward")
@@ -59,7 +65,16 @@ func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, ali
 		if err != nil {
 			return err
 		}
-		response, err := session.client().Do(forwardedRequest(r.Context(), r, session, remotePath, body))
+		answerContext, stopWaiting := context.WithTimeout(r.Context(), m.answerLimit)
+		defer stopWaiting()
+		response, err := session.client().Do(forwardedRequest(answerContext, r, session, remotePath, body))
+		if err != nil && r.Context().Err() == nil && errors.Is(answerContext.Err(), context.DeadlineExceeded) {
+			// 接続先が答えない。SSH の接続ごと捨て、次の要求で繋ぎ直す。
+			engine.forget(session)
+			engine.link.reset()
+			writeProblem(w, http.StatusBadGateway, "remote_engine_unreachable")
+			return nil
+		}
 		if err != nil {
 			if isDialFailure(err) {
 				engine.forget(session)

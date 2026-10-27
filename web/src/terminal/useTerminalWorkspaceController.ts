@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalShellProfileList, SettingsApi, TerminalSettings } from "../api/settings";
+import type { OpenTerminalSessionRequest } from "../api/terminalSessions";
 import type { Section } from "../routing/sectionRoute";
 import { useSplitView } from "./splitView/useSplitView";
 import type { TerminalSessionsState } from "./sessions";
@@ -100,33 +101,49 @@ export function useTerminalWorkspaceController({
       .map((entry) => entry.session);
   }, [terminalSessions.sessions, sessionOrder]);
 
+  // openSession opens a session and shows it. On a run target, opening waits on
+  // the SSH connection to that host, which takes until its timeout when the
+  // host does not answer, so the terminal screen is shown at once: it says that
+  // the host is being reached and, if it cannot be, why. On this machine a
+  // failure stays on the current screen.
+  const openSession = useCallback(
+    async (request: OpenTerminalSessionRequest) => {
+      if (runTarget !== null) {
+        closeNavigation();
+        navigate("Terminal");
+      }
+      const opened = await terminalSessions.open(request);
+      if (opened !== null) showSession(opened.id);
+      return opened;
+    },
+    [closeNavigation, navigate, runTarget, showSession, terminalSessions],
+  );
+
   // workspaceId is where the session goes; without one the engine puts it in
   // the default workspace.
   const openLocalShell = useCallback(
     async (profileId?: string, cwd?: string, workspaceId?: string) => {
-      const opened = await terminalSessions.open({
+      await openSession({
         kind: "shell",
         ...(profileId === undefined ? {} : { profileId }),
         ...(cwd === undefined ? {} : { cwd }),
         ...(workspaceId === undefined ? {} : { workspaceId }),
       });
-      if (opened !== null) showSession(opened.id);
     },
-    [terminalSessions, showSession],
+    [openSession],
   );
 
   // cwd は、SFTP で開いているフォルダからターミナルを開くときの開始位置である。
   const openSSHSession = useCallback(
     async (alias: string, cwd?: string, workspaceId?: string) => {
-      const opened = await terminalSessions.open({
+      await openSession({
         kind: "ssh",
         alias,
         ...(cwd === undefined ? {} : { cwd }),
         ...(workspaceId === undefined ? {} : { workspaceId }),
       });
-      if (opened !== null) showSession(opened.id);
     },
-    [terminalSessions, showSession],
+    [openSession],
   );
 
   const duplicateSession = useCallback(
@@ -138,7 +155,7 @@ export function useTerminalWorkspaceController({
       // A duplicate opens next to the original, in the same workspace and the
       // directory the original works in, when the engine knows it.
       const startIn = session.workingDirectory === undefined ? {} : { cwd: session.workingDirectory };
-      const opened = await terminalSessions.open(
+      return openSession(
         session.kind === "ssh" && session.alias !== undefined
           ? { kind: "ssh", alias: session.alias, workspaceId: session.workspaceId, ...startIn }
           : {
@@ -146,10 +163,8 @@ export function useTerminalWorkspaceController({
               ...(session.shellProfileId === undefined ? {} : { profileId: session.shellProfileId }),
             },
       );
-      if (opened !== null) showSession(opened.id);
-      return opened;
     },
-    [terminalSessions, showSession],
+    [terminalSessions.sessions, openSession],
   );
 
   return {
