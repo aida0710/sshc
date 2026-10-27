@@ -28,7 +28,7 @@ Without a password, sshc opens the vault automatically on startup and relies on 
 
 ## Automatic TOTP entry
 
-First, store a Base32 setup key or an `otpauth://totp/...` URI under **Menu → Vault → OTP**. The page normally shows the current six-digit code only; use the disclosure beside its remaining time to reveal the previous and next code. Assigned hosts appear in a separate row under each item and expand only when needed. Then open the target under **Connections** and select the saved token from **Basic → Authentication → One-time password (TOTP)**. You no longer need to type a host alias to create the assignment.
+First, store a Base32 setup key or an `otpauth://totp/...` URI with **Add** under **Menu → Vault → OTP**. The page lists one token per row: its name and assigned hosts, the current six-digit code, and the time it has left. Select a code to copy it. The previous and next codes, and the assigned hosts (with a way to remove each assignment), open from the row's **…** menu. Then open the target under **Connections** and select the saved token from **Basic → Authentication → One-time password (TOTP)**. You no longer need to type a host alias to create the assignment.
 
 The Vault is split into **Account passwords**, **Key passphrases**, and **OTP** pages so each list and registration form stays focused. The same TOTP entries can be managed from the CLI with `sshc otp list|show|add|edit|remove`.
 

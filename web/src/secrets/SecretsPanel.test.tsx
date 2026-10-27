@@ -58,298 +58,197 @@ function buildApi(overrides: Partial<SecretsApi> = {}): SecretsApi {
   } as unknown as SecretsApi;
 }
 
+// openRowMenu opens a row's "…" menu and returns the menu, whose items are what the row can do.
+async function openRowMenu(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(await screen.findByRole("button", { name: `Actions for ${name}` }));
+  return screen.getByRole("menu");
+}
+
 describe("SecretsPanel", () => {
-  it("labels hosts and keys for named and dedicated secrets without mixing kinds", async () => {
-    const user = userEvent.setup();
-    const api = buildApi();
-    render(<SecretsPanel api={api} />);
+  it("names the page as Menu does and lists only its own kind, each with where it is used", async () => {
+    render(<SecretsPanel api={buildApi()} kind="password" />);
 
-    const passwords = await screen.findByRole("region", { name: "Account passwords" });
-    const office = within(passwords).getByRole("article", { name: "office-vm" });
-    await user.click(within(office).getByRole("button", { name: "Show Assigned hosts for office-vm" }));
-    expect(within(office).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("web-1");
-    expect(within(office).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("web-2");
-
-    const phrases = screen.getByRole("region", { name: "Key passphrases" });
-    const build = within(phrases).getByRole("article", { name: "build-key" });
-    await user.click(within(build).getByRole("button", { name: "Show Keys for build-key" }));
-    await user.click(within(build).getByRole("button", { name: "Show Assigned hosts for build-key" }));
-    expect(within(build).getByRole("list", { name: "Keys" })).toHaveTextContent("keys/work/id_work");
-    expect(within(build).getByRole("list", { name: "Keys" })).toHaveTextContent("keys/work/id_release");
-    expect(within(build).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("build-1");
-    expect(within(build).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("release-1");
-
-    const dedicated = within(phrases).getByRole("article", { name: "keys/id_owned" });
-    expect(within(dedicated).getByText("Dedicated to this key")).toBeInTheDocument();
-    await user.click(within(dedicated).getByRole("button", { name: "Show Keys for keys/id_owned" }));
-    await user.click(within(dedicated).getByRole("button", { name: "Show Assigned hosts for keys/id_owned" }));
-    expect(within(dedicated).getByRole("list", { name: "Keys" })).toHaveTextContent("keys/id_owned");
-    expect(within(dedicated).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("deploy-1");
-
-    expect(within(passwords).queryByText("build-key")).not.toBeInTheDocument();
-    expect(within(phrases).queryByText("office-vm")).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Master password" })).not.toBeInTheDocument();
-    expect(api.changeMasterPassword).not.toHaveBeenCalled();
+    expect(await screen.findByRole("heading", { name: "Account passwords", level: 2 })).toBeInTheDocument();
+    const list = screen.getByRole("region", { name: "Account passwords" });
+    const office = within(list).getByRole("article", { name: "office-vm" });
+    expect(within(office).getAllByText("web-1, web-2")[0]).toBeInTheDocument();
+    expect(within(list).queryByText("build-key")).not.toBeInTheDocument();
+    expect(within(list).queryByText("production-otp")).not.toBeInTheDocument();
   });
 
-  it("distinguishes confirmed empty assignments from unavailable key hosts", async () => {
-    const user = userEvent.setup();
+  it("names a key passphrase's keys and hosts, and a passphrase kept for one key", async () => {
+    render(<SecretsPanel api={buildApi()} kind="key_passphrase" />);
+
+    const build = await screen.findByRole("article", { name: "build-key" });
+    expect(within(build).getAllByText("Keys: keys/work/id_work, keys/work/id_release; Hosts: build-1, release-1")[0]).toBeInTheDocument();
+    const dedicated = screen.getByRole("article", { name: "keys/id_owned" });
+    expect(within(dedicated).getByRole("heading", { name: "id_owned" })).toBeInTheDocument();
+    expect(within(dedicated).getAllByText("Dedicated to this key; Hosts: deploy-1")[0]).toBeInTheDocument();
+  });
+
+  it("says a credential is not assigned anywhere", async () => {
     const api = buildApi({
       credentials: vi.fn().mockResolvedValue({
-        credentials: [
-          { kind: "password", name: "unused-password", uses: [], hosts: [] },
-          { kind: "key_passphrase", name: "unused-phrase", uses: [], hosts: [] },
-        ],
+        credentials: [{ kind: "password", name: "unused-password", uses: [], hosts: [] }],
         dedicatedKeyPassphrases: [],
         keyHostUsageComplete: true,
       }),
     });
-    render(<SecretsPanel api={api} />);
+    render(<SecretsPanel api={api} kind="password" />);
 
     const password = await screen.findByRole("article", { name: "unused-password" });
-    await user.click(within(password).getByRole("button", { name: "Show Assigned hosts for unused-password" }));
-    expect(within(password).getByText("No assigned hosts")).toBeInTheDocument();
-    const phrase = screen.getByRole("article", { name: "unused-phrase" });
-    await user.click(within(phrase).getByRole("button", { name: "Show Keys for unused-phrase" }));
-    await user.click(within(phrase).getByRole("button", { name: "Show Assigned hosts for unused-phrase" }));
-    expect(within(phrase).getByText("No assigned keys")).toBeInTheDocument();
-    expect(within(phrase).getByText("No assigned hosts")).toBeInTheDocument();
+    expect(within(password).getAllByText("Not assigned")[0]).toBeInTheDocument();
   });
 
-  it("keeps password hosts visible when key-host projection is incomplete", async () => {
-    const user = userEvent.setup();
-    const api = buildApi({
-      credentials: vi.fn().mockResolvedValue({
-        credentials: [
-          { kind: "password", name: "office", uses: ["web-1"], hosts: ["web-1"] },
-          { kind: "key_passphrase", name: "team", uses: ["keys/id_team"], hosts: [] },
-        ],
-        dedicatedKeyPassphrases: [],
-        keyHostUsageComplete: false,
-      }),
+  it("says when a key passphrase's hosts could not all be read, on its own page only", async () => {
+    const credentials = vi.fn().mockResolvedValue({
+      credentials: [
+        { kind: "password", name: "office", uses: ["web-1"], hosts: ["web-1"] },
+        { kind: "key_passphrase", name: "team", uses: ["keys/id_team"], hosts: [] },
+      ],
+      dedicatedKeyPassphrases: [],
+      keyHostUsageComplete: false,
     });
-    render(<SecretsPanel api={api} />);
+    const { unmount } = render(<SecretsPanel api={buildApi({ credentials })} kind="key_passphrase" />);
 
-    expect(await screen.findByText(/could not be fully confirmed/i)).toBeVisible();
-    const office = screen.getByRole("article", { name: "office" });
-    await user.click(within(office).getByRole("button", { name: "Show Assigned hosts for office" }));
-    expect(within(office).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("web-1");
-    const team = screen.getByRole("article", { name: "team" });
-    await user.click(within(team).getByRole("button", { name: "Show Assigned hosts for team" }));
-    expect(within(team).getByText("Could not confirm assigned hosts")).toBeInTheDocument();
-    expect(within(team).queryByText("No assigned hosts")).not.toBeInTheDocument();
+    const team = await screen.findByRole("article", { name: "team" });
+    expect(within(team).getAllByText("Keys: keys/id_team; Could not confirm assigned hosts")[0]).toBeInTheDocument();
+    expect(screen.getByText(/could not be fully confirmed/i)).toBeInTheDocument();
+    unmount();
+
+    render(<SecretsPanel api={buildApi({ credentials })} kind="password" />);
+    const office = await screen.findByRole("article", { name: "office" });
+    expect(within(office).getAllByText("web-1")[0]).toBeInTheDocument();
+    expect(screen.queryByText(/could not be fully confirmed/i)).not.toBeInTheDocument();
   });
 
-  it("removes a dedicated passphrase through its key subject", async () => {
+  it("opens the form above the list from Add and stores the credential under its name", async () => {
     const user = userEvent.setup();
     const api = buildApi();
-    render(<SecretsPanel api={api} />);
+    render(<SecretsPanel api={api} kind="password" />);
 
-    const dedicated = await screen.findByRole("article", { name: "keys/id_owned" });
-    await user.click(within(dedicated).getByRole("button", { name: "Actions for keys/id_owned" }));
-    await user.click(screen.getByRole("menuitem", { name: "Remove saved passphrase for keys/id_owned" }));
-    const confirmation = await screen.findByRole("dialog", { name: "Delete id_owned?" });
-    await user.click(within(confirmation).getByRole("button", { name: "Delete it" }));
+    await user.click(await screen.findByRole("button", { name: "Add" }));
+    const form = screen.getByRole("region", { name: "Add an account password" });
+    await user.type(within(form).getByLabelText("Name"), "office-vm");
+    await user.type(within(form).getByLabelText("Password"), "s3cret");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
 
-    await waitFor(() =>
-      expect(api.unassignCredential).toHaveBeenCalledWith("key_passphrase", "keys/id_owned"),
-    );
+    await waitFor(() => expect(api.storeCredential).toHaveBeenCalledWith("password", "office-vm", "s3cret"));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Add an account password" })).not.toBeInTheDocument());
   });
 
-  it("creates an account password under a name", async () => {
+  it("keeps what was typed in the form when storing fails", async () => {
     const user = userEvent.setup();
-    const api = buildApi();
-    render(<SecretsPanel api={api} />);
-    await screen.findByRole("region", { name: "Account passwords" });
+    const api = buildApi({ storeCredential: vi.fn().mockRejectedValue(new Error("invalid TOTP")) });
+    render(<SecretsPanel api={api} kind="totp" />);
 
-    await user.type(screen.getByLabelText("New account password name"), "the office VMs");
-    await user.type(screen.getByLabelText("New account password value"), "s3cret");
-    await user.click(screen.getByRole("button", { name: "Store account password" }));
+    await user.click(await screen.findByRole("button", { name: "Add" }));
+    const form = screen.getByRole("region", { name: "Add a one-time password" });
+    await user.type(within(form).getByLabelText("Name"), "github");
+    await user.type(within(form).getByLabelText("Base32 setup key or otpauth URI", { exact: true }), "not-base32");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
 
-    await waitFor(() =>
-      expect(api.storeCredential).toHaveBeenCalledWith("password", "the office VMs", "s3cret"),
-    );
+    expect(await screen.findByText("The credential could not be saved.")).toBeInTheDocument();
+    expect(within(form).getByLabelText("Name")).toHaveValue("github");
+    expect(within(form).getByLabelText("Base32 setup key or otpauth URI", { exact: true })).toHaveValue("not-base32");
   });
 
-  it("creates a key passphrase under the other kind", async () => {
-    const user = userEvent.setup();
-    const api = buildApi();
-    render(<SecretsPanel api={api} />);
-    await screen.findByRole("region", { name: "Key passphrases" });
-
-    await user.type(screen.getByLabelText("New key passphrase name"), "build");
-    await user.type(screen.getByLabelText("New key passphrase value"), "phrase");
-    await user.click(screen.getByRole("button", { name: "Store key passphrase" }));
-
-    await waitFor(() =>
-      expect(api.storeCredential).toHaveBeenCalledWith("key_passphrase", "build", "phrase"),
-    );
-  });
-
-  it("stores a TOTP setup key and directs assignment to connection settings", async () => {
-    const user = userEvent.setup();
-    const api = buildApi();
-    render(<SecretsPanel api={api} />);
-    const tokens = await screen.findByRole("region", {
-      name: "One-time passwords (TOTP)",
-    });
-
-    await user.type(
-      within(tokens).getByLabelText("New one-time password name"),
-      "backup-otp",
-    );
-    await user.type(
-      within(tokens).getByLabelText("Base32 setup key or otpauth URI"),
-      "JBSWY3DPEHPK3PXP",
-    );
-    await user.click(
-      within(tokens).getByRole("button", {
-        name: "Store one-time password",
-      }),
-    );
-    await waitFor(() =>
-      expect(api.storeCredential).toHaveBeenCalledWith(
-        "totp",
-        "backup-otp",
-        "JBSWY3DPEHPK3PXP",
-      ),
-    );
-
-    expect(
-      within(tokens).getByText(
-        "To assign this token, open its target in Connections and choose it under One-time password (TOTP) in Basic settings.",
-      ),
-    ).toBeInTheDocument();
-    expect(within(tokens).queryByLabelText("Host alias")).not.toBeInTheDocument();
-  });
-
-  it("names a page of one kind as Menu does, above the list of that kind", async () => {
+  it("shows a one-time password's current code and tells how to assign it", async () => {
     render(<SecretsPanel api={buildApi()} kind="totp" />);
 
-    expect(await screen.findByRole("heading", { name: "OTP", level: 2 })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "One-time passwords (TOTP)" })).toBeInTheDocument();
+    const token = await screen.findByRole("article", { name: "production-otp" });
+    expect(await within(token).findByText("222 222")).toBeVisible();
+    expect(within(token).queryByText("111 111")).not.toBeInTheDocument();
+    expect(screen.getByText(/choose it under One-time password \(TOTP\) in Basic settings/)).toBeInTheDocument();
   });
 
-  it("shows only the current TOTP until its code is expanded", async () => {
+  it("opens the codes around the current one under the row from its menu", async () => {
+    const user = userEvent.setup();
+    render(<SecretsPanel api={buildApi()} kind="totp" />);
+    await screen.findByText("222 222");
+
+    const menu = await openRowMenu(user, "production-otp");
+    await user.click(within(menu).getByRole("menuitem", { name: "Show the codes before and after" }));
+
+    expect(screen.getByText("111 111")).toBeVisible();
+    expect(screen.getByText("333 333")).toBeVisible();
+  });
+
+  it("takes a one-time password off a host from the row's assigned hosts", async () => {
     const user = userEvent.setup();
     const api = buildApi();
     render(<SecretsPanel api={api} kind="totp" />);
 
-    const token = await screen.findByRole("article", { name: "production-otp" });
-    const current = await within(token).findByRole("button", {
-      name: "Show the previous and next codes for production-otp",
-    });
-    expect(within(token).getByText("222 222")).toBeVisible();
-    expect(within(token).getByText("17s")).toBeVisible();
-    expect(within(token).queryByText("111 111")).not.toBeInTheDocument();
-    expect(within(token).queryByText("333 333")).not.toBeInTheDocument();
+    const menu = await openRowMenu(user, "production-otp");
+    await user.click(within(menu).getByRole("menuitem", { name: "Assigned hosts (1)" }));
+    await user.click(screen.getByRole("button", { name: "Remove the one-time password assignment from bastion" }));
 
-    await user.click(current);
-    expect(within(token).getByText("111 111")).toBeVisible();
-    expect(within(token).getByText("333 333")).toBeVisible();
+    await waitFor(() => expect(api.unassignCredential).toHaveBeenCalledWith("totp", "bastion"));
   });
 
-  it("keeps a TOTP setup key in the form when storing it fails", async () => {
-    const user = userEvent.setup();
-    const api = buildApi({
-      storeCredential: vi.fn().mockRejectedValue(new Error("invalid TOTP")),
-    });
-    render(<SecretsPanel api={api} />);
-    const tokens = await screen.findByRole("region", {
-      name: "One-time passwords (TOTP)",
-    });
-    const name = within(tokens).getByLabelText(
-      "New one-time password name",
-    );
-    const setupKey = within(tokens).getByLabelText(
-      "Base32 setup key or otpauth URI",
-    );
-
-    await user.type(name, "backup-otp");
-    await user.type(setupKey, "not-a-valid-key");
-    await user.click(
-      within(tokens).getByRole("button", {
-        name: "Store one-time password",
-      }),
-    );
-
-    await waitFor(() => expect(api.storeCredential).toHaveBeenCalled());
-    expect(name).toHaveValue("backup-otp");
-    expect(setupKey).toHaveValue("not-a-valid-key");
-  });
-
-  it("removes a TOTP assignment from its host chip", async () => {
+  it("edits the saved account password under its row, name and value together", async () => {
     const user = userEvent.setup();
     const api = buildApi();
-    render(<SecretsPanel api={api} />);
-    const token = await screen.findByRole("article", {
-      name: "production-otp",
-    });
+    render(<SecretsPanel api={api} kind="password" />);
 
-    await user.click(within(token).getByRole("button", { name: "Show Assigned hosts for production-otp" }));
-    await user.click(
-      within(token).getByRole("button", {
-        name: "Remove the one-time password assignment from bastion",
-      }),
-    );
-    await waitFor(() =>
-      expect(api.unassignCredential).toHaveBeenCalledWith("totp", "bastion"),
-    );
-  });
+    const menu = await openRowMenu(user, "office-vm");
+    await user.click(within(menu).getByRole("menuitem", { name: "Edit" }));
 
-  it("shows the saved account password and updates its name and value together", async () => {
-    const user = userEvent.setup();
-    const api = buildApi();
-    render(<SecretsPanel api={api} />);
-
-    const passwords = await screen.findByRole("region", { name: "Account passwords" });
-    await user.click(within(passwords).getByRole("button", { name: "Actions for office-vm" }));
-    await user.click(screen.getByRole("menuitem", { name: "Edit office-vm" }));
-
-    const dialog = await screen.findByRole("dialog", { name: "Edit account password" });
-    const name = within(dialog).getByLabelText("Name");
-    const value = within(dialog).getByLabelText("Password");
+    const form = await screen.findByRole("region", { name: "Edit account password" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const name = await within(form).findByLabelText("Name");
+    const value = within(form).getByLabelText("Password");
     expect(name).toHaveValue("office-vm");
     expect(value).toHaveValue("original-password");
     expect(value).toHaveAttribute("type", "password");
-
-    await user.click(within(dialog).getByRole("button", { name: "Show Password" }));
-    expect(value).toHaveAttribute("type", "text");
 
     await user.clear(name);
     await user.type(name, "office-shared");
     await user.clear(value);
     await user.type(value, "rotated-password");
-    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await user.click(within(form).getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(api.updateCredential).toHaveBeenCalledWith(
       "password", "office-vm", "office-shared", "rotated-password",
     ));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Edit account password" })).not.toBeInTheDocument());
   });
 
-  it("uses the same prefilled edit flow for a named key passphrase", async () => {
+  it("uses the same edit form for a named key passphrase", async () => {
     const user = userEvent.setup();
     const api = buildApi();
-    render(<SecretsPanel api={api} />);
+    render(<SecretsPanel api={api} kind="key_passphrase" />);
 
-    const phrases = await screen.findByRole("region", { name: "Key passphrases" });
-    await user.click(within(phrases).getByRole("button", { name: "Actions for build-key" }));
-    await user.click(screen.getByRole("menuitem", { name: "Edit build-key" }));
+    const menu = await openRowMenu(user, "build-key");
+    await user.click(within(menu).getByRole("menuitem", { name: "Edit" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Edit key passphrase" });
-    expect(within(dialog).getByLabelText("Name")).toHaveValue("build-key");
-    expect(within(dialog).getByLabelText("Key passphrase")).toHaveValue("original-passphrase");
+    const form = await screen.findByRole("region", { name: "Edit key passphrase" });
+    expect(await within(form).findByLabelText("Name")).toHaveValue("build-key");
+    expect(within(form).getByLabelText("Key passphrase")).toHaveValue("original-passphrase");
     expect(api.revealCredential).toHaveBeenCalledWith("key_passphrase", "build-key");
+  });
+
+  it("removes a passphrase kept for one key through its key, after asking", async () => {
+    const user = userEvent.setup();
+    const api = buildApi();
+    render(<SecretsPanel api={api} kind="key_passphrase" />);
+
+    const menu = await openRowMenu(user, "keys/id_owned");
+    expect(within(menu).queryByRole("menuitem", { name: "Edit" })).not.toBeInTheDocument();
+    await user.click(within(menu).getByRole("menuitem", { name: "Delete" }));
+    const confirmation = await screen.findByRole("dialog", { name: "Delete id_owned?" });
+    await user.click(within(confirmation).getByRole("button", { name: "Delete it" }));
+
+    await waitFor(() => expect(api.unassignCredential).toHaveBeenCalledWith("key_passphrase", "keys/id_owned"));
   });
 
   it("keeps a credential whose deletion is cancelled", async () => {
     const user = userEvent.setup();
     const api = buildApi();
-    render(<SecretsPanel api={api} />);
-    const passwords = await screen.findByRole("region", { name: "Account passwords" });
+    render(<SecretsPanel api={api} kind="password" />);
 
-    await user.click(within(passwords).getByRole("button", { name: "Actions for office-vm" }));
-    await user.click(screen.getByRole("menuitem", { name: "Delete office-vm" }));
+    const menu = await openRowMenu(user, "office-vm");
+    await user.click(within(menu).getByRole("menuitem", { name: "Delete" }));
     const confirmation = await screen.findByRole("dialog", { name: "Delete office-vm?" });
     await user.click(within(confirmation).getByRole("button", { name: "Cancel" }));
 
@@ -362,11 +261,10 @@ describe("SecretsPanel", () => {
     const api = buildApi({
       deleteCredential: vi.fn().mockRejectedValue(new ApiError("credential_in_use", 409, null)),
     });
-    render(<SecretsPanel api={api} />);
-    const passwords = await screen.findByRole("region", { name: "Account passwords" });
+    render(<SecretsPanel api={api} kind="password" />);
 
-    await user.click(within(passwords).getByRole("button", { name: "Actions for office-vm" }));
-    await user.click(screen.getByRole("menuitem", { name: "Delete office-vm" }));
+    const menu = await openRowMenu(user, "office-vm");
+    await user.click(within(menu).getByRole("menuitem", { name: "Delete" }));
     const confirmation = await screen.findByRole("dialog", { name: "Delete office-vm?" });
     await user.click(within(confirmation).getByRole("button", { name: "Delete it" }));
 
@@ -378,18 +276,17 @@ describe("SecretsPanel", () => {
       passwordVault: vi.fn().mockResolvedValue(vaultStatus({ unlocked: false })),
       credentials: vi.fn(),
     });
-    render(<SecretsPanel api={api} />);
+    render(<SecretsPanel api={api} kind="password" />);
 
     expect(await screen.findByLabelText("Master password")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Account passwords" })).not.toBeInTheDocument();
     expect(api.credentials).not.toHaveBeenCalled();
   });
-
 });
 
 it("does not offer manual locking for a passwordless vault", async () => {
   const api = buildApi({ passwordVault: vi.fn().mockResolvedValue(vaultStatus({ passwordless: true })) });
-  render(<SecretsPanel api={api} />);
+  render(<SecretsPanel api={api} kind="password" />);
   await screen.findByText("office-vm");
   expect(screen.queryByRole("button", { name: "Lock sshc" })).not.toBeInTheDocument();
 });
@@ -397,7 +294,7 @@ it("does not offer manual locking for a passwordless vault", async () => {
 it("does not show a lock screen when protection was removed before the lock request", async () => {
   const api = buildApi({ lockVault: vi.fn().mockResolvedValue(vaultStatus({ passwordless: true })) });
   const onLock = vi.fn();
-  render(<SecretsPanel api={api} onLock={onLock} />);
+  render(<SecretsPanel api={api} kind="password" onLock={onLock} />);
   await userEvent.click(await screen.findByRole("button", { name: "Lock sshc" }));
   await waitFor(() => expect(api.lockVault).toHaveBeenCalled());
   expect(onLock).not.toHaveBeenCalled();

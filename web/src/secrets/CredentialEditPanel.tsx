@@ -1,13 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import type { CredentialKind, CredentialList, CredentialsApi } from "../api/credentials";
 import { useTranslate } from "../i18n/context";
 import { Field, control, hintText } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
-import { ModalShell } from "../ui/ModalShell";
 
-type CredentialEditDialogProps = {
+type CredentialEditPanelProps = {
   kind: CredentialKind;
   name: string;
   api: Pick<CredentialsApi, "revealCredential" | "updateCredential">;
@@ -15,7 +14,10 @@ type CredentialEditDialogProps = {
   onClose: () => void;
 };
 
-export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: CredentialEditDialogProps) {
+// CredentialEditPanel opens under the credential's row: the saved value is read from the engine, shown, and
+// written back with the name, so a rename keeps the assignments. It is not a dialog, so the page stays in
+// reach while it is open.
+export function CredentialEditPanel({ kind, name, api, onSaved, onClose }: CredentialEditPanelProps) {
   const t = useTranslate();
   const [nextName, setNextName] = useState(name);
   const [secret, setSecret] = useState("");
@@ -23,6 +25,7 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const nameInput = useRef<HTMLInputElement>(null);
+  const headingId = useId();
 
   const close = useCallback(() => {
     setSecret("");
@@ -48,6 +51,11 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
       active = false;
     };
   }, [api, kind, name, t]);
+
+  // The name field appears once the saved value is read; the panel's first field then takes the focus.
+  useEffect(() => {
+    if (!loading) nameInput.current?.focus();
+  }, [loading]);
 
   async function save() {
     setSaving(true);
@@ -75,43 +83,38 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
       : t("secrets.passphraseValue");
 
   return (
-    <ModalShell
-      labelledBy="credential-edit-heading"
-      onDismiss={close}
-      initialFocusRef={nameInput}
-      panelClassName="flex w-full max-w-lg flex-col gap-4 rounded-lg p-5"
-    >
-        <div>
-          <h2 id="credential-edit-heading" className="text-base font-semibold text-ink">{heading}</h2>
-          <p className={`mt-1 ${hintText}`}>{t("secrets.editNote")}</p>
+    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-lg bg-well p-3">
+      <div>
+        <h4 id={headingId} className="text-sm font-semibold text-ink">{heading}</h4>
+        <p className={`mt-1 ${hintText}`}>{t("secrets.editNote")}</p>
+      </div>
+      {error === "" ? null : <Notice tone="danger">{error}</Notice>}
+      {loading ? (
+        <p aria-live="polite" className={hintText}>{t("secrets.revealing")}</p>
+      ) : (
+        <div className="grid gap-3 @2xl:grid-cols-2">
+          <Field label={t("secrets.credentialName")}>
+            <input ref={nameInput} value={nextName} onChange={(event) => setNextName(event.target.value)} className={control} />
+          </Field>
+          <PasswordField
+            label={valueLabel}
+            value={secret}
+            onChange={setSecret}
+            initialShown={kind === "key_passphrase"}
+            disabled={saving}
+          />
         </div>
-        {error === "" ? null : <Notice tone="danger">{error}</Notice>}
-        {loading ? (
-          <p aria-live="polite" className={hintText}>{t("secrets.revealing")}</p>
-        ) : (
-          <>
-            <Field label={t("secrets.credentialName")}>
-              <input ref={nameInput} value={nextName} onChange={(event) => setNextName(event.target.value)} className={control} />
-            </Field>
-            <PasswordField
-              label={valueLabel}
-              value={secret}
-              onChange={setSecret}
-              initialShown={kind === "key_passphrase"}
-              disabled={saving}
-            />
-          </>
-        )}
-        <div className="flex justify-end gap-2">
-          <Button onClick={close}>{t("secrets.cancel")}</Button>
-          <Button
-            kind="primary"
-            disabled={loading || saving || nextName === "" || secret === ""}
-            onClick={() => void save()}
-          >
-            {saving ? t("secrets.saving") : t("secrets.saveChanges")}
-          </Button>
-        </div>
-    </ModalShell>
+      )}
+      <div className="flex justify-end gap-2">
+        <Button onClick={close}>{t("secrets.cancel")}</Button>
+        <Button
+          kind="primary"
+          disabled={loading || saving || nextName === "" || secret === ""}
+          onClick={() => void save()}
+        >
+          {saving ? t("secrets.saving") : t("secrets.saveChanges")}
+        </Button>
+      </div>
+    </section>
   );
 }

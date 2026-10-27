@@ -394,7 +394,6 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   const shared = page
     .getByRole("region", { name: "Key passphrases" })
     .getByRole("article", { name: "shared-sibling-phrase" });
-  await shared.getByRole("button", { name: "Show Keys for shared-sibling-phrase" }).click();
   await expect(shared).toContainText("id_connection_sibling");
   await expect(shared).not.toContainText("id_connection_owned");
 
