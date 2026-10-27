@@ -22,6 +22,7 @@ import (
 // 信じる。README の保管庫の寿命を定数から組み立てているのと同じ理由で、ここも
 // 数えて突き合わせる。
 func TestTheSettingsScreenSaysTheWindowTheGapsActuallyMakeUp(t *testing.T) {
+	t.Parallel()
 	// 選べる回数と、その文言の鍵。
 	choices := map[int]string{
 		1: "terminal.reconnectOnce",

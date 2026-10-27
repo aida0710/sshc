@@ -14,6 +14,7 @@ func trashEntryDirectory(root, entryID string) string {
 // 復元と完全削除は、空になったごみ箱のエントリのディレクトリも同じトランザクションで
 // 取り除く。
 func TestRestoreAndPurgeLeaveNoEmptyTrashEntryDirectory(t *testing.T) {
+	t.Parallel()
 	service, root := newTrashService(t)
 
 	trashed, err := service.Trash(ItemID("id_work"))
@@ -42,6 +43,7 @@ func TestRestoreAndPurgeLeaveNoEmptyTrashEntryDirectory(t *testing.T) {
 // manifest に無いファイルがエントリにあっても、完全削除は止まらない。そのファイルと
 // ディレクトリは残す。
 func TestAFileTheManifestDoesNotNameDoesNotBlockThePurge(t *testing.T) {
+	t.Parallel()
 	service, root := newTrashService(t)
 	trashed, err := service.Trash(ItemID("id_work"))
 	if err != nil {
@@ -66,6 +68,7 @@ func TestAFileTheManifestDoesNotNameDoesNotBlockThePurge(t *testing.T) {
 
 // ごみ箱へ移せないと分かった削除は、エントリのディレクトリを作らない。
 func TestATrashThatIsRefusedCreatesNoEntryDirectory(t *testing.T) {
+	t.Parallel()
 	service, root := newTrashService(t)
 	// 同じ鍵の公開鍵が、秘密鍵と同じ名前で別のディレクトリにもある。ごみ箱の
 	// エントリは平らなので、二つを同じ名前で置けない。

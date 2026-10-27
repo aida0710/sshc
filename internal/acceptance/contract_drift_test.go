@@ -135,6 +135,7 @@ func oneOf(values ...string) func(string) bool {
 }
 
 func TestTheTypesWeSerialiseMatchTheContract(t *testing.T) {
+	t.Parallel()
 	contract := contracttest.Contract{
 		Document:    contracttest.ReadDocument(t, filepath.Join("..", "..")),
 		Enums:       servedEnums,

@@ -15,6 +15,7 @@ import (
 // バックアップのファイルの上限は pages だけに書く。画面の「200件まで」は上限なので、
 // それより少なく残ることがあっても誤りにはならない。
 func TestThePagesAndTheHistoryScreenStateTheRetentionTheStorageApplies(t *testing.T) {
+	t.Parallel()
 	days := int(storage.HistoryRetentionPeriod / (24 * time.Hour))
 	for _, language := range []struct {
 		name        string

@@ -19,6 +19,7 @@ import (
 )
 
 func TestTrashAndRestoreAuthenticateWindowsPrivateMoves(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name       string
 		permissive bool
@@ -63,6 +64,7 @@ func TestTrashAndRestoreAuthenticateWindowsPrivateMoves(t *testing.T) {
 }
 
 func TestTrashRollbackRestoresTheAuthenticatedWindowsHandle(t *testing.T) {
+	t.Parallel()
 	wantFailure := errors.New("fail the second private move")
 	fileSystem := &failingWindowsPrivateMoveFileSystem{
 		FileSystem: storage.OSFileSystem{},

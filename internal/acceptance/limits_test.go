@@ -29,6 +29,7 @@ func bodyOfSize(size int) []byte {
 }
 
 func TestNoAPIRouteReadsAnUnboundedBody(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	oversized := bodyOfSize(httpserver.MaxRequestBodyCeiling + (1 << 20))
 
@@ -90,6 +91,7 @@ func TestNoAPIRouteReadsAnUnboundedBody(t *testing.T) {
 }
 
 func TestReportedCommandOutputStaysWithinItsPublishedCeiling(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 
 	// 相手が延々と喋る。取り込む量にも、返す量にも上限がある。

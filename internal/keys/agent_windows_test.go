@@ -20,6 +20,7 @@ import (
 // をひとつでも見れば、それは「鍵とパスフレーズを任意のパイプへ渡す方法」に
 // なる。この経路を通るのは復号済みの秘密鍵である。
 func TestTheWindowsAgentReadsNoEnvironmentToFindItsPipe(t *testing.T) {
+	t.Parallel()
 	consulted := make([]string, 0, 4)
 	dialled := make(chan string, 1)
 
@@ -50,6 +51,7 @@ func TestTheWindowsAgentReadsNoEnvironmentToFindItsPipe(t *testing.T) {
 // 宛先に資格情報は現れない。エラーもログもこの文字列を含むので、そこに秘密が
 // 混ざる余地を残さない。
 func TestTheWindowsAgentPipeNameCarriesNothingPrivate(t *testing.T) {
+	t.Parallel()
 	for _, forbidden := range []string{"passphrase", "password", "secret", "token"} {
 		if strings.Contains(strings.ToLower(windowspipe.AgentPipe), forbidden) {
 			t.Errorf("the pipe name mentions %q: %q", forbidden, windowspipe.AgentPipe)

@@ -53,6 +53,7 @@ func productionGoFiles(t *testing.T, visit func(relative, contents string)) {
 // TestWebPasswordsUseTheSharedControl は、表示切替やアクセシビリティが画面ごとに
 // 分岐しないよう、秘密入力の実装場所を PasswordField に限定する。
 func TestWebPasswordsUseTheSharedControl(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "web", "src")
 	passwordInput := regexp.MustCompile(`(?s)type\s*=\s*(?:["']password["']|\{.{0,160}?["']password["'].{0,160}?\})`)
 	var found []string
@@ -89,6 +90,7 @@ func TestWebPasswordsUseTheSharedControl(t *testing.T) {
 // UIプリミティブはこのclassを組み合わせてよいが、機能側はCardなどの共通部品を通し、
 // 角丸・背景・overflowが画面ごとに再び分岐しないようにする。
 func TestWebCardsUseTheSharedControl(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "web", "src")
 	var found []string
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
@@ -130,6 +132,7 @@ func TestWebCardsUseTheSharedControl(t *testing.T) {
 // pull preview in remotesync vocabulary. A direct import check cannot detect a
 // storage.Request smuggled through an exported service result.
 func TestRemoteSyncDoesNotExposeStorageTransactions(t *testing.T) {
+	t.Parallel()
 	result := reflect.TypeOf(remotesync.PullResult{})
 	for index := range result.NumField() {
 		field := result.Field(index)
@@ -153,6 +156,7 @@ func TestRemoteSyncDoesNotExposeStorageTransactions(t *testing.T) {
 var buildsTheSSHDialer = []string{"internal/app/ssh.go"}
 
 func TestOnlyOnePlaceAssemblesTheSSHDialer(t *testing.T) {
+	t.Parallel()
 	var found []string
 	productionGoFiles(t, func(relative, contents string) {
 		if strings.Contains(contents, "sshclient.Dialer{") {
@@ -174,6 +178,7 @@ func TestOnlyOnePlaceAssemblesTheSSHDialer(t *testing.T) {
 // 別の解決器を通っており、Match ブロックの下に書かれた HostName は画面に出なかった
 // 選んだ先と繋がる先が食い違っていた。
 func TestOnlyTheCompositionRootOpensTheWorkspace(t *testing.T) {
+	t.Parallel()
 	var found []string
 	productionGoFiles(t, func(relative, contents string) {
 		if strings.Contains(contents, "storage.NewWorkspace(") &&
@@ -194,6 +199,7 @@ func TestOnlyTheCompositionRootOpensTheWorkspace(t *testing.T) {
 // 内容が平文で残る。鍵 vault のマネージャがそうなっていた期間があり、その間、
 // パスフレーズの変更は以前の平文の秘密鍵をバックアップに残していた。
 func TestEveryManagerInTheEngineIsSealed(t *testing.T) {
+	t.Parallel()
 	var creates, seals []string
 	productionGoFiles(t, func(relative, contents string) {
 		if strings.Contains(contents, "storage.NewManager(") {
@@ -241,6 +247,7 @@ var persistenceLayer = []string{
 // IsExternalChange や internal/remotesync の Client がそれである。別名であって
 // 包み直しではないので errors.Is はどちらの表記でも通り、翻訳の層は増えない。
 func TestTheTransportDoesNotReachIntoPersistence(t *testing.T) {
+	t.Parallel()
 	var found []string
 	productionGoFiles(t, func(relative, contents string) {
 		if !strings.HasPrefix(relative, "internal/httpserver/") {

@@ -9,6 +9,7 @@ import (
 // 載せない。Android 11以前が読むbackup_rulesと、Android 12以降が読むdata_extraction_rulesの
 // 両方で、すべての保存先を除外する。
 func TestTheAndroidShellExcludesPrivateStateFromBackupAndDeviceTransfer(t *testing.T) {
+	t.Parallel()
 	manifest := readRepoFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
 	for _, required := range []string{
 		`android:allowBackup="false"`,
@@ -45,6 +46,7 @@ func TestTheAndroidShellExcludesPrivateStateFromBackupAndDeviceTransfer(t *testi
 // 通知したときに止まる。起動に失敗した画面では、serviceへの接続を保ったまま診断を出し、
 // 同じ画面から再試行できる。
 func TestTheAndroidDataSyncEngineHasABoundedLifetime(t *testing.T) {
+	t.Parallel()
 	manifest := readRepoFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
 	if !strings.Contains(manifest, `android:foregroundServiceType="dataSync"`) ||
 		!strings.Contains(manifest, `android:stopWithTask="true"`) {
