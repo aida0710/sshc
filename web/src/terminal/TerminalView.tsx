@@ -19,7 +19,8 @@ import { linkAtPoint, type ScreenPoint } from "./tappedLink";
 import { prefersNativeSelection } from "./nativeSelection";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
 import { attachTouchScroll } from "./touchScroll";
-import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
+import { KeyBar, applyModifiers, encodeKey } from "./KeyBar";
+import { useModifierKeys } from "./useModifierKeys";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { recentBufferText } from "./buffer";
@@ -102,6 +103,8 @@ type TerminalViewProps = {
   onOsc52Change?: (enabled: boolean) => void | Promise<void>;
   onForwardsChanged?: () => void | Promise<void>;
   jisYenBackslash?: boolean;
+  // composerEnterSends: Enter in the phone's text box sends; otherwise it starts a new line.
+  composerEnterSends?: boolean;
 };
 
 // A command shorter than this usually finishes while the user is still
@@ -147,6 +150,7 @@ export function TerminalView({
   onOsc52Change,
   onForwardsChanged,
   jisYenBackslash = false,
+  composerEnterSends = false,
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
@@ -201,9 +205,7 @@ export function TerminalView({
   const [pathPreview, setPathPreview] = useState<{ path: string; paths: string[] } | null>(null);
   const streamLinkController = useRef<StreamLinkController | null>(null);
 
-  const [modifiers, setModifiers] = useState<Modifiers>({ ctrl: false, alt: false });
-  const armed = useRef<Modifiers>(modifiers);
-  armed.current = modifiers;
+  const { modifiers, tap: tapModifier, takeModifiers } = useModifierKeys();
   const send = useRef<(name: string) => void>(() => {});
   const sendInput = useRef<(text: string) => void>(() => {});
 
@@ -395,17 +397,13 @@ export function TerminalView({
       : () => {};
 
     const typed = (data: string) => {
-      const { ctrl, alt } = armed.current;
-      const encoded = applyModifiers(data, ctrl, alt);
-      sendInput.current(encoded);
-      if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
+      const { ctrl, alt } = takeModifiers();
+      sendInput.current(applyModifiers(data, ctrl, alt));
     };
     sendInput.current = (text) => linkController.currentStream()?.send(text);
     send.current = (name: string) => {
-      const { ctrl, alt } = armed.current;
-      const encoded = encodeKey(name, ctrl, alt);
-      linkController.currentStream()?.send(encoded);
-      if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
+      const { ctrl, alt } = takeModifiers();
+      linkController.currentStream()?.send(encodeKey(name, ctrl, alt));
     };
     view.onData(typed);
 
@@ -525,7 +523,7 @@ export function TerminalView({
   }
 
   function submitComposer() {
-    const plan = planComposerSend(composerText);
+    const plan = planComposerSend(composerText, { bracketedPaste: terminal.current?.modes.bracketedPasteMode ?? false });
     if (plan.kind === "confirm") {
       setPendingPaste({ sessionId: session.id, raw: plan.text, fromComposer: true });
       return;
@@ -714,12 +712,13 @@ export function TerminalView({
       )}
       <KeyBar
         modifiers={modifiers}
-        onToggle={(name) => setModifiers((current) => ({ ...current, [name]: !current[name] }))}
+        onTap={tapModifier}
         onKey={(name) => send.current(name)}
       />
       <TerminalComposer
         value={composerText}
         disabled={link.phase !== "live"}
+        enterSends={composerEnterSends}
         onChange={setComposerText}
         onSubmit={submitComposer}
       />

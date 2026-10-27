@@ -15,14 +15,18 @@ function keepFocus(event: { preventDefault(): void }) {
 // TerminalComposer is the phone's text box under the key bar. Japanese is
 // composed and corrected here, and only the finished text reaches the terminal.
 // Typing into the terminal directly still works; this is an extra way in.
+// Enter starts a new line and the button beside the box sends, unless the
+// settings choose enterSends.
 export function TerminalComposer({
   value,
   disabled,
+  enterSends,
   onChange,
   onSubmit,
 }: {
   value: string;
   disabled: boolean;
+  enterSends: boolean;
   onChange: (value: string) => void;
   onSubmit: () => void;
 }) {
@@ -46,7 +50,12 @@ export function TerminalComposer({
 
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // The Enter that confirms a Japanese conversion must not send.
-    if (event.key !== "Enter" || event.shiftKey || isImeComposing(event)) return;
+    if (event.key !== "Enter" || isImeComposing(event)) return;
+    // A hardware keyboard keeps a way to do the other thing, as chat apps do:
+    // Shift+Enter starts a new line when Enter sends, and Ctrl+Enter or
+    // Command+Enter sends when Enter starts a new line.
+    const sends = enterSends ? !event.shiftKey : event.ctrlKey || event.metaKey;
+    if (!sends) return;
     event.preventDefault();
     if (!disabled) onSubmit();
   }
@@ -67,7 +76,7 @@ export function TerminalComposer({
         disabled={disabled}
         aria-label={t("terminal.composerField")}
         placeholder={t("terminal.composerPlaceholder")}
-        enterKeyHint="send"
+        enterKeyHint={enterSends ? "send" : "enter"}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={keyDown}
         className="min-h-11 grow resize-none rounded-[22px] bg-card px-3.5 py-2.5 text-base leading-6 text-ink placeholder:text-ink-faint focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
