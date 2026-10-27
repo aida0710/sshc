@@ -6,6 +6,8 @@ export type TerminalRestoreOfferState = {
   sessions: readonly TerminalRestoreSession[];
   restore: () => Promise<TerminalRestoreResult>;
   decline: () => Promise<void>;
+  // dismiss hides the question until the screen loads again; the offer stays.
+  dismiss: () => void;
 };
 
 // useTerminalRestoreOffer asks the engine whether sessions from before its last
@@ -34,5 +36,7 @@ export function useTerminalRestoreOffer(api: TerminalRestoreApi): TerminalRestor
     await api.decline();
   }, [api]);
 
-  return { sessions, restore, decline };
+  const dismiss = useCallback(() => setSessions([]), []);
+
+  return { sessions, restore, decline, dismiss };
 }

@@ -29,8 +29,9 @@ func (s *Session) Reopening() Reopening {
 }
 
 // Reopenings describes, in the order they were opened, the sessions still in
-// use. A session whose program exited or that the user closed is left out;
-// one waiting to reconnect is still in use.
+// use. A session the user closed or whose program exited is left out. An SSH
+// session that lost its connection is still in use, whether it is waiting to
+// reconnect or gave up: the user kept it to reconnect by hand.
 func (r *Registry) Reopenings() []Reopening {
 	r.mutex.Lock()
 	sessions := append([]*Session(nil), r.sessions...)
@@ -48,5 +49,15 @@ func (r *Registry) Reopenings() []Reopening {
 func (s *Session) inUse() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	return s.exited == nil && !s.discarded
+	if s.discarded {
+		return false
+	}
+	if s.exited == nil {
+		return true
+	}
+	switch s.problem {
+	case ProblemReconnectFailed, ProblemReconnectStopped, ProblemReconnectExhausted:
+		return true
+	}
+	return false
 }

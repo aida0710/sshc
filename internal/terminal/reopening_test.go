@@ -3,6 +3,7 @@ package terminal_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"sshc/internal/terminal"
 	"sshc/internal/testwait"
@@ -44,5 +45,45 @@ func TestReopeningsDescribeTheSessionsStillInUseInTheOrderOpened(t *testing.T) {
 	}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("Reopenings() = %+v, want %+v", got, want)
+	}
+}
+
+func TestAnSSHSessionThatLostItsConnectionIsStillReopened(t *testing.T) {
+	spy := &openSpy{}
+	registry, _ := newRegistry(terminal.DefaultLimits())
+	registry.ReconnectDelay = func(int) time.Duration { return time.Hour }
+	open := func(alias string) *terminal.Session {
+		t.Helper()
+		session, err := registry.Open(context.Background(), terminal.Spec{
+			Kind: terminal.KindSSH, Alias: alias, Title: alias, Workspace: "default", Open: spy.open,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return session
+	}
+	waiting := open("waiting")
+	stopped := open("stopped")
+	finished := open("finished")
+	spy.at(0).exit(transportLost)
+	spy.at(1).exit(transportLost)
+	spy.at(2).exit(terminal.ExitInfo{Code: 0})
+	testwait.Until(t, func() bool { return waiting.View().State == terminal.StateReconnecting })
+	testwait.Until(t, func() bool { return stopped.View().State == terminal.StateReconnecting })
+	if err := registry.StopReconnecting(context.Background(), stopped.ID()); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Until(t, func() bool { return stopped.View().State == terminal.StateExited })
+	testwait.Until(t, func() bool { return finished.View().State == terminal.StateExited })
+
+	var aliases []string
+	for _, reopening := range registry.Reopenings() {
+		aliases = append(aliases, reopening.Alias)
+	}
+	if len(aliases) != 2 || aliases[0] != "waiting" || aliases[1] != "stopped" {
+		t.Fatalf("reopened %q, want the waiting and the stopped session but not the finished one", aliases)
+	}
+	for _, session := range []*terminal.Session{waiting, stopped, finished} {
+		_ = registry.Close(session.ID())
 	}
 }

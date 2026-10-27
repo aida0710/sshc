@@ -8,15 +8,19 @@ const listedSessionLimit = 5;
 
 // TerminalRestoreDialog asks, once after the engine started again, whether to
 // open the sessions that were open when it stopped. Declining ends the offer:
-// the engine does not ask about the same sessions again.
+// the engine does not ask about the same sessions again. Escape or a tap
+// outside only closes the question; it comes back the next time the screen
+// loads.
 export function TerminalRestoreDialog({
   sessions,
   onRestore,
   onDecline,
+  onDismiss,
 }: {
   sessions: readonly TerminalRestoreSession[];
   onRestore: () => Promise<unknown>;
   onDecline: () => void;
+  onDismiss: () => void;
 }) {
   const t = useTranslate();
   const [error, setError] = useState("");
@@ -60,6 +64,7 @@ export function TerminalRestoreDialog({
       cancelLabel={t("terminal.restoreDecline")}
       onConfirm={restore}
       onCancel={onDecline}
+      onDismiss={onDismiss}
       error={error}
     />
   );

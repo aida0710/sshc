@@ -4,9 +4,10 @@ import { useToast } from "../ui/useToast";
 import { TerminalRestoreDialog } from "./TerminalRestoreDialog";
 import { useTerminalRestoreOffer } from "./useTerminalRestoreOffer";
 
-// TerminalRestorePrompt asks about the sessions from before the engine's last
-// stop. It is mounted while the screen is usable, so it asks again after the
-// Vault is unlocked, which is also when SSH sessions can connect.
+// TerminalRestorePrompt asks about the sessions from before this machine's
+// engine last stopped. It is mounted while the screen is usable and this
+// machine is the run target, so it asks after the Vault is unlocked (when SSH
+// sessions can connect) and the reopened sessions appear in the list shown.
 export function TerminalRestorePrompt({
   api = terminalRestoreApi,
   onRestored,
@@ -29,5 +30,5 @@ export function TerminalRestorePrompt({
     offer.decline().catch(() => showToast(t("terminal.restoreFailed")));
   }
 
-  return <TerminalRestoreDialog sessions={offer.sessions} onRestore={restore} onDecline={decline} />;
+  return <TerminalRestoreDialog sessions={offer.sessions} onRestore={restore} onDecline={decline} onDismiss={offer.dismiss} />;
 }

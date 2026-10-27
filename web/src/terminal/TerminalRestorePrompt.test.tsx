@@ -57,6 +57,15 @@ describe("TerminalRestorePrompt", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("closing with Escape keeps the offer for the next time the screen loads", async () => {
+    const api = restoreApi();
+    renderPrompt(api);
+    fireEvent.keyDown(await screen.findByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(api.decline).not.toHaveBeenCalled();
+    expect(api.restore).not.toHaveBeenCalled();
+  });
+
   it("asks nothing when there is no offer or it cannot be read", async () => {
     const offer = vi.fn().mockRejectedValue(new Error("engine unavailable"));
     renderPrompt(restoreApi({ offer }));

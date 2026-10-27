@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"sshc/internal/api"
@@ -112,7 +113,12 @@ func TestTheSessionListTellsWhereEachSessionWorks(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture.openShell(t)
-	fixture.starter.last().feed("\x1b]7;file://edge" + filepath.ToSlash(filepath.Join(directory, "app")) + "\a")
+	reported := filepath.ToSlash(filepath.Join(directory, "app"))
+	if !strings.HasPrefix(reported, "/") {
+		// OSC 7 writes a Windows drive path as file://host/C:/...
+		reported = "/" + reported
+	}
+	fixture.starter.last().feed("\x1b]7;file://edge" + reported + "\a")
 	var listed api.TerminalSessionList
 	testwait.Until(t, func() bool {
 		_, body := fixture.do(t, http.MethodGet, "/api/v1/terminal/sessions", "")
@@ -122,7 +128,7 @@ func TestTheSessionListTellsWhereEachSessionWorks(t *testing.T) {
 		return len(listed.Sessions) == 1 && listed.Sessions[0].WorkingDirectory != nil
 	})
 	session := listed.Sessions[0]
-	if *session.WorkingDirectory != filepath.ToSlash(filepath.Join(directory, "app")) || session.ShellProfileId == nil || *session.ShellProfileId != "default" {
+	if filepath.FromSlash(*session.WorkingDirectory) != filepath.Join(directory, "app") || session.ShellProfileId == nil || *session.ShellProfileId != "default" {
 		t.Fatalf("listed session = %+v", session)
 	}
 }
