@@ -224,6 +224,39 @@ test("quick navigation and terminal keys remain available in portrait and touch 
   await expect(navigation.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
 });
 
+// swipe drags one finger across the screen through real touch events, in small steps as a finger moves.
+async function swipe(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
+  const client = await page.context().newCDPSession(page);
+  const steps = 12;
+  await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [from] });
+  for (let step = 1; step <= steps; step += 1) {
+    const point = { x: from.x + ((to.x - from.x) * step) / steps, y: from.y + ((to.y - from.y) * step) / steps };
+    await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [point] });
+  }
+  await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await client.detach();
+}
+
+test("a swipe across the page opens the navigation and a swipe back closes it", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  // Closed, the navigation is hidden from the accessibility tree, so it is found by its marker.
+  const navigation = page.locator("[data-app-navigation]");
+  await expect(navigation).toHaveAttribute("data-navigation-open", "false");
+
+  // Up and down is the page's scroll, not the navigation.
+  await swipe(page, { x: 200, y: 520 }, { x: 215, y: 220 });
+  await expect(navigation).toHaveAttribute("data-navigation-open", "false");
+
+  await swipe(page, { x: 120, y: 360 }, { x: 330, y: 365 });
+  await expect(navigation).toHaveAttribute("data-navigation-open", "true");
+  await expect(navigation).toBeInViewport();
+  await capture(page, "mobile-navigation-swiped-open");
+
+  await swipe(page, { x: 260, y: 360 }, { x: 40, y: 360 });
+  await expect(navigation).toHaveAttribute("data-navigation-open", "false");
+  await expect(navigation).not.toBeInViewport();
+});
+
 test.describe("desktop pointer compatibility", () => {
   test.use({ viewport: { width: 1440, height: 900 }, hasTouch: false, isMobile: false });
   test("a mouse click selects a directory and a double click opens it", async ({ page, installation }) => {
