@@ -10,11 +10,18 @@ import {
   type RemoteKeyRegisterResponse,
   type RemoteKeysApi,
 } from "./api";
-import { CopyButton } from "../ui/CopyButton";
+import { ActionArea } from "../ui/ActionArea";
+import { FieldRow, FieldRowNote } from "../ui/FieldRow";
 import { Button, Notice } from "../ui/surface";
-import { CheckboxField, Field, control } from "../ui/form";
-import { PageHeader } from "../ui/page";
+import { CheckboxField, control } from "../ui/form";
+import { PageHeader, PageSection } from "../ui/page";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
+import { RemoteKeyHostPicker } from "./RemoteKeyHostPicker";
+import { RemoteKeyPlanCard } from "./RemoteKeyPlanCard";
+
+// 公開鍵をリモートホストの authorized_keys へ登録する画面。「1. 公開鍵」で鍵を、「2. 接続先」で
+// ホストを選び、［登録内容を確認］で sshcエンジンが設定から求めた登録内容（接続しない）を見せて
+// から、［鍵を登録］で初めてホストへ接続する。
 
 type RemoteKeyPanelProps = {
   api?: RemoteKeysApi;
@@ -38,11 +45,6 @@ type RegistrationOutcome = {
 const outcomeLabels: Record<string, MessageKey> = {
   added: "rk.added",
   already_present: "rk.alreadyPresent",
-};
-
-const valuesFromLabels: Record<string, MessageKey> = {
-  engine: "rk.valuesFromEngine",
-  "ssh -G": "rk.valuesFromSshG",
 };
 
 export function RemoteKeyPanel({
@@ -71,6 +73,8 @@ export function RemoteKeyPanel({
   const keyLoadGeneration = useRequestGeneration();
   const planGeneration = useRequestGeneration();
   const preferredHandled = useRef(false);
+  // keyEntered は、公開鍵の欄が一度でも埋まった（選んだ・入力した・渡された）ことを表す。
+  const keyEntered = useRef(false);
 
   const hostOptions = useMemo(
     () => [...new Set(hosts.filter((host) => host !== ""))]
@@ -98,10 +102,13 @@ export function RemoteKeyPanel({
     setResults([]);
   }, [planGeneration]);
 
+  // 開いたときは ~/.ssh の最初の公開鍵（Keys から渡された鍵があればその鍵）を選んでおく。
+  // 渡された鍵は、それより前に始めた読み込みに勝つ。最初の公開鍵は、読み終える前に利用者が
+  // 鍵を選んだり入力したりしたら入れず、一度でも鍵の欄が埋まったあとは選び直さない。
   useEffect(() => {
     let active = true;
     if (preferredPublicKeyPath !== null) preferredHandled.current = false;
-    const isPreferredCurrent = preferredPublicKeyPath === null ? () => false : keyLoadGeneration.begin();
+    const isCurrent = preferredPublicKeyPath === null ? keyLoadGeneration.observe() : keyLoadGeneration.begin();
     void keys
       .inventory()
       .then(async (inventory) => {
@@ -109,17 +116,20 @@ export function RemoteKeyPanel({
         if (!active) return;
         setCandidates(publicKeys);
         setCandidatesFailed(false);
-        if (preferredPublicKeyPath === null) return;
-        const preferred = publicKeys.find((item) => item.relativePath === preferredPublicKeyPath);
-        if (preferred === undefined) return;
-        const key = await keys.publicKey(preferred.id);
-        if (!active || !isPreferredCurrent()) return;
+        const preferred = preferredPublicKeyPath === null
+          ? undefined
+          : publicKeys.find((item) => item.relativePath === preferredPublicKeyPath);
+        const initial = preferred ?? (keyEntered.current ? undefined : publicKeys[0]);
+        if (initial === undefined) return;
+        const key = await keys.publicKey(initial.id);
+        if (!active || !isCurrent()) return;
         withdraw();
-        setChosen(preferred.id);
+        keyEntered.current = true;
+        setChosen(initial.id);
         setKeyPath(key.relativePath);
         setPublicKey(key.publicKey.trimEnd());
         setError("");
-        handlePreferredPublicKey();
+        if (preferred !== undefined) handlePreferredPublicKey();
       })
       .catch(() => {
         if (active) setCandidatesFailed(true);
@@ -127,7 +137,7 @@ export function RemoteKeyPanel({
     return () => {
       active = false;
     };
-  }, [keys, keyLoadGeneration, onPreferredPublicKeyHandled, preferredPublicKeyPath, handlePreferredPublicKey, withdraw]);
+  }, [keys, keyLoadGeneration, preferredPublicKeyPath, handlePreferredPublicKey, withdraw]);
 
   function edit(apply: (value: string) => void) {
     return (value: string) => {
@@ -139,6 +149,7 @@ export function RemoteKeyPanel({
   function editKey(apply: (value: string) => void) {
     return (value: string) => {
       keyLoadGeneration.retire();
+      keyEntered.current = true;
       handlePreferredPublicKey();
       setChosen("");
       edit(apply)(value);
@@ -147,6 +158,7 @@ export function RemoteKeyPanel({
 
   async function choose(keyId: string) {
     const isCurrent = keyLoadGeneration.begin();
+    keyEntered.current = true;
     handlePreferredPublicKey();
     withdraw();
     setChosen(keyId);
@@ -251,162 +263,94 @@ export function RemoteKeyPanel({
 
   return (
     <section aria-label={t("rk.heading")} className="flex flex-col gap-[22px] [&_button]:min-h-10 sm:[&_button]:min-h-0">
-      <PageHeader title={t("rk.heading")} />
+      <PageHeader title={t("rk.heading")} description={t("rk.description")} />
 
-      <p aria-live="polite" className="rounded-[9px] bg-well px-3 py-2.5 text-[12.5px] text-ink-muted">
-        {busy ? t("rk.waiting") : t("rk.idle")}
-      </p>
       {error ? (
         <Notice tone="danger">{error}</Notice>
       ) : null}
 
-
-      {/* The two steps sit side by side on a wide screen, so the page does not grow tall. */}
-      <section className="border-t border-line pt-5">
-        <div className="grid lg:grid-cols-2">
-          <div className="border-b border-line pb-5 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6">
-            <div className="mb-4 flex items-center gap-3">
-              <span aria-hidden="true" className="grid size-[22px] place-items-center rounded-full bg-accent font-mono text-[11.5px] font-semibold text-accent-ink">1</span>
-              <h3 className="text-sm font-semibold text-ink">{t("rk.pickFromSsh")}</h3>
-            </div>
-            <div className="flex flex-col gap-4">
-              <Field label={t("rk.pickFromSsh")}>
-                <select
-                  value={chosen}
-                  disabled={busy}
-                  onChange={(event) => void choose(event.target.value)}
-                  className={control}
-                >
-                  <option value="">{t("rk.typeInstead")}</option>
-                  {candidates.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.fingerprint === "" ? item.relativePath : `${item.relativePath} · ${item.fingerprint}`}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              {candidatesFailed ? <Notice compact>{t("rk.candidatesLoadFailed")}</Notice> : null}
-              <Field label={t("rk.publicKeyFile")}>
-                <input
-                  value={keyPath}
-                  disabled={busy}
-                  onChange={(event) => editKey(setKeyPath)(event.target.value)}
-                  className={`${control} font-mono`}
-                />
-              </Field>
-            </div>
-          </div>
-
-          <div className="pt-5 lg:pl-6 lg:pt-0">
-            <div className="mb-4 flex items-center gap-3">
-              <span aria-hidden="true" className="grid size-[22px] place-items-center rounded-full bg-ink/10 font-mono text-[11.5px] font-semibold text-ink">2</span>
-              <h3 className="text-sm font-semibold text-ink">{t("rk.hostAlias")}</h3>
-            </div>
-            <div className="flex flex-col gap-3">
-              <Field label={t("rk.hostSearch")}>
-                <input
-                  type="search"
-                  aria-label={t("rk.hostAlias")}
-                  value={hostQuery}
-                  disabled={busy}
-                  placeholder={t("rk.hostSearchPlaceholder")}
-                  onChange={(event) => {
-                    if (selectedAliases.length === 0) withdraw();
-                    setHostQuery(event.target.value);
-                  }}
-                  className={`${control} font-mono`}
-                />
-              </Field>
-              {hostOptions.length === 0 ? (
-                <p className="text-xs text-ink-muted">{t("rk.hostTypeHint")}</p>
-              ) : (
-                <div className="overflow-hidden rounded-md border border-line">
-                  <div className="flex items-center justify-between gap-2 border-b border-line bg-well px-3 py-2">
-                    <span className="text-xs text-ink-muted">
-                      {t("rk.hostsSelected", { count: selectedAliases.length })}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={busy || matchingHosts.length === 0}
-                        onClick={selectMatchingHosts}
-                        className="text-xs text-accent hover:underline"
-                      >
-                        {t("rk.selectMatches")}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy || selectedAliases.length === 0}
-                        onClick={clearSelectedHosts}
-                        className="text-xs text-ink-muted hover:text-ink"
-                      >
-                        {t("rk.clearSelection")}
-                      </button>
-                    </div>
-                  </div>
-                  <div role="group" aria-label={t("rk.hostChoices")} className="max-h-44 overflow-y-auto p-1.5">
-                    {matchingHosts.length === 0 ? (
-                      <p className="px-2 py-4 text-center text-xs text-ink-muted">{t("rk.noHostMatches")}</p>
-                    ) : matchingHosts.map((host) => (
-                      <label key={host} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-select-fill">
-                        <input
-                          type="checkbox"
-                          className="size-4 accent-accent"
-                          checked={selectedAliases.includes(host)}
-                          disabled={busy}
-                          onChange={() => toggleAlias(host)}
-                        />
-                        <span className="min-w-0 truncate font-mono">{host}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5 border-t border-line pt-5">
-          <Field label={t("rk.publicKeyLine")}>
+      <PageSection heading={t("rk.publicKeyStep")}>
+        <div>
+          <FieldRow label={t("rk.pickFromSsh")}>
+            <select
+              value={chosen}
+              disabled={busy}
+              onChange={(event) => void choose(event.target.value)}
+              className={control}
+            >
+              {candidates.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.comment === "" ? item.relativePath : t("rk.keyChoice", { path: item.relativePath, comment: item.comment })}
+                </option>
+              ))}
+              <option value="">{t("rk.typeInstead")}</option>
+            </select>
+          </FieldRow>
+          {candidatesFailed ? <FieldRowNote><Notice compact>{t("rk.candidatesLoadFailed")}</Notice></FieldRowNote> : null}
+          {/* ~/.ssh から選んだ鍵はファイルが決まっているので、ファイルの欄は手で入力するときだけ出す。 */}
+          {chosen === "" ? (
+            <FieldRow label={t("rk.publicKeyFile")}>
+              <input
+                value={keyPath}
+                disabled={busy}
+                onChange={(event) => editKey(setKeyPath)(event.target.value)}
+                className={`${control} font-mono`}
+              />
+            </FieldRow>
+          ) : null}
+          <FieldRow label={t("rk.publicKeyLine")}>
+            {/* 文字の大きさは、control の大きさより後に効くよう sm: で付ける（狭い画面は index.css が16pxにする）。 */}
             <textarea
               value={publicKey}
               disabled={busy}
               onChange={(event) => editKey(setPublicKey)(event.target.value)}
-              rows={3}
-              className={`${control} font-mono text-xs leading-5`}
+              rows={2}
+              spellCheck={false}
+              className={`${control} break-all font-mono leading-5 text-ink-muted max-sm:h-24 sm:text-[12.5px]`}
             />
-          </Field>
+          </FieldRow>
         </div>
+      </PageSection>
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <div className="flex items-center gap-2 text-xs text-ink-muted">
-            <span aria-hidden="true" className={`h-2 w-2 rounded-full ${plannedTargets.length === 0 ? "bg-ink-faint" : "bg-live"}`} />
-            {plannedTargets.length === 0
-              ? t("rk.showWhatWouldHappen")
-              : t("rk.plannedHosts", { count: plannedTargets.length })}
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <Button className="w-full sm:w-auto" disabled={busy} onClick={() => void describe()}>{t("rk.showWhatWouldHappen")}</Button>
+      <PageSection heading={t("rk.hostStep")}>
+        <RemoteKeyHostPicker
+          query={hostQuery}
+          hostOptions={hostOptions}
+          matchingHosts={matchingHosts}
+          selectedAliases={selectedAliases}
+          busy={busy}
+          onQueryChange={(query) => {
+            // 何も選んでいなければ、入力した alias が接続先なので、確認した内容は取り下げる。
+            if (selectedAliases.length === 0) withdraw();
+            setHostQuery(query);
+          }}
+          onToggle={toggleAlias}
+          onSelectMatches={selectMatchingHosts}
+          onClear={clearSelectedHosts}
+        />
+        <ActionArea
+          status={plannedTargets.length === 0 ? undefined : (
+            <p className="text-xs text-ink-muted">{t("rk.plannedHosts", { count: plannedTargets.length })}</p>
+          )}
+        >
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button busy={planning} disabled={busy} onClick={() => void describe()}>{t("rk.showWhatWouldHappen")}</Button>
             {plannedTargets.length > 0 && registerable.length === 0 ? null : (
-              <Button className="w-full sm:w-auto" kind="primary" disabled={blocked} onClick={() => void register()}>
+              <Button kind="primary" busy={registering} disabled={blocked} onClick={() => void register()}>
                 {registerable.length > 1 ? t("rk.registerMany", { count: registerable.length }) : t("rk.register")}
               </Button>
             )}
           </div>
-        </div>
-      </section>
+        </ActionArea>
+      </PageSection>
 
       {plannedTargets.length > 0 ? (
-        <section aria-labelledby="remote-key-plan-heading" className="border-t border-line pt-5 text-sm">
-          <div className="mb-2 flex items-center gap-3">
-            <span aria-hidden="true" className="grid size-[22px] place-items-center rounded-full bg-live font-mono text-[11.5px] font-semibold text-accent-ink">3</span>
-            <h3 id="remote-key-plan-heading" className="font-semibold">
-              {plannedTargets.length === 1
-                ? t("rk.confirmHeading")
-                : t("rk.confirmManyHeading", { count: plannedTargets.length })}
-            </h3>
-          </div>
-          <div className="divide-y divide-line">
+        <PageSection
+          heading={plannedTargets.length === 1
+            ? t("rk.confirmHeading")
+            : t("rk.confirmManyHeading", { count: plannedTargets.length })}
+        >
+          <div className="divide-y divide-line text-sm">
             {plannedTargets.map(({ plan }) => (
               <RemoteKeyPlanCard
                 key={plan.alias}
@@ -416,7 +360,7 @@ export function RemoteKeyPanel({
             ))}
           </div>
           {unavoidable.length > 0 ? (
-            <div className="mt-3 rounded-[10px] bg-notice p-4">
+            <div className="mt-3 rounded-[10px] bg-notice p-4 text-sm">
               <h4 className="font-medium text-notice-ink">{t("rk.connectingRuns")}</h4>
               <ul className="mt-2 flex flex-col gap-2">
                 {unavoidable.map(({ alias, directive }) => (
@@ -431,15 +375,14 @@ export function RemoteKeyPanel({
               <CheckboxField className="mt-2" label={t("rk.acknowledgeRuns")} checked={acknowledged} onChange={setAcknowledged} tone="notice" />
             </div>
           ) : null}
-        </section>
+        </PageSection>
       ) : null}
 
       {results.length > 0 ? (
-        <section className="border-t border-line pt-5 text-sm">
-          <h3 className="font-semibold text-live">{t("rk.result")}</h3>
-          <ul className="mt-2 divide-y divide-line">
+        <PageSection heading={t("rk.result")}>
+          <ul className="divide-y divide-line text-sm">
             {results.map((result) => (
-              <li key={result.alias} className="grid gap-1 py-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
+              <li key={result.alias} className="grid gap-1 py-3 first:pt-0 sm:grid-cols-[12rem_minmax(0,1fr)]">
                 <span className="font-mono font-medium">{result.alias}</span>
                 <div>
                   {result.response === undefined ? (
@@ -458,61 +401,9 @@ export function RemoteKeyPanel({
               </li>
             ))}
           </ul>
-        </section>
+        </PageSection>
       ) : null}
     </section>
-  );
-}
-
-function RemoteKeyPlanCard({ plan, manual }: { plan: RemoteKeyPlan; manual: boolean }) {
-  const t = useTranslate();
-  return (
-    <article aria-label={t("rk.planFor", { alias: plan.alias })}>
-      <h4 className="border-b border-hairline py-3 font-mono font-semibold text-ink">{plan.alias}</h4>
-      <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-        <dl className="border-b border-line lg:border-b-0 lg:border-r">
-          {[
-            [t("rk.effectiveUser"), plan.user === "" ? t("rk.noUser") : plan.user],
-            [t("rk.destination"), `${plan.hostname}:${plan.port}`],
-            [
-              t("rk.valuesCameFrom"),
-              plan.valuesFrom in valuesFromLabels ? t(valuesFromLabels[plan.valuesFrom]!) : plan.valuesFrom,
-            ],
-            [t("rk.keyFile"), plan.keyPath],
-            [t("rk.fingerprint"), plan.fingerprint],
-          ].map(([caption, value]) => (
-            <div key={caption} className="grid gap-1 border-t border-hairline py-3 pr-5 first:border-t-0 sm:grid-cols-[9rem_minmax(0,1fr)]">
-              <dt className="text-xs font-medium text-ink-muted">{caption}</dt>
-              <dd className="min-w-0 break-all font-mono text-xs">{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className="py-5 lg:pl-5">
-          <p>{t("rk.appendTo", {
-            remotePath: plan.remotePath,
-            account: plan.user === "" ? t("rk.theRemoteAccount") : t("rk.usersAccount", { user: plan.user }),
-            hostname: plan.hostname,
-          })}</p>
-          <pre aria-label={t("rk.keyLineLabel")} className="mt-3 overflow-x-auto rounded-lg border border-line bg-canvas p-3 font-mono text-xs">
-            {plan.keyLine}
-          </pre>
-          <div className="mt-2"><CopyButton value={plan.keyLine} label="copy.keyLine" /></div>
-          <p className="mt-5 text-ink-muted">{t("rk.remoteRuns")}</p>
-          <pre aria-label={t("rk.remoteCommandLabel")} className="mt-2 overflow-x-auto rounded-lg border border-line bg-canvas p-3 font-mono text-xs">
-            {plan.routine}
-          </pre>
-          <div className="mt-1"><CopyButton value={plan.routine} label="copy.remoteCommand" /></div>
-          {manual ? (
-            <div className="mt-4 rounded-[10px] bg-well p-3">
-              <h5 className="font-medium text-notice-ink">{t("rk.manualHeading")}</h5>
-              <ol className="mt-1 list-decimal pl-5">
-                {plan.manual.map((step) => <li key={step}>{step}</li>)}
-              </ol>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </article>
   );
 }
 

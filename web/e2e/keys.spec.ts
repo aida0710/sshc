@@ -36,6 +36,11 @@ test("preloads a generated public key only on the requested server workflow", as
   page,
   installation,
 }) => {
+  // ~/.ssh の最初の公開鍵（名前の順）は、渡された鍵とは別のものにしておく。
+  await installation.write(
+    "id_another.pub",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDCl0pXo+XohbTKwe3KeLjooZpC7lbbGsVOtwNHCUD1L another@fixture\n",
+  );
   await openApplication(page, installation);
   await openSection(page, "Keys");
   await page.getByLabel("File name").fill("id_handoff_server");
@@ -44,13 +49,15 @@ test("preloads a generated public key only on the requested server workflow", as
 
   await page.getByRole("button", { name: "Install on a server" }).click();
   await expect(page).toHaveURL(/\/install-key$/);
-  await expect(page.getByLabel("Public key file")).toHaveValue("id_handoff_server.pub");
+  const picker = page.getByLabel("Public key from ~/.ssh");
+  await expect(picker.getByRole("option", { name: /^id_handoff_server\.pub/ })).toHaveJSProperty("selected", true);
   await expect(page.getByLabel("Public key line")).toHaveValue(/ssh-ed25519 /);
 
+  // 渡された鍵は一度だけ使い、次に開いたときは ~/.ssh の最初の公開鍵を選ぶ。
   await openSection(page, "Keys");
   await openSection(page, "Install Key on Server");
-  await expect(page.getByLabel("Public key file")).toHaveValue("");
-  await expect(page.getByLabel("Public key line")).toHaveValue("");
+  await expect(picker.getByRole("option", { name: /^id_another\.pub/ })).toHaveJSProperty("selected", true);
+  await expect(page.getByLabel("Public key line")).toHaveValue(/another@fixture$/);
 });
 
 test("lists generated keys and reveals one only after an explicit confirmation", async ({
