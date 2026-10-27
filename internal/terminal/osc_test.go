@@ -13,11 +13,10 @@ type observed struct {
 
 func newTestObserver() (*oscObserver, *observed) {
 	seen := &observed{}
-	observer := newOSCObserver(
-		func(title string) { seen.titles = append(seen.titles, title) },
-		func(title, body string) { seen.notifications = append(seen.notifications, [2]string{title, body}) },
-		nil,
-	)
+	observer := newOSCObserver(oscReports{
+		Title:  func(title string) { seen.titles = append(seen.titles, title) },
+		Notify: func(title, body string) { seen.notifications = append(seen.notifications, [2]string{title, body}) },
+	})
 	return observer, seen
 }
 

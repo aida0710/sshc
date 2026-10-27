@@ -22,6 +22,7 @@ import (
 	"sshc/internal/platform"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalrestore"
 	"sshc/internal/terminalworkspace"
 	"sshc/internal/testwait"
 )
@@ -47,7 +48,7 @@ func TestRemoteWorkingDirectoryAndShellQuote(t *testing.T) {
 	if quoted := quotePOSIXShell(directory); quoted != `'/srv/project'"'"'s files'` {
 		t.Fatalf("quoted directory = %q", quoted)
 	}
-	for _, candidate := range []string{"relative", "/srv/../etc", "/srv\nwhoami"} {
+	for _, candidate := range []string{"relative", "/srv/../etc", "/srv\nwhoami", "~root", "~/", "~/../etc", "~/..", "~/a/../b", "~//etc"} {
 		if _, err := remoteWorkingDirectory(candidate); err == nil {
 			t.Fatalf("accepted unsafe directory %q", candidate)
 		}
@@ -361,7 +362,9 @@ func (f *terminalFixture) record(alias string) {
 	f.recorded = append(f.recorded, alias)
 }
 
-func newTerminalFixture(t *testing.T, limits terminal.Limits) *terminalFixture {
+// newTerminalFixture starts the terminal routes. offered is what a previous
+// engine left open, for the restore routes.
+func newTerminalFixture(t *testing.T, limits terminal.Limits, offered ...terminalrestore.Session) *terminalFixture {
 	t.Helper()
 	starter := &scriptedStarter{}
 	registry := &terminal.Registry{
@@ -379,10 +382,22 @@ func newTerminalFixture(t *testing.T, limits terminal.Limits) *terminalFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	previous, err := terminalrestore.NewService(storageRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := previous.SaveOnStop(offered); err != nil {
+		t.Fatal(err)
+	}
+	restore, err := terminalrestore.NewService(storageRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
 	engine := echo.New()
 	registerTerminalRoutes(engine, TerminalHandlers{
 		Registry:       registry,
 		Workspaces:     terminalworkspace.NewService(storageRoot, nil),
+		RestoreOffers:  restore,
 		Tickets:        &terminal.Tickets{},
 		Shell:          func() (string, error) { return "/bin/zsh", nil },
 		StartDirectory: func() string { return "/home/tester" },

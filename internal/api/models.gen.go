@@ -530,6 +530,24 @@ func (e TerminalPresentationTitleSource) Valid() bool {
 	}
 }
 
+// Defines values for TerminalRestoreSessionKind.
+const (
+	TerminalRestoreSessionKindShell TerminalRestoreSessionKind = "shell"
+	TerminalRestoreSessionKindSsh   TerminalRestoreSessionKind = "ssh"
+)
+
+// Valid indicates whether the value is a known member of the TerminalRestoreSessionKind enum.
+func (e TerminalRestoreSessionKind) Valid() bool {
+	switch e {
+	case TerminalRestoreSessionKindShell:
+		return true
+	case TerminalRestoreSessionKindSsh:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TerminalSessionKind.
 const (
 	TerminalSessionKindShell TerminalSessionKind = "shell"
@@ -2254,6 +2272,29 @@ type TerminalReconnect struct {
 	RetryAt time.Time `json:"retryAt"`
 }
 
+// TerminalRestoreOffer defines model for TerminalRestoreOffer.
+type TerminalRestoreOffer struct {
+	Sessions []TerminalRestoreSession `json:"sessions"`
+}
+
+// TerminalRestoreResult defines model for TerminalRestoreResult.
+type TerminalRestoreResult struct {
+	Failed int `json:"failed"`
+	Opened int `json:"opened"`
+}
+
+// TerminalRestoreSession defines model for TerminalRestoreSession.
+type TerminalRestoreSession struct {
+	Alias            *string                    `json:"alias,omitempty"`
+	Kind             TerminalRestoreSessionKind `json:"kind"`
+	PinnedTitle      *string                    `json:"pinnedTitle,omitempty"`
+	WorkingDirectory *string                    `json:"workingDirectory,omitempty"`
+	WorkspaceId      string                     `json:"workspaceId"`
+}
+
+// TerminalRestoreSessionKind defines model for TerminalRestoreSession.Kind.
+type TerminalRestoreSessionKind string
+
 // TerminalSession defines model for TerminalSession.
 type TerminalSession struct {
 	Alias               *string                     `json:"alias,omitempty"`
@@ -2268,9 +2309,11 @@ type TerminalSession struct {
 	ProgramProgress     *TerminalProgramProgress    `json:"programProgress,omitempty"`
 	Progress            *TerminalConnectionProgress `json:"progress,omitempty"`
 	Reconnect           *TerminalReconnect          `json:"reconnect,omitempty"`
+	ShellProfileId      *string                     `json:"shellProfileId,omitempty"`
 	StartedAt           string                      `json:"startedAt"`
 	State               TerminalSessionState        `json:"state"`
 	Title               string                      `json:"title"`
+	WorkingDirectory    *string                     `json:"workingDirectory,omitempty"`
 	WorkspaceId         string                      `json:"workspaceId"`
 }
 
