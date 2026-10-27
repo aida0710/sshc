@@ -5,6 +5,7 @@ import { Icon, type IconName } from "../ui/icons";
 import { isModifierHeld, modifierDoubleTapMilliseconds, type ModifierLatch, type ModifierName, type Modifiers } from "./modifierLatch";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { keepKeyboardAsIs } from "../ui/softKeyboard";
 
 // sequences は、キーの名前から送る制御シーケンスを引く。矢印キーの名前は KeyboardEvent.key に合わせる。
 const sequences: Record<string, string> = {
@@ -60,10 +61,6 @@ const latchColors: Record<ModifierLatch, string> = {
   locked: "bg-accent text-accent-ink",
 };
 
-function keepFocus(event: { preventDefault(): void }) {
-  event.preventDefault();
-}
-
 export function KeyBar({
   modifiers,
   onTap,
@@ -112,8 +109,8 @@ export function KeyBar({
         aria-label={t("terminal.extraKeys")}
         title={t("terminal.extraKeys")}
         aria-expanded={extraOpen}
-        onPointerDown={keepFocus}
-        onMouseDown={keepFocus}
+        onPointerDown={keepKeyboardAsIs}
+        onMouseDown={keepKeyboardAsIs}
         onClick={() => setExtraOpen((current) => !current)}
         className={`${keyShape} ${extraOpen ? pressedKey : latchColors[modifiers.alt]}`}
       >
@@ -123,7 +120,7 @@ export function KeyBar({
         <div className="absolute inset-x-1 bottom-full z-30 mb-1 grid grid-cols-5 gap-1 rounded border border-line bg-toolbar p-1 shadow-lg">
           <ModifierKeyButton label="Alt" latch={modifiers.alt} onTap={tapAlt} />
           {extraKeys.map((label) => (
-            <button key={label} type="button" onPointerDown={keepFocus} onMouseDown={keepFocus} onClick={() => press(label)} className={`${keyShape} ${idleKey}`}>{label}</button>
+            <button key={label} type="button" onPointerDown={keepKeyboardAsIs} onMouseDown={keepKeyboardAsIs} onClick={() => press(label)} className={`${keyShape} ${idleKey}`}>{label}</button>
           ))}
         </div>
       ) : null}
@@ -141,8 +138,8 @@ function ModifierKeyButton({ label, latch, onTap }: { label: string; latch: Modi
       data-touch-compact
       aria-pressed={isModifierHeld(latch)}
       aria-label={latch === "locked" ? t("terminal.modifierLocked", { key: label }) : undefined}
-      onPointerDown={keepFocus}
-      onMouseDown={keepFocus}
+      onPointerDown={keepKeyboardAsIs}
+      onMouseDown={keepKeyboardAsIs}
       onClick={onTap}
       className={`${keyShape} ${latchColors[latch]}`}
     >
@@ -159,8 +156,8 @@ function BarKeyButton({ barKey, onPress }: { barKey: BarKey; onPress: (name: str
       type="button"
       data-touch-compact
       aria-label={barKey.kind === "arrow" ? t(barKey.label) : undefined}
-      onPointerDown={keepFocus}
-      onMouseDown={keepFocus}
+      onPointerDown={keepKeyboardAsIs}
+      onMouseDown={keepKeyboardAsIs}
       onClick={() => onPress(barKey.name)}
       className={`${keyShape} ${idleKey}`}
     >
