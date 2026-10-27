@@ -1,6 +1,6 @@
 # リリース運用
 
-`scripts/release/publish.sh`は、main CIの待機から、タグの作成、`release` environmentの承認、公開後の検証までを1つのコマンドで実行します。ビルドはGitHub Actionsで進みますが、runの監視と承認、成果物の手動確認は不要です。publish.shを実行することが、その公開の承認になります（`docs/release-install.md`の「リポジトリ管理者向けの公開保護」）。
+`scripts/release/publish.sh`は、タグの作成から、`release` environmentの承認、公開後の検証までを1つのコマンドで実行します。ビルドはGitHub Actionsで進みますが、runの監視と承認、成果物の手動確認は不要です。publish.shを実行することが、その公開の承認になります（`docs/release-install.md`の「リポジトリ管理者向けの公開保護」）。
 
 ## 事前条件
 
@@ -32,9 +32,11 @@
 
 Homebrewのformulaは、タグのソースからNode.jsで画面を組み立ててからビルドします（`packaging/homebrew/sshc.rb`）。
 
-## Releaseワークフローはテストを流し直さない
+## ReleaseワークフローとmainのCI
 
-Releaseワークフローの最初の`verify-source` jobは、タグのコミットが`main`の履歴にあり、同じコミットでmain CIが成功したことを確かめてから先へ進みます。`main`へのpushと手動の実行のCIは、変更の範囲で絞り込まず、3OSのGoのテスト（raceを含む）、Web、deadcodeなどを全部流します。このため、macOS・Linux・Windowsのjobはテストを流し直さず、成果物をビルドして起動し、バージョンと画面が入っていることを確かめます。Windowsのjobは、公開する`install.ps1`での導入も試します。
+Releaseワークフローの最初の`verify-source` jobは、タグのコミットが`main`の履歴にあることを確かめます。そのあと、各OSのビルドと、同じコミットのmain CIの成功を待つ`main-ci` jobを並べて進めます。公開の段（`stage-release`）は、ビルドと`main-ci`の両方を待ちます。main CIの成功を公開の直前だけで待つので、マージからの公開は、main CIとReleaseのビルドのうち長い方の時間で済みます。
+
+`main`へのpushと手動の実行のCIは、3OSのGoのテスト（raceを含む）、Web、deadcodeなどを流します（VPNのイメージの検査だけは、`internal/vpn`のテストに関わる変更のときに流します）。このため、macOS・Linux・Windowsのjobはテストを流し直さず、成果物をビルドして起動し、バージョンと画面が入っていることを確かめます。Windowsのjobは、公開する`install.ps1`での導入も試します。
 
 ## 公開
 
@@ -44,10 +46,10 @@ scripts/release/publish.sh v0.33.2
 
 スクリプトは次を順番に行います。
 
-1. HEADと`origin/main`が同じで、同じSHAでmain CIが成功したことを照合
+1. HEADと`origin/main`が同じで、同じSHAのmain CIが始まっていて、まだ失敗していないことを照合（成功は待たない）
 2. 注釈付きタグを作成してpush
 3. Releaseワークフローのrunを見つけ、`release` environmentだけを実行者の認証情報で承認（確認の入力は求めない）
-4. ワークフローのすべてのjobが成功するまで、状態の変化を表示
+4. ワークフローのすべてのjob（main CIの成功を待つ`main-ci`を含む）が成功するまで、状態の変化を表示
 5. Immutable Release、11個の成果物（デモ一式のtar.gzとmanifestを含む）、`checksums.txt`、すべてのattestation、APK、このマシン向けのバイナリが報告するバージョン、Releaseの本文を検証
 6. 安定バージョンでは、Homebrewのformulaが指すタグとソースのSHA-256を検証
 
@@ -61,9 +63,21 @@ main CIかReleaseワークフローが失敗した場合、タグを動かした
 
 次の場合、タグはまだ作成されていません。それぞれの対処をしてから、同じバージョンで`scripts/release/publish.sh <tag>`をもう一度実行します。
 
-- main CIの失敗: mainを直してpushする
-- CIを待つあいだの`origin/main`の更新: 公開するcommitを選び直す
+- main CIの失敗（タグを打つ前に失敗が分かった場合）: mainを直してpushする
 - タグのpushの失敗: 原因を取り除く。publish.shは、作成したローカルのタグを削除してから終了します
+
+### タグのpush後にmain CIが失敗した場合
+
+publish.shはmain CIの成功を待たずにタグを打つので、タグのあとでmain CIが失敗することがあります。このときReleaseワークフローは`main-ci` jobで失敗し、公開はしません。
+
+不安定な検査で落ちただけでコミットに問題がなければ、main CIの失敗したjobを流し直し、成功したらReleaseワークフローの失敗したjobを流し直します。ビルド済みの成果物はそのまま使われます。
+
+```sh
+gh run rerun <main CIのrun-id> --failed --repo aida0710/sshc
+gh run rerun <Releaseのrun-id> --failed --repo aida0710/sshc
+```
+
+コミット自体に不具合があってmain CIが通らない場合、そのタグは公開できません。タグは動かせないので、mainを直して次のパッチバージョンで公開します。
 
 ### タグのpush後にReleaseワークフローが始まらない場合
 
@@ -89,7 +103,7 @@ gh run rerun <run-id> --failed --repo aida0710/sshc
 
 jobのあいだで受け渡す成果物（組み立てた画面と各OSの成果物）は1日で消えます。最初の実行から1日を過ぎたら、失敗したjobだけの再実行は成果物を受け取れずに失敗するので、次の`main`のReleaseワークフローで作り直してください。
 
-元のrunを再実行できない場合は、`main`のReleaseワークフローを同じタグで実行します。ワークフローは、タグのコミットが`main`の祖先で、同じSHAでmain CIが成功していることを確かめてから作り直します。
+元のrunを再実行できない場合は、`main`のReleaseワークフローを同じタグで実行します。ワークフローは、タグのコミットが`main`の祖先であることを確かめ、同じSHAでmain CIが成功していることを公開の前に確かめます。
 
 ```sh
 gh workflow run release.yml --repo aida0710/sshc --ref main -f tag=<tag>

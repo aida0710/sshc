@@ -1,7 +1,9 @@
 # タグからリリース成果物をビルドして公開する。
 # OS 固有の成果物は対象 OS の runner でビルドし、各ジョブ内で起動して確かめる。
-# テストは流し直さない。verify-source が、同じコミットで main の CI（push と手動の実行は
-# 3OS の go test・race・web・deadcode などを全部流す）が成功したことを確かめてから進むため。
+# テストは流し直さない。公開の前（stage-release）に、main-ci が同じコミットの main の CI
+# （push と手動の実行は 3OS の go test・race・web・deadcode などを流す）の成功を待つため。
+# ビルドは main の CI と並べて進め、成功を待つのは公開の直前だけにする。タグは main の CI が
+# 終わる前に打たれうる（scripts/release/publish.sh）。
 name: Release
 
 on:
@@ -46,7 +48,7 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
-      - name: Require protected main ancestry and successful CI for this SHA
+      - name: Require a semantic tag whose commit is in protected main
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_REPOSITORY: ${{ github.repository }}
@@ -108,6 +110,61 @@ jobs:
           printf 'promote_latest=%s\n' "$promote_latest" >> "$GITHUB_OUTPUT"
           printf 'latest_stable=%s\n' "$latest_stable" >> "$GITHUB_OUTPUT"
           echo "publication policy: channel=$release_channel promote_latest=$promote_latest latest_stable=${latest_stable:-none}"
+
+  # 同じコミットの main の CI が成功するまで待つ。ビルドの job とは並べて走り、公開
+  # （stage-release）だけがこれを待つ。push webhook が欠落した障害時も、main を明示して
+  # 起動した同一 workflow を同等に扱う。main の CI が失敗で終わったら、待たずに失敗する。
+  # 不安定な検査で落ちたときは、main の CI の失敗した job を流し直してから、この workflow の
+  # 失敗した job を流し直す（docs/releasing.md）。
+  main-ci:
+    name: Main CI for this commit
+    needs: [verify-source]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Wait for the main CI of the release commit to succeed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ needs.verify-source.outputs.release-sha }}
+        run: |
+          set -euo pipefail
+          last_state=
+          while :; do
+            # 45 分の待ちの途中の一時的な API の失敗では止めず、次の問い合わせで読み直す。
+            if ! runs=$(gh api -H 'Accept: application/vnd.github+json' \
+              "repos/$RELEASE_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$RELEASE_SHA&per_page=100"); then
+              echo "could not read the main CI runs; retrying" >&2
+              sleep 20
+              continue
+            fi
+            if ! state=$(printf '%s' "$runs" | jq -r --arg sha "$RELEASE_SHA" '
+              [.workflow_runs[] | select(
+                .head_sha == $sha and
+                .head_branch == "main" and
+                (.event == "push" or .event == "workflow_dispatch")
+              )] |
+              if any(.[]; .status == "completed" and .conclusion == "success") then "succeeded"
+              elif length == 0 then "not started"
+              elif all(.[]; .status == "completed") then "failed"
+              else "running" end'); then
+              echo "could not read the main CI runs; retrying" >&2
+              sleep 20
+              continue
+            fi
+            if [ "$state" != "$last_state" ]; then
+              echo "main CI for $RELEASE_SHA: $state"
+              last_state=$state
+            fi
+            case "$state" in
+              succeeded) exit 0 ;;
+              failed)
+                echo "the main CI of $RELEASE_SHA failed; rerun its failed jobs, then rerun the failed jobs of this workflow" >&2
+                exit 1
+                ;;
+            esac
+            sleep 20
+          done
 
   # 配布物に埋め込む画面を1回だけ組み立てる。OS ごとに組み立てると、ネイティブの依存（rollup、
   # lightningcss など）や Node の違いで、同じ tag の配布物が別々の画面を持ちうる。macOS・Linux・
@@ -350,7 +407,7 @@ jobs:
     name: Stage release
     # tapを書き換える前に、attestation付きの完全なdraftを作る。tap成功後に残る
     # 可変処理をdraft公開の一回だけへ縮め、失敗時は同じtagの手動復旧で再構築する。
-    needs: [macos, linux, windows, android, browser-demo, verify-source]
+    needs: [macos, linux, windows, android, browser-demo, verify-source, main-ci]
     runs-on: ubuntu-24.04
     environment: release
     timeout-minutes: 10
