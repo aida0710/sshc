@@ -26,7 +26,7 @@ const navigationBySection: Record<Section, SectionNavigation> = {
   Diagnostics: { navigation: "Ad hoc checks", heading: "Ad hoc checks" },
   Passwords: { navigation: "Account passwords", heading: "Account passwords" },
   "Key Passphrases": { navigation: "Key passphrases", heading: "Key passphrases" },
-  OTP: { navigation: "OTP", heading: "One-time passwords (TOTP)" },
+  OTP: { navigation: "OTP", heading: "OTP" },
   Settings: { navigation: "Engine", heading: "Engine" },
   Sync: { navigation: "Sync", heading: "Remote sync" },
   VPN: { navigation: "VPN", heading: "VPN" },

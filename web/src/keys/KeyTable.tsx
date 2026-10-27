@@ -1,9 +1,10 @@
-import { Fragment, useEffect, useRef, type DragEvent, type ReactNode } from "react";
+import { Fragment, type DragEvent, type ReactNode } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { KeyCertificate, KeyInventoryResponse, KeyItem } from "./api";
 import { ActionMenu, revealOnHover, type ActionMenuItem } from "../ui/ActionMenu";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
 import { Icon } from "../ui/icons";
+import { InlinePanel } from "../ui/InlinePanel";
 import { describeAlgorithm, describeKeyKind, noteLabels } from "./labels";
 import { groupOfKeyPath, keyItemGroups, keyListPath } from "./organizer";
 import { SortableTableHeader } from "../ui/tableSort";
@@ -180,16 +181,6 @@ export function KeyTable({
       </tbody>
     </table>
   );
-}
-
-// InlinePanel brings the form it opens into view, since the row it belongs to may sit at the bottom of
-// the window.
-function InlinePanel({ children }: { children: ReactNode }) {
-  const panel = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    panel.current?.scrollIntoView?.({ block: "nearest" });
-  }, []);
-  return <div ref={panel}>{children}</div>;
 }
 
 function rowActionItems({ item, related, inventory, actions, t }: {
