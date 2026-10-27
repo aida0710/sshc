@@ -659,8 +659,15 @@ export const en = {
   "workspace.delivered": "Sent",
   "workspace.deliveryFailed": "Not sent",
   "snippets.heading": "Snippets",
-  "snippets.new": "New",
+  "snippets.new": "Add snippet",
+  "snippets.count": "{count} saved",
   "snippets.empty": "No snippets have been saved.",
+  "snippets.emptyHeading": "No snippets yet",
+  "snippets.chooseHeading": "Choose a snippet",
+  "snippets.newHeading": "New snippet",
+  "snippets.filter": "Filter by name or command",
+  "snippets.noMatch": "No snippet matches.",
+  "snippets.allSnippets": "All snippets",
   "snippets.loadFailed": "Snippets could not be read.",
   "snippets.loading": "Loading snippets…",
   "snippets.failed": "The snippet operation failed.",
@@ -688,6 +695,7 @@ export const en = {
   "snippets.deleteBody": "The snippet is removed for every target host and cannot be recovered.",
   "snippets.confirmDelete": "Delete it",
   "snippets.deleteCancel": "Cancel",
+  "snippets.runHeading": "Run",
   "snippets.targets": "Target hosts",
   "snippets.preview": "Preview execution",
   "snippets.confirm": "Review exact commands",
@@ -705,8 +713,11 @@ export const en = {
   "snippets.problem.runFailed": "Could not run the command",
   "snippets.cancel": "Cancel",
   "snippets.startup": "Connection startup",
+  "snippets.startupTarget": "Host",
   "snippets.startupHint":
-    "Sent every time the shell is ready, including automatic reconnections. Secret variable values may remain in the remote shell history or on screen. Changing the destination or authentication settings stops this assignment.",
+    "Sent every time the shell is ready, including automatic reconnections. Changing the destination or authentication settings stops it.",
+  "snippets.startupHintWithSecret":
+    "Sent every time the shell is ready, including automatic reconnections. Secret variable values may remain in the remote shell history or on screen. Changing the destination or authentication settings stops it.",
   "snippets.startupStale":
     "Stopped. The destination, the authentication settings, or the VPN profile changed after this snippet was assigned, so it is not sent to this host. Check the destination and assign it again.",
   "snippets.startupStaleCount":
@@ -2465,31 +2476,32 @@ export const en = {
 
   "explorer.loading": "Loading configuration files…",
   "explorer.pageTitle": "Configuration files",
-  "explorer.pageDescription":
+  "explorer.formatKept":
     "Saving keeps your OpenSSH formatting, comments and order as they are.",
-  "explorer.metricFiles": "Loaded files",
-  "explorer.metricEditable": "Editable files",
-  "explorer.metricDiagnostics": "Diagnostics",
+  "explorer.summary": "Loaded files {files} · Editable {editable} · Diagnostics {diagnostics}",
+  "explorer.allFiles": "All files",
   "explorer.hierarchy": "Include hierarchy",
   "explorer.externalFile":
     "This file is outside ~/.ssh. It is read and shown, never written.",
   "explorer.insideCondition": "inside {condition}",
-  "explorer.fileState": "{missing}{loads}{editable}",
-  "explorer.missing": "missing · ",
-  "explorer.readTimes": "read {count} times · ",
+  "explorer.missing": "missing",
+  "explorer.readTimes": "read {count} times",
   "explorer.editable": "editable",
   "explorer.readOnly": "read only",
+  "explorer.fileActions": "Actions for {path}",
   "explorer.newFilePath": "New file path",
+  "explorer.directoryPath": "Directory path",
   "explorer.pathOutsideSSHDirectory": "Paths outside ~/.ssh cannot be used. Enter a path relative to ~/.ssh (for example conf.d/30-lab.conf) or one starting with ~/.ssh/.",
-  "explorer.sshDirectoryFiles": "Files in ~/.ssh",
-  "explorer.directoryHelp": "About files and directories",
   "explorer.createFile": "Create file",
   "explorer.createDirectory": "Create directory",
   "explorer.deleteDirectory": "Delete directory",
-  "explorer.directoryNote":
-    "You can create and delete directories here, but only empty directories can be deleted. Delete their files first; Include lines that directly reference those files are updated at the same time. Manage declared groups on the Groups screen.",
-  "explorer.fileOperations": "This file",
-  "explorer.fileOperationsNote":
+  "explorer.submitCreate": "Create",
+  "explorer.submitDelete": "Delete",
+  "explorer.submitRename": "Rename",
+  "explorer.cancelPathTask": "Cancel",
+  "explorer.createDirectoryNote": "Manage the directories of declared groups in Groups.",
+  "explorer.deleteDirectoryNote": "Only empty directories can be deleted. Delete their files first.",
+  "explorer.renameNote":
     "Renaming this file also updates Include lines that directly reference it. Wildcard patterns are not changed; a warning appears if the new path no longer matches.",
   "explorer.renameTo": "New path",
   "explorer.renameFile": "Rename file",
@@ -2498,12 +2510,10 @@ export const en = {
   "explorer.cancelDelete": "Keep it",
   "explorer.deleteIsRecoverable":
     "Deleting this file also removes Include lines that directly reference it. A backup is kept so the file can be restored from History.",
-  "explorer.saveOrDiscardFirst":
-    "There are unsaved edits. Save them or reopen the file before renaming or deleting it.",
   "explorer.newFileNote":
     "To make OpenSSH read a new file, reference it with an Include directive in ~/.ssh/config. Move connections between groups on the Connections screen.",
-  "explorer.diagnostics": "Diagnostics",
-  "explorer.noIncludeProblem": "No Include problem detected.",
+  "explorer.diagnosticsCount": "Diagnostics: {count}",
+  "explorer.noIncludeProblem": "No Include problems",
   "explorer.opened": "Opened {path} at line {line}.",
   "explorer.selectFile": "Select a file to edit its full text.",
   "explorer.emptyHeading": "Select a configuration file",

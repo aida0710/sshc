@@ -49,14 +49,11 @@ beforeEach(() => {
 });
 
 async function startAlpha(user: ReturnType<typeof userEvent.setup>) {
-  const chooser = await screen.findByRole("combobox", { name: "Snippets" });
-  await screen.findByRole("option", { name: "Alpha" });
-  await user.selectOptions(chooser, "alpha");
+  await user.click(await screen.findByRole("button", { name: /Alpha/ }));
   await user.click(screen.getByRole("checkbox", { name: "web-1" }));
   await user.click(screen.getByRole("button", { name: "Preview execution" }));
   await user.click(await screen.findByRole("button", { name: "Run on these hosts" }));
   expect(await screen.findByText("first output")).toBeInTheDocument();
-  return chooser;
 }
 
 it("keeps the job of a snippet the user has left away when its poll answers late", async () => {
@@ -66,10 +63,10 @@ it("keeps the job of a snippet the user has left away when its poll answers late
   );
   const user = userEvent.setup();
   render(<SnippetsPanel aliases={["web-1"]} />);
-  const chooser = await startAlpha(user);
+  await startAlpha(user);
   await waitFor(() => expect(snippetsApi.job).toHaveBeenCalledTimes(1), { timeout: 2_000 });
 
-  await user.selectOptions(chooser, "beta");
+  await user.click(screen.getByRole("button", { name: /Beta/ }));
   expect(screen.queryByText("first output")).not.toBeInTheDocument();
   await act(async () => {
     answerPoll(runningJob("late output"));

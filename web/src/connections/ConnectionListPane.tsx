@@ -4,6 +4,7 @@ import type { HostEntry, Overview } from "../api/config";
 import { ConnectionTree, type ConnectionTreeProps, type HostSelection } from "./ConnectionTree";
 import type { ConnectionDrag } from "./useConnectionDrag";
 import { Button } from "../ui/surface";
+import { workspaceListPane } from "../ui/workspaceLayout";
 
 
 export function ConnectionListPane({
@@ -34,11 +35,7 @@ export function ConnectionListPane({
 }) {
   const t = useTranslate();
   return (
-  <div
-    className={`relative min-h-0 flex-col ${compact ? "" : "border-r border-line md:flex"} ${
-      detailOpen ? "hidden" : "flex"
-    }`}
-  >
+  <div className={workspaceListPane(compact, detailOpen)}>
     {resizeHandle}
     <div className="min-h-0 flex-1">
       {invalidLocation ? (
