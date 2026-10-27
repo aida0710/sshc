@@ -17,26 +17,28 @@ export function MobileNavigation({
 }) {
   const t = useTranslate();
   return (
-    <nav
-      aria-label={t("shell.mobileNavigation")}
-      className="sshc-mobile-navigation grid shrink-0 grid-cols-5 border-t border-line bg-toolbar"
-    >
-      {mobileNavigationSections.map((name) => {
-        const current = section === name;
-        return (
-          <a
-            key={name}
-            href={sectionPath(name)}
-            aria-current={current ? "page" : undefined}
-            onClick={(event) => onNavigate(event, name)}
-            className={`relative flex min-h-13 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-1 text-[10px] transition-colors ${current ? "bg-select-fill font-semibold text-accent" : "text-ink-muted active:bg-hover"}`}
-          >
-            {current ? <span aria-hidden="true" className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-accent" /> : null}
-            <Icon name={sectionIcons[name]} className="size-5" />
-            <span className="max-w-full truncate">{t(sectionLabels[name])}</span>
-          </a>
-        );
-      })}
+    // A rounded bar held off the screen's edges. Only the icons show: the bar at the top already names the
+    // current section, so each name is kept for screen readers and as a tooltip.
+    <nav aria-label={t("shell.mobileNavigation")} className="sshc-mobile-navigation shrink-0 px-3 pt-1.5">
+      <div className="flex h-14 items-center justify-between rounded-full border border-line bg-card px-2 shadow-pane">
+        {mobileNavigationSections.map((name) => {
+          const current = section === name;
+          const label = t(sectionLabels[name]);
+          return (
+            <a
+              key={name}
+              href={sectionPath(name)}
+              title={label}
+              aria-current={current ? "page" : undefined}
+              onClick={(event) => onNavigate(event, name)}
+              className={`flex h-11 w-14 items-center justify-center rounded-full transition-colors ${current ? "bg-accent text-accent-ink" : "text-ink-muted active:bg-hover"}`}
+            >
+              <Icon name={sectionIcons[name]} className="size-5" />
+              <span className="sr-only">{label}</span>
+            </a>
+          );
+        })}
+      </div>
     </nav>
   );
 }
