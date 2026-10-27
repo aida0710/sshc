@@ -7,6 +7,7 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { SplitResizeHandle } from "../ui/SplitResizeHandle";
 import { useCompactViewport } from "../ui/useMediaQuery";
 import { Button } from "../ui/surface";
+import type { ActionMenuItem } from "../ui/ActionMenu";
 import { SFTPPanel, type SFTPTarget } from "./SFTPPanel";
 import type { RestoredSFTPLocation } from "./useSFTPBrowser";
 import { localHostAlias } from "./localHost";
@@ -19,7 +20,7 @@ import { SFTPCompareTabsDialog } from "./SFTPCompareTabsDialog";
 import type { SFTPLocation } from "./sftpLocation";
 import { rememberPanes, rememberSplitRatio, restorePanes, restoreSplitRatio } from "./sftpPaneStorage";
 import {
-  activeTab, addTab, allTabs, blankTab, canSplit, closeTab, findTab, maxTabsPerPane, moveTab, relocateTab, resortTab, selectTab,
+  activeTab, addTab, allTabs, blankTab, canSplit, closeTab, findTab, maxTabsPerPane, moveTab, relocateTab, resortTab, selectTab, swapPanes,
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
 } from "./sftpPanes";
 
@@ -243,6 +244,50 @@ export function SFTPWorkspace({
     rememberSplitRatio(ratio);
   };
 
+  // A tab reordered within its pane stays mounted, so it keeps its connection and any unsaved edit.
+  function reorderTab(pane: SFTPPane, tabId: string, index: number) {
+    setPanes((current) => moveTab(current, tabId, { paneId: pane.id, index }));
+  }
+
+  function moveTabAlong(tabId: string, offset: -1 | 1) {
+    const found = findTab(panes, tabId);
+    if (found === null) return;
+    const index = found.pane.tabs.findIndex((tab) => tab.id === tabId);
+    // The index counts the tabs before the move: one place right is before the tab two places on.
+    reorderTab(found.pane, tabId, offset < 0 ? index - 1 : index + 2);
+  }
+
+  function dropTabAt(pane: SFTPPane, index: number) {
+    const tabId = draggedTabId;
+    setDraggedTabId(null);
+    if (tabId === null) return;
+    if (findTab(panes, tabId)?.pane.id === pane.id) reorderTab(pane, tabId, index);
+    else placeTab(tabId, { paneId: pane.id, index });
+  }
+
+  // The panes trade places and each keeps its width, so the split looks mirrored.
+  function swapPaneSides() {
+    setPanes(swapPanes);
+    changeSplitRatio(100 - splitRatio);
+  }
+
+  function tabActions(pane: SFTPPane, tab: SFTPTab, index: number): ActionMenuItem[] {
+    const other = panes.find((candidate) => candidate.id !== pane.id);
+    // A tab that leaves its pane is mounted afresh there, which would drop an unsaved edit.
+    const leaves = dirtyTabs.has(tab.id) ? { disabled: true, title: t("sftp.tabHasUnsavedEdits") } : {};
+    const items: ActionMenuItem[] = [
+      { label: t("sftp.moveTabLeft"), disabled: index === 0, onSelect: () => moveTabAlong(tab.id, -1) },
+      { label: t("sftp.moveTabRight"), disabled: index === pane.tabs.length - 1, onSelect: () => moveTabAlong(tab.id, 1) },
+    ];
+    if (other !== undefined) {
+      items.push({ label: t("sftp.moveTabToOtherPane"), disabled: other.tabs.length >= maxTabsPerPane, ...leaves, onSelect: () => placeTab(tab.id, { paneId: other.id }) });
+      items.push({ label: t("sftp.swapPanes"), onSelect: swapPaneSides });
+    } else if (canSplit(panes)) {
+      items.push({ label: t("sftp.dropTabRight"), ...leaves, onSelect: () => placeTab(tab.id, { side: "right" }) });
+    }
+    return items;
+  }
+
   const leftLocation = leftPane === null ? null : activeTab(leftPane);
   const rightLocation = rightPane === null ? null : activeTab(rightPane);
 
@@ -340,6 +385,9 @@ export function SFTPWorkspace({
             onDragStart={setDraggedTabId}
             onDragEnd={() => setDraggedTabId(null)}
             onMove={moveTabWithKeyboard}
+            onDropAt={(at) => dropTabAt(pane, at)}
+            onReorder={moveTabAlong}
+            tabActions={(tab, at) => tabActions(pane, tab, at)}
             trailing={index === panes.length - 1 ? comparisonAction : null}
           />}
           <div data-sftp-pane-content={pane.id} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
