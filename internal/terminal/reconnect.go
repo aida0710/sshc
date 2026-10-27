@@ -171,9 +171,15 @@ func (s *Session) waitToReconnect(attempt, limit int, now func() time.Time) bool
 	s.reconnectView = &ReconnectView{Attempt: attempt + 1, Limit: limit, RetryAt: retryAt}
 	s.mutex.Unlock()
 	seconds := int((wait + time.Second - 1) / time.Second)
+	// 切れたことを書くのは最初の待ちだけである。2回目からは前の試みが失敗しただけで、
+	// 新しく切れたわけではない。
+	lead := "SSH接続が切れました。"
+	if attempt > 0 {
+		lead = "再接続できませんでした。"
+	}
 	s.publish([]byte(fmt.Sprintf(
-		"\r\n[sshc] SSH接続が切れました。%d秒後に再接続します（%d/%d）。\r\n",
-		seconds, attempt+1, limit)))
+		"\r\n[sshc] %s%d秒後に再接続します（%d/%d）。\r\n",
+		lead, seconds, attempt+1, limit)))
 
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
