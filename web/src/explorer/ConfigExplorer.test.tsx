@@ -354,9 +354,26 @@ describe("ConfigExplorer", () => {
     await user.click(screen.getByRole("button", { name: "Actions for config" }));
 
     expect(screen.getByRole("menuitem", { name: "Rename file" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Rename file" })).toHaveAttribute("title", expect.stringContaining("unsaved edits"));
     expect(screen.getByRole("menuitem", { name: "Delete file" })).toBeDisabled();
     expect(screen.getByRole("menuitem", { name: "Create directory" })).toBeEnabled();
     expect(screen.getByRole("menuitem", { name: "Delete directory" })).toBeEnabled();
+  });
+
+  it("keeps an edit begun after the rename field opened, and says to save it first instead of renaming", async () => {
+    const user = userEvent.setup();
+    render(<ToastProvider><ConfigExplorer /></ToastProvider>);
+    await user.click(await screen.findByRole("button", { name: "conf.d/10-home.conf" }));
+    const editor = await screen.findByLabelText(/File text.*10-home/);
+    await chooseFileAction(user, "conf.d/10-home.conf", "Rename file");
+
+    await user.type(editor, "  Port 2222");
+    await user.type(screen.getByLabelText("New path"), "conf.d/11-home.conf");
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Save them or reopen the file before renaming");
+    expect(configApi.save).not.toHaveBeenCalled();
+    expect(editor).toHaveValue("Host nas\n\tUser aida\n  Port 2222");
   });
 
   it("deletes an empty directory typed after choosing Delete directory, and closes the field", async () => {

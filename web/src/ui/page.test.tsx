@@ -36,6 +36,34 @@ describe("PageHeader", () => {
     topBar.remove();
   });
 
+  it("takes no room on a phone once its name is for screen readers and its actions are in the top bar", () => {
+    viewport(true);
+    const topBar = document.createElement("div");
+    document.body.append(topBar);
+    render(
+      <PageChromeContext.Provider value={{ inspectorToggle: null, phoneActionsSlot: topBar }}>
+        <PageHeader title="Snippets" meta="1 saved" actions={<button type="button">Add snippet</button>} className="py-3" />
+      </PageChromeContext.Provider>,
+    );
+
+    const header = screen.getByRole("banner");
+    expect(header).toHaveClass("sr-only");
+    expect(header).not.toHaveClass("py-3");
+    expect(within(header).getByRole("heading", { name: "Snippets" })).toBeInTheDocument();
+    topBar.remove();
+  });
+
+  it("keeps its room on a phone for a description under the hidden name", () => {
+    viewport(true);
+    render(
+      <PageChromeContext.Provider value={{ inspectorToggle: null, phoneActionsSlot: null }}>
+        <PageHeader title="VPN" description="Requires Docker on this machine." className="py-3" />
+      </PageChromeContext.Provider>,
+    );
+
+    expect(screen.getByRole("banner")).toHaveClass("py-3");
+  });
+
   it("keeps its actions beside a name shown on a phone", () => {
     viewport(true);
     const topBar = document.createElement("div");

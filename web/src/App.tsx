@@ -486,7 +486,7 @@ export function App({
             ) : null}
           </main>
           {inspector !== null && inspectorOpen ? (
-            <InspectorPane label={inspector.label} underTopBar={mobileLayout && !terminalTopBar} paneRef={inspectorPanelRef}>
+            <InspectorPane label={inspector.label} underTopBar={mobileLayout && !terminalTopBar} onClose={() => setInspectorOpen(false)} paneRef={inspectorPanelRef}>
               {inspector.body}
             </InspectorPane>
           ) : null}

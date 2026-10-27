@@ -31,8 +31,11 @@ export function PageHeader({
   const actionsInTopBar = titleHidden && phoneActionsSlot !== null;
   const rowActions = compact ? actions : <>{inspectorToggle}{actions}</>;
   const hasRowActions = compact ? actions !== undefined : actions !== undefined || inspectorToggle !== null;
+  // With the name only for screen readers and the actions in the top bar, nothing is left to see. The
+  // header then keeps no room either, or its padding would stay behind as an empty band.
+  const nothingShown = titleHidden && description === undefined && (actionsInTopBar || !hasRowActions);
   return (
-    <header className={`flex flex-wrap items-start justify-between gap-4 ${className}`}>
+    <header className={nothingShown ? "sr-only" : `flex flex-wrap items-start justify-between gap-4 ${className}`}>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-baseline gap-2.5">
           <h2 id={headingId} className={titleHidden ? "sr-only" : "text-xl font-semibold leading-[29px] text-ink"}>{title}</h2>

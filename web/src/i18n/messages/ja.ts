@@ -1601,6 +1601,7 @@ export const ja = {
   "vpn.remove": "削除",
   "vpn.rename": "名前を変更",
   "vpn.edit": "編集",
+  "vpn.finishEditFirst": "下の編集を保存するか取り消すと押せます。",
   "vpn.waitingForOperation": "実行中の操作が終わると押せます。",
   "vpn.waitingForRoute": "経路を用意している間は変更できません。切断すると用意を打ち切ります。",
   "vpn.renameTitle": "{name}の名前を変更",
@@ -2512,6 +2513,8 @@ export const ja = {
   "explorer.renameNote":
     "ファイル名を変更すると、このファイルを直接参照するInclude行も同時に書き換えます。ワイルドカードのパターンは変更せず、新しいパスが一致しない場合は警告します。",
   "explorer.renameTo": "新しいパス",
+  "explorer.saveOrDiscardFirst":
+    "未保存の編集があります。名前の変更や削除の前に保存するか、ファイルを開き直してください。",
   "explorer.renameFile": "ファイル名を変更",
   "explorer.deleteFile": "ファイルを削除",
   "explorer.confirmDelete": "削除する",
