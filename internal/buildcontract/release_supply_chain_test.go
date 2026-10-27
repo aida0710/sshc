@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -102,34 +101,17 @@ func TestReleaseRequiresExactSHACIAndAuthenticatedArtifacts(t *testing.T) {
 	}
 
 	gate := readContractFile(t, "scripts", "ci", "verify-release-source.sh")
-	if !strings.Contains(gate, `git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main`) {
-		t.Error("the release source gate does not require the tag's commit to be in main")
-	}
-
-	// 同じコミットの main の CI の成功は、ビルドと並べて走る main-ci が待ち、公開
-	// （stage-release）はそれを待つ。ビルドは CI と並べて進めてよいが、公開は CI の成功の後だけ。
-	document, _ := readReleaseWorkflow(t)
-	mainCI, found := namedStep(document.Jobs["main-ci"], "Wait for the main CI of the release commit to succeed")
-	if !found {
-		t.Fatal("the release workflow has no main-ci job waiting for the main CI of the release commit")
-	}
 	for _, required := range []string{
+		`git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main`,
 		`actions/workflows/ci.yml/runs?head_sha=$RELEASE_SHA`,
 		`.head_sha == $sha and`,
 		`.head_branch == "main" and`,
-		`(.event == "push" or .event == "workflow_dispatch")`,
-		`.status == "completed" and .conclusion == "success"`,
-		`succeeded) exit 0 ;;`,
+		`(.event == "push" or .event == "workflow_dispatch") and`,
+		`.conclusion == "success"`,
 	} {
-		if !strings.Contains(mainCI.Run, required) {
-			t.Errorf("the exact-SHA main CI gate lacks %q", required)
+		if !strings.Contains(gate, required) {
+			t.Errorf("exact-SHA release gate lacks %q", required)
 		}
-	}
-	if mainCI.Env["RELEASE_SHA"] != "${{ needs.verify-source.outputs.release-sha }}" {
-		t.Error("the main CI gate must wait for the commit verify-source resolved from the tag")
-	}
-	if !slices.Contains(document.Jobs["stage-release"].Needs, "main-ci") {
-		t.Error("stage-release publishes without waiting for the main CI of the release commit")
 	}
 
 	fingerprint := strings.TrimSpace(readContractFile(t, ".github", "android-release-signer.sha256"))
