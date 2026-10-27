@@ -682,9 +682,9 @@
   },
   {
     "name": "github.com/labstack/echo/v5",
-    "version": "v5.3.1",
+    "version": "v5.4.1",
     "category": "Go",
-    "url": "https://pkg.go.dev/github.com/labstack/echo/v5@v5.3.1",
+    "url": "https://pkg.go.dev/github.com/labstack/echo/v5@v5.4.1",
     "license": "MIT",
     "notices": [
       {

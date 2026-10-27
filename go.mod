@@ -9,7 +9,7 @@ require (
 	github.com/aws/smithy-go v1.27.6
 	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
-	github.com/labstack/echo/v5 v5.3.1
+	github.com/labstack/echo/v5 v5.4.1
 	github.com/pkg/sftp v1.13.11
 	go.bug.st/serial v1.8.0
 	golang.org/x/crypto v0.56.0
