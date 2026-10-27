@@ -13,11 +13,14 @@ const listedSessionLimit = 5;
 // loads.
 export function TerminalRestoreDialog({
   sessions,
+  host,
   onRestore,
   onDecline,
   onDismiss,
 }: {
   sessions: readonly TerminalRestoreSession[];
+  // host names the run target whose engine stopped; null for this machine.
+  host: string | null;
   onRestore: () => Promise<unknown>;
   onDecline: () => void;
   onDismiss: () => void;
@@ -42,7 +45,9 @@ export function TerminalRestoreDialog({
       heading={t("terminal.restoreHeading")}
       body={
         <>
-          <p className="text-sm text-ink-muted">{t("terminal.restoreBody", { count: sessions.length })}</p>
+          <p className="text-sm text-ink-muted">{host === null
+            ? t("terminal.restoreBody", { count: sessions.length })
+            : t("terminal.restoreBodyRemote", { count: sessions.length, host })}</p>
           <ul className="flex flex-col gap-1.5 text-sm">
             {listed.map((session, index) => (
               <li key={index} className="flex min-w-0 flex-col">

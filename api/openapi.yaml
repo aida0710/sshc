@@ -824,6 +824,99 @@ paths:
           minLength: 1
           maxLength: 64
       description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/restore:
+    get:
+      operationId: remoteEngineGetTerminalRestoreOffer
+      responses:
+        '200':
+          description: The sessions waiting to be opened again; empty when there is no offer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalRestoreOffer'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+    post:
+      operationId: remoteEngineRestoreTerminalSessions
+      responses:
+        '200':
+          description: The offer was ended and its sessions opened, as far as they could be
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalRestoreResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+    delete:
+      operationId: remoteEngineDeclineTerminalRestore
+      responses:
+        '204':
+          description: The offer was ended without opening anything
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
   /api/v1/engines/{alias}/terminal/shell-profiles:
     get:
       operationId: remoteEngineListLocalShellProfiles

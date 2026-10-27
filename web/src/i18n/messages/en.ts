@@ -822,6 +822,7 @@ export const en = {
   "terminal.duplicate": "Duplicate this connection",
   "terminal.restoreHeading": "Reopen your last sessions?",
   "terminal.restoreBody": "sshc reopens the {count} sessions that were open before it stopped, with the same connections and workspaces. Sessions whose working folder is known start there.",
+  "terminal.restoreBodyRemote": "sshc reopens the {count} sessions that were open on {host} before its sshc stopped, with the same connections and workspaces. Sessions whose working folder is known start there.",
   "terminal.restoreLocalShell": "Local shell",
   "terminal.restoreMore": "and {count} more",
   "terminal.restoreConfirm": "Reopen",

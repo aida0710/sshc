@@ -473,6 +473,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/engines/{alias}/terminal/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
+        get: operations["remoteEngineGetTerminalRestoreOffer"];
+        put?: never;
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
+        post: operations["remoteEngineRestoreTerminalSessions"];
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
+        delete: operations["remoteEngineDeclineTerminalRestore"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/engines/{alias}/terminal/shell-profiles": {
         parameters: {
             query?: never;
@@ -6011,6 +6030,91 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    remoteEngineGetTerminalRestoreOffer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sessions waiting to be opened again; empty when there is no offer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalRestoreOffer"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    remoteEngineRestoreTerminalSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The offer was ended and its sessions opened, as far as they could be */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalRestoreResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    remoteEngineDeclineTerminalRestore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The offer was ended without opening anything */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
         };

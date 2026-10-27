@@ -826,6 +826,7 @@ export const ja = {
   "terminal.duplicate": "この接続を複製",
   "terminal.restoreHeading": "前回のセッションを開き直しますか",
   "terminal.restoreBody": "sshcが止まる前に開いていた{count}件のセッションを、同じ接続先とワークスペースで開き直します。作業フォルダが分かるものはそこへ移動します。",
+  "terminal.restoreBodyRemote": "{host}のsshcが止まる前に開いていた{count}件のセッションを、同じ接続先とワークスペースで開き直します。作業フォルダが分かるものはそこへ移動します。",
   "terminal.restoreLocalShell": "ローカルシェル",
   "terminal.restoreMore": "ほか{count}件",
   "terminal.restoreConfirm": "開き直す",

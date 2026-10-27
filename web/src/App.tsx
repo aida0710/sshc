@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties
 import { type HealthResponse } from "./api/client";
 import { createTerminalSessionsApi, terminalSessionsApi } from "./api/terminalSessions";
 import { createTerminalWorkspacesApi, terminalWorkspacesApi } from "./api/terminalWorkspaces";
+import { createTerminalRestoreApi, terminalRestoreApi } from "./api/terminalRestore";
 import { engineStreamPath, engineTerminalBase } from "./api/remoteEngines";
 import { settingsApi } from "./api/settings";
 import { vaultApi, type PasswordVaultStatus } from "./api/vault";
@@ -124,10 +125,11 @@ export function App({
   const vaultRevision = runTargets.vaultUnlock.revision;
   const runTargetApis = useMemo(() => {
     const alias = runTargets.selected;
-    if (alias === null) return { sessions: terminalSessionsApi, workspaces: terminalWorkspacesApi, vaultRevision };
+    if (alias === null) return { sessions: terminalSessionsApi, workspaces: terminalWorkspacesApi, restore: terminalRestoreApi, vaultRevision };
     return {
       sessions: createTerminalSessionsApi(engineTerminalBase(alias), engineStreamPath(alias)),
       workspaces: createTerminalWorkspacesApi(engineTerminalBase(alias)),
+      restore: createTerminalRestoreApi(engineTerminalBase(alias)),
       vaultRevision,
     };
   }, [runTargets.selected, vaultRevision]);
@@ -477,7 +479,16 @@ export function App({
           <MobileNavigation section={section} onNavigate={navigateFromMenu} />
         ) : null}
         {state === "ready" ? <TransferNotifications /> : null}
-        {state === "ready" && runTargets.selected === null ? <TerminalRestorePrompt onRestored={terminalSessions.refresh} /> : null}
+        {/* Asked of the engine in use: a run target asks the first time it is used after
+            it restarted, once its Vault is unlocked (it lists its sessions again). */}
+        {state === "ready" && terminalSessions.remoteRefusal === null ? (
+          <TerminalRestorePrompt
+            key={runTargets.selected ?? ""}
+            api={runTargetApis.restore}
+            host={runTargets.selected}
+            onRestored={terminalSessions.refresh}
+          />
+        ) : null}
         {state === "ready" ? (
           <CommandPalette
             open={commandPaletteOpen}

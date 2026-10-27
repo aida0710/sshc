@@ -19,10 +19,10 @@ function restoreApi(overrides: Partial<TerminalRestoreApi> = {}): TerminalRestor
   };
 }
 
-function renderPrompt(api: TerminalRestoreApi, onRestored = vi.fn().mockResolvedValue(undefined)) {
+function renderPrompt(api: TerminalRestoreApi, onRestored = vi.fn().mockResolvedValue(undefined), host: string | null = null) {
   render(
     <LanguageProvider initial="en">
-      <TerminalRestorePrompt api={api} onRestored={onRestored} />
+      <TerminalRestorePrompt api={api} host={host} onRestored={onRestored} />
     </LanguageProvider>,
   );
   return onRestored;
@@ -55,6 +55,11 @@ describe("TerminalRestorePrompt", () => {
     expect(api.restore).not.toHaveBeenCalled();
     expect(onRestored).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("names the run target whose engine stopped", async () => {
+    renderPrompt(restoreApi(), undefined, "r540");
+    expect(await screen.findByText(/open on r540 before its sshc stopped/)).toBeTruthy();
   });
 
   it("closing with Escape keeps the offer for the next time the screen loads", async () => {
