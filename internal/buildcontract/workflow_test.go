@@ -38,12 +38,57 @@ func TestCIWorkflowBuildsTheVPNImageOnBothArchitectures(t *testing.T) {
 			t.Errorf("jobs.vpn-image does not run on %s", runner)
 		}
 	}
-	for _, step := range job.Steps {
-		if step.Run == "docker build internal/vpn/container" {
-			return
+	// イメージの組み立てと接続の確かめは、関係する変更のときだけ走る。判定が答えを
+	// 出せなかったとき（空のとき）は、'false' ではないので走る側に倒れる。
+	const whenNeeded = "${{ steps.vpn.outputs.needed != 'false' }}"
+	for _, want := range []struct{ name, run string }{
+		{"Build the VPN container image", "docker build internal/vpn/container"},
+		{"Connect through IKEv2/IPsec and L2TP/IPsec in the VPN container", "go test ./internal/vpn -run 'IKEv2|L2TP' -count=1 -timeout 15m"},
+	} {
+		step, found := namedStep(job, want.name)
+		if !found || strings.TrimSpace(step.Run) != want.run || step.If != whenNeeded {
+			t.Errorf("jobs.vpn-image must run %q as the step %q with if %s", want.run, want.name, whenNeeded)
 		}
 	}
-	t.Error("jobs.vpn-image does not build internal/vpn/container")
+	decide, found := namedStep(job, "Decide whether the VPN image check runs")
+	if !found || !strings.Contains(decide.Run, "git diff --name-only HEAD^1 HEAD | scripts/ci/vpn-image-tests-needed.sh") {
+		t.Error("jobs.vpn-image must decide from the change with scripts/ci/vpn-image-tests-needed.sh")
+	}
+}
+
+// vpn-image-tests-needed.sh は、internal/vpn のテストが読み込むパッケージ、コンテナ、
+// モジュールの定義、判定と workflow 自身のどれかが変わったときだけ true を返す。
+func TestVPNImageTestsNeededScriptFollowsTheVPNTestDependencies(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the script runs on the Linux runner")
+	}
+	cases := []struct {
+		name  string
+		paths string
+		want  string
+	}{
+		{"the web UI only", "web/src/App.tsx\npages/features/vpn.md\n", "false"},
+		{"a package the VPN tests do not load", "internal/app/app.go\n", "false"},
+		{"the VPN package", "web/src/App.tsx\ninternal/vpn/docker.go\n", "true"},
+		{"a package the VPN tests load", "internal/storage/journal.go\n", "true"},
+		{"the container", "internal/vpn/container/Dockerfile\n", "true"},
+		{"the module file", "go.sum\n", "true"},
+		{"the workflow itself", ".github/workflows/ci.yml\n", "true"},
+		{"nothing given", "", "true"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			command := exec.Command("bash", filepath.Join("..", "..", "scripts", "ci", "vpn-image-tests-needed.sh"))
+			command.Stdin = strings.NewReader(testCase.paths)
+			output, err := command.Output()
+			if err != nil {
+				t.Fatalf("run script: %v", err)
+			}
+			if got := strings.TrimSpace(string(output)); got != testCase.want {
+				t.Fatalf("VPN image check needed = %q, want %q", got, testCase.want)
+			}
+		})
+	}
 }
 
 // 全E2E は実バイナリをブラウザから操作するため時間がかかる。独立jobにはせず、
