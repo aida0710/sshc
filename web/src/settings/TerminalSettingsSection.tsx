@@ -130,8 +130,10 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
 
   const busy = save.busy;
   const groupProps = { draft, edit };
+  // The preview takes a column of its own only where the board leaves the fields room beside it. It goes by
+  // the board's width, not the screen's: on a PC the navigation and the list of settings pages take 470px.
   const look = (
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
+    <div className="grid items-start gap-6 @2xl:grid-cols-[minmax(0,1fr)_220px]">
       <div className="min-w-0"><TerminalLookFields {...groupProps} /></div>
       <TerminalPreview
         palette={draft.palette}

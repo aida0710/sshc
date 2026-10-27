@@ -1602,6 +1602,7 @@ export const en = {
   "vpn.remove": "Remove",
   "vpn.rename": "Rename",
   "vpn.edit": "Edit",
+  "vpn.finishEditFirst": "Save or cancel the edit below first.",
   "vpn.waitingForOperation": "Available once the current operation finishes.",
   "vpn.waitingForRoute": "Cannot be changed while the route is being prepared. Disconnect to stop preparing it.",
   "vpn.renameTitle": "Rename {name}",
@@ -2509,6 +2510,8 @@ export const en = {
   "explorer.renameNote":
     "Renaming this file also updates Include lines that directly reference it. Wildcard patterns are not changed; a warning appears if the new path no longer matches.",
   "explorer.renameTo": "New path",
+  "explorer.saveOrDiscardFirst":
+    "There are unsaved edits. Save them or reopen the file before renaming or deleting it.",
   "explorer.renameFile": "Rename file",
   "explorer.deleteFile": "Delete file",
   "explorer.confirmDelete": "Delete it",

@@ -6,8 +6,9 @@ import { useDismissibleLayer } from "./useDismissibleLayer";
 import { useMenuKeyboard } from "./useMenuKeyboard";
 
 // revealOnHover は、行やカードの「…」を、PC の大きさの画面では乗せたとき（とキーボードで触れたとき）
-// だけ出し、スマホの組み方では常に出すための class である。行やカードの側に group/row を付けて使う。
-export const revealOnHover = "opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 group-focus-within/row:opacity-100 mobile-layout:opacity-100";
+// だけ出し、スマホの組み方と、載せられる入力が1つも無い画面（any-hover: none）では常に出すための
+// class である。行やカードの側に group/row を付けて使う。
+export const revealOnHover = "opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 group-focus-within/row:opacity-100 mobile-layout:opacity-100 [@media(any-hover:none)]:opacity-100";
 
 export type ActionMenuItem = {
   label: string;

@@ -964,6 +964,50 @@ describe("VPNPanel", () => {
     expect(screen.getByRole("article", { name: "tohoku" })).toBeVisible();
   });
 
+  it("keeps the row being edited from being edited again, renamed or removed until the edit is closed", async () => {
+    const user = userEvent.setup();
+    render(<VPNPanel api={buildApi()} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await chooseRowAction(user, route, "Edit");
+    for (const label of ["Edit", "Rename", "Remove"]) {
+      const item = await rowActionItem(user, route, label);
+      expect(item).toBeDisabled();
+      expect(item).toHaveAttribute("title", "Save or cancel the edit below first.");
+      await user.keyboard("{Escape}");
+    }
+
+    await user.click(within(screen.getByRole("region", { name: "Edit tohoku" })).getByRole("button", { name: "Cancel" }));
+    expect(await rowActionItem(user, route, "Remove")).toBeEnabled();
+  });
+
+  it("closes the edit of a profile that leaves the list, so one made again under its name does not open it", async () => {
+    const user = userEvent.setup();
+    const officeProfile: VPNProfile = { ...tohokuProfile, name: "office" };
+    const both = overview({
+      profiles: [
+        { profile: tohokuProfile, running: false, relaySocket: "", connections: [], openConnections: 0 },
+        { profile: officeProfile, running: false, relaySocket: "", connections: [], openConnections: 0 },
+      ],
+    });
+    const revealVPNSecrets = vi.fn().mockResolvedValue(storedTohokuSecrets);
+    // tohoku is removed on another machine while office is being removed here, and made again there after.
+    const removeVPNProfile = vi.fn().mockResolvedValue(overview({ profiles: [], checking: true }));
+    render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(both), removeVPNProfile, revealVPNSecrets })} />);
+    const tohoku = await screen.findByRole("article", { name: "tohoku" });
+    await chooseRowAction(user, tohoku, "Edit");
+    await waitFor(() => expect(revealVPNSecrets).toHaveBeenCalledTimes(1));
+
+    await chooseRowAction(user, screen.getByRole("article", { name: "office" }), "Remove");
+    await user.click(within(screen.getByRole("dialog", { name: "Remove office?" })).getByRole("button", { name: "Remove" }));
+    expect(removeVPNProfile).toHaveBeenCalledWith("office");
+
+    await screen.findByRole("article", { name: "office" });
+    expect(screen.getByRole("article", { name: "tohoku" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Edit tohoku" })).toBeNull();
+    expect(revealVPNSecrets).toHaveBeenCalledTimes(1);
+  });
+
   it("hides a stored password until Show is pressed", async () => {
     const user = userEvent.setup();
     render(<VPNPanel api={buildApi()} />);

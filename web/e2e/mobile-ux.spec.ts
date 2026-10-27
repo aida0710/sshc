@@ -257,6 +257,47 @@ test("a swipe across the page opens the navigation and a swipe back closes it", 
   await expect(navigation).not.toBeInViewport();
 });
 
+// placedByHand reads whether a swipe left the navigation's position written on it rather than in the
+// stylesheet, where a later open or close could not move it.
+function placedByHand(page: Page) {
+  return page.locator("[data-app-navigation]").evaluate((panel: HTMLElement) => panel.style.transform !== "" || panel.style.translate !== "");
+}
+
+test("a swipe that pulls the navigation all the way out still lets a tap outside close it", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const navigation = page.locator("[data-app-navigation]");
+
+  // Further than the panel is wide, so it is already where it settles when the finger lifts.
+  await swipe(page, { x: 30, y: 360 }, { x: 385, y: 360 });
+  await expect(navigation).toHaveAttribute("data-navigation-open", "true");
+  await expect.poll(() => placedByHand(page)).toBe(false);
+
+  await page.locator("[data-navigation-backdrop]").click({ position: { x: 370, y: 360 } });
+  await expect(navigation).toHaveAttribute("data-navigation-open", "false");
+  await expect(navigation).not.toBeInViewport();
+});
+
+test("a second finger during a swipe does not leave the navigation half out", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const navigation = page.locator("[data-app-navigation]");
+  const client = await page.context().newCDPSession(page);
+
+  await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 60, y: 360 }] });
+  for (const x of [80, 110, 140, 170]) {
+    await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: 360 }] });
+  }
+  await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 170, y: 360 }, { x: 300, y: 500 }] });
+  await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 200, y: 360 }, { x: 300, y: 500 }] });
+  await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [{ x: 200, y: 360 }] });
+  await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await client.detach();
+
+  await expect.poll(() => placedByHand(page)).toBe(false);
+  const open = await navigation.getAttribute("data-navigation-open");
+  if (open === "true") await expect(navigation).toBeInViewport({ ratio: 1 });
+  else await expect(navigation).not.toBeInViewport();
+});
+
 test.describe("desktop pointer compatibility", () => {
   test.use({ viewport: { width: 1440, height: 900 }, hasTouch: false, isMobile: false });
   test("a mouse click selects a directory and a double click opens it", async ({ page, installation }) => {

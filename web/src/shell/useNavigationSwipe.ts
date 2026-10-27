@@ -15,7 +15,11 @@ const flickSpeed = 0.35;
 const ownsTouchSelector = "[data-terminal-host], input, textarea, select, [contenteditable='true']";
 
 type Gesture = {
+  // The panel the finger moves, taken when the finger goes down.
+  panel: HTMLElement;
   opening: boolean;
+  // Where the panel is while it follows the finger, from 0 (open) to -width (closed).
+  offset: number;
   startX: number;
   startY: number;
   dragging: boolean;
@@ -55,17 +59,30 @@ function placePanel(panel: HTMLElement, offset: number) {
   panel.style.transform = `translateX(${offset}px)`;
 }
 
-function settlePanel(panel: HTMLElement, open: boolean) {
+// settlePanel moves the panel from offset to where it settles. A panel already there has nothing to
+// animate, and no transition would end to hand it back, so it is handed back at once.
+function settlePanel(panel: HTMLElement, { open, offset, width }: { open: boolean; offset: number; width: number }) {
   delete panel.dataset.navigationDragging;
   panel.style.transition = "";
   panel.style.transform = open ? "translateX(0)" : "translateX(-100%)";
   const release = () => {
+    panel.removeEventListener("transitionend", ended);
+    panel.removeEventListener("transitioncancel", ended);
     panel.style.transform = "";
     panel.style.translate = "";
   };
+  // Only the panel's own transition counts: its children's end too and bubble up to it.
+  const ended = (event: TransitionEvent) => {
+    if (event.target === panel) release();
+  };
+  const settled = Math.abs(offset - (open ? 0 : -width)) < 1;
   const transitions = getComputedStyle(panel).transitionDuration.split(",").some((duration) => Number.parseFloat(duration) > 0);
-  if (transitions) panel.addEventListener("transitionend", release, { once: true });
-  else release();
+  if (settled || !transitions) {
+    release();
+    return;
+  }
+  panel.addEventListener("transitionend", ended);
+  panel.addEventListener("transitioncancel", ended);
 }
 
 // useNavigationSwipe lets a phone open the navigation with a swipe to the right anywhere on the page and
@@ -87,16 +104,20 @@ export function useNavigationSwipe({ enabled, open, panelRef, onOpenChange }: {
     let gesture: Gesture | null = null;
 
     function start(event: TouchEvent) {
+      // A second finger while one drags the panel is not a new swipe; the first finger's lifting settles it.
+      if (gesture?.dragging === true) return;
       const panel = panelRef.current;
       const touch = event.touches[0];
       gesture = null;
       if (panel === null || touch === undefined || event.touches.length > 1) return;
       if (dialogOpen(panel) || ownsTheTouch(event.target)) return;
       gesture = {
+        panel,
         opening: !openRef.current,
         startX: touch.clientX,
         startY: touch.clientY,
         dragging: false,
+        offset: openRef.current ? 0 : -panel.getBoundingClientRect().width,
         width: panel.getBoundingClientRect().width,
         lastX: touch.clientX,
         lastTime: event.timeStamp,
@@ -105,9 +126,8 @@ export function useNavigationSwipe({ enabled, open, panelRef, onOpenChange }: {
     }
 
     function move(event: TouchEvent) {
-      const panel = panelRef.current;
       const touch = event.touches[0];
-      if (gesture === null || panel === null || touch === undefined) return;
+      if (gesture === null || touch === undefined) return;
       const across = touch.clientX - gesture.startX;
       const down = touch.clientY - gesture.startY;
       if (!gesture.dragging) {
@@ -123,7 +143,8 @@ export function useNavigationSwipe({ enabled, open, panelRef, onOpenChange }: {
       // The page must not scroll under a finger that is moving the panel.
       event.preventDefault();
       const offset = gesture.opening ? across - gesture.width : across;
-      placePanel(panel, Math.min(0, Math.max(-gesture.width, offset)));
+      gesture.offset = Math.min(0, Math.max(-gesture.width, offset));
+      placePanel(gesture.panel, gesture.offset);
       const elapsed = event.timeStamp - gesture.lastTime;
       if (elapsed > 0) gesture.speed = (touch.clientX - gesture.lastX) / elapsed;
       gesture.lastX = touch.clientX;
@@ -131,15 +152,14 @@ export function useNavigationSwipe({ enabled, open, panelRef, onOpenChange }: {
     }
 
     function end() {
-      const panel = panelRef.current;
       const finished = gesture;
       gesture = null;
-      if (finished === null || !finished.dragging || panel === null) return;
+      if (finished === null || !finished.dragging) return;
       const travelled = Math.abs(finished.lastX - finished.startX);
       const flicked = finished.opening ? finished.speed > flickSpeed : finished.speed < -flickSpeed;
       const settles = travelled > finished.width * settleShare || flicked;
       const nextOpen = finished.opening ? settles : !settles;
-      settlePanel(panel, nextOpen);
+      settlePanel(finished.panel, { open: nextOpen, offset: finished.offset, width: finished.width });
       if (nextOpen !== openRef.current) onOpenChange(nextOpen);
     }
 
@@ -152,6 +172,10 @@ export function useNavigationSwipe({ enabled, open, panelRef, onOpenChange }: {
       document.removeEventListener("touchmove", move);
       document.removeEventListener("touchend", end);
       document.removeEventListener("touchcancel", end);
+      // Swiping stops being offered mid-drag (the screen turned wider): the panel goes back where it was.
+      if (gesture?.dragging === true) {
+        settlePanel(gesture.panel, { open: openRef.current, offset: gesture.offset, width: gesture.width });
+      }
     };
   }, [enabled, panelRef, onOpenChange]);
 }

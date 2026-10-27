@@ -1,9 +1,11 @@
 @import "tailwindcss";
 
 /* 押せない要素は、載せても押しても見た目を変えない。hover と active の指定を、:disabled の
-   ときは効かせない形に置き換える（:where で詳細度は上げない）。 */
+   ときは効かせない形に置き換える（:where で詳細度は上げない）。
+   載せたときの見た目は、マウスかタッチパッドが1つでもあれば（any-hover）効かせる。タッチの画面を
+   主な入力と伝える PC（hover: none）でも、マウスで載せた行の「…」が出るようにするためである。 */
 @custom-variant hover {
-  @media (hover: hover) {
+  @media (any-hover: hover) {
     &:hover:where(:not(:disabled)) {
       @slot;
     }
