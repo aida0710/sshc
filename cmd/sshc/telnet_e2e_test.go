@@ -160,13 +160,12 @@ func TestRunTelnetEndToEndAnswersANegotiationThatArrivesAfterTheCommand(t *testi
 func TestRunTelnetEndToEndTimesOutWhenPeerStopsResponding(t *testing.T) {
 	listener := listenLoopback(t)
 	serverErr := make(chan error, 1)
-	commandReceived := make(chan struct{})
 	releaseServer := make(chan struct{})
 	var releasePeer sync.Once
 	release := func() { releasePeer.Do(func() { close(releaseServer) }) }
 	defer release()
 	go func() {
-		serverErr <- serveSilentTelnetPeer(listener, commandReceived, releaseServer)
+		serverErr <- serveSilentTelnetPeer(listener, releaseServer)
 	}()
 
 	address := listener.Addr().String()
@@ -191,11 +190,6 @@ func TestRunTelnetEndToEndTimesOutWhenPeerStopsResponding(t *testing.T) {
 	if code != exitTimeout || stderr.Len() != 0 {
 		t.Fatalf("code = %d, stderr = %q, stdout = %q", code, stderr.String(), stdout.String())
 	}
-	select {
-	case <-commandReceived:
-	default:
-		t.Fatal("server did not receive the command before the client timed out")
-	}
 	var report transportRunReport
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatal(err)
@@ -204,6 +198,8 @@ func TestRunTelnetEndToEndTimesOutWhenPeerStopsResponding(t *testing.T) {
 		t.Fatalf("report = %#v", report)
 	}
 
+	// 期限が切れたのは step 2 なので、送信文は書き終えている。サーバの goroutine がそれを
+	// 読むのはクライアントが返ったあとのこともあるので、送信文を確かめて止まるのを待つ。
 	select {
 	case err := <-serverErr:
 		if err != nil {
@@ -284,7 +280,7 @@ func serveTelnetNegotiatingAfterTheCommand(listener net.Listener) error {
 	return server.DrainUntilClosed()
 }
 
-func serveSilentTelnetPeer(listener net.Listener, commandReceived chan<- struct{}, release <-chan struct{}) error {
+func serveSilentTelnetPeer(listener net.Listener, release <-chan struct{}) error {
 	connection, err := listener.Accept()
 	if err != nil {
 		return err
@@ -293,14 +289,19 @@ func serveSilentTelnetPeer(listener net.Listener, commandReceived chan<- struct{
 	if err := connection.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
 		return err
 	}
-	command, err := telnettest.NewServerConn(connection).ReadLineAfterOfferingEcho()
+	// この相手が確かめるのは期限切れなので、ECHO の返事は待たない。返事を送るのは
+	// クライアントが WILL を読んだときで、期限が先に切れれば送らずに終わる。
+	server := telnettest.NewServerConn(connection)
+	if err := server.OfferEcho(); err != nil {
+		return err
+	}
+	command, err := server.ReadLine()
 	if err != nil {
 		return err
 	}
 	if command != "show clock\r\n" {
 		return fmt.Errorf("Telnet command = %q", command)
 	}
-	close(commandReceived)
 	<-release
 	return nil
 }
