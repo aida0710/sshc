@@ -69,7 +69,7 @@ export function WorkspaceRow({
       onDragOver={dragOver}
       onDragLeave={dragLeave}
       onDrop={drop}
-      className={`group/row mt-1.5 flex items-center gap-1 rounded-md px-1 ${dropTargetLook({ accepts: acceptsSession, over })}`}
+      className={`group/row flex items-center gap-1 rounded-md px-1 ${dropTargetLook({ accepts: acceptsSession, over })}`}
     >
       <button
         type="button"

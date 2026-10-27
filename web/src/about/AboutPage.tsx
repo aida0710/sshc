@@ -6,7 +6,8 @@ import { UpdateControls } from "../shell/UpdateControls";
 import { explainedUpdateReason, updateMessage } from "../shell/updateMessage";
 import { isUpdateActive, useUpdateStatus } from "../shell/useUpdateStatus";
 import { formatDateTime } from "../ui/format";
-import { PageHeader } from "../ui/page";
+import { FactRows, type Fact } from "../ui/FactRows";
+import { PageHeader, PageSection } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
 import { BuildDetails } from "./BuildDetails";
 import { ReleaseNotes } from "./ReleaseNotes";
@@ -76,21 +77,21 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
     return status.available ? t("about.available", { version: status.latest }) : t("about.noNewerVersion", { version: status.current });
   }
 
+  const updateFacts: Fact[] = [];
+  if (status?.latest !== undefined) updateFacts.push({ label: t("about.latest"), value: status.latest });
+  if (status?.publishedAt !== undefined) updateFacts.push({ label: t("about.publishedAt"), value: formatDateTime(status.publishedAt, locale) });
+  updateFacts.push({ label: t("about.checkedAt"), value: status?.checkedAt === undefined ? t("about.notChecked") : formatDateTime(status.checkedAt, locale) });
+
   return (
     <section aria-labelledby="about-heading" className="flex flex-col gap-[22px]">
       <PageHeader title={t("section.about")} headingId="about-heading" />
-      <div className="border-t border-line pt-5">
-        {loadFailed ? <Notice tone="danger">{t("about.loadFailed")}</Notice> : about === null ? <p role="status">{t("about.loading")}</p> : <BuildDetails about={about} />}
-      </div>
-      <section aria-labelledby="about-update-heading" className="border-t border-line pt-5">
-        <h3 id="about-update-heading" className="mb-3 text-sm font-semibold text-ink">{t("about.updates")}</h3>
+      <PageSection heading={t("about.build")}>
+        {loadFailed ? <Notice tone="danger">{t("about.loadFailed")}</Notice> : about === null ? <p role="status" className="text-sm text-ink-muted">{t("about.loading")}</p> : <BuildDetails about={about} />}
+      </PageSection>
+      <PageSection heading={t("about.updates")} headingId="about-update-heading">
         <div className="grid gap-3 text-sm text-ink-muted">
           {currentState === null ? null : <p role="status">{currentState}</p>}
-          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
-            {status?.latest === undefined ? null : <><dt>{t("about.latest")}</dt><dd className="text-ink">{status.latest}</dd></>}
-            {status?.publishedAt === undefined ? null : <><dt>{t("about.publishedAt")}</dt><dd>{formatDateTime(status.publishedAt, locale)}</dd></>}
-            <dt>{t("about.checkedAt")}</dt><dd>{status?.checkedAt === undefined ? t("about.notChecked") : formatDateTime(status.checkedAt, locale)}</dd>
-          </dl>
+          <FactRows facts={updateFacts} />
           {status?.checkError ? <Notice tone="danger"><span className="grid gap-1"><span>{t("update.checkFailed")}</span><span className="break-words">{status.checkError}</span></span></Notice> : null}
           {reason === undefined ? null : <p>{t(updateMessage(reason))}</p>}
           <div className="flex flex-wrap items-baseline gap-4">
@@ -102,7 +103,7 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
           <UpdateActivityLog entries={activity.entries} />
           <UpdateOutput {...updateOutput} />
         </div>
-      </section>
+      </PageSection>
       <ReleaseNotes releases={status?.releases ?? []} current={status?.current ?? about?.version ?? ""} latest={status?.latest} />
     </section>
   );

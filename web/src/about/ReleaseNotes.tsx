@@ -3,6 +3,7 @@ import { useLanguage } from "../i18n/context";
 import { isSafeHttpURL } from "../terminal/links";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { formatDateTime } from "../ui/format";
+import { PageSection } from "../ui/page";
 
 type ReleaseNotesProps = {
   releases: NonNullable<UpdateStatus["releases"]>;
@@ -13,10 +14,9 @@ type ReleaseNotesProps = {
 export function ReleaseNotes({ releases, current, latest }: ReleaseNotesProps) {
   const { t, locale } = useLanguage();
   return (
-    <section aria-labelledby="about-notes-heading" className="border-t border-line pt-5">
-      <h3 id="about-notes-heading" className="mb-3 text-sm font-semibold text-ink">{t("about.releaseNotes")}</h3>
+    <PageSection heading={t("about.releaseNotes")} headingId="about-notes-heading">
       {releases.length === 0 ? <p className="text-sm text-ink-muted">{t("about.noNotes")}</p> : (
-        <div className="divide-y divide-line border-y border-line">
+        <div className="divide-y divide-line">
           {releases.map((release) => {
             const isCurrent = release.version.replace(/^v/, "") === current.replace(/^v/, "");
             return (
@@ -35,6 +35,6 @@ export function ReleaseNotes({ releases, current, latest }: ReleaseNotesProps) {
           })}
         </div>
       )}
-    </section>
+    </PageSection>
   );
 }

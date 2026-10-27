@@ -28,7 +28,7 @@ test("opens About from the menu and version link, checks for updates on opening 
   const about = page.getByRole("region", { name: "About sshc", exact: true });
   await expect(about.getByText("/fixture/sshc")).toBeVisible();
   await expect(about.getByRole("link", { name: "abcdef0" })).toHaveAttribute("href", /\/commit\/abcdef/);
-  await expect(about.getByRole("heading", { level: 3 })).toHaveText(["Updates", "Release notes"]);
+  await expect(about.getByRole("heading", { level: 3 })).toHaveText(["Build", "Updates", "Release notes"]);
   // Opening the page checks GitHub once, so it shows the release found now, not the stored one.
   const progress = about.getByRole("log", { name: "Check and update progress" });
   await expect(progress.getByRole("listitem")).toHaveText([/Checking GitHub for the latest release…/, /The latest release on GitHub is v1\.2\.0\./]);

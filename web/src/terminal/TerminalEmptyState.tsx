@@ -15,7 +15,7 @@ export function TerminalEmptyState() {
         <BrandMark className="size-10" />
         <h2 className="mt-4 text-lg font-semibold text-ink">{t("terminal.emptyHeading")}</h2>
         <p className="mt-1.5 max-w-sm text-[13px] leading-5 text-ink-muted">{t("terminal.emptyHint")}</p>
-        <div aria-hidden="true" className="mt-4 w-full max-w-xs rounded-md bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink"><span className="text-live">$</span> sshc host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div>
+        <div aria-hidden="true" className="mt-4 w-full max-w-xs rounded-md bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink"><span className="text-live">$</span> sshc ssh host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div>
       </div>
     </PageBoard>
   );
