@@ -278,8 +278,12 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
 
-  web:
-    name: Web
+  # 画面の検査は、型・lint・組み立て・axe（web-checks）と、単体テスト（web-unit）に分けて
+  # 並べて流す。単体テストが Web の時間の大半（約3分40秒）を占めていたので、ファイルで
+  # 分けて並べる。テストが増えたら shard の数を増やす。必須の検査「Web」は、両方の結果を
+  # まとめる jobs.web が出す。
+  web-checks:
+    name: Web checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -315,9 +319,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Unit tests
-        run: npm test
-
       - name: Build
         run: npm run build
 
@@ -332,6 +333,48 @@ jobs:
         env:
           SSHC_E2E_BROWSER_CHANNEL: chrome
         run: npm run e2e -- --project=chromium --output="$RUNNER_TEMP/playwright-results" e2e/accessibility.spec.ts
+
+  web-unit:
+    name: Web unit tests (${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Unit tests
+        run: npm test -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+  # 必須の検査「Web」。分けた画面の job がすべて成功したときだけ成功する。どれかが失敗・
+  # 取り消し・飛ばしで終わったら失敗する。
+  web:
+    name: Web
+    needs: [web-checks, web-unit]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every web job to succeed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            if [ "$result" != success ]; then
+              echo "a web job ended with $result (all: $RESULTS)" >&2
+              exit 1
+            fi
+          done
 
   pages:
     name: Documentation site
