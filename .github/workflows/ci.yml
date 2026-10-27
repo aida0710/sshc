@@ -96,15 +96,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # goBuildCache は、その OS での go env GOCACHE の既定の場所である。
           - os: ubuntu-24.04
             name: Linux
             timeoutMinutes: 30
+            goBuildCache: ~/.cache/go-build
           - os: macos-15
             name: macOS
             timeoutMinutes: 30
+            goBuildCache: ~/Library/Caches/go-build
           - os: windows-2025
             name: Windows
             timeoutMinutes: 30
+            goBuildCache: ~/AppData/Local/go-build
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         if: ${{ env.NATIVE_TESTS == 'true' }}
@@ -114,7 +118,23 @@ jobs:
           # バージョンは go.mod から来る。ツールチェーンを変えられる場所を
           # 一か所に限るためである。
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          # setup-go のキャッシュは go.sum だけで鍵を作るので、依存が変わらない限り作り直されず、
+          # そのあとに変わったパッケージを毎回コンパイルし直していた（2026-10-27 に、Windows と
+          # macOS のキャッシュは 10 月 22 日のままだった）。下の手順で、main のコミットごとに
+          # 作り直すキャッシュを使う。
+          cache: false
+      # PR と main への push は、main が最後に保存したビルドのキャッシュから始める。
+      - name: Restore the Go build cache
+        if: ${{ env.NATIVE_TESTS == 'true' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ matrix.goBuildCache }}
+            ~/go/pkg/mod
+          key: go-${{ matrix.name }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ matrix.name }}-${{ hashFiles('go.sum') }}-
+            go-${{ matrix.name }}-
       # CSP の trusted-types の検査と、バイナリが埋め込んだ画面を配るかの検査は、組み立てた画面を読む。
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         if: ${{ env.NATIVE_TESTS == 'true' }}
@@ -211,6 +231,17 @@ jobs:
           & go test -v -count=1 -race -tags sshc_test_kdf ./... 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/go-test-race-windows.log"
           $raceExit = $LASTEXITCODE
           exit $raceExit
+
+      # main への push だけが、テストを通ったビルドのキャッシュを保存する。PR は保存しない
+      # （PR のキャッシュはほかの PR から使えず、容量だけを使う）。
+      - name: Save the Go build cache
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && env.NATIVE_TESTS == 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ matrix.goBuildCache }}
+            ~/go/pkg/mod
+          key: go-${{ matrix.name }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
 
       # Console出力が切り詰められても、ConPTY停止時の直前のtest名と出力を
       # 完全な形で取得できるよう、失敗したWindows runだけlogを保存する。
