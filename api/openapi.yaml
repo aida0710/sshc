@@ -6139,10 +6139,16 @@ components:
       additionalProperties: false
       properties:
         # 選んでいる項目・ボタン・フォーカスの枠に使う色の名前。省略は既定の lavender。
-        # 未読の通知（橙）・接続済み（緑）・エラー（赤）と見分けがつく色だけにする。
+        # 用意した色は、未読の通知（橙）・接続済み（緑）・エラー（赤）と見分けがつく色だけにする。
+        # custom は accentColor の色を使う。
         accent:
           type: string
-          enum: [lavender, blue, sky, pink, mono]
+          enum: [lavender, blue, sky, pink, mono, custom]
+        # custom のときの色（#rrggbb、小文字）。用意した色を選んでいる間も残し、custom に
+        # 戻したときに同じ色を出す。
+        accentColor:
+          type: string
+          pattern: "^#[0-9a-f]{6}$"
     # 端末の表示設定。接続単位と全体設定を項目ごとに解決し、未設定項目はアプリの
     # テーマを使う。配色とフォントは名前で参照し、未知の名前は既定値へ戻す。
     TerminalAppearance:

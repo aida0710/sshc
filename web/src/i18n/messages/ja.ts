@@ -1241,6 +1241,11 @@ export const ja = {
   "appearance.accent.sky": "水色",
   "appearance.accent.pink": "ピンク",
   "appearance.accent.mono": "モノクロ",
+  "appearance.accent.custom": "カスタム",
+  "appearance.customColor": "カスタムの色",
+  "appearance.customColorCode": "カスタムの色のコード",
+  "appearance.customColorInvalid": "#rrggbbの形で入力してください。",
+  "appearance.customColorLowContrast": "この色は今の配色の地と見分けにくく、選んでいる項目やフォーカスの枠が見えにくくなります。",
   "appearance.accentSaveFailed": "さし色を保存できませんでした。もう一度選んでください。",
 
   "section.home": "Home",

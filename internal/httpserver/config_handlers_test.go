@@ -184,6 +184,31 @@ func TestTheAccentIsSavedAndAnUnknownOneIsRefused(t *testing.T) {
 	}
 }
 
+func TestACustomAccentColourIsSavedAndReadBack(t *testing.T) {
+	harness := newConfigHarness(t)
+
+	saved := harness.call(t, http.MethodPut, "/api/v1/metadata/appearance", map[string]any{"accent": "custom", "accentColor": "#3fa86b"}, true, true)
+	if saved.Code != http.StatusOK {
+		t.Fatalf("save = %d, body %s", saved.Code, saved.Body.String())
+	}
+	read := harness.call(t, http.MethodGet, "/api/v1/metadata", nil, true, true)
+	var metadata struct {
+		Appearance *api.AppearanceSettings `json:"appearance"`
+	}
+	if err := json.Unmarshal(read.Body.Bytes(), &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if metadata.Appearance == nil || metadata.Appearance.Accent == nil || *metadata.Appearance.Accent != api.Custom ||
+		metadata.Appearance.AccentColor == nil || *metadata.Appearance.AccentColor != "#3fa86b" {
+		t.Fatalf("metadata appearance = %#v, want custom #3fa86b; read %d", metadata.Appearance, read.Code)
+	}
+
+	refused := harness.call(t, http.MethodPut, "/api/v1/metadata/appearance", map[string]any{"accent": "custom"}, true, true)
+	if refused.Code != http.StatusBadRequest {
+		t.Fatalf("custom accent without a colour = %d, want 400; body %s", refused.Code, refused.Body.String())
+	}
+}
+
 func TestTerminalAndEngineSettingsReturnTheirWireSaveResult(t *testing.T) {
 	harness := newConfigHarness(t)
 	for name, target := range map[string]string{

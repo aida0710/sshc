@@ -4096,7 +4096,8 @@ export interface components {
         };
         AppearanceSettings: {
             /** @enum {string} */
-            accent?: "lavender" | "blue" | "sky" | "pink" | "mono";
+            accent?: "lavender" | "blue" | "sky" | "pink" | "mono" | "custom";
+            accentColor?: string;
         };
         TerminalAppearance: {
             palette?: string;
