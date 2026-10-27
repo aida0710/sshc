@@ -24,6 +24,7 @@ const scrollbackCanary = "scrollback-canary-8d31f7"
 // 見るのはファイルシステムそのものである。世代バックアップ、journal、history、
 // metadata、vault、handoff、そして状態ディレクトリ配下の何もかも。
 func TestTheScrollbackNeverReachesTheStateDirectory(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 
 	// ローカルシェルを一本開く。ハーネスの starter は本物の PTY を確保しないので、

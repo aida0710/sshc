@@ -72,6 +72,7 @@ func newKeyPairFixture(t *testing.T, passphrase string) (privateKey []byte, publ
 }
 
 func TestScanClassifiesByContentNotByFileName(t *testing.T) {
+	t.Parallel()
 	workspace := newTestWorkspace(t)
 	privateKey, publicKey, fingerprint := newKeyPairFixture(t, "correct horse")
 
@@ -145,6 +146,7 @@ func TestScanClassifiesByContentNotByFileName(t *testing.T) {
 }
 
 func TestScanShowsSymbolicLinksWithoutFollowingThem(t *testing.T) {
+	t.Parallel()
 	workspace := newTestWorkspace(t)
 	privateKey, _, _ := newKeyPairFixture(t, "")
 	outside := filepath.Join(t.TempDir(), "elsewhere")
@@ -180,6 +182,7 @@ func TestScanShowsSymbolicLinksWithoutFollowingThem(t *testing.T) {
 }
 
 func TestGroupMatchesSiblingsByFingerprintOnly(t *testing.T) {
+	t.Parallel()
 	workspace := newTestWorkspace(t)
 	privateKey, publicKey, _ := newKeyPairFixture(t, "")
 	_, strangerPublicKey, _ := newKeyPairFixture(t, "")

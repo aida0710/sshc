@@ -10,6 +10,7 @@ import (
 //
 // 対話セッションが外部の ssh プロセスや PTY 中継を使用しないことを検証する。
 func TestOpeningAnSSHSessionStartsNoProcess(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.terminal.reset()
 
@@ -49,6 +50,7 @@ func TestOpeningAnSSHSessionStartsNoProcess(t *testing.T) {
 // していた。前者はこのアプリケーションが断っていただけで、後者は OpenSSH が
 // 先に読んだ方を黙って使う設定なので、どちらも「解決できない」例ではない。
 func TestAnUnresolvableAliasOpensNoSession(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	mustWrite(t, f.root+"/config", []byte(""+
 		"Host refused\n"+

@@ -19,6 +19,7 @@ import (
 // 見つけるしかない。cgo の原文は、それを `import "C"` する Go と対でしか
 // 意味を持たない。連れが居ないなら、それは誰も読まないバイト列である。
 func TestNoCompiledSourceOutlivesItsGoCompanion(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..")
 	// 並べるのは cgo が拾う拡張子である。拾わないものは、置いてあっても
 	// ビルドに入らないので、ここが見張る対象ではない。

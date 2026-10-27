@@ -39,6 +39,7 @@ func runInstallMake(t *testing.T, environment []string, target string, assignmen
 // install-binaryは、古い宛先を新しい実行可能ファイルへ置き換える。ログイン時起動を
 // OSへ任せるようになってからは、置いたファイル自身に何かを依頼することはない。
 func TestInstallBinaryAtomicallyReplacesTheCLI(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	source := writeInstallFixture(t, root)
 	installDirectory := filepath.Join(root, "installed")
@@ -78,6 +79,7 @@ func TestInstallBinaryAtomicallyReplacesTheCLI(t *testing.T) {
 
 // stageに失敗した時点ではrenameしていないので、既存のCLIは1 byteも変わらない。
 func TestInstallBinaryKeepsTheOldCLIWhenStagingFails(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	installDirectory := filepath.Join(root, "installed")
 	if err := os.MkdirAll(installDirectory, 0o700); err != nil {
@@ -103,6 +105,7 @@ func TestInstallBinaryKeepsTheOldCLIWhenStagingFails(t *testing.T) {
 // ならない。このshimはproductionのinstallを置き換え、呼ばれた時点の宛先を観察する。
 // PID名へ事前配置されたsymlinkを追う実装では、この検査に失敗する。
 func TestInstallBinaryStagesIntoAnExclusivelyCreatedRegularFile(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	source := writeInstallFixture(t, root)
 	installDirectory := filepath.Join(root, "installed")
@@ -132,6 +135,7 @@ fi
 // uninstall-binaryはインストール済みのCLIを取り除く。ログイン時起動をOSへ任せる
 // ようになってからは、削除の前に何かを止める必要がない。
 func TestUninstallBinaryRemovesTheInstalledCLI(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	installDirectory := filepath.Join(root, "installed")
 	if err := os.MkdirAll(installDirectory, 0o700); err != nil {

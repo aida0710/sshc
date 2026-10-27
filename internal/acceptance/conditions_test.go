@@ -322,6 +322,7 @@ func completionConditions() []completionCondition {
 }
 
 func TestDesignCompletionConditionsNameExistingProofsAndStateTheirGaps(t *testing.T) {
+	t.Parallel()
 	repository := filepath.Join("..", "..")
 	sources := collectSources(t, repository)
 
@@ -384,6 +385,7 @@ func gapLine(gap string) string {
 // §12 が実際に挙げる数と一致し、かつ verdict の内訳が
 // 読み手に数えさせるのではなく明記されている場合に限る。
 func TestCompletionAuditCountsWhatItClaims(t *testing.T) {
+	t.Parallel()
 	conditions := completionConditions()
 	// design §12 の 12 個に、行 13 として §10.1 の隔離規則を加えたもの。
 	if len(conditions) != 13 {

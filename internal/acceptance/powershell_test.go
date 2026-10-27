@@ -18,6 +18,7 @@ import (
 // これは実機が教えたことである。ある .ps1 は pwsh 7 で解析が通っていたのに、
 // Windows 11 の既定の PowerShell では一行も走らなかった。
 func TestWindowsPowerShellScriptsCarryABOMWhenTheyNeedOne(t *testing.T) {
+	t.Parallel()
 	directory := filepath.Join("..", "..", "scripts", "windows")
 	entries, err := os.ReadDir(directory)
 	if err != nil {

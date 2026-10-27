@@ -11,6 +11,7 @@ import (
 )
 
 func TestEncodeAndInspectPrivateKeyRoundTrip(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		algorithm       Algorithm
@@ -82,6 +83,7 @@ func TestEncodeAndInspectPrivateKeyRoundTrip(t *testing.T) {
 }
 
 func TestDecodePrivateKeyReportsPassphraseProblemsDistinctly(t *testing.T) {
+	t.Parallel()
 	privateKey, err := GeneratePrivateKey(AlgorithmEd25519, 0, rand.Reader)
 	if err != nil {
 		t.Fatalf("GeneratePrivateKey error = %v", err)
@@ -106,6 +108,7 @@ func TestDecodePrivateKeyReportsPassphraseProblemsDistinctly(t *testing.T) {
 }
 
 func TestGeneratePrivateKeyRejectsUnsupportedRequests(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		algorithm Algorithm
@@ -129,6 +132,7 @@ func TestGeneratePrivateKeyRejectsUnsupportedRequests(t *testing.T) {
 }
 
 func TestInspectPublicKeyReadsCertificateDetail(t *testing.T) {
+	t.Parallel()
 	certificateLine := []byte(certificateFixture)
 	info, err := InspectPublicKey(certificateLine)
 	if err != nil {

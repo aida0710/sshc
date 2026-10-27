@@ -17,6 +17,7 @@ import (
 // 使う。同じ検査を両方で走らせると、落ちるだけでなく「環境が宛先を決める」
 // という誤りがどちらかに残る。
 func TestTheUnixAgentFindsItsSocketThroughTheEnvironment(t *testing.T) {
+	t.Parallel()
 	socket, _ := runAgent(t)
 	consulted := make([]string, 0, 2)
 
@@ -45,6 +46,7 @@ func TestTheUnixAgentFindsItsSocketThroughTheEnvironment(t *testing.T) {
 // 変数が無いことと、その先に誰かが居ないことは同じ扱いでよい。死んだ端末が
 // 残した SSH_AUTH_SOCK はいつまでも残るので、どちらも開いてみて返す。
 func TestTheUnixAgentWithoutTheVariableIsUnavailable(t *testing.T) {
+	t.Parallel()
 	adapter := keys.NewAgent(func(string) (string, bool) { return "", false })
 
 	if adapter.Available(context.Background()) {

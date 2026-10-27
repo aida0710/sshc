@@ -19,6 +19,7 @@ import (
 // PTY のインターフェースは残っている。SSH はプロセス内で通信するので、この一覧のどれも
 // そこへ届いてはならない。
 func TestNoConnectionRouteOpensAPseudoTerminal(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.scanner.reset()
 

@@ -25,6 +25,7 @@ func newTrashService(t *testing.T) (*Service, string) {
 }
 
 func TestTrashMovesTheWholeKeyPairAndKeepsItsPermissions(t *testing.T) {
+	t.Parallel()
 	service, root := newTrashService(t)
 	tightenTrashSourceKey(t, filepath.Join(root, "id_work"))
 
@@ -77,6 +78,7 @@ func TestTrashMovesTheWholeKeyPairAndKeepsItsPermissions(t *testing.T) {
 }
 
 func TestListTrashShowsAgeAndNeverDeletesAnything(t *testing.T) {
+	t.Parallel()
 	service, root := newTrashService(t)
 	result, err := service.Trash(ItemID("id_work"))
 	if err != nil {
@@ -122,6 +124,7 @@ func TestListTrashShowsAgeAndNeverDeletesAnything(t *testing.T) {
 }
 
 func TestRestoreRefusesWhenItWouldHaveToGuess(t *testing.T) {
+	t.Parallel()
 	service, root := newTrashService(t)
 	result, err := service.Trash(ItemID("id_work"))
 	if err != nil {
@@ -172,6 +175,7 @@ func TestRestoreRefusesWhenItWouldHaveToGuess(t *testing.T) {
 }
 
 func TestRestoreRefusesWhenAnIdenticalKeyIsAlreadyPresent(t *testing.T) {
+	t.Parallel()
 	service, root := newTrashService(t)
 	original, err := os.ReadFile(filepath.Join(root, "id_work"))
 	if err != nil {
@@ -201,6 +205,7 @@ func TestRestoreRefusesWhenAnIdenticalKeyIsAlreadyPresent(t *testing.T) {
 }
 
 func TestPurgeRemovesEveryFileAndCannotBeUndone(t *testing.T) {
+	t.Parallel()
 	service, root := newTrashService(t)
 	result, err := service.Trash(ItemID("id_work"))
 	if err != nil {

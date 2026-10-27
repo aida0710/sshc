@@ -76,6 +76,7 @@ func aliasRoutes() []aliasRoute {
 }
 
 func TestNoRouteEverLetsAHostileAliasReachAnExternalEffect(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	publicKey := string(bytes.TrimSpace(f.read("id_ed25519.pub")))
 
@@ -134,6 +135,7 @@ func TestNoRouteEverLetsAHostileAliasReachAnExternalEffect(t *testing.T) {
 // そのテストは本物の防御を取り除いた mutation を生き延びてしまう。
 // このテストはサービスを直接呼ぶので、各層が自分自身に対して責任を持つ。
 func TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
+	t.Parallel()
 	var reached []string
 	service := remotekey.Service{
 		Resolve: func(alias string) (sshclient.Target, error) {
@@ -190,6 +192,7 @@ func TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 }
 
 func TestRemoteRegistrationNeverInterpolatesInputIntoTheRemoteShell(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 
 	publicKey := string(bytes.TrimSpace(f.read("id_ed25519.pub")))
@@ -275,6 +278,7 @@ func TestRemoteRegistrationNeverInterpolatesInputIntoTheRemoteShell(t *testing.T
 }
 
 func TestNoRouteWritesOutsideTheWorkspaceOrThroughASymbolicLink(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	outside := filepath.Join(f.home, "private-notes", "canary.txt")
 	original, err := os.ReadFile(outside)
@@ -396,6 +400,7 @@ func TestNoRouteWritesOutsideTheWorkspaceOrThroughASymbolicLink(t *testing.T) {
 // 多層防御は歓迎すべきものだが、それは上の end-to-end テストがどちらか片方の guard
 // だけを消しても通ってしまうことを意味する。このテストは guard を直接呼ぶ。
 func TestTheWorkspaceGuardRefusesTraversalAndSymlinksWithoutTheHTTPLayer(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh", "conf.d"), 0o700); err != nil {
 		t.Fatal(err)
@@ -458,6 +463,7 @@ func TestTheWorkspaceGuardRefusesTraversalAndSymlinksWithoutTheHTTPLayer(t *test
 }
 
 func TestAnAliasOpenSSHWouldAcceptIsStillRefusedForEveryExternalEffect(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 
 	// 設定ファイルには、このアプリケーションが決して起動しない

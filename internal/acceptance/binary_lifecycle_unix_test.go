@@ -35,6 +35,7 @@ import (
 // すでに必要なローカルの Go ツールチェインを使い、HOME を一時ディレクトリに向けるため、
 // 本物の ~/.ssh は決して読まれない。ここはネットワークには一切触れない。
 func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
+	t.Parallel()
 	repository := filepath.Join("..", "..")
 	binary := filepath.Join(t.TempDir(), builtBinaryName)
 

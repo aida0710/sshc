@@ -89,6 +89,7 @@ func agentFor(socket string) keys.Agent {
 }
 
 func TestAgentAddsListsAndRemovesThroughTheRealProtocol(t *testing.T) {
+	t.Parallel()
 	socket, keyring := runAgent(t)
 	private, public := agentKey(t, nil)
 	adapter := agentFor(socket)
@@ -131,6 +132,7 @@ func TestAgentAddsListsAndRemovesThroughTheRealProtocol(t *testing.T) {
 
 // 鍵の復号はこのプロセスで行う。パスフレーズが agent へ渡ることはない。
 func TestAgentDecryptsTheKeyBeforeHandingItOver(t *testing.T) {
+	t.Parallel()
 	socket, keyring := runAgent(t)
 	private, _ := agentKey(t, []byte("correct horse"))
 	adapter := agentFor(socket)
@@ -157,6 +159,7 @@ func TestAgentDecryptsTheKeyBeforeHandingItOver(t *testing.T) {
 // 変数があることは、その先に誰かがいることを意味しない。死んだ端末が残した
 // SSH_AUTH_SOCK は、いつまでも残る。
 func TestAgentReportsAnUnreachableSocketAsUnavailable(t *testing.T) {
+	t.Parallel()
 	adapter := agentFor(filepath.Join(t.TempDir(), "nobody-is-here.sock"))
 
 	if adapter.Available(context.Background()) {
@@ -170,6 +173,7 @@ func TestAgentReportsAnUnreachableSocketAsUnavailable(t *testing.T) {
 // 開けなかった理由は、agent 転送の失敗としてターミナルへそのまま出る。改行を含むと、
 // 次の行が行頭へ戻らない。
 func TestAgentExplainsAnUnreachableSocketOnOneLine(t *testing.T) {
+	t.Parallel()
 	adapter := agentFor(filepath.Join(t.TempDir(), "nobody-is-here.sock"))
 
 	_, err := adapter.Connect(context.Background())
@@ -203,6 +207,7 @@ func agentOver(conn net.Conn) keys.Agent {
 // 署名の要求は、接続の認証や agent 転送のあいだのいつ来るか分からない。Connect が
 // 開いた接続に期限を付けると、転送した agent は Timeout の後に切れる。
 func TestConnectLeavesTheOpenedAgentWithoutADeadline(t *testing.T) {
+	t.Parallel()
 	client, server := net.Pipe()
 	defer func() { _ = server.Close() }()
 	recorded := &deadlineRecordingConn{Conn: client}
@@ -219,6 +224,7 @@ func TestConnectLeavesTheOpenedAgentWithoutADeadline(t *testing.T) {
 
 // Keys 画面の一往復は、応答しない agent で止まらないよう、開いた接続にも期限を付ける。
 func TestTheKeysScreenBoundsEachAgentRoundTripWithADeadline(t *testing.T) {
+	t.Parallel()
 	client, server := net.Pipe()
 	defer func() { _ = server.Close() }()
 	recorded := &deadlineRecordingConn{Conn: client}
@@ -232,6 +238,7 @@ func TestTheKeysScreenBoundsEachAgentRoundTripWithADeadline(t *testing.T) {
 }
 
 func TestAgentWithoutASocketIsUnavailable(t *testing.T) {
+	t.Parallel()
 	adapter := agentFor("")
 	private, _ := agentKey(t, nil)
 
@@ -247,6 +254,7 @@ func TestAgentWithoutASocketIsUnavailable(t *testing.T) {
 
 // 寿命つきの登録は agent が受け取る。
 func TestAgentPassesTheRequestedLifetime(t *testing.T) {
+	t.Parallel()
 	socket, keyring := runAgent(t)
 	private, _ := agentKey(t, nil)
 
