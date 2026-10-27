@@ -351,8 +351,8 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   }
 
   const sibling = page.getByRole("row", { name: /id_connection_sibling\b/ }).first();
-  await sibling.getByRole("button", { name: "Show details" }).click();
-  await page.getByRole("region", { name: "Actions for id_connection_sibling" }).getByRole("button", { name: "Save passphrase" }).click();
+  await sibling.getByRole("button", { name: "Actions for id_connection_sibling" }).click();
+  await page.getByRole("menuitem", { name: "Save passphrase" }).click();
   await page.getByLabel("Passphrase name").fill("shared-sibling-phrase");
   await page.getByLabel("Passphrase value", { exact: true }).fill(firstPassphrase);
   expect(await clickAndAwait(
@@ -363,8 +363,8 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   )).toBe(200);
 
   const owned = page.getByRole("row", { name: /id_connection_owned\b/ }).first();
-  await owned.getByRole("button", { name: "Show details" }).click();
-  await page.getByRole("region", { name: "Actions for id_connection_owned" }).getByRole("button", { name: "Save passphrase" }).click();
+  await owned.getByRole("button", { name: "Actions for id_connection_owned" }).click();
+  await page.getByRole("menuitem", { name: "Save passphrase" }).click();
   await page.getByLabel("Use a stored passphrase").selectOption("shared-sibling-phrase");
   expect(await clickAndAwait(
     page,
@@ -400,8 +400,8 @@ test("saves and replaces a key-owned passphrase without changing another key's s
 
   await openSection(page, "Keys");
   const ownedAfterSave = page.getByRole("row", { name: /id_connection_owned\b/ }).first();
-  await ownedAfterSave.getByRole("button", { name: "Show details" }).click();
-  await page.getByRole("region", { name: "Actions for id_connection_owned" }).getByRole("button", { name: "Change passphrase" }).click();
+  await ownedAfterSave.getByRole("button", { name: "Actions for id_connection_owned" }).click();
+  await page.getByRole("menuitem", { name: "Change passphrase" }).click();
   await page.getByLabel("Current passphrase", { exact: true }).fill(firstPassphrase);
   await page.getByLabel("New passphrase", { exact: true }).fill(nextPassphrase);
   const [passphraseChanged] = await Promise.all([

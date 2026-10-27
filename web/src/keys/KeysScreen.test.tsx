@@ -29,15 +29,27 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function openKeyDetails(row: HTMLElement): Promise<HTMLElement> {
-  const toggle = within(row).getByRole("button", { name: /(?:Show|Hide) details/ });
-  if (toggle.getAttribute("aria-expanded") !== "true") await userEvent.click(toggle);
-  return screen.getByRole("group", { name: "Key actions" });
+// openTrash opens the trash from the list of groups, where its entries are listed in place of the keys.
+async function openTrash() {
+  await userEvent.click(await screen.findByRole("button", { name: /^Trash, \d+$/ }));
+}
+
+// renderInspector draws the details the screen last handed to the inspector, as the app's pane would.
+function renderInspector(onInspector: ReturnType<typeof vi.fn>) {
+  const content = onInspector.mock.calls.at(-1)?.[0] as InspectorContent;
+  if (content === null || content === undefined) throw new Error("no details were handed to the inspector");
+  return render(<>{content.body}</>);
+}
+
+// openKeyActions opens the row's "…" menu and returns it.
+async function openKeyActions(row: HTMLElement): Promise<HTMLElement> {
+  await userEvent.click(within(row).getByRole("button", { name: /^Actions for / }));
+  return screen.getByRole("menu");
 }
 
 async function openStoredPassphrase(row: HTMLElement) {
-  const actions = await openKeyDetails(row);
-  await userEvent.click(within(actions).getByRole("button", { name: "Save passphrase" }));
+  const actions = await openKeyActions(row);
+  await userEvent.click(within(actions).getByRole("menuitem", { name: "Save passphrase" }));
 }
 
 function buildInventory(): KeyInventoryResponse {
@@ -254,13 +266,14 @@ describe("KeysScreen", () => {
     const inventoryTable = await screen.findByRole("table", {
       name: "Files classified by content and permissions",
     });
-    expect(inventoryTable).toHaveClass("block", "w-full", "md:table", "md:min-w-[56rem]");
-    expect(inventoryTable).not.toHaveClass("min-w-[56rem]");
+    // A table where its container has room for the columns, one card per key where it has not; never a
+    // table wider than the page that hides its last column.
+    expect(inventoryTable).toHaveClass("block", "w-full", "@xl/keytable:table");
+    expect(inventoryTable.className).not.toMatch(/min-w-/);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    expect(workRow).toHaveClass("grid", "md:table-row");
+    expect(workRow).toHaveClass("grid", "@xl/keytable:table-row");
     expect(within(workRow).getByText("referenced by 1")).toBeInTheDocument();
-    expect(within(workRow).getByText("SHA256:abcdef")).toBeInTheDocument();
 
     const legacyRow = screen.getByRole("row", { name: /legacy/ });
     expect(within(legacyRow).getByText("Permissions too open")).toBeInTheDocument();
@@ -290,18 +303,19 @@ describe("KeysScreen", () => {
     expect(fileName).toHaveClass("min-h-10", "sm:min-h-0");
   });
 
-  it("hands the chosen key to the inspector, and takes it back", async () => {
+  it("hands the chosen key to the inspector and opens it", async () => {
     const user = userEvent.setup();
     const onInspector = vi.fn();
-    render(<KeysScreen api={buildApi()} onInspector={onInspector} />);
+    const onShowInspector = vi.fn();
+    render(<KeysScreen api={buildApi()} onInspector={onInspector} onShowInspector={onShowInspector} />);
 
     await user.click(await screen.findByRole("button", { name: "id_work" }));
     expect(onInspector).toHaveBeenLastCalledWith(
       expect.objectContaining({ label: "Key details", attention: false }),
     );
-
-    await user.click(screen.getByRole("button", { name: "id_work" }));
-    expect(onInspector).toHaveBeenLastCalledWith(null);
+    expect(onShowInspector).toHaveBeenCalledTimes(1);
+    renderInspector(onInspector);
+    expect(screen.getAllByText("SHA256:abcdef").length).toBeGreaterThan(0);
   });
 
   it("hands the chosen key to an inspector held in the parent's state only once", async () => {
@@ -389,10 +403,10 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    const management = await openKeyDetails(workRow);
-    expect(management.closest("tr")).toHaveAttribute("data-key-detail-for", "key-one");
-    expect(management).toHaveClass("flex", "flex-wrap");
-    await userEvent.click(within(management).getByRole("button", { name: "Change passphrase" }));
+    const management = await openKeyActions(workRow);
+    await userEvent.click(within(management).getByRole("menuitem", { name: "Change passphrase" }));
+    // The form opens under the row it was asked from, not at the foot of the page.
+    expect(screen.getByRole("heading", { name: "Change passphrase: id_work" }).closest("tr")).toHaveAttribute("data-key-panel-for", "key-one");
 
     await userEvent.type(screen.getByLabelText("Current passphrase"), "first passphrase");
     await userEvent.type(screen.getByLabelText("New passphrase"), "second passphrase");
@@ -409,8 +423,8 @@ describe("KeysScreen", () => {
     await waitFor(() => expect(screen.queryByLabelText("Current passphrase")).not.toBeInTheDocument());
 
     const reopened = (await screen.findByRole("button", { name: "id_work" })).closest("tr")!;
-    const reopenedActions = await openKeyDetails(reopened);
-    await userEvent.click(within(reopenedActions).getByRole("button", { name: "Change passphrase" }));
+    const reopenedActions = await openKeyActions(reopened);
+    await userEvent.click(within(reopenedActions).getByRole("menuitem", { name: "Change passphrase" }));
     expect(screen.getByLabelText("Current passphrase")).toHaveValue("");
     expect(screen.getByLabelText("New passphrase")).toHaveValue("");
   });
@@ -423,8 +437,8 @@ describe("KeysScreen", () => {
     }));
     render(<KeysScreen api={buildApi({ changePassphrase } as Partial<KeysApi>)} />);
 
-    const management = await openKeyDetails(await screen.findByRole("row", { name: /id_work/ }));
-    await user.click(within(management).getByRole("button", { name: "Change passphrase" }));
+    const management = await openKeyActions(await screen.findByRole("row", { name: /id_work/ }));
+    await user.click(within(management).getByRole("menuitem", { name: "Change passphrase" }));
     await user.type(screen.getByLabelText("Current passphrase"), "first passphrase");
     await user.type(screen.getByLabelText("New passphrase"), "second passphrase");
     const passphraseForm = screen.getByRole("heading", { name: "Change passphrase: id_work" }).closest("form")!;
@@ -474,17 +488,20 @@ describe("KeysScreen", () => {
     expect(window.sessionStorage.length).toBe(0);
   });
 
-  it("keeps the trash folded but says how much is in it", async () => {
+  it("counts the trash in the list of groups and lists it only when opened", async () => {
     render(<KeysScreen api={buildApi()} />);
 
-    const summary = await screen.findByText("Trash (1)");
-    expect(summary.closest("details")).not.toHaveAttribute("open");
+    expect(await screen.findByRole("button", { name: "Trash, 1" })).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /id_old/ })).not.toBeInTheDocument();
+    await openTrash();
+    expect(await screen.findByRole("row", { name: /id_old/ })).toBeInTheDocument();
   });
 
   it("requires a second confirmation before a permanent delete", async () => {
     const api = buildApi();
     render(<KeysScreen api={api} />);
 
+    await openTrash();
     const trashRow = await screen.findByRole("row", { name: /id_old/ });
     await userEvent.click(within(trashRow).getByRole("button", { name: "Delete permanently" }));
     expect(api.purge).not.toHaveBeenCalled();
@@ -499,6 +516,7 @@ describe("KeysScreen", () => {
     const api = buildApi({ purge: vi.fn().mockRejectedValue(new Error("api_mutation_failed")) });
     render(<KeysScreen api={api} />);
 
+    await openTrash();
     const trashRow = await screen.findByRole("row", { name: /id_old/ });
     await userEvent.click(within(trashRow).getByRole("button", { name: "Delete permanently" }));
     const dialog = screen.getByRole("dialog");
@@ -512,6 +530,7 @@ describe("KeysScreen", () => {
     const api = buildApi({ purge: vi.fn().mockRejectedValue(new Error("api_mutation_failed")) });
     render(<KeysScreen api={api} />);
 
+    await openTrash();
     const trashRow = await screen.findByRole("row", { name: /id_old/ });
     await userEvent.click(within(trashRow).getByRole("button", { name: "Delete permanently" }));
     const failed = screen.getByRole("dialog");
@@ -527,6 +546,7 @@ describe("KeysScreen", () => {
     const api = buildApi();
     render(<KeysScreen api={api} />);
 
+    await openTrash();
     const trashRow = await screen.findByRole("row", { name: /id_old/ });
     await userEvent.click(within(trashRow).getByRole("button", { name: "Delete permanently" }));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
@@ -547,6 +567,7 @@ describe("KeysScreen", () => {
     });
     render(<KeysScreen api={api} />);
 
+    await openTrash();
     const trashRow = await screen.findByRole("row", { name: /id_old/ });
     await userEvent.click(within(trashRow).getByRole("button", { name: "Restore" }));
 
@@ -568,6 +589,7 @@ describe("KeysScreen", () => {
     };
     render(<KeysScreen api={buildApi({ listTrash: vi.fn().mockResolvedValue(blocked) })} />);
 
+    await openTrash();
     const trashRow = await screen.findByRole("row", { name: /id_old/ });
     expect(trashRow).toHaveTextContent("the same key already exists as id_new, id_old is missing from the trash");
     expect(trashRow).not.toHaveTextContent("restore_");
@@ -576,6 +598,7 @@ describe("KeysScreen", () => {
   it("marks a trash entry older than the retention window without deleting it", async () => {
     render(<KeysScreen api={buildApi()} />);
 
+    await openTrash();
     const trashRow = await screen.findByRole("row", { name: /id_old/ });
     expect(within(trashRow).getByText("40 days · older than 30 days")).toBeInTheDocument();
     expect(within(trashRow).getByRole("button", { name: "Restore" })).toBeEnabled();
@@ -596,7 +619,7 @@ describe("KeysScreen", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Try again" }));
 
-    expect(await screen.findByRole("row", { name: /id_old/ })).toBeInTheDocument();
+    expect(await screen.findByRole("row", { name: /id_work/ })).toBeInTheDocument();
   });
 
   it("keeps the list and says the list may be stale when the read after a successful operation fails", async () => {
@@ -606,6 +629,7 @@ describe("KeysScreen", () => {
     const api = buildApi({ inventory });
     render(<KeysScreen api={api} />);
 
+    await openTrash();
     const trashRow = await screen.findByRole("row", { name: /id_old/ });
     await userEvent.click(within(trashRow).getByRole("button", { name: "Delete permanently" }));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Confirm permanent deletion" }));
@@ -664,13 +688,16 @@ describe("KeysScreen", () => {
         },
       },
     ];
-    render(<KeysScreen api={buildApi({ inventory: vi.fn().mockResolvedValue(inventory) })} />);
+    const onInspector = vi.fn();
+    render(<KeysScreen api={buildApi({ inventory: vi.fn().mockResolvedValue(inventory) })} onInspector={onInspector} />);
 
     const row = await screen.findByRole("row", { name: /id_work-cert\.pub/ });
-    expect(within(row).getByText("key id aida@dubguild")).toBeInTheDocument();
-    expect(within(row).getByText("for deploy, ops")).toBeInTheDocument();
     expect(within(row).getByText("expired 2020-01-01 00:00Z")).toBeInTheDocument();
-    expect(within(row).getByText("signs ssh-ed25519 SHA256:signedkey")).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "id_work-cert.pub" }));
+    renderInspector(onInspector);
+    expect(screen.getByText("key id aida@dubguild")).toBeInTheDocument();
+    expect(screen.getByText("for deploy, ops")).toBeInTheDocument();
+    expect(screen.getByText("signs ssh-ed25519 SHA256:signedkey")).toBeInTheDocument();
   });
 
   it("says a certificate with no principal is valid for any of them", async () => {
@@ -691,11 +718,14 @@ describe("KeysScreen", () => {
         },
       },
     ];
-    render(<KeysScreen api={buildApi({ inventory: vi.fn().mockResolvedValue(inventory) })} />);
+    const onInspector = vi.fn();
+    render(<KeysScreen api={buildApi({ inventory: vi.fn().mockResolvedValue(inventory) })} onInspector={onInspector} />);
 
     const row = await screen.findByRole("row", { name: /host-cert\.pub/ });
-    expect(within(row).getByText("for any principal")).toBeInTheDocument();
     expect(within(row).getByText("never expires")).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "host-cert.pub" }));
+    renderInspector(onInspector);
+    expect(screen.getByText("for any principal")).toBeInTheDocument();
   });
 
   it("refuses agent registration, and says what is missing, when no agent is reachable", async () => {
@@ -703,8 +733,8 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    const actions = await openKeyDetails(workRow);
-    expect(within(actions).getByRole("button", { name: "Add to ssh-agent" })).toBeDisabled();
+    const actions = await openKeyActions(workRow);
+    expect(within(actions).getByRole("menuitem", { name: "Add to ssh-agent" })).toBeDisabled();
     expect(screen.getByText(/This process cannot connect to ssh-agent/)).toBeInTheDocument();
     expect(api.registerWithAgent).not.toHaveBeenCalled();
   });
@@ -714,8 +744,8 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    const actions = await openKeyDetails(workRow);
-    await userEvent.click(within(actions).getByRole("button", { name: "Add to ssh-agent" }));
+    const actions = await openKeyActions(workRow);
+    await userEvent.click(within(actions).getByRole("menuitem", { name: "Add to ssh-agent" }));
 
     await userEvent.type(screen.getByLabelText("Key passphrase"), "correct horse");
     await userEvent.selectOptions(screen.getByLabelText("Lifetime"), "3600");
@@ -739,8 +769,8 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    const actions = await openKeyDetails(workRow);
-    await userEvent.click(within(actions).getByRole("button", { name: "Add to ssh-agent" }));
+    const actions = await openKeyActions(workRow);
+    await userEvent.click(within(actions).getByRole("menuitem", { name: "Add to ssh-agent" }));
     await userEvent.type(screen.getByLabelText("Key passphrase"), "wrong passphrase");
     await userEvent.click(screen.getByRole("button", { name: "Add key to ssh-agent" }));
 
@@ -756,8 +786,8 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    const actions = await openKeyDetails(workRow);
-    await userEvent.click(within(actions).getByRole("button", { name: "Add to ssh-agent" }));
+    const actions = await openKeyActions(workRow);
+    await userEvent.click(within(actions).getByRole("menuitem", { name: "Add to ssh-agent" }));
 
     expect(screen.queryByLabelText("Key passphrase")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Add key to ssh-agent" }));
@@ -801,14 +831,14 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const row = await screen.findByRole("row", { name: /id_work\.pub/ });
-    const actions = await openKeyDetails(row);
-    expect(within(actions).queryByRole("button", { name: "Show private key" })).not.toBeInTheDocument();
-    await user.click(within(actions).getByRole("button", { name: "Show public key" }));
+    const actions = await openKeyActions(row);
+    expect(within(actions).queryByRole("menuitem", { name: "Show private key" })).not.toBeInTheDocument();
+    await user.click(within(actions).getByRole("menuitem", { name: "Show public key" }));
 
     const shown = await screen.findByLabelText("Public key");
     expect(shown).toHaveTextContent("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmU aida@laptop");
     const detailRow = shown.closest("tr");
-    expect(detailRow).toHaveAttribute("data-key-detail-for", "key-three");
+    expect(detailRow).toHaveAttribute("data-key-panel-for", "key-three");
     expect(detailRow?.closest("table")).toBe(row.closest("table"));
     expect(row.compareDocumentPosition(detailRow!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     await user.click(screen.getByRole("button", { name: "Copy public key" }));
@@ -832,8 +862,8 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const row = await screen.findByRole("row", { name: /id_work\b/ });
-    const actions = await openKeyDetails(row);
-    await userEvent.click(within(actions).getByRole("button", { name: "Show private key" }));
+    const actions = await openKeyActions(row);
+    await userEvent.click(within(actions).getByRole("menuitem", { name: "Show private key" }));
 
     const dialog = screen.getByRole("dialog");
     expect(dialog.closest("tr")).toBeNull();
@@ -847,8 +877,8 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={buildApi()} />);
 
     const row = await screen.findByRole("row", { name: /id_work\b/ });
-    const actions = await openKeyDetails(row);
-    expect(within(actions).queryByRole("button", { name: "Show public key" })).not.toBeInTheDocument();
+    const actions = await openKeyActions(row);
+    expect(within(actions).queryByRole("menuitem", { name: "Show public key" })).not.toBeInTheDocument();
   });
 
   it("reports a public key that could not be read", async () => {
@@ -864,14 +894,14 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const row = await screen.findByRole("row", { name: /id_work\.pub/ });
-    const actions = await openKeyDetails(row);
-    await user.click(within(actions).getByRole("button", { name: "Show public key" }));
+    const actions = await openKeyActions(row);
+    await user.click(within(actions).getByRole("menuitem", { name: "Show public key" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("public key could not be read");
     expect(screen.queryByLabelText("Public key")).not.toBeInTheDocument();
   });
 
-  it("toggles public material below its private key while leaving a public-only key visible", async () => {
+  it("keeps a key's public file in its row's details and menu, while a public-only key keeps its own row", async () => {
     const user = userEvent.setup();
     const inventory = buildInventory();
     const privateKey = inventory.items[0]!;
@@ -886,22 +916,22 @@ describe("KeysScreen", () => {
       },
       privateKey,
     ];
-    render(<KeysScreen api={buildApi({ inventory: vi.fn().mockResolvedValue(inventory) })} />);
+    const onInspector = vi.fn();
+    const api = buildApi({ inventory: vi.fn().mockResolvedValue(inventory) });
+    render(<KeysScreen api={api} onInspector={onInspector} />);
 
     const privateRow = (await screen.findByRole("button", { name: "id_work" })).closest("tr")!;
-    const toggle = within(privateRow).getByRole("button", { name: "Public key files (1)" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: "id_work.pub" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "colleague.pub" })).toBeVisible();
 
-    await user.click(toggle);
+    const actions = await openKeyActions(privateRow);
+    await user.click(within(actions).getByRole("menuitem", { name: "Show public key" }));
+    await waitFor(() => expect(api.publicKey).toHaveBeenCalledWith("paired-public"));
+    expect((await screen.findByLabelText("Public key")).closest("tr")).toHaveAttribute("data-key-panel-for", privateKey.id);
 
-    const pairedPublic = await screen.findByRole("button", { name: "id_work.pub" });
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(privateRow.compareDocumentPosition(pairedPublic.closest("tr")!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-
-    await user.click(toggle);
-    expect(screen.queryByRole("button", { name: "id_work.pub" })).not.toBeInTheDocument();
+    await user.click(within(privateRow).getByRole("button", { name: "id_work" }));
+    const details = renderInspector(onInspector);
+    expect(within(details.container).getByText("id_work.pub")).toBeInTheDocument();
   });
 
   it("relocates a key and reports what moved and what it rewrote", async () => {
@@ -910,8 +940,8 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const row = await screen.findByRole("row", { name: /id_work\b/ });
-    const actions = await openKeyDetails(row);
-    await user.click(within(actions).getByRole("button", { name: "Rename or move" }));
+    const actions = await openKeyActions(row);
+    await user.click(within(actions).getByRole("menuitem", { name: "Rename or move" }));
 
     const field = screen.getByLabelText("Name");
     expect(field).toHaveValue("id_work");
@@ -942,8 +972,8 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const row = await screen.findByRole("row", { name: /id_work\b/ });
-    const actions = await openKeyDetails(row);
-    await user.click(within(actions).getByRole("button", { name: "Rename or move" }));
+    const actions = await openKeyActions(row);
+    await user.click(within(actions).getByRole("menuitem", { name: "Rename or move" }));
     await user.clear(screen.getByLabelText("Name"));
     await user.type(screen.getByLabelText("Name"), "id_build");
     await user.click(screen.getByRole("button", { name: "Rename or move the key" }));
@@ -964,12 +994,13 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={buildApi({ inventory: vi.fn().mockResolvedValue(inventory) })} />);
 
     const privateRow = (await screen.findByRole("button", { name: "id_work" })).closest("tr")!;
-    await userEvent.click(within(privateRow).getByRole("button", { name: "Public key files (1)" }));
+    // A search lists the public half as a row of its own.
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search keys" }), "id_work.pub");
     const publicRow = await screen.findByRole("row", { name: /id_work\.pub/ });
-    const publicActions = await openKeyDetails(publicRow);
-    expect(within(publicActions).queryByRole("button", { name: "Rename or move" })).not.toBeInTheDocument();
-    const privateActions = await openKeyDetails(privateRow);
-    expect(within(privateActions).getByRole("button", { name: "Rename or move" })).toBeInTheDocument();
+    const publicActions = await openKeyActions(publicRow);
+    expect(within(publicActions).queryByRole("menuitem", { name: "Rename or move" })).not.toBeInTheDocument();
+    const privateActions = await openKeyActions(privateRow);
+    expect(within(privateActions).getByRole("menuitem", { name: "Rename or move" })).toBeInTheDocument();
   });
 
   it("offers relocation for a public key that stands alone, starting from its stem", async () => {
@@ -987,8 +1018,8 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={buildApi({ inventory: vi.fn().mockResolvedValue(inventory) })} />);
 
     const row = await screen.findByRole("row", { name: /colleague\.pub/ });
-    const actions = await openKeyDetails(row);
-    await user.click(within(actions).getByRole("button", { name: "Rename or move" }));
+    const actions = await openKeyActions(row);
+    await user.click(within(actions).getByRole("menuitem", { name: "Rename or move" }));
 
     expect(screen.getByLabelText("Name")).toHaveValue("colleague");
   });
@@ -1010,8 +1041,8 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     const privateRow = (await screen.findByRole("button", { name: "id_work" })).closest("tr")!;
-    const actions = await openKeyDetails(privateRow);
-    await user.click(within(actions).getByRole("button", { name: "Move to trash" }));
+    const actions = await openKeyActions(privateRow);
+    await user.click(within(actions).getByRole("menuitem", { name: "Move to trash" }));
 
     expect(await screen.findByText(/These files move together/)).toBeInTheDocument();
     expect(screen.getByText(/Nothing is deleted/)).toBeInTheDocument();
@@ -1142,8 +1173,8 @@ describe("taking a key back out of the agent", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    const actions = await openKeyDetails(workRow);
-    await userEvent.click(within(actions).getByRole("button", { name: "Remove from ssh-agent" }));
+    const actions = await openKeyActions(workRow);
+    await userEvent.click(within(actions).getByRole("menuitem", { name: "Remove from ssh-agent" }));
 
     await waitFor(() => expect(api.deregisterFromAgent).toHaveBeenCalledWith("key-one"));
   });
@@ -1154,11 +1185,12 @@ describe("taking a key back out of the agent", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    const actions = await openKeyDetails(workRow);
-    await userEvent.click(within(actions).getByRole("button", { name: "Remove from ssh-agent" }));
+    const actions = await openKeyActions(workRow);
+    await userEvent.click(within(actions).getByRole("menuitem", { name: "Remove from ssh-agent" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be removed from ssh-agent");
 
-    await userEvent.click(within(actions).getByRole("button", { name: "Remove from ssh-agent" }));
+    const again = await openKeyActions(workRow);
+    await userEvent.click(within(again).getByRole("menuitem", { name: "Remove from ssh-agent" }));
     await waitFor(() => expect(api.deregisterFromAgent).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
@@ -1168,8 +1200,8 @@ describe("taking a key back out of the agent", () => {
     render(<KeysScreen api={api} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    const actions = await openKeyDetails(workRow);
-    expect(within(actions).queryByRole("button", { name: "Remove from ssh-agent" })).not.toBeInTheDocument();
+    const actions = await openKeyActions(workRow);
+    expect(within(actions).queryByRole("menuitem", { name: "Remove from ssh-agent" })).not.toBeInTheDocument();
   });
 
   it("offers a stored passphrase for the key, and never an account password", async () => {
@@ -1177,8 +1209,8 @@ describe("taking a key back out of the agent", () => {
     render(<KeysScreen api={api} secrets={buildSecrets()} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    const actions = await openKeyDetails(workRow);
-    await userEvent.click(within(actions).getByRole("button", { name: "Add to ssh-agent" }));
+    const actions = await openKeyActions(workRow);
+    await userEvent.click(within(actions).getByRole("menuitem", { name: "Add to ssh-agent" }));
 
     const picker = await screen.findByLabelText("Use a stored passphrase");
     expect(picker).toHaveTextContent("build-key");
@@ -1191,8 +1223,8 @@ describe("taking a key back out of the agent", () => {
     render(<KeysScreen api={api} secrets={secrets} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    const actions = await openKeyDetails(workRow);
-    await userEvent.click(within(actions).getByRole("button", { name: "Add to ssh-agent" }));
+    const actions = await openKeyActions(workRow);
+    await userEvent.click(within(actions).getByRole("menuitem", { name: "Add to ssh-agent" }));
     await userEvent.selectOptions(await screen.findByLabelText("Use a stored passphrase"), "build-key");
     await userEvent.click(screen.getByRole("button", { name: "Use this passphrase" }));
 
@@ -1211,8 +1243,8 @@ describe("taking a key back out of the agent", () => {
     render(<KeysScreen api={api} secrets={secrets} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    const actions = await openKeyDetails(workRow);
-    await userEvent.click(within(actions).getByRole("button", { name: "Add to ssh-agent" }));
+    const actions = await openKeyActions(workRow);
+    await userEvent.click(within(actions).getByRole("menuitem", { name: "Add to ssh-agent" }));
 
     expect(await screen.findByText(/uses the stored passphrase named build-key/)).toBeInTheDocument();
     expect(screen.getByLabelText("Key passphrase")).toBeEnabled();
@@ -1226,8 +1258,8 @@ describe("taking a key back out of the agent", () => {
     render(<KeysScreen api={api} secrets={secrets} />);
 
     const workRow = await screen.findByRole("row", { name: /id_work/ });
-    const actions = await openKeyDetails(workRow);
-    await userEvent.click(within(actions).getByRole("button", { name: "Add to ssh-agent" }));
+    const actions = await openKeyActions(workRow);
+    await userEvent.click(within(actions).getByRole("menuitem", { name: "Add to ssh-agent" }));
 
     expect(await screen.findByText("A passphrase is saved only for this key.")).toBeInTheDocument();
     expect(screen.getByText(/Leave this empty to use the saved passphrase/)).toBeInTheDocument();
@@ -1337,7 +1369,7 @@ describe("dragging a key onto a folder", () => {
     });
     render(<KeysScreen api={buildApi({ relocate })} groups={["archive"]} />);
 
-    fireEvent.dragStart(await screen.findByLabelText("Drag id_work"), {
+    fireEvent.dragStart(await screen.findByRole("row", { name: /id_work/ }), {
       dataTransfer: { setData: vi.fn(), effectAllowed: "" },
     });
     fireEvent.drop(screen.getByRole("button", { name: "archive, 0" }));
@@ -1355,8 +1387,8 @@ describe("dragging a key onto a folder", () => {
     await openStoredPassphrase(row);
     expect(await screen.findByRole("heading", { name: /Saved passphrase/ })).toBeInTheDocument();
 
-    const actions = await openKeyDetails(row);
-    await userEvent.click(within(actions).getByRole("button", { name: "Change passphrase" }));
+    const actions = await openKeyActions(row);
+    await userEvent.click(within(actions).getByRole("menuitem", { name: "Change passphrase" }));
 
     expect(await screen.findByLabelText("Current passphrase")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /Saved passphrase/ })).toBeNull();

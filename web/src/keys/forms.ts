@@ -119,7 +119,6 @@ export function useOrganiser() {
   const [moveTarget, setMoveTarget] = useState("");
   const [listFilter, setListFilter] = useState<ListFilter>("keys");
   const [keyQuery, setKeyQuery] = useState("");
-  const [detailsFor, setDetailsFor] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   return {
     folder, setFolder,
@@ -129,7 +128,6 @@ export function useOrganiser() {
     moveTarget, setMoveTarget,
     listFilter, setListFilter,
     keyQuery, setKeyQuery,
-    detailsFor, setDetailsFor,
     selectedKey, setSelectedKey,
   };
 }

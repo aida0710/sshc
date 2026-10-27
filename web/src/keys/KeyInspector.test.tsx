@@ -33,10 +33,10 @@ const item: KeyItem = {
 
 describe("KeyInspector", () => {
   it("shows the complete technical identity", () => {
-    render(<KeyInspector item={item} now={0} />);
+    render(<KeyInspector item={item} related={[]} now={0} />);
 
     expect(screen.getByText("SHA256:abcdef")).toBeInTheDocument();
-    expect(screen.getByText("ed25519 · 256")).toBeInTheDocument();
+    expect(screen.getByText("Ed25519")).toBeInTheDocument();
     expect(screen.getByText("0600")).toBeInTheDocument();
     expect(screen.getByText("build-*")).toBeInTheDocument();
     expect(screen.getByText("Private key")).toBeInTheDocument();
@@ -44,20 +44,20 @@ describe("KeyInspector", () => {
   });
 
   it("uses the Japanese label instead of exposing the key kind code", () => {
-    render(<LanguageProvider initial="ja"><KeyInspector item={item} now={0} /></LanguageProvider>);
+    render(<LanguageProvider initial="ja"><KeyInspector item={item} related={[]} now={0} /></LanguageProvider>);
 
     expect(screen.getByText("秘密鍵")).toBeInTheDocument();
     expect(screen.queryByText("private_key")).not.toBeInTheDocument();
   });
 
   it("says so when nothing names the key", () => {
-    render(<KeyInspector item={{ ...item, references: [] }} now={0} />);
+    render(<KeyInspector item={{ ...item, references: [] }} related={[]} now={0} />);
 
     expect(screen.getByText("No connection references this key")).toBeInTheDocument();
   });
 
   it("marks permissions that are too open", () => {
-    render(<KeyInspector item={{ ...item, permission: "0644", permissionRisk: true }} now={0} />);
+    render(<KeyInspector item={{ ...item, permission: "0644", permissionRisk: true }} related={[]} now={0} />);
 
     expect(screen.getByText("Permissions too open")).toBeInTheDocument();
   });
