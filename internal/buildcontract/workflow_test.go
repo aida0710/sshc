@@ -136,7 +136,7 @@ func TestCIWorkflowRejectsWindowsTestStepsThatHideFailures(t *testing.T) {
 		t.Fatalf("read %s: %v", path, err)
 	}
 
-	for _, exitLine := range []string{"exit $testExit", "exit $raceExit"} {
+	for _, exitLine := range []string{"exit $raceExit"} {
 		t.Run(exitLine, func(t *testing.T) {
 			if !strings.Contains(string(source), exitLine) {
 				t.Fatalf("workflow does not contain %q", exitLine)
@@ -444,28 +444,45 @@ func validateGoSteps(job workflowJob) []string {
 		{run: "go vet ./...", condition: gated("${{ runner.os == 'Windows' }}"), shell: "pwsh"},
 		{run: "go build ./...", condition: gated("${{ runner.os != 'Windows' }}"), shell: "bash"},
 		{run: "go build ./...", condition: gated("${{ runner.os == 'Windows' }}"), shell: "pwsh"},
-		{run: "go test -count=1 ./...", condition: gated("${{ runner.os != 'Windows' }}"), shell: "bash"},
-		// race は PR では Linux だけ、main への push ではすべての OS で走る。
-		{run: "go test -count=1 -race -timeout 20m ./...", condition: gated("${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}"), shell: "bash"},
+		// テストは OS ごとに 1 回、race を付けて流す。PR でも main への push でも同じ。
+		{run: "go test -count=1 -race -tags sshc_test_kdf ./...", condition: gated("${{ runner.os != 'Windows' }}"), shell: "bash"},
+		{run: windowsFastTempScript, condition: gated("${{ runner.os == 'Windows' }}"), shell: "pwsh"},
 	} {
 		if !hasRunContract(job, required) {
 			problems = append(problems, fmt.Sprintf("jobs.go lacks run=%q if=%q shell=%q", required.run, required.condition, required.shell))
 		}
 	}
 
+	const windowsTest = "go test -race (Windows)"
 	problems = append(problems, validateWindowsLoggedTest(job, windowsLoggedTest{
-		name:         "go test (Windows)",
+		name:         windowsTest,
 		condition:    gated("${{ runner.os == 'Windows' }}"),
-		command:      "& go test -v -count=1 -timeout 20m ./... 2>&1 | Tee-Object -FilePath",
-		exitVariable: "$testExit",
-	})...)
-	problems = append(problems, validateWindowsLoggedTest(job, windowsLoggedTest{
-		name:         "go test -race (Windows)",
-		condition:    gated("${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}"),
-		command:      "& go test -v -count=1 -race -timeout 20m ./... 2>&1 | Tee-Object -FilePath",
+		command:      "& go test -v -count=1 -race -tags sshc_test_kdf ./... 2>&1 | Tee-Object -FilePath",
 		exitVariable: "$raceExit",
 	})...)
+	if !runsBefore(job, windowsFastTempScript, windowsTest) {
+		problems = append(problems, fmt.Sprintf("jobs.go must run %s before the step %q, or the Windows tests write to the slow system drive", windowsFastTempScript, windowsTest))
+	}
 	return problems
+}
+
+// windowsFastTempScript は、Windows の TEMP を OS のディスクから作業用のディスクへ移す。
+// 移さないと、非公開の書き込みのたびのディスクへの書き出しで、Windows の go test が
+// 数倍遅くなる（scripts/ci/windows-fast-temp.ps1）。
+const windowsFastTempScript = "./scripts/ci/windows-fast-temp.ps1"
+
+// runsBefore は、script を走らせる手順が、name の手順より前にあるかを返す。
+func runsBefore(job workflowJob, script, name string) bool {
+	scriptIndex, nameIndex := -1, -1
+	for index, step := range job.Steps {
+		if strings.TrimSpace(step.Run) == script && scriptIndex < 0 {
+			scriptIndex = index
+		}
+		if step.Name == name {
+			nameIndex = index
+		}
+	}
+	return scriptIndex >= 0 && nameIndex >= 0 && scriptIndex < nameIndex
 }
 
 // windowsLoggedTest は、出力をログへ残しながら go test を走らせる Windows の step の
@@ -540,13 +557,11 @@ func validateSeparatedRunShells(id string, job workflowJob) []string {
 			if step.Shell != "bash" || !strings.HasPrefix(strings.TrimSpace(step.Run), "echo ") {
 				problems = append(problems, fmt.Sprintf("%s step %q must only echo, in bash", id, step.Name))
 			}
-		case gated("${{ runner.os != 'Windows' }}"),
-			// race は PR では Linux だけに絞るが、Unix の command であることは変わらない。
-			gated("${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}"):
+		case gated("${{ runner.os != 'Windows' }}"):
 			if step.Shell != "bash" {
 				problems = append(problems, fmt.Sprintf("%s step %q must use bash for its Unix-only command", id, step.Name))
 			}
-		case gated("${{ runner.os == 'Windows' }}"), gated("${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}"):
+		case gated("${{ runner.os == 'Windows' }}"):
 			// The public installer explicitly supports the inbox Windows PowerShell
 			// 5.1. Its syntax check must use that executable; every build/test step
 			// continues to use the pinned pwsh runtime on the runner.
