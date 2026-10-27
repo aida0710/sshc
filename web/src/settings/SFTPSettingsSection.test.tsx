@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -40,13 +40,14 @@ describe("Settings > SFTP", () => {
     manager.applySettings.mockResolvedValue(undefined);
   });
 
-  it("shows the transfer settings in groups once the engine's queue is read", async () => {
+  it("shows the transfer settings and the exclusions as two sections once the engine's queue is read", async () => {
     render(<SFTPSettingsSection showHeading={false} />);
-    expect(await screen.findByRole("group", { name: "Speed and recovery" })).toBeVisible();
-    expect(screen.getByRole("group", { name: "Queue and finished transfers" })).toBeVisible();
-    expect(screen.getByRole("group", { name: "Split transfers" })).toBeVisible();
-    expect(screen.getByRole("textbox", { name: "Exclusion patterns (one per line)" })).toBeVisible();
-    expect(screen.getByRole("combobox", { name: "Clear finished after" })).toHaveValue("300");
+    const transfers = await screen.findByRole("region", { name: "Transfers" });
+    const exclusions = screen.getByRole("region", { name: "Transfer exclusions" });
+    expect(within(transfers).getByRole("spinbutton", { name: "Speed limit" })).toBeVisible();
+    expect(within(transfers).getByRole("checkbox", { name: "Resume automatically" })).not.toBeChecked();
+    expect(within(exclusions).getByRole("textbox", { name: "Exclusion patterns (one per line)" })).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "Finished transfers" })).toHaveValue("300");
     expect(screen.getByRole("spinbutton", { name: "Split at" })).toHaveValue(100);
     expect(screen.getByRole("spinbutton", { name: "Streams" })).toHaveValue(4);
     expect(screen.getByRole("spinbutton", { name: "Chunk" })).toHaveValue(32);
@@ -58,10 +59,10 @@ describe("Settings > SFTP", () => {
     manager.reconcile.mockReturnValue(new Promise<void>((resolve) => { answer = resolve; }));
     render(<SFTPSettingsSection showHeading={false} />);
     expect(screen.getByText("Loading SFTP settings…")).toBeVisible();
-    expect(screen.queryByRole("group", { name: "Speed and recovery" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Transfers" })).not.toBeInTheDocument();
 
     answer();
-    expect(await screen.findByRole("group", { name: "Speed and recovery" })).toBeVisible();
+    expect(await screen.findByRole("region", { name: "Transfers" })).toBeVisible();
     expect(screen.queryByText("Loading SFTP settings…")).not.toBeInTheDocument();
   });
 
@@ -76,7 +77,7 @@ describe("Settings > SFTP", () => {
     expect(manager.applySettings).toHaveBeenLastCalledWith({ speedLimitBytesPerSecond: 2048 * 1024 });
     expect(screen.getByText("KiB/s")).toBeVisible();
 
-    await userEvent.click(screen.getByRole("checkbox", { name: "Recover after connection loss" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Resume automatically" }));
     expect(manager.applySettings).toHaveBeenLastCalledWith({ autoReconnect: true, maxReconnectAttempts: 3 });
 
     const chunk = screen.getByRole("spinbutton", { name: "Chunk" });
@@ -89,10 +90,10 @@ describe("Settings > SFTP", () => {
     manager.reconcile.mockRejectedValueOnce(new Error("offline"));
     render(<SFTPSettingsSection showHeading={false} />);
     expect(await screen.findByText("SFTP settings could not be loaded. They cannot be saved until they load.")).toBeVisible();
-    expect(screen.queryByRole("group", { name: "Speed and recovery" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Transfers" })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByRole("group", { name: "Speed and recovery" })).toBeVisible();
+    expect(await screen.findByRole("region", { name: "Transfers" })).toBeVisible();
   });
 
   it("says why a change did not go through and reads the queue again", async () => {

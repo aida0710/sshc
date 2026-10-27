@@ -8,7 +8,7 @@ describe.each([
 ])("transfer settings while the IME reports %j", (composition) => {
   it("keeps the draft and focus during composition and commits on the next Enter", () => {
     const onCommit = vi.fn();
-    render(<TransferIntegerSetting label="Parallel transfers" value={2} min={1} max={8} onCommit={onCommit} />);
+    render(<TransferIntegerSetting label="Parallel transfers" value={2} min={1} max={8} widthClass="w-20" onCommit={onCommit} />);
     const input = screen.getByRole("spinbutton");
     input.focus();
     fireEvent.change(input, { target: { value: "4" } });

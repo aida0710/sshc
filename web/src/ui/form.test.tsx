@@ -28,8 +28,9 @@ describe("CheckboxField", () => {
     const onChange = vi.fn();
     render(<CheckboxField label="Auto sync" hint="Checks every minute" checked={false} onChange={onChange} />);
 
-    await userEvent.click(screen.getByRole("checkbox", { name: /Auto sync/ }));
+    const box = screen.getByRole("checkbox", { name: "Auto sync" });
+    expect(box).toHaveAccessibleDescription("Checks every minute");
+    await userEvent.click(screen.getByText("Checks every minute"));
     expect(onChange).toHaveBeenCalledWith(true);
-    expect(screen.getByText("Checks every minute")).toBeVisible();
   });
 });
