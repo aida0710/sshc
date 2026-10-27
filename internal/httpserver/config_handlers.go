@@ -264,6 +264,9 @@ func (h ConfigHandlers) SetAppearance(c *echo.Context) error {
 	if request.Accent != nil {
 		settings.Accent = string(*request.Accent)
 	}
+	if request.AccentColor != nil {
+		settings.AccentColor = *request.AccentColor
+	}
 	result, err := h.Service.SetAppearanceSettings(settings)
 	switch {
 	case errors.Is(err, application.ErrMetadataAppearance):

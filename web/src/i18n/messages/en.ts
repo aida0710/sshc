@@ -1238,6 +1238,11 @@ export const en = {
   "appearance.accent.sky": "Sky",
   "appearance.accent.pink": "Pink",
   "appearance.accent.mono": "Mono",
+  "appearance.accent.custom": "Custom",
+  "appearance.customColor": "Custom colour",
+  "appearance.customColorCode": "Custom colour code",
+  "appearance.customColorInvalid": "Enter the colour as #rrggbb.",
+  "appearance.customColorLowContrast": "This colour is hard to tell from the background in this theme, so the current item and the focus frame are hard to see.",
   "appearance.accentSaveFailed": "The accent colour could not be saved. Choose it again.",
 
   "section.home": "Home",

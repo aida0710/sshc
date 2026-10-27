@@ -6,6 +6,7 @@ import { AccentProvider, useAccent } from "./accentContext";
 
 afterEach(() => {
   document.documentElement.removeAttribute("data-accent");
+  document.documentElement.removeAttribute("style");
 });
 
 function fakeApi(saved: AppearanceSettings = {}): AppearanceApi & { setAppearanceSettings: ReturnType<typeof vi.fn> } {
@@ -40,6 +41,24 @@ describe("AccentProvider", () => {
     await userEvent.click(screen.getByRole("button", { name: "load" }));
 
     await waitFor(() => expect(document.documentElement).toHaveAttribute("data-accent", "sky"));
+  });
+
+  it("puts a saved custom accent and its colour on the page", async () => {
+    render(<AccentProvider api={fakeApi({ accent: "custom", accentColor: "#3fa86b" })}><Probe /></AccentProvider>);
+
+    await userEvent.click(screen.getByRole("button", { name: "load" }));
+
+    await waitFor(() => expect(document.documentElement).toHaveAttribute("data-accent", "custom"));
+    expect(document.documentElement.style.getPropertyValue("--ui-custom-accent")).toBe("#3fa86b");
+    expect(document.documentElement.style.getPropertyValue("--ui-custom-accent-ink")).toBe("#111214");
+  });
+
+  it("falls back to lavender when a custom accent was saved without a colour", async () => {
+    render(<AccentProvider api={fakeApi({ accent: "custom" })}><Probe /></AccentProvider>);
+
+    await userEvent.click(screen.getByRole("button", { name: "load" }));
+
+    await waitFor(() => expect(screen.getByText("accent lavender")).toBeVisible());
   });
 
   it("falls back to lavender when nothing was saved", async () => {

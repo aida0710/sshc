@@ -35,6 +35,7 @@ func (e AboutManager) Valid() bool {
 // Defines values for AppearanceSettingsAccent.
 const (
 	Blue     AppearanceSettingsAccent = "blue"
+	Custom   AppearanceSettingsAccent = "custom"
 	Lavender AppearanceSettingsAccent = "lavender"
 	Mono     AppearanceSettingsAccent = "mono"
 	Pink     AppearanceSettingsAccent = "pink"
@@ -45,6 +46,8 @@ const (
 func (e AppearanceSettingsAccent) Valid() bool {
 	switch e {
 	case Blue:
+		return true
+	case Custom:
 		return true
 	case Lavender:
 		return true
@@ -743,7 +746,8 @@ type AliasRequest struct {
 
 // AppearanceSettings defines model for AppearanceSettings.
 type AppearanceSettings struct {
-	Accent *AppearanceSettingsAccent `json:"accent,omitempty"`
+	Accent      *AppearanceSettingsAccent `json:"accent,omitempty"`
+	AccentColor *string                   `json:"accentColor,omitempty"`
 }
 
 // AppearanceSettingsAccent defines model for AppearanceSettings.Accent.
