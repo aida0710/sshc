@@ -683,21 +683,21 @@ test("keeps key actions in the list and opens private material in a modal", asyn
 
   const table = page.getByRole("table", { name: "Files classified by content and permissions" });
   const privateRow = table.getByRole("row", { name: /id_keys_layout\b/ }).first();
-  await privateRow.getByRole("button", { name: "Show details" }).click();
+  // Choosing the key opens its details over the page; Escape hands focus back to the top bar's toggle.
   await privateRow.getByRole("button", { name: "id_keys_layout", exact: true }).click();
-  const inspectorToggle = page.getByRole("button", { name: "Show Key details", exact: true });
-  await inspectorToggle.click();
   const inspector = page.getByRole("complementary", { name: "Key details" });
   await expect(inspector).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(inspector).toBeHidden();
-  await expect(inspectorToggle).toBeFocused();
-  const management = table.getByRole("group", { name: "Key actions" });
+  await expect(page.getByRole("button", { name: "Show Key details", exact: true })).toBeFocused();
+
+  // The row's actions open from its "…" menu, inside the screen.
+  await privateRow.getByRole("button", { name: "Actions for id_keys_layout" }).click();
+  const management = page.getByRole("menu");
   await expect(management).toBeVisible();
-  await expect(management.locator("xpath=ancestor::tr[@data-key-detail-for]")).toHaveCount(1);
   await expectFullyInsideViewport(page, management, "Key management actions");
 
-  await management.getByRole("button", { name: "Show private key" }).click();
+  await management.getByRole("menuitem", { name: "Show private key" }).click();
   const confirmation = page.getByRole("dialog");
   await expect(confirmation).toHaveAttribute("aria-modal", "true");
   await expect(confirmation.locator("xpath=ancestor::table")).toHaveCount(0);
@@ -707,10 +707,8 @@ test("keeps key actions in the list and opens private material in a modal", asyn
   }
   await confirmation.getByRole("button", { name: "Close" }).click();
 
-  await privateRow.getByRole("button", { name: "Public key files (1)" }).click();
-  const publicRow = table.getByRole("row", { name: /id_keys_layout\.pub/ });
-  await publicRow.getByRole("button", { name: "Show details" }).click();
-  await table.getByRole("group", { name: "Key actions" }).getByRole("button", { name: "Show public key" }).click();
+  await privateRow.getByRole("button", { name: "Actions for id_keys_layout" }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Show public key" }).click();
   const publicKey = page.getByLabel("Public key");
   await expect(publicKey.locator("xpath=ancestor::table")).toHaveCount(1);
   await expectNoHorizontalOverflow(page, "Public-key content");

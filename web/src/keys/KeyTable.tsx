@@ -1,12 +1,12 @@
-import { Fragment, useState, type DragEvent, type ReactNode } from "react";
-import { DisclosureChevron } from "../ui/DisclosureChevron";
+import { Fragment, useEffect, useRef, type DragEvent, type ReactNode } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { KeyCertificate, KeyInventoryResponse, KeyItem } from "./api";
+import { ActionMenu, revealOnHover, type ActionMenuItem } from "../ui/ActionMenu";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
-import { describeKeyKind, noteLabels, rowAction, rowDanger, rowPrimary } from "./labels";
-import { keyItemGroups } from "./organizer";
+import { Icon } from "../ui/icons";
+import { describeAlgorithm, describeKeyKind, noteLabels } from "./labels";
+import { groupOfKeyPath, keyItemGroups, keyListPath } from "./organizer";
 import { SortableTableHeader } from "../ui/tableSort";
-import { draggableCursor } from "../ui/dragAndDropLook";
 import { useTableSort, type SortValue } from "../ui/useTableSort";
 
 type KeySort = "file" | "kind" | "state";
@@ -14,25 +14,37 @@ type KeySort = "file" | "kind" | "state";
 export type KeyRowActions = {
   onSelect: (item: KeyItem) => void;
   onToggleChosen: (item: KeyItem, chosen: boolean) => void;
-  onBeginDrag: (event: DragEvent<HTMLSpanElement>, item: KeyItem) => void;
+  onBeginDrag: (event: DragEvent<HTMLElement>, item: KeyItem) => void;
   onEndDrag: () => void;
   onReveal: (item: KeyItem) => void;
+  // onShowPublicKey reads a public key or certificate file: the row's own, or the one paired with a
+  // private key.
   onShowPublicKey: (item: KeyItem) => void;
   onManageStoredPassphrase: (item: KeyItem) => void;
   onAddToAgent: (item: KeyItem) => void;
   onRemoveFromAgent: (item: KeyItem) => void;
-  onToggleDetails: (item: KeyItem) => void;
   onChangePassphrase: (item: KeyItem) => void;
   onRelocate: (item: KeyItem) => void;
   onMoveToTrash: (item: KeyItem) => void;
 };
+
+// The table is a table where its container (keytable, around it in KeysScreen) is at least 36rem wide, and
+// one card per key where it is narrower (a phone, or a page squeezed by the details pane), so no column
+// has to be scrolled to. The table lays out its columns at fixed widths, so a long file name wraps in its
+// own column instead of pushing the last one out. The classes spell out @xl/keytable each time so
+// Tailwind can find them.
+
+// A row's state, as the small round tags of the design: green for in use, amber for something to look at.
+const tag = "inline-flex h-5 items-center gap-1 whitespace-nowrap rounded-full px-[7px] text-[11.5px]";
+const neutralTag = `${tag} bg-well text-ink-muted`;
+const goodTag = `${tag} bg-live/15 text-live`;
+const attentionTag = `${tag} bg-notice text-notice-ink`;
 
 export function KeyTable({
   items,
   inventory,
   chosen,
   selected,
-  detailsFor,
   now,
   revealRelated = false,
   inlinePanel,
@@ -42,14 +54,15 @@ export function KeyTable({
   inventory: KeyInventoryResponse;
   chosen: ReadonlySet<string>;
   selected: string | null;
-  detailsFor: string;
   now: number;
+  // revealRelated lists a key's public files and certificates as rows of their own (while searching, so
+  // a match on one of them shows).
   revealRelated?: boolean;
+  // inlinePanel opens under one row: a form or a key's text, for the action chosen from that row.
   inlinePanel: { itemId: string; content: ReactNode } | null;
   actions: KeyRowActions;
 }) {
   const t = useTranslate();
-  const [expandedRelated, setExpandedRelated] = useState<ReadonlySet<string>>(new Set());
   const keySort = useTableSort<KeySort>("file");
   // 種類と状態のセルは1つの文ではなく、ラベルやバッジを並べて出す。並べ替えは、
   // それらの元の値をつないだ文字列で比べる。
@@ -61,257 +74,105 @@ export function KeyTable({
     }
   };
   const sortedGroups = keySort.sorted(keyItemGroups(items), (group, column) => keySortValue(group.primary, column));
-  const displayed = sortedGroups.flatMap((group) => {
-    const relatedExpanded = revealRelated || expandedRelated.has(group.primary.id);
-    return [
-      {
-        item: group.primary,
-        relatedCount: group.related.length,
-        relatedExpanded,
-        relatedTo: null as string | null,
-      },
-      ...(relatedExpanded
-        ? keySort.sorted(group.related, keySortValue).map((item) => ({
-            item,
-            relatedCount: 0,
-            relatedExpanded: false,
-            relatedTo: group.primary.id,
-          }))
-        : []),
-    ];
-  });
-
-  function toggleRelated(item: KeyItem) {
-    setExpandedRelated((current) => {
-      const next = new Set(current);
-      if (next.has(item.id)) next.delete(item.id);
-      else next.add(item.id);
-      return next;
-    });
-  }
+  const displayed = sortedGroups.flatMap((group) => [
+    { item: group.primary, related: group.related, relatedTo: null as string | null },
+    ...(revealRelated
+      ? keySort.sorted(group.related, keySortValue).map((item) => ({ item, related: [] as KeyItem[], relatedTo: group.primary.id }))
+      : []),
+  ]);
 
   return (
-    <table className="block w-full text-left text-sm md:table md:min-w-[56rem]">
+    <table className="block w-full text-left text-[13px] @xl/keytable:table @xl/keytable:table-fixed">
       <caption className="sr-only">{t("keys.tableCaption")}</caption>
-      <thead className="hidden md:table-header-group">
+      <thead className={`hidden @xl/keytable:table-header-group`}>
         <tr className={tableHeadRow}>
-          <th scope="col" className={`${tableHeadCell} w-12 pl-3`}>
+          <th scope="col" className={`${tableHeadCell} w-9`}>
             <span className="sr-only">{t("keys.colChoose")}</span>
           </th>
-          <SortableTableHeader column="file" {...keySort.headerProps} className={`${tableHeadCell} w-[30%] whitespace-nowrap`}>{t("keys.colFile")}</SortableTableHeader>
-          <SortableTableHeader column="kind" {...keySort.headerProps} className={`${tableHeadCell} w-[18%] whitespace-nowrap`}>{t("keys.colKind")}</SortableTableHeader>
-          <SortableTableHeader column="state" {...keySort.headerProps} className={`${tableHeadCell} w-[20%] whitespace-nowrap`}>{t("keys.colState")}</SortableTableHeader>
-          <th scope="col" className={`${tableHeadCell} whitespace-nowrap text-right`}>{t("keys.colActions")}</th>
+          <SortableTableHeader column="file" {...keySort.headerProps} className={`${tableHeadCell} whitespace-nowrap`}>{t("keys.colFile")}</SortableTableHeader>
+          <SortableTableHeader column="kind" {...keySort.headerProps} className={`${tableHeadCell} w-[7.5rem] whitespace-nowrap`}>{t("keys.colKind")}</SortableTableHeader>
+          <SortableTableHeader column="state" {...keySort.headerProps} className={`${tableHeadCell} w-[11.5rem] whitespace-nowrap`}>{t("keys.colState")}</SortableTableHeader>
+          <th scope="col" className={`${tableHeadCell} w-11`}>
+            <span className="sr-only">{t("keys.colActions")}</span>
+          </th>
         </tr>
       </thead>
-      <tbody className="block md:table-row-group">
-        {displayed.map(({ item, relatedCount, relatedExpanded, relatedTo }) => {
-          const heldByAgent = agentHolds(inventory, item);
+      <tbody className={`block @xl/keytable:table-row-group`}>
+        {displayed.map(({ item, related, relatedTo }) => {
           const isSelected = selected === item.id;
-          const detailsExpanded = detailsFor === item.id;
+          const movable = renameable(item, inventory.items);
+          const menu = rowActionItems({ item, related, inventory, actions, t });
           return (
             <Fragment key={item.id}>
-            <tr
-              data-key-related-to={relatedTo ?? undefined}
-              className={`grid grid-cols-[2.25rem_minmax(0,1fr)] border-b border-line align-top transition-colors last:border-b-0 md:table-row ${
-                isSelected ? "bg-select-fill" : ""
-              } ${relatedTo === null ? "" : "bg-surface-subtle"}`}
-            >
-              <td className="row-span-3 py-3 pl-2 md:table-cell md:pl-3">
-                {renameable(item, inventory.items) ? (
-                  <div className="flex flex-col items-center gap-1 md:flex-row">
-                    <label className="grid min-h-10 min-w-8 place-items-center md:min-h-0 md:min-w-0">
+              <tr
+                data-key-related-to={relatedTo ?? undefined}
+                draggable={movable}
+                onDragStart={movable ? (event) => actions.onBeginDrag(event, item) : undefined}
+                onDragEnd={movable ? actions.onEndDrag : undefined}
+                className={`group/row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 border-b border-line py-2 pl-1 last:border-b-0 @xl/keytable:table-row @xl/keytable:border-b-0 ${
+                  isSelected ? "bg-select-fill" : "hover:bg-hover"
+                } ${relatedTo === null ? "" : "bg-surface-subtle"}`}
+              >
+                <td className={`hidden border-line align-middle @xl/keytable:table-cell @xl/keytable:border-t @xl/keytable:py-[9px] @xl/keytable:pl-2.5`}>
+                  {movable ? (
+                    <label className="grid place-items-center">
                       <input
                         type="checkbox"
                         aria-label={t("keys.chooseKey", { path: item.relativePath })}
                         checked={chosen.has(item.id)}
                         onChange={(event) => actions.onToggleChosen(item, event.target.checked)}
-                        className="h-4 w-4 accent-accent"
+                        className="size-4 accent-accent"
                       />
                     </label>
-                    <span
-                      draggable
-                      aria-label={t("keys.dragKey", { path: item.relativePath })}
-                      onDragStart={(event) => actions.onBeginDrag(event, item)}
-                      onDragEnd={actions.onEndDrag}
-                      className={`flex min-h-10 min-w-8 select-none items-center justify-center rounded px-1.5 py-1 text-sm leading-none text-ink-faint hover:bg-surface md:min-h-0 md:min-w-0 ${draggableCursor}`}
-                    >
-                      ⠿
-                    </span>
-                  </div>
-                ) : null}
-              </td>
-              <td className={`min-w-0 py-3 pr-3 md:table-cell md:pr-4 ${relatedTo === null ? "" : "pl-3 md:pl-6"}`}>
-                <button
-                  type="button"
-                  aria-pressed={isSelected}
-                  onClick={() => actions.onSelect(item)}
-                  className="block min-h-10 max-w-full break-all text-left font-mono text-sm font-semibold text-ink underline-offset-4 hover:text-accent hover:underline md:min-h-0 md:break-normal"
-                >
-                  {item.relativePath}
-                </button>
-                {item.fingerprint === "" ? null : (
-                  <p className="mt-1 max-w-xs truncate font-mono text-[11px] text-ink-muted" title={item.fingerprint}>
-                    {item.fingerprint}
-                  </p>
-                )}
-                {item.comment === "" ? null : (
-                  <p className="mt-0.5 max-w-xs truncate text-xs text-ink-muted">{item.comment}</p>
-                )}
-                {relatedCount === 0 ? null : (
+                  ) : null}
+                </td>
+                <td className={`relative min-w-0 border-line align-middle @xl/keytable:table-cell @xl/keytable:border-t @xl/keytable:px-2.5 @xl/keytable:py-[9px] ${relatedTo === null ? "" : "pl-4 @xl/keytable:pl-6"}`}>
+                  {/* The name's button reaches over the whole cell (its ::before), so the line under the name
+                      is part of what a finger can tap without making the row taller. */}
                   <button
                     type="button"
-                    aria-expanded={relatedExpanded}
-                    disabled={revealRelated}
-                    onClick={() => toggleRelated(item)}
-                    className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-md bg-surface px-2 py-1 text-xs font-medium text-ink-muted hover:text-ink disabled:cursor-default disabled:opacity-100 md:min-h-0"
+                    aria-pressed={isSelected}
+                    onClick={() => actions.onSelect(item)}
+                    className="block min-h-0! max-w-full text-left text-[13.5px] text-ink [overflow-wrap:anywhere] before:absolute before:inset-0 before:content-[''] hover:underline"
                   >
-                    <DisclosureChevron expanded={relatedExpanded} className="size-3.5 text-ink-faint" />
-                    {t("keys.relatedPublicFiles", { count: relatedCount })}
+                    {keyListPath(item.relativePath)}
                   </button>
-                )}
-              </td>
-              <td className="col-start-2 min-w-0 pb-3 pr-3 md:table-cell md:py-3 md:pr-4">
-                <span className="inline-flex rounded-md bg-surface px-2 py-1 text-xs text-ink-muted">
-                  {describeKeyKind(item.kind, t)}
-                </span>
-                {item.algorithm === "" ? null : (
-                  <p className="mt-2 font-mono text-xs font-medium text-ink">
-                    {item.bits > 0 ? `${item.algorithm} · ${item.bits}` : item.algorithm}
-                  </p>
-                )}
-                {item.certificate === undefined ? null : (
-                  <ul className="mt-1 text-xs text-ink-muted">
-                    {certificateLines(item.certificate, now, t).map((line) => (
-                      <li key={line.text} className={line.expired ? "text-danger" : undefined}>
-                        {line.text}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </td>
-              <td className="col-start-2 min-w-0 pb-3 pr-3 text-xs md:table-cell md:py-3 md:pr-4">
-                <span className="flex flex-wrap gap-1.5">
-                  {item.permissionRisk && (
-                    <span className="rounded-md bg-notice px-2 py-1 font-medium text-notice-ink">
-                      {t("keys.permissionRisk")}
-                    </span>
+                  <span className={`block font-mono text-[11.5px] text-ink-faint @xl/keytable:hidden`}>{kindText(item, t)}</span>
+                  <span className={`hidden truncate text-[11.5px] text-ink-faint @xl/keytable:block`}>{whereText(item, t)}</span>
+                </td>
+                <td className={`hidden whitespace-nowrap border-line align-middle font-mono text-xs text-ink-muted @xl/keytable:table-cell @xl/keytable:border-t @xl/keytable:px-2.5 @xl/keytable:py-[9px]`}>
+                  {kindText(item, t)}
+                  {item.certificate === undefined ? null : (
+                    <span className="block font-sans text-[11.5px]">{certificateValidity(item.certificate, now, t)}</span>
                   )}
-                  {heldByAgent && (
-                    <span className="inline-flex items-center gap-1.5 rounded-md bg-surface px-2 py-1 font-medium text-live">
-                      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-live" />
-                      {t("keys.stateInAgent")}
-                    </span>
+                </td>
+                <td className={`border-line align-middle @xl/keytable:table-cell @xl/keytable:border-t @xl/keytable:px-2.5 @xl/keytable:py-[9px]`}>
+                  <span className="@xl/keytable:hidden"><KeySummaryTag item={item} t={t} /></span>
+                  <span className={`hidden flex-wrap gap-1.5 @xl/keytable:flex`}><KeyStateTags item={item} inventory={inventory} t={t} /></span>
+                </td>
+                <td className={`border-line pr-1 text-right align-middle @xl/keytable:table-cell @xl/keytable:border-t @xl/keytable:py-[9px] @xl/keytable:pr-2.5`}>
+                  {menu.length === 0 ? null : (
+                    <ActionMenu
+                      label={t("keys.rowActions", { path: item.relativePath })}
+                      items={menu}
+                      triggerClassName={`ml-auto flex size-10 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink @xl/keytable:size-7 ${isSelected ? "" : revealOnHover}`}
+                    />
                   )}
-                  {item.references.length > 0 && (
-                    <span className="rounded-md bg-surface px-2 py-1 text-ink-muted">
-                      {t("keys.stateUsedBy", { count: item.references.length })}
-                    </span>
-                  )}
-                  {item.notes.map((note) => (
-                    <span key={note} className="rounded-md bg-notice px-2 py-1 text-notice-ink">
-                      {note in noteLabels ? t(noteLabels[note]!) : note}
-                    </span>
-                  ))}
-                </span>
-              </td>
-              <td className="col-span-2 border-t border-hairline p-3 md:table-cell md:border-t-0 md:py-3 md:pr-3 md:pl-0">
-                <button
-                  type="button"
-                  className={`${rowAction} ml-auto`}
-                  aria-expanded={detailsExpanded}
-                  onClick={() => actions.onToggleDetails(item)}
-                >
-                  <DisclosureChevron expanded={detailsExpanded} className="mr-1 size-3.5 text-ink-faint" />
-                  {t(detailsExpanded ? "keys.hideDetails" : "keys.showDetails")}
-                </button>
-              </td>
-            </tr>
-            {detailsExpanded ? (
-              <tr
-                data-key-detail-for={item.id}
-                className="block border-b border-line bg-card md:table-row"
-              >
-                <td colSpan={5} className="block p-3 pt-0 md:table-cell md:p-4 md:pt-1">
-                  <section
-                    aria-label={t("keys.actionsHeading", { path: item.relativePath })}
-                    className="rounded-md border border-line bg-surface-subtle p-3 sm:p-4"
-                  >
-                    <div
-                      role="group"
-                      aria-label={t("keys.keyActions")}
-                      className="flex flex-wrap items-center gap-2"
-                    >
-                      {(item.kind === "public_key" || item.kind === "certificate") && (
-                        <button type="button" className={rowPrimary} onClick={() => actions.onShowPublicKey(item)}>
-                          {t("keys.showPublicKey")}
-                        </button>
-                      )}
-                      {item.kind === "private_key" && (
-                        <>
-                          <button type="button" className={rowAction} onClick={() => actions.onReveal(item)}>
-                            {t("keys.showPrivateKey")}
-                          </button>
-                          <button
-                            type="button"
-                            className={heldByAgent ? rowAction : rowPrimary}
-                            disabled={!inventory.agentAvailable}
-                            onClick={() => heldByAgent ? actions.onRemoveFromAgent(item) : actions.onAddToAgent(item)}
-                          >
-                            {t(heldByAgent ? "keys.removeFromAgent" : "keys.addToAgent")}
-                          </button>
-                          {item.encrypted ? (
-                            <button
-                              type="button"
-                              className={rowAction}
-                              onClick={() => actions.onManageStoredPassphrase(item)}
-                            >
-                              {t("keys.manageStoredPassphrase")}
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            className={rowAction}
-                            onClick={() => actions.onChangePassphrase(item)}
-                          >
-                            {t("keys.changePassphrase")}
-                          </button>
-                        </>
-                      )}
-                      {renameable(item, inventory.items) ? (
-                        <button
-                          type="button"
-                          className={rowAction}
-                          onClick={() => actions.onRelocate(item)}
-                        >
-                          {t("keys.relocate")}
-                        </button>
-                      ) : null}
-                      {item.kind === "private_key" ? (
-                        <button
-                          type="button"
-                          className={`${rowDanger} sm:ml-auto`}
-                          onClick={() => actions.onMoveToTrash(item)}
-                        >
-                          {t("keys.moveToTrash")}
-                        </button>
-                      ) : null}
-                    </div>
-                    {inlinePanel?.itemId === item.id ? (
-                      <div className="mt-3 border-t border-line pt-3">
-                        {inlinePanel.content}
-                      </div>
-                    ) : null}
-                  </section>
                 </td>
               </tr>
-            ) : null}
+              {inlinePanel?.itemId === item.id ? (
+                <tr data-key-panel-for={item.id} className={`block @xl/keytable:table-row`}>
+                  <td colSpan={5} className={`block px-1 pb-3 pt-1 @xl/keytable:table-cell @xl/keytable:px-2.5`}>
+                    <InlinePanel>{inlinePanel.content}</InlinePanel>
+                  </td>
+                </tr>
+              ) : null}
             </Fragment>
           );
         })}
         {displayed.length === 0 && (
-          <tr className="block md:table-row">
-            <td colSpan={5} className="block p-8 text-center text-sm text-ink-muted md:table-cell">
+          <tr className={`block @xl/keytable:table-row`}>
+            <td colSpan={5} className={`block p-8 text-center text-sm text-ink-muted @xl/keytable:table-cell`}>
               {inventory.items.length === 0 ? t("keys.inventoryEmpty") : t("keys.noMatches")}
             </td>
           </tr>
@@ -319,6 +180,102 @@ export function KeyTable({
       </tbody>
     </table>
   );
+}
+
+// InlinePanel brings the form it opens into view, since the row it belongs to may sit at the bottom of
+// the window.
+function InlinePanel({ children }: { children: ReactNode }) {
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    panel.current?.scrollIntoView?.({ block: "nearest" });
+  }, []);
+  return <div ref={panel}>{children}</div>;
+}
+
+function rowActionItems({ item, related, inventory, actions, t }: {
+  item: KeyItem;
+  related: KeyItem[];
+  inventory: KeyInventoryResponse;
+  actions: KeyRowActions;
+  t: Translate;
+}): ActionMenuItem[] {
+  const menu: ActionMenuItem[] = [];
+  if (item.kind === "public_key" || item.kind === "certificate") {
+    menu.push({ label: t("keys.showPublicKey"), onSelect: () => actions.onShowPublicKey(item) });
+  }
+  if (item.kind === "private_key") {
+    const pairedPublic = related.find((candidate) => candidate.kind === "public_key");
+    const certificate = related.find((candidate) => candidate.kind === "certificate");
+    const heldByAgent = agentHolds(inventory, item);
+    menu.push({ label: t("keys.showPrivateKey"), onSelect: () => actions.onReveal(item) });
+    if (pairedPublic !== undefined) menu.push({ label: t("keys.showPublicKey"), onSelect: () => actions.onShowPublicKey(pairedPublic) });
+    if (certificate !== undefined) menu.push({ label: t("keys.showCertificate"), onSelect: () => actions.onShowPublicKey(certificate) });
+    menu.push({
+      label: t(heldByAgent ? "keys.removeFromAgent" : "keys.addToAgent"),
+      disabled: !inventory.agentAvailable,
+      onSelect: () => heldByAgent ? actions.onRemoveFromAgent(item) : actions.onAddToAgent(item),
+    });
+    if (item.encrypted) menu.push({ label: t("keys.manageStoredPassphrase"), onSelect: () => actions.onManageStoredPassphrase(item) });
+    menu.push({ label: t("keys.changePassphrase"), onSelect: () => actions.onChangePassphrase(item) });
+  }
+  if (renameable(item, inventory.items)) menu.push({ label: t("keys.relocate"), onSelect: () => actions.onRelocate(item) });
+  if (item.kind === "private_key") menu.push({ label: t("keys.moveToTrash"), tone: "danger", onSelect: () => actions.onMoveToTrash(item) });
+  return menu;
+}
+
+// kindText is the 種別 column: the algorithm of a private key, and what a file is with its algorithm for
+// anything else (a public key or certificate on its own, or a file that is not a key).
+function kindText(item: KeyItem, t: Translate): string {
+  const algorithm = describeAlgorithm(item.algorithm, item.bits);
+  if (item.kind === "private_key" && algorithm !== "") return algorithm;
+  const kind = describeKeyKind(item.kind, t);
+  return algorithm === "" ? kind : `${kind} · ${algorithm}`;
+}
+
+// whereText is the line under a file's name: the group it is in, or where it is under ~/.ssh.
+function whereText(item: KeyItem, t: Translate): string {
+  const group = groupOfKeyPath(item.relativePath);
+  return group === "" ? `~/.ssh/${item.relativePath}` : t("keys.inGroup", { group });
+}
+
+function KeyStateTags({ item, inventory, t }: { item: KeyItem; inventory: KeyInventoryResponse; t: Translate }) {
+  return (
+    <>
+      {item.permissionRisk ? (
+        <span className={attentionTag}><Icon name="warning" className="size-3" />{t("keys.permissionRisk")}</span>
+      ) : null}
+      {item.notes.map((note) => (
+        <span key={note} className={attentionTag}>{note in noteLabels ? t(noteLabels[note]!) : note}</span>
+      ))}
+      {agentHolds(inventory, item) ? (
+        <span className={goodTag}><span aria-hidden="true" className="size-1.5 rounded-full bg-live" />{t("keys.stateInAgent")}</span>
+      ) : null}
+      {item.references.length > 0 ? (
+        <span className={goodTag}><Icon name="check" className="size-3" />{t("keys.stateUsedBy", { count: item.references.length })}</span>
+      ) : item.kind === "private_key" ? (
+        <span className={neutralTag}>{t("keys.stateUnused")}</span>
+      ) : null}
+    </>
+  );
+}
+
+// KeySummaryTag is the one tag a card shows where there is no room for all of them: what needs a look
+// first, then whether the key is used.
+function KeySummaryTag({ item, t }: { item: KeyItem; t: Translate }) {
+  if (item.permissionRisk || item.notes.length > 0) return <span className={attentionTag}>{t("keys.stateAttention")}</span>;
+  if (item.references.length > 0) return <span className={goodTag}>{t("keys.stateInUse")}</span>;
+  if (item.kind === "private_key") return <span className={neutralTag}>{t("keys.stateUnused")}</span>;
+  return null;
+}
+
+function certificateValidity(certificate: KeyCertificate, now: number, t: Translate): string {
+  if (certificate.neverExpires) return t("keys.certNeverExpires");
+  const when = certificateExpiry(certificate);
+  return certificate.validBefore * 1000 <= now ? t("keys.certExpired", { when }) : t("keys.certValidUntil", { when });
+}
+
+function certificateExpiry(certificate: KeyCertificate): string {
+  return `${new Date(certificate.validBefore * 1000).toISOString().slice(0, 16).replace("T", " ")}Z`;
 }
 
 export function certificateLines(
@@ -336,10 +293,8 @@ export function certificateLines(
   if (certificate.neverExpires) {
     lines.push({ text: t("keys.certNeverExpires"), expired: false });
   } else {
-    const expiry = new Date(certificate.validBefore * 1000);
     const expired = certificate.validBefore * 1000 <= now;
-    const when = `${expiry.toISOString().slice(0, 16).replace("T", " ")}Z`;
-    lines.push({ text: expired ? t("keys.certExpired", { when }) : t("keys.certValidUntil", { when }), expired });
+    lines.push({ text: certificateValidity(certificate, now, t), expired });
   }
   if (certificate.signedKeyType !== "") {
     lines.push({

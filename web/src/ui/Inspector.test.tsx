@@ -45,7 +45,7 @@ describe("InspectorToggle", () => {
 
 describe("InspectorPane", () => {
   it("is a labelled complementary region the toggle can address", () => {
-    render(<InspectorPane label="Details">nothing yet</InspectorPane>);
+    render(<InspectorPane label="Details" underTopBar={false}>nothing yet</InspectorPane>);
 
     const pane = screen.getByRole("complementary", { name: "Details" });
     expect(pane).toHaveAttribute("id", "inspector");
@@ -53,7 +53,7 @@ describe("InspectorPane", () => {
   });
 
   it("draws no segmented control", () => {
-    render(<InspectorPane label="Details">nothing yet</InspectorPane>);
+    render(<InspectorPane label="Details" underTopBar={false}>nothing yet</InspectorPane>);
 
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
   });

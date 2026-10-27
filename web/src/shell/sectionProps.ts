@@ -38,6 +38,8 @@ export type Shell = {
   // passwordless は、Vaultにマスターパスワードが無いかである。
   passwordless: boolean;
   onInspector: (content: InspectorContent) => void;
+  // onShowInspector opens the details pane, for a page whose user just chose what to see in it.
+  onShowInspector: () => void;
   terminalSessions: TerminalSessionsState;
   onShowSession: (id: string) => void;
   // onOpenSSHSession は、接続を開いてからそのターミナルを表示する。cwd は開始位置である。

@@ -6,6 +6,12 @@ export function groupOfKeyPath(relativePath: string): string {
   return segments.slice(1, -1).join("/");
 }
 
+// keyListPath is how the keys page names a file: its path under ~/.ssh, without the keys/ that every group
+// is kept under (the line under the name says which group it is in).
+export function keyListPath(relativePath: string): string {
+  return groupOfKeyPath(relativePath) === "" ? relativePath : relativePath.slice("keys/".length);
+}
+
 // relocateStem は、鍵を移すときに名前の欄へ最初に入れる名前である。公開鍵と
 // 証明書は、対になる秘密鍵と同じ名前になるように拡張子を外す。
 export function relocateStem(item: KeyItem): string {
@@ -17,9 +23,11 @@ export function relocateStem(item: KeyItem): string {
   return base;
 }
 
-export type Folder = { kind: "all" } | { kind: "ungrouped" } | { kind: "group"; name: string };
+// Folder is what the left list of the keys page opens: every key, the keys outside any group, one group,
+// or the trash (which lists trash entries instead of keys).
+export type Folder = { kind: "all" } | { kind: "ungrouped" } | { kind: "group"; name: string } | { kind: "trash" };
 
-export type MoveTarget = Exclude<Folder, { kind: "all" }>;
+export type MoveTarget = Extract<Folder, { kind: "ungrouped" } | { kind: "group" }>;
 
 export type FolderRow = { folder: Folder; count: number; depth: number };
 
@@ -31,21 +39,22 @@ export function sameFolder(left: Folder, right: Folder): boolean {
 
 export function itemsInFolder(items: KeyItem[], folder: Folder): KeyItem[] {
   if (folder.kind === "all") return items;
+  if (folder.kind === "trash") return [];
   const wanted = folder.kind === "ungrouped" ? "" : folder.name;
   return items.filter((item) => groupOfKeyPath(item.relativePath) === wanted);
 }
 
-export function folderRows(items: KeyItem[], groups: string[]): FolderRow[] {
-  const directCount = new Map<string, number>();
-  for (const item of items) {
-    const group = groupOfKeyPath(item.relativePath);
-    directCount.set(group, (directCount.get(group) ?? 0) + 1);
-  }
-  const rows: FolderRow[] = [{ folder: { kind: "all" }, count: items.length, depth: 0 }];
+// folderRows are the entries of the left list. Each count is the number of rows the table shows for that
+// entry: a key pair or a certificate is one row with its private key, as in keyItemGroups.
+export function folderRows(items: KeyItem[], groups: string[], trashCount: number): FolderRow[] {
+  const rowsIn = (folder: Folder) => keyItemGroups(itemsInFolder(items, folder)).length;
+  const rows: FolderRow[] = [{ folder: { kind: "all" }, count: rowsIn({ kind: "all" }), depth: 0 }];
   for (const name of [...groups].sort()) {
-    rows.push({ folder: { kind: "group", name }, count: directCount.get(name) ?? 0, depth: name.split("/").length });
+    const folder: Folder = { kind: "group", name };
+    rows.push({ folder, count: rowsIn(folder), depth: name.split("/").length });
   }
-  rows.push({ folder: { kind: "ungrouped" }, count: directCount.get("") ?? 0, depth: 0 });
+  rows.push({ folder: { kind: "ungrouped" }, count: rowsIn({ kind: "ungrouped" }), depth: 0 });
+  rows.push({ folder: { kind: "trash" }, count: trashCount, depth: 0 });
   return rows;
 }
 

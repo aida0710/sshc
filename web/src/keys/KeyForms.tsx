@@ -18,7 +18,7 @@ import type {
   useStoredPassphraseForm,
   useStoredPhrases,
 } from "./forms";
-import { describeBlocker, noteLabels, rowDanger } from "./labels";
+import { describeBlocker, noteLabels } from "./labels";
 import { usePendingResult } from "../ui/usePendingResult";
 
 // どのフォームも、送った操作が終わるまで submission.pending で送信のボタンを busy にする。
@@ -363,61 +363,6 @@ export function StoredPassphrasePanel({
           {t("keys.storeAndUsePassphrase")}
         </Button>
         <Button onClick={form.close}>{t("keys.cancel")}</Button>
-      </div>
-    </section>
-  );
-}
-
-export function TrashConfirmation({
-  item,
-  members,
-  onConfirm,
-  onCancel,
-}: {
-  item: KeyItem | null;
-  members: KeyItem[];
-  onConfirm: (id: string) => void;
-  onCancel: () => void;
-}) {
-  const t = useTranslate();
-  if (item === null) return null;
-  return (
-    <section aria-labelledby="trash-confirm-heading" className={sectionCard}>
-      <h3 id="trash-confirm-heading" className="text-sm font-semibold text-ink">
-        {t("keys.trashConfirmHeading", { path: item.relativePath })}
-      </h3>
-      <p className="text-sm text-ink">{t("keys.trashExplain")}</p>
-      <ul className="flex flex-col gap-0.5 font-mono text-xs text-ink-muted">
-        {members.map((member) => (
-          <li key={member.id}>{member.relativePath}</li>
-        ))}
-      </ul>
-      {item.references.length === 0 ? (
-        <p className={hintText}>{t("keys.trashNoReferences")}</p>
-      ) : (
-        <>
-          <p className="text-sm text-notice-ink">
-            {t("keys.trashReferences", { count: item.references.length })}
-          </p>
-          <ul className="flex flex-col gap-0.5 font-mono text-xs text-notice-ink">
-            {item.references.map((reference, index) => (
-              <li key={`${reference.configPath}-${reference.line}-${index}`}>
-                {`${reference.hostPatterns.join(" ")} · ${reference.configPath}:${reference.line}`}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-      <p className={hintText}>{t("keys.trashIsRecoverable")}</p>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className={rowDanger}
-          onClick={() => onConfirm(item.id)}
-        >
-          {t("keys.trashConfirm")}
-        </button>
-        <Button onClick={onCancel}>{t("keys.trashCancel")}</Button>
       </div>
     </section>
   );
