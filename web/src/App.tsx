@@ -460,6 +460,7 @@ export function App({
                           onVaultChanged: session.openVault,
                           passwordless: session.passwordless,
                           onInspector: setInspector,
+                          onShowInspector: () => setInspectorOpen(true),
                           terminalSessions,
                           onShowSession: showLocalSession,
                           onOpenSSHSession: openSSHSession,
@@ -482,7 +483,7 @@ export function App({
             ) : null}
           </main>
           {inspector !== null && inspectorOpen ? (
-            <InspectorPane label={inspector.label} paneRef={inspectorPanelRef}>
+            <InspectorPane label={inspector.label} underTopBar={mobileLayout && !terminalTopBar} paneRef={inspectorPanelRef}>
               {inspector.body}
             </InspectorPane>
           ) : null}

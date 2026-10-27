@@ -17,8 +17,8 @@ export function KeyListToolbar({
 }) {
   const t = useTranslate();
   return (
-    <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-        <label>
+    <div className="flex w-full gap-2 sm:w-auto">
+        <label className="w-28 shrink-0 sm:w-auto">
           <span className="sr-only">{t("keys.listFilter")}</span>
           <select
             className={control}
