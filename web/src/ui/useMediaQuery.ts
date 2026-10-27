@@ -1,6 +1,8 @@
 import { useEffect, useState, type RefObject } from "react";
 
-// A phone remains a touch interface when rotated into landscape.
+// A phone remains a touch interface when rotated into landscape. A touch screen as large as a PC's is laid
+// out as a PC. index.css repeats this condition in its mobile-layout variant and the 44px touch sizes;
+// change them together.
 export const mobileViewportQuery = "(max-width: 767px), (pointer: coarse) and (max-width: 1023px)";
 
 function matches(query: string): boolean {
