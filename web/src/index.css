@@ -602,7 +602,8 @@
   display: block;
 }
 .sshc-mobile-navigation {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  /* The bar floats 10px above the bottom edge, or above the system's gesture area when it has one. */
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
 }
 :root[data-keyboard-open="true"] .sshc-mobile-navigation,
 :root[data-keyboard-open="true"] .sshc-app[data-mobile="true"] [data-app-header] {
