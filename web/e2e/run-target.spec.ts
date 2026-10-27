@@ -282,3 +282,42 @@ test("uses a compatible engine of another version without a panel", async ({ pag
   await expect(information.getByRole("definition").filter({ hasText: remoteVersion })).toBeVisible();
   await expect(information.getByText(`this computer runs ${localVersion}`, { exact: true })).toBeVisible();
 });
+
+test("says the host is being reached while a session opens, and why it could not be", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion });
+  // Opening waits on the SSH connection to bastion, which here never succeeds.
+  let answerOpen = () => {};
+  const openAnswered = new Promise<void>((resolve) => { answerOpen = resolve; });
+  await page.route(`**${sessionsPath}`, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    await openAnswered;
+    await route.fulfill(refusalResponse("unreachable"));
+  });
+  await openApplication(page, installation);
+  // Screenshots are taken in Japanese, so the labels follow the language.
+  const japanese = process.env.SSHC_VISUAL_DIR !== undefined;
+  await chooseBastion(page);
+  if (japanese) await changeDisplayLanguage(page, "ja");
+
+  const navigation = page.getByRole("navigation", { name: japanese ? "メインナビゲーション" : "Primary" });
+  await navigation.getByRole("button", { name: japanese ? "新しいセッション" : "New session", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Local shell, localhost/ }).click();
+
+  const connecting = page.getByRole("heading", { name: japanese ? "bastionに接続しています" : "Connecting to bastion", exact: true });
+  await expect(connecting).toBeVisible();
+  await expect(page).toHaveURL(/\/terminal$/);
+  if (japanese) {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/run-target-connecting.png` });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/run-target-connecting-mobile.png` });
+    await page.setViewportSize({ width: 1280, height: 800 });
+  }
+
+  answerOpen();
+  await expect(page.getByRole("region", { name: japanese ? "bastion に接続できませんでした" : "Could not connect to bastion", exact: true })).toBeVisible();
+  await expect(connecting).toBeHidden();
+});
