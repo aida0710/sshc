@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/terminalrestore"
@@ -109,9 +110,7 @@ func TestADamagedRecordOffersNothingAndIsReplacedAtStop(t *testing.T) {
 		t.Fatal(err)
 	}
 	damaged := `{"schemaVersion":1,"sessions":[{"kind":"ssh","alias":"-oProxyCommand=x","workspace":"default"}]}`
-	if err := os.WriteFile(recordPath(workspace), []byte(damaged), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, recordPath(workspace), []byte(damaged))
 	service, err := terminalrestore.NewService(workspace)
 	if !errors.Is(err, terminalrestore.ErrInvalidDocument) || len(service.Offer()) != 0 {
 		t.Fatalf("NewService() = %+v, %v", service.Offer(), err)

@@ -2,6 +2,8 @@ package terminal_test
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,7 +29,13 @@ func TestReopeningsDescribeTheSessionsStillInUseInTheOrderOpened(t *testing.T) {
 	closed := open("bash", "default")
 	open("fish", "work")
 
-	starter.processes[0].feed("\x1b]7;file://edge/home/aida/src\a$ ")
+	directory := t.TempDir()
+	reported := filepath.ToSlash(directory)
+	if !strings.HasPrefix(reported, "/") {
+		// OSC 7 writes a Windows drive path as file://host/C:/...
+		reported = "/" + reported
+	}
+	starter.processes[0].feed("\x1b]7;file://edge" + reported + "\a$ ")
 	if err := registry.Rename(first.ID(), "build"); err != nil {
 		t.Fatal(err)
 	}
@@ -39,8 +47,11 @@ func TestReopeningsDescribeTheSessionsStillInUseInTheOrderOpened(t *testing.T) {
 	testwait.Until(t, func() bool { return first.WorkingDirectory() != "" })
 
 	got := registry.Reopenings()
+	if len(got) > 0 && filepath.FromSlash(got[0].WorkingDirectory) == directory {
+		got[0].WorkingDirectory = "the reported directory"
+	}
 	want := []terminal.Reopening{
-		{Kind: terminal.KindShell, ShellProfile: "zsh", Workspace: "default", PinnedTitle: "build", WorkingDirectory: "/home/aida/src"},
+		{Kind: terminal.KindShell, ShellProfile: "zsh", Workspace: "default", PinnedTitle: "build", WorkingDirectory: "the reported directory"},
 		{Kind: terminal.KindShell, ShellProfile: "fish", Workspace: "work"},
 	}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
