@@ -78,6 +78,15 @@ func TestACallerThatGivesUpDoesNotCancelTheAttemptOthersWaitFor(t *testing.T) {
 	if err := <-gaveUp; !errors.Is(err, context.Canceled) {
 		t.Fatalf("the caller that gave up got %v", err)
 	}
+	attempts.mutex.Lock()
+	running := attempts.running != nil
+	attempts.mutex.Unlock()
+	if !running {
+		t.Fatal("the attempt ended when the caller that started it gave up")
+	}
+	// The attempt blocks until released, so the patient caller reaches do and
+	// joins it in this time rather than starting its own after it ends.
+	time.Sleep(100 * time.Millisecond)
 	close(release)
 	if value := <-patient; value != "link" {
 		t.Fatalf("the remaining caller got %q, want the attempt's result", value)
