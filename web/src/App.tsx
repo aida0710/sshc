@@ -36,6 +36,7 @@ import { useTransferUnloadWarning } from "./sftp/useTransferUnloadWarning";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
 import { CommandPalette } from "./shell/CommandPalette";
 import { MobileNavigation } from "./shell/MobileNavigation";
+import { useNavigationSwipe } from "./shell/useNavigationSwipe";
 import { SectionNotices } from "./shell/SectionNotices";
 import { usePaletteCommands } from "./shell/usePaletteCommands";
 import { setAndroidAppearance } from "./android/native";
@@ -175,6 +176,7 @@ export function App({
   // the terminal inert), the app header keeps the navigation reachable.
   const terminalTopBar = mobileLayout && terminalFace && activeSessionId !== null && terminalSessions.remoteRefusal === null;
   const mobileNavigationShown = state === "ready" && mobileLayout && !terminalTopBar;
+  useNavigationSwipe({ enabled: mobileLayout && state === "ready", open: navigationOpen, panelRef: navigationPanelRef, onOpenChange: setNavigationOpen });
 
   // A page's heading shows the inspector's toggle among its actions on a wide screen, and puts its actions
   // in the top bar on a phone, where its name is hidden (see pageChrome).
