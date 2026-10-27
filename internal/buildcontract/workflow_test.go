@@ -426,6 +426,7 @@ func validateNativeWorkflow(document workflowDocument) []string {
 		problems = append(problems, validateGoSteps(goJob)...)
 		problems = append(problems, validatePinnedSetup(goJob, "actions/checkout")...)
 		problems = append(problems, validatePinnedSetup(goJob, "actions/setup-go")...)
+		problems = append(problems, validateGoBuildCache(goJob)...)
 		problems = append(problems, validateSetupOrder("jobs.go", goJob, "actions/setup-go")...)
 	}
 
@@ -634,9 +635,28 @@ func validatePinnedSetup(job workflowJob, action string) []string {
 	step := matches[0]
 	var problems []string
 	if action == "actions/setup-go" {
-		if fmt.Sprint(step.With["go-version-file"]) != "go.mod" || fmt.Sprint(step.With["cache-dependency-path"]) != "go.sum" {
-			problems = append(problems, "native Go setup must use go.mod and go.sum")
+		if fmt.Sprint(step.With["go-version-file"]) != "go.mod" || fmt.Sprint(step.With["cache"]) != "false" {
+			problems = append(problems, "native Go setup must use go.mod and leave caching to the Go build cache steps (cache: false)")
 		}
+	}
+	return problems
+}
+
+// validateGoBuildCache は、jobs.go のビルドのキャッシュを確かめる。setup-go のキャッシュは
+// go.sum だけで鍵を作るので、依存が変わらない限り作り直されず、そのあとに変わったパッケージを
+// 毎回コンパイルし直す。main のコミットごとに保存し、PR と push は最新のものから始める。
+func validateGoBuildCache(job workflowJob) []string {
+	const key = "go-${{ matrix.name }}-${{ hashFiles('go.sum') }}-${{ github.sha }}"
+	var problems []string
+	restore, found := namedStep(job, "Restore the Go build cache")
+	if !found || !strings.HasPrefix(restore.Uses, "actions/cache/restore@") || fmt.Sprint(restore.With["key"]) != key ||
+		!strings.Contains(fmt.Sprint(restore.With["restore-keys"]), "go-${{ matrix.name }}-${{ hashFiles('go.sum') }}-\n") {
+		problems = append(problems, "jobs.go must restore the newest Go build cache of its OS with the key "+key)
+	}
+	save, found := namedStep(job, "Save the Go build cache")
+	if !found || !strings.HasPrefix(save.Uses, "actions/cache/save@") || fmt.Sprint(save.With["key"]) != key ||
+		save.If != gated("${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}") {
+		problems = append(problems, "jobs.go must save the Go build cache only from pushes to main, with the key "+key)
 	}
 	return problems
 }
