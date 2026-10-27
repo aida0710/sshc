@@ -223,6 +223,13 @@ describe("SecretsPanel", () => {
     expect(within(tokens).queryByLabelText("Host alias")).not.toBeInTheDocument();
   });
 
+  it("names a page of one kind as Menu does, above the list of that kind", async () => {
+    render(<SecretsPanel api={buildApi()} kind="totp" />);
+
+    expect(await screen.findByRole("heading", { name: "OTP", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "One-time passwords (TOTP)" })).toBeInTheDocument();
+  });
+
   it("shows only the current TOTP until its code is expanded", async () => {
     const user = userEvent.setup();
     const api = buildApi();
