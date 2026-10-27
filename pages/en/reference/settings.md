@@ -28,11 +28,11 @@ The port and the Vault auto-lock under Engine belong to this device only. Sync d
 **Settings → Appearance** sets the theme and the accent colour of the whole app:
 
 - Theme: match the system, light, or dark
-- Accent colour: lavender, blue, sky, pink, or mono. It marks the current item, buttons, and the focused terminal pane
+- Accent colour: lavender, blue, sky, pink, mono, or custom. It marks the current item, buttons, and the focused terminal pane. Custom takes one colour of your own from the colour picker or as a code (#rrggbb), used in both the light and the dark theme. A colour that is hard to tell from the background of the theme on screen brings up a notice
 
 Each settings page lists the other settings pages on its left, so you can move between them.
 
-The theme stays in this browser and is not synced. The accent colour is stored in the sshc metadata under `~/.ssh/sshc` and synced to your other devices. Amber, green, and red are not offered because they already mean an unread notification, connected, and an error.
+The theme stays in this browser and is not synced. The accent colour is stored in the sshc metadata under `~/.ssh/sshc` and synced to your other devices. Amber, green, and red are not among the offered colours because they already mean an unread notification, connected, and an error.
 
 Preferences in Menu switches the display language (Japanese or English).
 
