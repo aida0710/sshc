@@ -42,13 +42,22 @@ func TestCIWorkflowBuildsTheVPNImageOnBothArchitectures(t *testing.T) {
 	// 出せなかったとき（空のとき）は、'false' ではないので走る側に倒れる。
 	const whenNeeded = "${{ steps.vpn.outputs.needed != 'false' }}"
 	for _, want := range []struct{ name, run string }{
-		{"Build the VPN container image", "docker build internal/vpn/container"},
+		{"Choose the image tag the engine uses", `echo "tag=sshc-vpn-test:$(scripts/ci/vpn-image-tag.sh)" >> "$GITHUB_OUTPUT"`},
 		{"Connect through IKEv2/IPsec and L2TP/IPsec in the VPN container", "go test ./internal/vpn -run 'IKEv2|L2TP' -count=1 -timeout 15m"},
 	} {
 		step, found := namedStep(job, want.name)
 		if !found || strings.TrimSpace(step.Run) != want.run || step.If != whenNeeded {
 			t.Errorf("jobs.vpn-image must run %q as the step %q with if %s", want.run, want.name, whenNeeded)
 		}
+	}
+	// イメージは main が保存したレイヤーのキャッシュから組み立て、エンジンが付けるタグで読み込む。
+	// Ubuntu の snapshot の障害で CI が落ちないためと、結合テストが組み立て直さないためである。
+	build, found := namedStep(job, "Build the VPN container image from the layer cache")
+	if !found || build.If != whenNeeded || !strings.HasPrefix(build.Uses, "docker/build-push-action@") ||
+		build.With["context"] != "internal/vpn/container" || build.With["load"] != true ||
+		build.With["tags"] != "${{ steps.image.outputs.tag }}" ||
+		!strings.HasPrefix(fmt.Sprint(build.With["cache-from"]), "type=gha,") {
+		t.Error("jobs.vpn-image must build internal/vpn/container from the gha layer cache and load it under the engine's tag")
 	}
 	decide, found := namedStep(job, "Decide whether the VPN image check runs")
 	if !found || !strings.Contains(decide.Run, "git diff --name-only HEAD^1 HEAD | scripts/ci/vpn-image-tests-needed.sh") {
@@ -661,13 +670,17 @@ func validateGoBuildCache(job workflowJob) []string {
 	return problems
 }
 
+// mainPushOnly は、main への push のときだけ走る手順（キャッシュの保存の前の整理）が
+// OS の条件に足す条件である。OS の分け方は、ほかの手順と同じ決まりで確かめる。
+const mainPushOnly = " && github.event_name == 'push' && github.ref == 'refs/heads/main'"
+
 func validateSeparatedRunShells(id string, job workflowJob) []string {
 	var problems []string
 	for _, step := range job.Steps {
 		if step.Run == "" {
 			continue
 		}
-		switch step.If {
+		switch strings.Replace(step.If, mainPushOnly, "", 1) {
 		// 画面だけの変更で Go のテストを飛ばしたことを知らせる echo だけは、どの OS でも bash で走る。
 		case "${{ env.NATIVE_TESTS != 'true' }}":
 			if step.Shell != "bash" || !strings.HasPrefix(strings.TrimSpace(step.Run), "echo ") {

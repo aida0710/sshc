@@ -3,7 +3,9 @@ package vpn
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -53,5 +55,25 @@ func TestTheDockerTestsUseTheirOwnImageName(t *testing.T) {
 	}
 	if manager := New(t.TempDir(), 1000, nil); manager.imageName != defaultImageName {
 		t.Fatalf("New のイメージの名前 = %q, want %q", manager.imageName, defaultImageName)
+	}
+}
+
+// CI は scripts/ci/vpn-image-tag.sh が出すタグでイメージを先に組み立てる。タグが
+// エンジンと食い違うと、結合テストはそのイメージを見つけられず、Ubuntu の snapshot から
+// 組み立て直す。
+func TestTheCIImageTagScriptMatchesTheEngine(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("このスクリプトは Linux の runner で走る")
+	}
+	printed, err := exec.Command("bash", "../../scripts/ci/vpn-image-tag.sh", "container").Output()
+	if err != nil {
+		t.Fatalf("vpn-image-tag.sh: %v", err)
+	}
+	want, err := imageTag()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(printed)); got != want {
+		t.Fatalf("vpn-image-tag.sh printed %q, the engine tags the image %q", got, want)
 	}
 }

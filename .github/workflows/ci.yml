@@ -232,6 +232,27 @@ jobs:
           $raceExit = $LASTEXITCODE
           exit $raceExit
 
+      # 保存する前に、この実行で使わなかったビルドの出力を消す。Go はキャッシュの項目を使うと、
+      # 最後に触ってから1時間を過ぎていれば更新時刻を今にする。そのため、この実行で使った項目は
+      # どれも、更新時刻が「1時間 + job の長さ」より新しい。2時間より古い項目は使っていないので
+      # 消してよい。消さないと、キャッシュはコミットごとに増え続ける（Linux で40分に296MBから421MB）。
+      - name: Drop build outputs this run did not use (Unix)
+        if: ${{ runner.os != 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.NATIVE_TESTS == 'true' }}
+        shell: bash
+        env:
+          GO_BUILD_CACHE: ${{ matrix.goBuildCache }}
+        # matrix.goBuildCache は ~ で始まる。引用の中の ~ は展開されないので置き換える。
+        run: find "${GO_BUILD_CACHE/#\~/$HOME}" -type f -mmin +120 -delete
+      - name: Drop build outputs this run did not use (Windows)
+        if: ${{ runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.NATIVE_TESTS == 'true' }}
+        shell: pwsh
+        env:
+          GO_BUILD_CACHE: ${{ matrix.goBuildCache }}
+        run: |
+          $unused = (Get-Date).AddMinutes(-120)
+          $directory = $env:GO_BUILD_CACHE -replace '^~', $HOME
+          Get-ChildItem -LiteralPath $directory -Recurse -File | Where-Object { $_.LastWriteTime -lt $unused } | Remove-Item -Force
+
       # main への push だけが、テストを通ったビルドのキャッシュを保存する。PR は保存しない
       # （PR のキャッシュはほかの PR から使えず、容量だけを使う）。
       - name: Save the Go build cache
@@ -254,11 +275,47 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # main への push で jobs.go が保存したビルドのキャッシュが置き換えた、同じ OS の古いキャッシュを
+  # 消す。次の実行が復元するのはいつも一番新しいものなので、古いものは容量を使うだけである。
+  # 残すと、リポジトリの上限（10GB）に達し、npm や Gradle のキャッシュが押し出される
+  # （2026-10-27 に9.998GBだった）。この commit のキャッシュを保存しなかった OS（Go に関わらない
+  # 変更で Windows と macOS のテストを飛ばしたとき）は、前のものを残す。
+  go-cache-cleanup:
+    name: Go build cache cleanup
+    needs: go
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Delete the Go build caches the new ones replace
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for os in Linux macOS Windows; do
+            keys=$(gh cache list --repo "$GITHUB_REPOSITORY" --key "go-$os-" --limit 100 --json id,key --jq '.[] | "\(.id) \(.key)"')
+            if ! grep -q -- "-$SHA\$" <<<"$keys"; then
+              echo "go-$os: no cache saved for $SHA; keeping the previous ones"
+              continue
+            fi
+            grep -v -- "-$SHA\$" <<<"$keys" | while read -r id key; do
+              [ -n "$id" ] || continue
+              echo "deleting $key"
+              gh cache delete --repo "$GITHUB_REPOSITORY" "$id"
+            done
+          done
+
   # gomobile、Gradle、manifest を含む配布経路で APK を検証する。
   # NDK はリポジトリで固定したrevisionだけを使用する。
   android:
     name: Android APK
     needs: ui
+    # jobs.ui が失敗しても、この job は走らせて、画面を受け取る手順で落とす。依存先の失敗で
+    # 飛ばされた必須の検査は成功に見えるので、APK を確かめないまま PR がマージできてしまう。
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -502,9 +559,29 @@ jobs:
           fi
           needed=$(git diff --name-only HEAD^1 HEAD | scripts/ci/vpn-image-tests-needed.sh)
           echo "needed=$needed" >> "$GITHUB_OUTPUT"
-      - name: Build the VPN container image
+      # イメージは、main が保存したレイヤーのキャッシュから組み立てる。Dockerfile は Ubuntu の
+      # snapshot の時刻とパッケージを固定しているので、同じ Dockerfile なら中身も同じである。
+      # 毎回 snapshot.ubuntu.com から取ると、その障害で CI が落ち、run 全体の成功を待つ
+      # Release の公開も止まる（2026-10-27 の main の失敗4回はすべてこれだった）。
+      # 組み立てたイメージは、エンジンが付けるタグで読み込む。結合テストはそれを見つけて使い、
+      # 組み立て直さない（ensureImage）。
+      - name: Choose the image tag the engine uses
         if: ${{ steps.vpn.outputs.needed != 'false' }}
-        run: docker build internal/vpn/container
+        id: image
+        run: echo "tag=sshc-vpn-test:$(scripts/ci/vpn-image-tag.sh)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        if: ${{ steps.vpn.outputs.needed != 'false' }}
+      - name: Build the VPN container image from the layer cache
+        if: ${{ steps.vpn.outputs.needed != 'false' }}
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: internal/vpn/container
+          load: true
+          provenance: false
+          tags: ${{ steps.image.outputs.tag }}
+          cache-from: type=gha,scope=vpn-image-${{ matrix.name }}
+          # 保存は main への push だけにする。PR のキャッシュはほかの PR から使えない。
+          cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('type=gha,mode=max,scope=vpn-image-{0}', matrix.name) || '' }}
       # IKEv2/IPsec は、トンネルをカーネルの XFRM インターフェースに結び付ける。
       # runner のカーネル（amd64 と arm64）で、テストの中で立てた strongSwan の
       # サーバーへ実際に接続できることを確かめる。L2TP/IPsec は、既定の暗号スイートで
