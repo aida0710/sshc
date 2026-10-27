@@ -59,12 +59,14 @@ func writeOnePrivateFile(fileSystem OSFileSystem, parent, directory string) erro
 	if err != nil {
 		return fmt.Errorf("WriteTemp: %w", err)
 	}
-	restricted, err := windowsacl.IsRestrictedToCurrentUser(path)
-	if err != nil {
-		return fmt.Errorf("inspect: %w", err)
-	}
-	if !restricted {
-		return errors.New("inspect: the temporary file is not restricted to the current user")
+	for _, created := range []string{directory, path} {
+		restricted, err := windowsacl.IsRestrictedToCurrentUser(created)
+		if err != nil {
+			return fmt.Errorf("inspect %s: %w", filepath.Base(created), err)
+		}
+		if !restricted {
+			return fmt.Errorf("inspect %s: not restricted to the current user", filepath.Base(created))
+		}
 	}
 	return nil
 }
