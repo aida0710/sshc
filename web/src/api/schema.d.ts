@@ -276,6 +276,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/terminal/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getTerminalRestoreOffer"];
+        put?: never;
+        post: operations["restoreTerminalSessions"];
+        delete: operations["declineTerminalRestore"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/terminal/workspaces": {
         parameters: {
             query?: never;
@@ -452,6 +468,25 @@ export interface paths {
         /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
         post: operations["remoteEngineOpenTerminalSession"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/engines/{alias}/terminal/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
+        get: operations["remoteEngineGetTerminalRestoreOffer"];
+        put?: never;
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
+        post: operations["remoteEngineRestoreTerminalSessions"];
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
+        delete: operations["remoteEngineDeclineTerminalRestore"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3217,6 +3252,8 @@ export interface components {
             exited?: components["schemas"]["TerminalExit"];
             forwards?: components["schemas"]["TerminalForward"][];
             presentation?: components["schemas"]["TerminalPresentation"];
+            shellProfileId?: string;
+            workingDirectory?: string;
             notificationVersion?: number;
             lastNotification?: components["schemas"]["TerminalNotification"];
         };
@@ -3266,6 +3303,21 @@ export interface components {
         TerminalSessionList: {
             sessions: components["schemas"]["TerminalSession"][];
             maxSessions: number;
+        };
+        TerminalRestoreOffer: {
+            sessions: components["schemas"]["TerminalRestoreSession"][];
+        };
+        TerminalRestoreSession: {
+            /** @enum {string} */
+            kind: "ssh" | "shell";
+            alias?: string;
+            workspaceId: string;
+            pinnedTitle?: string;
+            workingDirectory?: string;
+        };
+        TerminalRestoreResult: {
+            opened: number;
+            failed: number;
         };
         TerminalControlCursor: {
             /** Format: uint64 */
@@ -5462,6 +5514,76 @@ export interface operations {
             500: components["responses"]["Problem"];
         };
     };
+    getTerminalRestoreOffer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sessions waiting to be opened again; empty when there is no offer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalRestoreOffer"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    restoreTerminalSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The offer was ended and its sessions opened, as far as they could be */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalRestoreResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    declineTerminalRestore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The offer was ended without opening anything */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
     listTerminalWorkspaces: {
         parameters: {
             query?: never;
@@ -5908,6 +6030,91 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    remoteEngineGetTerminalRestoreOffer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sessions waiting to be opened again; empty when there is no offer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalRestoreOffer"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    remoteEngineRestoreTerminalSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The offer was ended and its sessions opened, as far as they could be */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalRestoreResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    remoteEngineDeclineTerminalRestore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The offer was ended without opening anything */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
         };

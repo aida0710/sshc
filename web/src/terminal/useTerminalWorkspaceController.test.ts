@@ -136,4 +136,26 @@ describe("useTerminalWorkspaceController", () => {
     expect(result.current.activeSessionId).toBe("s1");
     expect(navigate).not.toHaveBeenCalled();
   });
+  it("opens a duplicate in the directory and shell profile of the original", async () => {
+    const remote: TerminalSession = { ...session("edge"), workingDirectory: "~/src/sshc", workspaceId: "work" };
+    const local: TerminalSession = { ...session("local"), kind: "shell", shellProfileId: "fish", workingDirectory: "/home/aida/notes" };
+    delete local.alias;
+    const unknown: TerminalSession = session("plain");
+    const open = vi.fn(async () => null);
+    const { result } = renderHook(() => useTerminalWorkspaceController({
+      api,
+      terminalSessions: { sessions: [remote, local, unknown], refresh: vi.fn().mockResolvedValue(undefined), open } as unknown as TerminalSessionsState,
+      enabled: true,
+      section: "Terminal",
+      navigate: () => undefined,
+      closeNavigation: () => undefined,
+    }));
+
+    await act(() => result.current.duplicateSession("edge"));
+    expect(open).toHaveBeenLastCalledWith({ kind: "ssh", alias: "edge", workspaceId: "work", cwd: "~/src/sshc" });
+    await act(() => result.current.duplicateSession("local"));
+    expect(open).toHaveBeenLastCalledWith({ kind: "shell", workspaceId: "default", cwd: "/home/aida/notes", profileId: "fish" });
+    await act(() => result.current.duplicateSession("plain"));
+    expect(open).toHaveBeenLastCalledWith({ kind: "ssh", alias: "plain", workspaceId: "default" });
+  });
 });

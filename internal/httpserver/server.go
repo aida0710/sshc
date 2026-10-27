@@ -37,6 +37,7 @@ import (
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/snippets"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalrestore"
 	"sshc/internal/terminalworkspace"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnprofile"
@@ -117,6 +118,9 @@ type Options struct {
 	Terminals *terminal.Registry
 	// TerminalWorkspaces は、セッションをまとめるワークスペースの定義を持つ。
 	TerminalWorkspaces *terminalworkspace.Service
+	// TerminalRestore は、前のエンジンが止まったときに開いていたセッションを持つ。
+	// nil なら開き直しの受け口を登録しない。
+	TerminalRestore *terminalrestore.Service
 	// ConnectionOpened は、SSHセッションとstream ticketの両方を作れたあとに呼ぶ。
 	ConnectionOpened func(alias string)
 	// TerminalStartDirectory は、ローカルシェルが始まる場所を返す。空なら
@@ -578,6 +582,7 @@ func newTerminalHandlers(options Options, actions ActionHandlers, host string) T
 		StartDirectory:      options.TerminalStartDirectory,
 		Connected:           options.ConnectionOpened,
 		Workspaces:          options.TerminalWorkspaces,
+		RestoreOffers:       options.TerminalRestore,
 		Startup: func(alias string) StartupSnippet {
 			return prepareStartupSnippet(options.Snippets, options.Logger, alias)
 		},

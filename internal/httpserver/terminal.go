@@ -17,6 +17,7 @@ import (
 	"sshc/internal/platform"
 	"sshc/internal/snippets"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalrestore"
 	"sshc/internal/terminalworkspace"
 	"sshc/internal/validate"
 )
@@ -69,6 +70,9 @@ type TerminalHandlers struct {
 	// Workspaces は、セッションをまとめるワークスペースの定義を持つ。nil なら
 	// ワークスペースの受け口を登録せず、セッションはすべて default に入る。
 	Workspaces *terminalworkspace.Service
+	// RestoreOffers は、前のエンジンが止まったときに開いていたセッションを持つ。nil なら
+	// 開き直しの受け口を登録しない。
+	RestoreOffers *terminalrestore.Service
 	// Startup は、alias に割り当てた起動スニペットを、この接続で送るかを決める。
 	// コマンドは変数（シークレットを含む）を展開したもので、認証とリモートシェルの
 	// 起動が済んでから送る。送らない理由の案内も、同じ時点でターミナルへ書く。
@@ -95,6 +99,9 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	engine.GET(StreamPath, handlers.Stream)
 	if handlers.Workspaces != nil {
 		registerTerminalWorkspaceRoutes(engine, handlers)
+	}
+	if handlers.RestoreOffers != nil {
+		registerTerminalRestoreRoutes(engine, handlers)
 	}
 }
 
@@ -127,6 +134,12 @@ func describeSession(view terminal.View) api.TerminalSession {
 			TitleSource:  api.TerminalPresentationTitleSource(view.Presentation.TitleSource),
 			TitlePinned:  view.Presentation.TitlePinned,
 		},
+	}
+	if view.ShellProfile != "" {
+		described.ShellProfileId = &view.ShellProfile
+	}
+	if view.WorkingDirectory != "" {
+		described.WorkingDirectory = &view.WorkingDirectory
 	}
 	notificationVersion := int(view.NotificationVersion)
 	described.NotificationVersion = &notificationVersion
@@ -327,7 +340,8 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 // セッションの識別子にも触れない。名前が要るのは、同じ相手へ複数本開いたときに
 // 行が見分けられなくなるからである。
 //
-// 名前は metadata へ保存しない。セッションは現在のプロセス内でだけ有効である。
+// 名前は metadata へ保存しない。セッションは現在のプロセス内でだけ有効である。エンジンが
+// 止まるときだけ、開き直すための記録（terminalrestore）に、このマシンにだけ残す。
 func (h TerminalHandlers) SetTitle(c *echo.Context) error {
 	id, ok := sessionIDParam(c)
 	if !ok {
@@ -415,7 +429,7 @@ func (h TerminalHandlers) spec(request api.OpenTerminalSessionRequest, size term
 		Startup: func() terminal.Startup {
 			commands := make([]string, 0, 2)
 			if initialDirectory != "" {
-				commands = append(commands, "cd -- "+quotePOSIXShell(initialDirectory))
+				commands = append(commands, changeRemoteDirectory(initialDirectory))
 			}
 			var startup StartupSnippet
 			if h.Startup != nil {
@@ -437,15 +451,38 @@ func (h TerminalHandlers) spec(request api.OpenTerminalSessionRequest, size term
 	return spec, nil
 }
 
+// remoteWorkingDirectory accepts an absolute POSIX directory on the SSH server,
+// or one under the remote home (`~`, `~/src`) as a shell reports it in its title.
 func remoteWorkingDirectory(candidate string) (string, error) {
-	if candidate == "" || len(candidate) > 4096 || !strings.HasPrefix(candidate, "/") || containsControlCharacter(candidate) {
+	if candidate == "" || len(candidate) > 4096 || containsControlCharacter(candidate) {
 		return "", errInvalidRemoteWorkingDirectory
 	}
-	cleaned := path.Clean(candidate)
-	if cleaned != candidate {
-		return "", errInvalidRemoteWorkingDirectory
+	underHome, isUnderHome := strings.CutPrefix(candidate, "~/")
+	switch {
+	case candidate == "~":
+		return candidate, nil
+	case isUnderHome:
+		if path.Clean(underHome) != underHome || strings.HasPrefix(underHome, "/") || strings.HasPrefix(underHome, "../") || underHome == ".." {
+			return "", errInvalidRemoteWorkingDirectory
+		}
+		return candidate, nil
+	case strings.HasPrefix(candidate, "/") && path.Clean(candidate) == candidate:
+		return candidate, nil
 	}
-	return cleaned, nil
+	return "", errInvalidRemoteWorkingDirectory
+}
+
+// changeRemoteDirectory is the command that moves the remote shell into a
+// directory remoteWorkingDirectory accepted. The `~` is left outside the quotes
+// so the shell expands it to the home directory.
+func changeRemoteDirectory(directory string) string {
+	if directory == "~" {
+		return "cd"
+	}
+	if underHome, ok := strings.CutPrefix(directory, "~/"); ok {
+		return "cd -- ~/" + quotePOSIXShell(underHome)
+	}
+	return "cd -- " + quotePOSIXShell(directory)
 }
 
 func quotePOSIXShell(value string) string {
@@ -465,7 +502,7 @@ func (h TerminalHandlers) shellSpec(requested, cwd *string, size terminal.Size) 
 		}
 	}
 	return terminal.Spec{
-		Kind: terminal.KindShell, Title: shellTitle(profile.Path), Size: size,
+		Kind: terminal.KindShell, ShellProfile: profile.ID, Title: shellTitle(profile.Path), Size: size,
 		Command: terminal.Command{
 			Path: profile.Path, Argv0: profile.Argv0,
 			Arguments: append([]string(nil), profile.Arguments...), Env: h.environment(),

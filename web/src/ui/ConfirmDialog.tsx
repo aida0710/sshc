@@ -16,6 +16,8 @@ import { usePendingResult } from "./usePendingResult";
 // onConfirm が Promise を返す間と busy の間は、両方のボタンとダイアログを閉じる操作を
 // 止め、二度押しで要求が 2 回飛ばないようにする。その間、確認ボタンは文言を変えずに
 // 回転の印を添え、押したことが受け付けられて進んでいると分かるようにする。
+// onDismiss は、Esc や背景で閉じたときの処理である。省くとキャンセルと同じに扱う。
+// キャンセルのボタンが取り消せない決定（記録を消すなど）のときは、閉じるだけの処理を渡す。
 // confirmDisabled は、確かめる内容がまだ揃っていない間（確認の前提をサーバーから
 // 読み込んでいる間など）、確認ボタンだけを止める。キャンセルとダイアログを閉じる
 // 操作は止めない。開いた直後のフォーカスもキャンセルに置いたままにする。
@@ -27,6 +29,7 @@ export function ConfirmDialog({
   cancelLabel,
   onConfirm,
   onCancel,
+  onDismiss = onCancel,
   returnFocusRef,
   confirmKind = "danger",
   busy = false,
@@ -40,6 +43,7 @@ export function ConfirmDialog({
   cancelLabel: string;
   onConfirm: () => void | Promise<unknown>;
   onCancel: () => void;
+  onDismiss?: () => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
   confirmKind?: "primary" | "danger";
   busy?: boolean;
@@ -63,7 +67,7 @@ export function ConfirmDialog({
     <ModalShell
       labelledBy={id}
       describedBy={error === "" ? bodyId : `${bodyId} ${errorId}`}
-      onDismiss={onCancel}
+      onDismiss={onDismiss}
       dismissible={!locked}
       initialFocusRef={cancelRef}
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}

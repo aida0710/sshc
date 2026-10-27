@@ -370,6 +370,42 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
+  # The sessions the previous engine left open when it stopped (an update, a
+  # restart of the machine, a manual stop), offered once to be opened again.
+  /api/v1/terminal/restore:
+    get:
+      operationId: getTerminalRestoreOffer
+      responses:
+        "200":
+          description: The sessions waiting to be opened again; empty when there is no offer
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalRestoreOffer" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: restoreTerminalSessions
+      responses:
+        "200":
+          description: The offer was ended and its sessions opened, as far as they could be
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalRestoreResult" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: declineTerminalRestore
+      responses:
+        "204":
+          description: The offer was ended without opening anything
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/workspaces:
     get:
       operationId: listTerminalWorkspaces
@@ -776,6 +812,99 @@ paths:
         '500':
           $ref: '#/components/responses/Problem'
         '404':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/restore:
+    get:
+      operationId: remoteEngineGetTerminalRestoreOffer
+      responses:
+        '200':
+          description: The sessions waiting to be opened again; empty when there is no offer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalRestoreOffer'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+    post:
+      operationId: remoteEngineRestoreTerminalSessions
+      responses:
+        '200':
+          description: The offer was ended and its sessions opened, as far as they could be
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalRestoreResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+    delete:
+      operationId: remoteEngineDeclineTerminalRestore
+      responses:
+        '204':
+          description: The offer was ended without opening anything
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
           $ref: '#/components/responses/Problem'
         '502':
           $ref: '#/components/responses/Problem'
@@ -4627,6 +4756,13 @@ components:
         # 現在開いている転送。
         forwards: { type: array, items: { $ref: "#/components/schemas/TerminalForward" } }
         presentation: { $ref: "#/components/schemas/TerminalPresentation" }
+        # shell kind only: the LocalShellProfile the session runs.
+        shellProfileId: { type: string }
+        # Where the session works now, as the shell last reported it (OSC 7 or
+        # a `user@host: dir` title) or, for a local shell, as the engine reads
+        # it. Over SSH it may be under the remote home (`~/src`). Omitted when
+        # unknown. A duplicate opens here.
+        workingDirectory: { type: string }
         # notificationVersion は、端末内のプログラムが OSC 9／99／777 で通知を
         # 求めるたびに増える。画面はこれを前回と比べて新しい通知を知る。
         notificationVersion: { type: integer, minimum: 0 }
@@ -4708,6 +4844,36 @@ components:
       properties:
         sessions: { type: array, items: { $ref: "#/components/schemas/TerminalSession" } }
         maxSessions: { type: integer, minimum: 0, maximum: 200 }
+    TerminalRestoreOffer:
+      type: object
+      additionalProperties: false
+      required: [sessions]
+      properties:
+        sessions: { type: array, maxItems: 256, items: { $ref: "#/components/schemas/TerminalRestoreSession" } }
+    TerminalRestoreSession:
+      type: object
+      additionalProperties: false
+      required: [kind, workspaceId]
+      properties:
+        kind:
+          type: string
+          enum: [ssh, shell]
+          x-enum-varnames: [TerminalRestoreSessionKindSsh, TerminalRestoreSessionKindShell]
+        # ssh kind only.
+        alias: { type: string }
+        workspaceId: { type: string }
+        # The name the user gave the session, when it had one.
+        pinnedTitle: { type: string }
+        workingDirectory: { type: string }
+    TerminalRestoreResult:
+      type: object
+      additionalProperties: false
+      required: [opened, failed]
+      properties:
+        opened: { type: integer, minimum: 0 }
+        # Sessions that could not be opened: the connection was removed, or the
+        # session limit was reached.
+        failed: { type: integer, minimum: 0 }
     TerminalControlCursor:
       type: object
       additionalProperties: false
@@ -4749,8 +4915,9 @@ components:
       properties:
         kind: { type: string, enum: [ssh, shell] }
         alias: { type: string, minLength: 1, maxLength: 64 }
-        # Absolute directory selected by SFTP: POSIX on the SSH server for ssh,
-        # native or forward-slashed on the engine machine for shell.
+        # Directory to start in: for ssh, absolute POSIX on the SSH server or
+        # under the remote home (`~`, `~/src`); for shell, absolute, native or
+        # forward-slashed, on the engine machine.
         cwd: { type: string, minLength: 1, maxLength: 4096 }
         cols: { type: integer, minimum: 1, maximum: 1000 }
         rows: { type: integer, minimum: 1, maximum: 1000 }
