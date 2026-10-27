@@ -109,9 +109,9 @@ func TestReleaseBuildsTheWebUIOnceForEveryArtifact(t *testing.T) {
 	workflow, _ := readReleaseWorkflow(t)
 	problems := validateBuiltUIBuilder("jobs.ui", workflow.Jobs["ui"])
 	for id, goSteps := range map[string][]string{
-		"macos":   {"go test", "make release-cli-current"},
-		"linux":   {"make test", "make release-cli-current"},
-		"windows": {"go test", "nativebuild release-current"},
+		"macos":   {"make release-cli-current"},
+		"linux":   {"make release-cli-current"},
+		"windows": {"nativebuild release-current"},
 		"android": {"make android-bind"},
 	} {
 		problems = append(problems, validateBuiltUIReceiver("jobs."+id, workflow.Jobs[id], "ui", goSteps...)...)

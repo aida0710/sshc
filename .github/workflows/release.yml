@@ -1,5 +1,7 @@
 # タグからリリース成果物をビルドして公開する。
-# OS 固有の成果物は対象 OS の runner でビルドし、各ジョブ内で検証する。
+# OS 固有の成果物は対象 OS の runner でビルドし、各ジョブ内で起動して確かめる。
+# テストは流し直さない。verify-source が、同じコミットで main の CI（push と手動の実行は
+# 3OS の go test・race・web・deadcode などを全部流す）が成功したことを確かめてから進むため。
 name: Release
 
 on:
@@ -151,11 +153,6 @@ jobs:
           name: web-ui
           path: internal/ui/dist/app
 
-      # Linux jobがfull suiteを一度実行する。ここでは配布対象OSに固有のPTY、path、
-      # user解決を再実行し、同じWeb/deadcode/race検査を3runnerで重複させない。
-      - name: Verify macOS behaviour
-        run: go test -v -count=1 ./...
-
       - name: Build the CLI for this OS
         env:
           VERSION: ${{ env.RELEASE_TAG }}
@@ -184,20 +181,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 22
-      - run: npm ci --prefix web
       # 埋め込む画面は jobs.ui が1回だけ組み立てたもの。どの配布物も同じ画面を持つ。
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: web-ui
           path: internal/ui/dist/app
-
-      # tagがmain以外を指しても未検証の成果物を公開しないよう、full suiteは
-      # Linuxで一度実行する。macOSとWindowsはOS固有のGo testだけを受け持つ。
-      - name: Verify the full source tree
-        run: make test
 
       - name: Build the CLI for this OS
         env:
@@ -235,16 +223,6 @@ jobs:
 
       # Makefile の recipe は POSIX シェルを前提とするため、Windows では
       # nativebuild を直接実行する。成果物一覧との一致は契約テストで検証する。
-      # Windows の race は main への push の CI が走らせるので、このジョブでは
-      # 重ねない。PowerShell では native command の非ゼロ終了を確実に検出する
-      # よう、次の2変数を設定する。
-      - name: Verify Windows behaviour
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $true
-          go build ./...
-          go test -v -count=1 -timeout 20m ./...
-
       - name: Build the CLI for this OS
         env:
           SSHC_NATIVE_VERSION: ${{ env.RELEASE_TAG }}

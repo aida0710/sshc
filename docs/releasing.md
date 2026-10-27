@@ -32,6 +32,10 @@
 
 Homebrewのformulaは、タグのソースからNode.jsで画面を組み立ててからビルドします（`packaging/homebrew/sshc.rb`）。
 
+## Releaseワークフローはテストを流し直さない
+
+Releaseワークフローの最初の`verify-source` jobは、タグのコミットが`main`の履歴にあり、同じコミットでmain CIが成功したことを確かめてから先へ進みます。`main`へのpushと手動の実行のCIは、変更の範囲で絞り込まず、3OSのGoのテスト（raceを含む）、Web、deadcodeなどを全部流します。このため、macOS・Linux・Windowsのjobはテストを流し直さず、成果物をビルドして起動し、バージョンと画面が入っていることを確かめます。Windowsのjobは、公開する`install.ps1`での導入も試します。
+
 ## 公開
 
 ```sh
