@@ -191,7 +191,7 @@ test("creates a key-authenticated connection in an empty nested declared group",
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
 
   await openSection(page, "Connections");
-  await page.getByRole("button", { name: "New connection" }).click();
+  await page.getByRole("button", { name: "Add connection" }).click();
   const dialog = page.getByRole("dialog", { name: "Create connection" });
   await expect(dialog.getByRole("option", { name: "home-lab/others" })).toHaveCount(1);
   await dialog.getByLabel("Connection name").fill("lab-node");
@@ -233,7 +233,7 @@ test("creates a connection with a dedicated encrypted password and never starts 
 
   await openApplication(page, installation);
   await openSection(page, "Connections");
-  await page.getByRole("button", { name: "New connection" }).click();
+  await page.getByRole("button", { name: "Add connection" }).click();
   const dialog = page.getByRole("dialog", { name: "Create connection" });
   await dialog.getByLabel("Connection name").fill("password-node");
   await dialog.getByLabel("Host name or IP address").fill("password.example");

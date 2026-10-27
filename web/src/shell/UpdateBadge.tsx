@@ -74,12 +74,13 @@ export function UpdateBadge({ api = updateApi, current = "", leading, indicator,
 
   return (
     <div className="text-xs text-ink-faint">
-      <div className="flex h-10 min-w-0 items-center gap-2 pl-1.5 pr-1 md:h-8">
+      <div className="flex h-11 min-w-0 items-center gap-2 pl-1.5 pr-1 md:h-8">
         {leading}
         {displayedCurrent === "" ? null : (
           <>
             {indicator}
-            <a href={sectionPath("About")} onClick={followAbout} aria-label={versionLabel} className="min-w-0 truncate font-mono hover:text-ink hover:underline">{displayedCurrent}</a>
+            {/* A phone stretches links in the sidebar to 44px touch targets, so the text is centred in the link. */}
+            <a href={sectionPath("About")} onClick={followAbout} aria-label={versionLabel} className="flex min-w-0 items-center font-mono hover:text-ink hover:underline"><span className="truncate">{displayedCurrent}</span></a>
           </>
         )}
         {!hasDetails ? null : (

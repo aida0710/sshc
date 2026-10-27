@@ -31,7 +31,6 @@ import android.webkit.WebResourceResponse;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
-import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -184,9 +183,6 @@ public final class MainActivity extends ComponentActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (getResources().getBoolean(R.bool.secure_window)) {
-            getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
-        }
         showPreviousRuntimeNotice();
         // 閉じていたアプリを通知から開いた場合。Web 画面は起動したときに受け取りに来る。
         rememberOpenedNotification(getIntent());
