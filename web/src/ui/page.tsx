@@ -68,6 +68,9 @@ export function SummaryStat({ label, value, attention = false }: { label: string
   );
 }
 
+// phoneCardFrame is how a part of a page looks on a phone: a card of its own. Each part sets its padding.
+export const phoneCardFrame = "rounded-[14px] border border-line bg-sidebar";
+
 // PageSection is one part of a page, set off from the part above by a line, as in the design: a heading
 // with details beside it (meta, such as a file path) and controls on its right (actions), a hint under
 // it, then the contents. On a phone each part is a card of its own instead.
@@ -90,7 +93,7 @@ export function PageSection({
   const fallbackId = useId();
   const id = headingId ?? fallbackId;
   return (
-    <section aria-labelledby={id} className={compact ? "rounded-[14px] border border-line bg-sidebar px-3.5 py-3" : "border-t border-line pt-5"}>
+    <section aria-labelledby={id} className={compact ? `${phoneCardFrame} px-3.5 py-3` : "border-t border-line pt-5"}>
       <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <h3 id={id} className="text-sm font-semibold text-ink">{heading}</h3>
         {meta === undefined ? null : <span className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{meta}</span>}

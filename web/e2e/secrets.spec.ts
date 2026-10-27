@@ -7,6 +7,23 @@ import {
   sessionStatus,
   test,
 } from "./support/environment";
+import type { Page } from "@playwright/test";
+
+// addCredential stores one credential through the page's ［＋ Add］ form, which opens above the list.
+async function addCredential(page: Page, form: string, name: string, valueLabel: string, value: string) {
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const panel = page.getByRole("region", { name: form });
+  await panel.getByLabel("Name", { exact: true }).fill(name);
+  await panel.getByLabel(valueLabel, { exact: true }).fill(value);
+  await panel.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(panel).toHaveCount(0);
+}
+
+// openRowMenuItem chooses an item from a row's "…" menu (the menu is portalled outside the list).
+async function openRowMenuItem(page: Page, row: string, item: string) {
+  await page.getByRole("button", { name: `Actions for ${row}` }).click();
+  await page.getByRole("menuitem", { name: item }).click();
+}
 
 test("gives one named secret to two hosts and writes neither name into the file", async ({
   page,
@@ -17,9 +34,7 @@ test("gives one named secret to two hosts and writes neither name into the file"
 
   const passwords = page.getByRole("region", { name: "Account passwords" });
   await expect(passwords).toBeVisible();
-  await passwords.getByLabel("New account password name").fill("office-vm");
-  await passwords.getByLabel("New account password value", { exact: true }).fill("hunter2");
-  await passwords.getByRole("button", { name: "Store account password" }).click();
+  await addCredential(page, "Add an account password", "office-vm", "Password", "hunter2");
 
   await expect(passwords.getByRole("button", { name: "Actions for office-vm" })).toBeVisible();
   await expect(page.locator("body")).not.toContainText("hunter2");
@@ -44,9 +59,7 @@ test("gives one named secret to two hosts and writes neither name into the file"
   const office = page
     .getByRole("region", { name: "Account passwords" })
     .getByRole("article", { name: "office-vm" });
-  await office.getByRole("button", { name: "Show Assigned hosts for office-vm" }).click();
-  const assignedHosts = office.getByRole("list", { name: "Assigned hosts" });
-  await expect(assignedHosts.getByRole("listitem")).toHaveText(["bastion", "nas"]);
+  await expect(office.getByText("bastion, nas").filter({ visible: true })).toBeVisible();
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -64,9 +77,7 @@ test("never offers a key passphrase where a host password is chosen", async ({ p
   await openSection(page, "Key passphrases");
 
   const phrases = page.getByRole("region", { name: "Key passphrases" });
-  await phrases.getByLabel("New key passphrase name").fill("build-key");
-  await phrases.getByLabel("New key passphrase value", { exact: true }).fill("a passphrase");
-  await phrases.getByRole("button", { name: "Store key passphrase" }).click();
+  await addCredential(page, "Add a key passphrase", "build-key", "Key passphrase", "a passphrase");
   await expect(phrases.getByRole("button", { name: "Actions for build-key" })).toBeVisible();
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
@@ -100,19 +111,14 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
   const tokens = page.getByRole("region", {
     name: "One-time passwords (TOTP)",
   });
-  await tokens.getByLabel("New one-time password name").fill("production-otp");
-  await tokens.getByLabel("Base32 setup key or otpauth URI", { exact: true }).fill(setupKey);
-  await tokens.getByRole("button", { name: "Store one-time password" }).click();
+  await addCredential(page, "Add a one-time password", "production-otp", "Base32 setup key or otpauth URI", setupKey);
   const token = tokens.getByRole("article", { name: "production-otp" });
   await expect(token).toBeVisible();
-  const currentCode = token.getByRole("button", {
-    name: "Show the previous and next codes for production-otp",
-  });
   await expect(token).toContainText(/\d{3} \d{3}/);
-  await expect(token.getByText("Previous")).toHaveCount(0);
-  await currentCode.click();
-  await expect(token.getByText("Previous")).toBeVisible();
-  await expect(token.getByText("Next")).toBeVisible();
+  await expect(tokens.getByText("Previous")).toHaveCount(0);
+  await openRowMenuItem(page, "production-otp", "Show the codes before and after");
+  await expect(tokens.getByText("Previous")).toBeVisible();
+  await expect(tokens.getByText("Next")).toBeVisible();
 
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
@@ -127,16 +133,13 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
   await expect(authentication.getByText("Assigned: production-otp")).toBeVisible();
 
   await openSection(page, "OTP");
-  const assignedToken = page.getByRole("article", { name: "production-otp" });
-  await assignedToken.getByRole("button", { name: "Show Assigned hosts for production-otp" }).click();
-  await expect(assignedToken.getByRole("list", { name: "Assigned hosts" })).toContainText("bastion");
+  await openRowMenuItem(page, "production-otp", "Assigned hosts (1)");
+  await expect(page.getByRole("list", { name: "Assigned hosts" })).toContainText("bastion");
   await expect(page.locator("body")).not.toContainText(setupKey);
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     for (const name of ["aws dubguild sso", "mdx"]) {
-      await tokens.getByLabel("New one-time password name").fill(name);
-      await tokens.getByLabel("Base32 setup key or otpauth URI", { exact: true }).fill(setupKey);
-      await tokens.getByRole("button", { name: "Store one-time password" }).click();
+      await addCredential(page, "Add a one-time password", name, "Base32 setup key or otpauth URI", setupKey);
       await expect(tokens.getByRole("article", { name })).toBeVisible();
     }
     await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
@@ -150,7 +153,8 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
       path: `${process.env.SSHC_VISUAL_DIR}/totp-vault-current.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "production-otpの前後のコードを表示" }).click();
+    await page.getByRole("button", { name: "production-otpの操作" }).click();
+    await page.getByRole("menuitem", { name: "前後のコードを表示" }).click();
     await expect(page.getByText("ひとつ前")).toBeVisible();
     await page.screenshot({
       path: `${process.env.SSHC_VISUAL_DIR}/totp-vault-expanded.png`,
@@ -169,14 +173,12 @@ test("opens a named password masked and reveals it only on request", async ({ pa
   await openSection(page, "Account passwords");
 
   const passwords = page.getByRole("region", { name: "Account passwords" });
-  await passwords.getByLabel("New account password name").fill("office-vm");
-  await passwords.getByLabel("New account password value", { exact: true }).fill("original-test-password");
-  await passwords.getByRole("button", { name: "Store account password" }).click();
-  await passwords.getByRole("button", { name: "Actions for office-vm" }).click();
-  // The actions menu is portalled to the document body, outside the region.
-  await page.getByRole("menuitem", { name: "Edit office-vm" }).click();
+  await addCredential(page, "Add an account password", "office-vm", "Password", "original-test-password");
+  await expect(passwords.getByRole("article", { name: "office-vm" })).toBeVisible();
+  await openRowMenuItem(page, "office-vm", "Edit");
 
-  const dialog = page.getByRole("dialog", { name: "Edit account password" });
+  // The form opens under the row, not as a dialog over the page.
+  const dialog = passwords.getByRole("region", { name: "Edit account password" });
   const password = dialog.getByLabel("Password", { exact: true });
   await expect(dialog.getByLabel("Name")).toHaveValue("office-vm");
   await expect(password).toHaveValue("original-test-password");
@@ -301,9 +303,7 @@ test("lists saved one-time passwords with their current codes in both languages"
 
   const tokens = page.getByRole("region", { name: "One-time passwords (TOTP)" });
   for (const [name, setupKey] of Object.entries(setupKeys)) {
-    await tokens.getByLabel("New one-time password name").fill(name);
-    await tokens.getByLabel("Base32 setup key or otpauth URI", { exact: true }).fill(setupKey);
-    await tokens.getByRole("button", { name: "Store one-time password" }).click();
+    await addCredential(page, "Add a one-time password", name, "Base32 setup key or otpauth URI", setupKey);
     await expect(tokens.getByRole("article", { name })).toContainText(/\d{3} \d{3}/);
   }
 
