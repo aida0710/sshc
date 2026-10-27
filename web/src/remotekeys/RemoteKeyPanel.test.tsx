@@ -108,10 +108,21 @@ function buildApi(overrides: Partial<RemoteKeysApi> = {}): RemoteKeysApi {
   };
 }
 
+// typeKeyByHand は、~/.ssh から選んだ公開鍵をやめ、公開鍵のファイルと行を手で入力する。
+async function typeKeyByHand(user: ReturnType<typeof userEvent.setup>, path: string, line: string) {
+  await user.selectOptions(screen.getByLabelText("Public key from ~/.ssh"), "");
+  const file = screen.getByLabelText("Public key file");
+  await user.clear(file);
+  await user.type(file, path);
+  const keyLine = screen.getByLabelText("Public key line");
+  await user.clear(keyLine);
+  await user.type(keyLine, line);
+}
+
 async function fillForm() {
-  await userEvent.type(screen.getByLabelText("Host alias"), "bastion");
-  await userEvent.type(screen.getByLabelText("Public key file"), "~/.ssh/id_ed25519.pub");
-  await userEvent.type(screen.getByLabelText("Public key line"), publicKey);
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Host alias"), "bastion");
+  await typeKeyByHand(user, "~/.ssh/id_ed25519.pub", publicKey);
 }
 
 async function fetchPlan(api: RemoteKeysApi) {
@@ -152,8 +163,7 @@ describe("RemoteKeyPanel", () => {
     expect(screen.getByRole("checkbox", { name: "db-prod" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "db-stage" })).toBeChecked();
 
-    await user.type(screen.getByLabelText("Public key file"), "~/.ssh/id_ed25519.pub");
-    await user.type(screen.getByLabelText("Public key line"), publicKey);
+    await typeKeyByHand(user, "~/.ssh/id_ed25519.pub", publicKey);
     await user.click(screen.getByRole("button", { name: "Show what this would do" }));
 
     await waitFor(() => expect(api.plan).toHaveBeenCalledTimes(2));
@@ -179,7 +189,7 @@ describe("RemoteKeyPanel", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByLabelText("Public key file")).toHaveValue("id_ed25519.pub"));
+    await waitFor(() => expect(screen.getByLabelText("Public key from ~/.ssh")).toHaveValue("key-pub"));
     expect(screen.getByLabelText("Public key line")).toHaveValue(publicKey);
     expect(keys.inventory).toHaveBeenCalled();
     expect(keys.publicKey).toHaveBeenCalledWith("key-pub");
@@ -414,12 +424,46 @@ describe("RemoteKeyPanel", () => {
     expect(within(picker).getByRole("option", { name: /id_ed25519\.pub/ })).toBeInTheDocument();
     expect(within(picker).queryByRole("option", { name: /id_ed25519 ·/ })).not.toBeInTheDocument();
 
+    await user.selectOptions(picker, "");
     await user.selectOptions(picker, "key-pub");
 
-    await waitFor(() => expect(screen.getByLabelText("Public key file")).toHaveValue("id_ed25519.pub"));
+    await waitFor(() => expect(picker).toHaveValue("key-pub"));
     expect(screen.getByLabelText("Public key line")).toHaveValue(publicKey);
+    // ~/.ssh から選んだ鍵はファイルが決まっているので、ファイルの欄は手で入力するときだけ出す。
+    expect(screen.queryByLabelText("Public key file")).toBeNull();
     expect(keys.publicKey).toHaveBeenCalledWith("key-pub");
     expect(api.plan).not.toHaveBeenCalled();
+  });
+
+  it("chooses the first public key in ~/.ssh when it opens, and sends nothing", async () => {
+    const api = buildApi();
+    const keys = buildKeys();
+    render(<RemoteKeyPanel api={api} keys={keys} />);
+
+    await waitFor(() => expect(screen.getByLabelText("Public key from ~/.ssh")).toHaveValue("key-pub"));
+    expect(screen.getByLabelText("Public key line")).toHaveValue(publicKey);
+    expect(screen.getByRole("option", { name: "id_ed25519.pub (aida@laptop)" })).toBeInTheDocument();
+    expect(api.plan).not.toHaveBeenCalled();
+    expect(api.register).not.toHaveBeenCalled();
+  });
+
+  it("does not replace a key typed before the first public key was read", async () => {
+    let resolvePublicKey!: (value: Awaited<ReturnType<KeysApi["publicKey"]>>) => void;
+    const keys = buildKeys({
+      publicKey: vi.fn().mockReturnValue(new Promise((resolve) => {
+        resolvePublicKey = resolve;
+      })),
+    });
+    const user = userEvent.setup();
+    render(<RemoteKeyPanel api={buildApi()} keys={keys} />);
+    await waitFor(() => expect(keys.publicKey).toHaveBeenCalledWith("key-pub"));
+
+    const manualKey = publicKey.replace("deploy@laptop", "manual@laptop");
+    await user.type(screen.getByLabelText("Public key line"), manualKey);
+    resolvePublicKey({ id: "key-pub", relativePath: "id_ed25519.pub", publicKey: `${publicKey}\n`, fingerprint, comment: "aida@laptop" });
+
+    await waitFor(() => expect(screen.getByLabelText("Public key line")).toHaveValue(manualKey));
+    expect(screen.getByLabelText("Public key from ~/.ssh")).toHaveValue("");
   });
 
   it("withdraws a standing plan when a different key is picked", async () => {

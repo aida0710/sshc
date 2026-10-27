@@ -91,6 +91,18 @@ async function fillWireGuardProfile(user: ReturnType<typeof userEvent.setup>, fo
   pasteWireGuardConfig(form, wireGuardConfig());
 }
 
+// chooseRowAction は、プロファイルの行の「…」を開き、その操作を選ぶ。
+async function chooseRowAction(user: ReturnType<typeof userEvent.setup>, route: HTMLElement, label: string) {
+  await user.click(within(route).getByRole("button", { name: `Actions for ${route.getAttribute("aria-label") ?? ""}` }));
+  await user.click(screen.getByRole("menuitem", { name: label }));
+}
+
+// rowActionItem は、プロファイルの行の「…」を開き、その操作の項目を返す。選ばずに、状態だけを見る。
+async function rowActionItem(user: ReturnType<typeof userEvent.setup>, route: HTMLElement, label: string) {
+  await user.click(within(route).getByRole("button", { name: `Actions for ${route.getAttribute("aria-label") ?? ""}` }));
+  return screen.getByRole("menuitem", { name: label });
+}
+
 function buildApi(overrides: Partial<VPNApi> = {}): VPNApi {
   return {
     vpnOverview: vi.fn().mockResolvedValue(overview()),
@@ -111,7 +123,8 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi()} />);
 
     const route = await screen.findByRole("article", { name: "tohoku" });
-    expect(within(route).getByText("L2TP/IPsec · vpn.example.jp · route open")).toBeVisible();
+    expect(within(route).getByText("L2TP/IPsec · vpn.example.jp")).toBeVisible();
+    expect(within(route).getByText("route open")).toBeVisible();
     const connections = within(route).getByRole("list", { name: "Connections using this profile" });
     expect(within(connections).getByText("lab")).toBeVisible();
   });
@@ -133,7 +146,8 @@ describe("VPNPanel", () => {
     const route = await screen.findByRole("article", { name: "tohoku" });
     expect(within(route).queryByRole("combobox")).toBeNull();
     expect(within(route).queryByRole("button", { name: /lab/ })).toBeNull();
-    expect(within(route).getByText(/change "VPN profile" on its sshc tab/)).toBeVisible();
+    const profiles = screen.getByRole("region", { name: "VPN profiles" });
+    expect(within(profiles).getByText(/change "VPN profile" on its sshc tab/)).toBeVisible();
   });
 
   it("says in its own words why this machine cannot open routes, and adds Docker's words as details", async () => {
@@ -334,7 +348,7 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ vpnLogs })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Logs" }));
+    await chooseRowAction(user, route, "Logs");
 
     expect(vpnLogs).toHaveBeenCalledWith("tohoku");
     expect(await screen.findByText(/starting IPsec/)).toBeVisible();
@@ -346,7 +360,7 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ vpnLogs })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Logs" }));
+    await chooseRowAction(user, route, "Logs");
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Docker/);
   });
@@ -357,7 +371,7 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ renameVPNProfile })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Rename" }));
+    await chooseRowAction(user, route, "Rename");
     const dialog = screen.getByRole("dialog");
     await user.clear(within(dialog).getByLabelText("New name"));
     await user.type(within(dialog).getByLabelText("New name"), "tains");
@@ -372,7 +386,7 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ renameVPNProfile })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Rename" }));
+    await chooseRowAction(user, route, "Rename");
     const dialog = screen.getByRole("dialog");
     await user.clear(within(dialog).getByLabelText("New name"));
     await user.type(within(dialog).getByLabelText("New name"), "tohoku/office");
@@ -394,7 +408,7 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ renameVPNProfile })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Rename" }));
+    await chooseRowAction(user, route, "Rename");
     const dialog = screen.getByRole("dialog");
     await user.clear(within(dialog).getByLabelText("New name"));
     await user.type(within(dialog).getByLabelText("New name"), "tains");
@@ -624,8 +638,10 @@ describe("VPNPanel", () => {
 
     await user.click(within(tohoku).getByRole("button", { name: "Connect" }));
 
-    expect(within(tohoku).getByRole("button", { name: "Edit" })).toBeDisabled();
-    expect(within(office).getByRole("button", { name: "Edit" })).toBeEnabled();
+    expect(await rowActionItem(user, tohoku, "Edit")).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(await rowActionItem(user, office, "Edit")).toBeEnabled();
+    await user.keyboard("{Escape}");
     await user.click(within(office).getByRole("button", { name: "Disconnect" }));
     expect(disconnectVPNRoute).toHaveBeenCalledWith("office");
   });
@@ -655,17 +671,17 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ removeVPNProfile })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Remove" }));
+    await chooseRowAction(user, route, "Remove");
 
     const dialog = screen.getByRole("dialog", { name: "Remove tohoku?" });
     expect(removeVPNProfile).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
     expect(removeVPNProfile).toHaveBeenCalledWith("tohoku");
-    expect(await screen.findByText("No VPN profiles yet. Add one below.")).toBeVisible();
+    expect(await screen.findByText("None yet.")).toBeVisible();
     expect(screen.queryByRole("article", { name: "tohoku" })).toBeNull();
   });
 
-  it("shows the card's Remove as working after the confirmation closes, and says why the rest wait", async () => {
+  it("shows the row as working after the removal is confirmed, and says why the rest wait", async () => {
     const user = userEvent.setup();
     let answer: () => void = () => undefined;
     const removeVPNProfile = vi.fn(() => new Promise<VPNOverview>((resolve) => {
@@ -674,20 +690,19 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ removeVPNProfile })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Remove" }));
+    await chooseRowAction(user, route, "Remove");
     await user.click(within(screen.getByRole("dialog", { name: "Remove tohoku?" })).getByRole("button", { name: "Remove" }));
 
-    const remove = within(route).getByRole("button", { name: "Remove" });
-    expect(remove).toHaveAttribute("aria-busy", "true");
-    expect(remove).not.toHaveAttribute("title");
-    const edit = within(route).getByRole("button", { name: "Edit" });
-    expect(edit).toBeDisabled();
-    expect(edit).not.toHaveAttribute("aria-busy");
-    expect(edit).toHaveAttribute("title", "Available once the current operation finishes.");
+    // 待つ間は、行が待っていると名乗り、「…」の代わりに回転の印を出す。
+    expect(route).toHaveAttribute("aria-busy", "true");
+    expect(within(route).queryByRole("button", { name: "Actions for tohoku" })).toBeNull();
+    const disconnect = within(route).getByRole("button", { name: "Disconnect" });
+    expect(disconnect).toBeDisabled();
+    expect(disconnect).toHaveAttribute("title", "Available once the current operation finishes.");
     const save = within(screen.getByRole("region", { name: "Add a VPN profile" })).getByRole("button", { name: "Save" });
     expect(save).toHaveAttribute("title", "Available once the current operation finishes.");
     await act(async () => answer());
-    expect(await screen.findByText("No VPN profiles yet. Add one below.")).toBeVisible();
+    expect(await screen.findByText("None yet.")).toBeVisible();
   });
 
   it("shows Connect as working while the route is being opened, and why the profile cannot be changed meanwhile", async () => {
@@ -699,7 +714,10 @@ describe("VPNPanel", () => {
     await user.click(within(route).getByRole("button", { name: "Connect" }));
 
     expect(within(route).getByRole("button", { name: "Connect" })).toHaveAttribute("aria-busy", "true");
-    expect(within(route).getByRole("button", { name: "Edit" })).toHaveAttribute(
+    expect(within(route).getByText("connecting")).toBeVisible();
+    const edit = await rowActionItem(user, route, "Edit");
+    expect(edit).toBeDisabled();
+    expect(edit).toHaveAttribute(
       "title",
       "Cannot be changed while the route is being prepared. Disconnect to stop preparing it.",
     );
@@ -731,7 +749,7 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ removeVPNProfile })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Remove" }));
+    await chooseRowAction(user, route, "Remove");
     await user.click(within(screen.getByRole("dialog", { name: "Remove tohoku?" })).getByRole("button", { name: "Cancel" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -801,7 +819,9 @@ describe("VPNPanel", () => {
     pasteWireGuardConfig(form, wireGuardConfig().replace(privateKey, privateKey.slice(1)));
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
-    expect(within(form).getByRole("alert")).toHaveTextContent('Line 2: "PrivateKey" is not written in a form it accepts.');
+    expect(within(form).getByLabelText("Configuration file")).toHaveAccessibleDescription(
+      expect.stringContaining('Line 2: "PrivateKey" is not written in a form it accepts.'),
+    );
     expect(createVPNProfile).not.toHaveBeenCalled();
   });
 
@@ -841,7 +861,9 @@ describe("VPNPanel", () => {
     await user.type(within(form).getByLabelText("IPsec pre-shared key"), "a key");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
-    expect(within(form).getByRole("alert")).toHaveTextContent("Too long: up to 256 characters.");
+    expect(within(form).getByLabelText("VPN password")).toHaveAccessibleDescription(
+      expect.stringContaining("Too long: up to 256 characters."),
+    );
     expect(createVPNProfile).not.toHaveBeenCalled();
   });
 
@@ -919,7 +941,7 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ saveVPNProfile, revealVPNSecrets })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    await chooseRowAction(user, route, "Edit");
     const form = screen.getByRole("region", { name: "Edit tohoku" });
     expect(within(form).getByLabelText("Name")).toHaveValue("tohoku");
     expect(within(form).getByLabelText("Name")).toBeDisabled();
@@ -947,7 +969,7 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi()} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    await chooseRowAction(user, route, "Edit");
     const form = screen.getByRole("region", { name: "Edit tohoku" });
     const password = within(form).getByLabelText("VPN password");
     await waitFor(() => expect(password).toHaveValue("the stored password"));
@@ -963,7 +985,7 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    await chooseRowAction(user, route, "Edit");
     const form = screen.getByRole("region", { name: "Edit tohoku" });
     const password = within(form).getByLabelText("VPN password");
     await waitFor(() => expect(password).toHaveValue("the stored password"));
@@ -985,7 +1007,7 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ saveVPNProfile, revealVPNSecrets })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    await chooseRowAction(user, route, "Edit");
     const form = screen.getByRole("region", { name: "Edit tohoku" });
 
     expect(await within(form).findByText(/^The stored secrets could not be taken out of the vault\. The vault is locked/))
@@ -1003,7 +1025,7 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    await chooseRowAction(user, route, "Edit");
     const form = screen.getByRole("region", { name: "Edit tohoku" });
     await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
 
@@ -1028,14 +1050,14 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ saveVPNProfile, revealVPNSecrets })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    await chooseRowAction(user, route, "Edit");
     const form = screen.getByRole("region", { name: "Edit tohoku" });
     await waitFor(() => expect(within(form).getByLabelText("VPN password")).toHaveValue("the stored password"));
     await user.click(within(form).getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByRole("article", { name: "tohoku" })).toBeVisible();
     expect(saveVPNProfile).not.toHaveBeenCalled();
-    await user.click(within(screen.getByRole("article", { name: "tohoku" })).getByRole("button", { name: "Edit" }));
+    await chooseRowAction(user, screen.getByRole("article", { name: "tohoku" }), "Edit");
     const reopened = screen.getByRole("region", { name: "Edit tohoku" });
     expect(await within(reopened).findByText(/^The stored secrets could not be taken out/)).toBeVisible();
     expect(within(reopened).getByLabelText("VPN password")).toHaveValue("");
@@ -1055,7 +1077,7 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    await chooseRowAction(user, route, "Edit");
     const form = screen.getByRole("region", { name: "Edit tohoku" });
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
@@ -1070,21 +1092,21 @@ describe("VPNPanel", () => {
     twoProfiles.profiles.push({ profile: osakaProfile, running: false, relaySocket: "", connections: [], openConnections: 0 });
     render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(twoProfiles) })} />);
 
-    await user.click(within(await screen.findByRole("article", { name: "tohoku" })).getByRole("button", { name: "Edit" }));
+    await chooseRowAction(user, await screen.findByRole("article", { name: "tohoku" }), "Edit");
     const tohoku = screen.getByRole("region", { name: "Edit tohoku" });
     // 取り出したシークレットが欄に入っただけでは、変えたことにならない。
     await waitFor(() => expect(within(tohoku).getByLabelText("VPN password")).toHaveValue("the stored password"));
-    await user.click(within(screen.getByRole("article", { name: "osaka" })).getByRole("button", { name: "Edit" }));
+    await chooseRowAction(user, screen.getByRole("article", { name: "osaka" }), "Edit");
     expect(screen.queryByRole("dialog")).toBeNull();
     const osaka = screen.getByRole("region", { name: "Edit osaka" });
 
     await user.type(within(osaka).getByLabelText("VPN server"), "x");
-    await user.click(within(screen.getByRole("article", { name: "tohoku" })).getByRole("button", { name: "Edit" }));
+    await chooseRowAction(user, screen.getByRole("article", { name: "tohoku" }), "Edit");
     expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Keep editing" }));
     expect(within(screen.getByRole("region", { name: "Edit osaka" })).getByLabelText("VPN server")).toHaveValue("vpn.osaka.example.jpx");
 
-    await user.click(within(screen.getByRole("article", { name: "tohoku" })).getByRole("button", { name: "Edit" }));
+    await chooseRowAction(user, screen.getByRole("article", { name: "tohoku" }), "Edit");
     await user.click(screen.getByRole("button", { name: "Discard" }));
     expect(screen.getByRole("region", { name: "Edit tohoku" })).toBeVisible();
     expect(screen.queryByRole("region", { name: "Edit osaka" })).toBeNull();

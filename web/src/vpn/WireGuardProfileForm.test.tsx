@@ -127,8 +127,8 @@ describe("VPNProfileForm with WireGuard", () => {
 
     editConfig(form, storedConfig.replace("DNS = 10.64.0.1", "PostUp = iptables -A FORWARD -j ACCEPT"));
 
-    expect(within(form).getByRole("alert")).toHaveTextContent(
-      'Line 4: "PostUp" runs a command or loads a program, so it cannot be used.',
+    expect(configField(form)).toHaveAccessibleDescription(
+      expect.stringContaining('Line 4: "PostUp" runs a command or loads a program, so it cannot be used.'),
     );
   });
 });

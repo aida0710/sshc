@@ -11,7 +11,7 @@ test("shows the alias, effective user, fingerprint and the exact line before reg
   await openSection(page, "Install Key on Server");
   await expect(page.getByRole("heading", { name: "Install Key on Server" })).toBeVisible();
 
-  await expect(page.getByText("Nothing is sent to the remote host until you confirm it.")).toBeVisible();
+  await expect(page.getByText("Nothing is sent to the remote host until you press Register the key.")).toBeVisible();
 
   await page.getByLabel("Host alias").fill("bastion");
   await page.getByLabel("Public key file").fill("id_ed25519.pub");

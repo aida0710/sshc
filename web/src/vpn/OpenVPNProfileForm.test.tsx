@@ -68,8 +68,8 @@ describe("VPNProfileForm with OpenVPN", () => {
     await user.selectOptions(within(form).getByLabelText("Type"), "openvpn");
     pasteConfig(form, "client\nremote vpn.example.jp\nca /etc/openvpn/ca.crt\n");
 
-    expect(within(form).getByRole("alert")).toHaveTextContent(
-      'Line 3: "ca" names a file, which the container cannot read. Embed its contents as <ca>…</ca>.',
+    expect(within(form).getByLabelText("Configuration file (.ovpn)")).toHaveAccessibleDescription(
+      expect.stringContaining('Line 3: "ca" names a file, which the container cannot read. Embed its contents as <ca>…</ca>.'),
     );
     await user.click(within(form).getByRole("button", { name: "Save" }));
     expect(onSave).not.toHaveBeenCalled();
