@@ -396,3 +396,101 @@ func TestRunReportsStepTimeoutWhenStepDeadlinePassesFirst(t *testing.T) {
 		t.Fatalf("error = %#v", err)
 	}
 }
+
+// heldChildCancellationContext は、取り消しを子の context へすぐには伝えない呼び出し元の
+// context である。AfterFunc を持つ親に対して、context.WithTimeout は子の取り消しをその
+// AfterFunc に任せるので、release を呼ぶまで Run の期限は取り消されない。
+//
+// 本番の Telnet と Serial は、呼び出し元の context の AfterFunc で接続を閉じる。取り消しが
+// その AfterFunc と Run の期限へ順に伝わる間に、閉じた接続の読み込みの失敗が先に Run へ
+// 届くことがある。この順番を毎回作る。
+type heldChildCancellationContext struct {
+	context.Context
+	mu   sync.Mutex
+	held []func()
+}
+
+func (ctx *heldChildCancellationContext) AfterFunc(cancelChild func()) (stop func() bool) {
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+	ctx.held = append(ctx.held, cancelChild)
+	return func() bool { return false }
+}
+
+// Value は何も返さない。埋め込んだ context の値を見せると、context.WithTimeout は
+// AfterFunc を使わず、標準の取り消しの仕組みで子を直接つなぐ。
+func (*heldChildCancellationContext) Value(any) any { return nil }
+
+func (ctx *heldChildCancellationContext) release() {
+	ctx.mu.Lock()
+	held := ctx.held
+	ctx.held = nil
+	ctx.mu.Unlock()
+	for _, cancelChild := range held {
+		cancelChild()
+	}
+}
+
+// errClosedConnection は、閉じたソケットの読み込みが返す誤りの代わり。
+var errClosedConnection = errors.New("use of closed network connection")
+
+// closedOnCancelStream は、呼び出し元が取り消されるとソケットを閉じる Telnet の接続を
+// まねる。output を返し終えたあとの読み込みは閉じられるまで止まり、閉じたら失敗する。
+type closedOnCancelStream struct {
+	mu          sync.Mutex
+	output      []byte
+	closed      <-chan struct{}
+	waiting     chan struct{}
+	waitingOnce sync.Once
+}
+
+func (stream *closedOnCancelStream) Read(buffer []byte) (int, error) {
+	stream.mu.Lock()
+	if len(stream.output) > 0 {
+		count := copy(buffer, stream.output)
+		stream.output = stream.output[count:]
+		stream.mu.Unlock()
+		return count, nil
+	}
+	stream.mu.Unlock()
+	stream.waitingOnce.Do(func() { close(stream.waiting) })
+	<-stream.closed
+	return 0, errClosedConnection
+}
+
+func (*closedOnCancelStream) Write(buffer []byte) (int, error)   { return len(buffer), nil }
+func (*closedOnCancelStream) SetReadTimeout(time.Duration) error { return nil }
+
+// 呼び出し元が止めたために接続が閉じたなら、読み込みの失敗ではなく取り消しとして返す。
+// SIGTERM で止めた Telnet の自動処理が 130 でなく 1 で終わるのを防ぐ。
+func TestRunReportsCancellationWhenTheCallerClosesTheStreamFirst(t *testing.T) {
+	cases := []struct {
+		name   string
+		output string
+		settle time.Duration
+	}{
+		{name: "while waiting for the expected output"},
+		{name: "while the matched output settles", output: "router# ", settle: 10 * time.Millisecond},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			stopped, stop := context.WithCancel(context.Background())
+			defer stop()
+			caller := &heldChildCancellationContext{Context: stopped}
+			defer caller.release()
+			stream := &closedOnCancelStream{output: []byte(testCase.output), closed: stopped.Done(), waiting: make(chan struct{})}
+			go func() {
+				<-stream.waiting
+				stop()
+			}()
+
+			// Run 全体の期限は、この試験の間に切れない長さにする。
+			_, err := Run(caller, stream, Script{Steps: []Step{{Expect: "router# ", LineEnding: EndingNone}}}, Options{
+				Timeout: time.Minute, Settle: testCase.settle,
+			})
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("error = %#v, want context.Canceled", err)
+			}
+		})
+	}
+}
