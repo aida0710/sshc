@@ -72,7 +72,7 @@ func makePrivateDirectories(path string, permission fs.FileMode) error {
 		if created || final {
 			if err := windowsacl.RestrictDirectoryNativeHandle(next); err != nil {
 				_ = windows.CloseHandle(next)
-				return err
+				return fmt.Errorf("DEBUG restrict directory %s (created=%v): %w", component, created, err)
 			}
 		}
 		_ = windows.CloseHandle(current)
@@ -153,7 +153,7 @@ func createPrivateTempRelative(parent windows.Handle, directory, prefix string) 
 		if err := windowsacl.RestrictFileHandle(file); err != nil {
 			_ = discardFileHandle(handle)
 			_ = file.Close()
-			return nil, err
+			return nil, fmt.Errorf("DEBUG restrict temp %s: %w", name, err)
 		}
 		return file, nil
 	}

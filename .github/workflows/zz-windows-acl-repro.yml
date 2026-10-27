@@ -21,7 +21,7 @@ jobs:
           cache-dependency-path: go.sum
       - name: Storage first-write race
         if: ${{ !cancelled() }}
-        run: go test ./internal/storage -run TestTwoWritersCreatingTheSameDirectoryBothWritePrivateFiles -count=3 -v
+        run: go test ./internal/storage -run TestTwoWritersCreatingTheSameDirectoryBothWritePrivateFiles -count=1
       - name: Background upload test repeated
         if: ${{ !cancelled() }}
-        run: go test ./internal/application -run TestABackgroundAddedWhileAnotherIsUploadingDoesNotGetOverwritten -count=500
+        run: go test ./internal/application -run TestABackgroundAddedWhileAnotherIsUploadingDoesNotGetOverwritten -count=1500 -failfast=false -v 2>&1 | Select-String -Pattern "FAIL|DEBUG|background_upload_test" | Select-Object -First 40
