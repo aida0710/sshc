@@ -1,14 +1,14 @@
 package integration
 
 import (
-	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"testing"
 	"time"
+
+	"sshc/internal/telnet/telnettest"
 )
 
 // TestBuiltBinaryRunsAgainstVirtualTelnetServer proves the installed command
@@ -70,19 +70,8 @@ func serveIntegrationTelnet(listener net.Listener) error {
 	if err := connection.SetDeadline(time.Now().Add(4 * time.Second)); err != nil {
 		return err
 	}
-	const iac, will, do, echo = byte(255), byte(251), byte(253), byte(1)
-	if _, err := connection.Write([]byte{iac, will, echo}); err != nil {
-		return err
-	}
-	reply := make([]byte, 3)
-	if _, err := io.ReadFull(connection, reply); err != nil {
-		return err
-	}
-	if !bytes.Equal(reply, []byte{iac, do, echo}) {
-		return fmt.Errorf("Telnet negotiation reply = %v", reply)
-	}
-	reader := bufio.NewReader(connection)
-	command, err := reader.ReadString('\n')
+	server := telnettest.NewServerConn(connection)
+	command, err := server.ReadLineAfterOfferingEcho()
 	if err != nil {
 		return err
 	}
@@ -92,9 +81,6 @@ func serveIntegrationTelnet(listener net.Listener) error {
 	if _, err := io.WriteString(connection, "virtual telnet version 1\r\nvirtual# "); err != nil {
 		return err
 	}
-	// Keep the prompt available until the client has read it and closed. An
-	// immediate close can reset the TCP connection on Windows while Telnet
-	// negotiation bytes are still arriving, discarding the queued response.
-	_, err = io.Copy(io.Discard, reader)
-	return err
+	// Keep the prompt available until the client has read it and closed.
+	return server.DrainUntilClosed()
 }
