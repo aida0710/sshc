@@ -15,6 +15,7 @@ import type { PasswordVaultStatus } from "./api/vault";
 import { vaultStatus } from "./testing/vaultStatus";
 import { terminalSessionsApi, type TerminalSession } from "./api/terminalSessions";
 import { localHostAlias } from "./sftp/localHost";
+import { PageHeader } from "./ui/page";
 
 type BroadcastListener = (event: MessageEvent<unknown>) => void;
 
@@ -88,6 +89,8 @@ vi.mock("./connections/ConnectionsPage", () => ({
       }
     }, [location?.pathname, onNavigateLocation]);
     return <div>
+      {/* The page's heading is where a wide screen shows the inspector's toggle. */}
+      <PageHeader title="Connections" />
       connections panel
       <span>{`connection location ${location?.pathname ?? "missing"}${location?.search ?? ""}`}</span>
       <span>{`preferred connection key ${preferredKey?.privateRelativePath ?? "none"}`}</span>
