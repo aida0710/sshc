@@ -115,14 +115,19 @@ var Accepted = Limits{Time: maxKDFTime, MemoryKiB: maxKDFMemoryKiB, Threads: max
 // OpenRemote が使う。Derive が書く値までで、それ以上はない。
 var AcceptedFromRemote = Limits{Time: defaultTime, MemoryKiB: defaultMemoryKiB, Threads: defaultThreads}
 
+// productionDerivationCost は、製品が新しい鍵に使う Argon2id のコスト。
+var productionDerivationCost = Limits{Time: defaultTime, MemoryKiB: defaultMemoryKiB, Threads: defaultThreads}
+
 // DerivationCost は、Derive が新しい鍵に使う Argon2id のコスト。
 //
 // 製品では書き換えない。書き換えてよいのは、鍵導出の強さではなく同期などの手順を
 // 確かめるテストだけである。race detector の下では Argon2id の Go 実装
 // （アセンブリの無い arm64 など）が極端に遅く、push と pull のたびに鍵を導出する
 // テストが CI の上限を超える。コストはヘッダーに書かれ、開く側はヘッダーを
-// 読むので、下げたコストで封をしたブロブも同じ Open で開ける。
-var DerivationCost = Limits{Time: defaultTime, MemoryKiB: defaultMemoryKiB, Threads: defaultThreads}
+// 読むので、下げたコストで封をしたブロブも同じ Open で開ける。CI と make test は
+// ビルドタグ sshc_test_kdf を付けてテストを流し、すべてのテストで下げる
+// （derivation_cost_sshc_test_kdf.go）。
+var DerivationCost = productionDerivationCost
 
 var magic = [magicLength]byte{'s', 's', 'h', '-', 'u', 'i', '-', 'e', 'n', 'v', 'e', 'l', 'o', 'p', 'e', 0}
 

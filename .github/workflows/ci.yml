@@ -104,8 +104,7 @@ jobs:
             timeoutMinutes: 30
           - os: windows-2025
             name: Windows
-            # 通常テストとrace検査の各20分に加え、準備の時間も確保する。
-            timeoutMinutes: 45
+            timeoutMinutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         if: ${{ env.NATIVE_TESTS == 'true' }}
@@ -122,6 +121,12 @@ jobs:
         with:
           name: web-ui
           path: internal/ui/dist/app
+
+      # テストより前に、TEMP を作業用のディスクへ移す。理由は scripts/ci/windows-fast-temp.ps1。
+      - name: Move TEMP off the system drive (Windows)
+        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
+        shell: pwsh
+        run: ./scripts/ci/windows-fast-temp.ps1
 
       - name: Skip the Go tests for a web-only change
         if: ${{ env.NATIVE_TESTS != 'true' }}
@@ -187,45 +192,23 @@ jobs:
         shell: pwsh
         run: go build ./...
 
-      - name: go test (Unix)
+      # テストは OS ごとに 1 回、race detector を付けて流す。race の下でだけ外れるテストは
+      # 無いので、race を付けない実行は同じテストの繰り返しになる。PR でも main への push でも
+      # 同じものを流す。タグ sshc_test_kdf は、鍵の導出の強さを確かめないテストで Argon2id の
+      # コストを下げる（internal/envelope/derivation_cost_sshc_test_kdf.go）。
+      - name: go test -race (Unix)
         if: ${{ runner.os != 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: bash
-        run: go test -count=1 ./...
-
-      # Windows の runner は package あたり 2〜3 分かかり、遅い日は既定の 10 分に
-      # 触れる（2026-09-18 に application／httpserver が timeout で落ちた）。
-      - name: go test (Windows)
-        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
-        shell: pwsh
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $false
-          & go test -v -count=1 -timeout 20m ./... 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/go-test-normal-windows.log"
-          $testExit = $LASTEXITCODE
-          exit $testExit
-
-      # 実行時間と失敗種別を区別するため race detector を別ステップにする。
-      #
-      # race は macOS で 13 分、Windows で 6 分かかり（Linux は 4 分）、PR の CI
-      # を律速していた。データ競合は OS にほぼ依存しないので、PR では Linux だけ
-      # で走らせ、main への push と手動実行では 3 OS すべてで走らせる。OS 固有の
-      # 経路にある競合は main 側で遅れて捕まえる。
-      - name: go test -race (Unix)
-        if: ${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') && env.NATIVE_TESTS == 'true' }}
-        shell: bash
-        # macOS の -race では、internal/httpserver が 357〜406 秒、internal/secret が
-        # 338〜374 秒かかる（2026-09-29〜30 の main の 5 回）。既定の 10 分に対して
-        # 余裕が 1.5 倍しかなく、遅い runner では時間切れになり得るので 20 分にする。
-        # この 2 つが 5 分を大きく下回るようになれば、既定に戻してよい。
-        run: go test -count=1 -race -timeout 20m ./...
+        run: go test -count=1 -race -tags sshc_test_kdf ./...
 
       # windows/amd64 は Go の race detector の対応先なので、例外を設けず、
       # go test の終了コードをそのまま返す。
       - name: go test -race (Windows)
-        if: ${{ runner.os == 'Windows' && github.event_name != 'pull_request' && env.NATIVE_TESTS == 'true' }}
+        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
-          & go test -v -count=1 -race -timeout 20m ./... 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/go-test-race-windows.log"
+          & go test -v -count=1 -race -tags sshc_test_kdf ./... 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/go-test-race-windows.log"
           $raceExit = $LASTEXITCODE
           exit $raceExit
 
