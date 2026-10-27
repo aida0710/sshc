@@ -227,9 +227,10 @@ func workflowRunList(t *testing.T, runs ...workflowRun) string {
 	return string(body)
 }
 
-// 公開する commit で main の CI が成功していなければ、publish.sh は tag を作らずに止まる。
-// 失敗を見落としたまま公開すると、Release の途中で止まるか、検査を経ない成果物が出る。
-func TestPublishTagsOnlyACommitWhoseMainCISucceeded(t *testing.T) {
+// 公開する commit で main の CI が始まっていないか、もう失敗していれば、publish.sh は tag を
+// 作らずに止まる。失敗が分かっているコミットにタグを打つと、その版は公開できないまま残る。
+// 走っている途中なら tag を打つ。成功は Release ワークフローの main-ci が公開の前に待つ。
+func TestPublishTagsOnlyACommitWhoseMainCIStartedAndHasNotFailed(t *testing.T) {
 	for _, tool := range []string{"bash", "jq"} {
 		if _, err := exec.LookPath(tool); err != nil {
 			t.Skipf("%s is required to run publish.sh", tool)
@@ -247,6 +248,7 @@ func TestPublishTagsOnlyACommitWhoseMainCISucceeded(t *testing.T) {
 	for _, test := range []struct {
 		name       string
 		ciRuns     string
+		status     string
 		conclusion string
 		wantTag    bool
 		wantOutput string
@@ -257,10 +259,12 @@ func TestPublishTagsOnlyACommitWhoseMainCISucceeded(t *testing.T) {
 			wantOutput: "no main CI run exists for " + publishedCommit},
 		{name: "CI ran on another branch", ciRuns: workflowRunList(t, ciOnAnotherBranch),
 			wantOutput: "no main CI run exists for " + publishedCommit},
-		{name: "CI failed", ciRuns: workflowRunList(t, ciOnTheCommit), conclusion: "failure",
+		{name: "CI failed", ciRuns: workflowRunList(t, ciOnTheCommit), status: "completed", conclusion: "failure",
 			wantOutput: "main CI failed"},
-		// 通ったあとは tag を作って push する。偽の git は push を断るので、そこで止まる。
-		{name: "CI succeeded", ciRuns: workflowRunList(t, ciOnTheCommit), conclusion: "success",
+		// 走っている途中か通ったあとは tag を作って push する。偽の git は push を断るので、そこで止まる。
+		{name: "CI still running", ciRuns: workflowRunList(t, ciOnTheCommit), status: "in_progress",
+			wantTag: true, wantOutput: "tag push failed"},
+		{name: "CI succeeded", ciRuns: workflowRunList(t, ciOnTheCommit), status: "completed", conclusion: "success",
 			wantTag: true, wantOutput: "tag push failed"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -296,7 +300,7 @@ for argument in "$@"; do
 done
 case "$path" in
   */actions/workflows/ci.yml/runs) printf '%s' "$SSHC_TEST_CI_RUNS" ;;
-  */actions/runs/11) printf '{"status":"completed","conclusion":"%s"}' "$SSHC_TEST_CI_CONCLUSION" ;;
+  */actions/runs/11) printf '{"status":"%s","conclusion":"%s"}' "$SSHC_TEST_CI_STATUS" "$SSHC_TEST_CI_CONCLUSION" ;;
   *) exit 1 ;;
 esac
 `,
@@ -322,6 +326,7 @@ esac
 				"SSHC_TEST_COMMIT="+publishedCommit,
 				"SSHC_TEST_GIT_CALLS="+gitCalls,
 				"SSHC_TEST_CI_RUNS="+test.ciRuns,
+				"SSHC_TEST_CI_STATUS="+test.status,
 				"SSHC_TEST_CI_CONCLUSION="+test.conclusion,
 			)
 			output, err := command.CombinedOutput()

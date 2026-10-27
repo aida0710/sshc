@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Release tagが保護対象のmain履歴にあり、同じcommitの完全なCIが成功済みかを検証する。
-# push webhookが欠落した障害時も、mainを明示して起動した同一workflowを同等に扱う。
+# Release tagがsemantic versionで、そのcommitが保護対象のmain履歴にあるかを検証する。
+# 同じcommitのmain CIの成功は、Releaseワークフローのmain-ci jobが公開の前に待つ。
 set -euo pipefail
 
 : "${GH_TOKEN:?GH_TOKEN is required}"
@@ -26,19 +26,4 @@ if ! git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main; then
   exit 1
 fi
 
-runs=$(gh api \
-  -H 'Accept: application/vnd.github+json' \
-  "repos/$RELEASE_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$RELEASE_SHA&status=completed&per_page=100")
-if ! printf '%s' "$runs" | jq -e --arg sha "$RELEASE_SHA" '
-  any(.workflow_runs[];
-    .head_sha == $sha and
-    .head_branch == "main" and
-    (.event == "push" or .event == "workflow_dispatch") and
-    .conclusion == "success"
-  )
-' >/dev/null; then
-  echo "the exact release SHA has no successful completed main CI workflow" >&2
-  exit 1
-fi
-
-echo "release source verified: main ancestor and exact-SHA CI succeeded"
+echo "release source verified: the tag is semantic and its commit is in main"
