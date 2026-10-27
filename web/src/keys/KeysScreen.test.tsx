@@ -286,7 +286,7 @@ describe("KeysScreen", () => {
     const fileName = await screen.findByLabelText("File name");
     const pair = fileName.closest("label");
     expect(pair).toHaveClass("grid", "lg:grid-cols-subgrid");
-    expect(pair?.parentElement).toHaveClass("lg:grid-cols-[160px_minmax(0,1fr)]");
+    expect(pair?.parentElement).toHaveClass("lg:grid-cols-[184px_minmax(0,1fr)]");
     expect(fileName).toHaveClass("min-h-10", "sm:min-h-0");
   });
 

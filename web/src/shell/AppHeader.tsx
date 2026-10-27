@@ -15,6 +15,7 @@ export function AppHeader({
   inspectorOpen,
   inspectorToggleRef,
   onToggleInspector,
+  actionsSlotRef,
   sectionLabels,
 }: {
   route: { kind: string; section?: Section };
@@ -26,6 +27,8 @@ export function AppHeader({
   inspectorOpen: boolean;
   inspectorToggleRef?: RefObject<HTMLButtonElement | null>;
   onToggleInspector: () => void;
+  // actionsSlotRef receives the place where a page's heading puts its actions on a phone (see pageChrome).
+  actionsSlotRef: (element: HTMLDivElement | null) => void;
   sectionLabels: Record<Section, MessageKey>;
 }) {
   const { t } = useLanguage();
@@ -48,6 +51,8 @@ export function AppHeader({
           ? t(sectionLabels[route.section])
           : t("shell.pageNotFound")}
       </p>
+
+      <div ref={actionsSlotRef} className="flex shrink-0 items-center gap-2 empty:hidden" />
 
       {inspector === null ? null : (
         <span className="shrink-0 [&>button]:h-10 [&>button]:min-w-10 [&>button]:justify-center">
