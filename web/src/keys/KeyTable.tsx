@@ -110,13 +110,15 @@ export function KeyTable({
                 draggable={movable}
                 onDragStart={movable ? (event) => actions.onBeginDrag(event, item) : undefined}
                 onDragEnd={movable ? actions.onEndDrag : undefined}
-                className={`group/row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 border-b border-line py-2 pl-1 last:border-b-0 @xl/keytable:table-row @xl/keytable:border-b-0 ${
+                className={`group/row grid grid-cols-[2.25rem_minmax(0,1fr)_auto_auto] items-center gap-x-1 border-b border-line py-2 last:border-b-0 @xl/keytable:table-row @xl/keytable:border-b-0 ${
                   isSelected ? "bg-select-fill" : "hover:bg-hover"
                 } ${relatedTo === null ? "" : "bg-surface-subtle"}`}
               >
-                <td className={`hidden border-line align-middle @xl/keytable:table-cell @xl/keytable:border-t @xl/keytable:py-[9px] @xl/keytable:pl-2.5`}>
+                {/* The box to choose keys for moving together shows in the short rows as well, so a phone can move
+                    several keys at once. Its column keeps its width in a row without one, so the names line up. */}
+                <td className={`border-line align-middle @xl/keytable:table-cell @xl/keytable:border-t @xl/keytable:py-[9px] @xl/keytable:pl-2.5`}>
                   {movable ? (
-                    <label className="grid place-items-center">
+                    <label className="grid size-9 place-items-center @xl/keytable:size-auto">
                       <input
                         type="checkbox"
                         aria-label={t("keys.chooseKey", { path: item.relativePath })}

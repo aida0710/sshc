@@ -25,9 +25,11 @@ export type VPNProfileActions = {
   onRemove: () => void;
 };
 
-// profileColumns は、見出しと行が揃えて使う列である（名前・状態・使う接続・操作）。狭い画面では
-// 行を札にするので、sm 以上だけに付ける。
-const profileColumns = "sm:grid sm:grid-cols-[minmax(0,1fr)_11rem_minmax(0,14rem)_12rem] sm:gap-x-4";
+// profileColumns は、見出しと行が揃えて使う列である（名前・状態・使う接続・操作）。見出しと行は別々の
+// グリッドなので、中身で幅の決まる列を使わない。状態と操作の列は幅を決め、残りを名前と接続で分ける。
+// 板が狭いと名前の列が残らないので、行を札にする。画面の幅でなく板の幅で決めるのは、PCではナビが
+// 252pxを取るからである。
+const profileColumns = "@2xl:grid @2xl:grid-cols-[minmax(0,1.2fr)_11rem_minmax(0,1fr)_12rem] @2xl:gap-x-4";
 
 const tag = "inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-full px-[7px] text-[11.5px]";
 const neutralTag = `${tag} bg-well text-ink-muted`;
@@ -60,6 +62,7 @@ export function VPNProfileRow({
   starting,
   available,
   checking,
+  editing,
   actions,
 }: {
   status: VPNProfileStatus;
@@ -74,6 +77,8 @@ export function VPNProfileRow({
   // checking は、経路の状態をまだ確かめていないことを表す。確かめるまでは、状態を
   // 見せず、接続と切断も受け付けない。
   checking: boolean;
+  // editing は、この行の下に編集のフォームを開いていることを表す。
+  editing: boolean;
   actions: VPNProfileActions;
 }) {
   const t = useTranslate();
@@ -100,34 +105,37 @@ export function VPNProfileRow({
   // 最中であることは状態の文が、このマシンで使えないことは画面の上の知らせが伝える。
   const waitingForOperation = busy ? t("vpn.waitingForOperation") : undefined;
   const waitingToChange = waitingForOperation ?? (starting ? t("vpn.waitingForRoute") : undefined);
+  // 編集を開いている行の編集・名前の変更・削除は、フォームの入力を確かめずに消すので、
+  // フォームを保存するか取り消すまで押せない。
+  const waitingForEdit = editing ? t("vpn.finishEditFirst") : undefined;
   const menuPending = busyWith("rename") || busyWith("remove");
   const menu: ActionMenuItem[] = [
     { label: t("vpn.logs"), disabled: busy || !available, title: waitingForOperation, onSelect: actions.onShowLogs },
-    { label: t("vpn.edit"), disabled: busy || starting, title: waitingToChange, onSelect: actions.onEdit },
-    { label: t("vpn.rename"), disabled: busy || starting, title: waitingToChange, onSelect: actions.onRename },
-    { label: t("vpn.remove"), tone: "danger", disabled: busy || starting, title: waitingToChange, onSelect: actions.onRemove },
+    { label: t("vpn.edit"), disabled: busy || starting || editing, title: waitingToChange ?? waitingForEdit, onSelect: actions.onEdit },
+    { label: t("vpn.rename"), disabled: busy || starting || editing, title: waitingToChange ?? waitingForEdit, onSelect: actions.onRename },
+    { label: t("vpn.remove"), tone: "danger", disabled: busy || starting || editing, title: waitingToChange ?? waitingForEdit, onSelect: actions.onRemove },
   ];
   return (
     <article
       aria-label={name}
       aria-busy={menuPending || busyWith("disconnect") || undefined}
-      className={`group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 py-3 hover:bg-hover sm:py-[9px] ${profileColumns}`}
+      className={`group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 py-3 hover:bg-hover @2xl:py-[9px] ${profileColumns}`}
     >
-      <div className="min-w-0 sm:px-2.5">
+      <div className="min-w-0 @2xl:px-2.5">
         <p className="text-[13.5px] text-ink [overflow-wrap:anywhere]">{name}</p>
         <p className="text-[11.5px] text-ink-faint [overflow-wrap:anywhere]">{summary.join(" · ")}</p>
       </div>
-      <div className="col-span-2 row-start-2 flex min-w-0 flex-col items-start gap-1 sm:col-span-1 sm:row-start-auto sm:px-2.5">
+      <div className="col-span-2 row-start-2 flex min-w-0 flex-col items-start gap-1 @2xl:col-span-1 @2xl:row-start-auto @2xl:px-2.5">
         <span className={up ? goodTag : neutralTag}>
           {preparing && !up ? <Spinner className="size-2.5" /> : null}
           {state}
         </span>
         {status.tunnel === undefined || checking ? null : <TunnelDetail tunnel={status.tunnel} />}
       </div>
-      <div className="col-span-2 row-start-3 min-w-0 sm:col-span-1 sm:row-start-auto sm:px-2.5">
+      <div className="col-span-2 row-start-3 min-w-0 @2xl:col-span-1 @2xl:row-start-auto @2xl:px-2.5">
         <ProfileConnections connections={status.connections} />
       </div>
-      <div className="col-start-2 row-start-1 flex items-center justify-end gap-1 sm:col-start-auto sm:row-start-auto sm:pr-1">
+      <div className="col-start-2 row-start-1 flex items-center justify-end gap-1 @2xl:col-start-auto @2xl:row-start-auto @2xl:pr-1">
         <Button
           small
           busy={starting}
@@ -147,14 +155,14 @@ export function VPNProfileRow({
           {t("vpn.disconnect")}
         </Button>
         {menuPending ? (
-          <span className="flex size-10 items-center justify-center text-ink-muted sm:size-7">
+          <span className="flex size-10 items-center justify-center text-ink-muted @2xl:size-7">
             <Spinner />
           </span>
         ) : (
           <ActionMenu
             label={t("vpn.rowActions", { name })}
             items={menu}
-            triggerClassName={`flex size-10 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink sm:size-7 ${revealOnHover}`}
+            triggerClassName={`flex size-10 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink @2xl:size-7 ${revealOnHover}`}
           />
         )}
       </div>
@@ -194,7 +202,7 @@ function ProfileConnections({ connections }: { connections: string[] }) {
   const t = useTranslate();
   return (
     <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-      <span className="text-[11.5px] text-ink-faint sm:hidden">{t("vpn.connections")}</span>
+      <span className="text-[11.5px] text-ink-faint @2xl:hidden">{t("vpn.connections")}</span>
       {connections.length === 0 ? (
         <span className="text-xs text-ink-faint">{t("vpn.noConnections")}</span>
       ) : (

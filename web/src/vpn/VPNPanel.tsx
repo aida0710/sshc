@@ -81,6 +81,14 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
     else setEditingProfile(name);
   }
 
+  // showOverview は、届いた一覧を出す。編集していたプロファイルが一覧から消えたとき（ほかの
+  // マシンで消されたなど）は、編集も閉じる。同じ名前で作り直したときに、頼んでいない編集が
+  // 開いてシークレットを読み出さないためである。
+  const showOverview = useCallback((next: VPNOverview) => {
+    setOverview(next);
+    setEditingProfile((current) => (next.profiles.some((status) => status.profile.name === current) ? current : ""));
+  }, []);
+
   // 一覧を書き換えた応答の世代。操作を始めるときと終えるときに進め、読み始めたあとに
   // 世代が変わった応答は捨てる。遅れて届いたポーリングの応答が、操作の運んだ新しい
   // 一覧を古い一覧で上書きしないためである。
@@ -96,14 +104,14 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
       const isCurrent = overviewGeneration.begin();
       const succeeded = await run(work, {
         apply: (next) => {
-          if (isCurrent()) setOverview(next);
+          if (isCurrent()) showOverview(next);
         },
         describe: describeFailure,
       });
       if (isCurrent()) overviewGeneration.retire();
       return succeeded;
     },
-    [describe, overviewGeneration, run],
+    [describe, overviewGeneration, run, showOverview],
   );
 
   // actOnProfile は、行から始めた操作を act で走らせ、終わるまでその行を待たせる。
@@ -133,10 +141,10 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
     return api
       .vpnOverview()
       .then((next) => {
-        if (isCurrent()) setOverview(next);
+        if (isCurrent()) showOverview(next);
       })
       .catch(() => undefined);
-  }, [api, overviewGeneration]);
+  }, [api, overviewGeneration, showOverview]);
 
   // 経路の状態をまだ確かめていない一覧が届いたら、すぐに確かめに行く。
   const checking = overview?.checking ?? false;
@@ -154,7 +162,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
       const isCurrent = overviewGeneration.begin();
       try {
         const next = await api.startVPNRoute(name);
-        if (isCurrent()) setOverview(next);
+        if (isCurrent()) showOverview(next);
       } catch (error) {
         if (!abandonedStarts.current.has(name)) {
           if (failureCode(error) === "vpn_route_failed") setFailedProfile(name);
@@ -170,7 +178,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
         });
       }
     },
-    [api, clearError, describe, fail, overviewGeneration],
+    [api, clearError, describe, fail, overviewGeneration, showOverview],
   );
 
   // saveProfile は、プロファイルを保存する操作を走らせる。項目の誤りは、フォームの
@@ -288,6 +296,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
                       starting={startingProfiles.has(name)}
                       available={overview.available}
                       checking={overview.checking}
+                      editing={editingProfile === name}
                       actions={{
                         onStart: () => void startProfile(name),
                         onStop: () => requestDisconnect(name, status.openConnections),

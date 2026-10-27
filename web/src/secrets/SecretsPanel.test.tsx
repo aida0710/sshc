@@ -153,6 +153,34 @@ describe("SecretsPanel", () => {
     expect(within(form).getByLabelText("Base32 setup key or otpauth URI", { exact: true })).toHaveValue("not-base32");
   });
 
+  it("keeps the add form and a row's edit form open together, each with what was typed", async () => {
+    const user = userEvent.setup();
+    render(<SecretsPanel api={buildApi()} kind="password" />);
+
+    await user.click(await screen.findByRole("button", { name: "Add" }));
+    const addForm = screen.getByRole("region", { name: "Add an account password" });
+    await user.type(within(addForm).getByLabelText("Name"), "half-typed");
+
+    const menu = await openRowMenu(user, "office-vm");
+    await user.click(within(menu).getByRole("menuitem", { name: "Edit" }));
+    const editForm = await screen.findByRole("region", { name: "Edit account password" });
+    await user.type(await within(editForm).findByLabelText("Name"), "-renamed");
+
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(within(screen.getByRole("region", { name: "Add an account password" })).getByLabelText("Name")).toHaveValue("half-typed");
+    expect(within(screen.getByRole("region", { name: "Edit account password" })).getByLabelText("Name")).toHaveValue("office-vm-renamed");
+  });
+
+  it("offers the codes around the current one only once they have come", async () => {
+    const user = userEvent.setup();
+    render(<SecretsPanel api={buildApi({ totpCodes: vi.fn().mockReturnValue(new Promise(() => {})) })} kind="totp" />);
+
+    const menu = await openRowMenu(user, "production-otp");
+
+    expect(within(menu).getByRole("menuitem", { name: "Show the codes before and after" })).toBeDisabled();
+  });
+
   it("shows a one-time password's current code and tells how to assign it", async () => {
     render(<SecretsPanel api={buildApi()} kind="totp" />);
 

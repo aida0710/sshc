@@ -45,15 +45,25 @@ describe("InspectorToggle", () => {
 
 describe("InspectorPane", () => {
   it("is a labelled complementary region the toggle can address", () => {
-    render(<InspectorPane label="Details" underTopBar={false}>nothing yet</InspectorPane>);
+    render(<InspectorPane label="Details" underTopBar={false} onClose={vi.fn()}>nothing yet</InspectorPane>);
 
     const pane = screen.getByRole("complementary", { name: "Details" });
     expect(pane).toHaveAttribute("id", "inspector");
     expect(pane).toHaveTextContent("nothing yet");
   });
 
+  it("closes from its own button, for when it covers the page and the toggle under it", async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(<InspectorPane label="Details" underTopBar={false} onClose={onClose}>nothing yet</InspectorPane>);
+
+    await user.click(screen.getByRole("button", { name: "Hide Details" }));
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("draws no segmented control", () => {
-    render(<InspectorPane label="Details" underTopBar={false}>nothing yet</InspectorPane>);
+    render(<InspectorPane label="Details" underTopBar={false} onClose={vi.fn()}>nothing yet</InspectorPane>);
 
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
   });

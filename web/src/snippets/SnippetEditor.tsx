@@ -66,24 +66,28 @@ export function SnippetEditor({
         </FieldRow>
         {variables.map((variable) => (
           <FieldRow key={variable.name} label={<code className="font-mono text-[12.5px]">{`{{${variable.name}}}`}</code>} interactiveChildren>
-            <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+            {/* The type and the value share a line while the value keeps 13rem; past that each takes a line of
+                its own and the whole width. The value grows far faster, so on a shared line the type stays 9rem. */}
+            <div className="flex min-w-0 flex-wrap gap-2">
               <select
                 aria-label={`${variable.name} · ${t("snippets.variableType")}`}
                 value={variable.type}
                 onChange={(event) => onVariableChange(variable.name, { type: event.target.value as SnippetVariable["type"] })}
-                className={`${control} sm:w-36 sm:shrink-0`}
+                className={`${control} min-w-0 flex-[1_1_9rem]`}
               >
                 {variableTypes.map((type) => (
                   <option key={type} value={type}>{t(snippetVariableTypeLabelKey(type))}</option>
                 ))}
               </select>
-              <SnippetVariableValue
-                variable={variable}
-                value={inputs[variable.name] ?? ""}
-                label={`${variable.name} · ${t("snippets.value")}`}
-                className={control}
-                onChange={(value) => onInputChange(variable.name, value)}
-              />
+              <div className="flex min-w-0 flex-[999_1_13rem] flex-col">
+                <SnippetVariableValue
+                  variable={variable}
+                  value={inputs[variable.name] ?? ""}
+                  label={`${variable.name} · ${t("snippets.value")}`}
+                  className={control}
+                  onChange={(value) => onInputChange(variable.name, value)}
+                />
+              </div>
             </div>
           </FieldRow>
         ))}

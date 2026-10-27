@@ -130,9 +130,9 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 
 ## M11. UI外枠とタブ階層
 
-1. 保存済み接続のsummary中央行とConfigのInclude階層／editorで、カード外枠の左右線が途中で消えないことをライト／ダーク双方で確認する。
+1. 保存済み接続のsummary中央行で、カード外枠の左右線が途中で消えないことをライト／ダーク双方で確認する。ConfigではInclude階層の列とeditorの列を分ける縦線が、上端から下端まで途切れないことを確認する。
 2. Basic、設定解析、詳細設定を切り替え、tablistと内容が同じ外枠内にあり、選択中の内容が一段内側に表示されることを確認する。
-3. Configの「Include階層」headerと「config・編集可能」headerの上端、下端、高さが一致することを確認する。
+3. ConfigがConnectionsと同じ形で、ページの見出しの下の線から、左にInclude階層、右に開いたファイルの見出しの行とeditorが並ぶことを確認する。スマホでは、一覧から選ぶとファイルに移り、［ファイル一覧］で戻ることを確認する。
 4. 大きなsurfaceとdialogが12px、inputとbuttonが8px、小さな補助要素が6pxを基準に揃い、表内部は角なし、状態badgeだけpillになっていることを確認する。
 
 ## M12. 実Serial／Telnet endpoint

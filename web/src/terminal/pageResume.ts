@@ -5,14 +5,14 @@
 // keepalives fail, a minute or more), and what is typed into it is lost without a word.
 //
 // A wake is told by the clock: a check due every few seconds that runs far later means the page did not
-// run in between. A hidden page is not checked, since the browser slows its timers on purpose; a page that
-// was hidden that long counts as away when it is shown again.
+// run in between. A hidden page's timers are slowed on purpose (Chrome runs them once a minute after a
+// while), so a page shown again counts as away only when its timers stopped for longer than that.
 const wakeCheckIntervalMs = 5_000;
 const asleepAfterMs = 30_000;
+const hiddenAsleepAfterMs = 2 * 60_000;
 
 export function whenPageResumes(callback: () => void): () => void {
   let lastCheck = Date.now();
-  let hiddenAt: number | null = document.visibilityState === "hidden" ? Date.now() : null;
   const check = () => {
     const now = Date.now();
     const late = now - lastCheck > asleepAfterMs;
@@ -25,13 +25,9 @@ export function whenPageResumes(callback: () => void): () => void {
     if (event.persisted) callback();
   };
   const visibilityChanged = () => {
+    if (document.visibilityState !== "visible") return;
     const now = Date.now();
-    if (document.visibilityState === "hidden") {
-      hiddenAt = now;
-      return;
-    }
-    const away = hiddenAt !== null && now - hiddenAt > asleepAfterMs;
-    hiddenAt = null;
+    const away = now - lastCheck > hiddenAsleepAfterMs;
     lastCheck = now;
     if (away) callback();
   };

@@ -149,7 +149,7 @@ export function SecretsPanel({
                 {t("secrets.lock")}
               </Button>
             )}
-            <Button kind="primary" onClick={() => { setOpenPanel(null); setAdding(true); }} className="inline-flex items-center gap-1.5">
+            <Button kind="primary" onClick={() => setAdding(true)} className="inline-flex items-center gap-1.5">
               <Icon name="plus" className="size-4" />
               {t("secrets.add")}
             </Button>
@@ -206,10 +206,7 @@ export function SecretsPanel({
                         />
                       ) : null}
                       actions={{
-                        onOpenPanel: (next) => {
-                          setAdding(false);
-                          setOpenPanel(next === null ? null : { rowId: row.id, panel: next });
-                        },
+                        onOpenPanel: (next) => setOpenPanel(next === null ? null : { rowId: row.id, panel: next }),
                         onDelete: () => setPendingDeletion(deletionOf(row)),
                         onUnassignTOTP: (host) => void run(() => api.unassignCredential("totp", host), t("secrets.unassignTOTPFailed")),
                       }}
