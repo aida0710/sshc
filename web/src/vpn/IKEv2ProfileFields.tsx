@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useTranslate } from "../i18n/context";
-import { Field, control } from "../ui/form";
+import { control } from "../ui/form";
+import { FieldRow } from "../ui/FieldRow";
 import type { VPNProfileDraft } from "./vpnProfileDraft";
 import type { IKEv2Authentication } from "./vpnProfileRules";
 import type { VPNSecretKey } from "./vpnSecretRules";
@@ -26,7 +27,7 @@ export function IKEv2ProfileFields({
   const psk = draft.ikev2Authentication === "psk";
   return (
     <>
-      <Field label={t("vpn.ikev2Authentication")} hint={t("vpn.ikev2AuthenticationHint")} error={errorFor("ikev2.authentication")}>
+      <FieldRow label={t("vpn.ikev2Authentication")} hint={t("vpn.ikev2AuthenticationHint")} warning={errorFor("ikev2.authentication")}>
         <select
           className={control}
           value={draft.ikev2Authentication}
@@ -35,42 +36,40 @@ export function IKEv2ProfileFields({
           <option value="eap-mschapv2">{t("vpn.ikev2AuthenticationEAP")}</option>
           <option value="psk">{t("vpn.ikev2AuthenticationPSK")}</option>
         </select>
-      </Field>
-      <Field
+      </FieldRow>
+      <FieldRow
         label={t(psk ? "vpn.localIdentity" : "vpn.username")}
         {...(psk ? { hint: t("vpn.localIdentityHint") } : {})}
-        error={errorFor("ikev2.identity")}
+        warning={errorFor("ikev2.identity")}
       >
         <input className={control} value={draft.username} onChange={(event) => onEdit("username")(event.target.value)} />
-      </Field>
+      </FieldRow>
       {psk ? secretField("ikev2Psk", t("vpn.psk")) : secretField("ikev2Password", t("vpn.password"))}
-      <Field label={t("vpn.serverIdentity")} hint={t("vpn.serverIdentityHint")} error={errorFor("ikev2.serverIdentity")}>
+      <FieldRow label={t("vpn.serverIdentity")} hint={t("vpn.serverIdentityHint")} warning={errorFor("ikev2.serverIdentity")}>
         <input
           className={control}
           value={draft.serverIdentity}
           onChange={(event) => onEdit("serverIdentity")(event.target.value)}
         />
-      </Field>
+      </FieldRow>
       {psk ? null : (
-        <div className="sm:col-span-2">
-          <Field label={t("vpn.caCertificate")} hint={t("vpn.caCertificateHint")} error={errorFor("ikev2.caCertificate")}>
-            <textarea
-              className={`${control} font-mono text-xs leading-5`}
-              rows={4}
-              spellCheck={false}
-              placeholder="-----BEGIN CERTIFICATE-----"
-              value={draft.caCertificate}
-              onChange={(event) => onEdit("caCertificate")(event.target.value)}
-            />
-          </Field>
-        </div>
+        <FieldRow label={t("vpn.caCertificate")} hint={t("vpn.caCertificateHint")} warning={errorFor("ikev2.caCertificate")}>
+          <textarea
+            className={`${control} font-mono text-xs leading-5`}
+            rows={4}
+            spellCheck={false}
+            placeholder="-----BEGIN CERTIFICATE-----"
+            value={draft.caCertificate}
+            onChange={(event) => onEdit("caCertificate")(event.target.value)}
+          />
+        </FieldRow>
       )}
-      <Field label={t("vpn.ike")} hint={t("vpn.ikev2ProposalsHint")} error={errorFor("ikev2.ike")}>
+      <FieldRow label={t("vpn.ike")} hint={t("vpn.ikev2ProposalsHint")} warning={errorFor("ikev2.ike")}>
         <input className={control} value={draft.ike} onChange={(event) => onEdit("ike")(event.target.value)} />
-      </Field>
-      <Field label={t("vpn.esp")} hint={t("vpn.ikev2ProposalsHint")} error={errorFor("ikev2.esp")}>
+      </FieldRow>
+      <FieldRow label={t("vpn.esp")} hint={t("vpn.ikev2ProposalsHint")} warning={errorFor("ikev2.esp")}>
         <input className={control} value={draft.esp} onChange={(event) => onEdit("esp")(event.target.value)} />
-      </Field>
+      </FieldRow>
     </>
   );
 }

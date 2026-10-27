@@ -6,9 +6,8 @@ import type { NavigateLocationOptions, NavigationBlocker } from "../routing/useS
 import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
-import { hintText } from "../ui/form";
 import { InputDialog } from "../ui/InputDialog";
-import { PageHeader } from "../ui/page";
+import { PageHeader, PageSection } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { Button, Notice } from "../ui/surface";
@@ -17,7 +16,7 @@ import { usePendingAction } from "../ui/usePendingAction";
 import { usePolling } from "../ui/usePolling";
 import { describeVPNFieldError, vpnFieldErrorOf, type VPNFieldError } from "./vpnFieldErrors";
 import { VPNLogsDialog } from "./VPNLogsDialog";
-import { VPNProfileCard, type VPNProfileCardAction } from "./VPNProfileCard";
+import { VPNProfileListHeader, VPNProfileRow, type VPNProfileRowAction } from "./VPNProfileRow";
 import { VPNProfileForm, type VPNProfileSaveResult } from "./VPNProfileForm";
 import { overviewRefreshIntervalMs, routeProgressIntervalMs } from "./vpnOverviewPolling";
 import { describeVPNProblem } from "./vpnProblemMessage";
@@ -29,11 +28,11 @@ import { VPNUnavailableNotice } from "./VPNUnavailableNotice";
 // プロファイルを付けるのは Connections で行う。シークレットは保存のときに送り、編集を
 // 開いたときだけ、確認のトークンを添えてengineから取り出す。
 
-// ProfileActionKey は、カードのどのボタンで始めた操作かを、ボタンとプロファイルの名前で表す。
+// ProfileActionKey は、一覧のどの行のどの操作で始めたかを、操作とプロファイルの名前で表す。
 // 操作の名前には「:」が無いので、プロファイルの名前に「:」があっても取り違えない。
-type ProfileActionKey = `${VPNProfileCardAction}:${string}`;
+type ProfileActionKey = `${VPNProfileRowAction}:${string}`;
 
-function profileActionKey(action: VPNProfileCardAction, name: string): ProfileActionKey {
+function profileActionKey(action: VPNProfileRowAction, name: string): ProfileActionKey {
   return `${action}:${name}`;
 }
 
@@ -54,7 +53,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
   // editingProfile は、いま編集のフォームを開いているプロファイルである。
   const [editingProfile, setEditingProfile] = useState("");
   const [shownLogs, setShownLogs] = useState("");
-  // profileAction は、カードのボタンで始めて待っている操作である。
+  // profileAction は、一覧の行から始めて待っている操作である。
   const profileAction = usePendingAction<ProfileActionKey>();
   const { start: startProfileAction } = profileAction;
   // startingProfiles は、この画面がいま経路を用意させているプロファイルである。用意は
@@ -107,10 +106,10 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
     [describe, overviewGeneration, run],
   );
 
-  // actOnProfile は、カードのボタンで始めた操作を act で走らせ、終わるまでそのボタンを待たせる。
+  // actOnProfile は、行から始めた操作を act で走らせ、終わるまでその行を待たせる。
   // 失敗は act が画面の上に出すので、ここでは reject しない。
   const actOnProfile = useCallback(
-    (name: string, action: VPNProfileCardAction, work: () => Promise<VPNOverview>) =>
+    (name: string, action: VPNProfileRowAction, work: () => Promise<VPNOverview>) =>
       startProfileAction(profileActionKey(action, name), () => act(work)),
     [act, startProfileAction],
   );
@@ -267,46 +266,54 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
         </Notice>
       )}
 
-      {overview.profiles.length === 0 ? (
-        <p className={hintText}>{t("vpn.empty")}</p>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {overview.profiles.map((status) => {
-            const name = status.profile.name;
-            return (
-              <li key={name}>
-                {editingProfile === name ? (
-                  <VPNProfileForm
-                    busy={operation.busy}
-                    editing={status.profile}
-                    revealSecrets={api.revealVPNSecrets}
-                    onSave={updateProfile}
-                    onCancel={() => setEditingProfile("")}
-                    onDirtyChange={setEditFormDirty}
-                  />
-                ) : (
-                  <VPNProfileCard
-                    status={status}
-                    busy={operation.busy}
-                    busyWith={(action) => profileAction.running === profileActionKey(action, name)}
-                    starting={startingProfiles.has(name)}
-                    available={overview.available}
-                    checking={overview.checking}
-                    actions={{
-                      onStart: () => void startProfile(name),
-                      onStop: () => requestDisconnect(name, status.openConnections),
-                      onShowLogs: () => setShownLogs(name),
-                      onEdit: () => openEditor(name),
-                      onRename: () => setPendingRename(name),
-                      onRemove: () => setPendingRemoval(name),
-                    }}
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <PageSection
+        heading={t("vpn.profilesHeading")}
+        meta={t("vpn.profileCount", { count: overview.profiles.length })}
+        {...(overview.profiles.length === 0 ? {} : { hint: t("vpn.connectionsHint") })}
+      >
+        {overview.profiles.length === 0 ? (
+          <p className="text-[13px] text-ink-muted">{t("vpn.empty")}</p>
+        ) : (
+          <div>
+            <VPNProfileListHeader />
+            <ul className="divide-y divide-line">
+              {overview.profiles.map((status) => {
+                const name = status.profile.name;
+                return (
+                  <li key={name}>
+                    <VPNProfileRow
+                      status={status}
+                      busy={operation.busy}
+                      busyWith={(action) => profileAction.running === profileActionKey(action, name)}
+                      starting={startingProfiles.has(name)}
+                      available={overview.available}
+                      checking={overview.checking}
+                      actions={{
+                        onStart: () => void startProfile(name),
+                        onStop: () => requestDisconnect(name, status.openConnections),
+                        onShowLogs: () => setShownLogs(name),
+                        onEdit: () => openEditor(name),
+                        onRename: () => setPendingRename(name),
+                        onRemove: () => setPendingRemoval(name),
+                      }}
+                    />
+                    {editingProfile === name ? (
+                      <VPNProfileForm
+                        busy={operation.busy}
+                        editing={status.profile}
+                        revealSecrets={api.revealVPNSecrets}
+                        onSave={updateProfile}
+                        onCancel={() => setEditingProfile("")}
+                        onDirtyChange={setEditFormDirty}
+                      />
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </PageSection>
 
       <VPNProfileForm busy={operation.busy} onSave={createProfile} onDirtyChange={setCreateFormDirty} />
 
