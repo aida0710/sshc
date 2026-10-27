@@ -34,6 +34,7 @@ import (
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalrestore"
 	"sshc/internal/validate"
 	"sshc/internal/vpn"
 )
@@ -148,6 +149,7 @@ type runtime struct {
 	document      handoff.Handoff
 	stateDir      string
 	terminals     *terminal.Registry
+	restore       *terminalrestore.Service
 	vault         *secret.Service
 	autoSync      *remotesync.Auto
 	autoCancel    context.CancelFunc
@@ -275,6 +277,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		AutoSync:                  services.autoSync,
 		Terminals:                 services.terminals,
 		TerminalWorkspaces:        services.terminalWorkspaces,
+		TerminalRestore:           services.terminalRestore,
 		VPN:                       services.vpn,
 		VPNProfiles:               services.vpnProfiles,
 		TerminalStartDirectory:    services.config.TerminalStartDirectory,
@@ -324,6 +327,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		document:      document,
 		stateDir:      stateDir,
 		terminals:     services.terminals,
+		restore:       services.terminalRestore,
 		vault:         services.vault,
 		autoSync:      services.autoSync,
 		browserAuth:   services.browserAuth,
@@ -451,6 +455,12 @@ func (r runtime) unwind(dependencies Dependencies) error {
 		joined = append(joined, fmt.Errorf("remove the command-line handoff: %w", err))
 	}
 
+	// セッションが閉じ始める前に、次のエンジンが開き直せるよう記録する。
+	if r.restore != nil {
+		if err := r.restore.SaveOnStop(terminalrestore.FromReopenings(r.terminals.Reopenings())); err != nil {
+			joined = append(joined, fmt.Errorf("record the terminal sessions to reopen: %w", err))
+		}
+	}
 	r.terminals.BeginShutdown()
 	r.server.BeginShutdown()
 

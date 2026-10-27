@@ -14,6 +14,7 @@ type Session struct {
 	id            string
 	kind          Kind
 	alias         string
+	shellProfile  string
 	title         string
 	fallbackTitle string
 	titleSource   TitleSource
@@ -41,7 +42,10 @@ type Session struct {
 	// terminalTitle is the last OSC 0/1/2 title observed for the current
 	// process generation. The browser applies the same sequence itself; the
 	// engine records it so every client shows the same pane name.
-	terminalTitle       string
+	terminalTitle string
+	// workingDirectory is the last directory the shell reported. See
+	// working_directory.go.
+	workingDirectory    string
 	notificationVersion uint64
 	lastNotification    *Notification
 	programProgress     *ProgramProgress
@@ -100,6 +104,10 @@ type View struct {
 	// Forwards は、このセッションが開いている転送である。
 	Forwards     []Forward
 	Presentation Presentation
+	// ShellProfile is the local shell profile of a shell session.
+	ShellProfile string
+	// WorkingDirectory is where the session works now, or "" when unknown.
+	WorkingDirectory string
 	// NotificationVersion increases for every notification a program asked
 	// for; LastNotification is the most recent one.
 	NotificationVersion uint64
@@ -170,11 +178,13 @@ func (s *Session) Live() bool { return s.Exit() == nil }
 
 // View は一覧に出すための写しである。
 func (s *Session) View() View {
+	directory := s.WorkingDirectory()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	view := View{
 		ID: s.id, Kind: s.kind, Alias: s.alias, Title: s.title, Workspace: s.workspace,
 		Started: s.started, State: s.state, Problem: s.problem,
+		ShellProfile: s.shellProfile, WorkingDirectory: directory,
 		Presentation:        Presentation{DisplayTitle: s.title, TitleSource: s.titleSource, TitlePinned: s.titlePinned},
 		NotificationVersion: s.notificationVersion,
 	}
@@ -448,11 +458,12 @@ func (s *Session) pump(now func() time.Time) {
 		s.mutex.Lock()
 		process, ready, generation := s.process, s.ready, s.generation
 		s.mutex.Unlock()
-		observer := newOSCObserver(
-			func(title string) { s.acceptTitle(generation, title) },
-			func(title, body string) { s.acceptNotification(generation, title, body, now()) },
-			func(progress *ProgramProgress) { s.acceptProgramProgress(generation, progress) },
-		)
+		observer := newOSCObserver(oscReports{
+			Title:     func(title string) { s.acceptTitle(generation, title) },
+			Notify:    func(title, body string) { s.acceptNotification(generation, title, body, now()) },
+			Progress:  func(progress *ProgramProgress) { s.acceptProgramProgress(generation, progress) },
+			Directory: func(directory string) { s.acceptWorkingDirectory(generation, directory) },
+		})
 		buffer := make([]byte, readChunk)
 		for {
 			read, err := process.Read(buffer)

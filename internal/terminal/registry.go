@@ -16,6 +16,8 @@ import (
 type Spec struct {
 	Kind  Kind
 	Alias string
+	// ShellProfile is the ID of the local shell profile a shell session runs.
+	ShellProfile string
 	// Title は一覧に出す名前である。ssh は alias、shell はシェルの basename。
 	Title string
 	// Workspace は、このセッションを入れるワークスペースの ID である。
@@ -198,7 +200,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 	}
 
 	session := &Session{
-		id: id, kind: spec.Kind, alias: spec.Alias, title: spec.Title,
+		id: id, kind: spec.Kind, alias: spec.Alias, shellProfile: spec.ShellProfile, title: spec.Title,
 		fallbackTitle: spec.Title,
 		workspace:     spec.Workspace,
 		started:       r.now(),

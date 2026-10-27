@@ -27,6 +27,7 @@ import (
 	"sshc/internal/storage"
 	"sshc/internal/syncrestore"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalrestore"
 	"sshc/internal/terminalworkspace"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnprofile"
@@ -53,9 +54,11 @@ type engineServices struct {
 	terminals    *terminal.Registry
 	// terminalWorkspaces は、ターミナルのセッションをまとめるワークスペースの定義である。
 	terminalWorkspaces *terminalworkspace.Service
-	vpn                *vpn.Manager
-	vpnProfiles        *vpnprofile.Service
-	ssh                sshParts
+	// terminalRestore は、前のエンジンが止まったときに開いていたセッションを持つ。
+	terminalRestore *terminalrestore.Service
+	vpn             *vpn.Manager
+	vpnProfiles     *vpnprofile.Service
+	ssh             sshParts
 }
 
 // newEngineServices は、~/.ssh をひとつ開いて、その上に engine の部品を組む。
@@ -246,6 +249,11 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		sftp: sftpService, sftpPool: sftpPool, snippets: snippetService,
 		vpn: vpnRoutes, vpnProfiles: vpnProfiles, ssh: inProcessSSH,
 		terminalWorkspaces: terminalworkspace.NewService(workspace, dependencies.Random),
+	}
+	services.terminalRestore, err = terminalrestore.NewService(workspace)
+	if err != nil && dependencies.Logger != nil {
+		// 読めない記録は開き直しを差し出さないだけで、エンジンは止めない。次の停止で書き直す。
+		dependencies.Logger.Warn("read the terminal sessions to reopen", "error", err)
 	}
 	services.sync, services.autoSync, err = buildSync(workspace, transactions, vault, snippetStore, dependencies)
 	if err != nil {

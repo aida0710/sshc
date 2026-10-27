@@ -135,11 +135,16 @@ export function useTerminalWorkspaceController({
         (candidate) => candidate.id === id,
       );
       if (session === undefined) return null;
-      // A duplicate opens next to the original, in the same workspace.
+      // A duplicate opens next to the original, in the same workspace and the
+      // directory the original works in, when the engine knows it.
+      const startIn = session.workingDirectory === undefined ? {} : { cwd: session.workingDirectory };
       const opened = await terminalSessions.open(
         session.kind === "ssh" && session.alias !== undefined
-          ? { kind: "ssh", alias: session.alias, workspaceId: session.workspaceId }
-          : { kind: "shell", workspaceId: session.workspaceId },
+          ? { kind: "ssh", alias: session.alias, workspaceId: session.workspaceId, ...startIn }
+          : {
+              kind: "shell", workspaceId: session.workspaceId, ...startIn,
+              ...(session.shellProfileId === undefined ? {} : { profileId: session.shellProfileId }),
+            },
       );
       if (opened !== null) showSession(opened.id);
       return opened;
