@@ -1,4 +1,5 @@
 import { useLayoutEffect } from "react";
+import { isTextEntry } from "./softKeyboard";
 
 // Keep both the app and portalled dialogs inside the visible browser area.
 // Android already removes IME/system insets from its WebView; its viewport
@@ -17,8 +18,7 @@ export function useAppViewport() {
         fullHeight = window.innerHeight;
       }
       const active = document.activeElement;
-      const editing = active instanceof HTMLElement &&
-        (active.matches("input:not([type=checkbox]):not([type=radio]), textarea") || active.isContentEditable);
+      const editing = isTextEntry(active);
       // WebView can shrink innerHeight itself for the IME. Retain the largest
       // extent in this orientation, including when focus moves between fields.
       fullHeight = Math.max(fullHeight, window.innerHeight);
