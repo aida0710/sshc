@@ -1,5 +1,6 @@
 import { failureCode } from "../api/client";
 import type { TerminalSessionsApi } from "../api/terminalSessions";
+import { whenPageResumes } from "./pageResume";
 import { openStream, type StreamHandlers, type TerminalStream } from "./stream";
 
 // Where the browser stands with the WebSocket behind a terminal. This is
@@ -44,7 +45,9 @@ export type StreamLinkController = {
 // createStreamLink keeps one terminal's WebSocket attached: it resumes from
 // the last byte it received and, when the link drops, waits with backoff and
 // attaches again until the program exits, the session is gone or the user
-// stops it.
+// stops it. When the page comes back from being away (see whenPageResumes), a
+// wait is cut short and a link that still looks live is attached afresh: after
+// a sleep it may lead nowhere, and attaching again resumes from the same byte.
 export function createStreamLink(options: StreamLinkOptions): StreamLinkController {
   let stream: TerminalStream | null = null;
   let closed = false;
@@ -58,6 +61,7 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
 
   const connect = () => {
     clearInterval(countdown);
+    waiting = false;
     stopped = false;
     attempts += 1;
     options.onLink({ phase: "connecting", attempt: attempts });
@@ -100,8 +104,11 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
       });
   };
 
+  let waiting = false;
+
   const waitAndReconnect = () => {
     if (halted()) return;
+    waiting = true;
     if (attachedAt !== 0 && Date.now() - attachedAt > stableStreamResetMs) attempts = 1;
     const step = Math.min(attempts - 1, streamReconnectBackoffSeconds.length - 1);
     let secondsLeft = streamReconnectBackoffSeconds[step] ?? 1;
@@ -117,10 +124,28 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
     }, countdownTickMs);
   };
 
+  // A link the user stopped stays stopped, and one being attached is left to finish.
+  const attachAfresh = () => {
+    if (halted()) return;
+    if (waiting) {
+      connect();
+      return;
+    }
+    if (stream === null) return;
+    const stale = stream;
+    stream = null;
+    // Closing it on purpose does not count as a drop: the next attempt is the first again.
+    stale.close();
+    attempts = 0;
+    connect();
+  };
+  const stopWatchingResumes = whenPageResumes(attachAfresh);
+
   return {
     connect,
     stopRetrying: () => {
       stopped = true;
+      waiting = false;
       clearInterval(countdown);
       options.onLink({ phase: "stopped", gone: false });
     },
@@ -128,6 +153,7 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
     close: () => {
       closed = true;
       clearInterval(countdown);
+      stopWatchingResumes();
       stream?.close();
     },
   };
