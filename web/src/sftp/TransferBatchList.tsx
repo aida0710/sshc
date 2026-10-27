@@ -23,7 +23,7 @@ export function TransferBatchList({ batches, waiting, processingStopped, maxReco
           <span className="truncate font-medium" title={first.batchName}>{first.batchName}</span>
         </div>
         <span className="shrink-0 tabular-nums text-ink-muted">{t("sftp.manager.batchProgress", { completed, total: items.length })}</span>
-        {failed > 0 ? <button type="button" className="min-h-11 shrink-0 px-2 text-accent md:min-h-8 [@media(pointer:coarse)]:min-h-11" onClick={() => void runControl(() => sftpTransferManager.retryFailed(batchId))}>{t("sftp.manager.retryFailed", { count: failed })}</button> : null}
+        {failed > 0 ? <button type="button" className="min-h-11 shrink-0 px-2 text-accent md:min-h-8 mobile-layout:min-h-11" onClick={() => void runControl(() => sftpTransferManager.retryFailed(batchId))}>{t("sftp.manager.retryFailed", { count: failed })}</button> : null}
       </div> : null}
       <ul aria-label={t("sftp.manager.items")}>
         {items.map((job) => <TransferJobRow key={job.id} job={job} waiting={waiting} processingStopped={processingStopped}

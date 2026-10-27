@@ -10,6 +10,19 @@
   }
 }
 @custom-variant active (&:active:where(:not(:disabled)));
+/* タッチ向けの見た目（いつも出す操作、44px の押す場所）は、画面がスマホの組み方のときだけにする。
+   条件は useMediaQuery.ts の mobileViewportQuery と同じ。タッチ対応の PC でも、画面が PC の大きさなら
+   PC と同じに出す。desktop-layout はその逆（マウスで載せたときに出す操作など）。 */
+@custom-variant mobile-layout {
+  @media (max-width: 767px), (pointer: coarse) and (max-width: 1023px) {
+    @slot;
+  }
+}
+@custom-variant desktop-layout {
+  @media (min-width: 1024px), (min-width: 768px) and (not (pointer: coarse)) {
+    @slot;
+  }
+}
 /* [data-theme="light"] は、ダークの画面の中にライトの見本を描くとき（設定のテーマの見本）にも使う。 */
 :root,
 [data-theme="light"] {
@@ -671,7 +684,8 @@ select:not([multiple]):not([size]) {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b6bbc1' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
-@media (max-width: 767px), (pointer: coarse) {
+/* The same condition as the mobile-layout variant: a touch screen as large as a PC's keeps the PC's sizes. */
+@media (max-width: 767px), (pointer: coarse) and (max-width: 1023px) {
   /* Compact icon artwork keeps its size; the touch target is large enough. */
   :where(button:not([data-touch-compact]), [role="button"], [role="menuitem"], nav a):not(.monaco-editor *):not(.xterm *) {
     min-height: 44px;

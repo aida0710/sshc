@@ -32,11 +32,11 @@ function tabLabels(tab: SFTPTab, unnamed: string, localName: string) {
 // host under the folder inside its 44px tab.
 const tabLayout = {
   compact: "min-h-11 flex-col justify-center",
-  regular: "min-h-[30px] items-center gap-1.5 [@media(pointer:coarse)]:min-h-10",
+  regular: "min-h-[30px] items-center gap-1.5 mobile-layout:min-h-10",
 };
 const controlSize = {
   compact: "min-h-11 w-11",
-  regular: "min-h-[30px] w-6 [@media(pointer:coarse)]:min-h-10 [@media(pointer:coarse)]:w-8",
+  regular: "min-h-[30px] w-6 mobile-layout:min-h-10 mobile-layout:w-8",
 };
 // On a wide screen the selected tab takes the colour of the path bar under it, so the two read as one piece.
 const stripLook = {
@@ -183,7 +183,7 @@ export function SFTPTabStrip({
         aria-label={t("sftp.newTab")}
         disabled={addDisabled}
         onClick={onAdd}
-        className={`flex shrink-0 items-center justify-center text-ink-muted hover:text-ink ${compact ? "rounded hover:bg-card/50 min-h-11 w-11" : "min-h-[30px] w-7 rounded-[7px] hover:bg-hover [@media(pointer:coarse)]:min-h-10 [@media(pointer:coarse)]:w-10"}`}
+        className={`flex shrink-0 items-center justify-center text-ink-muted hover:text-ink ${compact ? "rounded hover:bg-card/50 min-h-11 w-11" : "min-h-[30px] w-7 rounded-[7px] hover:bg-hover mobile-layout:min-h-10 mobile-layout:w-10"}`}
       >
         <Icon name="plus" className={compact ? "size-5" : "size-4"} />
       </button>

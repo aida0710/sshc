@@ -6,7 +6,7 @@ const buttonClass = "flex size-7 shrink-0 items-center justify-center rounded-[7
 
 // Moving and focusing a pane are shown with the pointer on its header (or while in use), so the
 // header keeps the design's three actions: search, more, close.
-const revealOnHeaderHover = "opacity-0 group-hover/header:opacity-100 group-focus-within/header:opacity-100 pointer-coarse:opacity-100";
+const revealOnHeaderHover = "opacity-0 group-hover/header:opacity-100 group-focus-within/header:opacity-100 mobile-layout:opacity-100";
 
 export function PaneToolbar({ title, moving, focusMode, onSwap, onDragStart, onDragEnd, onFocusMode, onClose }: {
   title: string;

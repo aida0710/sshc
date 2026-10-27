@@ -42,7 +42,7 @@ function JobAction({ label, icon, tone = "text-ink-muted", disabled = false, onC
 }) {
   const control = usePendingResult();
   return <button type="button" aria-label={label} title={label} disabled={disabled || control.pending} aria-busy={control.pending || undefined} onClick={() => control.watch(onClick())}
-    className={`flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-select-fill focus-visible:ring-2 focus-visible:ring-accent md:size-8 [@media(pointer:coarse)]:size-11 ${tone}`}>
+    className={`flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-select-fill focus-visible:ring-2 focus-visible:ring-accent md:size-8 mobile-layout:size-11 ${tone}`}>
     {control.pending ? <Spinner className="size-4" /> : <Icon name={icon} className="size-4" />}
   </button>;
 }
@@ -88,7 +88,7 @@ export function TransferJobRow({ job, waiting, processingStopped, maxReconnectAt
           {job.status === "reconnecting" ? <span className="text-notice-ink">{t("sftp.manager.reconnectAttempt", { attempt: job.reconnectAttempt, maximum: maxReconnectAttempts })}</span> : null}
         </div>
       </div>
-      <div className="col-start-2 row-span-2 row-start-1 flex max-w-[8.25rem] flex-wrap items-center justify-end md:col-start-3 md:row-span-1 md:max-w-none [@media(pointer:coarse)]:max-w-[8.25rem]">
+      <div className="col-start-2 row-span-2 row-start-1 flex max-w-[8.25rem] flex-wrap items-center justify-end md:col-start-3 md:row-span-1 md:max-w-none mobile-layout:max-w-[8.25rem]">
         {job.status === "queued" && waiting.length > 1 ? <>
           <JobAction label={t("sftp.manager.moveUp", { name: job.name })} icon="arrowUp" disabled={waiting[0]?.id === job.id} onClick={() => runControl(() => sftpTransferManager.move(job.id, "up"))} />
           <JobAction label={t("sftp.manager.moveDown", { name: job.name })} icon="arrowDown" disabled={waiting[waiting.length - 1]?.id === job.id} onClick={() => runControl(() => sftpTransferManager.move(job.id, "down"))} />
@@ -101,7 +101,7 @@ export function TransferJobRow({ job, waiting, processingStopped, maxReconnectAt
         {job.allowedActions.includes("remove") ? <JobAction label={t("sftp.manager.remove")} icon="minus" onClick={() => runControl(() => sftpTransferManager.remove(job.id))} /> : null}
         <button type="button" aria-label={t(detailsOpen ? "sftp.manager.hideDetails" : "sftp.manager.showDetails", { name: job.name })}
           aria-expanded={detailsOpen} aria-controls={detailsId} onClick={() => setDetailsOpen((value) => !value)}
-          className="flex size-11 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill focus-visible:ring-2 focus-visible:ring-accent md:size-8 [@media(pointer:coarse)]:size-11">
+          className="flex size-11 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill focus-visible:ring-2 focus-visible:ring-accent md:size-8 mobile-layout:size-11">
           <Icon name="chevronRight" className={`size-4 ${detailsOpen ? "rotate-90" : ""}`} />
         </button>
       </div>
