@@ -285,10 +285,10 @@ export function SessionList({
                       </span>
                     </button>
                   )}
-                  {/* With a mouse the actions show only on the selected or hovered row, over the end of the
-                      name line. Touch keeps them in the row, always shown. */}
-                  <div className={`flex shrink-0 items-center gap-0.5 pointer-fine:absolute pointer-fine:right-1.5 pointer-fine:top-[2px] pointer-fine:rounded-md ${
-                    isSelected ? "pointer-fine:bg-select-fill" : `pointer-fine:bg-hover ${revealOnHover}`
+                  {/* On a PC-sized screen the actions show only on the selected or hovered row, over the end
+                      of the name line. The phone layout keeps them in the row, always shown. */}
+                  <div className={`flex shrink-0 items-center gap-0.5 desktop-layout:absolute desktop-layout:right-1.5 desktop-layout:top-[2px] desktop-layout:rounded-md ${
+                    isSelected ? "desktop-layout:bg-select-fill" : `desktop-layout:bg-hover ${revealOnHover}`
                   }`}>
                     <button
                       type="button"
