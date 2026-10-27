@@ -35,6 +35,11 @@ async function fillMasterPassword(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Confirm new master password"), "the new one is long");
 }
 
+// openTerminalTab moves Settings > Terminal to one of its tabs; on a computer each group of fields is a tab.
+function openTerminalTab(region: HTMLElement, name: "Display" | "Connection" | "Behaviour") {
+  fireEvent.click(within(region).getByRole("tab", { name }));
+}
+
 describe("SettingsPanel", () => {
   it("renders only the selected settings page", () => {
     render(<SettingsPanel api={buildApi()} page="Terminal" />);
@@ -210,6 +215,7 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi({ terminalSettings })} />);
 
     const region = screen.getByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Connection");
     const sessions = within(region).getByLabelText("Sessions open at once");
     expect(sessions).toBeDisabled();
     expect(within(region).getByRole("status")).toHaveTextContent("Loading terminal settings");
@@ -229,6 +235,7 @@ describe("SettingsPanel", () => {
 
     const region = screen.getByRole("region", { name: "Terminal" });
     expect(await within(region).findByRole("alert")).toHaveTextContent("Terminal settings could not be loaded");
+    openTerminalTab(region, "Connection");
     expect(within(region).getByLabelText("Sessions open at once")).toBeDisabled();
     expect(within(region).getByRole("button", { name: "Save" })).toBeDisabled();
 
@@ -263,6 +270,7 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi()} onTerminalSettingsChange={onTerminalSettingsChange} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Connection");
     const sessions = within(region).getByLabelText("Sessions open at once");
     await waitFor(() => expect(sessions).toBeEnabled());
     await user.type(sessions, "2");
@@ -379,6 +387,7 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Behaviour");
     await user.type(within(region).getByLabelText("Starting directory"), "~/work");
     await user.click(within(region).getByRole("button", { name: "Save" }));
 
@@ -392,21 +401,25 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Connection");
     await user.type(within(region).getByLabelText("Sessions open at once"), "4");
     await user.click(within(region).getByRole("button", { name: "Save" }));
 
     expect(setTerminalSettings).toHaveBeenCalledWith({ maxSessions: 4 });
   });
 
-  it("saves both scrollback scopes, shell profile, OSC 52, and the JIS yen key", async () => {
+  it("saves both scrollback scopes, shell profile, OSC 52, and the JIS yen key, typed on two tabs", async () => {
     const user = userEvent.setup();
     const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
     render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
-    await waitFor(() => expect(within(region).getByLabelText("Default local shell")).toBeEnabled());
+    openTerminalTab(region, "Connection");
+    await waitFor(() => expect(within(region).getByLabelText("Engine replay buffer (bytes)")).toBeEnabled());
     await user.type(within(region).getByLabelText("Engine replay buffer (bytes)"), "65536");
     await user.type(within(region).getByLabelText("Browser scrollback (lines)"), "12000");
+    openTerminalTab(region, "Behaviour");
+    await waitFor(() => expect(within(region).getByLabelText("Default local shell")).toBeEnabled());
     await user.selectOptions(within(region).getByLabelText("Default local shell"), "fish");
     await user.click(within(region).getByRole("checkbox", { name: /Allow OSC 52/ }));
     await user.click(within(region).getByRole("checkbox", { name: /Send the JIS/ }));
@@ -421,13 +434,12 @@ describe("SettingsPanel", () => {
     });
   });
 
-  it("distinguishes settings kept under ~/.ssh/sshc from browser-only preferences", async () => {
-    render(<SettingsPanel api={buildApi()} />);
+  it("says the terminal settings sync, and keeps the engine's and the browser's limits apart", async () => {
+    render(<SettingsPanel api={buildApi()} page="Terminal" />);
 
+    expect(screen.getByText("These settings sync between machines.")).toBeVisible();
     const terminal = await screen.findByRole("region", { name: "Terminal" });
-    expect(within(terminal).getByText(/These settings sync between machines/i)).toHaveTextContent(
-      /Theme, language and notification sounds stay in this browser/,
-    );
+    openTerminalTab(terminal, "Connection");
     expect(within(terminal).getByLabelText("Engine replay buffer (bytes)"))
       .toHaveAttribute("max", "4194304");
     expect(within(terminal).getByLabelText("Browser scrollback (lines)"))
@@ -443,6 +455,7 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Behaviour");
     const copy = within(region).getByRole("checkbox", { name: "Copy selected text automatically" });
     const paste = within(region).getByRole("checkbox", { name: "Paste with right click" });
     expect(copy).toBeChecked();
@@ -461,6 +474,7 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Behaviour");
     const webgl = await within(region).findByRole("checkbox", { name: "Use WebGL rendering" });
     expect(webgl).toBeChecked();
     await user.click(webgl);
@@ -477,7 +491,8 @@ describe("SettingsPanel", () => {
     })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
-    expect(await within(region).findByRole("checkbox", { name: "Copy selected text automatically" })).not.toBeChecked();
+    openTerminalTab(region, "Behaviour");
+    await waitFor(() => expect(within(region).getByRole("checkbox", { name: "Copy selected text automatically" })).not.toBeChecked());
     expect(within(region).getByRole("checkbox", { name: "Paste with right click" })).not.toBeChecked();
   });
 
@@ -487,6 +502,7 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Connection");
     await user.selectOptions(
       within(region).getByLabelText("Reconnect after a dropped connection"),
       "0",
@@ -504,8 +520,8 @@ describe("SettingsPanel", () => {
     })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
-    expect(await within(region).findByLabelText("Reconnect after a dropped connection"))
-      .toHaveValue("0");
+    openTerminalTab(region, "Connection");
+    await waitFor(() => expect(within(region).getByLabelText("Reconnect after a dropped connection")).toHaveValue("0"));
   });
 
   it("shows the stored numbers and leaves the unset ones blank", async () => {
@@ -516,8 +532,10 @@ describe("SettingsPanel", () => {
     })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
-    expect(await within(region).findByLabelText("Sessions open at once")).toHaveValue(4);
+    openTerminalTab(region, "Connection");
+    await waitFor(() => expect(within(region).getByLabelText("Sessions open at once")).toHaveValue(4));
     expect(within(region).getByLabelText("Engine replay buffer (bytes)")).toHaveValue(null);
+    openTerminalTab(region, "Behaviour");
     expect(within(region).getByLabelText("Starting directory")).toHaveValue("");
   });
 
@@ -545,10 +563,73 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Behaviour");
     await user.type(within(region).getByLabelText("Starting directory"), "~/nowhere");
     await user.click(within(region).getByRole("button", { name: "Save" }));
 
     expect(await within(region).findByText("The specified directory does not exist.")).toBeVisible();
+  });
+
+  it("keeps what was typed on one tab while another is open, and saves both", async () => {
+    const user = userEvent.setup();
+    const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({ setTerminalSettings })} page="Terminal" />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Connection");
+    const sessions = within(region).getByLabelText("Sessions open at once");
+    await waitFor(() => expect(sessions).toBeEnabled());
+    await user.type(sessions, "7");
+    openTerminalTab(region, "Display");
+    await user.type(within(region).getByLabelText("Font size"), "14");
+    openTerminalTab(region, "Connection");
+
+    expect(within(region).getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
+    expect(within(region).getByLabelText("Sessions open at once")).toHaveValue(7);
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+    expect(setTerminalSettings).toHaveBeenCalledWith({ maxSessions: 7, fontSize: 14 });
+  });
+
+  it("opens the tab of the field a refused save is about", async () => {
+    const user = userEvent.setup();
+    const setTerminalSettings = vi.fn().mockRejectedValue(
+      new ApiError("start_directory_missing", 400, { code: "start_directory_missing", message: "no" }),
+    );
+    render(<SettingsPanel api={buildApi({ setTerminalSettings })} page="Terminal" />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Behaviour");
+    const directory = within(region).getByLabelText("Starting directory");
+    await waitFor(() => expect(directory).toBeEnabled());
+    await user.type(directory, "~/nowhere");
+    openTerminalTab(region, "Display");
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    expect(await within(region).findByText("The specified directory does not exist.")).toBeVisible();
+    expect(within(region).getByRole("tab", { name: "Behaviour" })).toHaveAttribute("aria-selected", "true");
+    expect(within(region).getByLabelText("Starting directory")).toHaveValue("~/nowhere");
+  });
+
+  it("shows every terminal group as its own card on a phone, without tabs", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })));
+    render(<SettingsPanel api={buildApi()} page="Terminal" />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    expect(within(region).queryByRole("tablist")).not.toBeInTheDocument();
+    for (const heading of ["Startup", "Connection", "Display", "Behaviour"]) {
+      expect(within(region).getByRole("region", { name: heading })).toBeVisible();
+    }
+    expect(within(region).getByLabelText("Starting directory")).toBeInTheDocument();
+    expect(within(region).getByRole("checkbox", { name: "Use WebGL rendering" })).toBeInTheDocument();
   });
 
   it("closes every open connection at once", async () => {
@@ -710,6 +791,7 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Connection");
     const sessions = within(region).getByLabelText("Sessions open at once");
     await waitFor(() => expect(sessions).toBeEnabled());
     const save = within(region).getByRole("button", { name: "Save" });

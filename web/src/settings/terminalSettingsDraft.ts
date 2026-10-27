@@ -1,0 +1,100 @@
+import type { TerminalSettings } from "../api/settings";
+import { appearanceOf } from "../terminal/appearance";
+
+// The font sizes the engine accepts (EmbeddedTerminal.fontSize).
+export const fontSizeRange = { min: 8, max: 32 } as const;
+
+// Every field is kept as the text the user typed; numbers are read once, on
+// save, so that a half-typed value never snaps back under the cursor.
+export type TerminalDraft = {
+  startDirectory: string;
+  localShellProfile: string;
+  maxSessions: string;
+  scrollback: string;
+  browserScrollbackLines: string;
+  fontSize: string;
+  verbosity: string;
+  reconnect: string;
+  palette: string;
+  font: string;
+  background: string;
+  tint: number | undefined;
+  copyOnSelect: boolean;
+  rightClickPaste: boolean;
+  webgl: boolean;
+  osc52: boolean;
+  jisYenBackslash: boolean;
+  composerEnterSends: boolean;
+};
+
+export const initialTerminalDraft: TerminalDraft = {
+  startDirectory: "", localShellProfile: "", maxSessions: "", scrollback: "", browserScrollbackLines: "", fontSize: "",
+  verbosity: "0", reconnect: "", palette: "", font: "", background: "", tint: undefined,
+  copyOnSelect: true, rightClickPaste: true, webgl: true, osc52: false, jisYenBackslash: false, composerEnterSends: false,
+};
+
+export function draftOf(settings: TerminalSettings): TerminalDraft {
+  const text = (value: number | undefined) => value === undefined ? "" : String(value);
+  return {
+    startDirectory: settings.startDirectory ?? "",
+    localShellProfile: settings.localShellProfile ?? "",
+    maxSessions: text(settings.maxSessions),
+    scrollback: text(settings.scrollbackBytes),
+    browserScrollbackLines: text(settings.browserScrollbackLines),
+    fontSize: text(settings.fontSize),
+    verbosity: String(settings.verbosity ?? 0),
+    reconnect: text(settings.reconnect),
+    palette: settings.appearance?.palette ?? "",
+    font: settings.appearance?.font ?? "",
+    background: settings.appearance?.background ?? "",
+    tint: settings.appearance?.backgroundTint,
+    copyOnSelect: settings.copyOnSelect ?? true,
+    rightClickPaste: settings.rightClickPaste ?? true,
+    webgl: settings.webgl ?? true,
+    osc52: settings.osc52 ?? false,
+    jisYenBackslash: settings.jisYenBackslash ?? false,
+    composerEnterSends: settings.composerEnterSends ?? false,
+  };
+}
+
+function numberOr(text: string): number | undefined {
+  const trimmed = text.trim();
+  if (trimmed === "") return undefined;
+  const value = Number(trimmed);
+  return Number.isSafeInteger(value) ? value : Number.NaN;
+}
+
+// isFontSizeUnusable says whether the typed font size is one the engine would refuse, so a refused save can
+// point at the font size rather than at the limits.
+export function isFontSizeUnusable(draft: TerminalDraft): boolean {
+  const size = numberOr(draft.fontSize);
+  return size !== undefined && (Number.isNaN(size) || size < fontSizeRange.min || size > fontSizeRange.max);
+}
+
+// Turns the draft back into the settings document, leaving out every field
+// that still has its default so the stored document says only what changed.
+export function settingsOf(draft: TerminalDraft): TerminalSettings | null {
+  const sessions = numberOr(draft.maxSessions);
+  const bytes = numberOr(draft.scrollback);
+  const lines = numberOr(draft.browserScrollbackLines);
+  const size = numberOr(draft.fontSize);
+  if (Number.isNaN(sessions) || Number.isNaN(bytes) || Number.isNaN(lines) || Number.isNaN(size)) return null;
+  const directory = draft.startDirectory.trim();
+  return {
+    ...(directory === "" ? {} : { startDirectory: directory }),
+    ...(sessions === undefined ? {} : { maxSessions: sessions }),
+    ...(bytes === undefined ? {} : { scrollbackBytes: bytes }),
+    ...(lines === undefined ? {} : { browserScrollbackLines: lines }),
+    ...(size === undefined ? {} : { fontSize: size }),
+    ...(draft.verbosity === "0" ? {} : { verbosity: Number(draft.verbosity) }),
+    ...(draft.reconnect === "" ? {} : { reconnect: Number(draft.reconnect) }),
+    ...(draft.copyOnSelect ? {} : { copyOnSelect: false }),
+    ...(draft.rightClickPaste ? {} : { rightClickPaste: false }),
+    ...(draft.webgl ? {} : { webgl: false }),
+    ...(draft.osc52 ? { osc52: true } : {}),
+    ...(draft.jisYenBackslash ? { jisYenBackslash: true } : {}),
+    ...(draft.composerEnterSends ? { composerEnterSends: true } : {}),
+    ...(draft.localShellProfile === "" ? {} : { localShellProfile: draft.localShellProfile }),
+    ...appearanceOf({ palette: draft.palette, font: draft.font, background: draft.background, tint: draft.tint }),
+  };
+}

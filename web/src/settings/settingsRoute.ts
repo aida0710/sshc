@@ -34,11 +34,14 @@ export const settingsPageMeta: Record<
   Terminal: {
     path: "/settings/terminal",
     label: "terminal.settingsHeading",
+    // Terminal settings are kept in metadata.json, which Sync carries; only engine-settings.json stays on the machine.
+    description: "settings.terminalDescription",
     icon: "terminal",
   },
   SFTP: {
     path: "/settings/sftp",
     label: "sftp.settingsHeading",
+    description: "settings.sftpDescription",
     icon: "files",
   },
   Shortcuts: {
