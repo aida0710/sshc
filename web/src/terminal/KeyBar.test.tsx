@@ -4,7 +4,7 @@ import { applyModifiers, encodeKey, KeyBar } from "./KeyBar";
 import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { modifierDoubleTapMilliseconds, releasedModifiers, type Modifiers } from "./modifierLatch";
 
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); delete document.documentElement.dataset.keyboardOpen; });
 
 function showMobileKeyBar(modifiers: Modifiers = releasedModifiers) {
   vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
@@ -30,11 +30,12 @@ describe("mobile key bar", () => {
     expect(screen.getByRole("button", { name: "Extra keys" })).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("sends an extra key and returns to the compact bar without taking input focus", () => {
+  it("sends an extra key and returns to the compact bar, leaving an open keyboard open", () => {
     const { onKey } = showMobileKeyBar();
     const input = document.createElement("textarea");
     document.body.appendChild(input);
     input.focus();
+    document.documentElement.dataset.keyboardOpen = "true";
     const more = screen.getByRole("button", { name: "Extra keys" });
     expect(fireEvent.pointerDown(more, { cancelable: true })).toBe(false);
     fireEvent.click(more);
@@ -44,6 +45,28 @@ describe("mobile key bar", () => {
     expect(onKey).toHaveBeenCalledWith("|");
     expect(input).toHaveFocus();
     expect(more).toHaveAttribute("aria-expanded", "false");
+    input.remove();
+  });
+
+  it("does not bring a closed keyboard up when Ctrl or an arrow is tapped", () => {
+    const { onKey, onTap } = showMobileKeyBar();
+    const input = document.createElement("textarea");
+    document.body.appendChild(input);
+    input.focus();
+    document.documentElement.dataset.keyboardOpen = "false";
+    // Android shows the keyboard on a tap while a text field has the focus, so the field lets go of it.
+    const ctrl = screen.getByRole("button", { name: "Ctrl" });
+    expect(fireEvent.pointerDown(ctrl, { cancelable: true })).toBe(false);
+    fireEvent.click(ctrl);
+    expect(onTap).toHaveBeenCalledWith("ctrl");
+    expect(input).not.toHaveFocus();
+    input.focus();
+    const up = screen.getByRole("button", { name: "Up arrow" });
+    fireEvent.pointerDown(up, { cancelable: true });
+    fireEvent.click(up);
+    expect(onKey).toHaveBeenCalledWith("ArrowUp");
+    expect(input).not.toHaveFocus();
+    expect(up).not.toHaveFocus();
     input.remove();
   });
 
