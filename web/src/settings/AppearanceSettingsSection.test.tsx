@@ -79,7 +79,8 @@ describe("AppearanceSettingsSection", () => {
     await userEvent.click(screen.getByRole("radio", { name: "Custom" }));
 
     // The test page has no stylesheet, so the colour on screen is the lavender fallback.
-    expect(api.setAppearanceSettings).toHaveBeenCalledWith({ accent: "custom", accentColor: "#6550d0" });
+    // The preset stays beside the colour, for an older sshc that knows only the presets.
+    expect(api.setAppearanceSettings).toHaveBeenCalledWith({ accent: "lavender", accentColor: "#6550d0" });
     expect(document.documentElement).toHaveAttribute("data-accent", "custom");
     expect(document.documentElement.style.getPropertyValue("--ui-custom-accent")).toBe("#6550d0");
     expect(await screen.findByRole("textbox", { name: "Custom colour code" })).toHaveValue("#6550d0");
@@ -93,7 +94,7 @@ describe("AppearanceSettingsSection", () => {
 
     await userEvent.clear(code);
     await userEvent.type(code, "3FA86B{Enter}");
-    expect(api.setAppearanceSettings).toHaveBeenLastCalledWith({ accent: "custom", accentColor: "#3fa86b" });
+    expect(api.setAppearanceSettings).toHaveBeenLastCalledWith({ accent: "lavender", accentColor: "#3fa86b" });
 
     await userEvent.clear(code);
     await userEvent.type(code, "green{Enter}");
@@ -101,7 +102,7 @@ describe("AppearanceSettingsSection", () => {
     expect(api.setAppearanceSettings).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the custom colour while a preset is chosen", async () => {
+  it("gives up the custom colour when a preset is chosen", async () => {
     const api = fakeApi();
     renderSection(api);
     await userEvent.click(screen.getByRole("radio", { name: "Custom" }));
@@ -109,7 +110,8 @@ describe("AppearanceSettingsSection", () => {
 
     await userEvent.click(screen.getByRole("radio", { name: "Blue" }));
 
-    expect(api.setAppearanceSettings).toHaveBeenLastCalledWith({ accent: "blue", accentColor: "#6550d0" });
+    expect(api.setAppearanceSettings).toHaveBeenLastCalledWith({ accent: "blue" });
+    expect(document.documentElement).toHaveAttribute("data-accent", "blue");
     expect(screen.queryByRole("textbox", { name: "Custom colour code" })).toBeNull();
   });
 

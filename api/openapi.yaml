@@ -6138,14 +6138,14 @@ components:
       type: object
       additionalProperties: false
       properties:
-        # 選んでいる項目・ボタン・フォーカスの枠に使う色の名前。省略は既定の lavender。
-        # 用意した色は、未読の通知（橙）・接続済み（緑）・エラー（赤）と見分けがつく色だけにする。
-        # custom は accentColor の色を使う。
+        # 選んでいる項目・ボタン・フォーカスの枠に使う、用意した色の名前。省略は既定の lavender。
+        # 未読の通知（橙）・接続済み（緑）・エラー（赤）と見分けがつく色だけにする。
         accent:
           type: string
-          enum: [lavender, blue, sky, pink, mono, custom]
-        # custom のときの色（#rrggbb、小文字）。用意した色を選んでいる間も残し、custom に
-        # 戻したときに同じ色を出す。
+          enum: [lavender, blue, sky, pink, mono]
+        # 利用者が決めた色（#rrggbb、小文字）。あれば accent より先に使う。accent とは別の項目に
+        # するのは、知らない名前を断る v0.56.0 までの sshc が、同期した metadata を保存できなく
+        # ならないためである（古い版はこの項目を読み飛ばし、accent の色で出す）。
         accentColor:
           type: string
           pattern: "^#[0-9a-f]{6}$"
