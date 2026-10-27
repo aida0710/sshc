@@ -75,7 +75,7 @@ export function ConnectionRow({
         onPointerCancel={onPointerEnd}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        className={`w-full select-none rounded-md py-[7px] pl-3.5 text-left text-[13px] text-ink transition-colors ${menuItems.length === 0 ? "pr-3.5" : "pr-11 pointer-fine:pr-3.5"} ${draggable ? draggableCursor : ""} ${highlighted ? "bg-select-fill" : "hover:bg-hover"}`}
+        className={`w-full select-none rounded-md py-[7px] pl-3.5 text-left text-[13px] text-ink transition-colors ${menuItems.length === 0 ? "pr-3.5" : "pr-11 desktop-layout:pr-3.5"} ${draggable ? draggableCursor : ""} ${highlighted ? "bg-select-fill" : "hover:bg-hover"}`}
       >
         <span className="flex min-w-0 items-center gap-2.5">
           {showCheckbox ? (
@@ -108,7 +108,7 @@ export function ConnectionRow({
       {menuItems.length === 0 ? null : (
         // マウスでは、乗せているあいだ「…」が行の端に行と同じ地の色で重なる（サイドバーのセッションの行と同じ）。
         // タッチでは「…」の分を空けておく。
-        <div className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-md ${highlighted ? "pointer-fine:bg-select-fill" : "pointer-fine:bg-hover"} ${menuOpen ? "opacity-100" : revealOnHover}`}>
+        <div className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-md ${highlighted ? "desktop-layout:bg-select-fill" : "desktop-layout:bg-hover"} ${menuOpen ? "opacity-100" : revealOnHover}`}>
           <ActionMenu
             label={t("tree.connectionActions", { alias: host.identity.alias })}
             items={menuItems}
