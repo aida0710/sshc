@@ -1,12 +1,14 @@
 import type { CSSProperties } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { accents, type Accent } from "../theme/accent";
+import { accentOptions, customAccent, type Accent } from "../theme/accent";
+import { parseAccentColor } from "../theme/accentColor";
 import { useAccent } from "../theme/accentContext";
 import { useTheme } from "../theme/context";
 import { themes, type Theme } from "../theme/theme";
 import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { CustomAccentColor } from "./CustomAccentColor";
 import { SettingsSection } from "./SettingsSection";
 import { formColumns } from "../ui/FieldRow";
 
@@ -22,19 +24,36 @@ const accentLabelKeys: Record<Accent, MessageKey> = {
   sky: "appearance.accent.sky",
   pink: "appearance.accent.pink",
   mono: "appearance.accent.mono",
+  custom: "appearance.accent.custom",
 };
+
+// A custom accent chosen for the first time starts from the colour on screen, so that choosing it changes
+// nothing until the colour is moved. The preset values are #rrggbb in index.css; without the stylesheet
+// (in tests) it starts from the light lavender.
+function accentColorOnScreen(): string {
+  return parseAccentColor(getComputedStyle(document.documentElement).getPropertyValue("--ui-accent")) ?? "#6550d0"; // palette-exempt
+}
 
 // The look of the app: the theme, kept in this browser like the Menu's switch,
 // and the accent colour, kept in sshc's metadata so every machine shows it.
 export function AppearanceSettingsSection({ showHeading }: { showHeading: boolean }) {
   const t = useTranslate();
   const { theme, setTheme } = useTheme();
-  const { accent, chooseAccent } = useAccent();
+  const { accent, customColor, chooseAccent, previewCustomColor, chooseCustomColor } = useAccent();
   const saving = useAsyncOperation();
+  const describeFailure = { describe: () => t("appearance.accentSaveFailed") };
 
   function choose(next: Accent) {
     if (next === accent) return;
-    void saving.run(() => chooseAccent(next), { describe: () => t("appearance.accentSaveFailed") });
+    if (next === customAccent && customColor === null) {
+      void saving.run(() => chooseCustomColor(accentColorOnScreen()), describeFailure);
+      return;
+    }
+    void saving.run(() => chooseAccent(next), describeFailure);
+  }
+
+  function chooseColor(color: string) {
+    void saving.run(() => chooseCustomColor(color), describeFailure);
   }
 
   return (
@@ -69,7 +88,7 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
         </div>
         <div>
           <div className="flex flex-wrap gap-[18px]" role="radiogroup" aria-label={t("appearance.accent")}>
-            {accents.map((option) => (
+            {accentOptions.map((option) => (
               <label key={option} className="flex w-16 cursor-pointer flex-col items-center gap-2 text-[12.5px] text-ink-muted has-[:checked]:text-ink">
                 <input
                   type="radio"
@@ -80,16 +99,22 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
                   onChange={() => choose(option)}
                   className="peer sr-only"
                 />
-                {/* The swatch takes its colour from index.css through data-accent, for the theme on screen. */}
+                {/* A preset swatch takes its colour from index.css through data-accent, for the theme on screen.
+                    The custom swatch is its colour, or every hue until one is chosen. */}
                 <span
                   aria-hidden="true"
-                  data-accent={option}
-                  className="size-9 rounded-full bg-accent ring-offset-2 ring-offset-sidebar peer-checked:ring-2 peer-checked:ring-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent"
+                  data-accent={option === customAccent && customColor === null ? undefined : option}
+                  className={`size-9 rounded-full ring-offset-2 ring-offset-sidebar peer-checked:ring-2 peer-checked:ring-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent ${
+                    option === customAccent && customColor === null ? "sshc-accent-swatch-unset" : "bg-accent"
+                  }`}
                 />
                 {t(accentLabelKeys[option])}
               </label>
             ))}
           </div>
+          {accent === customAccent && customColor !== null ? (
+            <CustomAccentColor color={customColor} disabled={saving.busy} onPreview={previewCustomColor} onChoose={chooseColor} />
+          ) : null}
           {saving.error === "" ? null : <div className="mt-4"><Notice tone="danger">{saving.error}</Notice></div>}
         </div>
       </div>
