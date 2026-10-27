@@ -42,7 +42,7 @@ describe("the SFTP transfer settings form", () => {
   it("does not say a change was saved when the engine did not take it", async () => {
     const { onCommit, answer } = heldCommit();
     render(<TransferSettingsForm settings={savedSettings} onCommit={onCommit} />);
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Clear finished after" }), "0");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Finished transfers" }), "0");
     answer(false);
 
     await waitFor(() => expect(screen.queryByText("Saving…")).not.toBeInTheDocument());

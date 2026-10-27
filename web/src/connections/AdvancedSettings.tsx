@@ -7,7 +7,7 @@ import { control, hintText, narrowControl } from "../ui/form";
 import { Button, Card, Notice, Row } from "../ui/surface";
 import { formatDirectiveValues, parseDirectiveValues } from "../rules/rules";
 import { draftResetKey } from "./draftResetKey";
-import { activateTabFromKeyboard } from "../ui/tabKeyboard";
+import { SegmentedTabs } from "../ui/SegmentedTabs";
 import { DraftSaveBar } from "./DraftSaveBar";
 import { useDraftSave } from "./useDraftSave";
 import { useReportDirty } from "./useReportDirty";
@@ -34,7 +34,10 @@ const tabs: { area: AdvancedArea; label: "host.tabJump" | "conn.portForwarding" 
   { area: "Directives", label: "conn.advancedDirectives" },
   { area: "Raw", label: "host.tabRaw" },
 ];
-const tabAreas = tabs.map((tab) => tab.area);
+
+function advancedTabId(area: AdvancedArea): string {
+  return `advanced-area-${area.toLowerCase()}-tab`;
+}
 
 export function AdvancedSettings({
   detail,
@@ -195,23 +198,15 @@ export function AdvancedSettings({
 
       {/* The views inside Advanced are a second level of tabs, so they take the segmented look rather than
           the underline of the editor's tabs above. */}
-      <div role="tablist" aria-label={t("conn.advancedViews")} className="hidden self-start rounded-md border border-line bg-well p-0.5 md:inline-flex">
-        {tabs.map((tab, index) => (
-          <button
-            key={tab.area}
-            id={`advanced-area-${tab.area.toLowerCase()}-tab`}
-            type="button"
-            role="tab"
-            aria-selected={area === tab.area}
-            aria-controls="advanced-settings-panel"
-            tabIndex={area === tab.area ? 0 : -1}
-            onClick={() => onAreaChange(tab.area)}
-            onKeyDown={(event) => activateTabFromKeyboard(event, index, tabAreas, onAreaChange)}
-            className={`h-[26px] rounded-[6px] px-2.5 text-[12.5px] transition-colors ${area === tab.area ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-hover hover:text-ink"}`}
-          >
-            {t(tab.label)}
-          </button>
-        ))}
+      <div className="hidden self-start md:block">
+        <SegmentedTabs
+          label={t("conn.advancedViews")}
+          tabs={tabs.map((tab) => ({ value: tab.area, label: t(tab.label) }))}
+          value={area}
+          onChange={onAreaChange}
+          tabId={advancedTabId}
+          panelId="advanced-settings-panel"
+        />
       </div>
 
       {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
@@ -219,7 +214,7 @@ export function AdvancedSettings({
       <div
         id="advanced-settings-panel"
         role="tabpanel"
-        aria-labelledby={`advanced-area-${area.toLowerCase()}-tab`}
+        aria-labelledby={advancedTabId(area)}
       >
         <div hidden={area === "Raw"} className="flex flex-col gap-3">
         {rawDirty ? <Notice>{t("conn.advancedRawBlocksFields")}</Notice> : null}

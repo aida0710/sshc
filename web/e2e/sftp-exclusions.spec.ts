@@ -12,7 +12,8 @@ test("saves folder exclusion rules and preserves them while changing other trans
   const exclusionsSaved = page.waitForResponse((response) => response.url().endsWith("/api/v1/sftp/transfers/settings") && response.request().method() === "PUT");
   await page.getByRole("button", { name: "Save exclusions", exact: true }).click();
   expect((await exclusionsSaved).status()).toBe(200);
-  await expect(page.getByText("3 exclusion rules", { exact: true })).toBeVisible();
+  // Saved rules are no change, so the button waits for the next edit.
+  await expect(page.getByRole("button", { name: "Save exclusions", exact: true })).toBeDisabled();
 
   const speedSaved = page.waitForResponse((response) => response.url().endsWith("/api/v1/sftp/transfers/settings") && response.request().method() === "PUT");
   const speed = page.getByRole("spinbutton", { name: "Speed limit", exact: true });
@@ -26,9 +27,8 @@ test("saves folder exclusion rules and preserves them while changing other trans
   expect(metadata.fileTransfers.speedLimitBytesPerSecond).toBe(128 * 1024);
 
   await page.reload();
-  await expect(page.getByText("3 exclusion rules", { exact: true })).toBeVisible();
   await expect(patterns).toHaveValue(".git\nnode_modules\n*.log");
   await patterns.fill("../secret");
   await expect(page.getByRole("button", { name: "Save exclusions", exact: true })).toBeDisabled();
-  await expect(page.getByRole("alert")).toContainText("Check the patterns");
+  await expect(patterns).toHaveAccessibleDescription(/Check the patterns/);
 });

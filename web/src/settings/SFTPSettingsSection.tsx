@@ -23,15 +23,13 @@ export function SFTPSettingsSection({ showHeading }: { showHeading: boolean }) {
   const { problem, runControl } = useTransferControl();
   return (
     <SettingsSection id="settings-sftp" label={t("sftp.settingsHeading")} icon="files" showHeading={showHeading}>
-      <div className="max-w-2xl">
-        <SettingsLoadFailure settingsLoad={settingsLoad} title={t("sftp.settingsLoadFailed")} />
-        {problem === "" ? null : <div className="mb-5"><Notice tone="danger" compact>{problem}</Notice></div>}
-        {settingsLoad.state === "loading" ? <PanelState tone="loading" title={t("sftp.settingsLoading")} /> : null}
-        {settingsLoad.state === "loaded" ? (
-          <TransferSettingsForm settings={sftpTransferManager.getSettings()}
-            onCommit={(change) => runControl(() => sftpTransferManager.applySettings(change))} />
-        ) : null}
-      </div>
+      <SettingsLoadFailure settingsLoad={settingsLoad} title={t("sftp.settingsLoadFailed")} />
+      {problem === "" ? null : <div className="mb-5"><Notice tone="danger" compact>{problem}</Notice></div>}
+      {settingsLoad.state === "loading" ? <PanelState tone="loading" title={t("sftp.settingsLoading")} /> : null}
+      {settingsLoad.state === "loaded" ? (
+        <TransferSettingsForm settings={sftpTransferManager.getSettings()}
+          onCommit={(change) => runControl(() => sftpTransferManager.applySettings(change))} />
+      ) : null}
     </SettingsSection>
   );
 }

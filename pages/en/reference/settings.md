@@ -50,6 +50,8 @@ A passwordless Vault is neither auto-locked nor lockable by hand: it opens when 
 
 ## Terminal
 
+**Settings → Terminal** is split into the **Display** (color scheme, font, background), **Connection** (reconnecting, connection log, limits) and **Behaviour** (starting directory, local shell, clipboard and keyboard) tabs. On a phone every group is shown as its own section. **Save** stores the values changed on every tab at once.
+
 - Maximum concurrent sessions from 1 to 200, with a default of 50
 - Engine replay buffer from 16 KiB to 4 MiB, with a default of 256 KiB
 - Browser scrollback from 1,000 to 100,000 lines, with a default of 5,000

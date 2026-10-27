@@ -62,7 +62,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 640 
     await manager.getByRole("button", { name: "Transfer settings", exact: true }).click();
     await expect(page).toHaveURL(/\/settings\/sftp$/);
     await expect(manager).toBeHidden();
-    await expect(page.getByRole("group", { name: "Speed and recovery", exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Transfers", exact: true })).toBeVisible();
     await expect(page.getByRole("spinbutton", { name: "Speed limit", exact: true })).toHaveValue("2048");
     if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: join(process.env.SSHC_VISUAL_DIR, `transfer-settings-${viewport.width}x${viewport.height}-en.png`), animations: "disabled" });
   });

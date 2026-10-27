@@ -11,7 +11,7 @@ File upload, folder upload, file download, folder download, and remote-to-remote
 
 On desktop, drag the upper grip of the expanded list to resize it. With the grip focused, the arrow, Home, and End keys provide the same control from a keyboard. Height and folded state are saved in the browser. On phones, tap the bottom bar showing counts and progress to open the queue in a separate sheet.
 
-Transfer settings live under **Settings → SFTP**. **Transfer settings** in the Transfer Manager opens that page, even when the queue is empty or folded. The page groups speed and recovery, queue and finished transfers, split transfers, and exclusion rules. Number fields apply when focus leaves them; selections and checkboxes apply when changed. Exclusion rules require **Save exclusions**.
+Transfer settings live under **Settings → SFTP**. **Transfer settings** in the Transfer Manager opens that page, even when the queue is empty or folded. The page has two sections: Transfers and Transfer exclusions. Number fields apply when focus leaves them; selections and checkboxes apply when changed. Exclusion rules require **Save exclusions**.
 
 Each job shows its name, source → destination, progress, transferred and total bytes, speed, remaining time, status, and available actions. Open the row's details for full paths, the exclusions captured when it started, and failure information.
 
@@ -21,7 +21,7 @@ Each job shows its name, source → destination, progress, transferred and total
 - Cancel ends the job.
 - Clear finished removes completed and canceled entries from the view.
 - Remove from list dismisses one completed, canceled, or failed entry. Clear failed dismisses failed entries without clearing successful history.
-- **Clear finished after** set to anything but Keep (30 seconds, 5 minutes, 1 hour) removes completed entries that long after they finish. The setting is stored by the engine and shared by every screen.
+- **Finished transfers** set to anything but Keep (clear after 30 seconds, 5 minutes, 1 hour) removes completed entries that long after they finish. The setting is stored by the engine and shared by every screen.
 - **Stop starting new transfers** lets running transfers finish while queued entries show as Held and do not start; **Resume processing the transfer queue** reverts it.
 - Queued entries can be reordered with the ↑↓ controls on their rows; running and finished entries stay where they are.
 
@@ -77,7 +77,7 @@ Sequential upload requests receive the existing bounded HTTP chunk before writin
 
 ## Automatic recovery
 
-Enable **Recover after connection loss** and set **Maximum reconnect attempts** to 1–10. Recovery is disabled by default. Backoff starts at one second, doubles, and stops growing at 30 seconds. The queue shows **Waiting to reconnect** and the attempt count. Pause and cancel stop the wait and connection attempt. Stopping queue processing, disabling recovery or shutting down the engine also ends automatic recovery.
+Enable **Resume automatically** under **When the connection drops** and set **Reconnect limit** to 1–10. Recovery is disabled by default. Backoff starts at one second, doubles, and stops growing at 30 seconds. The queue shows **Waiting to reconnect** and the attempt count. Pause and cancel stop the wait and connection attempt. Stopping queue processing, disabling recovery or shutting down the engine also ends automatic recovery.
 
 | Transfer path | Recovery |
 | --- | --- |
