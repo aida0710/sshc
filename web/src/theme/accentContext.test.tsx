@@ -43,8 +43,8 @@ describe("AccentProvider", () => {
     await waitFor(() => expect(document.documentElement).toHaveAttribute("data-accent", "sky"));
   });
 
-  it("puts a saved custom accent and its colour on the page", async () => {
-    render(<AccentProvider api={fakeApi({ accent: "custom", accentColor: "#3fa86b" })}><Probe /></AccentProvider>);
+  it("puts a saved colour of one's own on the page over its preset", async () => {
+    render(<AccentProvider api={fakeApi({ accent: "sky", accentColor: "#3fa86b" })}><Probe /></AccentProvider>);
 
     await userEvent.click(screen.getByRole("button", { name: "load" }));
 
@@ -53,12 +53,13 @@ describe("AccentProvider", () => {
     expect(document.documentElement.style.getPropertyValue("--ui-custom-accent-ink")).toBe("#111214");
   });
 
-  it("falls back to lavender when a custom accent was saved without a colour", async () => {
-    render(<AccentProvider api={fakeApi({ accent: "custom" })}><Probe /></AccentProvider>);
+  it("shows the preset when the saved colour cannot be read", async () => {
+    render(<AccentProvider api={fakeApi({ accent: "pink", accentColor: "green" })}><Probe /></AccentProvider>);
 
     await userEvent.click(screen.getByRole("button", { name: "load" }));
 
-    await waitFor(() => expect(screen.getByText("accent lavender")).toBeVisible());
+    await waitFor(() => expect(document.documentElement).toHaveAttribute("data-accent", "pink"));
+    expect(document.documentElement.style.getPropertyValue("--ui-custom-accent")).toBe("");
   });
 
   it("falls back to lavender when nothing was saved", async () => {

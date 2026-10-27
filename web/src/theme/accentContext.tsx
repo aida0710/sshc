@@ -1,14 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AppearanceApi, AppearanceSettings } from "../api/appearance";
-import { applyAccent, customAccent, defaultAccentChoice, isAccent, type Accent, type AccentChoice } from "./accent";
+import { applyAccent, defaultAccentChoice, isAccent, type Accent, type AccentChoice } from "./accent";
 import { isAccentColor } from "./accentColor";
 
 type AccentState = AccentChoice & {
   // loadAccent reads the saved accent. The app calls it once the engine is
   // ready; before that (lock screen, first paint) the default accent shows.
   loadAccent: () => void;
-  // chooseAccent shows the colour at once and saves it. When saving fails it
-  // puts the previous colour back and rejects, so the caller can say why.
+  // chooseAccent shows the preset at once and saves it, giving up a colour of
+  // one's own. When saving fails it puts the previous colour back and rejects,
+  // so the caller can say why.
   chooseAccent: (accent: Accent) => Promise<void>;
   // previewCustomColor shows a custom colour without saving it, while the
   // colour picker is still being dragged.
@@ -21,9 +22,10 @@ type AccentState = AccentChoice & {
 const AccentContext = createContext<AccentState | null>(null);
 
 function choiceFrom(settings: AppearanceSettings): AccentChoice {
-  const customColor = isAccentColor(settings.accentColor) ? settings.accentColor : null;
-  const accent = isAccent(settings.accent) && (settings.accent !== customAccent || customColor !== null) ? settings.accent : defaultAccentChoice.accent;
-  return { accent, customColor };
+  return {
+    accent: isAccent(settings.accent) ? settings.accent : defaultAccentChoice.accent,
+    customColor: isAccentColor(settings.accentColor) ? settings.accentColor : null,
+  };
 }
 
 function settingsFrom(choice: AccentChoice): AppearanceSettings {
@@ -70,11 +72,12 @@ export function AccentProvider({ api, children }: { api: AppearanceApi; children
     }
   }, [api]);
 
-  const chooseAccent = useCallback((accent: Accent) => save({ accent, customColor: saved.current.customColor }), [save]);
-  const chooseCustomColor = useCallback((color: string) => save({ accent: customAccent, customColor: color }), [save]);
+  const chooseAccent = useCallback((accent: Accent) => save({ accent, customColor: null }), [save]);
+  // The preset under a colour of one's own is the one chosen last, for an older sshc to show.
+  const chooseCustomColor = useCallback((color: string) => save({ accent: saved.current.accent, customColor: color }), [save]);
   const previewCustomColor = useCallback((color: string) => {
     chosen.current = true;
-    setChoice({ accent: customAccent, customColor: color });
+    setChoice({ accent: saved.current.accent, customColor: color });
   }, []);
 
   const value = useMemo<AccentState>(
