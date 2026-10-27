@@ -131,9 +131,14 @@ jobs:
           set -euo pipefail
           last_state=
           while :; do
-            runs=$(gh api -H 'Accept: application/vnd.github+json' \
-              "repos/$RELEASE_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$RELEASE_SHA&per_page=100")
-            state=$(printf '%s' "$runs" | jq -r --arg sha "$RELEASE_SHA" '
+            # 45 分の待ちの途中の一時的な API の失敗では止めず、次の問い合わせで読み直す。
+            if ! runs=$(gh api -H 'Accept: application/vnd.github+json' \
+              "repos/$RELEASE_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$RELEASE_SHA&per_page=100"); then
+              echo "could not read the main CI runs; retrying" >&2
+              sleep 20
+              continue
+            fi
+            if ! state=$(printf '%s' "$runs" | jq -r --arg sha "$RELEASE_SHA" '
               [.workflow_runs[] | select(
                 .head_sha == $sha and
                 .head_branch == "main" and
@@ -142,7 +147,11 @@ jobs:
               if any(.[]; .status == "completed" and .conclusion == "success") then "succeeded"
               elif length == 0 then "not started"
               elif all(.[]; .status == "completed") then "failed"
-              else "running" end')
+              else "running" end'); then
+              echo "could not read the main CI runs; retrying" >&2
+              sleep 20
+              continue
+            fi
             if [ "$state" != "$last_state" ]; then
               echo "main CI for $RELEASE_SHA: $state"
               last_state=$state
