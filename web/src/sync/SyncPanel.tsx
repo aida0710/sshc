@@ -12,7 +12,7 @@ import { useSyncStatus } from "./useSyncStatus";
 import { SyncExclusionsPanel } from "./SyncExclusionsPanel";
 import { useSyncSetupForm } from "./useSyncSetupForm";
 import { useSyncRemoteState } from "./useSyncRemoteState";
-import { useSyncOperation } from "./useSyncOperation";
+import { useSyncOperation, type SyncRunOptions } from "./useSyncOperation";
 import { useSyncPullPreview } from "./useSyncPullPreview";
 import { SyncForcePushDialog } from "./SyncForcePushDialog";
 import { SyncPullPreviewDialog } from "./SyncPullPreviewDialog";
@@ -110,30 +110,27 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
     clearError,
   });
 
-  async function run<T>(
-    operation: () => Promise<T>,
-    apply: (value: T) => void,
-    failure: string,
-    explain?: (code: string) => string,
-  ) {
-    await execute(operation, apply, failure, explain, async (code) => {
-      if (
-        code !== "sync_remote_moved" ||
-        statusState.phase !== "ready" ||
-        statusState.value.direction !== "pull"
-      ) {
-        return false;
-      }
-      await reload();
-      return true;
+  async function run<T>(operation: () => Promise<T>, options: SyncRunOptions<T>) {
+    await execute(operation, {
+      ...options,
+      recover: async (code) => {
+        if (
+          code !== "sync_remote_moved" ||
+          statusState.phase !== "ready" ||
+          statusState.value.direction !== "pull"
+        ) {
+          return false;
+        }
+        await reload();
+        return true;
+      },
     });
   }
 
   async function previewWith(choice?: "local" | "remote", historyKey?: string) {
     pull.prepare(choice, historyKey);
-    await run(
-      () => api.pullSnapshot(false, choice, historyKey),
-      (next) => {
+    await run(() => api.pullSnapshot(false, choice, historyKey), {
+      apply: (next) => {
         pull.show(next);
         setResultView({ kind: "preview", result: next });
         setNotice(
@@ -143,15 +140,14 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
             : "",
         );
       },
-      t("sync.pullFailed"),
-    );
+      failure: t("sync.pullFailed"),
+    });
   }
 
   async function previewCurrentRemoteHead() {
     pull.prepareRemoteHead();
-    await run(
-      () => api.pullSnapshot(false, "remote", undefined, undefined, true),
-      (next) => {
+    await run(() => api.pullSnapshot(false, "remote", undefined, undefined, true), {
+      apply: (next) => {
         pull.show(next);
         setResultView({ kind: "preview", result: next });
         setNotice(
@@ -160,18 +156,17 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
             : "",
         );
       },
-      t("sync.pullFailed"),
-    );
+      failure: t("sync.pullFailed"),
+    });
   }
 
   async function selectHistory(key: string) {
     selectHistoryKey(key);
     setHistoryDiff(null);
-    await run(
-      () => api.diffSyncHistory(key),
-      (next) => setHistoryDiff(next),
-      t("sync.historyDiffFailed"),
-    );
+    await run(() => api.diffSyncHistory(key), {
+      apply: (next) => setHistoryDiff(next),
+      failure: t("sync.historyDiffFailed"),
+    });
   }
 
   if (statusState.phase === "loading") {
@@ -200,15 +195,14 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           busy={busy}
           onMasterChange={setMaster}
           onUnlock={() =>
-            void run(
-              () => api.unlockVault(master),
-              () => {
+            void run(() => api.unlockVault(master), {
+              apply: () => {
                 setMaster("");
                 void reload();
               },
-              t("sync.unlockFailed"),
-              (code) => (code === "vault_missing" ? t("sync.noVault") : ""),
-            )
+              failure: t("sync.unlockFailed"),
+              explain: (code) => (code === "vault_missing" ? t("sync.noVault") : ""),
+            })
           }
         />
       </SyncPageFrame>
@@ -258,18 +252,16 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           busy={busy}
           remoteHeadBlocked={remoteHeadBlocked}
           onToggleAuto={(checked) =>
-            void run(
-              () => api.setAutoSync(checked),
-              adoptStatus,
-              t("sync.autoFailed"),
-            )
+            void run(() => api.setAutoSync(checked), {
+              apply: adoptStatus,
+              failure: t("sync.autoFailed"),
+            })
           }
           onSyncNow={() =>
-            run(
-              () => api.syncNow(),
-              adoptStatus,
-              t("sync.autoNowFailed"),
-            )
+            run(() => api.syncNow(), {
+              apply: adoptStatus,
+              failure: t("sync.autoNowFailed"),
+            })
           }
           onPreviewRemoteHead={previewCurrentRemoteHead}
           onPreview={() => previewWith(undefined)}
@@ -295,18 +287,16 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
         busy={busy}
         form={form}
         onCheckSetup={() =>
-          void run(
-            () => api.checkSyncSetup(form.setupInput),
-            form.acceptSetupCheck,
-            t("sync.configureFailed"),
-          )
+          void run(() => api.checkSyncSetup(form.setupInput), {
+            apply: form.acceptSetupCheck,
+            failure: t("sync.configureFailed"),
+          })
         }
         onCompleteSetup={() => {
           const request = form.setupRequest();
           if (request === null) return;
-          void run(
-            () => api.completeSyncSetup(request),
-            (next) => {
+          void run(() => api.completeSyncSetup(request), {
+            apply: (next) => {
               adoptStatus(next.status);
               setRevealed(next.generatedKey ?? "");
               form.finishSetup();
@@ -316,8 +306,8 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
                   : t("sync.keyShownOnce"),
               );
             },
-            t("sync.configureFailed"),
-          );
+            failure: t("sync.configureFailed"),
+          });
         }}
         onSaveKey={() => {
           const { chooseOwn, ownKey } = form;
@@ -329,14 +319,16 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
                     true,
                   )
                 : api.setSyncKey(chooseOwn ? ownKey : undefined),
-            (next) => {
-              setRevealed(chooseOwn ? "" : next.key);
-              form.setOwnKey("");
-              form.setConfirmHistoryLoss(false);
-              setNotice(t("sync.keySaved"));
-              void reload();
+            {
+              apply: (next) => {
+                setRevealed(chooseOwn ? "" : next.key);
+                form.setOwnKey("");
+                form.setConfirmHistoryLoss(false);
+                setNotice(t("sync.keySaved"));
+                void reload();
+              },
+              failure: t("sync.keyFailed"),
             },
-            t("sync.keyFailed"),
           );
         }}
       />
@@ -349,11 +341,10 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           pushMessage={pushMessage}
           onMessageChange={editPushMessage}
           onPush={() =>
-            void run(
-              () => api.pushSnapshot(pushMessage.trim()),
-              (next) => adoptPush(next, "sync.pushed"),
-              t("sync.pushFailed"),
-            )
+            void run(() => api.pushSnapshot(pushMessage.trim()), {
+              apply: (next) => adoptPush(next, "sync.pushed"),
+              failure: t("sync.pushFailed"),
+            })
           }
           onPreview={() => void previewWith(undefined)}
         />
@@ -388,14 +379,13 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           onMessageChange={editPushMessage}
           onClose={() => setForcePushOpen(false)}
           onSubmit={() =>
-            void run(
-              () => api.forcePushSnapshot(pushMessage.trim()),
-              (next) => {
+            void run(() => api.forcePushSnapshot(pushMessage.trim()), {
+              apply: (next) => {
                 adoptPush(next, "sync.forcePushed");
                 setForcePushOpen(false);
               },
-              t("sync.forceFailed"),
-            )
+              failure: t("sync.forceFailed"),
+            })
           }
         />
       ) : null}
@@ -433,13 +423,15 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
                       true,
                     )
                   : api.pullSnapshot(true, resolve, previewHistoryKey, preview),
-              (next) => {
+              {
+                apply: (next) => {
                 pull.replace(next);
                 setResultView({ kind: "apply", result: next });
                 setNotice(t("sync.applied"));
                 void reload();
               },
-              t("sync.applyFailed"),
+                failure: t("sync.applyFailed"),
+              },
             )
           }
         />
