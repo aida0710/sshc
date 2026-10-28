@@ -248,6 +248,7 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 		metadata.GroupsFile = DefaultGroupsFile
 	}
 	withoutUnreadableAppearance(&metadata)
+	withoutUnreadableShortcutPresets(&metadata)
 	return metadata, nil
 }
 

@@ -23,6 +23,8 @@ export const en = {
   "shortcuts.terminalSearch": "Terminal search",
   "shortcuts.copy": "Copy selection",
   "shortcuts.paste": "Paste",
+  "shortcuts.previousPrompt": "Previous prompt",
+  "shortcuts.nextPrompt": "Next prompt",
   "shortcuts.nextSession": "Next connection",
   "shortcuts.previousSession": "Previous connection",
   "shortcuts.home": "Open Home",
