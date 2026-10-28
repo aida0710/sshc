@@ -92,29 +92,6 @@ func TestEditingAWireGuardProfileWithABlankPathKeepsEverything(t *testing.T) {
 	}
 }
 
-// v0.40.0 までの項目の形のプロファイルも、空欄なら保存済みのまま送る。engine が項目と
-// 秘密鍵から設定ファイルを組み立てて保存し直す。
-func TestEditingAFieldsProfileWithABlankPathSendsItsServers(t *testing.T) {
-	saved := application.VPNProfile{
-		Name: "provider", Backend: vpn.WireGuard,
-		WireGuard: &application.WireGuardProfile{
-			Servers: []string{"vpn.example.jp"}, Server: "vpn.example.jp:51820",
-			PeerPublicKey: testWireGuardPublicKey, Address: "10.64.1.2/32",
-		},
-	}
-	p := profilePrompter(t, "\n\n")
-	p.editing = true
-
-	input, err := readVPNProfile(p, "provider", &saved)
-
-	if err != nil {
-		t.Fatalf("readVPNProfile = %v", err)
-	}
-	if strings.Join(input.profile.WireGuard.Servers, ",") != "vpn.example.jp" || input.profile.WireGuard.Server != "" {
-		t.Fatalf("wireguard = %+v", input.profile.WireGuard)
-	}
-}
-
 // readPrompt は、Prompter がターミナルへ書いた案内を読む。
 func readPrompt(t *testing.T, p vpnProfilePrompter) string {
 	t.Helper()

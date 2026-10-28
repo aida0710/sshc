@@ -111,8 +111,8 @@ func decodeProblem(t *testing.T, payload []byte) problemPayload {
 
 // labConfig は、lab のプロファイルの設定ファイルである。
 func labConfig() string {
-	fields := vpn.WireGuardFields{Server: "vpn.example.jp:51820", PeerPublicKey: testVPNPublicKey, Address: "10.9.9.2/32"}
-	return fields.Config(testVPNPrivateKey)
+	return "[Interface]\nPrivateKey = " + testVPNPrivateKey + "\nAddress = 10.9.9.2/32\n\n" +
+		"[Peer]\nPublicKey = " + testVPNPublicKey + "\nEndpoint = vpn.example.jp:51820\nAllowedIPs = 0.0.0.0/0\n"
 }
 
 func labProfileBody(withSecret bool) string {
