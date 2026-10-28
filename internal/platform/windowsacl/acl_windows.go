@@ -75,7 +75,7 @@ func restrictNativeHandle(handle windows.Handle, directory bool) error {
 	if err := validateHandleType(handle, directory); err != nil {
 		return err
 	}
-	userSID, err := currentUserSID()
+	userSID, err := CurrentUserSID()
 	if err != nil {
 		return err
 	}
@@ -148,7 +148,7 @@ func IsRestrictedToCurrentUser(path string) (bool, error) {
 	if err := validateHandleTypeAny(handle); err != nil {
 		return false, err
 	}
-	userSID, err := currentUserSID()
+	userSID, err := CurrentUserSID()
 	if err != nil {
 		return false, err
 	}
@@ -194,7 +194,7 @@ func openAuthenticatedFile(path string, access uint32) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	userSID, err := currentUserSID()
+	userSID, err := CurrentUserSID()
 	if err == nil {
 		err = authenticateHandle(windows.Handle(file.Fd()), false, userSID)
 	}

@@ -9,14 +9,16 @@ import (
 	"path/filepath"
 
 	"golang.org/x/sys/windows"
+
 	"sshc/internal/app"
+	"sshc/internal/platform/windowsacl"
 )
 
 func newPlatformServiceManager(home string) (engineServiceManager, error) {
 	if !filepath.IsAbs(home) {
 		return nil, errors.New("home directory is not absolute")
 	}
-	tokenUser, err := windows.GetCurrentProcessToken().GetTokenUser()
+	user, err := windowsacl.CurrentUserSID()
 	if err != nil {
 		return nil, fmt.Errorf("read current user SID: %w", err)
 	}
@@ -31,7 +33,7 @@ func newPlatformServiceManager(home string) (engineServiceManager, error) {
 	}
 	engine := taskEngine{stateDir: stateDir, client: &http.Client{Timeout: connectTimeout}}
 	return &taskServiceManager{
-		sid:              tokenUser.User.Sid.String(),
+		sid:              user.String(),
 		runner:           osServiceCommandRunner{path: filepath.Join(systemDirectory, "schtasks.exe")},
 		readTask:         readWindowsServiceTask,
 		engineRunning:    func() (bool, error) { return isEngineRunning(stateDir) },
