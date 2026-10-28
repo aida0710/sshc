@@ -328,6 +328,21 @@ test("selects with Option on a Mac while a program reads the mouse", async ({ pa
   await expect(screen).toContainText("^[[<", { timeout: 20_000 });
 });
 
+test("sends a click to a program that asks for mouse reports without SGR", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "printf and cat are POSIX shell syntax here");
+  await openApplication(page, installation);
+  await openSessionList(page);
+  await openLocalShell(page);
+  // 1000 alone asks for the default format (ESC [ M and three bytes), which
+  // xterm.js reports through onBinary rather than onData.
+  const screen = await typeIntoTerminal(page, "printf '\\033[?1000h'; echo default-mouse-$((40 + 2)); cat -v");
+  await expect(screen).toContainText("default-mouse-42", { timeout: 20_000 });
+
+  await terminalScreen(page).click({ position: { x: 20, y: 20 } });
+
+  await expect(screen).toContainText("^[[M", { timeout: 20_000 });
+});
+
 test("pastes the clipboard into the terminal with right click", async ({ page, context, installation }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);

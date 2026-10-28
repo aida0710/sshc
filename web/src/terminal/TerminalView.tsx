@@ -412,6 +412,9 @@ export function TerminalView({
       linkController.currentStream()?.send(encodeKey(name, ctrl, alt));
     };
     view.onData(typed);
+    // A program that turns on mouse reports without SGR (1006) gets them in the
+    // default format, which xterm.js hands out here rather than through onData.
+    view.onBinary((data) => linkController.currentStream()?.sendBinary(data));
 
     linkController.connect();
 

@@ -6,7 +6,7 @@ import { createStreamLink, stableStreamResetMs, type StreamLink } from "./stream
 const streams: { handlers: StreamHandlers; stream: TerminalStream }[] = [];
 vi.mock("./stream", () => ({
   openStream: (_ticket: string, _streamPath: string, handlers: StreamHandlers) => {
-    const stream: TerminalStream = { send: vi.fn(), resize: vi.fn(), close: vi.fn() };
+    const stream: TerminalStream = { send: vi.fn(), sendBinary: vi.fn(), resize: vi.fn(), close: vi.fn() };
     streams.push({ handlers, stream });
     return stream;
   },
