@@ -49,4 +49,19 @@ describe("FieldRow", () => {
 
     expect(screen.getByRole("button", { name: "Show" }).closest("label")).toBeNull();
   });
+
+  it("lines an editor row up on the editor's own width rather than the window's", () => {
+    render(
+      <FieldRow label="Port" density="editor" hint="Empty uses 22.">
+        <input defaultValue="2222" />
+      </FieldRow>,
+    );
+
+    const port = screen.getByLabelText("Port");
+    expect(port).toHaveAccessibleName("Port");
+    expect(port).toHaveAccessibleDescription("Empty uses 22.");
+    const row = port.closest("label")!.parentElement!;
+    expect(row.className).toContain("@sm/editor:grid-cols-[132px_minmax(0,1fr)]");
+    expect(row.className).not.toContain("lg:grid-cols");
+  });
 });
