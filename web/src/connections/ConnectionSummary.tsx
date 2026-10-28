@@ -1,4 +1,7 @@
+import { useContext } from "react";
+import { createPortal } from "react-dom";
 import { useTranslate } from "../i18n/context";
+import { PageChromeContext } from "../ui/pageChrome";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { Button } from "../ui/surface";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
@@ -17,7 +20,7 @@ type ConnectionSummaryProps = {
 };
 
 // ConnectionSummary は、接続エディタの見出しである。名前とアドレス、［接続］、ほかの操作の「…」だけを置く。
-// 鍵やパスワードの割り当ては、基本のタブの認証の節で見る。
+// 鍵やパスワードの割り当て（片付けが要る割り当ても）は、基本のタブの認証の節で見る。
 export function ConnectionSummary({
   state,
   dirty,
@@ -30,12 +33,21 @@ export function ConnectionSummary({
   const t = useTranslate();
   const summary = summarizeConnection(state);
   const blocked = dirty || refreshState !== "idle";
-  const explicitKey = summary.privateKey.state !== "none";
-  const passwordConflict = explicitKey && (
-    summary.accountPassword.state === "dedicated" || summary.accountPassword.state === "named" ||
-    summary.accountPassword.state === "stale"
-  );
   const reasonId = `connection-actions-${encodeURIComponent(summary.alias)}`;
+  // On a phone the top bar holds ［接続］ and the 「…」, as the page's other actions do (see pageChrome).
+  const { phoneActionsSlot } = useContext(PageChromeContext);
+  const headerActions = (
+    <>
+      <Button kind="primary" className="shrink-0" disabled={blocked || connecting || !connectAvailable} aria-describedby={blocked ? reasonId : undefined} onClick={onConnect}>
+        {connecting ? t("conn.opening") : t("conn.connect")}
+      </Button>
+      <ActionMenu
+        label={t("conn.connectionActions")}
+        items={actions}
+        triggerClassName="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+      />
+    </>
+  );
 
   // blockedReason は、接続のボタンを止めている理由である。読み直しに失敗したときは、
   // 上に出る失敗の文と再読み込みのボタンに合わせ、読み直し中とは書かない。
@@ -57,16 +69,8 @@ export function ConnectionSummary({
           </div>
           <p className="truncate font-mono text-[11.5px] text-ink-faint" title={summary.endpoint}>{summary.endpoint}</p>
         </div>
-        <Button kind="primary" className="shrink-0" disabled={blocked || connecting || !connectAvailable} aria-describedby={blocked ? reasonId : undefined} onClick={onConnect}>
-          {connecting ? t("conn.opening") : t("conn.connect")}
-        </Button>
-        <ActionMenu
-          label={t("conn.connectionActions")}
-          items={actions}
-          triggerClassName="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
-        />
+        {phoneActionsSlot === null ? headerActions : createPortal(headerActions, phoneActionsSlot)}
       </header>
-      {passwordConflict ? <p role="status" className="mt-3 rounded-[9px] bg-notice px-3 py-2.5 text-[12.5px] text-notice-ink">{t("conn.summaryPasswordCleanup")}</p> : null}
       {blocked ? <p id={reasonId} className="mt-3 text-xs text-notice-ink">{blockedReason()}</p> : null}
     </section>
   );

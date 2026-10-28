@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { vaultStatus } from "../testing/vaultStatus";
 import type { ConnectionSavedState } from "./connectionSavedState";
 import { ConnectionSummary } from "./ConnectionSummary";
+import { PageChromeContext } from "../ui/pageChrome";
 
 const state: ConnectionSavedState = {
   detail: {
@@ -71,7 +72,7 @@ const state: ConnectionSavedState = {
 };
 
 describe("ConnectionSummary", () => {
-  it("renders a direct key and legacy password assignment only as pending cleanup", () => {
+  it("leaves the password cleanup to the authentication part of the Basic tab", () => {
     render(
       <ConnectionSummary
         state={state}
@@ -85,22 +86,22 @@ describe("ConnectionSummary", () => {
 
     expect(screen.getByRole("heading", { name: "bastion" })).toBeInTheDocument();
     expect(screen.getByText("ops@203.0.113.10:2222")).toBeInTheDocument();
-    expect(screen.getByText(/is not used and will be unassigned/i)).toBeInTheDocument();
+    expect(screen.queryByText(/is not used and will be unassigned/i)).not.toBeInTheDocument();
   });
 
-  it("does not claim a password cleanup when credential metadata is unavailable", () => {
+  it("puts Connect and the menu in the phone's top bar when it has one", () => {
+    const topBar = document.createElement("div");
+    document.body.append(topBar);
     render(
-      <ConnectionSummary
-        state={{ ...state, credentials: { status: "failed" } }}
-        dirty={false}
-        refreshState="idle"
-        onConnect={vi.fn()}
-        connecting={false}
-        actions={[]}
-      />,
+      <PageChromeContext.Provider value={{ inspectorToggle: null, phoneActionsSlot: topBar, phoneBackSlot: null }}>
+        <ConnectionSummary state={state} dirty={false} refreshState="idle" onConnect={vi.fn()} connecting={false} actions={[]} />
+      </PageChromeContext.Provider>,
     );
 
-    expect(screen.queryByText(/is not used and will be unassigned/i)).not.toBeInTheDocument();
+    expect(within(topBar).getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    expect(within(topBar).getByRole("button", { name: "Actions for this connection" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "bastion" })).queryByRole("button", { name: "Connect" })).toBeNull();
+    topBar.remove();
   });
 
   it("keeps only the name, address, Connect and the menu in the header", async () => {
