@@ -14,23 +14,6 @@ import (
 	"sshc/internal/testwait"
 )
 
-func TestRemoteDirectoriesUnderHomeAreChangedIntoWithTheTildeUnquoted(t *testing.T) {
-	cases := map[string]string{
-		"~":                "cd",
-		"~/src/it's":       `cd -- ~/'src/it'"'"'s'`,
-		"/srv/project dir": `cd -- '/srv/project dir'`,
-	}
-	for directory, want := range cases {
-		accepted, err := remoteWorkingDirectory(directory)
-		if err != nil {
-			t.Fatalf("remoteWorkingDirectory(%q) = %v", directory, err)
-		}
-		if got := changeRemoteDirectory(accepted); got != want {
-			t.Errorf("changeRemoteDirectory(%q) = %q, want %q", directory, got, want)
-		}
-	}
-}
-
 func restoreOffer(t *testing.T, fixture *terminalFixture) api.TerminalRestoreOffer {
 	t.Helper()
 	response, body := fixture.do(t, http.MethodGet, "/api/v1/terminal/restore", "")

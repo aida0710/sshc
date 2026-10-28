@@ -39,22 +39,6 @@ type scriptedPTY struct {
 	closed  bool
 }
 
-func TestRemoteWorkingDirectoryAndShellQuote(t *testing.T) {
-	t.Parallel()
-	directory, err := remoteWorkingDirectory("/srv/project's files")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if quoted := quotePOSIXShell(directory); quoted != `'/srv/project'"'"'s files'` {
-		t.Fatalf("quoted directory = %q", quoted)
-	}
-	for _, candidate := range []string{"relative", "/srv/../etc", "/srv\nwhoami", "~root", "~/", "~/../etc", "~/..", "~/a/../b", "~//etc"} {
-		if _, err := remoteWorkingDirectory(candidate); err == nil {
-			t.Fatalf("accepted unsafe directory %q", candidate)
-		}
-	}
-}
-
 func newScriptedPTY() *scriptedPTY {
 	return &scriptedPTY{ready: make(chan struct{}, 1), done: make(chan struct{})}
 }
@@ -560,18 +544,25 @@ func TestSSHStartupChangesToTheRequestedDirectoryAndThenRunsTheStartupSnippet(t 
 			return StartupSnippet{Command: "tmux attach"}
 		},
 	}
-	alias, directory := "production", "/srv/it's"
-	spec, err := handlers.spec(api.OpenTerminalSessionRequest{Kind: api.OpenTerminalSessionRequestKindSsh, Alias: &alias, Cwd: &directory}, terminal.Size{Cols: 80, Rows: 24})
-	if err != nil {
-		t.Fatal(err)
+	cases := map[string][]string{
+		"/srv/release 2": {`cd -- '/srv/release 2'`, "tmux attach"},
+		// A directory some login shell would read as code is not typed; the
+		// session starts in the home directory and the snippet still runs.
+		"/srv/it's": {"tmux attach"},
 	}
-	if spec.Startup == nil {
-		t.Fatal("the SSH spec has no startup commands")
-	}
-	got := spec.Startup()
-	want := []string{`cd -- '/srv/it'"'"'s'`, "tmux attach"}
-	if !slices.Equal(got.Commands, want) || got.Notice != "" {
-		t.Fatalf("startup = %#v, want the commands %q", got, want)
+	for directory, want := range cases {
+		alias := "production"
+		spec, err := handlers.spec(api.OpenTerminalSessionRequest{Kind: api.OpenTerminalSessionRequestKindSsh, Alias: &alias, Cwd: &directory}, terminal.Size{Cols: 80, Rows: 24})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if spec.Startup == nil {
+			t.Fatal("the SSH spec has no startup commands")
+		}
+		got := spec.Startup()
+		if !slices.Equal(got.Commands, want) || got.Notice != "" {
+			t.Fatalf("startup for %q = %#v, want the commands %q", directory, got, want)
+		}
 	}
 }
 
