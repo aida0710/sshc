@@ -1,5 +1,5 @@
 import { chooseConnectionAction } from "./support/connections";
-import { clickAndAwait, expect, openSection, openSettingsPage, test, openApplication } from "./support/environment";
+import { clickAndAwait, expect, masterPassword, openSection, openSettingsPage, test, openApplication } from "./support/environment";
 import type { Page } from "@playwright/test";
 import { createGroups } from "./support/groups";
 
@@ -189,21 +189,21 @@ test("creates a key-authenticated connection in an empty nested declared group",
 
   await openSection(page, "Connections");
   await page.getByRole("button", { name: "Add connection" }).click();
-  const dialog = page.getByRole("dialog", { name: "Create connection" });
-  await expect(dialog.getByRole("option", { name: "home-lab/others" })).toHaveCount(1);
-  await dialog.getByLabel("Connection name").fill("lab-node");
-  await dialog.getByLabel("Save in group").selectOption("home-lab/others");
-  await dialog.getByLabel("Host name or IP address").fill("2001:db8::1");
-  await dialog.getByLabel("User (optional)").fill("root");
-  await dialog.getByRole("radio", { name: "SSH private key" }).check();
-  const keyChoice = dialog.getByRole("combobox", { name: "SSH private key" });
+  const form = page.getByRole("form", { name: "New connection" });
+  await expect(form.getByRole("option", { name: "home-lab/others" })).toHaveCount(1);
+  await form.getByLabel("Connection name").fill("lab-node");
+  await form.getByRole("combobox", { name: "Group", exact: true }).selectOption("home-lab/others");
+  await form.getByLabel("Host name or IP address").fill("2001:db8::1");
+  await form.getByRole("textbox", { name: "User", exact: true }).fill("root");
+  await form.getByLabel("Authentication method").selectOption({ label: "SSH private key" });
+  const keyChoice = form.getByRole("combobox", { name: "SSH private key" });
   const keyId = await keyChoice.locator("option", { hasText: "id_connection_e2e" }).getAttribute("value");
   expect(keyId).not.toBeNull();
   await keyChoice.selectOption(keyId);
 
   expect(await clickAndAwait(page, "Create connection", "/api/v1/connections")).toBe(201);
 
-  await expect(dialog).toHaveCount(0);
+  await expect(form).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "lab-node", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
   expect(terminalLaunches).toEqual([]);
@@ -214,6 +214,48 @@ test("creates a key-authenticated connection in an empty nested declared group",
     "\tPort 22\n" +
     "\tIdentityFile ~/.ssh/id_connection_e2e\n",
   );
+});
+
+test("asks before leaving the page with a new connection half filled in", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Connections");
+  await page.getByRole("button", { name: "Add connection" }).click();
+  const form = page.getByRole("form", { name: "New connection" });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await form.getByLabel("Connection name").fill("half-done");
+
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home", exact: true }).click();
+  const discard = page.getByRole("dialog", { name: "Discard changes" });
+  await expect(discard).toContainText("Discard the new connection you are filling in?");
+  await discard.getByRole("button", { name: "Keep editing" }).click();
+  await expect(form.getByLabel("Connection name")).toHaveValue("half-done");
+
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home", exact: true }).click();
+  await page.getByRole("dialog", { name: "Discard changes" }).getByRole("button", { name: "Discard changes" }).click();
+  await expect(page).toHaveURL(new URL("/", installation.url).toString());
+});
+
+test("unlocks the password vault from the new connection and then creates it", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Connections");
+  // The vault is open after signing in; report it locked once so the form asks for the master password.
+  let reportedLocked = false;
+  await page.route("**/api/v1/passwords", async (route) => {
+    if (route.request().method() !== "GET" || reportedLocked) return route.fallback();
+    reportedLocked = true;
+    await route.fulfill({ json: { exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 } });
+  });
+  await page.getByRole("button", { name: "Add connection" }).click();
+  const form = page.getByRole("form", { name: "New connection" });
+  await form.getByLabel("Authentication method").selectOption({ label: "Encrypted password for this connection" });
+  await form.getByLabel("Master password", { exact: true }).fill(masterPassword);
+  await form.getByRole("button", { name: "Unlock vault" }).click();
+
+  await form.getByLabel("Connection name").fill("vault-node");
+  await form.getByLabel("Host name or IP address").fill("vault.example");
+  await form.getByRole("textbox", { name: "Connection password", exact: true }).fill("vault node password");
+  expect(await clickAndAwait(page, "Create connection", "/api/v1/connections")).toBe(201);
+  await expect(page.getByRole("heading", { name: "vault-node", exact: true })).toBeVisible();
 });
 
 test("creates a connection with a dedicated encrypted password and never starts it", async ({
@@ -231,14 +273,14 @@ test("creates a connection with a dedicated encrypted password and never starts 
   await openApplication(page, installation);
   await openSection(page, "Connections");
   await page.getByRole("button", { name: "Add connection" }).click();
-  const dialog = page.getByRole("dialog", { name: "Create connection" });
-  await dialog.getByLabel("Connection name").fill("password-node");
-  await dialog.getByLabel("Host name or IP address").fill("password.example");
-  await dialog.getByRole("textbox", { name: "Connection password", exact: true }).fill(password);
+  const form = page.getByRole("form", { name: "New connection" });
+  await form.getByLabel("Connection name").fill("password-node");
+  await form.getByLabel("Host name or IP address").fill("password.example");
+  await form.getByRole("textbox", { name: "Connection password", exact: true }).fill(password);
 
   expect(await clickAndAwait(page, "Create connection", "/api/v1/connections")).toBe(201);
 
-  await expect(dialog).toHaveCount(0);
+  await expect(form).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "password-node", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
   expect(terminalLaunches).toEqual([]);

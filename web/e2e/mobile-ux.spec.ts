@@ -251,7 +251,26 @@ test("a page's button in the top bar is drawn small and still answers a tap just
   expect(button.height).toBeLessThan(bar.height - 12);
   // The place to press still reaches past the drawn button, as tall as a touch target should be.
   await page.touchscreen.tap(button.x + button.width / 2, button.y + button.height + 6);
-  await expect(page.getByRole("dialog", { name: "Create connection" })).toBeVisible();
+  await expect(page.getByRole("form", { name: "New connection" })).toBeVisible();
+});
+
+test("a new connection takes the phone's screen in place of the list and opens its settings once created", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  await openApplication(page, installation);
+  await page.goto(new URL("/connections", page.url()).href);
+  await page.locator("[data-app-header]").getByRole("button", { name: "Add connection", exact: true }).tap();
+
+  const form = page.getByRole("form", { name: "New connection" });
+  await expect(form).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Connections" })).toBeHidden();
+  await form.getByLabel("Connection name").fill("phone-node");
+  await form.getByLabel("Host name or IP address").fill("phone.example");
+  await form.getByRole("textbox", { name: "Connection password", exact: true }).fill("phone node password");
+  await form.getByRole("button", { name: "Create connection" }).tap();
+
+  await expect(page.getByRole("heading", { name: "phone-node", exact: true })).toBeVisible();
+  await expect(form).toHaveCount(0);
 });
 
 test("a tap on a file path the terminal printed opens its preview at once", async ({ page, installation }) => {

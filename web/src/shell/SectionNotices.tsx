@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { CreateConnectionDraft } from "../connections/CreateConnectionModal";
+import type { CreateConnectionDraft } from "../connections/createConnectionDraft";
 import { useTranslate } from "../i18n/context";
 import type { Section } from "../routing/sectionRoute";
 import { Button } from "../ui/surface";

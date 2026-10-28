@@ -1,5 +1,5 @@
 import { vaultApi, type PasswordVaultStatus } from "../api/vault";
-import type { CreateConnectionDraft } from "../connections/CreateConnectionModal";
+import type { CreateConnectionDraft } from "../connections/createConnectionDraft";
 import { useTranslate } from "../i18n/context";
 import type { Section } from "../routing/sectionRoute";
 import type { PaletteCommand } from "./CommandPalette";
