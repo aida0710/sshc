@@ -49,13 +49,12 @@ import {
 import { searchKeyItems } from "./keySearch";
 import { useKeyInventory } from "./useKeyInventory";
 import { useKeyTrash } from "./useKeyTrash";
-import { useKeyPassphraseActions } from "./useKeyPassphraseActions";
+import { createKeyPassphraseActions } from "./keyPassphraseActions";
 import { KeyRowPanel, type KeyRowPanelState } from "./KeyRowPanel";
 import { ChosenKeysBar, KeyMoveOutcomeNotice } from "./KeyMoveControls";
 import { KeyListToolbar } from "./KeyListToolbar";
 import { KeyInventoryProblems } from "./KeyInventoryProblems";
 
-export { keySecretsApi, type KeySecretsApi } from "./secretsApi";
 
 type KeysScreenProps = {
   api?: KeysApi;
@@ -129,7 +128,7 @@ export function KeysScreen({
     assignPhrase,
     storeAndAssignPhrase,
     unassignPhrase,
-  } = useKeyPassphraseActions({
+  } = createKeyPassphraseActions({
     api,
     refresh,
     runKeyOperation,

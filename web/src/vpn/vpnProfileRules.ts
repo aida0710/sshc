@@ -52,7 +52,7 @@ export const openConnectProducts: Record<(typeof openConnectProtocols)[number], 
 const openConnectFingerprintPrefixes = ["sha256:", "pin-sha256:"];
 const secondFactors = ["", "approve", "totp"];
 // ikev2Authentications は、IKEv2 でこちらを認証する方式である（engine と同じ語）。
-export const ikev2Authentications = ["eap-mschapv2", "psk"] as const;
+const ikev2Authentications = ["eap-mschapv2", "psk"] as const;
 export type IKEv2Authentication = (typeof ikev2Authentications)[number];
 
 // 設定ファイルとコマンド引数へそのまま書けない字である。

@@ -121,7 +121,7 @@ function isSpace(character: string): boolean {
 }
 
 // splitLine は、1行を語に分ける（OpenVPN の parse_line）。読めない行は null を返す。
-export function splitLine(line: string): string[] | null {
+function splitLine(line: string): string[] | null {
   const words: string[] = [];
   let word = "";
   let state: "between" | "unquoted" | "double" | "single" = "between";

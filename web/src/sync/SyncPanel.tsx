@@ -25,7 +25,7 @@ import { syncPathRefusals, syncRefusals } from "./syncRefusals";
 
 // Setting the shared key needs the vault open; everything else is sync.
 export type SyncPanelApi = SyncApi & Pick<VaultApi, "unlockVault">;
-export const syncPanelApi: SyncPanelApi = { ...syncApi, ...vaultApi };
+const syncPanelApi: SyncPanelApi = { ...syncApi, ...vaultApi };
 
 type SyncPanelProps = { api?: SyncPanelApi };
 

@@ -6,7 +6,7 @@ import type { Locale } from "../i18n/locale";
 import { hintText } from "../ui/form";
 import { formatDateTime } from "../ui/format";
 import { Button, Notice } from "../ui/surface";
-import { formatBytes } from "./SyncResultCard";
+import { formatStorageBytes } from "./SyncResultCard";
 import { syncHistoryRelationLabelKeys } from "./syncMessageKeys";
 import type { HistoryState } from "./useSyncRemoteState";
 
@@ -69,7 +69,7 @@ export function SyncHistorySection({
           <p className={hintText}>
             {t("sync.historySummary", {
               count: historyState.value.revisions.length,
-              size: formatBytes(historyState.value.downloadedBytes, locale),
+              size: formatStorageBytes(historyState.value.downloadedBytes, locale),
             })}
           </p>
           {historyState.value.historyTruncated ||
