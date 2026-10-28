@@ -36,7 +36,7 @@ import { openTerminalURL, TerminalLinkPopover, type TerminalLinkSelection } from
 import { TerminalQuickCommands } from "./TerminalQuickCommands";
 import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 import { TerminalPortForwards } from "./TerminalPortForwards";
-import { attachWebglRenderer } from "./webgl";
+import { attachWebglWhileShown } from "./webgl";
 import { attachOSC7Directory } from "./osc7";
 import { attachOSC9Directory } from "./osc9Directory";
 import { attachOSC9Progress, noTerminalProgress, type TerminalProgress } from "./osc9Progress";
@@ -299,15 +299,12 @@ export function TerminalView({
     view.loadAddon(searchAddon);
     view.open(container);
     const inlineImages = attachInlineImages(view);
-    let webgl: { dispose(): void } | null = null;
-    let terminalDisposed = false;
-    void attachWebglRenderer(view, {
+    const renderer = attachWebglWhileShown(view, {
       enabled: webglEnabled,
       backgroundImage: backgroundConfigured,
-    }).then((attached) => {
-      if (terminalDisposed) attached?.dispose();
-      else webgl = attached;
     });
+    const measured = () => container.clientWidth !== 0 && container.clientHeight !== 0;
+    renderer.shown(measured());
     terminal.current = view;
 
     const unbindSearch = search.bind(view, searchAddon, container);
@@ -398,7 +395,8 @@ export function TerminalView({
     streamLinkController.current = linkController;
 
     const fitAndSync = () => {
-      if (container.clientWidth === 0 || container.clientHeight === 0) return;
+      renderer.shown(measured());
+      if (!measured()) return;
       try {
         fit.fit();
         if (touchTerminalRef.current) syncTerminalInputPosition(view);
@@ -463,7 +461,6 @@ export function TerminalView({
     const stopObservingSize = observeTerminalSize(view, container, fitAndSync);
 
     return () => {
-      terminalDisposed = true;
       linkController.close();
       streamLinkController.current = null;
       stopObservingSize();
@@ -477,7 +474,7 @@ export function TerminalView({
       inlineImages.dispose();
       commandMarkers.dispose();
       terminalLinks.dispose();
-      webgl?.dispose();
+      renderer.dispose();
       unbindSearch();
       view.dispose();
       terminal.current = null;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { attachWebglRenderer } from "./webgl";
+import { attachWebglRenderer, attachWebglWhileShown } from "./webgl";
 
 function addonHarness() {
   let contextLost: () => void = () => undefined;
@@ -77,5 +77,48 @@ describe("WebGL terminal renderer", () => {
       createElement.mockRestore();
       vi.unstubAllGlobals();
     }
+  });
+
+  describe("while the terminal is hidden", () => {
+    it("gives the renderer back while hidden and attaches a new one when shown again", async () => {
+      const terminal = { loadAddon: vi.fn() };
+      const addons: ReturnType<typeof addonHarness>["addon"][] = [];
+      const load = vi.fn(async () => {
+        const { addon } = addonHarness();
+        addons.push(addon);
+        return addon as never;
+      });
+      const renderer = attachWebglWhileShown(terminal, { supported: () => true, load });
+
+      // The renderer is attached once its import and set-up have finished.
+      const attached = () => new Promise((resolve) => setTimeout(resolve, 0));
+      renderer.shown(true);
+      await attached();
+      expect(addons).toHaveLength(1);
+      renderer.shown(false);
+      expect(addons[0]!.dispose).toHaveBeenCalledOnce();
+
+      renderer.shown(true);
+      await attached();
+      renderer.shown(true);
+      await attached();
+      expect(load).toHaveBeenCalledTimes(2);
+      renderer.dispose();
+      expect(addons[1]!.dispose).toHaveBeenCalledOnce();
+    });
+
+    it("lets go of a renderer that finished loading after the terminal was hidden", async () => {
+      const terminal = { loadAddon: vi.fn() };
+      const { addon } = addonHarness();
+      let finish: (value: never) => void = () => undefined;
+      const load = vi.fn(() => new Promise<never>((resolve) => { finish = resolve; }));
+      const renderer = attachWebglWhileShown(terminal, { supported: () => true, load });
+
+      renderer.shown(true);
+      renderer.shown(false);
+      finish(addon as never);
+
+      await vi.waitFor(() => expect(addon.dispose).toHaveBeenCalledOnce());
+    });
   });
 });
