@@ -40,6 +40,11 @@ async function runCommand(terminal: Locator, command: string) {
   await keyboard.press("Enter");
 }
 
+// focusedPane is the session whose pane holds the keyboard focus, or null when no pane does.
+async function focusedPane(page: Page): Promise<string | null> {
+  return page.evaluate(() => document.activeElement?.closest("[data-split-view-pane]")?.getAttribute("data-split-view-pane") ?? null);
+}
+
 function sessionRow(page: Page, title: string): Locator {
   return page.getByRole("navigation", { name: "Primary" }).getByRole("list", { name: "Open sessions" }).getByRole("listitem").filter({ has: page.getByRole("button", { name: title, exact: true }) });
 }
@@ -148,6 +153,37 @@ test("preserves terminal mounts through swaps, focus mode, sidebar selection and
   await expect(search).toHaveValue("mount-canary");
   await first.getByRole("button", { name: "Swap Build pane" }).dragTo(second);
   expect((await first.boundingBox())!.x).toBeGreaterThan((await second.boundingBox())!.x);
+});
+
+test("gives the keyboard to the pane whose header is clicked and frames that pane in the sidebar", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  const build = await openNamedShell(page, "Build");
+  const logs = await openNamedShell(page, "Logs");
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("button", { name: "Build", exact: true }).click();
+  await pane(page, build).getByRole("button", { name: "More terminal actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Show in split view on the right", exact: true }).click();
+  await page.getByRole("dialog", { name: "Choose a session to split" }).getByRole("button", { name: "Logs", exact: true }).click();
+  await expect.poll(() => focusedPane(page)).toBe(logs);
+  const buildMember = navigation.getByRole("button", { name: "Build in Split 1", exact: true });
+  const logsMember = navigation.getByRole("button", { name: "Logs in Split 1", exact: true });
+  await expect(logsMember).toHaveAttribute("aria-current", "true");
+  await expect(buildMember).not.toHaveAttribute("aria-current", "true");
+
+  // The title is plain text: before the fix the click chose the pane but left the keyboard on the page body.
+  await pane(page, build).getByText("Build", { exact: true }).click();
+  await expect.poll(() => focusedPane(page)).toBe(build);
+  await page.keyboard.type("echo HEADER:$((6 * 7))");
+  await page.keyboard.press("Enter");
+  await expect(pane(page, build)).toContainText("HEADER:42");
+  await expect(pane(page, logs)).not.toContainText("HEADER:42");
+  await expect(buildMember).toHaveAttribute("aria-current", "true");
+  await expect(logsMember).not.toHaveAttribute("aria-current", "true");
+
+  await logsMember.click();
+  await expect.poll(() => focusedPane(page)).toBe(logs);
+  await expect(logsMember).toHaveAttribute("aria-current", "true");
 });
 
 test("splits across workspaces without changing membership and still accepts workspace drops", async ({ page, installation }) => {
