@@ -1,5 +1,6 @@
 import type { IDisposable, IParser } from "@xterm/xterm";
 import { createInflatedSizeMeter } from "./inflatedSizeMeter";
+import { createKittyStoredImages } from "./kittyStoredImages";
 
 export type KittyImageLimits = {
   // Most pixels one image may hold once decoded.
@@ -7,6 +8,9 @@ export type KittyImageLimits = {
   // Most bytes one image may be sent as, before decompression. The image
   // addon is given the same value as its kittySizeLimit.
   imageByteLimit: number;
+  // Most bytes of the images sent only to be stored (a=t) that one terminal
+  // keeps. The addon bounds them by count alone.
+  storedOnlyByteLimit: number;
 };
 
 // The image addon ignores a command whose control data is longer than this.
@@ -36,6 +40,7 @@ type KittyCommand = {
   medium: string;
   id: number | undefined;
   imageNumber: number | undefined;
+  placement: number | undefined;
   deleteSelector: string;
 };
 
@@ -63,18 +68,20 @@ function parseKittyCommand(control: string): KittyCommand {
     medium: values.get("t") ?? "d",
     id: numberAt("i"),
     imageNumber: numberAt("I"),
+    placement: numberAt("p"),
     deleteSelector: values.get("d") ?? "a",
   };
 }
 
-function isPngWithinPixelLimit(header: Uint8Array, pixelLimit: number): boolean {
-  if (header.byteLength < pngHeaderLength) return false;
-  if (pngSignature.some((byte, index) => header[index] !== byte)) return false;
-  if (ihdrType.some((byte, index) => header[12 + index] !== byte)) return false;
+// pngPixels reads the pixel count from a PNG's header, or null if it is not one.
+function pngPixels(header: Uint8Array): number | null {
+  if (header.byteLength < pngHeaderLength) return null;
+  if (pngSignature.some((byte, index) => header[index] !== byte)) return null;
+  if (ihdrType.some((byte, index) => header[12 + index] !== byte)) return null;
   const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
   const width = view.getUint32(16);
   const height = view.getUint32(20);
-  return width > 0 && height > 0 && width * height <= pixelLimit;
+  return width > 0 && height > 0 ? width * height : null;
 }
 
 // Decodes base64 that arrives split across chunks at any character.
@@ -109,7 +116,8 @@ type TransmissionCheck = {
   cancel(): void;
 };
 
-function uncompressedPngCheck(pixelLimit: number): TransmissionCheck {
+// A PNG check passes the image's pixel count to onPixels once it has read it.
+function uncompressedPngCheck(pixelLimit: number, onPixels: (pixels: number) => void): TransmissionCheck {
   const base64 = createBase64Reader();
   const header = new Uint8Array(pngHeaderLength);
   let filled = 0;
@@ -121,7 +129,11 @@ function uncompressedPngCheck(pixelLimit: number): TransmissionCheck {
         const copied = bytes.subarray(0, pngHeaderLength - filled);
         header.set(copied, filled);
         filled += copied.byteLength;
-        if (filled === pngHeaderLength && !isPngWithinPixelLimit(header, pixelLimit)) return false;
+        if (filled === pngHeaderLength) {
+          const pixels = pngPixels(header);
+          if (pixels === null || pixels > pixelLimit) return false;
+          onPixels(pixels);
+        }
       }
       return !last || filled === pngHeaderLength;
     },
@@ -129,11 +141,14 @@ function uncompressedPngCheck(pixelLimit: number): TransmissionCheck {
   };
 }
 
-function compressedCheck({ inflatedLimit, pngPixelLimit }: { inflatedLimit: number; pngPixelLimit?: number }): TransmissionCheck {
+function compressedCheck({ inflatedLimit, png }: {
+  inflatedLimit: number;
+  png?: { pixelLimit: number; onPixels: (pixels: number) => void };
+}): TransmissionCheck {
   const base64 = createBase64Reader();
   const meter = createInflatedSizeMeter({
     limit: inflatedLimit,
-    headLength: pngPixelLimit === undefined ? 0 : pngHeaderLength,
+    headLength: png === undefined ? 0 : pngHeaderLength,
   });
   return {
     async take(payload, last) {
@@ -142,7 +157,11 @@ function compressedCheck({ inflatedLimit, pngPixelLimit }: { inflatedLimit: numb
       if (!last) return true;
       const rest = base64.end();
       if (rest === null || !(await meter.push(rest)) || !(await meter.finish())) return false;
-      return pngPixelLimit === undefined || isPngWithinPixelLimit(meter.head(), pngPixelLimit);
+      if (png === undefined) return true;
+      const pixels = pngPixels(meter.head());
+      if (pixels === null || pixels > png.pixelLimit) return false;
+      png.onPixels(pixels);
+      return true;
     },
     cancel: () => meter.cancel(),
   };
@@ -153,6 +172,8 @@ function compressedCheck({ inflatedLimit, pngPixelLimit }: { inflatedLimit: numb
 const refusedAsMalformed = "EINVAL:width and height required for raw pixel data";
 const refusedAsTooLarge = "EFBIG:image exceeds the terminal's limits";
 const refusedAsInterleaved = "EINVAL:another image's chunks arrived before this image finished";
+const refusedAsNoRoom = "ENOSPC:stored images exceed the terminal's limit; delete some (a=d)";
+const refusedPlacement = "EBUSY:too many placements to decode at once; place it again later";
 
 type Transmission = {
   refused: boolean;
@@ -165,6 +186,11 @@ type Transmission = {
   handedOver: boolean;
   encodedLength: number;
   check?: TransmissionCheck;
+  // Whether the addon stores the image (data sent with a=t or a=T), its
+  // pixels once known, and whether it is sent only to be stored (a=t).
+  stores: boolean;
+  pixels: number;
+  storedOnly: boolean;
 };
 
 // newTransmission is the state of an image that has not been checked yet.
@@ -174,6 +200,9 @@ function newTransmission(command: KittyCommand): Transmission {
     answered: false,
     handedOver: false,
     encodedLength: 0,
+    stores: (command.action === "t" || command.action === "T") && command.medium === "d",
+    pixels: 0,
+    storedOnly: command.action === "t" && command.medium === "d",
     ...(command.id === undefined ? {} : { answerTo: { id: command.id, quiet: command.quiet } }),
   };
 }
@@ -182,11 +211,12 @@ function startTransmission(command: KittyCommand, limits: KittyImageLimits): Tra
   const transmission = newTransmission(command);
   // Only transmitted images get stored and decoded. Queries and placements
   // never decode a payload, and other media are refused by the addon.
-  if ((command.action !== "t" && command.action !== "T") || command.medium !== "d") return transmission;
+  if (!transmission.stores) return transmission;
   if (command.format === pngFormat) {
+    const onPixels = (pixels: number) => { transmission.pixels = pixels; };
     transmission.check = command.compressed
-      ? compressedCheck({ inflatedLimit: limits.imageByteLimit, pngPixelLimit: limits.pixelLimit })
-      : uncompressedPngCheck(limits.pixelLimit);
+      ? compressedCheck({ inflatedLimit: limits.imageByteLimit, png: { pixelLimit: limits.pixelLimit, onPixels } })
+      : uncompressedPngCheck(limits.pixelLimit, onPixels);
     return transmission;
   }
   // Raw pixels must declare their size, and zlib must inflate to exactly
@@ -202,6 +232,7 @@ function startTransmission(command: KittyCommand, limits: KittyImageLimits): Tra
     transmission.refusal = refusedAsTooLarge;
     return transmission;
   }
+  transmission.pixels = pixels;
   if (command.compressed) {
     const bytesPerPixel = command.format === rgbaFormat ? rgbaBytesPerPixel : rgbBytesPerPixel;
     transmission.check = compressedCheck({ inflatedLimit: pixels * bytesPerPixel });
@@ -220,13 +251,16 @@ function startTransmission(command: KittyCommand, limits: KittyImageLimits): Tra
 // chunk without i under the last unfinished image. The guard therefore allows
 // one unfinished image at a time, as the protocol asks of programs, so that a
 // chunk it keeps from the addon can never land in another image.
-export function attachKittyImageGuard({ parser, images, limits, answer }: {
+export function attachKittyImageGuard({ parser, images, limits, answer, now = () => performance.now() }: {
   parser: IParser;
   images: { reset(): unknown };
   limits: KittyImageLimits;
   // answer sends a kitty graphics response to the program, as typed input.
   answer: (response: string) => void;
+  // now is the clock, in milliseconds, that refills the placement budget.
+  now?: () => number;
 }): IDisposable {
+  const stored = createKittyStoredImages({ pixelLimit: limits.pixelLimit, storedOnlyByteLimit: limits.storedOnlyByteLimit, now });
   // The addon gives up on an image whose base64 is longer than this.
   const maxEncodedLength = Math.ceil(limits.imageByteLimit * 4 / 3);
   // The image whose chunks are still arriving, under the key the addon files
@@ -254,7 +288,10 @@ export function attachKittyImageGuard({ parser, images, limits, answer }: {
     transmission.check?.cancel();
     // The addon cannot drop one half-received image, so drop all of its
     // images and unfinished data.
-    if (transmission.handedOver) images.reset();
+    if (transmission.handedOver) {
+      images.reset();
+      stored.cleared();
+    }
   };
 
   const inspect = (transmission: Transmission, payload: string, last: boolean): boolean | Promise<boolean> => {
@@ -288,9 +325,19 @@ export function attachKittyImageGuard({ parser, images, limits, answer }: {
     if (command.id !== undefined && command.imageNumber !== undefined) return false;
     if (command.action === "d") {
       const all = command.deleteSelector === "a" || command.deleteSelector === "A";
-      const byId = (command.deleteSelector === "i" || command.deleteSelector === "I") && command.id === unfinished?.key;
-      if (all || byId) forget();
+      const byId = command.deleteSelector === "i" || command.deleteSelector === "I";
+      if (all) stored.cleared();
+      if (byId && command.id !== undefined) stored.deleted(command.id);
+      if (all || (byId && command.id === unfinished?.key)) forget();
       return false;
+    }
+    if (command.action === "p") {
+      if (command.id === undefined || stored.mayPlace(command.id)) return false;
+      if (command.quiet < 2) {
+        const placement = command.placement === undefined ? "" : `,p=${command.placement}`;
+        answer(`\u001b_Gi=${command.id}${placement};${refusedPlacement}\u001b\\`);
+      }
+      return true;
     }
     if (separator < 0) return false;
 
@@ -302,6 +349,10 @@ export function attachKittyImageGuard({ parser, images, limits, answer }: {
     let transmission: Transmission;
     if (unfinished === undefined) {
       transmission = startTransmission(command, limits);
+      if (transmission.storedOnly && !transmission.refused && !stored.hasRoomFor(command.id)) {
+        transmission.refused = true;
+        transmission.refusal = refusedAsNoRoom;
+      }
     } else {
       transmission = unfinished.transmission;
       // A chunk for another image, or one that describes an image again,
@@ -319,7 +370,15 @@ export function attachKittyImageGuard({ parser, images, limits, answer }: {
     else unfinished = undefined;
     const last = !command.more;
     const answerIfLast = (kept: boolean) => {
-      if (last) answerRefusal(transmission);
+      if (!last) return kept;
+      answerRefusal(transmission);
+      if (transmission.stores && !transmission.refused) {
+        // Kitty has no image 0: an image without i is numbered by the addon.
+        stored.stored(key === 0 ? undefined : key, {
+          pixels: transmission.pixels || limits.pixelLimit,
+          storedOnlyBytes: transmission.storedOnly ? Math.floor(transmission.encodedLength * 3 / 4) : 0,
+        });
+      }
       return kept;
     };
     if (transmission.refused) return answerIfLast(true);
@@ -329,14 +388,16 @@ export function attachKittyImageGuard({ parser, images, limits, answer }: {
 
   const registrations = [
     parser.registerApcHandler({ final: "G" }, handle),
-    // RIS and DECSTR make the addon drop its unfinished images. Returning
+    // RIS and DECSTR make the addon drop its images and unfinished ones. Returning
     // false lets xterm and the addon handle them as before.
     parser.registerEscHandler({ final: "c" }, () => {
       forget();
+      stored.cleared();
       return false;
     }),
     parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
       forget();
+      stored.cleared();
       return false;
     }),
   ];
