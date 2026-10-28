@@ -4,7 +4,7 @@ import type { TerminalSession, TerminalSessionsApi } from "../api/terminalSessio
 import { resolveAppearance } from "../terminal/appearance";
 import { TerminalSplitView } from "../terminal/splitView/TerminalSplitView";
 import type { SplitViewController } from "../terminal/splitView/useSplitView";
-import type { RemotePathAction } from "../terminal/TerminalLinkPopover";
+import type { RemotePathAction } from "../sftp/SFTPPanel";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
 import type { PaneEdge } from "../terminal/splitView/layout";

@@ -812,7 +812,6 @@ export const en = {
   "terminal.command.reviewExpired": "The review has expired. Review the command again.",
   "terminal.linkActions": "Terminal link actions",
   "terminal.linkOpenBrowser": "Open in browser",
-  "terminal.linkPreview": "Preview",
   "terminal.relativePathUnknown": "sshc cannot tell which folder this path is relative to. A full path opens.",
   "terminal.homePathUnknown": "Cannot open this path because the session's home folder could not be read. Try a full path.",
   "terminal.linkBrowseSFTP": "Browse in SFTP",

@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { useTranslate } from "../i18n/context";
+import type { ActionMenuItem } from "../ui/ActionMenu";
 import { ModalShell } from "../ui/ModalShell";
 import { insideKeyboardOwner } from "../ui/useDismissibleLayer";
 import { FilePreviewBody } from "./FilePreviewBody";
@@ -18,16 +19,19 @@ function baseName(path: string): string {
 // can be downloaded from here, including those it cannot show.
 //
 // paths are the files the arrow keys step through, in order. When path is
-// not among them, the dialog shows path alone.
+// not among them, the dialog shows path alone. actions are what else the
+// shown file offers, in the header's "…".
 export function FilePreviewDialog({
   alias,
   path,
   paths = [],
+  actions,
   onClose,
 }: {
   alias: string;
   path: string;
   paths?: string[];
+  actions?: (path: string) => ActionMenuItem[];
   onClose: () => void;
 }) {
   const t = useTranslate();
@@ -69,6 +73,7 @@ export function FilePreviewDialog({
         count={steps.length}
         onStep={setPosition}
         onDownload={() => download(shown)}
+        {...(actions === undefined ? {} : { menu: { label: t("sftp.selectedActions", { name: baseName(shown) }), items: actions(shown) } })}
         onClose={onClose}
       />
       {problem === "" ? null : <p role="alert" className="border-b border-line px-3 py-2 text-xs text-danger">{problem}</p>}

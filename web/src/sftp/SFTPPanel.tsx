@@ -87,10 +87,14 @@ function MenuActionList({ actions, mobile = false }: { actions: SFTPMenuAction[]
   );
 }
 
+// RemotePathAction is what a terminal asks of a file path of an SSH session: list its folder, edit it, or
+// download it (into the other pane's folder when one is open beside it).
+export type RemotePathAction = "browse" | "edit" | "download";
+
 export type SFTPTarget = {
   alias: string;
   path: string;
-  action: "browse" | "edit" | "download";
+  action: RemotePathAction;
   request: number;
 };
 
