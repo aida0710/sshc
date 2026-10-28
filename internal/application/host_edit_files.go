@@ -65,45 +65,47 @@ func (s *Service) loadHostEditFile(files *hostEditFiles, relative string, base *
 	return loaded, nil
 }
 
-// loadHostEditSources は、bases のファイルを 1 回ずつ読み、hosts がどれかのファイルを指し、
-// どのファイルもどれかの接続先に使われていることを確かめる。
-func (s *Service) loadHostEditSources(hosts []HostEdit, bases []FileBase) (*hostEditFiles, error) {
+// loadHostEditSources は、hosts がどれかのファイルを指し、どのファイルもどれかの接続先に
+// 使われていることを確かめてから、bases のファイルを 1 回ずつ読む。対応はファイルを読む前に
+// 確かめるので、選択の誤りは、ファイルが無いことや書けないことより先に報せる。
+func (s *Service) loadHostEditSources(hosts []HostIdentity, bases []FileBase) (*hostEditFiles, error) {
 	if len(hosts) == 0 || len(hosts) > MaxHostEdits || len(bases) == 0 || len(bases) > MaxHostEdits {
 		return nil, ErrInvalidHostSelection
 	}
-	files := &hostEditFiles{byPath: map[string]*hostEditFile{}}
+	unused := map[string]bool{}
 	for _, base := range bases {
 		absolute, err := AbsolutePath(s.workspace.Root(), base.Path)
 		if err != nil {
 			return nil, err
 		}
-		if files.byPath[absolute] != nil {
+		if _, declared := unused[absolute]; declared {
 			return nil, ErrInvalidHostSelection
 		}
-		if _, err := s.loadHostEditFile(files, base.Path, &base.Base); err != nil {
-			return nil, err
-		}
+		unused[absolute] = true
 	}
-	used := map[*hostEditFile]bool{}
 	seen := map[HostIdentity]bool{}
 	for _, host := range hosts {
 		absolute, err := AbsolutePath(s.workspace.Root(), host.Path)
 		if err != nil {
 			return nil, err
 		}
-		file := files.byPath[absolute]
-		identity := HostIdentity{Path: host.Path, Alias: host.Alias}
-		if file != nil {
-			identity.Path = file.relative
-		}
-		if file == nil || host.Alias == "" || seen[identity] {
+		identity := HostIdentity{Path: absolute, Alias: host.Alias}
+		if _, declared := unused[absolute]; !declared || host.Alias == "" || seen[identity] {
 			return nil, ErrInvalidHostSelection
 		}
 		seen[identity] = true
-		used[file] = true
+		unused[absolute] = false
 	}
-	if len(used) != len(files.order) {
-		return nil, ErrInvalidHostSelection
+	for _, left := range unused {
+		if left {
+			return nil, ErrInvalidHostSelection
+		}
+	}
+	files := &hostEditFiles{byPath: map[string]*hostEditFile{}}
+	for _, base := range bases {
+		if _, err := s.loadHostEditFile(files, base.Path, &base.Base); err != nil {
+			return nil, err
+		}
 	}
 	return files, nil
 }
