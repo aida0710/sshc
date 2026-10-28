@@ -56,8 +56,13 @@ func ResolveShellProfile(profiles []ShellProfile, id string) (ShellProfile, erro
 //
 // 落とすのは小文字の `npm_` だけである。npm が輸出するのはそれであり、
 // NPM_TOKEN のような大文字はユーザーが自分で置いたものだからだ。
-func LoginEnvironment(environ []string) []string {
-	kept := make([]string, 0, len(environ)+1)
+//
+// 起動元のターミナルが自分のために置いた変数（TERM_PROGRAM、GHOSTTY_ で始まるもの、
+// Windows Terminal の WT_SESSION など）も落とす。sshc のターミナルの中では偽りになり、
+// プログラムは起動元のターミナルにしかない機能を使おうとする。代わりに sshc の
+// ターミナルを表す値を入れる。version は sshc の版で、TERM_PROGRAM_VERSION になる。
+func LoginEnvironment(environ []string, version string) []string {
+	kept := make([]string, 0, len(environ)+4)
 	for _, entry := range environ {
 		name, _, found := strings.Cut(entry, "=")
 		if found && (strings.HasPrefix(name, "npm_") || name == "INIT_CWD" || name == "NODE") {
@@ -68,10 +73,43 @@ func LoginEnvironment(environ []string) []string {
 		// Inheriting an empty, dumb, or unrelated value makes line editors such
 		// as zsh ZLE choose the wrong erase and cursor capabilities. SSH sessions
 		// already advertise this same type when they request their remote PTY.
-		if found && strings.EqualFold(name, "TERM") {
+		if found && (strings.EqualFold(name, "TERM") || describesLaunchingTerminal(name)) {
 			continue
 		}
 		kept = append(kept, entry)
 	}
-	return append(kept, "TERM="+terminal.DefaultTerminalType)
+	return append(kept,
+		"TERM="+terminal.DefaultTerminalType,
+		"COLORTERM="+terminal.ColorTerm,
+		"TERM_PROGRAM="+terminal.TerminalProgram,
+		"TERM_PROGRAM_VERSION="+strings.TrimPrefix(version, "v"),
+	)
+}
+
+// launchingTerminalVariables と launchingTerminalPrefixes は、ターミナルが中のシェルのために
+// 置く変数である。sshcエンジンを起動したターミナルのものが、そのまま継がれてくる。TERMINFO は
+// Ghostty や kitty が自分の terminfo の場所に向けるもので、継ぐと xterm-256color を引けなくなる。
+var launchingTerminalVariables = []string{
+	"COLORTERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "TERM_SESSION_ID", "TERMINAL_EMULATOR", "TERMINFO",
+	"LC_TERMINAL", "LC_TERMINAL_VERSION", "COLORFGBG", "VTE_VERSION", "WINDOWID",
+	"WT_SESSION", "WT_PROFILE_ID",
+}
+
+var launchingTerminalPrefixes = []string{"GHOSTTY_", "KITTY_", "WEZTERM_", "ALACRITTY_", "ITERM_", "KONSOLE_", "VSCODE_"}
+
+// describesLaunchingTerminal は、Windows の環境変数の名前が大文字と小文字を区別しないので、
+// 大文字にして比べる。
+func describesLaunchingTerminal(name string) bool {
+	upper := strings.ToUpper(name)
+	for _, variable := range launchingTerminalVariables {
+		if upper == variable {
+			return true
+		}
+	}
+	for _, prefix := range launchingTerminalPrefixes {
+		if strings.HasPrefix(upper, prefix) {
+			return true
+		}
+	}
+	return false
 }

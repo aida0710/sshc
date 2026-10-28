@@ -101,7 +101,7 @@ Sixel、iTerm2のインライン画像（OSC 1337 File=）、kittyの画像形�
 
 ## ローカルシェル
 
-セッション一覧の［新しいセッション］を選ぶと、SFTPの接続先選択と同じ画面が開きます。先頭の［Local shell］（検出したシェルプロファイルがあればプロファイルごとの行）でローカルシェルを、検索・最近使った接続・グループからSSHホストを選べます。ローカルシェルも、SSHと同じTerminalの仕組みで動作しています。［Settings］→［Terminal］ではシェルプロファイルを選べ、検索とクイックコマンドを同じように利用できます。macOSやLinuxでsshcエンジンを常駐起動した場合も、zshやfishの行編集に必要なTerminal情報をsshcが設定します。
+セッション一覧の［新しいセッション］を選ぶと、SFTPの接続先選択と同じ画面が開きます。先頭の［Local shell］（検出したシェルプロファイルがあればプロファイルごとの行）でローカルシェルを、検索・最近使った接続・グループからSSHホストを選べます。ローカルシェルも、SSHと同じTerminalの仕組みで動作しています。［Settings］→［Terminal］ではシェルプロファイルを選べ、検索とクイックコマンドを同じように利用できます。macOSやLinuxでsshcエンジンを常駐起動した場合も、zshやfishの行編集に必要なTerminal情報をsshcが設定します。ローカルシェルには`TERM=xterm-256color`、`COLORTERM=truecolor`、`TERM_PROGRAM=sshc`、`TERM_PROGRAM_VERSION`を渡し、sshcエンジンを起動したターミナルが置いた変数（`TERM_PROGRAM`、`GHOSTTY_`で始まるもの、Windows Terminalの`WT_SESSION`など）は渡しません。SSHの接続先には`COLORTERM=truecolor`を送ります（接続先のsshdが`AcceptEnv`で受け入れる場合。`SetEnv`に`COLORTERM`があればその値を送ります）。
 
 ## タイトルと通知
 

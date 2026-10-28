@@ -290,7 +290,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 			if dependencies.Environ != nil {
 				environment = dependencies.Environ()
 			}
-			return platform.LoginEnvironment(environment)
+			return platform.LoginEnvironment(environment, version)
 		},
 	})
 	if err != nil {

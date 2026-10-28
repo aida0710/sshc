@@ -141,6 +141,24 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	})
 }
 
+// sendColorTerm は、sshc のターミナルが 24 ビット色を描けることを COLORTERM で知らせる。
+// OpenSSH の ssh は手元の COLORTERM を送るが（Ubuntu の ssh_config の SendEnv）、sshc は
+// /etc/ssh/ssh_config を読まないので、ここで送る。SetEnv に COLORTERM があればそちらに任せる。
+// 受け入れるかはサーバーの AcceptEnv 次第で（Ubuntu の sshd は既定で受け入れる）、
+// 断られても続ける。
+func sendColorTerm(remote *ssh.Session, configured []EnvVar, trace *tracer) {
+	for _, variable := range configured {
+		if variable.Name == "COLORTERM" {
+			return
+		}
+	}
+	if err := remote.Setenv("COLORTERM", terminal.ColorTerm); err != nil {
+		trace.say(connectionlog.Detailed, "環境変数COLORTERMは受け入れられませんでした（サーバーのAcceptEnvを確認してください）。")
+		return
+	}
+	trace.say(connectionlog.Detailed, "環境変数COLORTERMを送りました。")
+}
+
 // start は、チャンネルの上で端末を要求し、シェルかコマンドを起動する。
 func (d Dialer) start(remote *ssh.Session, target Target, session *Session) error {
 	streams, _, err := encodeStreams(Streams{
@@ -172,6 +190,7 @@ func (d Dialer) start(remote *ssh.Session, target Target, session *Session) erro
 	if strings.EqualFold(target.RequestTTY, "no") {
 		session.trace.say(connectionlog.Detailed, "PTYは要求しません（RequestTTY no）。")
 	} else {
+		sendColorTerm(remote, target.SetEnv, session.trace)
 		// xterm.js is not a local TTY, so there is no real input or output baud
 		// rate to forward. Inventing one can leave the remote PTY with a speed
 		// that its termios implementation cannot apply again when programs enter
