@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
-import { maxGroupSegments } from "../rules/generated";
-import { isValidGroupName } from "../rules/rules";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { control, fieldLabel } from "../ui/form";
 import { InputDialog } from "../ui/InputDialog";
+import { groupSegmentProblem, joinGroup } from "./groupNameRules";
 
 // グループの「…」から開くダイアログ。どれを開いているかを Connections 画面が持つ。
 export type GroupDialogState =
@@ -32,25 +31,13 @@ function parentOf(name: string): string {
   return index < 0 ? "" : name.slice(0, index);
 }
 
-function joinGroup(parent: string, segment: string): string {
-  return parent === "" ? segment : `${parent}/${segment}`;
-}
-
 export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete, onClose, error = "" }: GroupDialogsProps) {
   const t = useTranslate();
   const [destination, setDestination] = useState("");
   const taken = new Set(groupNames.map((name) => name.toLowerCase()));
 
-  // 名前の欄には、親を除いた最後の1段だけを入れてもらう。階層は「中にグループを作成」とドラッグで決める。
   function validateSegment(parent: string, current: string | null) {
-    return (value: string) => {
-      if (value.includes("/")) return t("groupDialog.noSlash");
-      if (!isValidGroupName(value)) return t("groupDialog.invalidCharacters");
-      const full = joinGroup(parent, value);
-      if (!isValidGroupName(full)) return t("groupDialog.tooDeep", { count: maxGroupSegments });
-      if (full !== current && taken.has(full.toLowerCase())) return t("groups.nameTaken");
-      return "";
-    };
+    return (value: string) => groupSegmentProblem(t, { parent, value, current, taken });
   }
 
   if (dialog.kind === "create") {

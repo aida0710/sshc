@@ -5,8 +5,8 @@ import type { Section } from "../routing/sectionRoute";
 import { Button } from "../ui/surface";
 
 // The sections a connection being created sends the person to for what it
-// still needs (a group, a key); there the draft waits with a way back.
-const connectionDraftPrerequisiteSections: readonly Section[] = ["Groups", "Keys"];
+// still needs (a key); there the draft waits with a way back.
+const connectionDraftPrerequisiteSections: readonly Section[] = ["Keys"];
 
 // The notices across the top of every section: the Vault file was moved to
 // a newer version, and a connection being created waits for the person to

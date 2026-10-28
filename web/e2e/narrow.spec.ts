@@ -359,7 +359,6 @@ test("uses established product names in the Japanese navigation", async ({ page,
   }
   for (const section of [
     "SSH Config",
-    "Groups",
     "SSH Keys",
     "Known Hosts",
     "Remote Keys",

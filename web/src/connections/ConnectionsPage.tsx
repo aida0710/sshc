@@ -586,6 +586,7 @@ export function ConnectionsPage({
         groups={overview.groups}
         initialDraft={creationDraft ?? undefined}
         onOpenPrerequisite={leaveForCreationPrerequisite}
+        onCreateGroup={groups.createGroup}
         onClose={() => {
           setCreating(false);
           onCreationDraftChange?.(null);

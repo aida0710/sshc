@@ -1226,12 +1226,9 @@ export const ja = {
   "terminal.exitedWithSignal":
     "プログラムがシグナル{signal}で終了しました。出力は、このセッションを閉じるまで表示されます。",
   "inspector.appOnly": "sshc固有の設定",
-  "inspector.groupLabel": "グループの表示設定",
   "inspector.hostSave": "sshc固有の設定を保存",
   "inspector.hostSaveFailed":
     "sshc固有の設定の保存に失敗しました。エラーを確認して、もう一度保存してください。",
-  "inspector.groupChangesStaged":
-    "ここでの変更は「グループを保存」を押すまで保存されません。",
   "inspector.notices": "注意",
   "inspector.inherited": "継承した値",
   "inspector.noNotices": "この接続に関する注意事項はありません。",
@@ -1310,7 +1307,6 @@ export const ja = {
   "menu.signOutCancel": "キャンセル",
   "menu.signOutFailed": "サインアウトできませんでした。",
   "menu.configDescription": "設定ファイルとIncludeを編集",
-  "menu.groupsDescription": "接続と鍵をまとめて設定を共有",
   "menu.keysDescription": "鍵の作成・変更・削除",
   "menu.knownHostsDescription": "信頼したホスト鍵の確認と追加",
   "menu.remoteKeysDescription": "公開鍵をサーバーに登録",
@@ -1340,7 +1336,6 @@ export const ja = {
   "section.connections": "Connections",
   "section.terminal": "Terminal",
   "section.config": "SSH Config",
-  "section.groups": "Groups",
   "section.keys": "SSH Keys",
   "section.knownHosts": "Known Hosts",
   "section.remoteKeys": "Remote Keys",
@@ -1868,7 +1863,7 @@ export const ja = {
     "ディレクトリが空ではありません。先に中のファイルを削除してください。ファイルを削除すると、そのファイルを直接参照するInclude行も削除されます。",
   "refusal.not_a_directory": "指定したパスはディレクトリではなくファイルです。",
   "refusal.group_is_declared":
-    "{detail}は宣言済みのグループです。グループ画面で名前を変更または削除してください。関連する接続、共通設定、鍵も同時に移動されます。",
+    "{detail}は宣言済みのグループです。Connectionsのグループの「…」から名前の変更や削除をしてください。中の接続先、接続先の既定値、鍵も一緒に移ります。",
   "refusal.destination_exists":
     "移動先には同名のファイルまたはディレクトリがあります。",
   "refusal.alias_already_declared":
@@ -2507,7 +2502,7 @@ export const ja = {
   "explorer.submitDelete": "削除",
   "explorer.submitRename": "変更",
   "explorer.cancelPathTask": "キャンセル",
-  "explorer.createDirectoryNote": "宣言済みグループのディレクトリは、［Groups］で管理してください。",
+  "explorer.createDirectoryNote": "宣言済みのグループのフォルダは、Connectionsのグループの一覧で管理してください。",
   "explorer.deleteDirectoryNote": "削除できるのは空のディレクトリだけです。先に中のファイルを削除してください。",
   "explorer.renameNote":
     "ファイル名を変更すると、このファイルを直接参照するInclude行も同時に書き換えます。ワイルドカードのパターンは変更せず、新しいパスが一致しない場合は警告します。",
@@ -2539,79 +2534,8 @@ export const ja = {
   "explorer.createdDirectory": "ディレクトリ{path}を作成しました。",
   "explorer.deletedDirectory": "ディレクトリ{path}を削除しました。",
 
-  "groups.loading": "グループを読み込んでいます…",
-  "groups.pageTitle": "Groups",
-  "groups.metricGroups": "グループ",
-  "groups.metricConnections": "Connections",
-  "groups.metricDraft": "未保存の下書き",
-  "groups.empty": "グループはまだありません。",
-  "groups.nameTaken":
-    "同名のグループが既に存在します。別の名前を指定してください。",
-  "groups.chooseGroupAndKeyword":
-    "グループとディレクティブのキーワードを選んでください。",
   "groups.unbalancedQuote":
     "値の引用符が閉じていません。引用符を閉じるか、文字として残す引用符の前に\\を付けてください。",
-  "groups.renameNeedsName": "名前を変更するには、新しい名前が必要です。",
-  "groups.renameCollides":
-    "{name}は既に存在します。別の名前にするか、どちらか一方を削除してください。",
-  "groups.compileNote":
-    "グループは{file}の中の通常のHostブロックとして生成されます。OpenSSHは最初に読んだ値を保持するため、子グループを親より先に書き出します。",
-  "groups.members": "メンバー",
-  "groups.noMembers": "なし",
-  "groups.colour": "色",
-  "groups.clearColour": "{name}の色を消す",
-  "groups.renameTo": "{name}の新しい名前",
-  "groups.renameShort": "新しい名前",
-  "groups.rename": "{name}の名前を変更",
-  "groups.displayOrder": "表示順",
-  "groups.hide": "{name}を接続タブで非表示",
-  "groups.hideOnlyContainers":
-    "このグループには直下の接続があります。非表示にするとその接続も見えなくなるため、先に子グループへ移してください。",
-  "groups.remove": "{name}を削除",
-  "groups.newName": "新しいグループ名",
-  "groups.invalidName":
-    "グループ名は相対ディレクトリパスです。英数字とドット・ハイフン・アンダースコアをスラッシュで区切り、6階層までにしてください。",
-  "groups.directoryNote":
-    "グループはディレクトリとして保存されます。接続先は{connections}/<group>/、鍵は{keys}/<group>/に配置され、~/.ssh/configにはグループごとにInclude行が生成されます。読み込み順はglobの展開順に依存せず、設定ファイルに明示されます。",
-  "groups.howItWorks": "グループとSSHファイルの仕組み",
-  "groups.directories": "{connections}/ · {keys}/",
-  "groups.nestingNote":
-    "スラッシュで階層化できます。work/euはworkの子グループです。",
-  "groups.addChild": "{name}の中にグループを追加",
-  "groups.listLabel": "グループ一覧（親が先）",
-  "groups.orderNote":
-    "ここでは親が先に来るツリー順で表示しています。Include行は逆順（深い子グループが先）で書かれます。OpenSSHは最初に読んだ値を採用するため、子の設定を親より先に読ませる必要があるからです。",
-  "groups.removeInto": "{name}を削除",
-  "groups.removeIntoShort": "中の接続の移動先",
-  "groups.removeIntoNone": "グループなし（connections/直下）",
-  "groups.removeExplain":
-    "{name}を削除すると、Include行とグループ設定がなくなります。中の接続{count}件の移動先を選択してください。",
-  "groups.removeExplainEmpty":
-    "{name}を削除すると、Include行とグループ設定がなくなります。中に接続はないので、移動するものはありません。",
-  "groups.removeKeepsFiles":
-    "設定ファイルは1つも削除されません。1回の変更として履歴に残るため、あとから元に戻せます。",
-  "groups.removeConfirm": "{name}を削除する",
-  "groups.removeCancel": "キャンセル",
-  "groups.unsaved": "未保存",
-  "groups.unsavedBarLabel": "未保存のグループ変更",
-  "groups.unsavedBarNote":
-    "グループ追加と表示設定はまだ保存されていません。名前変更や削除の前に保存するか破棄してください。",
-  "groups.discard": "グループ変更を破棄",
-  "groups.saveDraftFirst":
-    "保留中のグループ変更を保存または破棄してから、名前変更や削除を行ってください。",
-  "groups.savedNote":
-    "未保存の変更はありません。色、表示順、グループ、設定の追加は「グループを保存」で反映されます。名前の変更と削除は実行時に即座に書き込まれます。",
-  "groups.immediateActions": "名前変更と削除は即座にディスクへ書き込みます。",
-  "groups.newGroupNote":
-    "このグループのディレクトリはまだありません。保存時に作成され、それまでは名前変更・削除できません。",
-  "groups.addHeading": "グループを追加する",
-  "groups.add": "グループを追加",
-  "groups.settingHeadingFor": "{name}に設定を追加",
-  "groups.directive": "ディレクティブ",
-  "groups.value": "値",
-  "groups.addSetting": "設定を追加",
-  "groups.previewChanges": "グループ変更をプレビュー",
-  "groups.save": "グループを保存",
 
   "groupFolders.heading": "フォルダ",
   "groupFolders.missing": "フォルダがありません。",
@@ -2683,6 +2607,7 @@ export const ja = {
   "groupDialog.noSlash": "名前に「/」は使えません。グループの中に作るときは、そのグループの「…」から［中にグループを作成］を選んでください。",
   "groupDialog.tooDeep": "グループは{count}階層までです。",
   "groupDialog.deleteKeepsConnections": "グループを削除しても、中の接続先は消えません。選んだグループへ移ります。",
+  "groupDialog.nameTaken": "同じ名前のグループがあります。別の名前にしてください。",
   "groupDialog.cancel": "キャンセル",
   "groupDialog.deleted": "{name}を削除しました。",
   "groupDialog.renamed": "名前を{name}に変更しました。",
@@ -2740,7 +2665,8 @@ export const ja = {
   "conn.createName": "接続名",
   "conn.createNameRequired": "接続名（必須）",
   "conn.createGroup": "保存先グループ",
-  "conn.createManageGroups": "グループを管理",
+  "conn.createNewGroupName": "新しいグループの名前",
+  "conn.createGroupFailed": "グループを作れませんでした。もう一度試してください。",
   "conn.createNoGroup": "グループなし",
   "conn.createHostName": "ホスト名またはIPアドレス",
   "conn.createHostNameRequired": "ホスト名またはIPアドレス（必須）",

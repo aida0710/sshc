@@ -41,7 +41,7 @@ const kindLabelKeys: Record<PaletteItem["kind"], MessageKey> = {
 };
 
 const searchableSections: Section[] = [
-  "Connections", "Config", "Groups", "Keys", "Known Hosts", "Remote Keys",
+  "Connections", "Config", "Keys", "Known Hosts", "Remote Keys",
   "Diagnostics", "Passwords", "Key Passphrases", "OTP", "Snippets", "Settings", "Sync", "VPN", "History",
 ];
 
