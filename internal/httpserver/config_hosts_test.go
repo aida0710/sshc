@@ -28,7 +28,7 @@ func TestHostEditsをHTTPで送るとPreviewとSaveが通る(t *testing.T) {
 			if err := os.WriteFile(path, base, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			request := application.EditRequest{Kind: kind, Hosts: []application.HostEdit{
+			request := application.EditRequest{Kind: kind, Hosts: []application.HostIdentity{
 				{Path: "config", Alias: "bastion"},
 				{Path: "config", Alias: "second"},
 			}, Bases: []application.FileBase{{Path: "config", Base: string(base)}}}
@@ -72,19 +72,19 @@ func TestHostEditsをHTTPで送るとPreviewとSaveが通る(t *testing.T) {
 }
 
 func TestHostEditsの不正な選択をHTTPで送ると拒否される(t *testing.T) {
-	host := application.HostEdit{Path: "config", Alias: "bastion"}
+	host := application.HostIdentity{Path: "config", Alias: "bastion"}
 	base := application.FileBase{Path: "config", Base: handlerConfig}
 	selections := map[string]application.EditRequest{
 		"empty":                 {Bases: []application.FileBase{base}},
-		"too many":              {Hosts: make([]application.HostEdit, application.MaxHostEdits+1), Bases: []application.FileBase{base}},
-		"missing alias":         {Hosts: []application.HostEdit{{Path: "config"}}, Bases: []application.FileBase{base}},
-		"duplicate":             {Hosts: []application.HostEdit{host, host}, Bases: []application.FileBase{base}},
-		"no contents":           {Hosts: []application.HostEdit{host}},
-		"missing base path":     {Hosts: []application.HostEdit{host}, Bases: []application.FileBase{{Base: handlerConfig}}},
-		"traversal":             {Hosts: []application.HostEdit{{Path: "../config", Alias: "bastion"}}, Bases: []application.FileBase{{Path: "../config", Base: handlerConfig}}},
-		"oversized base":        {Hosts: []application.HostEdit{host}, Bases: []application.FileBase{{Path: "config", Base: strings.Repeat("a", maxRawLength+1)}}},
-		"two contents for file": {Hosts: []application.HostEdit{host}, Bases: []application.FileBase{base, {Path: "config", Base: "different"}}},
-		"contents nothing uses": {Hosts: []application.HostEdit{host}, Bases: []application.FileBase{base, {Path: "conf.d/10-home.conf", Base: ""}}},
+		"too many":              {Hosts: make([]application.HostIdentity, application.MaxHostEdits+1), Bases: []application.FileBase{base}},
+		"missing alias":         {Hosts: []application.HostIdentity{{Path: "config"}}, Bases: []application.FileBase{base}},
+		"duplicate":             {Hosts: []application.HostIdentity{host, host}, Bases: []application.FileBase{base}},
+		"no contents":           {Hosts: []application.HostIdentity{host}},
+		"missing base path":     {Hosts: []application.HostIdentity{host}, Bases: []application.FileBase{{Base: handlerConfig}}},
+		"traversal":             {Hosts: []application.HostIdentity{{Path: "../config", Alias: "bastion"}}, Bases: []application.FileBase{{Path: "../config", Base: handlerConfig}}},
+		"oversized base":        {Hosts: []application.HostIdentity{host}, Bases: []application.FileBase{{Path: "config", Base: strings.Repeat("a", maxRawLength+1)}}},
+		"two contents for file": {Hosts: []application.HostIdentity{host}, Bases: []application.FileBase{base, {Path: "config", Base: "different"}}},
+		"contents nothing uses": {Hosts: []application.HostIdentity{host}, Bases: []application.FileBase{base, {Path: "conf.d/10-home.conf", Base: ""}}},
 	}
 	for name, selection := range selections {
 		t.Run(name, func(t *testing.T) {
@@ -105,7 +105,7 @@ func TestHostEditsの不正な選択をHTTPで送ると拒否される(t *testin
 func TestHostEditsの古いBaseをHTTPで送ると全体のConflictが返る(t *testing.T) {
 	harness := newConfigHarness(t)
 	request := application.EditRequest{Kind: application.EditDeleteHosts,
-		Hosts: []application.HostEdit{{Path: "config", Alias: "bastion"}},
+		Hosts: []application.HostIdentity{{Path: "config", Alias: "bastion"}},
 		Bases: []application.FileBase{{Path: "config", Base: handlerConfig + "# stale\n"}},
 	}
 	for _, endpoint := range []string{"preview", "save"} {
