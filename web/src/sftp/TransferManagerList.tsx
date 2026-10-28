@@ -10,6 +10,7 @@ import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { readStoredJSON, writeStoredJSON } from "../ui/browserStorage";
 import { localStorageKeys } from "../ui/browserStorageKeys";
+import { menuItemClass, menuSurface } from "../ui/menuStyle";
 import { settingsPagePath } from "../settings/settingsRoute";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
 import { getTransferQueueSummary } from "./transferQueueSummaryModel";
@@ -207,12 +208,12 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
             <Icon name="moreHorizontal" className="size-4" />
           </button> : null}
           {menuOpen ? (
-            <div ref={menuPanel} role="menu" aria-label={t("sftp.manager.actions")} className={`absolute right-0 z-20 w-48 rounded-lg border border-control-line bg-card p-1 shadow-lg ${compactViewport ? "top-full mt-1" : "bottom-full mb-1"}`}>
-              {canPause ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.pauseAll()); }} className="block min-h-11 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-8 mobile-layout:min-h-11">{t("sftp.manager.pauseAll")}</button> : null}
-              {canResume ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.resumeAll()); }} className="block min-h-11 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-8 mobile-layout:min-h-11">{t("sftp.manager.resumeAll")}</button> : null}
-              {canCancel ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.cancelAll()); }} className="block min-h-11 w-full rounded px-2.5 py-2 text-left text-sm text-danger hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-8 mobile-layout:min-h-11">{t("sftp.manager.cancelAll")}</button> : null}
-              {canClear ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.clearFinished()); }} className="block min-h-11 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-8 mobile-layout:min-h-11">{t("sftp.transfer.clear")}</button> : null}
-              {canClearFailed ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.clearFailed()); }} className="block min-h-11 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-8 mobile-layout:min-h-11">{t("sftp.manager.clearFailed")}</button> : null}
+            <div ref={menuPanel} role="menu" aria-label={t("sftp.manager.actions")} className={`absolute right-0 z-20 w-48 ${menuSurface} ${compactViewport ? "top-full mt-1" : "bottom-full mb-1"}`}>
+              {canPause ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.pauseAll()); }} className={menuItemClass()}>{t("sftp.manager.pauseAll")}</button> : null}
+              {canResume ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.resumeAll()); }} className={menuItemClass()}>{t("sftp.manager.resumeAll")}</button> : null}
+              {canCancel ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.cancelAll()); }} className={menuItemClass("danger")}>{t("sftp.manager.cancelAll")}</button> : null}
+              {canClear ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.clearFinished()); }} className={menuItemClass()}>{t("sftp.transfer.clear")}</button> : null}
+              {canClearFailed ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.clearFailed()); }} className={menuItemClass()}>{t("sftp.manager.clearFailed")}</button> : null}
             </div>
           ) : null}
         </div>
