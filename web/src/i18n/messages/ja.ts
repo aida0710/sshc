@@ -1008,11 +1008,12 @@ export const ja = {
   "terminal.keepScreenAwake": "画面を常にオン",
   "terminal.keepScreenAwakeHint":
     "ターミナルを表示している間、画面を消しません。このブラウザだけの設定で、すべてのターミナルに効きます",
+  "terminal.globalSettings": "全体設定",
   "terminal.osc52Hint":
-    "このターミナルセッションからOSC 52でシステムのクリップボードへ書き込むことを許可します",
+    "すべてのターミナルで、リモートのプログラムがOSC 52でクリップボードへ書き込むことを許可します",
   "terminal.osc52Enabled":
-    "このターミナルセッションでOSC 52のクリップボード書き込みを許可しました。",
-  "terminal.osc52Disabled": "OSC 52のクリップボード書き込みを拒否します。",
+    "すべてのターミナルで、OSC 52のクリップボード書き込みを許可しました。",
+  "terminal.osc52Disabled": "すべてのターミナルで、OSC 52のクリップボード書き込みを拒否します。",
   "terminal.osc52Copied":
     "リモートアプリがシステムのクリップボードへコピーしました。",
   "terminal.moreActions": "ターミナルのその他の操作",
@@ -1085,8 +1086,8 @@ export const ja = {
   "terminal.linesUnit": "行",
   "terminal.localShellProfileLabel": "既定のローカルシェル",
   "terminal.localShellProfileSystem": "システムのログインシェル",
-  "terminal.osc52DefaultLabel": "OSC 52のクリップボード書き込みを既定で許可",
-  "terminal.osc52DefaultHint": "SSH接続ごとに継承・許可・拒否を選べます。",
+  "terminal.osc52SettingLabel": "OSC 52のクリップボード書き込みを許可",
+  "terminal.osc52SettingHint": "すべてのターミナルに効きます。ターミナルの「…」でも切り替えられます。",
   "terminal.jisYenBackslashLabel": "JIS配列の¥キーをバックスラッシュ（\\）として送る",
   "terminal.jisYenBackslashHint": "日本語キーボード向け。IME変換中の入力は変えません。",
   "terminal.composerEnterSendsLabel": "スマホの入力欄でEnterを押したら送信する",
@@ -1192,12 +1193,6 @@ export const ja = {
   "connection.encodingShiftJIS": "Shift_JIS（日本語）",
   "connection.encodingEUCJP": "EUC-JP（日本語）",
   "connection.encodingISO2022JP": "ISO-2022-JP（日本語）",
-  "connection.osc52Label": "OSC 52",
-  "connection.osc52Hint":
-    "このSSH接続のリモートアプリケーションが、システムのクリップボードへ書き込むことを許可するか選択します。",
-  "connection.osc52Inherit": "ターミナル全体の設定を使う",
-  "connection.osc52Allow": "この接続では許可",
-  "connection.osc52Deny": "この接続では拒否",
   "connection.vpnLabel": "使用するVPNプロファイル",
   "connection.vpnHint": "この接続を、選択したVPNプロファイルのVPN経由で接続します。接続先はこの接続のHostNameとPortです。VPNプロファイルはVPN画面で作成します。",
   "connection.vpnNone": "VPNを使わない",

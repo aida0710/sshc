@@ -6125,10 +6125,6 @@ components:
           type: string
           enum: [utf-8, shift_jis, euc-jp, iso-2022-jp]
           description: Text encoding used by this SSH terminal. Omitted means UTF-8.
-        osc52:
-          type: string
-          enum: [allow, deny]
-          description: Per-connection OSC 52 override. Omitted inherits the terminal default.
         # 通る VPN プロファイルの名前。ssh_config には書かない。OpenSSH が解釈する
         # 語ではなく、sshc だけが持つ紐付けだからである。
         vpn: { type: string, maxLength: 48 }

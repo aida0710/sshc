@@ -180,19 +180,6 @@ export function HostInspector({
               <option value="iso-2022-jp">{t("connection.encodingISO2022JP")}</option>
             </select>
           </FieldRow>
-
-          <FieldRow density="editor" label={t("connection.osc52Label")} hint={t("connection.osc52Hint")}>
-            <select
-              value={draft.osc52 ?? ""}
-              onChange={(event) =>
-                setDraft(withOptionalChoice(draft, "osc52", event.target.value as NonNullable<HostMetadata["osc52"]> | ""))}
-              className={control}
-            >
-              <option value="">{t("connection.osc52Inherit")}</option>
-              <option value="allow">{t("connection.osc52Allow")}</option>
-              <option value="deny">{t("connection.osc52Deny")}</option>
-            </select>
-          </FieldRow>
         </EditorSection>
 
         <EditorSection title={t("inspector.vpnHeading")}>

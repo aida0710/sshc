@@ -81,3 +81,20 @@ test("applies terminal titles to the pane and marks notifications unread", async
   await expect(first.getByText(/Build finished/)).toHaveCount(0);
   await expect(first.getByRole("button").first()).not.toHaveAccessibleDescription(/Unread notification/);
 });
+
+test("turns OSC 52 on for every terminal from one terminal's menu", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const first = page.getByRole("region", { name: /^Terminal for / });
+  await expect(first).toContainText(/[$#%>]/);
+  await first.getByRole("button", { name: "More terminal actions" }).click();
+  await first.getByRole("group", { name: "Global settings" }).getByRole("menuitemcheckbox", { name: "OSC 52" }).click();
+  await expect(first).toContainText("OSC 52 clipboard writes are now allowed in every terminal.");
+
+  await openLocalShell(page);
+  await expect(page.getByRole("list", { name: "Open sessions" }).getByRole("listitem")).toHaveCount(2);
+  const second = page.getByRole("region", { name: /^Terminal for / });
+  await expect(second).toContainText(/[$#%>]/);
+  await second.getByRole("button", { name: "More terminal actions" }).click();
+  await expect(second.getByRole("menuitemcheckbox", { name: "OSC 52" })).toHaveAttribute("aria-checked", "true");
+});

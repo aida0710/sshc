@@ -4087,11 +4087,6 @@ export interface components {
              * @enum {string}
              */
             encoding?: "utf-8" | "shift_jis" | "euc-jp" | "iso-2022-jp";
-            /**
-             * @description Per-connection OSC 52 override. Omitted inherits the terminal default.
-             * @enum {string}
-             */
-            osc52?: "allow" | "deny";
             vpn?: string;
         };
         AppearanceSettings: {

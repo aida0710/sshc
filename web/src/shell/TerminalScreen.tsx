@@ -19,16 +19,8 @@ const TerminalView = lazy(() =>
   import("../terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
 );
 
-// A host's own OSC 52 policy wins over the terminal-wide default.
-export function resolveOSC52(
-  policy: "allow" | "deny" | undefined,
-  fallback: boolean,
-): boolean {
-  return policy === undefined ? fallback : policy === "allow";
-}
-
 // Terminals stay mounted behind other sections so output keeps flowing.
-// Each session uses its host's appearance and clipboard policy.
+// Each session uses its host's appearance.
 export function TerminalScreen({
   visible,
   terminalSessions,
@@ -36,7 +28,6 @@ export function TerminalScreen({
   splitView,
   settings,
   hostAppearance,
-  hostOSC52,
   hostVPN,
   api,
   runTargets,
@@ -52,7 +43,6 @@ export function TerminalScreen({
   splitView: SplitViewController;
   settings: TerminalSettings;
   hostAppearance: Map<string, TerminalAppearance>;
-  hostOSC52: Map<string, "allow" | "deny">;
   // hostVPN は、alias ごとに通るVPN経路の名前である。
   hostVPN: Map<string, string>;
   // api is the terminal API of the run target the sessions belong to.
@@ -65,10 +55,8 @@ export function TerminalScreen({
     path: string,
     action: RemotePathAction,
   ) => void;
-  onOSC52Change: (
-    session: TerminalSession,
-    enabled: boolean,
-  ) => Promise<void>;
+  // onOSC52Change turns OSC 52 on or off for every terminal.
+  onOSC52Change: (enabled: boolean) => Promise<void>;
 }) {
   const runTarget = runTargets.selected;
   // Only an engine on an SSH host refuses a list; this machine's own list
@@ -90,11 +78,6 @@ export function TerminalScreen({
         : hostAppearance.get(session.alias),
       settings.appearance,
     );
-    const hostPolicy =
-      session.alias === undefined
-        ? undefined
-        : hostOSC52.get(session.alias);
-    const osc52Enabled = resolveOSC52(hostPolicy, settings.osc52 ?? false);
     const vpnProfile = session.alias === undefined ? "" : hostVPN.get(session.alias) ?? "";
     return (
       <div className="flex min-h-0 flex-1 flex-col">
@@ -116,11 +99,11 @@ export function TerminalScreen({
           {...(settings.browserScrollbackLines === undefined
             ? {}
             : { scrollbackLines: settings.browserScrollbackLines })}
-          osc52Enabled={osc52Enabled}
+          osc52Enabled={settings.osc52 ?? false}
           vpnProfile={vpnProfile}
           jisYenBackslash={settings.jisYenBackslash ?? false}
           composerEnterSends={settings.composerEnterSends ?? false}
-          onOsc52Change={(enabled) => onOSC52Change(session, enabled)}
+          onOsc52Change={onOSC52Change}
           onForwardsChanged={terminalSessions.refresh}
           {...(appearance.palette === ""
             ? {}

@@ -20,7 +20,7 @@ describe("sameHostMetadata", () => {
   });
 
   it("sees a changed value as a change", () => {
-    expect(sameHostMetadata({ identity, osc52: "deny" }, { identity })).toBe(false);
+    expect(sameHostMetadata({ identity, encoding: "euc-jp" }, { identity })).toBe(false);
     expect(sameHostMetadata({ identity, tags: ["web", "db"] }, { identity, tags: ["db", "web"] })).toBe(false);
   });
 

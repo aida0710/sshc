@@ -96,7 +96,6 @@ var servedStringEnums = map[string]func(string) bool{
 	"HostMetadata.os":                     acceptedAsHostMetadata(func(host *application.HostMetadata, value string) { host.OS = value }),
 	"HostMetadata.detectedOS":             acceptedAsHostMetadata(func(host *application.HostMetadata, value string) { host.DetectedOS = value }),
 	"HostMetadata.encoding":               acceptedAsHostMetadata(func(host *application.HostMetadata, value string) { host.Encoding = value }),
-	"HostMetadata.osc52":                  acceptedAsHostMetadata(func(host *application.HostMetadata, value string) { host.OSC52 = value }),
 	"VaultAutoLockSettings.mode":          oneOf(application.VaultAutoLockIdle, application.VaultAutoLockRestart),
 	"VaultAutoLockSettings.unit":          oneOf(application.VaultAutoLockMinutes, application.VaultAutoLockHours),
 	"PasswordEligibility.passwordBinding": oneOf(authenticationBindingStates...),

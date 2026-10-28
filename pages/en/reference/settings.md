@@ -58,13 +58,13 @@ A passwordless Vault is neither auto-locked nor lockable by hand: it opens when 
 - Reconnect attempts after a dropped connection and connection-log verbosity
 - Font size, color scheme, font, background, and tint
 - Copy on select and right-click paste
-- Global OSC 52 default
+- OSC 52 (applies to every terminal)
 - JIS yen-key to backslash behavior
 - Whether Enter sends from the phone's text box (it starts a new line by default)
 
 The engine replay buffer retains bytes in memory so it can replay output when a browser reconnects. Browser scrollback is the separate number of display lines retained by xterm. Neither setting writes terminal output to disk.
 
-OSC 52 and encoding may be overridden per connection. OSC 8 and Kitty keyboard behavior are protocol-driven.
+Encoding may be overridden per connection. OSC 8 and Kitty keyboard behavior are protocol-driven.
 
 Rendering uses WebGL by default and automatically falls back to the DOM renderer when WebGL is unavailable or a background image is active. If a GPU or browser duplicates characters or leaves visual traces, turn off **Use WebGL rendering** to always use DOM rendering.
 

@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { vaultStatePollIntervalMs } from "./session/useAppSession";
-import { resolveOSC52 } from "./shell/TerminalScreen";
 import type { InspectorContent } from "./ui/Inspector";
 import { LanguageProvider } from "./i18n/context";
 import { ThemeProvider } from "./theme/context";
@@ -259,11 +258,6 @@ describe("App", () => {
     expect(window.location.pathname).toBe("/terminal");
   });
 
-  it("resolves OSC 52 with an SSH host override before the terminal default", () => {
-    expect(resolveOSC52(undefined, true)).toBe(true);
-    expect(resolveOSC52("deny", true)).toBe(false);
-    expect(resolveOSC52("allow", false)).toBe(true);
-  });
   it("unmounts the ready UI when vault-state polling observes a lock", async () => {
     let poll: (() => void) | null = null;
     const originalSetInterval = window.setInterval.bind(window);
