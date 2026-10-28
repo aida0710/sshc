@@ -16,6 +16,7 @@ export function AppHeader({
   inspectorToggleRef,
   onToggleInspector,
   actionsSlotRef,
+  backSlotRef,
   sectionLabels,
 }: {
   route: { kind: string; section?: Section };
@@ -29,11 +30,15 @@ export function AppHeader({
   onToggleInspector: () => void;
   // actionsSlotRef receives the place where a page's heading puts its actions on a phone (see pageChrome).
   actionsSlotRef: (element: HTMLDivElement | null) => void;
+  // backSlotRef receives the place where a page puts its way back (PhoneBackButton); the menu button gives
+  // way to it while it is there.
+  backSlotRef: (element: HTMLDivElement | null) => void;
   sectionLabels: Record<Section, MessageKey>;
 }) {
   const { t } = useLanguage();
   return (
     <header data-app-header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:hidden">
+      <div ref={backSlotRef} data-page-back className="flex shrink-0 items-center empty:hidden" />
       <button
         ref={navigationToggleRef}
         type="button"
@@ -41,7 +46,7 @@ export function AppHeader({
         aria-expanded={navigationOpen}
         aria-controls={navigationId}
         onClick={onToggleNavigation}
-        className="grid h-10 w-10 shrink-0 place-items-center rounded text-ink-muted hover:bg-select-fill hover:text-ink"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded text-ink-muted hover:bg-select-fill hover:text-ink [[data-page-back]:not(:empty)~&]:hidden"
       >
         <Icon name="menu" className="h-4 w-4" />
       </button>
