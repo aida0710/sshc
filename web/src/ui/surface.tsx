@@ -8,6 +8,7 @@ import {
 } from "react";
 import { describeControl } from "./describeControl";
 import { dangerAction, dangerTextAction, hintText, primaryAction, secondaryAction, smallSecondaryAction } from "./form";
+import { segmentClass, segmentedStrip } from "./segmentedStyle";
 import { Spinner } from "./Spinner";
 
 type CardElement = "div" | "section" | "article" | "dl" | "ul";
@@ -158,7 +159,7 @@ export function Segmented<T extends string>({
     <div
       role="group"
       aria-label={label}
-      className="inline-flex rounded-md border border-line bg-well p-0.5"
+      className={segmentedStrip}
     >
       {options.map((option) => (
         <button
@@ -166,11 +167,7 @@ export function Segmented<T extends string>({
           type="button"
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
-          className={`h-[26px] rounded-[6px] px-2.5 text-[12.5px] transition-colors ${
-            value === option.value
-              ? "bg-select-fill text-ink"
-              : "text-ink-muted hover:bg-hover hover:text-ink"
-          }`}
+          className={segmentClass(value === option.value)}
         >
           {option.label}
         </button>
