@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { terminalProblemKey } from "./sessions";
-import { exitedAbnormally } from "./sessionStatus";
+import { endedRightAway, exitedAbnormally } from "./sessionStatus";
 import type { StreamLink } from "./streamLink";
 
 const notice = "shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink";
@@ -167,9 +167,11 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
           <p className={`min-w-0 grow ${exitedAbnormally(session) ? "text-danger" : "text-ink-muted"}`}>
             {session.exited.connectionLost === true
               ? t("terminal.exitedWithConnectionLost")
-              : session.exited.signal === ""
-                ? t("terminal.exitedWithCode", { code: String(session.exited.code) })
-                : t("terminal.exitedWithSignal", { signal: session.exited.signal })}
+              : session.exited.signal !== ""
+                ? t("terminal.exitedWithSignal", { signal: session.exited.signal })
+                : session.exited.code === 0 && endedRightAway(session)
+                  ? t("terminal.exitedWithCodeRightAway")
+                  : t("terminal.exitedWithCode", { code: String(session.exited.code) })}
           </p>
           {session.kind !== "ssh" || session.alias === undefined || onReconnect === undefined ? null : (
             <button
