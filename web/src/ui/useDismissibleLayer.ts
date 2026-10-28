@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 import { isImeComposing } from "./imeComposition";
 
 export type DismissReason = "outside" | "escape" | "android-back" | "superseded";
@@ -180,7 +180,10 @@ export function useDismissibleLayer({
   returnFocus.current = returnFocusRef;
   initialFocus.current = initialFocusRef;
 
-  useEffect(() => {
+  // Registered while React commits the layer, not after it paints: a layer
+  // that appears on its own (an offer that arrives, a menu) can be shown before
+  // a passive effect runs, and an Escape pressed then would go nowhere.
+  useLayoutEffect(() => {
     if (!open) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const layer: Layer = {

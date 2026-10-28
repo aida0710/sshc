@@ -71,6 +71,25 @@ describe("TerminalRestorePrompt", () => {
     expect(api.restore).not.toHaveBeenCalled();
   });
 
+  // The offer arrives after the screen has loaded, so the dialog appears on
+  // its own; an Escape pressed the moment it shows must still close it.
+  it("closes on an Escape pressed as soon as the question appears", async () => {
+    const pressed = new Promise<void>((resolve) => {
+      const observer = new MutationObserver(() => {
+        const dialog = document.querySelector('[role="dialog"]');
+        if (dialog === null) return;
+        observer.disconnect();
+        fireEvent.keyDown(dialog, { key: "Escape" });
+        resolve();
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+    renderPrompt(restoreApi());
+    await pressed;
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
   it("asks nothing when there is no offer or it cannot be read", async () => {
     const offer = vi.fn().mockRejectedValue(new Error("engine unavailable"));
     renderPrompt(restoreApi({ offer }));
