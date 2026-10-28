@@ -47,6 +47,7 @@ function runTargets(selected: string | null, api = enginesApi()): RunTargetsStat
     api, localVersion: "v0.54.0",
     vaultUnlock: { unlockFor: null, revision: 0, ask: vi.fn(), close: vi.fn(), unlocked: vi.fn() },
     engineInfo: { openFor: null, ask: vi.fn(), close: vi.fn() },
+    unread: new Set(),
   };
 }
 
