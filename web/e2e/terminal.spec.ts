@@ -334,6 +334,25 @@ test("saves the whole scrollback to a text file from the terminal's menu", async
   expect(text).toContain("saved-42\n");
 });
 
+test("tells a program whether the terminal is shown when it asks (mode 2033)", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "printf and read are POSIX shell syntax here");
+  await openApplication(page, installation);
+  const panel = await openSessionList(page);
+  await openLocalShell(page);
+  // CSI ? 998 n asks once; the answer is CSI ? 999 ; 1 n while shown, 2 when not.
+  const ask = "printf '\\033[?998n'; IFS= read -rs -d n reply";
+  const screen = await typeIntoTerminal(page, `${ask}; printf 'ANSWER:%s\\n' "\${reply#*;}"`);
+  await expect(screen).toContainText("ANSWER:1", { timeout: 20_000 });
+
+  // The first shell asks once the second, on the screen in its place, says so; the answer comes back
+  // through a file, since the first terminal is kept hidden meanwhile.
+  await typeIntoTerminal(page, `until [ -e "$HOME/ask-now" ]; do sleep 0.1; done; ${ask}; printf '%s' "\${reply#*;}" > "$HOME/answer"`);
+  await openLocalShell(page);
+  await expect(panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem")).toHaveCount(2);
+  await typeIntoTerminal(page, `touch "$HOME/ask-now"; until [ -s "$HOME/answer" ]; do sleep 0.1; done; printf 'HIDDEN:%s\\n' "$(cat "$HOME/answer")"`);
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toContainText("HIDDEN:2", { timeout: 20_000 });
+});
+
 test("refuses to open more sessions than the configured limit", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",

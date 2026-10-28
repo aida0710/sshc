@@ -47,6 +47,8 @@ import { TerminalProgressBar } from "./TerminalProgressBar";
 import { attachInlineImages } from "./inlineImages";
 import { applyCurrentUnicodeWidths } from "./unicodeWidths";
 import { attachCommandMarkers } from "./commandMarkers";
+import { attachVisibilityReportQuestions } from "./visibilityReports";
+import { isTerminalShown, watchTerminalShown } from "./terminalVisibility";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
 import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
@@ -356,6 +358,7 @@ export function TerminalView({
     // behind once the shell reports the command finished. The engine notifies
     // the end of a long command (internal/terminal/command_finished.go).
     const commandMarkers = attachCommandMarkers(view, () => setProgramProgress(noTerminalProgress));
+    const visibilityQuestions = attachVisibilityReportQuestions(view.parser);
     // Registered after the command marks, so it sees OSC 133 before they consume it.
     const prompt = trackPromptCursor(view);
     promptCursor.current = prompt;
@@ -391,6 +394,8 @@ export function TerminalView({
       onLink: setLink,
       onAttached: () => {
         sent = "";
+        // A new stream starts as shown to the engine; it is told the truth at once.
+        linkController.currentStream()?.reportShown(isTerminalShown(container));
         if (activeRef.current && !touchTerminalRef.current && session.state !== "exited" && !search.hasFocus() && !isTypingElsewhere(region.current)) {
           view.focus();
         }
@@ -487,11 +492,14 @@ export function TerminalView({
     });
 
     const stopObservingSize = observeTerminalSize(view, container, fitAndSync);
+    const stopWatchingShown = watchTerminalShown(container, (shown) => linkController.currentStream()?.reportShown(shown));
 
     return () => {
       linkController.close();
       streamLinkController.current = null;
       stopObservingSize();
+      stopWatchingShown();
+      visibilityQuestions.dispose();
       detachTouchScroll();
       detachClipboard();
       detachOsc52();
