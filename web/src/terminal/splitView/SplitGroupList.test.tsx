@@ -30,9 +30,9 @@ const sessions = [
   session("build", { kind: "ssh", alias: "build-01", title: "ビルド", state: "reconnecting", reconnect: { attempt: 2, limit: 5, retryAt: "2026-10-26T00:00:05Z", problem: "" } }),
 ];
 
-function renderList() {
+function renderList({ selected = 1 }: { selected?: number | null } = {}) {
   const props = { onSelect: vi.fn(), onSelectSession: vi.fn(), onDissolve: vi.fn() };
-  render(<SplitGroupList groups={[group]} sessions={sessions} selected={1} unreadBySession={new Set(["log"])} {...props} />);
+  render(<SplitGroupList groups={[group]} sessions={sessions} selected={selected} unreadBySession={new Set(["log"])} {...props} />);
   return props;
 }
 
@@ -59,6 +59,20 @@ describe("SplitGroupList", () => {
 
     const map = screen.getByRole("button", { name: "Split 1" }).querySelector("[data-split-layout-map]");
     expect(map?.children).toHaveLength(3);
+  });
+
+  it("marks the session typing goes to while its split is shown", () => {
+    renderList();
+
+    const members = within(screen.getByRole("list", { name: "Sessions in Split 1" })).getAllByRole("button");
+    expect(members.map((row) => row.getAttribute("aria-current"))).toEqual(["true", null, null]);
+  });
+
+  it("marks no session while another split or a single session is shown", () => {
+    renderList({ selected: null });
+
+    const members = within(screen.getByRole("list", { name: "Sessions in Split 1" })).getAllByRole("button");
+    expect(members.every((row) => !row.hasAttribute("aria-current"))).toBe(true);
   });
 
   it("opens a session of the split, and the split itself, from the rows", async () => {

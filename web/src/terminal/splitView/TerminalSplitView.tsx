@@ -3,6 +3,7 @@ import type { TerminalSession } from "../../api/terminalSessions";
 import { useTranslate } from "../../i18n/context";
 import { shortcutsBlocked } from "../../keyconfig/bindings";
 import { SplitResizeHandle } from "../../ui/SplitResizeHandle";
+import { prefersNativeSelection } from "../nativeSelection";
 import { terminalDisplayTitle } from "../terminalPresentation";
 import { TerminalEmptyState } from "../TerminalEmptyState";
 import { splitViewGeometry } from "./geometry";
@@ -105,6 +106,16 @@ export function TerminalSplitView({ splitView, sessions, renderTerminal }: {
                 className={`absolute min-h-0 min-w-0 flex-col ${compact ? "" : "p-1"} ${hidden ? "hidden" : "flex"}`}
                 onPointerDown={() => selectSession(sessionId, false)}
                 onFocusCapture={() => selectSession(sessionId, false)}
+                onClick={(event) => {
+                  // A click on the header's title leaves the keyboard on the page body, so the pane would look
+                  // chosen while typing goes nowhere. A click that put the focus in the pane (the terminal, a
+                  // button) needs nothing, nor does one in a dialog the pane opened elsewhere on the page.
+                  // A touch screen keeps its keyboard closed until the terminal itself is tapped.
+                  const pane = event.currentTarget;
+                  if (compact || prefersNativeSelection((query) => window.matchMedia(query))) return;
+                  if (!pane.contains(event.target as Node) || pane.contains(document.activeElement)) return;
+                  selectSession(sessionId);
+                }}
                 onDragEnter={(event) => drag.dragOver(event, sessionId)}
                 onDragOver={(event) => drag.dragOver(event, sessionId)}
                 onDragLeave={drag.leave}
