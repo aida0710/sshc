@@ -127,6 +127,12 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Set-Cookie", "leaked=1")
 		fmt.Fprintf(w, `{"method":%q,"body":%q,"cookies":%q}`, r.Method, string(body), r.Header.Get("Cookie"))
+	case "/api/v1/terminal/commands":
+		if !f.authorized(w, r) {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"action":%q}`, r.Header.Get(handoff.ActionHeader))
 	case remoteUnlockPath:
 		if !f.authorized(w, r) {
 			return
@@ -312,6 +318,27 @@ func TestAnEngineIsConnectedOnlyWhileItHoldsTheLinkAndTheSessionAndAskingDoesNot
 	}
 	if manager.Connected("r540") || connects != 1 {
 		t.Fatalf("after removing: connected = %v, connects = %d", manager.Connected("r540"), connects)
+	}
+}
+
+// このマシンのエンジン自身が送る要求も、取り次ぎと同じ資格で届き、確認のトークンを運ぶ。
+// 資格が古ければ受け取り直して一度だけ送り直す。
+func TestACallToTheRemoteTerminalAPICarriesTheActionTokenAndRenewsAnExpiredSession(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r540"); err != nil {
+		t.Fatal(err)
+	}
+	remote.expired.Store(true)
+	answer, err := manager.CallTerminalAPI(context.Background(), "r540", TerminalCall{
+		Method: http.MethodPost, Path: "/api/v1/terminal/commands", ContentType: "application/json",
+		Body: []byte(`{}`), ActionToken: "remote-token",
+	})
+	if err != nil || answer.Status != http.StatusOK || string(answer.Body) != `{"action":"remote-token"}` {
+		t.Fatalf("call = %d %s, %v", answer.Status, answer.Body, err)
+	}
+	if got := remote.sessions.Load(); got != 2 {
+		t.Fatalf("sessions issued = %d, want 2", got)
 	}
 }
 

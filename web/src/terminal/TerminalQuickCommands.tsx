@@ -5,7 +5,7 @@ import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { snippetsApi, type Snippet } from "../snippets/api";
 import { clipboard } from "../ui/clipboard";
-import { terminalCommandApi } from "./commands/commandApi";
+import { terminalCommandApi, type TerminalCommandApi, type TerminalCommandPreview, type TerminalCommandRequest } from "./commands/commandApi";
 import { describeTerminalCommandFailure, terminalCommandProblemText } from "./commands/terminalCommandProblem";
 import { describeSnippetFailure } from "../snippets/snippetFailure";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
@@ -14,8 +14,8 @@ import { Notice } from "../ui/surface";
 
 type Prepared = {
   command: string;
-  preview: Awaited<ReturnType<typeof terminalCommandApi.preview>>;
-  request: Parameters<typeof terminalCommandApi.preview>[0];
+  preview: TerminalCommandPreview;
+  request: TerminalCommandRequest;
 };
 
 export function TerminalQuickCommands({
@@ -24,8 +24,11 @@ export function TerminalQuickCommands({
   onCopied,
   initialCommand = "",
   returnFocusRef,
+  api = terminalCommandApi,
 }: {
   session: TerminalSession;
+  // api is the command API of the engine the session runs on (terminalCommandApiFor).
+  api?: TerminalCommandApi;
   onClose: () => void;
   // コピーは画面に何も起きないので、閉じたあとに呼び手が「コピーしました」を出す。
   onCopied: () => void;
@@ -123,7 +126,7 @@ export function TerminalQuickCommands({
         inputs,
         targets: [{ targetId: session.id, sessionId: session.id }],
       };
-      const preview = await terminalCommandApi.preview({
+      const preview = await api.preview({
         ...request,
         issueAction: false,
       });
@@ -162,7 +165,7 @@ export function TerminalQuickCommands({
 
   async function revealPrepared(): Promise<string> {
     if (prepared === null) throw new Error("invalid_response");
-    const revealed = await terminalCommandApi.preview({
+    const revealed = await api.preview({
       ...prepared.request,
       revealCommand: true,
       issueAction: false,
@@ -182,13 +185,13 @@ export function TerminalQuickCommands({
     setBusy(true);
     setProblem("");
     try {
-      const confirmed = await terminalCommandApi.preview({
+      const confirmed = await api.preview({
         ...current.request,
         issueAction: true,
         submit: false,
         expectedReviewEvidence: current.preview.reviewEvidence,
       });
-      await terminalCommandApi.dispatch(confirmed, current.request, false);
+      await api.dispatch(confirmed, current.request, false);
       onClose();
     } catch (error) {
       await handleActionFailure(error, current);
@@ -203,13 +206,13 @@ export function TerminalQuickCommands({
     setBusy(true);
     setProblem("");
     try {
-      const confirmed = await terminalCommandApi.preview({
+      const confirmed = await api.preview({
         ...current.request,
         issueAction: true,
         submit: true,
         expectedReviewEvidence: current.preview.reviewEvidence,
       });
-      await terminalCommandApi.dispatch(confirmed, current.request, true);
+      await api.dispatch(confirmed, current.request, true);
       onClose();
     } catch (error) {
       await handleActionFailure(error, current);
@@ -225,7 +228,7 @@ export function TerminalQuickCommands({
       return;
     }
     try {
-      const preview = await terminalCommandApi.preview({
+      const preview = await api.preview({
         ...current.request,
         issueAction: false,
       });

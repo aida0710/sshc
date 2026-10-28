@@ -203,7 +203,6 @@ export function AppNavigation({
           aliases={aliases}
           hosts={hosts}
           {...(onConnect === undefined ? {} : { onConnect })}
-          canBroadcast={runTargets.selected === null}
           runTarget={runTargets.selected}
         />
       </div>

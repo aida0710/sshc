@@ -452,7 +452,9 @@ func New(options Options) (*Server, error) {
 	if options.Terminals != nil {
 		registerTerminalRoutes(e, newTerminalHandlers(options, actions, host))
 		if options.RemoteEngines != nil {
-			registerRemoteEngineRoutes(e, RemoteEngineHandlers{Engines: options.RemoteEngines, ExpectedOrigin: "http://" + host})
+			registerRemoteEngineRoutes(e, RemoteEngineHandlers{
+				Engines: options.RemoteEngines, ExpectedOrigin: "http://" + host, Snippets: options.Snippets, Actions: actions,
+			})
 		}
 	}
 	if options.VPN != nil {

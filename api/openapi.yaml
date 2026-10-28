@@ -957,6 +957,68 @@ paths:
         '502':
           $ref: '#/components/responses/Problem'
       description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/commands/preview:
+    post:
+      operationId: remoteEnginePreviewTerminalCommand
+      description: >-
+        Prepares a quick command or broadcast for sessions of the run target {alias}. This machine expands the
+        snippet and answers with its redacted form; the run target confirms the exact sessions. The browser's
+        token is this machine's; the run target's token stays in this engine.
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TerminalCommandPreviewRequest" }
+      responses:
+        "200":
+          description: Exact sessions of the run target and the redacted command awaiting confirmation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalCommandPreview" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /api/v1/engines/{alias}/terminal/commands:
+    post:
+      operationId: remoteEngineDispatchTerminalCommand
+      description: Sends a confirmed command to sessions of the run target {alias}, once.
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TerminalCommandDispatchRequest" }
+      responses:
+        "200":
+          description: What each session of the run target received
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalCommandDispatchResponse" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /api/v1/engines/{alias}/terminal/shell-profiles:
     get:
       operationId: remoteEngineListLocalShellProfiles
