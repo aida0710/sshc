@@ -48,15 +48,21 @@ func cssToken(t *testing.T, css, selector, name string) string {
 	return strings.TrimSpace(found[1])
 }
 
-// androidChromeColours は、chromeColour() が返す 2 つの色を、夜・昼の順で返す。
+// androidChromeColours は、chromeColour() が返す 2 つの色（CHROME_NIGHT・CHROME_DAY）を、
+// 夜・昼の順で返す。
 func androidChromeColours(t *testing.T, java string) (dark, light string) {
 	t.Helper()
-	found := regexp.MustCompile(
-		`UI_MODE_NIGHT_YES\s*\?\s*0x([0-9A-Fa-f]{8})\s*:\s*0x([0-9A-Fa-f]{8})`).FindStringSubmatch(java)
-	if found == nil {
-		t.Fatal("MainActivity.chromeColour が、夜と昼の 2 つの ARGB を返す形をしていない")
+	if !regexp.MustCompile(`UI_MODE_NIGHT_YES\s*\?\s*CHROME_NIGHT\s*:\s*CHROME_DAY`).MatchString(java) {
+		t.Fatal("MainActivity.chromeColour が、夜と昼の色（CHROME_NIGHT・CHROME_DAY）を返す形をしていない")
 	}
-	return found[1], found[2]
+	constant := func(name string) string {
+		found := regexp.MustCompile(`static final int ` + name + `\s*=\s*0x([0-9A-Fa-f]{8});`).FindStringSubmatch(java)
+		if found == nil {
+			t.Fatalf("MainActivity に %s の ARGB が無い", name)
+		}
+		return found[1]
+	}
+	return constant("CHROME_NIGHT"), constant("CHROME_DAY")
 }
 
 // ページの帯と、その外側の余白は同じ色である。
