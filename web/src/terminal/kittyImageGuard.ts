@@ -26,6 +26,7 @@ const continuationKeys = new Set(["m", "q", "i"]);
 
 type KittyCommand = {
   keys: string[];
+  quiet: number;
   action: string;
   format: number;
   width: number;
@@ -52,6 +53,7 @@ function parseKittyCommand(control: string): KittyCommand {
   };
   return {
     keys: [...values.keys()],
+    quiet: numberAt("q") ?? 0,
     action: values.get("a") ?? "t",
     format: numberAt("f") ?? rgbaFormat,
     width: numberAt("s") ?? 0,
@@ -146,16 +148,38 @@ function compressedCheck({ inflatedLimit, pngPixelLimit }: { inflatedLimit: numb
   };
 }
 
+// Kitty answers an image it cannot take with an error the program can read,
+// when the program named the image (i) and did not ask for quiet (q=2).
+const refusedAsMalformed = "EINVAL:width and height required for raw pixel data";
+const refusedAsTooLarge = "EFBIG:image exceeds the terminal's limits";
+const refusedAsInterleaved = "EINVAL:another image's chunks arrived before this image finished";
+
 type Transmission = {
   refused: boolean;
+  // Why the image was refused, sent back once its last chunk has arrived.
+  refusal?: string;
+  // Where the answer goes, from the command that started the image.
+  answerTo?: { id: number; quiet: number };
+  answered: boolean;
   // Whether the image addon already holds earlier chunks of this image.
   handedOver: boolean;
   encodedLength: number;
   check?: TransmissionCheck;
 };
 
+// newTransmission is the state of an image that has not been checked yet.
+function newTransmission(command: KittyCommand): Transmission {
+  return {
+    refused: false,
+    answered: false,
+    handedOver: false,
+    encodedLength: 0,
+    ...(command.id === undefined ? {} : { answerTo: { id: command.id, quiet: command.quiet } }),
+  };
+}
+
 function startTransmission(command: KittyCommand, limits: KittyImageLimits): Transmission {
-  const transmission: Transmission = { refused: false, handedOver: false, encodedLength: 0 };
+  const transmission = newTransmission(command);
   // Only transmitted images get stored and decoded. Queries and placements
   // never decode a payload, and other media are refused by the addon.
   if ((command.action !== "t" && command.action !== "T") || command.medium !== "d") return transmission;
@@ -168,8 +192,14 @@ function startTransmission(command: KittyCommand, limits: KittyImageLimits): Tra
   // Raw pixels must declare their size, and zlib must inflate to exactly
   // that many bytes, so the declaration bounds the work before any decoding.
   const pixels = command.width * command.height;
-  if (!(command.width > 0 && command.height > 0 && pixels <= limits.pixelLimit)) {
+  if (!(command.width > 0 && command.height > 0)) {
     transmission.refused = true;
+    transmission.refusal = refusedAsMalformed;
+    return transmission;
+  }
+  if (pixels > limits.pixelLimit) {
+    transmission.refused = true;
+    transmission.refusal = refusedAsTooLarge;
     return transmission;
   }
   if (command.compressed) {
@@ -190,10 +220,12 @@ function startTransmission(command: KittyCommand, limits: KittyImageLimits): Tra
 // chunk without i under the last unfinished image. The guard therefore allows
 // one unfinished image at a time, as the protocol asks of programs, so that a
 // chunk it keeps from the addon can never land in another image.
-export function attachKittyImageGuard({ parser, images, limits }: {
+export function attachKittyImageGuard({ parser, images, limits, answer }: {
   parser: IParser;
   images: { reset(): unknown };
   limits: KittyImageLimits;
+  // answer sends a kitty graphics response to the program, as typed input.
+  answer: (response: string) => void;
 }): IDisposable {
   // The addon gives up on an image whose base64 is longer than this.
   const maxEncodedLength = Math.ceil(limits.imageByteLimit * 4 / 3);
@@ -206,9 +238,19 @@ export function attachKittyImageGuard({ parser, images, limits }: {
     unfinished = undefined;
   };
 
-  const refuse = (transmission: Transmission) => {
+  // Sends the refusal once, after the image's last chunk: a program reads the
+  // answer to a chunked image only when it has sent all of it.
+  const answerRefusal = (transmission: Transmission) => {
+    const to = transmission.answerTo;
+    if (!transmission.refused || transmission.answered || to === undefined || to.quiet >= 2) return;
+    transmission.answered = true;
+    answer(`\u001b_Gi=${to.id};${transmission.refusal ?? refusedAsTooLarge}\u001b\\`);
+  };
+
+  const refuse = (transmission: Transmission, refusal: string) => {
     if (transmission.refused) return;
     transmission.refused = true;
+    transmission.refusal = refusal;
     transmission.check?.cancel();
     // The addon cannot drop one half-received image, so drop all of its
     // images and unfinished data.
@@ -218,7 +260,7 @@ export function attachKittyImageGuard({ parser, images, limits }: {
   const inspect = (transmission: Transmission, payload: string, last: boolean): boolean | Promise<boolean> => {
     const decide = (safe: boolean) => {
       if (!safe) {
-        refuse(transmission);
+        refuse(transmission, refusedAsTooLarge);
         return true;
       }
       transmission.handedOver = true;
@@ -229,6 +271,7 @@ export function attachKittyImageGuard({ parser, images, limits }: {
       // The addon drops this image by itself at the same point, so the
       // other images can stay.
       transmission.refused = true;
+      transmission.refusal = refusedAsTooLarge;
       transmission.check?.cancel();
       return true;
     }
@@ -264,15 +307,24 @@ export function attachKittyImageGuard({ parser, images, limits }: {
       // A chunk for another image, or one that describes an image again,
       // would be read by the addon differently from how it was checked.
       if (key !== unfinished.key || command.keys.some((name) => !continuationKeys.has(name))) {
-        refuse(transmission);
+        refuse(transmission, refusedAsInterleaved);
+        answerRefusal(transmission);
         forget();
+        // The chunk that broke in is dropped as well; nothing of it is checked.
+        if (!command.more) answerRefusal({ ...newTransmission(command), refused: true, refusal: refusedAsInterleaved });
         return true;
       }
     }
     if (command.more) unfinished = { key, transmission };
     else unfinished = undefined;
-    if (transmission.refused) return true;
-    return inspect(transmission, payload, !command.more);
+    const last = !command.more;
+    const answerIfLast = (kept: boolean) => {
+      if (last) answerRefusal(transmission);
+      return kept;
+    };
+    if (transmission.refused) return answerIfLast(true);
+    const kept = inspect(transmission, payload, last);
+    return kept instanceof Promise ? kept.then(answerIfLast) : answerIfLast(kept);
   };
 
   const registrations = [
