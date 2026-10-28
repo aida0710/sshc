@@ -2,26 +2,13 @@
 
 package sftp
 
-import (
-	"io/fs"
-	"os"
-	"syscall"
-)
+import "os"
 
 func captureLocalTextMetadata(file *os.File) (localTextMetadata, error) {
-	info, err := file.Stat()
+	metadata, _, err := unixLocalTextMetadata(file)
 	if err != nil {
 		return localTextMetadata{}, err
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.Mode().IsRegular() {
-		return localTextMetadata{}, ErrUnsupportedEntry
-	}
-	attributes, err := readLocalTextExtendedAttributes(file)
-	if err != nil {
-		return localTextMetadata{}, err
-	}
-	metadata := localTextMetadata{uid: int(stat.Uid), gid: int(stat.Gid), mode: info.Mode(), extendedAttributes: attributes}
 	metadata.revision = localTextMetadataRevision(metadata)
 	return metadata, nil
 }
@@ -29,23 +16,8 @@ func captureLocalTextMetadata(file *os.File) (localTextMetadata, error) {
 func applyLocalTextMetadata(_ *os.File, staged *os.File, snapshot localTextMetadata) error {
 	// Privileged executable bits and capabilities need a deliberate policy when
 	// changing contents. The text editor only replaces ordinary unprivileged files.
-	if snapshot.mode&(fs.ModeSetuid|fs.ModeSetgid|fs.ModeSticky) != 0 {
-		return ErrUnsupportedEntry
-	}
 	if _, privileged := snapshot.extendedAttributes["security.capability"]; privileged {
 		return ErrUnsupportedEntry
 	}
-	current, err := captureLocalTextMetadata(staged)
-	if err != nil {
-		return err
-	}
-	if current.uid != snapshot.uid || current.gid != snapshot.gid {
-		if err := staged.Chown(snapshot.uid, snapshot.gid); err != nil {
-			return err
-		}
-	}
-	if err := staged.Chmod(snapshot.mode.Perm()); err != nil {
-		return err
-	}
-	return applyLocalTextExtendedAttributes(staged, snapshot.extendedAttributes)
+	return applyUnixLocalTextOwnership(staged, snapshot)
 }

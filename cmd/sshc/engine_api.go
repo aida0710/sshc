@@ -68,8 +68,8 @@ type engineAPI struct {
 	csrf   string
 	client *http.Client
 
-	closeMu sync.Mutex
-	closed  bool
+	closeMutex sync.Mutex
+	closed     bool
 }
 
 // fetchEngineStatus は、handoff が示す engine に path（/cli/status または
@@ -332,8 +332,8 @@ func (engine *engineAPI) Close() error {
 	if engine == nil {
 		return nil
 	}
-	engine.closeMu.Lock()
-	defer engine.closeMu.Unlock()
+	engine.closeMutex.Lock()
+	defer engine.closeMutex.Unlock()
 	if engine.closed {
 		return nil
 	}

@@ -171,9 +171,9 @@ func (s *Service) SyncState() SyncStateView {
 // DisplayPath は、ワークスペースの絶対パスを、このアプリケーションの他の部分が
 // 表示する相対パスへ戻す。
 func (s *Service) DisplayPath(absolute string) string {
-	relative, err := filepath.Rel(s.workspace.Root(), absolute)
-	if err != nil {
+	relative, ok := s.workspace.RelativeSlash(absolute)
+	if !ok {
 		return filepath.Base(absolute)
 	}
-	return filepath.ToSlash(relative)
+	return relative
 }
