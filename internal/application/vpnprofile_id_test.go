@@ -71,35 +71,6 @@ func TestAProfileRecreatedUnderARemovedNameGetsAnotherID(t *testing.T) {
 	}
 }
 
-// schema 9 より前の metadata のプロファイルは、名前から決めた識別子を得る。書き直すまでは
-// 読むたびに移行するので、何度読んでも同じ識別子になり、割り当ての結び付けの値が合う。
-func TestProfilesFromAnOlderSchemaGetTheSameIDOnEveryRead(t *testing.T) {
-	document := []byte(`{"schemaVersion":8,"vpnProfiles":[` +
-		`{"name":"lab","backend":"wireguard","wireguard":{"servers":["lab.vpn.example.jp"]}},` +
-		`{"name":"office","backend":"wireguard","wireguard":{"servers":["office.vpn.example.jp"]}}]}`)
-
-	first, err := DecodeMetadata(document)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := DecodeMetadata(document)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for index, profile := range first.VPNProfiles {
-		if !validVPNProfileID(profile.ID) || profile.ID != second.VPNProfiles[index].ID {
-			t.Fatalf("%s: ids %q and %q, want the same valid id on every read", profile.Name, profile.ID, second.VPNProfiles[index].ID)
-		}
-	}
-	if first.VPNProfiles[0].ID == first.VPNProfiles[1].ID {
-		t.Fatalf("lab and office share the id %q", first.VPNProfiles[0].ID)
-	}
-	if _, err := EncodeMetadata(first); err != nil {
-		t.Fatalf("EncodeMetadata = %v", err)
-	}
-}
-
 // 今の形の metadata で、識別子の無いプロファイルと、識別子が重なるプロファイルは保存しない。
 // どちらも、別のプロファイルを通る接続に割り当てが渡りうる。
 func TestAProfileWithoutItsOwnIDIsNotSaved(t *testing.T) {
@@ -126,7 +97,7 @@ func TestTheIDOfAProfileIsThirtyTwoLowercaseHexDigits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{created, migratedVPNProfileID("lab")} {
+	for _, id := range []string{created} {
 		if !validVPNProfileID(id) {
 			t.Errorf("%q is not a valid id", id)
 		}

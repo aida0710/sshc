@@ -47,7 +47,7 @@ async function seedTerminalSettings(installation: Installation) {
   await installation.write(
     "sshc/metadata.json",
     JSON.stringify({
-      schemaVersion: 3,
+      schemaVersion: 9,
       embeddedTerminal: { maxSessions: 2, scrollbackBytes: 16384 },
     }),
   );
@@ -108,7 +108,7 @@ test("keeps image-backed terminal editing free of stale glyphs", async ({ page, 
   await installation.write(
     "sshc/metadata.json",
     JSON.stringify({
-      schemaVersion: 4,
+      schemaVersion: 9,
       embeddedTerminal: { appearance: { background: "terminal-wall.gif" } },
     }),
   );
@@ -143,7 +143,7 @@ test("keeps WebGL disabled when the terminal setting turns it off", async ({ pag
   await installation.write(
     "sshc/metadata.json",
     JSON.stringify({
-      schemaVersion: 4,
+      schemaVersion: 9,
       embeddedTerminal: { webgl: false },
     }),
   );
@@ -183,7 +183,7 @@ test("keeps the session and replays its scrollback after a reload", async ({ pag
 test("refuses to open more sessions than the configured limit", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",
-    JSON.stringify({ schemaVersion: 3, embeddedTerminal: { maxSessions: 2, scrollbackBytes: 16384 } }),
+    JSON.stringify({ schemaVersion: 9, embeddedTerminal: { maxSessions: 2, scrollbackBytes: 16384 } }),
   );
   await openApplication(page, installation);
 

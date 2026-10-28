@@ -7,7 +7,7 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
   await installation.write(
     "sshc/metadata.json",
     JSON.stringify({
-      schemaVersion: 3,
+      schemaVersion: 9,
       hosts: [
         {
           identity: { path: "config", alias: "bastion" },
