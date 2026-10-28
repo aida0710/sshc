@@ -19,7 +19,7 @@ describe("pathPreviewHome", () => {
   ])("uses SFTP's home on $alias", async ({ session, runTarget, alias }) => {
     const list = vi.spyOn(sftpApi, "list").mockResolvedValue({ path: "/srv/account", entries: [] });
     const local = vi.spyOn(sftpApi, "listLocal");
-    const previewAlias = pathPreviewAlias(session, runTarget);
+    const previewAlias = pathPreviewAlias(session, runTarget, false);
     expect(previewAlias).toBe(alias);
     expect(await pathPreviewHome(previewAlias!)).toBe("/srv/account");
     expect(list).toHaveBeenCalledWith(alias, "~");
