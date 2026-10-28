@@ -6,7 +6,8 @@ test("searches hosts, config files and settings from the keyboard", async ({ pag
   await openApplication(page, installation);
   // snippets.json is sealed with the Vault key, so the snippet is saved the way a person saves one.
   await openSection(page, "Snippets");
-  await page.getByRole("button", { name: "Add snippet", exact: true }).click();
+  // With no snippet yet, the empty list offers the same button as the page header; use the header's.
+  await page.getByRole("main").locator("header").getByRole("button", { name: "Add snippet", exact: true }).click();
   await page.getByLabel("Name", { exact: true }).fill("Update packages");
   await page.getByLabel("Command", { exact: true }).fill("sudo apt update");
   await page.getByRole("button", { name: "Save", exact: true }).click();
