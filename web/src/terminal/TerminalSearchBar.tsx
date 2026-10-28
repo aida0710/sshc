@@ -1,17 +1,31 @@
+import { useEffect } from "react";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
+import { sizedControl } from "../ui/form";
+import { Button } from "../ui/surface";
 import type { TerminalSearch } from "./useTerminalSearch";
 import { isImeComposing } from "../ui/imeComposition";
 
-const stepButton = "rounded border border-control-line px-2 py-1 transition-colors duration-150 hover:bg-hover";
+const pressedOption = "aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-accent";
+
+// A press on the bar's buttons leaves focus in the query, so the next step
+// or another character can follow at once.
+function keepQueryFocus(event: { preventDefault(): void }) {
+  event.preventDefault();
+}
 
 // The find-in-scrollback bar floating over the terminal.
 export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; mobile: boolean }) {
   const t = useTranslate();
+  const { input } = search;
+  // The query carried over from the last search is selected, so typing replaces it.
+  useEffect(() => {
+    input.current?.select();
+  }, [input]);
   return (
     <div className={`absolute inset-x-2 top-2 z-20 items-center gap-1.5 rounded-lg border border-line bg-toolbar/95 p-1.5 shadow-lg backdrop-blur ${mobile ? "grid grid-cols-6" : "left-auto flex w-[34rem] max-w-[calc(100%-1rem)] flex-wrap"}`}>
       <input
-        ref={search.input}
+        ref={input}
         autoFocus
         aria-label={t("terminal.searchInput")}
         value={search.query}
@@ -21,27 +35,29 @@ export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; 
           if (event.key === "Escape") search.close();
           else if (event.key === "Enter") search.step(event.shiftKey ? -1 : 1);
         }}
-        className={`min-w-0 flex-1 rounded border border-control-line bg-control px-2 py-1 ${mobile ? "col-span-6 min-h-11 text-base" : "text-xs"}`}
+        className={`${sizedControl("min-w-0 flex-1")} ${mobile ? "col-span-6" : ""}`}
         placeholder={t("terminal.searchPlaceholder")}
       />
-      <button
-        type="button"
+      <Button
+        small
         aria-label={t("terminal.searchCaseSensitive")}
         aria-pressed={search.caseSensitive}
-        className={`rounded border px-1.5 py-1 text-xs transition-colors duration-150 ${search.caseSensitive ? "border-accent bg-accent/10 text-accent" : "border-control-line text-ink-muted hover:bg-hover hover:text-ink"}`}
+        className={pressedOption}
+        onMouseDown={keepQueryFocus}
         onClick={() => search.setCaseSensitive((current) => !current)}
       >
         Aa
-      </button>
-      <button
-        type="button"
+      </Button>
+      <Button
+        small
         aria-label={t("terminal.searchRegex")}
         aria-pressed={search.regex}
-        className={`rounded border px-1.5 py-1 font-mono text-xs transition-colors duration-150 ${search.regex ? "border-accent bg-accent/10 text-accent" : "border-control-line text-ink-muted hover:bg-hover hover:text-ink"}`}
+        className={`font-mono ${pressedOption}`}
+        onMouseDown={keepQueryFocus}
         onClick={() => search.setRegex((current) => !current)}
       >
         .*
-      </button>
+      </Button>
       <span role="status" className={`${mobile ? "min-w-0" : "w-14"} text-center text-[11px] ${search.invalid ? "text-danger" : "text-ink-muted"}`}>
         {search.invalid
           ? t("terminal.searchInvalidRegex")
@@ -49,9 +65,9 @@ export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; 
             ? t("terminal.searchNoResults")
             : `${search.result.index + 1}/${search.result.total}`}
       </span>
-      <button type="button" aria-label={t("terminal.searchPrevious")} className={stepButton} onClick={() => search.step(-1)}><Icon name="arrowUp" className="size-3.5" /></button>
-      <button type="button" aria-label={t("terminal.searchNext")} className={stepButton} onClick={() => search.step(1)}><Icon name="arrowDown" className="size-3.5" /></button>
-      <button type="button" aria-label={t("terminal.searchClose")} className="rounded px-2 py-1 transition-colors duration-150 hover:bg-hover" onClick={search.close}><Icon name="close" className="size-3.5" /></button>
+      <Button small aria-label={t("terminal.searchPrevious")} onMouseDown={keepQueryFocus} onClick={() => search.step(-1)}><Icon name="arrowUp" className="size-3.5" /></Button>
+      <Button small aria-label={t("terminal.searchNext")} onMouseDown={keepQueryFocus} onClick={() => search.step(1)}><Icon name="arrowDown" className="size-3.5" /></Button>
+      <Button small aria-label={t("terminal.searchClose")} onClick={search.close}><Icon name="close" className="size-3.5" /></Button>
     </div>
   );
 }
