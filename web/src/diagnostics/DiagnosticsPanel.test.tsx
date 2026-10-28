@@ -47,7 +47,41 @@ function buildApi(overrides: Partial<DiagnosticsApi> = {}): DiagnosticsApi {
   };
 }
 
+const unavoidableProxy = {
+  keyword: "ProxyCommand", command: "nc -X connect %h %p", path: "~/.ssh/config", line: 3,
+  condition: "Host bastion", onEvaluate: false, onConnect: true, overridable: false,
+};
+
 describe("DiagnosticsPanel", () => {
+  it("shows the command an authentication test would run and tests only after it is confirmed", async () => {
+    const effective = vi.fn().mockResolvedValue({
+      alias: "bastion", tokenWarning: "", executableDirectives: [unavoidableProxy], values: [], sources: [], complexities: [], route: [],
+    });
+    const api = buildApi({ effective });
+    render(<LanguageProvider><DiagnosticsPanel api={api} host="bastion" /></LanguageProvider>);
+
+    await userEvent.click(screen.getByRole("button", { name: "Test authentication" }));
+
+    expect(await screen.findByText("nc -X connect %h %p")).toBeInTheDocument();
+    expect(api.authentication).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Acknowledge and check authentication" }));
+    await waitFor(() => expect(api.authentication).toHaveBeenCalledWith("bastion", true));
+    expect(screen.queryByText("nc -X connect %h %p")).not.toBeInTheDocument();
+  });
+
+  it("tests authentication without asking when every command can be turned off", async () => {
+    const effective = vi.fn().mockResolvedValue({
+      alias: "bastion", tokenWarning: "", executableDirectives: [{ ...unavoidableProxy, overridable: true }],
+      values: [], sources: [], complexities: [], route: [],
+    });
+    const api = buildApi({ effective });
+    render(<LanguageProvider><DiagnosticsPanel api={api} host="bastion" /></LanguageProvider>);
+
+    await userEvent.click(screen.getByRole("button", { name: "Test authentication" }));
+
+    await waitFor(() => expect(api.authentication).toHaveBeenCalledWith("bastion", false));
+  });
+
   it("explains that the source table scrolls sideways on narrow screens", async () => {
     const { container } = render(<DiagnosticsPanel api={buildApi()} />);
 
