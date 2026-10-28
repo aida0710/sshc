@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { changeDisplayLanguage, expect, openApplication, openLocalShell, test } from "./support/environment";
-import { terminalHostBottomOverflow, terminalKeyboard, waitForTerminalLayout } from "./support/terminal";
+import { drawnRowsIn, terminalHostBottomOverflow, terminalKeyboard, waitForTerminalLayout } from "./support/terminal";
 
 function pane(page: Page, sessionId: string): Locator {
   return page.locator(`[data-split-view-pane="${sessionId}"]`);
@@ -109,6 +109,57 @@ test("splits real shells, routes input independently, resizes and closes only th
   await expect(right).toContainText("RIGHT:1110");
   await runCommand(right, "printf 'STILL:%s\\n' $((6 * 7))");
   await expect(right).toContainText("STILL:42");
+});
+
+test("keeps a pane of a nested split its header and a row of the terminal, however far it is dragged", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Top");
+  const two = await openNamedShell(page, "Middle");
+  await openNamedShell(page, "Bottom");
+  await page.getByRole("button", { name: "Top", exact: true }).click();
+  await dragSession(page, { title: "Middle", target: pane(page, one), edge: "bottom" });
+  await dragSession(page, { title: "Bottom", target: pane(page, two), edge: "bottom" });
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(3);
+  const middle = pane(page, two);
+
+  // The second divider splits the lower half between Middle and Bottom. Drag it onto Middle's top.
+  const inner = (await page.getByRole("separator", { name: "Resize split view" }).nth(1).boundingBox())!;
+  const middleTop = (await middle.boundingBox())!.y;
+  await page.mouse.move(inner.x + inner.width / 2, inner.y + inner.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(inner.x + inner.width / 2, middleTop + 2, { steps: 4 });
+  await page.mouse.up();
+
+  await waitForTerminalLayout(page);
+  expect((await middle.boundingBox())!.height).toBeGreaterThanOrEqual(79);
+  await expect(drawnRowsIn(middle)).not.toHaveCount(0);
+  // The pane shows one row, so the size the shell got is printed without a newline and held there.
+  await runCommand(middle, "printf 'ROWS:%s' \"$(stty size)\"; sleep 30");
+  await expect(middle).toContainText(/ROWS:[1-9]/);
+});
+
+test("keeps the header's buttons inside a pane of a nested split, however narrow it is dragged", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Left");
+  const two = await openNamedShell(page, "Middle");
+  await openNamedShell(page, "Right");
+  await page.getByRole("button", { name: "Left", exact: true }).click();
+  await dragSession(page, { title: "Middle", target: pane(page, one), edge: "right" });
+  await dragSession(page, { title: "Right", target: pane(page, two), edge: "right" });
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(3);
+  const middle = pane(page, two);
+
+  const inner = (await page.getByRole("separator", { name: "Resize split view" }).nth(1).boundingBox())!;
+  const middleLeft = (await middle.boundingBox())!.x;
+  await page.mouse.move(inner.x + inner.width / 2, inner.y + inner.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(middleLeft + 2, inner.y + inner.height / 2, { steps: 4 });
+  await page.mouse.up();
+
+  await waitForTerminalLayout(page);
+  const bounds = (await middle.boundingBox())!;
+  const close = (await middle.getByRole("button", { name: "Close Middle pane" }).boundingBox())!;
+  expect(close.x + close.width).toBeLessThanOrEqual(bounds.x + bounds.width);
 });
 
 test("preserves terminal mounts through swaps, focus mode, sidebar selection and mobile widths", async ({ page, installation }) => {

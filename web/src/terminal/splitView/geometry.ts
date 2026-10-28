@@ -1,5 +1,24 @@
 import type { CSSProperties } from "react";
+import type { SplitDirection, SplitMinimum } from "../../ui/SplitResizeHandle";
 import type { PaneEdge, SplitPath, SplitViewNode } from "./layout";
+
+// minimumPanePx is the least a pane keeps, padding included, however the
+// splits around it are dragged (measured in the desktop layout). Across: the
+// header's name cut to its dot and a few letters (52px), its search and "…"
+// buttons (2 × 28px), the swap, focus and close buttons (88px) and the
+// padding. Down: the 40px header, the terminal's 17px of padding and one
+// 15px row. A smaller pane pushes its close button out of sight, or leaves
+// xterm no row to draw while the shell writes on at the last size.
+export const minimumPanePx = { width: 248, height: 80 };
+
+// minimumExtentPx is the least a part of the split takes along direction: its
+// panes side by side add up, panes across it need only the largest.
+export function minimumExtentPx(node: SplitViewNode, direction: SplitDirection): number {
+  if ("sessionId" in node) return direction === "horizontal" ? minimumPanePx.width : minimumPanePx.height;
+  const first = minimumExtentPx(node.first, direction);
+  const second = minimumExtentPx(node.second, direction);
+  return node.direction === direction ? first + second : Math.max(first, second);
+}
 
 export type PaneBounds = { left: number; top: number; width: number; height: number };
 export type PanePlacement = { sessionId: string; style: CSSProperties };
@@ -8,6 +27,7 @@ export type DividerPlacement = {
   style: CSSProperties;
   direction: "horizontal" | "vertical";
   ratio: number;
+  minimum: SplitMinimum;
 };
 
 function boundsStyle(bounds: PaneBounds): CSSProperties {
@@ -20,7 +40,10 @@ export function splitViewGeometry(root: SplitViewNode | null): { panes: PanePlac
   const dividers: DividerPlacement[] = [];
   walkSplitTree(root, {
     pane: (sessionId, bounds) => panes.push({ sessionId, style: boundsStyle(bounds) }),
-    divider: (node, bounds, path) => dividers.push({ path, style: boundsStyle(bounds), direction: node.direction, ratio: node.ratio }),
+    divider: (node, bounds, path) => dividers.push({
+      path, style: boundsStyle(bounds), direction: node.direction, ratio: node.ratio,
+      minimum: { first: minimumExtentPx(node.first, node.direction), second: minimumExtentPx(node.second, node.direction) },
+    }),
   });
   return { panes, dividers };
 }
