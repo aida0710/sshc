@@ -428,24 +428,4 @@ describe("HostInspector", () => {
     expect(screen.queryByLabelText("Comment")).toBeNull();
     expect(screen.queryByLabelText("Rename alias")).toBeNull();
   });
-
-  it("lists the notices this connection has", () => {
-    const detail = build();
-    detail.form.notices = [{ code: "duplicate_alias", path: "config", line: 41 }];
-    render(<HostInspector detail={detail} onSave={vi.fn()} />);
-
-    expect(screen.getByText(/config:41/)).toBeInTheDocument();
-  });
-
-  it("lists only the values that came from elsewhere", () => {
-    const detail = build();
-    detail.effective.entries = [
-      { keyword: "Port", values: ["22"], source: { path: "groups.sshc.conf", line: 3 } },
-      { keyword: "User", values: ["aida"], source: { path: "connections/work/bastion.conf", line: 2 } },
-    ];
-    render(<HostInspector detail={detail} onSave={vi.fn()} />);
-
-    expect(screen.getByText(/Port 22/)).toBeInTheDocument();
-    expect(screen.queryByText(/User aida/)).toBeNull();
-  });
 });

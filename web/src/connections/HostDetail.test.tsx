@@ -87,7 +87,7 @@ describe("HostDetailPanel", () => {
   it("uses the four direct route panels without running checks", async () => {
     const user = userEvent.setup();
     const onLocationChange = vi.fn();
-    const harness = renderPanel({ panel: "Basic", advanced: "Jump", onLocationChange });
+    const harness = renderPanel({ panel: "Basic", advanced: "Settings", onLocationChange });
 
     const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
     expect(within(areaTabs).getAllByRole("tab")).toHaveLength(4);
@@ -104,17 +104,17 @@ describe("HostDetailPanel", () => {
     expect(reachability).toBeEnabled();
     expect(harness.props.integrations.reachability).not.toHaveBeenCalled();
 
-    await user.click(within(areaTabs).getByRole("tab", { name: "Analysis" }));
-    expect(onLocationChange).toHaveBeenCalledWith("Analysis", "Jump");
+    await user.click(within(areaTabs).getByRole("tab", { name: "Resolved values" }));
+    expect(onLocationChange).toHaveBeenCalledWith("Analysis", "Settings");
 
-    await user.click(within(areaTabs).getByRole("tab", { name: "sshc" }));
-    expect(onLocationChange).toHaveBeenCalledWith("Sshc", "Jump");
+    await user.click(within(areaTabs).getByRole("tab", { name: "Display & terminal" }));
+    expect(onLocationChange).toHaveBeenCalledWith("Sshc", "Settings");
   });
 
   it("supports the WAI-ARIA keyboard pattern for editor tabs", async () => {
     const user = userEvent.setup();
     const onLocationChange = vi.fn();
-    const harness = renderPanel({ panel: "Basic", advanced: "Jump", onLocationChange });
+    const harness = renderPanel({ panel: "Basic", advanced: "Settings", onLocationChange });
     const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
     const tabs = within(areaTabs).getAllByRole("tab");
 
@@ -122,31 +122,31 @@ describe("HostDetailPanel", () => {
     tabs[0]?.focus();
     await user.keyboard("{ArrowRight}");
     expect(tabs[1]).toHaveFocus();
-    expect(onLocationChange).toHaveBeenLastCalledWith("Analysis", "Jump");
+    expect(onLocationChange).toHaveBeenLastCalledWith("Advanced", "Settings");
 
-    harness.rerender(<HostDetailPanel {...harness.props} panel="Analysis" advanced="Jump" />);
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Advanced" advanced="Settings" />);
     expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, 0, -1, -1]);
     await user.keyboard("{End}");
     expect(tabs[3]).toHaveFocus();
-    expect(onLocationChange).toHaveBeenLastCalledWith("Sshc", "Jump");
+    expect(onLocationChange).toHaveBeenLastCalledWith("Analysis", "Settings");
     await user.keyboard("{Home}");
     expect(tabs[0]).toHaveFocus();
-    expect(onLocationChange).toHaveBeenLastCalledWith("Basic", "Jump");
+    expect(onLocationChange).toHaveBeenLastCalledWith("Basic", "Settings");
     await user.keyboard("{ArrowLeft}");
     expect(tabs[3]).toHaveFocus();
-    expect(onLocationChange).toHaveBeenLastCalledWith("Sshc", "Jump");
+    expect(onLocationChange).toHaveBeenLastCalledWith("Analysis", "Settings");
   });
 
   it("shows connection-specific app settings in the sshc panel", () => {
-    renderPanel({ panel: "Sshc", advanced: "Jump" });
+    renderPanel({ panel: "Sshc", advanced: "Settings" });
 
-    expect(screen.getByRole("tabpanel", { name: "sshc" })).toBeVisible();
+    expect(screen.getByRole("tabpanel", { name: "Display & terminal" })).toBeVisible();
     expect(screen.getByLabelText("Remote text encoding")).toBeVisible();
   });
 
   it("keeps a Basic draft mounted across areas and blocks connection checks", async () => {
     const user = userEvent.setup();
-    const harness = renderPanel({ panel: "Basic", advanced: "Jump" });
+    const harness = renderPanel({ panel: "Basic", advanced: "Settings" });
     const hostName = screen.getByLabelText("Host name or IP address");
     await user.clear(hostName);
     await user.type(hostName, "198.51.100.7");
@@ -154,18 +154,18 @@ describe("HostDetailPanel", () => {
     expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(true);
     expect(screen.getByRole("button", { name: "Check reachability" })).toBeDisabled();
 
-    harness.rerender(<HostDetailPanel {...harness.props} panel="Analysis" advanced="Jump" />);
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Analysis" advanced="Settings" />);
     expect(screen.getByRole("region", { name: "Settings analysis" })).toBeVisible();
-    harness.rerender(<HostDetailPanel {...harness.props} panel="Basic" advanced="Jump" />);
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Basic" advanced="Settings" />);
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("198.51.100.7");
   });
 
   // タブを切り替えても、接続の確認は同じ場所に出たままにする。Basic のときだけ出すと、
   // 編集欄の位置がタブごとに上下する。
   it("shows the connection checks on every area so switching areas does not move the editor", () => {
-    const harness = renderPanel({ panel: "Basic", advanced: "Jump" });
+    const harness = renderPanel({ panel: "Basic", advanced: "Settings" });
     for (const panel of ["Basic", "Analysis", "Advanced", "Sshc"] as const) {
-      harness.rerender(<HostDetailPanel {...harness.props} panel={panel} advanced="Jump" />);
+      harness.rerender(<HostDetailPanel {...harness.props} panel={panel} advanced="Settings" />);
       expect(screen.getByRole("region", { name: "Connection checks" })).toBeVisible();
       expect(screen.getByRole("button", { name: "Check reachability" })).toBeEnabled();
     }
@@ -173,8 +173,8 @@ describe("HostDetailPanel", () => {
 
   // sshc タブの項目も、Basic と同じく枠で囲まずに編集欄へ直接並べる。
   it("lays out the sshc settings without a surrounding panel, like the Basic area", () => {
-    renderPanel({ panel: "Sshc", advanced: "Jump" });
-    const panel = screen.getByRole("tabpanel", { name: "sshc" });
+    renderPanel({ panel: "Sshc", advanced: "Settings" });
+    const panel = screen.getByRole("tabpanel", { name: "Display & terminal" });
     for (let element = screen.getByLabelText("Remote text encoding").parentElement; element !== null && element !== panel; element = element.parentElement) {
       expect(element).not.toHaveClass("bg-tree");
     }
@@ -182,16 +182,16 @@ describe("HostDetailPanel", () => {
 
   it("keeps an sshc draft mounted across areas and locks the other editors until it is saved", async () => {
     const user = userEvent.setup();
-    const harness = renderPanel({ panel: "Sshc", advanced: "Jump" });
+    const harness = renderPanel({ panel: "Sshc", advanced: "Settings" });
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
 
     expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(true);
     expect(harness.props.onMetadataSave).not.toHaveBeenCalled();
 
-    harness.rerender(<HostDetailPanel {...harness.props} panel="Basic" advanced="Jump" />);
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Basic" advanced="Settings" />);
     expect(screen.getByLabelText("Host name or IP address")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Check reachability" })).toBeDisabled();
-    harness.rerender(<HostDetailPanel {...harness.props} panel="Sshc" advanced="Jump" />);
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Sshc" advanced="Settings" />);
     expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
 
     await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
@@ -200,10 +200,10 @@ describe("HostDetailPanel", () => {
 
   it("locks the sshc settings while Basic has a draft", async () => {
     const user = userEvent.setup();
-    const harness = renderPanel({ panel: "Basic", advanced: "Jump" });
+    const harness = renderPanel({ panel: "Basic", advanced: "Settings" });
     await user.type(screen.getByLabelText("Host name or IP address"), "7");
 
-    harness.rerender(<HostDetailPanel {...harness.props} panel="Sshc" advanced="Jump" />);
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Sshc" advanced="Settings" />);
     expect(screen.getByLabelText("Remote text encoding")).toBeDisabled();
   });
 
@@ -212,7 +212,7 @@ describe("HostDetailPanel", () => {
     let discard: (() => void) | null = null;
     const harness = renderPanel({
       panel: "Sshc",
-      advanced: "Jump",
+      advanced: "Settings",
       onDiscardReady: (next: (() => void) | null) => { discard = next; },
     });
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
@@ -237,43 +237,15 @@ describe("HostDetailPanel", () => {
     expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(true);
   });
 
-  it("shows the advanced subview named directly by the route", () => {
-    renderPanel({ panel: "Advanced", advanced: "Raw" });
+  it("shows the Host block's text when the route asks for it, and goes back to the settings", async () => {
+    const user = userEvent.setup();
+    const onLocationChange = vi.fn();
+    renderPanel({ panel: "Advanced", advanced: "Raw", onLocationChange });
 
     const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
     expect(within(areaTabs).getByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("combobox", { name: "Advanced setting views" })).toHaveValue("Raw");
-  });
-
-  it("reports an advanced subview as a direct canonical location", async () => {
-    const user = userEvent.setup();
-    const onLocationChange = vi.fn();
-    renderPanel({ panel: "Advanced", advanced: "Jump", onLocationChange });
-
-    await user.selectOptions(screen.getByRole("combobox", { name: "Advanced setting views" }), "Directives");
-    expect(onLocationChange).toHaveBeenCalledWith("Advanced", "Directives");
-  });
-
-  it("supports the WAI-ARIA keyboard pattern for advanced tabs", async () => {
-    const user = userEvent.setup();
-    const onLocationChange = vi.fn();
-    renderPanel({ panel: "Advanced", advanced: "Jump", onLocationChange });
-    const advancedTabs = screen.getByRole("tablist", { name: "Advanced setting views" });
-    const tabs = within(advancedTabs).getAllByRole("tab");
-
-    expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1, -1]);
-    expect(tabs.every((tab) => tab.getAttribute("aria-controls") === "advanced-settings-panel")).toBe(true);
-    expect(document.getElementById("advanced-settings-panel")).toHaveAttribute("role", "tabpanel");
-
-    tabs[0]?.focus();
-    await user.keyboard("{ArrowLeft}");
-    expect(tabs[3]).toHaveFocus();
-    expect(onLocationChange).toHaveBeenLastCalledWith("Advanced", "Raw");
-    await user.keyboard("{Home}");
-    expect(tabs[0]).toHaveFocus();
-    expect(onLocationChange).toHaveBeenLastCalledWith("Advanced", "Jump");
-    await user.keyboard("{End}");
-    expect(tabs[3]).toHaveFocus();
-    expect(onLocationChange).toHaveBeenLastCalledWith("Advanced", "Raw");
+    expect(screen.getByLabelText(/Block text/)).toHaveValue(detail.form.raw);
+    await user.click(screen.getByRole("button", { name: "Back to the settings" }));
+    expect(onLocationChange).toHaveBeenCalledWith("Advanced", "Settings");
   });
 });

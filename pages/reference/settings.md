@@ -5,7 +5,7 @@ description: 外観、Terminalの入力、通知、ローカルシェルに関�
 
 # 設定
 
-［Menu］は、各ページを名前と一言の説明で並べます。［Appearance］、［Engine］、［Terminal］、［SFTP］、［Keyboard shortcuts］、［Notifications］、［Open connections］、［Master password］もここから直接開けます。表示言語は［Preferences］、接続先ごとの項目は［Connections］の［sshc］タブにあります。
+［Menu］は、各ページを名前と一言の説明で並べます。［Appearance］、［Engine］、［Terminal］、［SFTP］、［Keyboard shortcuts］、［Notifications］、［Open connections］、［Master password］もここから直接開けます。表示言語は［Preferences］、接続先ごとの項目は［Connections］の［表示とターミナル］タブにあります。
 
 ## Engine
 

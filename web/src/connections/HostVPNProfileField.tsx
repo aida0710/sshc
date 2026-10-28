@@ -53,7 +53,7 @@ export function HostVPNProfileField({
   return (
     // A fragment, so the row is one of the form's rows and draws the line above it like the others.
     <>
-      <FieldRow label={t("connection.vpnLabel")} hint={t("connection.vpnHint")} warning={note}>
+      <FieldRow density="editor" label={t("connection.vpnLabel")} hint={t("connection.vpnHint")} warning={note}>
         <select
           value={chosen}
           onChange={(event) => onChange(event.target.value)}

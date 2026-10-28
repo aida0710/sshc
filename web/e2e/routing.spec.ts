@@ -1,3 +1,4 @@
+import { chooseConnectionAction } from "./support/connections";
 import { expect, openApplication, openSection, openSettingsPage, test } from "./support/environment";
 
 function atPath(url: string, pathname: string): string {
@@ -61,13 +62,13 @@ test("restores a selected connection and editor tab from its URL", async ({
   });
 
   await page.getByRole("tab", { name: "Advanced" }).click();
-  await page.getByRole("tab", { name: "Directives" }).click();
+  await chooseConnectionAction(page, "Edit as text");
   current = new URL(page.url());
   expect(Object.fromEntries(current.searchParams)).toEqual({
     path: "config",
     host: "bastion",
     panel: "advanced",
-    advanced: "directives",
+    advanced: "raw",
   });
 
   await page.reload();
@@ -76,11 +77,11 @@ test("restores a selected connection and editor tab from its URL", async ({
     "aria-selected",
     "true",
   );
-  await expect(page.getByRole("tab", { name: "Directives" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByLabel(/Block text/)).toBeVisible();
 
   await page.goBack();
-  await expect(page.getByRole("tab", { name: "Jump Host" })).toHaveAttribute("aria-selected", "true");
-  expect(new URL(page.url()).searchParams.get("advanced")).toBe("jump");
+  await expect(page.getByRole("region", { name: "Other settings" })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("advanced")).toBeNull();
   await page.goBack();
   await expect(page.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
   expect(new URL(page.url()).searchParams.get("panel")).toBe("basic");
@@ -145,10 +146,9 @@ test("opens every canonical connection panel URL without starting an operation",
 
   const cases = [
     { panel: "basic", area: "Basic" },
-    { panel: "analysis", area: "Analysis" },
-    { panel: "advanced", area: "Advanced", advanced: "jump", label: "Jump Host" },
-    { panel: "advanced", area: "Advanced", advanced: "directives", label: "Directives" },
-    { panel: "advanced", area: "Advanced", advanced: "raw", label: "Raw" },
+    { panel: "analysis", area: "Resolved values" },
+    { panel: "advanced", area: "Advanced" },
+    { panel: "advanced", area: "Advanced", advanced: "raw", text: true },
   ];
 
   for (const item of cases) {
@@ -159,9 +159,7 @@ test("opens every canonical connection panel URL without starting an operation",
     if (item.advanced !== undefined) target.searchParams.set("advanced", item.advanced);
     await page.goto(target.toString());
     await expect(page.getByRole("tab", { name: item.area })).toHaveAttribute("aria-selected", "true");
-    if (item.label !== undefined) {
-      await expect(page.getByRole("tab", { name: item.label })).toHaveAttribute("aria-selected", "true");
-    }
+    if (item.text === true) await expect(page.getByLabel(/Block text/)).toBeVisible();
   }
 
   expect(started).toEqual([]);

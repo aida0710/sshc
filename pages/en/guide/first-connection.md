@@ -23,7 +23,7 @@ To add one, open **Connections → Add connection**, then enter an alias, host, 
 
 - **Check reachability** verifies name resolution, TCP, and host key.
 - **Check authentication with saved settings** continues through authentication.
-- **Analysis** shows effective values and their source, including `Include` and `Match`.
+- **Resolved values** shows effective values and their source, including `Include` and `Match`.
 
 Confirm unknown host key fingerprints before saving them. sshc rejects a changed saved key.
 

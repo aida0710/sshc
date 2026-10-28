@@ -1,4 +1,5 @@
-export type AdvancedArea = "Jump" | "Forwards" | "Directives" | "Raw";
+// AdvancedArea is how the 踏み台・転送・その他 tab shows the Host block: as settings, or as its text (Raw).
+export type AdvancedArea = "Settings" | "Raw";
 
 export type ConnectionPanel = "Basic" | "Analysis" | "Advanced" | "Sshc";
 
@@ -38,16 +39,8 @@ const panelsBySlug = new Map(
   Object.entries(panelSlugs).map(([panel, slug]) => [slug, panel as ConnectionPanel]),
 );
 
-const advancedSlugs: Record<AdvancedArea, string> = {
-  Jump: "jump",
-  Forwards: "port-forwarding",
-  Directives: "directives",
-  Raw: "raw",
-};
-
-const advancedBySlug = new Map(
-  Object.entries(advancedSlugs).map(([area, slug]) => [slug, area as AdvancedArea]),
-);
+// The settings are what the tab shows unless the URL asks for the text.
+const rawSlug = "raw";
 
 const allowedQueryKeys = new Set(["path", "host", "panel", "advanced"]);
 
@@ -77,14 +70,8 @@ function parseTarget(query: URLSearchParams): ConnectionTarget | null | false {
   }
   const panel = panelsBySlug.get(panelSlug);
   if (panel === undefined) return false;
-  if (panel !== "Advanced") {
-    return advancedSlug === null
-      ? { path, alias, panel, advanced: "Jump" }
-      : false;
-  }
-  if (advancedSlug === null) return false;
-  const advanced = advancedBySlug.get(advancedSlug);
-  return advanced === undefined ? false : { path, alias, panel, advanced };
+  if (advancedSlug === null) return { path, alias, panel, advanced: "Settings" };
+  return panel === "Advanced" && advancedSlug === rawSlug ? { path, alias, panel, advanced: "Raw" } : false;
 }
 
 export function parseConnectionLocation(location: {
@@ -112,8 +99,8 @@ export function connectionLocation(target: ConnectionTarget | null): string {
   query.set("path", target.path);
   query.set("host", target.alias);
   query.set("panel", panelSlugs[target.panel]);
-  if (target.panel === "Advanced") {
-    query.set("advanced", advancedSlugs[target.advanced]);
+  if (target.panel === "Advanced" && target.advanced === "Raw") {
+    query.set("advanced", rawSlug);
   }
   return `/connections/servers?${query.toString()}`;
 }

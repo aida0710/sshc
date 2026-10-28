@@ -1,7 +1,6 @@
 import { useTranslate } from "../i18n/context";
-import { DisclosureChevron } from "../ui/DisclosureChevron";
+import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { Button } from "../ui/surface";
-import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { summarizeConnection, type ConnectionSavedState } from "./connectionSavedState";
 import type { RefreshState } from "./pageState";
@@ -13,10 +12,12 @@ type ConnectionSummaryProps = {
   onConnect: () => void;
   connecting: boolean;
   connectAvailable?: boolean;
-  onToggleManage: () => void;
-  managing: boolean;
+  // actions は、見出しの「…」に並べる操作（名前の変更・移動・複製・テキストで編集・削除など）。
+  actions: ActionMenuItem[];
 };
 
+// ConnectionSummary は、接続エディタの見出しである。名前とアドレス、［接続］、ほかの操作の「…」だけを置く。
+// 鍵やパスワードの割り当ては、基本のタブの認証の節で見る。
 export function ConnectionSummary({
   state,
   dirty,
@@ -24,8 +25,7 @@ export function ConnectionSummary({
   onConnect,
   connecting,
   connectAvailable = true,
-  onToggleManage,
-  managing,
+  actions,
 }: ConnectionSummaryProps) {
   const t = useTranslate();
   const summary = summarizeConnection(state);
@@ -35,8 +35,6 @@ export function ConnectionSummary({
     summary.accountPassword.state === "dedicated" || summary.accountPassword.state === "named" ||
     summary.accountPassword.state === "stale"
   );
-  const showPassphrase = explicitKey && summary.keyPassphrase.state !== "not_needed";
-  const showAccountPassword = !explicitKey && summary.accountPassword.state !== "none";
   const reasonId = `connection-actions-${encodeURIComponent(summary.alias)}`;
 
   // blockedReason は、接続のボタンを止めている理由である。読み直しに失敗したときは、
@@ -47,45 +45,11 @@ export function ConnectionSummary({
     return t("conn.summaryReloadFirst");
   }
 
-  function privateKeyText() {
-    switch (summary.privateKey.state) {
-      case "none": return t("conn.summaryKeyNone");
-      case "known": return `${summary.privateKey.path} · ${summary.privateKey.fingerprint}`;
-      case "custom": return summary.privateKey.path;
-      case "complex": return t("conn.summaryKeyComplex");
-      case "unavailable": return t("conn.summaryKeyUnavailable", { path: summary.privateKey.path });
-    }
-  }
-
-  function keyPassphraseText() {
-    switch (summary.keyPassphrase.state) {
-      case "none": return t("conn.summaryKeyPassphraseNone");
-      case "dedicated": return t("conn.summaryKeyPassphraseDedicated");
-      case "named": return t("conn.summaryKeyPassphraseNamed", { name: summary.keyPassphrase.name });
-      case "not_needed": return t("conn.summaryKeyPassphraseNotNeeded");
-      case "locked": return t("conn.summaryLocked");
-      case "unavailable": return t("conn.summaryUnavailable");
-    }
-  }
-
-  function accountPasswordText() {
-    switch (summary.accountPassword.state) {
-      case "none": return t("conn.summaryPasswordNone");
-      case "dedicated": return t("conn.summaryPasswordDedicated");
-      case "named": return t("conn.summaryPasswordNamed", { name: summary.accountPassword.name });
-      case "stale": return t("conn.summaryPasswordRouteStale");
-      case "locked": return t("conn.summaryLocked");
-      case "unavailable": return t("conn.summaryUnavailable");
-    }
-  }
-
   return (
     <section data-connection-summary aria-labelledby="connection-summary-heading" className="shrink-0">
-      <header className="flex flex-wrap items-center gap-x-2.5 gap-y-3">
+      <header className="flex items-center gap-2.5">
         <OperatingSystemIcon os={state.detail.metadata.os || state.detail.metadata.detectedOS} look="accentTile" />
-        {/* The name keeps at least 10rem; below that the buttons move to their own line instead of
-            squeezing a long name and address into several broken lines. */}
-        <div className="min-w-40 flex-1">
+        <div className="min-w-0 flex-1">
           {/* The unsaved badge moves under a long name instead of squeezing it. */}
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <h3 id="connection-summary-heading" className="min-w-0 max-w-full truncate text-base font-semibold text-ink" title={summary.alias}>{summary.alias}</h3>
@@ -93,36 +57,15 @@ export function ConnectionSummary({
           </div>
           <p className="truncate font-mono text-[11.5px] text-ink-faint" title={summary.endpoint}>{summary.endpoint}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button disabled={blocked || connecting || !connectAvailable} aria-describedby={blocked ? reasonId : undefined} onClick={onConnect}>
-            {connecting ? t("conn.opening") : t("conn.connect")}
-          </Button>
-          <Button
-            aria-expanded={managing}
-            aria-controls="connection-management"
-            onClick={onToggleManage}
-            className={`inline-flex items-center gap-2 ${managing ? "border-accent bg-select-fill text-accent" : ""}`}
-          >
-            <span>{t("conn.manageLabel")}</span>
-            <DisclosureChevron expanded={managing} className="size-3.5" />
-          </Button>
-        </div>
+        <Button kind="primary" className="shrink-0" disabled={blocked || connecting || !connectAvailable} aria-describedby={blocked ? reasonId : undefined} onClick={onConnect}>
+          {connecting ? t("conn.opening") : t("conn.connect")}
+        </Button>
+        <ActionMenu
+          label={t("conn.connectionActions")}
+          items={actions}
+          triggerClassName="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+        />
       </header>
-      {summary.group === "" ? null : <p className="mt-2.5 flex items-center gap-1.5 text-xs text-ink-faint"><Icon name="groups" className="size-3.5" /><span className="sr-only">{t("conn.summaryGroup")}: </span>{summary.group}</p>}
-      <dl className="mt-2.5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-ink-faint">
-        <div className="min-w-0">
-          <dt className={explicitKey ? "mb-0.5 font-medium text-ink-muted" : "sr-only"}>{t("conn.summaryPrivateKey")}</dt>
-          <dd className="break-all">{privateKeyText()}</dd>
-        </div>
-        {showPassphrase ? <div className="min-w-0">
-          <dt className="mb-0.5 font-medium text-ink-muted">{t("conn.summaryKeyPassphrase")}</dt>
-          <dd>{keyPassphraseText()}</dd>
-        </div> : null}
-        {showAccountPassword ? <div className="min-w-0">
-          <dt className="mb-0.5 font-medium text-ink-muted">{t("conn.summaryAccountPassword")}</dt>
-          <dd>{accountPasswordText()}</dd>
-        </div> : null}
-      </dl>
       {passwordConflict ? <p role="status" className="mt-3 rounded-[9px] bg-notice px-3 py-2.5 text-[12.5px] text-notice-ink">{t("conn.summaryPasswordCleanup")}</p> : null}
       {blocked ? <p id={reasonId} className="mt-3 text-xs text-notice-ink">{blockedReason()}</p> : null}
     </section>

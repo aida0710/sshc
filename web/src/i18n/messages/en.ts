@@ -1174,17 +1174,14 @@ export const en = {
   "terminal.tintHint":
     "Increase the opacity to darken the image and improve text readability.",
   "connection.backgroundLabel": "Terminal background image",
-  "connection.backgroundHint": "Only this connection's terminals use it.",
   "terminal.fontHint": "JetBrains Mono ships with the application.",
   "terminal.fontFollowsSystem": "Use the device's monospace font",
   "terminal.fontFollowsOverall": "Use the overall setting",
   "connection.fontLabel": "Terminal font family",
-  "connection.fontHint": "Only this connection's terminals use it.",
   "terminal.paletteHint": "Used by terminals without their own colour scheme.",
   "terminal.paletteFollowsTheme": "Follow the application theme",
   "terminal.paletteFollowsOverall": "Use the overall setting",
   "connection.paletteLabel": "Terminal colour scheme",
-  "connection.paletteHint": "Only this connection's terminals use it.",
   "connection.encodingLabel": "Remote text encoding",
   "connection.encodingHint":
     "Used by this connection in the browser terminal and by sshc on the command line.",
@@ -1226,15 +1223,15 @@ export const en = {
     "The program exited with status {code}. The output above is kept until you close this session.",
   "terminal.exitedWithSignal":
     "The program was ended by {signal}. The output above is kept until you close this session.",
-  "inspector.appOnly": "sshc-only settings",
+  "inspector.lookHeading": "Display",
+  "inspector.terminalHeading": "Terminal",
+  "inspector.terminalFollowsApp": "Empty follows the app's settings",
+  "inspector.vpnHeading": "VPN",
+  "host.displayOrderLabel": "Display order",
+  "host.displayOrderHint": "Smaller comes first in the list; 0 keeps the order in the file.",
   "inspector.hostSave": "Save sshc-only settings",
   "inspector.hostSaveFailed":
     "The sshc-only settings could not be saved. Check the error and save again.",
-  "inspector.notices": "Notices",
-  "inspector.inherited": "Inherited values",
-  "inspector.noNotices": "Nothing to report for this connection.",
-  "inspector.noInherited":
-    "All values for this connection are defined in its own block.",
   "shell.languageMenu": "Lang menu",
   "shell.languageEnglish": "English",
   "shell.languageJapanese": "日本語",
@@ -1917,7 +1914,6 @@ export const en = {
   "preview.pendingChange": "Your pending change",
   "preview.mergeByHand":
     "Reload the file to merge the two changes by hand. Nothing was written.",
-  "preview.nothingYet": "Change a value to see exactly what would be written.",
   "preview.explainedFor": "Resolved settings for {alias}",
   "preview.unset": "unset",
 
@@ -2850,25 +2846,8 @@ export const en = {
     "It may have been renamed, moved or deleted since this link was created.",
   "conn.backToList": "Back to connections",
   "conn.summaryUnsaved": "Unsaved changes",
-  "conn.summaryGroup": "Group",
-  "conn.summaryPrivateKey": "SSH private key",
-  "conn.summaryKeyNone": "SSH agent or inherited keys",
-  "conn.summaryKeyComplex": "Multiple IdentityFile directives",
-  "conn.summaryKeyUnavailable": "{path} — key details unavailable",
-  "conn.summaryKeyPassphrase": "Key passphrase",
-  "conn.summaryKeyPassphraseNone": "No passphrase saved",
-  "conn.summaryKeyPassphraseDedicated": "Saved only for this key",
-  "conn.summaryKeyPassphraseNamed": "Saved passphrase: {name}",
-  "conn.summaryKeyPassphraseNotNeeded": "Not needed for this unencrypted key",
-  "conn.summaryAccountPassword": "Account password",
-  "conn.summaryPasswordNone": "No saved password",
-  "conn.summaryPasswordDedicated": "Connection-only password saved",
-  "conn.summaryPasswordNamed": "Saved password: {name}",
-  "conn.summaryPasswordRouteStale": "Saved password paused",
   "conn.summaryPasswordCleanup":
     "A stored password is assigned but is not used and will be unassigned when Basic settings are saved.",
-  "conn.summaryLocked": "Unavailable while the vault is locked",
-  "conn.summaryUnavailable": "Could not load this status",
   "conn.summaryDraftBlocksActions":
     "Save or discard this draft before using the saved connection.",
   "conn.summaryRefreshing":
@@ -2876,9 +2855,9 @@ export const en = {
   "conn.summaryReloadFirst": "Reload the saved connection before using it.",
   "conn.editorLabel": "Connection editor",
   "conn.areaBasic": "Basic",
-  "conn.areaAnalysis": "Analysis",
+  "conn.areaAnalysis": "Resolved values",
   "conn.areaAdvanced": "Advanced",
-  "conn.areaSshc": "sshc",
+  "conn.areaSshc": "Display & terminal",
   "conn.checksLabel": "Connection checks",
   "conn.checkReachability": "Check reachability",
   "conn.checkAuthentication": "Check authentication with saved settings",
@@ -2893,8 +2872,6 @@ export const en = {
   "conn.analysisExplainedHint":
     "These are the values used by this connection. They are resolved without executing commands. Settings that cannot be resolved are identified explicitly.",
   "conn.analysisAuthoritative": "Where each value comes from",
-  "conn.analysisAuthoritativeHint":
-    "Lists every line read for the saved connection, the file containing it, and whether the line takes effect.",
   "conn.analysisRun": "Show the sources",
   "conn.analysisRunning": "Reading…",
   "conn.analysisExecutableHeading":
@@ -2902,10 +2879,25 @@ export const en = {
   "conn.analysisTokenWarning":
     "OpenSSH does not shell-escape expanded tokens. Host name, port, or user values may therefore reach the command's shell unescaped.",
   "conn.analysisSources": "Configuration lines related to this connection",
+  "advanced.jumpHeading": "Jump host",
+  "advanced.jumpVia": "Connect through",
+  "advanced.jumpNone": "None (connect directly)",
+  "advanced.forwardListen": "Listens on",
+  "advanced.rowActions": "Actions",
+  "advanced.pending": "Not saved yet",
+  "advanced.portPlaceholder": "Port",
+  "advanced.add": "Add",
+  "advanced.otherHeading": "Other settings",
+  "advanced.count": "{count}",
+  "advanced.keywordPlaceholder": "Setting (e.g. ServerAliveInterval)",
+  "advanced.valuePlaceholder": "Value",
+  "advanced.keepNamed": "Keep {keyword}",
+  "advanced.removeNamed": "Remove {keyword}",
+  "advanced.backToSettings": "Back to the settings",
+  "conn.editAsText": "Edit as text",
+  "conn.connectionActions": "Actions for this connection",
+  "conn.actionCancel": "Cancel",
   "conn.advancedLabel": "Advanced settings",
-  "conn.advancedViews": "Advanced setting views",
-  "conn.advancedViewLabel": "View",
-  "conn.advancedDirectives": "Directives",
   "conn.portForwarding": "Port forwarding",
   "conn.forwardLoopbackOnly":
     "Listeners use 127.0.0.1 on this device or the SSH server. Other OS accounts on the same machine may be able to use them.",
@@ -2922,22 +2914,14 @@ export const en = {
     "Enter the host name or IP address and port as seen from the SSH server.",
   "conn.forwardDynamicHint":
     "The application using this SOCKS proxy chooses the destination for each connection.",
-  "conn.forwardAdd": "Add forwarding",
-  "conn.forwardPendingSave":
-    "This forwarding will be written when you save the changes.",
   "conn.forwardInvalidPort": "Enter a port from 1 to 65535.",
   "conn.forwardInvalidDestination": "Enter the destination as host:port.",
-  "conn.advancedNoFields": "This connection has no settings in this view.",
   "conn.advancedRawBlocksFields":
     "Raw has unsaved changes. Discard or save it before editing directives.",
   "conn.advancedFieldsBlockRaw":
     "Directives have unsaved changes. Discard or save them before editing Raw.",
   "conn.connect": "Connect",
   "conn.opening": "Opening…",
-  "conn.duplicate": "Duplicate connection",
-  "conn.manageLabel": "Manage connection",
-  "conn.manageIndependent":
-    "Each action is saved independently of Basic and Advanced settings.",
   "conn.manageDraftBlocked":
     "Save or discard the editor draft before changing connection identity or storage.",
   "conn.discardPrompt":
@@ -2954,20 +2938,15 @@ export const en = {
   "conn.deleteBody":
     "This removes the Host block from your configuration. You can restore it from History.",
   "conn.deleteCancel": "Keep it",
-  "conn.delete": "Delete connection",
 
-  "host.tabJump": "Jump Host",
-  "host.tabRaw": "Raw",
   "host.unbalancedQuote":
     "A value has a quote that is not closed. Close it, or put a backslash before a quote you want to keep as a character.",
   "host.needsKeyword": "A directive needs a keyword.",
   "host.dangerousField":
     "{keyword} can run a command when OpenSSH evaluates this host. It is stored as written and never executed here.",
   "host.keep": "Keep",
-  "host.remove": "Remove",
   "host.newDirective": "New directive",
   "host.newValue": "New value",
-  "host.addDirective": "Add directive",
   "host.saveChanges": "Save changes",
   "host.blockText":
     "Block text. Comments, blank lines and unknown directives are written back exactly as typed.",
@@ -2990,11 +2969,8 @@ export const en = {
   "host.osAutomatic": "Auto-detect after connecting",
   "host.osGeneric": "Generic server",
   "host.osUnknown": "OS unknown",
-  "host.osHint": "Detected after connecting. Choose an icon to override detection.",
   "host.colour": "Colour",
   "host.clearColour": "Clear colour",
-  "host.displayOrder":
-    "Display order — lower sorts earlier; 0 leaves this host where the file puts it",
   "host.tags": "Tags, comma separated",
   "host.renameAlias": "Rename alias",
   "host.rename": "Rename",

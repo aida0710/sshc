@@ -48,6 +48,9 @@ export function SavePreviewPanel({
   problem: Problem | null;
 }) {
   const t = useTranslate();
+  // 書き込んだものも、断られた理由も無いうちは何も出さない。いつも出ていると、済んだことのない操作の
+  // 説明が画面に残り続ける。
+  if (preview === null && conflict === null && problem === null) return null;
   return (
     <section aria-labelledby="preview-heading" className="flex flex-col gap-3 border-t border-line pt-5">
       <div className="flex items-center justify-between gap-3">
@@ -83,11 +86,7 @@ export function SavePreviewPanel({
         </div>
       )}
 
-      {preview === null ? (
-        conflict === null && problem === null ? (
-          <p className="text-xs text-ink-muted">{t("preview.nothingYet")}</p>
-        ) : null
-      ) : (
+      {preview === null ? null : (
         <div className="flex flex-col gap-3">
           {preview.diffs.map((diff) => (
             <FileDiffView key={diff.path} diff={diff} />
