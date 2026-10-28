@@ -556,7 +556,7 @@ describe("TerminalView", () => {
     streams[0]!.handlers.onReplay({ start: 4096, next: 4096, end: 4096, truncated: true });
 
     expect(await screen.findByText(/no longer in the engine replay buffer/)).toBeVisible();
-    expect(write).toHaveBeenCalledWith("\u0018");
+    expect(write).toHaveBeenCalledWith("\u0018", expect.any(Function));
   });
 
   it("connects at once when asked instead of waiting out the delay", async () => {

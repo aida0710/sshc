@@ -18,6 +18,9 @@ function harness() {
   const copied = vi.fn();
   const imageSequences = vi.fn(() => true);
   const imageHandler = terminal.parser.registerOscHandler(1337, imageSequences);
+  // What xterm sends back to the program, and whether the parser was in history then.
+  const answers: { data: string; replaying: boolean }[] = [];
+  const answerListener = terminal.onData((data) => answers.push({ data, replaying: output.isReplaying() }));
   const detachClipboard = attachOsc52Clipboard({
     parser: terminal.parser,
     enabled: () => !output.isReplaying(),
@@ -25,6 +28,7 @@ function harness() {
     copied,
   });
   cleanups.push(() => {
+    answerListener.dispose();
     imageHandler.dispose();
     detachClipboard();
     output.dispose();
@@ -35,6 +39,7 @@ function harness() {
     writeText,
     copied,
     imageSequences,
+    answers,
     async expectLine(text: string) {
       await vi.waitFor(() => expect(terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(text));
     },
@@ -127,5 +132,29 @@ describe("terminal output replay", () => {
 
     expect(subject.writeText).toHaveBeenCalledTimes(1);
     expect(subject.writeText).toHaveBeenCalledWith("new text");
+  });
+
+  it("marks the answers to queries in history as replayed and the answers to live queries as new", async () => {
+    const subject = harness();
+    const history = encoder.encode("history\u001b[c");
+    subject.output.beginReplay({ start: 0, next: history.byteLength, end: history.byteLength, truncated: false });
+
+    subject.output.write(history);
+    subject.output.write(encoder.encode("live\u001b[c"));
+    await subject.expectLine("historylive");
+
+    await vi.waitFor(() => expect(subject.answers).toHaveLength(2));
+    expect(subject.answers.map(({ replaying }) => replaying)).toEqual([true, false]);
+  });
+
+  it("stops treating output as history once the replay is parsed, even when nothing live follows", async () => {
+    const subject = harness();
+    const history = encoder.encode("history");
+    subject.output.beginReplay({ start: 0, next: history.byteLength, end: history.byteLength, truncated: false });
+
+    subject.output.write(history);
+    await subject.expectLine("history");
+
+    expect(subject.output.isReplaying()).toBe(false);
   });
 });
