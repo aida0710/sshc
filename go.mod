@@ -53,3 +53,7 @@ tool (
 	golang.org/x/mobile/cmd/gomobile
 	golang.org/x/tools/cmd/deadcode
 )
+
+// npm の依存（web/・pages/・demo/ の node_modules）に入る Go のコードを、./... の対象から外す。
+// 外さないと、npm のパッケージが置いた Go のテストが go vet ./...・go test ./... で動く。
+ignore node_modules
