@@ -21,9 +21,13 @@ function imageHarness() {
   const terminal = new Terminal({ cols: 80, rows: 24, allowProposedApi: true });
   const images = attachInlineImages(terminal);
   const output = createTerminalOutput(terminal);
+  // What the terminal sends back to the program, and whether it was parsing replayed history then.
+  const answers: { data: string; replaying: boolean }[] = [];
+  terminal.onData((data) => answers.push({ data, replaying: output.isReplaying() }));
   return {
     decodeBitmap,
     output,
+    answers,
     flush: () => new Promise<void>((resolve) => terminal.write("", resolve)),
     dispose() {
       output.dispose();
@@ -259,5 +263,90 @@ describe("kitty graphics", () => {
     } finally {
       subject.dispose();
     }
+  });
+
+  describe("answers to a refused image", () => {
+    const answer = (id: number, message: string) => `\u001b_Gi=${id};${message}\u001b\\`;
+
+    it("tells a program that named the image why it was refused", async () => {
+      const subject = imageHarness();
+      try {
+        subject.output.write(kittyCommand("a=T,f=32,i=5", "AAAA"));
+        subject.output.write(kittyCommand("a=T,f=32,s=20000,v=20000,i=6", "AAAA"));
+        await subject.flush();
+
+        expect(subject.answers.map(({ data }) => data)).toEqual([
+          answer(5, "EINVAL:width and height required for raw pixel data"),
+          answer(6, "EFBIG:image exceeds the terminal's limits"),
+        ]);
+      } finally {
+        subject.dispose();
+      }
+    });
+
+    it("answers a chunked image once, after its last chunk", async () => {
+      stubImageData();
+      const subject = imageHarness();
+      try {
+        const zeros = toBase64(await zlibCompress(new Uint8Array(inflatedBombBytes)));
+        const chunkLength = 8;
+        subject.output.write(kittyCommand("a=T,f=32,s=2,v=2,o=z,i=7,m=1", zeros.slice(0, chunkLength)));
+        for (let offset = chunkLength; offset < zeros.length; offset += chunkLength) {
+          const more = offset + chunkLength < zeros.length ? 1 : 0;
+          if (more === 0) {
+            await subject.flush();
+            expect(subject.answers).toEqual([]);
+          }
+          subject.output.write(kittyCommand(`m=${more}`, zeros.slice(offset, offset + chunkLength)));
+        }
+        await subject.flush();
+
+        expect(subject.answers.map(({ data }) => data)).toEqual([answer(7, "EFBIG:image exceeds the terminal's limits")]);
+      } finally {
+        subject.dispose();
+      }
+    });
+
+    it("answers both images when another image breaks into an unfinished one", async () => {
+      const subject = imageHarness();
+      try {
+        const compressed = toBase64(await zlibCompress(pngBytes));
+        subject.output.write(kittyCommand("a=T,f=100,o=z,i=8,m=1", compressed.slice(0, 8)));
+        subject.output.write(kittyCommand("a=T,f=100,i=9", pngBase64));
+        await subject.flush();
+
+        const interleaved = "EINVAL:another image's chunks arrived before this image finished";
+        expect(subject.answers.map(({ data }) => data)).toEqual([answer(8, interleaved), answer(9, interleaved)]);
+      } finally {
+        subject.dispose();
+      }
+    });
+
+    it("stays quiet for q=2 and for an image without i", async () => {
+      const subject = imageHarness();
+      try {
+        subject.output.write(kittyCommand("a=T,f=32,i=5,q=2", "AAAA"));
+        subject.output.write(kittyCommand("a=T,f=32", "AAAA"));
+        await subject.flush();
+
+        expect(subject.answers).toEqual([]);
+      } finally {
+        subject.dispose();
+      }
+    });
+
+    it("answers a refusal found again in replayed output as replayed, so the terminal holds it back", async () => {
+      const subject = imageHarness();
+      try {
+        const history = kittyCommand("a=T,f=32,i=5", "AAAA");
+        subject.output.beginReplay({ start: 0, next: history.byteLength, end: history.byteLength, truncated: false });
+        subject.output.write(history);
+        await subject.flush();
+
+        expect(subject.answers).toEqual([{ data: answer(5, "EINVAL:width and height required for raw pixel data"), replaying: true }]);
+      } finally {
+        subject.dispose();
+      }
+    });
   });
 });
