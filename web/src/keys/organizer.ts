@@ -1,4 +1,5 @@
 import type { KeyItem, KeyLocationInput, RelocateKeyResponse } from "./api";
+import { groupDepth } from "../rules/groupPath";
 
 export function groupOfKeyPath(relativePath: string): string {
   const segments = relativePath.split("/");
@@ -51,7 +52,7 @@ export function folderRows(items: KeyItem[], groups: string[], trashCount: numbe
   const rows: FolderRow[] = [{ folder: { kind: "all" }, count: rowsIn({ kind: "all" }), depth: 0 }];
   for (const name of [...groups].sort()) {
     const folder: Folder = { kind: "group", name };
-    rows.push({ folder, count: rowsIn(folder), depth: name.split("/").length });
+    rows.push({ folder, count: rowsIn(folder), depth: groupDepth(name) });
   }
   rows.push({ folder: { kind: "ungrouped" }, count: rowsIn({ kind: "ungrouped" }), depth: 0 });
   rows.push({ folder: { kind: "trash" }, count: trashCount, depth: 0 });

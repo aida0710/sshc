@@ -1,4 +1,5 @@
 import type { HostEntry, HostMetadata, Overview } from "../api/config";
+import { groupBaseName, isGroupOrDescendant } from "../rules/groupPath";
 import { duplicateAliasesOf, hostMetadataByIdentity, identityKey, nearestDeclaredParent } from "./connectionBrowser";
 
 // Connections の画面の接続先とグループを overview から組み立てる。グループの一覧と接続の一覧が、
@@ -31,7 +32,7 @@ export type GroupNode = {
 };
 
 export function belongsToGroup(item: DecoratedHost, group: string): boolean {
-  return item.group === group || item.group.startsWith(`${group}/`);
+  return isGroupOrDescendant(item.group, group);
 }
 
 function hostBlockIdentity(host: HostEntry): string {
@@ -83,7 +84,7 @@ export function buildGroupTree(overview: Overview, decorated: readonly Decorated
     const display = metadata.get(group.name);
     nodes.set(group.name, {
       name: group.name,
-      label: group.name.slice(group.name.lastIndexOf("/") + 1),
+      label: groupBaseName(group.name),
       colour: display?.colour ?? "",
       hidden: display?.hidden === true,
       order: display?.order ?? group.order ?? 0,

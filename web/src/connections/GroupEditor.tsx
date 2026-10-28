@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { groupBaseName, parentGroupName } from "../rules/groupPath";
 import type { GroupMetadata } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { formatDirectiveValues, parseDirectiveValues } from "../rules/rules";
@@ -35,8 +36,8 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
   const [saving, setSaving] = useState(false);
   const [draftError, setDraftError] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
-  const parent = group.name.includes("/") ? group.name.slice(0, group.name.lastIndexOf("/") + 1) : "";
-  const label = group.name.slice(group.name.lastIndexOf("/") + 1);
+  const parent = parentGroupName(group.name) === "" ? "" : `${parentGroupName(group.name)}/`;
+  const label = groupBaseName(group.name);
 
   useEffect(() => {
     onDirtyChange(dirty);
