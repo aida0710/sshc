@@ -5,19 +5,20 @@ import (
 	"net/http"
 
 	"sshc/internal/app"
+	"sshc/internal/handoff"
 )
 
 // engineStatusReader は、home の handoff が指す engine に状態を尋ねる。
-type engineStatusReader func(ctx context.Context, home string) (statusAnswer, error)
+type engineStatusReader func(ctx context.Context, home string) (handoff.EngineStatus, error)
 
 // vaultStateUnknownAdvice は、起動した engine の Vault の状態を読めなかったときの案内である。
 const vaultStateUnknownAdvice = "could not read the vault state; run sshc vault status"
 
 // readEngineStatus は、home の handoff が指す engine を確かめてから状態を尋ねる。
-func readEngineStatus(ctx context.Context, home string) (statusAnswer, error) {
+func readEngineStatus(ctx context.Context, home string) (handoff.EngineStatus, error) {
 	stateDir, err := app.StateDir(home)
 	if err != nil {
-		return statusAnswer{}, err
+		return handoff.EngineStatus{}, err
 	}
 	client := &http.Client{Timeout: connectTimeout}
 	_, answer, err := verifiedStatus(ctx, stateDir, client)

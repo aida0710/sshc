@@ -233,7 +233,7 @@ type openResponse struct {
 //
 // これは CLI 専用のエンドポイントであり、Web UI は自身の session を使う。
 // ここが返す相手は `sshc status` であり、認可は handoff の秘密ひとつである。
-const StatusPath = "/cli/status"
+const StatusPath = handoff.StatusPath
 
 // StopPath は、走っている engine に「畳んで終わってくれ」と頼む場所である。
 //
@@ -246,7 +246,7 @@ const StopPath = "/cli/stop"
 // ChallengePath は、CLI が秘密を送る前に「この engine は handoff の秘密を持って
 // いるか」を確かめる場所である。認可は要らない。答えは challenge に固有の HMAC で、
 // 秘密そのものは明かさない。
-const ChallengePath = "/cli/challenge"
+const ChallengePath = handoff.ChallengePath
 
 type CLIStatus struct {
 	Owner           handoff.Owner `json:"owner"`

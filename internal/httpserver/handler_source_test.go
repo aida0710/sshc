@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -97,6 +98,7 @@ func readPackageSource(t *testing.T) packageSource {
 		functions: map[string]*ast.FuncDecl{},
 		methods:   map[string]*ast.FuncDecl{},
 	}
+	source.indexImportedConstants(t, "handoff")
 	for _, entry := range entries {
 		name := entry.Name()
 		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -132,19 +134,44 @@ func (source packageSource) indexDeclarations(file *ast.File) {
 	}
 }
 
+// indexImportedConstants は、経路のパスを共有するパッケージの文字列の定数を
+// "handoff.SessionPath" の形で引けるようにする。CLI とリモートのエンジンが
+// 同じパスを呼ぶので、パスの正本は internal/handoff にある。
+func (source packageSource) indexImportedConstants(t *testing.T, packageName string) {
+	t.Helper()
+	files, err := filepath.Glob(filepath.Join("..", packageName, "*.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(source.fileSet, name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, declaration := range file.Decls {
+			if declaration, ok := declaration.(*ast.GenDecl); ok && declaration.Tok == token.CONST {
+				source.indexStringConstantsAs(declaration, packageName+".")
+			}
+		}
+	}
+}
+
 func (source packageSource) indexStringConstants(declaration *ast.GenDecl) {
+	source.indexStringConstantsAs(declaration, "")
+}
+
+func (source packageSource) indexStringConstantsAs(declaration *ast.GenDecl, prefix string) {
 	for _, specification := range declaration.Specs {
 		value := specification.(*ast.ValueSpec)
 		for index, name := range value.Names {
 			if index >= len(value.Values) {
 				continue
 			}
-			literal, ok := value.Values[index].(*ast.BasicLit)
-			if !ok || literal.Kind != token.STRING {
-				continue
-			}
-			if unquoted, err := strconv.Unquote(literal.Value); err == nil {
-				source.constants[name.Name] = unquoted
+			if text, ok := source.stringValue(value.Values[index]); ok {
+				source.constants[prefix+name.Name] = text
 			}
 		}
 	}
@@ -264,6 +291,13 @@ func (source packageSource) stringValue(expression ast.Expr) (string, bool) {
 		return value, err == nil
 	case *ast.Ident:
 		value, ok := source.constants[expression.Name]
+		return value, ok
+	case *ast.SelectorExpr:
+		packageName, ok := expression.X.(*ast.Ident)
+		if !ok {
+			return "", false
+		}
+		value, ok := source.constants[packageName.Name+"."+expression.Sel.Name]
 		return value, ok
 	case *ast.CallExpr:
 		helper, ok := expression.Fun.(*ast.Ident)

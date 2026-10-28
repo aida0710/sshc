@@ -7,13 +7,14 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
+	"sshc/internal/handoff"
 	"sshc/internal/session"
 	sshcSFTP "sshc/internal/sftp"
 )
 
 const (
-	SessionCookie     = "sshc_session"
-	CSRFHeader        = "X-SSHC-CSRF"
+	SessionCookie     = handoff.SessionCookie
+	CSRFHeader        = handoff.CSRFHeader
 	SessionContextKey = "sshc-session"
 
 	// style-src だけが 'unsafe-inline' を持つ。

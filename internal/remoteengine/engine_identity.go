@@ -115,7 +115,7 @@ func proveConnection(ctx context.Context, connection net.Conn, identity engineId
 		stopWatching()
 		return err
 	}
-	request, err := http.NewRequest(http.MethodGet, "http://"+loopbackHost(identity.port)+challengePath, nil)
+	request, err := http.NewRequest(http.MethodGet, "http://"+loopbackHost(identity.port)+handoff.ChallengePath, nil)
 	if err != nil {
 		stopWatching()
 		return err

@@ -90,10 +90,10 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 	f.seen = append(f.seen, r.Method+" "+r.URL.Path)
 	f.mutex.Unlock()
 	switch r.URL.Path {
-	case challengePath:
+	case handoff.ChallengePath:
 		w.Header().Set(handoff.ProofHeader, handoff.Prove(fakeSecret, r.Header.Get(handoff.ChallengeHeader)))
 		w.WriteHeader(http.StatusNoContent)
-	case cliSessionPath:
+	case handoff.SessionPath:
 		if r.Header.Get(handoff.HeaderName) != fakeSecret {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -107,9 +107,9 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 		f.cookie, f.csrf = fmt.Sprintf("cookie-%d", number), fmt.Sprintf("csrf-%d", number)
 		cookie, csrf := f.cookie, f.csrf
 		f.mutex.Unlock()
-		http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: cookie})
+		http.SetCookie(w, &http.Cookie{Name: handoff.SessionCookie, Value: cookie})
 		_ = json.NewEncoder(w).Encode(map[string]string{"csrfToken": csrf})
-	case cliStatusPath:
+	case handoff.StatusPath:
 		if r.Header.Get(handoff.HeaderName) != fakeSecret {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -163,7 +163,7 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// 接続先が付けたヘッダーがブラウザへ届かないことを確かめるために付ける。
-		w.Header().Set("Set-Cookie", sessionCookieName+"=remote; Path=/")
+		w.Header().Set("Set-Cookie", handoff.SessionCookie+"=remote; Path=/")
 		w.Header().Set("Clear-Site-Data", `"cookies"`)
 		connection, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 		if err != nil {
@@ -185,11 +185,11 @@ func (f *fakeRemoteEngine) authorized(w http.ResponseWriter, r *http.Request) bo
 	f.mutex.Lock()
 	cookie, csrf := f.cookie, f.csrf
 	f.mutex.Unlock()
-	sent, _ := r.Cookie(sessionCookieName)
+	sent, _ := r.Cookie(handoff.SessionCookie)
 	switch {
 	case r.Header.Get("Origin") != f.origin() || r.Header.Get("Sec-Fetch-Site") != "same-origin":
 		http.Error(w, "cross_site_request", http.StatusForbidden)
-	case sent == nil || sent.Value != cookie || r.Header.Get(csrfHeaderName) != csrf:
+	case sent == nil || sent.Value != cookie || r.Header.Get(handoff.CSRFHeader) != csrf:
 		http.Error(w, "invalid_session", http.StatusUnauthorized)
 	case f.expired.CompareAndSwap(true, false):
 		http.Error(w, "invalid_session", http.StatusUnauthorized)
@@ -238,7 +238,7 @@ func forward(t *testing.T, manager *Manager, method, body string) (int, string, 
 	request := httptest.NewRequest(method, "/api/v1/engines/r540/terminal/sessions", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Cookie", "sshc_session=this-machine")
-	request.Header.Set(csrfHeaderName, "this-machine-csrf")
+	request.Header.Set(handoff.CSRFHeader, "this-machine-csrf")
 	recorder := httptest.NewRecorder()
 	if err := manager.ForwardTerminalAPI(recorder, request, "r540", "/api/v1/terminal/sessions"); err != nil {
 		t.Fatal(err)
@@ -548,7 +548,7 @@ func TestARefusedTerminalStreamDoesNotPassTheRemoteCookiesToTheBrowser(t *testin
 			remote.serve(w, r)
 			return
 		}
-		w.Header().Add("Set-Cookie", sessionCookieName+"=attacker-chosen; Path=/")
+		w.Header().Add("Set-Cookie", handoff.SessionCookie+"=attacker-chosen; Path=/")
 		w.Header().Set("Clear-Site-Data", `"cookies"`)
 		w.WriteHeader(http.StatusBadRequest)
 	}))

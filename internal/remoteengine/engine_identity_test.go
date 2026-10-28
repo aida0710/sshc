@@ -12,6 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"sshc/internal/handoff"
 )
 
 // portSquatter は、接続先のエンジンが手放したポートを取った、接続先の別の利用者の
@@ -36,14 +38,14 @@ func squatPort(t *testing.T, address string) *portSquatter {
 }
 
 func (s *portSquatter) serve(w http.ResponseWriter, r *http.Request) {
-	cookie, _ := r.Cookie(sessionCookieName)
+	cookie, _ := r.Cookie(handoff.SessionCookie)
 	var body struct {
 		Passphrase string `json:"passphrase"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	s.mutex.Lock()
 	s.received = append(s.received, fmt.Sprintf("%s %s cookie=%v csrf=%q passphrase=%q",
-		r.Method, r.URL.Path, cookie != nil, r.Header.Get(csrfHeaderName), body.Passphrase))
+		r.Method, r.URL.Path, cookie != nil, r.Header.Get(handoff.CSRFHeader), body.Passphrase))
 	s.mutex.Unlock()
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(http.StatusConflict)
@@ -58,7 +60,7 @@ func (s *portSquatter) onlyChallenged(t *testing.T) {
 	if len(s.received) == 0 {
 		t.Fatal("the squatter was never asked to prove itself")
 	}
-	want := fmt.Sprintf("GET %s cookie=false csrf=\"\" passphrase=\"\"", challengePath)
+	want := fmt.Sprintf("GET %s cookie=false csrf=\"\" passphrase=\"\"", handoff.ChallengePath)
 	for _, line := range s.received {
 		if line != want {
 			t.Errorf("the squatter received %s, want only the challenge", line)

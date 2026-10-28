@@ -72,39 +72,24 @@ type engineAPI struct {
 	closed  bool
 }
 
-// engineStatusWire は、engine の状態応答の通信形式である。必須項目は欠落を
-// 見分けるため pointer で受ける。
-type engineStatusWire struct {
-	Owner           handoff.Owner `json:"owner"`
-	Version         string        `json:"version"`
-	ProtocolVersion int           `json:"protocolVersion"`
-	Vault           *bool         `json:"vault"`
-	Unlocked        *bool         `json:"unlocked"`
-	Passwordless    bool          `json:"passwordless"`
-	Sessions        *int          `json:"sessions"`
-}
-
 // fetchEngineStatus は、handoff が示す engine に path（/cli/status または
 // /cli/vault/status）で状態を尋ね、応答が handoff と同じ engine のものであることを
 // 確かめてから返す。status、vault、connect、service の全経路がここを通る。
-func fetchEngineStatus(ctx context.Context, client *http.Client, found handoff.Handoff, path string) (statusAnswer, error) {
-	var wire engineStatusWire
+func fetchEngineStatus(ctx context.Context, client *http.Client, found handoff.Handoff, path string) (handoff.EngineStatus, error) {
+	var wire handoff.EngineStatusWire
 	err := newHandoffEndpoint(found, client).exchange(ctx,
 		handoffCall{method: http.MethodGet, path: path}, handoffAnswer{status: http.StatusOK, into: &wire})
 	if err != nil {
-		return statusAnswer{}, err
+		return handoff.EngineStatus{}, err
 	}
-	if wire.Vault == nil || wire.Unlocked == nil || wire.Sessions == nil ||
-		*wire.Sessions < 0 || (!*wire.Vault && *wire.Unlocked) {
-		return statusAnswer{}, errEngineInvalidResponse
+	status, err := wire.Status()
+	if err != nil {
+		return handoff.EngineStatus{}, errEngineInvalidResponse
 	}
-	if wire.Owner != found.Owner || wire.Version != found.Version || wire.ProtocolVersion != found.ProtocolVersion {
-		return statusAnswer{}, errEngineIdentityMismatch
+	if status.Owner != found.Owner || status.Version != found.Version || status.ProtocolVersion != found.ProtocolVersion {
+		return handoff.EngineStatus{}, errEngineIdentityMismatch
 	}
-	return statusAnswer{
-		Owner: wire.Owner, Version: wire.Version, ProtocolVersion: wire.ProtocolVersion,
-		Vault: *wire.Vault, Unlocked: *wire.Unlocked, Sessions: *wire.Sessions, Passwordless: wire.Passwordless,
-	}, nil
+	return status, nil
 }
 
 // openEngineAPI validates one exact handoff and engine before minting a
@@ -138,36 +123,40 @@ func openEngineAPI(ctx context.Context, stateDir string, base *http.Client) (*en
 	if response.StatusCode != http.StatusOK {
 		return nil, decodeEngineProblem(response)
 	}
-	var cookie *http.Cookie
-	for _, candidate := range response.Cookies() {
-		if candidate.Name == httpserver.SessionCookie && candidate.Value != "" {
-			copy := *candidate
-			cookie = &copy
-			break
+	cookies := response.Cookies()
+	body, err := readAndCloseBounded(response, maxEngineAPIResponse, errEngineInvalidResponse, errEngineResponseTooLarge)
+	if err != nil {
+		clear(body)
+		if ctx.Err() != nil {
+			return nil, transportProblem(ctx.Err(), false)
 		}
+		return nil, err
 	}
-	var credentials api.BootstrapResponse
-	decodeErr := decodeEngineJSONResponse(response, &credentials)
-	if decodeErr != nil && ctx.Err() != nil {
-		decodeErr = transportProblem(ctx.Err(), false)
-	}
-	if decodeErr != nil || cookie == nil || credentials.CsrfToken == "" {
-		if cookie != nil {
-			partial := &engineAPI{origin: found.URL, secret: found.Secret, cookie: *cookie, client: client}
+	credentials, err := handoff.ReadSessionAnswer(body, cookies)
+	clear(body)
+	if err != nil {
+		if credentials.Cookie != "" {
+			// 受け取れた cookie のセッションは、使わずに返す。
+			partial := &engineAPI{origin: found.URL, secret: found.Secret, cookie: sessionCookie(credentials.Cookie), client: client}
 			_ = partial.Close()
 		}
-		if decodeErr != nil {
-			return nil, decodeErr
+		if ctx.Err() != nil {
+			return nil, transportProblem(ctx.Err(), false)
 		}
 		return nil, errEngineInvalidResponse
 	}
 	return &engineAPI{
 		origin: found.URL,
 		secret: found.Secret,
-		cookie: *cookie,
-		csrf:   credentials.CsrfToken,
+		cookie: sessionCookie(credentials.Cookie),
+		csrf:   credentials.CSRF,
 		client: client,
 	}, nil
+}
+
+// sessionCookie is the cookie that carries a borrowed API session on each later request.
+func sessionCookie(value string) http.Cookie {
+	return http.Cookie{Name: handoff.SessionCookie, Value: value}
 }
 
 func engineCommandClient(base *http.Client) *http.Client {

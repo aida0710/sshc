@@ -241,7 +241,7 @@ func TestStatusPrintsATableAndStillSpeaksJSON(t *testing.T) {
 	}, true); code != 0 {
 		t.Fatalf("status --json = %d\n%s", code, errOut.String())
 	}
-	var decoded statusAnswer
+	var decoded handoff.EngineStatus
 	decodeCommandSuccess(t, machine.String(), &decoded)
 	if decoded.Sessions != 2 || decoded.Version != "v9-test" {
 		t.Errorf("--json lost fields: %+v", decoded)

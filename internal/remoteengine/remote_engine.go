@@ -14,16 +14,6 @@ import (
 	"sshc/internal/handoff"
 )
 
-// Header names and the cookie the remote engine's own API expects. They are
-// spelled here rather than imported because httpserver imports this package.
-const (
-	sessionCookieName = "sshc_session"
-	csrfHeaderName    = "X-SSHC-CSRF"
-	challengePath     = "/cli/challenge"
-	cliSessionPath    = "/cli/session"
-	cliStatusPath     = "/cli/status"
-)
-
 var (
 	// ErrNotRunning は、接続先で sshc のエンジンが動いていないことを表す。
 	ErrNotRunning = errors.New("the sshc engine on the remote host is not running")
@@ -197,7 +187,7 @@ func (e *remoteEngine) attach(ctx context.Context) (*remoteSession, error) {
 func (e *remoteEngine) openSession(ctx context.Context, session *remoteSession) error {
 	ctx, cancel := context.WithTimeout(ctx, e.sessionLimit)
 	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, session.origin()+cliSessionPath, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, session.origin()+handoff.SessionPath, nil)
 	if err != nil {
 		return err
 	}
@@ -210,21 +200,15 @@ func (e *remoteEngine) openSession(ctx context.Context, session *remoteSession) 
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("%w: session refused with status %d", ErrUnproven, response.StatusCode)
 	}
-	var answer struct {
-		CSRFToken string `json:"csrfToken"`
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxRemoteAnswer))
+	if err != nil {
+		return err
 	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, maxRemoteAnswer)).Decode(&answer); err != nil || answer.CSRFToken == "" {
-		return fmt.Errorf("%w: the session answer is unreadable", ErrUnproven)
+	credentials, err := handoff.ReadSessionAnswer(body, response.Cookies())
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrUnproven, err)
 	}
-	for _, cookie := range response.Cookies() {
-		if cookie.Name == sessionCookieName {
-			session.cookie = cookie.Value
-		}
-	}
-	if session.cookie == "" {
-		return fmt.Errorf("%w: the session answer has no cookie", ErrUnproven)
-	}
-	session.csrf = answer.CSRFToken
+	session.cookie, session.csrf = credentials.Cookie, credentials.CSRF
 	return nil
 }
 
@@ -253,7 +237,7 @@ func (e *remoteEngine) status(ctx context.Context) (Status, error) {
 		if err != nil {
 			return Status{}, err
 		}
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, session.origin()+cliStatusPath, nil)
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, session.origin()+handoff.StatusPath, nil)
 		if err != nil {
 			return Status{}, err
 		}
@@ -282,11 +266,16 @@ func (e *remoteEngine) readStatus(session *remoteSession, response *http.Respons
 	if response.StatusCode != http.StatusOK {
 		return Status{}, fmt.Errorf("remote status answered %d", response.StatusCode)
 	}
-	var status Status
-	if err := json.NewDecoder(io.LimitReader(response.Body, maxRemoteAnswer)).Decode(&status); err != nil {
+	// 接続先は別のバージョンの sshc でありうるので、知らない項目は読み飛ばす。
+	var wire handoff.EngineStatusWire
+	if err := json.NewDecoder(io.LimitReader(response.Body, maxRemoteAnswer)).Decode(&wire); err != nil {
 		return Status{}, err
 	}
-	return status, nil
+	answer, err := wire.Status()
+	if err != nil {
+		return Status{}, err
+	}
+	return Status{Version: answer.Version, Vault: answer.Vault, Unlocked: answer.Unlocked, Passwordless: answer.Passwordless, Sessions: answer.Sessions}, nil
 }
 
 func (e *remoteEngine) close() {
