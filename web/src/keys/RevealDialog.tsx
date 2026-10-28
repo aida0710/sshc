@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { MoreDetails } from "../ui/MoreDetails";
 import { CopyButton } from "../ui/CopyButton";
 import { useTranslate } from "../i18n/context";
 import type { KeysApi } from "./api";
@@ -51,6 +52,7 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
       {state === "confirm" && (
         <>
           <p className="mt-3 rounded-md bg-notice px-3 py-2 text-sm text-notice-ink">{t("reveal.warning")}</p>
+          <MoreDetails className="mt-2">{t("reveal.warningMore")}</MoreDetails>
           <Button
             ref={showButton}
             className="mt-4"

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MoreDetails } from "../ui/MoreDetails";
 import { failureCode } from "../api/client";
 import type { PasswordVaultStatus, VaultApi } from "../api/vault";
 import { useTranslate } from "../i18n/context";
@@ -76,7 +77,8 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
   return (
     <SettingsSection id="settings-password" label={t("secrets.changeHeading")} icon="secrets" showHeading={showHeading}>
       <div>
-        <p className="mb-4 text-xs leading-[18px] text-ink-faint">{t("secrets.changeNote")}</p>
+        <p className="text-xs leading-[18px] text-ink-faint">{t("secrets.changeNote")}</p>
+        <MoreDetails className="mb-4 mt-1">{t("secrets.changeNoteMore")}</MoreDetails>
         <CheckboxField label={t("lock.withoutPassword")} checked={draft.withoutPassword} onChange={(checked) => edit({ withoutPassword: checked })} />
         {draft.withoutPassword ? <p className="mb-3 text-sm text-ink-muted">{t("lock.withoutPasswordHint")}</p> : null}
         <div className="mt-3">
