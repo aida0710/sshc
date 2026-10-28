@@ -30,6 +30,10 @@ export function terminalRoot(page: Page): Locator {
 export function drawnRows(page: Page): Locator {
   return page.locator(DRAWN_ROWS);
 }
+// drawnRowsIn is each row xterm draws inside container, such as one pane of a split.
+export function drawnRowsIn(container: Locator): Locator {
+  return container.locator(`${DRAWN_ROWS} > div`);
+}
 export function drawnSpan(page: Page, text: string): Locator {
   return page.locator(`${DRAWN_ROWS} span`, { hasText: text });
 }
