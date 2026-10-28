@@ -1025,6 +1025,9 @@ export const en = {
   "terminal.copyContextHint":
     "Copy up to the latest 200 terminal rows without control sequences",
   "terminal.copyContextDone": "Recent terminal context copied.",
+  "terminal.copyWithColors": "Copy with colors",
+  "terminal.copyWithColorsHint": "Copies the selection keeping its colors and the terminal's background (as HTML), for pasting into a document. Links stay as their text.",
+  "terminal.copyWithColorsEmpty": "Select text in the terminal first.",
   "terminal.copyContextEmpty": "There is no terminal context to copy.",
   "terminal.keepScreenAwake": "Keep screen on",
   "terminal.keepScreenAwakeHint":
