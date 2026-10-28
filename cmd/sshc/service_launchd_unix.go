@@ -8,7 +8,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -67,49 +66,32 @@ func (manager *launchdServiceManager) DisablePlan() string {
 	return fmt.Sprintf("stop and remove the launchd user agent at %s", manager.plistPath())
 }
 
-func (manager *launchdServiceManager) Install(ctx context.Context, executable string) (result error) {
-	release, err := manager.acquireOperationLock()
-	if err != nil {
-		return err
+func (manager *launchdServiceManager) Install(ctx context.Context, executable string) error {
+	return manager.definitionSteps().install(ctx, executable)
+}
+
+// definitionSteps は、launchd の user agent の登録と外し方である。
+func (manager *launchdServiceManager) definitionSteps() serviceDefinitionSteps {
+	return serviceDefinitionSteps{
+		definition:      manager.definitionFile(),
+		lock:            manager.lock,
+		temporaryPrefix: ".sshc-launchd-",
+		stopForInstall:  manager.bootoutIfLoaded,
+		start: func(ctx context.Context) error {
+			return manager.run(ctx, "bootstrap", manager.domain(), manager.plistPath())
+		},
+		waitReady:      manager.waitUntilReady,
+		stopForRemoval: manager.bootoutIfLoaded,
 	}
-	defer func() { result = errors.Join(result, release()) }()
-	definition := manager.definitionFile()
-	snapshot, err := definition.readSnapshot()
-	if err != nil {
-		return err
-	}
-	if snapshot.state == serviceUnmanaged {
-		return errUnmanagedServiceUnit
-	}
-	plist, err := launchdPlist(executable, manager.home)
-	if err != nil {
-		return err
-	}
+}
+
+// bootoutIfLoaded は、読み込まれている agent を外す。読み込まれていなければ何もしない。
+func (manager *launchdServiceManager) bootoutIfLoaded(ctx context.Context) error {
 	loaded, err := manager.isLoaded(ctx)
-	if err != nil {
+	if err != nil || !loaded {
 		return err
 	}
-	if loaded {
-		if err := manager.run(ctx, "bootout", manager.target()); err != nil {
-			return err
-		}
-	}
-	if err := definition.ensureUnchanged(snapshot); err != nil {
-		return err
-	}
-	if err := manager.files.MkdirAll(filepath.Dir(manager.plistPath()), 0o700); err != nil {
-		return fmt.Errorf("create LaunchAgents directory: %w", err)
-	}
-	if err := storage.WriteAtomicFile(manager.files, manager.plistPath(), ".sshc-launchd-", 0o600, []byte(plist)); err != nil {
-		return fmt.Errorf("write %s: %w", manager.plistPath(), err)
-	}
-	if err := manager.run(ctx, "bootstrap", manager.domain(), manager.plistPath()); err != nil {
-		return err
-	}
-	if err := manager.waitUntilReady(ctx); err != nil {
-		return fmt.Errorf("service did not become ready: %w", err)
-	}
-	return definition.ensureStillMatches(executable, "starting")
+	return manager.run(ctx, "bootout", manager.target())
 }
 
 func (manager *launchdServiceManager) Status(ctx context.Context) (serviceState, error) {
@@ -160,39 +142,8 @@ func (manager *launchdServiceManager) restartRunning(ctx context.Context) error 
 	return manager.run(ctx, "kickstart", "-k", manager.target())
 }
 
-func (manager *launchdServiceManager) Disable(ctx context.Context) (removed bool, result error) {
-	release, err := manager.acquireOperationLock()
-	if err != nil {
-		return false, err
-	}
-	defer func() { result = errors.Join(result, release()) }()
-	definition := manager.definitionFile()
-	snapshot, err := definition.readSnapshot()
-	if err != nil {
-		return false, err
-	}
-	if snapshot.state == serviceAbsent {
-		return false, nil
-	}
-	if snapshot.state == serviceUnmanaged {
-		return false, errUnmanagedServiceUnit
-	}
-	loaded, err := manager.isLoaded(ctx)
-	if err != nil {
-		return false, err
-	}
-	if loaded {
-		if err := manager.run(ctx, "bootout", manager.target()); err != nil {
-			return false, err
-		}
-	}
-	if err := definition.ensureUnchanged(snapshot); err != nil {
-		return false, err
-	}
-	if err := manager.files.Remove(manager.plistPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return false, fmt.Errorf("remove %s: %w", manager.plistPath(), err)
-	}
-	return true, nil
+func (manager *launchdServiceManager) Disable(ctx context.Context) (bool, error) {
+	return manager.definitionSteps().disable(ctx)
 }
 
 func (manager *launchdServiceManager) acquireOperationLock() (func() error, error) {
