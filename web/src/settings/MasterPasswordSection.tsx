@@ -1,10 +1,10 @@
+import { PasswordlessSwitch } from "../secrets/PasswordlessSwitch";
 import { useEffect, useState } from "react";
 import { failureCode } from "../api/client";
 import type { PasswordVaultStatus, VaultApi } from "../api/vault";
 import { useTranslate } from "../i18n/context";
 import { FieldRow } from "../ui/FieldRow";
 import { PasswordInput } from "../ui/PasswordField";
-import { CheckboxField } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea } from "../ui/ActionArea";
 import { SettingsSection } from "./SettingsSection";
@@ -77,8 +77,7 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
     <SettingsSection id="settings-password" label={t("secrets.changeHeading")} icon="secrets" showHeading={showHeading}>
       <div>
         <p className="mb-4 text-xs leading-[18px] text-ink-faint">{t("secrets.changeNote")}</p>
-        <CheckboxField label={t("lock.withoutPassword")} checked={draft.withoutPassword} onChange={(checked) => edit({ withoutPassword: checked })} />
-        {draft.withoutPassword ? <p className="mb-3 text-sm text-ink-muted">{t("lock.withoutPasswordHint")}</p> : null}
+        <PasswordlessSwitch checked={draft.withoutPassword} onChange={(checked) => edit({ withoutPassword: checked })} />
         <div className="mt-3">
           {passwordless === false ? (
             <FieldRow label={t("secrets.currentMaster")} interactiveChildren>

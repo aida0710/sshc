@@ -1,3 +1,4 @@
+import { dialogHeading } from "../ui/form";
 import { useId, type RefObject } from "react";
 import type { RemoteEnginesApi } from "../api/remoteEngines";
 import { useTranslate } from "../i18n/context";
@@ -38,7 +39,7 @@ export function RemoteVaultUnlockDialog({
     >
       {form.vaultMissing === true ? (
         <div className="flex flex-col gap-3">
-          <h2 id={headingId} className="text-sm font-medium text-ink">{t("runTarget.vaultMissingHeading", { alias })}</h2>
+          <h2 id={headingId} className={dialogHeading}>{t("runTarget.vaultMissingHeading", { alias })}</h2>
           <p className="text-sm text-ink-muted">{t("runTarget.vaultMissingBody", { alias })}</p>
           <div className="flex justify-end gap-2">
             <Button onClick={onClose}>{t("runTarget.unlockCancel")}</Button>
@@ -47,7 +48,7 @@ export function RemoteVaultUnlockDialog({
         </div>
       ) : (
         <form onSubmit={(event) => void form.unlock(event)} className="flex flex-col gap-3">
-          <h2 id={headingId} className="text-sm font-medium text-ink">{t("runTarget.unlockHeading", { alias })}</h2>
+          <h2 id={headingId} className={dialogHeading}>{t("runTarget.unlockHeading", { alias })}</h2>
           <p className="text-sm text-ink-muted">{t("runTarget.unlockBody", { alias })}</p>
           <PasswordField label={t("runTarget.unlockPassword", { alias })} value={form.password} onChange={form.setPassword} error={form.error} disabled={busy} autoFocus />
           <div className="flex justify-end gap-2">

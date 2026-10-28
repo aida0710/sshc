@@ -1,3 +1,4 @@
+import { tagClass } from "../ui/Tag";
 import type { SyncDirection, SyncHistoryDiff } from "../api/sync";
 import { PageSection } from "../ui/page";
 import type { Translate } from "../i18n/context";
@@ -110,7 +111,7 @@ export function SyncHistorySection({
                       <span className="font-mono text-xs font-semibold text-ink">
                         {revision.revision.slice(0, 12)}
                       </span>
-                      <span className="rounded-full bg-toolbar px-2 py-0.5 text-[11px] font-medium text-ink-muted">
+                      <span className={tagClass("neutral")}>
                         {t(syncHistoryRelationLabelKeys[revision.relation])}
                       </span>
                     </span>

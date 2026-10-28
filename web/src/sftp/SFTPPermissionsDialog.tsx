@@ -2,7 +2,7 @@ import { useId, useRef, useState, type RefObject } from "react";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
-import { control, hintText } from "../ui/form";
+import { control, dialogHeading, hintText } from "../ui/form";
 import { Button } from "../ui/surface";
 import { symbolicModeToOctal } from "./transfers";
 import type { SFTPPermissionsModel } from "./useSFTPPermissions";
@@ -82,7 +82,7 @@ function PermissionsForm({ intent, permissions, returnFocusRef }: {
   }
 
   return <ModalShell labelledBy={id} onDismiss={permissions.cancel} initialFocusRef={inputRef} returnFocusRef={returnFocusRef} panelClassName="w-full max-w-md rounded-lg p-5">
-    <h2 id={id} className="text-base font-semibold">{t(intent.recursive ? "sftp.chmodRecursive" : single ? "sftp.chmod" : "sftp.chmodBatch")}</h2>
+    <h2 id={id} className={dialogHeading}>{t(intent.recursive ? "sftp.chmodRecursive" : single ? "sftp.chmod" : "sftp.chmodBatch")}</h2>
     <p className={`mt-2 ${hintText}`}>{t("sftp.chmodSelectionCount", { count: intent.entries.length })}</p>
     <form className="mt-4 space-y-3" onSubmit={(event) => { event.preventDefault(); submit(); }}>
       <label className="block text-sm">{t(single ? "sftp.chmodPrompt" : "sftp.chmodFileMode")}

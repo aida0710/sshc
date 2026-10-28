@@ -1,3 +1,4 @@
+import { tagClass } from "../ui/Tag";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import type { SyncDirection, SyncStatus } from "../api/sync";
 import { useTranslate } from "../i18n/context";
@@ -74,7 +75,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                 ) : null}
               </div>
             ) : (
-              <span className="rounded-full bg-well px-2.5 py-0.5 text-[11.5px] text-ink-muted">
+              <span className={tagClass("neutral")}>
                 {t("sync.notConfigured")}
               </span>
             )}

@@ -1,3 +1,4 @@
+import { tagClass } from "../ui/Tag";
 import type { SyncStatus } from "../api/sync";
 import { useLanguage } from "../i18n/context";
 import { CheckboxField, hintText } from "../ui/form";
@@ -46,7 +47,7 @@ export function SyncOverviewCard({
       heading={t("sync.overviewHeading")}
       hint={describeLastSync(t, status, locale)}
       actions={(
-        <span className="rounded-full bg-select-fill px-2.5 py-0.5 text-[11.5px] font-medium text-accent">
+        <span className={tagClass("accent")}>
           {t(syncDirectionLabelKeys[status.direction])}
         </span>
       )}
