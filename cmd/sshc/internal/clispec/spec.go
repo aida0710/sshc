@@ -110,7 +110,7 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
 	{Name: "open", Route: "open", Help: "usage:\n  sshc open [--no-browser]\n  sshc open <alias> [--no-browser]\n\nStart the engine in the background if needed, print a one-time UI URL and open it in your browser.\n\nWith an alias, open the sshc engine running on that SSH host instead. This machine's engine connects to the host without prompting, asks the sshc there for a one-time UI URL, and relays it to a port on this machine's 127.0.0.1 that stays the same for the alias. Terminals opened there keep running on that host after the browser closes. The relay lasts until this machine's engine stops; run the command again to reopen it. sshc must already be installed on the host, its SSH server must allow TCP forwarding, and its host key and credentials must already be accepted or saved here.\n  --no-browser  print the URL without opening a browser\n"},
 	{Name: "stop", Route: "stop", Help: "usage:\n  sshc stop\n\nAsk the running engine to stop and wait for it to exit.\n"},
 	{Name: "status", Route: "status", Help: "usage:\n  sshc status [--json]\n\nPrint what the running engine is doing.\n"},
-	{Name: "update", Route: "update", Help: "usage:\n  sshc update [-y|--yes]\n\nUpdate an installation managed by Homebrew or install.sh. The command shows the plan and asks before changing the installation; -y or --yes skips the prompt.\n"},
+	{Name: "update", Route: "update", Help: "usage:\n  sshc update [-y|--yes]\n\nUpdate an installation managed by Homebrew, install.sh or install.ps1. The command shows the plan and asks before changing the installation; -y or --yes skips the prompt.\n"},
 	{Name: "service", Route: "service", Help: "usage:\n  sshc service install [-y|--yes]\n  sshc service status\n  sshc service restart [-y|--yes]\n  sshc service disable [-y|--yes]\n\nManage the sshc engine as a systemd user service on Linux, a launchd user agent on macOS, or a logon task on Windows. Mutating actions show the plan and ask for confirmation; -y or --yes skips the prompt.\n", Actions: []Action{
 		{Name: "install", Help: "usage:\n  sshc service install [-y|--yes]\n\nInstall and start the sshc user service on Linux, macOS, or Windows. The command asks for confirmation unless -y or --yes is given.\n"},
 		{Name: "status", Help: "usage:\n  sshc service status\n\nPrint whether the sshc-managed user service is active.\n"},
@@ -233,7 +233,7 @@ const GlobalHelp = `usage:
   sshc stop            stop the running engine and wait for it to exit
   sshc status          print what the running engine is doing
                        --json      print it as JSON, for the shell
-  sshc update [-y]     update an installation managed by Homebrew or install.sh
+  sshc update [-y]     update an installation managed by Homebrew, install.sh or install.ps1
   sshc service install install and start a user service on Linux, macOS, or Windows
   sshc service status  print whether the managed service is active
   sshc service restart restart the active managed service after confirmation

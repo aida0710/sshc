@@ -39,6 +39,6 @@ Deleting a workspace closes nothing: its sessions move to Main.
 
 ## What is stored
 
-The engine keeps workspace names and whether each is hidden in `~/.ssh/sshc/workspaces.json`. Which session is in which workspace lives only in the engine's memory, like the sessions themselves, and ends when the engine stops. The file is excluded from encrypted sync.
+The engine keeps workspace names and whether each is hidden in `~/.ssh/sshc/workspaces.json`. Which session is in which workspace lives in the engine's memory, like the sessions themselves. When the engine stops cleanly, the record kept for reopening includes each session's workspace, so sessions [reopened](./terminal#reopen-sessions-after-a-stop) on the next start return to the same workspace. The file is excluded from encrypted sync.
 
 Use [Split view](./split-view) to arrange sessions on screen. Split arrangements are not saved.
