@@ -292,17 +292,16 @@ func (g *groupLayout) rewriteMovedKeyReferences() error {
 		return err
 	}
 	for _, change := range changes {
-		previous, _, readErr := g.service.readFile(change.Path)
-		if readErr != nil {
-			return readErr
+		moved, err := g.rewriteAtMoveDestination(change)
+		if err != nil {
+			return err
 		}
-		if g.rewriteAtMoveDestination(change, previous) {
+		if moved {
 			continue
 		}
-		g.prepared.changes = append(g.prepared.changes, change)
-		g.prepared.base[filepath.Clean(change.Path)] = previous
-		g.prepared.preview.Diffs = append(g.prepared.preview.Diffs,
-			BuildFileDiff(g.service.displayPath(change.Path), previous, change.Contents))
+		if err := g.service.addChange(&g.prepared, change); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -313,11 +312,15 @@ func (g *groupLayout) rewriteMovedKeyReferences() error {
 // トランザクションは 1 つのパスを 1 回しか扱えないので、移動と書き換えを 1 つにまとめる。
 // 移動元の削除は、書き換えの元にした内容に Precondition で結び付け、History から戻せるように
 // バックアップを取る（接続の設定ファイルであり鍵素材ではない）。
-func (g *groupLayout) rewriteAtMoveDestination(change storage.Change, previous []byte) bool {
+func (g *groupLayout) rewriteAtMoveDestination(change storage.Change) (bool, error) {
 	source := filepath.Clean(change.Path)
 	for index, move := range g.prepared.moves {
 		if filepath.Clean(move.From) != source {
 			continue
+		}
+		previous, _, err := g.service.readFile(change.Path)
+		if err != nil {
+			return false, err
 		}
 		g.prepared.moves = append(g.prepared.moves[:index], g.prepared.moves[index+1:]...)
 		g.prepared.changes = append(g.prepared.changes, storage.Change{Path: move.To, Contents: change.Contents})
@@ -327,9 +330,9 @@ func (g *groupLayout) rewriteAtMoveDestination(change storage.Change, previous [
 		g.prepared.base[filepath.Clean(move.To)] = previous
 		g.prepared.preview.Diffs = append(g.prepared.preview.Diffs,
 			BuildFileDiff(g.service.displayPath(move.To), previous, change.Contents))
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 // stageEntryRegion は、エントリファイルの生成領域を、これから宣言されるグループで書き直す。
