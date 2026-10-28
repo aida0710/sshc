@@ -54,4 +54,10 @@ final class TerminalNotifications {
         issued.issue(tag);
         manager.notify(tag, NOTIFICATION_ID, notification);
     }
+
+    /** tag の通知を取り下げる。取り下げた通知は押されないので、覚えた tag からも外す。 */
+    void cancel(String tag) {
+        context.getSystemService(NotificationManager.class).cancel(tag, NOTIFICATION_ID);
+        issued.take(tag);
+    }
 }

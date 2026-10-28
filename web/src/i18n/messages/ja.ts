@@ -755,6 +755,7 @@ export const ja = {
   "terminal.connecting": "接続を開始中",
   "terminal.connected": "接続済み",
   "terminal.longCommandCompleted": "{subject}のコマンドが{seconds}秒で完了しました。",
+  "terminal.notificationSessionClosed": "このセッションは閉じています。",
   "terminal.unreadNotification": "未読の通知",
   "terminal.unreadCount": "未読の通知 {count}",
   "terminal.openNextUnread": "次の未読の通知を開く",

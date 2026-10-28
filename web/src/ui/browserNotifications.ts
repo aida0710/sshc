@@ -7,6 +7,7 @@
 
 import {
   androidNotificationPermission,
+  cancelAndroidNotification,
   requestAndroidNotificationPermission,
   showAndroidNotification,
 } from "../android/native";
@@ -23,6 +24,11 @@ export type BrowserNotification = {
 };
 
 export type BrowserNotificationPermission = NotificationPermission | "unsupported";
+
+// The notifications this page has shown, by tag, so that one can be taken back
+// once what it announced has been seen. One shown before the page last loaded
+// is not here; the browser keeps it until it is clicked or dismissed.
+const shownNotifications = new Map<string, Notification>();
 
 type NotificationWindow = Window & { Notification?: typeof Notification };
 
@@ -60,6 +66,10 @@ export function showBrowserNotification(notification: BrowserNotification, targe
   if (api === null || api.permission !== "granted") return false;
   try {
     const shown = new api(notification.title, { body: notification.body, tag: notification.tag });
+    shownNotifications.set(notification.tag, shown);
+    shown.onclose = () => {
+      if (shownNotifications.get(notification.tag) === shown) shownNotifications.delete(notification.tag);
+    };
     if (notification.onClick !== undefined) {
       shown.onclick = () => {
         try {
@@ -76,4 +86,16 @@ export function showBrowserNotification(notification: BrowserNotification, targe
     // Native wrappers and browsers can revoke delivery between checks.
     return false;
   }
+}
+
+// closeBrowserNotification takes back the notification with this tag: what it
+// announced has been seen, or its session is gone.
+export function closeBrowserNotification(tag: string, target: Window = window): void {
+  if (androidNotificationPermission(target) !== null) {
+    cancelAndroidNotification(tag, target);
+    return;
+  }
+  const shown = shownNotifications.get(tag);
+  shownNotifications.delete(tag);
+  shown?.close();
 }
