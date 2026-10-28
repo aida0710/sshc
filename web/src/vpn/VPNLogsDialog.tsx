@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import type { VPNApi } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
 import { dialogHeading, hintText } from "../ui/form";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
+import { useLoad } from "../ui/useLoad";
 
 // engine が経路を用意した記録と、コンテナの直近の出力を見せる。繋がらないときに
 // 最初に見る場所で、利用者に docker を直接叩かせないためにある。秘密は engine の
@@ -21,24 +22,10 @@ export function VPNLogsDialog({
   onClose: () => void;
 }) {
   const t = useTranslate();
-  const [lines, setLines] = useState<string | null>(null);
-  const [failure, setFailure] = useState("");
+  const logs = useLoad(useCallback(() => api.vpnLogs(name), [api, name]));
+  const lines = logs.state === "loaded" ? logs.value.lines : null;
+  const failure = logs.state === "failed" ? describe(logs.error) : "";
   const closeRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    let current = true;
-    void api
-      .vpnLogs(name)
-      .then((logs) => {
-        if (current) setLines(logs.lines);
-      })
-      .catch((error: unknown) => {
-        if (current) setFailure(describe(error));
-      });
-    return () => {
-      current = false;
-    };
-  }, [api, describe, name]);
 
   return (
     <ModalShell

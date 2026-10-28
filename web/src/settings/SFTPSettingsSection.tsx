@@ -7,7 +7,7 @@ import { TransferSettingsForm } from "../sftp/TransferSettingsForm";
 import { useTransferControl } from "../sftp/useTransferControl";
 import { SettingsLoadFailure } from "./SettingsLoadFailure";
 import { SettingsSection } from "./SettingsSection";
-import { useSettingsLoad } from "./useSettingsLoad";
+import { useLoad } from "../ui/useLoad";
 
 // The transfer settings are part of the engine's transfer queue, so they are
 // read from the queue listing and each control saves its own change at once.
@@ -19,7 +19,7 @@ export function SFTPSettingsSection({ showHeading }: { showHeading: boolean }) {
   // A fresh listing before the form opens, so that the first change is not
   // sent together with defaults that were never read from the engine.
   const loadSettings = useCallback(() => sftpTransferManager.reconcile(), []);
-  const settingsLoad = useSettingsLoad(loadSettings);
+  const settingsLoad = useLoad(loadSettings);
   const { problem, runControl } = useTransferControl();
   return (
     <SettingsSection id="settings-sftp" label={t("sftp.settingsHeading")} icon="files" showHeading={showHeading}>
