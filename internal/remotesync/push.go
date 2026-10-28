@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -310,12 +309,7 @@ func (s *Service) liveSnapshotFollows(
 	if err != nil {
 		return false, err
 	}
-	sort.Slice(infos, func(i, j int) bool {
-		if infos[i].LastModified.Equal(infos[j].LastModified) {
-			return infos[i].Key > infos[j].Key
-		}
-		return infos[i].LastModified.After(infos[j].LastModified)
-	})
+	sortSnapshotsNewestFirst(infos)
 	manifests := make(map[string]Manifest, len(infos))
 	type cachedOpen struct {
 		manifest Manifest
