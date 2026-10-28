@@ -307,14 +307,6 @@ func OpenRemote(sealed []byte, passphrase string) ([]byte, Key, error) {
 	return checked.open(passphrase)
 }
 
-// IsEnvelope は、contents が envelope の形をしているかを返す。鍵は使わず、復号も
-// しない。このビルドが扱えないバージョンやコストのものも、envelope の形なら真を返す。
-// 暗号化する前の平文の文書を、暗号化した文書と見分けるためにある。
-func IsEnvelope(contents []byte) bool {
-	_, _, _, err := readHeader(contents)
-	return !errors.Is(err, ErrNotAnEnvelope)
-}
-
 // checkedEnvelope は、ヘッダーを読み、要求するコストを上限と照らし合わせ終えた envelope。
 type checkedEnvelope struct {
 	header     []byte

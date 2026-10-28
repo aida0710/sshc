@@ -108,14 +108,6 @@ func (s *Service) ChangeMasterPassword(ctx context.Context, current, next string
 		return err
 	}
 	defer previous.Destroy()
-	// 封じ直す処理は今の形しか読まない。ロックを解除したときの移行が終わっていなければ
-	// （保留中の変更があった、Vault を作ったあとまだロックを解除していない）、ここで
-	// 終える。
-	if err := s.migrateKeyBoundArtifacts(keyBoundMigration{Key: previous, Passphrase: current}); err != nil {
-		candidate.Destroy()
-		return err
-	}
-
 	// 稼働中の vault は commit point まで古い鍵のまま保つ。候補だけが新しい鍵で
 	// 暗号化し、失敗経路でプロセス内状態を戻す必要そのものをなくす。
 	// バックアップの一覧と再暗号化は workspace の変更のロックの内側で行う。ロックの
@@ -181,8 +173,7 @@ type keyBoundReSeal struct {
 // reSealKeyBoundArtifactsは、古い鍵が暗号化したすべてのファイルを読み、新しい鍵で暗号化し直す。
 // 同期状態に古い鍵で鍵付きにして残した vault 文書と保護文書の digest も、新しい鍵の値へ移す。
 //
-// 読むのは今の形（封じた保護文書と、入れ子の控え）だけである。旧バージョンが残した形は、
-// 呼び出し側が先に migrateKeyBoundArtifacts で移しておく。
+// 読むのは今の形（封じた保護文書と、入れ子の控え）だけである。
 //
 // バックアップはマネージャ経由ではなく直接読む。マネージャは現在の新しい鍵を
 // 使用するため、古い鍵で暗号化されたバックアップを開けない。

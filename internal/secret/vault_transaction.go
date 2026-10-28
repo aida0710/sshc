@@ -16,9 +16,6 @@ const (
 	operationCredentialUpdate = "secret.credential.update"
 	// operationRekey はマスターパスワードを変える。
 	operationRekey = "secret.rekey"
-	// operationMigrateKeyBoundArtifacts は、旧バージョンが残した保護文書と控えを
-	// 今の形へ移す（migrateKeyBoundArtifacts）。
-	operationMigrateKeyBoundArtifacts = "secret.migrate-key-bound-artifacts"
 )
 
 // 起動時に AutoUnlock が片付ける保留記録の Operation。どれもほかの設定と一緒に
@@ -28,7 +25,7 @@ var (
 	// 封じずに持つ（CommitAtomicDiscardBackups）ので、vault の鍵が要らない。
 	// 作成とマスターパスワードの変更は、パスワードなしの vault を開く鍵のファイルも
 	// 一緒に書き換えるので、そのファイルを読む前に片付けなければならない。
-	recoveredBeforeUnlock = []string{operationInitialise, operationRekey, operationMigrateKeyBoundArtifacts}
+	recoveredBeforeUnlock = []string{operationInitialise, operationRekey}
 	// vaultOnlyOperations は、控えを vault の鍵で封じる（CommitAtomic）。巻き戻しが
 	// 控えを開くなら、vault を開いたあとでなければ片付けられない。vault だけを書く
 	// 書き手を足したら、ここにも足す。

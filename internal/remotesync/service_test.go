@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -3746,58 +3745,6 @@ func TestAMasterPasswordChangeKeepsTheVaultUnchangedSinceTheLastSync(t *testing.
 	}
 	if len(result.Conflicts) != 0 {
 		t.Fatalf("a vault changed only on the other machine conflicted after a master password change: %+v", result.Conflicts)
-	}
-}
-
-// 鍵付きにする前の版は、vault 文書の素の SHA-256 を state に書いていた。移行は
-// それを今の鍵の値へ書き換え、前回の同期との比較は変えない。
-func TestMigratingTheTravelDigestReplacesAPlainDigestLeftByAnEarlierRelease(t *testing.T) {
-	bucket := &fakeBucket{}
-	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	sender := withVault(t, &first, "the first machine's master")
-	if err := secrettest.StoreDedicatedPassword(sender, first.manager, secrettest.DedicatedPassword{
-		Alias: "bastion", Password: "hunter2",
-		Binding: "abababababababababababababababababababababababababababababababab",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
-		t.Fatalf("Push = %v", err)
-	}
-	document, err := sender.TravelDocument()
-	if err != nil {
-		t.Fatal(err)
-	}
-	plain := remotesync.Digest(document)
-	statePath := filepath.Join(first.workspace.Root(), filepath.FromSlash(remotesync.StatePath))
-	state, err := os.ReadFile(statePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	earlier := regexp.MustCompile(`"hmac-sha256:[0-9a-f]+"`).ReplaceAll(state, []byte(`"`+plain+`"`))
-	if bytes.Equal(earlier, state) {
-		t.Fatalf("the sync state has no keyed digest to replace:\n%s", state)
-	}
-	if err := os.WriteFile(statePath, earlier, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := first.service.MigrateTravelDigest(); err != nil {
-		t.Fatalf("MigrateTravelDigest = %v", err)
-	}
-	migrated, err := os.ReadFile(statePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Contains(migrated, []byte(plain)) || !bytes.Contains(migrated, []byte(`"sha256": "hmac-sha256:`)) {
-		t.Fatalf("the plain digest was not replaced by a keyed one:\n%s", migrated)
-	}
-	draft, err := first.service.PushDraft()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if draft.Added+draft.Modified+draft.Removed != 0 {
-		t.Fatalf("an unchanged vault is reported as a change after the migration: %+v", draft)
 	}
 }
 
