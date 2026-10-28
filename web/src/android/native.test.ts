@@ -105,10 +105,10 @@ describe("Android notifications", () => {
     const opened = vi.fn();
     const stop = subscribeAndroidNotificationOpened(opened);
     expect(opened).not.toHaveBeenCalled();
-    pending = "sshc-command-2";
+    pending = "sshc-terminal-2";
     window.dispatchEvent(new CustomEvent("sshc-android-notification-opened"));
     window.dispatchEvent(new CustomEvent("sshc-android-notification-opened"));
-    expect(opened).toHaveBeenCalledExactlyOnceWith("sshc-command-2");
+    expect(opened).toHaveBeenCalledExactlyOnceWith("sshc-terminal-2");
     stop();
     pending = "sshc-terminal-3";
     window.dispatchEvent(new CustomEvent("sshc-android-notification-opened"));

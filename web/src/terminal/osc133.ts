@@ -1,42 +1,32 @@
 type Disposable = { dispose(): void };
 type OSCParser = { registerOscHandler(identifier: number, handler: (data: string) => boolean): Disposable };
 
-export type OSC133Completion = {
-  durationMilliseconds: number;
-  exitCode: number | null;
-};
-
+// attachOSC133Commands follows the shell integration's command marks. The
+// engine times commands and notifies the long ones; the view needs only where
+// a command starts and that it ended.
 export function attachOSC133Commands(
   parser: OSCParser,
   callbacks: {
     onCommandStarted?: () => void;
-    onCommandCompleted?: (completion: OSC133Completion) => void;
-    now?: () => number;
+    onCommandCompleted?: () => void;
   },
 ): Disposable {
-  const now = callbacks.now ?? Date.now;
-  let startedAt: number | null = null;
+  let running = false;
   return parser.registerOscHandler(133, (data) => {
-    const [kind, detail = ""] = data.split(";", 2);
+    const [kind] = data.split(";", 1);
     if (kind === "C") {
-      startedAt = now();
+      running = true;
       callbacks.onCommandStarted?.();
       return true;
     }
     if (kind === "D") {
-      if (startedAt !== null) {
-        const parsed = detail === "" ? Number.NaN : Number(detail);
-        callbacks.onCommandCompleted?.({
-          durationMilliseconds: Math.max(0, now() - startedAt),
-          exitCode: Number.isInteger(parsed) ? parsed : null,
-        });
-      }
-      startedAt = null;
+      if (running) callbacks.onCommandCompleted?.();
+      running = false;
       return true;
     }
     // A (prompt start) and B (prompt end) are valid shell-integration markers.
-    // Consume them so they never appear as text, while C/D define the timed
-    // command region used by sshc.
+    // Consume them so they never appear as text, while C/D define the command
+    // region used by sshc.
     return kind === "A" || kind === "B";
   });
 }
