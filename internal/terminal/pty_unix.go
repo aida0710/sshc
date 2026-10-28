@@ -31,8 +31,25 @@ func (UnixStarter) Start(ctx context.Context, command Command, size Size) (Proce
 	}
 	child.Env = command.Env
 	child.Dir = command.Dir
-	file, err := pty.StartWithSize(child, &pty.Winsize{Cols: size.Cols, Rows: size.Rows})
+	// pty.StartWithSize と同じ手順を自分で踏むのは、シェルが起動して端末の設定を
+	// 読む前に IUTF8 を立てるためである。
+	file, tty, err := pty.Open()
 	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tty.Close() }()
+	if err := enableUTF8Input(tty); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	if err := pty.Setsize(file, &pty.Winsize{Cols: size.Cols, Rows: size.Rows}); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	child.Stdin, child.Stdout, child.Stderr = tty, tty, tty
+	child.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true}
+	if err := child.Start(); err != nil {
+		_ = file.Close()
 		return nil, err
 	}
 	return &unixProcess{file: file, child: child}, nil

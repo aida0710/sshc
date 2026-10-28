@@ -67,6 +67,42 @@ func TestARealPseudoTerminalCarriesTheOutputAndTheExitStatus(t *testing.T) {
 	}
 }
 
+func TestTheShellReadsLinesAsUTF8(t *testing.T) {
+	shell := lookProgram(t, "sh")
+	registry := &terminal.Registry{
+		Start:  terminal.NewStarter(),
+		Limits: func() terminal.Limits { return terminal.Limits{MaxSessions: 2, Scrollback: 16 << 10} },
+	}
+	t.Cleanup(func() {
+		registry.ForceClose()
+		_ = registry.Wait()
+	})
+	// 行単位の入力で日本語の Backspace が1文字を消すには、起動した時点で IUTF8 が要る。
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindShell, Title: "sh",
+		Size: terminal.Size{Cols: 200, Rows: 24},
+		Command: terminal.Command{
+			Path:      shell,
+			Arguments: []string{"-c", "printf 'modes:%s:end\\n' \"$(stty -a | tr '\\n' ' ')\"; read ignored"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Open() = %v", err)
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) && !strings.Contains(string(snapshotOf(session)), ":end") {
+		time.Sleep(5 * time.Millisecond)
+	}
+	got := string(snapshotOf(session))
+	if !strings.Contains(got, ":end") {
+		t.Fatalf("stty never answered: %q", got)
+	}
+	if !strings.Contains(got, " iutf8") || strings.Contains(got, "-iutf8") {
+		t.Fatalf("the terminal settings lack iutf8: %q", got)
+	}
+}
+
 func TestOpeningAMissingProgramFails(t *testing.T) {
 	registry := &terminal.Registry{Start: terminal.NewStarter(), Limits: terminal.DefaultLimits}
 	if _, err := registry.Open(context.Background(), terminal.Spec{
