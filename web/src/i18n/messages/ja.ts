@@ -747,6 +747,7 @@ export const ja = {
     "このブロックより前に同じキーワードがあります。OpenSSHは最初に出てきた値を使用します。",
 
   "terminal.sessionList": "開いているセッション",
+  "terminal.endingSessions": "終了するセッション",
   "terminal.noSessions": "開いているセッションはありません。",
   "terminal.openShell": "Local shell",
   "terminal.remoteIncompatible": "実行先のsshcエンジンに接続できません。このマシンのsshcと組み合わせて使えないバージョンです。",

@@ -223,6 +223,31 @@ describe("EngineInfoDialog", () => {
     expect(within(dialog).getByText("Vault")).toBeInTheDocument();
   });
 
+  it("names the sessions on the run target that stopping it ends, and keeps to the count when they cannot be read", async () => {
+    const user = userEvent.setup();
+    const status = vi.fn(async () => ({ alias: "r540", version: "v0.53.0", vault: true, unlocked: true, passwordless: true, sessions: 1 }));
+    const running = { id: "one", kind: "ssh", alias: "osaka", workspaceId: "default", title: "deploy", startedAt: "2026-10-28T09:00:00Z", state: "connected", problem: "" } as const;
+    const terminalSessions = vi.fn().mockResolvedValueOnce({ sessions: [running], maxSessions: 12 }).mockRejectedValueOnce(new Error("vault_locked"));
+    const terminalSessionsOf = vi.fn(() => ({ terminalSessions }));
+    render(<EngineInfoDialog alias="r540" targets={targets({ api: enginesApi({ status }) })} onClose={vi.fn()} terminalSessionsOf={terminalSessionsOf} />);
+    const dialog = screen.getByRole("dialog", { name: "Engine on r540" });
+    await within(dialog).findByText("v0.53.0");
+
+    await user.click(within(dialog).getByRole("button", { name: "Stop" }));
+    let confirmation = screen.getByRole("dialog", { name: /^Stop the engine on r540/ });
+    const listed = await within(confirmation).findByRole("list", { name: "Sessions that end" });
+    expect(within(listed).getAllByRole("listitem").map((row) => row.textContent)).toEqual(["deployosaka"]);
+    expect(terminalSessionsOf).toHaveBeenCalledWith("r540");
+    await user.click(within(confirmation).getByRole("button", { name: "Cancel" }));
+
+    await user.click(within(dialog).getByRole("button", { name: "Stop" }));
+    confirmation = screen.getByRole("dialog", { name: /^Stop the engine on r540/ });
+    await waitFor(() => expect(terminalSessions).toHaveBeenCalledTimes(2));
+    expect(within(confirmation).queryByRole("list")).not.toBeInTheDocument();
+    expect(within(confirmation).getByText("All 1 sessions running on r540 will end.")).toBeInTheDocument();
+    expect(within(confirmation).getByRole("button", { name: "Stop" })).toBeEnabled();
+  });
+
   it("keeps the version prompt and allows another update when the update fails", async () => {
     const user = userEvent.setup();
     const api = enginesApi({ status: vi.fn().mockRejectedValue(incompatibleEngine()), actionLog: vi.fn().mockResolvedValue(engineActionLog({ succeeded: false, output: "update failed" })) });

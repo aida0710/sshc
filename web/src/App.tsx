@@ -3,10 +3,10 @@ import { opensInThisPage } from "./ui/linkClick";
 import { useBindings } from "./keyconfig/bindings";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { type HealthResponse } from "./api/client";
-import { createTerminalSessionsApi, terminalSessionsApi } from "./api/terminalSessions";
+import { runTargetTerminalSessionsApi, terminalSessionsApi } from "./api/terminalSessions";
 import { createTerminalWorkspacesApi, terminalWorkspacesApi } from "./api/terminalWorkspaces";
 import { createTerminalRestoreApi, terminalRestoreApi } from "./api/terminalRestore";
-import { engineStreamPath, engineTerminalBase } from "./api/remoteEngines";
+import { engineTerminalBase } from "./api/remoteEngines";
 import { settingsApi } from "./api/settings";
 import { vaultApi, type PasswordVaultStatus } from "./api/vault";
 import type { SessionState } from "./session/bootstrap";
@@ -130,7 +130,7 @@ export function App({
     const alias = runTargets.selected;
     if (alias === null) return { sessions: terminalSessionsApi, workspaces: terminalWorkspacesApi, restore: terminalRestoreApi, vaultRevision };
     return {
-      sessions: createTerminalSessionsApi(engineTerminalBase(alias), engineStreamPath(alias)),
+      sessions: runTargetTerminalSessionsApi(alias),
       workspaces: createTerminalWorkspacesApi(engineTerminalBase(alias)),
       restore: createTerminalRestoreApi(engineTerminalBase(alias)),
       vaultRevision,

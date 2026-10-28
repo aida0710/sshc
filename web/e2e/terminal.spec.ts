@@ -804,6 +804,7 @@ test("closes every open connection from the settings screen", async ({ page, ins
   const region = page.getByRole("region", { name: "Open connections" });
   await expect(region.getByText("2 open")).toBeVisible();
   await region.getByRole("button", { name: "Close every connection" }).click();
+  await expect(page.getByRole("dialog").getByRole("list", { name: "Sessions that end" }).getByRole("listitem")).toHaveCount(2);
   await page.getByRole("button", { name: "Close them all" }).click();
 
   await expect(region.getByText("0 open")).toBeVisible();

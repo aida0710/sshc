@@ -742,6 +742,7 @@ export const en = {
     "A previous line in this block uses the same keyword. OpenSSH keeps the first one.",
 
   "terminal.sessionList": "Open sessions",
+  "terminal.endingSessions": "Sessions that end",
   "terminal.noSessions": "No session is open.",
   "terminal.openShell": "Local shell",
   "terminal.remoteIncompatible": "Cannot connect to the run target’s sshc engine because its version does not work with this computer’s.",
