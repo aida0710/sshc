@@ -1,10 +1,12 @@
 import { dialogHeading } from "../ui/form";
-import { useId, useRef, useState, type RefObject } from "react";
+import { useId, useMemo, useRef, useState, type RefObject } from "react";
 import type { RemoteEngineAction, RemoteEngineStatus } from "../api/remoteEngines";
+import { runTargetTerminalSessionsApi, type TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { RunTargetsState } from "../terminal/useRunTargets";
 import { useEngineInfo } from "../terminal/useEngineInfo";
+import { EngineEndingSessionsList } from "../terminal/EndingSessionsList";
 import { CommandOutput } from "../ui/CommandOutput";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
@@ -29,11 +31,15 @@ export function EngineInfoDialog({
   targets,
   onClose,
   returnFocusRef,
+  terminalSessionsOf = runTargetTerminalSessionsApi,
 }: {
   alias: string;
   targets: RunTargetsState;
   onClose: () => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
+  // terminalSessionsOf reads the sessions on the run target that the
+  // confirmation lists.
+  terminalSessionsOf?: (alias: string) => Pick<TerminalSessionsApi, "terminalSessions">;
 }) {
   const t = useTranslate();
   const headingId = useId();
@@ -42,6 +48,7 @@ export function EngineInfoDialog({
     alias, api: targets.api, translate: t, vaultRevision: targets.vaultUnlock.revision,
   });
   const [confirming, setConfirming] = useState<RemoteEngineAction | null>(null);
+  const sessions = useMemo(() => terminalSessionsOf(alias), [terminalSessionsOf, alias]);
   const busy = info.running !== null;
 
   return (
@@ -86,7 +93,12 @@ export function EngineInfoDialog({
         <ConfirmDialog
           id={`${headingId}-confirm`}
           heading={t(actionLabels[confirming].confirm, { alias })}
-          body={<p className="text-sm text-ink-muted">{confirmBody(t, confirming, info.status)}</p>}
+          body={(
+            <>
+              <p className="text-sm text-ink-muted">{confirmBody(t, confirming, info.status)}</p>
+              <EngineEndingSessionsList api={sessions} />
+            </>
+          )}
           confirmLabel={t(actionLabels[confirming].button)}
           cancelLabel={t("engineInfo.cancel")}
           confirmKind={confirming === "stop" ? "danger" : "primary"}
