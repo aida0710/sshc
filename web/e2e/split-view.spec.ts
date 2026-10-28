@@ -342,7 +342,8 @@ test("limits split view to four panes and shows the Japanese desktop layout", as
   await dragSession(page, { title: titles[4]!, target: pane(page, ids[0]!), edge: "left" });
   await expect(page.locator("[data-split-view-pane]")).toHaveCount(4);
   for (const [index, output] of ["build complete", "GET /health 200 OK", "tests passed", "all services running"].entries()) {
-    await runCommand(pane(page, ids[index]!), `printf '\\033[2J\\033[H%s\\n' '${output}'`);
+    // The prompt is fixed so that a screenshot shows neither this machine's user name nor its hostname.
+    await runCommand(pane(page, ids[index]!), `export PS1='sshc@localhost:~$ '; printf '\\033[2J\\033[H%s\\n' '${output}'`);
     await expect(pane(page, ids[index]!)).toContainText(output);
   }
   await changeDisplayLanguage(page, "ja");
