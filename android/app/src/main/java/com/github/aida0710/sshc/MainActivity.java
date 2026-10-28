@@ -1,7 +1,5 @@
 package com.github.aida0710.sshc;
 
-import android.app.Notification;
-import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.Manifest;
 import android.content.ClipData;
@@ -60,7 +58,6 @@ public final class MainActivity extends ComponentActivity {
     private static final int SAVE_DESTINATION_REQUEST = 21;
     private static final int NOTIFICATION_PERMISSION_REQUEST = 22;
     private static final int FOLDER_CHOOSER_REQUEST = 23;
-    private static final String TRANSFER_CHANNEL = "transfers";
     private static final String NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked";
 
     private WebView webView;
@@ -72,7 +69,6 @@ public final class MainActivity extends ComponentActivity {
     private String pendingTransferStatus;
     private String webAppearance;
     private Uri engineOrigin;
-    private int transferNotificationSequence = 100;
     private final NativeBridge nativeBridge = new NativeBridge(new NativeBridge.Host() {
         @Override
         public void chooseSaveDestination(String requestId, String suggestedName, String mimeType) {
@@ -572,7 +568,7 @@ public final class MainActivity extends ComponentActivity {
         }
     }
 
-    /** Web画面を閉じていても転送結果が分かる、内容を伏せた端末通知。 */
+    /** 転送の結果を通知する。通知の権限をまだ尋ねていなければ、先に尋ねる。 */
     private void showTransferNotification(String status) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -582,27 +578,7 @@ public final class MainActivity extends ComponentActivity {
             return;
         }
         pendingTransferStatus = null;
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(new NotificationChannel(
-                    TRANSFER_CHANNEL, getString(R.string.transfer_channel), NotificationManager.IMPORTANCE_DEFAULT));
-        }
-        Intent open = new Intent(this, MainActivity.class)
-                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        android.app.PendingIntent content = android.app.PendingIntent.getActivity(
-                this, 2, open, android.app.PendingIntent.FLAG_IMMUTABLE | android.app.PendingIntent.FLAG_UPDATE_CURRENT);
-        int message = "completed".equals(status) ? R.string.transfer_completed : R.string.transfer_failed;
-        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new Notification.Builder(this, TRANSFER_CHANNEL)
-                : new Notification.Builder(this);
-        builder.setSmallIcon(android.R.drawable.stat_notify_sync)
-                .setContentTitle(getString(R.string.app_name))
-                .setContentText(getString(message))
-                .setContentIntent(content)
-                .setAutoCancel(true)
-                .setCategory(Notification.CATEGORY_PROGRESS)
-                .setVisibility(Notification.VISIBILITY_PRIVATE);
-        manager.notify(transferNotificationSequence++, builder.build());
+        new TransferNotifications(this).show(status);
     }
 
     @Override
@@ -651,13 +627,14 @@ public final class MainActivity extends ComponentActivity {
         reloadLayout.setMargins(0, gap, 0, 0);
         content.addView(reload, reloadLayout);
         setContentView(frame(content));
-        applySystemBarAppearance(systemAppearance());
+        showNativeScreenColours();
     }
 
     /** WindowInsets の padding とページ背景色を適用するコンテナを作る。 */
     private FrameLayout frame(View content) {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(chromeColour());
+        paintText(content, inkColour());
         root.addView(content, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         avoidSystemBars(root);
@@ -666,9 +643,22 @@ public final class MainActivity extends ComponentActivity {
         return root;
     }
 
+    /**
+     * ネイティブの画面（起動の失敗、画面の停止からの復旧）は、システムのライト・ダークに従う。
+     * Web 側のテーマは覚えないので、表示中に切り替えると onConfigurationChanged が塗り直す。
+     */
+    private void showNativeScreenColours() {
+        webAppearance = null;
+        paintSystemBars(systemAppearance());
+    }
+
     /** Web側で解決したthemeをsystem barの色とiconへ反映する。 */
     private void applySystemBarAppearance(String appearance) {
         webAppearance = appearance;
+        paintSystemBars(appearance);
+    }
+
+    private void paintSystemBars(String appearance) {
         boolean dark = "dark".equals(appearance);
         int colour = dark ? 0xFF15171B : 0xFFFFFFFF;
         getWindow().setStatusBarColor(colour);
@@ -775,7 +765,7 @@ public final class MainActivity extends ComponentActivity {
         scroll.addView(content, new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
         setContentView(frame(scroll));
-        applySystemBarAppearance(systemAppearance());
+        showNativeScreenColours();
     }
 
     private LinearLayout.LayoutParams matchWidthWrapHeight() {
@@ -823,6 +813,29 @@ public final class MainActivity extends ComponentActivity {
         return night == Configuration.UI_MODE_NIGHT_YES ? 0xFF15171B : 0xFFFFFFFF;
     }
 
+    /**
+     * ネイティブの画面の文字の色を返す。web/src/index.css の --ui-ink と同期する。
+     * Activity のテーマは起動時の uiMode で決まり、configChanges で受けた切り替えでは
+     * 変わらないので、背景（chromeColour）と一緒に文字の色も塗り直す。
+     */
+    private int inkColour() {
+        int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        return night == Configuration.UI_MODE_NIGHT_YES ? 0xFFE8E9EB : 0xFF1F2326;
+    }
+
+    /** view とその中の文字（ボタンを除く）を colour で塗る。 */
+    private static void paintText(View view, int colour) {
+        if (view instanceof Button) return;
+        if (view instanceof TextView) {
+            ((TextView) view).setTextColor(colour);
+            return;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int index = 0; index < group.getChildCount(); index++) paintText(group.getChildAt(index), colour);
+        }
+    }
+
     private String systemAppearance() {
         int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         return night == Configuration.UI_MODE_NIGHT_YES ? "dark" : "light";
@@ -836,9 +849,12 @@ public final class MainActivity extends ComponentActivity {
             applySystemBarAppearance(webAppearance);
             return;
         }
+        paintSystemBars(systemAppearance());
         View root = findViewById(android.R.id.content);
         if (root instanceof ViewGroup && ((ViewGroup) root).getChildCount() > 0) {
-            ((ViewGroup) root).getChildAt(0).setBackgroundColor(chromeColour());
+            View screen = ((ViewGroup) root).getChildAt(0);
+            screen.setBackgroundColor(chromeColour());
+            paintText(screen, inkColour());
         }
     }
 

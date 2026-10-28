@@ -1,7 +1,6 @@
 package com.github.aida0710.sshc;
 
 import android.app.Notification;
-import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
@@ -125,8 +124,25 @@ public final class EngineService extends Service {
             return START_NOT_STICKY;
         }
         // dataSync foreground serviceをOS終了後に常駐再開しない。Activityからの明示的な
-        // 起動だけを受理し、taskを閉じた場合はmanifestのstopWithTaskで終了する。
+        // 起動だけを受理し、taskを閉じた場合はonTaskRemovedで終了する。
         return START_NOT_STICKY;
+    }
+
+    /**
+     * 最近のタスクから払って閉じた。開き直しの記録は Go のエンジンが止まるときに書くので、
+     * 止まり終えるまで foreground のままにし、そのあとで service を外す。manifest の
+     * stopWithTask で止めると、OS がプロセスごと消し、記録を書き終えないことがある。
+     */
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        entrance = null;
+        if (listener != null) listener.engineStopped();
+        if (lease.requestStop()) shutdown.request();
+        // ENGINE は1本の worker なので、これはエンジンの停止のあとに走る。
+        ENGINE.execute(() -> main.post(() -> {
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            stopSelf();
+        }));
     }
 
     /** Android 15以降のdataSync時間上限に達したら、ANRになる前にengineもserviceも止める。 */
@@ -209,13 +225,8 @@ public final class EngineService extends Service {
 
     /** Activity を開く操作、engine の停止操作、実行中バージョンを含む通知を作る。 */
     private Notification notification() {
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        manager.createNotificationChannel(
-                new NotificationChannel(CHANNEL, "sshc", NotificationManager.IMPORTANCE_LOW));
-
-        PendingIntent open = PendingIntent.getActivity(this, 0,
-                new Intent(this, MainActivity.class),
-                PendingIntent.FLAG_IMMUTABLE);
+        AppNotifications.channel(this, CHANNEL, "sshc", NotificationManager.IMPORTANCE_LOW);
+        PendingIntent open = AppNotifications.openApp(this, 0, null);
         PendingIntent stop = PendingIntent.getService(this, 1,
                 new Intent(this, EngineService.class).setAction(ACTION_STOP),
                 PendingIntent.FLAG_IMMUTABLE);

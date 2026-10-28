@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 起動の失敗と画面の停止からの復旧はネイティブの画面で出す。システムがライトのとき、
+         ダーク系のテーマのまま背景だけ白にすると白い文字になるので、ライトとダークで分ける。 -->
+    <style name="Theme.Sshc" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar" />
+</resources>
