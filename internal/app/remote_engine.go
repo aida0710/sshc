@@ -49,5 +49,7 @@ func (l sshRemoteEngineLink) Run(ctx context.Context, request remoteengine.RunRe
 	return remoteengine.RunResult{Stdout: output.Stdout, Stderr: output.Stderr, ExitCode: output.ExitCode}, err
 }
 
+func (l sshRemoteEngineLink) Ping(limit time.Duration) error { return l.connection.Ping(limit) }
+
 func (l sshRemoteEngineLink) Wait() error  { return l.connection.Wait() }
 func (l sshRemoteEngineLink) Close() error { return l.connection.Close() }

@@ -152,6 +152,11 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"code":"vault_locked","message":"request rejected"}`)
 	case "/api/v1/terminal/shell-profiles":
 		w.WriteHeader(http.StatusForbidden)
+	case "/api/v1/terminal/restore":
+		// fetch は Location の無い 3xx を追わず、画面は code で読む。
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusSeeOther)
+		fmt.Fprint(w, `{"code":"vault_locked"}`)
 	case RemoteStreamPath:
 		if r.Header.Get("Origin") != f.origin() || r.Header.Get("Cookie") != "" {
 			w.WriteHeader(http.StatusForbidden)
@@ -417,6 +422,7 @@ func TestTheRemoteEnginesOwnRefusalsAreNotMistakenForThisMachines(t *testing.T) 
 	}
 	for path, want := range map[string]string{
 		"/api/v1/terminal/workspaces":     "remote_engine_vault_locked",
+		"/api/v1/terminal/restore":        "remote_engine_vault_locked",
 		"/api/v1/terminal/shell-profiles": "remote_engine_refused",
 	} {
 		recorder := httptest.NewRecorder()

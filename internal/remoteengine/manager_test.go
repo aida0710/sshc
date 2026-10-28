@@ -56,6 +56,8 @@ func strictEngine(t *testing.T) *httptest.Server {
 		switch request.URL.Path {
 		case "/sign-in":
 			http.SetCookie(response, &http.Cookie{Name: "sshc_session", Value: "remote", Path: "/", HttpOnly: true})
+		case "/sign-out":
+			response.Header().Set("Clear-Site-Data", `"cookies", "storage"`)
 		case "/cookies":
 			fmt.Fprint(response, request.Header.Get("Cookie"))
 			return
@@ -73,8 +75,10 @@ type fakeLink struct {
 	exitCode int
 	// refuseDial は、SSH サーバーが TCP の転送を断る設定を真似る。
 	refuseDial bool
-	done       chan struct{}
-	once       sync.Once
+	// silent が立つと、keepalive に答えない（黙って切れた SSH の接続を真似る）。
+	silent atomic.Bool
+	done   chan struct{}
+	once   sync.Once
 }
 
 func newFakeLink(entrance string, exitCode int) *fakeLink {
@@ -99,6 +103,13 @@ func (l *fakeLink) Run(_ context.Context, request RunRequest) (RunResult, error)
 		return RunResult{}, fmt.Errorf("unexpected command %q", command)
 	}
 	return RunResult{Stdout: []byte(l.entrance + "\n"), ExitCode: l.exitCode}, nil
+}
+
+func (l *fakeLink) Ping(time.Duration) error {
+	if l.silent.Load() {
+		return context.DeadlineExceeded
+	}
+	return nil
 }
 
 func (l *fakeLink) Wait() error { <-l.done; return nil }
@@ -323,5 +334,20 @@ func TestTheRemoteSessionCookieDoesNotOverwriteThisMachinesOwn(t *testing.T) {
 	sent.Header.Set("Cookie", "sshc_session=local; "+prefix+"sshc_session=remote; sshc-relay-1-sshc_session=other")
 	if _, body := send(t, sent); body != "sshc_session=remote" {
 		t.Fatalf("the remote engine received cookies %q", body)
+	}
+}
+
+func TestTheRemoteSignOutDoesNotClearThisMachinesSiteData(t *testing.T) {
+	fixture := newManagerFixture(t, newStore(t))
+	base := relayBase(t, fixture.open(t))
+	request, _ := http.NewRequest(http.MethodGet, base+"/sign-out", nil)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	// cookie はポートを区別しないので、渡すとこのマシンの画面のセッションも消える。
+	if cleared := response.Header.Get("Clear-Site-Data"); cleared != "" {
+		t.Fatalf("Clear-Site-Data through the relay = %q", cleared)
 	}
 }

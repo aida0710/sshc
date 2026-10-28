@@ -513,6 +513,23 @@ func TestRenewRequiresAnIssuedTokenAndKeepsOtherTabsWorking(t *testing.T) {
 	}
 }
 
+func TestAShadowSessionCookieSentFirstDoesNotLockThisMachineOut(t *testing.T) {
+	engine, credentials := newRenewServer(t)
+	// 127.0.0.1 の別のポートのページは JS で Path=/api の cookie を置ける。ブラウザは
+	// パスの長いそれを、正しい cookie より先に送る。
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/session/renew", nil)
+	request.Host = renewTestHost
+	request.Header.Set("Sec-Fetch-Site", "same-origin")
+	request.Header.Set(echo.HeaderOrigin, "http://"+renewTestHost)
+	request.Header.Set("Cookie", SessionCookie+"=shadow; "+SessionCookie+"="+credentials.SessionID)
+	request.Header.Set(CSRFHeader, credentials.CSRFToken)
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("renew with a shadow cookie first = %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestRenewRefusesWithoutASession(t *testing.T) {
 	engine, _ := newRenewServer(t)
 
