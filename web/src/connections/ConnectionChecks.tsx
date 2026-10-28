@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import type { AuthenticationResponse, DiagnosticsApi, EffectiveResponse, ReachabilityResponse } from "../api/diagnostics";
 import { useTranslate } from "../i18n/context";
 import { describeAuthentication, describeReachability, reachabilityNoticeKey } from "../diagnostics/diagnosticLabels";
-import { hintText, sectionHeading } from "../ui/form";
-import { Button, Notice } from "../ui/surface";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
+import { hintText } from "../ui/form";
+import { Icon } from "../ui/icons";
+import { Button } from "../ui/surface";
 
 type ChecksApi = Pick<DiagnosticsApi, "effective" | "reachability" | "authentication">;
 
@@ -81,9 +83,10 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
   }
 
   const blocked = disabled || busy !== null;
+  const hasResult = reachability !== null || authentication !== null;
 
   return (
-    <section aria-label={t("conn.checksLabel")} className="flex flex-col gap-3">
+    <section aria-label={t("conn.checksLabel")} className="flex flex-col gap-1.5 pt-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <Button small disabled={blocked} onClick={() => void checkReachability()} className="max-w-full whitespace-normal text-left">
           {busy === "reachability" ? t("conn.checking") : t("conn.checkReachability")}
@@ -91,11 +94,10 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
         <Button small disabled={blocked} onClick={() => void checkAuthentication()} className="max-w-full whitespace-normal text-left">
           {busy === "authentication" ? t("conn.checking") : t("conn.checkAuthentication")}
         </Button>
-        {/* The summary above already says why the checks wait while a draft is unsaved. */}
       </div>
 
-      {reachabilityError === "" ? null : <Notice tone="danger">{reachabilityError}</Notice>}
-      {authenticationError === "" ? null : <Notice tone="danger">{authenticationError}</Notice>}
+      {reachabilityError === "" ? null : <CheckLine passed={false} text={reachabilityError} />}
+      {authenticationError === "" ? null : <CheckLine passed={false} text={authenticationError} />}
 
       {pendingDirectives.length === 0 ? null : (
         <div className="rounded-[9px] bg-notice p-3 text-sm">
@@ -121,32 +123,45 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
         </div>
       )}
 
-      {reachability === null && authentication === null ? null : (
-        <div className="grid border-t border-line pt-3 sm:grid-cols-2 sm:divide-x sm:divide-line">
-          {reachability === null ? null : (
-            <div className="flex flex-col gap-1.5 p-3 text-sm">
-              <h4 className={sectionHeading}>{t("diag.reachability")}</h4>
-              <p className="font-mono text-xs text-ink">{reachability.address}</p>
-              <p className="font-medium text-ink">{describeReachability(t, reachability.outcome)}</p>
-              <p className={hintText}>{t(reachabilityNoticeKey(reachability.outcome))}</p>
-            </div>
-          )}
-          {authentication === null ? null : (
-            <div className="flex flex-col gap-1.5 border-t border-line p-3 text-sm sm:border-t-0">
-              <h4 className={sectionHeading}>{t("diag.authentication")}</h4>
-              <p className="font-medium text-ink">{describeAuthentication(t, authentication.outcome)}</p>
-              {authentication.method === "" ? null : (
-                <p className={hintText}>{t("diag.authenticationMethod", { method: authentication.method })}</p>
-              )}
-              {authentication.detail === "" ? null : (
-                <pre className="whitespace-pre-wrap break-all font-mono text-xs text-ink-muted">
-                  {authentication.detail}
-                </pre>
-              )}
-            </div>
-          )}
-        </div>
+      {reachability === null ? null : (
+        <CheckLine
+          passed={reachability.outcome === "reached"}
+          text={t("conn.checkResult", { check: t("diag.reachability"), result: describeReachability(t, reachability.outcome) })}
+          detail={reachability.address}
+        />
+      )}
+      {authentication === null ? null : (
+        <CheckLine
+          passed={authentication.outcome === "authenticated"}
+          text={t("conn.checkResult", { check: t("diag.authentication"), result: describeAuthentication(t, authentication.outcome) })}
+          detail={authentication.method === "" ? "" : t("diag.authenticationMethod", { method: authentication.method })}
+        />
+      )}
+      {/* 結果の読み方（直接つないだので踏み台を使っていない、など）と、認証の生の出力は、開いたときだけ見せる。 */}
+      {!hasResult ? null : (
+        <details className="text-xs text-ink-muted">
+          <DisclosureSummary className="py-0.5 text-xs text-ink-muted">{t("conn.checksDetails")}</DisclosureSummary>
+          <div className="mt-1.5 flex flex-col gap-1.5">
+            {reachability === null ? null : <p className={hintText}>{t(reachabilityNoticeKey(reachability.outcome))}</p>}
+            {authentication === null || authentication.detail === "" ? null : (
+              <pre className="whitespace-pre-wrap break-all font-mono text-xs text-ink-muted">{authentication.detail}</pre>
+            )}
+          </div>
+        </details>
       )}
     </section>
+  );
+}
+
+// CheckLine は、確認の結果の1行：通ったかの印、結果の文、宛先や認証の方法。
+function CheckLine({ passed, text, detail = "" }: { passed: boolean; text: string; detail?: string }) {
+  return (
+    <p role="status" className={`flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs leading-[18px] ${passed ? "text-success" : "text-notice-ink"}`}>
+      <span className="flex items-baseline gap-1.5">
+        <Icon name={passed ? "check" : "warning"} className="size-3.5 shrink-0 translate-y-0.5" />
+        {text}
+      </span>
+      {detail === "" ? null : <span className="font-mono text-[11.5px] text-ink-faint">{detail}</span>}
+    </p>
   );
 }

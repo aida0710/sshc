@@ -99,7 +99,7 @@ describe("HostDetailPanel", () => {
     const reachability = screen.getByRole("button", { name: "Check reachability" });
     expect(editor).not.toBeNull();
     expect(editor).not.toHaveClass("sshc-card", "rounded-lg");
-    expect(editor).not.toContainElement(reachability);
+    expect(screen.getByRole("region", { name: "Authentication" })).toContainElement(screen.getByRole("region", { name: "Connection checks" }));
     expect(screen.getByRole("region", { name: "Connection checks" })).toContainElement(reachability);
     expect(reachability).toBeEnabled();
     expect(harness.props.integrations.reachability).not.toHaveBeenCalled();
@@ -160,14 +160,13 @@ describe("HostDetailPanel", () => {
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("198.51.100.7");
   });
 
-  // タブを切り替えても、接続の確認は同じ場所に出たままにする。Basic のときだけ出すと、
-  // 編集欄の位置がタブごとに上下する。
-  it("shows the connection checks on every area so switching areas does not move the editor", () => {
+  // 接続の確認は、認証の設定のすぐ下で試すものなので、基本タブの認証の節の最後にだけ置く。
+  it("shows the connection checks at the end of the Basic area's authentication only", () => {
     const harness = renderPanel({ panel: "Basic", advanced: "Settings" });
-    for (const panel of ["Basic", "Analysis", "Advanced", "Sshc"] as const) {
+    expect(screen.getByRole("button", { name: "Check reachability" })).toBeVisible();
+    for (const panel of ["Analysis", "Advanced", "Sshc"] as const) {
       harness.rerender(<HostDetailPanel {...harness.props} panel={panel} advanced="Settings" />);
-      expect(screen.getByRole("region", { name: "Connection checks" })).toBeVisible();
-      expect(screen.getByRole("button", { name: "Check reachability" })).toBeEnabled();
+      expect(screen.queryByRole("region", { name: "Connection checks" })).not.toBeInTheDocument();
     }
   });
 

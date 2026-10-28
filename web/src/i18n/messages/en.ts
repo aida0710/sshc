@@ -1950,7 +1950,7 @@ export const en = {
   "password.blocker.identityFile":
     "This host has a direct private key. sshc leaves any password prompt to OpenSSH instead of storing or supplying one.",
   "password.warn.hostKeyUnknown":
-    "This host key is not in known_hosts. When a saved password is used, the password helper cannot answer the host-key confirmation prompt, so the first connection will fail. Add the host key through Known Hosts first.",
+    "This host key is not in known_hosts, so the saved password cannot be typed on the first connection. Add the host key in Known Hosts first.",
   "password.warn.hostNameUnresolved":
     "No HostName could be resolved for this alias. The password will still be assigned to the alias.",
   "password.show": "Show",
@@ -2741,26 +2741,30 @@ export const en = {
   "conn.basicUser": "User",
   "conn.basicPort": "Port",
   "conn.basicPrivateKey": "SSH private key",
-  "conn.basicStoredPassword": "Stored password",
-  "conn.basicStoredTOTP": "One-time password (TOTP)",
-  "conn.basicThisConnection": "Set on this connection.",
+  "conn.basicPassword": "Password",
+  "conn.basicTOTP": "One-time password",
+  "conn.basicNotAssigned": "Not assigned",
+  "conn.basicPasswordDedicated": "Password for this connection",
+  "conn.basicPasswordNamed": "{name} (saved password)",
+  "conn.basicChooseSaved": "Choose a saved one",
+  "conn.basicUnassign": "Unassign",
+  "conn.basicTOTPNeedsVault": "Unlock the vault to choose one.",
   "conn.basicInheritedFrom": "Inherited from {path}:{line}.",
   "conn.basicSSHDefault":
     "SSH default. Saving another field will not write this value.",
-  "conn.basicReadOnlyAdvanced":
-    "Read-only in Basic; the original directives remain available in Advanced.",
   "conn.basicComplex":
     "This connection has multiple direct {keyword} values. Resolve them in Advanced.",
   "conn.basicUseInheritedHost": "Use inherited/default host name",
   "conn.basicUseInheritedUser": "Use inherited/default user",
   "conn.basicUseInheritedPort": "Use inherited/default port",
-  "conn.basicKeepDirect": "Keep this connection value",
+  "conn.basicInheritPlaceholder": "Inherited or default",
+  "conn.basicDefaultTail": "default",
+  "conn.basicInheritedTail": "inherited",
   "conn.basicAgentOrInherited": "SSH agent or inherited keys",
   "conn.basicManageKeyPassphrase": "Save or change key passphrase",
-  "conn.basicKeyPassphraseHeading": "Saved key passphrase",
-  "conn.basicKeyPassphraseUnencrypted":
-    "This private key is not encrypted, so it needs no saved passphrase.",
   "conn.basicKeyPassphraseNone": "No passphrase is saved for this key.",
+  "conn.basicKeyPassphraseLocked": "Unlock the vault to see whether a passphrase is saved for this key.",
+  "conn.basicKeyPassphraseUnavailable": "Could not read the saved passphrases.",
   "conn.basicKeyPassphraseDedicated":
     "A passphrase is saved only for this key.",
   "conn.basicKeyPassphraseShared":
@@ -2784,34 +2788,21 @@ export const en = {
     "This connection uses the custom IdentityFile path {path}. Edit it in Advanced.",
   "conn.basicComplexKey":
     "This connection has multiple direct IdentityFile values. Resolve them in Advanced.",
-  "conn.basicAssignedDedicated":
-    "A connection-only password is assigned. Its value is never displayed.",
-  "conn.basicAssignedNamed": "Assigned: {name}",
-  "conn.basicNoPassword": "No stored password is assigned.",
-  "conn.basicNoTOTP": "No one-time password is assigned.",
-  "conn.basicAssignedTOTP": "Assigned: {name}",
   "conn.basicRouteConfirmHeading": "Use saved credentials with the changed settings?",
   "conn.basicRouteConfirmBody":
     "Connection settings such as HostName, User, Port, ProxyJump, or the VPN profile have changed since the credentials were assigned. Saving allows the assigned password or one-time password to be used with the changed settings. A startup snippet assignment is not moved to the changed settings and stops; check the destination on the Snippets screen and assign it again.",
   "conn.basicRouteConfirmSave": "Save and confirm",
   "conn.basicRouteConfirmCancel": "Cancel",
-  "conn.basicTOTPAction": "One-time password action",
-  "conn.basicTOTPUnchanged": "No assignment change",
-  "conn.basicUseSavedTOTP": "Assign a saved TOTP",
-  "conn.basicRemoveTOTP": "Remove TOTP assignment",
   "conn.basicChooseSavedTOTP": "Saved TOTP",
   "conn.basicNoSavedTOTPs": "No TOTP is stored in Vault",
-  "conn.basicTOTPNote":
-    "Register TOTP seeds in the Vault, then assign one to this connection here. sshc only enters the code when an authentication prompt explicitly requests it, such as “Verification code”.",
+  "conn.basicTOTPNote": "It is typed only into prompts that ask for a code, such as “Verification code”.",
   "conn.basicPasswordCleanup":
     "A stored password is still assigned, but sshc will not use it. Saving Basic settings will remove this connection's assignment; a shared credential and its other hosts remain unchanged.",
-  "conn.basicPasswordAction": "Stored password action",
-  "conn.basicPasswordUnchanged": "No password change",
   "conn.basicReplaceDedicated": "Replace with a connection-only password",
-  "conn.basicRemovePassword": "Remove stored password",
   "conn.basicConfirmRemove": "Confirm stored password removal",
   "conn.basicEmptyPasswordUnchanged":
     "Leaving this empty makes no password change.",
+  "conn.basicPasswordStale": "The saved password is not used because the destination settings changed. Saving the Basic settings uses it with the current settings.",
   "conn.basicVaultMissing":
     "Create the encrypted vault before saving Basic settings.",
   "conn.basicVaultLocked":
@@ -2863,6 +2854,8 @@ export const en = {
     "Review the exact saved directives before allowing the authentication check to continue.",
   "conn.checksDirectiveAt": "{keyword} at {path}:{line}",
   "conn.checksAcknowledge": "Acknowledge and check authentication",
+  "conn.checkResult": "{check}: {result}",
+  "conn.checksDetails": "Details",
   "conn.analysisLabel": "Settings analysis",
   "conn.analysisExplained": "Resolved saved values",
   "conn.analysisExplainedHint":
