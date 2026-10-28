@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { HostEntry, Notice } from "../api/config";
 import type { KeyItem } from "../keys/api";
-import { connectionFilesOf, folderNoticesOf, keyFilesOf, ordersAfterMove } from "./groupFolders";
+import { connectionFilesOf, folderNoticesOf, keyFilesOf } from "./groupFolderContents";
 
 function host(alias: string, path: string, group?: string): HostEntry {
   return {
@@ -50,16 +50,5 @@ describe("folder notices", () => {
       { code: "duplicate_alias", path: "config", detail: "nas" },
     ];
     expect(folderNoticesOf(notices).map((notice) => notice.path)).toEqual(["connections/old", "connections/10-loose.conf"]);
-  });
-});
-
-describe("moving a group among its siblings", () => {
-  it("numbers every sibling in its new place", () => {
-    expect([...ordersAfterMove(["home", "lab", "work"], "lab", "up")!]).toEqual([["lab", 0], ["home", 1], ["work", 2]]);
-  });
-
-  it("does not move the first group up or the last group down", () => {
-    expect(ordersAfterMove(["home", "lab"], "home", "up")).toBeNull();
-    expect(ordersAfterMove(["home", "lab"], "lab", "down")).toBeNull();
   });
 });

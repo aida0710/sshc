@@ -7,7 +7,7 @@ import { identityKey } from "./connectionBrowser";
 import { duplicateAliasOf } from "./duplicateAlias";
 import { groupAfterRename } from "./connectionMoves";
 import { buildGroupTree, decorateHosts, type GroupNode } from "./connectionTreeIndex";
-import { ordersAfterMove, type MoveDirection } from "./groupFolders";
+import { ordersAfterMove, type MoveDirection } from "./groupOrder";
 import type { HostSelection, Scope } from "./ConnectionTree";
 import type { GroupDialogState } from "./GroupDialogs";
 import { listGroups } from "./groupListing";

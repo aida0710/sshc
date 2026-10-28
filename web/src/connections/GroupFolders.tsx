@@ -4,7 +4,7 @@ import { useTranslate } from "../i18n/context";
 import type { KeysApi } from "../keys/api";
 import { sectionHeading } from "../ui/form";
 import { Icon, type IconName } from "../ui/icons";
-import { connectionFilesOf, keyFilesOf } from "./groupFolders";
+import { connectionFilesOf, keyFilesOf } from "./groupFolderContents";
 import { useKeyItems } from "./useKeyItems";
 
 type GroupFoldersProps = {

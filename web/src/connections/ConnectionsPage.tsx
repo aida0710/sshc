@@ -51,7 +51,7 @@ import { useSelectedConnection } from "./useSelectedConnection";
 import { useConnectionSave } from "./useConnectionSave";
 import { useConnectionManagement } from "./useConnectionManagement";
 import { useGroupOperations } from "./useGroupOperations";
-import { folderNoticesOf } from "./groupFolders";
+import { folderNoticesOf } from "./groupFolderContents";
 import { GroupFolders } from "./GroupFolders";
 import { useConnectionListActions } from "./useConnectionListActions";
 import { ConnectionListDialogs } from "./ConnectionListDialogs";
