@@ -12,10 +12,15 @@ export function createTerminalOutput(terminal: WritableTerminal) {
 
   const writeDecodedText = (text: string, isReplay: boolean) => {
     if (disposed || text === "") return;
-    // xterm parses asynchronously. Queue this change before its text so live
-    // bytes already received cannot enable clipboard writes while history parses.
-    terminal.write("", () => { replaying = isReplay; });
-    terminal.write(text);
+    if (!isReplay) {
+      terminal.write(text);
+      return;
+    }
+    // xterm parses asynchronously, so the flag follows the parser rather than
+    // the arrival of bytes: it is set only while this history text is parsed,
+    // which is when xterm answers the queries the history still holds.
+    terminal.write("", () => { replaying = true; });
+    terminal.write(text, () => { replaying = false; });
   };
 
   return {
