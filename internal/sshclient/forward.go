@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
+	"sshc/internal/netaccept"
 	"sshc/internal/terminal"
 )
 
@@ -317,32 +318,11 @@ func describe(spec ForwardSpec) string {
 const maxConcurrentForwardConnections = 64
 
 // accept は、開いた listener に届く接続を、この SSH の上へ流し続ける。
+// listener が閉じたら（セッションが終わったら）戻る。
 func accept(listener net.Listener, client *ssh.Client, spec ForwardSpec) {
-	acceptLimited(listener, maxConcurrentForwardConnections, func(local net.Conn) {
+	netaccept.Serve(listener, maxConcurrentForwardConnections, func(local net.Conn) {
 		serve(local, client, spec)
 	})
-}
-
-// acceptLimited は、ひとつの listener から同時に生やす処理数を制限する。
-// 上限を超えた接続は goroutine を作る前に閉じる。
-func acceptLimited(listener net.Listener, limit int, handle func(net.Conn)) {
-	active := make(chan struct{}, limit)
-	for {
-		local, err := listener.Accept()
-		if err != nil {
-			// listener が閉じた。セッションが終わったということである。
-			return
-		}
-		select {
-		case active <- struct{}{}:
-			go func() {
-				defer func() { <-active }()
-				handle(local)
-			}()
-		default:
-			_ = local.Close()
-		}
-	}
 }
 
 const (
