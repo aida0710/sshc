@@ -33,7 +33,7 @@ export function sameHostMetadata(left: HostMetadata, right: HostMetadata): boole
   return canonicalHostMetadata(left) === canonicalHostMetadata(right);
 }
 
-type OptionalChoice = "encoding" | "osc52" | "vpn";
+type OptionalChoice = "encoding" | "vpn";
 
 // withOptionalChoice は、選択肢の項目を変えた下書きを返す。空の選択（UTF-8、全体の設定に
 // 従う、VPNを使わない）は、項目そのものを消す。

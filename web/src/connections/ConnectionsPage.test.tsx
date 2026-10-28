@@ -974,13 +974,13 @@ describe("ConnectionsPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
-    await user.selectOptions(screen.getByLabelText("OSC 52 clipboard"), "deny");
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
     await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
 
     expect(await screen.findByText("The sshc-only settings could not be saved. Check the error and save again."))
       .toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Save preview" })).toHaveTextContent("metadata_invalid");
-    expect(screen.getByLabelText("OSC 52 clipboard")).toHaveValue("deny");
+    expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
     expect(screen.getByRole("button", { name: "Save sshc-only settings" })).toBeEnabled();
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
@@ -995,11 +995,11 @@ describe("ConnectionsPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
-    await user.selectOptions(screen.getByLabelText("OSC 52 clipboard"), "deny");
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
     await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
 
     expect(await screen.findByText(/sshc settings changed in another window, the CLI or sync/)).toBeInTheDocument();
-    expect(screen.getByLabelText("OSC 52 clipboard")).toHaveValue("deny");
+    expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 

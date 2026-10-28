@@ -222,7 +222,7 @@ type Switch = "copyOnSelect" | "rightClickPaste" | "osc52" | "jisYenBackslash" |
 const switches: { key: Switch; label: MessageKey; hint: MessageKey }[] = [
   { key: "copyOnSelect", label: "terminal.copyOnSelectLabel", hint: "terminal.copyOnSelectHint" },
   { key: "rightClickPaste", label: "terminal.rightClickPasteLabel", hint: "terminal.rightClickPasteHint" },
-  { key: "osc52", label: "terminal.osc52DefaultLabel", hint: "terminal.osc52DefaultHint" },
+  { key: "osc52", label: "terminal.osc52SettingLabel", hint: "terminal.osc52SettingHint" },
   { key: "jisYenBackslash", label: "terminal.jisYenBackslashLabel", hint: "terminal.jisYenBackslashHint" },
   { key: "composerEnterSends", label: "terminal.composerEnterSendsLabel", hint: "terminal.composerEnterSendsHint" },
   { key: "webgl", label: "terminal.webglLabel", hint: "terminal.webglHint" },

@@ -84,11 +84,15 @@ export function TerminalOverflowMenu({
       <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" title={t("terminal.copyContextHint")} onClick={action(onCopyContext)}>
         {t("terminal.copyContext")}
       </button>
-      <CheckboxMenuItem label="OSC 52" hint={t("terminal.osc52Hint")} checked={osc52Enabled} onSelect={action(onToggleOsc52)} />
-      {isScreenWakeLockSupported() ? (
-        <CheckboxMenuItem label={t("terminal.keepScreenAwake")} hint={t("terminal.keepScreenAwakeHint")} checked={keepScreenAwake}
-          onSelect={action(() => saveKeepScreenAwake(!keepScreenAwake))} />
-      ) : null}
+      {/* These two apply to every terminal, not only this one, so they sit apart under their own heading. */}
+      <div role="group" aria-label={t("terminal.globalSettings")} className="mt-1 border-t border-line pt-1">
+        <p aria-hidden="true" className="px-2.5 py-1 text-[11px] text-ink-faint">{t("terminal.globalSettings")}</p>
+        <CheckboxMenuItem label="OSC 52" hint={t("terminal.osc52Hint")} checked={osc52Enabled} onSelect={action(onToggleOsc52)} />
+        {isScreenWakeLockSupported() ? (
+          <CheckboxMenuItem label={t("terminal.keepScreenAwake")} hint={t("terminal.keepScreenAwakeHint")} checked={keepScreenAwake}
+            onSelect={action(() => saveKeepScreenAwake(!keepScreenAwake))} />
+        ) : null}
+      </div>
     </div>
   );
 }
