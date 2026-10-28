@@ -41,5 +41,6 @@ description: sshcのTerminalが受け取るOSCと、画像やキーボードに�
 | DCS（Sixel） | 画像 | [画像と文字幅](/features/terminal#画像と文字幅) |
 | APC `G`（kittyの画像形式） | 画像 | データとして送られた画像だけを表示します |
 | Kitty keyboard protocol | キーボード | 問い合わせと、要求に応じた切り替えに対応します |
+| mode 2033、`CSI ? 998 n`（visibility reports） | 見えているかの知らせ | sshcエンジンが答えます。どこかのブラウザがターミナルを表示していれば見えている、どれも表示していなければ見えていないと知らせます |
 
 そのほかのCSIやモード（マウス、bracketed paste、代替画面など）は、xterm.jsの[対応表](https://xtermjs.org/docs/api/vtfeatures/)のとおりです。

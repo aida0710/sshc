@@ -41,5 +41,6 @@ These OSC sequences are not taken:
 | DCS (SIXEL) | Images | [Images and character widths](/en/features/terminal#images-and-character-widths) |
 | APC `G` (kitty graphics protocol) | Images | Only images sent as data are shown |
 | Kitty keyboard protocol | Keyboard | Answers the query and switches as requested |
+| Mode 2033, `CSI ? 998 n` (visibility reports) | Whether the terminal is seen | Answered by the sshc engine: visible while any browser shows the terminal, not visible when none does |
 
 Other CSI sequences and modes (mouse, bracketed paste, the alternate screen and so on) follow xterm.js's [feature table](https://xtermjs.org/docs/api/vtfeatures/).
