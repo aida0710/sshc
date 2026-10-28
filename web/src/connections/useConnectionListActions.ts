@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { isGroupOrDescendant } from "../rules/groupPath";
 import type { HostEntry, HostIdentity, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import type { ActionMenuItem } from "../ui/ActionMenu";
@@ -101,7 +102,7 @@ export function useConnectionListActions({
 
   // 消したグループ（とその下のグループ）を絞り込んだり編集したりしていたら、すべての接続先へ戻す。
   function forgetDeletedGroup(name: string) {
-    const removed = (group: string) => group === name || group.startsWith(`${name}/`);
+    const removed = (group: string) => isGroupOrDescendant(group, name);
     if (scope.kind === "group" && removed(scope.name)) setScope({ kind: "all" });
     setEditingGroup((current) => (current !== null && removed(current) ? null : current));
   }
