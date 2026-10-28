@@ -60,7 +60,7 @@ export function KeyConfig() {
   }
 
   return <div data-shortcut-editor className="flex flex-col gap-5">
-    {library.error ? <Notice tone="danger"><span className="grow">{t("shortcuts.reloadRequired")}</span><Button small className="shrink-0" onClick={() => { void refreshPresets(); }}>{t("shortcuts.reload")}</Button></Notice> : null}
+    {library.error ? <Notice tone="danger" actions={<Button small onClick={() => { void refreshPresets(); }}>{t("shortcuts.reload")}</Button>}>{t("shortcuts.reloadRequired")}</Notice> : null}
     {library.loading ? <PanelState tone="loading" title={t("shortcuts.loading")} /> : null}
     <PageSection heading={t("shortcuts.presetsHeading")}>
       <FieldRow label={t("shortcuts.preset")} hint={library.selected === "default" ? t("shortcuts.defaultPresetHint") : undefined}

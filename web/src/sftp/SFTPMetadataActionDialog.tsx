@@ -1,7 +1,7 @@
 import { useId, useRef, useState, type RefObject } from "react";
 import { useTranslate } from "../i18n/context";
 import { ModalShell } from "../ui/ModalShell";
-import { control, hintText } from "../ui/form";
+import { control, dialogHeading, hintText } from "../ui/form";
 import { Button } from "../ui/surface";
 import type { MetadataIntent, SFTPMetadataActionsModel } from "./useSFTPMetadataActions";
 
@@ -50,7 +50,7 @@ function MetadataForm({ intent, actions, returnFocusRef }: {
   }
 
   return <ModalShell labelledBy={id} onDismiss={actions.cancel} dismissible={!actions.acting} initialFocusRef={initialFocus} returnFocusRef={returnFocusRef} panelClassName="w-full max-w-md rounded-lg p-5">
-    <h2 id={id} className="text-base font-semibold">{heading}</h2>
+    <h2 id={id} className={dialogHeading}>{heading}</h2>
     <p className="mt-2 break-all font-mono text-xs text-ink-muted">{path}</p>
     <p className={`mt-2 ${hintText}`}>{t(intent.kind === "ownership" ? "sftp.ownershipHint" : "sftp.symlinkHint")}</p>
     {intent.kind === "ownership" ? <p className={`mt-2 ${hintText}`}>{t("sftp.currentOwnership", { uid: intent.entry.uid ?? "—", gid: intent.entry.gid ?? "—" })}</p> : null}

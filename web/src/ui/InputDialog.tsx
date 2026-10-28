@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { usePendingResult } from "./usePendingResult";
-import { control, hintText } from "./form";
+import { control, dialogHeading, hintText } from "./form";
 import { Button } from "./surface";
 import { ModalShell } from "./ModalShell";
 
@@ -72,7 +72,7 @@ export function InputDialog({
       panelClassName="flex w-full max-w-md flex-col gap-4 rounded-lg p-4 sm:p-5"
     >
       <div>
-        <h2 id={id} className="text-base font-semibold text-ink">{heading}</h2>
+        <h2 id={id} className={dialogHeading}>{heading}</h2>
         {description === undefined ? null : <div id={descriptionId} className={`mt-1 ${hintText}`}>{description}</div>}
       </div>
       <form

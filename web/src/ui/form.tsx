@@ -43,6 +43,9 @@ export const dangerAction =
 export const dangerTextAction =
   "whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-danger transition-colors duration-150 hover:bg-danger/10";
 
+// dialogHeading is the heading of every dialog, so a confirmation and a form read as the same kind of window.
+export const dialogHeading = "text-base font-semibold text-ink";
+
 export const fieldLabel = "text-[12.5px] text-ink-muted";
 export const hintText = "text-xs text-ink-muted";
 export const sectionCard =

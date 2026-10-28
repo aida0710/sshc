@@ -1,3 +1,4 @@
+import { tagClass } from "../ui/Tag";
 import type { ConflictReport, DiffLine, FileDiff, SavePreview } from "../api/config";
 import { ConfigDiagnosticList } from "../sshconfig/ConfigDiagnosticList";
 import type { Problem } from "../api/client";
@@ -57,7 +58,7 @@ export function SavePreviewPanel({
       <div className="flex items-center justify-between gap-3">
         <h3 id="preview-heading" className="text-sm font-medium text-ink">{t("preview.heading")}</h3>
         {preview === null ? null : (
-          <span className="rounded-full bg-select-fill px-2 py-1 text-xs text-ink-muted">
+          <span className={tagClass("neutral")}>
             {preview.diffs.length}
           </span>
         )}

@@ -1,3 +1,4 @@
+import { tagClass } from "../ui/Tag";
 import type { VPNProfile, VPNProfileStatus } from "../api/vpn";
 import { useLanguage, useTranslate } from "../i18n/context";
 import { ActionMenu, revealOnHover, type ActionMenuItem } from "../ui/ActionMenu";
@@ -31,9 +32,8 @@ export type VPNProfileActions = {
 // 252pxを取るからである。
 const profileColumns = "@2xl:grid @2xl:grid-cols-[minmax(0,1.2fr)_11rem_minmax(0,1fr)_12rem] @2xl:gap-x-4";
 
-const tag = "inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-full px-[7px] text-[11.5px]";
-const neutralTag = `${tag} bg-well text-ink-muted`;
-const goodTag = `${tag} bg-live/15 text-live`;
+const neutralTag = tagClass("neutral");
+const goodTag = tagClass("ok");
 
 // VPNProfileListHeader は、行の列の名前を小さく薄く並べる。狭い画面では各行が自分で名前を添える。
 export function VPNProfileListHeader() {
