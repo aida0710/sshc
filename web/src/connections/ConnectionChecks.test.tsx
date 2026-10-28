@@ -73,7 +73,7 @@ describe("ConnectionChecks", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Check reachability" }));
 
-    expect(await screen.findByText("Not checked, because this connection goes through a VPN profile.")).toBeInTheDocument();
+    expect(await screen.findByText("Reachability: Not checked, because this connection goes through a VPN profile.")).toBeInTheDocument();
     expect(screen.getByText(/does not use the VPN route\. The authentication check connects through the VPN\./)).toBeInTheDocument();
     expect(screen.queryByText(/ProxyJump, ProxyCommand and any jump-host firewall/)).not.toBeInTheDocument();
     expect(screen.queryByText(notice)).not.toBeInTheDocument();
@@ -85,7 +85,7 @@ describe("ConnectionChecks", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Check authentication with saved settings" }));
 
-    expect(await screen.findByText("Authentication succeeded.")).toBeInTheDocument();
+    expect(await screen.findByText("Authentication: Authentication succeeded.")).toBeInTheDocument();
     expect(integrations.effective).toHaveBeenCalledWith("bastion");
     expect(integrations.authentication).toHaveBeenCalledWith("bastion", false);
   });
@@ -113,7 +113,7 @@ describe("ConnectionChecks", () => {
     expect(screen.getByText("/usr/bin/nc %h %p")).toBeInTheDocument();
     expect(integrations.authentication).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Acknowledge and check authentication" }));
-    expect(await screen.findByText("Authentication succeeded.")).toBeInTheDocument();
+    expect(await screen.findByText("Authentication: Authentication succeeded.")).toBeInTheDocument();
     expect(integrations.authentication).toHaveBeenCalledWith("bastion", true);
   });
 

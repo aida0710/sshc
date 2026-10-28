@@ -21,11 +21,33 @@ export type DraftField = {
   state: BasicFieldState;
   value: string;
   inherit: boolean;
+  // typed says the user has typed into the field since it was read. A field that inherits its value shows it
+  // only as the placeholder, so what is typed stays shown even when it happens to equal the inherited value.
+  typed: boolean;
 };
 
 export function initialField(detail: HostDetail, keyword: BasicKeyword): DraftField {
   const state = deriveBasicField(detail, keyword);
-  return { state, value: state.value, inherit: false };
+  return { state, value: state.value, inherit: false, typed: false };
+}
+
+// inheritsValue says the connection writes no value of its own and uses the inherited or default one: after
+// "go back" removed a written value (inherit), or while nothing has been typed into a field that has none.
+export function inheritsValue(field: DraftField): boolean {
+  return field.inherit || (field.state.origin !== "direct" && !field.typed);
+}
+
+// typedValue puts what was typed into the field. Emptying it goes back to writing no value of its own.
+export function typedValue(field: DraftField, value: string): DraftField {
+  if (value !== "") return { ...field, value, inherit: false, typed: true };
+  return resetValue(field);
+}
+
+// resetValue is "go back": stop writing the connection's own value and use the inherited or default one.
+export function resetValue(field: DraftField): DraftField {
+  return field.state.origin === "direct"
+    ? { ...field, value: "", inherit: true, typed: false }
+    : { ...field, value: field.state.value, inherit: false, typed: false };
 }
 
 // How the configured IdentityFile maps onto the key list: one known key

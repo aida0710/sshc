@@ -1,20 +1,19 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import type { Problem } from "../api/client";
 import type { HostDetail, UpdateConnectionRequest } from "../api/config";
 import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
 import { useTranslate } from "../i18n/context";
 import { keysApi, type KeysApi } from "../keys/api";
-import { control, sectionHeading } from "../ui/form";
 import { Notice } from "../ui/surface";
-import { FieldRow } from "../ui/FieldRow";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import type { BasicFieldState } from "./basicFields";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import type { ConnectionSavedState } from "./connectionSavedState";
 import { draftResetKey } from "./draftResetKey";
 import { BasicPasswordSection } from "./BasicPasswordSection";
 import { BasicPrivateKeyField } from "./BasicPrivateKeyField";
 import { BasicTOTPSection } from "./BasicTOTPSection";
+import { ConnectionDestinationFields } from "./ConnectionDestinationFields";
+import { EditorSection } from "./EditorSection";
 import { DraftSaveBar } from "./DraftSaveBar";
 import {
   clearedKeyPassphrase,
@@ -44,50 +43,9 @@ type ConnectionBasicFormProps = {
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
   onDiscardReady?: ((discard: (() => void) | null) => void) | undefined;
   disabled?: boolean | undefined;
+  // checks は、認証の節の最後に置く接続の確認（ConnectionChecks）。保存済みの設定を試すもので、下書きとは別。
+  checks?: ReactNode;
 };
-
-function sourceText(field: BasicFieldState, t: ReturnType<typeof useTranslate>): string {
-  if (field.origin === "direct") return t("conn.basicThisConnection");
-  if (field.origin === "default") return t("conn.basicSSHDefault");
-  if (field.origin === "complex") return t("conn.basicReadOnlyAdvanced");
-  const path = field.source?.path ?? field.source?.absolute ?? "";
-  return t("conn.basicInheritedFrom", { path, line: field.source?.line ?? 0 });
-}
-
-function ConnectionField({ field, label, error, inheritLabel, onChange, onInherit, numeric = false }: {
-  field: DraftField;
-  label: string;
-  error: string;
-  inheritLabel: string;
-  onChange: (value: string) => void;
-  onInherit: () => void;
-  numeric?: boolean;
-}) {
-  const t = useTranslate();
-  const hint = field.state.origin === "direct" ? "" : sourceText(field.state, t);
-  const warning = field.state.origin === "complex" ? t("conn.basicComplex", { keyword: field.state.keyword }) : error;
-  return (
-    <FieldRow
-      label={label}
-      hint={hint === "" ? undefined : hint}
-      warning={warning === "" ? undefined : warning}
-      actions={field.state.origin === "direct" ? (
-        <button type="button" aria-pressed={field.inherit} onClick={onInherit} className={`rounded py-0.5 text-left text-xs underline-offset-4 hover:text-accent hover:underline ${field.inherit ? "font-medium text-notice-ink" : "text-ink-muted"}`}>
-          {field.inherit ? t("conn.basicKeepDirect") : inheritLabel}
-        </button>
-      ) : undefined}
-    >
-      <input
-        type={numeric ? "number" : "text"}
-        {...(numeric ? { min: 1, max: 65535 } : {})}
-        value={field.value}
-        disabled={!field.state.editable || field.state.origin === "complex"}
-        onChange={(event) => onChange(event.target.value)}
-        className={control}
-      />
-    </FieldRow>
-  );
-}
 
 // The basic view of one connection: host, user and port, which key it uses,
 // and what the vault keeps for it. The draft is one object; what it means
@@ -104,6 +62,7 @@ export function ConnectionBasicForm({
   onDirtyChange,
   onDiscardReady,
   disabled = false,
+  checks = null,
 }: ConnectionBasicFormProps) {
   const t = useTranslate();
   const identity = detail.form.entry.identity;
@@ -255,59 +214,57 @@ export function ConnectionBasicForm({
             ? t("conn.createNeedConnectionPassword")
             : "";
 
-  const field = (name: "hostName" | "user" | "port") => ({
-    field: draft[name],
-    onChange: (value: string) => edit({ [name]: { ...draft[name], value, inherit: false } }, true),
-    onInherit: () => edit({ [name]: { ...draft[name], inherit: !draft[name].inherit } }),
+  const destination = (name: "hostName" | "user" | "port", error: string) => ({
+    draft: draft[name],
+    error,
+    onChange: (next: DraftField) => edit({ [name]: next }, true),
   });
+  const file = detail.form.entry.file;
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={submit}>
+    <form className="flex flex-col" onSubmit={submit}>
       {secrets.error === "" || problem !== null ? null : <Notice tone="danger">{secrets.error}</Notice>}
 
       <fieldset disabled={disabled} className="contents">
-      <section className="flex flex-col gap-2" aria-labelledby="basic-connection-heading">
-        <h3 id="basic-connection-heading" className={sectionHeading}>{t("conn.basicConnection")}</h3>
-        <div>
-          <ConnectionField {...field("hostName")} label={t("conn.basicHostName")} error={derived.hostError || serverHostError} inheritLabel={t("conn.basicUseInheritedHost")} />
-          <ConnectionField {...field("user")} label={t("conn.basicUser")} error={derived.userError || serverUserError} inheritLabel={t("conn.basicUseInheritedUser")} />
-          <ConnectionField {...field("port")} label={t("conn.basicPort")} error={derived.portError || serverPortError} inheritLabel={t("conn.basicUseInheritedPort")} numeric />
-        </div>
-      </section>
+      <EditorSection title={t("conn.basicConnection")} meta={<span title={file.absolute}>{file.path ?? file.absolute}</span>}>
+        <ConnectionDestinationFields
+          hostName={destination("hostName", derived.hostError || serverHostError)}
+          user={destination("user", derived.userError || serverUserError)}
+          port={destination("port", derived.portError || serverPortError)}
+        />
+      </EditorSection>
 
-      <section className="flex flex-col gap-2 border-t border-line pt-4" aria-labelledby="basic-auth-heading">
-        <h3 id="basic-auth-heading" className={sectionHeading}>{t("conn.basicAuthentication")}</h3>
-        <div>
-          <BasicPrivateKeyField
-            draft={draft}
-            derived={derived}
-            keySelection={keySelection}
-            secrets={secrets}
-            preferredKey={preferredKey}
-            serverKeyError={serverKeyError}
-            serverKeyPassphraseError={serverKeyPassphraseError}
-            passphraseOpen={keyPassphraseOpen}
-            onPassphraseOpenChange={setKeyPassphraseOpen}
-            onSelectKey={selectKey}
-            onEdit={(patch) => edit(patch, true)}
-          />
-          <BasicPasswordSection
-            draft={draft}
-            derived={derived}
-            secrets={secrets}
-            serverPasswordError={serverPasswordError}
-            onEdit={(patch) => edit(patch)}
-            onChooseAction={choosePasswordAction}
-            onOpenVault={() => void openVault()}
-          />
-          <BasicTOTPSection
-            draft={draft}
-            derived={derived}
-            secrets={secrets}
-            onEdit={(patch) => edit(patch, "totpAction" in patch)}
-          />
-        </div>
-      </section>
+      <EditorSection title={t("conn.basicAuthentication")}>
+        <BasicPrivateKeyField
+          draft={draft}
+          derived={derived}
+          keySelection={keySelection}
+          secrets={secrets}
+          preferredKey={preferredKey}
+          serverKeyError={serverKeyError}
+          serverKeyPassphraseError={serverKeyPassphraseError}
+          passphraseOpen={keyPassphraseOpen}
+          onPassphraseOpenChange={setKeyPassphraseOpen}
+          onSelectKey={selectKey}
+          onEdit={(patch) => edit(patch, true)}
+        />
+        <BasicPasswordSection
+          draft={draft}
+          derived={derived}
+          secrets={secrets}
+          serverPasswordError={serverPasswordError}
+          onEdit={(patch) => edit(patch)}
+          onChooseAction={choosePasswordAction}
+          onOpenVault={() => void openVault()}
+        />
+        <BasicTOTPSection
+          draft={draft}
+          derived={derived}
+          secrets={secrets}
+          onEdit={(patch) => edit(patch, "totpAction" in patch)}
+        />
+        {checks}
+      </EditorSection>
 
       {dirty ? <DraftSaveBar
         note={derived.needsVault

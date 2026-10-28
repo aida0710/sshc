@@ -157,8 +157,8 @@ test("shows Basic save actions only after a change and keeps them in the form", 
 
   await expect(save).toHaveCount(0);
   await page.getByLabel("Port", { exact: true }).fill("2223");
-  await expect(save).toBeVisible();
-  await expect(save).not.toBeInViewport();
+  // The save actions belong to the Basic form, under its fields, rather than to a bar over the page.
+  await expect(page.getByRole("tabpanel", { name: "Basic" }).getByRole("button", { name: "Save Basic settings" })).toBeVisible();
   await save.scrollIntoViewIfNeeded();
   await expect(save).toBeInViewport();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
@@ -421,13 +421,16 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   const ownedId = await keyChoice.locator("option", { hasText: "id_connection_owned" }).getAttribute("value");
   expect(ownedId).not.toBeNull();
   await keyChoice.selectOption(ownedId);
-  await expect(page.getByText(/uses the shared saved passphrase “shared-sibling-phrase”/)).not.toBeVisible();
+  // Whether a passphrase is saved shows under the key; the editor opens only on request.
+  await expect(page.getByText(/uses the shared saved passphrase “shared-sibling-phrase”/)).toBeVisible();
+  await expect(page.getByLabel("New saved key passphrase", { exact: true })).not.toBeVisible();
   await page.getByText("Save or change key passphrase").click();
   await expect(page.getByText(/uses the shared saved passphrase “shared-sibling-phrase”/)).toBeVisible();
   await page.getByLabel("New saved key passphrase", { exact: true }).fill(firstPassphrase);
   await page.getByLabel("Confirm saved key passphrase", { exact: true }).fill(firstPassphrase);
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
-  await expect(page.getByText("A passphrase is saved only for this key.")).not.toBeVisible();
+  await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
+  await expect(page.getByLabel("New saved key passphrase", { exact: true })).not.toBeVisible();
 
   await openSection(page, "Key passphrases");
   const shared = page
@@ -454,13 +457,15 @@ test("saves and replaces a key-owned passphrase without changing another key's s
     .getByRole("navigation", { name: "Connections" })
     .getByRole("button", { name: "bastion", exact: true })
     .click();
-  await expect(page.getByText("A passphrase is saved only for this key.")).not.toBeVisible();
+  await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
+  await expect(page.getByLabel("New saved key passphrase", { exact: true })).not.toBeVisible();
   await page.getByText("Save or change key passphrase").click();
   await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
   await page.getByLabel("New saved key passphrase", { exact: true }).fill(nextPassphrase);
   await page.getByLabel("Confirm saved key passphrase", { exact: true }).fill(nextPassphrase);
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
-  await expect(page.getByText("A passphrase is saved only for this key.")).not.toBeVisible();
+  await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
+  await expect(page.getByLabel("New saved key passphrase", { exact: true })).not.toBeVisible();
   await expect(page.locator("body")).not.toContainText(firstPassphrase);
   await expect(page.locator("body")).not.toContainText(nextPassphrase);
 
