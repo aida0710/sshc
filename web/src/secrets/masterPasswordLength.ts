@@ -2,7 +2,7 @@
 // screen and Settings suggest a longer one. It is the minimum the engine keeps
 // for the sync key (internal/envelope.MinPassphraseLength), whose sealed data
 // leaves this machine.
-export const RECOMMENDED_MASTER_PASSWORD_LENGTH = 12;
+const RECOMMENDED_MASTER_PASSWORD_LENGTH = 12;
 
 // The engine counts a passphrase in Unicode code points
 // (internal/envelope.DeriveWithMinimum). String.length would count an emoji or

@@ -18,7 +18,7 @@ function isWellFormedToken(value: unknown): value is string {
   return typeof value === "string" && engineTokenPattern.test(value);
 }
 
-export function loadSessionCSRF(storage: Pick<Storage, "getItem" | "removeItem"> = window.sessionStorage): string {
+function loadSessionCSRF(storage: Pick<Storage, "getItem" | "removeItem"> = window.sessionStorage): string {
   try {
     const value = storage.getItem(sessionStorageKeys.sessionCSRF);
     if (isWellFormedToken(value)) return value;
@@ -30,7 +30,7 @@ export function loadSessionCSRF(storage: Pick<Storage, "getItem" | "removeItem">
   return "";
 }
 
-export function storeSessionCSRF(
+function storeSessionCSRF(
   value: string,
   storage: Pick<Storage, "setItem"> = window.sessionStorage,
 ): void {

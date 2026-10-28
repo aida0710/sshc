@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { LanguageProvider } from "../i18n/context";
 import type { PullResponse, PushResult, SyncOperation } from "../api/sync";
-import { SyncResultCard, formatBytes } from "./SyncResultCard";
+import { SyncResultCard, formatStorageBytes } from "./SyncResultCard";
 
 const summary = {
   createdAt: "2026-08-12T01:30:00Z",
@@ -42,7 +42,7 @@ function renderJapanese(view: Parameters<typeof SyncResultCard>[0]["view"]) {
   );
 }
 
-describe("formatBytes", () => {
+describe("formatStorageBytes", () => {
   it.each([
     [0, "0 B"],
     [999, "999 B"],
@@ -51,7 +51,7 @@ describe("formatBytes", () => {
     [1_000_000, "1 MB"],
     [4_800_000, "4.8 MB"],
   ])("formats %i bytes with decimal units", (bytes, expected) => {
-    expect(formatBytes(bytes, "en")).toBe(expected);
+    expect(formatStorageBytes(bytes, "en")).toBe(expected);
   });
 });
 

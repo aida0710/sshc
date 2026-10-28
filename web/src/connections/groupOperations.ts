@@ -8,10 +8,10 @@ type GroupOperationsOptions = {
   reload: () => Promise<Overview | null>;
 };
 
-// useGroupOperations は、Connections 画面から行うグループの作成と、設定・表示順・隠すの保存を持つ。どちらも metadata の
+// createGroupOperations は、Connections 画面から行うグループの作成と、設定・表示順・隠すの保存を持つ。どちらも metadata の
 // グループの設定を書き換える操作で、Groups 画面と同じ sshcエンジンの保存を呼ぶ。名前の変更と削除は
-// 開いている接続先の場所も変えるので、useConnectionManagement が持つ。
-export function useGroupOperations({ overview, feedback, reload }: GroupOperationsOptions) {
+// 開いている接続先の場所も変えるので、createConnectionManagement が持つ。
+export function createGroupOperations({ overview, feedback, reload }: GroupOperationsOptions) {
   const { setPreview, setProblem } = feedback;
 
   // 作成と設定の保存は、読み込んだときのグループの設定を base に送る。ほかで変わっていればサーバーが断る。

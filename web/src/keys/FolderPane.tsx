@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useTranslate } from "../i18n/context";
+import { useTranslate, type Translate } from "../i18n/context";
 import { dropTargetLook } from "../ui/dragAndDropLook";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
@@ -13,7 +13,7 @@ type FolderPaneProps = {
   onDropInto: (target: MoveTarget) => void;
 };
 
-function labelOf(folder: Folder, t: ReturnType<typeof useTranslate>): string {
+function labelOf(folder: Folder, t: Translate): string {
   if (folder.kind === "all") return t("keys.folderAll");
   if (folder.kind === "ungrouped") return t("keys.folderUngrouped");
   if (folder.kind === "trash") return t("keys.folderTrash");

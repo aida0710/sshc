@@ -12,7 +12,7 @@ export const forwardHintKeys = {
   dynamic: "conn.forwardDynamicHint",
 } as const;
 
-export const forwardKeywords = {
+const forwardKeywords = {
   local: "LocalForward",
   remote: "RemoteForward",
   dynamic: "DynamicForward",

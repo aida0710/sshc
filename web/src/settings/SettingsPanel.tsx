@@ -17,7 +17,7 @@ import { PageBoard } from "../ui/PageBoard";
 
 // Settings also change the master password, which belongs to the vault.
 export type SettingsPanelApi = SettingsApi & Pick<VaultApi, "passwordVault" | "changeMasterPassword">;
-export const settingsPanelApi: SettingsPanelApi = { ...settingsApi, ...vaultApi };
+const settingsPanelApi: SettingsPanelApi = { ...settingsApi, ...vaultApi };
 
 const mobileTouchTargets =
   "[&_button]:min-h-10 [&_a]:inline-flex [&_a]:min-h-10 [&_a]:items-center " +

@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { useTranslate } from "../i18n/context";
+import { useTranslate, type Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
@@ -31,7 +31,7 @@ const labels: Record<DestinationName, { label: MessageKey; reset: MessageKey }> 
   port: { label: "conn.basicPort", reset: "conn.basicUseInheritedPort" },
 };
 
-function sourceTitle(state: BasicFieldState, t: ReturnType<typeof useTranslate>): string {
+function sourceTitle(state: BasicFieldState, t: Translate): string {
   if (state.origin === "default") return t("conn.basicSSHDefault");
   const path = state.source?.path ?? state.source?.absolute ?? "";
   return t("conn.basicInheritedFrom", { path, line: state.source?.line ?? 0 });

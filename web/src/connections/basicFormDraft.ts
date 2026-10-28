@@ -26,7 +26,7 @@ export type DraftField = {
   typed: boolean;
 };
 
-export function initialField(detail: HostDetail, keyword: BasicKeyword): DraftField {
+function initialField(detail: HostDetail, keyword: BasicKeyword): DraftField {
   const state = deriveBasicField(detail, keyword);
   return { state, value: state.value, inherit: false, typed: false };
 }

@@ -6,7 +6,7 @@ import { vaultStatus } from "../testing/vaultStatus";
 import type { InspectorContent } from "../ui/Inspector";
 import { KeysScreen } from "./KeysScreen";
 import type { KeyInventoryResponse, KeysApi } from "./api";
-import type { KeySecretsApi } from "./KeysScreen";
+import type { KeySecretsApi } from "./secretsApi";
 
 function buildSecrets(overrides: Partial<KeySecretsApi> = {}): KeySecretsApi {
   const listed = {

@@ -4,7 +4,7 @@ import { useTranslate } from "../i18n/context";
 
 export type InspectorContent = { label: string; attention: boolean; body: ReactNode } | null;
 
-export const inspectorId = "inspector";
+const inspectorId = "inspector";
 
 export function InspectorToggle({
   label,

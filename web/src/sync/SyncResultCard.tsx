@@ -11,7 +11,7 @@ export type SyncResultView =
   | { kind: "previous"; operation: SyncOperation };
 
 // Sizes here are what S3 stores and bills, so they read in decimal units.
-export function formatBytes(bytes: number, locale: Locale): string {
+export function formatStorageBytes(bytes: number, locale: Locale): string {
   return formatSize(bytes, { decimal: true, locale });
 }
 
@@ -22,11 +22,11 @@ function SummaryLines({ summary }: { summary: SnapshotSummary }) {
       <p className="font-medium text-ink">
         {t("sync.result.filesSource", {
           count: new Intl.NumberFormat(locale).format(summary.fileCount),
-          size: formatBytes(summary.sourceBytes, locale),
+          size: formatStorageBytes(summary.sourceBytes, locale),
         })}
       </p>
       <p className="text-sm text-ink-muted">
-        {t("sync.result.encrypted", { size: formatBytes(summary.snapshotBytes, locale) })}
+        {t("sync.result.encrypted", { size: formatStorageBytes(summary.snapshotBytes, locale) })}
       </p>
     </>
   );
@@ -80,14 +80,14 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
       );
 
   return (
-    <PageSection heading={heading} meta={formatBytes(summary.snapshotBytes, locale)}>
+    <PageSection heading={heading} meta={formatStorageBytes(summary.snapshotBytes, locale)}>
         <div className="flex flex-col gap-1">
         {displayKind === "push" ? (
           <>
             <SummaryLines summary={summary} />
             <p className="text-sm text-ink-muted">
               {t("sync.result.uploaded", {
-                size: formatBytes(uploadedBytes, locale),
+                size: formatStorageBytes(uploadedBytes, locale),
                 count: new Intl.NumberFormat(locale).format(objectCount),
               })}
             </p>
@@ -99,8 +99,8 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
           <>
             <p className="font-medium text-ink">
               {t("sync.result.previewDownload", {
-                downloaded: formatBytes(downloadedBytes, locale),
-                source: formatBytes(summary.sourceBytes, locale),
+                downloaded: formatStorageBytes(downloadedBytes, locale),
+                source: formatStorageBytes(summary.sourceBytes, locale),
               })}
             </p>
             <p className="text-sm text-ink-muted">
@@ -119,7 +119,7 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
               {t("sync.result.changes", { written, removed, conflicts })}
             </p>
             <p className="text-sm text-ink-muted">
-              {t("sync.result.applyDownload", { size: formatBytes(downloadedBytes, locale) })}
+              {t("sync.result.applyDownload", { size: formatStorageBytes(downloadedBytes, locale) })}
             </p>
           </>
         )}
