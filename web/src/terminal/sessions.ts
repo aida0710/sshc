@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { usePolling } from "../ui/usePolling";
 import { useRequestGeneration, type IsCurrentRequest } from "../ui/useRequestGeneration";
 import { ApiError, failureCode } from "../api/client";
-import type { OpenTerminalSessionRequest, TerminalSession, TerminalSessionsApi as SessionsApi } from "../api/terminalSessions";
+import type { OpenTerminalSessionRequest, TerminalSession, TerminalSessionList, TerminalSessionsApi as SessionsApi } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 
@@ -30,6 +30,10 @@ export type TerminalSessionsState = {
   // last as long as the SSH connection to it takes to fail.
   opening: boolean;
   loaded: boolean;
+  // restoreOffer names the engine's offer to reopen the sessions from before
+  // it last stopped, while that waits for an answer. A new name means a new
+  // engine: one that restarted while this screen kept listing it.
+  restoreOffer: string | undefined;
   rename: (id: string, title: string) => Promise<boolean>;
   unpinTitle?: (id: string) => Promise<boolean>;
   open: (request: OpenTerminalSessionRequest) => Promise<TerminalSession | null>;
@@ -49,6 +53,7 @@ export function useTerminalSessions(
 ): TerminalSessionsState {
   const [sessions, setSessions] = useState<TerminalSession[]>([]);
   const [maxSessions, setMaxSessions] = useState(0);
+  const [restoreOffer, setRestoreOffer] = useState<string | undefined>(undefined);
   const [pendingOperations, setPendingOperations] = useState(0);
   const [pendingOpens, setPendingOpens] = useState(0);
   const [problem, setProblem] = useState("");
@@ -79,7 +84,7 @@ export function useTerminalSessions(
   }, [mutationGeneration, refreshGeneration]);
 
   const adoptMutationListing = useCallback((
-    listed: { sessions: TerminalSession[]; maxSessions: number },
+    listed: TerminalSessionList,
     isCurrent: IsCurrentRequest,
   ): boolean => {
     if (!isCurrent()) return false;
@@ -89,6 +94,7 @@ export function useTerminalSessions(
     refreshGeneration.retire();
     setSessions(listed.sessions);
     setMaxSessions(listed.maxSessions);
+    setRestoreOffer(listed.restoreOffer);
     return true;
   }, [refreshGeneration]);
 
@@ -100,6 +106,7 @@ export function useTerminalSessions(
       if (!isCurrent()) return;
       setSessions(listed.sessions);
       setMaxSessions(listed.maxSessions);
+      setRestoreOffer(listed.restoreOffer);
       setListFailure(null);
     } catch (error) {
       // A run-target engine that cannot be reached would otherwise look like
@@ -117,7 +124,7 @@ export function useTerminalSessions(
   // change. A response that lost the race to a newer mutation is discarded in
   // favour of a fresh list. Callers only say what to show when it fails.
   const applyMutation = useCallback(async (
-    request: () => Promise<{ sessions: TerminalSession[]; maxSessions: number }>,
+    request: () => Promise<TerminalSessionList>,
     reportFailure: (error: unknown) => Promise<void> | void,
   ): Promise<boolean> => {
     beginOperation();
@@ -148,6 +155,7 @@ export function useTerminalSessions(
     mutationGeneration.retire();
     setSessions([]);
     setMaxSessions(0);
+    setRestoreOffer(undefined);
     setProblem("");
     setListFailure(null);
     // An open still waiting belongs to the previous engine; the new one is not
@@ -299,7 +307,7 @@ export function useTerminalSessions(
   }, [beginMutation]);
 
   return {
-    sessions, maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded,
+    sessions, maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded, restoreOffer,
     rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited, moveToWorkspace,
   };
 }

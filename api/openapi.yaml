@@ -4844,6 +4844,11 @@ components:
       properties:
         sessions: { type: array, items: { $ref: "#/components/schemas/TerminalSession" } }
         maxSessions: { type: integer, minimum: 0, maximum: 200 }
+        # Names the offer to reopen the sessions from before the engine last
+        # stopped, while it waits for an answer (GET /terminal/restore). Each
+        # engine start names a new one, so a screen that kept listing across a
+        # quick restart still sees that there is something to ask.
+        restoreOffer: { type: string, minLength: 1, maxLength: 64 }
     TerminalRestoreOffer:
       type: object
       additionalProperties: false

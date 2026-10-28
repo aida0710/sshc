@@ -89,6 +89,33 @@ func TestDecliningARestoreOpensNothingAndEndsTheOffer(t *testing.T) {
 	}
 }
 
+func TestTheSessionListNamesTheOfferUntilItIsAnswered(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 3, Scrollback: 1 << 12},
+		terminalrestore.Session{Kind: terminal.KindShell, Workspace: "default"},
+	)
+	listedOffer := func() *string {
+		t.Helper()
+		response, body := fixture.do(t, http.MethodGet, "/api/v1/terminal/sessions", "")
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("list = %d: %s", response.StatusCode, body)
+		}
+		var list api.TerminalSessionList
+		if err := json.Unmarshal([]byte(body), &list); err != nil {
+			t.Fatal(err)
+		}
+		return list.RestoreOffer
+	}
+	if offer := listedOffer(); offer == nil || *offer == "" {
+		t.Fatal("the list does not name the waiting offer")
+	}
+	if response, body := fixture.do(t, http.MethodDelete, "/api/v1/terminal/restore", ""); response.StatusCode != http.StatusNoContent {
+		t.Fatalf("decline = %d: %s", response.StatusCode, body)
+	}
+	if offer := listedOffer(); offer != nil {
+		t.Fatalf("the list names the answered offer %q", *offer)
+	}
+}
+
 func TestTheSessionListTellsWhereEachSessionWorks(t *testing.T) {
 	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 2, Scrollback: 1 << 12})
 	directory := t.TempDir()

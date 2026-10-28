@@ -321,3 +321,35 @@ test("says the host is being reached while a session opens, and why it could not
   await expect(page.getByRole("region", { name: japanese ? "bastion に接続できませんでした" : "Could not connect to bastion", exact: true })).toBeVisible();
   await expect(connecting).toBeHidden();
 });
+
+test("asks to reopen the sessions of a run target that restarted between two lists", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion });
+  // bastion's sshc restarts so quickly that this machine's engine reaches the
+  // new one on its own: no list fails, the next one is empty and names an offer.
+  let restarted = false;
+  const before = { id: "bastion-shell", kind: "shell", workspaceId: "default", title: "build", startedAt: "2026-10-28T00:00:00Z", state: "connected", problem: "", forwards: [] };
+  await page.route(`**${sessionsPath}`, async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: restarted ? { sessions: [], maxSessions: 50, restoreOffer: "after-restart" } : { sessions: [before], maxSessions: 50 } });
+  });
+  await page.route(`**${sessionsPath}/**`, async (route) => {
+    await route.fulfill({ status: 404, contentType: "application/problem+json", json: { code: "terminal_session_not_found", message: "request rejected" } });
+  });
+  await page.route("**/api/v1/engines/bastion/terminal/restore", async (route) => {
+    const offered = restarted ? [{ kind: "shell", workspaceId: "default", pinnedTitle: "build" }] : [];
+    await route.fulfill({ json: { sessions: offered } });
+  });
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  await chooseBastion(page);
+  const question = page.getByRole("dialog", { name: "Reopen your last sessions?", exact: true });
+  await expect(page.getByRole("list", { name: "Workspaces", exact: true }).getByText("build").first()).toBeVisible();
+  await expect(question).toHaveCount(0);
+
+  restarted = true;
+  await expect(question).toBeVisible();
+  await expect(question.getByText(/open on bastion before its sshc stopped/)).toBeVisible();
+});
