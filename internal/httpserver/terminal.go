@@ -13,6 +13,7 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/platform"
 	"sshc/internal/snippets"
+	"sshc/internal/sshclient"
 	"sshc/internal/terminal"
 	"sshc/internal/terminalopen"
 	"sshc/internal/terminalrestore"
@@ -75,11 +76,15 @@ type TerminalHandlers struct {
 	// コマンドは変数（シークレットを含む）を展開したもので、認証とリモートシェルの
 	// 起動が済んでから送る。送らない理由の案内も、同じ時点でターミナルへ書く。
 	Startup func(alias string) terminalopen.StartupSnippet
+	// ResolveTarget は、alias をこのエンジンの SSH の設定で解決する。繋ぎには行かない。
+	// nil なら行き先の受け口は alias_unresolvable で断る。
+	ResolveTarget func(alias string) (sshclient.Target, error)
 }
 
 func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	engine.GET("/api/v1/terminal/sessions", handlers.List)
 	engine.GET("/api/v1/terminal/shell-profiles", handlers.ListShellProfiles)
+	engine.GET("/api/v1/terminal/destinations/:connectionAlias", handlers.Destination)
 	engine.POST("/api/v1/terminal/sessions", handlers.Open)
 	if handlers.Snippets != nil && handlers.Actions.Sessions != nil {
 		engine.POST("/api/v1/terminal/commands/preview", handlers.PreviewCommand)

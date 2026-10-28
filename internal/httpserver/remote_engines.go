@@ -54,6 +54,7 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.GET("/api/v1/engines/:alias/terminal/sessions", handlers.ForwardTerminal)
 	engine.POST("/api/v1/engines/:alias/terminal/sessions", handlers.ForwardTerminal)
 	engine.GET("/api/v1/engines/:alias/terminal/shell-profiles", handlers.ForwardTerminal)
+	engine.GET("/api/v1/engines/:alias/terminal/destinations/:connectionAlias", handlers.ForwardTerminal)
 	engine.GET("/api/v1/engines/:alias/terminal/restore", handlers.ForwardTerminal)
 	engine.POST("/api/v1/engines/:alias/terminal/restore", handlers.ForwardTerminal)
 	engine.DELETE("/api/v1/engines/:alias/terminal/restore", handlers.ForwardTerminal)

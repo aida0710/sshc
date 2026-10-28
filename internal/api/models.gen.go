@@ -2175,6 +2175,14 @@ type TerminalControlResponse struct {
 // TerminalControlResponseState defines model for TerminalControlResponse.State.
 type TerminalControlResponseState string
 
+// TerminalDestination defines model for TerminalDestination.
+type TerminalDestination struct {
+	Alias    string `json:"alias"`
+	HostName string `json:"hostName"`
+	Port     string `json:"port"`
+	User     string `json:"user"`
+}
+
 // TerminalDeterminateProgress defines model for TerminalDeterminateProgress.
 type TerminalDeterminateProgress struct {
 	Percent int                              `json:"percent"`

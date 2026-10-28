@@ -36,6 +36,7 @@ import (
 	"sshc/internal/session"
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/snippets"
+	"sshc/internal/sshclient"
 	"sshc/internal/terminal"
 	"sshc/internal/terminalopen"
 	"sshc/internal/terminalrestore"
@@ -86,6 +87,8 @@ type Options struct {
 	Keys        KeyService
 	// Connect は、alias ひとつ分の対話セッションを開く。合成の根が組み立てる。
 	Connect terminalopen.Connector
+	// ResolveTarget は、alias をこのエンジンの SSH の設定で解決する。繋ぎには行かない。
+	ResolveTarget func(alias string) (sshclient.Target, error)
 	// RemoteEngines は、SSH の接続先のエンジンへの中継と、実行先としての取り次ぎを持つ。
 	// nil なら `sshc open <alias>` と実行先の受け口を登録しない。
 	RemoteEngines RemoteEngineDirectory
@@ -576,6 +579,7 @@ func newTerminalHandlers(options Options, actions ActionHandlers, host string) T
 		Snippets:            options.Snippets,
 		Actions:             actions,
 		Connect:             options.Connect,
+		ResolveTarget:       options.ResolveTarget,
 		Shell:               options.LoginShell,
 		ShellProfiles:       options.LocalShellProfiles,
 		DefaultShellProfile: options.TerminalLocalShellProfile,
