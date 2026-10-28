@@ -153,6 +153,7 @@ func TestTerminalDisplayAndSecurityChoicesRoundTrip(t *testing.T) {
 	webgl := false
 	want := TerminalSettings{
 		BrowserScrollbackLines: 12000,
+		RetainedTerminals:      20,
 		WebGL:                  &webgl,
 		OSC52:                  true,
 		JISYenBackslash:        true,
@@ -163,7 +164,7 @@ func TestTerminalDisplayAndSecurityChoicesRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := service.TerminalSettings()
-	if got.BrowserScrollbackLines != want.BrowserScrollbackLines || got.WebGL == nil || *got.WebGL || got.OSC52 != want.OSC52 ||
+	if got.BrowserScrollbackLines != want.BrowserScrollbackLines || got.RetainedTerminals != want.RetainedTerminals || got.WebGL == nil || *got.WebGL || got.OSC52 != want.OSC52 ||
 		got.JISYenBackslash != want.JISYenBackslash || got.ComposerEnterSends != want.ComposerEnterSends || got.LocalShellProfile != want.LocalShellProfile {
 		t.Fatalf("settings = %#v, want %#v", got, want)
 	}
@@ -179,6 +180,8 @@ func TestTheLimitsAreRefusedOutsideTheirRange(t *testing.T) {
 		"scrollback too large":    {ScrollbackBytes: 99 << 20},
 		"browser lines too small": {BrowserScrollbackLines: 999},
 		"browser lines too large": {BrowserScrollbackLines: 100001},
+		"no terminal kept":        {RetainedTerminals: -1},
+		"too many terminals kept": {RetainedTerminals: 100},
 		"invalid shell profile":   {LocalShellProfile: "../../bin/sh"},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -12,6 +12,7 @@ export type TerminalDraft = {
   maxSessions: string;
   scrollback: string;
   browserScrollbackLines: string;
+  retainedTerminals: string;
   fontSize: string;
   verbosity: string;
   reconnect: string;
@@ -28,7 +29,7 @@ export type TerminalDraft = {
 };
 
 export const initialTerminalDraft: TerminalDraft = {
-  startDirectory: "", localShellProfile: "", maxSessions: "", scrollback: "", browserScrollbackLines: "", fontSize: "",
+  startDirectory: "", localShellProfile: "", maxSessions: "", scrollback: "", browserScrollbackLines: "", retainedTerminals: "", fontSize: "",
   verbosity: "0", reconnect: "", palette: "", font: "", background: "", tint: undefined,
   copyOnSelect: true, rightClickPaste: true, webgl: true, osc52: false, jisYenBackslash: false, composerEnterSends: false,
 };
@@ -41,6 +42,7 @@ export function draftOf(settings: TerminalSettings): TerminalDraft {
     maxSessions: text(settings.maxSessions),
     scrollback: text(settings.scrollbackBytes),
     browserScrollbackLines: text(settings.browserScrollbackLines),
+    retainedTerminals: text(settings.retainedTerminals),
     fontSize: text(settings.fontSize),
     verbosity: String(settings.verbosity ?? 0),
     reconnect: text(settings.reconnect),
@@ -77,14 +79,16 @@ export function settingsOf(draft: TerminalDraft): TerminalSettings | null {
   const sessions = numberOr(draft.maxSessions);
   const bytes = numberOr(draft.scrollback);
   const lines = numberOr(draft.browserScrollbackLines);
+  const retained = numberOr(draft.retainedTerminals);
   const size = numberOr(draft.fontSize);
-  if (Number.isNaN(sessions) || Number.isNaN(bytes) || Number.isNaN(lines) || Number.isNaN(size)) return null;
+  if ([sessions, bytes, lines, retained, size].some(Number.isNaN)) return null;
   const directory = draft.startDirectory.trim();
   return {
     ...(directory === "" ? {} : { startDirectory: directory }),
     ...(sessions === undefined ? {} : { maxSessions: sessions }),
     ...(bytes === undefined ? {} : { scrollbackBytes: bytes }),
     ...(lines === undefined ? {} : { browserScrollbackLines: lines }),
+    ...(retained === undefined ? {} : { retainedTerminals: retained }),
     ...(size === undefined ? {} : { fontSize: size }),
     ...(draft.verbosity === "0" ? {} : { verbosity: Number(draft.verbosity) }),
     ...(draft.reconnect === "" ? {} : { reconnect: Number(draft.reconnect) }),

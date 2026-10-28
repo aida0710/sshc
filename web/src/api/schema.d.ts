@@ -4360,6 +4360,7 @@ export interface components {
             maxSessions?: number;
             scrollbackBytes?: number;
             browserScrollbackLines?: number;
+            retainedTerminals?: number;
             fontSize?: number;
             verbosity?: number;
             reconnect?: number;
@@ -4378,6 +4379,7 @@ export interface components {
             maxSessions?: number;
             scrollbackBytes?: number;
             browserScrollbackLines?: number;
+            retainedTerminals?: number;
             fontSize?: number;
             verbosity?: number;
             reconnect?: number;
