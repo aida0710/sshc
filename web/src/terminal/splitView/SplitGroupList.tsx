@@ -1,7 +1,10 @@
+import type { DragEvent } from "react";
 import type { TerminalSession } from "../../api/terminalSessions";
 import { useTranslate } from "../../i18n/context";
 import { ActionMenu } from "../../ui/ActionMenu";
+import { draggableCursor } from "../../ui/dragAndDropLook";
 import { SessionDestinationLine } from "../SessionDestinationLine";
+import { sessionDragMimeType } from "../sessionDrag";
 import { sessionMarkerClass } from "../sessionStatus";
 import type { UnreadSessions } from "../terminalNotifications";
 import { terminalDisplayTitle } from "../terminalPresentation";
@@ -79,10 +82,15 @@ function SplitGroupRow({ group, members, selected, unreadBySession, onSelect, on
           const title = terminalDisplayTitle(session);
           const active = session.id === activeSessionId;
           return (
-            <li key={session.id}>
+            // A row drags like the session's row in the workspaces below: onto a pane's edge to put it there.
+            <li key={session.id} draggable className={draggableCursor}
+              onDragStart={(event: DragEvent) => {
+                event.dataTransfer.setData(sessionDragMimeType, session.id);
+                event.dataTransfer.effectAllowed = "move";
+              }}>
               {/* The dot sits where the dots of the workspace rows below sit. */}
               <button type="button" aria-label={t("splitView.groupSession", { name, title })} aria-describedby={`split-member-${session.id}`} aria-current={active ? "true" : undefined} onClick={() => onSelectSession(session.id)}
-                className={`flex min-h-10 w-full min-w-0 items-start gap-2.5 rounded-[7px] py-1 pl-4 pr-2 text-left hover:bg-hover md:min-h-0 md:py-[3px] ${active ? "ring-1 ring-inset ring-accent/45" : ""}`}>
+                className={`flex min-h-10 w-full min-w-0 items-start gap-2.5 rounded-[7px] py-1 pl-4 pr-2 text-left hover:bg-hover md:min-h-0 md:py-[3px] ${draggableCursor} ${active ? "ring-1 ring-inset ring-accent/45" : ""}`}>
                 <span aria-hidden="true" className={`mt-[5px] size-2 shrink-0 rounded-full ${sessionMarkerClass(session, unreadBySession.has(session.id))}`} />
                 {/* As in the workspace rows, the name gets the whole line and the destination is under it. */}
                 <span className="min-w-0 flex-1">
