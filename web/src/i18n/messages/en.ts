@@ -1,4 +1,5 @@
 export const en = {
+  "ui.moreDetails": "More details",
   "shortcuts.heading": "Keyboard shortcuts",
   "shortcuts.description": "The preset you use is chosen for each browser.",
   "shortcuts.confirmDelete": "Delete this preset on all synced devices?",
@@ -1125,8 +1126,7 @@ export const en = {
   "terminal.reconnectFive": "5 times (waits up to 40 s)",
   "engine.heading": "Engine",
   "engine.portLabel": "Port",
-  "engine.portHint":
-    "Leave this empty to use a device-local stable port (initially 54447). A stable port keeps bookmarks and the installed web app working. Applies the next time the engine starts.",
+  "engine.portHint": "Leave it empty to use this machine's fixed port (initially 54447). It applies from the next engine start.",
   "engine.portOutOfRange": "The port must be between 1024 and 65535.",
   "engine.loadFailed": "Engine settings could not be loaded. They cannot be saved until they load.",
   "engine.loading": "Loading engine settings…",
@@ -1310,7 +1310,7 @@ export const en = {
   "about.viewRelease": "View on GitHub",
   "section.license": "License",
   "menu.others": "Others",
-  "menu.signOutHint": "Removes this browser's session and registration. To open sshc again, run sshc (or sshc open) in a terminal and open the URL it prints.",
+  "menu.signOutHint": "Removes this browser's session and registration. Open sshc again from the URL sshc open prints.",
   "menu.signOutRowHint": "Open it again from the URL sshc open prints",
   "menu.signOut": "Sign out of this browser",
   "menu.signOutConfirmHeading": "Sign out of this browser?",
@@ -1470,8 +1470,8 @@ export const en = {
   "desktop.openCount": "{count} open",
   "desktop.closeAll": "Close every connection",
   "secrets.changeHeading": "Master password",
-  "secrets.changeNote":
-    "Choose password protection or automatic opening on this device. The change also updates protection for snippets, sync settings, and local backups. Sync uses an independent key.",
+  "secrets.changeNote": "Choose password protection, or opening automatically when sshc starts.",
+  "secrets.changeNoteMore": "The change also applies to the protection of snippets, sync settings and local backups. Sync uses a key of its own.",
   "secrets.currentMaster": "Current master password",
   "secrets.newMaster": "New master password",
   "secrets.confirmMaster": "Confirm new master password",
@@ -1840,8 +1840,8 @@ export const en = {
   "history.completed": "Completed changes",
   "history.empty": "No change has been made through this application yet.",
   "history.restorePath": "Restore {path}",
-  "history.backupRetention":
-    "Previous versions of changed files are kept in ~/.ssh/sshc/backups for the newest 200 changes, as long as they are no older than 90 days; older ones are deleted automatically. A restore is itself a new transaction, so it can be undone the same way.",
+  "history.backupRetention": "Previous versions of changed files are kept in ~/.ssh/sshc/backups.",
+  "history.backupRetentionMore": "The newest 200 changes no older than 90 days are kept; older ones are deleted automatically. A restore is itself a new change, so it can be undone the same way.",
 
   "notice.complex_external_rule":
     "This value cannot be edited in the simplified view because its source uses a wildcard, negation, Match block, or duplicate alias. The source is shown instead.",
@@ -1931,8 +1931,8 @@ export const en = {
   "preview.unset": "unset",
 
   "reveal.heading": "Show private key: {path}",
-  "reveal.warning":
-    "The private key will appear on this page. Anyone who can view the screen can copy it. sshc cannot protect the key from browser extensions or clipboard-history tools. Each reveal is recorded in History, but the key itself is not.",
+  "reveal.warning": "The private key is shown on this page. Anyone who can see the screen, and browser extensions or clipboard history tools, can copy it.",
+  "reveal.warningMore": "Showing the key is recorded in the history (the key itself is not).",
   "reveal.show": "Show private key",
   "reveal.requesting": "Requesting a one-time confirmation…",
   "reveal.privateKeyLabel": "Private key",
@@ -2407,7 +2407,7 @@ export const en = {
   "kh.scan": "Scan",
   "kh.scanCandidates": "Scan candidates",
   "kh.unverified": "unverified",
-  "kh.unverifiedNotice": "An answer at this address proves only that something answered there. It does not prove the host's identity. Compare the fingerprint with one you obtained another way before trusting it.",
+  "kh.unverifiedNotice": "An answer does not prove who the host is. Compare the fingerprint with one you got another way.",
   "kh.add": "Add",
   "kh.addHeading": "Add an unverified host key",
   "kh.addExplain":

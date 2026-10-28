@@ -46,7 +46,7 @@ func TestThePagesAndTheHistoryScreenStateTheRetentionTheStorageApplies(t *testin
 				stated: []string{language.records, language.period, language.backupFiles},
 			},
 			{
-				name: "the History screen", text: messageFor(t, messages, "history.backupRetention"),
+				name: "the History screen", text: messageFor(t, messages, "history.backupRetentionMore"),
 				stated: []string{language.records, language.period},
 			},
 		} {

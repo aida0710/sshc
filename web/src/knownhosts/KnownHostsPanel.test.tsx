@@ -147,7 +147,7 @@ describe("KnownHostsPanel", () => {
     await userEvent.type(await screen.findByLabelText("Host to scan"), "new.example.com");
     await userEvent.click(screen.getByRole("button", { name: "Scan" }));
 
-    expect(await screen.findByText(/does not prove the host's identity/)).toBeInTheDocument();
+    expect(await screen.findByText(/does not prove who the host is/)).toBeInTheDocument();
     const candidate = await screen.findByRole("row", { name: /new\.example\.com/ });
     expect(within(candidate).getByText("unverified")).toBeInTheDocument();
     expect(within(candidate).queryByText("verified")).not.toBeInTheDocument();
