@@ -33,7 +33,7 @@ func TestLocalWorkingDirectoryRefusesMissingFilesAndAmbiguousPaths(t *testing.T)
 	candidates := []string{
 		"", "relative", "~", file, filepath.Join(directory, "missing"),
 		directory + "/\x00", directory + "/../" + filepath.Base(directory),
-		strings.Repeat("/", localWorkingDirectoryLimit+1),
+		strings.Repeat("/", MaxWorkingDirectoryBytes+1),
 	}
 	if runtime.GOOS == "windows" {
 		candidates = append(candidates, "/srv/remote", "C:relative")

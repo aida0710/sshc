@@ -17,7 +17,9 @@ func TestOSC7DirectoryIsTheDecodedPathOfAFileURL(t *testing.T) {
 		"file://edge/home?query":       "",
 		"file://edge/home#fragment":    "",
 		"file://edge/home/a%0Ab":       "",
-		"file://edge/" + strings.Repeat("a", maxWorkingDirectoryBytes): "",
+		"file://edge//attacker/share":  "",
+		"file://edge/home/a%09b":       "",
+		"file://edge/" + strings.Repeat("a", MaxWorkingDirectoryBytes): "",
 		"not a url %": "",
 	}
 	for payload, want := range cases {
@@ -91,5 +93,20 @@ func TestALocalShellOffersOnlyDirectoriesThisMachineCanStartIn(t *testing.T) {
 	session.acceptWorkingDirectory(1, absolute)
 	if got := session.WorkingDirectory(); got != strings.TrimPrefix(absolute, "/") && got != absolute {
 		t.Fatalf("WorkingDirectory() = %q for the report %q", got, absolute)
+	}
+}
+
+func TestANetworkPathAShellReportsIsNeverRecorded(t *testing.T) {
+	// On Windows these name a share on another machine, and checking that the
+	// directory exists would connect to it with the user's credentials.
+	for _, title := range []string{`aida@edge: //attacker/share`, `aida@edge: //?/C:/Users`} {
+		if directory, ok := workingDirectoryFromTitle(title); ok {
+			t.Errorf("workingDirectoryFromTitle(%q) = %q", title, directory)
+		}
+	}
+	for _, directory := range []string{"//attacker/share", `\\attacker\share`} {
+		if _, ok := checkedWorkingDirectory(directory); ok {
+			t.Errorf("checkedWorkingDirectory(%q) accepted it", directory)
+		}
 	}
 }

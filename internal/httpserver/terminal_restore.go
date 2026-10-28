@@ -85,7 +85,7 @@ func (h TerminalHandlers) reopen(ctx context.Context, saved terminalrestore.Sess
 		request.Cwd = &saved.WorkingDirectory
 	}
 	spec, err := h.spec(request, terminal.Size{})
-	if errors.Is(err, errInvalidRemoteWorkingDirectory) || errors.Is(err, terminal.ErrInvalidLocalWorkingDirectory) {
+	if errors.Is(err, terminal.ErrInvalidRemoteWorkingDirectory) || errors.Is(err, terminal.ErrInvalidLocalWorkingDirectory) {
 		request.Cwd = nil
 		spec, err = h.spec(request, terminal.Size{})
 	}

@@ -14,8 +14,27 @@ import (
 // and many prompt themes. Bash on Debian and Ubuntu sends none, but its
 // default title is `user@host: dir`, so that title is read as well.
 
-// maxWorkingDirectoryBytes matches the bound the terminal API puts on cwd.
-const maxWorkingDirectoryBytes = 4096
+// MaxWorkingDirectoryBytes matches the bound the terminal API puts on cwd.
+const MaxWorkingDirectoryBytes = 4096
+
+// isDirectoryText reports whether a directory, reported by a shell or sent to
+// the API, is text every check below may look at further: not empty, within
+// MaxWorkingDirectoryBytes, without control characters, and not a network or
+// device path. A `//host/share` or `\\host\share` value is a UNC path on Windows,
+// and merely checking that it exists connects to that host over SMB and offers
+// the user's Windows credentials to it. A shell's output decides the value, so
+// it is refused before anything opens it.
+func isDirectoryText(directory string) bool {
+	if directory == "" || len(directory) > MaxWorkingDirectoryBytes {
+		return false
+	}
+	if strings.HasPrefix(directory, "//") || strings.HasPrefix(directory, `\\`) {
+		return false
+	}
+	return strings.IndexFunc(directory, isControlCharacter) < 0
+}
+
+func isControlCharacter(r rune) bool { return r < 0x20 || r == 0x7f }
 
 // parseOSC7Directory reads the path of `OSC 7 ; file://host/path`. The host is
 // not checked: over SSH it names the remote machine.
@@ -49,7 +68,7 @@ func workingDirectoryFromTitle(title string) (string, bool) {
 }
 
 func checkedWorkingDirectory(directory string) (string, bool) {
-	if directory == "" || len(directory) > maxWorkingDirectoryBytes || strings.ContainsAny(directory, "\x00\r\n") {
+	if !isDirectoryText(directory) {
 		return "", false
 	}
 	if directory[0] != '/' && directory[0] != '~' {
@@ -94,8 +113,20 @@ func localWorkingDirectory(reported string) string {
 	if runtime.GOOS == "windows" && len(reported) >= 3 && reported[0] == '/' && reported[2] == ':' {
 		reported = reported[1:]
 	}
-	if !filepath.IsAbs(filepath.FromSlash(reported)) {
+	local := filepath.FromSlash(reported)
+	if !filepath.IsAbs(local) || !onLocalDrive(local) {
 		return ""
 	}
 	return reported
+}
+
+// onLocalDrive reports whether an absolute path names a drive of this machine.
+// On Windows that is a drive letter; a UNC (`\\host\share`) or device
+// (`\\?\`, `\\.\`) volume reaches beyond it. Other systems have no volumes.
+func onLocalDrive(path string) bool {
+	if runtime.GOOS != "windows" {
+		return true
+	}
+	volume := filepath.VolumeName(path)
+	return len(volume) == 2 && volume[1] == ':'
 }
