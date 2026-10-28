@@ -1277,13 +1277,56 @@ describe("ConnectionsPage", () => {
     }));
     await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "build01"));
     expect(configApi.overview).toHaveBeenCalledTimes(2);
-    expect(screen.queryByRole("dialog", { name: "Create connection" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "New connection" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Basic" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: "build01" })).toBeInTheDocument();
     expect(onNavigateLocation).toHaveBeenLastCalledWith(
       "/connections/servers?path=config&host=build01&panel=basic",
       { replace: true },
     );
+  });
+
+  it("opens a new connection in the right area, not a dialog, and asks before a typed draft is dropped for another connection", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: "Add connection" }));
+    expect(await screen.findByRole("form", { name: "New connection" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Connection name"), "build01");
+    await user.click(screen.getByRole("button", { name: /^bastion/ }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Discard changes" });
+    expect(dialog).toHaveTextContent("Discard the new connection you are filling in?");
+    await user.click(within(dialog).getByRole("button", { name: "Discard changes" }));
+    await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "bastion"));
+    expect(screen.queryByRole("form", { name: "New connection" })).not.toBeInTheDocument();
+  });
+
+  it("closes an untouched new connection without asking when another connection is opened", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: "Add connection" }));
+    await screen.findByRole("form", { name: "New connection" });
+    await user.click(screen.getByRole("button", { name: /^bastion/ }));
+
+    await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "bastion"));
+    expect(screen.queryByRole("dialog", { name: "Discard changes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "New connection" })).not.toBeInTheDocument();
+  });
+
+  it("goes back to the empty right area when a new connection is cancelled", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: "Add connection" }));
+    const form = await screen.findByRole("form", { name: "New connection" });
+    await user.type(within(form).getByLabelText("Connection name"), "build01");
+    await user.click(within(form).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("form", { name: "New connection" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Choose a connection" })).toBeInTheDocument();
   });
 
   it("replaces the URL after renaming the selected connection", async () => {
