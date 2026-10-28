@@ -255,27 +255,26 @@ func (m *TransferManager) BeginDownload(id string, total int64, revision string,
 	if job.Direction != TransferDownload || job.Status != TransferRunning {
 		return TransferJob{}, ErrTransferState
 	}
-	original := cloneTransferJobRecord(record)
-	changed := record.revision != revision || (total >= 0 && job.TotalBytes != total)
-	if changed {
-		record.revision, record.sentBytes = revision, 0
-		job.DownloadRevision = revision
-		job.TransferredBytes = 0
-		job.TotalBytes = total
-		job.BytesPerSecond, job.RemainingSeconds = 0, -1
-		record.sampleAt, record.sampleBytes = m.now().UTC(), 0
-	}
-	job.DownloadRevision = record.revision
-	if offset != job.TransferredBytes || offset > record.sentBytes {
-		// A refused request leaves the ledger as it found it, like the other
-		// download entry points. Otherwise the reset above would persist with the
-		// next write and discard a checkpoint the browser still holds.
-		*record = original
-		return TransferJob{}, ErrOffsetMismatch
-	}
-	job.UpdatedAt = m.now().UTC()
-	if err := m.persistJobsLocked(true); err != nil {
-		*record = original
+	err := m.rewriteJobLocked(record, true, func(now time.Time) error {
+		changed := record.revision != revision || (total >= 0 && job.TotalBytes != total)
+		if changed {
+			record.revision, record.sentBytes = revision, 0
+			job.DownloadRevision = revision
+			job.TransferredBytes = 0
+			job.TotalBytes = total
+			job.BytesPerSecond, job.RemainingSeconds = 0, -1
+			record.sampleAt, record.sampleBytes = now, 0
+		}
+		job.DownloadRevision = record.revision
+		if offset != job.TransferredBytes || offset > record.sentBytes {
+			// A refused request leaves the ledger as it found it, like the other
+			// download entry points. Otherwise the reset above would persist with the
+			// next write and discard a checkpoint the browser still holds.
+			return ErrOffsetMismatch
+		}
+		return nil
+	})
+	if err != nil {
 		return TransferJob{}, err
 	}
 	return cloneTransferJob(*job), nil
@@ -299,19 +298,17 @@ func (m *TransferManager) RecordDownloadSent(id string, sent, total int64, revis
 	if job.Direction != TransferDownload || job.Status != TransferRunning || record.revision != revision {
 		return TransferJob{}, ErrTransferState
 	}
-	original := cloneTransferJobRecord(record)
-	if total >= 0 {
-		if sent > total {
-			return TransferJob{}, ErrOffsetMismatch
+	if total >= 0 && sent > total {
+		return TransferJob{}, ErrOffsetMismatch
+	}
+	err := m.rewriteJobLocked(record, false, func(time.Time) error {
+		if total >= 0 {
+			job.TotalBytes = total
 		}
-		job.TotalBytes = total
-	}
-	if sent > record.sentBytes {
-		record.sentBytes = sent
-	}
-	job.UpdatedAt = m.now().UTC()
-	if err := m.persistJobsLocked(false); err != nil {
-		*record = original
+		record.sentBytes = max(record.sentBytes, sent)
+		return nil
+	})
+	if err != nil {
 		return TransferJob{}, err
 	}
 	return cloneTransferJob(*job), nil
@@ -338,10 +335,7 @@ func (m *TransferManager) VerifyDownloadComplete(id string, total int64, revisio
 	if job.TotalBytes != total || record.sentBytes != total {
 		return TransferJob{}, ErrOffsetMismatch
 	}
-	original := cloneTransferJobRecord(record)
-	job.UpdatedAt = m.now().UTC()
-	if err := m.persistJobsLocked(true); err != nil {
-		*record = original
+	if err := m.rewriteJobLocked(record, true, func(time.Time) error { return nil }); err != nil {
 		return TransferJob{}, err
 	}
 	return cloneTransferJob(*job), nil
@@ -368,17 +362,16 @@ func (m *TransferManager) AcknowledgeDownload(id string, offset int64, revision 
 	if offset > record.sentBytes || (job.TotalBytes >= 0 && offset > job.TotalBytes) {
 		return TransferJob{}, ErrOffsetMismatch
 	}
-	original := cloneTransferJobRecord(record)
-	now := m.now().UTC()
-	if offset < job.TransferredBytes {
-		job.BytesPerSecond, job.RemainingSeconds = 0, -1
-		record.sampleAt, record.sampleBytes = now, offset
-	}
-	job.TransferredBytes = offset
-	m.updateRateLocked(record, now)
-	job.UpdatedAt = now
-	if err := m.persistJobsLocked(false); err != nil {
-		*record = original
+	err := m.rewriteJobLocked(record, false, func(now time.Time) error {
+		if offset < job.TransferredBytes {
+			job.BytesPerSecond, job.RemainingSeconds = 0, -1
+			record.sampleAt, record.sampleBytes = now, offset
+		}
+		job.TransferredBytes = offset
+		m.updateRateLocked(record, now)
+		return nil
+	})
+	if err != nil {
 		return TransferJob{}, err
 	}
 	return cloneTransferJob(*job), nil

@@ -28,6 +28,24 @@ func cloneTransferJobRecord(record *transferJobRecord) transferJobRecord {
 	return cloned
 }
 
+// rewriteJobLocked は、record を rewrite で書き換え、UpdatedAt をその時刻にして保存する。
+// rewrite が誤りを返すか保存に失敗したら、record を書き換える前に戻す。force は
+// persistJobsLocked へ渡す。m.jobsMutex を握って呼ぶ。
+func (m *TransferManager) rewriteJobLocked(record *transferJobRecord, force bool, rewrite func(now time.Time) error) error {
+	original := cloneTransferJobRecord(record)
+	now := m.now().UTC()
+	if err := rewrite(now); err != nil {
+		*record = original
+		return err
+	}
+	record.job.UpdatedAt = now
+	if err := m.persistJobsLocked(force); err != nil {
+		*record = original
+		return err
+	}
+	return nil
+}
+
 func (m *TransferManager) snapshotTransferQueueLocked() transferQueueSnapshot {
 	snapshot := transferQueueSnapshot{
 		jobs:       make(map[string]*transferJobRecord, len(m.jobs)),
