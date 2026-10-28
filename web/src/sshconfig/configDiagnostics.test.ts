@@ -5,11 +5,11 @@ import { describeConfigDiagnostic, describeConfigDiagnosticGroup, groupConfigDia
 
 function translator(language: "en" | "ja"): Translate {
   const catalogue = language === "ja" ? ja : en;
-  return ((key: MessageKey, values: Record<string, string | number> = {}) => {
+  return (key: MessageKey, values: Record<string, string | number> = {}) => {
     let message: string = catalogue[key];
     for (const [name, value] of Object.entries(values)) message = message.replaceAll(`{${name}}`, String(value));
     return message;
-  }) as Translate;
+  };
 }
 
 const noMatch = { severity: "warning", code: "include_no_match", path: "config", line: 2, detail: "~/.ssh/missing/*.conf" };
