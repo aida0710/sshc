@@ -25,6 +25,13 @@
     @slot;
   }
 }
+/* hover-reveal は、行の「…」などが載せたときだけ出る（revealOnHover）画面：PC の組み方で、マウスなど載せられる
+   入力があるとき。それ以外（スマホの組み方、タッチだけの画面）では「…」がいつも見えるので、その場所を空けておく。 */
+@custom-variant hover-reveal {
+  @media (any-hover: hover) and (min-width: 1024px), (any-hover: hover) and (min-width: 768px) and (not (pointer: coarse)) {
+    @slot;
+  }
+}
 /* [data-theme="light"] は、ダークの画面の中にライトの見本を描くとき（設定のテーマの見本）にも使う。 */
 :root,
 [data-theme="light"] {

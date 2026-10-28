@@ -122,7 +122,7 @@ export function ConnectionGroupFacets({
             </span>
             <span className="min-w-0 flex-1 truncate">{node.label}</span>
             {tucked ? <span className="shrink-0 text-[11px] text-ink-faint">{t("tree.hiddenMark")}</span> : null}
-            <span className={`shrink-0 font-mono text-[11.5px] font-normal text-ink-faint ${items.length === 0 ? "" : "group-hover/row:invisible group-focus-within/row:invisible"} ${openMenu === menuKey ? "invisible" : ""}`}>
+            <span className={`shrink-0 font-mono text-[11.5px] font-normal text-ink-faint ${items.length === 0 ? "" : "mr-6 hover-reveal:mr-0 hover-reveal:group-hover/row:invisible hover-reveal:group-focus-within/row:invisible"} ${openMenu === menuKey ? "hover-reveal:invisible" : ""}`}>
               {node.descendantCount}
             </span>
           </button>
