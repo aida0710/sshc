@@ -55,11 +55,12 @@ func TestARealLocalShellStartsInTheSelectedFolderWithoutExecutingItsName(t *test
 	output := string(replay.Data)
 	for !strings.Contains(output, "START="+physical) {
 		select {
-		case chunk, open := <-stream.Output():
+		case <-stream.Ready():
+			read, open := stream.Take(1 << 20)
 			if !open {
 				t.Fatalf("shell exited before reporting its directory: %q", output)
 			}
-			output += string(chunk)
+			output += string(read.Data)
 		case <-wait.Done():
 			t.Fatalf("shell did not start in the selected folder: %q", output)
 		}

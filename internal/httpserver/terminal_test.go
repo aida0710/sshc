@@ -1034,6 +1034,89 @@ func TestReattachingReplaysTheScrollbackAndKeepsTheSessionAlive(t *testing.T) {
 	}
 }
 
+// ブラウザが解析し終えたと知らせた量より unacknowledgedOutputLimit 先までしか
+// 送らない。待つあいだに再生バッファから押し出された出力は、知らせを送ってから
+// 飛ばし、つながりは落とさない。落とすと、張り直しを待つあいだの打鍵が届かない。
+func TestTheStreamWaitsForTheBrowserAndSkipsWhatTheBufferLostMeanwhile(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: terminal.MinScrollback})
+	id, ticket := fixture.openShell(t)
+	process := fixture.starter.last()
+	session, _ := fixture.registry.Lookup(id)
+
+	connection, _ := fixture.dial(t, ticket)
+	if connection == nil {
+		t.Fatal("the stream refused a fresh ticket")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	readReplayNotice(t, connection, ctx)
+	acknowledge := func(parsed int) {
+		t.Helper()
+		if err := connection.Write(ctx, websocket.MessageText, fmt.Appendf(nil, `{"ack":%d}`, parsed)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	acknowledge(0)
+
+	// 受け取ってから次を書くので、ここまでは何も飛ばない。
+	piece := strings.Repeat("a", terminal.MinScrollback)
+	for received := 0; received < unacknowledgedOutputLimit; received += len(piece) {
+		process.feed(piece)
+		if got := readBinary(t, connection, ctx, len(piece)); string(got) != piece {
+			t.Fatalf("frame after %d bytes differs from what was written", received)
+		}
+	}
+
+	// 窓が埋まっているので、これは送られずに再生バッファから押し出される。
+	kibibyte := strings.Repeat("z", 1<<10)
+	for written := 0; written <= terminal.MinScrollback; written += len(kibibyte) {
+		process.feed(kibibyte)
+		testwait.Until(t, func() bool { return strings.HasSuffix(string(snapshotOf(session)), kibibyte) })
+	}
+	process.feed("tail")
+	testwait.Until(t, func() bool { return strings.HasSuffix(string(snapshotOf(session)), "tail") })
+	retained := snapshotOf(session)
+	acknowledge(unacknowledgedOutputLimit)
+
+	kind, payload, err := connection.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var skipped struct {
+		Skipped *struct {
+			Start uint64 `json:"start"`
+		} `json:"skipped"`
+	}
+	if kind != websocket.MessageText || json.Unmarshal(payload, &skipped) != nil || skipped.Skipped == nil {
+		t.Fatalf("first frame after the acknowledgement = %v %.80q, want the skip notice", kind, payload)
+	}
+	if got := readBinary(t, connection, ctx, len(retained)); string(got) != string(retained) {
+		t.Fatalf("after the skip received %d bytes ending %q, want the %d retained bytes", len(got), got[max(0, len(got)-8):], len(retained))
+	}
+
+	process.feed("still-live")
+	if got := readBinary(t, connection, ctx, len("still-live")); string(got) != "still-live" {
+		t.Fatalf("after the skip the link carried %q", got)
+	}
+}
+
+// readBinary は、出力のフレームを合わせて size バイトになるまで読む。
+func readBinary(t *testing.T, connection *websocket.Conn, ctx context.Context, size int) []byte {
+	t.Helper()
+	var received []byte
+	for len(received) < size {
+		kind, payload, err := connection.Read(ctx)
+		if err != nil {
+			t.Fatalf("read %d of %d bytes: %v", len(received), size, err)
+		}
+		if kind != websocket.MessageBinary {
+			t.Fatalf("read %d of %d bytes, then a text frame %.80q", len(received), size, payload)
+		}
+		received = append(received, payload...)
+	}
+	return received
+}
+
 // newTicket は、すでに開いているセッションへ繋ぎ直すためのチケットを取る。
 func (f *terminalFixture) newTicket(t *testing.T, id string, cursors ...uint64) string {
 	t.Helper()

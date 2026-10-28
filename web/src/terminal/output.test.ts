@@ -134,6 +134,19 @@ describe("terminal output replay", () => {
     expect(subject.writeText).toHaveBeenCalledWith("new text");
   });
 
+  it("abandons an incomplete escape sequence where output was skipped and treats what follows as live", async () => {
+    const subject = harness();
+    subject.output.write(encoder.encode(`before\u001b]52;c;${btoa("incomplete")}`));
+
+    subject.output.skip();
+    subject.output.write(encoder.encode(`${copyRequest("new text")}after\u001b[c`));
+    await subject.expectLine("beforeafter");
+
+    expect(subject.writeText).toHaveBeenCalledExactlyOnceWith("new text");
+    await vi.waitFor(() => expect(subject.answers).toHaveLength(1));
+    expect(subject.answers[0]?.replaying).toBe(false);
+  });
+
   it("marks the answers to queries in history as replayed and the answers to live queries as new", async () => {
     const subject = harness();
     const history = encoder.encode("history\u001b[c");
@@ -165,5 +178,16 @@ describe("terminal output replay", () => {
     subject.output.write(encoder.encode("plain\u009b31mtext\u009d0;title\u0007"));
 
     await subject.expectLine("plain31mtext0;title");
+  });
+
+  it("says when xterm.js has parsed what was written", async () => {
+    const subject = harness();
+    const parsed = vi.fn();
+
+    subject.output.write(encoder.encode("first"), parsed);
+    subject.output.write(encoder.encode(" second"));
+    await subject.expectLine("first second");
+
+    expect(parsed).toHaveBeenCalledOnce();
   });
 });

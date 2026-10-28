@@ -18,11 +18,15 @@ import (
 //   - バイナリフレーム、PTY の生バイト列。サーバー→クライアントは出力、
 //     クライアント→サーバーは打鍵。base64 を挟まない。
 //   - テキストフレーム、JSON の制御メッセージ。
-type resizeMessage struct {
+//
+// clientMessage は、ブラウザからの制御メッセージである。大きさを変えたか、
+// 出力をどこまで解析し終えたか（outputFlow）のどちらかを持つ。
+type clientMessage struct {
 	Resize *struct {
 		Cols int `json:"cols"`
 		Rows int `json:"rows"`
 	} `json:"resize,omitempty"`
+	Ack *uint64 `json:"ack,omitempty"`
 }
 
 type exitMessage struct {
@@ -41,6 +45,15 @@ type replayMessage struct {
 		End       uint64 `json:"end"`
 		Truncated bool   `json:"truncated"`
 	} `json:"replay"`
+}
+
+// skippedMessage は、ブラウザが遅れているうちに再生バッファから押し出された出力を
+// 飛ばしたことを伝える。次のバイナリフレームは start から始まる。ブラウザは
+// cursor を start へ進め、途中で切れたエスケープシーケンスの解析を捨てる。
+type skippedMessage struct {
+	Skipped struct {
+		Start uint64 `json:"start"`
+	} `json:"skipped"`
 }
 
 // shellReplacedMessage は、表示していたシェルが再接続で新しいシェルに替わったことを
@@ -119,6 +132,7 @@ func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Con
 	}
 	defer session.Detach(stream)
 
+	flow := newOutputFlow()
 	writerDone := make(chan struct{})
 	go func() {
 		defer close(writerDone)
@@ -135,15 +149,13 @@ func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Con
 			return
 		}
 		// 再アタッチ時は、指定 cursor 以後だけを送り、その後ライブ出力へ継ぐ。
-		if len(replay.Data) > 0 && !writeFrame(ctx, connection, websocket.MessageBinary, replay.Data) {
-			return
+		if len(replay.Data) > 0 {
+			if !writeFrame(ctx, connection, websocket.MessageBinary, replay.Data) {
+				return
+			}
+			flow.wrote(len(replay.Data))
 		}
-		if !forwardOutput(ctx, connection, stream) {
-			return
-		}
-		// チャンネルが閉じたのが「落とされた」ためなら、終了は起きていない。
-		if stream.Dropped() {
-			_ = connection.Close(websocket.StatusPolicyViolation, "the client fell behind")
+		if !forwardOutput(ctx, connection, stream, flow) {
 			return
 		}
 		if info := session.Exit(); info != nil {
@@ -170,8 +182,14 @@ func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Con
 				stop()
 			}
 		case websocket.MessageText:
-			var message resizeMessage
-			if err := json.Unmarshal(payload, &message); err != nil || message.Resize == nil {
+			var message clientMessage
+			if err := json.Unmarshal(payload, &message); err != nil {
+				continue
+			}
+			if message.Ack != nil {
+				flow.acknowledge(*message.Ack)
+			}
+			if message.Resize == nil {
 				continue
 			}
 			// 範囲の外は TIOCSWINSZ へ渡さない。壊れた幅で描くより、
@@ -192,17 +210,31 @@ func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Con
 }
 
 // forwardOutput は、出力とシェルの差し替えの知らせを、出力が閉じるまで送る。
+// 届いている出力はまとめて送り、ブラウザが追いつくまでは待つ（outputFlow）。
 // 書き出しに失敗したら false を返す。
-func forwardOutput(ctx context.Context, connection *websocket.Conn, stream *terminal.Stream) bool {
+func forwardOutput(ctx context.Context, connection *websocket.Conn, stream *terminal.Stream, flow *outputFlow) bool {
 	for {
 		select {
-		case chunk, open := <-stream.Output():
+		case <-stream.Ready():
+			if !flow.waitForRoom(ctx) {
+				return false
+			}
+			// 取り出し残しがあれば、Take が Ready をもう一度知らせる。1 フレームずつ
+			// 戻るのは、出力が絶えないあいだもシェルの差し替えを知らせるためである。
+			output, open := stream.Take(maxOutputFrame)
 			if !open {
 				return true
 			}
-			if !writeFrame(ctx, connection, websocket.MessageBinary, chunk) {
+			if output.Skipped && !writeSkipped(ctx, connection, output.Start) {
 				return false
 			}
+			if len(output.Data) == 0 {
+				continue
+			}
+			if !writeFrame(ctx, connection, websocket.MessageBinary, output.Data) {
+				return false
+			}
+			flow.wrote(len(output.Data))
 		case <-stream.ShellReplaced():
 			encoded, err := json.Marshal(shellReplacedMessage{})
 			if err != nil || !writeFrame(ctx, connection, websocket.MessageText, encoded) {
@@ -210,6 +242,14 @@ func forwardOutput(ctx context.Context, connection *websocket.Conn, stream *term
 			}
 		}
 	}
+}
+
+// writeSkipped は、次の出力が start から始まり、その手前が飛ばされたことを伝える。
+func writeSkipped(ctx context.Context, connection *websocket.Conn, start uint64) bool {
+	var message skippedMessage
+	message.Skipped.Start = start
+	encoded, err := json.Marshal(message)
+	return err == nil && writeFrame(ctx, connection, websocket.MessageText, encoded)
 }
 
 func clampDimension(value int) uint16 {

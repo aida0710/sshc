@@ -29,7 +29,7 @@ func attach(t *testing.T, session *terminal.Session) ([]byte, *terminal.Stream) 
 
 // ringContents は、リングが今保持しているバイト列を先頭から読む。
 func ringContents(ring *terminal.Ring) []byte {
-	read, ok := ring.ReadAvailableFrom(0)
+	read, ok := ring.ReadAvailableFrom(0, ring.Capacity())
 	if !ok {
 		return nil
 	}

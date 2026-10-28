@@ -6,7 +6,7 @@ import { createStreamLink, stableStreamResetMs, type StreamLink } from "./stream
 const streams: { handlers: StreamHandlers; stream: TerminalStream }[] = [];
 vi.mock("./stream", () => ({
   openStream: (_ticket: string, _streamPath: string, handlers: StreamHandlers) => {
-    const stream: TerminalStream = { send: vi.fn(), sendBinary: vi.fn(), resize: vi.fn(), close: vi.fn() };
+    const stream: TerminalStream = { send: vi.fn(), sendBinary: vi.fn(), resize: vi.fn(), acknowledge: vi.fn(), close: vi.fn() };
     streams.push({ handlers, stream });
     return stream;
   },
@@ -24,6 +24,7 @@ function startLink(terminalStreamTicket: TicketIssuer = async () => ({ streamTic
   const onOutput = vi.fn();
   const onClose = vi.fn();
   const onReplay = vi.fn();
+  const onSkipped = vi.fn();
   const controller = createStreamLink({
     sessionId: "a",
     api: { streamPath: "/terminal/stream", terminalStreamTicket: ticket },
@@ -31,13 +32,14 @@ function startLink(terminalStreamTicket: TicketIssuer = async () => ({ streamTic
     onAttached: vi.fn(),
     onReplay,
     onOutput,
+    onSkipped,
     onExit,
     onShellReplaced: vi.fn(),
     onClose,
   });
   controller.connect();
   started.push(controller);
-  return { controller, links, ticket, onExit, onOutput, onClose, onReplay };
+  return { controller, links, ticket, onExit, onOutput, onClose, onReplay, onSkipped };
 }
 
 function lastLink(links: StreamLink[]): StreamLink | undefined {
@@ -122,6 +124,21 @@ describe("createStreamLink", () => {
     expect(ticket).toHaveBeenLastCalledWith("a", 105);
   });
 
+  it("resumes after skipped output from where the engine went on, not from the bytes it never sent", async () => {
+    const { ticket, onSkipped } = startLink();
+    await vi.advanceTimersByTimeAsync(0);
+
+    streams[0]!.handlers.onReplay({ start: 100, next: 100, end: 100, truncated: false });
+    streams[0]!.handlers.onOutput(new TextEncoder().encode("hello"));
+    streams[0]!.handlers.onSkipped(5000);
+    streams[0]!.handlers.onOutput(new TextEncoder().encode("tail"));
+    streams[0]!.handlers.onClose();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(onSkipped).toHaveBeenCalledOnce();
+    expect(ticket).toHaveBeenLastCalledWith("a", 5004);
+  });
+
   it("tells a replay that continues after an offline link from the first replay of a view", async () => {
     const { onReplay } = startLink();
     await vi.advanceTimersByTimeAsync(0);
@@ -131,6 +148,20 @@ describe("createStreamLink", () => {
     streams[1]!.handlers.onReplay({ start: 0, next: 0, end: 0, truncated: true });
 
     expect(onReplay.mock.calls.map(([, resumed]) => resumed)).toEqual([false, true]);
+  });
+
+  it("acknowledges a parsed chunk to the stream that delivered it", async () => {
+    const { onOutput } = startLink();
+    await vi.advanceTimersByTimeAsync(0);
+    streams[0]!.handlers.onOutput(new TextEncoder().encode("hello"));
+    streams[0]!.handlers.onClose();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const [, parsed] = onOutput.mock.calls[0] as [Uint8Array, () => void];
+    parsed();
+
+    expect(streams[0]!.stream.acknowledge).toHaveBeenCalledWith(5);
+    expect(streams[1]!.stream.acknowledge).not.toHaveBeenCalled();
   });
 
   it("stops retrying on request and attaches again only when asked", async () => {
