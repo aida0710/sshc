@@ -1,3 +1,4 @@
+import { dialogHeading } from "./form";
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { ModalShell } from "./ModalShell";
 import { Button } from "./surface";
@@ -73,7 +74,7 @@ export function ConfirmDialog({
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
       panelClassName="flex w-full max-w-sm flex-col gap-3 rounded-lg p-4"
     >
-      <h2 id={id} className="text-sm font-medium text-ink">
+      <h2 id={id} className={dialogHeading}>
         {heading}
       </h2>
       <div id={bodyId} className="flex flex-col gap-3">{body}</div>

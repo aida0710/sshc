@@ -1,3 +1,4 @@
+import { Tag } from "../ui/Tag";
 import { useCallback, useEffect, useState } from "react";
 import { MoreDetails } from "../ui/MoreDetails";
 import { toProblem } from "../api/guards";
@@ -165,7 +166,7 @@ export function HistoryPanel() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-medium text-ink">{t(historyOperationLabelKey(entry.operation))}</p>
-                    <span className="rounded-full bg-well px-2 py-0.5 text-[11.5px] text-ink-muted">{t(historyStatusLabelKey(entry.status))}</span>
+                    <Tag>{t(historyStatusLabelKey(entry.status))}</Tag>
                   </div>
                   <p className="mt-1 truncate font-mono text-xs text-ink-faint">{entry.paths.join(", ")}</p>
                 </div>

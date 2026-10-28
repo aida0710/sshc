@@ -282,7 +282,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
         {...(overview.profiles.length === 0 ? {} : { hint: t("vpn.connectionsHint") })}
       >
         {overview.profiles.length === 0 ? (
-          <p className="text-[13px] text-ink-muted">{t("vpn.empty")}</p>
+          <PanelState tone="empty" title={t("vpn.empty")} />
         ) : (
           <div>
             <VPNProfileListHeader />
