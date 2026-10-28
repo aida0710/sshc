@@ -7,7 +7,8 @@ import { secondaryAction } from "../ui/form";
 import { EntryScreen } from "../ui/EntryScreen";
 import { Icon } from "../ui/icons";
 import { PageBoard } from "../ui/PageBoard";
-import { Button, Card } from "../ui/surface";
+import { Spinner } from "../ui/Spinner";
+import { Button } from "../ui/surface";
 import { ErrorDiagnosticNotice } from "./ErrorDiagnosticNotice";
 
 function reloadHere() {
@@ -69,17 +70,13 @@ function CommandBlock({ children }: { children: ReactNode }) {
 export function VaultRecheckOverlay({ phase }: { phase: Exclude<VaultRecheckPhase, "idle"> }) {
   const t = useTranslate();
   return (
-    <div className="fixed inset-0 z-[100] grid min-h-screen place-items-center bg-canvas p-6">
-      <Card
-        as="section"
-        role="status"
-        className="w-full max-w-md p-6 sm:p-8"
+    <div className="fixed inset-0 z-[100]">
+      <EntryScreen
+        heading={t("shell.title")}
+        description={<p role="status">{t(phase === "checking" ? "shell.vaultChecking" : "shell.vaultCheckRetrying")}</p>}
       >
-        <h1 className="text-lg font-semibold">{t("shell.title")}</h1>
-        <p className="mt-3 text-sm leading-6 text-ink-muted">
-          {t(phase === "checking" ? "shell.vaultChecking" : "shell.vaultCheckRetrying")}
-        </p>
-      </Card>
+        <Spinner className="size-5 self-center" />
+      </EntryScreen>
     </div>
   );
 }

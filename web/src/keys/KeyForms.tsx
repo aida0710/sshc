@@ -1,4 +1,5 @@
 import { useTranslate } from "../i18n/context";
+import { PageSection } from "../ui/page";
 import type { Credential } from "../api/credentials";
 import type { KeyItem, RelocateKeyResponse } from "./api";
 import {
@@ -6,7 +7,6 @@ import {
   Field,
   control,
   hintText,
-  sectionCard,
 } from "../ui/form";
 import { FieldRow } from "../ui/FieldRow";
 import { Button, Notice } from "../ui/surface";
@@ -290,14 +290,12 @@ export function StoredPassphrasePanel({
   const { phrases, dedicatedPhrasePaths, chosenPhrase, setChosenPhrase } =
     storedPhrases;
   return (
-    <section
-      aria-labelledby="stored-passphrase-heading"
-      className={sectionCard}
+    <PageSection
+      heading={t("keys.storedPassphraseHeading", { path: item.relativePath })}
+      headingId="stored-passphrase-heading"
+      hint={t("keys.storedPassphraseNote")}
     >
-      <h3 id="stored-passphrase-heading" className="text-sm font-semibold text-ink">
-        {t("keys.storedPassphraseHeading", { path: item.relativePath })}
-      </h3>
-      <p className={hintText}>{t("keys.storedPassphraseNote")}</p>
+      <div className="flex flex-col gap-4">
       {!hasStoredFor(phrases, dedicatedPhrasePaths, item) ? null : (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-card p-3">
           <p className="grow text-sm text-ink">
@@ -364,7 +362,8 @@ export function StoredPassphrasePanel({
         </Button>
         <Button onClick={form.close}>{t("keys.cancel")}</Button>
       </div>
-    </section>
+      </div>
+    </PageSection>
   );
 }
 

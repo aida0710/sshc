@@ -1,8 +1,7 @@
 import type { PullResponse, PushResult, SnapshotSummary, SyncOperation } from "../api/sync";
 import { useLanguage } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
-import { Icon } from "../ui/icons";
-import { Card } from "../ui/surface";
+import { PageSection } from "../ui/page";
 import { formatBytes as formatSize, formatDateTime } from "../ui/format";
 
 export type SyncResultView =
@@ -81,15 +80,7 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
       );
 
   return (
-    <Card as="section" aria-label={heading} radius="md">
-      <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Icon name="sync" className="h-4 w-4 text-ink-muted" />
-          <h4 className="text-sm font-semibold text-ink">{heading}</h4>
-        </div>
-        <span className="h-2 w-2 rounded-full bg-live" />
-      </header>
-      <div className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+    <PageSection heading={heading} meta={formatBytes(summary.snapshotBytes, locale)}>
         <div className="flex flex-col gap-1">
         {displayKind === "push" ? (
           <>
@@ -135,11 +126,7 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
         <p className="text-xs text-ink-muted">
           {t("sync.result.completed", { at: formatDateTime(completedAt, locale) })}
         </p>
-        </div>
-        <span className="rounded-lg bg-select-fill px-3 py-2 font-mono text-xs text-ink-muted">
-          {formatBytes(summary.snapshotBytes, locale)}
-        </span>
       </div>
-    </Card>
+    </PageSection>
   );
 }

@@ -1,7 +1,8 @@
 import type { SyncDirection, SyncHistoryDiff } from "../api/sync";
+import { PageSection } from "../ui/page";
 import type { Translate } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
-import { hintText, sectionHeading } from "../ui/form";
+import { hintText } from "../ui/form";
 import { formatDateTime } from "../ui/format";
 import { Button, Notice } from "../ui/surface";
 import { formatBytes } from "./SyncResultCard";
@@ -43,24 +44,16 @@ export function SyncHistorySection({
       : undefined;
 
   return (
-    <section
-      aria-labelledby="sync-history-heading"
-      className="flex flex-col gap-3 rounded-[10px] bg-well p-4 lg:col-span-2"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h4 id="sync-history-heading" className={sectionHeading}>
-            {t("sync.historyHeading")}
-          </h4>
-          <p className={`mt-1 ${hintText}`}>{t("sync.historyHint")}</p>
-        </div>
-        <Button
-          disabled={busy || !keyConfigured || historyState.phase === "loading"}
-          onClick={onRefresh}
-        >
+    <PageSection
+      heading={t("sync.historyHeading")}
+      headingId="sync-history-heading"
+      hint={t("sync.historyHint")}
+      actions={
+        <Button small disabled={busy || !keyConfigured || historyState.phase === "loading"} onClick={onRefresh}>
           {t("sync.historyRefresh")}
         </Button>
-      </div>
+      }
+    >
 
       {historyState.phase === "idle" ? (
         <p className={hintText}>{t("sync.historyNeedsKey")}</p>
@@ -206,6 +199,6 @@ export function SyncHistorySection({
           </div>
         </div>
       )}
-    </section>
+    </PageSection>
   );
 }

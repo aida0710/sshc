@@ -1,7 +1,8 @@
 import type { SyncPushDraft, SyncStatus } from "../api/sync";
 import { useTranslate } from "../i18n/context";
-import { control, hintText, sectionHeading } from "../ui/form";
-import { Button, Card } from "../ui/surface";
+import { control, hintText } from "../ui/form";
+import { PageSection } from "../ui/page";
+import { Button } from "../ui/surface";
 
 // The push side: a commit message for the local changes the engine counted,
 // and the buttons that send or preview them.
@@ -20,19 +21,12 @@ export function SyncTransferCard({ status, busy, pushDraft, pushMessage, onMessa
       ? null
       : pushDraft.added + pushDraft.modified + pushDraft.removed;
   return (
-    <Card
-      as="section"
-      aria-labelledby="sync-transfer-heading"
-      radius="md"
-      className="flex flex-col gap-3 p-4"
+    <PageSection
+      heading={t("sync.transferHeading")}
+      headingId="sync-transfer-heading"
+      hint={t(status.direction === "push" ? "sync.transferHint.push" : "sync.transferHint.both")}
     >
-      <h3 id="sync-transfer-heading" className={sectionHeading}>
-        {t("sync.transferHeading")}
-      </h3>
-      <p className="text-sm leading-6 text-ink-muted">
-        {t(status.direction === "push" ? "sync.transferHint.push" : "sync.transferHint.both")}
-      </p>
-      <div className="flex flex-col gap-1 border-t border-line pt-3 text-sm text-ink">
+      <div className="flex flex-col gap-1 text-sm text-ink">
         <label htmlFor="sync-commit-message" className="font-medium">
           {t("sync.commitMessage")}
         </label>
@@ -78,6 +72,6 @@ export function SyncTransferCard({ status, busy, pushDraft, pushMessage, onMessa
           {t("sync.preview")}
         </Button>
       </div>
-    </Card>
+    </PageSection>
   );
 }

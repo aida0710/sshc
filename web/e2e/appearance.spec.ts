@@ -143,12 +143,11 @@ for (const appearance of ["light", "dark"] as const) {
     }
 
     await openSection(page, "Ad hoc checks");
-    const diagnosticCards = page.locator("main .sshc-card");
-    await expect(diagnosticCards).toHaveCount(2);
-    for (const card of await diagnosticCards.all()) {
-      await expect(card).toHaveCSS("border-left-width", "1px");
-      await expect(card).toHaveCSS("border-right-width", "1px");
-    }
+    // The page's sections are divided by a rule. Waiting for one that the loaded page shows keeps the
+    // loading skeleton's cards from being measured instead.
+    const configuration = page.getByRole("region", { name: /^Configuration/ });
+    await expect(configuration).toBeVisible();
+    await expect(configuration).toHaveCSS("border-top-width", "1px");
     if (process.env.SSHC_VISUAL_DIR !== undefined) {
       await page.screenshot({
         path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-diagnostics-${appearance}.png`,
