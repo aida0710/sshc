@@ -157,4 +157,13 @@ describe("terminal output replay", () => {
 
     expect(subject.output.isReplaying()).toBe(false);
   });
+
+  it("ignores C1 controls written as UTF-8 instead of starting a sequence", async () => {
+    const subject = harness();
+
+    // U+009B would start a CSI that turns the text red and swallows "31m".
+    subject.output.write(encoder.encode("plain\u009b31mtext\u009d0;title\u0007"));
+
+    await subject.expectLine("plain31mtext0;title");
+  });
 });

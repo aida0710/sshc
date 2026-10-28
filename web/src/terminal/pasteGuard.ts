@@ -11,7 +11,8 @@ export type TerminalPasteInspection = {
   previewTruncated: boolean;
 };
 
-const unsafeControlCharacter = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u;
+// C1 (U+0080–U+009F) is a control to xterm.js even as UTF-8 text: U+009B starts a CSI.
+const unsafeControlCharacter = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u;
 
 function countLogicalLines(text: string): number {
   if (text === "") return 0;
@@ -38,11 +39,9 @@ function escapePreviewCharacter(character: string): string {
       return "\\n\n";
     case "\t":
       return "\\t";
-    case "\u007f":
-      return "\\x7f";
     default: {
       const codePoint = character.codePointAt(0) ?? 0;
-      if (codePoint < 0x20) return `\\x${codePoint.toString(16).padStart(2, "0")}`;
+      if (codePoint < 0x20 || (codePoint >= 0x7f && codePoint <= 0x9f)) return `\\x${codePoint.toString(16).padStart(2, "0")}`;
       return character;
     }
   }
