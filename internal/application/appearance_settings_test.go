@@ -75,10 +75,10 @@ func TestTheAccentSurvivesEncodingTheMetadata(t *testing.T) {
 	}
 }
 
-func TestACustomColourIsStoredBesideThePresetAnOlderSshcStillAccepts(t *testing.T) {
+func TestACustomColourIsStoredAsTheAccent(t *testing.T) {
 	service, _ := newTerminalService(t)
 
-	if _, err := service.SetAppearanceSettings(AppearanceSettings{Accent: "blue", AccentColor: "#3fa86b"}); err != nil {
+	if _, err := service.SetAppearanceSettings(AppearanceSettings{Accent: "#3fa86b"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -86,25 +86,30 @@ func TestACustomColourIsStoredBesideThePresetAnOlderSshcStillAccepts(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.Appearance == nil || stored.Appearance.Accent != "blue" || stored.Appearance.AccentColor != "#3fa86b" {
-		t.Fatalf("stored appearance = %+v, want blue with #3fa86b", stored.Appearance)
+	if stored.Appearance == nil || stored.Appearance.Accent != "#3fa86b" {
+		t.Fatalf("stored appearance = %+v, want #3fa86b", stored.Appearance)
 	}
 }
 
-func TestAnAccentNameOlderSshcDoesNotKnowOrAnUnreadableColourIsRefused(t *testing.T) {
-	for _, settings := range []AppearanceSettings{
-		{Accent: "custom", AccentColor: "#3fa86b"},
-		{AccentColor: "green"},
-		{AccentColor: "#3FA86B"},
-		{AccentColor: "#3fa86"},
-		{Accent: "lavender", AccentColor: "#3fa86b80"},
-	} {
+func TestAnAccentThatIsNeitherAPresetNorAColourIsRefused(t *testing.T) {
+	for _, accent := range []string{"custom", "green", "#3FA86B", "#3fa86", "#3fa86b80"} {
 		service, _ := newTerminalService(t)
 
-		_, err := service.SetAppearanceSettings(settings)
+		_, err := service.SetAppearanceSettings(AppearanceSettings{Accent: accent})
 
 		if !errors.Is(err, ErrMetadataAppearance) {
-			t.Fatalf("SetAppearanceSettings(%+v) err = %v, want ErrMetadataAppearance", settings, err)
+			t.Fatalf("SetAppearanceSettings(%q) err = %v, want ErrMetadataAppearance", accent, err)
 		}
+	}
+}
+
+// 同期で届いた metadata のさし色が読めなくても、metadata は読め、さし色だけが既定に戻る。
+func TestAnUnreadableAccentFromAnotherMachineIsDroppedWhenRead(t *testing.T) {
+	decoded, err := DecodeMetadata([]byte(`{"schemaVersion":9,"appearance":{"accent":"url(javascript:1)"},"hosts":[]}`))
+	if err != nil {
+		t.Fatalf("DecodeMetadata = %v, want the metadata read", err)
+	}
+	if decoded.Appearance != nil {
+		t.Fatalf("appearance = %+v, want it dropped", decoded.Appearance)
 	}
 }
