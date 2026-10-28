@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
@@ -16,7 +16,7 @@ import { clipboard } from "../ui/clipboard";
 import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
 import { linkAtPoint, type ScreenPoint } from "./tappedLink";
-import { prefersNativeSelection } from "./nativeSelection";
+import { useTouchTerminal } from "./touchMode";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
 import { attachTouchScroll } from "./touchScroll";
 import { terminalTouchScrollTarget } from "./touchScrollTarget";
@@ -161,6 +161,9 @@ export function TerminalView({
   const { resolved } = useTheme();
   const reducedMotion = useMediaQuery(reducedMotionQuery);
   const mobile = useMediaQuery(mobileViewportQuery);
+  const touchTerminal = useTouchTerminal();
+  const touchTerminalRef = useRef(touchTerminal);
+  touchTerminalRef.current = touchTerminal;
   const resolvedFontSize = fontSize ?? (mobile ? mobileTerminalFontSize : desktopTerminalFontSize);
   const resolvedFontFamily = useTerminalFont(font ?? "", resolvedFontSize);
   const reducedMotionRef = useRef(reducedMotion);
@@ -229,21 +232,20 @@ export function TerminalView({
     return () => window.clearTimeout(timer);
   }, [terminalNotice]);
 
+  // A file path opens its preview without a menu first; what else the file offers is in the preview's
+  // "…". A URL, and a path whose file cannot be read here, open the menu.
+  const selectLinkAt = useCallback((link: TerminalLinkSelection["link"], point: ScreenPoint) => {
+    const preview = previewLinkedPath.current;
+    if (link.kind !== "url" && preview !== null) {
+      preview(link.target);
+      return;
+    }
+    setLinkSelection({ link, x: point.clientX + linkPopoverOffsetPx, y: point.clientY + linkPopoverOffsetPx });
+  }, []);
+
   useEffect(() => {
     const container = host.current;
     if (container === null) return;
-
-    const coarse = prefersNativeSelection((query) => window.matchMedia(query));
-    // A file path opens its preview without a menu first; what else the file offers is in the preview's
-    // "…". A URL, and a path whose file cannot be read here, open the menu.
-    const selectLinkAt = (link: TerminalLinkSelection["link"], point: ScreenPoint) => {
-      const preview = previewLinkedPath.current;
-      if (link.kind !== "url" && preview !== null) {
-        preview(link.target);
-        return;
-      }
-      setLinkSelection({ link, x: point.clientX + linkPopoverOffsetPx, y: point.clientY + linkPopoverOffsetPx });
-    };
 
     let view: Terminal;
     view = new Terminal({
@@ -355,7 +357,7 @@ export function TerminalView({
       onLink: setLink,
       onAttached: () => {
         sent = "";
-        if (activeRef.current && !coarse && session.state !== "exited" && !search.hasFocus() && !isTypingElsewhere(region.current)) {
+        if (activeRef.current && !touchTerminalRef.current && session.state !== "exited" && !search.hasFocus() && !isTypingElsewhere(region.current)) {
           view.focus();
         }
         fitAndSync();
@@ -383,7 +385,7 @@ export function TerminalView({
       if (container.clientWidth === 0 || container.clientHeight === 0) return;
       try {
         fit.fit();
-        if (coarse) syncTerminalInputPosition(view);
+        if (touchTerminalRef.current) syncTerminalInputPosition(view);
       } catch {
         return;
       }
@@ -399,21 +401,6 @@ export function TerminalView({
       selectionHeld: () => selectionHeldIn(container),
       reducedMotion: () => reducedMotionRef.current,
     });
-
-    const releaseImeKeys = coarse
-      ? attachImeKeys({ container, textarea: view.textarea ?? container })
-      : () => {};
-
-    const detachOverlay = coarse
-      ? attachSelectionOverlay(container, view, {
-        onTap: (point) => {
-          const link = linkAtPoint(view, point, windowsPathsRef.current);
-          if (link === null) return false;
-          selectLinkAt(link, point);
-          return true;
-        },
-      })
-      : () => {};
 
     const typed = (data: string) => {
       const { ctrl, alt } = takeModifiers();
@@ -441,7 +428,7 @@ export function TerminalView({
         sendPaste.current(text);
       },
       clipboard,
-      coarsePointer: () => coarse,
+      coarsePointer: () => touchTerminalRef.current,
       settings: () => clipboardSettings.current,
       refuse: () => setProblem(t("terminal.clipboardRefused")),
       copied: () => setTerminalNotice(t("copy.done")),
@@ -457,8 +444,6 @@ export function TerminalView({
       streamLinkController.current = null;
       stopObservingSize();
       detachTouchScroll();
-      releaseImeKeys();
-      detachOverlay();
       detachClipboard();
       detachOsc52();
       output.dispose();
@@ -482,6 +467,29 @@ export function TerminalView({
     // recreating the addon stack and the WebSocket.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id, api, backgroundConfigured, webglEnabled]);
+
+  // Declared after the effect that builds the terminal, and keyed on the same
+  // values, so it attaches to each new terminal. Switching between touch and
+  // mouse changes only these, not the connection.
+  useEffect(() => {
+    const container = host.current;
+    const view = terminal.current;
+    if (!touchTerminal || container === null || view === null) return;
+    const releaseImeKeys = attachImeKeys({ container, textarea: view.textarea ?? container });
+    const detachOverlay = attachSelectionOverlay(container, view, {
+      onTap: (point) => {
+        const link = linkAtPoint(view, point, windowsPathsRef.current);
+        if (link === null) return false;
+        selectLinkAt(link, point);
+        return true;
+      },
+    });
+    refit.current?.();
+    return () => {
+      releaseImeKeys();
+      detachOverlay();
+    };
+  }, [touchTerminal, selectLinkAt, session.id, api, backgroundConfigured, webglEnabled]);
 
   useEffect(() => {
     if (focusRequest !== undefined && activeRef.current && !region.current?.contains(document.activeElement)) terminal.current?.focus();

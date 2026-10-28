@@ -3,7 +3,7 @@ import type { TerminalSession } from "../../api/terminalSessions";
 import { useTranslate } from "../../i18n/context";
 import { shortcutsBlocked } from "../../keyconfig/bindings";
 import { SplitResizeHandle } from "../../ui/SplitResizeHandle";
-import { prefersNativeSelection } from "../nativeSelection";
+import { useTouchTerminal } from "../touchMode";
 import { terminalDisplayTitle } from "../terminalPresentation";
 import { TerminalEmptyState } from "../TerminalEmptyState";
 import { splitViewGeometry } from "./geometry";
@@ -29,6 +29,7 @@ export function TerminalSplitView({ splitView, sessions, renderTerminal }: {
   const { state, compact, dispatch, selectSession } = splitView;
   const { panes, dividers } = splitViewGeometry(state.root);
   const drag = usePaneDrag(splitView);
+  const touchTerminal = useTouchTerminal();
   const multiple = panes.length > 1;
   const singleVisible = compact || state.focusMode;
   const sessionById = new Map(sessions.map((session) => [session.id, session]));
@@ -112,7 +113,7 @@ export function TerminalSplitView({ splitView, sessions, renderTerminal }: {
                   // button) needs nothing, nor does one in a dialog the pane opened elsewhere on the page.
                   // A touch screen keeps its keyboard closed until the terminal itself is tapped.
                   const pane = event.currentTarget;
-                  if (compact || prefersNativeSelection((query) => window.matchMedia(query))) return;
+                  if (compact || touchTerminal) return;
                   if (!pane.contains(event.target as Node) || pane.contains(document.activeElement)) return;
                   selectSession(sessionId);
                 }}
