@@ -656,17 +656,17 @@
 /* How far the floating bottom bar reaches up from the bottom edge, plus 8px so a page's last line does not
    touch it. What scrolls to the bottom of the screen pads its end by this much, and bars that end the
    screen (SFTP's transfers, the selection bar) reach under it. Zero wherever the bar is not shown. */
-.sshc-app {
+:root {
   --mobile-navigation-inset: 0px;
 }
-.sshc-app[data-mobile-navigation="true"] {
+:root[data-mobile-navigation="true"] {
   --mobile-navigation-inset: calc(3.5rem + max(10px, env(safe-area-inset-bottom, 0px)) + 8px);
 }
 :root[data-keyboard-open="true"] .sshc-mobile-navigation,
 :root[data-keyboard-open="true"] .sshc-app[data-mobile="true"] [data-app-header] {
   display: none;
 }
-:root[data-keyboard-open="true"] .sshc-app {
+:root[data-keyboard-open="true"] {
   --mobile-navigation-inset: 0px;
 }
 .sshc-modal-frame {
