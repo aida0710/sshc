@@ -1,8 +1,6 @@
 package application
 
 import (
-	"path/filepath"
-
 	"sshc/internal/config"
 )
 
@@ -111,13 +109,5 @@ func (s *Service) appendHostRelocations(prepared *planned, relocations []hostRel
 	if err != nil {
 		return err
 	}
-	previous, _, err := s.readFile(change.Path)
-	if err != nil {
-		return err
-	}
-	prepared.changes = append(prepared.changes, change)
-	prepared.base[filepath.Clean(change.Path)] = previous
-	prepared.preview.Diffs = append(prepared.preview.Diffs,
-		BuildFileDiff(s.displayPath(change.Path), previous, change.Contents))
-	return nil
+	return s.addChange(prepared, change)
 }
