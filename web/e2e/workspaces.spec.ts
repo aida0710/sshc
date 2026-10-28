@@ -180,3 +180,27 @@ test("keeps a workspace's name under the Workspaces heading while its sessions s
   expect(mainBox.y).toBeGreaterThanOrEqual(headingBox.y + headingBox.height - 2);
   expect(mainBox.y).toBeLessThan(headingBox.y + headingBox.height + 16);
 });
+
+// On a PC-sized screen a session's name has the whole row: its 「…」 and close show only under the pointer (the
+// selected row too), over the end of the name, and a right click opens the same menu.
+test("shows a session's actions only on hover and opens its menu with a right click", async ({ page, installation }) => {
+  const sessions = [
+    { id: "s1", kind: "shell", workspaceId: "default", title: "Build", startedAt: "2026-10-28T00:00:00Z", state: "connected", problem: "", forwards: [] },
+    { id: "s2", kind: "shell", workspaceId: "default", title: "Logs", startedAt: "2026-10-28T00:00:00Z", state: "connected", problem: "", forwards: [] },
+  ];
+  await page.route("**/api/v1/terminal/sessions**", (route) => new URL(route.request().url()).pathname.endsWith("/stream")
+    ? route.fulfill({ status: 404, json: {} })
+    : route.fulfill({ json: { sessions, maxSessions: 50 } }));
+  await openApplication(page, installation);
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  const actions = navigation.getByRole("button", { name: "Actions for Build" }).locator("..");
+  await expect(actions).toHaveCSS("opacity", "0");
+  await expect(actions).toHaveCSS("position", "absolute");
+
+  await navigation.getByText("Build", { exact: true }).hover();
+  await expect(actions).toHaveCSS("opacity", "1");
+
+  await page.mouse.move(0, 0);
+  await navigation.getByText("Logs", { exact: true }).click({ button: "right" });
+  await expect(navigation.getByRole("button", { name: "Actions for Logs" })).toHaveAttribute("aria-expanded", "true");
+});
