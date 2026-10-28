@@ -20,6 +20,8 @@ export function TerminalOverflowMenu({
   onSplit,
   onRemoveFromSplit,
   onSearch,
+  onPreviousPrompt,
+  onNextPrompt,
   canSplit = false,
   triggerRef,
 }: {
@@ -36,6 +38,9 @@ export function TerminalOverflowMenu({
   onRemoveFromSplit?: (() => void) | undefined;
   // onSearch is offered here on a phone, whose top bar keeps only the other actions.
   onSearch?: (() => void) | undefined;
+  // The previous and next prompt, offered on a phone, which has no keys for them.
+  onPreviousPrompt?: (() => void) | undefined;
+  onNextPrompt?: (() => void) | undefined;
   canSplit?: boolean;
   triggerRef?: RefObject<HTMLElement | null>;
 }) {
@@ -68,6 +73,16 @@ export function TerminalOverflowMenu({
       {onSearch === undefined ? null : (
         <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onSearch)}>
           {t("terminal.search")}
+        </button>
+      )}
+      {onPreviousPrompt === undefined ? null : (
+        <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onPreviousPrompt)}>
+          {t("shortcuts.previousPrompt")}
+        </button>
+      )}
+      {onNextPrompt === undefined ? null : (
+        <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onNextPrompt)}>
+          {t("shortcuts.nextPrompt")}
         </button>
       )}
       {onSplit === undefined ? null : (["right", "bottom"] as const).map((edge) => (

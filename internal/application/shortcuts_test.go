@@ -1,6 +1,7 @@
 package application
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
@@ -62,5 +63,32 @@ func TestShortcutPresetsAcceptFunctionKeysWithAnyModifiers(t *testing.T) {
 	p.Bindings["sftp"] = []string{"F24"}
 	if err := validateShortcutPresets([]ShortcutPreset{p}); err != nil {
 		t.Fatalf("function keys were refused: %v", err)
+	}
+}
+
+// A preset saved before the prompt actions were added binds none of them. It is
+// dropped when metadata is read, so it cannot make every later save refuse.
+func TestAPresetWithoutEveryActionIsDroppedWhenMetadataIsRead(t *testing.T) {
+	current := testShortcutPreset()
+	old := testShortcutPreset()
+	old.ID, old.Name = "before-prompts", "Before prompts"
+	delete(old.Bindings, "previousPrompt")
+	delete(old.Bindings, "nextPrompt")
+	metadata := NewMetadata()
+	metadata.ShortcutPresets = []ShortcutPreset{old, current}
+	encoded, err := json.Marshal(metadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	read, err := DecodeMetadata(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(read.ShortcutPresets) != 1 || read.ShortcutPresets[0].ID != current.ID {
+		t.Fatalf("presets = %+v, want only the one binding every action", read.ShortcutPresets)
+	}
+	if _, err := EncodeMetadata(read); err != nil {
+		t.Fatalf("saving after the read refused: %v", err)
 	}
 }

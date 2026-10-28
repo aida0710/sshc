@@ -19,6 +19,7 @@ import { cellAtPoint, linkAtPoint, type ScreenPoint } from "./tappedLink";
 import { scrollbackFileName, scrollbackText } from "./scrollbackFile";
 import { saveFile, type BrowserSave } from "../ui/saveFile";
 import { attachPromptCursorClicks, trackPromptCursor, type PromptCursor } from "./promptCursor";
+import { attachPromptJumpKeys, trackPromptJumps, type PromptJump } from "./promptJump";
 import { useTouchTerminal } from "./touchMode";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
 import { attachTouchScroll } from "./touchScroll";
@@ -235,6 +236,7 @@ export function TerminalView({
   const send = useRef<(name: string) => void>(() => {});
   const sendInput = useRef<(text: string) => void>(() => {});
   const promptCursor = useRef<PromptCursor | null>(null);
+  const promptJump = useRef<PromptJump | null>(null);
 
   useEffect(() => {
     setOsc52Enabled(initialOsc52Enabled);
@@ -361,6 +363,9 @@ export function TerminalView({
     const visibilityQuestions = attachVisibilityReportQuestions(view.parser);
     // Registered after the command marks, so it sees OSC 133 before they consume it.
     const prompt = trackPromptCursor(view);
+    const prompts = trackPromptJumps(view);
+    promptJump.current = prompts;
+    const detachPromptJumpKeys = attachPromptJumpKeys(container, prompts);
     promptCursor.current = prompt;
     const detachPromptClicks = attachPromptCursorClicks({
       container,
@@ -511,6 +516,9 @@ export function TerminalView({
       commandMarkers.dispose();
       detachPromptClicks();
       prompt.dispose();
+      detachPromptJumpKeys();
+      prompts.dispose();
+      promptJump.current = null;
       promptCursor.current = null;
       terminalLinks.dispose();
       renderer.dispose();
@@ -723,7 +731,11 @@ export function TerminalView({
         {headerActions}
         {overflowOpen ? (
           <TerminalOverflowMenu
-            {...(mobile ? { onSearch: search.toggle } : {})}
+            {...(mobile ? {
+              onSearch: search.toggle,
+              onPreviousPrompt: () => promptJump.current?.jump(-1),
+              onNextPrompt: () => promptJump.current?.jump(1),
+            } : {})}
             onSplit={onSplit}
             onRemoveFromSplit={onRemoveFromSplit}
             canSplit={canSplit}

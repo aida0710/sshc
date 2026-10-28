@@ -25,6 +25,8 @@ export const ja = {
   "shortcuts.terminalSearch": "ターミナル内検索",
   "shortcuts.copy": "選択範囲をコピー",
   "shortcuts.paste": "貼り付け",
+  "shortcuts.previousPrompt": "前のプロンプトへ",
+  "shortcuts.nextPrompt": "次のプロンプトへ",
   "shortcuts.nextSession": "次のセッション",
   "shortcuts.previousSession": "前のセッション",
   "shortcuts.home": "Homeを開く",

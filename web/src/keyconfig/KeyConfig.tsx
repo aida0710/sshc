@@ -18,6 +18,8 @@ const actionLabelKeys: Record<ShortcutAction, MessageKey> = {
   terminalSearch: "shortcuts.terminalSearch",
   copy: "shortcuts.copy",
   paste: "shortcuts.paste",
+  previousPrompt: "shortcuts.previousPrompt",
+  nextPrompt: "shortcuts.nextPrompt",
   nextSession: "shortcuts.nextSession",
   previousSession: "shortcuts.previousSession",
   home: "shortcuts.home",
