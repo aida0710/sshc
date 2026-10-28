@@ -22,8 +22,12 @@ import { PageHeader, PageSection } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
+import { ExecutableDirectiveConfirmation } from "./ExecutableDirectiveConfirmation";
+import { unavoidableDirectives, type ExecutableDirective } from "./executableDirectives";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
+
+type AuthenticationTest = { confirm: ExecutableDirective[] } | { result: AuthenticationResponse };
 
 type DiagnosticsPanelProps = {
   api?: DiagnosticsApi;
@@ -40,6 +44,8 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
   const [effective, setEffective] = useState<EffectiveResponse | null>(null);
   const [reach, setReach] = useState<ReachabilityResponse | null>(null);
   const [auth, setAuth] = useState<AuthenticationResponse | null>(null);
+  // pendingDirectives are the commands an authentication test would run; the test waits until they are confirmed.
+  const [pendingDirectives, setPendingDirectives] = useState<ExecutableDirective[]>([]);
   const check = useAsyncOperation();
   const { fail: reportFailure, clearError } = check;
   // The alias can change while a check runs (typed, or a new fixed host), and a
@@ -68,6 +74,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
     setEffective(null);
     setReach(null);
     setAuth(null);
+    setPendingDirectives([]);
     clearError();
   }, [alias, checkRequests, clearError]);
 
@@ -94,14 +101,29 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
     },
     {
       label: t("diag.testAuthentication"),
-      start: () =>
-        void run(
-          () => api.authentication(alias, directives.some((directive) => !directive.overridable)),
-          setAuth,
-          t("diag.authenticationFailed"),
-        ),
+      start: () => void run(() => testAuthentication(), applyAuthenticationTest, t("diag.authenticationFailed")),
     },
   ];
+
+  // testAuthentication runs the test unless it would run a command the user has not confirmed yet.
+  async function testAuthentication(): Promise<AuthenticationTest> {
+    const unavoidable = unavoidableDirectives((effective ?? await api.effective(alias)).executableDirectives);
+    if (unavoidable.length > 0) return { confirm: unavoidable };
+    return { result: await api.authentication(alias, false) };
+  }
+
+  function applyAuthenticationTest(test: AuthenticationTest) {
+    if ("confirm" in test) {
+      setPendingDirectives(test.confirm);
+      return;
+    }
+    setPendingDirectives([]);
+    setAuth(test.result);
+  }
+
+  function acknowledgeAndTestAuthentication() {
+    void run(async () => ({ result: await api.authentication(alias, true) }), applyAuthenticationTest, t("diag.authenticationFailed"));
+  }
   const blocked = check.busy || alias === "";
   const hasResults = effective !== null || reach !== null || auth !== null;
 
@@ -161,6 +183,10 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
           </p>
         </div>
       </section>
+
+      {pendingDirectives.length === 0 ? null : (
+        <ExecutableDirectiveConfirmation directives={pendingDirectives} busy={check.busy} onAcknowledge={acknowledgeAndTestAuthentication} />
+      )}
 
       {config ? (
         <PageSection heading={t("diag.configuration")} meta={String(config.files.length)}>

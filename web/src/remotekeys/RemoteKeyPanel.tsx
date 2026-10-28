@@ -18,6 +18,7 @@ import { PageHeader, PageSection } from "../ui/page";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { RemoteKeyHostPicker } from "./RemoteKeyHostPicker";
 import { RemoteKeyPlanCard } from "./RemoteKeyPlanCard";
+import { unavoidableDirectives } from "../diagnostics/executableDirectives";
 
 // 公開鍵をリモートホストの authorized_keys へ登録する画面。「1. 公開鍵」で鍵を、「2. 接続先」で
 // ホストを選び、［登録内容を確認］で sshcエンジンが設定から求めた登録内容（接続しない）を見せて
@@ -252,9 +253,7 @@ export function RemoteKeyPanel({
   }
 
   const unavoidable = plannedTargets.flatMap(({ plan }) =>
-    plan.executableDirectives
-      .filter((directive) => !directive.overridable)
-      .map((directive) => ({ alias: plan.alias, directive })),
+    unavoidableDirectives(plan.executableDirectives).map((directive) => ({ alias: plan.alias, directive })),
   );
   const registerable = plannedTargets.filter(({ plan }) => plan.supported && !unsupportedAliases.has(plan.alias));
   const busy = planning || registering;
