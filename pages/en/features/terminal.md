@@ -31,6 +31,7 @@ When the sshc engine stops (an update, a restart of the computer, a manual stop)
 
 - Scrollback search with `Ctrl/Cmd+F`
 - Clearing the screen with `Ctrl+L` in bash or zsh keeps the cleared output in the scrollback (`clear` empties the scrollback too)
+- **Save scrollback to a file** in the terminal's **…** menu saves the whole scrollback, screen included, as a text file, with wrapped rows joined (**Copy recent terminal context** takes up to 200 rows)
 - Case, regex, match highlighting, and result navigation
 - URL and path context actions, including previews and downloads of paths, and OSC 8 links
 - Quick Commands and snippets

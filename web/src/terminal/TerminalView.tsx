@@ -16,6 +16,8 @@ import { clipboard } from "../ui/clipboard";
 import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
 import { cellAtPoint, linkAtPoint, type ScreenPoint } from "./tappedLink";
+import { scrollbackFileName, scrollbackText } from "./scrollbackFile";
+import { saveFile, type BrowserSave } from "../ui/saveFile";
 import { attachPromptCursorClicks, trackPromptCursor, type PromptCursor } from "./promptCursor";
 import { useTouchTerminal } from "./touchMode";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
@@ -194,6 +196,7 @@ export function TerminalView({
     },
   });
   const copyContext = useRef<() => void>(() => {});
+  const saveScrollback = useRef<() => void>(() => {});
   const [osc52Enabled, setOsc52Enabled] = useState(initialOsc52Enabled);
   const osc52EnabledRef = useRef(initialOsc52Enabled);
   osc52EnabledRef.current = osc52Enabled;
@@ -310,6 +313,23 @@ export function TerminalView({
     terminal.current = view;
 
     const unbindSearch = search.bind(view, searchAddon, container);
+    // The browser may read the last saved file after the click; it is let go
+    // once the next save replaces it or the terminal goes away.
+    let lastSave: BrowserSave | null = null;
+    saveScrollback.current = () => {
+      const text = scrollbackText(view.buffer.active);
+      if (text === "") {
+        setTerminalNotice(t("terminal.saveScrollbackEmpty"));
+        return;
+      }
+      // The Android app takes a bare media type for its save dialog (NativeBridge.safeMimeType), so no charset.
+      void saveFile(new Blob([`${text}\n`], { type: "text/plain" }), scrollbackFileName(terminalDisplayTitle(session), new Date()))
+        .then((save) => {
+          lastSave?.release();
+          lastSave = save;
+        })
+        .catch(() => setProblem(t("terminal.saveScrollbackFailed")));
+    };
     copyContext.current = () => {
       const text = recentBufferText(view.buffer.active);
       if (text === "") {
@@ -492,6 +512,8 @@ export function TerminalView({
       sendInput.current = () => {};
       sendPaste.current = () => {};
       copyContext.current = () => {};
+      saveScrollback.current = () => {};
+      lastSave?.release();
     };
     // The terminal is built once per session; settings, callbacks and
     // translations it reads are applied by the effects below without
@@ -708,6 +730,7 @@ export function TerminalView({
               ? () => onOpenRemotePath(session.alias!, currentDirectory, "browse")
               : undefined}
             onCopyContext={() => copyContext.current()}
+            onSaveScrollback={() => saveScrollback.current()}
             onToggleOsc52={async () => {
               const next = !osc52Enabled;
               try {

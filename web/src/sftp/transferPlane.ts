@@ -1,5 +1,5 @@
+import type { BrowserSave } from "../ui/saveFile";
 import type {
-  BrowserSave,
   CreateTransferJob,
   DownloadStream,
   DownloadTarget,

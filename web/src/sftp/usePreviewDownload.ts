@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslate } from "../i18n/context";
-import { sftpApi, type BrowserSave } from "./api";
+import type { BrowserSave } from "../ui/saveFile";
+import { sftpApi } from "./api";
 import { localHostAlias } from "./localHost";
 import { sftpProblemText } from "./sftpProblemText";
 import { sftpTransferManager } from "./transferManager";
