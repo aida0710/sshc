@@ -45,6 +45,9 @@ type WorkspaceTreeProps = {
   // canBroadcast is false for an engine on an SSH host: sending a command to
   // several sessions is confirmed by an action token only this machine issues.
   canBroadcast?: boolean;
+  // runTarget is the SSH alias of the engine the shells open on, or null for
+  // this machine.
+  runTarget?: string | null;
 };
 
 type NameRequest = { kind: "create" } | { kind: "rename"; workspace: TerminalWorkspace };
@@ -70,6 +73,7 @@ export function WorkspaceTree({
   onDuplicate,
   onReorder,
   localShellProfiles = [],
+  runTarget = null,
   aliases = [],
   hosts = [],
   onOpenShell,
@@ -125,10 +129,10 @@ export function WorkspaceTree({
   const localChoices = useMemo<LocalChoice[]>(() => {
     const profiles = localShellProfiles.filter((profile) => profile.id !== "default");
     return [
-      { id: "default", label: t("terminal.openShell"), detail: t("terminal.localhost") },
+      { id: "default", label: t("terminal.openShell"), detail: runTarget ?? t("terminal.localhost") },
       ...profiles.map((profile) => ({ id: profile.id, label: `${t("terminal.openShell")} · ${profile.label}`, detail: profile.path })),
     ];
-  }, [localShellProfiles, t]);
+  }, [localShellProfiles, runTarget, t]);
 
   function toggleShowHidden() {
     setShowHidden((current) => {

@@ -152,6 +152,7 @@ export function App({
   const terminalWorkspace = useTerminalWorkspaceController({
     runTarget: runTargets.selected,
     api: settingsApi,
+    shells: runTargetApis.sessions,
     terminalSessions,
     enabled: state === "ready",
     section,
