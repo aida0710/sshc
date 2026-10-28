@@ -271,6 +271,31 @@ test("keeps the link and stops a program flooding the terminal at once on Ctrl+C
   expect(sockets).toBe(1);
 });
 
+test("moves the shell's cursor to where the line being typed is clicked", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "the prompt marks come from bash's PS1 here");
+  await openApplication(page, installation);
+  await openSessionList(page);
+  await openLocalShell(page);
+  // Shell integration marks where the prompt and the typed text begin (OSC 133;A and B).
+  const screen = await typeIntoTerminal(page, "PS1='\\[\\e]133;A\\a\\]$ \\[\\e]133;B\\a\\]'");
+  await page.keyboard.type("echo 0123456789 | rev");
+  // Keys typed while the shell still ran the PS1 command are echoed where the new prompt then starts,
+  // so the 5 to click is the one after the prompt: the last one on the line.
+  await expect(screen).toContainText("$ echo 0123456789 | rev");
+  const typed = drawnSpan(page, "echo 0123456789 | rev").last();
+  await expect(typed).toBeVisible();
+  const box = await typed.boundingBox();
+  const text = (await typed.textContent()) ?? "";
+  if (box === null) throw new Error("the typed line is not drawn");
+  const cellWidth = box.width / text.length;
+
+  await page.mouse.click(box.x + (text.lastIndexOf("5") + 0.5) * cellWidth, box.y + box.height / 2);
+  await page.keyboard.type("_");
+  await page.keyboard.press("Enter");
+
+  await expect(screen).toContainText("98765_43210");
+});
+
 test("refuses to open more sessions than the configured limit", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",
