@@ -37,7 +37,7 @@ type fakeEngineDirectory struct {
 	connected  map[string]bool
 }
 
-func (f *fakeEngineDirectory) Engines() ([]string, error) { return f.engines, nil }
+func (f *fakeEngineDirectory) Engines() ([]string, error)  { return f.engines, nil }
 func (f *fakeEngineDirectory) Connected(alias string) bool { return f.connected[alias] }
 func (f *fakeEngineDirectory) AddEngine(_ context.Context, alias string) error {
 	if f.addErr != nil {
