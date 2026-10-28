@@ -17,6 +17,7 @@ public final class NativeBridgeTest {
         String mime;
         String status;
         String appearance;
+        int barColour;
 
         @Override
         public void chooseSaveDestination(String requestId, String suggestedName, String mimeType) {
@@ -31,8 +32,9 @@ public final class NativeBridgeTest {
         }
 
         @Override
-        public void setAppearance(String appearance) {
+        public void setAppearance(String appearance, int barColour) {
             this.appearance = appearance;
+            this.barColour = barColour;
         }
 
         String permission = "granted";
@@ -172,9 +174,12 @@ public final class NativeBridgeTest {
         assertEquals(null, host.status);
         bridge.notifyTransfer("failed");
         assertEquals("failed", host.status);
-        bridge.setAppearance("sepia");
+        bridge.setAppearance("sepia", "#000000");
         assertEquals(null, host.appearance);
-        bridge.setAppearance("dark");
+        bridge.setAppearance("dark", "black");
+        assertEquals(null, host.appearance);
+        bridge.setAppearance("dark", "#0A0a0b");
         assertEquals("dark", host.appearance);
+        assertEquals(0xFF0A0A0B, host.barColour);
     }
 }

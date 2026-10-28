@@ -77,7 +77,7 @@ export function App({
   useAppViewport();
   const mobileLayout = useMediaQuery(mobileViewportQuery);
   const shortcuts = useBindings();
-  const { resolved: resolvedTheme } = useTheme();
+  const { resolved: resolvedTheme, scheme } = useTheme();
   const { route, location, navigate, navigateLocation, setNavigationBlocker } =
     useSectionRoute();
   const section = route.kind === "section" ? route.section : null;
@@ -115,9 +115,10 @@ export function App({
     openPaletteFromNavigation,
   } = useShellLayers({ mobileLayout, ready: state === "ready", section });
 
+  // Two themes of the same scheme have different bars, so this follows the theme, not only its scheme.
   useEffect(() => {
-    setAndroidAppearance(resolvedTheme);
-  }, [resolvedTheme]);
+    setAndroidAppearance(scheme);
+  }, [resolvedTheme, scheme]);
 
   const runTargets = useRunTargets({ translate: t, enabled: state === "ready", localVersion: version });
   // The terminal API of the run target: this machine's own, or the one this

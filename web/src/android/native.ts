@@ -1,3 +1,4 @@
+import type { ColorScheme } from "../theme/theme";
 import { newIdentifier } from "../ui/randomIdentifier";
 
 export type AndroidBridge = {
@@ -6,7 +7,7 @@ export type AndroidBridge = {
   finishSave(requestId: string): string;
   cancelSave(requestId: string): void;
   notifyTransfer(status: "completed" | "failed"): void;
-  setAppearance(appearance: "light" | "dark"): void;
+  setAppearance(appearance: ColorScheme, barColour: string): void;
   notificationPermission(): string;
   requestNotificationPermission(): void;
   showNotification(tag: string, title: string, body: string): string;
@@ -167,9 +168,12 @@ export function notifyAndroidTransfer(status: "completed" | "failed"): void {
   }
 }
 
-export function setAndroidAppearance(appearance: "light" | "dark"): void {
+// setAndroidAppearance paints Android's status and navigation bars like the top bar of the theme on screen:
+// the theme's --ui-toolbar, with light or dark icons by its scheme.
+export function setAndroidAppearance(scheme: ColorScheme): void {
+  const barColour = getComputedStyle(document.documentElement).getPropertyValue("--ui-toolbar").trim();
   try {
-    window.sshcAndroid?.setAppearance(appearance);
+    window.sshcAndroid?.setAppearance(scheme, barColour);
   } catch {
     // Android以外、またはrenderer再起動中はWebのthemeだけを維持する。
   }

@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import type { Theme } from "../../src/theme/theme";
 
 const binaryPath = resolve(
   process.cwd(),
@@ -290,14 +291,17 @@ export async function openSettingsPage(
   await page.getByRole("link", { name: `Open ${name}`, exact: true }).click();
 }
 
+// themeChoiceLabels are the names of the choices on Settings → Appearance. It is keyed by Theme, so a new
+// theme has to be named here, and appearance.spec.ts then checks it like the others.
+export const themeChoiceLabels: Record<Theme, string> = { system: "System", light: "Light", dark: "Dark" };
+
 // chooseTheme picks the theme on Settings → Appearance, the one place the signed-in app offers it.
-export async function chooseTheme(page: Page, theme: "system" | "light" | "dark"): Promise<void> {
-  const labels = { system: "System", light: "Light", dark: "Dark" } as const;
+export async function chooseTheme(page: Page, theme: Theme): Promise<void> {
   await openSection(page, "Appearance");
   // The radio itself is visually hidden behind its picture, so the choice is made by pressing its label.
   const themes = page.getByRole("radiogroup", { name: "Theme" });
-  await themes.locator("label").filter({ hasText: labels[theme] }).click();
-  await expect(themes.getByRole("radio", { name: labels[theme] })).toBeChecked();
+  await themes.locator("label").filter({ hasText: themeChoiceLabels[theme] }).click();
+  await expect(themes.getByRole("radio", { name: themeChoiceLabels[theme] })).toBeChecked();
 }
 
 export async function changeDisplayLanguage(
