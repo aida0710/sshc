@@ -28,7 +28,7 @@ The port and the Vault auto-lock under Engine belong to this device only. Sync d
 **Settings → Appearance** sets the theme and the accent colour of the whole app:
 
 - Theme: match the system, light, or dark
-- Accent colour: lavender, blue, sky, pink, mono, or custom. It marks the current item, buttons, and the focused terminal pane. Custom takes one colour of your own from the colour picker or as a code (#rrggbb), used in both the light and the dark theme. A colour that is hard to tell from the background of the theme on screen brings up a notice. A synced device running sshc v0.56.0 or earlier shows the offered colour chosen last instead
+- Accent colour: lavender, blue, sky, pink, mono, or custom. It marks the current item, buttons, and the focused terminal pane. Custom takes one colour of your own from the colour picker or as a code (#rrggbb), used in both the light and the dark theme. A colour that is hard to tell from the background of the theme on screen brings up a notice.
 
 Each settings page lists the other settings pages on its left, so you can move between them.
 

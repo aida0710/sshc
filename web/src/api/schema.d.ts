@@ -4091,9 +4091,7 @@ export interface components {
             vpn?: string;
         };
         AppearanceSettings: {
-            /** @enum {string} */
-            accent?: "lavender" | "blue" | "sky" | "pink" | "mono";
-            accentColor?: string;
+            accent?: string;
         };
         TerminalAppearance: {
             palette?: string;
