@@ -273,6 +273,25 @@ test("a new connection takes the phone's screen in place of the list and opens i
   await expect(form).toHaveCount(0);
 });
 
+test("a tap on the line being typed at a prompt moves the shell's cursor there", async ({ page, installation }) => {
+  // Shell integration marks where the prompt and the typed text begin (OSC 133;A and B).
+  const messages = await mockTerminalSession(page, "\x1b]133;A\x07$ \x1b]133;B\x07echo 0123456789");
+  await openApplication(page, installation);
+  await page.goto(new URL("/terminal", page.url()).href);
+  const typed = drawnSpan(page, "echo 0123456789").last();
+  await expect(typed).toBeVisible();
+  const box = await typed.boundingBox();
+  const text = (await typed.textContent()) ?? "";
+  if (box === null) throw new Error("the typed line is not drawn");
+  const cellWidth = box.width / text.length;
+
+  await page.touchscreen.tap(box.x + (text.indexOf("5") + 0.5) * cellWidth, box.y + box.height / 2);
+
+  // From after the 9 back to the 5: one arrow key for each of 9, 8, 7, 6 and 5.
+  await expect.poll(() => messages.join("")).toContain("\x1b[D".repeat(5));
+  expect(messages.join("")).not.toContain("\x1b[D".repeat(6));
+});
+
 test("a tap on a file path the terminal printed opens its preview at once", async ({ page, installation }) => {
   const imagePath = join(installation.home, "shot.png");
   test.skip(!imagePath.startsWith("/"), "terminal paths are detected only when they start with /");
