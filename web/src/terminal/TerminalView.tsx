@@ -456,6 +456,7 @@ export function TerminalView({
       coarsePointer: () => touchTerminalRef.current,
       settings: () => clipboardSettings.current,
       refuse: () => setProblem(t("terminal.clipboardRefused")),
+      nothingToPaste: (image) => setTerminalNotice(t(image ? "terminal.pasteImageUnsupported" : "terminal.pasteEmpty")),
       copied: () => setTerminalNotice(t("copy.done")),
       enhancedKey: (event) => encodeIntlYen(event, intlYenRef.current),
       sendEnhancedKey: (sequence) => linkController.currentStream()?.send(sequence),

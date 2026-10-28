@@ -994,6 +994,8 @@ export const ja = {
   "terminal.outputSkipped":
     "出力が画面の描画より速かったため、sshcエンジンの再生バッファに残っていない部分を飛ばしました。",
   "terminal.clipboardRefused": "クリップボードにアクセスできませんでした。",
+  "terminal.pasteImageUnsupported": "画像は貼り付けられません。ターミナルへ送れるのは文字だけです。",
+  "terminal.pasteEmpty": "クリップボードに貼り付けられる文字がありません。",
   "terminal.pasteHeading": "{target}への貼り付けを確認",
   "terminal.pasteDescription":
     "送信前に内容を確認してください。貼り付ける内容は{lines}行です。",
