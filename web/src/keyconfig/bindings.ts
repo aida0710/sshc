@@ -15,6 +15,9 @@ export const defaultBindings = {
   terminalSearch: ["Ctrl+F", "Meta+F"],
   copy: ["Ctrl+Shift+C", "Meta+C"],
   paste: ["Ctrl+V", "Meta+V", "Ctrl+Shift+V"],
+  // As Ghostty: Ctrl+Shift with the arrows, and Command with them on a Mac.
+  previousPrompt: ["Ctrl+Shift+ArrowUp", "Meta+ArrowUp"],
+  nextPrompt: ["Ctrl+Shift+ArrowDown", "Meta+ArrowDown"],
   nextSession: ["Alt+PageDown"],
   previousSession: ["Alt+PageUp"],
   home: [],

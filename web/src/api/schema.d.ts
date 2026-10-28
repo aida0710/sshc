@@ -4216,6 +4216,8 @@ export interface components {
                 terminalSearch: string[];
                 copy: string[];
                 paste: string[];
+                previousPrompt: string[];
+                nextPrompt: string[];
                 nextSession: string[];
                 previousSession: string[];
                 home: string[];
