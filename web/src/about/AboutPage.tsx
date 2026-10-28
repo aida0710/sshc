@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { aboutApi, type About, type AboutApi } from "../api/about";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { aboutApi, type AboutApi } from "../api/about";
 import { updateApi, type UpdateApi } from "../api/update";
 import { useLanguage } from "../i18n/context";
 import { UpdateControls } from "../shell/UpdateControls";
@@ -9,6 +9,7 @@ import { formatDateTime } from "../ui/format";
 import { FactRows, type Fact } from "../ui/FactRows";
 import { PageHeader, PageSection } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
+import { useLoad } from "../ui/useLoad";
 import { BuildDetails } from "./BuildDetails";
 import { ReleaseNotes } from "./ReleaseNotes";
 import { checkRequestFailedActivity, checkResultActivity, checkStartedActivity } from "./updateActivity";
@@ -21,8 +22,8 @@ type AboutPageProps = { api?: AboutApi; updates?: UpdateApi };
 
 export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProps) {
   const { t, locale } = useLanguage();
-  const [about, setAbout] = useState<About | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const aboutLoad = useLoad(useCallback(() => api.about(), [api]));
+  const about = aboutLoad.state === "loaded" ? aboutLoad.value : null;
   const [checking, setChecking] = useState(false);
   // A stored result may be days old; only a successful check on this page
   // can establish whether a newer version exists.
@@ -31,14 +32,6 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
   const { status, setStatus } = useUpdateStatus(updates);
   const activity = useUpdateActivity(status);
   const updateOutput = useUpdateOutput(updates, status?.job);
-
-  useEffect(() => {
-    let active = true;
-    void api.about().then((loaded) => {
-      if (active) setAbout(loaded);
-    }).catch(() => { if (active) setLoadFailed(true); });
-    return () => { active = false; };
-  }, [api]);
 
   async function checkUpdate() {
     if (checking) return;
@@ -86,7 +79,7 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
     <section aria-labelledby="about-heading" className="flex flex-col gap-[22px]">
       <PageHeader title={t("section.about")} headingId="about-heading" />
       <PageSection heading={t("about.build")}>
-        {loadFailed ? <Notice tone="danger">{t("about.loadFailed")}</Notice> : about === null ? <p role="status" className="text-sm text-ink-muted">{t("about.loading")}</p> : <BuildDetails about={about} />}
+        {aboutLoad.state === "failed" ? <Notice tone="danger">{t("about.loadFailed")}</Notice> : about === null ? <p role="status" className="text-sm text-ink-muted">{t("about.loading")}</p> : <BuildDetails about={about} />}
       </PageSection>
       <PageSection heading={t("about.updates")} headingId="about-update-heading">
         <div className="grid gap-3 text-sm text-ink-muted">

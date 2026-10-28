@@ -9,7 +9,7 @@ import { ActionArea } from "../ui/ActionArea";
 import { SettingsSection } from "./SettingsSection";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { SettingsLoadFailure } from "./SettingsLoadFailure";
-import { useSettingsLoad } from "./useSettingsLoad";
+import { useLoad } from "../ui/useLoad";
 
 export type EngineSettingsApi = Pick<SettingsApi, "engineSettings" | "setEngineSettings">;
 
@@ -42,7 +42,7 @@ export function EngineSettingsSection({ api, showHeading, passwordless }: {
       vaultAutoLockUnit: settings.vaultAutoLock?.mode === "idle" ? settings.vaultAutoLock.unit ?? "hours" : initialDraft.vaultAutoLockUnit,
     });
   }, [api]);
-  const settingsLoad = useSettingsLoad(loadSettings);
+  const settingsLoad = useLoad(loadSettings);
   const loaded = settingsLoad.state === "loaded";
 
   function edit(patch: Partial<EngineDraft>) {
