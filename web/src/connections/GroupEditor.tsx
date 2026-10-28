@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { GroupMetadata } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { formatDirectiveValues, parseDirectiveValues } from "../rules/rules";
@@ -14,6 +14,8 @@ type GroupEditorProps = {
   group: GroupMetadata;
   memberCount: number;
   actions: ActionMenuItem[];
+  // folders は、見出しのすぐ下に置く、グループのフォルダの中身（GroupFolders）。
+  folders?: ReactNode;
   onSave: (next: GroupMetadata) => Promise<boolean>;
   // 保存していない変更があるかを知らせる。画面はほかへ移る前に捨ててよいかを確かめる。
   onDirtyChange: (dirty: boolean) => void;
@@ -21,7 +23,7 @@ type GroupEditorProps = {
 
 // GroupEditor は、グループを選んで接続先を開いていないときに右側に出す、グループの編集欄である。
 // SSH の設定はキーワードを打ち込ませず、接続先の編集と同じ名前の欄で既定値として見せる。
-export function GroupEditor({ group, memberCount, actions, onSave, onDirtyChange }: GroupEditorProps) {
+export function GroupEditor({ group, memberCount, actions, folders, onSave, onDirtyChange }: GroupEditorProps) {
   const t = useTranslate();
   const showToast = useToast();
   const [saved, setSaved] = useState(() => draftOf(group));
@@ -104,6 +106,8 @@ export function GroupEditor({ group, memberCount, actions, onSave, onDirtyChange
           triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
         />
       </header>
+
+      {folders}
 
       <div className="flex flex-col gap-3 border-t border-line pt-5">
         <h4 className={sectionHeading}>{t("groupEditor.defaults")}</h4>

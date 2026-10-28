@@ -22,6 +22,7 @@ export type HistoryEntry = components["schemas"]["HistoryEntry"];
 export type PendingTransaction = components["schemas"]["PendingTransaction"];
 export type Metadata = components["schemas"]["Metadata"];
 export type GroupMetadata = components["schemas"]["GroupMetadata"];
+export type GroupView = components["schemas"]["GroupView"];
 export type HostMetadata = components["schemas"]["HostMetadata"];
 export type Notice = components["schemas"]["Notice"];
 export type Diagnostic = components["schemas"]["Diagnostic"];

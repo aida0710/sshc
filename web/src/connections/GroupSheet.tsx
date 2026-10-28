@@ -4,6 +4,8 @@ import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import type { GroupListing } from "./groupListing";
+import type { Notice } from "../api/config";
+import { GroupFolderNotices } from "./GroupFolderNotices";
 
 export type ScopeChoice = { kind: "all" } | { kind: "group"; name: string } | { kind: "ungrouped" };
 
@@ -16,12 +18,14 @@ type GroupSheetProps = {
   // null のときは［新しいグループ］を出さない。
   onCreate: (() => void) | null;
   groupActions: (name: string) => ActionMenuItem[];
+  folderNotices?: readonly Notice[];
+  onDeclare?: (name: string) => void;
   onClose: () => void;
 };
 
 // GroupSheet は、横幅の狭い画面で、グループの絞り込みとグループの操作を下から出す一覧にまとめる。
 // 広い画面では左のグループの列が同じ役目を持つ。
-export function GroupSheet({ groups, total, ungrouped, active, onChoose, onCreate, groupActions, onClose }: GroupSheetProps) {
+export function GroupSheet({ groups, total, ungrouped, active, onChoose, onCreate, groupActions, folderNotices = [], onDeclare, onClose }: GroupSheetProps) {
   const t = useTranslate();
 
   function isActive(scope: ScopeChoice): boolean {
@@ -76,6 +80,11 @@ export function GroupSheet({ groups, total, ungrouped, active, onChoose, onCreat
           </Button>
         )}
       </div>
+      {onDeclare === undefined || folderNotices.length === 0 ? null : (
+        <div className="px-3 pt-3">
+          <GroupFolderNotices notices={folderNotices} onDeclare={onDeclare} />
+        </div>
+      )}
       <ul className="min-h-0 flex-1 overflow-y-auto p-2">
         {row({ kind: "all" }, t("tree.allConnections"), total, 0, [])}
         {groups.map((group) => row({ kind: "group", name: group.name }, group.label, group.count, group.depth, groupActions(group.name)))}
