@@ -88,7 +88,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false, initialL
   // has typed more, so `value` is not always the model's latest contents.
   const pendingReports = useRef<string[]>([]);
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const { resolved } = useTheme();
+  const { scheme } = useTheme();
   const reducedMotion = useMediaQuery(reducedMotionQuery);
   callback.current = onChange;
   saveCallback.current = onSave;
@@ -108,7 +108,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false, initialL
       padding: { top: 10, bottom: 10 },
       scrollBeyondLastLine: false,
       cursorBlinking: editorCursorBlinking(reducedMotion),
-      theme: resolved === "dark" ? "vs-dark" : "vs",
+      theme: scheme === "dark" ? "vs-dark" : "vs",
     });
     startWithTabIndenting(view);
     const saveAction = view.addAction({ id: "sshc.saveFile", label: t("sftp.save"), keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS], run: () => { saveCallback.current?.(); } });
@@ -153,9 +153,9 @@ export function MonacoEditor({ path, value, onChange, readOnly = false, initialL
     editor.current?.updateOptions({
       readOnly,
       cursorBlinking: editorCursorBlinking(reducedMotion),
-      theme: resolved === "dark" ? "vs-dark" : "vs",
+      theme: scheme === "dark" ? "vs-dark" : "vs",
     });
-  }, [readOnly, reducedMotion, resolved]);
+  }, [readOnly, reducedMotion, scheme]);
 
   useEffect(() => {
     const view = editor.current;

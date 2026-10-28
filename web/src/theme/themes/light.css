@@ -1,0 +1,61 @@
+/* ライト。<html> にテーマがまだ付いていない間（最初の描画の前）もこの色にする。:where(:root) は
+   詳細度を持たないので、ほかのテーマのファイルを読み込む順に関わらず、そちらの色が勝つ。
+   [data-theme="light"] は、ダークの画面の中にライトの見本を描くとき（設定のテーマの見本）にも使う。 */
+:where(:root),
+[data-theme="light"] {
+  color-scheme: light;
+
+  --ui-canvas: #e9ebef;
+  --ui-sidebar: #ffffff;
+  --ui-tree: #f7f8fa;
+  --ui-toolbar: #ffffff;
+  --ui-card: #ffffff;
+  --ui-surface: #e4e7ec;
+  --ui-surface-subtle: #f4f5f8;
+  --ui-line: #d3d7de;
+  --ui-hairline: #e6e8ec;
+  --ui-control: #ffffff;
+  --ui-control-line: #8c949a;
+  --ui-hover: #eef0f4;
+  --ui-well: #f1f2f5;
+  --ui-select-fill: #eeecfa;
+  --ui-ink: #1f2326;
+  --ui-ink-muted: #4f575e;
+  --ui-ink-faint: #5f676e;
+  --ui-accent: #6550d0;
+  --ui-accent-ink: #ffffff;
+  --ui-notice: #fff6df;
+  --ui-notice-line: #efd08b;
+  --ui-notice-ink: #71500a;
+  --ui-danger: #c92b3a;
+  --ui-live: #177451;
+  --ui-code-bg: #080b0d;
+  --ui-code-fg: #d8dfe4;
+  --ui-brand-background: var(--ui-accent);
+  --ui-brand-mark: var(--ui-accent-ink);
+  --ui-brand-cursor: color-mix(in srgb, var(--ui-accent-ink) 70%, var(--ui-accent));
+  --ui-card-shadow: 0 1px 2px rgb(20 24 27 / 0.06);
+  --ui-pane-shadow: 0 6px 20px rgb(20 24 40 / 0.08);
+  --ui-skeleton: #e1e3e1;
+  --ui-skeleton-highlight: #f7f7f6;
+  --ui-term-bg: #ffffff;
+  --ui-term-fg: #1d1d1f;
+  --ui-term-cursor: #1d1d1f;
+  --ui-term-selection: rgb(0 122 255 / 0.24);
+  --ui-term-black: #2b2b2b;
+  --ui-term-red: #c02c38;
+  --ui-term-green: #23794a;
+  --ui-term-yellow: #8a6300;
+  --ui-term-blue: #1a56c4;
+  --ui-term-magenta: #9333a8;
+  --ui-term-cyan: #0f6f78;
+  --ui-term-white: #cfcfd4;
+  --ui-term-bright-black: #6e6e73;
+  --ui-term-bright-red: #e2453f;
+  --ui-term-bright-green: #2f9d5f;
+  --ui-term-bright-yellow: #b07d05;
+  --ui-term-bright-blue: #2f6fe0;
+  --ui-term-bright-magenta: #b455ca;
+  --ui-term-bright-cyan: #158b96;
+  --ui-term-bright-white: #f5f5f7;
+}

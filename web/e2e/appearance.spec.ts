@@ -1,10 +1,13 @@
 import { chooseConnectionAction } from "./support/connections";
 import { expect, test } from "./support/environment";
-import { chooseTheme, openApplication, openSection, sessionStatus } from "./support/environment";
+import { chooseTheme, openApplication, openSection, sessionStatus, themeChoiceLabels } from "./support/environment";
+import type { ColorTheme, Theme } from "../src/theme/theme";
 import { everySection } from "./support/sectionNavigation";
 import { answerNoVPNProfiles } from "./support/vpn";
 
-for (const appearance of ["light", "dark"] as const) {
+const everyTheme = (Object.keys(themeChoiceLabels) as Theme[]).filter((theme): theme is ColorTheme => theme !== "system");
+
+for (const appearance of everyTheme) {
   test(`every section renders in ${appearance}`, async ({ page, installation }) => {
     await answerNoVPNProfiles(page);
     await openApplication(page, installation);
@@ -156,7 +159,7 @@ for (const appearance of ["light", "dark"] as const) {
     }
 
     await openSection(page, "Config");
-    // The editor is the one framed area in the Config workspace, so its edge has to show in both themes.
+    // The editor is the one framed area in the Config workspace, so its edge has to show in every theme.
     const editor = page.getByLabel(/File text/);
     await expect(editor).toHaveCSS("border-top-width", "1px");
     await expect(editor).toHaveCSS("border-radius", "10px");

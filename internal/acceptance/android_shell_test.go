@@ -33,7 +33,7 @@ func cssToken(t *testing.T, css, selector, name string) string {
 	t.Helper()
 	start := strings.Index(css, selector+" {")
 	if start < 0 {
-		t.Fatalf("index.css に %q という選択子が無い", selector)
+		t.Fatalf("テーマの色のファイルに %q という選択子が無い", selector)
 	}
 	end := strings.Index(css[start:], "\n}")
 	if end < 0 {
@@ -71,30 +71,34 @@ func androidChromeColours(t *testing.T, java string) (dark, light string) {
 // ない。ページのツールバーと違う色を置くと、画面の上端に別の板が乗っているよう
 // に見える。
 //
-// MainActivity は Web UI の CSS 変数を直接参照できないため、両方の値を検証する。
+// Web を読み込む前と、ネイティブの画面（起動の失敗など）では、MainActivity が
+// システムの明暗でライトかダークの色を自分で塗る。MainActivity は Web UI の CSS
+// 変数を直接参照できないため、両方の値を検証する。Web を読み込んだあとは、Web が
+// 表示中のテーマの --ui-toolbar を渡すので、ほかのテーマはここに要らない。
 func TestTheAndroidChromeMatchesThePageToolbar(t *testing.T) {
 	t.Parallel()
-	css := readRepoFile(t, "web", "src", "index.css")
 	java := readRepoFile(t, "android", "app", "src", "main", "java",
 		"com", "github", "aida0710", "sshc", "MainActivity.java")
 
 	dark, light := androidChromeColours(t, java)
 
 	for _, want := range []struct {
+		theme    string
 		selector string
 		java     string
 	}{
-		{":root,\n[data-theme=\"light\"]", light},
-		{`[data-theme="dark"]`, dark},
+		{"light", ":where(:root),\n[data-theme=\"light\"]", light},
+		{"dark", `[data-theme="dark"]`, dark},
 	} {
+		css := readRepoFile(t, "web", "src", "theme", "themes", want.theme+".css")
 		token := cssToken(t, css, want.selector, "--ui-toolbar")
 		// Java は ARGB、CSS は RGB。不透明であることも一緒に確かめる。
 		if !strings.EqualFold(want.java[:2], "FF") {
 			t.Errorf("%s: Java の色 0x%s が不透明ではない", want.selector, want.java)
 		}
 		if got := "#" + strings.ToLower(want.java[2:]); got != strings.ToLower(token) {
-			t.Errorf("%s: index.css は --ui-toolbar: %s、MainActivity は %s\n"+
-				"  どちらかを変えたら、もう一方も変えること。", want.selector, token, got)
+			t.Errorf("%s: %s.css は --ui-toolbar: %s、MainActivity は %s\n"+
+				"  どちらかを変えたら、もう一方も変えること。", want.selector, want.theme, token, got)
 		}
 	}
 }

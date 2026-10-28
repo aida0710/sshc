@@ -1,10 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { applyTheme, detectTheme, rememberTheme, resolveTheme, type Theme } from "./theme";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { applyTheme, detectTheme, rememberTheme, resolveTheme, schemeOf, type ColorScheme, type ColorTheme, type Theme } from "./theme";
 
 type ThemeState = {
   theme: Theme;
   setTheme: (theme: Theme) => void;
-  resolved: "light" | "dark";
+  // resolved is the theme on screen; scheme is whether it is light or dark.
+  resolved: ColorTheme;
+  scheme: ColorScheme;
 };
 
 const ThemeContext = createContext<ThemeState | null>(null);
@@ -30,7 +32,10 @@ export function ThemeProvider({ children, initial }: { children: ReactNode; init
 
   const resolved = resolveTheme(theme, prefersDark);
 
-  useEffect(() => {
+  // A layout effect, so the theme is on <html> before any component's effect reads its colours from the
+  // stylesheet (the terminal, Android's system bars). A child's effects run before its parent's, so a plain
+  // effect here would come after theirs and they would read the previous theme.
+  useLayoutEffect(() => {
     applyTheme(document.documentElement, resolved);
   }, [resolved]);
 
@@ -39,12 +44,15 @@ export function ThemeProvider({ children, initial }: { children: ReactNode; init
     rememberTheme(next);
   }, []);
 
-  const value = useMemo<ThemeState>(() => ({ theme, setTheme, resolved }), [theme, setTheme, resolved]);
+  const value = useMemo<ThemeState>(
+    () => ({ theme, setTheme, resolved, scheme: schemeOf(resolved) }),
+    [theme, setTheme, resolved],
+  );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
-const fallback: ThemeState = { theme: "dark", setTheme: () => undefined, resolved: "dark" };
+const fallback: ThemeState = { theme: "dark", setTheme: () => undefined, resolved: "dark", scheme: "dark" };
 
 export function useTheme(): ThemeState {
   return useContext(ThemeContext) ?? fallback;

@@ -5,21 +5,38 @@ import {
   isTheme,
   rememberTheme,
   resolveTheme,
+  schemeOf,
+  themeLabel,
+  themes,
 } from "./theme";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 
 afterEach(() => {
   window.localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-scheme");
 });
 
 describe("isTheme", () => {
-  it("accepts the three choices and nothing else", () => {
-    expect(isTheme("system")).toBe(true);
-    expect(isTheme("light")).toBe(true);
-    expect(isTheme("dark")).toBe(true);
+  it("accepts system and every theme, and nothing else", () => {
+    expect(themes).toEqual(["system", "light", "dark"]);
+    for (const theme of themes) expect(isTheme(theme)).toBe(true);
     expect(isTheme("solarized")).toBe(false);
     expect(isTheme(undefined)).toBe(false);
+  });
+});
+
+describe("schemeOf", () => {
+  it("tells a light theme from a dark one", () => {
+    expect(schemeOf("light")).toBe("light");
+    expect(schemeOf("dark")).toBe("dark");
+  });
+});
+
+describe("themeLabel", () => {
+  it("names system and each theme", () => {
+    expect(themeLabel("system")).toBe("shell.themeSystem");
+    expect(themeLabel("dark")).toBe("shell.themeDark");
   });
 });
 
@@ -53,10 +70,11 @@ describe("resolveTheme", () => {
 });
 
 describe("applyTheme", () => {
-  it("stamps the resolved theme on the element", () => {
-    applyTheme(document.documentElement, "dark");
-    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-    applyTheme(document.documentElement, "light");
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+  it("stamps the resolved theme and its scheme on the element", () => {
+    const root = document.documentElement;
+    applyTheme(root, "dark");
+    expect([root.getAttribute("data-theme"), root.getAttribute("data-scheme")]).toEqual(["dark", "dark"]);
+    applyTheme(root, "light");
+    expect([root.getAttribute("data-theme"), root.getAttribute("data-scheme")]).toEqual(["light", "light"]);
   });
 });

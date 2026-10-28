@@ -19,7 +19,7 @@ var appearanceAccents = []string{"lavender", "blue", "sky", "pink", "mono"}
 var accentColorPattern = regexp.MustCompile(`^#[0-9a-f]{6}$`)
 
 // AppearanceSettings は、アプリの見た目のうち metadata に置いて同期するものである。
-// テーマ（ライト／ダーク）はこのブラウザだけの好みなので、ここには無い。
+// テーマ（ライト・ダークなど）はこのブラウザだけの好みなので、ここには無い。
 type AppearanceSettings struct {
 	// Accent は、選んでいる項目・ボタン・フォーカスの枠に使う色である。用意した色の名前か、
 	// 利用者が決めた色（#rrggbb、小文字）。空は既定の色（画面の既定は lavender）。

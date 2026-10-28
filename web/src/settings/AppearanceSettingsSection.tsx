@@ -5,18 +5,12 @@ import { chosenOption, customAccent, presetAccents, type AccentOption } from "..
 import { parseAccentColor } from "../theme/accentColor";
 import { useAccent } from "../theme/accentContext";
 import { useTheme } from "../theme/context";
-import { themes, type Theme } from "../theme/theme";
+import { themeAttributes, themeLabel, themes, type Theme } from "../theme/theme";
 import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { CustomAccentColor } from "./CustomAccentColor";
 import { SettingsSection } from "./SettingsSection";
 import { formColumns } from "../ui/FieldRow";
-
-const themeLabelKeys: Record<Theme, MessageKey> = {
-  system: "shell.themeSystem",
-  light: "shell.themeLight",
-  dark: "shell.themeDark",
-};
 
 const accentLabelKeys: Record<AccentOption, MessageKey> = {
   lavender: "appearance.accent.lavender",
@@ -64,7 +58,7 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
       {/* Each choice is a row: its name on the left, the options on the right, a line between rows. */}
       <div className={fieldRow}>
         <div className={fieldLabel}>{t("appearance.theme")}</div>
-        <div className="grid max-w-[532px] grid-cols-3 gap-3.5" role="radiogroup" aria-label={t("appearance.theme")}>
+        <div className="grid max-w-[720px] grid-cols-2 gap-3.5 md:grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))]" role="radiogroup" aria-label={t("appearance.theme")}>
           {themes.map((option) => (
             <label key={option} className="flex min-w-0 cursor-pointer flex-col gap-2 text-[13px]">
               <input
@@ -76,9 +70,10 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
                 className="peer sr-only"
               />
               <ThemeThumbnail theme={option} />
-              <span className="flex items-center gap-2 text-ink-muted peer-checked:text-ink peer-checked:[&>span]:border-[5px] peer-checked:[&>span]:border-accent">
+              <span className="flex items-center gap-2 text-ink-muted peer-checked:text-ink peer-checked:[&>span:first-child]:border-[5px] peer-checked:[&>span:first-child]:border-accent">
                 <span aria-hidden="true" className="size-4 shrink-0 rounded-full border-[1.5px] border-ink-faint" />
-                {t(themeLabelKeys[option])}
+                {/* A name too long for its column ("システムに合わせる") breaks into even halves, not after its last word. */}
+                <span className="min-w-0 text-balance">{t(themeLabel(option))}</span>
               </span>
             </label>
           ))}
@@ -125,17 +120,19 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
   );
 }
 
-const fieldRow = `grid gap-4 border-t border-line py-5 lg:gap-6 ${formColumns}`;
+// One column below lg is minmax(0, 1fr), not the implicit auto: the themes' auto-fill grid needs a definite
+// width to count its columns, or it lays all of them in one row past the edge.
+const fieldRow = `grid grid-cols-[minmax(0,1fr)] gap-4 border-t border-line py-5 lg:gap-6 ${formColumns}`;
 const fieldLabel = "pt-1.5 text-[13.5px] font-medium text-ink";
 
 // ThemeThumbnail is a small picture of the app in a theme: a sidebar with the
 // current item in the accent, and a terminal board. "System" shows both halves.
-// Each half carries data-theme so index.css paints it in that theme whatever the
-// page is in. The accent stripe reads the page's accent, copied into
+// Each half carries the theme's attributes so index.css paints it in that theme
+// whatever the page is in. The accent stripe reads the page's accent, copied into
 // --thumbnail-accent outside the halves, because a half's theme block would
 // otherwise put back the default accent.
 function ThemeThumbnail({ theme }: { theme: Theme }) {
-  const halves = theme === "system" ? (["light", "dark"] as const) : ([theme] as const);
+  const halves = theme === "system" ? (["light", "dark"] as const) : [theme];
   return (
     <span
       aria-hidden="true"
@@ -143,7 +140,7 @@ function ThemeThumbnail({ theme }: { theme: Theme }) {
       className="flex h-24 overflow-hidden rounded-[10px] border border-line peer-checked:outline-2 peer-checked:outline-offset-2 peer-checked:outline-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
     >
       {halves.map((half) => (
-        <span key={half} data-theme={half} className="flex flex-1 bg-canvas">
+        <span key={half} {...themeAttributes(half)} className="flex flex-1 bg-canvas">
           <span className="flex w-[30%] flex-col gap-1.5 bg-sidebar px-1.5 py-2">
             <span className="block h-1.5 w-[70%] rounded-full bg-[var(--thumbnail-accent)]" />
             <span className="block h-1.5 rounded-full bg-hover" />

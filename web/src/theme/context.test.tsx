@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
+import { useEffect } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider, useTheme } from "./context";
@@ -23,6 +24,7 @@ beforeEach(() => {
 afterEach(() => {
   window.localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-scheme");
 });
 
 function Probe() {
@@ -94,5 +96,25 @@ describe("ThemeProvider", () => {
     await user.click(screen.getByRole("button", { name: "go system" }));
 
     expect(screen.getByText("resolved dark")).toBeInTheDocument();
+  });
+
+  it("puts the theme on the page before a child's effect reads the page's colours", () => {
+    // The terminal and Android's system bars read the theme's colours from the stylesheet in an effect.
+    const seen: string[] = [];
+    let choose: (theme: "light") => void = () => undefined;
+    function Reader() {
+      const { resolved, setTheme } = useTheme();
+      choose = setTheme;
+      useEffect(() => {
+        seen.push(`${resolved} on page ${document.documentElement.getAttribute("data-theme")}`);
+      }, [resolved]);
+      return null;
+    }
+
+    render(<ThemeProvider initial="dark"><Reader /></ThemeProvider>);
+    act(() => choose("light"));
+
+    expect(seen).toEqual(["dark on page dark", "light on page light"]);
+    expect(document.documentElement.getAttribute("data-scheme")).toBe("light");
   });
 });
