@@ -35,6 +35,7 @@ type TerminalSettings struct {
 	RightClickPaste        *bool
 	WebGL                  *bool
 	BrowserScrollbackLines int
+	RetainedTerminals      int
 	OSC52                  bool
 	JISYenBackslash        bool
 	ComposerEnterSends     bool
@@ -60,6 +61,7 @@ func (s *Service) TerminalSettings() TerminalSettings {
 		RightClickPaste:        stored.EmbeddedTerminal.RightClickPaste,
 		WebGL:                  stored.EmbeddedTerminal.WebGL,
 		BrowserScrollbackLines: stored.EmbeddedTerminal.BrowserScrollbackLines,
+		RetainedTerminals:      stored.EmbeddedTerminal.RetainedTerminals,
 		OSC52:                  stored.EmbeddedTerminal.OSC52,
 		JISYenBackslash:        stored.EmbeddedTerminal.JISYenBackslash,
 		ComposerEnterSends:     stored.EmbeddedTerminal.ComposerEnterSends,
@@ -114,6 +116,7 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 			RightClickPaste:        settings.RightClickPaste,
 			WebGL:                  settings.WebGL,
 			BrowserScrollbackLines: settings.BrowserScrollbackLines,
+			RetainedTerminals:      settings.RetainedTerminals,
 			OSC52:                  settings.OSC52,
 			JISYenBackslash:        settings.JISYenBackslash,
 			ComposerEnterSends:     settings.ComposerEnterSends,

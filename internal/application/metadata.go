@@ -159,6 +159,8 @@ type EmbeddedTerminal struct {
 	// BrowserScrollbackLines はbrowserのxtermが保持する表示行数である。
 	// ScrollbackBytesはengineが再接続時に再生するbyte ringで、用途が異なる。
 	BrowserScrollbackLines int `json:"browserScrollbackLines,omitempty"`
+	// RetainedTerminals は、表示から外れても browser に裏で残すターミナルの数である。
+	RetainedTerminals int `json:"retainedTerminals,omitempty"`
 	// OSC52は、すべてのターミナルで、リモートのプログラムがOSC 52でクリップボードへ書き込むのを許す。
 	// 接続先ごとの上書きは無い（以前の版が書いた hosts[].osc52 は読み飛ばす）。
 	OSC52 bool `json:"osc52,omitempty"`
@@ -303,6 +305,11 @@ func ValidateMetadata(metadata Metadata) error {
 			(settings.BrowserScrollbackLines < terminal.MinBrowserScrollbackLines ||
 				settings.BrowserScrollbackLines > terminal.MaxBrowserScrollbackLines) {
 			return fmt.Errorf("%w: browserScrollbackLines %d", ErrMetadataTerminal, settings.BrowserScrollbackLines)
+		}
+		if settings.RetainedTerminals != 0 &&
+			(settings.RetainedTerminals < terminal.MinRetainedTerminals ||
+				settings.RetainedTerminals > terminal.MaxRetainedTerminals) {
+			return fmt.Errorf("%w: retainedTerminals %d", ErrMetadataTerminal, settings.RetainedTerminals)
 		}
 		if settings.LocalShellProfile != "" && !validShellProfileID(settings.LocalShellProfile) {
 			return fmt.Errorf("%w: localShellProfile", ErrMetadataTerminal)

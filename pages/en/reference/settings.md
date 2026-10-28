@@ -55,6 +55,7 @@ A passwordless Vault is neither auto-locked nor lockable by hand: it opens when 
 - Maximum concurrent sessions from 1 to 200, with a default of 50
 - Engine replay buffer from 16 KiB to 4 MiB, with a default of 256 KiB
 - Browser scrollback from 1,000 to 100,000 lines, with a default of 5,000
+- Terminals kept hidden from 1 to 99, with a default of 3. Terminals shown recently stay hidden when they leave the screen, so their whole scrollback is there when you go back. Each keeps its scrollback in the browser's memory (a few MB for 5,000 lines)
 - Reconnect attempts after a dropped connection and connection-log verbosity
 - Font size, color scheme, font, background, and tint
 - Copy on select and right-click paste
