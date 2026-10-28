@@ -214,7 +214,7 @@ describe("KnownHostsPanel", () => {
         false,
       ),
     );
-    expect(await screen.findByText(/tx-2/)).toBeInTheDocument();
+    expect(await screen.findByText("Added new.example.com.")).toBeInTheDocument();
   });
 
   it("adds an unverified key only on an explicit acknowledgement and forgets it afterwards", async () => {
@@ -291,8 +291,8 @@ describe("KnownHostsPanel", () => {
     await userEvent.click(within(row).getByRole("button", { name: "Delete" }));
     await userEvent.click(await screen.findByRole("button", { name: "Confirm delete" }));
 
-    expect(await screen.findByText(/tx-1/)).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText(/tx-1/)).not.toBeInTheDocument(), { timeout: toastVisibleMs + 1000 });
+    expect(await screen.findByText("Removed one entry.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Removed one entry.")).not.toBeInTheDocument(), { timeout: toastVisibleMs + 1000 });
   });
 
   it("reports a refused deletion without claiming the entry was removed", async () => {

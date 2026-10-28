@@ -7,7 +7,8 @@ export const toastVisibleMs = 2500;
 
 type VisibleToast = { id: number; message: string; tone: ToastTone };
 
-// ToastProvider は、アプリに一つだけ置き、useToast で出した知らせを画面の下に出す。
+// ToastProvider は、アプリに一つだけ置き、useToast で出した知らせを画面の下に出す。スマホの
+// 浮かせた下タブがあれば、その上に出す。
 // 読み上げの領域は常に置いておき、中身を入れ替えて読ませる（出すたびに領域を作ると
 // 読み上げられないことがある）。
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -29,7 +30,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div
         role="status"
-        className="pointer-events-none fixed inset-x-0 bottom-4 z-[80] flex justify-center px-4 pb-[env(safe-area-inset-bottom)]"
+        className="pointer-events-none fixed inset-x-0 bottom-[max(calc(1rem+var(--mobile-navigation-inset)),calc(1rem+env(safe-area-inset-bottom,0px)))] z-[80] flex justify-center px-4"
       >
         {toast === null ? null : (
           <ToastMessage key={toast.id} tone={toast.tone} className="max-w-md">

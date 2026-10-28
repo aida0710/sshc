@@ -2392,8 +2392,8 @@ export const ja = {
   "kh.addFailed": "鍵を追加できませんでした。何も変更していません。",
   "kh.addFailedCode":
     "鍵を追加できませんでした（{code}）。何も変更していません。",
-  "kh.removed": "1件のエントリを削除しました（履歴ID：{id}）。",
-  "kh.added": "{host}を追加しました（履歴ID：{id}）。",
+  "kh.removed": "1件のエントリを削除しました。",
+  "kh.added": "{host}を追加しました。",
   "kh.search": "検索",
   "kh.hashed": "（ハッシュ済み）",
   "kh.delete": "削除",
