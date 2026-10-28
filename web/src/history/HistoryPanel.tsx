@@ -14,7 +14,7 @@ import { formatDateTime } from "../ui/format";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
-export function historyOperationLabelKey(operation: string): MessageKey {
+function historyOperationLabelKey(operation: string): MessageKey {
   if (operation.startsWith("connection.")) return "history.operation.connection";
   if (operation.startsWith("key.")) return "history.operation.key";
   if (operation.startsWith("terminal.")) return "history.operation.terminal";
@@ -27,7 +27,7 @@ export function historyOperationLabelKey(operation: string): MessageKey {
   return "history.operation.other";
 }
 
-export function historyStatusLabelKey(status: string): MessageKey {
+function historyStatusLabelKey(status: string): MessageKey {
   switch (status) {
     case "staging": return "history.status.staging";
     case "staged": return "history.status.staged";

@@ -71,7 +71,7 @@ const remoteCapabilities: SFTPCapabilities = {
   details: true, browserUpload: true, download: true, dragOut: true, terminal: true,
 };
 
-export function remoteSource(alias: string): SFTPSource {
+function remoteSource(alias: string): SFTPSource {
   return {
     alias,
     local: false,
@@ -93,7 +93,7 @@ export function remoteSource(alias: string): SFTPSource {
 
 // Engine-local paths are always forward-slashed, but their root can be "/",
 // a Windows drive such as "C:/", or a network share "//server/share/".
-export function localRootOf(value: string): string {
+function localRootOf(value: string): string {
   const unc = /^\/\/[^/]+\/[^/]+(?:\/|$)/.exec(value);
   if (unc) return `${unc[0].replace(/\/$/, "")}/`;
   return /^[A-Za-z]:\//.test(value) ? value.slice(0, 3) : "/";
@@ -121,7 +121,7 @@ const localCapabilities: SFTPCapabilities = {
   details: true, browserUpload: false, download: false, dragOut: true, terminal: true,
 };
 
-export const localSource: SFTPSource = {
+const localSource: SFTPSource = {
   alias: localHostAlias,
   local: true,
   can: localCapabilities,

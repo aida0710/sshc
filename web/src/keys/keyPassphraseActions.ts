@@ -13,10 +13,10 @@ type KeyPassphraseActionsOptions = {
   storedPassphraseForm: ReturnType<typeof useStoredPassphraseForm>;
 };
 
-// useKeyPassphraseActions は、パスフレーズを使う鍵の操作をまとめる。パスフレーズの
+// createKeyPassphraseActions は、パスフレーズを使う鍵の操作をまとめる。パスフレーズの
 // 変更、保存したパスフレーズの割り当てと取り外し、ssh-agent への登録と取り外しである。
 // 断られたら、入力したパスフレーズを残さない。
-export function useKeyPassphraseActions({
+export function createKeyPassphraseActions({
   api,
   refresh,
   runKeyOperation,

@@ -41,8 +41,8 @@ const locallyExplainedSyncFailures = [
   "sync_ignore_invalid",
 ] as const;
 
-export const SYNC_FORCE_PUSH_ACTION_KIND = "sync.force_push";
-export const SYNC_FORCE_PUSH_TARGET = "remote-workspace";
+const SYNC_FORCE_PUSH_ACTION_KIND = "sync.force_push";
+const SYNC_FORCE_PUSH_TARGET = "remote-workspace";
 
 export type SyncApi = {
   syncStatus(): Promise<SyncStatus>;

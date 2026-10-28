@@ -7,8 +7,8 @@ export type EffectiveResponse = components["schemas"]["EffectiveResponse"];
 export type ReachabilityResponse = components["schemas"]["ReachabilityResponse"];
 export type AuthenticationResponse = components["schemas"]["AuthenticationResponse"];
 
-export const REACHABILITY_ACTION_KIND = "diagnostics.reachability";
-export const AUTHENTICATION_ACTION_KIND = "diagnostics.authentication";
+const REACHABILITY_ACTION_KIND = "diagnostics.reachability";
+const AUTHENTICATION_ACTION_KIND = "diagnostics.authentication";
 
 export type DiagnosticsApi = {
   configCheck(): Promise<ConfigCheckResponse>;

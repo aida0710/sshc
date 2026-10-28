@@ -10,7 +10,7 @@ export type TOTPCodeSet = components["schemas"]["TOTPCodeSet"];
 
 export type CredentialKind = "password" | "key_passphrase" | "totp";
 
-export const CREDENTIAL_REVEAL_ACTION_KIND = "credential.reveal";
+const CREDENTIAL_REVEAL_ACTION_KIND = "credential.reveal";
 
 function credentialPath(kind: CredentialKind, name: string): string {
   return `/api/v1/credentials/${kind}/${encodeURIComponent(name)}`;

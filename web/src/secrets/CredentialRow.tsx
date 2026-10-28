@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { CredentialsApi } from "../api/credentials";
-import { useTranslate } from "../i18n/context";
+import { useTranslate, type Translate } from "../i18n/context";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { InlinePanel } from "../ui/InlinePanel";
 import { Button } from "../ui/surface";
@@ -100,7 +100,7 @@ function rowMenu({ row, hosts, panel, hasCode, neighboursReady, actions, t }: {
   // The codes around the current one come with it; until they have, there is nothing to open.
   neighboursReady: boolean;
   actions: RowActions;
-  t: ReturnType<typeof useTranslate>;
+  t: Translate;
 }): ActionMenuItem[] {
   const toggle = (next: RowPanel) => () => actions.onOpenPanel(panel === next ? null : next);
   const items: ActionMenuItem[] = [];

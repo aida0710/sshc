@@ -6,10 +6,6 @@ import type { PaneSide } from "./sftpPanes";
 // entry lists and from the desktop are never mistaken for a tab.
 export const sftpTabMimeType = "application/x-sshc-sftp-tab";
 
-export function draggedTabId(event: DragEvent<HTMLElement>): string {
-  return typeof event.dataTransfer.getData === "function" ? event.dataTransfer.getData(sftpTabMimeType) : "";
-}
-
 export function carriesTab(event: DragEvent<HTMLElement>): boolean {
   return Array.from(event.dataTransfer.types ?? []).includes(sftpTabMimeType);
 }

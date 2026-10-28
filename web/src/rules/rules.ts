@@ -16,7 +16,7 @@ function byteLength(value: string): number {
   return new TextEncoder().encode(value).length;
 }
 
-export function isValidGroupSegment(segment: string): boolean {
+function isValidGroupSegment(segment: string): boolean {
   if (byteLength(segment) > maxGroupSegmentBytes) return false;
   if (!groupSegmentPattern.test(segment)) return false;
   return !reservedNames.has(segment.toLowerCase());

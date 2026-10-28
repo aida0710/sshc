@@ -13,7 +13,7 @@ export const localeLabelKeys: Record<Locale, MessageKey> = {
   ja: "shell.languageJapanese",
 };
 
-export function isLocale(value: unknown): value is Locale {
+function isLocale(value: unknown): value is Locale {
   return typeof value === "string" && (locales as readonly string[]).includes(value);
 }
 

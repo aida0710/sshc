@@ -1,6 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { Icon } from "../ui/icons";
-import { useTranslate } from "../i18n/context";
+import { useTranslate, type Translate } from "../i18n/context";
 import { showBrowserNotification } from "../ui/browserNotifications";
 import { notifiesTransfersNatively } from "../android/native";
 import { sftpTransferManager, type TransferNotice } from "./transferManager";
@@ -9,7 +9,7 @@ import { sftpTransferProblemText } from "./sftpProblemText";
 export function notifyBackgroundTransfers(
   notices: readonly TransferNotice[],
   delivered: Set<string>,
-  t: ReturnType<typeof useTranslate>,
+  t: Translate,
   hidden = document.hidden,
 ): void {
   for (const notice of notices) {

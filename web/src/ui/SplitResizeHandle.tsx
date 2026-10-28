@@ -2,8 +2,8 @@ import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent a
 
 export type SplitDirection = "horizontal" | "vertical";
 
-export const minimumSplitRatio = 10;
-export const maximumSplitRatio = 90;
+const minimumSplitRatio = 10;
+const maximumSplitRatio = 90;
 const keyboardStep = 5;
 
 export function clampSplitRatio(ratio: number): number {
