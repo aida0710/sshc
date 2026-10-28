@@ -16,13 +16,6 @@ import (
 	"sshc/internal/config"
 )
 
-// TokenEscapeWarning は、実行を伴うすべてのディレクティブの隣に表示される。
-//
-// OpenSSH は %h、%p、%r などを、シェル向けの引用をせずに実行するコマンドへ展開する。
-// そのため、設定から取られたホスト名やユーザーの値が、そのままそのシェルへ届き
-// うる。
-const TokenEscapeWarning = "OpenSSH does not shell-escape the tokens it expands. A hostname, port or user value can reach the shell of this command unchanged."
-
 // Executable は、OpenSSH にプログラムを実行させうるディレクティブひとつ。
 type Executable struct {
 	// Keyword は正規の表記。Match の criterion の場合は "Match exec"。

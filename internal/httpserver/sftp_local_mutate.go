@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v5"
 	"sshc/internal/api"
@@ -56,11 +55,7 @@ func (h SFTPHandlers) PlanLocalDelete(c *echo.Context) error {
 	if !allowed {
 		return response
 	}
-	expiresAt, err := time.Parse(time.RFC3339, issued.ExpiresAt)
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, api.SFTPLocalDeletePlan{Revision: plan.Revision, Items: plan.Items, ActionToken: issued.Token, ActionExpiresAt: expiresAt})
+	return c.JSON(http.StatusOK, api.SFTPLocalDeletePlan{Revision: plan.Revision, Items: plan.Items, ActionToken: issued.Token})
 }
 
 func (h SFTPHandlers) DeleteLocal(c *echo.Context) error {

@@ -4321,7 +4321,7 @@ components:
       additionalProperties: false
       required:
         [id, relativePath, kind, container, algorithm, keyType, bits, encrypted,
-         fingerprint, comment, permission, permissionRisk, sizeBytes, references, notes]
+         fingerprint, comment, permission, permissionRisk, references, notes]
       properties:
         id: { type: string }
         relativePath: { type: string }
@@ -4335,7 +4335,6 @@ components:
         comment: { type: string }
         permission: { type: string }
         permissionRisk: { type: boolean }
-        sizeBytes: { type: integer }
         certificate: { $ref: "#/components/schemas/KeyCertificate" }
         references: { type: array, items: { $ref: "#/components/schemas/KeyReference" } }
         notes: { type: array, items: { type: string } }
@@ -4432,13 +4431,12 @@ components:
     UpdatePreview:
       type: object
       additionalProperties: false
-      required: [current, target, manager, actionToken, actionExpiresAt]
+      required: [current, target, manager, actionToken]
       properties:
         current: { type: string }
         target: { type: string }
         manager: { type: string, enum: [homebrew, install.sh, install.ps1] }
         actionToken: { type: string }
-        actionExpiresAt: { type: string }
     UpdateJob:
       type: object
       additionalProperties: false
@@ -4641,14 +4639,13 @@ components:
     ExecutableDirective:
       type: object
       additionalProperties: false
-      required: [keyword, command, path, line, condition, onEvaluate, onConnect, overridable]
+      required: [keyword, command, path, line, condition, onConnect, overridable]
       properties:
         keyword: { type: string }
         command: { type: string }
         path: { type: string }
         line: { type: integer }
         condition: { type: string }
-        onEvaluate: { type: boolean }
         onConnect: { type: boolean }
         overridable: { type: boolean }
     ConfigCheckResponse:
@@ -4686,10 +4683,9 @@ components:
     EffectiveResponse:
       type: object
       additionalProperties: false
-      required: [alias, tokenWarning, executableDirectives, sources, complexities, route]
+      required: [alias, executableDirectives, sources, complexities, route]
       properties:
         alias: { type: string }
-        tokenWarning: { type: string }
         executableDirectives:
           type: array
           items: { $ref: "#/components/schemas/ExecutableDirective" }
@@ -4740,11 +4736,10 @@ components:
     ReachabilityResponse:
       type: object
       additionalProperties: false
-      required: [address, outcome, elapsedMs, detail, notice]
+      required: [address, outcome, detail, notice]
       properties:
         address: { type: string }
         outcome: { type: string }
-        elapsedMs: { type: integer }
         detail: { type: string }
         notice: { type: string }
     AuthenticationRequest:
@@ -4760,14 +4755,13 @@ components:
       # exitCode と stderr は無い。外部の ssh を起動しないので、終了コードも
       # 診断出力も存在しない。代わりに method（通った認証方式）と detail
       # （ユーザーへ向けた説明）を返す。
-      required: [outcome, authenticated, method, detail, truncated, elapsedMs]
+      required: [outcome, authenticated, method, detail, truncated]
       properties:
         outcome: { type: string }
         authenticated: { type: boolean }
         method: { type: string }
         detail: { type: string }
         truncated: { type: boolean }
-        elapsedMs: { type: integer }
     RemoteKeyPlanRequest:
       type: object
       additionalProperties: false
@@ -4779,7 +4773,7 @@ components:
     RemoteKeyPlan:
       type: object
       additionalProperties: false
-      required: [alias, user, hostname, port, valuesFrom, fingerprint, keyPath, keyLine, remotePath, routine, supported, manual, executableDirectives, actionToken, actionExpiresAt]
+      required: [alias, user, hostname, port, valuesFrom, fingerprint, keyPath, keyLine, remotePath, routine, supported, manual, executableDirectives, actionToken]
       properties:
         alias: { type: string }
         user: { type: string }
@@ -4799,7 +4793,6 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ExecutableDirective" }
         actionToken: { type: string }
-        actionExpiresAt: { type: string }
     RemoteKeyRegisterRequest:
       type: object
       additionalProperties: false
@@ -5571,10 +5564,9 @@ components:
     SyncHistory:
       type: object
       additionalProperties: false
-      required: [checkedAt, headRevision, revisions, historyTruncated, downloadTruncated, downloadedBytes, skipped]
+      required: [checkedAt, revisions, historyTruncated, downloadTruncated, downloadedBytes, skipped]
       properties:
         checkedAt: { type: string }
-        headRevision: { type: string, pattern: "^[0-9a-f]{64}$" }
         revisions:
           type: array
           maxItems: 50
@@ -5594,10 +5586,8 @@ components:
     SyncHistoryDiff:
       type: object
       additionalProperties: false
-      required: [fromRevision, toRevision, added, modified, removed, downloadedBytes]
+      required: [added, modified, removed, downloadedBytes]
       properties:
-        fromRevision: { type: string, pattern: "^[0-9a-f]{64}$" }
-        toRevision: { type: string, pattern: "^[0-9a-f]{64}$" }
         added:
           type: array
           items: { type: string }
@@ -6156,20 +6146,18 @@ components:
     TrashFileSummary:
       type: object
       additionalProperties: false
-      required: [originalRelativePath, trashRelativePath, kind, fingerprint, permission]
+      required: [originalRelativePath, kind, fingerprint, permission]
       properties:
         originalRelativePath: { type: string }
-        trashRelativePath: { type: string }
         kind: { type: string }
         fingerprint: { type: string }
         permission: { type: string }
     TrashEntrySummary:
       type: object
       additionalProperties: false
-      required: [id, deletedAt, ageDays, stale, files, restorable, blockers]
+      required: [id, ageDays, stale, files, restorable, blockers]
       properties:
         id: { type: string }
-        deletedAt: { type: string }
         ageDays: { type: integer }
         stale: { type: boolean }
         files: { type: array, items: { $ref: "#/components/schemas/TrashFileSummary" } }
@@ -6759,7 +6747,9 @@ components:
       type: object
       additionalProperties: false
       properties:
-        # 0 または省略時は 30000〜60000 からランダムに選ぶ。ポート番号は秘密情報ではない。
+        # 指定すると、エンジンはこのポートだけで待ち受け、使用中なら起動に失敗する。省略時は、
+        # 前回使ったポート、既定のポート（デスクトップは54447、Androidは54448）の順に試し、
+        # 使用中なら空いているポートを1つ選んで次回のために保存する。ポート番号は秘密情報ではない。
         port: { type: integer, minimum: 1024, maximum: 65535 }
         # 省略時は12時間。restartは自動ロックを無効にする。
         vaultAutoLock: { $ref: "#/components/schemas/VaultAutoLockSettings" }
@@ -7166,12 +7156,11 @@ components:
     SFTPLocalDeletePlan:
       type: object
       additionalProperties: false
-      required: [revision, items, actionToken, actionExpiresAt]
+      required: [revision, items, actionToken]
       properties:
         revision: { type: string, minLength: 1 }
         items: { type: integer, format: int64, minimum: 1 }
         actionToken: { type: string, minLength: 1 }
-        actionExpiresAt: { type: string, format: date-time }
     SFTPLocalListing:
       type: object
       additionalProperties: false
@@ -7272,7 +7261,7 @@ components:
     SFTPChmodPlan:
       type: object
       additionalProperties: false
-      required: [revision, selectionCount, files, directories, skippedSymlinks, options, actionToken, actionExpiresAt]
+      required: [revision, selectionCount, files, directories, skippedSymlinks, options, actionToken]
       properties:
         revision: { type: string, minLength: 1 }
         selectionCount: { type: integer, minimum: 1, maximum: 200 }
@@ -7281,7 +7270,6 @@ components:
         skippedSymlinks: { type: integer, minimum: 0 }
         options: { $ref: "#/components/schemas/SFTPChmodOptions" }
         actionToken: { type: string, minLength: 43, maxLength: 43 }
-        actionExpiresAt: { type: string, format: date-time }
     SFTPChmodResult:
       type: object
       additionalProperties: false

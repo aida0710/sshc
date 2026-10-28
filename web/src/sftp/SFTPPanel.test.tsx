@@ -73,7 +73,7 @@ describe("SFTPPanel uploads", () => {
       revision: "permission-plan", selectionCount: selection.entries.length,
       files: selection.entries.filter((entry: { path: string }) => entry.path.endsWith(".txt")).length,
       directories: selection.entries.filter((entry: { path: string }) => !entry.path.endsWith(".txt")).length,
-      skippedSymlinks: 0, options: selection.options, actionToken: "permission-token", actionExpiresAt: "2026-10-07T12:01:00Z",
+      skippedSymlinks: 0, options: selection.options, actionToken: "permission-token",
     }));
     permissions.apply.mockResolvedValue({ applied: 1, items: 1, complete: true });
     api.mkdir.mockResolvedValue(undefined);

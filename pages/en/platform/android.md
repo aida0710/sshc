@@ -7,7 +7,7 @@ description: Install and use the Android app, local shell, navigation, and file 
 
 ![Quick Connect on Android](/images/android-home.png)
 
-Install the signed APK from GitHub Releases. Android 13+ back navigation closes dialogs, command search, the drawer, and Inspector before moving through page history.
+Install the signed APK from GitHub Releases. Android 13+ back navigation closes dialogs, Command Palette, the drawer, and Inspector before moving through page history.
 
 ## Mobile controls
 
@@ -19,7 +19,7 @@ Install the signed APK from GitHub Releases. Android 13+ back navigation closes 
 - Tap a URL or path shown in the terminal to open a menu for opening it in the browser, copying it, and other actions. Tapping anywhere else opens the keyboard. OSC 8 hyperlinks printed by programs cannot be opened by tapping.
 - Dialogs and action sheets stay within the visible area above the keyboard. Long content scrolls inside them. Android Back dismisses the topmost menu before its parent dialog.
 
-The top-left menu button opens a drawer with running terminals and **Search everything**, which opens command search. Screen-edge gestures remain available for Android Back. Tap outside the drawer or use Back to close it.
+The top-left menu button, or swiping right across the page, opens a drawer with running terminals and **Search everything**, which opens command search. Swiping over a terminal or over something that scrolls sideways does not open it. Screen-edge gestures remain available for Android Back. Tap outside the drawer, swipe left or use Back to close it.
 
 ## SFTP on a phone
 

@@ -735,7 +735,6 @@ type AuthenticationRequest struct {
 type AuthenticationResponse struct {
 	Authenticated bool   `json:"authenticated"`
 	Detail        string `json:"detail"`
-	ElapsedMs     int    `json:"elapsedMs"`
 	Method        string `json:"method"`
 	Outcome       string `json:"outcome"`
 	Truncated     bool   `json:"truncated"`
@@ -971,7 +970,6 @@ type EffectiveResponse struct {
 	ExecutableDirectives []ExecutableDirective `json:"executableDirectives"`
 	Route                []JumpStage           `json:"route"`
 	Sources              []ValueSource         `json:"sources"`
-	TokenWarning         string                `json:"tokenWarning"`
 }
 
 // EngineSettings defines model for EngineSettings.
@@ -987,7 +985,6 @@ type ExecutableDirective struct {
 	Keyword     string `json:"keyword"`
 	Line        int    `json:"line"`
 	OnConnect   bool   `json:"onConnect"`
-	OnEvaluate  bool   `json:"onEvaluate"`
 	Overridable bool   `json:"overridable"`
 	Path        string `json:"path"`
 }
@@ -1121,7 +1118,6 @@ type KeyItem struct {
 	PermissionRisk bool            `json:"permissionRisk"`
 	References     []KeyReference  `json:"references"`
 	RelativePath   string          `json:"relativePath"`
-	SizeBytes      int             `json:"sizeBytes"`
 }
 
 // KeyReference defines model for KeyReference.
@@ -1381,11 +1377,10 @@ type PushResult struct {
 
 // ReachabilityResponse defines model for ReachabilityResponse.
 type ReachabilityResponse struct {
-	Address   string `json:"address"`
-	Detail    string `json:"detail"`
-	ElapsedMs int    `json:"elapsedMs"`
-	Notice    string `json:"notice"`
-	Outcome   string `json:"outcome"`
+	Address string `json:"address"`
+	Detail  string `json:"detail"`
+	Notice  string `json:"notice"`
+	Outcome string `json:"outcome"`
 }
 
 // RecentConnection defines model for RecentConnection.
@@ -1514,7 +1509,6 @@ type RemoteEngineStatus struct {
 
 // RemoteKeyPlan defines model for RemoteKeyPlan.
 type RemoteKeyPlan struct {
-	ActionExpiresAt      string                `json:"actionExpiresAt"`
 	ActionToken          string                `json:"actionToken"`
 	Alias                string                `json:"alias"`
 	ExecutableDirectives []ExecutableDirective `json:"executableDirectives"`
@@ -1627,7 +1621,6 @@ type SFTPChmodOptions struct {
 
 // SFTPChmodPlan defines model for SFTPChmodPlan.
 type SFTPChmodPlan struct {
-	ActionExpiresAt time.Time        `json:"actionExpiresAt"`
 	ActionToken     string           `json:"actionToken"`
 	Directories     int              `json:"directories"`
 	Files           int              `json:"files"`
@@ -1756,10 +1749,9 @@ type SFTPLocalDeleteEntry struct {
 
 // SFTPLocalDeletePlan defines model for SFTPLocalDeletePlan.
 type SFTPLocalDeletePlan struct {
-	ActionExpiresAt time.Time `json:"actionExpiresAt"`
-	ActionToken     string    `json:"actionToken"`
-	Items           int64     `json:"items"`
-	Revision        string    `json:"revision"`
+	ActionToken string `json:"actionToken"`
+	Items       int64  `json:"items"`
+	Revision    string `json:"revision"`
 }
 
 // SFTPLocalDeleteRequest defines model for SFTPLocalDeleteRequest.
@@ -1897,7 +1889,6 @@ type SyncHistory struct {
 	CheckedAt         string                `json:"checkedAt"`
 	DownloadTruncated bool                  `json:"downloadTruncated"`
 	DownloadedBytes   int64                 `json:"downloadedBytes"`
-	HeadRevision      string                `json:"headRevision"`
 	HistoryTruncated  bool                  `json:"historyTruncated"`
 	Revisions         []SyncHistoryRevision `json:"revisions"`
 	Skipped           int                   `json:"skipped"`
@@ -1907,10 +1898,8 @@ type SyncHistory struct {
 type SyncHistoryDiff struct {
 	Added           []string `json:"added"`
 	DownloadedBytes int64    `json:"downloadedBytes"`
-	FromRevision    string   `json:"fromRevision"`
 	Modified        []string `json:"modified"`
 	Removed         []string `json:"removed"`
-	ToRevision      string   `json:"toRevision"`
 }
 
 // SyncHistoryDiffRequest defines model for SyncHistoryDiffRequest.
@@ -2360,7 +2349,6 @@ type TerminalWorkspaceList struct {
 type TrashEntrySummary struct {
 	AgeDays    int                `json:"ageDays"`
 	Blockers   []string           `json:"blockers"`
-	DeletedAt  string             `json:"deletedAt"`
 	Files      []TrashFileSummary `json:"files"`
 	Id         string             `json:"id"`
 	Restorable bool               `json:"restorable"`
@@ -2373,7 +2361,6 @@ type TrashFileSummary struct {
 	Kind                 string `json:"kind"`
 	OriginalRelativePath string `json:"originalRelativePath"`
 	Permission           string `json:"permission"`
-	TrashRelativePath    string `json:"trashRelativePath"`
 }
 
 // TrashKeyResponse defines model for TrashKeyResponse.
@@ -2472,11 +2459,10 @@ type UpdatePasswordUnchanged struct {
 
 // UpdatePreview defines model for UpdatePreview.
 type UpdatePreview struct {
-	ActionExpiresAt string               `json:"actionExpiresAt"`
-	ActionToken     string               `json:"actionToken"`
-	Current         string               `json:"current"`
-	Manager         UpdatePreviewManager `json:"manager"`
-	Target          string               `json:"target"`
+	ActionToken string               `json:"actionToken"`
+	Current     string               `json:"current"`
+	Manager     UpdatePreviewManager `json:"manager"`
+	Target      string               `json:"target"`
 }
 
 // UpdatePreviewManager defines model for UpdatePreview.Manager.

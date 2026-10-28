@@ -2058,6 +2058,7 @@ export const en = {
   "sync.regionHint":
     "Optional. Leave this empty to use auto. Use auto for R2; for Amazon S3, enter the bucket's region.",
   "sync.accessKeyId": "Access key ID",
+  "sync.accessKeySaved": "The saved access key ID ends in {suffix}.",
   "sync.secretAccessKey": "Secret access key",
   "sync.credentialsNote":
     "Bucket credentials are encrypted with the master password and excluded from snapshots. Including them would allow anyone who obtained one snapshot to download later snapshots.",

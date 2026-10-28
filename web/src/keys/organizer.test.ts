@@ -26,7 +26,6 @@ function item(relativePath: string, id = relativePath): KeyItem {
     comment: "",
     permission: "0600",
     permissionRisk: false,
-    sizeBytes: 444,
     references: [],
     notes: [],
   };

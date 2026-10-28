@@ -38,7 +38,6 @@ const detail: HostDetail = {
 
 const effective: EffectiveResponse = {
   alias: "bastion",
-  tokenWarning: "OpenSSH token warning.",
   executableDirectives: [],
   sources: [{
     keyword: "HostName",
@@ -85,14 +84,12 @@ describe("ConnectionAnalysis", () => {
   it("localises the executable-directive warning instead of showing backend prose", async () => {
     const risky: EffectiveResponse = {
       ...effective,
-      tokenWarning: "UNTRANSLATED_BACKEND_WARNING",
       executableDirectives: [{
         keyword: "ProxyCommand",
         command: "/usr/bin/nc %h %p",
         path: "config",
         line: 9,
         condition: "Host bastion",
-        onEvaluate: false,
         onConnect: true,
         overridable: false,
       }],

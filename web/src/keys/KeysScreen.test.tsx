@@ -68,7 +68,6 @@ function buildInventory(): KeyInventoryResponse {
         comment: "aida@laptop",
         permission: "0600",
         permissionRisk: false,
-        sizeBytes: 444,
         references: [
           {
             directive: "IdentityFile",
@@ -94,7 +93,6 @@ function buildInventory(): KeyInventoryResponse {
         comment: "",
         permission: "0644",
         permissionRisk: true,
-        sizeBytes: 1700,
         references: [],
         notes: ["fingerprint_unavailable"],
       },
@@ -200,13 +198,11 @@ function buildApi(overrides: Partial<KeysApi> = {}): KeysApi {
       entries: [
         {
           id: "20260805T090000.000-aabbccdd",
-          deletedAt: "2026-08-05T09:00:00Z",
           ageDays: 40,
           stale: true,
           files: [
             {
               originalRelativePath: "id_old",
-              trashRelativePath: "sshc/trash/20260805T090000.000-aabbccdd/id_old",
               kind: "private_key",
               fingerprint: "SHA256:012345",
               permission: "0600",

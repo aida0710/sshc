@@ -23,7 +23,6 @@ const plan = {
   manual: ["Open a session to the host yourself."],
   executableDirectives: [],
   actionToken,
-  actionExpiresAt: "2026-08-05T09:02:00Z",
 };
 
 function jsonResponse(body: unknown, status = 200): Response {

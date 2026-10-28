@@ -5,7 +5,6 @@ import (
 	"errors"
 	"math"
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -356,7 +355,6 @@ func (h KeyHandlers) ListTrash(c *echo.Context) error {
 	for _, entry := range entries {
 		response.Entries = append(response.Entries, api.TrashEntrySummary{
 			Id:         entry.ID,
-			DeletedAt:  entry.DeletedAt.UTC().Format(time.RFC3339),
 			AgeDays:    entry.AgeDays,
 			Stale:      entry.Stale,
 			Files:      trashFiles(entry.Files),
@@ -514,7 +512,6 @@ func keyItem(item keys.Item) api.KeyItem {
 		Comment:        item.Comment,
 		Permission:     item.Permission,
 		PermissionRisk: item.PermissionRisk,
-		SizeBytes:      int(item.SizeBytes),
 		References:     referenceList(item.References),
 		Notes:          nonNilStrings(item.Notes),
 	}
@@ -562,7 +559,6 @@ func trashFiles(files []keys.TrashFile) []api.TrashFileSummary {
 	for _, file := range files {
 		converted = append(converted, api.TrashFileSummary{
 			OriginalRelativePath: file.OriginalRelativePath,
-			TrashRelativePath:    file.TrashRelativePath,
 			Kind:                 string(file.Kind),
 			Fingerprint:          file.Fingerprint,
 			Permission:           file.Permission,

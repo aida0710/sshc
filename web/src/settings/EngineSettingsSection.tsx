@@ -10,6 +10,7 @@ import { SettingsSection } from "./SettingsSection";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { SettingsLoadFailure } from "./SettingsLoadFailure";
 import { useLoad } from "../ui/useLoad";
+import { runsInAndroidApp } from "../android/native";
 
 export type EngineSettingsApi = Pick<SettingsApi, "engineSettings" | "setEngineSettings">;
 
@@ -80,18 +81,22 @@ export function EngineSettingsSection({ api, showHeading, passwordless }: {
     <SettingsSection id="settings-engine" label={t("engine.heading")} icon="settings" showHeading={showHeading}>
       <div>
         <SettingsLoadFailure settingsLoad={settingsLoad} title={t("engine.loadFailed")} />
-        <FieldRow label={t("engine.portLabel")} hint={t("engine.portHint")}>
-          <input
-            type="number"
-            min={1024}
-            max={65535}
-            className={control}
-            value={draft.port}
-            placeholder="54447"
-            disabled={disabled}
-            onChange={(event) => edit({ port: event.target.value })}
-          />
-        </FieldRow>
+        {/* Android版はポートを変えさせない。WebView は origin（ポート）ごとに保存内容を分けるので、
+            変えるとテーマなどの設定と途中のダウンロードの一時データを失う。 */}
+        {runsInAndroidApp() ? null : (
+          <FieldRow label={t("engine.portLabel")} hint={t("engine.portHint")}>
+            <input
+              type="number"
+              min={1024}
+              max={65535}
+              className={control}
+              value={draft.port}
+              placeholder="54447"
+              disabled={disabled}
+              onChange={(event) => edit({ port: event.target.value })}
+            />
+          </FieldRow>
+        )}
         <FieldRow label={t("engine.vaultAutoLockLabel")} hint={t("engine.vaultAutoLockHint")}>
           <select
             className={control}
