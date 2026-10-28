@@ -2391,8 +2391,8 @@ export const en = {
   "kh.addFailed": "The key could not be added. Nothing was changed.",
   "kh.addFailedCode":
     "The key could not be added ({code}). Nothing was changed.",
-  "kh.removed": "Removed one entry in transaction {id}.",
-  "kh.added": "Added {host} in transaction {id}.",
+  "kh.removed": "Removed one entry.",
+  "kh.added": "Added {host}.",
   "kh.search": "Search",
   "kh.hashed": "(hashed)",
   "kh.delete": "Delete",
