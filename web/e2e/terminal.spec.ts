@@ -339,6 +339,27 @@ for (const chord of ["Control+v", "Control+Shift+V"]) {
   });
 }
 
+// Coming back to the page rechecks the vault, and the app is inert meanwhile, which takes the focus off the
+// terminal. Typing right after coming back must still reach the shell, without clicking the terminal first.
+test("keeps the keyboard on the terminal after the page is hidden and shown again", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = await typeIntoTerminal(page, "echo before-leaving");
+  await expect(screen).toContainText("before-leaving", { timeout: 20_000 });
+
+  for (const state of ["hidden", "visible"] as const) {
+    await page.evaluate((visibility) => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+      document.dispatchEvent(new Event("visibilitychange"));
+    }, state);
+  }
+  await expect(page.getByText("Checking that the vault is still unlocked before restoring protected content…")).toHaveCount(0);
+  await expect(terminalKeyboard(page)).toBeFocused();
+  await page.keyboard.type("echo after-coming-back");
+  await page.keyboard.press("Enter");
+  await expect(screen).toContainText("after-coming-back", { timeout: 20_000 });
+});
+
 test("reviews a multiline paste before sending any terminal input", async ({ page, context, installation }) => {
   const inputFrames: string[] = [];
   page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {
