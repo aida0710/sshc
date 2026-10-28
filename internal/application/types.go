@@ -26,15 +26,15 @@ const (
 
 // EditRequest は、要求された 1 個の変更である。
 type EditRequest struct {
-	Kind     EditKind    `json:"kind"`
-	Path     string      `json:"path,omitempty"`
-	Base     string      `json:"base,omitempty"`
-	Alias    string      `json:"alias,omitempty"`
-	NewAlias string      `json:"newAlias,omitempty"`
-	Fields   []FieldEdit `json:"fields,omitempty"`
-	Raw      string      `json:"raw,omitempty"`
-	Comment  string      `json:"comment,omitempty"`
-	Hosts    []HostEdit  `json:"hosts,omitempty"`
+	Kind     EditKind       `json:"kind"`
+	Path     string         `json:"path,omitempty"`
+	Base     string         `json:"base,omitempty"`
+	Alias    string         `json:"alias,omitempty"`
+	NewAlias string         `json:"newAlias,omitempty"`
+	Fields   []FieldEdit    `json:"fields,omitempty"`
+	Raw      string         `json:"raw,omitempty"`
+	Comment  string         `json:"comment,omitempty"`
+	Hosts    []HostIdentity `json:"hosts,omitempty"`
 	// Bases は、Hosts が指すファイルごとの、画面が読み込んだときの中身である。
 	// 同じファイルにある接続先がいくつあっても、中身は 1 回だけ送る。
 	Bases []FileBase `json:"bases,omitempty"`
@@ -52,12 +52,6 @@ type EditRequest struct {
 	// DestinationPath と DestinationBase は、move の 2 番目のファイルを記述する。
 	DestinationPath string `json:"destinationPath,omitempty"`
 	DestinationBase string `json:"destinationBase,omitempty"`
-}
-
-// HostEdit は、一括操作の対象の接続先である。ファイルの中身は EditRequest.Bases に置く。
-type HostEdit struct {
-	Path  string `json:"path"`
-	Alias string `json:"alias"`
 }
 
 // FileBase は、一括操作で書き換えるファイルと、画面が読み込んだときのその中身である。

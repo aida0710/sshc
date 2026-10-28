@@ -120,7 +120,7 @@ func TestDeletingSeveralHostsDropsTheirStartupsAndKeepsTheRest(t *testing.T) {
 
 	if _, err := harness.service.SaveWithSecrets(EditRequest{
 		Kind:  EditDeleteHosts,
-		Hosts: []HostEdit{{Path: "config", Alias: "edge"}, {Path: "config", Alias: "core"}},
+		Hosts: []HostIdentity{{Path: "config", Alias: "edge"}, {Path: "config", Alias: "core"}},
 		Bases: []FileBase{{Path: "config", Base: before}},
 	}); err != nil {
 		t.Fatal(err)

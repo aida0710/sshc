@@ -4390,10 +4390,6 @@ export interface components {
             keyword?: string;
             values?: string[];
         };
-        HostEdit: {
-            path: string;
-            alias: string;
-        };
         FileBase: {
             path: string;
             base: string;
@@ -4405,7 +4401,7 @@ export interface components {
             alias?: string;
             newAlias?: string;
             /** @description Targets for move_hosts or delete_hosts. Each path must have exactly one entry in bases. */
-            hosts?: components["schemas"]["HostEdit"][];
+            hosts?: components["schemas"]["HostIdentity"][];
             /** @description The file each move_hosts or delete_hosts target lives in, with the contents the client loaded, once per file. */
             bases?: components["schemas"]["FileBase"][];
             fields?: components["schemas"]["FieldEdit"][];
