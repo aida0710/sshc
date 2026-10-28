@@ -9,9 +9,9 @@ Menu is organized into feature groups, and each page in it has a line on what it
 
 ## Keyboard shortcuts
 
-Open **Menu → Keyboard shortcuts** to assign command search, terminal search, copy/paste, previous/next connection, Home and SFTP. Click a binding and press a chord with Ctrl, Alt or Meta (Command), or a function key. Escape cancels; Tab moves to the next control.
+Open **Menu → Keyboard shortcuts** to assign command search, terminal search, copy/paste, previous/next prompt, previous/next connection, Home and SFTP. Click a binding and press a chord with Ctrl, Alt or Meta (Command), or a function key. Escape cancels; Tab moves to the next control.
 
-Duplicate bindings are rejected. Use **Clear** to disable an action or **Restore defaults** to reset all bindings. Connection switching defaults to Alt+PageDown / Alt+PageUp. Copy, paste and terminal search apply inside the terminal. Paste retains its normal confirmation and editing flow.
+Duplicate bindings are rejected. Use **Clear** to disable an action or **Restore defaults** to reset all bindings. Connection switching defaults to Alt+PageDown / Alt+PageUp. Moving to the previous/next prompt defaults to Ctrl+Shift+Up / Down (Command+Up / Down on a Mac): when the shell marks its prompts through OSC 133 (shell integration), it passes over long output to the prompt's line. On mobile, choose it from the terminal's **…** menu. Copy, paste, terminal search and the prompt keys apply inside the terminal. Paste retains its normal confirmation and editing flow.
 
 Save named presets, duplicate, rename, edit or delete them. Preset contents are included in Sync; each browser selects its own preset. Editing Default creates a personal preset. Deleting the selected preset restores defaults. Reload after a concurrent edit conflict. Update all synced devices to a version that supports presets because the metadata format has changed. Browser or OS shortcuts may take priority. Native browser paste remains available.
 

@@ -30,26 +30,56 @@ func validateShortcutPresets(presets []ShortcutPreset) error {
 	}
 	ids := map[string]bool{}
 	for _, p := range presets {
-		if !shortcutID.MatchString(p.ID) || p.ID == "default" || ids[p.ID] || strings.TrimSpace(p.Name) == "" || utf8.RuneCountInString(p.Name) > validate.MaxShortcutPresetNameLength || strings.ContainsAny(p.Name, "\r\n\x00") || len(p.Bindings) != len(validate.ShortcutActions) {
+		if !validShortcutPreset(p) || ids[p.ID] {
 			return ErrShortcutPresets
 		}
 		ids[p.ID] = true
-		seen := map[string]bool{}
-		for _, action := range validate.ShortcutActions {
-			keys, ok := p.Bindings[action]
-			if !ok || keys == nil || len(keys) > validate.MaxShortcutKeysPerAction {
-				return ErrShortcutPresets
-			}
-			for _, key := range keys {
-				if validate.ShortcutChord(key) != nil || seen[key] {
-					return ErrShortcutPresets
-				}
-				seen[key] = true
-			}
-		}
 	}
 	return nil
 }
+
+// validShortcutPreset says whether p names itself properly and binds every
+// action, each to chords the screen records and none twice.
+func validShortcutPreset(p ShortcutPreset) bool {
+	if !shortcutID.MatchString(p.ID) || p.ID == "default" || strings.TrimSpace(p.Name) == "" || utf8.RuneCountInString(p.Name) > validate.MaxShortcutPresetNameLength || strings.ContainsAny(p.Name, "\r\n\x00") || len(p.Bindings) != len(validate.ShortcutActions) {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, action := range validate.ShortcutActions {
+		keys, ok := p.Bindings[action]
+		if !ok || keys == nil || len(keys) > validate.MaxShortcutKeysPerAction {
+			return false
+		}
+		for _, key := range keys {
+			if validate.ShortcutChord(key) != nil || seen[key] {
+				return false
+			}
+			seen[key] = true
+		}
+	}
+	return true
+}
+
+// withoutUnreadableShortcutPresets drops the presets this build cannot use: a
+// preset saved before an action was added does not bind it. They are dropped
+// rather than filled in (the user's choice for #367); keeping them would make
+// every later save of metadata refuse.
+func withoutUnreadableShortcutPresets(metadata *Metadata) {
+	kept := metadata.ShortcutPresets[:0]
+	ids := map[string]bool{}
+	for _, p := range metadata.ShortcutPresets {
+		if len(kept) >= validate.MaxShortcutPresets || !validShortcutPreset(p) || ids[p.ID] {
+			continue
+		}
+		ids[p.ID] = true
+		kept = append(kept, p)
+	}
+	if len(kept) == 0 {
+		kept = nil
+	}
+	metadata.ShortcutPresets = kept
+}
+
 func (s *Service) SetShortcutPresets(base, presets []ShortcutPreset) (SaveResult, error) {
 	if err := validateShortcutPresets(presets); err != nil {
 		return SaveResult{}, err

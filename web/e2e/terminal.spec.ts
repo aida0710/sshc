@@ -353,6 +353,28 @@ test("tells a program whether the terminal is shown when it asks (mode 2033)", a
   await expect(page.getByRole("region", { name: /^Terminal for / })).toContainText("HIDDEN:2", { timeout: 20_000 });
 });
 
+test("moves between the prompts of a long output with the prompt keys", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "the prompt marks come from bash's PS1 here");
+  await openApplication(page, installation);
+  await openSessionList(page);
+  await openLocalShell(page);
+  // Shell integration marks where each prompt begins (OSC 133;A).
+  const screen = await typeIntoTerminal(page, "PS1='\\[\\e]133;A\\a\\]$ '");
+  await typeIntoTerminal(page, "echo first-$((40+2)); seq -f 'first %03g' 200");
+  await expect(screen).toContainText("first 200", { timeout: 20_000 });
+  await typeIntoTerminal(page, "echo second-$((40+3)); seq -f 'second %03g' 200");
+  await expect(screen).toContainText("second 200", { timeout: 20_000 });
+
+  // The top row of the screen follows the prompt it moved to.
+  const topRow = drawnRows(page).locator("> div").first();
+  await page.keyboard.press("Control+Shift+ArrowUp");
+  await expect(topRow).toContainText("second-");
+  await page.keyboard.press("Control+Shift+ArrowUp");
+  await expect(topRow).toContainText("first-");
+  await page.keyboard.press("Control+Shift+ArrowDown");
+  await expect(topRow).toContainText("second-");
+});
+
 test("refuses to open more sessions than the configured limit", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",

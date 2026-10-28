@@ -6392,12 +6392,14 @@ components:
         bindings:
           type: object
           additionalProperties: false
-          required: [palette, terminalSearch, copy, paste, nextSession, previousSession, home, sftp]
+          required: [palette, terminalSearch, copy, paste, previousPrompt, nextPrompt, nextSession, previousSession, home, sftp]
           properties:
             palette: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             terminalSearch: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             copy: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             paste: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            previousPrompt: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            nextPrompt: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             nextSession: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             previousSession: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             home: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
