@@ -2,7 +2,7 @@ import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, openApplication, openLocalShell, test } from "./support/environment";
-import { samplePNG } from "./support/images";
+import { largestPNG, samplePNG } from "./support/images";
 import { drawnCharacterColumns, drawnImagePixels, terminalKeyboard } from "./support/terminal";
 
 async function runInShell(page: Page, command: string) {
@@ -191,4 +191,27 @@ test("counts an emoji as two cells so the rest of the line stays aligned", async
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/terminal-emoji-width.png` });
   }
+});
+
+test("keeps the output moving when a program places a large stored image again and again", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "cat is POSIX shell syntax here");
+  // Each placement decodes the stored image again; about 75 ms for this one,
+  // so 200 placements held the terminal's output for 15 seconds.
+  const image = largestPNG().toString("base64");
+  const chunks: string[] = [];
+  for (let offset = 0; offset < image.length; offset += 4096) {
+    const more = offset + 4096 < image.length ? 1 : 0;
+    chunks.push(`\x1b_G${offset === 0 ? "a=t,f=100,i=42,q=2," : ""}m=${more};${image.slice(offset, offset + 4096)}\x1b\\`);
+  }
+  const placements = "\x1b_Ga=p,i=42,c=4,r=2,q=2\x1b\\".repeat(200);
+  await writeFile(join(installation.home, "placements.txt"), `${chunks.join("")}${placements}\n`);
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+
+  await runInShell(page, "cd ~ && cat placements.txt; echo placed-$((6*7))");
+
+  await expect(screen).toContainText("placed-42", { timeout: 5_000 });
+  expect(await drawnImagePixels(page)).toBeGreaterThan(0);
 });

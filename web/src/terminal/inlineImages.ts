@@ -4,7 +4,10 @@ import { attachKittyImageGuard, maxKittyControlLength } from "./kittyImageGuard"
 
 // Every open terminal keeps its own image store and several sessions can be
 // open at once, on a phone too, so each store is far below the addon's 128 MB.
-const imageStorageLimitMiB = 32;
+// The addon counts in MB (10^6 bytes) of decoded pixels.
+const imageStorageLimitMB = 32;
+// Images sent only to be stored (a=t) get the same room as the displayed ones.
+const storedOnlyByteLimit = imageStorageLimitMB * 1_000_000;
 // The addon's default: 4096 × 4096 pixels, 64 MiB once decoded to RGBA.
 const imagePixelLimit = 4096 * 4096;
 // xterm hands an APC handler registered through its public API at most this
@@ -22,7 +25,7 @@ const kittyImageByteLimit = Math.floor((xtermApcPayloadLimit - maxKittyControlLe
 // 'wasm-unsafe-eval'.
 export function attachInlineImages(view: Terminal): { dispose(): void } {
   const addon = new ImageAddon({
-    storageLimit: imageStorageLimitMiB,
+    storageLimit: imageStorageLimitMB,
     pixelLimit: imagePixelLimit,
     kittySizeLimit: kittyImageByteLimit,
   });
@@ -30,7 +33,7 @@ export function attachInlineImages(view: Terminal): { dispose(): void } {
   const kittyGuard = attachKittyImageGuard({
     parser: view.parser,
     images: addon,
-    limits: { pixelLimit: imagePixelLimit, imageByteLimit: kittyImageByteLimit },
+    limits: { pixelLimit: imagePixelLimit, imageByteLimit: kittyImageByteLimit, storedOnlyByteLimit },
     // As typed input, so that an answer found again in replayed output is
     // held back like xterm.js's own answers.
     answer: (response) => view.input(response, false),
