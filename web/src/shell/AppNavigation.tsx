@@ -196,6 +196,7 @@ export function AppNavigation({
           splitGroupBySession={splitView.groupBySession}
           {...(canSplitSession === undefined ? {} : { canSplitSession })}
           {...(onSplitSession === undefined ? {} : { onSplitSession })}
+          onRemoveSessionFromSplit={splitView.removeFromSplit}
           onDuplicate={onDuplicateSession}
           onReorder={onReorderSessions}
           localShellProfiles={localShellProfiles}

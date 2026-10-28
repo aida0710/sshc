@@ -17,6 +17,7 @@ export function TerminalOverflowMenu({
   onToggleOsc52,
   onClose,
   onSplit,
+  onRemoveFromSplit,
   onSearch,
   canSplit = false,
   triggerRef,
@@ -29,6 +30,8 @@ export function TerminalOverflowMenu({
   onToggleOsc52: () => void | Promise<void>;
   onClose: () => void;
   onSplit?: ((edge: PaneEdge) => void) | undefined;
+  // onRemoveFromSplit is offered while the terminal is in a split. The session goes on outside it.
+  onRemoveFromSplit?: (() => void) | undefined;
   // onSearch is offered here on a phone, whose top bar keeps only the other actions.
   onSearch?: (() => void) | undefined;
   canSplit?: boolean;
@@ -70,6 +73,11 @@ export function TerminalOverflowMenu({
           className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:opacity-50 md:min-h-0"
           onClick={action(() => onSplit(edge))}>{t(edge === "right" ? "splitView.right" : "splitView.below")}</button>
       ))}
+      {onRemoveFromSplit === undefined ? null : (
+        <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onRemoveFromSplit)}>
+          {t("splitView.remove")}
+        </button>
+      )}
       {onQuickCommands === undefined ? null : (
         <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onQuickCommands)}>
           {t("terminal.quickCommands")}
