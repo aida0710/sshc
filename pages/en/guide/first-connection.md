@@ -37,4 +37,4 @@ sshc ssh <alias>
 
 The progress view distinguishes resolution, jump hosts, host key checks, authentication, and shell startup. On failure, use the displayed error code and cause.
 
-Home displays an OS icon for each connection. Detection runs after a normal SSH connection opens; unknown systems use a generic server icon. Use **Operating system icon** in the connection Inspector to choose an override. Failed detection does not interrupt the terminal.
+Home displays an OS icon for each connection. Detection runs after a normal SSH connection opens; unknown systems use a generic server icon. Use **Operating system icon** on the **Display & terminal** tab of the connection details to choose an override. Failed detection does not interrupt the terminal.

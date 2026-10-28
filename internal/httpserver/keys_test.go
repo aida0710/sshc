@@ -550,7 +550,7 @@ func TestInventoryAndTrashListingsMatchTheGeneratedContract(t *testing.T) {
 	if trash.RetentionDays != keys.TrashRetentionDays || len(trash.Entries) != 1 {
 		t.Fatalf("trash = %#v", trash)
 	}
-	if trash.Entries[0].DeletedAt != "2026-08-05T09:00:00Z" || !trash.Entries[0].Stale {
+	if !trash.Entries[0].Stale {
 		t.Fatalf("entry = %#v", trash.Entries[0])
 	}
 }

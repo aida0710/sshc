@@ -55,7 +55,6 @@ const bucketStatus = {
 const historyRevision = "a".repeat(64);
 const historyStatus = {
   checkedAt: "2026-08-25T01:55:00Z",
-  headRevision: historyRevision,
   historyTruncated: false,
   downloadTruncated: false,
   downloadedBytes: 1800,
@@ -123,8 +122,6 @@ function buildApi(
     syncBucketStatus: vi.fn().mockResolvedValue(bucketStatus),
     syncHistory: vi.fn().mockResolvedValue(historyStatus),
     diffSyncHistory: vi.fn().mockResolvedValue({
-      fromRevision: historyRevision,
-      toRevision: historyRevision,
       added: [],
       modified: [],
       removed: [],
@@ -300,8 +297,6 @@ describe("SyncPanel", () => {
       written: ["config"],
     });
     const diffSyncHistory = vi.fn().mockResolvedValue({
-      fromRevision: historyRevision,
-      toRevision: "b".repeat(64),
       added: ["connections/new.conf"],
       modified: ["config"],
       removed: ["connections/old.conf"],
@@ -521,6 +516,13 @@ describe("SyncPanel", () => {
     );
     expect(screen.getByLabelText("Bucket name")).toHaveValue("sshc");
     expect(screen.getByLabelText("Secret access key")).toHaveValue("");
+  });
+
+  it("names the end of the saved access key ID while the bucket settings are edited", async () => {
+    render(<SyncPanel api={buildApi({ ...configured, accessKeySuffix: "QWXYZ" }, nothingToDo)} />);
+    await userEvent.click(await screen.findByText("Manage sync settings"));
+    await userEvent.click(await screen.findByRole("button", { name: "Edit bucket settings" }));
+    expect(screen.getByText("The saved access key ID ends in QWXYZ.")).toBeVisible();
   });
 
   it("sends the region it was given", async () => {

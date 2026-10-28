@@ -22,7 +22,6 @@ const privateKey = {
   comment: "aida@laptop",
   permission: "0600",
   permissionRisk: false,
-  sizeBytes: 444,
   references: [],
   notes: [],
 };

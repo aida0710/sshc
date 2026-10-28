@@ -25,7 +25,7 @@ describe("engine-local mutation API", () => {
   it("binds a multiple-selection delete to the inspected revision and single-use token", async () => {
     const folder = { ...notes, name: "folder", path: "//server/share/folder", type: "directory" as const, revision: "folder-revision" };
     const fetcher = vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(jsonResponse({ revision: "tree-revision", items: 5, actionToken: "fixture-token", actionExpiresAt: "2026-10-07T01:01:00Z" }))
+      .mockResolvedValueOnce(jsonResponse({ revision: "tree-revision", items: 5, actionToken: "fixture-token" }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     await localMutationApi.remove([notes, folder]);
     const entries = [notes, folder].map((entry) => ({ path: entry.path, expectedRevision: entry.revision }));
@@ -46,7 +46,7 @@ describe("engine-local mutation API", () => {
   });
 
   it("rejects an invalid confirmation response before deleting", async () => {
-    const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ revision: "tree-revision", items: 1, actionToken: "", actionExpiresAt: "2026-10-07T01:01:00Z" }));
+    const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ revision: "tree-revision", items: 1, actionToken: "" }));
     await expect(localMutationApi.remove([notes])).rejects.toThrow();
     expect(fetcher).toHaveBeenCalledTimes(1);
   });

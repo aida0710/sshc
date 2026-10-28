@@ -3,7 +3,7 @@ import { apiClient, whenRequestFailed } from "../api/client";
 import { chmodApi } from "./chmodApi";
 
 const selection = { entries: [{ path: "/資料:file", expectedRevision: "file-revision" }], options: { fileMode: "644", directoryMode: "755", recursive: true } };
-const plan = { revision: "plan-revision", selectionCount: 1, files: 1, directories: 0, skippedSymlinks: 0, options: selection.options, actionToken: "b".repeat(43), actionExpiresAt: "2026-10-07T12:01:00Z" };
+const plan = { revision: "plan-revision", selectionCount: 1, files: 1, directories: 0, skippedSymlinks: 0, options: selection.options, actionToken: "b".repeat(43) };
 
 describe("permission plans", () => {
   beforeEach(() => apiClient.setCSRF("a".repeat(43)));

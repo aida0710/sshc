@@ -118,7 +118,10 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                     className={control}
                   />
                 </FieldRow>
-                <FieldRow label={t("sync.accessKeyId")}>
+                <FieldRow
+                  label={t("sync.accessKeyId")}
+                  hint={status.accessKeySuffix ? t("sync.accessKeySaved", { suffix: status.accessKeySuffix }) : undefined}
+                >
                   <input
                     value={accessKeyId}
                     onChange={(event) => setAccessKeyId(event.target.value)}

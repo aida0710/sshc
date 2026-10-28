@@ -31,7 +31,6 @@ const plan: RemoteKeyPlan = {
   ],
   executableDirectives: [],
   actionToken: "a".repeat(43),
-  actionExpiresAt: "2026-08-05T09:02:00Z",
 };
 
 const proxyCommand = {
@@ -39,7 +38,6 @@ const proxyCommand = {
   command: "/usr/bin/nc %h %p",
   path: "~/.ssh/config",
   line: 4,
-  onEvaluate: false,
   onConnect: true,
   overridable: false,
 };
@@ -61,7 +59,6 @@ function buildKeys(overrides: Partial<Pick<KeysApi, "inventory" | "publicKey">> 
           comment: "aida@laptop",
           permission: "0644",
           permissionRisk: false,
-          sizeBytes: 100,
           references: [],
           notes: [],
         },
@@ -78,7 +75,6 @@ function buildKeys(overrides: Partial<Pick<KeysApi, "inventory" | "publicKey">> 
           comment: "",
           permission: "0600",
           permissionRisk: false,
-          sizeBytes: 400,
           references: [],
           notes: [],
         },

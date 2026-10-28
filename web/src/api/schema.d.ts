@@ -2949,7 +2949,6 @@ export interface components {
             comment: string;
             permission: string;
             permissionRisk: boolean;
-            sizeBytes: number;
             certificate?: components["schemas"]["KeyCertificate"];
             references: components["schemas"]["KeyReference"][];
             notes: string[];
@@ -3031,7 +3030,6 @@ export interface components {
             /** @enum {string} */
             manager: "homebrew" | "install.sh" | "install.ps1";
             actionToken: string;
-            actionExpiresAt: string;
         };
         UpdateJob: {
             id: string;
@@ -3165,7 +3163,6 @@ export interface components {
             path: string;
             line: number;
             condition: string;
-            onEvaluate: boolean;
             onConnect: boolean;
             overridable: boolean;
         };
@@ -3190,7 +3187,6 @@ export interface components {
         };
         EffectiveResponse: {
             alias: string;
-            tokenWarning: string;
             executableDirectives: components["schemas"]["ExecutableDirective"][];
             sources: components["schemas"]["ValueSource"][];
             complexities: components["schemas"]["ComplexityNote"][];
@@ -3225,7 +3221,6 @@ export interface components {
         ReachabilityResponse: {
             address: string;
             outcome: string;
-            elapsedMs: number;
             detail: string;
             notice: string;
         };
@@ -3239,7 +3234,6 @@ export interface components {
             method: string;
             detail: string;
             truncated: boolean;
-            elapsedMs: number;
         };
         RemoteKeyPlanRequest: {
             alias: string;
@@ -3261,7 +3255,6 @@ export interface components {
             manual: string[];
             executableDirectives: components["schemas"]["ExecutableDirective"][];
             actionToken: string;
-            actionExpiresAt: string;
         };
         RemoteKeyRegisterRequest: {
             alias: string;
@@ -3705,7 +3698,6 @@ export interface components {
         };
         SyncHistory: {
             checkedAt: string;
-            headRevision: string;
             revisions: components["schemas"]["SyncHistoryRevision"][];
             historyTruncated: boolean;
             downloadTruncated: boolean;
@@ -3717,8 +3709,6 @@ export interface components {
             key: string;
         };
         SyncHistoryDiff: {
-            fromRevision: string;
-            toRevision: string;
             added: string[];
             modified: string[];
             removed: string[];
@@ -4069,14 +4059,12 @@ export interface components {
         };
         TrashFileSummary: {
             originalRelativePath: string;
-            trashRelativePath: string;
             kind: string;
             fingerprint: string;
             permission: string;
         };
         TrashEntrySummary: {
             id: string;
-            deletedAt: string;
             ageDays: number;
             stale: boolean;
             files: components["schemas"]["TrashFileSummary"][];
@@ -4661,8 +4649,6 @@ export interface components {
             /** Format: int64 */
             items: number;
             actionToken: string;
-            /** Format: date-time */
-            actionExpiresAt: string;
         };
         SFTPLocalListing: {
             path: string;
@@ -4735,8 +4721,6 @@ export interface components {
             skippedSymlinks: number;
             options: components["schemas"]["SFTPChmodOptions"];
             actionToken: string;
-            /** Format: date-time */
-            actionExpiresAt: string;
         };
         SFTPChmodResult: {
             applied: number;

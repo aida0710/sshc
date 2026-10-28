@@ -1,5 +1,7 @@
 # Live Workspace drag layout design
 
+> **Superseded.** Live Workspaceと保存するワークスペース（Saved Workspace）は無くなり、ワークスペース（`pages/features/workspace.md`）と分割表示（`pages/features/split-view.md`）に置き換わった。以下は経緯の記録として残す。
+
 Date: 2026-08-26
 
 ## Goal

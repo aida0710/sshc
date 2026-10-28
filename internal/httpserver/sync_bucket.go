@@ -86,7 +86,7 @@ func (h SyncHandlers) History(c *echo.Context) error {
 		return syncProblem(c, err)
 	}
 	response := api.SyncHistory{
-		CheckedAt: view.CheckedAt, HeadRevision: view.HeadRevision,
+		CheckedAt:        view.CheckedAt,
 		HistoryTruncated: view.HistoryTruncated, DownloadTruncated: view.DownloadTruncated,
 		DownloadedBytes: view.DownloadedBytes,
 		Skipped:         view.Skipped,
@@ -124,7 +124,6 @@ func (h SyncHandlers) HistoryDiff(c *echo.Context) error {
 		return syncProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, api.SyncHistoryDiff{
-		FromRevision: diff.FromRevision, ToRevision: diff.ToRevision,
 		Added: diff.Added, Modified: diff.Modified, Removed: diff.Removed,
 		DownloadedBytes: diff.DownloadedBytes,
 	})
