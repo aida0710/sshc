@@ -1,5 +1,5 @@
 import { PasswordlessSwitch } from "../secrets/PasswordlessSwitch";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { MoreDetails } from "../ui/MoreDetails";
 import { failureCode } from "../api/client";
 import type { PasswordVaultStatus, VaultApi } from "../api/vault";
@@ -10,6 +10,7 @@ import { Button, Notice } from "../ui/surface";
 import { ActionArea } from "../ui/ActionArea";
 import { SettingsSection } from "./SettingsSection";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { useLoad } from "../ui/useLoad";
 import { isAcceptedButShort, meetsMasterPasswordMinimum } from "../secrets/masterPasswordLength";
 
 export type MasterPasswordApi = Pick<VaultApi, "passwordVault" | "changeMasterPassword">;
@@ -24,25 +25,16 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
   onVaultChanged?: ((status: PasswordVaultStatus) => void) | undefined;
 }) {
   const t = useTranslate();
+  const loadVault = useCallback(() => api.passwordVault(), [api]);
+  const vaultLoad = useLoad(loadVault);
+  // The vault a change reported, which is newer than the one read when the page opened.
+  const [changedVault, setChangedVault] = useState<PasswordVaultStatus | null>(null);
+  const vault = changedVault ?? (vaultLoad.state === "loaded" ? vaultLoad.value : null);
   // null until the vault has said whether it has a password at all.
-  const [passwordless, setPasswordless] = useState<boolean | null>(null);
-  const [minPassphraseLength, setMinPassphraseLength] = useState<number | undefined>(undefined);
+  const passwordless = vault === null ? null : vault.passwordless ?? false;
+  const minPassphraseLength = vault?.minPassphraseLength;
   const [draft, setDraft] = useState<MasterDraft>(emptyDraft);
   const save = useAsyncOperation();
-
-  // Only the stable reporter is a dependency: the operation's facts change on
-  // every save and must not re-read the vault state mid-flow.
-  const reportFailure = save.fail;
-  useEffect(() => {
-    let active = true;
-    setPasswordless(null);
-    void api.passwordVault().then((status) => {
-      if (!active) return;
-      setPasswordless(status.passwordless ?? false);
-      setMinPassphraseLength(status.minPassphraseLength);
-    }).catch(() => { if (active) reportFailure(t("secrets.failed")); });
-    return () => { active = false; };
-  }, [api, t, reportFailure]);
 
   function edit(patch: Partial<MasterDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -66,10 +58,16 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
     const { current, next, withoutPassword } = draft;
     const changed = await save.run(async () => {
       const result = await api.changeMasterPassword(passwordless ? "" : current, withoutPassword ? "" : next);
-      setPasswordless(result.vault.passwordless ?? false);
+      setChangedVault(result.vault);
       onVaultChanged?.(result.vault);
     }, { describe: (error) => describeChangeFailure(failureCode(error)) });
     if (changed) setDraft((state) => ({ ...emptyDraft, withoutPassword: state.withoutPassword }));
+  }
+
+  function masterPasswordStatus() {
+    if (save.error !== "") return <Notice tone="danger">{save.error}</Notice>;
+    if (vaultLoad.state === "failed" && changedVault === null) return <Notice tone="danger">{t("secrets.failed")}</Notice>;
+    return save.saved ? <Notice tone="success">{t("secrets.changedMasterLocally")}</Notice> : undefined;
   }
 
   const strong = meetsMasterPasswordMinimum(draft.next, minPassphraseLength) && draft.next === draft.confirm;
@@ -111,9 +109,7 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
           </>}
         </div>
         {!draft.withoutPassword && isAcceptedButShort(draft.next, minPassphraseLength) ? <p className="mt-3 text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
-        <ActionArea status={save.error === ""
-          ? (save.saved ? <Notice tone="success">{t("secrets.changedMasterLocally")}</Notice> : undefined)
-          : <Notice tone="danger">{save.error}</Notice>}
+        <ActionArea status={masterPasswordStatus()}
         >
           <Button kind="primary" busy={save.busy} disabled={!canChange} onClick={() => void submit()}>
             {t("secrets.change")}

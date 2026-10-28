@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useId, type ReactNode, type RefObject } from "react";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { useLanguage } from "../i18n/context";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
@@ -12,12 +12,7 @@ import { entryTypeLabelKeys } from "./sftpMessageKeys";
 import { symbolicModeToOctal } from "./transfers";
 import { FilePreviewBody } from "./FilePreviewBody";
 import { useFilePreview } from "./useFilePreview";
-
-type DirectoryStatsState =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | { kind: "loaded"; stats: RemoteDirectoryStats }
-  | { kind: "unavailable" };
+import { useLoad } from "../ui/useLoad";
 
 function Property({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -57,7 +52,6 @@ export function SFTPDetailsDialog({
   const { locale, t } = useLanguage();
   const headingId = useId();
   const mobileViewport = useMediaQuery(mobileViewportQuery);
-  const [directoryStats, setDirectoryStats] = useState<DirectoryStatsState>({ kind: "idle" });
   const entry = entries.length === 1 ? entries[0] ?? null : null;
   const kind = entry === null ? null : entryKind(entry);
   const previewPath = entry !== null && kind === "file" ? entry.path : null;
@@ -66,19 +60,14 @@ export function SFTPDetailsDialog({
   const preview = useFilePreview(alias, previewPath);
   const heading = entry === null ? t("sftp.detailsForCount", { count: entries.length }) : t("sftp.detailsFor", { name: entry.name });
 
-  useEffect(() => {
-    if (directoryPath === null) {
-      setDirectoryStats({ kind: "idle" });
-      return;
-    }
-    let active = true;
-    setDirectoryStats({ kind: "loading" });
-    void sftpApi.directoryStats(alias, directoryPath).then(
-      (stats) => { if (active) setDirectoryStats({ kind: "loaded", stats }); },
-      () => { if (active) setDirectoryStats({ kind: "unavailable" }); },
-    );
-    return () => { active = false; };
-  }, [alias, directoryPath]);
+  // Only a remote directory has its size counted; anything else reads nothing.
+  const readDirectoryStats = useCallback(
+    async (): Promise<RemoteDirectoryStats | null> => directoryPath === null ? null : sftpApi.directoryStats(alias, directoryPath),
+    [alias, directoryPath],
+  );
+  const directoryStatsLoad = useLoad(readDirectoryStats);
+  const directoryStats = directoryStatsLoad.state === "loaded" ? directoryStatsLoad.value : null;
+  const calculating = directoryPath !== null && directoryStatsLoad.state === "loading";
 
   const properties = (
         <dl role="group" className="min-h-0 overflow-auto border-t border-line px-3 py-2 md:border-l md:border-t-0" aria-label={t("sftp.properties")}>
@@ -99,16 +88,16 @@ export function SFTPDetailsDialog({
               <Property label={t("sftp.size")}>
                 {kind === "file"
                   ? `${entry.size.toLocaleString(locale)} (${formatBytes(entry.size)})`
-                  : directoryStats.kind === "loading"
+                  : calculating
                     ? t("sftp.calculating")
-                    : directoryStats.kind === "loaded"
-                      ? `${directoryStats.stats.truncated ? t("sftp.partialSizePrefix") : ""}${directoryStats.stats.bytes.toLocaleString(locale)} (${formatBytes(directoryStats.stats.bytes)})`
+                    : directoryStats !== null
+                      ? `${directoryStats.truncated ? t("sftp.partialSizePrefix") : ""}${directoryStats.bytes.toLocaleString(locale)} (${formatBytes(directoryStats.bytes)})`
                       : t("sftp.sizeUnavailable")}
               </Property>
-              {kind === "directory" && directoryStats.kind === "loaded" ? (
+              {kind === "directory" && directoryStats !== null ? (
                 <>
-                  <Property label={t("sftp.containedFiles")}>{directoryStats.stats.files.toLocaleString(locale)}</Property>
-                  <Property label={t("sftp.containedDirectories")}>{Math.max(0, directoryStats.stats.directories - 1).toLocaleString(locale)}</Property>
+                  <Property label={t("sftp.containedFiles")}>{directoryStats.files.toLocaleString(locale)}</Property>
+                  <Property label={t("sftp.containedDirectories")}>{Math.max(0, directoryStats.directories - 1).toLocaleString(locale)}</Property>
                 </>
               ) : null}
               <Property label={t("sftp.modified")}>
