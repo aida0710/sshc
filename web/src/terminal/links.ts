@@ -34,9 +34,11 @@ export function linkTextNamesTarget(link: Pick<TerminalLinkMatch, "text" | "targ
   }
 }
 
+// visibleText is not replaced by the address when it is empty: text that could
+// not be read names no address, so the address is shown before it opens.
 export function osc8Link(target: string, visibleText: string, start: number, end: number): TerminalLinkMatch | null {
   if (!isSafeHttpURL(target) || target.length > maxLinkLength) return null;
-  return { kind: "url", text: visibleText || target, target, start, end };
+  return { kind: "url", text: visibleText, target, start, end };
 }
 
 const maxLinkLength = 4096;
