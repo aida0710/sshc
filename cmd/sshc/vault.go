@@ -149,36 +149,50 @@ func runVault(ctx context.Context, action string, environment commandEnvironment
 }
 
 func runVaultCreate(ctx context.Context, found handoff.Handoff, environment commandEnvironment) int {
+	next, code := promptNewVaultPassword(ctx, environment)
+	defer clear(next)
+	if code != 0 {
+		return code
+	}
+	payload, err := vaultPassphrasePayload(next)
+	if err != nil {
+		fmt.Fprintln(environment.stderr, "sshc: the password could not be encoded safely")
+		return exitFailure
+	}
+	clear(next)
+	return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultCreatePath, payload: payload, success: "vault created and unlocked"})
+}
+
+// promptNewVaultPassword は、新しいマスターパスワードを2度尋ね、一致したものを返す。
+// 尋ね終えられなかったときは、終了コード（0 以外）を返す。返したパスワードは呼び出し側が消す。
+func promptNewVaultPassword(ctx context.Context, environment commandEnvironment) (password []byte, exitCode int) {
 	stdin, stderr, terminal := environment.stdin, environment.stderr, environment.terminal
 	fmt.Fprintln(stderr, newVaultPasswordGuidance)
 	next, err := promptVaultPassword(ctx, stdin, stderr, terminal, "New master password: ")
-	defer clear(next)
+	defer func() {
+		if exitCode != 0 {
+			clear(next)
+		}
+	}()
 	if err != nil {
-		return vaultPromptFailure(ctx, err, stderr)
+		return nil, vaultPromptFailure(ctx, err, stderr)
 	}
 	if ctx.Err() != nil {
-		return exitInterrupted
+		return nil, exitInterrupted
 	}
 	confirmation, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Confirm new master password: ")
 	defer clear(confirmation)
 	if err != nil {
-		return vaultPromptFailure(ctx, err, stderr)
+		return nil, vaultPromptFailure(ctx, err, stderr)
 	}
 	if ctx.Err() != nil {
-		return exitInterrupted
+		return nil, exitInterrupted
 	}
 	if !bytes.Equal(next, confirmation) {
 		fmt.Fprintln(stderr, "sshc: password confirmation did not match")
-		return exitFailure
+		return nil, exitFailure
 	}
-	payload, err := vaultPassphrasePayload(next)
-	if err != nil {
-		fmt.Fprintln(stderr, "sshc: the password could not be encoded safely")
-		return exitFailure
-	}
-	clear(next)
-	clear(confirmation)
-	return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultCreatePath, payload: payload, success: "vault created and unlocked"})
+	return next, 0
 }
 
 func runVaultUnlock(ctx context.Context, found handoff.Handoff, environment commandEnvironment) int {
@@ -226,26 +240,10 @@ func runVaultChange(ctx context.Context, found handoff.Handoff, environment comm
 	if code := finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultVerifyPath, payload: payload, success: ""}); code != 0 {
 		return code
 	}
-	fmt.Fprintln(stderr, newVaultPasswordGuidance)
-	next, err := promptVaultPassword(ctx, stdin, stderr, terminal, "New master password: ")
+	next, code := promptNewVaultPassword(ctx, environment)
 	defer clear(next)
-	if err != nil {
-		return vaultPromptFailure(ctx, err, stderr)
-	}
-	if ctx.Err() != nil {
-		return exitInterrupted
-	}
-	confirmation, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Confirm new master password: ")
-	defer clear(confirmation)
-	if err != nil {
-		return vaultPromptFailure(ctx, err, stderr)
-	}
-	if ctx.Err() != nil {
-		return exitInterrupted
-	}
-	if !bytes.Equal(next, confirmation) {
-		fmt.Fprintln(stderr, "sshc: password confirmation did not match")
-		return exitFailure
+	if code != 0 {
+		return code
 	}
 	payload, err = vaultChangePayload(current, next)
 	if err != nil {
@@ -254,7 +252,6 @@ func runVaultChange(ctx context.Context, found handoff.Handoff, environment comm
 	}
 	clear(current)
 	clear(next)
-	clear(confirmation)
 	return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultChangePath, payload: payload, success: "vault password changed"})
 }
 
