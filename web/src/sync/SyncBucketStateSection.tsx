@@ -1,7 +1,8 @@
 import { useTranslate } from "../i18n/context";
+import { PageSection } from "../ui/page";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import type { Locale } from "../i18n/locale";
-import { hintText, sectionHeading } from "../ui/form";
+import { hintText } from "../ui/form";
 import { formatDateTime, formatOptionalDateTime } from "../ui/format";
 import { PanelState } from "../ui/PanelState";
 import { Button } from "../ui/surface";
@@ -25,26 +26,16 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
   const historyItems = bucketState.phase === "ready" ? bucketState.value.history : [];
   const visibleHistory = historyExpanded ? historyItems : historyItems.slice(0, collapsedHistoryCount);
   return (
-    <section
-      aria-labelledby="sync-bucket-state-heading"
-      className="flex flex-col gap-3 rounded-[10px] bg-well p-4 lg:col-span-2"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h4 id="sync-bucket-state-heading" className={sectionHeading}>
-            {t("sync.bucketStateHeading")}
-          </h4>
-          <p className={`mt-1 ${hintText}`}>
-            {t("sync.bucketStateHint")}
-          </p>
-        </div>
-        <Button
-          disabled={busy || bucketState.phase === "loading"}
-          onClick={onRefresh}
-        >
+    <PageSection
+      heading={t("sync.bucketStateHeading")}
+      headingId="sync-bucket-state-heading"
+      hint={t("sync.bucketStateHint")}
+      actions={
+        <Button small disabled={busy || bucketState.phase === "loading"} onClick={onRefresh}>
           {t("sync.bucketRefresh")}
         </Button>
-      </div>
+      }
+    >
 
       {bucketState.phase === "idle" ? (
         <PanelState tone="empty" title={t("sync.bucketNotConfigured")} />
@@ -53,7 +44,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
       ) : bucketState.phase === "error" ? (
         <PanelState tone="failed" title={bucketState.message} action={<Button onClick={onRefresh}>{t("sync.bucketRefresh")}</Button>} />
       ) : (
-        <div className="grid gap-3 border-t border-line pt-3 lg:grid-cols-2">
+        <div className="grid gap-3 lg:grid-cols-2">
           <div className="rounded border border-line bg-surface p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
               {t("sync.bucketLive")}
@@ -163,6 +154,6 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
           </p>
         </div>
       )}
-    </section>
+    </PageSection>
   );
 }

@@ -3,7 +3,7 @@ import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./wo
 import { keysApi, type KeyVariant, type KeysApi } from "./api";
 import { useTranslate } from "../i18n/context";
 import { CopyButton } from "../ui/CopyButton";
-import { CheckboxField, control, hintText, sectionCard, sectionHeading } from "../ui/form";
+import { CheckboxField, control } from "../ui/form";
 import { PasswordInput } from "../ui/PasswordField";
 import { ActionArea } from "../ui/ActionArea";
 import { FieldRow } from "../ui/FieldRow";
@@ -166,13 +166,8 @@ export function KeyGenerationSection({
       </PageSection>
 
       {generated === null ? null : (
-        <section aria-live="polite" className={sectionCard}>
-          <h3 className={sectionHeading}>{t("keys.generatedHeading")}</h3>
-          <p className={hintText}>
-            {t("keys.generatedNext", {
-              path: generated.private.privateRelativePath,
-            })}
-          </p>
+        <div aria-live="polite">
+        <PageSection heading={t("keys.generatedHeading")} hint={t("keys.generatedNext", { path: generated.private.privateRelativePath })}>
           <div className="flex flex-wrap gap-2">
             <Button
               kind="primary"
@@ -184,7 +179,8 @@ export function KeyGenerationSection({
               {t("keys.installGenerated")}
             </Button>
           </div>
-        </section>
+        </PageSection>
+        </div>
       )}
 
       {terminalCommand !== null && (
