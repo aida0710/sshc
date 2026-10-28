@@ -387,10 +387,12 @@ func TestResizeDuringSetEnvReachesTheRemotePTY(t *testing.T) {
 	path, contents, public := keyPair(t)
 	envArrived := make(chan struct{})
 	releaseEnv := make(chan struct{})
+	// The SetEnv entry and COLORTERM each make an env request.
+	var firstEnv sync.Once
 	server := newTestServer(t, serverOptions{
 		AcceptKeys: []ssh.PublicKey{public},
 		BeforeEnvReply: func() {
-			close(envArrived)
+			firstEnv.Do(func() { close(envArrived) })
 			<-releaseEnv
 		},
 		OnShell: func(channel ssh.Channel) {
@@ -457,6 +459,37 @@ func TestSetEnvReachesTheRemote(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("env = %#v", server.Env())
+	}
+}
+
+// COLORTERM tells the remote programs that the terminal draws 24-bit colour;
+// OpenSSH forwards the local value, and sshc has no local terminal to read it from.
+func TestTheRemoteLearnsTheTerminalDrawsTrueColour(t *testing.T) {
+	for _, configured := range [][]sshclient.EnvVar{nil, {{Name: "COLORTERM", Value: "24bit"}}} {
+		path, contents, public := keyPair(t)
+		server := newTestServer(t, serverOptions{
+			AcceptKeys: []ssh.PublicKey{public},
+			OnShell:    func(channel ssh.Channel) { _, _ = io.WriteString(channel, "ready\r\n") },
+		})
+		auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+		target := targetWith(server, path)
+		target.SetEnv = configured
+
+		process, err := dialerFor(t, server, auth).Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+		if err != nil {
+			t.Fatal(err)
+		}
+		readUntil(t, process, "ready")
+		_ = process.Close()
+
+		// A COLORTERM in SetEnv is the person's choice and goes alone.
+		want := []string{"COLORTERM=truecolor"}
+		if configured != nil {
+			want = []string{"COLORTERM=24bit"}
+		}
+		if got := server.Env(); !slices.Equal(got, want) {
+			t.Errorf("SetEnv %v: env = %q, want %q", configured, got, want)
+		}
 	}
 }
 
