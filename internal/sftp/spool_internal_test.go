@@ -1,7 +1,9 @@
 package sftp
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -204,14 +206,17 @@ func TestCrossProcessReservationsShareOneHardQuota(t *testing.T) {
 	}
 	commands[0].Env = append(os.Environ(), "SSHC_TEST_SPOOL_HELPER=1", "SSHC_TEST_SPOOL_ROOT="+root, "SSHC_TEST_SPOOL_CURRENT="+first)
 	commands[1].Env = append(os.Environ(), "SSHC_TEST_SPOOL_HELPER=1", "SSHC_TEST_SPOOL_ROOT="+root, "SSHC_TEST_SPOOL_CURRENT="+second)
-	for _, command := range commands {
+	outputs := make([]*bytes.Buffer, len(commands))
+	for index, command := range commands {
+		outputs[index] = &bytes.Buffer{}
+		command.Stdout, command.Stderr = outputs[index], outputs[index]
 		if err := command.Start(); err != nil {
 			t.Fatal(err)
 		}
 	}
 	succeeded := 0
 	limited := 0
-	for _, command := range commands {
+	for index, command := range commands {
 		err := command.Wait()
 		switch {
 		case err == nil:
@@ -219,7 +224,7 @@ func TestCrossProcessReservationsShareOneHardQuota(t *testing.T) {
 		case exitCode(err) == 23:
 			limited++
 		default:
-			t.Fatal(err)
+			t.Fatalf("%v: %s", err, outputs[index])
 		}
 	}
 	if succeeded != 1 || limited != 1 {
@@ -247,6 +252,7 @@ func TestSpoolQuotaProcessHelper(t *testing.T) {
 	if errors.Is(err, ErrTransferLimit) {
 		os.Exit(23)
 	}
+	fmt.Fprintf(os.Stderr, "reserve: %v\n", err)
 	os.Exit(24)
 }
 
