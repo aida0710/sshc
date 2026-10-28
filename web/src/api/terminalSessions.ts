@@ -1,5 +1,6 @@
 import { apiClient, failureCode } from "./client";
 import { postEmpty, postJSON, putJSON } from "./guards";
+import { engineStreamPath, engineTerminalBase } from "./remoteEngines";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -165,3 +166,9 @@ export function createTerminalSessionsApi(base: string, streamPath: string): Ter
 
 // This machine's own terminal sessions.
 export const terminalSessionsApi = createTerminalSessionsApi("/api/v1/terminal", "/terminal/stream");
+
+// runTargetTerminalSessionsApi is the terminal API of a run-target engine, as
+// this machine's engine forwards it.
+export function runTargetTerminalSessionsApi(alias: string): TerminalSessionsApi {
+  return createTerminalSessionsApi(engineTerminalBase(alias), engineStreamPath(alias));
+}

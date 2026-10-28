@@ -652,6 +652,9 @@ describe("SettingsPanel", () => {
     const region = await screen.findByRole("region", { name: "Open connections" });
     expect(within(region).getByText("2 open")).toBeVisible();
     await user.click(within(region).getByRole("button", { name: "Close every connection" }));
+    // The confirmation names the sessions it ends, not only how many.
+    const listed = within(screen.getByRole("dialog")).getByRole("list", { name: "Sessions that end" });
+    expect(within(listed).getAllByRole("listitem").map((row) => row.textContent)).toEqual(["onelocalhost", "twolocalhost"]);
     await user.click(screen.getByRole("button", { name: "Close them all" }));
 
     expect(closeAll).toHaveBeenCalledTimes(1);

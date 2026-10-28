@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { TerminalSessionsState } from "../terminal/sessions";
+import { EndingSessionsList } from "../terminal/EndingSessionsList";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Button } from "../ui/surface";
 import { usePendingResult } from "../ui/usePendingResult";
@@ -39,7 +40,12 @@ export function SessionSettingsSection({ terminalSessions, showHeading }: { term
         <ConfirmDialog
           id="close-all-sessions-heading"
           heading={t("desktop.closeAllHeading2", { count: String(live) })}
-          body={<p className="text-sm text-ink-muted">{t("desktop.closeAllBody")}</p>}
+          body={(
+            <>
+              <p className="text-sm text-ink-muted">{t("desktop.closeAllBody")}</p>
+              <EndingSessionsList sessions={terminalSessions.sessions} />
+            </>
+          )}
           confirmLabel={t("desktop.closeAllConfirm")}
           cancelLabel={t("desktop.closeAllCancel")}
           onCancel={() => setConfirming(false)}
