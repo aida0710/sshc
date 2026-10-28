@@ -43,19 +43,21 @@ func TestTheAndroidShellExcludesPrivateStateFromBackupAndDeviceTransfer(t *testi
 }
 
 // dataSyncのforeground serviceは、利用者がタスクを閉じたときとAndroidが時間切れを
-// 通知したときに止まる。起動に失敗した画面では、serviceへの接続を保ったまま診断を出し、
-// 同じ画面から再試行できる。
+// 通知したときに止まる。タスクを閉じたときは、エンジンが止まり終える（開き直しの記録を
+// 書き終える）までforegroundのまま残り、そのあとで外れる。起動に失敗した画面では、
+// serviceへの接続を保ったまま診断を出し、同じ画面から再試行できる。
 func TestTheAndroidDataSyncEngineHasABoundedLifetime(t *testing.T) {
 	t.Parallel()
 	manifest := readRepoFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
 	if !strings.Contains(manifest, `android:foregroundServiceType="dataSync"`) ||
-		!strings.Contains(manifest, `android:stopWithTask="true"`) {
-		t.Fatal("the dataSync foreground engine must stop with its user task")
+		!strings.Contains(manifest, `android:stopWithTask="false"`) {
+		t.Fatal("the dataSync foreground engine must outlive its task only to stop the engine itself")
 	}
 
 	service := readRepoFile(t, "android", "app", "src", "main", "java", "com", "github", "aida0710", "sshc", "EngineService.java")
 	for _, required := range []string{
 		"public void onTimeout(int startId, int foregroundServiceType)",
+		"public void onTaskRemoved(Intent rootIntent)",
 		"stopServiceAndEngine(startId);",
 		"shutdown.request();",
 		"Executors.newSingleThreadExecutor",
