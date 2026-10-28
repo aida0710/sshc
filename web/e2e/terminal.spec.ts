@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { expect, type Installation, openApplication, openSection, openSettingsPage, shellSays, test, openLocalShell } from "./support/environment";
 import type { Locator, Page, Response } from "@playwright/test";
 import {
@@ -294,6 +295,26 @@ test("moves the shell's cursor to where the line being typed is clicked", async 
   await page.keyboard.press("Enter");
 
   await expect(screen).toContainText("98765_43210");
+});
+
+test("saves the whole scrollback to a text file from the terminal's menu", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "seq and printf are POSIX here");
+  await openApplication(page, installation);
+  await openSessionList(page);
+  await openLocalShell(page);
+  // More rows than "Copy recent terminal context" takes, so the file shows the start too.
+  const screen = await typeIntoTerminal(page, "seq -f 'row %03g' 300; printf 'saved-%s\\n' $((6*7))");
+  await expect(screen).toContainText("saved-42", { timeout: 20_000 });
+
+  const downloaded = page.waitForEvent("download");
+  await screen.getByRole("button", { name: "More terminal actions" }).click();
+  await page.getByRole("menuitem", { name: "Save scrollback to a file" }).click();
+  const download = await downloaded;
+
+  expect(download.suggestedFilename()).toMatch(/^bash-\d{8}-\d{6}\.txt$/);
+  const text = await readFile(await download.path(), "utf8");
+  expect(text).toContain("row 001\nrow 002\n");
+  expect(text).toContain("saved-42\n");
 });
 
 test("refuses to open more sessions than the configured limit", async ({ page, installation }) => {

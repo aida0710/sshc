@@ -997,6 +997,9 @@ export const ja = {
   "terminal.clipboardRefused": "クリップボードにアクセスできませんでした。",
   "terminal.pasteImageUnsupported": "画像は貼り付けられません。ターミナルへ送れるのは文字だけです。",
   "terminal.pasteEmpty": "クリップボードに貼り付けられる文字がありません。",
+  "terminal.saveScrollback": "スクロールバックをファイルに保存",
+  "terminal.saveScrollbackEmpty": "保存する出力がありません。",
+  "terminal.saveScrollbackFailed": "スクロールバックを保存できませんでした。",
   "terminal.pasteHeading": "{target}への貼り付けを確認",
   "terminal.pasteDescription":
     "送信前に内容を確認してください。貼り付ける内容は{lines}行です。",

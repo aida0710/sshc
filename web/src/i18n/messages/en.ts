@@ -994,6 +994,9 @@ export const en = {
   "terminal.clipboardRefused": "The clipboard could not be accessed.",
   "terminal.pasteImageUnsupported": "Images cannot be pasted. Only text can be sent to the terminal.",
   "terminal.pasteEmpty": "The clipboard has no text to paste.",
+  "terminal.saveScrollback": "Save scrollback to a file",
+  "terminal.saveScrollbackEmpty": "There is no output to save.",
+  "terminal.saveScrollbackFailed": "The scrollback could not be saved.",
   "terminal.pasteHeading": "Review paste to {target}",
   "terminal.pasteDescription":
     "Review this paste before anything is sent. Logical line count: {lines}.",

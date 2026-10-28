@@ -3,7 +3,7 @@ import { apiClient, failureCode } from "../api/client";
 import { issueAction, patchJSON, postJSON, putJSON, sendJSON } from "../api/guards";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
-import { saveWithAndroid } from "../android/native";
+import { saveFile, type BrowserSave } from "../ui/saveFile";
 import { vpnProblemCodes } from "../vpn/vpnRefusals";
 import type { DirectoryCompareOptions, SearchOptions } from "./contentToolTypes";
 
@@ -105,10 +105,6 @@ export type UploadCompletion = UploadTarget & { size: number; expectedRevision: 
 export type DownloadTarget = { alias: string; jobId: string; remotePath: string };
 // Where a download response starts: a folder is always sent whole as a zip.
 export type DownloadStream = DownloadTarget & { directory: boolean; offset: number };
-// A save the browser carries on by itself after saveDownload returns: it reads
-// the blob later and never says when it has finished. The caller keeps what
-// backs the blob and calls release once nothing will read it again.
-export type BrowserSave = { release(): void };
 export type ModeChange = { alias: string; remotePath: string; mode: string; expectedRevision: string; recursive: boolean };
 
 function pathFor(alias: string, suffix: string, remotePath: string): string {
@@ -317,14 +313,7 @@ export const sftpApi = {
     const blob = new Blob(chunks, { type: directory ? "application/zip" : "application/octet-stream" });
     const components = remotePath.split("/").filter(Boolean);
     const name = `${components[components.length - 1] ?? "download"}${directory ? ".zip" : ""}`;
-    if (await saveWithAndroid(blob, name)) return null;
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = name;
-    anchor.click();
-    // WebView and Safari may resolve the object URL after click() returns.
-    return { release: () => URL.revokeObjectURL(url) };
+    return saveFile(blob, name);
   },
   async chmod({ alias, remotePath, mode, expectedRevision, recursive }: ModeChange): Promise<RemoteEntry> {
     const target = `${alias}:${remotePath}:${mode}${recursive ? ":recursive" : ""}`;

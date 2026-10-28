@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { BrowserSave } from "../ui/saveFile";
 import type {
-  BrowserSave,
   CreateTransferJob,
   DownloadStream,
   ResumableUpload,
