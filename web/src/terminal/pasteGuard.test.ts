@@ -44,6 +44,16 @@ describe("terminal paste guard", () => {
     });
   });
 
+  it("requires confirmation for C1 controls written as UTF-8 and shows them in the preview", () => {
+    // xterm.js reads U+009B as the start of a CSI.
+    expect(inspectTerminalPaste("ls\u009b31m\u0085")).toMatchObject({
+      requiresConfirmation: true,
+      risks: ["control-character"],
+      preview: "ls\\x9b31m\\x85",
+    });
+    expect(inspectTerminalPaste("café\u00a0ok").requiresConfirmation).toBe(false);
+  });
+
   it("makes line endings, tabs, and literal backslashes unambiguous in the preview", () => {
     expect(inspectTerminalPaste("one\\path\t\r\ntwo\rthree").preview).toBe(
       "one\\\\path\\t\\r\\n\ntwo\\rthree",

@@ -502,6 +502,34 @@ test("keeps the paste review open while a program redraws on focus changes", asy
   await expect(dialog).toBeHidden();
 });
 
+test("keeps an ESC in a reviewed paste from ending bracketed paste and running the rest", async ({ page, context, installation }) => {
+  test.skip(process.platform === "win32", "bash turns on bracketed paste here");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+  await openSessionList(page);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  // The text closes the bracket itself, so whatever follows would be typed.
+  await page.evaluate(() => navigator.clipboard.writeText("echo bracket-$((1+1))\u001b[201~\necho escaped-$((2+2))\n"));
+
+  await terminalKeyboard(page).focus();
+  await page.keyboard.press("Control+Shift+V");
+  const dialog = page.getByRole("dialog", { name: /^Review paste to / });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Paste", exact: true }).click();
+  await expect(dialog).toBeHidden();
+
+  // bash holds the whole paste on its input line; cancel it and run a marker.
+  await terminalKeyboard(page).focus();
+  await page.keyboard.press("Control+C");
+  await page.keyboard.type("echo after-paste-$((3+3))");
+  await page.keyboard.press("Enter");
+  await expect(screen).toContainText("after-paste-6", { timeout: 20_000 });
+  await expect(screen).not.toContainText("bracket-2");
+  await expect(screen).not.toContainText("escaped-4");
+});
+
 test("edits a multiline paste before sending the changed text", async ({ page, context, installation }) => {
   const inputFrames: string[] = [];
   page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {

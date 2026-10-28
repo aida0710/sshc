@@ -69,6 +69,40 @@ describe("terminal clipboard interactions", () => {
     subject.detach();
   });
 
+  it("keeps an ESC inside a bracketed paste from ending the bracket early", () => {
+    expect(prepareTerminalPaste("echo safe\u001b[201~rm -rf ~\n", true)).toBe("\u001b[200~echo safe\u241b[201~rm -rf ~\r\u001b[201~");
+    // Without the bracket the program reads keys; the review already warned about the ESC.
+    expect(prepareTerminalPaste("a\u001bb", false)).toBe("a\u001bb");
+  });
+
+  it("reviews a keyboard's multi-line suggestion and pasted input like a paste", () => {
+    const paste = vi.fn();
+    const container = document.createElement("div");
+    const detach = attachTerminalClipboard({
+      container,
+      terminal: { attachCustomKeyEventHandler: vi.fn(), onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })), hasSelection: () => false, getSelection: () => "", paste: vi.fn() },
+      paste,
+      clipboard: { readText: vi.fn(), writeText: vi.fn() },
+      settings: () => ({ copyOnSelect: false, rightClickPaste: false }),
+      refuse: vi.fn(),
+    });
+    const input = (inputType: string, data: string) => {
+      const event = new InputEvent("beforeinput", { inputType, data, cancelable: true, bubbles: true });
+      container.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+
+    expect(input("insertText", "echo one\necho two")).toBe(true);
+    expect(input("insertFromPaste", "single line")).toBe(true);
+    expect(paste.mock.calls).toEqual([["echo one\necho two"], ["single line"]]);
+
+    // Typing and IME composition stay with xterm.js.
+    expect(input("insertText", "a")).toBe(false);
+    expect(input("insertCompositionText", "にほん")).toBe(false);
+    expect(paste).toHaveBeenCalledTimes(2);
+    detach();
+  });
+
   it("normalizes and brackets paste text before sending it to a terminal", () => {
     expect(prepareTerminalPaste("one\ntwo\r\nthree", false)).toBe("one\rtwo\rthree");
     expect(prepareTerminalPaste("one\ntwo", true)).toBe("\u001b[200~one\rtwo\u001b[201~");
