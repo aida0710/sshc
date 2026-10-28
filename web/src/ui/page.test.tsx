@@ -26,7 +26,7 @@ describe("PageHeader", () => {
     const topBar = document.createElement("div");
     document.body.append(topBar);
     render(
-      <PageChromeContext.Provider value={{ inspectorToggle: null, phoneActionsSlot: topBar }}>
+      <PageChromeContext.Provider value={{ inspectorToggle: null, phoneActionsSlot: topBar, phoneBackSlot: null }}>
         <PageHeader title="SSH Keys" actions={<button type="button">鍵を作成</button>} />
       </PageChromeContext.Provider>,
     );
@@ -41,7 +41,7 @@ describe("PageHeader", () => {
     const topBar = document.createElement("div");
     document.body.append(topBar);
     render(
-      <PageChromeContext.Provider value={{ inspectorToggle: null, phoneActionsSlot: topBar }}>
+      <PageChromeContext.Provider value={{ inspectorToggle: null, phoneActionsSlot: topBar, phoneBackSlot: null }}>
         <PageHeader title="Snippets" meta="1 saved" actions={<button type="button">Add snippet</button>} className="py-3" />
       </PageChromeContext.Provider>,
     );
@@ -56,7 +56,7 @@ describe("PageHeader", () => {
   it("keeps its room on a phone for a description under the hidden name", () => {
     viewport(true);
     render(
-      <PageChromeContext.Provider value={{ inspectorToggle: null, phoneActionsSlot: null }}>
+      <PageChromeContext.Provider value={{ inspectorToggle: null, phoneActionsSlot: null, phoneBackSlot: null }}>
         <PageHeader title="VPN" description="Requires Docker on this machine." className="py-3" />
       </PageChromeContext.Provider>,
     );
@@ -69,7 +69,7 @@ describe("PageHeader", () => {
     const topBar = document.createElement("div");
     document.body.append(topBar);
     render(
-      <PageChromeContext.Provider value={{ inspectorToggle: null, phoneActionsSlot: topBar }}>
+      <PageChromeContext.Provider value={{ inspectorToggle: null, phoneActionsSlot: topBar, phoneBackSlot: null }}>
         <PageHeader title="Terminal" titleOnPhone actions={<button type="button">保存</button>} />
       </PageChromeContext.Provider>,
     );
@@ -82,7 +82,7 @@ describe("PageHeader", () => {
   it("shows the inspector's toggle first among its actions on a wide screen", () => {
     viewport(false);
     render(
-      <PageChromeContext.Provider value={{ inspectorToggle: <button type="button">鍵の詳細</button>, phoneActionsSlot: null }}>
+      <PageChromeContext.Provider value={{ inspectorToggle: <button type="button">鍵の詳細</button>, phoneActionsSlot: null, phoneBackSlot: null }}>
         <PageHeader title="SSH Keys" actions={<button type="button">鍵を作成</button>} />
       </PageChromeContext.Provider>,
     );

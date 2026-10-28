@@ -104,7 +104,7 @@ test("moves from the compact connection browser to detail at 360 pixels", async 
   await browser.getByRole("button", { name: "bastion", exact: true }).click();
   await expect(browser).toBeHidden();
   await expect(page.getByRole("heading", { name: "bastion", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "All connections" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Back to connections" })).toBeVisible();
   await expectNoHorizontalOverflow(page, "Connection detail");
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
@@ -141,7 +141,7 @@ test("moves from the compact connection browser to detail at 360 pixels", async 
     });
   }
 
-  await page.getByRole("button", { name: "All connections" }).click();
+  await page.getByRole("button", { name: "Back to connections" }).click();
   await expect(browser).toBeVisible();
 });
 
@@ -730,7 +730,7 @@ test("lets the connection detail replace the list and hands back a way out", asy
   await tree.getByRole("button", { name: "alpha", exact: true }).click();
 
   await expect(tree).toBeHidden();
-  const back = page.getByRole("button", { name: "All connections" });
+  const back = page.getByRole("button", { name: "Back to connections" });
   await expect(back).toBeVisible();
 
   await back.click();
