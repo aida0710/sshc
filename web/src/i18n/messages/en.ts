@@ -513,6 +513,8 @@ export const en = {
   "runTarget.heading": "Engines",
   "runTarget.thisMachine": "localhost",
   "runTarget.thisMachineNote": "this computer",
+  "runTarget.unread": "New notifications",
+  "runTarget.unreadElsewhere": "Another engine has new notifications",
   "runTarget.actions": "Actions for engine {alias}",
   "runTarget.openInNewTab": "Open its full screen in a new tab",
   "runTarget.remove": "Remove from the list",

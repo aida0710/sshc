@@ -3410,6 +3410,7 @@ export interface components {
         };
         RemoteEngine: {
             alias: string;
+            connected: boolean;
         };
         RemoteEngineList: {
             engines: components["schemas"]["RemoteEngine"][];
