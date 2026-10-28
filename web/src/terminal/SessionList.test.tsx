@@ -221,7 +221,7 @@ describe("SessionList", () => {
     const props = renderList();
 
     await user.click(screen.getByRole("button", { name: "Actions for bastion" }));
-    await user.click(screen.getByRole("menuitem", { name: "Duplicate this connection" }));
+    await user.click(screen.getByRole("menuitem", { name: "Duplicate session" }));
 
     expect(props.onDuplicate).toHaveBeenCalledWith("a");
   });

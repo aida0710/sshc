@@ -17,13 +17,13 @@ You can also choose **Show in split view on the right** or **Show in split view 
 
 ## Switch between splits
 
-Splitting a session displayed on its own creates a group under **Split views**, above **Workspaces** in the sidebar. Groups are named **Split 1**, **Split 2**, and so on, in creation order. Numbers are not reused after a group is dissolved. You can keep up to eight groups, with up to four panes each. Splitting within a displayed group adds a pane to that group.
+Splitting a session displayed on its own creates a split under **Split views**, above **Workspaces** in the sidebar. Splits are named **Split 1**, **Split 2**, and so on, in creation order. Numbers are not reused after a split is dissolved. You can keep up to eight splits, with up to four panes each. Splitting within a displayed split adds a pane to it.
 
-Select a group row to return to its arrangement. The small map at the row's left shows how its panes are arranged, and the number at its right is how many sessions it holds. Beneath the row, each session in the group has its own row: a status dot and its name, with the destination under the name. Selecting one opens the group with that pane focused. In the workspace tree, a grouped session shows a small map with its own pane highlighted.
+Select a split's row to return to its arrangement. The small map at the row's left shows how its panes are arranged, and the number at its right is how many sessions it holds. Beneath the row, each session in the split has its own row: a status dot and its name, with the destination under the name. Selecting one opens the split with that pane focused. In the workspace tree, a session in a split shows a small map with its own pane highlighted.
 
-Selecting a grouped session in the sidebar opens its group and focuses that pane. Selecting an ungrouped session shows it alone while keeping every group available under **Split views**.
+Selecting a session in a split in the sidebar opens its split and focuses that pane. Selecting a session in no split shows it alone while keeping every split available under **Split views**.
 
-A session can belong to only one split group. Adding it to another group removes it from the original group. If only one pane remains, the original group dissolves. Workspace membership does not change.
+A session can belong to only one split. Adding it to another split removes it from the original one. If only one pane remains, the original split dissolves. Workspace membership does not change.
 
 ## Operate panes
 
@@ -35,12 +35,12 @@ A session can belong to only one split group. Adding it to another group removes
 | Close a pane | Select **Close pane** in its heading. The session keeps running and remains in the sidebar |
 | Select another pane | Click the pane or select its session in the sidebar. Within the terminal, Ctrl+Alt+Left/Right also moves between panes |
 
-The selected pane has a colored border. Choose **…** → **Dissolve** on a group row to remove that group, or close panes until only one remains. Neither action closes the sessions themselves. When a session exits or is deleted, its pane is removed, even from a group that is not displayed. Groups with fewer than two remaining panes dissolve.
+The selected pane has a colored border. Choose **…** → **Dissolve** on a split's row to remove that split, or close panes until only one remains. Neither action closes the sessions themselves. When a session exits or is deleted, its pane is removed, even from a split that is not displayed. Splits with fewer than two remaining panes dissolve.
 
 ## Mobile and persistence
 
-Mobile widths show one pane at a time. If you narrow the window during split view, switch panes using the session names at the top. The sidebar still lets you switch between groups. Widening the window restores the split.
+Mobile widths show one pane at a time. If you narrow the window during split view, switch panes using the session names at the top. The sidebar still lets you switch between splits. Widening the window restores the split.
 
-Groups and arrangements are not saved to the server or browser storage. Reloading the browser tab or changing the run target clears split view.
+Splits and arrangements are not saved to the server or browser storage. Reloading the browser tab or changing the run target clears split view.
 
 See [Workspaces](./workspace) for grouping sessions in the sidebar.

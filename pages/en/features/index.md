@@ -11,9 +11,13 @@ sshc is a local terminal application for SSH and local shells. It combines SFTP 
 
 - Use SSH and local shells in the same interface, grouped into [workspaces](./workspace), with connections opened by LLMs kept in a hidden one
 - Follow connection progress, and reconnect an exited SSH session while keeping its pane and scrollback
+- Put several sessions side by side with [split views](./split-view)
+- [Reopen](./terminal#reopen-sessions-after-a-stop) the sessions that were open when the sshc engine stopped
+- Click a file path printed in the terminal to [preview](./terminal#links-and-remote-paths) an image, text, audio or video in place
+- Use the terminals of an sshc engine that stays running on an SSH host from this machine's browser with a [run target](./run-target)
 - Search, choose encodings, and open links and remote paths
 - Use [Quick Commands and snippets](/en/terminal/commands) with confirmation before running, automatic runs on connect, and runs across several connections
-- Show pane names and notifications sent by programs with [titles and notifications](/en/terminal/notifications), including notifications from Claude Code and Codex
+- Show session names and notifications sent by programs with [titles and notifications](/en/terminal/notifications), including notifications from Claude Code and Codex
 - [Port forwarding](/en/terminal/port-forwarding) supports Local forwarding, Remote forwarding and Dynamic SOCKS, as saved settings or temporary forwards
 - Change the terminal palette, font, and background in [Settings](/en/reference/settings)
 
