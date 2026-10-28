@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../i18n/context";
 import { loadKeepScreenAwake } from "./keepScreenAwake";
+import { loadTouchMode } from "./touchMode";
 import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 
 function renderMenu(onClose = () => undefined) {
@@ -81,5 +82,23 @@ describe("TerminalOverflowMenu", () => {
     renderMenu();
 
     expect(screen.queryByRole("menuitemcheckbox", { name: "Keep screen on" })).toBeNull();
+  });
+
+  it("fixes touch or mouse for every terminal once detection is turned off", async () => {
+    const close = vi.fn();
+    renderMenu(close);
+    const detect = screen.getByRole("menuitemcheckbox", { name: "Detect touch automatically" });
+    expect(detect).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByRole("menuitemradio")).toBeNull();
+
+    await userEvent.click(detect);
+    // The menu stays open so that the fixed input can be picked; jsdom has no touch screen, so mouse is kept.
+    expect(close).not.toHaveBeenCalled();
+    expect(loadTouchMode()).toBe("mouse");
+    expect(screen.getByRole("menuitemradio", { name: "Use by mouse" })).toHaveAttribute("aria-checked", "true");
+
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "Use by touch" }));
+    expect(loadTouchMode()).toBe("touch");
+    expect(close).toHaveBeenCalledOnce();
   });
 });

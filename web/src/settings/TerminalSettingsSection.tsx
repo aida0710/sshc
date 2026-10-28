@@ -18,6 +18,7 @@ import {
   TerminalSwitches,
 } from "./TerminalSettingsFields";
 import { TerminalPreview } from "./TerminalPreview";
+import { TouchModeField } from "./TouchModeField";
 import {
   draftOf,
   initialTerminalDraft,
@@ -164,7 +165,9 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
             <PageSection heading={t("terminal.settingsGroupStart")}><div><TerminalStartFields {...groupProps} profiles={profiles} /></div></PageSection>
             <PageSection heading={t("terminal.settingsGroupConnection")}><div><TerminalConnectionFields {...groupProps} /></div></PageSection>
             <PageSection heading={t("terminal.settingsGroupLook")}>{look}</PageSection>
-            <PageSection heading={t("terminal.settingsGroupOperation")}><TerminalSwitches {...groupProps} /></PageSection>
+            <PageSection heading={t("terminal.settingsGroupOperation")}>
+              <div><TerminalSwitches {...groupProps} /><div className="border-t border-line pt-1.5"><TouchModeField /></div></div>
+            </PageSection>
           </div>
         ) : (
           <div id={panelId} role="tabpanel" aria-labelledby={tabId(tab)} className="mt-[18px] border-t border-line pt-[18px]">
@@ -174,6 +177,7 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
               <>
                 <TerminalStartFields {...groupProps} profiles={profiles} />
                 <div className="border-t border-line pt-1.5"><TerminalSwitches {...groupProps} /></div>
+                <div className="border-t border-line pt-1.5"><TouchModeField /></div>
               </>
             ) : null}
           </div>

@@ -1,9 +1,11 @@
 import { useRef, type RefObject } from "react";
 import { Icon } from "../ui/icons";
 import { useTranslate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { isScreenWakeLockSupported, saveKeepScreenAwake, useKeepScreenAwake } from "./keepScreenAwake";
+import { saveTouchMode, useDetectedTouchMode, useTouchMode, type FixedTouchMode } from "./touchMode";
 import type { PaneEdge } from "./splitView/layout";
 
 export function TerminalOverflowMenu({
@@ -35,6 +37,8 @@ export function TerminalOverflowMenu({
   const t = useTranslate();
   const panel = useRef<HTMLDivElement>(null);
   const keepScreenAwake = useKeepScreenAwake();
+  const touchMode = useTouchMode();
+  const detectedTouchMode = useDetectedTouchMode();
 
   useDismissibleLayer({
     open: true,
@@ -84,26 +88,46 @@ export function TerminalOverflowMenu({
       <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" title={t("terminal.copyContextHint")} onClick={action(onCopyContext)}>
         {t("terminal.copyContext")}
       </button>
-      {/* These two apply to every terminal, not only this one, so they sit apart under their own heading. */}
+      {/* These apply to every terminal, not only this one, so they sit apart under their own heading. */}
       <div role="group" aria-label={t("terminal.globalSettings")} className="mt-1 border-t border-line pt-1">
         <p aria-hidden="true" className="px-2.5 py-1 text-[11px] text-ink-faint">{t("terminal.globalSettings")}</p>
-        <CheckboxMenuItem label="OSC 52" hint={t("terminal.osc52Hint")} checked={osc52Enabled} onSelect={action(onToggleOsc52)} />
+        <ChoiceMenuItem role="menuitemcheckbox" label="OSC 52" hint={t("terminal.osc52Hint")} checked={osc52Enabled} onSelect={action(onToggleOsc52)} />
         {isScreenWakeLockSupported() ? (
-          <CheckboxMenuItem label={t("terminal.keepScreenAwake")} hint={t("terminal.keepScreenAwakeHint")} checked={keepScreenAwake}
+          <ChoiceMenuItem role="menuitemcheckbox" label={t("terminal.keepScreenAwake")} hint={t("terminal.keepScreenAwakeHint")} checked={keepScreenAwake}
             onSelect={action(() => saveKeepScreenAwake(!keepScreenAwake))} />
         ) : null}
+        {/* Turning detection off keeps the menu open: the two fixed choices appear under it to pick from.
+            It starts on the one detection picked, so nothing changes until one is picked. */}
+        <ChoiceMenuItem role="menuitemcheckbox" label={t("terminal.touchModeAuto")} hint={t("terminal.touchModeAutoHint")} checked={touchMode === "auto"}
+          onSelect={() => saveTouchMode(touchMode === "auto" ? detectedTouchMode : "auto")} />
+        {touchMode === "auto" ? null : fixedTouchModes.map(({ mode, label, hint }) => (
+          <ChoiceMenuItem key={mode} role="menuitemradio" indent label={t(label)} hint={t(hint)} checked={touchMode === mode}
+            onSelect={action(() => saveTouchMode(mode))} />
+        ))}
       </div>
     </div>
   );
 }
 
-function CheckboxMenuItem({ label, hint, checked, onSelect }: { label: string; hint: string; checked: boolean; onSelect: () => void }) {
+const fixedTouchModes: { mode: FixedTouchMode; label: MessageKey; hint: MessageKey }[] = [
+  { mode: "touch", label: "terminal.touchModeTouch", hint: "terminal.touchModeTouchHint" },
+  { mode: "mouse", label: "terminal.touchModeMouse", hint: "terminal.touchModeMouseHint" },
+];
+
+function ChoiceMenuItem({ role, label, hint, checked, onSelect, indent = false }: {
+  role: "menuitemcheckbox" | "menuitemradio";
+  label: string;
+  hint: string;
+  checked: boolean;
+  onSelect: () => void;
+  indent?: boolean;
+}) {
   return (
     <button
       type="button"
-      role="menuitemcheckbox"
+      role={role}
       aria-checked={checked}
-      className="flex min-h-10 w-full items-center justify-between gap-3 rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0"
+      className={`flex min-h-10 w-full items-center justify-between gap-3 rounded py-2 pr-2.5 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0 ${indent ? "pl-6" : "pl-2.5"}`}
       title={hint}
       onClick={onSelect}
     >
