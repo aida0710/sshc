@@ -7,7 +7,7 @@ import { Icon } from "../ui/icons";
 import { PasswordInput } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
 import type { CreateConnectionAuthenticationKind, CreateConnectionDraft, CreationPrerequisite } from "./createConnectionDraft";
-import { CreateConnectionVaultPrompt } from "./CreateConnectionVaultPrompt";
+import { ConnectionVaultUnlock } from "./ConnectionVaultUnlock";
 import { EditorSection } from "./EditorSection";
 import { groupDefaultValue } from "./groupDefaults";
 import { NewGroupField } from "./NewGroupField";
@@ -191,7 +191,7 @@ export function CreateConnectionPane({
 
             {form.vault !== null && passwordNeedsVault ? (
               <FieldRowNote density="editor">
-                <CreateConnectionVaultPrompt
+                <ConnectionVaultUnlock
                   vault={form.vault}
                   masterPassword={values.masterPassword}
                   onMasterPasswordChange={form.setMasterPassword}

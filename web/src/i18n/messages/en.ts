@@ -2721,10 +2721,8 @@ export const en = {
   "conn.createConfirmMaster": "Confirm master password",
   "conn.createInitialiseVault": "Create encrypted vault",
   "conn.createUnlockVault": "Unlock vault",
-  "conn.createVaultMissing":
-    "Create the encrypted vault before saving this connection.",
-  "conn.createVaultLocked":
-    "Unlock the encrypted vault before saving this connection.",
+  "conn.vaultMissingBeforeSave": "Create the encrypted vault before saving.",
+  "conn.vaultLockedBeforeSave": "Unlock the encrypted vault before saving.",
   "conn.createVaultFailed": "The encrypted vault could not be created.",
   "conn.createUnlockFailed": "The encrypted vault could not be unlocked.",
   "conn.createNeedVault": "Unlock the encrypted vault to continue.",
@@ -2836,10 +2834,6 @@ export const en = {
   "conn.basicEmptyPasswordUnchanged":
     "Leaving this empty makes no password change.",
   "conn.basicPasswordStale": "The saved password is not used because the destination settings changed. Saving the Basic settings uses it with the current settings.",
-  "conn.basicVaultMissing":
-    "Create the encrypted vault before saving Basic settings.",
-  "conn.basicVaultLocked":
-    "Unlock the encrypted vault before saving Basic settings.",
   "conn.basicNeedVault": "Unlock the encrypted vault to save this draft.",
   "conn.basicPasswordBlocked":
     "The current SSH settings block adding or replacing a stored password.",
