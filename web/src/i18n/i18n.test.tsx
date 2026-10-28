@@ -36,11 +36,6 @@ describe("the catalogue", () => {
     expect(untranslated.sort()).toEqual(
       [
         "appearance.heading",
-        "conn.advancedDirectives",
-        "conn.areaAdvanced",
-        "conn.areaAnalysis",
-        "conn.areaBasic",
-        "conn.areaSshc",
         "conn.heading",
         "desktop.closeAllHeading",
         "diag.hostAlias",
@@ -48,8 +43,7 @@ describe("the catalogue", () => {
         "engineInfo.vault",
         "history.pageTitle",
         "home.heading",
-        "host.tabJump",
-        "host.tabRaw",
+        "inspector.vpnHeading",
         "keys.agentHeading",
         "keys.blockerOther",
         "keys.reference",
@@ -61,6 +55,7 @@ describe("the catalogue", () => {
         "menu.language",
         "menu.others",
         "rk.hostAlias",
+        "runTarget.thisMachine",
         "secrets.changeHeading",
         "section.about",
         "section.connections",
@@ -84,8 +79,6 @@ describe("the catalogue", () => {
         "shell.languageEnglish",
         "shell.languageJapanese",
         "shell.navVault",
-        "workspace.heading",
-        "runTarget.thisMachine",
         "shell.title",
         "shortcuts.heading",
         "snippets.heading",
@@ -99,6 +92,7 @@ describe("the catalogue", () => {
         "terminal.settingsHeading",
         "tree.navLabel",
         "vpn.heading",
+        "workspace.heading",
       ].sort(),
     );
   });

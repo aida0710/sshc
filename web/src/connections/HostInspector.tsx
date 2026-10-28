@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HostDetail, HostMetadata } from "../api/config";
 import type { VPNProfile } from "../api/vpn";
-import { control, fieldLabel, hintText, sectionHeading } from "../ui/form";
+import { control } from "../ui/form";
 import { FieldRow } from "../ui/FieldRow";
 import { Button, Notice } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
@@ -15,7 +15,7 @@ import {
   withOptionalChoice,
 } from "./hostMetadataDraft";
 import { HostVPNProfileField } from "./HostVPNProfileField";
-import { NoticeList } from "./NoticeList";
+import { EditorSection } from "./EditorSection";
 import { useDraftSave } from "./useDraftSave";
 import { useReportDirty } from "./useReportDirty";
 import { AppearancePicker } from "../terminal/AppearancePicker";
@@ -24,11 +24,6 @@ import { chooseAppearance } from "../terminal/appearance";
 import { fonts } from "../terminal/fonts";
 import { operatingSystems, OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { palettes } from "../terminal/palettes";
-
-function inherited(detail: HostDetail) {
-  const own = detail.form.entry.file.path ?? detail.form.entry.file.absolute;
-  return detail.effective.entries.filter((entry) => (entry.source.path ?? entry.source.absolute) !== own);
-}
 
 type HostInspectorProps = {
   detail: HostDetail;
@@ -41,8 +36,8 @@ type HostInspectorProps = {
   disabled?: boolean | undefined;
 };
 
-// HostInspector は、接続エディタのsshcタブである。sshcだけが使う接続ごとの設定を下書きとして
-// 編集し、保存を押したときにまとめて保存する。
+// HostInspector は、接続エディタの「表示とターミナル」のタブである。sshc だけが使う接続ごとの設定
+// （一覧での見え方、ターミナル、VPN）を下書きとして編集し、保存を押したときにまとめて保存する。
 export function HostInspector({
   detail,
   onSave,
@@ -59,8 +54,6 @@ export function HostInspector({
   const [tagsText, setTagsText] = useState(() => formatTags(saved.tags));
   const { saving, written, saveFailed, save: saveDraft } = useDraftSave({ draft, saved });
   const dirty = !written && !sameHostMetadata(draft, saved);
-  const notices = [...(detail.form.notices ?? []), ...(detail.effective.notices ?? [])];
-  const fromElsewhere = inherited(detail);
 
   const discard = useCallback(() => {
     setDraft(saved);
@@ -88,166 +81,140 @@ export function HostInspector({
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col">
+      <fieldset disabled={disabled || saving} className="flex min-w-0 flex-col">
+        <EditorSection title={t("inspector.lookHeading")}>
+          <FieldRow
+            density="editor"
+            label={t("host.colour")}
+            actions={draft.colour === undefined || draft.colour === "" ? undefined : (
+              <Button small onClick={() => setDraft({ ...draft, colour: "" })}>
+                {t("host.clearColour")}
+              </Button>
+            )}
+          >
+            <input
+              type="color"
+              value={
+                draft.colour === undefined || draft.colour === ""
+                  ? "#8e8e93" /* palette-exempt: ネイティブコントロール自身の中立色 */
+                  : draft.colour
+              }
+              onChange={(event) => setDraft({ ...draft, colour: event.target.value })}
+              className="h-8 w-14 rounded border border-control-line bg-control"
+            />
+          </FieldRow>
 
-      <section className="flex flex-col gap-3">
-        <h3 className={sectionHeading}>{t("inspector.appOnly")}</h3>
+          <FieldRow density="editor" label={t("host.os")} interactiveChildren>
+            <div className="flex items-center gap-2">
+              <OperatingSystemIcon os={draft.os || draft.detectedOS || ""} />
+              <select aria-label={t("host.os")} value={draft.os ?? ""}
+                onChange={(event) => setDraft({ ...draft, os: event.target.value as NonNullable<HostMetadata["os"]> })}
+                className={control}>
+                <option value="">{t("host.osAutomatic")}</option>
+                {operatingSystems.map(([value, label]) => <option key={value} value={value}>{value === "server" ? t("host.osGeneric") : label}</option>)}
+              </select>
+            </div>
+          </FieldRow>
 
-        {/* 項目は Basic と同じく枠で囲まずに並べる。sshc タブだけ背景の付いた枠に入れると、
-            タブを切り替えたときに見た目と横幅がそろわない。 */}
-        <fieldset disabled={disabled || saving} className="flex min-w-0 flex-col">
-        <FieldRow
-          label={t("host.colour")}
-          actions={draft.colour === undefined || draft.colour === "" ? undefined : (
-            <Button small onClick={() => setDraft({ ...draft, colour: "" })}>
-              {t("host.clearColour")}
-            </Button>
-          )}
-        >
-          <input
-            type="color"
-            value={
-              draft.colour === undefined || draft.colour === ""
-                ? "#8e8e93" /* palette-exempt: ネイティブコントロール自身の中立色 */
-                : draft.colour
-            }
-            onChange={(event) => setDraft({ ...draft, colour: event.target.value })}
-            className="h-8 w-14 rounded border border-control-line bg-control"
-          />
-        </FieldRow>
+          <FieldRow density="editor" label={t("host.tags")}>
+            <input
+              value={tagsText}
+              onChange={(event) => {
+                setTagsText(event.target.value);
+                setDraft({ ...draft, tags: parseTags(event.target.value) });
+              }}
+              className={control}
+            />
+          </FieldRow>
 
-        <FieldRow label={t("host.os")} hint={t("host.osHint")} interactiveChildren>
-          <div className="flex items-center gap-2">
-            <OperatingSystemIcon os={draft.os || draft.detectedOS || ""} />
-            <select aria-label={t("host.os")} value={draft.os ?? ""}
-              onChange={(event) => setDraft({ ...draft, os: event.target.value as NonNullable<HostMetadata["os"]> })}
-              className={control}>
-              <option value="">{t("host.osAutomatic")}</option>
-              {operatingSystems.map(([value, label]) => <option key={value} value={value}>{value === "server" ? t("host.osGeneric") : label}</option>)}
+          <FieldRow density="editor" label={t("host.displayOrderLabel")} hint={t("host.displayOrderHint")}>
+            <input
+              type="number"
+              value={String(draft.order ?? 0)}
+              onChange={(event) => setDraft({ ...draft, order: Number(event.target.value) || 0 })}
+              className={`${control} w-28`}
+            />
+          </FieldRow>
+        </EditorSection>
+
+        <EditorSection title={t("inspector.terminalHeading")} meta={t("inspector.terminalFollowsApp")}>
+          <FieldRow density="editor" label={t("connection.paletteLabel")}>
+            <AppearancePicker
+              choices={palettes}
+              value={draft.appearance?.palette ?? ""}
+              onChange={(chosen) => setDraft(chooseAppearance(draft, { palette: chosen }))}
+              unchosen={t("terminal.paletteFollowsOverall")}
+            />
+          </FieldRow>
+
+          <FieldRow density="editor" label={t("connection.fontLabel")}>
+            <AppearancePicker
+              choices={fonts}
+              value={draft.appearance?.font ?? ""}
+              onChange={(chosen) => setDraft(chooseAppearance(draft, { font: chosen }))}
+              unchosen={t("terminal.fontFollowsOverall")}
+            />
+          </FieldRow>
+
+          <FieldRow density="editor" label={t("connection.backgroundLabel")} interactiveChildren>
+            <BackgroundPicker
+              value={draft.appearance?.background ?? ""}
+              onChange={(chosen) => setDraft(chooseAppearance(draft, { background: chosen }))}
+              tint={draft.appearance?.backgroundTint}
+              onTintChange={(chosen) => setDraft(chooseAppearance(draft, { backgroundTint: chosen }))}
+              unchosen={t("terminal.backgroundFollowsOverall")}
+            />
+          </FieldRow>
+
+          <FieldRow density="editor" label={t("connection.encodingLabel")} hint={t("connection.encodingHint")}>
+            <select
+              value={draft.encoding ?? ""}
+              onChange={(event) =>
+                setDraft(withOptionalChoice(draft, "encoding", event.target.value as NonNullable<HostMetadata["encoding"]> | ""))}
+              className={control}
+            >
+              <option value="">{t("connection.encodingUTF8")}</option>
+              <option value="shift_jis">{t("connection.encodingShiftJIS")}</option>
+              <option value="euc-jp">{t("connection.encodingEUCJP")}</option>
+              <option value="iso-2022-jp">{t("connection.encodingISO2022JP")}</option>
             </select>
-          </div>
-        </FieldRow>
+          </FieldRow>
 
-        <FieldRow label={t("connection.paletteLabel")} hint={t("connection.paletteHint")}>
-          <AppearancePicker
-            choices={palettes}
-            value={draft.appearance?.palette ?? ""}
-            onChange={(chosen) => setDraft(chooseAppearance(draft, { palette: chosen }))}
-            unchosen={t("terminal.paletteFollowsOverall")}
+          <FieldRow density="editor" label={t("connection.osc52Label")} hint={t("connection.osc52Hint")}>
+            <select
+              value={draft.osc52 ?? ""}
+              onChange={(event) =>
+                setDraft(withOptionalChoice(draft, "osc52", event.target.value as NonNullable<HostMetadata["osc52"]> | ""))}
+              className={control}
+            >
+              <option value="">{t("connection.osc52Inherit")}</option>
+              <option value="allow">{t("connection.osc52Allow")}</option>
+              <option value="deny">{t("connection.osc52Deny")}</option>
+            </select>
+          </FieldRow>
+        </EditorSection>
+
+        <EditorSection title={t("inspector.vpnHeading")}>
+          <HostVPNProfileField
+            detail={detail}
+            value={draft.vpn ?? ""}
+            saved={saved.vpn ?? ""}
+            profiles={vpnProfiles}
+            onChange={(profile) => setDraft(withOptionalChoice(draft, "vpn", profile))}
           />
-        </FieldRow>
+        </EditorSection>
+      </fieldset>
 
-        <FieldRow label={t("connection.fontLabel")} hint={t("connection.fontHint")}>
-          <AppearancePicker
-            choices={fonts}
-            value={draft.appearance?.font ?? ""}
-            onChange={(chosen) => setDraft(chooseAppearance(draft, { font: chosen }))}
-            unchosen={t("terminal.fontFollowsOverall")}
-          />
-        </FieldRow>
-
-        <FieldRow label={t("connection.backgroundLabel")} hint={t("connection.backgroundHint")} interactiveChildren>
-          <BackgroundPicker
-            value={draft.appearance?.background ?? ""}
-            onChange={(chosen) => setDraft(chooseAppearance(draft, { background: chosen }))}
-            tint={draft.appearance?.backgroundTint}
-            onTintChange={(chosen) => setDraft(chooseAppearance(draft, { backgroundTint: chosen }))}
-            unchosen={t("terminal.backgroundFollowsOverall")}
-          />
-        </FieldRow>
-
-        <FieldRow label={t("connection.encodingLabel")} hint={t("connection.encodingHint")}>
-          <select
-            value={draft.encoding ?? ""}
-            onChange={(event) =>
-              setDraft(withOptionalChoice(draft, "encoding", event.target.value as NonNullable<HostMetadata["encoding"]> | ""))}
-            className={control}
-          >
-            <option value="">{t("connection.encodingUTF8")}</option>
-            <option value="shift_jis">{t("connection.encodingShiftJIS")}</option>
-            <option value="euc-jp">{t("connection.encodingEUCJP")}</option>
-            <option value="iso-2022-jp">{t("connection.encodingISO2022JP")}</option>
-          </select>
-        </FieldRow>
-
-        <FieldRow label={t("connection.osc52Label")} hint={t("connection.osc52Hint")}>
-          <select
-            value={draft.osc52 ?? ""}
-            onChange={(event) =>
-              setDraft(withOptionalChoice(draft, "osc52", event.target.value as NonNullable<HostMetadata["osc52"]> | ""))}
-            className={control}
-          >
-            <option value="">{t("connection.osc52Inherit")}</option>
-            <option value="allow">{t("connection.osc52Allow")}</option>
-            <option value="deny">{t("connection.osc52Deny")}</option>
-          </select>
-        </FieldRow>
-
-        <HostVPNProfileField
-          detail={detail}
-          value={draft.vpn ?? ""}
-          saved={saved.vpn ?? ""}
-          profiles={vpnProfiles}
-          onChange={(profile) => setDraft(withOptionalChoice(draft, "vpn", profile))}
-        />
-
-        <FieldRow label={t("host.tags")}>
-          <input
-            value={tagsText}
-            onChange={(event) => {
-              setTagsText(event.target.value);
-              setDraft({ ...draft, tags: parseTags(event.target.value) });
-            }}
-            className={control}
-          />
-        </FieldRow>
-
-        <FieldRow label={t("host.displayOrder")}>
-          <input
-            type="number"
-            value={String(draft.order ?? 0)}
-            onChange={(event) => setDraft({ ...draft, order: Number(event.target.value) || 0 })}
-            className={control}
-          />
-        </FieldRow>
-        </fieldset>
-
-        {saveFailed ? <Notice tone="danger">{t("inspector.hostSaveFailed")}</Notice> : null}
-        {dirty ? <DraftSaveBar
-          saveLabel={t("inspector.hostSave")}
-          saving={saving}
-          saveDisabled={disabled || saving}
-          discardDisabled={saving}
-          onDiscard={discard}
-          onSave={save}
-        /> : null}
-      </section>
-
-      <section className="flex flex-col gap-2">
-        <h3 className={fieldLabel}>{t("inspector.notices")}</h3>
-        {notices.length === 0 ? (
-          <p className={hintText}>{t("inspector.noNotices")}</p>
-        ) : (
-          <NoticeList notices={notices} />
-        )}
-      </section>
-
-      <section className="flex flex-col gap-2">
-        <h3 className={fieldLabel}>{t("inspector.inherited")}</h3>
-        {fromElsewhere.length === 0 ? (
-          <p className={hintText}>{t("inspector.noInherited")}</p>
-        ) : (
-          <ul className="overflow-hidden rounded-lg bg-tree">
-            {fromElsewhere.map((entry, index) => (
-              <li key={`${entry.keyword}-${index}`} className="border-t border-hairline px-3 py-2 font-mono text-xs text-ink-muted first:border-t-0">
-                {`${entry.keyword} ${entry.values.join(" ")} · ${
-                  entry.source.path ?? entry.source.absolute ?? ""
-                }:${entry.source.line ?? 0}`}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {saveFailed ? <Notice tone="danger">{t("inspector.hostSaveFailed")}</Notice> : null}
+      {dirty ? <DraftSaveBar
+        saveLabel={t("inspector.hostSave")}
+        saving={saving}
+        saveDisabled={disabled || saving}
+        discardDisabled={saving}
+        onDiscard={discard}
+        onSave={save}
+      /> : null}
     </div>
   );
 }

@@ -5,7 +5,7 @@ description: Appearance, terminal, input, notifications, and local-shell setting
 
 # Settings
 
-Menu is organized into feature groups, and each page in it has a line on what it is for. Its Settings group links directly to Appearance, Engine, Terminal, SFTP, Keyboard shortcuts, Notifications, Open connections, and Master password. Preferences at the bottom of Menu switches the display language. Connection-specific behavior lives in the connection's sshc tab.
+Menu is organized into feature groups, and each page in it has a line on what it is for. Its Settings group links directly to Appearance, Engine, Terminal, SFTP, Keyboard shortcuts, Notifications, Open connections, and Master password. Preferences at the bottom of Menu switches the display language. Connection-specific behavior lives in the connection's **Display & terminal** tab.
 
 ## Keyboard shortcuts
 

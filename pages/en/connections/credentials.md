@@ -51,7 +51,7 @@ An account password or TOTP assignment is bound to the destination and the route
 
 The VPN profile is included because the same `HostName` can be a different machine on the network of another VPN. Attaching a profile recreated under the name of a deleted one does not bring the assignment back, even when the profile was detached from the connection before it was deleted. Renaming or editing a VPN profile keeps its assignments working. To move a connection to a VPN on another network, create a new profile and attach it instead ([Per-connection VPN](/en/features/vpn)).
 
-Connections shows **Saved password paused** in the summary for an account password that stopped. Pressing **Save Basic settings** under **Basic** asks for confirmation, and **Save and confirm** makes the assigned password and one-time password work with the changed destination.
+An account password that stopped is shown in the authentication part of the connection's **Basic** tab. Pressing **Save Basic settings** under **Basic** asks for confirmation, and **Save and confirm** makes the assigned password and one-time password work with the changed destination.
 
 ## Lock and change the master password
 

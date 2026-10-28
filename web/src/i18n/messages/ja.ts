@@ -1173,26 +1173,23 @@ export const ja = {
   "terminal.tintLabel": "画像に重ねる色の不透明度",
   "terminal.tintHint":
     "値を大きくすると画像が暗くなり、文字を読みやすくできます。",
-  "connection.backgroundLabel": "ターミナルの背景画像",
-  "connection.backgroundHint": "この接続のターミナルにだけ適用されます。",
+  "connection.backgroundLabel": "背景画像",
   "terminal.fontHint": "JetBrains Monoはアプリに同梱しています。",
   "terminal.fontFollowsSystem": "システムの等幅フォントを使用",
   "terminal.fontFollowsOverall": "全体の設定に従う",
-  "connection.fontLabel": "ターミナルのフォント",
-  "connection.fontHint": "この接続のターミナルにだけ適用されます。",
+  "connection.fontLabel": "フォント",
   "terminal.paletteHint": "個別に指定していないターミナルに使います。",
   "terminal.paletteFollowsTheme": "アプリのテーマに従う",
   "terminal.paletteFollowsOverall": "全体の設定に従う",
-  "connection.paletteLabel": "ターミナルの配色",
-  "connection.paletteHint": "この接続のターミナルにだけ適用されます。",
-  "connection.encodingLabel": "接続先の文字コード",
+  "connection.paletteLabel": "配色",
+  "connection.encodingLabel": "文字コード",
   "connection.encodingHint":
     "ブラウザのターミナルとコマンドラインのsshcの両方で、この接続に使用します。",
   "connection.encodingUTF8": "UTF-8（既定）",
   "connection.encodingShiftJIS": "Shift_JIS（日本語）",
   "connection.encodingEUCJP": "EUC-JP（日本語）",
   "connection.encodingISO2022JP": "ISO-2022-JP（日本語）",
-  "connection.osc52Label": "OSC 52クリップボード",
+  "connection.osc52Label": "OSC 52",
   "connection.osc52Hint":
     "このSSH接続のリモートアプリケーションが、システムのクリップボードへ書き込むことを許可するか選択します。",
   "connection.osc52Inherit": "ターミナル全体の設定を使う",
@@ -1225,15 +1222,15 @@ export const ja = {
     "プログラムが終了コード{code}で終了しました。出力は、このセッションを閉じるまで表示されます。",
   "terminal.exitedWithSignal":
     "プログラムがシグナル{signal}で終了しました。出力は、このセッションを閉じるまで表示されます。",
-  "inspector.appOnly": "sshc固有の設定",
+  "inspector.lookHeading": "表示",
+  "inspector.terminalHeading": "ターミナル",
+  "inspector.terminalFollowsApp": "空欄はアプリ全体の設定に従う",
+  "inspector.vpnHeading": "VPN",
+  "host.displayOrderLabel": "表示順",
+  "host.displayOrderHint": "小さいほど一覧の先に並びます。0はファイルの順です。",
   "inspector.hostSave": "sshc固有の設定を保存",
   "inspector.hostSaveFailed":
     "sshc固有の設定の保存に失敗しました。エラーを確認して、もう一度保存してください。",
-  "inspector.notices": "注意",
-  "inspector.inherited": "継承した値",
-  "inspector.noNotices": "この接続に関する注意事項はありません。",
-  "inspector.noInherited":
-    "この接続の値はすべて同じHostブロック内で定義されています。",
   "shell.languageMenu": "言語メニュー",
   "shell.languageEnglish": "English",
   "shell.languageJapanese": "日本語",
@@ -1919,8 +1916,6 @@ export const ja = {
   "preview.pendingChange": "保留中の変更",
   "preview.mergeByHand":
     "ファイルを読み込み直し、2つの変更を手動で統合してください。何も書き込んでいません。",
-  "preview.nothingYet":
-    "値を変更すると、何が書き込まれるかがここに表示されます。",
   "preview.explainedFor": "{alias}の最終的な設定値",
   "preview.unset": "未設定",
 
@@ -2853,35 +2848,18 @@ export const ja = {
     "このリンクの作成後に、名前変更・移動・削除された可能性があります。",
   "conn.backToList": "接続一覧へ戻る",
   "conn.summaryUnsaved": "未保存の変更あり",
-  "conn.summaryGroup": "グループ",
-  "conn.summaryPrivateKey": "SSH秘密鍵",
-  "conn.summaryKeyNone": "ssh-agentまたは継承した鍵",
-  "conn.summaryKeyComplex": "IdentityFileが複数あります",
-  "conn.summaryKeyUnavailable": "{path}（鍵の詳細を確認できません）",
-  "conn.summaryKeyPassphrase": "鍵パスフレーズ",
-  "conn.summaryKeyPassphraseNone": "パスフレーズは保存されていません",
-  "conn.summaryKeyPassphraseDedicated": "この鍵専用として保存済み",
-  "conn.summaryKeyPassphraseNamed": "保存済みパスフレーズ：{name}",
-  "conn.summaryKeyPassphraseNotNeeded": "暗号化されていない鍵のため不要",
-  "conn.summaryAccountPassword": "アカウントのパスワード",
-  "conn.summaryPasswordNone": "保存済みパスワードなし",
-  "conn.summaryPasswordDedicated": "この接続専用のパスワードを保存済み",
-  "conn.summaryPasswordNamed": "保存済みパスワード：{name}",
-  "conn.summaryPasswordRouteStale": "保存済みパスワードは使用されていません",
   "conn.summaryPasswordCleanup":
     "保存済みパスワードが割り当てられていますが、現在のSSH設定では使用されません。基本設定を保存すると、この接続への割り当てを解除します。",
-  "conn.summaryLocked": "Vaultがロックされているため確認できません",
-  "conn.summaryUnavailable": "この状態を読み込めませんでした",
   "conn.summaryDraftBlocksActions":
     "下書きを保存または破棄してから、保存済みの接続を使用してください。",
   "conn.summaryRefreshing":
     "保存済みの接続を再読み込みしています。完了後に操作できます。",
   "conn.summaryReloadFirst": "保存済みの接続を再読み込みしてから操作できます。",
   "conn.editorLabel": "接続エディタ",
-  "conn.areaBasic": "Basic",
-  "conn.areaAnalysis": "Analysis",
-  "conn.areaAdvanced": "Advanced",
-  "conn.areaSshc": "sshc",
+  "conn.areaBasic": "基本",
+  "conn.areaAnalysis": "最終的な値",
+  "conn.areaAdvanced": "踏み台・転送・その他",
+  "conn.areaSshc": "表示とターミナル",
   "conn.checksLabel": "接続確認",
   "conn.checkReachability": "疎通を確認",
   "conn.checkAuthentication": "保存済み設定で認証を確認",
@@ -2897,8 +2875,6 @@ export const ja = {
   "conn.analysisExplainedHint":
     "この接続で使用する値です。コマンドを実行せずに解析し、値を確定できない設定は理由を表示します。",
   "conn.analysisAuthoritative": "各値の参照元",
-  "conn.analysisAuthoritativeHint":
-    "この接続に関係する設定行を、ファイルと行番号、実際に採用されるかどうかとともに表示します。",
   "conn.analysisRun": "参照元を表示",
   "conn.analysisRunning": "読み取っています…",
   "conn.analysisExecutableHeading":
@@ -2906,10 +2882,25 @@ export const ja = {
   "conn.analysisTokenWarning":
     "OpenSSHは展開したトークンをシェル向けにエスケープしません。そのため、ホスト名、ポート、ユーザー名の値が、エスケープされないままコマンドを実行するシェルに渡る可能性があります。",
   "conn.analysisSources": "この接続に関係する設定行",
+  "advanced.jumpHeading": "踏み台",
+  "advanced.jumpVia": "経由する接続先",
+  "advanced.jumpNone": "なし（直接つなぐ）",
+  "advanced.forwardListen": "待ち受け",
+  "advanced.rowActions": "操作",
+  "advanced.pending": "保存前",
+  "advanced.portPlaceholder": "ポート",
+  "advanced.add": "追加",
+  "advanced.otherHeading": "その他の設定",
+  "advanced.count": "{count}件",
+  "advanced.keywordPlaceholder": "項目（例: ServerAliveInterval）",
+  "advanced.valuePlaceholder": "値",
+  "advanced.keepNamed": "{keyword}を戻す",
+  "advanced.removeNamed": "{keyword}を削除",
+  "advanced.backToSettings": "設定に戻る",
+  "conn.editAsText": "テキストで編集",
+  "conn.connectionActions": "この接続先の操作",
+  "conn.actionCancel": "キャンセル",
   "conn.advancedLabel": "詳細設定",
-  "conn.advancedViews": "詳細設定の表示",
-  "conn.advancedViewLabel": "表示",
-  "conn.advancedDirectives": "Directives",
   "conn.portForwarding": "ポート転送",
   "conn.forwardLoopbackOnly":
     "待ち受けはローカルまたはSSH接続先の127.0.0.1に限定します。同じマシンの別のOSユーザーから利用される可能性があります。",
@@ -2926,23 +2917,15 @@ export const ja = {
     "SSH接続先から見たホスト名またはIPアドレスとポートです。",
   "conn.forwardDynamicHint":
     "接続先は、このSOCKSプロキシを使うアプリが通信ごとに指定します。",
-  "conn.forwardAdd": "転送を追加",
-  "conn.forwardPendingSave":
-    "変更を保存すると、この転送が設定へ書き込まれます。",
   "conn.forwardInvalidPort": "1〜65535のポートを入力してください。",
   "conn.forwardInvalidDestination":
     "転送先をhost:portの形式で入力してください。",
-  "conn.advancedNoFields": "現在の表示条件に一致する設定はありません。",
   "conn.advancedRawBlocksFields":
     "Rawに未保存の変更があります。保存または破棄してからディレクティブを編集してください。",
   "conn.advancedFieldsBlockRaw":
     "ディレクティブに未保存の変更があります。保存または破棄してからRawを編集してください。",
   "conn.connect": "接続",
   "conn.opening": "接続中…",
-  "conn.duplicate": "接続を複製",
-  "conn.manageLabel": "接続の管理",
-  "conn.manageIndependent":
-    "ここでの操作は、基本設定・詳細設定の変更とは別に保存されます。",
   "conn.manageDraftBlocked":
     "接続名や保存場所を変更する前に、編集中の下書きを保存または破棄してください。",
   "conn.discardPrompt":
@@ -2959,20 +2942,15 @@ export const ja = {
   "conn.deleteBody":
     "このHostブロックを設定から削除します。削除後も履歴から復元できます。",
   "conn.deleteCancel": "キャンセル",
-  "conn.delete": "接続を削除",
 
-  "host.tabJump": "Jump Host",
-  "host.tabRaw": "Raw",
   "host.unbalancedQuote":
     "値の引用符が閉じていません。引用符を閉じるか、文字として残す引用符の前に\\を付けてください。",
   "host.needsKeyword": "ディレクティブにはキーワードが必要です。",
   "host.dangerousField":
     "{keyword}は、OpenSSHがこのホストを評価するときにコマンドを実行する可能性があります。記述どおり保存され、ここで実行されることはありません。",
   "host.keep": "戻す",
-  "host.remove": "削除",
   "host.newDirective": "新しいディレクティブ",
   "host.newValue": "新しい値",
-  "host.addDirective": "ディレクティブを追加",
   "host.saveChanges": "変更を保存",
   "host.blockText":
     "ブロック本文。コメント、空行、未知のディレクティブは入力したとおりに書き戻されます。",
@@ -2995,11 +2973,8 @@ export const ja = {
   "host.osAutomatic": "接続時に自動判定",
   "host.osGeneric": "汎用サーバー",
   "host.osUnknown": "OS未判定",
-  "host.osHint": "接続後にOSを判定します。手動でアイコンを選ぶこともできます。",
   "host.colour": "色",
   "host.clearColour": "色を消す",
-  "host.displayOrder":
-    "表示順。小さいほど先に並びます。0の場合はファイル内の順序を使用します。",
   "host.tags": "タグ（カンマ区切り）",
   "host.renameAlias": "aliasの変更",
   "host.rename": "変更",

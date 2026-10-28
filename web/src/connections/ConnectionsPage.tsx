@@ -4,9 +4,11 @@ import {
   configApi,
   hostMetadataEditRequest,
   type CreateConnectionResponse,
+  type HostDetail,
   type HostEntry,
   type Overview,
 } from "../api/config";
+import type { ActionMenuItem } from "../ui/ActionMenu";
 import { ConnectionListPane } from "./ConnectionListPane";
 import { useToast } from "../ui/useToast";
 import { usePendingResult } from "../ui/usePendingResult";
@@ -40,7 +42,7 @@ import type {
 import { parseConnectionLocation } from "../routing/connectionRoute";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import { ConnectionSummary } from "./ConnectionSummary";
-import { ManageConnection } from "./ManageConnection";
+import { ConnectionActionPanel, type ConnectionAction } from "./ConnectionActionPanel";
 import { identityKey } from "./connectionBrowser";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PanelState } from "../ui/PanelState";
@@ -126,6 +128,8 @@ export function ConnectionsPage({
   const [overview, setOverview] = useState<Overview | null>(null);
   const [listWidth, setListWidth] = useStoredColumnWidth(connectionListWidth);
   const [discardIntent, setDiscardIntent] = useState<DiscardIntent | null>(null);
+  // 見出しの「…」の［削除…］で、開いている接続先を消してよいかを確かめている間。
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const draftDiscardRef = useRef<(() => void) | null>(null);
   const feedback = useSaveFeedback();
   const {
@@ -169,7 +173,7 @@ export function ConnectionsPage({
       setPreview(null);
       setProblem(null);
       setLocalError("");
-      setManaging(false);
+      setManaging(null);
     },
     onIdentityFollowed: () => selected.forget(),
   });
@@ -362,9 +366,26 @@ export function ConnectionsPage({
     setPreview(result.preview);
     setProblem(null);
     setLocalError("");
-    setManaging(false);
-    followCommittedIdentity(result.identity, "Basic", "Jump");
+    setManaging(null);
+    followCommittedIdentity(result.identity, "Basic", "Settings");
     await reload();
+  }
+
+  // connectionHeaderActions は、開いている接続先の見出しの「…」に並べる操作である。入力が要る操作は見出しの下に
+  // 欄を開き、複製はすぐ行い、削除だけ確かめる。
+  function connectionHeaderActions(opened: HostDetail): ActionMenuItem[] {
+    const blocked = editorDirty || refreshState !== "idle";
+    const handlers = manageConnectionHandlers({ saves: management, alias: opened.form.entry.identity.alias, t, showToast });
+    const open = (action: ConnectionAction) => ({ onSelect: () => setManaging(action), disabled: blocked });
+    return [
+      { label: t("tree.rename"), ...open("rename") },
+      { label: t("tree.moveToGroup"), ...open("group") },
+      { label: t("tree.duplicate"), onSelect: () => void handlers.onDuplicate(), disabled: blocked },
+      { label: t("host.comment"), ...open("comment") },
+      { label: t("conn.move"), ...open("file") },
+      { label: t("conn.editAsText"), onSelect: () => { if (selection !== null) navigateTarget(selection, "Advanced", "Raw"); } },
+      { label: t("tree.deleteEllipsis"), tone: "danger", onSelect: () => setConfirmingDelete(true), disabled: blocked },
+    ];
   }
 
   async function connectHost() {
@@ -525,8 +546,7 @@ export function ConnectionsPage({
               refreshState={refreshState}
               onConnect={() => void connectHost()}
               connecting={launching}
-              onToggleManage={() => setManaging((current) => !current)}
-              managing={managing}
+              actions={connectionHeaderActions(detail)}
             />
             {/* 読み直しに失敗したときだけ現れるボタンなので、現れたときにフォーカスを移す。
                 タブの下にある保存のバーで保存すると、失敗の文とこのボタンは画面の外にあるので、
@@ -540,16 +560,18 @@ export function ConnectionsPage({
                 各タブのeffectは、同じ接続で版が変わったときだけを扱えばよい。
                 2つは同じfragmentの兄弟なので、keyの頭に欄の名前を付けて重ならないようにする。
                 同じkeyにすると、Reactが描き直すたびに古い管理の欄を消さずに新しい欄を足す。 */}
-            {managing ? (
-              <ManageConnection
-                key={`manage:${identityKey(detail.form.entry.identity)}`}
+            {managing === null ? null : (
+              <ConnectionActionPanel
+                key={`manage:${managing}:${identityKey(detail.form.entry.identity)}`}
+                action={managing}
                 detail={detail}
                 groups={overview.groups}
                 files={overview.files}
                 disabled={editorDirty || refreshState !== "idle"}
                 {...manageConnectionHandlers({ saves: management, alias: detail.form.entry.identity.alias, t, showToast })}
+                onClose={() => setManaging(null)}
               />
-            ) : null}
+            )}
             <HostDetailPanel
               key={`detail:${identityKey(detail.form.entry.identity)}`}
               detail={detail}
@@ -602,6 +624,21 @@ export function ConnectionsPage({
       renameConnection={management.renameConnection}
       failure={problem === null ? "" : saveProblemMessage(problem, t)}
     />
+    {confirmingDelete && detail !== null ? (
+      <ConfirmDialog
+        id="delete-connection-heading"
+        heading={t("conn.deleteHeading", { alias: detail.form.entry.identity.alias })}
+        body={<p className="text-sm text-ink-muted">{t("conn.deleteBody")}</p>}
+        confirmLabel={t("conn.confirmDelete")}
+        cancelLabel={t("conn.deleteCancel")}
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={() => {
+          // 先に閉じてから消す。断られた理由は背面の画面に出るので、閉じておかないと隠れる。
+          setConfirmingDelete(false);
+          void manageConnectionHandlers({ saves: management, alias: detail.form.entry.identity.alias, t, showToast }).onDelete();
+        }}
+      />
+    ) : null}
     {discardIntent === null ? null : (
       <ConfirmDialog
         id="connection-discard-heading"

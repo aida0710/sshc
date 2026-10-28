@@ -95,6 +95,13 @@ beforeEach(() => {
   });
 });
 
+// chooseConnectionAction は、開いている接続先の見出しの「…」から操作を選ぶ。
+async function chooseConnectionAction(user: ReturnType<typeof userEvent.setup>, alias: string, action: string) {
+  const header = await screen.findByRole("region", { name: alias });
+  await user.click(within(header).getByRole("button", { name: "Actions for this connection" }));
+  await user.click(await screen.findByRole("menuitem", { name: action }));
+}
+
 describe("ConnectionsPage", () => {
   describe("acting on several chosen connections", () => {
     const twoInConfig = {
@@ -344,7 +351,7 @@ describe("ConnectionsPage", () => {
         onInspector={() => undefined}
         location={{
           pathname: "/connections/servers",
-          search: "?path=config&host=bastion&panel=advanced&advanced=directives",
+          search: "?path=config&host=bastion&panel=advanced",
         }}
         onNavigateLocation={vi.fn()}
       />,
@@ -352,7 +359,7 @@ describe("ConnectionsPage", () => {
 
     await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "bastion"));
     expect(await screen.findByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Directives" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("region", { name: "Other settings" })).toBeVisible();
   });
 
   it("keeps an open connection visible when the selected tree item is clicked again", async () => {
@@ -395,7 +402,7 @@ describe("ConnectionsPage", () => {
       "/connections/servers?path=config&host=bastion&panel=basic",
     );
 
-    await user.click(await screen.findByRole("tab", { name: "Analysis" }));
+    await user.click(await screen.findByRole("tab", { name: "Resolved values" }));
     expect(onNavigateLocation).toHaveBeenLastCalledWith(
       "/connections/servers?path=config&host=bastion&panel=analysis",
     );
@@ -563,23 +570,24 @@ describe("ConnectionsPage", () => {
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^bastion/ })).not.toHaveAttribute("draggable", "true");
 
-    await user.click(screen.getByRole("button", { name: "Manage connection" }));
-    expect(screen.getByRole("region", { name: "Manage connection" })).toHaveAttribute("aria-disabled", "true");
-    await user.click(screen.getByRole("tab", { name: "Analysis" }));
+    await user.click(within(screen.getByRole("region", { name: "bastion" })).getByRole("button", { name: "Actions for this connection" }));
+    expect(screen.getByRole("menuitem", { name: "Rename" })).toBeDisabled();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("tab", { name: "Resolved values" }));
     await user.click(screen.getByRole("tab", { name: "Basic" }));
     expect(screen.getByLabelText("Port")).toHaveValue(2222);
   });
 
-  it("keeps a single management panel while the page renders again with it open", async () => {
+  it("keeps a single action panel while the page renders again with it open", async () => {
     const user = userEvent.setup();
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(await screen.findByRole("button", { name: "Manage connection" }));
-    await user.click(screen.getByRole("tab", { name: "Analysis" }));
+    await chooseConnectionAction(user, "bastion", "Rename");
+    await user.click(screen.getByRole("tab", { name: "Resolved values" }));
     await user.click(screen.getByRole("tab", { name: "Basic" }));
 
-    expect(screen.getAllByRole("region", { name: "Manage connection" })).toHaveLength(1);
+    expect(screen.getAllByLabelText("Rename alias")).toHaveLength(1);
   });
 
   it("registers a same-identity-aware navigation blocker and beforeunload guard for drafts", async () => {
@@ -778,9 +786,9 @@ describe("ConnectionsPage", () => {
     expect(inspector.mock.calls.every(([content]) => content === null)).toBe(true);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
 
-    expect(screen.getByRole("tabpanel", { name: "sshc" })).toBeVisible();
+    expect(screen.getByRole("tabpanel", { name: "Display & terminal" })).toBeVisible();
     expect(screen.getByLabelText("Remote text encoding")).toBeVisible();
     expect(inspector.mock.calls.every(([content]) => content === null)).toBe(true);
   });
@@ -797,7 +805,7 @@ describe("ConnectionsPage", () => {
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
 
     expect(configApi.save).not.toHaveBeenCalled();
@@ -851,7 +859,7 @@ describe("ConnectionsPage", () => {
     const { finishListReload } = renderWhileTheListReloads();
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
-    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
     await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
     await chooseEdgeRightAfterTheWrite(user);
@@ -866,8 +874,7 @@ describe("ConnectionsPage", () => {
     const { finishListReload } = renderWhileTheListReloads();
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
-    await user.click(await screen.findByRole("tab", { name: "Advanced" }));
-    await user.click(screen.getByRole("tab", { name: "Raw" }));
+    await chooseConnectionAction(user, "bastion", "Edit as text");
     await user.type(screen.getByLabelText(/Block text/), "\tCompression yes\n");
     await user.click(screen.getByRole("button", { name: "Save block" }));
     await chooseEdgeRightAfterTheWrite(user);
@@ -927,7 +934,7 @@ describe("ConnectionsPage", () => {
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
-    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
     await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
 
@@ -948,7 +955,7 @@ describe("ConnectionsPage", () => {
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
-    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
     await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
 
@@ -966,7 +973,7 @@ describe("ConnectionsPage", () => {
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
     await user.selectOptions(screen.getByLabelText("OSC 52 clipboard"), "deny");
     await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
 
@@ -987,7 +994,7 @@ describe("ConnectionsPage", () => {
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
     await user.selectOptions(screen.getByLabelText("OSC 52 clipboard"), "deny");
     await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
 
@@ -1022,7 +1029,7 @@ describe("ConnectionsPage", () => {
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
-    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "euc-jp");
     await user.click(screen.getByRole("button", { name: /^edge/ }));
 
@@ -1109,9 +1116,7 @@ describe("ConnectionsPage", () => {
 
     await user.click(screen.getByRole("button", { name: "nas" }));
 
-    await waitFor(() =>
-      expect(screen.getByRole("region", { name: "Save preview" }))
-        .toHaveTextContent("Change a value to see exactly what would be written."));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Save preview" })).not.toBeInTheDocument());
   });
 
   it("says the newly selected connection is loading instead of asking to choose one", async () => {
@@ -1200,7 +1205,7 @@ describe("ConnectionsPage", () => {
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(screen.getByRole("button", { name: "Manage connection" }));
+    await chooseConnectionAction(user, "bastion", "Rename");
     await user.clear(screen.getByLabelText("Rename alias"));
     await user.type(screen.getByLabelText("Rename alias"), "nas");
     await user.click(screen.getByRole("button", { name: "Rename" }));
@@ -1218,8 +1223,7 @@ describe("ConnectionsPage", () => {
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(screen.getByRole("button", { name: "Manage connection" }));
-    await user.click(screen.getByRole("button", { name: "Duplicate connection" }));
+    await chooseConnectionAction(user, "bastion", "Duplicate");
 
     await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
       kind: "duplicate",
@@ -1297,7 +1301,7 @@ describe("ConnectionsPage", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(screen.getByRole("button", { name: "Manage connection" }));
+    await chooseConnectionAction(user, "bastion", "Rename");
     await user.clear(await screen.findByLabelText("Rename alias"));
     await user.type(screen.getByLabelText("Rename alias"), "gateway");
     await user.click(screen.getByRole("button", { name: "Rename" }));
@@ -1326,7 +1330,7 @@ describe("ConnectionsPage", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(screen.getByRole("button", { name: "Manage connection" }));
+    await chooseConnectionAction(user, "bastion", "Rename");
     await user.clear(await screen.findByLabelText("Rename alias"));
     await user.type(screen.getByLabelText("Rename alias"), "gateway");
     await user.click(screen.getByRole("button", { name: "Rename" }));
@@ -1366,7 +1370,7 @@ describe("ConnectionsPage", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(screen.getByRole("button", { name: "Manage connection" }));
+    await chooseConnectionAction(user, "bastion", "Change storage file");
     expect(screen.getByText(/Primary group controls where sshc organises the connection/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Change storage file" })).toBeDisabled();
     await user.selectOptions(await screen.findByLabelText("Storage file"), "conf.d/10-home.conf");
@@ -1410,7 +1414,7 @@ describe("ConnectionsPage", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(screen.getByRole("button", { name: "Manage connection" }));
+    await chooseConnectionAction(user, "bastion", "Change storage file");
     await user.selectOptions(await screen.findByLabelText("Storage file"), "conf.d/10-home.conf");
     await user.click(screen.getByRole("button", { name: "Change storage file" }));
 
@@ -1437,8 +1441,7 @@ describe("ConnectionsPage", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(screen.getByRole("button", { name: "Manage connection" }));
-    await user.click(await screen.findByRole("button", { name: "Delete connection" }));
+    await chooseConnectionAction(user, "bastion", "Delete…");
     await user.click(screen.getByRole("button", { name: "Delete it" }));
 
     await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
@@ -1462,8 +1465,7 @@ describe("ConnectionsPage", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(screen.getByRole("button", { name: "Manage connection" }));
-    await user.click(await screen.findByRole("button", { name: "Delete connection" }));
+    await chooseConnectionAction(user, "bastion", "Delete…");
     await user.click(screen.getByRole("button", { name: "Delete it" }));
 
     await screen.findByRole("alert");
@@ -1493,7 +1495,7 @@ describe("taking a connection out of every group", () => {
 
     render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: "bastion" }));
-    await user.click(screen.getByRole("button", { name: "Manage connection" }));
+    await chooseConnectionAction(user, "bastion", "Move to group…");
     await user.selectOptions(await screen.findByLabelText("Primary group"), "");
     await user.click(screen.getByRole("button", { name: "Move to this group" }));
 

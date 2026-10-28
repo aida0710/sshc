@@ -65,7 +65,7 @@ describe("ConnectionAnalysis", () => {
     const api = { effective: vi.fn() } as Pick<DiagnosticsApi, "effective">;
     render(<ConnectionAnalysis detail={detail} alias="bastion" api={api} />);
 
-    expect(screen.getByText("HostName 203.0.113.10")).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /HostName 203\.0\.113\.10/ })).toBeInTheDocument();
     expect(screen.getByText("config:2")).toBeInTheDocument();
     expect(screen.getByText(/These are the values used by this connection/)).toBeInTheDocument();
     expect(api.effective).not.toHaveBeenCalled();

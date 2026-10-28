@@ -21,6 +21,7 @@ import { draftResetKey } from "./draftResetKey";
 import { HostInspector } from "./HostInspector";
 import { useReportDirty } from "./useReportDirty";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
+import { editorContainer } from "../ui/FieldRow";
 
 // The detail view checks a host and edits its secrets, so it is handed both.
 export type HostDetailApi = DiagnosticsApi & ConnectionSecretsApi;
@@ -52,11 +53,13 @@ type HostDetailPanelProps = {
   vpnProfiles?: VPNProfile[] | undefined;
 };
 
+// The tabs go from what every connection needs to what only some do, and end with the values the
+// settings come to.
 const areas: { area: ConnectionPanel; label: "conn.areaBasic" | "conn.areaAnalysis" | "conn.areaAdvanced" | "conn.areaSshc" }[] = [
   { area: "Basic", label: "conn.areaBasic" },
-  { area: "Analysis", label: "conn.areaAnalysis" },
   { area: "Advanced", label: "conn.areaAdvanced" },
   { area: "Sshc", label: "conn.areaSshc" },
+  { area: "Analysis", label: "conn.areaAnalysis" },
 ];
 const areaNames = areas.map((item) => item.area);
 
@@ -86,7 +89,7 @@ export function HostDetailPanel({
 }: HostDetailPanelProps) {
   const t = useTranslate();
   const [localPanel, setLocalPanel] = useState<ConnectionPanel>("Basic");
-  const [lastAdvanced, setLastAdvanced] = useState<AdvancedArea>("Jump");
+  const [lastAdvanced, setLastAdvanced] = useState<AdvancedArea>("Settings");
   const [basicDirty, setBasicDirty] = useState(false);
   const [advancedDirty, setAdvancedDirty] = useState(false);
   const [sshcDirty, setSshcDirty] = useState(false);
@@ -103,7 +106,7 @@ export function HostDetailPanel({
 
   useEffect(() => {
     if (controlledPanel === undefined) setLocalPanel("Basic");
-    setLastAdvanced("Jump");
+    setLastAdvanced("Settings");
     // Runs only when the host, file revision or saved revision behind resetKey
     // changes; the controlled panel prop is read, not watched, so a parent
     // toggling it does not move the tabs. The dirty marks are not touched here:
@@ -141,7 +144,7 @@ export function HostDetailPanel({
   }
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className={`flex flex-col gap-4 ${editorContainer}`}>
       <NoticeList collapsible notices={detail.form.notices ?? []} />
 
       {/* 接続の確認は、保存済みの接続を試すもので、どのタブを開いていても同じである。
@@ -156,7 +159,7 @@ export function HostDetailPanel({
       ) : null}
 
       <div data-connection-editor className="min-w-0">
-        <div role="tablist" aria-label={t("conn.editorLabel")} className="flex gap-[18px] border-b border-line">
+        <div role="tablist" aria-label={t("conn.editorLabel")} className="flex gap-5 overflow-x-auto border-b border-line [scrollbar-width:none]">
           {areas.map((item, index) => (
             <button
               key={item.area}
@@ -168,14 +171,14 @@ export function HostDetailPanel({
               tabIndex={panel === item.area ? 0 : -1}
               onClick={() => selectArea(item.area)}
               onKeyDown={(event) => activateTabFromKeyboard(event, index, areaNames, selectArea)}
-              className={`-mb-px whitespace-nowrap border-b-2 pb-[8px] text-[13px] transition-colors ${panel === item.area ? "border-accent text-ink" : "border-transparent text-ink-muted hover:text-ink"}`}
+              className={`-mb-px shrink-0 whitespace-nowrap border-b-2 pb-[8px] text-[13px] transition-colors ${panel === item.area ? "border-accent text-ink" : "border-transparent text-ink-muted hover:text-ink"}`}
             >
               {t(item.label)}
             </button>
           ))}
         </div>
 
-        <div className="pt-5">
+        <div className="pt-4">
           <div
             id="connection-area-basic-panel"
             role="tabpanel"

@@ -1,3 +1,4 @@
+import { chooseConnectionAction } from "./support/connections";
 import { clickAndAwait, expect, openSection, openSettingsPage, test, openApplication } from "./support/environment";
 import type { Page } from "@playwright/test";
 import { createGroups } from "./support/groups";
@@ -79,9 +80,9 @@ test("separates classification, filtered results, and connection detail without 
   await advancedTab.click();
   await expect(advancedTab).toHaveAttribute("aria-selected", "true");
   await expect(advancedTab).toHaveCSS("border-bottom-width", "2px");
-  const advancedViews = page.getByRole("tablist", { name: "Advanced setting views" });
-  await expect(advancedViews).toBeVisible();
-  await expect(advancedViews.getByRole("tab", { name: "Jump Host" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("region", { name: "Jump host" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Port forwarding" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Other settings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Discard changes" })).toHaveCount(0);
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({
@@ -91,11 +92,10 @@ test("separates classification, filtered results, and connection detail without 
   }
 });
 
-test("adds Local, reverse and SOCKS forwarding from the dedicated advanced view", async ({ page, installation }) => {
+test("adds Local, reverse and SOCKS forwarding from the advanced tab", async ({ page, installation }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openBastion(page, installation.url);
   await page.getByRole("tab", { name: "Advanced" }).click();
-  await page.getByRole("tab", { name: "Port forwarding" }).click();
   await expect(page.getByText(/Listeners use 127\.0\.0\.1 on this device or the SSH server/)).toBeVisible();
 
   const forwardType = page.getByRole("combobox", { name: "Type", exact: true });
@@ -109,17 +109,18 @@ test("adds Local, reverse and SOCKS forwarding from the dedicated advanced view"
   await expect(page.getByLabel("Destination")).toHaveAttribute("placeholder", "127.0.0.1:5432");
   await page.getByLabel("Local port").fill("18080");
   await page.getByLabel("Destination").fill("127.0.0.1:5432");
-  await page.getByRole("button", { name: "Add forwarding" }).click();
+  const forwarding = page.getByRole("region", { name: "Port forwarding" });
+  await forwarding.getByRole("button", { name: "Add", exact: true }).click();
   expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(200);
-  await expect(page.getByRole("textbox", { name: /LocalForward/ })).toHaveValue("18080 127.0.0.1:5432");
+  await expect(forwarding.getByRole("row", { name: /Local tunnel 18080 127\.0\.0\.1:5432/ })).toBeVisible();
   expect(await installation.read("config")).toContain("LocalForward 18080 127.0.0.1:5432");
 
   await forwardType.selectOption("remote");
   await page.getByLabel("SSH server port").fill("19080");
   await page.getByLabel("Destination").fill("127.0.0.1:3000");
-  await page.getByRole("button", { name: "Add forwarding" }).click();
+  await forwarding.getByRole("button", { name: "Add", exact: true }).click();
   expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(200);
-  await expect(page.getByRole("textbox", { name: /RemoteForward/ })).toHaveValue("19080 127.0.0.1:3000");
+  await expect(forwarding.getByRole("row", { name: /Remote tunnel 19080 127\.0\.0\.1:3000/ })).toBeVisible();
   expect(await installation.read("config")).toContain("RemoteForward 19080 127.0.0.1:3000");
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
@@ -289,7 +290,7 @@ test("keeps the committed summary stable while a Basic draft crosses editor area
   await expect(page.getByRole("button", { name: "Check reachability" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Check authentication with saved settings" })).toBeDisabled();
 
-  await page.getByRole("tab", { name: "Analysis" }).click();
+  await page.getByRole("tab", { name: "Resolved values" }).click();
   await page.getByRole("tab", { name: "Basic" }).click();
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
 
@@ -458,8 +459,7 @@ test("edits the same host through Raw and keeps every other byte", async ({
   installation,
 }) => {
   await openBastion(page, installation.url);
-  await page.getByRole("tab", { name: "Advanced" }).click();
-  await page.getByRole("tab", { name: "Raw" }).click();
+  await chooseConnectionAction(page, "Edit as text");
 
   const editor = page.getByLabel(/Block text/);
   const original = await editor.inputValue();
@@ -532,7 +532,7 @@ test("shows connection checks on Basic and starts nothing unasked", async ({
 
 test("shows where each value comes from without a confirmation", async ({ page, installation }) => {
   await openBastion(page, installation.url);
-  await page.getByRole("tab", { name: "Analysis" }).click();
+  await page.getByRole("tab", { name: "Resolved values" }).click();
 
   await expect(page.getByRole("region", { name: "Settings analysis" })).toBeVisible();
   const show = page.getByRole("button", { name: "Show the sources" });
@@ -547,7 +547,7 @@ test("edits the display order it stores", async ({
   installation,
 }) => {
   await openBastion(page, installation.url);
-  await page.getByRole("tab", { name: "sshc" }).click();
+  await page.getByRole("tab", { name: "Display & terminal" }).click();
 
   await page.getByLabel(/Display order/).fill("-1");
   expect(await clickAndAwait(page, "Save sshc-only settings", "/api/v1/config/save")).toBe(200);
@@ -559,7 +559,7 @@ test("keeps sshc changes as a draft until they are saved or discarded", async ({
   installation,
 }) => {
   await openBastion(page, installation.url);
-  await page.getByRole("tab", { name: "sshc" }).click();
+  await page.getByRole("tab", { name: "Display & terminal" }).click();
   const saveRequests: string[] = [];
   page.on("request", (request) => {
     if (request.url().includes("/api/v1/config/save")) saveRequests.push(request.url());
@@ -574,7 +574,7 @@ test("keeps sshc changes as a draft until they are saved or discarded", async ({
   await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
   await page.getByRole("tab", { name: "Basic" }).click();
   await expect(page.getByLabel("Port", { exact: true })).toBeDisabled();
-  await page.getByRole("tab", { name: "sshc" }).click();
+  await page.getByRole("tab", { name: "Display & terminal" }).click();
   await expect(osc52).toHaveValue("deny");
 
   await page.getByRole("button", { name: "Discard changes" }).click();
@@ -589,7 +589,7 @@ test("keeps the saved SSH encoding selected after metadata refresh", async ({
   installation,
 }) => {
   await openBastion(page, installation.url);
-  await page.getByRole("tab", { name: "sshc" }).click();
+  await page.getByRole("tab", { name: "Display & terminal" }).click();
 
   const encoding = page.getByLabel("Remote text encoding");
   await encoding.selectOption("shift_jis");
@@ -604,7 +604,7 @@ test("moves to another connection right after the sshc settings are saved, witho
   installation,
 }) => {
   await openBastion(page, installation.url);
-  await page.getByRole("tab", { name: "sshc" }).click();
+  await page.getByRole("tab", { name: "Display & terminal" }).click();
   await page.getByLabel("OSC 52 clipboard").selectOption("deny");
 
   // 書き込みが済んだあと、ページが保存済みの接続を読み直し終える前に、別の接続を選ぶ。
@@ -630,7 +630,7 @@ test("brings the reload button into view when the reload after a save at the bot
   installation,
 }) => {
   await openBastion(page, installation.url);
-  await page.getByRole("tab", { name: "sshc" }).click();
+  await page.getByRole("tab", { name: "Display & terminal" }).click();
   await page.getByLabel("OSC 52 clipboard").selectOption("deny");
   const save = page.getByRole("button", { name: "Save sshc-only settings" });
   await save.scrollIntoViewIfNeeded();
@@ -689,9 +689,8 @@ test("writes a comment into the configuration file above the Host line", async (
   const before = await installation.read("config");
   await openBastion(page, installation.url);
 
-  await page.getByRole("button", { name: "Manage connection" }).click();
-  const management = page.getByRole("region", { name: "Manage connection" });
-  await management.getByLabel("Comment", { exact: true }).fill("the production bastion\nask infra before changing it");
+  await chooseConnectionAction(page, "Comment");
+  await page.getByLabel("Comment", { exact: true }).fill("the production bastion\nask infra before changing it");
   expect(await clickAndAwait(page, "Save comment", "/api/v1/config/save")).toBe(200);
 
   const after = await installation.read("config");
@@ -705,14 +704,15 @@ test("removes the comment lines when the comment is cleared", async ({ page, ins
   const before = await installation.read("config");
   await openBastion(page, installation.url);
 
-  await page.getByRole("button", { name: "Manage connection" }).click();
-  const management = page.getByRole("region", { name: "Manage connection" });
-  await management.getByLabel("Comment", { exact: true }).fill("temporary");
+  await chooseConnectionAction(page, "Comment");
+  await page.getByLabel("Comment", { exact: true }).fill("temporary");
   expect(await clickAndAwait(page, "Save comment", "/api/v1/config/save")).toBe(200);
-  await expect(management.getByLabel("Comment", { exact: true })).toHaveValue("temporary");
-  await expect(management.getByRole("button", { name: "Save comment" })).toBeDisabled();
+  await expect(page.getByLabel("Comment", { exact: true })).toHaveCount(0);
 
-  await management.getByLabel("Comment", { exact: true }).fill("");
+  await chooseConnectionAction(page, "Comment");
+  await expect(page.getByLabel("Comment", { exact: true })).toHaveValue("temporary");
+  await expect(page.getByRole("button", { name: "Save comment" })).toBeDisabled();
+  await page.getByLabel("Comment", { exact: true }).fill("");
   expect(await clickAndAwait(page, "Save comment", "/api/v1/config/save")).toBe(200);
 
   expect(await installation.read("config")).toBe(before);
@@ -729,10 +729,11 @@ test("takes a comment with the connection it describes when the block moves", as
   await openApplication(page, installation);
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas", exact: true }).click();
-  await page.getByRole("button", { name: "Manage connection" }).click();
-  const management = page.getByRole("region", { name: "Manage connection" });
-  await expect(management.getByLabel("Comment", { exact: true })).toHaveValue("the file server");
+  await chooseConnectionAction(page, "Comment");
+  await expect(page.getByLabel("Comment", { exact: true })).toHaveValue("the file server");
+  await page.getByRole("button", { name: "Cancel" }).click();
 
+  await chooseConnectionAction(page, "Change storage file");
   await page.getByLabel("Storage file").selectOption("config");
   expect(await clickAndAwait(page, "Change storage file", "/api/v1/config/save")).toBe(200);
 
@@ -754,8 +755,7 @@ test("takes a comment with the connection when the block is deleted", async ({
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas", exact: true }).click();
 
-  await page.getByRole("button", { name: "Manage connection" }).click();
-  await page.getByRole("button", { name: "Delete connection" }).click();
+  await chooseConnectionAction(page, "Delete…");
   expect(await clickAndAwait(page, "Delete it", "/api/v1/config/save")).toBe(200);
 
   const after = await installation.read("conf.d/10-home.conf");
@@ -775,7 +775,7 @@ test("shows an empty group in the management tree and moves an ungrouped connect
   await expect(groups.getByRole("button", { name: "work", exact: true })).toBeVisible();
 
   await browser.getByRole("button", { name: "bastion", exact: true }).click();
-  await page.getByRole("button", { name: "Manage connection" }).click();
+  await chooseConnectionAction(page, "Move to group…");
   await page.getByLabel("Primary group").selectOption("work");
   expect(await clickAndAwait(page, "Move to this group", "/api/v1/config/save")).toBe(200);
 
@@ -795,9 +795,9 @@ test("keeps sshc-only settings in the connection editor instead of a side inspec
   await openBastion(page, installation.url);
   await expect(page.getByRole("button", { name: "Show Display and classification" })).toHaveCount(0);
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toHaveCSS("position", "static");
-  await page.getByRole("tab", { name: "sshc" }).click();
+  await page.getByRole("tab", { name: "Display & terminal" }).click();
 
-  await expect(page.getByRole("tabpanel", { name: "sshc" })).toBeVisible();
+  await expect(page.getByRole("tabpanel", { name: "Display & terminal" })).toBeVisible();
   await expect(page.getByLabel("Remote text encoding")).toBeVisible();
   await expect(page.getByRole("complementary", { name: "Display and classification" })).toHaveCount(0);
   if (process.env.SSHC_VISUAL_DIR !== undefined) {

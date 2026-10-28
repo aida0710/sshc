@@ -521,7 +521,7 @@ export function App({
                   path: identity.path,
                   alias: identity.alias,
                   panel: "Basic",
-                  advanced: "Jump",
+                  advanced: "Settings",
                 }),
               )
             }

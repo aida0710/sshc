@@ -34,7 +34,7 @@ export function useConnectionSelection({
   );
   const [invalidLocation, setInvalidLocation] = useState(initialRoute.kind === "invalid");
   const [activePanel, setActivePanel] = useState<ConnectionPanel>(initialTarget?.panel ?? "Basic");
-  const [activeAdvanced, setActiveAdvanced] = useState<AdvancedArea>(initialTarget?.advanced ?? "Jump");
+  const [activeAdvanced, setActiveAdvanced] = useState<AdvancedArea>(initialTarget?.advanced ?? "Settings");
   // 非同期の処理が終わったときに、まだ同じ接続を選んでいるかを確かめるために、最新の選択を持つ。
   const selectionRef = useRef<HostSelection | null>(selection);
 
@@ -111,14 +111,14 @@ export function useConnectionSelection({
     if (selectionRef.current === null) return;
     moveSelectionTo(null);
     setActivePanel("Basic");
-    setActiveAdvanced("Jump");
+    setActiveAdvanced("Settings");
   }
 
   function selectHost(host: HostEntry) {
     if (host.identity.alias === "") return;
     const nextSelection = { path: host.identity.path, alias: host.identity.alias };
     const selectingCurrent = isCurrentSelection(nextSelection);
-    if (!navigateTarget(nextSelection, "Basic", "Jump")) return;
+    if (!navigateTarget(nextSelection, "Basic", "Settings")) return;
     if (selectingCurrent) return;
     moveSelectionTo(nextSelection);
   }
