@@ -72,3 +72,10 @@ it("shows a clean exit quietly and a failed one in red", () => {
   rerender(<TerminalStatusBanners session={exitedWith(3)} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} />);
   expect(screen.getByText(/exited with status 3/)).toHaveClass("text-danger");
 });
+
+it("says in red that a session ended as soon as it opened, even with status 0", () => {
+  const rightAway: TerminalSession = { ...session, state: "exited", exited: { code: 0, signal: "", at: "2026-08-14T09:00:00.080Z" } };
+  render(<TerminalStatusBanners session={rightAway} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} />);
+
+  expect(screen.getByText(/exited with status 0 as soon as it started/)).toHaveClass("text-danger");
+});
