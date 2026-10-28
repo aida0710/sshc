@@ -58,6 +58,21 @@ function linksAcrossBoundaries(text: string, boundaries: number[], allowWindowsP
   ];
 }
 
+// bufferRangeText returns the text that a link range covers, read by cells: a
+// slice of the row's string is shifted by one for every two-cell character
+// before the link. The range continues across wrapped rows.
+export function bufferRangeText(buffer: IBuffer, range: IBufferRange): string {
+  let text = "";
+  for (let row = range.start.y; row <= range.end.y; row += 1) {
+    const line = buffer.getLine(row - 1);
+    if (!line) return "";
+    const start = row === range.start.y ? range.start.x - 1 : 0;
+    const end = row === range.end.y ? range.end.x : line.length;
+    text += line.translateToString(false, start, end);
+  }
+  return text;
+}
+
 export function findBufferLinks(buffer: IBuffer, lineNumber: number, allowWindowsPaths = false): PositionedLink[] {
   let firstRow = lineNumber - 1;
   let cellCount = 0;
