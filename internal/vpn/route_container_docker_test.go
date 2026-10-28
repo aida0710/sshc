@@ -212,20 +212,18 @@ type testTunnel struct {
 	dns []string
 }
 
-// route は、テスト用の相手へ繋ぐプロファイルと秘密を作る。設定ファイルは、v0.40.0 までの
-// 項目の形のプロファイルから組み立てる本文（WireGuardFields.Config）と同じにし、項目の形の
-// プロファイルがそのまま使えることも確かめる。
+// route は、テスト用の相手へ繋ぐプロファイルと秘密を作る。
 func (tunnel testTunnel) route(name string) (Profile, Secrets) {
-	fields := WireGuardFields{
-		Server:        Endpoint{Host: tunnel.peerAddress, Port: wireGuardPeerPort}.Address(),
-		PeerPublicKey: tunnel.peerPublicKey,
-		Address:       tunnelClientAddress,
-		DNS:           tunnel.dns,
+	config := wireGuardConfigParts{
+		server:        Endpoint{Host: tunnel.peerAddress, Port: wireGuardPeerPort}.Address(),
+		peerPublicKey: tunnel.peerPublicKey,
+		address:       tunnelClientAddress,
+		dns:           tunnel.dns,
 	}
 	profile := Profile{
-		Name: name, Backend: WireGuard, DNS: tunnel.dns, WireGuard: &WireGuardSettings{Servers: fields.Servers()},
+		Name: name, Backend: WireGuard, DNS: tunnel.dns, WireGuard: &WireGuardSettings{Servers: []string{tunnel.peerAddress}},
 	}
-	return profile, Secrets{WireGuard: &WireGuardSecrets{Config: fields.Config(tunnel.clientPrivateKey)}}
+	return profile, Secrets{WireGuard: &WireGuardSecrets{Config: config.Config(tunnel.clientPrivateKey)}}
 }
 
 // dialTarget は、経路ひとつと、その先で繋ぐ接続先である。

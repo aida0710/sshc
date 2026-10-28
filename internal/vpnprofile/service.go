@@ -95,16 +95,12 @@ func (s *Service) Update(profile application.VPNProfile, sent *vpn.SecretsDocume
 	if err != nil {
 		return err
 	}
-	previous, err := s.configuration.StoredVPNProfile(profile.Name)
-	if err != nil {
-		return err
-	}
 	return s.commitWithVault(change, secret.VPNSecretsMutation{
 		Kind: secret.VPNSecretsRewrite, Profile: profile.Name,
 		Rewrite: func(current string, exists bool) (string, error) {
 			stored := vpn.Secrets{}
 			if exists {
-				read, err := readSecrets(previous, current)
+				read, err := vpn.DecodeSecrets(current)
 				if err != nil {
 					return "", err
 				}
@@ -186,7 +182,7 @@ func (s *Service) LoadProfileAndSecrets(name string) (vpn.Profile, vpn.Secrets, 
 	if err != nil {
 		return vpn.Profile{}, vpn.Secrets{}, err
 	}
-	secrets, err := readSecrets(stored, record)
+	secrets, err := vpn.DecodeSecrets(record)
 	if err != nil {
 		return vpn.Profile{}, vpn.Secrets{}, err
 	}
@@ -235,13 +231,12 @@ func (s *Service) SecretsEvidence(name string) (string, error) {
 // 秘密は伏せるためだけに読む。Vault がロック中でも、秘密が壊れていても、ログは
 // 返せるように空の秘密を返す。伏せる相手が分からないときは、伏せられる範囲で伏せる。
 func (s *Service) LogRedactions(name string) (vpn.Secrets, error) {
-	stored, err := s.configuration.StoredVPNProfile(name)
-	if err != nil {
+	if _, err := s.configuration.StoredVPNProfile(name); err != nil {
 		return vpn.Secrets{}, err
 	}
 	var secrets vpn.Secrets
 	if record, err := s.vault.VPNSecrets(name); err == nil {
-		secrets, _ = readSecrets(stored, record)
+		secrets, _ = vpn.DecodeSecrets(record)
 	}
 	return secrets, nil
 }
@@ -295,7 +290,7 @@ func (s *Service) storedSecrets(stored application.VPNProfile) (vpn.Secrets, err
 	if err != nil {
 		return vpn.Secrets{}, err
 	}
-	return readSecrets(stored, record)
+	return vpn.DecodeSecrets(record)
 }
 
 // requireUnlockedVault は、Vault がロック中なら ErrLocked を返す。
