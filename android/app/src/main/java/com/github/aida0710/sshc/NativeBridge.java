@@ -16,6 +16,8 @@ final class NativeBridge {
         String notificationPermission();
         void requestNotificationPermission();
         void showNotification(String tag, String title, String body);
+        /** tag の通知を取り下げる。Web 画面がそのセッションを見せたか、閉じたとき。 */
+        void cancelNotification(String tag);
         /** 押されたまま Web 画面が受け取っていない通知の tag。無ければ空文字。 */
         String takeOpenedNotification();
         void chooseFolder(String requestId);
@@ -143,6 +145,13 @@ final class NativeBridge {
         if (!"granted".equals(host.notificationPermission())) return "notifications_blocked";
         host.showNotification(tag, limitText(title, MAX_NOTIFICATION_TITLE), limitText(body, MAX_NOTIFICATION_BODY));
         return "";
+    }
+
+    /** tag の通知を取り下げる。出していなければ何も起きない。 */
+    @JavascriptInterface
+    public void cancelNotification(String tag) {
+        if (!validNotificationTag(tag)) return;
+        host.cancelNotification(tag);
     }
 
     synchronized boolean openSave(String requestId, OutputStream output) {
