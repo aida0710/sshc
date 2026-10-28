@@ -102,7 +102,7 @@ export function TerminalSplitView({ splitView, sessions, renderTerminal }: {
                   selectSession(sessionId);
                   dispatch({ type: "focus-mode", enabled: !state.focusMode });
                 }}
-                onClose={() => dispatch({ type: "close", sessionId })}
+                onRemove={() => splitView.removeFromSplit(sessionId)}
               />
             ) : null;
             return (

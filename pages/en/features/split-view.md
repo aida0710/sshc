@@ -32,10 +32,10 @@ A session can belong to only one split. Adding it to another split removes it fr
 | Resize | Drag a divider, or focus it and use the arrow keys. Ratios range from 10% to 90%, and no pane gets smaller than its heading and one row of the terminal, or narrower than its heading's buttons |
 | Swap | Drag a pane's swap button onto another pane, or select the swap button on each pane in turn |
 | Focus one pane | Select the focus button in its heading. Choose **Return to split view** or press Esc to restore the split |
-| Close a pane | Select **Close pane** in its heading. The session keeps running and remains in the sidebar |
+| Remove from split view | Select **Remove <session> from split view** (×) in its heading, or **Remove from split view** in the **…** menu of the terminal or of the session's sidebar row. The session keeps running and remains in the sidebar. At mobile widths, use the terminal's **…** menu |
 | Select another pane | Click the pane or select its session in the sidebar. Within the terminal, Ctrl+Alt+Left/Right also moves between panes |
 
-The selected pane has a colored border. Choose **…** → **Dissolve** on a split's row to remove that split, or close panes until only one remains. Neither action closes the sessions themselves. When a session exits or is deleted, its pane is removed, even from a split that is not displayed. Splits with fewer than two remaining panes dissolve.
+The selected pane has a colored border. Choose **…** → **Dissolve** on a split's row to remove that split, or remove sessions from it until only one remains. Neither action closes the sessions themselves. When a session exits or is deleted, its pane is removed, even from a split that is not displayed. Splits with fewer than two remaining panes dissolve.
 
 ## Mobile and persistence
 

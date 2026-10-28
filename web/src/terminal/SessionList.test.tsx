@@ -150,6 +150,20 @@ describe("SessionList", () => {
     expect(detail.closest("button")).toHaveAttribute("aria-label", live.title);
   });
 
+  it("offers taking a session out of its split only for a session in one", async () => {
+    const user = userEvent.setup();
+    const group = { number: 1, view: { root: { direction: "horizontal" as const, ratio: 50, first: { sessionId: "a" }, second: { sessionId: "b" } }, activeSessionId: "a", focusMode: false, focusRevision: 0 } };
+    const onRemoveSessionFromSplit = vi.fn();
+    renderList({ splitGroupBySession: new Map([["a", group], ["b", group]]), onRemoveSessionFromSplit });
+
+    await user.click(screen.getByRole("button", { name: "Actions for bastion" }));
+    await user.click(screen.getByRole("menuitem", { name: "Remove from split view" }));
+    expect(onRemoveSessionFromSplit).toHaveBeenCalledExactlyOnceWith("a");
+
+    await user.click(screen.getByRole("button", { name: "Actions for db-primary" }));
+    expect(screen.queryByRole("menuitem", { name: "Remove from split view" })).not.toBeInTheDocument();
+  });
+
   it("renames a session in place and leaves its destination alone", async () => {
     const user = userEvent.setup();
     const props = renderList();

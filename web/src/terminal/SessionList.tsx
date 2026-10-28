@@ -33,6 +33,7 @@ type SessionListProps = {
   onSelect: (id: string) => void;
   canSplitSession?: (id: string) => boolean;
   onSplitSession?: (id: string, edge: PaneEdge) => void;
+  onRemoveSessionFromSplit?: (id: string) => void;
   onClose: (id: string) => void;
   onRename: (id: string, title: string) => Promise<boolean>;
   onUnpinTitle: (id: string) => Promise<boolean>;
@@ -74,6 +75,7 @@ export function SessionList({
   onSelect,
   canSplitSession,
   onSplitSession,
+  onRemoveSessionFromSplit,
   onClose,
   onRename,
   onUnpinTitle,
@@ -347,6 +349,7 @@ export function SessionList({
                     canDuplicate={!busy && !atSessionLimit}
                     canSplit={canSplitSession?.(session.id) ?? false}
                     {...(onSplitSession === undefined ? {} : { onSplit: (edge: PaneEdge) => onSplitSession(session.id, edge) })}
+                    {...(onRemoveSessionFromSplit === undefined || splitGroup === undefined ? {} : { onRemoveFromSplit: () => onRemoveSessionFromSplit(session.id) })}
                     canMoveUp={index > 0}
                     canMoveDown={index < sessions.length - 1}
                     onRename={() => {
