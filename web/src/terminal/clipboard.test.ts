@@ -75,6 +75,35 @@ describe("terminal clipboard interactions", () => {
     expect(prepareTerminalPaste("a\u001bb", false)).toBe("a\u001bb");
   });
 
+  it("does not copy the match that the scrollback search selects", () => {
+    let selectionChanged = () => {};
+    let searching = false;
+    const writeText = vi.fn(async () => undefined);
+    const detach = attachTerminalClipboard({
+      container: document.createElement("div"),
+      terminal: {
+        attachCustomKeyEventHandler: vi.fn(),
+        onSelectionChange: vi.fn((handler: () => void) => { selectionChanged = handler; return { dispose: vi.fn() }; }),
+        hasSelection: () => true,
+        getSelection: () => "query",
+        paste: vi.fn(),
+      },
+      clipboard: { readText: vi.fn(), writeText },
+      settings: () => ({ copyOnSelect: true, rightClickPaste: false }),
+      refuse: vi.fn(),
+      selectionIsSearchMatch: () => searching,
+    });
+
+    searching = true;
+    selectionChanged();
+    expect(writeText).not.toHaveBeenCalled();
+
+    searching = false;
+    selectionChanged();
+    expect(writeText).toHaveBeenCalledWith("query");
+    detach();
+  });
+
   it("reviews a keyboard's multi-line suggestion and pasted input like a paste", () => {
     const paste = vi.fn();
     const container = document.createElement("div");

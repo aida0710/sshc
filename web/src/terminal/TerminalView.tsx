@@ -182,7 +182,14 @@ export function TerminalView({
   const [link, setLink] = useState<StreamLink>({ phase: "connecting", attempt: 1 });
   const activeRef = useRef(active);
   activeRef.current = active;
-  const search = useTerminalSearch({ shortcutActive: searchShortcutActive, region });
+  const search = useTerminalSearch({
+    shortcutActive: searchShortcutActive,
+    region,
+    // A touch screen would raise its keyboard again for the terminal.
+    returnFocus: () => {
+      if (!touchTerminalRef.current) terminal.current?.focus();
+    },
+  });
   const copyContext = useRef<() => void>(() => {});
   const [osc52Enabled, setOsc52Enabled] = useState(initialOsc52Enabled);
   const osc52EnabledRef = useRef(initialOsc52Enabled);
@@ -444,6 +451,7 @@ export function TerminalView({
       copied: () => setTerminalNotice(t("copy.done")),
       enhancedKey: (event) => encodeIntlYen(event, intlYenRef.current) ?? kittyKeyboard.encode(event),
       sendEnhancedKey: (sequence) => linkController.currentStream()?.send(sequence),
+      selectionIsSearchMatch: search.isSelectingMatch,
     });
 
     const stopObservingSize = observeTerminalSize(view, container, fitAndSync);

@@ -8,27 +8,39 @@ export type TerminalSearchResult = { index: number; total: number };
 
 const noResult: TerminalSearchResult = { index: -1, total: 0 };
 
+// The last search of the page, which the next search starts from, in any
+// session. It stays in memory: a query can hold a secret seen on the screen.
+const lastSearch = { query: "", caseSensitive: false, regex: false };
+
 // Search state for one terminal view. The xterm instance is recreated with
 // the session, so the addon is bound from inside the terminal effect; the
 // query and settings live in refs as well so the bound callbacks read the
 // latest values without that effect re-running.
-export function useTerminalSearch({ shortcutActive, region }: {
+export function useTerminalSearch({ shortcutActive, region, returnFocus }: {
   // When set, the shortcut is owned regardless of focus; otherwise only
   // while focus is inside the region.
   shortcutActive: boolean | undefined;
   region: RefObject<HTMLElement | null>;
+  // Called when the bar closes while it holds focus, which would otherwise
+  // fall to the page and take the next keystrokes nowhere.
+  returnFocus: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [caseSensitive, setCaseSensitive] = useState(false);
-  const [regex, setRegex] = useState(false);
+  const [query, setQuery] = useState(lastSearch.query);
+  const [caseSensitive, setCaseSensitive] = useState(lastSearch.caseSensitive);
+  const [regex, setRegex] = useState(lastSearch.regex);
   const [invalid, setInvalid] = useState(false);
   const [result, setResult] = useState(noResult);
   const queryRef = useRef("");
   queryRef.current = query;
   const settingsRef = useRef<TerminalSearchSettings>({ caseSensitive: false, regex: false });
   settingsRef.current = { caseSensitive, regex };
+  // True while the addon selects the match it moves to: that selection is the
+  // search showing a result, not the person choosing text to copy.
+  const selectingMatch = useRef(false);
+  const returnFocusRef = useRef(returnFocus);
+  returnFocusRef.current = returnFocus;
   const stepRef = useRef<(direction: 1 | -1) => void>(() => {});
   const refreshRef = useRef<() => void>(() => {});
   const clearRef = useRef<() => void>(() => {});
@@ -53,6 +65,12 @@ export function useTerminalSearch({ shortcutActive, region }: {
     if (open) refreshRef.current();
     else clearRef.current();
   }, [open, query, caseSensitive, regex]);
+
+  useEffect(() => {
+    lastSearch.query = query;
+    lastSearch.caseSensitive = caseSensitive;
+    lastSearch.regex = regex;
+  }, [query, caseSensitive, regex]);
 
   // Wires the addon of a freshly opened terminal. The returned function
   // unwires it and must run before that terminal is disposed.
@@ -94,8 +112,13 @@ export function useTerminalSearch({ shortcutActive, region }: {
         reset();
         return;
       }
-      if (direction === 1) search.findNext(query, options(incremental));
-      else search.findPrevious(query, options(false));
+      selectingMatch.current = true;
+      try {
+        if (direction === 1) search.findNext(query, options(incremental));
+        else search.findPrevious(query, options(false));
+      } finally {
+        selectingMatch.current = false;
+      }
     };
     stepRef.current = (direction) => run(direction, false);
     refreshRef.current = () => run(1, true);
@@ -113,12 +136,17 @@ export function useTerminalSearch({ shortcutActive, region }: {
 
   const step = useCallback((direction: 1 | -1) => stepRef.current(direction), []);
   const toggle = useCallback(() => setOpen((current) => !current), []);
-  const close = useCallback(() => setOpen(false), []);
   // Whether the search bar, rather than the terminal, holds keyboard focus.
   const hasFocus = useCallback(
     () => input.current?.parentElement?.contains(document.activeElement) === true,
     [],
   );
+  const isSelectingMatch = useCallback(() => selectingMatch.current, []);
+  const close = useCallback(() => {
+    const focused = hasFocus();
+    setOpen(false);
+    if (focused) returnFocusRef.current();
+  }, [hasFocus]);
 
   return {
     input,
@@ -136,6 +164,7 @@ export function useTerminalSearch({ shortcutActive, region }: {
     close,
     bind,
     hasFocus,
+    isSelectingMatch,
   };
 }
 
