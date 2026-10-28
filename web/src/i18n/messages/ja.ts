@@ -983,6 +983,8 @@ export const ja = {
   "terminal.linkStop": "再試行を停止",
   "terminal.replayTruncated":
     "接続が切れていた間の出力の一部は、再生バッファの上限を超えたため表示できません。",
+  "terminal.replayTruncatedOldest":
+    "このセッションの古い出力は、sshcエンジンの再生バッファに残っていないため表示できません。",
   "terminal.clipboardRefused": "クリップボードにアクセスできませんでした。",
   "terminal.pasteHeading": "{target}への貼り付けを確認",
   "terminal.pasteDescription":
