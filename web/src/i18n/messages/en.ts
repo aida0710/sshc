@@ -1005,6 +1005,18 @@ export const en = {
   "terminal.keepScreenAwake": "Keep screen on",
   "terminal.keepScreenAwakeHint":
     "Keep the screen on while a terminal is shown. This browser only; applies to every terminal",
+  "terminal.touchModeAuto": "Detect touch automatically",
+  "terminal.touchModeAutoHint": "Use terminals by finger where the browser says the screen is touch first. Turn this off to fix touch or mouse when a 2-in-1 PC is detected wrongly. This browser only; applies to every terminal",
+  "terminal.touchModeTouch": "Use by touch",
+  "terminal.touchModeTouchHint": "Long-press to select and tap a link to open it. Mouse drag selection, link clicks, the wheel and right-click paste do not work",
+  "terminal.touchModeMouse": "Use by mouse",
+  "terminal.touchModeMouseHint": "Drag to select and click a link to open it",
+  "terminal.touchModeLabel": "Touch input",
+  "terminal.touchModeSettingHint": "This browser only. A change applies at once, without Save",
+  "terminal.touchModeAutoShort": "Detect automatically",
+  "terminal.touchModeFixedLabel": "Fixed input",
+  "terminal.touchModeTouchShort": "Touch",
+  "terminal.touchModeMouseShort": "Mouse",
   "terminal.globalSettings": "Global settings",
   "terminal.osc52Hint":
     "Allow remote programs to write to the system clipboard via OSC 52 in every terminal",

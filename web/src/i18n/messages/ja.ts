@@ -1008,6 +1008,18 @@ export const ja = {
   "terminal.keepScreenAwake": "画面を常にオン",
   "terminal.keepScreenAwakeHint":
     "ターミナルを表示している間、画面を消しません。このブラウザだけの設定で、すべてのターミナルに効きます",
+  "terminal.touchModeAuto": "タッチ操作を自動判定",
+  "terminal.touchModeAutoHint": "ブラウザがタッチ優先と答える画面では、指でターミナルを操作する形にします。2in1のPCで判定が合わないときは、オフにしてタッチかマウスに固定します。このブラウザだけの設定で、すべてのターミナルに効きます",
+  "terminal.touchModeTouch": "タッチで操作",
+  "terminal.touchModeTouchHint": "長押しで範囲選択し、リンクはタップで開きます。マウスでのドラッグ選択・リンクのクリック・ホイール・右クリックでの貼り付けは効きません",
+  "terminal.touchModeMouse": "マウスで操作",
+  "terminal.touchModeMouseHint": "ドラッグで範囲選択し、リンクはクリックで開きます",
+  "terminal.touchModeLabel": "タッチ操作",
+  "terminal.touchModeSettingHint": "このブラウザだけの設定です。変えるとすぐ効き、保存は要りません",
+  "terminal.touchModeAutoShort": "自動判定",
+  "terminal.touchModeFixedLabel": "固定する操作",
+  "terminal.touchModeTouchShort": "タッチ",
+  "terminal.touchModeMouseShort": "マウス",
   "terminal.globalSettings": "全体設定",
   "terminal.osc52Hint":
     "すべてのターミナルで、リモートのプログラムがOSC 52でクリップボードへ書き込むことを許可します",
