@@ -360,18 +360,13 @@ func (s *Store) load() (document, error) {
 	var header struct {
 		SchemaVersion int `json:"schemaVersion"`
 	}
-	if json.Unmarshal(contents, &header) == nil && header.SchemaVersion > 0 && header.SchemaVersion < schemaVersionWithPrevious {
-		// ハッシュの一覧だけの形式は読まない。登録はブラウザを一度開き直せば
-		// 作り直せるので、形式が変わった端末では登録なしから始める。
+	if json.Unmarshal(contents, &header) == nil && header.SchemaVersion > 0 && header.SchemaVersion < SchemaVersion {
+		// 古い形式は読まない。登録はブラウザを一度 `sshc open` で開き直せば作り
+		// 直せるので、形式が変わったマシンでは登録なしから始める。
 		return document{SchemaVersion: SchemaVersion, Registrations: []registration{}}, nil
 	}
 	var stored document
-	if header.SchemaVersion == schemaVersionWithPrevious {
-		stored, err = decodeDocumentWithPrevious(contents)
-	} else {
-		err = strictjson.Decode(contents, &stored)
-	}
-	if err != nil {
+	if err := strictjson.Decode(contents, &stored); err != nil {
 		return document{}, fmt.Errorf("%w: %v", ErrInvalidDocument, err)
 	}
 	if stored.SchemaVersion != SchemaVersion ||

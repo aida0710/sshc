@@ -3,6 +3,8 @@ package browserauth_test
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
@@ -242,49 +244,34 @@ func TestAnOlderDocumentStartsWithoutRegistrations(t *testing.T) {
 	}
 }
 
-// 退役 token を直前の 1 世代だけ覚えていた形式の登録は、そのまま引き継ぐ。直前の
-// 世代も退役 token として覚えたままなので、猶予の後に出されれば複製として検知する。
-func TestADocumentWithOnlyThePreviousTokenKeepsItsRegistrations(t *testing.T) {
-	store, clock := newStore(t, randomBytes(t, 32*8))
+// 古い形式の登録は読まずに、登録なしから始める。エンジンは起動でき、ブラウザは
+// `sshc open` で入り直せる。
+func TestADocumentInAnOlderFormatStartsWithoutRegistrations(t *testing.T) {
+	store, _ := newStore(t, randomBytes(t, 32*8))
 	original, _, err := store.Register("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	rotated, _ := recover(t, store, original)
-	contents, err := os.ReadFile(store.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	var current struct {
-		Registrations []struct {
-			Hash       string    `json:"hash"`
-			Retired    []string  `json:"retired"`
-			IssuedAt   time.Time `json:"issuedAt"`
-			LastUsedAt time.Time `json:"lastUsedAt"`
-		} `json:"registrations"`
-	}
-	if err := json.Unmarshal(contents, &current); err != nil || len(current.Registrations) != 1 {
-		t.Fatalf("registrations = %+v, %v", current, err)
-	}
-	entry := current.Registrations[0]
 	older, err := json.Marshal(map[string]any{
 		"schemaVersion": 2,
-		"registrations": []map[string]any{{
-			"hash": entry.Hash, "previous": entry.Retired[0], "issuedAt": entry.IssuedAt, "lastUsedAt": entry.LastUsedAt,
-		}},
+		"registrations": []map[string]any{{"hash": registrationHash(original), "issuedAt": time.Now(), "lastUsedAt": time.Now()}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	acltest.WritePrivateFile(t, store.Path(), older)
+	if _, accepted := recover(t, store, original); accepted {
+		t.Fatal("a registration in an older format was read")
+	}
+	if _, _, err := store.Register(""); err != nil {
+		t.Fatalf("registering again after an older format = %v", err)
+	}
+}
 
-	clock.advance(2 * time.Minute)
-	if copied, err := store.Recover(original); err != nil || copied.Accepted() || copied.Stolen == "" {
-		t.Fatalf("Recover(previous after the grace) = %+v, %v; want the clone detected", copied, err)
-	}
-	if _, accepted := recover(t, store, rotated); accepted {
-		t.Fatal("the registration survived the detected clone")
-	}
+// registrationHash は、登録の文書に書く token のハッシュである（store.go の hashToken と同じ）。
+func registrationHash(token string) string {
+	digest := sha256.Sum256([]byte(token))
+	return base64.RawURLEncoding.EncodeToString(digest[:])
 }
 
 func randomBytes(t *testing.T, size int) []byte {
