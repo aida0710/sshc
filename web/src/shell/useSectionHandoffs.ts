@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { CreateConnectionDraft } from "../connections/CreateConnectionModal";
+import type { CreateConnectionDraft } from "../connections/createConnectionDraft";
 import type { FileTarget } from "../explorer/ConfigExplorer";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "../keys/workflow";
 import type { Section } from "../routing/sectionRoute";

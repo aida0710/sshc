@@ -68,7 +68,8 @@ export function NewGroupField({ groupNames, onCreate, onCreated }: NewGroupField
   }
   return (
     <div className="mt-2 flex flex-col gap-1.5">
-      <div {...keyboardOwnerProps} onKeyDown={keyDown} className="flex items-center gap-2">
+      {/* 狭い欄では、名前の欄を1行に取り、ボタンを次の行へ送る。 */}
+      <div {...keyboardOwnerProps} onKeyDown={keyDown} className="flex flex-wrap items-center gap-2">
         <input
           autoFocus
           aria-label={t("conn.createNewGroupName")}
@@ -80,7 +81,7 @@ export function NewGroupField({ groupNames, onCreate, onCreated }: NewGroupField
             setProblem("");
           }}
           aria-invalid={problem !== ""}
-          className={`${control} min-w-0 flex-1`}
+          className={`${control} min-w-0 flex-[999_1_9rem]`}
         />
         <Button busy={busy} disabled={name === ""} onClick={() => void create()}>{t("groupDialog.create")}</Button>
         <Button disabled={busy} onClick={close}>{t("groupDialog.cancel")}</Button>

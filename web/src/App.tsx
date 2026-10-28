@@ -10,7 +10,7 @@ import { engineStreamPath, engineTerminalBase } from "./api/remoteEngines";
 import { settingsApi } from "./api/settings";
 import { vaultApi, type PasswordVaultStatus } from "./api/vault";
 import type { SessionState } from "./session/bootstrap";
-import type { CreationPrerequisite } from "./connections/CreateConnectionModal";
+import type { CreationPrerequisite } from "./connections/createConnectionDraft";
 import { LockScreen } from "./secrets/LockScreen";
 import { useLanguage } from "./i18n/context";
 import { InspectorPane, InspectorToggle } from "./ui/Inspector";
