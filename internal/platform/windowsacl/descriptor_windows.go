@@ -57,15 +57,10 @@ func isDescriptorRestricted(descriptor *windows.SECURITY_DESCRIPTOR, userSID *wi
 		return false, nil
 	}
 
-	systemSID, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	expected, err := trustedPrincipals(userSID)
 	if err != nil {
 		return false, err
 	}
-	administratorsSID, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
-	if err != nil {
-		return false, err
-	}
-	expected := []*windows.SID{userSID, systemSID, administratorsSID}
 	wantFlags := privateAceFlags(directory)
 	seen := make([]bool, len(expected))
 	for index := uint32(0); index < uint32(dacl.AceCount); index++ {
@@ -94,9 +89,7 @@ func isDescriptorRestricted(descriptor *windows.SECURITY_DESCRIPTOR, userSID *wi
 			return false, nil
 		}
 	}
-	runtime.KeepAlive(userSID)
-	runtime.KeepAlive(systemSID)
-	runtime.KeepAlive(administratorsSID)
+	runtime.KeepAlive(expected)
 	return true, nil
 }
 
@@ -113,7 +106,7 @@ func NewPrivateSecurityDescriptor(directory bool) (*windows.SECURITY_DESCRIPTOR,
 }
 
 func newPrivateSecurityDescriptor(directory bool) (*windows.SECURITY_DESCRIPTOR, *windows.SID, error) {
-	userSID, err := currentUserSID()
+	userSID, err := CurrentUserSID()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -154,25 +147,6 @@ func privateAceFlags(directory bool) uint8 {
 		return windows.OBJECT_INHERIT_ACE | windows.CONTAINER_INHERIT_ACE
 	}
 	return 0
-}
-
-// currentUserSID は、このユーザー本人の SID を返す。
-//
-// DACL には現在のユーザー SID を使用する。所有者は ownedByThisToken で別に判定する。
-// 所有者 SID を使用すると、昇格した環境で Administrators の ACE が重複する。
-func currentUserSID() (*windows.SID, error) {
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
-		return nil, err
-	}
-	defer token.Close()
-	user, err := token.GetTokenUser()
-	if err != nil {
-		return nil, err
-	}
-	sid, err := user.User.Sid.Copy()
-	runtime.KeepAlive(user)
-	return sid, err
 }
 
 // tokenOwnerInformation は TOKEN_OWNER である。SID へのポインタ一本しか無い。

@@ -7,6 +7,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"sshc/internal/platform/windowsacl"
 )
 
 func openLocalTextStagingFile(parent *os.Root, name string) (localTextStaging, error) {
@@ -15,13 +17,16 @@ func openLocalTextStagingFile(parent *os.Root, name string) (localTextStaging, e
 		return localTextStaging{}, err
 	}
 	defer directory.Close()
-	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	user, err := windowsacl.CurrentUserSID()
 	if err != nil {
 		return localTextStaging{}, err
 	}
 	// Protect the sibling from inherited Readers/Users ACEs before any edited
 	// bytes are written. Metadata is applied only after the complete write.
-	descriptor, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;" + user.User.Sid.String() + ")(A;;FA;;;SY)")
+	// This is not windowsacl's private descriptor: the file is the user's own and
+	// takes the original file's ACL when published, so it carries no owner and
+	// only the two entries the original file is compared against.
+	descriptor, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;" + user.String() + ")(A;;FA;;;SY)")
 	if err != nil {
 		return localTextStaging{}, err
 	}
