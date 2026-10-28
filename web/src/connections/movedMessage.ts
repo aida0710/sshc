@@ -2,7 +2,7 @@ import type { Translate } from "../i18n/context";
 import type { DragPayload } from "./dragdrop";
 
 // movedConnectionsMessage は、接続先を group へ動かし終えたときの知らせの文を返す。
-// group が "" なら、接続先は未分類へ動いている。
+// group が "" なら、接続先はグループなしへ動いている。
 export function movedConnectionsMessage(t: Translate, { aliases, group }: { aliases: readonly string[]; group: string }): string {
   const destination = group === "" ? t("tree.ungrouped") : group;
   if (aliases.length === 1) return t("tree.moved", { name: aliases[0] ?? "", destination });

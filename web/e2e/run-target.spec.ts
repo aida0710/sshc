@@ -120,7 +120,7 @@ async function screenshotInJapanese(page: Page, name: string) {
   if (directory === undefined) return;
   await page.setViewportSize({ width: 1280, height: 800 });
   await changeDisplayLanguage(page, "ja");
-  await expect(page.getByRole("region").getByRole("button", { name: "localhost に戻す", exact: true })).toBeVisible();
+  await expect(page.getByRole("region").getByRole("button", { name: "localhostに戻す", exact: true })).toBeVisible();
   await page.screenshot({ path: `${directory}/${name}.png` });
   await page.setViewportSize({ width: 390, height: 844 });
   // The sidebar slides away at this width; the screenshot waits until it is gone.
