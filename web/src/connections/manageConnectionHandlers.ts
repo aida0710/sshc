@@ -3,7 +3,7 @@ import type { ShowToast } from "../ui/toastContext";
 import { duplicateAliasOf } from "./duplicateAlias";
 import { movedConnectionsMessage } from "./movedMessage";
 
-// 管理パネルの操作が使う、開いている接続先への保存。どれも保存できたかを返す。
+// 見出しの「…」の操作が使う、開いている接続先への保存。どれも保存できたかを返す。
 type ConnectionManagementSaves = {
   rename: (alias: string) => Promise<boolean>;
   moveToGroup: (group: string) => Promise<boolean>;
@@ -13,8 +13,8 @@ type ConnectionManagementSaves = {
   remove: () => Promise<boolean>;
 };
 
-// manageConnectionHandlers は、管理パネルの操作を、保存できたら成功を知らせる形にして返す。
-// 管理パネルの下の差分は、開いているタブによっては見えないので、知らせで終わったことを伝える。
+// manageConnectionHandlers は、見出しの「…」の操作を、保存できたら成功を知らせる形にして返す。
+// 保存の差分は、開いているタブによっては見えないので、知らせで終わったことを伝える。
 // 断られた理由は保存の処理が画面に出すので、ここでは何もしない。
 export function manageConnectionHandlers({ saves, alias, t, showToast }: {
   saves: ConnectionManagementSaves;
@@ -22,8 +22,10 @@ export function manageConnectionHandlers({ saves, alias, t, showToast }: {
   t: Translate;
   showToast: ShowToast;
 }) {
-  async function tellWhenSaved(saving: Promise<boolean>, message: string) {
-    if (await saving) showToast(message, { tone: "success" });
+  async function tellWhenSaved(saving: Promise<boolean>, message: string): Promise<boolean> {
+    const saved = await saving;
+    if (saved) showToast(message, { tone: "success" });
+    return saved;
   }
 
   return {

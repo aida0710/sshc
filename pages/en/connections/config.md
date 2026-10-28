@@ -14,11 +14,11 @@ The editor shows loaded files and their Include relationships. UTF-8 text is wri
 ## Four connection tabs
 
 - **Basic**: host, user, port, authentication
-- **Analysis**: effective values, sources, warnings
-- **Advanced**: ProxyJump, port forwarding, directives, raw block
-- **sshc**: encoding, OSC 52, and other sshc-only behavior
+- **Advanced**: the jump host (ProxyJump), port forwarding and the other directives
+- **Display & terminal**: colour, OS icon, tags, display order, the terminal's palette, encoding and OSC 52, the VPN, and the other sshc-only behavior
+- **Resolved values**: effective values, sources, warnings
 
-Clearing a value removes its connection-specific directive and restores OpenSSH inheritance.
+Clearing a value removes its connection-specific directive and restores OpenSSH inheritance. Renaming, moving to a group, duplicating, the comment, the storage file, deleting, and **Edit as text** for the raw Host block are in the **…** at the top of the connection.
 
 ```sh
 sshc info <alias>

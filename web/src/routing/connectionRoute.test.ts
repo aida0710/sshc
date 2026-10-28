@@ -17,7 +17,7 @@ describe("connection routes", () => {
       path: "connections/work/api.conf",
       alias: "api prod",
       panel: "Basic",
-      advanced: "Jump",
+      advanced: "Settings",
     });
     expect(location).toBe(
       "/connections/servers?path=connections%2Fwork%2Fapi.conf&host=api+prod&panel=basic",
@@ -31,7 +31,7 @@ describe("connection routes", () => {
         path: "connections/work/api.conf",
         alias: "api prod",
         panel: "Basic",
-        advanced: "Jump",
+        advanced: "Settings",
       },
     });
   });
@@ -45,7 +45,7 @@ describe("connection routes", () => {
       path: "config",
       alias: "bastion",
       panel: "Sshc",
-      advanced: "Jump",
+      advanced: "Settings",
     });
     expect(location).toBe("/connections/servers?path=config&host=bastion&panel=sshc");
     expect(parseConnectionLocation({
@@ -53,14 +53,22 @@ describe("connection routes", () => {
       search: "?path=config&host=bastion&panel=sshc",
     })).toEqual({
       kind: "valid",
-      target: { path: "config", alias: "bastion", panel: "Sshc", advanced: "Jump" },
+      target: { path: "config", alias: "bastion", panel: "Sshc", advanced: "Settings" },
     });
   });
 
-  it("round-trips the port-forwarding advanced view", () => {
-    const target = { path: "config", alias: "bastion", panel: "Advanced", advanced: "Forwards" } as const;
+  it("round-trips the advanced tab's settings without naming them", () => {
+    const target = { path: "config", alias: "bastion", panel: "Advanced", advanced: "Settings" } as const;
     const location = connectionLocation(target);
-    expect(location).toBe("/connections/servers?path=config&host=bastion&panel=advanced&advanced=port-forwarding");
+    expect(location).toBe("/connections/servers?path=config&host=bastion&panel=advanced");
+    expect(parseConnectionLocation({ pathname: "/connections/servers", search: location.slice(location.indexOf("?")) }))
+      .toEqual({ kind: "valid", target });
+  });
+
+  it("round-trips the Host block's text in the advanced tab", () => {
+    const target = { path: "config", alias: "bastion", panel: "Advanced", advanced: "Raw" } as const;
+    const location = connectionLocation(target);
+    expect(location).toBe("/connections/servers?path=config&host=bastion&panel=advanced&advanced=raw");
     expect(parseConnectionLocation({ pathname: "/connections/servers", search: location.slice(location.indexOf("?")) }))
       .toEqual({ kind: "valid", target });
   });
@@ -75,7 +83,7 @@ describe("connection routes", () => {
     ["/connections/servers", "?tab=raw"],
     ["/connections/servers", "?path=config&host=api&panel=basic&host=other"],
     ["/connections/servers", "?path=config&host=api"],
-    ["/connections/servers", "?path=config&host=api&panel=advanced"],
+    ["/connections/servers", "?path=config&host=api&panel=advanced&advanced=port-forwarding"],
     ["/connections/servers", "?path=config&host=api&panel=basic&advanced=raw"],
     ["/connections/servers", "?path=connections%2F..%2Fconfig&host=api&panel=basic"],
     ["/connections/servers", "?path=config&host=api%00hidden&panel=basic"],

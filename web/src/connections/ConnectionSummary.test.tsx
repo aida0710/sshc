@@ -79,18 +79,13 @@ describe("ConnectionSummary", () => {
         refreshState="idle"
         onConnect={vi.fn()}
         connecting={false}
-        onToggleManage={vi.fn()}
-        managing={false}
+        actions={[]}
       />,
     );
 
     expect(screen.getByRole("heading", { name: "bastion" })).toBeInTheDocument();
     expect(screen.getByText("ops@203.0.113.10:2222")).toBeInTheDocument();
-    expect(screen.getByText("id_work · SHA256:work")).toBeInTheDocument();
-    expect(screen.getByText("Saved only for this key")).toBeInTheDocument();
-    expect(screen.queryByText("Saved password: office")).not.toBeInTheDocument();
     expect(screen.getByText(/is not used and will be unassigned/i)).toBeInTheDocument();
-    expect(screen.getByText("work")).toBeInTheDocument();
   });
 
   it("does not claim a password cleanup when credential metadata is unavailable", () => {
@@ -101,107 +96,39 @@ describe("ConnectionSummary", () => {
         refreshState="idle"
         onConnect={vi.fn()}
         connecting={false}
-        onToggleManage={vi.fn()}
-        managing={false}
+        actions={[]}
       />,
     );
 
     expect(screen.queryByText(/is not used and will be unassigned/i)).not.toBeInTheDocument();
   });
 
-  it("shows when the saved password is blocked by an authentication route change", () => {
-    render(
-      <ConnectionSummary
-        state={{
-          ...state,
-          detail: { ...state.detail, form: { ...state.detail.form, fields: state.detail.form.fields.filter((field) => field.keyword !== "IdentityFile") } },
-          eligibility: { status: "ready", value: {
-            alias: "bastion", storable: true, blockers: [], warnings: [], passwordBinding: "stale",
-          } },
-        }}
-        dirty={false}
-        refreshState="idle"
-        onConnect={vi.fn()}
-        connecting={false}
-        onToggleManage={vi.fn()}
-        managing={false}
-      />,
-    );
-
-    expect(screen.getByText("Saved password paused")).toBeInTheDocument();
-  });
-
-  it("keeps configured key details without an empty account-password field", () => {
-    render(
-      <ConnectionSummary
-        state={{
-          ...state,
-          credentials: { status: "ready", value: [] },
-          vault: {
-            status: "ready",
-            value: vaultStatus({ dedicatedKeyPassphrases: ["id_work"] }),
-          },
-        }}
-        dirty={false}
-        refreshState="idle"
-        onConnect={vi.fn()}
-        connecting={false}
-        onToggleManage={vi.fn()}
-        managing={false}
-      />,
-    );
-
-    expect(screen.getByText("work")).toBeInTheDocument();
-    expect(screen.getByText("id_work · SHA256:work")).toBeInTheDocument();
-    expect(screen.getByText("Saved only for this key")).toBeInTheDocument();
-    expect(screen.queryByText("Account password")).not.toBeInTheDocument();
-  });
-
-  it("keeps the default authentication summary concise and the main action available", async () => {
+  it("keeps only the name, address, Connect and the menu in the header", async () => {
     const user = userEvent.setup();
     const onConnect = vi.fn();
+    const onRename = vi.fn();
     render(
       <ConnectionSummary
-        state={{
-          ...state,
-          detail: {
-            ...state.detail,
-            form: {
-              ...state.detail.form,
-              entry: { ...state.detail.form.entry, group: "" },
-              fields: state.detail.form.fields.filter((field) => field.keyword !== "IdentityFile"),
-            },
-          },
-          credentials: { status: "ready", value: [] },
-          vault: {
-            status: "ready",
-            value: vaultStatus(),
-          },
-        }}
+        state={state}
         dirty={false}
         refreshState="idle"
         onConnect={onConnect}
         connecting={false}
-        onToggleManage={vi.fn()}
-        managing={false}
+        actions={[{ label: "Rename", onSelect: onRename }]}
       />,
     );
 
     expect(screen.getByRole("region", { name: "bastion" })).toBeInTheDocument();
-    expect(screen.getByText("SSH agent or inherited keys")).toBeInTheDocument();
-    expect(screen.queryByText("Saved connection")).not.toBeInTheDocument();
-    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
-    expect(screen.queryByText("Ungrouped")).not.toBeInTheDocument();
-    expect(screen.queryByText("Key passphrase")).not.toBeInTheDocument();
-    expect(screen.queryByText("Account password")).not.toBeInTheDocument();
+    expect(screen.queryByText("id_work · SHA256:work")).not.toBeInTheDocument();
+    expect(screen.queryByText("work")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Connect" }));
     expect(onConnect).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Actions for this connection" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    expect(onRename).toHaveBeenCalledOnce();
   });
-
-  it("keeps committed text while disabling saved-state actions for a draft", async () => {
-    const user = userEvent.setup();
+  it("keeps committed text while disabling saved-state actions for a draft", () => {
     const onConnect = vi.fn();
-    const onToggleManage = vi.fn();
     render(
       <ConnectionSummary
         state={state}
@@ -209,8 +136,7 @@ describe("ConnectionSummary", () => {
         refreshState="idle"
         onConnect={onConnect}
         connecting={false}
-        onToggleManage={onToggleManage}
-        managing={false}
+        actions={[]}
       />,
     );
 
@@ -218,12 +144,7 @@ describe("ConnectionSummary", () => {
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     expect(screen.getByText(/Save or discard this draft/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
-    const manage = screen.getByRole("button", { name: "Manage connection" });
-    expect(manage).toHaveAttribute("aria-expanded", "false");
-    expect(manage).toHaveAttribute("aria-controls", "connection-management");
-    await user.click(manage);
     expect(onConnect).not.toHaveBeenCalled();
-    expect(onToggleManage).toHaveBeenCalledOnce();
   });
 
   it("keeps Connect unavailable when this platform cannot launch a terminal", () => {
@@ -235,8 +156,7 @@ describe("ConnectionSummary", () => {
         connectAvailable={false}
         onConnect={vi.fn()}
         connecting={false}
-        onToggleManage={vi.fn()}
-        managing={false}
+        actions={[]}
       />,
     );
 
@@ -251,8 +171,7 @@ describe("ConnectionSummary", () => {
         refreshState="refreshing"
         onConnect={vi.fn()}
         connecting={false}
-        onToggleManage={vi.fn()}
-        managing={false}
+        actions={[]}
       />,
     );
 
@@ -270,8 +189,7 @@ describe("ConnectionSummary", () => {
         refreshState="failed"
         onConnect={vi.fn()}
         connecting={false}
-        onToggleManage={vi.fn()}
-        managing={false}
+        actions={[]}
       />,
     );
 

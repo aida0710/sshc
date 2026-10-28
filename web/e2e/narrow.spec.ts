@@ -116,10 +116,8 @@ test("moves from the compact connection browser to detail at 360 pixels", async 
   }
 
   await page.getByRole("tab", { name: "Advanced" }).click();
-  const advancedViews = page.getByRole("combobox", { name: "Advanced setting views" });
-  await expect(advancedViews).toBeVisible();
-  await expect(advancedViews).toHaveValue("Jump");
-  await expect(page.getByRole("tablist", { name: "Advanced setting views" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Jump host" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Other settings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Discard changes" })).toHaveCount(0);
   await expectNoHorizontalOverflow(page, "Advanced connection editor");
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
@@ -130,8 +128,8 @@ test("moves from the compact connection browser to detail at 360 pixels", async 
     });
   }
 
-  await page.getByRole("tab", { name: "sshc" }).click();
-  await expect(page.getByRole("tabpanel", { name: "sshc" })).toBeVisible();
+  await page.getByRole("tab", { name: "Display & terminal" }).click();
+  await expect(page.getByRole("tabpanel", { name: "Display & terminal" })).toBeVisible();
   await expect(page.getByLabel("Remote text encoding")).toBeVisible();
   await expectNoHorizontalOverflow(page, "sshc connection editor");
   if (process.env.SSHC_VISUAL_DIR !== undefined) {

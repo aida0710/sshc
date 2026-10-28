@@ -20,7 +20,7 @@ export function ConnectionActions({
   onConnect,
 }: ConnectionActionsProps) {
   const t = useTranslate();
-  const settingsLocation = connectionLocation({ path, alias, panel: "Basic", advanced: "Jump" });
+  const settingsLocation = connectionLocation({ path, alias, panel: "Basic", advanced: "Settings" });
 
   return (
     <ActionMenu
