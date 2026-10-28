@@ -213,13 +213,14 @@ func (s *Session) queueReply(reply []byte) {
 }
 
 // writeReplies writes the queued answers to the program, in order, until the
-// session ends.
-func (s *Session) writeReplies() {
+// pump that started it ends (done). A manual reconnect starts a new pump with
+// a new done, and a new writer with it.
+func (s *Session) writeReplies(done <-chan struct{}) {
 	for {
 		select {
 		case reply := <-s.replies:
 			_, _ = s.Write(reply)
-		case <-s.done:
+		case <-done:
 			return
 		}
 	}

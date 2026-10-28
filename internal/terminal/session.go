@@ -466,7 +466,7 @@ func (s *Session) sendStartup(process Process) {
 // pump は PTY を読み、バッファへ書き、アタッチしているものへ配る。
 func (s *Session) pump(now func() time.Time) {
 	defer close(s.done)
-	go s.writeReplies()
+	go s.writeReplies(s.done)
 	connectedAt := s.started
 	for {
 		s.mutex.Lock()
