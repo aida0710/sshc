@@ -1,7 +1,6 @@
 import { Terminal } from "@xterm/xterm";
 import { describe, expect, it } from "vitest";
 import leftoverModeReset from "../../../internal/terminal/testdata/leftover-mode-reset.json";
-import { attachKittyKeyboardProtocol } from "./kittyKeyboard";
 
 // シェルのプロセスが終わるたびにエンジンが出力へ足す列（internal/terminal/leftover_modes.go）を、
 // 実際のxterm.jsへ流して確かめる。Goの側はinternal/terminal/leftover_modes_test.goが同じ列を読む。
@@ -75,23 +74,47 @@ describe("the sequence the engine appends when a shell process ends", () => {
     }
   });
 
-  it("stops encoding keys with the kitty keyboard protocol", async () => {
-    const terminal = new Terminal({ cols: 80, rows: 24, allowProposedApi: true });
-    const kittyKeyboard = attachKittyKeyboardProtocol(terminal.parser);
+  // The flags are read back through the protocol's own query (CSI ? u).
+  async function kittyFlags(terminal: Terminal): Promise<string> {
+    let answer = "";
+    const listener = terminal.onData((data) => { answer += data; });
+    await writeTo(terminal, "\u001b[?u");
+    listener.dispose();
+    return answer;
+  }
+
+  it("turns the kitty keyboard protocol off and empties what the program pushed", async () => {
+    const terminal = new Terminal({ cols: 80, rows: 24, allowProposedApi: true, vtExtensions: { kittyKeyboard: true } });
     try {
       await writeTo(terminal, "\u001b[>1u\u001b[>3u");
-      const controlC = new KeyboardEvent("keydown", { key: "c", ctrlKey: true });
-      expect(kittyKeyboard.encode(controlC)).toBe("\u001b[99;5u");
+      expect(await kittyFlags(terminal)).toBe("\u001b[?3u");
 
       await writeTo(terminal, reset);
 
-      expect(kittyKeyboard.encode(controlC)).toBeNull();
+      expect(await kittyFlags(terminal)).toBe("\u001b[?0u");
       // 終わったプログラムが積んだフラグも残さない。次のシェルでpushしていないプログラムが
       // popしても、前のフラグへ戻らない。
       await writeTo(terminal, "\u001b[<u");
-      expect(kittyKeyboard.encode(controlC)).toBeNull();
+      expect(await kittyFlags(terminal)).toBe("\u001b[?0u");
     } finally {
-      kittyKeyboard.dispose();
+      terminal.dispose();
+    }
+  });
+
+  // xterm.js keeps the alternate screen's flags apart and gives them back on
+  // the next ?1049h; the soft reset (DECSTR) at the end clears them too.
+  it("does not hand the flags a program set on the alternate screen to the next program there", async () => {
+    const terminal = new Terminal({ cols: 80, rows: 24, allowProposedApi: true, vtExtensions: { kittyKeyboard: true } });
+    try {
+      await writeTo(terminal, "\u001b[?1049h\u001b[>1u");
+      expect(await kittyFlags(terminal)).toBe("\u001b[?1u");
+
+      await writeTo(terminal, reset);
+      expect(await kittyFlags(terminal)).toBe("\u001b[?0u");
+
+      await writeTo(terminal, "\u001b[?1049h");
+      expect(await kittyFlags(terminal)).toBe("\u001b[?0u");
+    } finally {
       terminal.dispose();
     }
   });
