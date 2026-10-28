@@ -43,6 +43,7 @@ import { useSFTPPermissions } from "./useSFTPPermissions";
 import { SFTPPermissionsDialog } from "./SFTPPermissionsDialog";
 import { SFTPWaitingOverlay } from "./SFTPWaitingOverlay";
 import { isImeComposing } from "../ui/imeComposition";
+import { menuItemClass, menuSurface } from "../ui/menuStyle";
 
 const noHosts: HostEntry[] = [];
 
@@ -78,7 +79,7 @@ function MenuActionList({ actions, mobile = false }: { actions: SFTPMenuAction[]
           role="menuitem"
           disabled={action.disabled === true}
           onClick={action.run}
-          className={`block w-full rounded text-left hover:bg-hover focus:bg-select-fill focus:outline-none ${mobile ? "min-h-12 px-3 py-3 text-base" : "min-h-10 px-2.5 py-2 text-sm md:min-h-0"} ${action.danger === true ? "text-danger" : ""}`}
+          className={mobile ? `block min-h-12 w-full rounded-md px-3 py-3 text-left text-base hover:bg-hover focus:bg-select-fill focus:outline-none ${action.danger === true ? "text-danger" : ""}` : menuItemClass(action.danger === true ? "danger" : undefined)}
         >
           {action.label}
         </button>
@@ -514,7 +515,7 @@ export function SFTPPanel({
             <button type="button" aria-label={t("sftp.mobile.actions")} aria-haspopup={mobileInteraction ? "dialog" : "menu"} aria-expanded={menu?.kind === "folder"} onClick={(event) => toggleMenu("folder", event.currentTarget)} className={`flex shrink-0 items-center justify-center rounded text-ink-muted transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-select-fill ${mobileInteraction ? "size-12" : "size-9"}`}><Icon name="moreHorizontal" className="size-5" /></button>
           </>}
         />
-      {!mobileInteraction && menu?.kind === "folder" ? <div ref={menuPanel} role="menu" aria-label={t("sftp.mobile.actions")} className="absolute right-0 top-full z-20 max-h-[70dvh] w-60 overflow-y-auto rounded-lg border border-control-line bg-card p-1 shadow-lg"><MenuActionList actions={folderMenuActions()} /></div> : null}
+      {!mobileInteraction && menu?.kind === "folder" ? <div ref={menuPanel} role="menu" aria-label={t("sftp.mobile.actions")} className={`absolute right-0 top-full z-20 max-h-[70dvh] w-60 overflow-y-auto ${menuSurface}`}><MenuActionList actions={folderMenuActions()} /></div> : null}
       </div>
 
       {problem === "" || listingFailed ? null : <Notice tone="danger">{problem}</Notice>}
@@ -642,20 +643,20 @@ export function SFTPPanel({
               </>
             ) : null}
             {!mobileInteraction && menu?.kind === "create" ? (
-              <div ref={menuPanel} role="menu" aria-label={t("sftp.createActions")} className="absolute left-2 top-full z-20 mt-1 w-52 rounded-lg border border-control-line bg-card p-1 shadow-lg">
+              <div ref={menuPanel} role="menu" aria-label={t("sftp.createActions")} className={`absolute left-2 top-full z-20 mt-1 w-52 ${menuSurface}`}>
                 {can?.createDirectory ? <>
-                  <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "mkdir" })} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.newFolder")}</button>
-                  {can?.createEntries ? <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "createFile" })} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.newFile")}</button> : null}
+                  <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "mkdir" })} className={menuItemClass()}>{t("sftp.newFolder")}</button>
+                  {can?.createEntries ? <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "createFile" })} className={menuItemClass()}>{t("sftp.newFile")}</button> : null}
                 </> : null}
                 {can?.symlink ? <MenuActionList actions={folderMenuActions().filter((action) => action.key === "newSymlink")} /> : null}
                 {can?.browserUpload ? <>
-                  <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFiles(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.upload")}</button>
-                  <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFolder(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.uploadFolder")}</button>
+                  <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFiles(); }} className={menuItemClass()}>{t("sftp.upload")}</button>
+                  <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFolder(); }} className={menuItemClass()}>{t("sftp.uploadFolder")}</button>
                 </> : null}
               </div>
             ) : null}
             {!mobileInteraction && menu?.kind === "selected" && selectedEntries.length > 0 ? (
-              <div ref={menuPanel} role="menu" aria-label={selectionMenuLabel()} className="absolute right-2 top-full z-20 mt-1 w-52 rounded-lg border border-control-line bg-card p-1 shadow-lg">
+              <div ref={menuPanel} role="menu" aria-label={selectionMenuLabel()} className={`absolute right-2 top-full z-20 mt-1 w-52 ${menuSurface}`}>
                 <MenuActionList actions={selectedMenuActions()} />
               </div>
             ) : null}
@@ -668,7 +669,7 @@ export function SFTPPanel({
                   left: Math.max(8, Math.min(menu.x, window.innerWidth - contextMenuWidth - 8)),
                   top: Math.max(8, Math.min(menu.y, window.innerHeight - selectedMenuActions().length * contextMenuItemHeight - 16)),
                 }}
-                className="fixed z-30 w-56 rounded-lg border border-control-line bg-card p-1 shadow-lg"
+                className={`fixed z-30 w-56 ${menuSurface}`}
               >
                 <MenuActionList actions={selectedMenuActions()} />
               </div>
