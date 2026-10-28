@@ -56,11 +56,16 @@ describe("Android native bridge", () => {
     expect(notifiesTransfersNatively()).toBe(true);
   });
 
-  it("Webの配色をAndroidのsystem barへ同期する", () => {
+  it("Webの明暗と上のバーの色をAndroidのsystem barへ同期する", () => {
     const setAppearance = vi.fn();
     window.sshcAndroid = fakeBridge({ setAppearance });
-    setAndroidAppearance("dark");
-    expect(setAppearance).toHaveBeenCalledWith("dark");
+    document.documentElement.style.setProperty("--ui-toolbar", "#0a0a0b");
+    try {
+      setAndroidAppearance("dark");
+    } finally {
+      document.documentElement.style.removeProperty("--ui-toolbar");
+    }
+    expect(setAppearance).toHaveBeenCalledWith("dark", "#0a0a0b");
   });
 });
 

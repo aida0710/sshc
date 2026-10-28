@@ -72,6 +72,7 @@ public final class MainActivity extends ComponentActivity {
     private String lastEntrance;
     private String pendingTransferStatus;
     private String webAppearance;
+    private int webBarColour;
     private Uri engineOrigin;
     private final NativeBridge nativeBridge = new NativeBridge(new NativeBridge.Host() {
         @Override
@@ -85,8 +86,8 @@ public final class MainActivity extends ComponentActivity {
         }
 
         @Override
-        public void setAppearance(String appearance) {
-            runOnUiThread(() -> applySystemBarAppearance(appearance));
+        public void setAppearance(String appearance, int barColour) {
+            runOnUiThread(() -> applySystemBarAppearance(appearance, barColour));
         }
 
         @Override
@@ -642,18 +643,18 @@ public final class MainActivity extends ComponentActivity {
      */
     private void showNativeScreenColours() {
         webAppearance = null;
-        paintSystemBars(systemAppearance());
+        paintSystemBars(systemAppearance(), chromeColour());
     }
 
     /** Web側で解決したthemeをsystem barの色とiconへ反映する。 */
-    private void applySystemBarAppearance(String appearance) {
+    private void applySystemBarAppearance(String appearance, int barColour) {
         webAppearance = appearance;
-        paintSystemBars(appearance);
+        webBarColour = barColour;
+        paintSystemBars(appearance, barColour);
     }
 
-    private void paintSystemBars(String appearance) {
+    private void paintSystemBars(String appearance, int colour) {
         boolean dark = "dark".equals(appearance);
-        int colour = dark ? CHROME_NIGHT : CHROME_DAY;
         getWindow().setStatusBarColor(colour);
         getWindow().setNavigationBarColor(colour);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) getWindow().setNavigationBarDividerColor(colour);
@@ -771,7 +772,7 @@ public final class MainActivity extends ComponentActivity {
 
     /**
      * WindowInsets の余白へ適用する色を返す。
-     * web/src/index.css の --ui-toolbar と同期し、ページ読込前の色差を防ぐ。
+     * web/src/theme/themes/ のライト・ダークの --ui-toolbar と同期し、ページ読込前の色差を防ぐ。
      */
     private int chromeColour() {
         int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
@@ -779,7 +780,7 @@ public final class MainActivity extends ComponentActivity {
     }
 
     /**
-     * ネイティブの画面の文字の色を返す。web/src/index.css の --ui-ink と同期する。
+     * ネイティブの画面の文字の色を返す。web/src/theme/themes/ のライト・ダークの --ui-ink と同期する。
      * Activity のテーマは起動時の uiMode で決まり、configChanges で受けた切り替えでは
      * 変わらないので、背景（chromeColour）と一緒に文字の色も塗り直す。
      */
@@ -811,10 +812,10 @@ public final class MainActivity extends ComponentActivity {
     public void onConfigurationChanged(Configuration configuration) {
         super.onConfigurationChanged(configuration);
         if (webAppearance != null) {
-            applySystemBarAppearance(webAppearance);
+            applySystemBarAppearance(webAppearance, webBarColour);
             return;
         }
-        paintSystemBars(systemAppearance());
+        paintSystemBars(systemAppearance(), chromeColour());
         View root = findViewById(android.R.id.content);
         if (root instanceof ViewGroup && ((ViewGroup) root).getChildCount() > 0) {
             View screen = ((ViewGroup) root).getChildAt(0);
