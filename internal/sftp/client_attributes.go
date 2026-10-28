@@ -26,7 +26,7 @@ const (
 type attributeReader struct {
 	source      io.Reader
 	pending     *bytes.Reader
-	directories *directoryEntryLimit
+	directories *directoryListingLimit
 }
 
 func (reader *attributeReader) Read(destination []byte) (int, error) {

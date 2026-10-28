@@ -21,8 +21,8 @@ type noFollowAttributesWriter struct {
 	destination  io.WriteCloser
 	payloadBytes uint32
 	permissions  bool
-	// directories は、この writer が区切る要求の頭を見て、フォルダの一覧の件数を数える。
-	directories *directoryEntryLimit
+	// directories は、この writer が区切る要求の頭を見て、フォルダの一覧の件数とバイト数を数える。
+	directories *directoryListingLimit
 }
 
 func (writer *noFollowAttributesWriter) Close() error { return writer.destination.Close() }
