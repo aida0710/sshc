@@ -36,6 +36,7 @@ When the sshc engine stops (an update, a restart of the computer, a manual stop)
 - WebGL rendering with an automatic DOM-renderer fallback when unavailable or when a background image is active, plus an option to disable WebGL permanently
 - An uncompressed background image library with search, selection, rename, delete, a 1–1024 MiB storage limit, and atomic updates to overall and per-connection references
 - Static cursors in Terminal and the SFTP text editor when the operating system requests reduced motion, avoiding distracting rapid animation
+- **Keep screen on** in a terminal's "…" menu keeps the screen from turning off while Terminal is shown (Screen Wake Lock API). It applies to every terminal and is saved in this browser only. It appears only when the browser opened sshc over HTTPS or `localhost`
 
 On reconnect, sshc replays only bytes after the browser's last rendered position. Existing output is not duplicated, and older scrollback retained only by the browser is not cleared. If a long disconnect let required output fall out of the engine buffer, the terminal reports the gap. Both buffers stay in memory and are not written to the vault, backups, or sync snapshots.
 
