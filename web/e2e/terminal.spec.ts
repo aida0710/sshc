@@ -292,6 +292,42 @@ test("copies what was selected in the terminal as soon as selection finishes", a
     .toContain("selectable-canary");
 });
 
+test("selects with Option on a Mac while a program reads the mouse", async ({ page, context, installation }) => {
+  // xterm.js reads the platform once when it loads.
+  await page.addInitScript(() => Object.defineProperty(navigator, "platform", { get: () => "MacIntel" }));
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+
+  await openSessionList(page);
+  await openLocalShell(page);
+  await typeIntoTerminal(page, "echo option-select-canary");
+  // Turns on the mouse reports Claude Code asks for, then prints what arrives.
+  const screen = await typeIntoTerminal(page, "printf '\\033[?1002h\\033[?1006h'; echo mouse-reports-$((40 + 2)); cat -v");
+  await expect(screen).toContainText("mouse-reports-42", { timeout: 20_000 });
+
+  const box = await drawnRows(page).boundingBox();
+  expect(box).not.toBeNull();
+  if (box === null) return;
+  await page.keyboard.down("Alt");
+  await page.mouse.move(box.x + 2, box.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 2, box.y + box.height - 2, { steps: 12 });
+  await page.mouse.up();
+  await page.keyboard.up("Alt");
+  await expect(selectionMarks(page).first()).toBeAttached();
+  await expect
+    .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
+    .toContain("option-select-canary");
+  await expect(screen).not.toContainText("^[[<");
+
+  // Without Option the drag still goes to the program.
+  await page.mouse.move(box.x + 2, box.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + 2, { steps: 4 });
+  await page.mouse.up();
+  await expect(screen).toContainText("^[[<", { timeout: 20_000 });
+});
+
 test("pastes the clipboard into the terminal with right click", async ({ page, context, installation }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
