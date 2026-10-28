@@ -49,6 +49,13 @@ type Session struct {
 	notificationVersion uint64
 	lastNotification    *Notification
 	programProgress     *ProgramProgress
+	// visibilityReports is whether the program turned visibility reports
+	// (mode 2033) on; visible is whether any attached browser may show the
+	// session. replies holds the answers on their way to the program. See
+	// visibility_reports.go.
+	visibilityReports bool
+	visible           bool
+	replies           chan []byte
 	// commandStartedAt is when the current shell last reported a command
 	// start (OSC 133;C); zero when no command is running. See command_finished.go.
 	commandStartedAt time.Time
@@ -385,6 +392,8 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 	s.resetTerminalTitleLocked()
 	s.programProgress = nil
 	s.commandStartedAt = time.Time{}
+	// The new shell asked for no reports; the old program's answers are not for it.
+	s.visibilityReports = false
 	s.generation++
 	generation := s.generation
 	// 前のシェルは既に無い。ここから先の入力は新しいシェルへ届く。
@@ -457,6 +466,7 @@ func (s *Session) sendStartup(process Process) {
 // pump は PTY を読み、バッファへ書き、アタッチしているものへ配る。
 func (s *Session) pump(now func() time.Time) {
 	defer close(s.done)
+	go s.writeReplies(s.done)
 	connectedAt := s.started
 	for {
 		s.mutex.Lock()
@@ -470,11 +480,13 @@ func (s *Session) pump(now func() time.Time) {
 			CommandStarted:  func() { s.acceptCommandStarted(generation, now()) },
 			CommandFinished: func(exitCode *int) { s.acceptCommandFinished(generation, exitCode, now()) },
 		})
+		visibilityRequests := newVisibilityRequestObserver(func(request visibilityRequest) { s.acceptVisibilityRequest(generation, request) })
 		buffer := make([]byte, readChunk)
 		for {
 			read, err := process.Read(buffer)
 			if read > 0 {
 				observer.Observe(buffer[:read])
+				visibilityRequests.Observe(buffer[:read])
 				s.publish(buffer[:read])
 			}
 			if err != nil {

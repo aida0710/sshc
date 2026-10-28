@@ -16,6 +16,9 @@ type Stream struct {
 	// cursor と open は session.mutex で守る。
 	cursor uint64
 	open   bool
+	// visible is whether the browser behind this attachment shows its
+	// terminal, also under session.mutex. See visibility_reports.go.
+	visible bool
 	// ready は、取り出せる出力が届いたか、アタッチが外れたことを知らせる。
 	ready chan struct{}
 	// shellReplaced は、表示していたシェルが新しいシェルに替わったことを知らせる。
@@ -25,7 +28,7 @@ type Stream struct {
 
 func newStream(session *Session, cursor uint64) *Stream {
 	return &Stream{
-		session: session, cursor: cursor, open: true,
+		session: session, cursor: cursor, open: true, visible: true,
 		ready: make(chan struct{}, 1), shellReplaced: make(chan struct{}, 1),
 	}
 }
@@ -114,6 +117,7 @@ func (s *Session) AttachFrom(cursor uint64) (RingRead, *Stream, bool) {
 		return replay, stream, true
 	}
 	s.streams[stream] = true
+	s.queueReply(s.visibilityChangedLocked())
 	return replay, stream, true
 }
 
@@ -139,6 +143,7 @@ func (s *Session) Detach(stream *Stream) {
 	defer s.mutex.Unlock()
 	delete(s.streams, stream)
 	stream.closeLocked()
+	s.queueReply(s.visibilityChangedLocked())
 }
 
 // closeStreams は、アタッチしているものをすべて外す。

@@ -27,6 +27,9 @@ export type TerminalStream = {
   // would turn into two bytes if they were encoded as UTF-8.
   sendBinary: (data: string) => void;
   resize: (cols: number, rows: number) => void;
+  // reportShown tells the engine whether this browser shows the terminal, for
+  // the programs that asked for visibility reports (mode 2033).
+  reportShown: (shown: boolean) => void;
   close: () => void;
 };
 
@@ -125,6 +128,9 @@ export function openStream(ticket: string, streamPath: string, handlers: StreamH
     },
     resize(cols, rows) {
       push(JSON.stringify({ resize: { cols, rows } }));
+    },
+    reportShown(shown) {
+      push(JSON.stringify({ visible: shown }));
     },
     acknowledge(bytes) {
       parsed += bytes;
