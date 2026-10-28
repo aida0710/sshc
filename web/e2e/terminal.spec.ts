@@ -207,26 +207,48 @@ test("does not answer the queries in replayed output again after a reload", asyn
   expect(sentAfterReload.join("")).not.toContain("\u001b[?");
 });
 
-test("says only the oldest output is gone, not that the link was offline, when a session is shown again", async ({ page, installation }) => {
+test("says only the oldest output is gone, not that the link was offline, when a reloaded page shows a session", async ({ page, installation }) => {
   test.skip(process.platform === "win32", "seq is POSIX here");
   await installation.write(
     "sshc/metadata.json",
     JSON.stringify({ schemaVersion: 9, embeddedTerminal: { scrollbackBytes: 16384 } }),
   );
   await openApplication(page, installation);
-  const panel = await openSessionList(page);
+  await openSessionList(page);
   await openLocalShell(page);
   // More output than the 16 KiB the engine keeps for the session.
   const screen = await typeIntoTerminal(page, "seq -f 'line %06g' 4000; echo printed-$((40+2))");
   await expect(screen).toContainText("printed-42", { timeout: 20_000 });
+
+  // A reloaded page builds the terminal anew from the engine's replay.
+  await page.reload();
+  const reopened = await openSessionList(page);
+  await reopened.getByRole("list", { name: "Open sessions" }).getByRole("listitem").first().getByRole("button").first().click();
+
+  await expect(page.getByText("The session's oldest output is no longer in the engine replay buffer, so it is not shown here.")).toBeVisible();
+  await expect(page.getByText(/while the terminal link was offline/)).toHaveCount(0);
+});
+
+test("keeps the whole scrollback of a session shown again, past what the engine replays", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "seq and printf are POSIX here");
+  await openApplication(page, installation);
+  const panel = await openSessionList(page);
+  await openLocalShell(page);
+  // About 360 KB: fewer lines than the browser keeps, more bytes than the engine's 256 KiB replay.
+  const screen = await typeIntoTerminal(page, "for i in $(seq -w 1 3000); do printf 'line %s %0110d\\n' $i 0; done; echo printed-$((40+2))");
+  await expect(screen).toContainText("printed-42", { timeout: 30_000 });
   await openLocalShell(page);
   const rows = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
   await expect(rows).toHaveCount(2);
 
   await rows.first().getByRole("button").first().click();
+  await expect(screen).toContainText("printed-42", { timeout: 20_000 });
 
-  await expect(page.getByText("The session's oldest output is no longer in the engine replay buffer, so it is not shown here.")).toBeVisible();
-  await expect(page.getByText(/while the terminal link was offline/)).toHaveCount(0);
+  // The scrollback search reads the whole buffer: the first line is still there.
+  await screen.getByRole("button", { name: "Find" }).click();
+  await screen.getByRole("textbox", { name: "Search terminal output" }).fill("line 0001 0");
+  await expect(screen.getByRole("textbox", { name: "Search terminal output" }).locator("..").getByRole("status")).toHaveText("1/1");
+  await expect(page.getByText(/no longer in the engine replay buffer/)).toHaveCount(0);
 });
 
 test("refuses to open more sessions than the configured limit", async ({ page, installation }) => {

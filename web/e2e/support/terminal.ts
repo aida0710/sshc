@@ -1,13 +1,16 @@
 import type { Locator, Page } from "@playwright/test";
 
 
-const ROOT = ".xterm";
-const DRAWN_ROWS = ".xterm-rows";
-const SCREEN = ".xterm-screen";
-const KEYBOARD = ".xterm-helper-textarea";
-const SELECTION = ".xterm-selection div";
-const VIEWPORT = ".xterm-viewport";
-const SCROLLBAR_SLIDER = ".xterm-scrollable-element > .xterm-scrollbar.xterm-vertical > .xterm-slider";
+// The terminals on the screen, not the ones of sessions kept hidden after
+// they were left (data-split-view-kept).
+const SHOWN = ":not([data-split-view-kept] *)";
+const ROOT = `.xterm${SHOWN}`;
+const DRAWN_ROWS = `.xterm-rows${SHOWN}`;
+const SCREEN = `.xterm-screen${SHOWN}`;
+const KEYBOARD = `.xterm-helper-textarea${SHOWN}`;
+const SELECTION = `.xterm-selection${SHOWN} div`;
+const VIEWPORT = `.xterm-viewport${SHOWN}`;
+const SCROLLBAR_SLIDER = `.xterm-scrollable-element${SHOWN} > .xterm-scrollbar.xterm-vertical > .xterm-slider`;
 // These fit tests use 13px fonts: allow the 16px padding and one rounded row.
 export const maxTerminalUnusedHeightPx = 40;
 export async function waitForTerminalLayout(page: Page): Promise<void> {
@@ -141,24 +144,24 @@ export function surfaceBackgroundImage(page: Page): Promise<string> {
 // kitty images placed under it, one below), so a missing or blank image reads
 // as zero.
 export function drawnImagePixels(page: Page): Promise<number> {
-  return page.evaluate(() => {
+  return page.evaluate((shown) => {
     let drawn = 0;
-    for (const layer of document.querySelectorAll<HTMLCanvasElement>("canvas[class*='xterm-image-layer']")) {
+    for (const layer of document.querySelectorAll<HTMLCanvasElement>(`canvas[class*='xterm-image-layer']${shown}`)) {
       const context = layer.getContext("2d");
       if (context === null || layer.width === 0 || layer.height === 0) continue;
       const pixels = context.getImageData(0, 0, layer.width, layer.height).data;
       for (let index = 3; index < pixels.length; index += 4) if ((pixels[index] ?? 0) > 0) drawn += 1;
     }
     return drawn;
-  });
+  }, SHOWN);
 }
 
 // The left edge in pixels of the first `character` on each drawn row, for the
 // first `rows` rows that contain it. Only the DOM renderer draws rows as text.
 export function drawnCharacterColumns(page: Page, character: string, rows: number): Promise<number[]> {
-  return page.evaluate(({ character, rows }) => {
+  return page.evaluate(({ character, rows, drawnRows }) => {
     const lefts: number[] = [];
-    for (const row of document.querySelectorAll(".xterm-rows > div")) {
+    for (const row of document.querySelectorAll(`${drawnRows} > div`)) {
       const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
       for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
         const at = node.textContent?.indexOf(character) ?? -1;
@@ -172,5 +175,5 @@ export function drawnCharacterColumns(page: Page, character: string, rows: numbe
       if (lefts.length === rows) break;
     }
     return lefts;
-  }, { character, rows });
+  }, { character, rows, drawnRows: DRAWN_ROWS });
 }

@@ -78,3 +78,46 @@ export async function attachWebglRenderer(
     },
   };
 }
+
+// attachWebglWhileShown keeps the WebGL renderer only while the terminal is on
+// the screen. A hidden terminal (a session kept after it was left, a pane
+// behind Focus mode) gives back its GPU context and glyph textures and draws
+// with the DOM renderer, which costs nothing while nothing is displayed.
+export function attachWebglWhileShown(terminal: WebglTerminal, options: WebglOptions = {}): {
+  shown(visible: boolean): void;
+  dispose(): void;
+} {
+  let renderer: Disposable | null = null;
+  let attaching = false;
+  let wanted = false;
+  let disposed = false;
+  const settle = () => {
+    if (disposed) return;
+    if (!wanted) {
+      renderer?.dispose();
+      renderer = null;
+      return;
+    }
+    if (renderer !== null || attaching) return;
+    attaching = true;
+    void attachWebglRenderer(terminal, options).then((attached) => {
+      attaching = false;
+      if (disposed || !wanted) {
+        attached?.dispose();
+        return;
+      }
+      renderer = attached;
+    });
+  };
+  return {
+    shown(visible) {
+      wanted = visible;
+      settle();
+    },
+    dispose() {
+      disposed = true;
+      renderer?.dispose();
+      renderer = null;
+    },
+  };
+}
