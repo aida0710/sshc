@@ -1,5 +1,7 @@
 # Workspace操作整理 設計
 
+> **Superseded.** Live Workspaceと保存レイアウトは無くなり、ワークスペース（`pages/features/workspace.md`）と分割表示（`pages/features/split-view.md`）に置き換わった。以下は経緯の記録として残す。
+
 ## 目的
 
 ターミナル本文へ管理ボタンを重ねず、スマホでは接続先の切り替えと端末操作に集中できる画面にする。分割作成はDrag & Dropへ一本化し、一括操作は誤入力しにくい確認付きフローにする。

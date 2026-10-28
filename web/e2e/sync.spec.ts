@@ -182,7 +182,6 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
         contentType: "application/json",
         body: JSON.stringify({
           checkedAt: "2026-08-25T02:10:00Z",
-          headRevision: "b".repeat(64),
           historyTruncated: false,
           downloadTruncated: false,
           downloadedBytes: 5_700_000,
@@ -257,8 +256,6 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          fromRevision: "a".repeat(64),
-          toRevision: "b".repeat(64),
           added: ["connections/production.conf"],
           modified: ["config"],
           removed: ["connections/retired.conf"],
@@ -603,7 +600,6 @@ test("reviews and accepts a diverged remote head on a receive-only machine", asy
         contentType: "application/json",
         body: JSON.stringify({
           checkedAt: "2026-08-30T04:41:00Z",
-          headRevision: "c".repeat(64),
           historyTruncated: false,
           downloadTruncated: false,
           downloadedBytes: 4_100,

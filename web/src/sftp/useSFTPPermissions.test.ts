@@ -14,7 +14,7 @@ vi.mock("./chmodApi", async (importOriginal) => ({
 vi.mock("./api", () => ({ sftpApi: files }));
 
 const options = { fileMode: "644", directoryMode: "755", recursive: false };
-const plan: ChmodPlan = { revision: "plan-revision", selectionCount: 1, files: 1, directories: 0, skippedSymlinks: 0, options, actionToken: "b".repeat(43), actionExpiresAt: "2026-10-07T12:01:00Z" };
+const plan: ChmodPlan = { revision: "plan-revision", selectionCount: 1, files: 1, directories: 0, skippedSymlinks: 0, options, actionToken: "b".repeat(43) };
 const entry: RemoteEntry = { name: "file", path: "/srv/file", type: "file", size: 1, mode: "-rw-------", modifiedAt: "2026-10-07T12:00:00Z", revision: "original-revision" };
 
 function permissionFixture() {

@@ -183,7 +183,7 @@ describe("AboutPage", () => {
 
   it("confirms the update on the page and lists its progress there instead of in the sidebar dialog", async () => {
     const update = updates();
-    vi.mocked(update.previewUpdate).mockResolvedValue({ current: "v1.0.0", target: "v1.2.0", manager: "homebrew", actionToken: "confirmation", actionExpiresAt: "2026-10-19T02:00:00Z" });
+    vi.mocked(update.previewUpdate).mockResolvedValue({ current: "v1.0.0", target: "v1.2.0", manager: "homebrew", actionToken: "confirmation" });
     vi.mocked(update.startUpdate).mockResolvedValue({ id: "about-job", target: "v1.2.0", state: "installing", problem: "" });
     render(<><UpdateBadge api={update} showsProgressDialog={false} /><AboutPage api={api} updates={update} /></>);
     const page = screen.getByRole("region", { name: "About sshc" });

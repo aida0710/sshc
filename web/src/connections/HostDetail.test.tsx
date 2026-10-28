@@ -53,7 +53,7 @@ function savedState(): ConnectionSavedState {
 function integrations(): HostDetailApi {
   return {
     effective: vi.fn().mockResolvedValue({
-      alias: "bastion", tokenWarning: "", executableDirectives: [], sources: [],
+      alias: "bastion", executableDirectives: [], sources: [],
     }),
     reachability: vi.fn(),
     authentication: vi.fn(),

@@ -2060,6 +2060,7 @@ export const ja = {
   "sync.regionHint":
     "任意です。空欄の場合はautoを使用します。R2ではauto、AWS S3ではバケットのリージョンを指定してください。",
   "sync.accessKeyId": "アクセスキーID",
+  "sync.accessKeySaved": "保存済みのアクセスキーIDは末尾が{suffix}です。",
   "sync.secretAccessKey": "シークレットアクセスキー",
   "sync.credentialsNote":
     "バケットの認証情報はマスターパスワードで暗号化して保存し、スナップショットには含めません。スナップショットに含めると、1つのスナップショットを入手した第三者が以後のスナップショットも取得できるためです。",

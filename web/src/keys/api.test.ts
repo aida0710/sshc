@@ -28,7 +28,7 @@ describe("keysApi", () => {
     const base = {
       container: "", algorithm: "", keyType: "", bits: 0, encrypted: false,
       fingerprint: "", comment: "", permission: "0600", permissionRisk: false,
-      sizeBytes: 1, references: [], notes: [],
+      references: [], notes: [],
     };
     const items = [
       { ...base, id: "private", relativePath: "id_work", kind: "private_key" },
@@ -178,7 +178,6 @@ describe("keysApi", () => {
         comment: "aida@laptop",
         permission: "0600",
         permissionRisk: false,
-        sizeBytes: 444,
         references: [],
         notes: [],
       }],
@@ -193,7 +192,6 @@ describe("keysApi", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
       entries: [{
         id: "entry-1",
-        deletedAt: "2026-08-05T09:00:00Z",
         ageDays: 40,
         stale: true,
         files: [],

@@ -32,7 +32,7 @@ test("confirms Homebrew updates, streams brew's output while it runs and shows t
     }) });
   });
   await page.route("**/api/v1/update/preview", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ current: "v1.0.0", target: "v1.1.0", manager: "homebrew", actionToken: "homebrew-confirmation", actionExpiresAt: "2026-10-10T09:00:00Z" }) });
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ current: "v1.0.0", target: "v1.1.0", manager: "homebrew", actionToken: "homebrew-confirmation" }) });
   });
   await openApplication(page, installation);
   const navigation = page.getByRole("navigation", { name: "Primary" });

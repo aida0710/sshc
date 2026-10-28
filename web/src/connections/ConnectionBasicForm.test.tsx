@@ -24,7 +24,6 @@ const privateKey = {
   comment: "work",
   permission: "0600",
   permissionRisk: false,
-  sizeBytes: 444,
   references: [],
   notes: [],
 };

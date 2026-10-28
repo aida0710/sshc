@@ -12,7 +12,7 @@ sshc does not auto-merge snapshots. It compares local and remote revisions and m
 3. Push when local is authoritative, or pull when remote is authoritative.
 4. Resolve conflicts and removals with an explicit operation.
 
-`sshc sync now` follows the configured direction and performs only decisions that are safe to automate.
+`sshc sync now` runs one automatic sync in the configured direction. With send and receive, it first takes in remote changes that do not conflict and do not delete local files, then sends local changes. Receive-only only receives and send-only only sends. It stops without overwriting anything when changes on both sides conflict, when receiving would delete local files, or when the reviewed remote history has moved or been deleted.
 
 Conflict previews show `0600` and `0700` permission differences alongside content changes, separated into the last sync, this machine, and the remote. Files kept locally as `0400` or executable `0500` are checked against their actual permissions before replacement.
 
@@ -30,9 +30,11 @@ When receive-only history diverges, automatic receive stops rather than rolling 
 
 Force Push issues a short-lived confirmation token bound to the configured binding generation, target identity, and current live ETag. Inside the operation lock, sshc verifies the same binding and target again before using a conditional PUT against that ETag. A later remote write or a switch to another bucket or path—even one with the same ETag—is therefore rejected without overwriting it.
 
-Force Pull previews conflicts and removals with the remote selected as authoritative. Apply verifies the same ETag and revision again and writes nothing locally if the remote changed.
+Force Pull previews conflicts and removals with the remote selected as authoritative. Apply verifies again that neither the reviewed remote snapshot nor the local files changed, and writes nothing locally if either did.
 
 Bucket history is read directly from S3. The screen initially shows the latest five entries. Expand the list or reveal long S3 object names only when needed. Listing encrypted objects does not require decryption; content diffs and restoration require the encryption key.
+
+Showing or restoring history on a receive-only device never rewrites the snapshot in S3.
 
 Remote snapshots are read only in schema v6. Schema v5 snapshots written by sshc before v0.24.0 are not read. If a v5 snapshot is still the live snapshot of a target, overwrite it with Force Push from a device allowed to send. v5 snapshots left in history can be neither shown nor restored.
 

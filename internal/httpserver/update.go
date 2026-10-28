@@ -150,7 +150,7 @@ func (h *UpdateHandlers) Preview(c *echo.Context) error {
 		return response
 	}
 	return c.JSON(http.StatusOK, api.UpdatePreview{Current: plan.Current, Target: plan.Target,
-		Manager: api.UpdatePreviewManager(plan.Installation.Manager), ActionToken: token.Token, ActionExpiresAt: token.ExpiresAt})
+		Manager: api.UpdatePreviewManager(plan.Installation.Manager), ActionToken: token.Token})
 }
 
 func (h *UpdateHandlers) Start(c *echo.Context) error {

@@ -18,7 +18,6 @@ function buildApi(overrides: Partial<DiagnosticsApi> = {}): DiagnosticsApi {
     }),
     effective: vi.fn().mockResolvedValue({
       alias: "bastion",
-      tokenWarning: "OpenSSH does not shell-escape the tokens it expands.",
       executableDirectives: [],
       values: [{ keyword: "hostname", values: ["203.0.113.10"] }],
       sources: [
@@ -30,7 +29,6 @@ function buildApi(overrides: Partial<DiagnosticsApi> = {}): DiagnosticsApi {
     reachability: vi.fn().mockResolvedValue({
       address: "203.0.113.10:22",
       outcome: "reached",
-      elapsedMs: 12,
       detail: "",
       // engine の notice は英語の定数で、画面は読まない。
       notice: "Engine notice that the screen does not show.",
@@ -41,7 +39,6 @@ function buildApi(overrides: Partial<DiagnosticsApi> = {}): DiagnosticsApi {
       method: "publickey",
       detail: "",
       truncated: false,
-      elapsedMs: 40,
     }),
     ...overrides,
   };
@@ -49,13 +46,13 @@ function buildApi(overrides: Partial<DiagnosticsApi> = {}): DiagnosticsApi {
 
 const unavoidableProxy = {
   keyword: "ProxyCommand", command: "nc -X connect %h %p", path: "~/.ssh/config", line: 3,
-  condition: "Host bastion", onEvaluate: false, onConnect: true, overridable: false,
+  condition: "Host bastion", onConnect: true, overridable: false,
 };
 
 describe("DiagnosticsPanel", () => {
   it("shows the command an authentication test would run and tests only after it is confirmed", async () => {
     const effective = vi.fn().mockResolvedValue({
-      alias: "bastion", tokenWarning: "", executableDirectives: [unavoidableProxy], values: [], sources: [], complexities: [], route: [],
+      alias: "bastion", executableDirectives: [unavoidableProxy], values: [], sources: [], complexities: [], route: [],
     });
     const api = buildApi({ effective });
     render(<LanguageProvider><DiagnosticsPanel api={api} host="bastion" /></LanguageProvider>);
@@ -71,7 +68,7 @@ describe("DiagnosticsPanel", () => {
 
   it("tests authentication without asking when every command can be turned off", async () => {
     const effective = vi.fn().mockResolvedValue({
-      alias: "bastion", tokenWarning: "", executableDirectives: [{ ...unavoidableProxy, overridable: true }],
+      alias: "bastion", executableDirectives: [{ ...unavoidableProxy, overridable: true }],
       values: [], sources: [], complexities: [], route: [],
     });
     const api = buildApi({ effective });
@@ -155,7 +152,7 @@ describe("DiagnosticsPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Check reachability" }));
     await userEvent.clear(target);
     await userEvent.type(target, "nas");
-    await act(async () => answer({ address: "203.0.113.10:22", outcome: "reached", elapsedMs: 12, detail: "", notice: "" }));
+    await act(async () => answer({ address: "203.0.113.10:22", outcome: "reached", detail: "", notice: "" }));
 
     expect(screen.queryByText(/203\.0\.113\.10:22/)).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Reachability" })).not.toBeInTheDocument();
@@ -219,7 +216,6 @@ describe("DiagnosticsPanel", () => {
       reachability: vi.fn().mockResolvedValue({
         address: "10.9.9.1:22",
         outcome: "not_checked",
-        elapsedMs: 0,
         detail: "",
         notice: "Engine notice that the screen does not show.",
       }),
@@ -242,7 +238,6 @@ describe("DiagnosticsPanel", () => {
         method: "",
         detail: "",
         truncated: false,
-        elapsedMs: 40,
       }),
     });
     render(<LanguageProvider initial="ja"><DiagnosticsPanel api={api} /></LanguageProvider>);
@@ -277,7 +272,6 @@ describe("DiagnosticsPanel", () => {
     const api = buildApi({
       effective: vi.fn().mockResolvedValue({
         alias: "lab",
-        tokenWarning: "",
         executableDirectives: [],
         sources: [],
         complexities: [
@@ -308,7 +302,6 @@ describe("DiagnosticsPanel", () => {
     const api = buildApi({
       effective: vi.fn().mockResolvedValue({
         alias: "deep",
-        tokenWarning: "",
         executableDirectives: [],
         sources: [],
         complexities: [],
@@ -334,7 +327,6 @@ describe("DiagnosticsPanel", () => {
     const api = buildApi({
       effective: vi.fn().mockResolvedValue({
         alias: "bastion",
-        tokenWarning: "",
         executableDirectives: [],
         sources: [
           { keyword: "Port", value: "2222", path: "~/.ssh/config", line: 4, condition: "Host bastion", kind: "exact", winner: true },

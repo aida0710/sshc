@@ -78,6 +78,18 @@ describe("SettingsPanel", () => {
     expect(await within(region).findByText(/Auto-lock applies now/)).toBeVisible();
   });
 
+  it("offers no port in the Android app, whose saved data belongs to the port it opened on", async () => {
+    window.sshcAndroid = { notificationPermission: () => "default" } as unknown as NonNullable<Window["sshcAndroid"]>;
+    try {
+      render(<SettingsPanel api={buildApi({ engineSettings: vi.fn().mockResolvedValue({ port: 54448 }) })} />);
+      const region = screen.getByRole("region", { name: "Engine" });
+      await waitFor(() => expect(within(region).getByLabelText("Vault auto-lock")).toBeEnabled());
+      expect(within(region).queryByLabelText("Port")).toBeNull();
+    } finally {
+      delete window.sshcAndroid;
+    }
+  });
+
   it("shows a persistent warning and saves restart-only locking", async () => {
     const user = userEvent.setup();
     const setEngineSettings = vi.fn().mockResolvedValue(undefined);
