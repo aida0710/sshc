@@ -2191,9 +2191,10 @@ type TerminalDirectory struct {
 
 // TerminalExit defines model for TerminalExit.
 type TerminalExit struct {
-	At     string `json:"at"`
-	Code   int    `json:"code"`
-	Signal string `json:"signal"`
+	At             string `json:"at"`
+	Code           int    `json:"code"`
+	ConnectionLost *bool  `json:"connectionLost,omitempty"`
+	Signal         string `json:"signal"`
 }
 
 // TerminalForward defines model for TerminalForward.

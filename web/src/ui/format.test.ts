@@ -1,16 +1,6 @@
-import { renderHook } from "@testing-library/react";
-import { createElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
-import { LanguageProvider, useTranslate, type Translate } from "../i18n/context";
-import type { Locale } from "../i18n/locale";
+import { translatorFor } from "../testing/translator";
 import { formatBytes, formatDateTime, formatDuration, formatOptionalDateTime, formatTimeOfDay } from "./format";
-
-function translatorFor(locale: Locale): Translate {
-  const { result } = renderHook(() => useTranslate(), {
-    wrapper: ({ children }: { children: ReactNode }) => createElement(LanguageProvider, { initial: locale, children }),
-  });
-  return result.current;
-}
 
 describe("formatBytes", () => {
   it.each([

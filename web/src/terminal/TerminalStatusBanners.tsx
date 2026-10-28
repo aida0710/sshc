@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { terminalProblemKey } from "./sessions";
+import { exitedAbnormally } from "./sessionStatus";
 import type { StreamLink } from "./streamLink";
 
 const notice = "shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink";
@@ -162,11 +163,13 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
         </div>
       )}
       {session.exited === undefined ? null : (
-        <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-card px-3 py-1.5 text-xs text-ink-muted">
-          <p className="min-w-0 grow">
-            {session.exited.signal === ""
-              ? t("terminal.exitedWithCode", { code: String(session.exited.code) })
-              : t("terminal.exitedWithSignal", { signal: session.exited.signal })}
+        <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-card px-3 py-1.5 text-xs">
+          <p className={`min-w-0 grow ${exitedAbnormally(session) ? "text-danger" : "text-ink-muted"}`}>
+            {session.exited.connectionLost === true
+              ? t("terminal.exitedWithConnectionLost")
+              : session.exited.signal === ""
+                ? t("terminal.exitedWithCode", { code: String(session.exited.code) })
+                : t("terminal.exitedWithSignal", { signal: session.exited.signal })}
           </p>
           {session.kind !== "ssh" || session.alias === undefined || onReconnect === undefined ? null : (
             <button

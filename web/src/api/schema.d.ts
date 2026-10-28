@@ -3299,6 +3299,7 @@ export interface components {
             code: number;
             signal: string;
             at: string;
+            connectionLost?: boolean;
         };
         TerminalSessionList: {
             sessions: components["schemas"]["TerminalSession"][];

@@ -728,6 +728,10 @@ func TestAutomaticReconnectCanBeStoppedFromTheAPI(t *testing.T) {
 		listed.Sessions[0].Problem != "reconnect_stopped" || listed.Sessions[0].Reconnect != nil {
 		t.Fatalf("sessions after stop = %#v", listed.Sessions)
 	}
+	// The connection, not the program, ended; the screen says so instead of exit code -1.
+	if exited := listed.Sessions[0].Exited; exited == nil || exited.ConnectionLost == nil || !*exited.ConnectionLost {
+		t.Fatalf("exit after the connection was lost = %#v", exited)
+	}
 	response, _ = fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions/absent/reconnect/stop", "")
 	if response.StatusCode != http.StatusNotFound {
 		t.Fatalf("stop of an unknown session = %d", response.StatusCode)
@@ -961,7 +965,7 @@ func TestTheStreamCarriesOutputKeystrokesAndTheExit(t *testing.T) {
 	if len(listed.Sessions) != 1 || listed.Sessions[0].Id != id || listed.Sessions[0].Exited == nil {
 		t.Fatalf("sessions = %#v", listed.Sessions)
 	}
-	if listed.Sessions[0].Exited.Code != 42 {
+	if listed.Sessions[0].Exited.Code != 42 || listed.Sessions[0].Exited.ConnectionLost != nil {
 		t.Fatalf("exit = %#v", listed.Sessions[0].Exited)
 	}
 	if listed.Sessions[0].State != api.TerminalSessionState("exited") {
