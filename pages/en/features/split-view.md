@@ -29,7 +29,7 @@ A session can belong to only one split. Adding it to another split removes it fr
 
 | Action | How |
 | --- | --- |
-| Resize | Drag a divider, or focus it and use the arrow keys. Ratios range from 10% to 90% |
+| Resize | Drag a divider, or focus it and use the arrow keys. Ratios range from 10% to 90%, and no pane gets smaller than its heading and one row of the terminal, or narrower than its heading's buttons |
 | Swap | Drag a pane's swap button onto another pane, or select the swap button on each pane in turn |
 | Focus one pane | Select the focus button in its heading. Choose **Return to split view** or press Esc to restore the split |
 | Close a pane | Select **Close pane** in its heading. The session keeps running and remains in the sidebar |

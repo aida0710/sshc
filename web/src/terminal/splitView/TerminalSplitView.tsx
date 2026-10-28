@@ -137,9 +137,9 @@ export function TerminalSplitView({ splitView, sessions, renderTerminal }: {
               </div>
             );
           })}
-          {singleVisible ? null : dividers.map(({ path, style, direction, ratio }) => (
+          {singleVisible ? null : dividers.map(({ path, style, direction, ratio, minimum }) => (
             <div key={path.join("/")} className="pointer-events-none absolute" style={style}>
-              <SplitResizeHandle direction={direction} ratio={ratio} label={t("splitView.resize")} look="gap"
+              <SplitResizeHandle direction={direction} ratio={ratio} minimum={minimum} label={t("splitView.resize")} look="gap"
                 style={direction === "horizontal" ? { position: "absolute", pointerEvents: "auto", left: `${ratio}%`, top: 0, height: "100%", transform: "translateX(-50%)" } : { position: "absolute", pointerEvents: "auto", top: `${ratio}%`, left: 0, width: "100%", transform: "translateY(-50%)" }}
                 onRatioChange={(next) => dispatch({ type: "resize", path, ratio: next })} />
             </div>

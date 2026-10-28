@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptySplitView, paneSessionIds, reduceSplitView, type PaneEdge } from "./layout";
-import { nearestPaneEdge, splitViewGeometry } from "./geometry";
+import { fitSplitRatio } from "../../ui/SplitResizeHandle";
+import { minimumExtentPx, minimumPanePx, nearestPaneEdge, splitViewGeometry } from "./geometry";
 
 const single = reduceSplitView(emptySplitView, { type: "select", sessionId: "one" });
 const pair = reduceSplitView(single, { type: "split", sourceSessionId: "two", targetSessionId: "one", edge: "right" });
@@ -77,5 +78,26 @@ describe("split view layout", () => {
     ]);
     expect(geometry.dividers.map((divider) => divider.path)).toEqual([[], ["second"]]);
     expect(nearestPaneEdge({ x: 590, y: 100 }, { width: 600, height: 400 })).toBe("right");
+  });
+});
+
+describe("how small a split pane can be dragged", () => {
+  it("adds up panes along a split and takes the largest across it", () => {
+    // four: one and four are stacked on the left, two and three on the right.
+    expect(minimumExtentPx(four.root!, "vertical")).toBe(2 * minimumPanePx.height);
+    expect(minimumExtentPx(four.root!, "horizontal")).toBe(2 * minimumPanePx.width);
+    const { dividers } = splitViewGeometry(four.root);
+    expect(dividers[0]?.minimum).toEqual({ first: minimumPanePx.width, second: minimumPanePx.width });
+  });
+
+  it("keeps both halves at their minimum in px instead of 10% of a nested split", () => {
+    // Two panes stacked in the top 10% of a 760px split: the inner split is 76px tall.
+    const minimum = { first: minimumPanePx.height, second: minimumPanePx.height };
+    expect(fitSplitRatio(10, 760, minimum)).toBe(11);
+    expect(fitSplitRatio(95, 760, minimum)).toBe(89);
+    expect(fitSplitRatio(40, 760, minimum)).toBe(40);
+    // When neither minimum fits, the two share the room.
+    expect(fitSplitRatio(10, 100, minimum)).toBe(50);
+    expect(fitSplitRatio(10, 100, { first: 3 * minimumPanePx.height, second: minimumPanePx.height })).toBe(75);
   });
 });
