@@ -178,6 +178,13 @@ func (d Dialer) start(remote *ssh.Session, target Target, session *Session) erro
 		// raw mode. Let the server keep its native PTY speeds and only request the
 		// interactive echo behaviour the browser terminal expects.
 		modes := ssh.TerminalModes{ssh.ECHO: 1}
+		// 新しく作った PTY は IUTF8 が切れていて、行単位で読むプログラム（cat、read、
+		// input()）の Backspace が日本語を1バイトずつ消す。OpenSSH の ssh は手元の
+		// 端末の設定ごと送るので立つ。Shift_JIS などの接続では、1文字が UTF-8 の
+		// 形をしていないので立てない。
+		if target.Encoding == "" || target.Encoding == textencoding.UTF8 {
+			modes[ssh.IUTF8] = 1
+		}
 		// 寸法は送る直前に読む。SetEnv や agent 転送の往復のあいだに届いた
 		// Resize を、pty-req に載せるためである。
 		size := session.currentSize()

@@ -20,6 +20,7 @@ import (
 	"sshc/internal/knownhosts"
 	"sshc/internal/sshclient"
 	"sshc/internal/terminal"
+	"sshc/internal/textencoding"
 )
 
 type closeObservedConn struct {
@@ -126,15 +127,41 @@ func TestOpenRunsAShellAndCarriesItsOutput(t *testing.T) {
 	if term != terminal.DefaultTerminalType || size != [2]uint32{120, 40} {
 		t.Errorf("pty-req = %q %v", term, size)
 	}
+	// IUTF8 は、行単位で読むプログラムの Backspace が UTF-8 の1文字を消すのに要る。
 	modes := server.PTYModes()
-	if len(modes) != 1 || modes[ssh.ECHO] != 1 {
-		t.Errorf("pty modes = %v, want only ECHO=1", modes)
+	if len(modes) != 2 || modes[ssh.ECHO] != 1 || modes[ssh.IUTF8] != 1 {
+		t.Errorf("pty modes = %v, want only ECHO=1 and IUTF8=1", modes)
 	}
 	if _, exists := modes[ssh.TTY_OP_ISPEED]; exists {
 		t.Error("pty request invented an input baud rate")
 	}
 	if _, exists := modes[ssh.TTY_OP_OSPEED]; exists {
 		t.Error("pty request invented an output baud rate")
+	}
+}
+
+func TestALegacyEncodingDoesNotAskForUTF8LineEditing(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell: func(channel ssh.Channel) {
+			_, _ = io.WriteString(channel, "welcome to the fixture\r\n")
+		},
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	target := targetWith(server, path)
+	// Shift_JIS の1文字は UTF-8 の形をしていないので、IUTF8 の Backspace が文字を壊す。
+	target.Encoding = textencoding.ShiftJIS
+
+	process, err := dialerFor(t, server, auth).Open(context.Background(), target, terminal.Size{Cols: 120, Rows: 40})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	readUntil(t, process, "welcome to the fixture")
+	if modes := server.PTYModes(); len(modes) != 1 || modes[ssh.ECHO] != 1 {
+		t.Errorf("pty modes = %v, want only ECHO=1", modes)
 	}
 }
 
