@@ -149,7 +149,7 @@ export function QuickConnectBrowser({
             event.preventDefault();
             connect();
           }}
-          className="flex w-full min-w-0 items-center gap-3 rounded-xl p-3.5 pr-12 text-left disabled:cursor-wait desktop-layout:pr-3.5"
+          className="flex w-full min-w-0 items-center gap-3 rounded-xl p-3.5 pr-12 text-left disabled:cursor-wait hover-reveal:pr-3.5"
         >
           <OperatingSystemIcon os={server.os} colour={server.colour} look="accentTile" />
           <span className="min-w-0 flex-1">
@@ -169,9 +169,10 @@ export function QuickConnectBrowser({
               )}
             </span>
           </span>
-          {/* On a PC-sized screen, the "…" button appears over the group name while the pointer is on the card. */}
+          {/* Where the "…" shows only under the pointer (hover-reveal), it appears over the group name; elsewhere the
+              card keeps room for it. */}
           <span
-            className="max-w-[30%] shrink-0 truncate text-[11px] text-ink-faint transition-opacity duration-150 desktop-layout:group-hover/row:opacity-0 desktop-layout:group-focus-within/row:opacity-0"
+            className="max-w-[30%] shrink-0 truncate text-[11px] text-ink-faint transition-opacity duration-150 hover-reveal:group-hover/row:opacity-0 hover-reveal:group-focus-within/row:opacity-0"
             title={groupName}
           >
             {groupName}

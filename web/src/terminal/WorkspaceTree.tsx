@@ -221,6 +221,10 @@ export function WorkspaceTree({
           return (
             // A hidden workspace shown on request is dimmed, sessions and all.
             <li key={workspace.id} className={`not-first:mt-1.5 ${workspace.hidden ? "opacity-60" : ""}`}>
+              {/* Like the group headings of the connection list, a workspace's name stays under the Workspaces
+                  heading while its sessions scroll by, and gives way to the next workspace's. The offset is the
+                  heading's height (48px on a phone, where its buttons are 44px touch targets). */}
+              <div className="sticky top-12 z-[1] bg-sidebar md:top-[34px]">
               <WorkspaceRow
                 name={name}
                 sessionCount={members.length}
@@ -234,6 +238,7 @@ export function WorkspaceTree({
                 acceptsSession={heldWorkspace !== null && heldWorkspace !== workspace.id}
                 onDropSession={(id) => moveSessionInto(workspace.id, members, id, null)}
               />
+              </div>
               {expanded ? (
                 <div className="pl-1">
                   <SessionList
