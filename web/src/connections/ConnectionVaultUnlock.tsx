@@ -3,9 +3,10 @@ import { useTranslate } from "../i18n/context";
 import { PasswordField } from "../ui/PasswordField";
 import { Button } from "../ui/surface";
 
-// CreateConnectionVaultPrompt は、パスワードで認証する接続を作る前に、Vault の
-// ロックを解除する（無ければ作る）欄である。作るときだけ確認の入力を求める。
-export function CreateConnectionVaultPrompt({
+// ConnectionVaultUnlock asks for the master password before a connection that keeps a password in the vault
+// is saved: it unlocks the vault, or creates it, asking for the password twice only then. Creating a
+// connection and editing one show the same fields.
+export function ConnectionVaultUnlock({
   vault,
   masterPassword,
   onMasterPasswordChange,
@@ -26,17 +27,15 @@ export function CreateConnectionVaultPrompt({
 }) {
   const t = useTranslate();
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-notice-line bg-notice p-3">
-      <p className="text-sm text-notice-ink">{t(vault.exists ? "conn.createVaultLocked" : "conn.createVaultMissing")}</p>
+    <div className="flex flex-col gap-2.5 rounded-[9px] bg-notice p-3">
+      <p className="text-xs leading-[18px] text-notice-ink">
+        {t(vault.exists ? "conn.vaultLockedBeforeSave" : "conn.vaultMissingBeforeSave")}
+      </p>
       <PasswordField label={t("conn.createMasterPassword")} value={masterPassword} onChange={onMasterPasswordChange} />
       {vault.exists ? null : (
-        <PasswordField
-          label={t("conn.createConfirmMaster")}
-          value={masterConfirmation}
-          onChange={onMasterConfirmationChange}
-        />
+        <PasswordField label={t("conn.createConfirmMaster")} value={masterConfirmation} onChange={onMasterConfirmationChange} />
       )}
-      <Button kind="primary" disabled={busy || !canOpen} onClick={onOpen}>
+      <Button kind="primary" className="self-start" disabled={!canOpen} busy={busy} onClick={onOpen}>
         {t(vault.exists ? "conn.createUnlockVault" : "conn.createInitialiseVault")}
       </Button>
     </div>

@@ -466,7 +466,7 @@ describe("ConnectionBasicForm", () => {
 
     await user.clear(screen.getByLabelText("Host name or IP address"));
     await user.type(screen.getByLabelText("Host name or IP address"), "draft.example");
-    expect(await screen.findByText("Unlock the encrypted vault before saving Basic settings.")).toBeInTheDocument();
+    expect(await screen.findByText("Unlock the encrypted vault before saving.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
 
     await user.type(screen.getByLabelText("Master password"), "the master password");

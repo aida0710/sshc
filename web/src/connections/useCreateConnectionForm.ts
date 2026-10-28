@@ -14,6 +14,7 @@ import { meetsMasterPasswordMinimum } from "../secrets/masterPasswordLength";
 import type { CreateConnectionAuthenticationKind, CreateConnectionDraft } from "./createConnectionDraft";
 import { createConnectionFieldErrors } from "./createConnectionValidation";
 import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
+import { openVaultCredentials, readVaultCredentials } from "./vaultCredentials";
 
 export type CreateConnectionFormOptions = {
   config?: Pick<typeof configApi, "createConnection">;
@@ -75,9 +76,8 @@ export function useCreateConnectionForm({
 
   useEffect(() => {
     let active = true;
-    void Promise.all([secrets.passwordVault(), keys.inventory()])
-      .then(async ([status, inventory]) => {
-        const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
+    void Promise.all([readVaultCredentials(secrets), keys.inventory()])
+      .then(([{ status, listed }, inventory]) => {
         if (!active) return;
         const passwordCredentials = listed.filter((credential) => credential.kind === "password");
         const identities = selectablePrivateKeys(inventory);
@@ -156,10 +156,7 @@ export function useCreateConnectionForm({
     setVaultBusy(true);
     setError("");
     try {
-      const status = vault.exists
-        ? await secrets.unlockVault(masterPassword)
-        : await secrets.initialiseVault(masterPassword);
-      const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
+      const { status, listed } = await openVaultCredentials(secrets, vault, masterPassword);
       const passwordCredentials = listed.filter((credential) => credential.kind === "password");
       setVault(status);
       setCredentials(passwordCredentials);

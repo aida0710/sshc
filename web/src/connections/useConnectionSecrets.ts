@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { openVaultCredentials, readVaultCredentials } from "./vaultCredentials";
 import type { HostDetail } from "../api/config";
 import type { Credential } from "../api/credentials";
 import type { PasswordEligibility, PasswordVaultStatus } from "../api/vault";
@@ -92,10 +93,9 @@ export function useConnectionSecrets({ detail, resetKey, keys, secrets, savedSta
 
     void Promise.all([
       keys.inventory(),
-      secrets.passwordVault(),
+      readVaultCredentials(secrets),
       secrets.passwordEligibility(alias),
-    ]).then(async ([inventory, status, nextEligibility]) => {
-      const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
+    ]).then(([inventory, { status, listed }, nextEligibility]) => {
       if (!active) return;
       setPrivateKeys(selectablePrivateKeys(inventory));
       setKeyOptionsStatus("ready");
@@ -124,15 +124,8 @@ export function useConnectionSecrets({ detail, resetKey, keys, secrets, savedSta
     setVaultBusy(true);
     setError("");
     try {
-      const status = vault.exists
-        ? await secrets.unlockVault(masterPassword)
-        : await secrets.initialiseVault(masterPassword);
-      const [listed, nextEligibility] = status.unlocked
-        ? await Promise.all([
-            secrets.credentials().then((response) => response.credentials),
-            secrets.passwordEligibility(alias),
-          ])
-        : [[], eligibility];
+      const { status, listed } = await openVaultCredentials(secrets, vault, masterPassword);
+      const nextEligibility = status.unlocked ? await secrets.passwordEligibility(alias) : eligibility;
       setVault(status);
       setCredentials(credentialStateOf(alias, status, listed));
       setEligibility(nextEligibility);
@@ -149,8 +142,7 @@ export function useConnectionSecrets({ detail, resetKey, keys, secrets, savedSta
   // After a save changed what the vault holds for this host.
   async function refreshCredentials(): Promise<void> {
     try {
-      const status = await secrets.passwordVault();
-      const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
+      const { status, listed } = await readVaultCredentials(secrets);
       setVault(status);
       setCredentials(credentialStateOf(alias, status, listed));
       setCredentialOptionsStatus(status.unlocked ? "ready" : "locked");

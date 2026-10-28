@@ -2724,10 +2724,8 @@ export const ja = {
   "conn.createConfirmMaster": "マスターパスワードの確認",
   "conn.createInitialiseVault": "暗号化Vaultを作成",
   "conn.createUnlockVault": "Vaultのロックを解除",
-  "conn.createVaultMissing":
-    "この接続を保存する前に暗号化Vaultを作成してください。",
-  "conn.createVaultLocked":
-    "この接続を保存する前にVaultのロックを解除してください。",
+  "conn.vaultMissingBeforeSave": "保存する前に暗号化Vaultを作成してください。",
+  "conn.vaultLockedBeforeSave": "保存する前にVaultのロックを解除してください。",
   "conn.createVaultFailed": "暗号化Vaultを作成できませんでした。",
   "conn.createUnlockFailed": "Vaultのロックを解除できませんでした。",
   "conn.createNeedVault": "続行するにはVaultのロックを解除してください。",
@@ -2838,10 +2836,6 @@ export const ja = {
   "conn.basicEmptyPasswordUnchanged":
     "空欄のままならパスワードを変更しません。",
   "conn.basicPasswordStale": "接続先の設定が変わったため、保存済みパスワードを使っていません。基本設定を保存すると、今の設定で使います。",
-  "conn.basicVaultMissing":
-    "基本設定を保存する前に暗号化Vaultを作成してください。",
-  "conn.basicVaultLocked":
-    "基本設定を保存する前にVaultのロックを解除してください。",
   "conn.basicNeedVault":
     "この下書きを保存するにはVaultのロックを解除してください。",
   "conn.basicPasswordBlocked":
