@@ -87,28 +87,6 @@ func (s *Service) planFileEdit(graph *config.Graph, request EditRequest) (planne
 			BuildFileDiff(s.displayPath(change.Path), previous, change.Contents))
 	}
 
-	if request.Kind == EditComment {
-		stored, precondition, err := s.metadata.Load()
-		if err != nil {
-			return planned{}, err
-		}
-		cleared := ClearHostNote(stored, HostIdentity{Path: request.Path, Alias: request.Alias})
-		change, err := s.metadata.Change(cleared, precondition)
-		if err != nil {
-			return planned{}, err
-		}
-		previous, _, err := s.readFile(change.Path)
-		if err != nil {
-			return planned{}, err
-		}
-		if !bytes.Equal(previous, change.Contents) {
-			prepared.changes = append(prepared.changes, change)
-			prepared.base[filepath.Clean(change.Path)] = previous
-			prepared.preview.Diffs = append(prepared.preview.Diffs,
-				BuildFileDiff(s.displayPath(change.Path), previous, change.Contents))
-		}
-	}
-
 	if request.Alias != "" {
 		pending := map[string][]byte{filepath.Clean(absolute): updated}
 		after, err := s.resolveWith(pending)

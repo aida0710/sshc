@@ -4079,7 +4079,6 @@ export interface components {
             detectedOS?: "" | "server" | "linux" | "amazonlinux" | "ubuntu" | "debian" | "redhat" | "fedora" | "centos" | "rocky" | "almalinux" | "arch" | "alpine" | "opensuse" | "freebsd" | "macos" | "windows";
             detectedOSBinding?: string;
             colour?: string;
-            note?: string;
             order?: number;
             orphan?: boolean;
             appearance?: components["schemas"]["TerminalAppearance"];
@@ -4102,7 +4101,6 @@ export interface components {
         GroupMetadata: {
             name: string;
             colour?: string;
-            note?: string;
             order?: number;
             hidden?: boolean;
             settings?: components["schemas"]["Setting"][];
@@ -4333,7 +4331,6 @@ export interface components {
             directory: string;
             keyDirectory: string;
             colour?: string;
-            note?: string;
             order?: number;
             settings?: components["schemas"]["Setting"][];
             memberCount: number;

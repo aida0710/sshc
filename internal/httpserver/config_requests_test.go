@@ -84,14 +84,14 @@ func TestValidateEditRequestEnforcesEveryKindsRequirements(t *testing.T) {
 		}, true},
 		{"groups with key material", application.EditRequest{
 			Kind:   application.EditGroups,
-			Groups: []application.GroupMetadata{{Name: "work", Note: "x", Settings: []application.Setting{{Keyword: "IdentityFile", Values: []string{"-----BEGIN OPENSSH PRIVATE KEY-----"}}}}},
+			Groups: []application.GroupMetadata{{Name: "work", Settings: []application.Setting{{Keyword: "IdentityFile", Values: []string{"-----BEGIN OPENSSH PRIVATE KEY-----"}}}}},
 		}, true},
 		{"metadata without an alias", application.EditRequest{Kind: application.EditMetadata, Path: "config"}, true},
 		{"metadata with key material", application.EditRequest{
 			Kind: application.EditMetadata, Path: "config", Alias: "a",
 			HostMetadata: &application.HostMetadata{
 				Identity: application.HostIdentity{Path: "config", Alias: "a"},
-				Note:     "-----BEGIN OPENSSH PRIVATE KEY-----",
+				Tags:     []string{"-----BEGIN OPENSSH PRIVATE KEY-----"},
 			},
 		}, true},
 		{"metadata whose base belongs to another connection", application.EditRequest{

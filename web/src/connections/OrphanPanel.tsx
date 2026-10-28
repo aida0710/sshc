@@ -13,7 +13,6 @@ type OrphanPanelProps = {
 
 function describe(entry: HostMetadata, t: Translate): string {
   const parts: string[] = [];
-  if (entry.note !== undefined && entry.note !== "") parts.push(t("orphan.note", { note: entry.note }));
   if (entry.tags !== undefined && entry.tags.length > 0) parts.push(t("orphan.tags", { tags: entry.tags.join(", ") }));
   if (entry.colour !== undefined && entry.colour !== "") parts.push(t("orphan.colour", { colour: entry.colour }));
   return parts.length === 0 ? t("orphan.noSettings") : parts.join(" · ");

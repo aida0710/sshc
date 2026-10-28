@@ -610,7 +610,7 @@ func TestSavingGroupsRefusesAProxyCommandWithAQuoteThatIsNotClosed(t *testing.T)
 func TestSaveRenameUpdatesTheHostLineAndMetadataTogether(t *testing.T) {
 	service, workspace := newTestService(t)
 	metadata := NewMetadata()
-	metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: "config", Alias: "bastion"}, Note: "keep me"}}
+	metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: "config", Alias: "bastion"}, Tags: []string{"keep me"}}}
 	seedMetadata(t, service, metadata)
 
 	if _, err := service.Save(EditRequest{
@@ -629,7 +629,7 @@ func TestSaveRenameUpdatesTheHostLineAndMetadataTogether(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stored.Hosts) != 1 || stored.Hosts[0].Identity.Alias != "jump" || stored.Hosts[0].Note != "keep me" || stored.Hosts[0].Orphan {
+	if len(stored.Hosts) != 1 || stored.Hosts[0].Identity.Alias != "jump" || strings.Join(stored.Hosts[0].Tags, ",") != "keep me" || stored.Hosts[0].Orphan {
 		t.Fatalf("stored metadata = %#v", stored.Hosts)
 	}
 }
@@ -703,7 +703,7 @@ func TestSaveMoveCommitsBothFilesAndMetadataInOneTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 	metadata := NewMetadata()
-	metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: "config", Alias: "bastion"}, Note: "keep me"}}
+	metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: "config", Alias: "bastion"}, Tags: []string{"keep me"}}}
 	seedMetadata(t, service, metadata)
 
 	before := snapshotConfigFiles(t, workspace)
@@ -790,7 +790,7 @@ func TestSaveMoveCommitsBothFilesAndMetadataInOneTransaction(t *testing.T) {
 	if len(stored.Hosts) != 1 {
 		t.Fatalf("stored hosts = %#v", stored.Hosts)
 	}
-	if stored.Hosts[0].Identity.Path != "conf.d/10-home.conf" || stored.Hosts[0].Note != "keep me" || stored.Hosts[0].Orphan {
+	if stored.Hosts[0].Identity.Path != "conf.d/10-home.conf" || strings.Join(stored.Hosts[0].Tags, ",") != "keep me" || stored.Hosts[0].Orphan {
 		t.Fatalf("metadata after the move = %#v", stored.Hosts[0])
 	}
 

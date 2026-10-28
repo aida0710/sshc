@@ -58,7 +58,6 @@ type HostMetadata struct {
 	Identity          HostIdentity `json:"identity"`
 	Tags              []string     `json:"tags,omitempty"`
 	Colour            string       `json:"colour,omitempty"`
-	Note              string       `json:"note,omitempty"`
 	Order             int          `json:"order,omitempty"`
 	OS                string       `json:"os,omitempty"`
 	DetectedOS        string       `json:"detectedOS,omitempty"`
@@ -119,7 +118,6 @@ func (host HostMetadata) Alias() string { return host.Identity.Alias }
 type GroupMetadata struct {
 	Name     string    `json:"name"`
 	Colour   string    `json:"colour,omitempty"`
-	Note     string    `json:"note,omitempty"`
 	Order    int       `json:"order,omitempty"`
 	Hidden   bool      `json:"hidden,omitempty"`
 	Settings []Setting `json:"settings,omitempty"`
@@ -391,7 +389,7 @@ func ValidateMetadata(metadata Metadata) error {
 		if err := validateAppearance(host.Appearance); err != nil {
 			return err
 		}
-		for _, text := range append([]string{host.Note, host.Colour}, host.Tags...) {
+		for _, text := range append([]string{host.Colour}, host.Tags...) {
 			if containsSecretMarker(text) {
 				return ErrMetadataSecret
 			}
@@ -501,24 +499,6 @@ func saysNothing(host HostMetadata) bool {
 	host.Identity = HostIdentity{}
 	host.Orphan = false
 	return reflect.DeepEqual(host, HostMetadata{})
-}
-
-// 内容のない entry は削除する。
-func ClearHostNote(metadata Metadata, identity HostIdentity) Metadata {
-	cleared := metadata
-	cleared.Hosts = make([]HostMetadata, 0, len(metadata.Hosts))
-	for _, host := range metadata.Hosts {
-		if host.Identity != identity {
-			cleared.Hosts = append(cleared.Hosts, host)
-			continue
-		}
-		host.Note = ""
-		if saysNothing(host) {
-			continue
-		}
-		cleared.Hosts = append(cleared.Hosts, host)
-	}
-	return cleared
 }
 
 // hostMetadataIndex は、識別子 identity の entry の位置を返す。無ければ -1 を返す。

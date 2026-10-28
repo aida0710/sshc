@@ -2,6 +2,7 @@ package application
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"sshc/internal/platform/windowsacl/acltest"
@@ -71,7 +72,7 @@ func TestSavingOneHostsMetadataKeepsSectionsChangedElsewhere(t *testing.T) {
 func TestSavingOneHostsMetadataFromAStaleCopyIsRefused(t *testing.T) {
 	service, _ := newTestService(t)
 	metadata := NewMetadata()
-	metadata.Hosts = []HostMetadata{{Identity: bastion, Note: "written elsewhere"}}
+	metadata.Hosts = []HostMetadata{{Identity: bastion, Tags: []string{"written elsewhere"}}}
 	seedMetadata(t, service, metadata)
 
 	_, err := service.Save(EditRequest{
@@ -82,7 +83,7 @@ func TestSavingOneHostsMetadataFromAStaleCopyIsRefused(t *testing.T) {
 	if !errors.Is(err, ErrMetadataChanged) {
 		t.Fatalf("Save error = %v, want ErrMetadataChanged", err)
 	}
-	if stored := loadMetadata(t, service); stored.Hosts[0].Note != "written elsewhere" {
+	if stored := loadMetadata(t, service); strings.Join(stored.Hosts[0].Tags, ",") != "written elsewhere" {
 		t.Fatalf("hosts = %#v", stored.Hosts)
 	}
 }
@@ -113,19 +114,19 @@ func TestReassociatingAnOrphanMovesItsMetadataToTheChosenHost(t *testing.T) {
 	gone := HostIdentity{Path: "config", Alias: "retired"}
 	nas := HostIdentity{Path: "conf.d/10-home.conf", Alias: "nas"}
 	metadata := NewMetadata()
-	metadata.Hosts = []HostMetadata{{Identity: gone, Note: "rack 3", Orphan: true}}
+	metadata.Hosts = []HostMetadata{{Identity: gone, Tags: []string{"rack 3"}, Orphan: true}}
 	seedMetadata(t, service, metadata)
 
 	if _, err := service.Save(EditRequest{
 		Kind: EditMetadata, Path: gone.Path, Alias: gone.Alias,
-		HostMetadataBase: &HostMetadata{Identity: gone, Note: "rack 3", Orphan: true},
-		HostMetadata:     &HostMetadata{Identity: nas, Note: "rack 3"},
+		HostMetadataBase: &HostMetadata{Identity: gone, Tags: []string{"rack 3"}, Orphan: true},
+		HostMetadata:     &HostMetadata{Identity: nas, Tags: []string{"rack 3"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	hosts := loadMetadata(t, service).Hosts
-	if len(hosts) != 1 || hosts[0].Identity != nas || hosts[0].Note != "rack 3" || hosts[0].Orphan {
+	if len(hosts) != 1 || hosts[0].Identity != nas || strings.Join(hosts[0].Tags, ",") != "rack 3" || hosts[0].Orphan {
 		t.Fatalf("hosts = %#v", hosts)
 	}
 }
@@ -134,18 +135,18 @@ func TestDiscardingAnOrphanRemovesOnlyThatEntry(t *testing.T) {
 	service, _ := newTestService(t)
 	gone := HostIdentity{Path: "config", Alias: "retired"}
 	metadata := NewMetadata()
-	metadata.Hosts = []HostMetadata{{Identity: gone, Note: "old", Orphan: true}, {Identity: bastion, Note: "keep"}}
+	metadata.Hosts = []HostMetadata{{Identity: gone, Tags: []string{"old"}, Orphan: true}, {Identity: bastion, Tags: []string{"keep"}}}
 	seedMetadata(t, service, metadata)
 
 	if _, err := service.Save(EditRequest{
 		Kind: EditMetadata, Path: gone.Path, Alias: gone.Alias,
-		HostMetadataBase: &HostMetadata{Identity: gone, Note: "old", Orphan: true},
+		HostMetadataBase: &HostMetadata{Identity: gone, Tags: []string{"old"}, Orphan: true},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	hosts := loadMetadata(t, service).Hosts
-	if len(hosts) != 1 || hosts[0].Identity != bastion || hosts[0].Note != "keep" {
+	if len(hosts) != 1 || hosts[0].Identity != bastion || strings.Join(hosts[0].Tags, ",") != "keep" {
 		t.Fatalf("hosts = %#v", hosts)
 	}
 }
@@ -153,7 +154,7 @@ func TestDiscardingAnOrphanRemovesOnlyThatEntry(t *testing.T) {
 func TestSavingGroupsKeepsHostsChangedElsewhere(t *testing.T) {
 	service, _ := newTestService(t)
 	metadata := NewMetadata()
-	metadata.Hosts = []HostMetadata{{Identity: bastion, Note: "written elsewhere"}}
+	metadata.Hosts = []HostMetadata{{Identity: bastion, Tags: []string{"written elsewhere"}}}
 	seedMetadata(t, service, metadata)
 
 	if _, err := service.Save(EditRequest{Kind: EditGroups, Groups: []GroupMetadata{{Name: "work"}}}); err != nil {
@@ -161,7 +162,7 @@ func TestSavingGroupsKeepsHostsChangedElsewhere(t *testing.T) {
 	}
 
 	stored := loadMetadata(t, service)
-	if len(stored.Groups) != 1 || len(stored.Hosts) != 1 || stored.Hosts[0].Note != "written elsewhere" {
+	if len(stored.Groups) != 1 || len(stored.Hosts) != 1 || strings.Join(stored.Hosts[0].Tags, ",") != "written elsewhere" {
 		t.Fatalf("stored = %#v", stored)
 	}
 }
@@ -186,7 +187,7 @@ func TestRenamingOntoALeftoverOrphanKeepsOnlyTheRenamedHostsMetadata(t *testing.
 	service, _ := newTestService(t)
 	jump := HostIdentity{Path: "config", Alias: "jump"}
 	metadata := NewMetadata()
-	metadata.Hosts = []HostMetadata{{Identity: bastion, Note: "bastion"}, {Identity: jump, Note: "retired jump", Orphan: true}}
+	metadata.Hosts = []HostMetadata{{Identity: bastion, Tags: []string{"bastion"}}, {Identity: jump, Tags: []string{"retired jump"}, Orphan: true}}
 	seedMetadata(t, service, metadata)
 
 	if _, err := service.Save(EditRequest{
@@ -196,7 +197,7 @@ func TestRenamingOntoALeftoverOrphanKeepsOnlyTheRenamedHostsMetadata(t *testing.
 	}
 
 	hosts := loadMetadata(t, service).Hosts
-	if len(hosts) != 1 || hosts[0].Identity != jump || hosts[0].Note != "bastion" {
+	if len(hosts) != 1 || hosts[0].Identity != jump || strings.Join(hosts[0].Tags, ",") != "bastion" {
 		t.Fatalf("hosts = %#v, want only the renamed host's entry", hosts)
 	}
 }

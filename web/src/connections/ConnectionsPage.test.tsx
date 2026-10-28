@@ -1007,7 +1007,7 @@ describe("ConnectionsPage", () => {
     const user = userEvent.setup();
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
-      metadata: { schemaVersion: 1, hosts: [{ identity: { path: "config", alias: "retired" }, note: "old", orphan: true }] },
+      metadata: { schemaVersion: 1, hosts: [{ identity: { path: "config", alias: "retired" }, tags: ["old"], orphan: true }] },
     });
     vi.mocked(configApi.save).mockRejectedValue(new ApiError("metadata_changed", 409, {
       code: "metadata_changed",
