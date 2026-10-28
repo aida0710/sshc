@@ -7,6 +7,20 @@ import type { SyncResultView } from "./SyncResultCard";
 type Refusals = Readonly<Partial<Record<string, MessageKey>>>;
 type Recover = (code: string) => Promise<boolean>;
 
+// SyncRunOptions is what a Sync operation does with its result and how it explains a refusal.
+export type SyncRunOptions<T> = {
+  apply: (value: T) => void;
+  // failure is the message when no more specific one names the refusal.
+  failure: string;
+  // explain names a refusal the operation knows better than the shared table.
+  explain?: (code: string) => string;
+};
+
+type SyncExecuteOptions<T> = SyncRunOptions<T> & {
+  // recover handles a refusal itself (for example by reading the state again); true means handled.
+  recover?: Recover;
+};
+
 export function useSyncOperation(
   t: Translate,
   refusals: Refusals,
@@ -35,13 +49,8 @@ export function useSyncOperation(
     return named === undefined ? failure : t(named);
   }
 
-  async function execute<T>(
-    operation: () => Promise<T>,
-    apply: (value: T) => void,
-    failure: string,
-    explain?: (code: string) => string,
-    recover?: Recover,
-  ) {
+  async function execute<T>(operation: () => Promise<T>, options: SyncExecuteOptions<T>) {
+    const { apply, failure, explain, recover } = options;
     clearError();
     setNotice("");
     setBusy(true);
