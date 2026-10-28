@@ -593,6 +593,7 @@ test("keeps every section inside 360 pixels", async ({ page, installation }) => 
     await openSectionThroughDrawer(page, section.navigation, section.heading);
     await expectNoHorizontalOverflow(page, section.navigation);
     await expectNothingCutOff(page, section.navigation);
+    await expectIconsCentered(page, section.navigation);
     if (section.navigation === "Known Hosts") {
       await expectFullyInsideViewport(
         page,
@@ -614,6 +615,32 @@ async function expectFullyInsideViewport(
   expect(viewport, `${name}: viewport is unavailable`).not.toBeNull();
   expect(box!.x, `${name}: left edge`).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width, `${name}: right edge`).toBeLessThanOrEqual(viewport!.width);
+}
+
+// A button that holds only an icon must keep the icon in its middle when the
+// phone's 44-pixel minimum or a grid makes it wider than the icon.
+async function expectIconsCentered(page: import("@playwright/test").Page, where: string) {
+  const offCentre = await page.evaluate(() => {
+    const out: string[] = [];
+    for (const element of Array.from(document.querySelectorAll<HTMLElement>("button, [role='button'], a[href]"))) {
+      const icons = element.querySelectorAll("svg");
+      if (icons.length !== 1 || (element.textContent ?? "").trim() !== "") continue;
+      const box = element.getBoundingClientRect();
+      const icon = icons[0]!.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0 || icon.width === 0) continue;
+      const style = getComputedStyle(element);
+      const left = box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+      const right = box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+      const top = box.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop);
+      const bottom = box.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom);
+      const across = (icon.left + icon.right) / 2 - (left + right) / 2;
+      const down = (icon.top + icon.bottom) / 2 - (top + bottom) / 2;
+      if (Math.abs(across) <= 1.5 && Math.abs(down) <= 1.5) continue;
+      out.push(`"${element.getAttribute("aria-label") ?? element.tagName.toLowerCase()}" ${across.toFixed(1)},${down.toFixed(1)}px`);
+    }
+    return out;
+  });
+  expect(offCentre, `${where}: アイコンがボタンの中央にない`).toEqual([]);
 }
 
 async function expectNothingCutOff(page: import("@playwright/test").Page, where: string) {
@@ -926,4 +953,18 @@ test("asks before closing a live session, in the middle of the screen and not in
 
   await expect(dialog.getByRole("button", { name: /Keep|open/i })).toBeVisible();
   await expect(dialog.getByRole("button", { name: /Close/i })).toBeVisible();
+});
+
+test("keeps the icons of the terminal and its search bar in the middle of their buttons", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await expectIconsCentered(page, "Terminal");
+
+  await screen.getByRole("button", { name: "More terminal actions" }).click();
+  await page.getByRole("menuitem", { name: "Find" }).click();
+  await expect(screen.getByRole("textbox", { name: "Search terminal output" })).toBeVisible();
+  await expectIconsCentered(page, "Terminal search");
 });

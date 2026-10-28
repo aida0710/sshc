@@ -7,6 +7,9 @@ import type { TerminalSearch } from "./useTerminalSearch";
 import { isImeComposing } from "../ui/imeComposition";
 
 const pressedOption = "aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-accent";
+// An icon is a block (Tailwind's preflight), so it would sit at the left of a
+// button that the phone's 44-pixel minimum or the grid makes wider than it.
+const iconButton = "inline-flex items-center justify-center";
 
 // A press on the bar's buttons leaves focus in the query, so the next step
 // or another character can follow at once.
@@ -65,9 +68,9 @@ export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; 
             ? t("terminal.searchNoResults")
             : `${search.result.index + 1}/${search.result.total}`}
       </span>
-      <Button small aria-label={t("terminal.searchPrevious")} onMouseDown={keepQueryFocus} onClick={() => search.step(-1)}><Icon name="arrowUp" className="size-3.5" /></Button>
-      <Button small aria-label={t("terminal.searchNext")} onMouseDown={keepQueryFocus} onClick={() => search.step(1)}><Icon name="arrowDown" className="size-3.5" /></Button>
-      <Button small aria-label={t("terminal.searchClose")} onClick={search.close}><Icon name="close" className="size-3.5" /></Button>
+      <Button small aria-label={t("terminal.searchPrevious")} className={iconButton} onMouseDown={keepQueryFocus} onClick={() => search.step(-1)}><Icon name="arrowUp" className="size-3.5" /></Button>
+      <Button small aria-label={t("terminal.searchNext")} className={iconButton} onMouseDown={keepQueryFocus} onClick={() => search.step(1)}><Icon name="arrowDown" className="size-3.5" /></Button>
+      <Button small aria-label={t("terminal.searchClose")} className={iconButton} onClick={search.close}><Icon name="close" className="size-3.5" /></Button>
     </div>
   );
 }
