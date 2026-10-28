@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
-import type { OpenTerminalSessionResponse } from "../api/terminalSessions";
+import type { OpenTerminalSessionResponse, TerminalSession } from "../api/terminalSessions";
 import { terminalProblemKey, useTerminalSessions, type TerminalSessionsApi } from "./sessions";
 
 const list = { sessions: [], maxSessions: 50 };
@@ -594,5 +594,20 @@ describe("terminalProblemKey", () => {
 
   it("says that a symlinked known_hosts could not save the host key, not that the terminal failed to open", () => {
     expect(terminalProblemKey("known_hosts_symlink")).toBe("terminal.knownHostsSymlink");
+  });
+});
+
+describe("a session's stream reporting its exit", () => {
+  it("shows the status the stream reported at once, not 0 until the next listing", async () => {
+    const running: TerminalSession = {
+      id: "a", kind: "ssh", alias: "bastion", workspaceId: "default", title: "bastion", startedAt: "2026-10-28T09:00:00Z", state: "connected", problem: "",
+    };
+    const client = api({ terminalSessions: vi.fn().mockResolvedValue({ sessions: [running], maxSessions: 50 }) });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.sessions).toHaveLength(1));
+
+    act(() => result.current.markExited("a", { code: -1, signal: "", connectionLost: true }));
+
+    expect(result.current.sessions[0]).toMatchObject({ state: "exited", exited: { code: -1, signal: "", connectionLost: true } });
   });
 });

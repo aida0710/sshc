@@ -93,6 +93,18 @@ describe("openStream", () => {
     expect(onExit).toHaveBeenCalledWith({ code: 255, signal: "" });
   });
 
+  it("reports that the SSH connection, not the program, ended", () => {
+    withFakeSocket();
+    const onExit = vi.fn();
+    openStream("one-time", "/terminal/stream", { onReplay: vi.fn(), onOutput: vi.fn(), onExit, onShellReplaced: vi.fn(), onClose: vi.fn() });
+    const socket = FakeSocket.last!;
+    socket.open();
+
+    socket.emit("message", { data: JSON.stringify({ exit: { code: -1, signal: "", connectionLost: true } }) });
+
+    expect(onExit).toHaveBeenCalledWith({ code: -1, signal: "", connectionLost: true });
+  });
+
   it("sends keystrokes as bytes and resizes as JSON", () => {
     withFakeSocket();
     const stream = openStream("one-time", "/terminal/stream", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose: vi.fn() });

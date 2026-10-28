@@ -8,7 +8,7 @@ import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
 import { connectionProgressText } from "./progress";
-import { sessionShowsDestination, sessionStatusTone } from "./sessionStatus";
+import { exitedAbnormally, sessionShowsDestination, sessionStatusTone } from "./sessionStatus";
 import { useTerminalFont } from "./useTerminalFont";
 import { defaultTint } from "./appearance";
 import { useBackgroundImage } from "./backgroundImage";
@@ -27,6 +27,7 @@ import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { recentBufferText } from "./buffer";
 import { attachOsc52Clipboard } from "./osc52";
 import { createTerminalOutput } from "./output";
+import type { ExitReport } from "./stream";
 import { encodeIntlYen } from "./intlYenKey";
 import { linkTextNamesTarget, modifierOpensLink, osc8Link } from "./links";
 import { bufferRangeText } from "./bufferLinks";
@@ -83,7 +84,8 @@ type TerminalViewProps = {
   onSplit?: (edge: PaneEdge) => void;
   canSplit?: boolean;
   api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
-  onExit?: () => void;
+  // onExit hands over how the program ended, as the stream reported it.
+  onExit?: (exit: ExitReport) => void;
   onReconnect?: () => Promise<boolean>;
   onStopReconnect?: () => Promise<boolean>;
   copyOnSelect?: boolean;
@@ -384,10 +386,10 @@ export function TerminalView({
       onOutput: output.write,
       // The paste was reviewed for the shell that is now gone.
       onShellReplaced: () => setPendingPaste(null),
-      onExit: () => {
+      onExit: (exit) => {
         view.options.cursorBlink = false;
         setPendingPaste(null);
-        onExit?.();
+        onExit?.(exit);
       },
       onClose: () => setPendingPaste(null),
     });
@@ -626,7 +628,7 @@ export function TerminalView({
               aria-hidden="true"
               className={`size-2 shrink-0 rounded-full ${
                 session.state === "exited"
-                  ? "bg-ink-faint"
+                  ? exitedAbnormally(session) ? "bg-danger" : "bg-ink-faint"
                   : session.state === "reconnecting" || session.state === "connecting" || link.phase !== "live"
                     ? "bg-notice-ink"
                     : "bg-live"

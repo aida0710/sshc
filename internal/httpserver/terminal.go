@@ -192,6 +192,10 @@ func describeSession(view terminal.View) api.TerminalSession {
 			Signal: view.Exited.Signal,
 			At:     view.Exited.At.UTC().Format(time.RFC3339),
 		}
+		if view.Exited.TransportLost {
+			connectionLost := true
+			described.Exited.ConnectionLost = &connectionLost
+		}
 	}
 	return described
 }

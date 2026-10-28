@@ -4837,6 +4837,9 @@ components:
         code: { type: integer }
         signal: { type: string }
         at: { type: string }
+        # The SSH connection under the shell was lost, rather than the program
+        # ending; code is then -1 and means nothing. Omitted otherwise.
+        connectionLost: { type: boolean }
     TerminalSessionList:
       type: object
       additionalProperties: false

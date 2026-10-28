@@ -51,3 +51,24 @@ it("counts down to the next reconnect attempt and then says it is connecting", (
     vi.useRealTimers();
   }
 });
+
+it("says a lost SSH connection ended the session, in red, rather than exit status -1", () => {
+  const lost: TerminalSession = {
+    ...session, kind: "ssh", alias: "bastion", state: "exited",
+    exited: { code: -1, signal: "", at: "2026-10-28T09:00:00Z", connectionLost: true },
+  };
+  render(<TerminalStatusBanners session={lost} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} />);
+
+  const message = screen.getByText("The SSH connection was lost. The output above is kept until you close this session.");
+  expect(message).toHaveClass("text-danger");
+  expect(screen.queryByText(/status -1/)).toBeNull();
+});
+
+it("shows a clean exit quietly and a failed one in red", () => {
+  const exitedWith = (code: number): TerminalSession => ({ ...session, state: "exited", exited: { code, signal: "", at: "2026-10-28T09:00:00Z" } });
+  const { rerender } = render(<TerminalStatusBanners session={exitedWith(0)} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} />);
+  expect(screen.getByText(/exited with status 0/)).toHaveClass("text-ink-muted");
+
+  rerender(<TerminalStatusBanners session={exitedWith(3)} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} />);
+  expect(screen.getByText(/exited with status 3/)).toHaveClass("text-danger");
+});
