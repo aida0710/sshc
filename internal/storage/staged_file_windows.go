@@ -6,6 +6,8 @@ import (
 	"os"
 
 	"golang.org/x/sys/windows"
+
+	"sshc/internal/platform/windowsacl"
 )
 
 // stagedTemporaryは、一時ファイルと、それを作ったディレクトリのハンドルである。Windowsでは
@@ -29,7 +31,7 @@ func cleanStageDirectory(directory string) (string, error) {
 // cleanAtomicTarget）。afterParentOpenは、ディレクトリを開いた直後に呼ぶテストの差し込み口で、
 // そこでパスを差し替えても、開いたディレクトリへ書くことを確かめるのに使う。本番ではnilである。
 func stageFileNative(request StageRequest, afterParentOpen func()) (*StagedFile, error) {
-	parent, err := openNoReparseDirectoryWithAccess(request.Directory, windows.FILE_TRAVERSE|windows.FILE_WRITE_DATA|fileDeleteChild)
+	parent, err := windowsacl.OpenDirectoryNoReparse(request.Directory, windows.FILE_TRAVERSE|windows.FILE_WRITE_DATA|fileDeleteChild)
 	if err != nil {
 		return nil, err
 	}
