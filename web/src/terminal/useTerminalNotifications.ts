@@ -5,13 +5,12 @@ import { closeBrowserNotification, showBrowserNotification } from "../ui/browser
 import { isUserAway } from "../ui/userAway";
 import { useToast } from "../ui/useToast";
 import { subscribeAndroidNotificationOpened } from "../android/native";
-import { longCommandNotificationTag, programNotificationTag, sessionIdFromNotificationTag } from "./notificationTags";
+import { sessionIdFromNotificationTag, terminalNotificationTag } from "./notificationTags";
 import { playNotificationSound, primeNotificationSound } from "./notificationSound";
 import { nextTerminalNotification, type UnreadSessions } from "./terminalNotifications";
 
 function closeSessionNotifications(sessionId: string): void {
-  closeBrowserNotification(programNotificationTag(sessionId));
-  closeBrowserNotification(longCommandNotificationTag(sessionId));
+  closeBrowserNotification(terminalNotificationTag(sessionId));
 }
 
 // useTerminalNotifications turns notificationVersion changes into unread marks,
@@ -110,7 +109,7 @@ export function useTerminalNotifications(
       showBrowserNotification({
         title: notification.title,
         body: notification.body,
-        tag: programNotificationTag(session.id),
+        tag: terminalNotificationTag(session.id),
         // The session may have been closed since; then nothing else comes forward.
         onClick: () => {
           if (currentSessions.current.some((current) => current.id === session.id)) openSession.current(session.id);

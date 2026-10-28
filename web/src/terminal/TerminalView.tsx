@@ -44,9 +44,6 @@ import { TerminalProgressBar } from "./TerminalProgressBar";
 import { attachInlineImages } from "./inlineImages";
 import { applyCurrentUnicodeWidths } from "./unicodeWidths";
 import { attachCommandMarkers } from "./commandMarkers";
-import { showBrowserNotification } from "../ui/browserNotifications";
-import { isUserAway } from "../ui/userAway";
-import { longCommandNotificationTag } from "./notificationTags";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
 import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
@@ -116,10 +113,6 @@ type TerminalViewProps = {
   // composerEnterSends: Enter in the phone's text box sends; otherwise it starts a new line.
   composerEnterSends?: boolean;
 };
-
-// A command shorter than this usually finishes while the user is still
-// watching, so a desktop notification for it would only be noise.
-const longCommandNotifyMs = 30_000;
 
 // The link popover opens just below and to the right of the pointer so it does
 // not cover the link that was clicked.
@@ -333,20 +326,10 @@ export function TerminalView({
     const osc7Directory = attachOSC7Directory(view.parser, setCurrentDirectory);
     const osc9Directory = attachOSC9Directory(view.parser, setCurrentDirectory);
     const osc9Progress = attachOSC9Progress(view.parser, setProgramProgress);
-    const commandMarkers = attachCommandMarkers(view, ({ durationMilliseconds }) => {
-      // A program that quit without clearing its OSC 9;4 progress leaves no
-      // bar behind once the shell reports the command finished.
-      setProgramProgress(noTerminalProgress);
-      if (durationMilliseconds < longCommandNotifyMs || !isUserAway()) return;
-      showBrowserNotification({
-        title: "sshc",
-        body: t("terminal.longCommandCompleted", {
-          subject: terminalDisplayTitle(session),
-          seconds: String(Math.round(durationMilliseconds / 1000)),
-        }),
-        tag: longCommandNotificationTag(session.id),
-      });
-    });
+    // A program that quit without clearing its OSC 9;4 progress leaves no bar
+    // behind once the shell reports the command finished. The engine notifies
+    // the end of a long command (internal/terminal/command_finished.go).
+    const commandMarkers = attachCommandMarkers(view, () => setProgramProgress(noTerminalProgress));
     const terminalLinks = attachLinkProvider(view, {
       open: openTerminalURL,
       select: selectLinkAt,

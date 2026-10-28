@@ -4888,7 +4888,8 @@ components:
         # unknown. A duplicate opens here.
         workingDirectory: { type: string }
         # notificationVersion は、端末内のプログラムが OSC 9／99／777 で通知を
-        # 求めるたびに増える。画面はこれを前回と比べて新しい通知を知る。
+        # 求めるたびと、長いコマンドが終わるたびに増える。画面はこれを前回と
+        # 比べて新しい通知を知る。
         notificationVersion: { type: integer, minimum: 0 }
         lastNotification: { $ref: "#/components/schemas/TerminalNotification" }
     TerminalProgramProgress:
@@ -4927,6 +4928,17 @@ components:
         title: { type: string }
         body: { type: string }
         occurredAt: { type: string, format: date-time }
+        # finishedCommand は、シェルが OSC 133 で知らせたコマンドが長く掛かって
+        # 終わったことを表す。このとき title と body は空で、画面が文を作る。
+        finishedCommand: { $ref: "#/components/schemas/TerminalFinishedCommand" }
+    TerminalFinishedCommand:
+      type: object
+      additionalProperties: false
+      required: [seconds]
+      properties:
+        seconds: { type: integer, minimum: 0 }
+        # シェルが OSC 133;D に終了コードを付けなかったときは省く。
+        exitCode: { type: integer }
     TerminalDestination:
       type: object
       additionalProperties: false

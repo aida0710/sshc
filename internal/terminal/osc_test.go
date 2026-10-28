@@ -236,3 +236,25 @@ func TestKittyNotificationsPendingPastTheIdentifierLimitAreDroppedTogether(t *te
 		t.Fatalf("dropped chunks were delivered: %q", seen.notifications)
 	}
 }
+
+func TestOSCObserverReportsCommandsAndTheirExitCodes(t *testing.T) {
+	var events []string
+	observer := newOSCObserver(oscReports{
+		CommandStarted: func() { events = append(events, "start") },
+		CommandFinished: func(exitCode *int) {
+			if exitCode == nil {
+				events = append(events, "end")
+				return
+			}
+			events = append(events, fmt.Sprintf("end %d", *exitCode))
+		},
+	})
+
+	observer.Observe([]byte("\x1b]133;A\a$ \x1b]133;B\amake\r\n\x1b]133;C\a"))
+	observer.Observe([]byte("\x1b]133;D;2\a\x1b]133;D\x1b\\\x1b]133;D;0;aid=4021\a\x1b]133;D;none\a"))
+
+	want := []string{"start", "end 2", "end", "end 0", "end"}
+	if fmt.Sprint(events) != fmt.Sprint(want) {
+		t.Fatalf("events = %q, want %q", events, want)
+	}
+}
