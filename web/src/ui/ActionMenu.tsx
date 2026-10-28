@@ -11,6 +11,12 @@ import { useMenuKeyboard } from "./useMenuKeyboard";
 // それ以外では「…」の分の場所を空けて並ぶ。
 export const revealOnHover = "transition-opacity duration-150 hover-reveal:opacity-0 hover-reveal:group-hover/row:opacity-100 hover-reveal:group-focus-within/row:opacity-100";
 
+// revealOnHoverAtPcSize は、場所の狭い行（Connections のグループの一覧、サイドバーのセッションの行）のための
+// revealOnHover である。PC の組み方の画面では、タッチ対応でも、乗せたとき（とキーボードで触れたとき）だけ出し、
+// その間だけ件数や名前の上に重ねる。いつも出して件数や名前の場所を削らない（スマホの組み方では常に出す）。
+// 乗せられない画面では、行を長押ししたときのメニューで同じ操作ができる。
+export const revealOnHoverAtPcSize = "transition-opacity duration-150 desktop-layout:opacity-0 desktop-layout:group-hover/row:opacity-100 desktop-layout:group-focus-within/row:opacity-100";
+
 export type ActionMenuItem = {
   label: string;
   onSelect: () => void;

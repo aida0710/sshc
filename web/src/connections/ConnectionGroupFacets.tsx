@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import type { Notice, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
-import { ActionMenu, revealOnHover, type ActionMenuItem } from "../ui/ActionMenu";
+import { ActionMenu, revealOnHoverAtPcSize, type ActionMenuItem } from "../ui/ActionMenu";
 import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { draggableCursor, dropTargetLook } from "../ui/dragAndDropLook";
@@ -122,12 +122,12 @@ export function ConnectionGroupFacets({
             </span>
             <span className="min-w-0 flex-1 truncate">{node.label}</span>
             {tucked ? <span className="shrink-0 text-[11px] text-ink-faint">{t("tree.hiddenMark")}</span> : null}
-            <span className={`shrink-0 font-mono text-[11.5px] font-normal text-ink-faint ${items.length === 0 ? "" : "mr-6 hover-reveal:mr-0 hover-reveal:group-hover/row:invisible hover-reveal:group-focus-within/row:invisible"} ${openMenu === menuKey ? "hover-reveal:invisible" : ""}`}>
+            <span className={`shrink-0 font-mono text-[11.5px] font-normal text-ink-faint ${items.length === 0 ? "" : "group-hover/row:invisible group-focus-within/row:invisible"} ${openMenu === menuKey ? "invisible" : ""}`}>
               {node.descendantCount}
             </span>
           </button>
           {items.length === 0 ? null : (
-            <div className={`absolute right-1 top-1/2 -translate-y-1/2 ${openMenu === menuKey ? "opacity-100" : revealOnHover}`}>
+            <div className={`absolute right-1 top-1/2 -translate-y-1/2 ${openMenu === menuKey ? "opacity-100" : revealOnHoverAtPcSize}`}>
               <ActionMenu
                 label={t("tree.groupActions", { name: node.name })}
                 items={items}

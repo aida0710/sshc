@@ -14,7 +14,7 @@ import { sessionMarkerClass, sessionStatusText } from "./sessionStatus";
 import { SessionRowMenu, type SessionRowMenuPlacement, type WorkspaceMoveTarget } from "./SessionRowMenu";
 import { terminalDisplayTitle } from "./terminalPresentation";
 import { notificationText, type UnreadSessions } from "./terminalNotifications";
-import { revealOnHover } from "../ui/ActionMenu";
+import { revealOnHoverAtPcSize } from "../ui/ActionMenu";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { useShiftKeyHeld } from "../ui/useShiftKeyHeld";
@@ -233,6 +233,14 @@ export function SessionList({
                       ? "bg-danger/10 hover:bg-danger/10"
                       : isSelected ? "bg-select-fill" : "hover:bg-hover"
                   }`}
+                  // A right click or a long press opens the row's menu, which is the way to it where the 「…」 shows
+                  // only under a pointer that the screen does not have.
+                  onContextMenu={renaming === session.id ? undefined : (event) => {
+                    const trigger = event.currentTarget.querySelector<HTMLButtonElement>("[data-session-menu-trigger]");
+                    if (trigger === null || menuFor === session.id) return;
+                    event.preventDefault();
+                    trigger.click();
+                  }}
                 >
 
                   {session.programProgress !== undefined ? <TerminalProgressBar progress={session.programProgress} /> : null}
@@ -285,14 +293,15 @@ export function SessionList({
                       </span>
                     </button>
                   )}
-                  {/* Where a pointer can hover (hover-reveal), the actions show only on the selected or hovered row,
-                      over the end of the name line. Elsewhere (a phone, a touch-only screen) they stay in the row,
-                      always shown, so they never cover the name. */}
-                  <div className={`flex shrink-0 items-center gap-0.5 hover-reveal:absolute hover-reveal:right-1.5 hover-reveal:top-[2px] hover-reveal:rounded-md ${
-                    isSelected ? "hover-reveal:bg-select-fill" : `hover-reveal:bg-hover ${revealOnHover}`
-                  }`}>
+                  {/* On a PC-sized screen the name has the whole row, and the actions show only on the hovered (or
+                      keyboard-reached) row, over the end of the name line. The phone layout keeps them in the row,
+                      always shown. */}
+                  <div className={`flex shrink-0 items-center gap-0.5 desktop-layout:absolute desktop-layout:right-1.5 desktop-layout:top-[2px] desktop-layout:rounded-md ${
+                    isSelected ? "desktop-layout:bg-select-fill" : "desktop-layout:bg-hover"
+                  } ${menuFor === session.id ? "" : revealOnHoverAtPcSize}`}>
                     <button
                       type="button"
+                      data-session-menu-trigger
                       aria-label={t("terminal.rowMenu", { title: session.title })}
                       aria-expanded={menuFor === session.id}
                       onClick={(event) => {
@@ -324,8 +333,7 @@ export function SessionList({
                         }
                         setClosing(session);
                       }}
-                      // On the selected row only "…" stays; close appears with the pointer, as in the design.
-                      className={`relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5 ${isSelected ? revealOnHover : ""}`}
+                      className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5"
                     >
                       <Icon name="close" className="size-3.5" />
                     </button>
