@@ -3,6 +3,7 @@ package sftp
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // remoteRun is one worker's ownership of a remote job. Pause and cancel end the
@@ -242,14 +243,10 @@ func (m *TransferManager) markRemoteCommitPending(run *remoteRun, id string) err
 	if record.job.Direction != TransferRemote || record.job.Status != TransferRunning {
 		return ErrTransferState
 	}
-	original := cloneTransferJobRecord(record)
-	record.job.Problem = RemoteReconciliationProblem
-	record.job.UpdatedAt = m.now().UTC()
-	if err := m.persistJobsLocked(true); err != nil {
-		*record = original
-		return err
-	}
-	return nil
+	return m.rewriteJobLocked(record, true, func(time.Time) error {
+		record.job.Problem = RemoteReconciliationProblem
+		return nil
+	})
 }
 
 // clearCommitPendingAfterPause runs after a pause interrupted the operation
@@ -264,14 +261,12 @@ func (m *TransferManager) clearCommitPendingAfterPause(id string) {
 		record.job.Problem != RemoteReconciliationProblem {
 		return
 	}
-	original := cloneTransferJobRecord(record)
-	record.job.Problem = ""
-	record.job.UpdatedAt = m.now().UTC()
-	if err := m.persistJobsLocked(true); err != nil {
-		// Without a durable record the mark must stay; a restart would otherwise
-		// restore the paused job still marked and the two views would disagree.
-		*record = original
-	}
+	// Without a durable record the mark must stay; a restart would otherwise
+	// restore the paused job still marked and the two views would disagree.
+	_ = m.rewriteJobLocked(record, true, func(time.Time) error {
+		record.job.Problem = ""
+		return nil
+	})
 }
 
 // failRemoteJobBeforeOperation reports a failure from before the operation
