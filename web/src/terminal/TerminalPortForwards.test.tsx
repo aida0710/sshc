@@ -42,6 +42,14 @@ describe("TerminalPortForwards", () => {
     expect(api.stopTerminalForward).toHaveBeenCalledWith("session-1", "pf-remote");
   });
 
+  it("offers only temporary local and dynamic forwards on a run target", async () => {
+    const api = { startTerminalForward: vi.fn(), stopTerminalForward: vi.fn() };
+    render(<LanguageProvider><TerminalPortForwards session={session} api={api} onRunTarget onClose={vi.fn()} /></LanguageProvider>);
+    const options = Array.from(screen.getByLabelText<HTMLSelectElement>("Type").options).map((option) => option.value);
+    expect(options).toEqual(["local", "dynamic"]);
+    expect(screen.queryByRole("checkbox", { name: /Save to this connection/ })).toBeNull();
+  });
+
   it("explains when the SSH server denies the remote listener", async () => {
     const api = {
       startTerminalForward: vi.fn().mockRejectedValue(new ApiError("terminal_forward_bind_failed", 409, { code: "terminal_forward_bind_failed", message: "request rejected", reason: "remote_denied" })),

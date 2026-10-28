@@ -3,6 +3,7 @@ package httpserver
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 
@@ -27,6 +28,8 @@ type RemoteEngineDirectory interface {
 	ActionLog(alias string, cursor uint64, limit int) (remoteengine.ActionLogRead, error)
 	UnlockVault(ctx context.Context, alias, passphrase string) error
 	ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
+	// DialRunTargetLoopback は、実行先の 127.0.0.1:port へ、取り次ぎの SSH の接続の上で TCP を開く。
+	DialRunTargetLoopback(ctx context.Context, alias string, port int) (net.Conn, error)
 	// CallTerminalAPI は、このマシンのエンジン自身が、実行先のエンジンのターミナルの API へ送る。
 	CallTerminalAPI(ctx context.Context, alias string, call remoteengine.TerminalCall) (remoteengine.TerminalAnswer, error)
 	ForwardTerminalStream(w http.ResponseWriter, r *http.Request, alias string) error
@@ -44,6 +47,8 @@ type RemoteEngineHandlers struct {
 	Actions ActionHandlers
 	// commands は、実行先のエンジンが出した確認のトークンを、送るまで持つ。
 	commands *remoteCommandConfirmations
+	// forwards は、実行先のセッションの転送を、このマシンの待ち受けからつなぐ中継である。
+	forwards *runTargetForwardRelays
 }
 
 // enginesPrefix は、実行先のエンジンの受け口の頭である。:alias のあとの /terminal… は、
@@ -51,9 +56,16 @@ type RemoteEngineHandlers struct {
 const enginesPrefix = "/api/v1/engines"
 
 // registerRemoteEngineRoutes は、実行先のエンジンの受け口を登録する。取り次ぐのは、画面が
-// 使うターミナルの操作だけである。ポート転送と制御用の読み取りは、今の段階では取り次がない
-// （画面が出さない）。経路は契約の検査がソースから読むので、一本ずつ書く。
+// 使うターミナルの操作だけである。制御用の読み取りは取り次がない（画面が出さない）。経路は
+// 契約の検査がソースから読むので、一本ずつ書く。
 func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers) {
+	// 登録する受け口はどれも handlers の写しを持つので、共有する状態は登録の前に作る。
+	if handlers.commands == nil {
+		handlers.commands = newRemoteCommandConfirmations()
+	}
+	if handlers.forwards == nil {
+		handlers.forwards = newRunTargetForwardRelays()
+	}
 	engine.GET("/api/v1/engines", handlers.List)
 	engine.POST("/api/v1/engines", handlers.Add)
 	engine.DELETE("/api/v1/engines/:alias", handlers.Remove)
@@ -68,11 +80,12 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.GET("/api/v1/engines/:alias/terminal/destinations/:connectionAlias", handlers.ForwardTerminal)
 	// クイックコマンドと一括送信は取り次がない。このマシンでスニペットを展開し、確認のトークンを
 	// 2段にして送る（remote_terminal_commands.go）。
-	if handlers.commands == nil {
-		handlers.commands = newRemoteCommandConfirmations()
-	}
 	engine.POST("/api/v1/engines/:alias/terminal/commands/preview", handlers.PreviewRemoteCommand)
 	engine.POST("/api/v1/engines/:alias/terminal/commands", handlers.DispatchRemoteCommand)
+	// 転送は取り次がない。このマシンで待ち受け、実行先のポートへ SSH の接続の上でつなぐ
+	// （remote_terminal_forwards.go）。
+	engine.POST("/api/v1/engines/:alias/terminal/sessions/:id/forwards", handlers.StartRunTargetForward)
+	engine.DELETE("/api/v1/engines/:alias/terminal/sessions/:id/forwards/:forwardId", handlers.StopRunTargetForward)
 	engine.GET("/api/v1/engines/:alias/terminal/restore", handlers.ForwardTerminal)
 	engine.POST("/api/v1/engines/:alias/terminal/restore", handlers.ForwardTerminal)
 	engine.DELETE("/api/v1/engines/:alias/terminal/restore", handlers.ForwardTerminal)
@@ -146,6 +159,7 @@ func (h RemoteEngineHandlers) Remove(c *echo.Context) error {
 	if err := h.Engines.RemoveEngine(alias); err != nil {
 		return remoteEngineProblem(c, err)
 	}
+	h.forwards.keepOnly(alias, nil)
 	list, err := h.engineList()
 	if err != nil {
 		return remoteEngineProblem(c, err)
@@ -271,6 +285,9 @@ func (h RemoteEngineHandlers) ForwardTerminal(c *echo.Context) error {
 	}
 	local := c.Request().URL.Path
 	remotePath := "/api/v1/terminal" + strings.TrimPrefix(local, enginesPrefix+"/"+alias+"/terminal")
+	if h.forwards.has(alias) {
+		return h.forwardWithLocalListens(c, alias, remotePath)
+	}
 	if err := h.Engines.ForwardTerminalAPI(c.Response(), c.Request(), alias, remotePath); err != nil {
 		return remoteEngineProblem(c, err)
 	}

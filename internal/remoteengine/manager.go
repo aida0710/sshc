@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/netip"
 	"slices"
 	"sync"
@@ -123,6 +124,17 @@ func (m *Manager) Connected(alias string) bool {
 	link, engine := target.link, target.engine
 	m.mutex.Unlock()
 	return link.connected() && engine.attached()
+}
+
+// DialRunTargetLoopback は、実行先 alias の 127.0.0.1:port へ、取り次ぎに使う SSH の接続の上で
+// TCP を開く。実行先のセッションのポート転送を、このマシンの待ち受けからつなぐのに使う。
+// SSH の接続が切れていれば繋ぎ直す。
+func (m *Manager) DialRunTargetLoopback(ctx context.Context, alias string, port int) (net.Conn, error) {
+	engine, err := m.engine(alias)
+	if err != nil {
+		return nil, err
+	}
+	return engine.link.dialLoopback(ctx, port)
 }
 
 // AddEngine は、alias で動いているエンジンを実行先に足す。足す前に、接続できること、
