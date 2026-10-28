@@ -106,6 +106,18 @@ describe("openStream", () => {
     expect(JSON.parse(String(socket.sent[1]))).toEqual({ resize: { cols: 120, rows: 34 } });
   });
 
+  it("sends xterm's binary reports one byte per character, without UTF-8", () => {
+    withFakeSocket();
+    const stream = openStream("one-time", "/terminal/stream", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose: vi.fn() });
+    const socket = FakeSocket.last!;
+    socket.open();
+
+    // A press of the left button at column 128, row 1 in the default format.
+    stream.sendBinary("\u001b[M \u00a0!");
+
+    expect([...(socket.sent[0] as Uint8Array)]).toEqual([0x1b, 0x5b, 0x4d, 0x20, 0xa0, 0x21]);
+  });
+
   it("splits a large UTF-8 paste below the server's per-message limit without changing bytes", () => {
     withFakeSocket();
     const stream = openStream("one-time", "/terminal/stream", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onShellReplaced: vi.fn(), onClose: vi.fn() });
