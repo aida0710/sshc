@@ -257,6 +257,10 @@ export function TerminalView({
       fontSize: resolvedFontSize,
       theme: terminalTheme(container, hasBackground),
       scrollback: scrollbackLines,
+      // A drag goes to a program that reads the mouse (Claude Code, vim, tmux).
+      // xterm.js lets Shift take the drag back for selecting, except on macOS,
+      // where only Option does and only with this on.
+      macOptionClickForcesSelection: true,
       linkHandler: {
         activate: (event, target, range) => {
           const line = view.buffer.active.getLine(range.start.y - 1)?.translateToString(true) ?? "";
