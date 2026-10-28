@@ -193,6 +193,9 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	if request.BrowserScrollbackLines != nil {
 		settings.BrowserScrollbackLines = *request.BrowserScrollbackLines
 	}
+	if request.RetainedTerminals != nil {
+		settings.RetainedTerminals = *request.RetainedTerminals
+	}
 	if request.FontSize != nil {
 		settings.FontSize = *request.FontSize
 	}

@@ -2329,6 +2329,7 @@ type TerminalSettings struct {
 	MaxSessions            *int                `json:"maxSessions,omitempty"`
 	Osc52                  *bool               `json:"osc52,omitempty"`
 	Reconnect              *int                `json:"reconnect,omitempty"`
+	RetainedTerminals      *int                `json:"retainedTerminals,omitempty"`
 	RightClickPaste        *bool               `json:"rightClickPaste,omitempty"`
 	ScrollbackBytes        *int                `json:"scrollbackBytes,omitempty"`
 	StartDirectory         *string             `json:"startDirectory,omitempty"`

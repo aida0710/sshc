@@ -418,6 +418,7 @@ describe("SettingsPanel", () => {
     await waitFor(() => expect(within(region).getByLabelText("Engine replay buffer (bytes)")).toBeEnabled());
     await user.type(within(region).getByLabelText("Engine replay buffer (bytes)"), "65536");
     await user.type(within(region).getByLabelText("Browser scrollback (lines)"), "12000");
+    await user.type(within(region).getByLabelText("Terminals kept hidden"), "20");
     openTerminalTab(region, "Behaviour");
     await waitFor(() => expect(within(region).getByLabelText("Default local shell")).toBeEnabled());
     await user.selectOptions(within(region).getByLabelText("Default local shell"), "fish");
@@ -428,6 +429,7 @@ describe("SettingsPanel", () => {
     expect(setTerminalSettings).toHaveBeenCalledWith({
       scrollbackBytes: 65536,
       browserScrollbackLines: 12000,
+      retainedTerminals: 20,
       localShellProfile: "fish",
       osc52: true,
       jisYenBackslash: true,
@@ -446,6 +448,8 @@ describe("SettingsPanel", () => {
       .toHaveAttribute("max", "100000");
     expect(within(terminal).getByLabelText("Sessions open at once"))
       .toHaveAttribute("max", "200");
+    expect(within(terminal).getByLabelText("Terminals kept hidden"))
+      .toHaveAttribute("max", "99");
     expect(within(terminal).getByLabelText("Connection log")).toBeVisible();
   });
 

@@ -8,6 +8,7 @@ import {
   maxBrowserScrollbackLines,
   minBrowserScrollbackLines,
 } from "../terminal/browserScrollback";
+import { defaultRetainedTerminals, maxRetainedTerminals, minRetainedTerminals } from "../terminal/splitView/retainedSessions";
 import { fonts } from "../terminal/fonts";
 import { palettes } from "../terminal/palettes";
 import type { DescribableControlProps } from "../ui/describeControl";
@@ -121,6 +122,9 @@ export function TerminalConnectionFields({ draft, edit }: GroupProps) {
           scrollbackMin: minBrowserScrollbackLines,
           scrollbackMax: maxBrowserScrollbackLines,
           scrollbackDefault: defaultBrowserScrollbackLines,
+          retainedMin: minRetainedTerminals,
+          retainedMax: maxRetainedTerminals,
+          retainedDefault: defaultRetainedTerminals,
         })}
         interactiveChildren
       >
@@ -130,8 +134,8 @@ export function TerminalConnectionFields({ draft, edit }: GroupProps) {
   );
 }
 
-// TerminalLimitInputs are the three numbers in one sentence-like line. Each input keeps its full name (the
-// short words beside them only make sense together), and all three take the row's description.
+// TerminalLimitInputs are the four numbers in one sentence-like line. Each input keeps its full name (the
+// short words beside them only make sense together), and all four take the row's description.
 function TerminalLimitInputs({ draft, edit, ...description }: GroupProps & DescribableControlProps) {
   const t = useTranslate();
   return (
@@ -179,6 +183,20 @@ function TerminalLimitInputs({ draft, edit, ...description }: GroupProps & Descr
           onChange={(event) => edit({ browserScrollbackLines: event.target.value })}
         />
         {t("terminal.linesUnit")}
+      </label>
+      <label className="inline-flex items-center gap-2">
+        {t("terminal.retainedTerminalsShort")}
+        <input
+          type="number"
+          min={minRetainedTerminals}
+          max={maxRetainedTerminals}
+          aria-label={t("terminal.retainedTerminalsLabel")}
+          {...description}
+          className={`${sizedControl("w-[64px]")} font-mono`}
+          value={draft.retainedTerminals}
+          placeholder={String(defaultRetainedTerminals)}
+          onChange={(event) => edit({ retainedTerminals: event.target.value })}
+        />
       </label>
     </span>
   );
