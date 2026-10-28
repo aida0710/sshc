@@ -110,7 +110,6 @@ describe("useTerminalNotifications", () => {
       rerender({ current: [notified(1)], active: "one" });
 
       await waitFor(() => expect(bridge.cancelNotification).toHaveBeenCalledWith("sshc-terminal-one"));
-      expect(bridge.cancelNotification).toHaveBeenCalledWith("sshc-command-one");
     });
 
     it("takes back the notifications of a session that was closed", async () => {

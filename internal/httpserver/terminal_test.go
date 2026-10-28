@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1236,6 +1237,36 @@ func TestTerminalOSCTitleAndNotificationReachTheSessionList(t *testing.T) {
 	}
 	if snapshot := string(snapshotOf(core)); snapshot != "before\x1b]0;API認証の修正\x1b\\\x1b]777;notify;Claude Code;入力待ちです\aafter" {
 		t.Fatalf("scrollback was altered: %q", snapshot)
+	}
+}
+
+// The engine times the command, so a session shown in no browser is notified
+// too. The browser words the notification from the seconds and the exit code.
+func TestTheEndOfALongCommandReachesTheSessionListWithItsExitCode(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	started := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	var elapsed atomic.Int64
+	fixture.registry.Now = func() time.Time { return started.Add(time.Duration(elapsed.Load())) }
+	id, _ := fixture.openShell(t)
+	process := fixture.starter.last()
+	session, _ := fixture.registry.Lookup(id)
+
+	process.feed("make\r\n\x1b]133;C\a")
+	testwait.Until(t, func() bool { return strings.Contains(string(snapshotOf(session)), "133;C") })
+	elapsed.Store(int64(terminal.LongCommand + time.Second))
+	process.feed("\x1b]133;D;2\a")
+
+	var listed api.TerminalSessionList
+	testwait.Until(t, func() bool {
+		_, current := fixture.do(t, http.MethodGet, "/api/v1/terminal/sessions", "")
+		return json.Unmarshal([]byte(current), &listed) == nil && len(listed.Sessions) == 1 &&
+			listed.Sessions[0].LastNotification != nil
+	})
+	notification := listed.Sessions[0].LastNotification
+	finished := notification.FinishedCommand
+	if finished == nil || finished.Seconds != 31 || finished.ExitCode == nil || *finished.ExitCode != 2 ||
+		notification.Title != "" || notification.Body != "" {
+		t.Fatalf("notification = %+v, finished command %+v", notification, finished)
 	}
 }
 

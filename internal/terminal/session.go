@@ -49,6 +49,9 @@ type Session struct {
 	notificationVersion uint64
 	lastNotification    *Notification
 	programProgress     *ProgramProgress
+	// commandStartedAt is when the current shell last reported a command
+	// start (OSC 133;C); zero when no command is running. See command_finished.go.
+	commandStartedAt time.Time
 
 	connectedCallback func()
 	connectedOnce     sync.Once
@@ -381,6 +384,7 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 	// linger on the pane while it starts.
 	s.resetTerminalTitleLocked()
 	s.programProgress = nil
+	s.commandStartedAt = time.Time{}
 	s.generation++
 	generation := s.generation
 	// 前のシェルは既に無い。ここから先の入力は新しいシェルへ届く。
@@ -459,10 +463,12 @@ func (s *Session) pump(now func() time.Time) {
 		process, ready, generation := s.process, s.ready, s.generation
 		s.mutex.Unlock()
 		observer := newOSCObserver(oscReports{
-			Title:     func(title string) { s.acceptTitle(generation, title) },
-			Notify:    func(title, body string) { s.acceptNotification(generation, title, body, now()) },
-			Progress:  func(progress *ProgramProgress) { s.acceptProgramProgress(generation, progress) },
-			Directory: func(directory string) { s.acceptWorkingDirectory(generation, directory) },
+			Title:           func(title string) { s.acceptTitle(generation, title) },
+			Notify:          func(title, body string) { s.acceptNotification(generation, title, body, now()) },
+			Progress:        func(progress *ProgramProgress) { s.acceptProgramProgress(generation, progress) },
+			Directory:       func(directory string) { s.acceptWorkingDirectory(generation, directory) },
+			CommandStarted:  func() { s.acceptCommandStarted(generation, now()) },
+			CommandFinished: func(exitCode *int) { s.acceptCommandFinished(generation, exitCode, now()) },
 		})
 		buffer := make([]byte, readChunk)
 		for {

@@ -152,6 +152,12 @@ func describeSession(view terminal.View) api.TerminalSession {
 			Body:       view.LastNotification.Body,
 			OccurredAt: view.LastNotification.OccurredAt.UTC(),
 		}
+		if finished := view.LastNotification.FinishedCommand; finished != nil {
+			described.LastNotification.FinishedCommand = &api.TerminalFinishedCommand{
+				Seconds:  int(finished.Duration.Round(time.Second) / time.Second),
+				ExitCode: finished.ExitCode,
+			}
+		}
 	}
 	if view.Reconnect != nil {
 		described.Reconnect = &api.TerminalReconnect{

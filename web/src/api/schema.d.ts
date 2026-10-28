@@ -3346,6 +3346,11 @@ export interface components {
             body: string;
             /** Format: date-time */
             occurredAt: string;
+            finishedCommand?: components["schemas"]["TerminalFinishedCommand"];
+        };
+        TerminalFinishedCommand: {
+            seconds: number;
+            exitCode?: number;
         };
         TerminalDestination: {
             alias: string;

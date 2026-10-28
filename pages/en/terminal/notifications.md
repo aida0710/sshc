@@ -45,6 +45,16 @@ printf '\e]9;Task complete\a'
 printf '\e]777;notify;Build finished;main.go compiled\a'
 ```
 
+## Long commands finishing
+
+When the shell reports where a command starts and ends through OSC 133 (shell integration), the sshc engine times it. When a command that ran for 30 seconds or more finishes, sshc tells you by the same rules as a program's notification: an unread mark, a browser notification and the sound. The text reads “A command finished after 95 seconds.”, or “A command failed with exit code 2 after 95 seconds.” when the shell reports a nonzero exit code. Because the engine does the timing, commands in a session in another workspace, or outside the split view, are reported too.
+
+To try it, run this in a shell with shell integration and then switch to another session:
+
+```sh
+sleep 31; false
+```
+
 ## Progress
 
 When a program reports progress with `ESC ] 9 ; 4 ; state ; percent BEL`, sshc draws a thin line along the bottom edge of the pane header and its entry in the session list. The list keeps showing progress while you view another session.

@@ -2206,6 +2206,12 @@ type TerminalExit struct {
 	Signal         string `json:"signal"`
 }
 
+// TerminalFinishedCommand defines model for TerminalFinishedCommand.
+type TerminalFinishedCommand struct {
+	ExitCode *int `json:"exitCode,omitempty"`
+	Seconds  int  `json:"seconds"`
+}
+
 // TerminalForward defines model for TerminalForward.
 type TerminalForward struct {
 	Id        string `json:"id"`
@@ -2226,9 +2232,10 @@ type TerminalIndeterminateProgressState string
 
 // TerminalNotification defines model for TerminalNotification.
 type TerminalNotification struct {
-	Body       string    `json:"body"`
-	OccurredAt time.Time `json:"occurredAt"`
-	Title      string    `json:"title"`
+	Body            string                   `json:"body"`
+	FinishedCommand *TerminalFinishedCommand `json:"finishedCommand,omitempty"`
+	OccurredAt      time.Time                `json:"occurredAt"`
+	Title           string                   `json:"title"`
 }
 
 // TerminalPresentation defines model for TerminalPresentation.

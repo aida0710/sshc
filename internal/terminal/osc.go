@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"encoding/base64"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -11,11 +12,14 @@ import (
 )
 
 // Notification is one desktop-style notification a program running in the
-// terminal asked for through OSC 9, OSC 99 or OSC 777.
+// terminal asked for through OSC 9, OSC 99 or OSC 777, or the end of a long
+// command the shell reported through OSC 133.
 type Notification struct {
 	Title      string
 	Body       string
 	OccurredAt time.Time
+	// FinishedCommand is set, and Title and Body are empty, for a long command.
+	FinishedCommand *FinishedCommand
 }
 
 const (
@@ -79,6 +83,10 @@ type oscReports struct {
 	Notify    func(title, body string)
 	Progress  func(*ProgramProgress)
 	Directory func(directory string)
+	// CommandStarted and CommandFinished follow the shell integration's
+	// OSC 133;C and OSC 133;D. exitCode is nil when the shell sent none.
+	CommandStarted  func()
+	CommandFinished func(exitCode *int)
 }
 
 type kittyNotification struct {
@@ -204,13 +212,34 @@ func (o *oscObserver) complete() {
 	case "99":
 		o.notifyKitty(payload)
 	case "133":
-		kind, _, _ := strings.Cut(payload, ";")
-		if kind == "D" {
+		kind, detail, _ := strings.Cut(payload, ";")
+		switch kind {
+		case "C":
+			if o.reports.CommandStarted != nil {
+				o.reports.CommandStarted()
+			}
+		case "D":
+			// A program that quit without clearing its OSC 9;4 progress leaves
+			// no bar behind once the shell reports the command finished.
 			o.reportProgramProgress(nil)
+			if o.reports.CommandFinished != nil {
+				o.reports.CommandFinished(commandExitCode(detail))
+			}
 		}
 	case "777":
 		o.notifyRxvt(payload)
 	}
+}
+
+// commandExitCode reads the exit code of `OSC 133 ; D ; code`. The key=value
+// fields some shells add after it are ignored.
+func commandExitCode(detail string) *int {
+	field, _, _ := strings.Cut(detail, ";")
+	code, err := strconv.Atoi(field)
+	if err != nil {
+		return nil
+	}
+	return &code
 }
 
 func (o *oscObserver) reportProgramProgress(progress *ProgramProgress) {

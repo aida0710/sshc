@@ -1,9 +1,9 @@
 import type { Terminal } from "@xterm/xterm";
-import { attachOSC133Commands, type OSC133Completion } from "./osc133";
+import { attachOSC133Commands } from "./osc133";
 
-// Marks each OSC 133 command start in the gutter and reports completions,
-// so that a long command finishing in a hidden tab can raise a notification.
-export function attachCommandMarkers(view: Terminal, onCompleted: (completion: OSC133Completion) => void): { dispose(): void } {
+// Marks each OSC 133 command start in the gutter and reports when a command
+// ended.
+export function attachCommandMarkers(view: Terminal, onCompleted: () => void): { dispose(): void } {
   const decorations = new Set<{ dispose(): void }>();
   const commands = attachOSC133Commands(view.parser, {
     onCommandStarted: () => {
