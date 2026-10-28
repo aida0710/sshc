@@ -26,12 +26,14 @@ function harness(initial: TerminalClipboardSettings = { copyOnSelect: true, righ
   };
   const refuse = vi.fn();
   const copied = vi.fn();
+  const nothingToPaste = vi.fn();
   const detach = attachTerminalClipboard({
     container,
     terminal,
     clipboard,
     settings: () => settings,
     refuse,
+    nothingToPaste,
     copied,
   });
   return {
@@ -39,6 +41,7 @@ function harness(initial: TerminalClipboardSettings = { copyOnSelect: true, righ
     terminal,
     clipboard,
     refuse,
+    nothingToPaste,
     copied,
     detach,
     key: (event: KeyboardEvent) => keyHandler?.(event),
@@ -54,7 +57,43 @@ function harness(initial: TerminalClipboardSettings = { copyOnSelect: true, righ
 
 afterEach(() => localStorage.clear());
 
+// pasteEvent is a browser paste of what clipboardData holds: text, and files such as an image.
+function pasteEvent(text: string, files: { type: string }[] = []): Event {
+  const event = new Event("paste", { cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: { getData: (format: string) => format === "text/plain" ? text : "", items: files.map(({ type }) => ({ kind: "file", type })) },
+  });
+  return event;
+}
+
 describe("terminal clipboard interactions", () => {
+  it("says an image cannot be pasted instead of doing nothing", () => {
+    const subject = harness();
+
+    const event = pasteEvent("", [{ type: "image/png" }]);
+    subject.container.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(subject.nothingToPaste).toHaveBeenCalledExactlyOnceWith(true);
+    expect(subject.terminal.paste).not.toHaveBeenCalled();
+    subject.container.dispatchEvent(pasteEvent("ls"));
+    expect(subject.terminal.paste).toHaveBeenCalledExactlyOnceWith("ls");
+    expect(subject.nothingToPaste).toHaveBeenCalledOnce();
+    subject.detach();
+  });
+
+  it("says the clipboard has no text when the paste shortcut reads nothing", async () => {
+    const subject = harness();
+    subject.clipboard.readText.mockResolvedValueOnce("");
+    saveBindings({ ...defaultBindings, paste: ["Alt+V"] });
+
+    subject.key(new KeyboardEvent("keydown", { key: "v", altKey: true, cancelable: true }));
+    await vi.waitFor(() => expect(subject.nothingToPaste).toHaveBeenCalledExactlyOnceWith(false));
+
+    expect(subject.terminal.paste).not.toHaveBeenCalled();
+    subject.detach();
+  });
+
   it("uses a remapped paste chord once and observes changes without reattaching", async () => {
     const subject = harness();
     saveBindings({ ...defaultBindings, paste: ["Alt+V"] });

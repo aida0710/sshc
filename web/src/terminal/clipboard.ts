@@ -22,6 +22,10 @@ type TerminalClipboardOptions = {
   coarsePointer?: () => boolean;
   settings: () => TerminalClipboardSettings;
   refuse: () => void;
+  // nothingToPaste は、貼り付けに文字が無かったときに呼ぶ。image は、クリップボードにあったのが
+  // 画像だけだったか（ターミナルへ送れるのは文字だけである）。黙っていると、貼り付けが
+  // 効かなかったのか、何も起きなかったのかが分からない。
+  nothingToPaste?: (image: boolean) => void;
   // copied は、コピーのショートカットで選択を写せたときだけ呼ぶ。選ぶだけで写す設定のときに
   // 毎回知らせると、選び直すたびに知らせが出てうるさい。
   copied?: () => void;
@@ -48,6 +52,7 @@ export function attachTerminalClipboard({
   coarsePointer = () => false,
   settings,
   refuse,
+  nothingToPaste,
   copied,
   enhancedKey,
   sendEnhancedKey,
@@ -69,7 +74,10 @@ export function attachTerminalClipboard({
       .then((text) => {
         // Clipboard reads can outlive the terminal effect which started them.
         // Never deliver an old session's paste into a replacement session.
-        if (active && text !== "") pasteText(text);
+        if (!active) return;
+        // readText cannot tell an image from an empty clipboard; the paste event below can.
+        if (text === "") nothingToPaste?.(false);
+        else pasteText(text);
       })
       .catch(() => {
         if (active) refuse();
@@ -109,13 +117,18 @@ export function attachTerminalClipboard({
     copySelection({ announce: false });
   });
   const onPaste = (event: ClipboardEvent) => {
-    const text = event.clipboardData?.getData("text/plain");
-    if (text === undefined) return;
+    const data = event.clipboardData;
+    if (data === null) return;
     // Own the event once at xterm's parent so neither its nested listeners nor
     // a custom keyboard shortcut can duplicate terminal input.
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (text !== "") pasteText(text);
+    const text = data.getData("text/plain");
+    if (text !== "") {
+      pasteText(text);
+      return;
+    }
+    nothingToPaste?.([...data.items].some((item) => item.kind === "file" && item.type.startsWith("image/")));
   };
   // A keyboard's clipboard suggestion can arrive as an input event instead of
   // a paste event, and xterm.js would send its text as typed. Text that would
