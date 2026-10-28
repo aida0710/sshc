@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/labstack/echo/v5"
@@ -313,9 +315,8 @@ func (h RemoteEngineHandlers) forwardWithLocalListens(c *echo.Context, alias, re
 	if err != nil {
 		return remoteEngineProblem(c, err)
 	}
-	var listed api.TerminalSessionList
-	if reply.Status >= http.StatusOK && reply.Status < http.StatusMultipleChoices &&
-		json.Unmarshal(reply.Body, &listed) == nil && listed.Sessions != nil {
+	succeeded := reply.Status >= http.StatusOK && reply.Status < http.StatusMultipleChoices
+	if listed, ok := sessionListAnswer(remotePath, reply.Body); succeeded && ok {
 		return c.JSON(reply.Status, h.withLocalListens(alias, listed))
 	}
 	contentType := reply.ContentType
@@ -326,6 +327,22 @@ func (h RemoteEngineHandlers) forwardWithLocalListens(c *echo.Context, alias, re
 		return c.NoContent(reply.Status)
 	}
 	return c.Blob(reply.Status, contentType, reply.Body)
+}
+
+// sessionListAnswer は、remotePath の答えがセッションの一覧なら、それを返す。開き直しの申し出
+// （/terminal/restore）も sessions を持つが、要素の形が違う。それを一覧として読むと、項目が落ち、
+// 転送の待ち受けまで閉じてしまうので、セッションの受け口の答えで、形が正確に合うものだけを読む。
+func sessionListAnswer(remotePath string, body []byte) (api.TerminalSessionList, bool) {
+	var listed api.TerminalSessionList
+	if !strings.HasPrefix(remotePath, "/api/v1/terminal/sessions") {
+		return listed, false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&listed) != nil || listed.Sessions == nil {
+		return listed, false
+	}
+	return listed, true
 }
 
 // maxForwardedRequestBody は、中継のある実行先へ取り次ぐ要求の本文の上限である。取り次ぎ

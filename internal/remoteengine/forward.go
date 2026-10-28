@@ -95,7 +95,8 @@ type TerminalAnswer struct {
 }
 
 // maxCalledAnswer は、CallTerminalAPI が読む答えの上限である。答えは、最大 64 の宛先と
-// それぞれのコマンドを並べた JSON までである。
+// それぞれのコマンドを並べた JSON か、セッションの一覧（転送を中継している実行先の取り次ぎ）
+// までである。
 const maxCalledAnswer = 1 << 20
 
 // ErrAnswerTooLarge は、接続先の答えが maxCalledAnswer を超えたことを表す。

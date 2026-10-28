@@ -744,7 +744,7 @@ export function TerminalView({
         <TerminalPortForwards
           session={session}
           api={forwardApiFor(runTarget)}
-          onRunTarget={runTarget !== undefined}
+          isRunTargetSession={runTarget !== undefined}
           {...(onForwardsChanged === undefined ? {} : { onChanged: onForwardsChanged })}
           onClose={() => setPortForwardsOpen(false)}
         />

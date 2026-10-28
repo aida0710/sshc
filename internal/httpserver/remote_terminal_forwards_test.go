@@ -18,7 +18,9 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/session"
+	"sshc/internal/storage"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalrestore"
 )
 
 // echoForwardProcess は、実行先のセッションの役である。転送を求められると、実行先の 127.0.0.1 の
@@ -118,7 +120,22 @@ func runTargetForwardFixture(t *testing.T) (*echo.Echo, session.Credentials, str
 	})
 	remote := echo.New()
 	remote.Use((Security{ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: manager, Unlocked: alwaysUnlocked}).Middleware)
-	registerTerminalRoutes(remote, TerminalHandlers{Registry: registry, Tickets: &terminal.Tickets{}, ExpectedOrigin: "http://" + keyTestHost})
+	storageRoot, err := storage.NewWorkspace(storage.OSFileSystem{}, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous, err := terminalrestore.NewService(storageRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := previous.SaveOnStop([]terminalrestore.Session{{Kind: "ssh", Alias: "web", Workspace: "default", PinnedTitle: "build"}}); err != nil {
+		t.Fatal(err)
+	}
+	restore, err := terminalrestore.NewService(storageRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerTerminalRoutes(remote, TerminalHandlers{Registry: registry, RestoreOffers: restore, Tickets: &terminal.Tickets{}, ExpectedOrigin: "http://" + keyTestHost})
 	directory := &relayWithLoopback{relayToEngine: relayToEngine{t: t, remote: remote, credentials: remoteCredentials}}
 	directory.engines = []string{"r540"}
 	local, credentials, _ := localEngineForRunTarget(t, directory)
@@ -217,4 +234,18 @@ func TestRemovingARunTargetClosesItsForwardListeners(t *testing.T) {
 	if _, err := net.DialTimeout("tcp", listen, time.Second); err == nil {
 		t.Fatal("this machine still listens for a run target that was removed")
 	}
+}
+
+func TestTheRestoreOfferOfARunTargetWithAForwardPassesThroughAndKeepsTheListener(t *testing.T) {
+	local, credentials, sessionID, _ := runTargetForwardFixture(t)
+	listen := startRunTargetLocalForward(t, local, credentials, sessionID)
+	offer := sendKeyRequest(t, local, credentials, http.MethodGet, "/api/v1/engines/r540/terminal/restore", nil, "")
+	if offer.Code != http.StatusOK || !strings.Contains(offer.Body.String(), `"pinnedTitle":"build"`) {
+		t.Fatalf("restore offer = %d: %s, want the offer as the run target wrote it", offer.Code, offer.Body.String())
+	}
+	connection, err := net.DialTimeout("tcp", listen, time.Second)
+	if err != nil {
+		t.Fatalf("reading the restore offer closed the forward's listener: %v", err)
+	}
+	_ = connection.Close()
 }

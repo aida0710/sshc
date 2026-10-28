@@ -44,7 +44,7 @@ describe("TerminalPortForwards", () => {
 
   it("offers only temporary local and dynamic forwards on a run target", async () => {
     const api = { startTerminalForward: vi.fn(), stopTerminalForward: vi.fn() };
-    render(<LanguageProvider><TerminalPortForwards session={session} api={api} onRunTarget onClose={vi.fn()} /></LanguageProvider>);
+    render(<LanguageProvider><TerminalPortForwards session={session} api={api} isRunTargetSession onClose={vi.fn()} /></LanguageProvider>);
     const options = Array.from(screen.getByLabelText<HTMLSelectElement>("Type").options).map((option) => option.value);
     expect(options).toEqual(["local", "dynamic"]);
     expect(screen.queryByRole("checkbox", { name: /Save to this connection/ })).toBeNull();
