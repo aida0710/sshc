@@ -45,14 +45,14 @@ test("gives one named secret to two hosts and writes neither name into the file"
     await expect(page.getByRole("heading", { name: alias, exact: true })).toBeVisible();
 
     const panel = page.getByRole("region", { name: "Authentication" });
-    await panel.getByLabel("Stored password action").selectOption("saved_password");
+    await panel.getByLabel("Password", { exact: true }).selectOption("saved_password");
     await panel.getByLabel("Saved password").selectOption("office-vm");
     const saved = page.waitForResponse(
       (response) => new URL(response.url()).pathname === "/api/v1/connections" && response.request().method() === "PATCH",
     );
     await page.getByRole("button", { name: "Save Basic settings" }).click();
     expect((await saved).status()).toBe(200);
-    await expect(panel.getByText("Assigned: office-vm")).toBeVisible();
+    await expect(panel.getByLabel("Password", { exact: true }).locator("option:checked")).toHaveText("office-vm (saved password)");
   }
 
   await openSection(page, "Account passwords");
@@ -95,7 +95,7 @@ test("never offers a key passphrase where a host password is chosen", async ({ p
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
 
   const panel = page.getByRole("region", { name: "Authentication" });
-  await panel.getByLabel("Stored password action").selectOption("saved_password");
+  await panel.getByLabel("Password", { exact: true }).selectOption("saved_password");
   await expect(panel.getByLabel("Saved password").locator("option")).toHaveCount(1);
   await expect(panel.getByRole("option", { name: "build-key" })).toHaveCount(0);
 });
@@ -123,14 +123,14 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
   const authentication = page.getByRole("region", { name: "Authentication" });
-  await authentication.getByLabel("One-time password action").selectOption("saved_totp");
+  await authentication.getByLabel("One-time password", { exact: true }).selectOption("saved_totp");
   await authentication.getByLabel("Saved TOTP").selectOption("production-otp");
   const saved = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/v1/connections" && response.request().method() === "PATCH",
   );
   await page.getByRole("button", { name: "Save Basic settings" }).click();
   expect((await saved).status()).toBe(200);
-  await expect(authentication.getByText("Assigned: production-otp")).toBeVisible();
+  await expect(authentication.getByLabel("One-time password", { exact: true }).locator("option:checked")).toHaveText("production-otp");
 
   await openSection(page, "OTP");
   await openRowMenuItem(page, "production-otp", "Assigned hosts (1)");
@@ -310,10 +310,10 @@ test("lists saved one-time passwords with their current codes in both languages"
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
   const authentication = page.getByRole("region", { name: "Authentication" });
-  await authentication.getByLabel("One-time password action").selectOption("saved_totp");
+  await authentication.getByLabel("One-time password", { exact: true }).selectOption("saved_totp");
   await authentication.getByLabel("Saved TOTP").selectOption("bastion-otp");
   await page.getByRole("button", { name: "Save Basic settings" }).click();
-  await expect(authentication.getByText("Assigned: bastion-otp")).toBeVisible();
+  await expect(authentication.getByLabel("One-time password", { exact: true }).locator("option:checked")).toHaveText("bastion-otp");
   await openSection(page, "OTP");
   await expect(page.getByRole("article", { name: "bastion-otp" })).toBeVisible();
   for (const setupKey of Object.values(setupKeys)) {

@@ -9,7 +9,7 @@ test("stores a password for a host and never shows it again", async ({ page, ins
   await expect(panel).toBeVisible();
   await expect(panel.getByLabel("SSH private key")).toHaveValue("");
 
-  await panel.getByLabel("Stored password action").selectOption("dedicated_password");
+  await panel.getByLabel("Password", { exact: true }).selectOption("dedicated_password");
   await panel.getByRole("textbox", { name: "Connection password", exact: true }).fill("hunter2");
   const saved = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/v1/connections" && response.request().method() === "PATCH",
@@ -17,7 +17,7 @@ test("stores a password for a host and never shows it again", async ({ page, ins
   await page.getByRole("button", { name: "Save Basic settings" }).click();
   expect((await saved).status()).toBe(200);
 
-  await expect(panel.getByText(/connection-only password is assigned/)).toBeVisible();
+  await expect(panel.getByLabel("Password", { exact: true }).locator("option:checked")).toHaveText("Password for this connection");
   await expect(page.locator("body")).not.toContainText("hunter2");
 
   const sealed = await installation.read("sshc/secrets");
@@ -34,7 +34,7 @@ test("selecting a key removes the stored password assignment and returning to ag
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
 
   let panel = page.getByRole("region", { name: "Authentication" });
-  await panel.getByLabel("Stored password action").selectOption("dedicated_password");
+  await panel.getByLabel("Password", { exact: true }).selectOption("dedicated_password");
   await panel.getByRole("textbox", { name: "Connection password", exact: true }).fill("first e2e password");
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
 
@@ -51,18 +51,18 @@ test("selecting a key removes the stored password assignment and returning to ag
   expect(keyId).not.toBeNull();
 
   await keyChoice.selectOption(keyId);
-  await expect(panel.getByLabel("Stored password action")).toHaveCount(0);
+  await expect(panel.getByLabel("Password", { exact: true })).toHaveCount(0);
   await expect(panel.getByText(/will remove this connection's assignment/)).toBeVisible();
   const connectionURL = page.url();
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
   await expect(page).toHaveURL(connectionURL);
   await expect(panel.getByText(/will remove this connection's assignment/)).toHaveCount(0);
-  await expect(panel.getByLabel("Stored password action")).toHaveCount(0);
+  await expect(panel.getByLabel("Password", { exact: true })).toHaveCount(0);
   expect(await installation.read("config")).toContain("IdentityFile ~/.ssh/id_exclusive_auth");
 
   await keyChoice.selectOption("");
-  await expect(panel.getByLabel("Stored password action")).toBeVisible();
-  await panel.getByLabel("Stored password action").selectOption("dedicated_password");
+  await expect(panel.getByLabel("Password", { exact: true })).toBeVisible();
+  await panel.getByLabel("Password", { exact: true }).selectOption("dedicated_password");
   await panel.getByRole("textbox", { name: "Connection password", exact: true }).fill("replacement e2e password");
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
   expect(await installation.read("config")).not.toContain("IdentityFile");

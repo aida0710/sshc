@@ -1952,7 +1952,7 @@ export const ja = {
   "password.blocker.identityFile":
     "このホストには秘密鍵が直接設定されています。sshcはパスワードの保存も自動入力も行いません。パスワードはOpenSSHのプロンプトで入力してください。",
   "password.warn.hostKeyUnknown":
-    "このホストの鍵はknown_hostsに登録されていません。保存済みパスワードを使用すると、パスワード入力ヘルパーはホスト鍵の確認に応答できないため、初回接続に失敗します。先にKnown Hostsでホスト鍵を登録してください。",
+    "このホストの鍵はknown_hostsに無いため、保存済みパスワードの自動入力は初回の接続で失敗します。先にKnown Hostsで登録してください。",
   "password.warn.hostNameUnresolved":
     "このaliasのHostNameを特定できませんでした。パスワードはaliasに紐づけて保存されます。",
   "password.show": "表示",
@@ -2743,26 +2743,30 @@ export const ja = {
   "conn.basicUser": "ユーザー",
   "conn.basicPort": "ポート",
   "conn.basicPrivateKey": "SSH秘密鍵",
-  "conn.basicStoredPassword": "保存済みパスワード",
-  "conn.basicStoredTOTP": "ワンタイムパスワード（TOTP）",
-  "conn.basicThisConnection": "この接続に設定されています。",
+  "conn.basicPassword": "パスワード",
+  "conn.basicTOTP": "ワンタイムパスワード",
+  "conn.basicNotAssigned": "割り当てない",
+  "conn.basicPasswordDedicated": "この接続専用のパスワード",
+  "conn.basicPasswordNamed": "{name}（保存済みパスワード）",
+  "conn.basicChooseSaved": "保存済みから選ぶ",
+  "conn.basicUnassign": "割り当てを外す",
+  "conn.basicTOTPNeedsVault": "Vaultのロックを解除すると選べます。",
   "conn.basicInheritedFrom": "{path}:{line}から継承しています。",
   "conn.basicSSHDefault":
     "SSHの既定値です。他の項目を保存しても、この値は書き込みません。",
-  "conn.basicReadOnlyAdvanced":
-    "基本タブでは読み取り専用です。元のディレクティブは詳細タブに残っています。",
   "conn.basicComplex":
     "この接続には{keyword}が複数あります。詳細タブで整理してください。",
   "conn.basicUseInheritedHost": "ホスト名を継承値・既定値に戻す",
   "conn.basicUseInheritedUser": "ユーザーを継承値・既定値に戻す",
   "conn.basicUseInheritedPort": "ポートを継承値・既定値に戻す",
-  "conn.basicKeepDirect": "この接続の値を維持",
+  "conn.basicInheritPlaceholder": "継承値か既定値",
+  "conn.basicDefaultTail": "既定",
+  "conn.basicInheritedTail": "継承",
   "conn.basicAgentOrInherited": "ssh-agentまたは継承した鍵",
   "conn.basicManageKeyPassphrase": "鍵パスフレーズを保存・変更",
-  "conn.basicKeyPassphraseHeading": "保存済みの鍵パスフレーズ",
-  "conn.basicKeyPassphraseUnencrypted":
-    "この秘密鍵は暗号化されていないため、パスフレーズを保存する必要はありません。",
   "conn.basicKeyPassphraseNone": "この鍵にはパスフレーズが保存されていません。",
+  "conn.basicKeyPassphraseLocked": "パスフレーズを保存しているかは、Vaultのロックを解除すると分かります。",
+  "conn.basicKeyPassphraseUnavailable": "保存済みのパスフレーズを読み込めませんでした。",
   "conn.basicKeyPassphraseDedicated":
     "この鍵だけのパスフレーズが保存されています。",
   "conn.basicKeyPassphraseShared":
@@ -2786,34 +2790,21 @@ export const ja = {
     "この接続は独自のIdentityFileパス{path}を使っています。詳細タブで編集してください。",
   "conn.basicComplexKey":
     "この接続にはIdentityFileが複数あります。詳細タブで整理してください。",
-  "conn.basicAssignedDedicated":
-    "この接続専用のパスワードが割り当てられています。値は表示しません。",
-  "conn.basicAssignedNamed": "割り当て済み：{name}",
-  "conn.basicNoPassword": "保存済みパスワードは割り当てられていません。",
-  "conn.basicNoTOTP": "ワンタイムパスワードは割り当てられていません。",
-  "conn.basicAssignedTOTP": "割り当て済み：{name}",
   "conn.basicRouteConfirmHeading": "保存済みの認証情報を変更後の設定で使いますか？",
   "conn.basicRouteConfirmBody":
     "HostName、User、Port、ProxyJump、VPNプロファイルなどの接続の設定が、認証情報を割り当てたときと変わっています。保存すると、割り当て済みのパスワードまたはワンタイムパスワードを変更後の設定で使用できるようにします。起動スニペットの割り当ては結び直さないため、停止中になります。［Snippets］画面で接続先を確認して、もう一度割り当ててください。",
   "conn.basicRouteConfirmSave": "保存して再確認",
   "conn.basicRouteConfirmCancel": "キャンセル",
-  "conn.basicTOTPAction": "ワンタイムパスワードの操作",
-  "conn.basicTOTPUnchanged": "割り当ては変更しない",
-  "conn.basicUseSavedTOTP": "保存済みTOTPを割り当てる",
-  "conn.basicRemoveTOTP": "TOTPの割り当てを外す",
   "conn.basicChooseSavedTOTP": "保存済みTOTP",
   "conn.basicNoSavedTOTPs": "Vaultに保存済みTOTPがありません",
-  "conn.basicTOTPNote":
-    "TOTPの登録はVaultで行い、この接続先への割り当てはここで保存します。「Verification code」など、認証コードを明示的に求める入力欄にのみ自動入力します。",
+  "conn.basicTOTPNote": "「Verification code」など、認証コードを求める入力欄にだけ自動で入力します。",
   "conn.basicPasswordCleanup":
     "保存済みパスワードが割り当てられていますが、現在のSSH設定では使用されません。基本設定を保存すると、この接続への割り当てだけを解除します。保存済みパスワードと、ほかの接続への割り当ては変更しません。",
-  "conn.basicPasswordAction": "保存済みパスワードの操作",
-  "conn.basicPasswordUnchanged": "パスワードは変更しない",
   "conn.basicReplaceDedicated": "この接続専用パスワードで置き換える",
-  "conn.basicRemovePassword": "保存済みパスワードを外す",
   "conn.basicConfirmRemove": "保存済みパスワードを外すことを確認",
   "conn.basicEmptyPasswordUnchanged":
     "空欄のままならパスワードを変更しません。",
+  "conn.basicPasswordStale": "接続先の設定が変わったため、保存済みパスワードを使っていません。基本設定を保存すると、今の設定で使います。",
   "conn.basicVaultMissing":
     "基本設定を保存する前に暗号化Vaultを作成してください。",
   "conn.basicVaultLocked":
@@ -2867,6 +2858,8 @@ export const ja = {
     "認証確認を続ける前に、保存済みディレクティブの内容を確認してください。",
   "conn.checksDirectiveAt": "{path}:{line}の{keyword}",
   "conn.checksAcknowledge": "確認して認証を実行",
+  "conn.checkResult": "{check}：{result}",
+  "conn.checksDetails": "詳しく",
   "conn.analysisLabel": "Config Analysis",
   "conn.analysisExplained": "保存済み設定から求めた値",
   "conn.analysisExplainedHint":
