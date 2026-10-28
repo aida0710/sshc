@@ -46,7 +46,6 @@ var (
 	ErrTooManySnippets    = errors.New("the snippet library is full")
 	ErrUnsupportedVersion = errors.New("snippets were written by a newer version of sshc")
 	ErrNoProtection       = errors.New("snippet encryption is not configured")
-	ErrNotEncrypted       = errors.New("snippet document is not encrypted")
 	ErrUnknownJob         = errors.New("snippet execution job does not exist")
 	ErrJobFinished        = errors.New("snippet execution job has already finished")
 	ErrTooManyJobs        = errors.New("too many snippet execution jobs are active")

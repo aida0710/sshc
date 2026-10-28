@@ -169,13 +169,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	remoteKeyService := &remotekey.Service{Resolve: inProcessSSH.target, Run: remoteRun}
 	snippetStore := snippets.NewStore(workspace, snippets.Protection{
 		Seal: vault.SealDocument,
-		Open: func(contents []byte) ([]byte, error) {
-			plaintext, err := vault.OpenDocument(contents)
-			if errors.Is(err, secret.ErrNotAVault) {
-				return nil, snippets.ErrNotEncrypted
-			}
-			return plaintext, err
-		},
+		Open: vault.OpenDocument,
 		WithMutation: func(mutation func() error) error {
 			return vault.WithStableSnapshot(func() error {
 				return transactions.WithSnapshot(mutation)
@@ -230,11 +224,6 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	// 古いバージョンが残したスニペットと控えを移せなくても、ロックの解除は止めない。
 	// 何度やっても移せないものに気付けるよう、ログに残す。起動時の自動のロック解除にも
 	// 効くよう、AutoUnlock より前に取り付ける。
-	if dependencies.Logger != nil {
-		vault.SetReportKeyBoundMigrationFailure(func(err error) {
-			dependencies.Logger.Error("migrate the snippets and backups left by an older version", "error", err)
-		})
-	}
 	if err := vault.AutoUnlock(); err != nil && !errors.Is(err, secret.ErrUnsupportedVersion) {
 		return nil, fmt.Errorf("auto-unlock vault: %w", err)
 	}
@@ -325,15 +314,6 @@ func buildSync(
 	// 変更は、同じトランザクションでその値を新しい鍵へ移す。
 	vault.SetTravelDigestRekey(syncService.RekeyTravelDigest)
 	// 鍵付きにする前の版が書いた素の digest は、Vault を開いたときに移す。起動時に
-	// 自動でロックを解除した Vault は、この配線より前に開いているので、ここで一度移す。
-	migrateTravelDigest := func() {
-		if err := syncService.MigrateTravelDigest(); err != nil && !errors.Is(err, secret.ErrLocked) && dependencies.Logger != nil {
-			dependencies.Logger.Error("migrate the vault digest in the synchronization state", "error", err)
-		}
-	}
-	vault.SetAfterUnlock(migrateTravelDigest)
-	migrateTravelDigest()
-
 	autoSync := remotesync.NewAuto(syncService, remotesync.AutoInterval,
 		func() string { return time.Now().UTC().Format(time.RFC3339) })
 	if dependencies.Logger != nil {
