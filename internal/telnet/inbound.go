@@ -27,7 +27,7 @@ const (
 )
 
 // inboundDecoder is the partially read IAC command carried between Reads.
-// Only Read touches it, while holding readMu.
+// Only Read touches it, while holding readMutex.
 type inboundDecoder struct {
 	state                   inboundState
 	negotiationCommand      byte

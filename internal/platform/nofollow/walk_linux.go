@@ -3,9 +3,6 @@
 package nofollow
 
 import (
-	"os"
-	"path/filepath"
-
 	"golang.org/x/sys/unix"
 )
 
@@ -18,17 +15,4 @@ func walkDirectoryFlags(readable bool) int {
 		return flags | unix.O_RDONLY
 	}
 	return flags | unix.O_PATH
-}
-
-func openWalkRoot() (*os.File, error) {
-	fd, err := unix.Open(string(filepath.Separator), walkDirectoryFlags(false), 0)
-	if err != nil {
-		return nil, err
-	}
-	root := os.NewFile(uintptr(fd), string(filepath.Separator))
-	if root == nil {
-		_ = unix.Close(fd)
-		return nil, os.ErrInvalid
-	}
-	return root, nil
 }

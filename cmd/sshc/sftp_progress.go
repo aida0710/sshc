@@ -21,12 +21,12 @@ import (
 // finished download leaves the drawing, so a recursive get of many files
 // redraws only the files its workers are transferring.
 type sftpCLIProgressDisplay struct {
-	engine    *engineAPI
-	output    io.Writer
-	refreshMu sync.Mutex
-	mu        sync.Mutex
-	state     sftpCLIProgressState
-	lines     int
+	engine       *engineAPI
+	output       io.Writer
+	refreshMutex sync.Mutex
+	mutex        sync.Mutex
+	state        sftpCLIProgressState
+	lines        int
 }
 
 // sftpCLIProgressState is what one drawing shows.
@@ -58,16 +58,16 @@ func newSFTPCLIProgressDisplay(engine *engineAPI, output io.Writer, files int) *
 }
 
 func (display *sftpCLIProgressDisplay) track(id, name string) {
-	display.mu.Lock()
+	display.mutex.Lock()
 	display.state.active = append(display.state.active, sftpCLIActiveDownload{id: id, name: name})
-	display.mu.Unlock()
+	display.mutex.Unlock()
 }
 
 // untrack takes a download that succeeded, failed or was canceled out of the
 // drawing and counts it as finished.
 func (display *sftpCLIProgressDisplay) untrack(id string) {
-	display.mu.Lock()
-	defer display.mu.Unlock()
+	display.mutex.Lock()
+	defer display.mutex.Unlock()
 	display.state.active = slices.DeleteFunc(display.state.active, func(download sftpCLIActiveDownload) bool {
 		return download.id == id
 	})
@@ -84,16 +84,16 @@ func (display *sftpCLIProgressDisplay) refresh(ctx context.Context) {
 	if display == nil {
 		return
 	}
-	display.refreshMu.Lock()
-	defer display.refreshMu.Unlock()
+	display.refreshMutex.Lock()
+	defer display.refreshMutex.Unlock()
 	requestContext, cancel := context.WithTimeout(ctx, sftpProgressRequestTimeout)
 	defer cancel()
 	var queue httpserver.SFTPTransferJobList
 	if err := display.engine.sendJSON(requestContext, http.MethodGet, "/api/v1/sftp/transfers", nil, &queue); err != nil {
 		return
 	}
-	display.mu.Lock()
-	defer display.mu.Unlock()
+	display.mutex.Lock()
+	defer display.mutex.Unlock()
 	for _, job := range queue.Jobs {
 		if job.ID == "" || !validSFTPDownloadParts(job.DownloadParts) {
 			continue
