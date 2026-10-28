@@ -29,6 +29,7 @@ import { KeyBar, applyModifiers, encodeKey } from "./KeyBar";
 import { useModifierKeys } from "./useModifierKeys";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
 import { selectionWithColors } from "./richCopy";
+import { attachKittyClipboard } from "./kittyClipboard";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { recentBufferText } from "./buffer";
 import { attachOsc52Clipboard } from "./osc52";
@@ -368,6 +369,15 @@ export function TerminalView({
       copied: () => setTerminalNotice(t("terminal.osc52Copied")),
       refused: () => setProblem(t("terminal.clipboardRefused")),
     });
+    const kittyClipboard = attachKittyClipboard({
+      parser: view.parser,
+      // A program may change the clipboard only where OSC 52 is allowed: the same setting governs both.
+      writesAllowed: () => osc52EnabledRef.current,
+      replaying: () => output.isReplaying(),
+      writeClipboard: (items) => clipboard.writeItems(items),
+      reply: (sequence) => sendInput.current(sequence),
+      copied: () => setTerminalNotice(t("terminal.osc52Copied")),
+    });
     const osc7Directory = attachOSC7Directory(view.parser, setCurrentDirectory);
     const osc9Directory = attachOSC9Directory(view.parser, setCurrentDirectory);
     const osc9Progress = attachOSC9Progress(view.parser, setProgramProgress);
@@ -505,6 +515,7 @@ export function TerminalView({
       settings: () => clipboardSettings.current,
       refuse: () => setProblem(t("terminal.clipboardRefused")),
       nothingToPaste: (image) => setTerminalNotice(t(image ? "terminal.pasteImageUnsupported" : "terminal.pasteEmpty")),
+      takePaste: (items) => kittyClipboard.takePaste(items),
       copied: () => setTerminalNotice(t("copy.done")),
       enhancedKey: (event) => encodeIntlYen(event, intlYenRef.current),
       sendEnhancedKey: (sequence) => linkController.currentStream()?.send(sequence),
@@ -523,6 +534,7 @@ export function TerminalView({
       detachTouchScroll();
       detachClipboard();
       detachOsc52();
+      kittyClipboard.dispose();
       output.dispose();
       osc7Directory.dispose();
       osc9Directory.dispose();

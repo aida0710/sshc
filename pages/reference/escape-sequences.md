@@ -24,6 +24,7 @@ description: sshcのTerminalが受け取るOSCと、画像やキーボードに�
 | 133 | シェル統合（A・B・C・D） | sshcエンジン、ブラウザ | コマンドの始まりの印、30秒以上かかったコマンドの終わりの通知、プロンプトのクリックでカーソルを動かす操作に使います |
 | 777 | 通知（rxvt形式、`notify;タイトル;本文`） | sshcエンジン | |
 | 1337 | iTerm2のインライン画像（`File=`） | ブラウザ | PNG、JPEG、GIFを表示します |
+| 5522 | Kitty clipboard protocol | ブラウザ | 書き込みは、OSC 52を有効にしているときだけ受け付け、text/plain、text/html、image/pngをクリップボードへ入れます。読み取りは断り、貼り付けの知らせ（mode 5522）で渡した一度きりのパスワードを付けたときだけ、貼り付けた中身を渡します |
 
 通知（9、99、777）は4096バイトを超えると、初めの部分だけを使います。未読の印、ブラウザ通知、通知音の出方は[タイトルと通知](/terminal/notifications)にあります。
 
@@ -31,7 +32,7 @@ description: sshcのTerminalが受け取るOSCと、画像やキーボードに�
 
 - 52の読み取り（クリップボードの中身をプログラムへ渡すこと）
 - 1337のうち`File=`以外（`SetUserVar`など）
-- 5522（Kitty clipboard protocol）
+- 5522の、貼り付け以外の読み取りとprimary selection
 - 7501（プログラムの状態の知らせ）
 
 ## OSC以外
@@ -41,6 +42,7 @@ description: sshcのTerminalが受け取るOSCと、画像やキーボードに�
 | DCS（Sixel） | 画像 | [画像と文字幅](/features/terminal#画像と文字幅) |
 | APC `G`（kittyの画像形式） | 画像 | データとして送られた画像だけを表示します |
 | Kitty keyboard protocol | キーボード | 問い合わせと、要求に応じた切り替えに対応します |
+| mode 5522（貼り付けの知らせ） | 貼り付け | プログラムが有効にしていると、貼り付けたときに文字を打ち込まず、貼り付けた中身の形（text/plain、image/pngなど）の一覧と一度きりのパスワードを知らせます |
 | mode 2033、`CSI ? 998 n`（visibility reports） | 見えているかの知らせ | sshcエンジンが答えます。どこかのブラウザがターミナルを表示していれば見えている、どれも表示していなければ見えていないと知らせます |
 
 そのほかのCSIやモード（マウス、bracketed paste、代替画面など）は、xterm.jsの[対応表](https://xtermjs.org/docs/api/vtfeatures/)のとおりです。

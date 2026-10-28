@@ -61,12 +61,38 @@ afterEach(() => localStorage.clear());
 function pasteEvent(text: string, files: { type: string }[] = []): Event {
   const event = new Event("paste", { cancelable: true });
   Object.defineProperty(event, "clipboardData", {
-    value: { getData: (format: string) => format === "text/plain" ? text : "", items: files.map(({ type }) => ({ kind: "file", type })) },
+    value: { getData: (format: string) => format === "text/plain" ? text : "", items: files.map(({ type }) => ({ kind: "file", type, getAsFile: () => new File([""], "pasted", { type }) })) },
   });
   return event;
 }
 
 describe("terminal clipboard interactions", () => {
+  it("hands every form of a paste to a program that asked for paste events, and types nothing", () => {
+    const container = document.createElement("div");
+    const terminal = { attachCustomKeyEventHandler: vi.fn(), onSelectionChange: () => ({ dispose: () => {} }), hasSelection: () => false, getSelection: () => "", paste: vi.fn() };
+    const taken: { mime: string; data: string | Blob }[][] = [];
+    const detach = attachTerminalClipboard({
+      container, terminal, clipboard: { readText: vi.fn(), writeText: vi.fn() },
+      settings: () => ({ copyOnSelect: false, rightClickPaste: false }), refuse: vi.fn(),
+      takePaste: (items) => { taken.push(items()); return true; },
+    });
+    const image = new File(["png"], "shot.png", { type: "image/png" });
+    const event = new Event("paste", { cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        getData: (format: string) => format === "text/plain" ? "caption" : "",
+        items: [{ kind: "string", type: "text/plain" }, { kind: "file", type: "image/png", getAsFile: () => image }],
+      },
+    });
+
+    container.dispatchEvent(event);
+
+    expect(taken).toEqual([[{ mime: "text/plain", data: "caption" }, { mime: "image/png", data: image }]]);
+    expect(terminal.paste).not.toHaveBeenCalled();
+    detach();
+  });
+
+
   it("says an image cannot be pasted instead of doing nothing", () => {
     const subject = harness();
 
@@ -270,7 +296,7 @@ describe("terminal clipboard interactions", () => {
     subject.container.append(textarea);
     const paste = new Event("paste", { bubbles: true, cancelable: true });
     Object.defineProperty(paste, "clipboardData", {
-      value: { getData: (format: string) => format === "text/plain" ? "one paste" : "" },
+      value: { getData: (format: string) => format === "text/plain" ? "one paste" : "", items: [{ kind: "string", type: "text/plain" }] },
     });
 
     textarea.dispatchEvent(paste);
