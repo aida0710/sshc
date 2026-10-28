@@ -11,6 +11,7 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/application"
+	"sshc/internal/handoff"
 	"sshc/internal/keys"
 	"sshc/internal/platform"
 	"sshc/internal/session"
@@ -18,7 +19,7 @@ import (
 
 // ActionHeader は、reveal と permanent delete がセッション cookie と
 // CSRF ヘッダーに加えて必要とする一度限りのトークンを運ぶ。
-const ActionHeader = "X-SSHC-Action"
+const ActionHeader = handoff.ActionHeader
 
 // maxKeyRequestBody は鍵 vault のリクエストボディを制限する。
 const maxKeyRequestBody = 64 << 10

@@ -10,6 +10,7 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/remoteengine"
+	"sshc/internal/snippets"
 	"sshc/internal/validate"
 )
 
@@ -26,6 +27,8 @@ type RemoteEngineDirectory interface {
 	ActionLog(alias string, cursor uint64, limit int) (remoteengine.ActionLogRead, error)
 	UnlockVault(ctx context.Context, alias, passphrase string) error
 	ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
+	// CallTerminalAPI は、このマシンのエンジン自身が、実行先のエンジンのターミナルの API へ送る。
+	CallTerminalAPI(ctx context.Context, alias string, call remoteengine.TerminalCall) (remoteengine.TerminalAnswer, error)
 	ForwardTerminalStream(w http.ResponseWriter, r *http.Request, alias string) error
 }
 
@@ -35,6 +38,12 @@ type RemoteEngineHandlers struct {
 	Engines RemoteEngineDirectory
 	// ExpectedOrigin は、取り次ぐ WebSocket で完全一致を求めるこのマシンの Origin である。
 	ExpectedOrigin string
+	// Snippets は、実行先のセッションへ送るクイックコマンドを、このマシンで展開する。
+	Snippets *snippets.Service
+	// Actions は、実行先へのコマンドを送る前の、ブラウザへの確認のトークンを出す。
+	Actions ActionHandlers
+	// commands は、実行先のエンジンが出した確認のトークンを、送るまで持つ。
+	commands *remoteCommandConfirmations
 }
 
 // enginesPrefix は、実行先のエンジンの受け口の頭である。:alias のあとの /terminal… は、
@@ -42,8 +51,8 @@ type RemoteEngineHandlers struct {
 const enginesPrefix = "/api/v1/engines"
 
 // registerRemoteEngineRoutes は、実行先のエンジンの受け口を登録する。取り次ぐのは、画面が
-// 使うターミナルの操作だけである。ポート転送、一括送信、制御用の読み取りは、今の段階では
-// 取り次がない（画面が出さない）。経路は契約の検査がソースから読むので、一本ずつ書く。
+// 使うターミナルの操作だけである。ポート転送と制御用の読み取りは、今の段階では取り次がない
+// （画面が出さない）。経路は契約の検査がソースから読むので、一本ずつ書く。
 func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers) {
 	engine.GET("/api/v1/engines", handlers.List)
 	engine.POST("/api/v1/engines", handlers.Add)
@@ -57,6 +66,13 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.POST("/api/v1/engines/:alias/terminal/sessions", handlers.ForwardTerminal)
 	engine.GET("/api/v1/engines/:alias/terminal/shell-profiles", handlers.ForwardTerminal)
 	engine.GET("/api/v1/engines/:alias/terminal/destinations/:connectionAlias", handlers.ForwardTerminal)
+	// クイックコマンドと一括送信は取り次がない。このマシンでスニペットを展開し、確認のトークンを
+	// 2段にして送る（remote_terminal_commands.go）。
+	if handlers.commands == nil {
+		handlers.commands = newRemoteCommandConfirmations()
+	}
+	engine.POST("/api/v1/engines/:alias/terminal/commands/preview", handlers.PreviewRemoteCommand)
+	engine.POST("/api/v1/engines/:alias/terminal/commands", handlers.DispatchRemoteCommand)
 	engine.GET("/api/v1/engines/:alias/terminal/restore", handlers.ForwardTerminal)
 	engine.POST("/api/v1/engines/:alias/terminal/restore", handlers.ForwardTerminal)
 	engine.DELETE("/api/v1/engines/:alias/terminal/restore", handlers.ForwardTerminal)
