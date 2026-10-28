@@ -180,6 +180,33 @@ test("keeps the session and replays its scrollback after a reload", async ({ pag
     .toContainText("survives-a-reload", { timeout: 20_000 });
 });
 
+test("does not answer the queries in replayed output again after a reload", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "printf and read are POSIX shell syntax here");
+  await openApplication(page, installation);
+  await openSessionList(page);
+  await openLocalShell(page);
+
+  // The program asks for the terminal's identity (DA1) and reads the answer,
+  // as vim and Claude Code do when they start.
+  const screen = await typeIntoTerminal(page, "printf '\\033[c'; IFS= read -rs -d c reply; echo answer-$((1+1))-read");
+  await expect(screen).toContainText("answer-2-read", { timeout: 20_000 });
+
+  await page.reload();
+  const sentAfterReload: string[] = [];
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      sentAfterReload.push(typeof payload === "string" ? payload : payload.toString("utf8"));
+    });
+  });
+  const reopened = await openSessionList(page);
+  await reopened.getByRole("list", { name: "Open sessions" }).getByRole("listitem").first().getByRole("button").first().click();
+  await expect(screen).toContainText("answer-2-read", { timeout: 20_000 });
+
+  await typeIntoTerminal(page, "echo typed-after-$((20+6))");
+  await expect(screen).toContainText("typed-after-26", { timeout: 20_000 });
+  expect(sentAfterReload.join("")).not.toContain("\u001b[?");
+});
+
 test("refuses to open more sessions than the configured limit", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",
