@@ -186,6 +186,30 @@ test("takes one session out of a split from the terminal's menu on a phone, and 
   await expect(sessionRow(page, "Logs")).toHaveCount(1);
 });
 
+test("moves a pane beside another pane's edge by its handle or its row under Split views", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Build");
+  const two = await openNamedShell(page, "Logs");
+  await splitWithMenu(page, "Build");
+  const build = pane(page, one);
+  const logs = pane(page, two);
+  // Build was added to the right of Logs, the session shown last.
+  expect((await build.boundingBox())!.x).toBeGreaterThan((await logs.boundingBox())!.x);
+
+  // Near the bottom edge of Logs, Build's handle moves Build below Logs instead of swapping.
+  const below = (await logs.boundingBox())!;
+  await build.getByRole("button", { name: "Swap Build pane" }).dragTo(logs, { targetPosition: { x: below.width / 2, y: below.height - 12 } });
+  await expect.poll(async () => (await build.boundingBox())!.y).toBeGreaterThan((await logs.boundingBox())!.y);
+  expect((await build.boundingBox())!.x).toBe((await logs.boundingBox())!.x);
+
+  // Logs's row under Split views drags the same way: onto the right edge of Build.
+  const group = page.getByRole("list", { name: "Sessions in Split 1" });
+  const right = (await build.boundingBox())!;
+  await group.getByRole("listitem").filter({ hasText: "Logs" }).dragTo(build, { targetPosition: { x: right.width - 12, y: right.height / 2 } });
+  await expect.poll(async () => (await logs.boundingBox())!.x).toBeGreaterThan((await build.boundingBox())!.x);
+  expect((await logs.boundingBox())!.y).toBe((await build.boundingBox())!.y);
+});
+
 test("preserves terminal mounts through swaps, focus mode, sidebar selection and mobile widths", async ({ page, installation }) => {
   await openApplication(page, installation);
   const one = await openNamedShell(page, "Build");
