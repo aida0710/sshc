@@ -198,3 +198,29 @@ test("deletes the open connection from its header menu with the file's contents 
   expect(JSON.parse(saves[0] ?? "{}")).toMatchObject({ kind: "delete_hosts", hosts: [{ path: "config", alias: "alpha" }] });
   expect(await installation.read("config")).toContain("Host beta");
 });
+
+// On a screen without a pointer that can hover, the 「…」 of a group or a connection is always shown, so what it
+// would cover on hover (the count, the address) makes room for it instead.
+test("keeps the counts and addresses clear of an always-shown 「…」 on a touch-only screen", async ({ browser, installation }) => {
+  await installWorkGroup(installation);
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  const tree = await openConnections(page, installation);
+
+  const groups = page.getByRole("navigation", { name: "Groups" });
+  const work = groups.getByRole("button", { name: "work", exact: true });
+  const menu = groups.getByRole("button", { name: "Actions for work" });
+  await expect(menu).toBeVisible();
+  const countBox = (await work.getByText(/^\d+$/).boundingBox())!;
+  const menuBox = (await menu.boundingBox())!;
+  expect(countBox.x + countBox.width).toBeLessThanOrEqual(menuBox.x);
+
+  const alpha = tree.getByRole("button", { name: "alpha", exact: true });
+  const alphaMenu = tree.getByRole("button", { name: /^Actions for alpha/ });
+  await expect(alphaMenu).toBeVisible();
+  const rowBox = (await alpha.boundingBox())!;
+  const rowMenuBox = (await alphaMenu.boundingBox())!;
+  const padding = await alpha.evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingRight));
+  expect(rowBox.x + rowBox.width - padding).toBeLessThanOrEqual(rowMenuBox.x);
+  await context.close();
+});

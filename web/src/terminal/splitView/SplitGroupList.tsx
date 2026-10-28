@@ -26,7 +26,9 @@ export function SplitGroupList({ groups, sessions, selected, unreadBySession = n
   if (groups.length === 0) return null;
   return (
     <div>
-      <span aria-hidden="true" className="block px-2 pb-1 pt-[18px] text-xs text-ink-faint">{t("splitView.heading")}</span>
+      {/* Like the Workspaces heading below and the group headings of the connection list, this heading stays at
+          the top of the sidebar's list while its rows scroll under it, until the Workspaces heading takes its place. */}
+      <span aria-hidden="true" className="sticky top-0 z-[2] block bg-sidebar px-2 pb-1 pt-[18px] text-xs text-ink-faint">{t("splitView.heading")}</span>
       <ul aria-label={t("splitView.heading")} className="flex flex-col gap-0.5">
         {groups.map((group) => (
           <SplitGroupRow key={group.number} group={group} selected={selected === group.number}
