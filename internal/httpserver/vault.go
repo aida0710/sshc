@@ -85,13 +85,27 @@ func registerVaultRoutes(engine *echo.Echo, handlers VaultHandlers) {
 // ロック、互換backupからの復旧と作り直しは、成功するとこれを返す。
 // どの接続先がパスワードを持つかを運び、パスワードそのものは運ばない。
 func (h VaultHandlers) status(c *echo.Context) error {
+	answer, state, err := h.describeVault()
+	if err != nil {
+		return unexpectedProblem(c, "vault_unreadable", err)
+	}
+	if state.LastMigration.Applied() {
+		answer.MigratedFromVersion = &state.LastMigration.From
+		answer.MigratedToVersion = &state.LastMigration.To
+	}
+	return c.JSON(http.StatusOK, answer)
+}
+
+// describeVault は、Vault の今の状態を答えの形にする。前の版からの移行の印は入れない
+// （状態の取得だけが運ぶ）。
+func (h VaultHandlers) describeVault() (api.PasswordVaultStatus, secret.State, error) {
 	var state secret.State
 	err := withVault(h.Service, func(vault *secret.Service) (err error) {
 		state, err = vault.State()
 		return err
 	})
 	if err != nil {
-		return unexpectedProblem(c, "vault_unreadable", err)
+		return api.PasswordVaultStatus{}, secret.State{}, err
 	}
 	minimum := secret.MinPassphraseLength
 	aliases := h.Service.Aliases()
@@ -102,19 +116,14 @@ func (h VaultHandlers) status(c *echo.Context) error {
 	if dedicatedKeyPassphrases == nil {
 		dedicatedKeyPassphrases = []string{}
 	}
-	answer := api.PasswordVaultStatus{
+	return api.PasswordVaultStatus{
 		Passwordless:            &state.Passwordless,
 		Exists:                  state.Exists,
 		Unlocked:                state.Unlocked,
 		Aliases:                 aliases,
 		DedicatedKeyPassphrases: dedicatedKeyPassphrases,
 		MinPassphraseLength:     &minimum,
-	}
-	if state.LastMigration.Applied() {
-		answer.MigratedFromVersion = &state.LastMigration.From
-		answer.MigratedToVersion = &state.LastMigration.To
-	}
-	return c.JSON(http.StatusOK, answer)
+	}, state, nil
 }
 
 func (h VaultHandlers) Status(c *echo.Context) error { return h.status(c) }
@@ -184,30 +193,11 @@ func (h VaultHandlers) Change(c *echo.Context) error {
 		return vaultProblem(c, err)
 	}
 
-	answer := api.ChangeMasterPasswordResult{}
-
-	var state secret.State
-	err := withVault(h.Service, func(vault *secret.Service) (err error) {
-		state, err = vault.State()
-		return err
-	})
+	vault, _, err := h.describeVault()
 	if err != nil {
 		return unexpectedProblem(c, "vault_unreadable", err)
 	}
-	minimum := secret.MinPassphraseLength
-	aliases := h.Service.Aliases()
-	if aliases == nil {
-		aliases = []string{}
-	}
-	dedicatedKeyPassphrases := h.Service.DedicatedKeyPassphrases()
-	if dedicatedKeyPassphrases == nil {
-		dedicatedKeyPassphrases = []string{}
-	}
-	answer.Vault = api.PasswordVaultStatus{
-		Passwordless: &state.Passwordless, Exists: state.Exists, Unlocked: state.Unlocked, Aliases: aliases,
-		DedicatedKeyPassphrases: dedicatedKeyPassphrases, MinPassphraseLength: &minimum,
-	}
-	return c.JSON(http.StatusOK, answer)
+	return c.JSON(http.StatusOK, api.ChangeMasterPasswordResult{Vault: vault})
 }
 
 func (h VaultHandlers) Lock(c *echo.Context) error {
