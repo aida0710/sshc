@@ -3,6 +3,10 @@ import { useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { Button, Notice } from "../ui/surface";
+import { FieldRow } from "../ui/FieldRow";
+import { sizedControl } from "../ui/form";
+import { PageSection } from "../ui/page";
+import { PanelState } from "../ui/PanelState";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { newIdentifier } from "../ui/randomIdentifier";
 import { defaultBindings, shortcutActions, shortcutKey, useBindings, type Bindings, type ShortcutAction } from "./bindings";
@@ -55,19 +59,26 @@ export function KeyConfig() {
     } catch { setError(t("shortcuts.saveFailed")); }
   }
 
-  return <div data-shortcut-editor>
-    <p className="mb-4 text-sm text-ink-muted">{t("shortcuts.hint")}</p>
-    <div className="mb-4 flex flex-wrap items-end gap-3">
-      <label className="text-sm">{t("shortcuts.preset")}<select className="ml-2 rounded border border-line bg-control p-2" value={library.selected} disabled={unavailable}
-        onChange={(event) => { try { selectPreset(event.target.value); } catch { setError(t("shortcuts.saveFailed")); } }}>
-        <option value="default">{t("shortcuts.defaultPreset")}</option>
-        {library.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
-      </select></label>
-      <label className="text-sm">{t("shortcuts.presetName")}<input className="ml-2 rounded border border-line bg-control p-2" maxLength={maxShortcutPresetNameLength} value={name} onChange={(event) => setName(event.target.value)} /></label>
-      <Button disabled={unavailable || !name.trim() || library.presets.length >= maxShortcutPresets} onClick={() => { void manage("copy"); }}>{t("shortcuts.duplicate")}</Button>
-      <Button disabled={unavailable || !name.trim() || library.selected === "default"} onClick={() => { void manage("rename"); }}>{t("shortcuts.rename")}</Button>
-      <Button disabled={unavailable || library.selected === "default"} onClick={() => setConfirmingDelete(true)}>{t("shortcuts.delete")}</Button>
-    </div>
+  return <div data-shortcut-editor className="flex flex-col gap-5">
+    {library.error ? <Notice tone="danger"><span className="grow">{t("shortcuts.reloadRequired")}</span><Button small className="shrink-0" onClick={() => { void refreshPresets(); }}>{t("shortcuts.reload")}</Button></Notice> : null}
+    {library.loading ? <PanelState tone="loading" title={t("shortcuts.loading")} /> : null}
+    <PageSection heading={t("shortcuts.presetsHeading")}>
+      <FieldRow label={t("shortcuts.preset")} hint={library.selected === "default" ? t("shortcuts.defaultPresetHint") : undefined}
+        actions={library.selected === "default" ? undefined : <Button kind="dangerText" disabled={unavailable} onClick={() => setConfirmingDelete(true)}>{t("shortcuts.delete")}</Button>}>
+        <select className={sizedControl("w-full max-w-xs")} value={library.selected} disabled={unavailable}
+          onChange={(event) => { try { selectPreset(event.target.value); } catch { setError(t("shortcuts.saveFailed")); } }}>
+          <option value="default">{t("shortcuts.defaultPreset")}</option>
+          {library.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+        </select>
+      </FieldRow>
+      <FieldRow label={t("shortcuts.presetName")} interactiveChildren>
+        <div className="flex flex-wrap items-center gap-2">
+          <input aria-label={t("shortcuts.presetName")} className={sizedControl("w-full max-w-xs")} maxLength={maxShortcutPresetNameLength} value={name} disabled={unavailable} onChange={(event) => setName(event.target.value)} />
+          <Button disabled={unavailable || !name.trim() || library.presets.length >= maxShortcutPresets} onClick={() => { void manage("copy"); }}>{t("shortcuts.duplicate")}</Button>
+          <Button disabled={unavailable || !name.trim() || library.selected === "default"} onClick={() => { void manage("rename"); }}>{t("shortcuts.rename")}</Button>
+        </div>
+      </FieldRow>
+    </PageSection>
     {confirmingDelete && selectedPreset !== undefined ? <ConfirmDialog
       id="shortcut-preset-delete-heading"
       heading={t("shortcuts.confirmDelete")}
@@ -77,42 +88,37 @@ export function KeyConfig() {
       onCancel={() => setConfirmingDelete(false)}
       onConfirm={() => { setConfirmingDelete(false); void manage("delete"); }}
     /> : null}
-    {library.error ? <Notice tone="danger"><span className="grow">{t("shortcuts.reloadRequired")}</span><Button className="shrink-0" onClick={() => { void refreshPresets(); }}>{t("shortcuts.reload")}</Button></Notice> : null}
-    {library.loading ? <p role="status">{t("shortcuts.loading")}</p> : null}
-    <fieldset disabled={unavailable}>
-    <ul className="divide-y divide-line">
-      {shortcutActions.map((action) => <li key={action} className="flex flex-wrap items-center gap-3 py-3">
-        <span className="min-w-40 flex-1 text-sm font-medium text-ink">{t(actionLabelKeys[action])}</span>
-        {/* The key and its clear button stay together, at the right end or on a line of their own. */}
-        <div className="ml-auto flex items-center gap-2">
-        <button type="button" aria-label={t("shortcuts.assign", { action: t(actionLabelKeys[action]) })}
-          className="min-h-10 min-w-48 rounded border border-line bg-control px-3 py-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-accent"
-          onClick={() => { setRecording(action); setError(""); setMessage(""); }}
-          onBlur={() => setRecording(null)}
-          onKeyDown={(event) => {
-            if (recording !== action || isImeComposing(event)) return;
-            if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) { setRecording(null); return; }
-            event.preventDefault();
-            event.stopPropagation();
-            if (event.key === "Escape") { setRecording(null); return; }
-            if (event.repeat) return;
-            const key = shortcutKey(event.nativeEvent);
-            if (key === null) return;
-            const conflict = shortcutActions.find((other) => other !== action && bindings[other].includes(key));
-            if (conflict !== undefined) { setError(t("shortcuts.conflict", { action: t(actionLabelKeys[conflict]) })); return; }
-            void save({ ...bindings, [action]: [key] });
-          }}>
-          {recording === action ? t("shortcuts.recording") : bindings[action].join(" / ") || t("shortcuts.unassigned")}
-        </button>
-        <Button onClick={() => { void save({ ...bindings, [action]: [] }); }} disabled={bindings[action].length === 0}
-          aria-label={t("shortcuts.clearAction", { action: t(actionLabelKeys[action]) })}>{t("shortcuts.clear")}</Button>
-        </div>
-      </li>)}
-    </ul>
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-      <div aria-live="polite">{error ? <Notice tone="danger">{error}</Notice> : message ? <p role="status" className="text-sm text-ink-muted">{message}</p> : null}</div>
-      <Button onClick={() => { void save(defaultBindings); }}>{t("shortcuts.reset")}</Button>
-    </div>
-    </fieldset>
+    <PageSection heading={t("shortcuts.keysHeading")} hint={t("shortcuts.hint")}
+      actions={<Button small disabled={unavailable} onClick={() => { void save(defaultBindings); }}>{t("shortcuts.reset")}</Button>}>
+      <fieldset disabled={unavailable}>
+        {shortcutActions.map((action) => <FieldRow key={action} label={t(actionLabelKeys[action])} interactiveChildren>
+          {/* The key and its clear button stay together on one line. */}
+          <div className="flex items-center gap-2">
+            <button type="button" aria-label={t("shortcuts.assign", { action: t(actionLabelKeys[action]) })}
+              className={`${sizedControl("w-full max-w-xs")} text-left`}
+              onClick={() => { setRecording(action); setError(""); setMessage(""); }}
+              onBlur={() => setRecording(null)}
+              onKeyDown={(event) => {
+                if (recording !== action || isImeComposing(event)) return;
+                if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) { setRecording(null); return; }
+                event.preventDefault();
+                event.stopPropagation();
+                if (event.key === "Escape") { setRecording(null); return; }
+                if (event.repeat) return;
+                const key = shortcutKey(event.nativeEvent);
+                if (key === null) return;
+                const conflict = shortcutActions.find((other) => other !== action && bindings[other].includes(key));
+                if (conflict !== undefined) { setError(t("shortcuts.conflict", { action: t(actionLabelKeys[conflict]) })); return; }
+                void save({ ...bindings, [action]: [key] });
+              }}>
+              {recording === action ? t("shortcuts.recording") : bindings[action].join(" / ") || t("shortcuts.unassigned")}
+            </button>
+            <Button small onClick={() => { void save({ ...bindings, [action]: [] }); }} disabled={bindings[action].length === 0}
+              aria-label={t("shortcuts.clearAction", { action: t(actionLabelKeys[action]) })}>{t("shortcuts.clear")}</Button>
+          </div>
+        </FieldRow>)}
+      </fieldset>
+    </PageSection>
+    <div aria-live="polite">{error ? <Notice tone="danger">{error}</Notice> : message ? <p role="status" className="text-sm text-ink-muted">{message}</p> : null}</div>
   </div>;
 }
