@@ -32,6 +32,8 @@ func runBackgroundEngine(ctx context.Context, run backgroundEngineRun) int {
 	}
 	defer restore()
 	options.Background = false
+	ctx, finish := watchSessionEnd(ctx)
+	defer finish()
 	return runEngineWithDependencies(ctx, paths, options, nil, output, output, run.dependencies)
 }
 
