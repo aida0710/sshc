@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import type { AuthenticationResponse, DiagnosticsApi, EffectiveResponse, ReachabilityResponse } from "../api/diagnostics";
+import type { AuthenticationResponse, DiagnosticsApi, ReachabilityResponse } from "../api/diagnostics";
 import { useTranslate } from "../i18n/context";
 import { describeAuthentication, describeReachability, reachabilityNoticeKey } from "../diagnostics/diagnosticLabels";
+import { ExecutableDirectiveConfirmation } from "../diagnostics/ExecutableDirectiveConfirmation";
+import { unavoidableDirectives, type ExecutableDirective } from "../diagnostics/executableDirectives";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { hintText } from "../ui/form";
 import { Icon } from "../ui/icons";
@@ -20,7 +22,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
   const t = useTranslate();
   const [reachability, setReachability] = useState<ReachabilityResponse | null>(null);
   const [authentication, setAuthentication] = useState<AuthenticationResponse | null>(null);
-  const [pendingDirectives, setPendingDirectives] = useState<EffectiveResponse["executableDirectives"]>([]);
+  const [pendingDirectives, setPendingDirectives] = useState<ExecutableDirective[]>([]);
   const [reachabilityError, setReachabilityError] = useState("");
   const [authenticationError, setAuthenticationError] = useState("");
   const [busy, setBusy] = useState<"reachability" | "authentication" | null>(null);
@@ -68,9 +70,9 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
     setAuthenticationError("");
     setPendingDirectives([]);
     try {
-      const inspection = await api.effective(alias);
-      if (inspection.executableDirectives.length > 0) {
-        setPendingDirectives(inspection.executableDirectives);
+      const unavoidable = unavoidableDirectives((await api.effective(alias)).executableDirectives);
+      if (unavoidable.length > 0) {
+        setPendingDirectives(unavoidable);
         return;
       }
       setAuthentication(await api.authentication(alias, false));
@@ -100,27 +102,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
       {authenticationError === "" ? null : <CheckLine passed={false} text={authenticationError} />}
 
       {pendingDirectives.length === 0 ? null : (
-        <div className="rounded-[9px] bg-notice p-3 text-sm">
-          <h4 className="font-medium text-notice-ink">{t("conn.checksExecutableHeading")}</h4>
-          <p className={hintText}>{t("conn.checksExecutableHint")}</p>
-          <ul className="mt-2 flex flex-col gap-2">
-            {pendingDirectives.map((directive) => (
-              <li key={`${directive.path}:${directive.line}:${directive.keyword}`}>
-                <p className="text-ink-muted">
-                  {t("conn.checksDirectiveAt", {
-                    keyword: directive.keyword,
-                    path: directive.path,
-                    line: directive.line,
-                  })}
-                </p>
-                <pre className="whitespace-pre-wrap break-all text-xs text-ink">{directive.command}</pre>
-              </li>
-            ))}
-          </ul>
-          <Button className="mt-3" disabled={busy !== null} busy={busy === "authentication"} onClick={() => void authenticate(true)}>
-            {t("conn.checksAcknowledge")}
-          </Button>
-        </div>
+        <ExecutableDirectiveConfirmation directives={pendingDirectives} busy={busy === "authentication"} onAcknowledge={() => void authenticate(true)} />
       )}
 
       {reachability === null ? null : (
