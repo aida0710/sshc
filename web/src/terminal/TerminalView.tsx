@@ -27,7 +27,7 @@ import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { recentBufferText } from "./buffer";
 import { attachOsc52Clipboard } from "./osc52";
 import { createTerminalOutput } from "./output";
-import { attachKittyKeyboardProtocol, encodeIntlYen } from "./kittyKeyboard";
+import { encodeIntlYen } from "./intlYenKey";
 import { linkTextNamesTarget, modifierOpensLink, osc8Link } from "./links";
 import { bufferRangeText } from "./bufferLinks";
 import { attachLinkProvider } from "./linkProvider";
@@ -275,6 +275,9 @@ export function TerminalView({
       // xterm.js lets Shift take the drag back for selecting, except on macOS,
       // where only Option does and only with this on.
       macOptionClickForcesSelection: true,
+      // Programs ask whether the kitty keyboard protocol is there (CSI ? u)
+      // before they turn it on; xterm.js answers and encodes the keys itself.
+      vtExtensions: { kittyKeyboard: true },
       linkHandler: {
         activate: (event, target, range) => {
           const link = osc8Link(target, bufferRangeText(view.buffer.active, range), range.start.x - 1, range.end.x);
@@ -317,7 +320,6 @@ export function TerminalView({
         .catch(() => setProblem(t("terminal.clipboardRefused")));
     };
 
-    const kittyKeyboard = attachKittyKeyboardProtocol(view.parser);
     const output = createTerminalOutput(view);
     const detachOsc52 = attachOsc52Clipboard({
       parser: view.parser,
@@ -449,7 +451,7 @@ export function TerminalView({
       settings: () => clipboardSettings.current,
       refuse: () => setProblem(t("terminal.clipboardRefused")),
       copied: () => setTerminalNotice(t("copy.done")),
-      enhancedKey: (event) => encodeIntlYen(event, intlYenRef.current) ?? kittyKeyboard.encode(event),
+      enhancedKey: (event) => encodeIntlYen(event, intlYenRef.current),
       sendEnhancedKey: (sequence) => linkController.currentStream()?.send(sequence),
       selectionIsSearchMatch: search.isSelectingMatch,
     });
@@ -470,7 +472,6 @@ export function TerminalView({
       osc9Progress.dispose();
       inlineImages.dispose();
       commandMarkers.dispose();
-      kittyKeyboard.dispose();
       terminalLinks.dispose();
       webgl?.dispose();
       unbindSearch();

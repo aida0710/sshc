@@ -24,8 +24,9 @@ const leftoverModeReset = "" +
 	"\x1b[?2026l" +
 	// kitty keyboard protocolのフラグを0にする。残るとシェルへCtrl+CがCSI uの形で届く。
 	// 先に積まれた分より多くpopしてスタックを空にする。残すと、次のシェルでpushしていない
-	// プログラムがpopしたときに、終わったプログラムのフラグへ戻る。99はスタックの上限
-	// （web/src/terminal/kittyKeyboard.tsのKITTY_KEYBOARD_STATE_STACK_LIMIT、64）より大きい数である。
+	// プログラムがpopしたときに、終わったプログラムのフラグへ戻る。99は、xterm.jsが画面ごとに
+	// 持つスタックの上限（16）より大きい数である。
 	"\x1b[<99u\x1b[=0;1u" +
 	// DECSTR: 文字の属性、スクロール範囲、カーソルの表示、カーソルキーとキーパッドのモード。
+	// xterm.jsでは、代替画面の側に残したkitty keyboard protocolのフラグとスタックもここで戻る。
 	"\x1b[!p"
