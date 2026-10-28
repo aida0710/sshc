@@ -80,6 +80,20 @@ function walkSplitTree(root: SplitViewNode | null, visit: {
   if (root !== null) place(root, { left: 0, top: 0, width: 100, height: 100 }, []);
 }
 
+// A pane dragged by its handle onto the middle of another pane swaps with it;
+// onto the part near an edge, it moves beside that edge. The middle is the
+// part farther than this share of the pane from every edge.
+const paneEdgeZone = 0.25;
+
+// paneDropZone is where a dragged pane goes: beside the nearest edge, or null
+// to swap places.
+export function paneDropZone(point: { x: number; y: number }, size: { width: number; height: number }): PaneEdge | null {
+  const horizontal = point.x / size.width;
+  const vertical = point.y / size.height;
+  const nearEdge = Math.min(horizontal, 1 - horizontal, vertical, 1 - vertical) < paneEdgeZone;
+  return nearEdge ? nearestPaneEdge(point, size) : null;
+}
+
 export function nearestPaneEdge(point: { x: number; y: number }, size: { width: number; height: number }): PaneEdge {
   const horizontal = point.x / size.width;
   const vertical = point.y / size.height;

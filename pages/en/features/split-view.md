@@ -30,7 +30,7 @@ A session can belong to only one split. Adding it to another split removes it fr
 | Action | How |
 | --- | --- |
 | Resize | Drag a divider, or focus it and use the arrow keys. Ratios range from 10% to 90%, and no pane gets smaller than its heading and one row of the terminal, or narrower than its heading's buttons |
-| Swap | Drag a pane's swap button onto another pane, or select the swap button on each pane in turn |
+| Swap or move | Drag a pane's swap button onto the middle of another pane to swap them, or near one of its edges to move the pane beside that edge. A session's row under **Split views** in the sidebar can also be dragged onto a pane's edge to move it there. Selecting the swap button on each pane in turn also swaps them |
 | Focus one pane | Select the focus button in its heading. Choose **Return to split view** or press Esc to restore the split |
 | Remove from split view | Select the **×** in its heading (named “Remove *session name* from split view”), or **Remove from split view** in the **…** menu of the terminal or of the session's sidebar row. The session keeps running and remains in the sidebar. At mobile widths, use the terminal's **…** menu |
 | Select another pane | Click the pane or select its session in the sidebar. Within the terminal, Ctrl+Alt+Left/Right also moves between panes |
