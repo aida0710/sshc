@@ -73,6 +73,9 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
       await route.fulfill({ json: { alias: "bastion", version: compatibleVersion ?? localVersion, vault: true, unlocked: true, passwordless: true, sessions: 0 } });
     } else if (path.endsWith("/terminal/sessions")) {
       await route.fulfill({ json: { sessions, maxSessions: 50 } });
+    } else if (path.includes("/terminal/destinations/")) {
+      // bastion cannot resolve the alias, so this machine does not read that session's files.
+      await route.fulfill({ status: 422, contentType: "application/problem+json", json: { code: "alias_unresolvable", message: "request rejected" } });
     } else if (path.endsWith("/stream")) {
       // A session shown in the terminal asks for its stream; the test does not need its output.
       await route.fulfill({ json: { streamTicket: "bastion-ticket" } });
