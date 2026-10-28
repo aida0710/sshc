@@ -147,17 +147,6 @@ export function HostDetailPanel({
     <section className={`flex flex-col gap-4 ${editorContainer}`}>
       <NoticeList collapsible notices={detail.form.notices ?? []} />
 
-      {/* 接続の確認は、保存済みの接続を試すもので、どのタブを開いていても同じである。
-          Basic のときだけ出すと、タブを切り替えるたびに下の編集欄の位置が上下する。 */}
-      {identity.alias !== "" ? (
-        <ConnectionChecks
-          alias={identity.alias}
-          api={integrations}
-          disabled={disabled || dirty}
-          resetKey={resetKey}
-        />
-      ) : null}
-
       <div data-connection-editor className="min-w-0">
         <div role="tablist" aria-label={t("conn.editorLabel")} className="flex gap-5 overflow-x-auto border-b border-line [scrollbar-width:none]">
           {areas.map((item, index) => (
@@ -198,6 +187,9 @@ export function HostDetailPanel({
               onDirtyChange={setBasicDirty}
               onDiscardReady={discardReceivers.Basic}
               disabled={disabled || advancedDirty || sshcDirty}
+              checks={identity.alias === "" ? null : (
+                <ConnectionChecks alias={identity.alias} api={integrations} disabled={disabled || dirty} resetKey={resetKey} />
+              )}
             />
           </div>
 
