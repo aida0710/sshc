@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalShellProfileList, SettingsApi, TerminalSettings } from "../api/settings";
-import type { OpenTerminalSessionRequest } from "../api/terminalSessions";
+import type { OpenTerminalSessionRequest, TerminalSessionsApi } from "../api/terminalSessions";
 import type { Section } from "../routing/sectionRoute";
 import { useSplitView } from "./splitView/useSplitView";
 import type { TerminalSessionsState } from "./sessions";
 
 type TerminalWorkspaceControllerOptions = {
-  api: Pick<SettingsApi, "terminalSettings" | "localShellProfiles">;
+  api: Pick<SettingsApi, "terminalSettings">;
+  // shells is the terminal API of the engine in use: its shells are the ones
+  // a new session can open, on this machine or on the run target.
+  shells: Pick<TerminalSessionsApi, "shellProfiles">;
   terminalSessions: TerminalSessionsState;
   enabled: boolean;
   runTarget?: string | null;
@@ -17,6 +20,7 @@ type TerminalWorkspaceControllerOptions = {
 
 export function useTerminalWorkspaceController({
   api,
+  shells,
   terminalSessions,
   enabled,
   runTarget = null,
@@ -41,18 +45,27 @@ export function useTerminalWorkspaceController({
         if (active) setSettings(next);
       })
       .catch(() => undefined);
-    if (api.localShellProfiles !== undefined) {
-      void api
-        .localShellProfiles()
-        .then((answer) => {
-          if (active) setLocalShellProfiles(answer.profiles);
-        })
-        .catch(() => undefined);
-    }
     return () => {
       active = false;
     };
   }, [api, enabled, section]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+    // The shells of the previous engine are not offered while the next one's
+    // are read.
+    setLocalShellProfiles([]);
+    void shells
+      .shellProfiles()
+      .then((answer) => {
+        if (active) setLocalShellProfiles(answer.profiles);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [shells, enabled, section]);
 
   useEffect(() => {
     if (activeSessionId === null) return;

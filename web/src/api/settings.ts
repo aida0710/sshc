@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import { terminalSessionsApi } from "./terminalSessions";
 import { patchJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
@@ -32,10 +33,6 @@ function validateMetadata(value: unknown): Metadata {
   return validateOpenAPISchema<Metadata>("Metadata", value);
 }
 
-function validateLocalShellProfiles(value: unknown): LocalShellProfileList {
-  return validateOpenAPISchema<LocalShellProfileList>("LocalShellProfileList", value);
-}
-
 function validateBackground(value: unknown): TerminalBackground {
   return validateOpenAPISchema<TerminalBackground>("TerminalBackground", value);
 }
@@ -52,11 +49,9 @@ export const settingsApi: SettingsApi = {
   async setTerminalSettings(settings) {
     await putJSON("/api/v1/metadata/terminal", settings);
   },
-  async localShellProfiles() {
-    return validateLocalShellProfiles(
-      await apiClient.read("/api/v1/terminal/shell-profiles"),
-    );
-  },
+  // Settings choose among this machine's shells, whichever engine runs the
+  // terminals.
+  localShellProfiles: () => terminalSessionsApi.shellProfiles(),
   // The engine settings belong to this machine and are not part of the synced
   // metadata, so they have their own endpoint.
   async engineSettings() {

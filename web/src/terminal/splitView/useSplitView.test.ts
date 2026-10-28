@@ -8,12 +8,13 @@ import { paneSessionIds } from "./layout";
 const sessions: TerminalSession[] = ["one", "two", "three", "four", "five"].map((id) => ({
   id, title: id, kind: "shell", workspaceId: id === "three" ? "other" : "default", state: "connected", problem: "", startedAt: "2026-10-23T00:00:00Z",
 }));
-const api = { terminalSettings: vi.fn().mockResolvedValue({}), localShellProfiles: vi.fn().mockResolvedValue({ profiles: [] }) };
+const api = { terminalSettings: vi.fn().mockResolvedValue({}) };
+const shells = { shellProfiles: vi.fn().mockResolvedValue({ profiles: [] }) };
 const refresh = vi.fn().mockResolvedValue(undefined);
 
 function setup() {
   return renderHook(({ listed, runTarget }: { listed: TerminalSession[]; runTarget: string | null }) => useTerminalWorkspaceController({
-    api, terminalSessions: { sessions: listed, refresh } as unknown as TerminalSessionsState,
+    api, shells, terminalSessions: { sessions: listed, refresh } as unknown as TerminalSessionsState,
     enabled: false, section: "Terminal", navigate: vi.fn(), closeNavigation: vi.fn(), runTarget,
   }), { initialProps: { listed: sessions, runTarget: null as string | null } });
 }

@@ -11,6 +11,7 @@ export type OpenTerminalSessionResponse = components["schemas"]["OpenTerminalSes
 export type StartTerminalForwardRequest = components["schemas"]["StartTerminalForwardRequest"];
 export type TerminalStreamTicket = components["schemas"]["TerminalStreamTicket"];
 export type TerminalDirectory = components["schemas"]["TerminalDirectory"];
+export type LocalShellProfileList = components["schemas"]["LocalShellProfileList"];
 
 export type TerminalSessionsApi = {
   // streamPath is the WebSocket path a stream ticket from this API is redeemed at.
@@ -40,6 +41,9 @@ export type TerminalSessionsApi = {
   // shell works, or null when the engine cannot tell (an SSH session, macOS,
   // Windows, or a session that is not connected).
   terminalSessionDirectory(id: string): Promise<string | null>;
+  // shellProfiles lists the shells this engine can open: a run target's own,
+  // not this machine's.
+  shellProfiles(): Promise<LocalShellProfileList>;
 };
 
 // The engine cannot say where a session's program works; the caller falls back
@@ -54,6 +58,10 @@ function validateOpenTerminalSession(
   value: unknown,
 ): OpenTerminalSessionResponse {
   return validateOpenAPISchema<OpenTerminalSessionResponse>("OpenTerminalSessionResponse", value);
+}
+
+function validateShellProfiles(value: unknown): LocalShellProfileList {
+  return validateOpenAPISchema<LocalShellProfileList>("LocalShellProfileList", value);
 }
 
 function validateStreamTicket(value: unknown): TerminalStreamTicket {
@@ -148,6 +156,9 @@ export function createTerminalSessionsApi(base: string, streamPath: string): Ter
           },
         ),
       );
+    },
+    async shellProfiles() {
+      return validateShellProfiles(await apiClient.read(`${base}/shell-profiles`));
     },
   };
 }
