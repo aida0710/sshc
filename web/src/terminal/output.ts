@@ -38,7 +38,14 @@ export function createTerminalOutput(terminal: WritableTerminal) {
       // the old parser state while keeping the displayed screen intact.
       writeDecodedText("\u0018", true);
     },
-    write(chunk: Uint8Array) {
+    // skip follows output the engine skipped: like a truncated replay, the
+    // output goes on from wherever the buffer still held it.
+    skip() {
+      decoder = new TextDecoder();
+      writeDecodedText("\u0018", false);
+    },
+    // parsed is called once xterm.js has parsed everything written so far.
+    write(chunk: Uint8Array, parsed?: () => void) {
       const replayLength = Math.min(replayBytesRemaining, chunk.byteLength);
       replayBytesRemaining -= replayLength;
       if (replayLength > 0) {
@@ -47,6 +54,8 @@ export function createTerminalOutput(terminal: WritableTerminal) {
       if (replayLength < chunk.byteLength) {
         writeDecodedText(decoder.decode(chunk.subarray(replayLength), { stream: true }), false);
       }
+      // xterm.js runs write callbacks in order, after the writes queued before them.
+      if (parsed !== undefined && !disposed) terminal.write("", parsed);
     },
     isReplaying: () => replaying,
     dispose() {

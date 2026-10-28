@@ -36,6 +36,9 @@ func NewRing(capacity int) *Ring {
 
 func (r *Ring) CanReadFrom(cursor uint64) bool { return cursor <= r.written }
 
+// Capacity は、保持できるバイト数である。
+func (r *Ring) Capacity() int { return len(r.data) }
+
 // Oldest is the absolute position of the oldest retained byte.
 func (r *Ring) Oldest() uint64 { return r.written - uint64(r.size) }
 
@@ -70,10 +73,10 @@ func (r *Ring) ReadFrom(cursor uint64, limit int) (RingRead, bool) {
 	return r.readFrom(cursor, limit, true)
 }
 
-// ReadAvailableFrom returns every retained byte at or after cursor without
-// allocating the decoder context needed by the plain-text control API.
-func (r *Ring) ReadAvailableFrom(cursor uint64) (RingRead, bool) {
-	return r.readFrom(cursor, r.size, false)
+// ReadAvailableFrom returns at most limit retained bytes at or after cursor
+// without allocating the decoder context needed by the plain-text control API.
+func (r *Ring) ReadAvailableFrom(cursor uint64, limit int) (RingRead, bool) {
+	return r.readFrom(cursor, limit, false)
 }
 
 func (r *Ring) readFrom(cursor uint64, limit int, includeContext bool) (RingRead, bool) {

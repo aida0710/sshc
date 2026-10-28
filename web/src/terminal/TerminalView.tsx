@@ -385,6 +385,10 @@ export function TerminalView({
         // only the session's oldest output.
         setTerminalNotice(t(resumed ? "terminal.replayTruncated" : "terminal.replayTruncatedOldest"));
       },
+      onSkipped: () => {
+        output.skip();
+        setTerminalNotice(t("terminal.outputSkipped"));
+      },
       // Output alone keeps a pending paste: full-screen programs redraw all
       // the time, and on the focus change that opening the review causes.
       onOutput: output.write,

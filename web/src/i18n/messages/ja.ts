@@ -986,6 +986,8 @@ export const ja = {
     "接続が切れていた間の出力の一部は、再生バッファの上限を超えたため表示できません。",
   "terminal.replayTruncatedOldest":
     "このセッションの古い出力は、sshcエンジンの再生バッファに残っていないため表示できません。",
+  "terminal.outputSkipped":
+    "出力が画面の描画より速かったため、sshcエンジンの再生バッファに残っていない部分を飛ばしました。",
   "terminal.clipboardRefused": "クリップボードにアクセスできませんでした。",
   "terminal.pasteHeading": "{target}への貼り付けを確認",
   "terminal.pasteDescription":
