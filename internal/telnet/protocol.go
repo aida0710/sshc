@@ -67,8 +67,8 @@ func supportsLocal(option byte) bool {
 }
 
 func (c *Conn) enableRemote(option byte) bool {
-	c.stateMu.Lock()
-	defer c.stateMu.Unlock()
+	c.stateMutex.Lock()
+	defer c.stateMutex.Unlock()
 	if c.remoteEnabled[option] {
 		return false
 	}
@@ -78,15 +78,15 @@ func (c *Conn) enableRemote(option byte) bool {
 }
 
 func (c *Conn) disableRemote(option byte) {
-	c.stateMu.Lock()
+	c.stateMutex.Lock()
 	c.remoteEnabled[option] = false
 	c.remoteRejected[option] = false
-	c.stateMu.Unlock()
+	c.stateMutex.Unlock()
 }
 
 func (c *Conn) markRemoteRejected(option byte) bool {
-	c.stateMu.Lock()
-	defer c.stateMu.Unlock()
+	c.stateMutex.Lock()
+	defer c.stateMutex.Unlock()
 	if c.remoteRejected[option] {
 		return false
 	}
@@ -95,8 +95,8 @@ func (c *Conn) markRemoteRejected(option byte) bool {
 }
 
 func (c *Conn) enableLocal(option byte) bool {
-	c.stateMu.Lock()
-	defer c.stateMu.Unlock()
+	c.stateMutex.Lock()
+	defer c.stateMutex.Unlock()
 	if c.localEnabled[option] {
 		return false
 	}
@@ -106,8 +106,8 @@ func (c *Conn) enableLocal(option byte) bool {
 }
 
 func (c *Conn) disableLocal(option byte) bool {
-	c.stateMu.Lock()
-	defer c.stateMu.Unlock()
+	c.stateMutex.Lock()
+	defer c.stateMutex.Unlock()
 	wasEnabled := c.localEnabled[option]
 	c.localEnabled[option] = false
 	c.localRejected[option] = false
@@ -115,8 +115,8 @@ func (c *Conn) disableLocal(option byte) bool {
 }
 
 func (c *Conn) markLocalRejected(option byte) bool {
-	c.stateMu.Lock()
-	defer c.stateMu.Unlock()
+	c.stateMutex.Lock()
+	defer c.stateMutex.Unlock()
 	if c.localRejected[option] {
 		return false
 	}
@@ -125,8 +125,8 @@ func (c *Conn) markLocalRejected(option byte) bool {
 }
 
 func (c *Conn) windowSize() (uint16, uint16) {
-	c.stateMu.Lock()
-	defer c.stateMu.Unlock()
+	c.stateMutex.Lock()
+	defer c.stateMutex.Unlock()
 	return c.windowWidth, c.windowHeight
 }
 
@@ -134,10 +134,10 @@ func (c *Conn) handleSubnegotiation(option byte, payload []byte) error {
 	if option != optionTerminalType || len(payload) != 1 || payload[0] != terminalTypeSEND {
 		return nil
 	}
-	c.stateMu.Lock()
+	c.stateMutex.Lock()
 	enabled := c.localEnabled[optionTerminalType]
 	terminalType := c.terminalType
-	c.stateMu.Unlock()
+	c.stateMutex.Unlock()
 	if !enabled {
 		return nil
 	}

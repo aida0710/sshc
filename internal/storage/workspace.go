@@ -203,6 +203,13 @@ func (w *Workspace) Home() string { return w.home }
 
 func (w *Workspace) Root() string { return w.root }
 
+// RelativeSlash は、ワークスペースの中の absolute を、`/` で区切った相対パスにする。
+// 画面と保存（vault の鍵、参照の索引、metadata）は OS に関わらずこの表記で名指すので、
+// Windows でも `keys\work\id` にしない。ワークスペースの外なら false を返す。
+func (w *Workspace) RelativeSlash(absolute string) (string, bool) {
+	return nativepath.RelativeSlash(w.root, absolute)
+}
+
 // StateDirectoryName は、ワークスペース（~/.ssh）の中で sshc が自分の状態を置く
 // ディレクトリの名前。
 const StateDirectoryName = "sshc"

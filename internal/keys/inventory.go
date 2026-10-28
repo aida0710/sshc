@@ -254,11 +254,11 @@ func (scanner *Scanner) walk(inventory *Inventory, directory string, depth int, 
 // と `keys\work\id` という別々の鍵ができ、保存したパスフレーズも、その鍵を名指す
 // IdentityFile も、グループ名変更の書き換えも、どれも一致しなくなる。
 func (scanner *Scanner) relativePath(absolute string) string {
-	relative, err := filepath.Rel(scanner.workspace.Root(), absolute)
-	if err != nil {
+	relative, ok := scanner.workspace.RelativeSlash(absolute)
+	if !ok {
 		return absolute
 	}
-	return filepath.ToSlash(relative)
+	return relative
 }
 
 func (scanner *Scanner) classifyFile(inventory *Inventory, absolute, relative string, info fs.FileInfo) Item {

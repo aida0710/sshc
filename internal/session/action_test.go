@@ -49,8 +49,8 @@ func newTestManager(t *testing.T) (*Manager, string) {
 // これしか方法がない。
 func addSession(t *testing.T, manager *Manager, sessionID string) {
 	t.Helper()
-	manager.mu.Lock()
-	defer manager.mu.Unlock()
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
 	manager.sessions[sha256.Sum256([]byte(sessionID))] = Session{
 		csrfTokens: newIssuedCSRFTokens("csrf-" + sessionID),
 		actions:    make(map[[sha256.Size]byte]actionRecord),

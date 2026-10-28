@@ -2,7 +2,6 @@ package sftp
 
 import (
 	"encoding/binary"
-	"io/fs"
 	"os"
 	"runtime"
 	"syscall"
@@ -23,15 +22,7 @@ const (
 )
 
 func captureLocalTextMetadata(file *os.File) (localTextMetadata, error) {
-	info, err := file.Stat()
-	if err != nil {
-		return localTextMetadata{}, err
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.Mode().IsRegular() {
-		return localTextMetadata{}, ErrUnsupportedEntry
-	}
-	attributes, err := readLocalTextExtendedAttributes(file)
+	metadata, stat, err := unixLocalTextMetadata(file)
 	if err != nil {
 		return localTextMetadata{}, err
 	}
@@ -40,7 +31,7 @@ func captureLocalTextMetadata(file *os.File) (localTextMetadata, error) {
 		return localTextMetadata{}, err
 	}
 	retainedBytes := len(security)
-	for name, value := range attributes {
+	for name, value := range metadata.extendedAttributes {
 		retainedBytes += len(name) + len(value) + 1
 	}
 	if retainedBytes > maxLocalTextMetadataBytes {
@@ -51,7 +42,7 @@ func captureLocalTextMetadata(file *os.File) (localTextMetadata, error) {
 	platform := make([]byte, darwinAttributeLengthBytes+len(security))
 	binary.LittleEndian.PutUint32(platform, stat.Flags)
 	copy(platform[darwinAttributeLengthBytes:], security)
-	metadata := localTextMetadata{uid: int(stat.Uid), gid: int(stat.Gid), mode: info.Mode(), extendedAttributes: attributes, platformMetadata: platform}
+	metadata.platformMetadata = platform
 	metadata.revision = localTextMetadataRevision(metadata)
 	return metadata, nil
 }
@@ -91,9 +82,6 @@ func readDarwinTextSecurity(file *os.File) ([]byte, error) {
 }
 
 func applyLocalTextMetadata(_ *os.File, staged *os.File, snapshot localTextMetadata) error {
-	if snapshot.mode&(fs.ModeSetuid|fs.ModeSetgid|fs.ModeSticky) != 0 {
-		return ErrUnsupportedEntry
-	}
 	if len(snapshot.platformMetadata) < darwinAttributeLengthBytes {
 		return ErrUnsupportedEntry
 	}
@@ -101,19 +89,7 @@ func applyLocalTextMetadata(_ *os.File, staged *os.File, snapshot localTextMetad
 	if flags&(unix.UF_IMMUTABLE|unix.UF_APPEND|unix.SF_IMMUTABLE|unix.SF_APPEND|unix.SF_RESTRICTED|unix.SF_NOUNLINK|unix.UF_COMPRESSED|unix.SF_DATALESS) != 0 {
 		return ErrUnsupportedEntry
 	}
-	current, err := captureLocalTextMetadata(staged)
-	if err != nil {
-		return err
-	}
-	if current.uid != snapshot.uid || current.gid != snapshot.gid {
-		if err := staged.Chown(snapshot.uid, snapshot.gid); err != nil {
-			return err
-		}
-	}
-	if err := staged.Chmod(snapshot.mode.Perm()); err != nil {
-		return err
-	}
-	if err := applyLocalTextExtendedAttributes(staged, snapshot.extendedAttributes); err != nil {
+	if err := applyUnixLocalTextOwnership(staged, snapshot); err != nil {
 		return err
 	}
 	security := snapshot.platformMetadata[darwinAttributeLengthBytes:]

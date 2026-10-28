@@ -111,8 +111,8 @@ func (m *Manager) IssueAction(sessionID string, request ActionRequest) (string, 
 		return "", ErrInvalidAction
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	sessionValue, ok := m.sessionLocked(sessionID)
 	if !ok {
@@ -146,8 +146,8 @@ func (m *Manager) IssueAction(sessionID string, request ActionRequest) (string, 
 // セッションに属するトークンは、単にこのセッションの表に存在しないというだけの
 // ことである。
 func (m *Manager) ConsumeAction(sessionID, presented string, request ActionRequest) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	sessionValue, ok := m.sessionLocked(sessionID)
 	if !ok {

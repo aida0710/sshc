@@ -33,7 +33,7 @@ type Watcher struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	fetch    Fetch
-	mu       sync.Mutex
+	mutex    sync.Mutex
 	snapshot Snapshot
 	checking *releaseCheck
 }
@@ -50,8 +50,8 @@ func (w *Watcher) Load(ctx context.Context) (Snapshot, error) {
 
 // Cached returns the retained result without starting a network request.
 func (w *Watcher) Cached() Snapshot {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
 	return cloneSnapshot(w.snapshot)
 }
 
@@ -61,14 +61,14 @@ func (w *Watcher) Check(ctx context.Context) (Snapshot, error) {
 }
 
 func (w *Watcher) load(ctx context.Context, refresh bool) (Snapshot, error) {
-	w.mu.Lock()
+	w.mutex.Lock()
 	if !refresh && !w.snapshot.CheckedAt.IsZero() {
 		snapshot := cloneSnapshot(w.snapshot)
-		w.mu.Unlock()
+		w.mutex.Unlock()
 		return snapshot, nil
 	}
 	if err := w.ctx.Err(); err != nil {
-		w.mu.Unlock()
+		w.mutex.Unlock()
 		return Snapshot{}, err
 	}
 	pending := w.checking
@@ -77,7 +77,7 @@ func (w *Watcher) load(ctx context.Context, refresh bool) (Snapshot, error) {
 		w.checking = pending
 		go w.fetchCatalog(pending)
 	}
-	w.mu.Unlock()
+	w.mutex.Unlock()
 	select {
 	case <-ctx.Done():
 		return Snapshot{}, ctx.Err()
@@ -90,8 +90,8 @@ func (w *Watcher) fetchCatalog(pending *releaseCheck) {
 	ctx, cancel := context.WithTimeout(w.ctx, checkTimeout)
 	defer cancel()
 	catalog, err := w.fetch(ctx)
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
 	snapshot := w.snapshot
 	snapshot.CheckedAt = time.Now().UTC()
 	snapshot.Failure = ""
@@ -133,9 +133,9 @@ func (w *Watcher) Run(ctx context.Context) {
 // Stop cancels the shared request and waits for it before the engine releases its lock.
 func (w *Watcher) Stop() {
 	w.cancel()
-	w.mu.Lock()
+	w.mutex.Lock()
 	pending := w.checking
-	w.mu.Unlock()
+	w.mutex.Unlock()
 	if pending != nil {
 		<-pending.done
 	}

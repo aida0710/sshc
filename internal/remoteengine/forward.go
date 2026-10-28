@@ -63,45 +63,64 @@ func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, ali
 		return ErrRequestTooLarge
 	}
 	for attempt := 0; ; attempt++ {
-		session, err := engine.current(r.Context())
-		if err != nil {
+		retry, err := m.forwardOnce(w, r, forwardAttempt{engine: engine, remotePath: remotePath, body: body, first: attempt == 0})
+		if !retry {
 			return err
 		}
-		answerContext, stopWaiting := context.WithTimeout(r.Context(), m.answerLimit)
-		defer stopWaiting()
-		response, err := session.client().Do(forwardedRequest(answerContext, r, session, remotePath, body))
-		if err != nil && r.Context().Err() == nil && errors.Is(answerContext.Err(), context.DeadlineExceeded) {
-			// 接続先が答えない。資格を捨て、SSH の接続も答えなければ捨てて、次の要求で繋ぎ直す。
-			engine.forget(session)
-			engine.link.resetIfSilent()
-			writeProblem(w, http.StatusBadGateway, "remote_engine_unreachable")
-			return nil
-		}
-		if err != nil {
-			if isDialFailure(err) {
-				engine.forget(session)
-				if attempt == 0 {
-					continue
-				}
-			}
-			if errors.Is(err, ErrUnproven) {
-				return ErrUnproven
-			}
-			writeProblem(w, http.StatusBadGateway, "remote_engine_unreachable")
-			return nil
-		}
-		if response.StatusCode == http.StatusUnauthorized && attempt == 0 {
-			_ = response.Body.Close()
-			engine.forget(session)
-			continue
-		}
-		if code := remoteRefusal(response); code != "" {
-			writeProblem(w, http.StatusBadGateway, code)
-			return nil
-		}
-		copyResponse(w, response)
-		return nil
 	}
+}
+
+// forwardAttempt は、取り次ぎの1回分である。first は、断られたら送り直してよい1回目かどうか。
+type forwardAttempt struct {
+	engine     *remoteEngine
+	remotePath string
+	body       []byte
+	first      bool
+}
+
+// forwardOnce は、要求を1回送り、答えをブラウザへ写す。資格が古いか、前のポートに
+// 繋がらなかった1回目は、何も書かずに retry を返す。答えを待つ期限は、本文を写し終える
+// までこの1回の中で持つ。
+func (m *Manager) forwardOnce(w http.ResponseWriter, r *http.Request, attempt forwardAttempt) (retry bool, _ error) {
+	engine := attempt.engine
+	session, err := engine.current(r.Context())
+	if err != nil {
+		return false, err
+	}
+	answerContext, stopWaiting := context.WithTimeout(r.Context(), m.answerLimit)
+	defer stopWaiting()
+	response, err := session.client().Do(forwardedRequest(answerContext, r, session, attempt.remotePath, attempt.body))
+	if err != nil && r.Context().Err() == nil && errors.Is(answerContext.Err(), context.DeadlineExceeded) {
+		// 接続先が答えない。資格を捨て、SSH の接続も答えなければ捨てて、次の要求で繋ぎ直す。
+		engine.forget(session)
+		engine.link.resetIfSilent()
+		writeProblem(w, http.StatusBadGateway, "remote_engine_unreachable")
+		return false, nil
+	}
+	if err != nil {
+		if isDialFailure(err) {
+			engine.forget(session)
+			if attempt.first {
+				return true, nil
+			}
+		}
+		if errors.Is(err, ErrUnproven) {
+			return false, ErrUnproven
+		}
+		writeProblem(w, http.StatusBadGateway, "remote_engine_unreachable")
+		return false, nil
+	}
+	if response.StatusCode == http.StatusUnauthorized && attempt.first {
+		_ = response.Body.Close()
+		engine.forget(session)
+		return true, nil
+	}
+	if code := remoteRefusal(response); code != "" {
+		writeProblem(w, http.StatusBadGateway, code)
+		return false, nil
+	}
+	copyResponse(w, response)
+	return false, nil
 }
 
 // maxRefusalBody は、接続先の断りの本文を読む上限である。断りは短い JSON だけである。

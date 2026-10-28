@@ -11,14 +11,14 @@ import (
 )
 
 const (
-	// SchemaVersion は workspaces.json の形の版である。1 と 2 は、画面を分割して
-	// 保存していた頃の形で、読まずに無いものとして扱う（分割の機能ごと消したため）。
+	// SchemaVersion は workspaces.json の形の版である。これより前の版のファイルは
+	// 読まずに、無いものとして扱う。
 	SchemaVersion = 3
 	// PathRelative は、ワークスペースの定義を置くファイルである。このマシンの
 	// エンジンのものなので、同期では運ばない。
 	PathRelative = "sshc/workspaces.json"
 	// MaxWorkspaces は、持てるワークスペースの数の上限である。サイドバーの木に
-	// 並べて選べる数として、分割の頃の保存数の上限と同じ値にした。
+	// 並べて選べる数にした。
 	MaxWorkspaces = 50
 	// MaxNameRunes は、ワークスペースの名前の長さの上限である。
 	MaxNameRunes = 64
