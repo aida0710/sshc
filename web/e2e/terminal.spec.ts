@@ -207,6 +207,28 @@ test("does not answer the queries in replayed output again after a reload", asyn
   expect(sentAfterReload.join("")).not.toContain("\u001b[?");
 });
 
+test("says only the oldest output is gone, not that the link was offline, when a session is shown again", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "seq is POSIX here");
+  await installation.write(
+    "sshc/metadata.json",
+    JSON.stringify({ schemaVersion: 9, embeddedTerminal: { scrollbackBytes: 16384 } }),
+  );
+  await openApplication(page, installation);
+  const panel = await openSessionList(page);
+  await openLocalShell(page);
+  // More output than the 16 KiB the engine keeps for the session.
+  const screen = await typeIntoTerminal(page, "seq -f 'line %06g' 4000; echo printed-$((40+2))");
+  await expect(screen).toContainText("printed-42", { timeout: 20_000 });
+  await openLocalShell(page);
+  const rows = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
+  await expect(rows).toHaveCount(2);
+
+  await rows.first().getByRole("button").first().click();
+
+  await expect(page.getByText("The session's oldest output is no longer in the engine replay buffer, so it is not shown here.")).toBeVisible();
+  await expect(page.getByText(/while the terminal link was offline/)).toHaveCount(0);
+});
+
 test("refuses to open more sessions than the configured limit", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",

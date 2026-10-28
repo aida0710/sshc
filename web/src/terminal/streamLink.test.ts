@@ -23,12 +23,13 @@ function startLink(terminalStreamTicket: TicketIssuer = async () => ({ streamTic
   const onExit = vi.fn();
   const onOutput = vi.fn();
   const onClose = vi.fn();
+  const onReplay = vi.fn();
   const controller = createStreamLink({
     sessionId: "a",
     api: { streamPath: "/terminal/stream", terminalStreamTicket: ticket },
     onLink: (link) => links.push(link),
     onAttached: vi.fn(),
-    onReplay: vi.fn(),
+    onReplay,
     onOutput,
     onExit,
     onShellReplaced: vi.fn(),
@@ -36,7 +37,7 @@ function startLink(terminalStreamTicket: TicketIssuer = async () => ({ streamTic
   });
   controller.connect();
   started.push(controller);
-  return { controller, links, ticket, onExit, onOutput, onClose };
+  return { controller, links, ticket, onExit, onOutput, onClose, onReplay };
 }
 
 function lastLink(links: StreamLink[]): StreamLink | undefined {
@@ -119,6 +120,17 @@ describe("createStreamLink", () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     expect(ticket).toHaveBeenLastCalledWith("a", 105);
+  });
+
+  it("tells a replay that continues after an offline link from the first replay of a view", async () => {
+    const { onReplay } = startLink();
+    await vi.advanceTimersByTimeAsync(0);
+    streams[0]!.handlers.onReplay({ start: 0, next: 0, end: 0, truncated: false });
+    streams[0]!.handlers.onClose();
+    await vi.advanceTimersByTimeAsync(1000);
+    streams[1]!.handlers.onReplay({ start: 0, next: 0, end: 0, truncated: true });
+
+    expect(onReplay.mock.calls.map(([, resumed]) => resumed)).toEqual([false, true]);
   });
 
   it("stops retrying on request and attaches again only when asked", async () => {

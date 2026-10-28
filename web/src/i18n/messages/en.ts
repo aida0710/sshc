@@ -980,6 +980,8 @@ export const en = {
   "terminal.linkStop": "Stop retrying",
   "terminal.replayTruncated":
     "Some output produced while the terminal link was offline is no longer in the engine replay buffer.",
+  "terminal.replayTruncatedOldest":
+    "The session's oldest output is no longer in the engine replay buffer, so it is not shown here.",
   "terminal.clipboardRefused": "The clipboard could not be accessed.",
   "terminal.pasteHeading": "Review paste to {target}",
   "terminal.pasteDescription":

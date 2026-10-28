@@ -15,7 +15,16 @@ type WebglOptions = {
   load?: () => Promise<WebglAddon>;
 };
 
+// Asked once per page: every terminal shown would otherwise create a probe
+// context, and browsers count live WebGL contexts against a small limit.
+let webglSupported: boolean | undefined;
+
 export function browserSupportsWebgl(): boolean {
+  webglSupported ??= probeWebgl();
+  return webglSupported;
+}
+
+function probeWebgl(): boolean {
   // jsdom exposes the canvas API but reports getContext through its virtual
   // console instead of implementing it. Skip before touching the method so
   // unit tests exercise the deterministic DOM-renderer path without noise.
@@ -23,7 +32,10 @@ export function browserSupportsWebgl(): boolean {
   if (typeof WebGLRenderingContext === "undefined" && typeof WebGL2RenderingContext === "undefined") return false;
   try {
     const canvas = document.createElement("canvas");
-    return canvas.getContext("webgl2") !== null || canvas.getContext("webgl") !== null;
+    const context = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+    // Give the probe's context back at once instead of when it is collected.
+    context?.getExtension("WEBGL_lose_context")?.loseContext();
+    return context !== null;
   } catch {
     return false;
   }
