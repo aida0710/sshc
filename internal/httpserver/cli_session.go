@@ -7,13 +7,14 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
+	"sshc/internal/handoff"
 	"sshc/internal/session"
 )
 
 const (
 	// CLISessionPath exchanges the user-private handoff secret for a short-lived
 	// normal API session. Sync commands can therefore reuse the browser API.
-	CLISessionPath = "/cli/session"
+	CLISessionPath = handoff.SessionPath
 	// CLISessionIdleTimeout bounds a credential left behind when a command is
 	// killed before it can revoke the session. Every request, and every request
 	// still being served, keeps a running command's session alive.

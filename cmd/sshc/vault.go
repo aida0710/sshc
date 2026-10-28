@@ -415,7 +415,7 @@ func writeUncertainVaultResult(path string, stderr io.Writer) {
 
 func fetchVaultStatus(
 	ctx context.Context, found handoff.Handoff, client *http.Client,
-) (statusAnswer, error) {
+) (handoff.EngineStatus, error) {
 	return fetchEngineStatus(ctx, client, found, httpserver.VaultStatusPath)
 }
 
