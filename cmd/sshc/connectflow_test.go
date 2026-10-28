@@ -21,7 +21,7 @@ import (
 // fakeProbe は、設定された engine 状態を順番に返す。
 type fakeProbe struct {
 	mutex       sync.Mutex
-	answers     []statusAnswer
+	answers     []handoff.EngineStatus
 	statusCalls int
 	statusErr   error
 	connections []string
@@ -123,15 +123,15 @@ func TestRunAdviceNamesTheAliasAndNonInteractiveRecovery(t *testing.T) {
 	}
 }
 
-func (probe *fakeProbe) Status(context.Context) (statusAnswer, error) {
+func (probe *fakeProbe) Status(context.Context) (handoff.EngineStatus, error) {
 	probe.mutex.Lock()
 	defer probe.mutex.Unlock()
 	probe.statusCalls++
 	if probe.statusErr != nil {
-		return statusAnswer{}, probe.statusErr
+		return handoff.EngineStatus{}, probe.statusErr
 	}
 	if len(probe.answers) == 0 {
-		return statusAnswer{}, errors.New("no scripted answer")
+		return handoff.EngineStatus{}, errors.New("no scripted answer")
 	}
 	answer := probe.answers[0]
 	if len(probe.answers) > 1 {
@@ -153,12 +153,12 @@ func (probe *fakeProbe) requestedAliases() []string {
 	return append([]string(nil), probe.connections...)
 }
 
-func unlockedEngine() statusAnswer {
-	return statusAnswer{Owner: handoff.OwnerEngine, ProtocolVersion: handoff.ProtocolVersion, Vault: true, Unlocked: true}
+func unlockedEngine() handoff.EngineStatus {
+	return handoff.EngineStatus{Owner: handoff.OwnerEngine, ProtocolVersion: handoff.ProtocolVersion, Vault: true, Unlocked: true}
 }
 
-func lockedEngine() statusAnswer {
-	return statusAnswer{Owner: handoff.OwnerEngine, ProtocolVersion: handoff.ProtocolVersion, Vault: true}
+func lockedEngine() handoff.EngineStatus {
+	return handoff.EngineStatus{Owner: handoff.OwnerEngine, ProtocolVersion: handoff.ProtocolVersion, Vault: true}
 }
 
 // stateWithEngine は、handoff だけを置く。応答するのは fakeProbe である。
@@ -188,23 +188,23 @@ func TestReachUnlockedEngineExplainsInsteadOfStartingOne(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		running bool
-		answers []statusAnswer
+		answers []handoff.EngineStatus
 		wantErr string
 	}{
 		{
 			name:    "an unlocked engine is handed straight over",
-			running: true, answers: []statusAnswer{unlockedEngine()},
+			running: true, answers: []handoff.EngineStatus{unlockedEngine()},
 		},
 		{
 			name:    "a locked vault says how to unlock it",
-			running: true, answers: []statusAnswer{lockedEngine()},
+			running: true, answers: []handoff.EngineStatus{lockedEngine()},
 			wantErr: "sshc vault unlock",
 		},
 		{
 			// Vault 未作成とロック中を区別する。
 			name:    "no vault says how to create one",
 			running: true,
-			answers: []statusAnswer{{Owner: handoff.OwnerEngine, ProtocolVersion: handoff.ProtocolVersion}},
+			answers: []handoff.EngineStatus{{Owner: handoff.OwnerEngine, ProtocolVersion: handoff.ProtocolVersion}},
 			wantErr: "sshc vault create",
 		},
 		{
@@ -257,7 +257,9 @@ func TestTheMissingEngineMessageNamesTheWayThroughWithoutIt(t *testing.T) {
 func TestReachUnlockedEngineKeepsTheReasonTheEngineCouldNotBeReached(t *testing.T) {
 	unanswered := func(ctx context.Context, stateDir string, client *http.Client) error {
 		_, err := reachUnlockedEngine(ctx, stateDir, client,
-			func(handoff.Handoff) engineProbe { return &fakeProbe{answers: []statusAnswer{unlockedEngine()}} })
+			func(handoff.Handoff) engineProbe {
+				return &fakeProbe{answers: []handoff.EngineStatus{unlockedEngine()}}
+			})
 		return err
 	}
 	handoffTo := func(t *testing.T, target string) string {
@@ -333,7 +335,7 @@ func TestReachUnlockedEngineKeepsTheReasonTheEngineCouldNotBeReached(t *testing.
 // 指定された alias の接続情報を一度だけ要求する。
 func TestConnectionIsRequestedOnceForTheOriginalAlias(t *testing.T) {
 	stateDir := stateWithEngine(t, handoff.OwnerEngine)
-	probe := &fakeProbe{answers: []statusAnswer{unlockedEngine()}}
+	probe := &fakeProbe{answers: []handoff.EngineStatus{unlockedEngine()}}
 
 	session, err := reach(t, stateDir, probe)
 	if err != nil {

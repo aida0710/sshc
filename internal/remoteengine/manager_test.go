@@ -35,7 +35,7 @@ func strictEngine(t *testing.T) *httptest.Server {
 			http.Error(response, "cross_site_request "+origin, http.StatusForbidden)
 			return
 		}
-		if request.URL.Path == challengePath {
+		if request.URL.Path == handoff.ChallengePath {
 			response.Header().Set(handoff.ProofHeader, handoff.Prove(fakeSecret, request.Header.Get(handoff.ChallengeHeader)))
 			response.WriteHeader(http.StatusNoContent)
 			return

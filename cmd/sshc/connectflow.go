@@ -12,7 +12,7 @@ import (
 // engineProbe は認証済み engine の状態と接続情報を取得する。
 // handoff の存在だけでは engine の稼働を保証できないため、HTTP 応答を検証する。
 type engineProbe interface {
-	Status(context.Context) (statusAnswer, error)
+	Status(context.Context) (handoff.EngineStatus, error)
 	Connection(context.Context, string) (connectAnswer, error)
 }
 
@@ -24,7 +24,7 @@ type httpProbe struct {
 
 // Status は `sshc status` と同じ状態の要求を送る。engine に断られたときは、`sshc ssh` の
 // 断りの文（refusedRequestError）にする。`sshc status` 自身の文は変えない。
-func (probe httpProbe) Status(ctx context.Context) (statusAnswer, error) {
+func (probe httpProbe) Status(ctx context.Context) (handoff.EngineStatus, error) {
 	answer, err := requestStatus(ctx, probe.found, probe.client)
 	return answer, explainRefusedRequest(err)
 }
@@ -63,14 +63,14 @@ func reachUnlockedEngine(
 func liveEngineStatus(
 	ctx context.Context, stateDir string, client *http.Client,
 	newProbe func(handoff.Handoff) engineProbe,
-) (handoff.Handoff, statusAnswer, error) {
+) (handoff.Handoff, handoff.EngineStatus, error) {
 	found, err := verifiedHandoff(ctx, stateDir, client)
 	if err != nil {
-		return handoff.Handoff{}, statusAnswer{}, err
+		return handoff.Handoff{}, handoff.EngineStatus{}, err
 	}
 	status, err := newProbe(found).Status(ctx)
 	if err != nil {
-		return handoff.Handoff{}, statusAnswer{}, err
+		return handoff.Handoff{}, handoff.EngineStatus{}, err
 	}
 	// 所有者と protocol version は稼働中の engine の応答を使用する。
 	found.Owner = status.Owner
