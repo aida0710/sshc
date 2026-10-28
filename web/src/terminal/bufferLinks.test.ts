@@ -1,6 +1,6 @@
 import { Terminal } from "@xterm/xterm";
 import { describe, expect, it } from "vitest";
-import { findBufferLinks } from "./bufferLinks";
+import { bufferRangeText, findBufferLinks } from "./bufferLinks";
 import { attachLinkProvider } from "./linkProvider";
 import type { ILinkProvider, ILink } from "@xterm/xterm";
 
@@ -79,6 +79,34 @@ describe("wrapped terminal links", () => {
       links![0]!.activate(new MouseEvent("click"), url);
       expect(opened).toEqual([url]);
       expect(selected).toEqual([url]);
+    } finally { terminal.dispose(); }
+  });
+});
+
+// The ranges below are the ones xterm.js gives an OSC 8 link: 1-based, the end
+// column inclusive, continued across wrapped rows.
+describe("the text a link range covers", () => {
+  it("reads the label by cells after Japanese text", async () => {
+    const terminal = await terminalWithOutput("日本語の説明 https://example.test/", 40);
+    try {
+      // 日本語の説明 takes 12 cells and the space one more.
+      expect(bufferRangeText(terminal.buffer.active, { start: { x: 14, y: 1 }, end: { x: 34, y: 1 } }))
+        .toBe("https://example.test/");
+    } finally { terminal.dispose(); }
+  });
+
+  it("reads the label after a combining character", async () => {
+    const terminal = await terminalWithOutput("e\u0301 docs");
+    try {
+      expect(bufferRangeText(terminal.buffer.active, { start: { x: 3, y: 1 }, end: { x: 6, y: 1 } })).toBe("docs");
+    } finally { terminal.dispose(); }
+  });
+
+  it("joins a label that wraps onto the next row", async () => {
+    const terminal = await terminalWithOutput("see https://example.test/a-long-path", 20);
+    try {
+      expect(bufferRangeText(terminal.buffer.active, { start: { x: 5, y: 1 }, end: { x: 16, y: 2 } }))
+        .toBe("https://example.test/a-long-path");
     } finally { terminal.dispose(); }
   });
 });

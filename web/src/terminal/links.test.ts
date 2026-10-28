@@ -117,6 +117,13 @@ describe("findTerminalLinks", () => {
     expect(osc8Link("javascript:alert(1)", "unsafe", 0, 6)).toBeNull();
   });
 
+  it("shows the address first when the label of an OSC 8 link could not be read", () => {
+    const link = osc8Link("https://example.test/actual", "", 4, 17);
+
+    expect(link?.text).toBe("");
+    expect(linkTextNamesTarget(link!)).toBe(false);
+  });
+
   it("treats an OSC 8 link as naming its address only when the text is that same address", () => {
     expect(linkTextNamesTarget({ text: "https://example.test", target: "https://example.test/" })).toBe(true);
     expect(linkTextNamesTarget({ text: "https://github.com/", target: "https://evil.example/" })).toBe(false);
