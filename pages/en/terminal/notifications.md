@@ -32,9 +32,10 @@ printf '\e]0;hello\a'
 
 When a program asks for a notification through OSC 9, OSC 99, or OSC 777, sshc marks that pane as unread.
 
-- A notification that arrives while the sshc tab is in the background, or while you are looking at another session, marks the session in the session list as unread. Showing that session clears the mark.
-- While the tab is in the background, sshc also shows a browser notification (if allowed under Settings → Notifications) and plays the selected sound. The browser notification is titled with the pane name; for SSH the connection alias comes first and the pane name follows in parentheses. A program on the server can change the pane name but not the alias, so these stay distinguishable from sshc's own notifications. The body carries the title and text the program sent.
+- A notification that arrives while the sshc tab is in the background, while the sshc window does not have the focus (you are working in another app beside it), or while you are looking at another session, marks the session in the session list as unread. Showing that session clears the mark.
+- While the tab is in the background or the window does not have the focus, sshc also shows a browser notification (if allowed under Settings → Notifications) and plays the selected sound. The browser notification is titled with the pane name; for SSH the connection alias comes first and the pane name follows in parentheses. A program on the server can change the pane name but not the alias, so these stay distinguishable from sshc's own notifications. The body carries the title and text the program sent.
 - The Android app shows an Android notification instead of a browser notification. It arrives while sshc is closed (another app or the home screen is showing), and tapping it opens that pane. The Android notification itself is silent; only the selected sound plays. The text is not shown on the lock screen. Next to the app name, the Android notification says it comes from a terminal program.
+- When you show the session that sent a notification, or close that session, sshc also takes the notification back from the system's notification centre or the Android notification shade. Tapping a notification of a session that has been closed does not bring another session forward; sshc says the session is closed instead.
 - A notification for the pane you are currently viewing produces neither an unread mark nor a sound.
 - A bare BEL (`\a`) is not treated as a notification because shells ring it for routine events such as failed completion.
 
