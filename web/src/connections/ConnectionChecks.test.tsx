@@ -117,6 +117,23 @@ describe("ConnectionChecks", () => {
     expect(integrations.authentication).toHaveBeenCalledWith("bastion", true);
   });
 
+  it("checks authentication without asking when the directive can be turned off for the check", async () => {
+    const overridable: EffectiveResponse = {
+      ...safeInspection,
+      executableDirectives: [{
+        keyword: "LocalCommand", command: "notify-send connected", path: "config", line: 9,
+        condition: "Host bastion", onEvaluate: false, onConnect: true, overridable: true,
+      }],
+    };
+    const integrations = api({ effective: vi.fn().mockResolvedValue(overridable) });
+    render(<ConnectionChecks alias="bastion" api={integrations} disabled={false} resetKey={0} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Check authentication with saved settings" }));
+
+    expect(await screen.findByText("Authentication: Authentication succeeded.")).toBeInTheDocument();
+    expect(integrations.authentication).toHaveBeenCalledWith("bastion", false);
+  });
+
   it("clears results when the connection or saved revision changes", async () => {
     const integrations = api();
     const rendered = render(
