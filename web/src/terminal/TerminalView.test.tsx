@@ -555,7 +555,8 @@ describe("TerminalView", () => {
 
     streams[0]!.handlers.onReplay({ start: 4096, next: 4096, end: 4096, truncated: true });
 
-    expect(await screen.findByText(/no longer in the engine replay buffer/)).toBeVisible();
+    // A view that starts afresh lost only the oldest output, not output from while it was offline.
+    expect(await screen.findByText(/oldest output is no longer in the engine replay buffer/)).toBeVisible();
     expect(write).toHaveBeenCalledWith("\u0018", expect.any(Function));
   });
 

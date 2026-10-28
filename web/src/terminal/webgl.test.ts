@@ -58,4 +58,24 @@ describe("WebGL terminal renderer", () => {
     expect(addon.dispose).toHaveBeenCalledOnce();
     attached?.dispose();
   });
+
+  it("asks the browser for WebGL once a page and gives the probe's context back", async () => {
+    vi.resetModules();
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 Chrome/156" });
+    vi.stubGlobal("WebGL2RenderingContext", class {});
+    const loseContext = vi.fn();
+    const getContext = vi.fn(() => ({ getExtension: (name: string) => (name === "WEBGL_lose_context" ? { loseContext } : null) }));
+    const createElement = vi.spyOn(document, "createElement").mockReturnValue({ getContext } as never);
+    try {
+      const { browserSupportsWebgl } = await import("./webgl");
+
+      expect(browserSupportsWebgl()).toBe(true);
+      expect(browserSupportsWebgl()).toBe(true);
+      expect(getContext).toHaveBeenCalledOnce();
+      expect(loseContext).toHaveBeenCalledOnce();
+    } finally {
+      createElement.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
 });

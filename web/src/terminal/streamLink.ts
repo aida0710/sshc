@@ -1,7 +1,7 @@
 import { failureCode } from "../api/client";
 import type { TerminalSessionsApi } from "../api/terminalSessions";
 import { whenPageResumes } from "./pageResume";
-import { openStream, type StreamHandlers, type TerminalStream } from "./stream";
+import { openStream, type ReplayReport, type StreamHandlers, type TerminalStream } from "./stream";
 
 // Where the browser stands with the WebSocket behind a terminal. This is
 // separate from the engine-side session state, which the session reports:
@@ -24,7 +24,11 @@ export const stableStreamResetMs = 10_000;
 // The waiting banner counts down in whole seconds.
 const countdownTickMs = 1000;
 
-export type StreamLinkOptions = StreamHandlers & {
+export type StreamLinkOptions = Omit<StreamHandlers, "onReplay"> & {
+  // resumed is true when the stream continues from what this view had already
+  // shown, after the link was offline; false for a view that starts afresh
+  // (a session shown again, a reloaded page), whose screen begins at the replay.
+  onReplay: (replay: ReplayReport, resumed: boolean) => void;
   sessionId: string;
   api: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath">;
   // Receives every phase change so the view can show where the link stands.
@@ -80,8 +84,9 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
     stopped = false;
     attempts += 1;
     if (!quiet) options.onLink({ phase: "connecting", attempt: attempts });
+    const resumeFrom = cursor;
     void options.api
-      .terminalStreamTicket(options.sessionId, cursor)
+      .terminalStreamTicket(options.sessionId, resumeFrom)
       .then((issued) => {
         if (halted()) return;
         attachedAt = Date.now();
@@ -89,7 +94,7 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
           onReplay: (replay) => {
             if (muted.has(attached)) return;
             cursor = replay.start;
-            options.onReplay(replay);
+            options.onReplay(replay, resumeFrom !== undefined);
           },
           onOutput: (chunk) => {
             if (muted.has(attached)) return;
