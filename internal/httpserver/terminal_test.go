@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -19,7 +18,6 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
-	"sshc/internal/platform"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/terminalrestore"
@@ -499,103 +497,6 @@ func TestOpeningASessionReturnsATicketAndListsIt(t *testing.T) {
 	if opened[0].Dir != "/home/tester" {
 		t.Fatalf("the shell started in %q, want the home directory", opened[0].Dir)
 	}
-}
-
-func TestLocalShellProfileUsesStoredDefaultAndOneShotOverride(t *testing.T) {
-	handlers := TerminalHandlers{
-		ShellProfiles: func() []platform.ShellProfile {
-			return []platform.ShellProfile{
-				{ID: "default", Label: "sh", Path: "/bin/sh", Argv0: "-sh"},
-				{ID: "fish", Label: "fish", Path: "/usr/bin/fish", Argv0: "-fish"},
-				{ID: "zsh", Label: "zsh", Path: "/bin/zsh", Argv0: "-zsh"},
-			}
-		},
-		DefaultShellProfile: func() string { return "fish" },
-	}
-	stored, err := handlers.shellSpec(nil, nil, terminal.Size{Cols: 80, Rows: 24})
-	if err != nil || stored.Command.Path != "/usr/bin/fish" || stored.Command.Argv0 != "-fish" {
-		t.Fatalf("stored profile = %#v, %v", stored.Command, err)
-	}
-	oneShot := "zsh"
-	overridden, err := handlers.shellSpec(&oneShot, nil, terminal.Size{Cols: 80, Rows: 24})
-	if err != nil || overridden.Command.Path != "/bin/zsh" {
-		t.Fatalf("one-shot profile = %#v, %v", overridden.Command, err)
-	}
-	handlers.DefaultShellProfile = func() string { return "powershell" }
-	fallback, err := handlers.shellSpec(nil, nil, terminal.Size{Cols: 80, Rows: 24})
-	if err != nil || fallback.Command.Path != "/bin/sh" {
-		t.Fatalf("cross-platform fallback = %#v, %v", fallback.Command, err)
-	}
-	unsafe := "/bin/sh -c id"
-	if _, err := handlers.shellSpec(&unsafe, nil, terminal.Size{}); !errors.Is(err, platform.ErrUnknownShellProfile) {
-		t.Fatalf("unsafe profile = %v", err)
-	}
-}
-
-func TestSSHStartupChangesToTheRequestedDirectoryAndThenRunsTheStartupSnippet(t *testing.T) {
-	handlers := TerminalHandlers{
-		Connect: func(context.Context, string, terminal.Size) (terminal.Process, error) {
-			return newScriptedPTY(), nil
-		},
-		Startup: func(alias string) StartupSnippet {
-			if alias != "production" {
-				t.Fatalf("startup alias = %q", alias)
-			}
-			return StartupSnippet{Command: "tmux attach"}
-		},
-	}
-	cases := map[string][]string{
-		"/srv/release 2": {`cd -- '/srv/release 2'`, "tmux attach"},
-		// A directory some login shell would read as code is not typed; the
-		// session starts in the home directory and the snippet still runs.
-		"/srv/it's": {"tmux attach"},
-	}
-	for directory, want := range cases {
-		alias := "production"
-		spec, err := handlers.spec(api.OpenTerminalSessionRequest{Kind: api.OpenTerminalSessionRequestKindSsh, Alias: &alias, Cwd: &directory}, terminal.Size{Cols: 80, Rows: 24})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if spec.Startup == nil {
-			t.Fatal("the SSH spec has no startup commands")
-		}
-		got := spec.Startup()
-		if !slices.Equal(got.Commands, want) || got.Notice != "" {
-			t.Fatalf("startup for %q = %#v, want the commands %q", directory, got, want)
-		}
-	}
-}
-
-func TestSSHSpecOpenReturnsTheConnectedProcessWithEveryCapability(t *testing.T) {
-	underlying := &forwardingReadinessPTY{readinessPTY: newReadinessPTY(newScriptedPTY())}
-	var connectContext context.Context
-	handlers := TerminalHandlers{
-		Connect: func(ctx context.Context, _ string, _ terminal.Size) (terminal.Process, error) {
-			connectContext = ctx
-			return underlying, nil
-		},
-	}
-	alias := "production"
-	spec, err := handlers.spec(api.OpenTerminalSessionRequest{Kind: api.OpenTerminalSessionRequestKindSsh, Alias: &alias}, terminal.Size{Cols: 80, Rows: 24})
-	if err != nil {
-		t.Fatal(err)
-	}
-	request, cancelRequest := context.WithCancel(context.Background())
-	process, err := spec.Open(request, terminal.Size{Cols: 80, Rows: 24})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 包みを返すと、包みが素通ししない能力（接続の進捗など）が黙って消える。
-	if process != terminal.Process(underlying) {
-		t.Fatalf("spec.Open returned %T, want the connected process itself", process)
-	}
-	cancelRequest()
-	if err := connectContext.Err(); err != nil {
-		t.Fatalf("the SSH session context ended with the HTTP request: %v", err)
-	}
-	underlying.finishOpen(nil)
-	underlying.exit(terminal.ExitInfo{})
-	_ = process.Close()
 }
 
 // 上限に達した状態で開こうとした要求は拒否する。暗黙に古いセッションを

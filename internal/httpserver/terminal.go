@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"sshc/internal/platform"
 	"sshc/internal/snippets"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalopen"
 	"sshc/internal/terminalrestore"
 	"sshc/internal/terminalworkspace"
 	"sshc/internal/validate"
@@ -40,7 +40,7 @@ type TerminalHandlers struct {
 	//
 	// 外部の ssh は起動しない。プロセス内で SSH 接続を行うため、確保する
 	// PTY も無い。nil なら SSH のセッションは開けない。
-	Connect Connector
+	Connect terminalopen.Connector
 	// Shell はローカルシェルの絶対パスを解決する。
 	Shell func() (string, error)
 	// ShellProfiles returns only executables detected and validated on this machine.
@@ -74,7 +74,7 @@ type TerminalHandlers struct {
 	// Startup は、alias に割り当てた起動スニペットを、この接続で送るかを決める。
 	// コマンドは変数（シークレットを含む）を展開したもので、認証とリモートシェルの
 	// 起動が済んでから送る。送らない理由の案内も、同じ時点でターミナルへ書く。
-	Startup func(alias string) StartupSnippet
+	Startup func(alias string) terminalopen.StartupSnippet
 }
 
 func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
@@ -309,15 +309,17 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 		size = candidate
 	}
 
-	spec, err := h.spec(request, size)
-	if err != nil {
-		return h.startProblem(c, err)
-	}
-	spec.Workspace, err = h.openingWorkspace(request.WorkspaceId)
+	workspace, err := h.openingWorkspace(request.WorkspaceId)
 	if err != nil {
 		return terminalWorkspaceProblem(c, err)
 	}
-	session, err := h.Registry.Open(c.Request().Context(), spec)
+	opening := terminalopen.Request{
+		Kind: kind, ShellProfile: request.ProfileId, WorkingDirectory: request.Cwd, Workspace: workspace, Size: size,
+	}
+	if request.Alias != nil {
+		opening.Alias = *request.Alias
+	}
+	session, err := h.opener().Open(c.Request().Context(), opening)
 	if err != nil {
 		return h.startProblem(c, err)
 	}
@@ -327,10 +329,6 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 		// チケットを出せなければ誰も繋げない。開いたものは閉じる。
 		_ = h.Registry.Close(session.ID())
 		return unexpectedProblem(c, "terminal_start_failed", err)
-	}
-	if kind == terminal.KindSSH && h.Connected != nil {
-		alias := *request.Alias
-		session.WhenConnected(func() { h.Connected(alias) })
 	}
 	return c.JSON(http.StatusCreated, api.OpenTerminalSessionResponse{
 		Session: describeSession(session.View()), StreamTicket: ticket,
@@ -385,157 +383,28 @@ func (h TerminalHandlers) SetTitle(c *echo.Context) error {
 	return c.JSON(http.StatusOK, h.list())
 }
 
-// spec は、開こうとしているセッションひとつ分の起動一式を組み立てる。
-func (h TerminalHandlers) spec(request api.OpenTerminalSessionRequest, size terminal.Size) (terminal.Spec, error) {
-	if request.Kind == api.OpenTerminalSessionRequestKindShell {
-		return h.shellSpec(request.ProfileId, request.Cwd, size)
+// opener は、このハンドラの配線でセッションを組み立てる terminalopen.Opener である。
+func (h TerminalHandlers) opener() terminalopen.Opener {
+	return terminalopen.Opener{
+		Registry: h.Registry, Connect: h.Connect, Shell: h.Shell,
+		ShellProfiles: h.ShellProfiles, DefaultShellProfile: h.DefaultShellProfile,
+		Environment: h.Environment, StartDirectory: h.StartDirectory,
+		Startup: h.Startup, Connected: h.Connected, RequireWorkspace: h.requireWorkspace,
+		ReconnectError: reconnectError, ReconnectStopNotice: reconnectStopNotice,
 	}
-	alias, cwd := request.Alias, request.Cwd
-
-	if alias == nil {
-		return terminal.Spec{}, errMissingAlias
-	}
-	if err := validate.Alias(*alias); err != nil {
-		return terminal.Spec{}, err
-	}
-	if h.Connect == nil {
-		return terminal.Spec{}, terminal.ErrNoStarter
-	}
-	initialDirectory := ""
-	if cwd != nil {
-		var err error
-		initialDirectory, err = terminal.CheckRemoteWorkingDirectory(*cwd)
-		if err != nil {
-			return terminal.Spec{}, err
-		}
-	}
-
-	// 設定を読むのはここである。読めなければセッションを作らない。設定の
-	// 問題は接続画面が表示できるので、端末に理由を書く必要が無い。接続そのものの
-	// 出来事（届かない、認証が通らない）は、開いたセッションの中で語られる。
-	target := *alias
-	spec := terminal.Spec{
-		Kind: terminal.KindSSH, Alias: target, Title: target, Size: size,
-		Open: func(ctx context.Context, size terminal.Size) (terminal.Process, error) {
-			// 確保が取り消されたなら、繋ぎに行かない。
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			// 成功したセッションの寿命は、要求から切り離す。Dialer.Open は
-			// すぐ返り、渡された context を非同期の接続のあいだ持ち続けるので、
-			// 要求の context をそのまま渡すと、開いた HTTP ハンドラが返った瞬間に
-			// SSH セッションが終了する。取り消す権利は Process.Close と ForceClose が
-			// 持つ（sshclient.Session は自分で派生させた context をそこで取り消す）。
-			return h.Connect(context.WithoutCancel(ctx), target, size)
-		},
-		// 起動時のコマンドと送らなかったことの知らせは、terminal.Session が Ready の
-		// 後に世代ごとに送る。再接続のたびに解決し直すので、割り当ての変更と停止がすぐ効く。
-		Startup: func() terminal.Startup {
-			commands := make([]string, 0, 2)
-			if command, ok := terminal.ChangeRemoteDirectoryCommand(initialDirectory); initialDirectory != "" && ok {
-				commands = append(commands, command)
-			}
-			var startup StartupSnippet
-			if h.Startup != nil {
-				startup = h.Startup(target)
-			}
-			if startup.Command != "" {
-				commands = append(commands, startup.Command)
-			}
-			return terminal.Startup{Notice: startup.Notice, Commands: commands}
-		},
-		ReconnectError: func(err error) (bool, string) {
-			if code, requiresAction := connectProblem(err); requiresAction {
-				return false, code
-			}
-			return true, terminal.ProblemReconnectFailed
-		},
-		ReconnectStopNotice: reconnectStopNotice,
-	}
-	return spec, nil
 }
 
-func (h TerminalHandlers) shellSpec(requested, cwd *string, size terminal.Size) (terminal.Spec, error) {
-	profile, err := h.resolveShellProfile(requested)
-	if err != nil {
-		return terminal.Spec{}, err
+// reconnectError は、再接続の失敗のうち、利用者の操作が要るもの（設定を直すなど）では
+// 再接続をやめ、その理由の語を返す。
+func reconnectError(err error) (bool, string) {
+	if code, requiresAction := connectProblem(err); requiresAction {
+		return false, code
 	}
-	directory := h.startDirectory()
-	if cwd != nil {
-		directory, err = terminal.ResolveLocalWorkingDirectory(*cwd)
-		if err != nil {
-			return terminal.Spec{}, err
-		}
-	}
-	return terminal.Spec{
-		Kind: terminal.KindShell, ShellProfile: profile.ID, Title: shellTitle(profile.Path), Size: size,
-		Command: terminal.Command{
-			Path: profile.Path, Argv0: profile.Argv0,
-			Arguments: append([]string(nil), profile.Arguments...), Env: h.environment(),
-			Dir: directory,
-		},
-	}, nil
-}
-
-var errMissingAlias = errors.New("an ssh session needs an alias")
-
-// shellTitle は、タブに出す名前である。
-//
-// filepath でよい。ここに来るのは、このマシンで解決されたローカルシェルの
-// 絶対パスだけなので、区切り文字はこの OS のものである。自前で `/` だけを
-// 数えると、Windows のタブには `C:\Windows\System32\...\powershell.exe` が
-// まるごと並ぶ。
-func shellTitle(shell string) string { return filepath.Base(shell) }
-
-func (h TerminalHandlers) resolveShell() (string, error) {
-	if h.Shell == nil {
-		return "", platform.ErrNoLoginShell
-	}
-	return h.Shell()
-}
-
-func (h TerminalHandlers) resolveShellProfile(requested *string) (platform.ShellProfile, error) {
-	if h.ShellProfiles == nil {
-		shell, err := h.resolveShell()
-		if err != nil {
-			return platform.ShellProfile{}, err
-		}
-		if requested != nil && *requested != "" && *requested != "default" {
-			return platform.ShellProfile{}, platform.ErrUnknownShellProfile
-		}
-		return platform.ShellProfile{
-			ID: "default", Label: shellTitle(shell), Path: shell,
-			Argv0: platform.LoginArgv0(shell), Arguments: platform.LoginArguments(shell),
-		}, nil
-	}
-	id := ""
-	if requested != nil {
-		id = *requested
-	} else if h.DefaultShellProfile != nil {
-		id = h.DefaultShellProfile()
-	}
-	profiles := h.ShellProfiles()
-	profile, err := platform.ResolveShellProfile(profiles, id)
-	if err != nil && requested == nil {
-		// Metadata may be synced from another OS. An unavailable stored default
-		// must not prevent the machine's verified login shell from opening.
-		return platform.ResolveShellProfile(profiles, "default")
-	}
-	return profile, err
+	return true, terminal.ProblemReconnectFailed
 }
 
 func (h TerminalHandlers) ListShellProfiles(c *echo.Context) error {
-	profiles := []platform.ShellProfile(nil)
-	if h.ShellProfiles != nil {
-		profiles = h.ShellProfiles()
-	}
-	chosen := "default"
-	if h.DefaultShellProfile != nil && h.DefaultShellProfile() != "" {
-		chosen = h.DefaultShellProfile()
-	}
-	if _, err := platform.ResolveShellProfile(profiles, chosen); err != nil {
-		chosen = "default"
-	}
+	profiles, chosen := h.opener().ShellProfileChoices()
 	answer := api.LocalShellProfileList{Profiles: make([]api.LocalShellProfile, 0, len(profiles))}
 	for _, profile := range profiles {
 		answer.Profiles = append(answer.Profiles, api.LocalShellProfile{
@@ -546,27 +415,13 @@ func (h TerminalHandlers) ListShellProfiles(c *echo.Context) error {
 	return c.JSON(http.StatusOK, answer)
 }
 
-func (h TerminalHandlers) startDirectory() string {
-	if h.StartDirectory == nil {
-		return ""
-	}
-	return h.StartDirectory()
-}
-
-func (h TerminalHandlers) environment() []string {
-	if h.Environment == nil {
-		return nil
-	}
-	return h.Environment()
-}
-
 // startProblem は、開けなかった理由を、利用者が次に何をすればよいか分かる形に変える。
 func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 	switch {
 	case errors.Is(err, terminal.ErrSessionLimit):
 		// 暗黙に古いセッションを閉じることはしない。
 		return problem(c, http.StatusConflict, "terminal_session_limit")
-	case errors.Is(err, validate.ErrUnsafeAlias), errors.Is(err, errMissingAlias):
+	case errors.Is(err, validate.ErrUnsafeAlias), errors.Is(err, terminalopen.ErrMissingAlias):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	case errors.Is(err, terminal.ErrInvalidRemoteWorkingDirectory):
 		// SFTP で開いているフォルダの名前は接続先が決める。制御文字を含む名前は
