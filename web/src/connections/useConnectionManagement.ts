@@ -1,4 +1,5 @@
 import { configApi, type EditRequest, type HostDetail, type Overview } from "../api/config";
+import { groupBaseName, isGroupOrDescendant } from "../rules/groupPath";
 import { toProblem } from "../api/guards";
 import type { NavigateLocationOptions } from "../routing/useSectionRoute";
 import type { HostSelection } from "./ConnectionTree";
@@ -131,7 +132,7 @@ export function useConnectionManagement({
   }
 
   async function renameGroupByDrop(name: string, target: string) {
-    const base = name.slice(name.lastIndexOf("/") + 1);
+    const base = groupBaseName(name);
     await renameGroupFollowingSelection(name, target === "" ? base : `${target}/${base}`);
   }
 
@@ -150,7 +151,7 @@ export function useConnectionManagement({
 
   async function deleteGroup(name: string, destination: string): Promise<boolean> {
     const selectedGroup = selectedHostGroup();
-    const selectionMoves = selectedGroup !== undefined && (selectedGroup === name || selectedGroup.startsWith(`${name}/`));
+    const selectionMoves = selectedGroup !== undefined && isGroupOrDescendant(selectedGroup, name);
     try {
       const result = await configApi.deleteGroup(name, destination);
       setPreview(result.preview);

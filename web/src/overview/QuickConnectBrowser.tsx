@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { isGroupOrDescendant } from "../rules/groupPath";
 import type { Overview } from "../api/config";
 import type { RecentConnection } from "../api/recentConnections";
 import {
@@ -50,7 +51,7 @@ function includesQuery(server: BrowserServer, query: string): boolean {
 }
 
 function belongsToGroup(server: BrowserServer, group: string): boolean {
-  return group === "" || server.group === group || server.group.startsWith(`${group}/`);
+  return group === "" || isGroupOrDescendant(server.group, group);
 }
 
 export function QuickConnectBrowser({
