@@ -116,24 +116,30 @@ const noticeToneClasses = {
 
 // Notice is the one way a panel tells the user something went wrong, needs
 // attention, or has just been done ("success": saved, started, restored).
-// "compact" fits it into dense lists and side panes.
+// "compact" fits it into dense lists and side panes. actions are what the user
+// can do about it; they sit inside the frame, under the words, as the design
+// asks, so a long message is never squeezed beside them. A close button that
+// only dismisses the notice stays in children, at the end of the line.
 export function Notice({
   children,
   tone = "notice",
   compact = false,
+  actions,
 }: {
   children: ReactNode;
   tone?: keyof typeof noticeToneClasses;
   compact?: boolean;
+  actions?: ReactNode;
 }) {
   const spacing = compact ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-sm";
   return (
-    <p
+    <div
       role={tone === "danger" ? "alert" : "status"}
-      className={`flex items-center gap-2 rounded-md border ${spacing} ${noticeToneClasses[tone]}`}
+      className={`rounded-md border ${spacing} ${noticeToneClasses[tone]}`}
     >
-      {children}
-    </p>
+      <div className="flex items-center gap-2">{children}</div>
+      {actions === undefined ? null : <div className={`flex flex-wrap items-center gap-2 ${compact ? "mt-1.5" : "mt-2"}`}>{actions}</div>}
+    </div>
   );
 }
 

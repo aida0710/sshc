@@ -35,17 +35,16 @@ export function SFTPTextEditor({ editor, busy = false }: {
           </div>
           {problem === null ? null : (
             <div className="border-b border-line px-3 py-2">
-              <Notice tone="danger">
-                {/* On a narrow screen the actions wrap below the message instead of squeezing it. */}
-                <span className="flex grow flex-wrap items-center gap-x-3 gap-y-1">
-                  <span className="grow basis-48">{problem.message}</span>
-                  {problem.conflict ? (
-                    <span className="flex shrink-0 gap-3">
-                      <button type="button" disabled={editor.busy} className="text-accent" onClick={editor.requestReload}>{t(editor.local ? "sftp.editorLocalReload" : "sftp.editorReload")}</button>
-                      <button type="button" disabled={writeDisabled} className="text-accent" onClick={() => void editor.requestOverwrite()}>{t("sftp.editorOverwrite")}</button>
-                    </span>
-                  ) : null}
-                </span>
+              <Notice
+                tone="danger"
+                actions={problem.conflict ? (
+                  <>
+                    <Button small disabled={editor.busy} onClick={editor.requestReload}>{t(editor.local ? "sftp.editorLocalReload" : "sftp.editorReload")}</Button>
+                    <Button small disabled={writeDisabled} onClick={() => void editor.requestOverwrite()}>{t("sftp.editorOverwrite")}</Button>
+                  </>
+                ) : undefined}
+              >
+                {problem.message}
               </Notice>
             </div>
           )}
