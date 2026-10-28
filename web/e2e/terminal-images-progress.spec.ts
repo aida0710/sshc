@@ -176,14 +176,18 @@ test("counts an emoji as two cells so the rest of the line stays aligned", async
   const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
 
-  // Octal escapes keep "12|" out of the typed command, so waiting for it waits
-  // for the output rather than the echo.
-  await runInShell(page, "clear; printf '\\360\\237\\230\\200\\174\\n\\061\\062\\174\\n'");
+  // Emoji from Unicode 6.1, 13, 14, 15 and 16, each followed by a bar. Octal
+  // escapes keep "12|" out of the typed command, so waiting for it waits for
+  // the output rather than the echo.
+  const emoji = ["\u{1F600}", "\u{1F972}", "\u{1FAE0}", "\u{1FAE8}", "\u{1FAE9}"];
+  const octal = (text: string) => [...Buffer.from(text, "utf8")].map((byte) => `\\${byte.toString(8)}`).join("");
+  const lines = [...emoji.map((character) => `${octal(character)}${octal("|")}`), octal("12|")];
+  await runInShell(page, `clear; printf '${lines.join("\\n")}\\n'`);
   await expect(screen).toContainText("12|");
-  // The DOM renderer draws each row as text; the two bars must share a column.
-  const columns = await drawnCharacterColumns(page, "|", 2);
-  expect(columns).toHaveLength(2);
-  expect(Math.abs((columns[0] ?? 0) - (columns[1] ?? 0))).toBeLessThanOrEqual(1);
+  // The DOM renderer draws each row as text; every bar must share a column.
+  const columns = await drawnCharacterColumns(page, "|", lines.length);
+  expect(columns).toHaveLength(lines.length);
+  for (const column of columns) expect(Math.abs(column - (columns.at(-1) ?? 0))).toBeLessThanOrEqual(1);
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/terminal-emoji-width.png` });
   }

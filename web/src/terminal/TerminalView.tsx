@@ -41,7 +41,7 @@ import { attachOSC9Directory } from "./osc9Directory";
 import { attachOSC9Progress, noTerminalProgress, type TerminalProgress } from "./osc9Progress";
 import { TerminalProgressBar } from "./TerminalProgressBar";
 import { attachInlineImages } from "./inlineImages";
-import { applyUnicode11Widths } from "./unicodeWidths";
+import { applyCurrentUnicodeWidths } from "./unicodeWidths";
 import { attachCommandMarkers } from "./commandMarkers";
 import { showBrowserNotification } from "../ui/browserNotifications";
 import { longCommandNotificationTag } from "./notificationTags";
@@ -290,7 +290,7 @@ export function TerminalView({
         },
       },
     });
-    applyUnicode11Widths(view);
+    applyCurrentUnicodeWidths(view);
     const fit = new FitAddon();
     const searchAddon = new SearchAddon({ highlightLimit: 1000 });
     view.loadAddon(fit);
