@@ -612,21 +612,21 @@ test("keeps sshc changes as a draft until they are saved or discarded", async ({
     if (request.url().includes("/api/v1/config/save")) saveRequests.push(request.url());
   });
   const save = page.getByRole("button", { name: "Save sshc-only settings" });
-  const osc52 = page.getByLabel("OSC 52 clipboard");
+  const encoding = page.getByLabel("Remote text encoding");
 
   await expect(save).toHaveCount(0);
-  await osc52.selectOption("deny");
+  await encoding.selectOption("shift_jis");
   await expect(save).toBeVisible();
   await expect(page.getByText("Unsaved changes")).toBeVisible();
   await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
   await page.getByRole("tab", { name: "Basic" }).click();
   await expect(page.getByLabel("Port", { exact: true })).toBeDisabled();
   await page.getByRole("tab", { name: "Display & terminal" }).click();
-  await expect(osc52).toHaveValue("deny");
+  await expect(encoding).toHaveValue("shift_jis");
 
   await page.getByRole("button", { name: "Discard changes" }).click();
   await expect(save).toHaveCount(0);
-  await expect(osc52).toHaveValue("");
+  await expect(encoding).toHaveValue("");
   await expect(page.getByText("Unsaved changes")).toHaveCount(0);
   expect(saveRequests).toEqual([]);
 });
@@ -652,7 +652,7 @@ test("moves to another connection right after the sshc settings are saved, witho
 }) => {
   await openBastion(page, installation.url);
   await page.getByRole("tab", { name: "Display & terminal" }).click();
-  await page.getByLabel("OSC 52 clipboard").selectOption("deny");
+  await page.getByLabel("Remote text encoding").selectOption("euc-jp");
 
   // 書き込みが済んだあと、ページが保存済みの接続を読み直し終える前に、別の接続を選ぶ。
   let finishReload: () => void = () => undefined;
@@ -669,7 +669,7 @@ test("moves to another connection right after the sshc settings are saved, witho
 
   await expect(page.getByRole("heading", { name: "nas" })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Discard changes" })).toHaveCount(0);
-  expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].osc52).toBe("deny");
+  expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].encoding).toBe("euc-jp");
 });
 
 test("brings the reload button into view when the reload after a save at the bottom of the tab fails", async ({
@@ -678,7 +678,7 @@ test("brings the reload button into view when the reload after a save at the bot
 }) => {
   await openBastion(page, installation.url);
   await page.getByRole("tab", { name: "Display & terminal" }).click();
-  await page.getByLabel("OSC 52 clipboard").selectOption("deny");
+  await page.getByLabel("Remote text encoding").selectOption("shift_jis");
   const save = page.getByRole("button", { name: "Save sshc-only settings" });
   await save.scrollIntoViewIfNeeded();
   await expect(page.getByRole("heading", { name: "bastion" })).not.toBeInViewport();

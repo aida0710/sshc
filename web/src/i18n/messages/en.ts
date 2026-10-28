@@ -1005,11 +1005,12 @@ export const en = {
   "terminal.keepScreenAwake": "Keep screen on",
   "terminal.keepScreenAwakeHint":
     "Keep the screen on while a terminal is shown. This browser only; applies to every terminal",
+  "terminal.globalSettings": "Global settings",
   "terminal.osc52Hint":
-    "Allow this terminal session to write to the system clipboard via OSC 52",
+    "Allow remote programs to write to the system clipboard via OSC 52 in every terminal",
   "terminal.osc52Enabled":
-    "OSC 52 clipboard writes are allowed for this terminal session.",
-  "terminal.osc52Disabled": "OSC 52 clipboard writes are blocked.",
+    "OSC 52 clipboard writes are now allowed in every terminal.",
+  "terminal.osc52Disabled": "OSC 52 clipboard writes are now blocked in every terminal.",
   "terminal.osc52Copied":
     "The remote application copied text to the system clipboard.",
   "terminal.moreActions": "More terminal actions",
@@ -1085,8 +1086,8 @@ export const en = {
   "terminal.linesUnit": "lines",
   "terminal.localShellProfileLabel": "Default local shell",
   "terminal.localShellProfileSystem": "System login shell",
-  "terminal.osc52DefaultLabel": "Allow OSC 52 clipboard writes by default",
-  "terminal.osc52DefaultHint": "Each SSH connection can inherit, allow or deny it.",
+  "terminal.osc52SettingLabel": "Allow OSC 52 clipboard writes",
+  "terminal.osc52SettingHint": "Applies to every terminal. A terminal's More menu switches it too.",
   "terminal.jisYenBackslashLabel": "Send the JIS ¥ key as backslash",
   "terminal.jisYenBackslashHint": "For Japanese keyboards. IME composition is not changed.",
   "terminal.composerEnterSendsLabel": "Send with Enter in the phone's text box",
@@ -1192,12 +1193,6 @@ export const en = {
   "connection.encodingShiftJIS": "Shift_JIS (Japanese)",
   "connection.encodingEUCJP": "EUC-JP (Japanese)",
   "connection.encodingISO2022JP": "ISO-2022-JP (Japanese)",
-  "connection.osc52Label": "OSC 52 clipboard",
-  "connection.osc52Hint":
-    "Choose whether remote applications on this SSH connection may write to the system clipboard.",
-  "connection.osc52Inherit": "Use terminal default",
-  "connection.osc52Allow": "Allow for this connection",
-  "connection.osc52Deny": "Block for this connection",
   "connection.vpnLabel": "VPN profile",
   "connection.vpnHint": "Connect through the VPN of the chosen VPN profile. The destination is this connection's HostName and Port. VPN profiles are created on the VPN screen.",
   "connection.vpnNone": "No VPN",

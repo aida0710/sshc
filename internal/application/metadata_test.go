@@ -145,18 +145,18 @@ func TestEncodeMetadataRefusesLimitsOutsideTheirRange(t *testing.T) {
 	}
 }
 
-func TestMetadataAcceptsOnlyExplicitOSC52HostPolicies(t *testing.T) {
-	for _, policy := range []string{"", "allow", "deny"} {
-		metadata := NewMetadata()
-		metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: "config", Alias: "host"}, OSC52: policy}}
-		if _, err := EncodeMetadata(metadata); err != nil {
-			t.Errorf("policy %q = %v", policy, err)
-		}
+func TestMetadataDropsThePerConnectionOSC52PolicyEarlierVersionsWrote(t *testing.T) {
+	stored := []byte(`{"schemaVersion": 9, "hosts": [{"identity": {"path": "config", "alias": "host"}, "tags": ["prod"], "osc52": "allow"}]}`)
+	decoded, err := DecodeMetadata(stored)
+	if err != nil {
+		t.Fatalf("decode = %v", err)
 	}
-	metadata := NewMetadata()
-	metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: "config", Alias: "host"}, OSC52: "yes"}}
-	if _, err := EncodeMetadata(metadata); !errors.Is(err, ErrMetadataOSC52) {
-		t.Fatalf("invalid policy = %v, want ErrMetadataOSC52", err)
+	encoded, err := EncodeMetadata(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "osc52") || !strings.Contains(string(encoded), `"prod"`) {
+		t.Fatalf("encoded = %s", encoded)
 	}
 }
 

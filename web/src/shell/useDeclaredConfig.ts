@@ -4,13 +4,11 @@ import type { TerminalAppearance } from "../api/settings";
 import type { Section } from "../routing/sectionRoute";
 
 // What the SSH configuration declares, read once per section: the groups,
-// the hosts (with the appearance, clipboard policy and VPN route each one
-// asked for) and the config files. Sections take these instead of reading the
+// the hosts (with the appearance and VPN route each one asked for) and the config files. Sections take these instead of reading the
 // overview themselves.
 export function useDeclaredConfig(enabled: boolean, section: Section | null) {
   const [groups, setGroups] = useState<string[]>([]);
   const [hostAppearance, setHostAppearance] = useState<Map<string, TerminalAppearance>>(new Map());
-  const [hostOSC52, setHostOSC52] = useState<Map<string, "allow" | "deny">>(new Map());
   const [hostVPN, setHostVPN] = useState<Map<string, string>>(new Map());
   const [knownAliases, setKnownAliases] = useState<string[]>([]);
   const [hosts, setHosts] = useState<HostEntry[]>([]);
@@ -26,7 +24,6 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null) {
         setGroups((overview.metadata.groups ?? []).map((group) => group.name));
         const hostMetadata = overview.metadata.hosts ?? [];
         setHostAppearance(hostSettingByAlias(hostMetadata, (host) => host.appearance));
-        setHostOSC52(hostSettingByAlias(hostMetadata, (host) => host.osc52));
         setHostVPN(hostSettingByAlias(hostMetadata, (host) => host.vpn === "" ? undefined : host.vpn));
         setKnownAliases([
           ...new Set(
@@ -44,7 +41,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null) {
     };
   }, [enabled, section]);
 
-  return { groups, hostAppearance, hostOSC52, setHostOSC52, hostVPN, knownAliases, hosts, files };
+  return { groups, hostAppearance, hostVPN, knownAliases, hosts, files };
 }
 
 // hostSettingByAlias は、alias の付いた接続のうち pick が値を返したものだけを、

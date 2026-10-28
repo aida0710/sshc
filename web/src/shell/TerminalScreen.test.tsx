@@ -62,7 +62,6 @@ function Screen({ api, targets }: { api: TerminalSessionsApi; targets: RunTarget
       splitView={splitView}
       settings={{ appearance: { palette: "", font: "", background: "" } }}
       hostAppearance={new Map()}
-      hostOSC52={new Map()}
       hostVPN={new Map()}
       api={api}
       runTargets={targets}
@@ -225,7 +224,6 @@ function OpeningScreen({ api, targets }: { api: TerminalSessionsApi; targets: Ru
       splitView={splitView}
       settings={{ appearance: { palette: "", font: "", background: "" } }}
       hostAppearance={new Map()}
-      hostOSC52={new Map()}
       hostVPN={new Map()}
       api={api}
       runTargets={targets}

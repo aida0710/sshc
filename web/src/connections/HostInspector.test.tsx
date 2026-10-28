@@ -110,11 +110,11 @@ describe("HostInspector", () => {
     render(<HostInspector detail={build()} onSave={onSave} />);
 
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
-    await user.selectOptions(screen.getByLabelText("OSC 52 clipboard"), "deny");
+    await user.type(screen.getByLabelText(/^Display order/), "3");
     await user.click(saveButton()!);
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ encoding: "shift_jis", osc52: "deny" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ encoding: "shift_jis", order: 3 }));
   });
 
   it("discards the draft back to the saved values", async () => {
@@ -284,20 +284,10 @@ describe("HostInspector", () => {
     expect(onSave).toHaveBeenLastCalledWith(expect.not.objectContaining({ encoding: expect.anything() }));
   });
 
-  it("stores an OSC 52 override per SSH connection and can inherit again", async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
-    const user = userEvent.setup();
-    const detail = build();
-    const { rerender } = render(<HostInspector detail={detail} onSave={onSave} />);
+  it("leaves OSC 52 to the one setting for every terminal", () => {
+    render(<HostInspector detail={build()} onSave={vi.fn()} />);
 
-    await user.selectOptions(screen.getByLabelText("OSC 52 clipboard"), "deny");
-    await user.click(saveButton()!);
-    expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ osc52: "deny" }));
-
-    rerender(<HostInspector detail={{ ...detail, metadata: { ...detail.metadata, osc52: "deny" } }} onSave={onSave} />);
-    await user.selectOptions(screen.getByLabelText("OSC 52 clipboard"), "");
-    await user.click(saveButton()!);
-    expect(onSave).toHaveBeenLastCalledWith(expect.not.objectContaining({ osc52: expect.anything() }));
+    expect(screen.queryByLabelText("OSC 52 clipboard")).toBeNull();
   });
 
   it("routes this connection through a VPN profile and can stop routing it", async () => {
