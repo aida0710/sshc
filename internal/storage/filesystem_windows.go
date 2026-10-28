@@ -10,13 +10,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 
-	"sshc/internal/platform/nativepath"
 	"sshc/internal/platform/windowsacl"
 )
 
@@ -42,7 +40,7 @@ func makePrivateDirectories(path string, permission fs.FileMode) error {
 	if err != nil || relative == "." || filepath.IsAbs(relative) {
 		return os.ErrInvalid
 	}
-	current, err := openAbsoluteNoReparseDirectory(root, windows.FILE_TRAVERSE)
+	current, err := windowsacl.OpenVolumeRoot(root, windows.FILE_TRAVERSE)
 	if err != nil {
 		return err
 	}
@@ -57,13 +55,14 @@ func makePrivateDirectories(path string, permission fs.FileMode) error {
 		if final {
 			access |= windows.FILE_READ_ATTRIBUTES | windows.READ_CONTROL | windows.WRITE_DAC
 		}
-		next, openErr := openRelativeNoReparse(current, component, access, true, false)
+		existing := windowsacl.RelativeOpen{Access: access, Disposition: windows.FILE_OPEN, CreateOptions: windows.FILE_DIRECTORY_FILE}
+		next, openErr := windowsacl.OpenRelative(current, component, existing)
 		created := false
 		if errors.Is(openErr, fs.ErrNotExist) {
-			next, openErr = createRelativeDirectoryNoReparse(current, component)
+			next, openErr = windowsacl.OpenRelative(current, component, privateDirectory)
 			created = openErr == nil
 			if errors.Is(openErr, windows.ERROR_FILE_EXISTS) || errors.Is(openErr, windows.ERROR_ALREADY_EXISTS) {
-				next, openErr = openRelativeNoReparse(current, component, access, true, false)
+				next, openErr = windowsacl.OpenRelative(current, component, existing)
 				created = false
 			}
 		}
@@ -82,44 +81,22 @@ func makePrivateDirectories(path string, permission fs.FileMode) error {
 	return nil
 }
 
-// createRelativeDirectoryNoReparse は、ディレクトリを作るときから非公開にする
-// （windowsacl.NewPrivateSecurityDescriptor）。
-func createRelativeDirectoryNoReparse(parent windows.Handle, name string) (windows.Handle, error) {
-	objectName, err := windows.NewNTUnicodeString(name)
-	if err != nil {
-		return 0, err
-	}
-	descriptor, err := windowsacl.NewPrivateSecurityDescriptor(true)
-	if err != nil {
-		return 0, err
-	}
-	attributes := &windows.OBJECT_ATTRIBUTES{
-		Length:             uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
-		RootDirectory:      parent,
-		ObjectName:         objectName,
-		Attributes:         windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
-		SecurityDescriptor: descriptor,
-	}
-	var handle windows.Handle
-	var status windows.IO_STATUS_BLOCK
-	err = windows.NtCreateFile(
-		&handle,
-		windows.FILE_TRAVERSE|windows.FILE_READ_ATTRIBUTES|windows.READ_CONTROL|windows.WRITE_DAC,
-		attributes,
-		&status,
-		nil,
-		0,
-		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
-		windows.FILE_CREATE,
-		windows.FILE_DIRECTORY_FILE,
-		0,
-		0,
-	)
-	runtime.KeepAlive(descriptor)
-	if err != nil {
-		return 0, mapNtError(err)
-	}
-	return handle, nil
+// privateDirectory は、makePrivateDirectories が足りない要素を作るときの開き方である。
+// 作るときから非公開にする。
+var privateDirectory = windowsacl.RelativeOpen{
+	Access:        windows.FILE_TRAVERSE | windows.FILE_READ_ATTRIBUTES | windows.READ_CONTROL | windows.WRITE_DAC,
+	Disposition:   windows.FILE_CREATE,
+	CreateOptions: windows.FILE_DIRECTORY_FILE,
+	Private:       true,
+}
+
+// privateTemporaryFile は、一時ファイルを作るときの開き方である。作るときから非公開にし、
+// 名前が既にあれば作らずに失敗する。
+var privateTemporaryFile = windowsacl.RelativeOpen{
+	Access:        windows.FILE_WRITE_DATA | windows.FILE_WRITE_ATTRIBUTES | windows.FILE_READ_ATTRIBUTES | windows.READ_CONTROL | windows.WRITE_DAC | windows.DELETE | windows.SYNCHRONIZE,
+	Disposition:   windows.FILE_CREATE,
+	CreateOptions: windows.FILE_NON_DIRECTORY_FILE | windows.FILE_SYNCHRONOUS_IO_NONALERT | windows.FILE_WRITE_THROUGH,
+	Private:       true,
 }
 
 func createPrivateTemp(directory, prefix string) (*os.File, error) {
@@ -127,7 +104,7 @@ func createPrivateTemp(directory, prefix string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	parent, err := openNoReparseDirectoryWithAccess(absolute, windows.FILE_TRAVERSE|windows.FILE_WRITE_DATA|fileDeleteChild)
+	parent, err := windowsacl.OpenDirectoryNoReparse(absolute, windows.FILE_TRAVERSE|windows.FILE_WRITE_DATA|fileDeleteChild)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +123,7 @@ func createPrivateTempRelative(parent windows.Handle, directory, prefix string) 
 			return nil, err
 		}
 		name := prefix + hex.EncodeToString(randomBytes)
-		handle, err := createRelativeNoReparse(parent, name)
+		handle, err := windowsacl.OpenRelative(parent, name, privateTemporaryFile)
 		if errors.Is(err, windows.ERROR_FILE_EXISTS) || errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
 			continue
 		}
@@ -169,52 +146,12 @@ func createPrivateTempRelative(parent windows.Handle, directory, prefix string) 
 	return nil, fmt.Errorf("create private Windows temp: collision limit exceeded")
 }
 
-// createRelativeNoReparse は、ファイルを作るときから非公開にする
-// （windowsacl.NewPrivateSecurityDescriptor）。
-func createRelativeNoReparse(parent windows.Handle, name string) (windows.Handle, error) {
-	objectName, err := windows.NewNTUnicodeString(name)
-	if err != nil {
-		return 0, err
-	}
-	descriptor, err := windowsacl.NewPrivateSecurityDescriptor(false)
-	if err != nil {
-		return 0, err
-	}
-	attributes := &windows.OBJECT_ATTRIBUTES{
-		Length:             uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
-		RootDirectory:      parent,
-		ObjectName:         objectName,
-		Attributes:         windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
-		SecurityDescriptor: descriptor,
-	}
-	var handle windows.Handle
-	var status windows.IO_STATUS_BLOCK
-	err = windows.NtCreateFile(
-		&handle,
-		windows.FILE_WRITE_DATA|windows.FILE_WRITE_ATTRIBUTES|windows.FILE_READ_ATTRIBUTES|windows.READ_CONTROL|windows.WRITE_DAC|windows.DELETE|windows.SYNCHRONIZE,
-		attributes,
-		&status,
-		nil,
-		0,
-		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
-		windows.FILE_CREATE,
-		windows.FILE_NON_DIRECTORY_FILE|windows.FILE_SYNCHRONOUS_IO_NONALERT|windows.FILE_WRITE_THROUGH,
-		0,
-		0,
-	)
-	runtime.KeepAlive(descriptor)
-	if err != nil {
-		return 0, mapNtError(err)
-	}
-	return handle, nil
-}
-
 func openRegularNoFollow(path string) (*os.File, error) {
 	absolutePath, err := cleanAbsoluteDOSPath(path)
 	if err != nil {
 		return nil, err
 	}
-	parent, err := openNoReparseDirectory(filepath.Dir(absolutePath))
+	parent, err := windowsacl.OpenDirectoryNoReparse(filepath.Dir(absolutePath), windows.FILE_TRAVERSE)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +165,11 @@ func openRegularNoFollow(path string) (*os.File, error) {
 	// 通常ファイルであることを handle から確かめてから中身を読むためだ。
 	// FILE_READ_DATA だけで開くと、その確認が Access is denied で落ち、
 	// ユーザーの ~/.ssh/config がひとつも読めない。
-	handle, err := openRelativeNoReparse(parent, fileName, windows.FILE_READ_DATA|windows.FILE_READ_ATTRIBUTES, false, true)
+	handle, err := windowsacl.OpenRelative(parent, fileName, windowsacl.RelativeOpen{
+		Access:        windows.FILE_READ_DATA | windows.FILE_READ_ATTRIBUTES | windows.SYNCHRONIZE,
+		Disposition:   windows.FILE_OPEN,
+		CreateOptions: windows.FILE_SYNCHRONOUS_IO_NONALERT,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +200,7 @@ func (OSFileSystem) ReadPrivateFileLimited(path string, maximum int64) ([]byte, 
 	}
 	file, err := windowsacl.OpenAuthenticatedFileForRead(path)
 	if err != nil {
-		return nil, mapPrivateOpenError(err)
+		return nil, err
 	}
 	defer file.Close()
 	return readBoundedRegularFile(file, maximum)
@@ -271,7 +212,7 @@ func (OSFileSystem) DigestPrivateFileLimited(path string, maximum int64) (string
 	}
 	file, err := windowsacl.OpenAuthenticatedFileForRead(path)
 	if err != nil {
-		return "", mapPrivateOpenError(err)
+		return "", err
 	}
 	defer file.Close()
 	return digestBoundedRegularFile(file, maximum)
@@ -280,155 +221,10 @@ func (OSFileSystem) DigestPrivateFileLimited(path string, maximum int64) (string
 func (OSFileSystem) ReadPrivateFilePrefix(path string, maximum int) ([]byte, error) {
 	file, err := windowsacl.OpenAuthenticatedFileForRead(path)
 	if err != nil {
-		return nil, mapPrivateOpenError(err)
+		return nil, err
 	}
 	defer file.Close()
 	return readRegularFilePrefix(file, maximum)
-}
-
-func mapPrivateOpenError(err error) error {
-	if errors.Is(err, windowsacl.ErrReparsePoint) {
-		return ErrSymlinkPath
-	}
-	return err
-}
-
-// openNoReparseDirectory は渡された directory 自体を handle 相対でたどる。
-// OBJ_DONT_REPARSE を各 component の name resolution に渡すため、検査後の置換で
-// 別 tree をたどれない。呼び出し側が file path を渡す関数ではない。
-func openNoReparseDirectory(directory string) (windows.Handle, error) {
-	return openNoReparseDirectoryWithAccess(directory, windows.FILE_TRAVERSE)
-}
-
-func openNoReparseDirectoryWithAccess(directory string, finalAccess uint32) (windows.Handle, error) {
-	volume := filepath.VolumeName(directory)
-	if volume == "" {
-		return 0, os.ErrInvalid
-	}
-	root := volume + string(os.PathSeparator)
-	relativeParent, ok := nativepath.Relative(root, directory)
-	if !ok {
-		return 0, os.ErrInvalid
-	}
-
-	rootAccess := uint32(windows.FILE_TRAVERSE)
-	if relativeParent == "." {
-		rootAccess = finalAccess
-	}
-	current, err := openAbsoluteNoReparseDirectory(root, rootAccess)
-	if err != nil {
-		return 0, err
-	}
-	if relativeParent == "." {
-		return current, nil
-	}
-	components := strings.Split(relativeParent, string(os.PathSeparator))
-	for index, component := range components {
-		if component == "" || component == "." {
-			continue
-		}
-		access := uint32(windows.FILE_TRAVERSE)
-		if index == len(components)-1 {
-			access = finalAccess
-		}
-		next, err := openRelativeNoReparse(current, component, access, true, false)
-		if err != nil {
-			_ = windows.CloseHandle(current)
-			return 0, err
-		}
-		_ = windows.CloseHandle(current)
-		current = next
-	}
-	return current, nil
-}
-
-// openAbsoluteNoReparseDirectory は volume/share root を開く。RootDirectory 相対
-// NtCreateFile を始めるため Win32 の directory open が必要だが、root 自体は入力の
-// lexical parent ではないため FILE_TRAVERSE だけを要求する。
-func openAbsoluteNoReparseDirectory(path string, access uint32) (windows.Handle, error) {
-	pathUTF16, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return 0, err
-	}
-	handle, err := windows.CreateFile(
-		pathUTF16,
-		access,
-		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
-		nil,
-		windows.OPEN_EXISTING,
-		windows.FILE_FLAG_BACKUP_SEMANTICS,
-		0,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return handle, nil
-}
-
-// openRelativeNoReparse は既に検査済みの parent handle を RootDirectory に渡す。
-// これにより parent path の名前空間が後から junction 等へ置換されても、開く
-// object は保持中の親 directory に固定される。
-func openRelativeNoReparse(parent windows.Handle, name string, access uint32, directory, synchronous bool) (windows.Handle, error) {
-	return openRelativeNoReparseWithOptions(parent, name, access, directory, synchronous, 0)
-}
-
-func openRelativeNoReparseWithOptions(parent windows.Handle, name string, access uint32, directory, synchronous bool, createOptions uint32) (windows.Handle, error) {
-	objectName, err := windows.NewNTUnicodeString(name)
-	if err != nil {
-		return 0, err
-	}
-	attributes := &windows.OBJECT_ATTRIBUTES{
-		Length:        uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
-		RootDirectory: parent,
-		ObjectName:    objectName,
-		Attributes:    windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
-	}
-	var handle windows.Handle
-	var status windows.IO_STATUS_BLOCK
-	options := createOptions
-	if directory {
-		options |= windows.FILE_DIRECTORY_FILE
-	}
-	if synchronous {
-		access |= windows.SYNCHRONIZE
-		options |= windows.FILE_SYNCHRONOUS_IO_NONALERT
-	}
-	err = windows.NtCreateFile(
-		&handle,
-		access,
-		attributes,
-		&status,
-		nil,
-		0,
-		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
-		windows.FILE_OPEN,
-		options,
-		0,
-		0,
-	)
-	if err != nil {
-		return 0, mapNtError(err)
-	}
-	return handle, nil
-}
-
-// mapNtError は、Nt* が返す NTSTATUS を、この木の他の層が知っている形に直す。
-//
-// NTSTATUS は fs.ErrNotExist に一致しない。「まだ無い」と「読めなかった」を
-// errors.Is で分ける呼び出し側が上に何十とあり、生の NTSTATUS を返すと、存在
-// しないだけの ~/.ssh/config が読み取り失敗として扱われる。Unix 側は
-// os.OpenFile の errno を返しているので、こちらも Win32 の errno へ揃える。
-func mapNtError(err error) error {
-	if errors.Is(err, windows.STATUS_STOPPED_ON_SYMLINK) ||
-		errors.Is(err, windows.STATUS_REPARSE_POINT_ENCOUNTERED) ||
-		errors.Is(err, windows.ERROR_STOPPED_ON_SYMLINK) {
-		return ErrSymlinkPath
-	}
-	var status windows.NTStatus
-	if errors.As(err, &status) {
-		return status.Errno()
-	}
-	return err
 }
 
 func cleanAbsoluteDOSPath(path string) (string, error) {
@@ -475,25 +271,22 @@ func replaceFile(oldPath, newPath string) error {
 	if !strings.EqualFold(filepath.VolumeName(oldAbsolute), filepath.VolumeName(newAbsolute)) {
 		return windows.ERROR_NOT_SAME_DEVICE
 	}
-	sourceParent, err := openNoReparseDirectory(filepath.Dir(oldAbsolute))
+	sourceParent, err := windowsacl.OpenDirectoryNoReparse(filepath.Dir(oldAbsolute), windows.FILE_TRAVERSE)
 	if err != nil {
 		return err
 	}
 	defer windows.CloseHandle(sourceParent)
-	source, err := openRelativeNoReparseWithOptions(
-		sourceParent,
-		filepath.Base(oldAbsolute),
-		windows.DELETE|windows.FILE_READ_ATTRIBUTES,
-		false,
-		true,
-		windows.FILE_WRITE_THROUGH,
-	)
+	source, err := windowsacl.OpenRelative(sourceParent, filepath.Base(oldAbsolute), windowsacl.RelativeOpen{
+		Access:        windows.DELETE | windows.FILE_READ_ATTRIBUTES | windows.SYNCHRONIZE,
+		Disposition:   windows.FILE_OPEN,
+		CreateOptions: windows.FILE_SYNCHRONOUS_IO_NONALERT | windows.FILE_WRITE_THROUGH,
+	})
 	if err != nil {
 		return err
 	}
 	defer windows.CloseHandle(source)
 
-	destinationParent, err := openNoReparseDirectoryWithAccess(
+	destinationParent, err := windowsacl.OpenDirectoryNoReparse(
 		filepath.Dir(newAbsolute),
 		windows.FILE_TRAVERSE|windows.FILE_WRITE_DATA|fileDeleteChild,
 	)
@@ -528,20 +321,17 @@ func movePrivateFileWith(oldPath, newPath string, afterAuthenticate func(*os.Fil
 		return windows.ERROR_NOT_SAME_DEVICE
 	}
 
-	sourceParent, err := openNoReparseDirectory(filepath.Dir(oldAbsolute))
+	sourceParent, err := windowsacl.OpenDirectoryNoReparse(filepath.Dir(oldAbsolute), windows.FILE_TRAVERSE)
 	if err != nil {
 		return err
 	}
 	defer windows.CloseHandle(sourceParent)
-	sourceHandle, err := openRelativeNoReparseWithOptions(
-		sourceParent,
-		filepath.Base(oldAbsolute),
-		windows.DELETE|windows.READ_CONTROL|windows.WRITE_DAC|windows.FILE_READ_ATTRIBUTES,
-		false,
-		true,
+	sourceHandle, err := windowsacl.OpenRelative(sourceParent, filepath.Base(oldAbsolute), windowsacl.RelativeOpen{
+		Access:      windows.DELETE | windows.READ_CONTROL | windows.WRITE_DAC | windows.FILE_READ_ATTRIBUTES | windows.SYNCHRONIZE,
+		Disposition: windows.FILE_OPEN,
 		// パス指定の移動へ戻さず、MoveFileEx と同じ write-through の永続性を維持する。
-		windows.FILE_WRITE_THROUGH,
-	)
+		CreateOptions: windows.FILE_SYNCHRONOUS_IO_NONALERT | windows.FILE_WRITE_THROUGH,
+	})
 	if err != nil {
 		return err
 	}
@@ -560,7 +350,7 @@ func movePrivateFileWith(oldPath, newPath string, afterAuthenticate func(*os.Fil
 		}
 	}
 
-	destinationParent, err := openNoReparseDirectoryWithAccess(
+	destinationParent, err := windowsacl.OpenDirectoryNoReparse(
 		filepath.Dir(newAbsolute),
 		windows.FILE_TRAVERSE|windows.FILE_WRITE_DATA|fileDeleteChild,
 	)
@@ -586,7 +376,7 @@ func renamePrivateFileHandle(source, destinationParent windows.Handle, destinati
 	information.FileNameLength = uint32(nameLength)
 	copy(unsafe.Slice(&information.FileName[0], nameLength/2), nameUTF16[:len(nameUTF16)-1])
 	status := windows.IO_STATUS_BLOCK{}
-	return mapNtError(windows.NtSetInformationFile(
+	return windowsacl.MapNoReparseError(windows.NtSetInformationFile(
 		source,
 		&status,
 		&buffer[0],
@@ -602,7 +392,7 @@ type fileDispositionInformation struct {
 func discardFileHandle(handle windows.Handle) error {
 	information := fileDispositionInformation{DeleteFile: 1}
 	status := windows.IO_STATUS_BLOCK{}
-	return mapNtError(windows.NtSetInformationFile(
+	return windowsacl.MapNoReparseError(windows.NtSetInformationFile(
 		handle,
 		&status,
 		(*byte)(unsafe.Pointer(&information)),
@@ -616,12 +406,16 @@ func removeNoFollow(path string) error {
 	if err != nil {
 		return err
 	}
-	parent, err := openNoReparseDirectoryWithAccess(filepath.Dir(absolute), windows.FILE_TRAVERSE|fileDeleteChild)
+	parent, err := windowsacl.OpenDirectoryNoReparse(filepath.Dir(absolute), windows.FILE_TRAVERSE|fileDeleteChild)
 	if err != nil {
 		return err
 	}
 	defer windows.CloseHandle(parent)
-	handle, err := openRelativeNoReparse(parent, filepath.Base(absolute), windows.DELETE|windows.FILE_READ_ATTRIBUTES, false, true)
+	handle, err := windowsacl.OpenRelative(parent, filepath.Base(absolute), windowsacl.RelativeOpen{
+		Access:        windows.DELETE | windows.FILE_READ_ATTRIBUTES | windows.SYNCHRONIZE,
+		Disposition:   windows.FILE_OPEN,
+		CreateOptions: windows.FILE_SYNCHRONOUS_IO_NONALERT,
+	})
 	if err != nil {
 		return err
 	}
@@ -635,7 +429,7 @@ func syncDirectory(path string) error {
 	// MovePrivate の write-through source handle を永続化境界にし、ここでは
 	// それ以上の永続性を装わない。ただし path の再解析点を追わずに開き、呼出し側が
 	// 検証した directory と別の場所を同期したことにしない。
-	directory, err := openNoReparseDirectory(path)
+	directory, err := windowsacl.OpenDirectoryNoReparse(path, windows.FILE_TRAVERSE)
 	if err != nil {
 		return err
 	}
