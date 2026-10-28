@@ -844,6 +844,7 @@ export const ja = {
   "terminal.exitedWith": "終了コード{code}",
   "terminal.exitedBySignal": "シグナル{signal}で終了",
   "terminal.exitedConnectionLost": "接続が切れました",
+  "terminal.exitedRightAway": "開いてすぐ終了",
   "terminal.localhost": "localhost",
   "terminal.emptyHeading": "開いているセッションがありません",
   "terminal.emptyHint":
@@ -1242,6 +1243,8 @@ export const ja = {
   "terminal.screenLabel": "{title}のターミナル",
   "terminal.exitedWithCode":
     "プログラムが終了コード{code}で終了しました。出力は、このセッションを閉じるまで表示されます。",
+  "terminal.exitedWithCodeRightAway":
+    "プログラムが開いてすぐ終了コード0で終了しました。シェルやプロファイルの設定を確かめてください。出力は、このセッションを閉じるまで表示されます。",
   "terminal.exitedWithSignal":
     "プログラムがシグナル{signal}で終了しました。出力は、このセッションを閉じるまで表示されます。",
   "terminal.exitedWithConnectionLost":

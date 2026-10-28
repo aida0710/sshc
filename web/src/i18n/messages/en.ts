@@ -840,6 +840,7 @@ export const en = {
   "terminal.exitedWith": "exited {code}",
   "terminal.exitedBySignal": "ended by {signal}",
   "terminal.exitedConnectionLost": "connection lost",
+  "terminal.exitedRightAway": "exited right after opening",
   "terminal.localhost": "localhost",
   "terminal.emptyHeading": "No session is open",
   "terminal.emptyHint":
@@ -1243,6 +1244,8 @@ export const en = {
   "terminal.screenLabel": "Terminal for {title}",
   "terminal.exitedWithCode":
     "The program exited with status {code}. The output above is kept until you close this session.",
+  "terminal.exitedWithCodeRightAway":
+    "The program exited with status 0 as soon as it started, so its shell or profile may be misconfigured. The output above is kept until you close this session.",
   "terminal.exitedWithSignal":
     "The program was ended by {signal}. The output above is kept until you close this session.",
   "terminal.exitedWithConnectionLost":
