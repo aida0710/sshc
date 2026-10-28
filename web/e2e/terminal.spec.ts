@@ -494,6 +494,28 @@ test("copies the selection with its colors as HTML from the terminal's menu", as
   expect(item.html).toMatch(/color: ?#[0-9a-f]{6}/i);
 });
 
+test("lets a program write the clipboard through the Kitty clipboard protocol where OSC 52 is allowed", async ({ page, context, installation }) => {
+  test.skip(process.platform === "win32", "printf and read are POSIX shell syntax here");
+  await installation.write("sshc/metadata.json", JSON.stringify({ schemaVersion: 9, embeddedTerminal: { osc52: true } }));
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+  await openSessionList(page);
+  await openLocalShell(page);
+
+  // text/plain is dGV4dC9wbGFpbg== and kitty-canary is a2l0dHktY2FuYXJ5 in base64. The answer ends with
+  // ESC \, so read stops at the backslash.
+  const screen = await typeIntoTerminal(page, [
+    "printf '\\033]5522;type=write\\033\\\\'",
+    "printf '\\033]5522;type=wdata:mime=dGV4dC9wbGFpbg==;a2l0dHktY2FuYXJ5\\033\\\\'",
+    "printf '\\033]5522;type=wdata\\033\\\\'",
+    "IFS= read -rs -t 10 -d '\\' reply",
+    "printf 'ANSWER:%s\\n' \"$(printf '%s' \"$reply\" | tr -dc 'a-z=:A-Z')\"",
+  ].join("; "));
+
+  await expect(screen).toContainText("ANSWER:type=write:status=DONE", { timeout: 20_000 });
+  await expect.poll(async () => page.evaluate(() => navigator.clipboard.readText())).toBe("kitty-canary");
+});
+
 test("copies what was selected in the terminal as soon as selection finishes", async ({ page, context, installation }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
