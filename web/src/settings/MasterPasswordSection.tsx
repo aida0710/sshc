@@ -1,5 +1,6 @@
 import { PasswordlessSwitch } from "../secrets/PasswordlessSwitch";
 import { useEffect, useState } from "react";
+import { MoreDetails } from "../ui/MoreDetails";
 import { failureCode } from "../api/client";
 import type { PasswordVaultStatus, VaultApi } from "../api/vault";
 import { useTranslate } from "../i18n/context";
@@ -76,7 +77,8 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
   return (
     <SettingsSection id="settings-password" label={t("secrets.changeHeading")} icon="secrets" showHeading={showHeading}>
       <div>
-        <p className="mb-4 text-xs leading-[18px] text-ink-faint">{t("secrets.changeNote")}</p>
+        <p className="text-xs leading-[18px] text-ink-faint">{t("secrets.changeNote")}</p>
+        <MoreDetails className="mb-4 mt-1">{t("secrets.changeNoteMore")}</MoreDetails>
         <PasswordlessSwitch checked={draft.withoutPassword} onChange={(checked) => edit({ withoutPassword: checked })} />
         <div className="mt-3">
           {passwordless === false ? (

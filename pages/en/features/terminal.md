@@ -26,6 +26,7 @@ When the sshc engine stops (an update, a restart of the computer, a manual stop)
 ## Terminal controls
 
 - Scrollback search with `Ctrl/Cmd+F`
+- Clearing the screen with `Ctrl+L` in bash or zsh keeps the cleared output in the scrollback (`clear` empties the scrollback too)
 - Case, regex, match highlighting, and result navigation
 - URL and path context actions, including previews and downloads of paths, and OSC 8 links
 - Quick Commands and snippets
@@ -46,7 +47,7 @@ Normal text-selection copying stays inside the browser and does not require OSC 
 
 OSC 52 lets remote software write to the device clipboard. It is off by default. Turned on, it applies to every terminal, whatever the connection; switch it under **Settings → Terminal** or under **Global settings** in a terminal's "…" menu. Turn it on only while you use connections you trust. Replaying past output does not repeat OSC 52 copies or copy notifications. New copy requests are processed even when they contain the same text.
 
-Kitty keyboard mode follows requests from the remote application. A JIS option sends the yen key as backslash. Mobile adds a special-key row for Ctrl, Alt, Esc, Tab, and arrows. One tap on Ctrl or Alt applies it to the next key only. A quick double tap locks it until you tap it again, and a locked key is shown in the accent colour.
+Kitty keyboard mode answers the remote application's query and follows its requests, including the levels that report key releases. A JIS option sends the yen key as backslash. Mobile adds a special-key row for Ctrl, Alt, Esc, Tab, and arrows. One tap on Ctrl or Alt applies it to the next key only. A quick double tap locks it until you tap it again, and a locked key is shown in the accent colour.
 
 On mobile, a text box below the special keys is always shown. Japanese conversion finishes inside the box, and only the finished text reaches the terminal. Enter starts a new line, and **Send** beside the box sends the text the way a paste does and then presses Enter. To send with Enter instead, turn on “Send with Enter in the phone's text box” in **Settings → Terminal**; Shift+Enter then starts a new line. With it off, Ctrl+Enter (⌘+Enter on a Mac) sends from a hardware keyboard. The Enter that confirms a conversion does not send. Sending an empty box presses Enter alone, for example to confirm a choice in Claude Code. Text with line breaks is sent as one paste when the program in the terminal uses bracketed paste. Otherwise, and whenever the text has control characters, it opens the same review as a paste and is sent only when you accept it. You can still tap the terminal and type into it directly.
 

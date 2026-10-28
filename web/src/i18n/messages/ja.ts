@@ -1,6 +1,7 @@
 import type { MessageKey } from "./en";
 
 export const ja = {
+  "ui.moreDetails": "詳しく",
   "shortcuts.heading": "Keyboard shortcuts",
   "shortcuts.description": "使うプリセットは、このブラウザごとに選びます。",
   "shortcuts.confirmDelete": "同期しているすべてのマシンからこのプリセットを削除しますか？",
@@ -1125,8 +1126,7 @@ export const ja = {
   "terminal.reconnectFive": "5回（待ち時間は最大40秒）",
   "engine.heading": "Engine",
   "engine.portLabel": "ポート",
-  "engine.portHint":
-    "空欄の場合、デスクトップではマシンごとの固定ポート（初期値54447）を使用します。ブックマークやインストールしたWebアプリを継続して使えます。次回のsshcエンジン起動時から適用されます。",
+  "engine.portHint": "空欄なら、マシンごとの固定ポート（初期値54447）を使います。次のsshcエンジンの起動から効きます。",
   "engine.portOutOfRange": "ポートは1024〜65535の範囲で指定してください。",
   "engine.loadFailed": "sshcエンジンの設定を読み込めませんでした。読み込めるまで保存できません。",
   "engine.loading": "sshcエンジンの設定を読み込んでいます…",
@@ -1309,7 +1309,7 @@ export const ja = {
   "about.viewRelease": "GitHubで開く",
   "section.license": "License",
   "menu.others": "Others",
-  "menu.signOutHint": "このブラウザのセッションと登録を消します。次に開くときは、ターミナルでsshc（またはsshc open）を実行して表示されるURLを開いてください。",
+  "menu.signOutHint": "このブラウザのセッションと登録を消します。次はsshc openのURLから開きます。",
   "menu.signOutRowHint": "次はsshc openのURLから開く",
   "menu.signOut": "このブラウザからサインアウト",
   "menu.signOutConfirmHeading": "このブラウザからサインアウトしますか？",
@@ -1469,8 +1469,8 @@ export const ja = {
   "desktop.openCount": "{count}件",
   "desktop.closeAll": "接続をすべて閉じる",
   "secrets.changeHeading": "Master password",
-  "secrets.changeNote":
-    "このマシンでパスワード保護を使うか、起動時に自動でロックを解除するかを選べます。変更はスニペット、同期設定、ローカルのバックアップにも適用されます。同期には別の暗号化キーを使います。",
+  "secrets.changeNote": "パスワードで守るか、起動時に自動でロックを解除するかを選べます。",
+  "secrets.changeNoteMore": "変更は、スニペット、同期の設定、ローカルのバックアップの保護にも効きます。同期には別の暗号化キーを使います。",
   "secrets.currentMaster": "現在のマスターパスワード",
   "secrets.newMaster": "新しいマスターパスワード",
   "secrets.confirmMaster": "新しいマスターパスワード（確認）",
@@ -1839,8 +1839,8 @@ export const ja = {
   "history.completed": "完了した変更",
   "history.empty": "sshcで行った変更はまだありません。",
   "history.restorePath": "{path}を復元",
-  "history.backupRetention":
-    "変更前のファイルは~/.ssh/sshc/backupsにバックアップされます。新しい方から200件まで、かつ90日以内の変更の分を保持し、それより古いものは自動で削除されます。復元操作も新しい変更として履歴に残るため、同じ方法で取り消せます。",
+  "history.backupRetention": "変更前のファイルは~/.ssh/sshc/backupsに残します。",
+  "history.backupRetentionMore": "新しい方から200件まで、かつ90日以内の変更の分を残し、それより古いものは自動で消します。復元も新しい変更として履歴に残るので、同じ方法で取り消せます。",
 
   "notice.complex_external_rule":
     "ワイルドカード、否定、Matchブロック、aliasの重複のいずれかが含まれるため、この値を単純な形式では編集できません。値の参照元を表示します。",
@@ -1933,8 +1933,8 @@ export const ja = {
   "preview.unset": "未設定",
 
   "reveal.heading": "秘密鍵を表示：{path}",
-  "reveal.warning":
-    "秘密鍵はこのページに表示されます。この画面を見られる人は秘密鍵をコピーできます。sshcでは、ブラウザ拡張機能やクリップボード履歴ツールによる取得を防げません。表示操作は履歴に記録されます（鍵そのものは記録しません）。",
+  "reveal.warning": "秘密鍵をこのページに表示します。画面を見られる人や、ブラウザの拡張機能・クリップボードの履歴の道具は、鍵を写し取れます。",
+  "reveal.warningMore": "表示した操作は履歴に残ります（鍵そのものは残しません）。",
   "reveal.show": "秘密鍵を表示",
   "reveal.requesting": "一度限りの確認を要求しています…",
   "reveal.privateKeyLabel": "秘密鍵",
@@ -2407,7 +2407,7 @@ export const ja = {
   "kh.scan": "スキャン",
   "kh.scanCandidates": "スキャン候補",
   "kh.unverified": "未検証",
-  "kh.unverifiedNotice": "このアドレスから応答があっても、何かが応答したことしか分かりません。ホストの身元は証明されません。信頼する前に、別の手段で入手したフィンガープリントと照合してください。",
+  "kh.unverifiedNotice": "応答があっても、ホストの身元は証明されません。別の手段で入手したフィンガープリントと照合してください。",
   "kh.add": "追加",
   "kh.addHeading": "未検証のホスト鍵を追加",
   "kh.addExplain":
@@ -2724,10 +2724,8 @@ export const ja = {
   "conn.createConfirmMaster": "マスターパスワードの確認",
   "conn.createInitialiseVault": "暗号化Vaultを作成",
   "conn.createUnlockVault": "Vaultのロックを解除",
-  "conn.createVaultMissing":
-    "この接続を保存する前に暗号化Vaultを作成してください。",
-  "conn.createVaultLocked":
-    "この接続を保存する前にVaultのロックを解除してください。",
+  "conn.vaultMissingBeforeSave": "保存する前に暗号化Vaultを作成してください。",
+  "conn.vaultLockedBeforeSave": "保存する前にVaultのロックを解除してください。",
   "conn.createVaultFailed": "暗号化Vaultを作成できませんでした。",
   "conn.createUnlockFailed": "Vaultのロックを解除できませんでした。",
   "conn.createNeedVault": "続行するにはVaultのロックを解除してください。",
@@ -2838,10 +2836,6 @@ export const ja = {
   "conn.basicEmptyPasswordUnchanged":
     "空欄のままならパスワードを変更しません。",
   "conn.basicPasswordStale": "接続先の設定が変わったため、保存済みパスワードを使っていません。基本設定を保存すると、今の設定で使います。",
-  "conn.basicVaultMissing":
-    "基本設定を保存する前に暗号化Vaultを作成してください。",
-  "conn.basicVaultLocked":
-    "基本設定を保存する前にVaultのロックを解除してください。",
   "conn.basicNeedVault":
     "この下書きを保存するにはVaultのロックを解除してください。",
   "conn.basicPasswordBlocked":

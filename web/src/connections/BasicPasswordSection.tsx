@@ -1,9 +1,10 @@
 import { useTranslate } from "../i18n/context";
+import { ConnectionVaultUnlock } from "./ConnectionVaultUnlock";
 import { CheckboxField, control } from "../ui/form";
 import { FieldRow, FieldRowNote } from "../ui/FieldRow";
 import { Icon } from "../ui/icons";
-import { PasswordField, PasswordInput } from "../ui/PasswordField";
-import { Button, Notice } from "../ui/surface";
+import { PasswordInput } from "../ui/PasswordField";
+import { Notice } from "../ui/surface";
 import { eligibilityText } from "./eligibilityText";
 import type { BasicDraft, BasicFormDerived, PasswordAction } from "./basicFormDraft";
 import type { ConnectionSecretsModel } from "./useConnectionSecrets";
@@ -50,22 +51,16 @@ export function BasicPasswordSection({
     return (
       <FieldRow density="editor" label={label} interactiveChildren>
         {vault !== null && !vault.unlocked ? (
-          <div className="flex flex-col gap-2.5 rounded-[9px] bg-notice p-3">
-            <p className="text-xs leading-[18px] text-notice-ink">
-              {t(vault.exists ? "conn.basicVaultLocked" : "conn.basicVaultMissing")}
-            </p>
-            <PasswordField label={t("conn.createMasterPassword")} value={draft.masterPassword} onChange={(value) => onEdit({ masterPassword: value })} />
-            {vault.exists ? null : (
-              <PasswordField
-                label={t("conn.createConfirmMaster")}
-                value={draft.masterConfirmation}
-                onChange={(value) => onEdit({ masterConfirmation: value })}
-              />
-            )}
-            <Button kind="primary" className="self-start" disabled={!derived.canOpenVault} busy={secrets.vaultBusy} onClick={onOpenVault}>
-              {t(vault.exists ? "conn.createUnlockVault" : "conn.createInitialiseVault")}
-            </Button>
-          </div>
+          <ConnectionVaultUnlock
+            vault={vault}
+            masterPassword={draft.masterPassword}
+            onMasterPasswordChange={(value) => onEdit({ masterPassword: value })}
+            masterConfirmation={draft.masterConfirmation}
+            onMasterConfirmationChange={(value) => onEdit({ masterConfirmation: value })}
+            canOpen={derived.canOpenVault}
+            busy={secrets.vaultBusy}
+            onOpen={onOpenVault}
+          />
         ) : (
           <p className="pt-1.5 text-[13px] text-ink-faint">
             {credentialOptionsStatus === "failed" ? t("conn.basicCredentialOptionsFailed") : t("conn.createLoadingOptions")}

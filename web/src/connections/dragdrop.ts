@@ -1,4 +1,5 @@
 import { maxGroupSegments } from "../rules/generated";
+import { groupBaseName, groupDepth, isGroupOrDescendant } from "../rules/groupPath";
 
 export type DraggedConnection = { path: string; alias: string; group: string };
 
@@ -12,18 +13,6 @@ export const dragMimeType = "application/x-sshc-drag";
 
 const noGroup = "";
 
-function segments(name: string): number {
-  return name === noGroup ? 0 : name.split("/").length;
-}
-
-function basename(name: string): string {
-  const index = name.lastIndexOf("/");
-  return index < 0 ? name : name.slice(index + 1);
-}
-
-function isSelfOrDescendant(name: string, candidate: string): boolean {
-  return candidate === name || candidate.startsWith(`${name}/`);
-}
 
 export function canDrop(payload: DragPayload, target: string, groups: string[]): boolean {
   if (payload.kind === "connection") {
@@ -32,9 +21,9 @@ export function canDrop(payload: DragPayload, target: string, groups: string[]):
   if (payload.kind === "connections") {
     return payload.items.some((item) => item.group !== target);
   }
-  if (isSelfOrDescendant(payload.name, target)) return false;
-  const moved = target === noGroup ? basename(payload.name) : `${target}/${basename(payload.name)}`;
+  if (isGroupOrDescendant(target, payload.name)) return false;
+  const moved = target === noGroup ? groupBaseName(payload.name) : `${target}/${groupBaseName(payload.name)}`;
   if (moved === payload.name) return false;
   if (groups.includes(moved)) return false;
-  return segments(moved) <= maxGroupSegments;
+  return groupDepth(moved) <= maxGroupSegments;
 }

@@ -1,5 +1,6 @@
 import { Tag } from "../ui/Tag";
 import { useCallback, useEffect, useState } from "react";
+import { MoreDetails } from "../ui/MoreDetails";
 import { toProblem } from "../api/guards";
 import { useLanguage } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
@@ -181,6 +182,7 @@ export function HistoryPanel() {
           </ol>
         )}
         <p className="mt-3 text-xs leading-[18px] text-ink-faint">{t("history.backupRetention")}</p>
+        <MoreDetails className="mt-1">{t("history.backupRetentionMore")}</MoreDetails>
       </PageSection>
     </div>
   );

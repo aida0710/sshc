@@ -1,4 +1,5 @@
 import type { HostIdentity, Overview } from "../api/config";
+import { renamedGroup } from "../rules/groupPath";
 
 // Where a host lands after a move is decided by the engine; the page only
 // knows the alias and the group it asked for. These helpers find the moved
@@ -14,7 +15,5 @@ export function movedHostIdentity(overview: Overview | null, alias: string, grou
 // group `from` (and everything below it) is renamed to `to`, or null when the
 // selection is outside the renamed subtree.
 export function groupAfterRename(selectedGroup: string | undefined, from: string, to: string): string | null {
-  if (selectedGroup === from) return to;
-  if (selectedGroup?.startsWith(`${from}/`)) return `${to}${selectedGroup.slice(from.length)}`;
-  return null;
+  return selectedGroup === undefined ? null : renamedGroup(selectedGroup, from, to);
 }

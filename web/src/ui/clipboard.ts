@@ -1,7 +1,14 @@
 
 export type ClipboardAccess = { readText(): Promise<string>; writeText(text: string): Promise<void> };
 
+// execCommandCopy copies through a hidden text area, which has to take focus
+// to be selected. Focus goes back afterwards: without it, a copy made when
+// text is selected in the terminal would leave the next keystrokes nowhere.
 function execCommandCopy(text: string): boolean {
+  const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const textSelection = focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement
+    ? { element: focused, start: focused.selectionStart, end: focused.selectionEnd, direction: focused.selectionDirection ?? undefined }
+    : null;
   const holder = document.createElement("textarea");
   holder.value = text;
   holder.setAttribute("readonly", "");
@@ -17,6 +24,10 @@ function execCommandCopy(text: string): boolean {
     return false;
   } finally {
     holder.remove();
+    focused?.focus({ preventScroll: true });
+    if (textSelection !== null && textSelection.start !== null && textSelection.end !== null) {
+      textSelection.element.setSelectionRange(textSelection.start, textSelection.end, textSelection.direction);
+    }
   }
 }
 
