@@ -268,6 +268,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		Snippets:              services.snippets,
 		Vault:                 services.vault,
 		Connect:               services.ssh.connector(),
+		ResolveTarget:         services.ssh.target,
 		RemoteEngines:         remoteEngines,
 		ConnectionOpened: func(alias string) {
 			if err := services.recentStore.Record(alias); err != nil && dependencies.Logger != nil {
