@@ -1,4 +1,5 @@
 import { useTranslate } from "../i18n/context";
+import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 
 // The controls never shrink: a squeezed button wraps its label one character
 // per line. On a narrow screen the path takes the first row on its own and
@@ -6,7 +7,8 @@ import { useTranslate } from "../i18n/context";
 const controlClassName = "min-h-11 shrink-0 whitespace-nowrap px-1 text-xs text-ink-muted hover:text-ink disabled:opacity-40 md:min-h-0";
 
 // FilePreviewHeader names the shown file and holds the preview's controls:
-// stepping through the other printed files, downloading, and closing.
+// stepping through the other printed files, downloading, the "…" of what
+// else the file offers (menu), and closing.
 export function FilePreviewHeader({
   headingId,
   path,
@@ -14,6 +16,7 @@ export function FilePreviewHeader({
   count,
   onStep,
   onDownload,
+  menu,
   onClose,
 }: {
   headingId: string;
@@ -22,6 +25,7 @@ export function FilePreviewHeader({
   count: number;
   onStep: (position: number) => void;
   onDownload: () => void;
+  menu?: { label: string; items: ActionMenuItem[] };
   onClose: () => void;
 }) {
   const t = useTranslate();
@@ -48,6 +52,13 @@ export function FilePreviewHeader({
           </>
         ) : null}
         <button type="button" className={controlClassName} onClick={onDownload}>{t("sftp.download")}</button>
+        {menu === undefined ? null : (
+          <ActionMenu
+            label={menu.label}
+            items={menu.items}
+            triggerClassName="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink md:size-7 md:min-h-0 md:min-w-0"
+          />
+        )}
         <button type="button" className={controlClassName} onClick={onClose}>{t("sftp.close")}</button>
       </div>
     </div>

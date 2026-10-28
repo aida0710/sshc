@@ -30,7 +30,7 @@ import { createTerminalOutput } from "./output";
 import { attachKittyKeyboardProtocol, encodeIntlYen } from "./kittyKeyboard";
 import { linkTextNamesTarget, modifierOpensLink, osc8Link } from "./links";
 import { attachLinkProvider } from "./linkProvider";
-import { openTerminalURL, TerminalLinkPopover, type RemotePathAction, type TerminalLinkSelection } from "./TerminalLinkPopover";
+import { openTerminalURL, TerminalLinkPopover, type TerminalLinkSelection } from "./TerminalLinkPopover";
 import { TerminalQuickCommands } from "./TerminalQuickCommands";
 import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 import { TerminalPortForwards } from "./TerminalPortForwards";
@@ -63,6 +63,9 @@ import { isHomePath, resolveTerminalPath } from "./relativePaths";
 import { useLocalWindowsPaths } from "./useLocalWindowsPaths";
 import { pathPreviewHome } from "./pathPreviewHome";
 import { FilePreviewDialog } from "../sftp/FilePreviewDialog";
+import type { RemotePathAction } from "../sftp/SFTPPanel";
+import type { ActionMenuItem } from "../ui/ActionMenu";
+import { useToast } from "../ui/useToast";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
 import { ToastMessage } from "../ui/ToastMessage";
@@ -154,6 +157,7 @@ export function TerminalView({
   composerEnterSends = false,
 }: TerminalViewProps) {
   const t = useTranslate();
+  const showToast = useToast();
   const { resolved } = useTheme();
   const reducedMotion = useMediaQuery(reducedMotionQuery);
   const mobile = useMediaQuery(mobileViewportQuery);
@@ -204,6 +208,8 @@ export function TerminalView({
   const [portForwardsOpen, setPortForwardsOpen] = useState(false);
   const [linkSelection, setLinkSelection] = useState<TerminalLinkSelection | null>(null);
   const [pathPreview, setPathPreview] = useState<{ path: string; paths: string[] } | null>(null);
+  // previewLinkedPath opens a clicked file path's preview at once; null where this session's files cannot be read.
+  const previewLinkedPath = useRef<((path: string) => void) | null>(null);
   const streamLinkController = useRef<StreamLinkController | null>(null);
 
   const { modifiers, tap: tapModifier, takeModifiers } = useModifierKeys();
@@ -228,8 +234,16 @@ export function TerminalView({
     if (container === null) return;
 
     const coarse = prefersNativeSelection((query) => window.matchMedia(query));
-    const selectLinkAt = (link: TerminalLinkSelection["link"], point: ScreenPoint) =>
+    // A file path opens its preview without a menu first; what else the file offers is in the preview's
+    // "…". A URL, and a path whose file cannot be read here, open the menu.
+    const selectLinkAt = (link: TerminalLinkSelection["link"], point: ScreenPoint) => {
+      const preview = previewLinkedPath.current;
+      if (link.kind !== "url" && preview !== null) {
+        preview(link.target);
+        return;
+      }
       setLinkSelection({ link, x: point.clientX + linkPopoverOffsetPx, y: point.clientY + linkPopoverOffsetPx });
+    };
 
     let view: Terminal;
     view = new Terminal({
@@ -522,6 +536,31 @@ export function TerminalView({
       paths: terminal.current === null ? [] : previewPathsInBuffer(terminal.current.buffer.active, { directory, home, allowWindowsPaths }),
     });
   }
+  previewLinkedPath.current = previewAlias === undefined ? null : (path) => void previewPath(path);
+
+  // SFTP can open a file of an SSH session at its host. A session opened on a run target reached its host
+  // through that engine's SSH config, which this PC may not share.
+  const openInSFTP = runTarget === undefined && remoteAlias !== undefined && onOpenRemotePath !== undefined
+    ? (path: string, action: RemotePathAction) => {
+      setPathPreview(null);
+      onOpenRemotePath(remoteAlias, path, action);
+    }
+    : undefined;
+  function previewedFileActions(path: string): ActionMenuItem[] {
+    return [
+      ...(openInSFTP === undefined ? [] : [
+        { label: t("terminal.linkBrowseSFTP"), onSelect: () => openInSFTP(path, "browse") },
+        { label: t("terminal.linkEditSFTP"), onSelect: () => openInSFTP(path, "edit") },
+        { label: t("terminal.linkDownloadSFTP"), onSelect: () => openInSFTP(path, "download") },
+      ]),
+      {
+        label: t("sftp.copyPath"),
+        onSelect: () => void clipboard.writeText(path)
+          .then(() => showToast(t("copy.done"), { tone: "success" }))
+          .catch(() => showToast(t("copy.refused"))),
+      },
+    ];
+  }
 
   function submitComposer() {
     const plan = planComposerSend(composerText, { bracketedPaste: terminal.current?.modes.bracketedPasteMode ?? false });
@@ -687,14 +726,16 @@ export function TerminalView({
         <TerminalLinkPopover
           selection={linkSelection}
           onClose={() => setLinkSelection(null)}
-          {...(previewAlias === undefined ? {} : { onPreviewPath: (path: string) => void previewPath(path) })}
-          {...(runTarget === undefined && remoteAlias !== undefined && onOpenRemotePath !== undefined
-            ? { onRemotePath: (path: string, action: RemotePathAction) => onOpenRemotePath(remoteAlias, path, action) }
-            : {})}
         />
       )}
       {previewAlias === undefined || pathPreview === null ? null : (
-        <FilePreviewDialog alias={previewAlias} path={pathPreview.path} paths={pathPreview.paths} onClose={() => setPathPreview(null)} />
+        <FilePreviewDialog
+          alias={previewAlias}
+          path={pathPreview.path}
+          paths={pathPreview.paths}
+          actions={previewedFileActions}
+          onClose={() => setPathPreview(null)}
+        />
       )}
       {pendingPaste === null || pendingPaste.sessionId !== session.id ? null : (
         <TerminalPasteDialog
