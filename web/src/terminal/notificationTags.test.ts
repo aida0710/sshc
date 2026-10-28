@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { longCommandNotificationTag, programNotificationTag, sessionIdFromNotificationTag } from "./notificationTags";
+import { sessionIdFromNotificationTag, terminalNotificationTag } from "./notificationTags";
 
 describe("terminal notification tags", () => {
-  it("どちらの通知のtagからもセッションを取り出せる", () => {
-    expect(sessionIdFromNotificationTag(programNotificationTag("abc123"))).toBe("abc123");
-    expect(sessionIdFromNotificationTag(longCommandNotificationTag("abc123"))).toBe("abc123");
+  it("ターミナルの通知のtagからセッションを取り出せる", () => {
+    expect(sessionIdFromNotificationTag(terminalNotificationTag("abc123"))).toBe("abc123");
   });
 
   it("ターミナル以外の通知のtagからは取り出さない", () => {
