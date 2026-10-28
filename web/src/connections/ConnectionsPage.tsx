@@ -18,11 +18,8 @@ import { localStorageKeys } from "../ui/browserStorageKeys";
 import { MissingConnection, NoConnectionSelected } from "./DetailPlaceholders";
 import { useOverlays, useSaveFeedback } from "./pageState";
 import { HostDetailPanel } from "./HostDetail";
-import {
-  CreateConnectionModal,
-  type CreateConnectionDraft,
-  type CreationPrerequisite,
-} from "./CreateConnectionModal";
+import { CreateConnectionPane } from "./CreateConnectionPane";
+import type { CreateConnectionDraft, CreationPrerequisite } from "./createConnectionDraft";
 import { NoticeList } from "./NoticeList";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { OrphanPanel } from "./OrphanPanel";
@@ -144,6 +141,10 @@ export function ConnectionsPage({
   const [groupDraftDirty, setGroupDraftDirty] = useState(false);
   const groupDraftDirtyRef = useRef(groupDraftDirty);
   groupDraftDirtyRef.current = groupDraftDirty;
+  // 右の欄で作りかけの新しい接続に、何か入れてあるか。
+  const [creationDirty, setCreationDirty] = useState(false);
+  const creationDirtyRef = useRef(creationDirty);
+  creationDirtyRef.current = creationDirty;
   const {
     creatingConnection: creating, setCreatingConnection: setCreating,
     launching, setLaunching,
@@ -247,7 +248,7 @@ export function ConnectionsPage({
       });
     },
   });
-  const detailOpen = selection !== null || (compact && listActions.editingGroup !== null);
+  const detailOpen = selection !== null || creating || (compact && listActions.editingGroup !== null);
   // 宣言だけあって metadata に設定が無いグループは、名前だけの設定から編集を始める。
   const editedGroup = groupEditorName === null
     ? null
@@ -278,21 +279,49 @@ export function ConnectionsPage({
     );
   }
 
+  // connectionDraft が true の操作は、右の欄を別のものに替える。作りかけの新しい接続もそのとき閉じる。
   function confirmBeforeLeaving(proceed: () => void, { connectionDraft }: { connectionDraft: boolean }) {
-    if (groupDraftDirtyRef.current || (connectionDraft && editorDirtyRef.current)) {
-      setDiscardIntent({ kind: "proceed", proceed });
+    const continueTo = connectionDraft ? () => {
+      leaveCreation();
+      proceed();
+    } : proceed;
+    if (groupDraftDirtyRef.current || (connectionDraft && (editorDirtyRef.current || creationDirtyRef.current))) {
+      setDiscardIntent({ kind: "proceed", proceed: continueTo });
       return;
     }
-    proceed();
+    continueTo();
+  }
+
+  function leaveCreation() {
+    creationDirtyRef.current = false;
+    setCreationDirty(false);
+    setCreating(false);
+    onCreationDraftChange?.(null);
+  }
+
+  // 新しい接続は右の欄で開く。開いていた接続とグループの欄は閉じ、一覧の選択も外す。
+  function startCreation() {
+    onCreationDraftChange?.(null);
+    listActions.closeGroupEditor();
+    if (selection !== null) clearTarget();
+    setCreating(true);
   }
 
   function beginCreation() {
+    if (creating) return;
     if (editorDirty || groupDraftDirty) {
       setDiscardIntent({ kind: "create" });
       return;
     }
-    onCreationDraftChange?.(null);
-    setCreating(true);
+    startCreation();
+  }
+
+  function cancelCreation() {
+    if (creationDirtyRef.current) {
+      setDiscardIntent({ kind: "proceed", proceed: leaveCreation });
+      return;
+    }
+    leaveCreation();
   }
 
   function confirmDiscard() {
@@ -303,17 +332,19 @@ export function ConnectionsPage({
     setEditorDirty(false);
     groupDraftDirtyRef.current = false;
     setGroupDraftDirty(false);
+    creationDirtyRef.current = false;
+    setCreationDirty(false);
     draftDiscardRef.current?.();
     if (intent.kind === "proceed") {
       intent.proceed();
       return;
     }
     if (intent.kind === "create") {
-      onCreationDraftChange?.(null);
-      setCreating(true);
+      startCreation();
       return;
     }
     if (intent.kind === "select") {
+      leaveCreation();
       listActions.closeGroupEditor();
       selectHost(intent.host);
       return;
@@ -321,9 +352,12 @@ export function ConnectionsPage({
     onNavigateLocation?.(`${intent.location.pathname}${intent.location.search}`);
   }
 
+  // 下書きは持ち越すので、画面を離れる前の確認は出さない。
   function leaveForCreationPrerequisite(section: CreationPrerequisite, draft: CreateConnectionDraft) {
-    onCreationDraftChange?.(draft);
+    creationDirtyRef.current = false;
+    setCreationDirty(false);
     setCreating(false);
+    onCreationDraftChange?.(draft);
     onNavigateForCreation?.(section);
   }
 
@@ -333,7 +367,7 @@ export function ConnectionsPage({
 
   // 同じ接続への移動（保存後の URL の置き換えなど）は、下書きを捨てないので通す。
   const leaveEditorBlocker = useCallback<NavigationBlocker>((next) => {
-    if (!editorDirtyRef.current && !groupDraftDirtyRef.current) return true;
+    if (!editorDirtyRef.current && !groupDraftDirtyRef.current && !creationDirtyRef.current) return true;
     const parsed = parseConnectionLocation(next);
     if (parsed.kind === "valid" && selection !== null) {
       const target = parsed.target;
@@ -344,7 +378,7 @@ export function ConnectionsPage({
     setDiscardIntent({ kind: "navigate", location: next });
     return false;
   }, [selection]);
-  useUnsavedDraftGuard({ dirty: editorDirty || groupDraftDirty, blocker: leaveEditorBlocker, onNavigationBlockerChange });
+  useUnsavedDraftGuard({ dirty: editorDirty || groupDraftDirty || creationDirty, blocker: leaveEditorBlocker, onNavigationBlockerChange });
 
   useEffect(() => {
     onInspector(null);
@@ -352,17 +386,17 @@ export function ConnectionsPage({
   }, [onInspector]);
 
   function onSelect(host: HostEntry) {
-    if ((editorDirty && !isCurrentSelection(host.identity)) || groupDraftDirty) {
+    if ((editorDirty && !isCurrentSelection(host.identity)) || groupDraftDirty || creationDirty) {
       setDiscardIntent({ kind: "select", host });
       return;
     }
+    leaveCreation();
     listActions.closeGroupEditor();
     selectHost(host);
   }
 
   async function onConnectionCreated(result: CreateConnectionResponse) {
-    setCreating(false);
-    onCreationDraftChange?.(null);
+    leaveCreation();
     setPreview(result.preview);
     setProblem(null);
     setLocalError("");
@@ -497,7 +531,7 @@ export function ConnectionsPage({
 
         <Button
           className={`w-fit ${compact ? "" : "md:hidden"}`}
-          onClick={() => confirmBeforeLeaving(() => {
+          onClick={creating ? cancelCreation : () => confirmBeforeLeaving(() => {
             listActions.closeGroupEditor();
             clearTarget();
           }, { connectionDraft: false })}
@@ -505,14 +539,28 @@ export function ConnectionsPage({
           {t("conn.allConnections")}
         </Button>
 
-        <NoticeList collapsible notices={paneNotices} />
-        <OrphanPanel
-          metadata={overview.metadata}
-          hosts={overview.hosts}
-          onSave={(base, next) => void save.submit(hostMetadataEditRequest(base, next))}
-        />
-        {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
-        {editedGroup !== null && selection === null ? (
+        {creating ? null : (
+          <>
+            <NoticeList collapsible notices={paneNotices} />
+            <OrphanPanel
+              metadata={overview.metadata}
+              hosts={overview.hosts}
+              onSave={(base, next) => void save.submit(hostMetadataEditRequest(base, next))}
+            />
+            {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
+          </>
+        )}
+        {creating ? (
+          <CreateConnectionPane
+            groups={overview.groups}
+            initialDraft={creationDraft ?? undefined}
+            onOpenPrerequisite={leaveForCreationPrerequisite}
+            onCreateGroup={groups.createGroup}
+            onDirtyChange={setCreationDirty}
+            onCancel={leaveCreation}
+            onCreated={(result) => void onConnectionCreated(result)}
+          />
+        ) : editedGroup !== null && selection === null ? (
           <>
             {problem === null ? null : <Notice tone="danger">{saveProblemMessage(problem, t)}</Notice>}
             {/* 保存して読み直した設定で下書きを作り直すため、key に保存済みの設定を含める。 */}
@@ -603,19 +651,6 @@ export function ConnectionsPage({
         </div>
       </div>
     </PageBoard>
-    {creating ? (
-      <CreateConnectionModal
-        groups={overview.groups}
-        initialDraft={creationDraft ?? undefined}
-        onOpenPrerequisite={leaveForCreationPrerequisite}
-        onCreateGroup={groups.createGroup}
-        onClose={() => {
-          setCreating(false);
-          onCreationDraftChange?.(null);
-        }}
-        onCreated={(result) => void onConnectionCreated(result)}
-      />
-    ) : null}
     <ConnectionListDialogs
       actions={listActions}
       createGroup={groups.createGroup}
@@ -643,7 +678,7 @@ export function ConnectionsPage({
       <ConfirmDialog
         id="connection-discard-heading"
         heading={t("conn.discardChanges")}
-        body={<p className="text-sm text-ink-muted">{t(groupDraftDirty ? "groupEditor.discardPrompt" : "conn.discardPrompt")}</p>}
+        body={<p className="text-sm text-ink-muted">{t(groupDraftDirty ? "groupEditor.discardPrompt" : creationDirty ? "conn.discardCreationPrompt" : "conn.discardPrompt")}</p>}
         confirmLabel={t("conn.discardChanges")}
         cancelLabel={t("conn.keepEditing")}
         onConfirm={confirmDiscard}

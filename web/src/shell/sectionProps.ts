@@ -1,4 +1,4 @@
-import type { CreateConnectionDraft, CreationPrerequisite } from "../connections/CreateConnectionModal";
+import type { CreateConnectionDraft, CreationPrerequisite } from "../connections/createConnectionDraft";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "../keys/workflow";
 import type { BrowserLocation, NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
 import type { FileTarget } from "../explorer/ConfigExplorer";
