@@ -1,5 +1,5 @@
 import { retryableTransferFailure, TransferPublicationUncertain } from "./transferRecovery";
-import type { BrowserSave } from "./api";
+import type { BrowserSave } from "../ui/saveFile";
 import { downloadCheckpointInterval } from "./downloadCheckpointInterval";
 import { DownloadSinkStore, type DownloadSink } from "./downloadSinks";
 import type { ManagedTransferJob } from "./transferLedger";
