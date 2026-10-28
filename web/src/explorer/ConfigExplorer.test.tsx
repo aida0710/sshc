@@ -126,7 +126,7 @@ describe("ConfigExplorer", () => {
 
     expect(await screen.findByRole("button", { name: "config" })).toBeInTheDocument();
     expect(screen.getByText("conf.d/*.conf")).toBeInTheDocument();
-    expect(screen.getByText(/include_no_match/)).toBeInTheDocument();
+    expect(screen.getByText("No file matches this Include: conf.d/*.conf (config:2)")).toBeInTheDocument();
   });
 
   it("sums up the files and diagnostics beside the heading", async () => {

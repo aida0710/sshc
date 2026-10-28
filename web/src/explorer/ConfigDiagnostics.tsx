@@ -1,11 +1,7 @@
 import type { Diagnostic } from "../api/config";
 import { useTranslate } from "../i18n/context";
+import { ConfigDiagnosticList } from "../sshconfig/ConfigDiagnosticList";
 import { Icon } from "../ui/icons";
-
-function diagnosticTone(severity: Diagnostic["severity"]): string {
-  if (severity === "error") return "text-danger";
-  return severity === "warning" ? "text-notice-ink" : "text-ink-muted";
-}
 
 // ConfigDiagnostics は、Include階層の下に、Include をたどったときに見つかった問題を出す。
 // 問題が無ければ、無いことを1行で伝える。列の下端に置くので、スマホでは浮いた下タブの上に空ける。
@@ -25,13 +21,7 @@ export function ConfigDiagnostics({ diagnostics }: { diagnostics: Diagnostic[] }
         <Icon name="warning" className="size-3.5 shrink-0" />
         {t("explorer.diagnosticsCount", { count: diagnostics.length })}
       </h3>
-      <ul className="mt-1.5 flex min-h-0 flex-col gap-1 overflow-y-auto">
-        {diagnostics.map((diagnostic, index) => (
-          <li key={`${diagnostic.code}-${index}`} className={`break-all font-mono text-xs ${diagnosticTone(diagnostic.severity)}`}>
-            {`${diagnostic.code} ${diagnostic.path ?? diagnostic.absolute ?? ""}${diagnostic.line === undefined ? "" : `:${diagnostic.line}`} ${diagnostic.detail ?? ""}`}
-          </li>
-        ))}
-      </ul>
+      <ConfigDiagnosticList diagnostics={diagnostics} className="mt-1.5 min-h-0 overflow-y-auto" />
     </section>
   );
 }
