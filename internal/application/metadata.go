@@ -247,6 +247,7 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	if metadata.GroupsFile == "" {
 		metadata.GroupsFile = DefaultGroupsFile
 	}
+	withoutUnreadableAppearance(&metadata)
 	return metadata, nil
 }
 

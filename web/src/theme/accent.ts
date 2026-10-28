@@ -1,16 +1,14 @@
-import type { components } from "../api/schema";
 import { readableInkOn } from "./accentColor";
-
-// Accent is the name of a preset colour for the current item, buttons and the
-// focused pane. The preset colours live in index.css under [data-accent]; this
-// file only knows their names, which come from the engine's metadata. A colour
-// of the user's own is kept beside the name (AccentChoice.customColor), which an
-// older sshc that knows only the names reads past and shows the preset instead.
-export type Accent = NonNullable<components["schemas"]["AppearanceSettings"]["accent"]>;
 
 // The order the settings page shows the presets in. Amber, green and red are
 // missing on purpose: they mean an unread notification, connected and an error.
-export const presetAccents = ["lavender", "blue", "sky", "pink", "mono"] as const satisfies readonly Accent[];
+export const presetAccents = ["lavender", "blue", "sky", "pink", "mono"] as const;
+
+// Accent is the name of a preset colour for the current item, buttons and the
+// focused pane. The preset colours live in index.css under [data-accent]; this
+// file only knows their names. The engine keeps one accent in its metadata: a
+// preset's name or a colour of the user's own (AccentChoice.customColor).
+export type Accent = (typeof presetAccents)[number];
 
 export const defaultAccent: Accent = "lavender";
 
