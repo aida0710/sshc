@@ -34,9 +34,11 @@ type fakeEngineDirectory struct {
 	logErr     error
 	logAsked   []string
 	unlocked   []string
+	connected  map[string]bool
 }
 
-func (f *fakeEngineDirectory) Engines() ([]string, error) { return f.engines, nil }
+func (f *fakeEngineDirectory) Engines() ([]string, error)  { return f.engines, nil }
+func (f *fakeEngineDirectory) Connected(alias string) bool { return f.connected[alias] }
 func (f *fakeEngineDirectory) AddEngine(_ context.Context, alias string) error {
 	if f.addErr != nil {
 		return f.addErr
@@ -96,6 +98,15 @@ func TestAnAddedEngineIsListedAndAnIncompatibleEngineNamesTheRemoteVersion(t *te
 	recorder = send(t, engine, http.MethodGet, "/api/v1/engines", "", nil)
 	if list := decodeAs[api.RemoteEngineList](t, recorder.Body.String()); len(list.Engines) != 1 || list.Engines[0].Alias != "r540" {
 		t.Fatalf("list = %s", recorder.Body.String())
+	}
+
+	if decodeAs[api.RemoteEngineList](t, recorder.Body.String()).Engines[0].Connected {
+		t.Fatalf("an engine with no connection was listed as connected: %s", recorder.Body.String())
+	}
+	directory.connected = map[string]bool{"r540": true}
+	recorder = send(t, engine, http.MethodGet, "/api/v1/engines", "", nil)
+	if !decodeAs[api.RemoteEngineList](t, recorder.Body.String()).Engines[0].Connected {
+		t.Fatalf("a connected engine was not listed as connected: %s", recorder.Body.String())
 	}
 
 	directory.statusErr = &remoteengine.IncompatibleEngineError{Local: "v0.53.0", Remote: "v0.51.0"}

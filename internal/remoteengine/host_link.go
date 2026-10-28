@@ -92,6 +92,13 @@ func (h *hostLink) live(ctx context.Context) (Link, error) {
 	return h.connecting.do(ctx, h.attemptLimit, h.connectOnce)
 }
 
+// connected は、SSH の接続を今持っているかを答える。繋ぎには行かない。
+func (h *hostLink) connected() bool {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	return h.link != nil && !h.closed
+}
+
 func (h *hostLink) connectOnce(ctx context.Context) (Link, error) {
 	link, err := h.connect(ctx)
 	if err != nil {

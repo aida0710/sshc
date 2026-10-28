@@ -52,6 +52,7 @@ export function RunTargetSwitcher({
         >
           <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-live" />
           <span className={`min-w-0 grow truncate font-mono ${chosen ? "font-semibold text-accent" : "text-ink"}`}>{name}</span>
+          {alias !== null && targets.unread.has(alias) ? <UnreadMark label={t("runTarget.unread")} /> : null}
           {alias === null ? <span className="shrink-0 text-[11px] text-ink-faint">{t("runTarget.thisMachineNote")}</span> : null}
         </button>
         {alias === null ? null : (
@@ -115,6 +116,7 @@ export function RunTargetSwitcher({
         <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-live" />
         <span className="shrink-0 text-ink-muted">{t("runTarget.label")}</span>
         <span className="min-w-0 grow truncate text-left font-mono font-semibold text-ink">{current}</span>
+        {targets.unread.size > 0 ? <UnreadMark label={t("runTarget.unreadElsewhere")} /> : null}
         <Icon name="chevronRight" className={`size-3.5 shrink-0 text-ink-faint transition-transform ${open ? "-rotate-90" : "rotate-90"}`} />
       </button>
       <HostPickerDialog
@@ -147,5 +149,15 @@ export function RunTargetSwitcher({
         />
       )}
     </div>
+  );
+}
+
+// UnreadMark is the dot for a run target whose terminals sent a notification nobody has seen yet.
+function UnreadMark({ label }: { label: string }) {
+  return (
+    <span className="flex shrink-0 items-center">
+      <span aria-hidden="true" className="size-2 rounded-full bg-accent" />
+      <span className="sr-only">{label}</span>
+    </span>
   );
 }

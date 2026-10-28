@@ -15,7 +15,7 @@ const translate = ((key: string, values?: Record<string, string>) =>
 
 function enginesApi(overrides: Partial<RemoteEnginesApi> = {}): RemoteEnginesApi {
   return {
-    list: vi.fn(async () => ({ engines: [{ alias: "r540" }] })),
+    list: vi.fn(async () => ({ engines: [{ alias: "r540", connected: true }] })),
     add: vi.fn(async () => undefined),
     remove: vi.fn(async () => ({ engines: [] })),
     status: vi.fn(),
@@ -33,6 +33,7 @@ function targets(overrides: Partial<RunTargetsState> = {}): RunTargetsState {
     select: vi.fn(), add: vi.fn(async () => true), remove: vi.fn(async () => undefined), openInNewTab: vi.fn(async () => undefined),
     api: enginesApi(), localVersion: "v0.53.0", vaultUnlock: vaultUnlockState(),
     engineInfo: { openFor: null, ask: vi.fn(), close: vi.fn() },
+    unread: new Set(),
     ...overrides,
   };
 }
@@ -96,6 +97,16 @@ describe("useRunTargets", () => {
 });
 
 describe("RunTargetSwitcher", () => {
+  it("marks the switch and the engine whose terminals sent a notification nobody has seen", async () => {
+    const user = userEvent.setup();
+    render(<RunTargetSwitcher targets={targets({ unread: new Set(["r540"]) })} aliases={["r540"]} hosts={[]} />);
+    const trigger = screen.getByRole("button", { name: /^Choose where terminals run/ });
+    expect(within(trigger).getByText("Another engine has new notifications")).toBeInTheDocument();
+    await user.click(trigger);
+    const list = screen.getByRole("list", { name: "Engines" });
+    expect(within(list).getByRole("button", { name: /^r540.*New notifications/ })).toBeInTheDocument();
+  });
+
   it("chooses an engine from the list that opens upward", async () => {
     const user = userEvent.setup();
     const state = targets();

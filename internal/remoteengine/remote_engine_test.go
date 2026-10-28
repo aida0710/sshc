@@ -284,6 +284,37 @@ func TestAnExpiredRemoteSessionIsIssuedAgainOnceAndTheRequestSentAgain(t *testin
 	}
 }
 
+// 一覧は、繋がっているかを答えるだけで、繋ぎには行かない。繋ぎに行くと、画面が実行先の一覧を
+// 読むたびに、繋がっていない接続先へ SSH の接続（と認証）を始めてしまう。
+func TestAnEngineIsConnectedOnlyWhileItHoldsTheLinkAndTheSessionAndAskingDoesNotConnect(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	connects := 0
+	manager := NewManager(ManagerOptions{
+		Store:        newStore(t),
+		LocalVersion: "v9",
+		Connect: func(context.Context, string) (Link, error) {
+			connects++
+			return &handoffLink{fakeLink: newFakeLink(remote.server.URL+"/#x", 0), handoff: remote.handoffDocument("v9")}, nil
+		},
+	})
+	t.Cleanup(manager.Close)
+	if manager.Connected("r540") || connects != 0 {
+		t.Fatalf("before adding: connected = %v, connects = %d", manager.Connected("r540"), connects)
+	}
+	if err := manager.AddEngine(context.Background(), "r540"); err != nil {
+		t.Fatal(err)
+	}
+	if !manager.Connected("r540") {
+		t.Fatal("an added engine is not connected")
+	}
+	if err := manager.RemoveEngine("r540"); err != nil {
+		t.Fatal(err)
+	}
+	if manager.Connected("r540") || connects != 1 {
+		t.Fatalf("after removing: connected = %v, connects = %d", manager.Connected("r540"), connects)
+	}
+}
+
 func TestAnEngineOfAnotherVersionWithTheSameCompatibilityIsUsed(t *testing.T) {
 	remote := newFakeRemoteEngine(t)
 	manager := newEngineManager(t, remote, "v8")

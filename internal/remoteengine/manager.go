@@ -111,6 +111,20 @@ func (m *Manager) Engines() ([]string, error) {
 	return m.options.Store.Engines()
 }
 
+// Connected は、alias の実行先へ、SSH の接続と接続先のエンジンの資格の両方を今持っているかを
+// 答える。持っていれば、取り次ぎは繋ぎ直しも認証もせずに届く。繋ぎには行かない。
+func (m *Manager) Connected(alias string) bool {
+	m.mutex.Lock()
+	target := m.hosts[alias]
+	if target == nil || target.engine == nil {
+		m.mutex.Unlock()
+		return false
+	}
+	link, engine := target.link, target.engine
+	m.mutex.Unlock()
+	return link.connected() && engine.attached()
+}
+
 // AddEngine は、alias で動いているエンジンを実行先に足す。足す前に、接続できること、
 // 接続先のエンジンが動いていることを確かめる。互換でないエンジンも足す。
 // 画面から更新できるのは、実行先に足したエンジンだけだからである。

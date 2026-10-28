@@ -97,6 +97,13 @@ func newRemoteEngine(link *hostLink, localVersion string, sessionLimit time.Dura
 	return engine
 }
 
+// attached は、接続先のエンジンの資格を今持っているかを答える。受け取りには行かない。
+func (e *remoteEngine) attached() bool {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	return e.session != nil
+}
+
 // current は、使える資格を返す。まだ無ければ、接続先で handoff を読んで受け取る。
 //
 // 受け取りはロックの外で行い、そのあいだに来た要求は同じ受け取りを待つ。

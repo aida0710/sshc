@@ -5027,9 +5027,12 @@ components:
     RemoteEngine:
       type: object
       additionalProperties: false
-      required: [alias]
+      required: [alias, connected]
       properties:
         alias: { type: string, minLength: 1, maxLength: 64 }
+        # connected は、このマシンのエンジンが今その実行先へ繋がっていて、取り次ぎが繋ぎ直しも
+        # 認証もせずに届くかである。画面は、繋がっていない実行先を読みに行かない。
+        connected: { type: boolean }
     RemoteEngineList:
       type: object
       additionalProperties: false
