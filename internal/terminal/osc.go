@@ -19,8 +19,10 @@ type Notification struct {
 }
 
 const (
-	// MaxOSCPayload bounds one observed sequence. Longer payloads are ignored
-	// so arbitrary terminal output cannot grow memory.
+	// MaxOSCPayload bounds one observed sequence, so arbitrary terminal output
+	// cannot grow memory. Past it a notification (OSC 9, OSC 777) keeps its
+	// beginning, which is longer than what is shown anyway; any other sequence
+	// is ignored, since a cut title or directory would be a wrong one.
 	MaxOSCPayload = 4096
 	// MaxNotificationTitleRunes and MaxNotificationBodyRunes keep the copy
 	// shown in the session list and browser notifications short.
@@ -60,9 +62,12 @@ const (
 // everything and applies these sequences itself. The engine only records what
 // it saw so the session list, other tabs and headless clients can show it.
 type oscObserver struct {
-	state           oscState
-	number          []byte
-	payload         []byte
+	state   oscState
+	number  []byte
+	payload []byte
+	// truncated is set once the payload reached MaxOSCPayload and the rest of
+	// the sequence was not kept.
+	truncated       bool
 	chunks          map[string]*kittyNotification
 	reports         oscReports
 	programProgress *ProgramProgress
@@ -126,7 +131,7 @@ func (o *oscObserver) Observe(chunk []byte) {
 				o.state = oscPayloadEscape
 			default:
 				if len(o.payload) >= MaxOSCPayload {
-					o.state = oscDiscard
+					o.truncated = true
 					continue
 				}
 				o.payload = append(o.payload, value)
@@ -172,11 +177,15 @@ func (o *oscObserver) reset() {
 	o.state = oscText
 	o.number = o.number[:0]
 	o.payload = o.payload[:0]
+	o.truncated = false
 }
 
 func (o *oscObserver) complete() {
-	number, payload := string(o.number), string(o.payload)
+	number, payload, truncated := string(o.number), string(o.payload), o.truncated
 	o.reset()
+	if truncated && number != "9" && number != "777" {
+		return
+	}
 	switch number {
 	case "0", "1", "2":
 		if o.reports.Title != nil {

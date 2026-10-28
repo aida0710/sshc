@@ -10,6 +10,7 @@ export type AndroidBridge = {
   notificationPermission(): string;
   requestNotificationPermission(): void;
   showNotification(tag: string, title: string, body: string): string;
+  cancelNotification(tag: string): void;
   takeOpenedNotification(): string;
   chooseFolder(requestId: string): string;
   takeChosenFolder(requestId: string): string;
@@ -85,6 +86,15 @@ export function showAndroidNotification(
   } catch {
     // renderer の再起動と同時に bridge が消えても、通知が出なかったことにする。
     return false;
+  }
+}
+
+/** Android の通知を取り下げる。出していなければ何もしない。 */
+export function cancelAndroidNotification(tag: string, target: Window = window): void {
+  try {
+    (target as AndroidWindow).sshcAndroid?.cancelNotification(tag);
+  } catch {
+    // renderer の再起動と同時に bridge が消えた。通知は押されるか払われるまで残る。
   }
 }
 

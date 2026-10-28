@@ -105,6 +105,11 @@ public final class MainActivity extends ComponentActivity {
         }
 
         @Override
+        public void cancelNotification(String tag) {
+            terminalNotifications.cancel(tag);
+        }
+
+        @Override
         public String takeOpenedNotification() {
             return takeOpenedNotificationTag();
         }

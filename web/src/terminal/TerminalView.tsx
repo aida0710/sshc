@@ -45,6 +45,7 @@ import { attachInlineImages } from "./inlineImages";
 import { applyCurrentUnicodeWidths } from "./unicodeWidths";
 import { attachCommandMarkers } from "./commandMarkers";
 import { showBrowserNotification } from "../ui/browserNotifications";
+import { isUserAway } from "../ui/userAway";
 import { longCommandNotificationTag } from "./notificationTags";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
@@ -337,7 +338,7 @@ export function TerminalView({
       // A program that quit without clearing its OSC 9;4 progress leaves no
       // bar behind once the shell reports the command finished.
       setProgramProgress(noTerminalProgress);
-      if (durationMilliseconds < longCommandNotifyMs || !document.hidden) return;
+      if (durationMilliseconds < longCommandNotifyMs || !isUserAway()) return;
       showBrowserNotification({
         title: "sshc",
         body: t("terminal.longCommandCompleted", {
