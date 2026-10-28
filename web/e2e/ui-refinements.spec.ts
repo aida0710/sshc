@@ -8,7 +8,7 @@ test("shows OS icons and editable paste and close dialogs with synthetic connect
     ["demo-macos", "macos"], ["demo-windows", "windows"], ["demo-unknown", ""],
   ];
   await installation.write("config", hosts.map(([alias]) => `Host ${alias}\n  HostName 192.0.2.10\n  User demo\n`).join("\n"));
-  await installation.write("sshc/metadata.json", JSON.stringify({ schemaVersion: 4, hosts: hosts.map(([alias, os]) => ({ identity: { path: "config", alias }, os })) }));
+  await installation.write("sshc/metadata.json", JSON.stringify({ schemaVersion: 9, hosts: hosts.map(([alias, os]) => ({ identity: { path: "config", alias }, os })) }));
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
   for (const name of ["Amazon Linux", "Fedora", "Ubuntu", "Red Hat Enterprise Linux", "Debian", "macOS", "Windows", "OS unknown"]) {
