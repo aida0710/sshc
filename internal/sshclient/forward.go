@@ -234,7 +234,7 @@ func (f *forwards) listen(client *ssh.Client, spec ForwardSpec, origin forwardOr
 		Temporary: origin == forwardTemporary,
 	}
 	if err != nil {
-		entry.Problem = listenProblem(err)
+		entry.Problem = ListenProblem(err)
 		if spec.Kind == terminal.ForwardRemote {
 			entry.Problem = remoteListenProblem(err)
 		}

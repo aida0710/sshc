@@ -324,7 +324,7 @@ func TestTemporaryForwardRouteRejectsInvalidAndLocalShellRequests(t *testing.T) 
 	for _, body := range []string{
 		`{"kind":"unknown","listenPort":8080,"destination":"db:5432"}`,
 		`{"kind":"remote","listenPort":8080}`,
-		`{"kind":"local","listenPort":0,"destination":"db:5432"}`,
+		`{"kind":"remote","listenPort":0,"destination":"db:5432"}`,
 		`{"kind":"local","listenPort":8080}`,
 		`{"kind":"dynamic","listenPort":1080,"destination":"db:5432"}`,
 	} {

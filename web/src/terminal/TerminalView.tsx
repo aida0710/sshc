@@ -59,6 +59,7 @@ import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { TerminalComposer } from "./TerminalComposer";
 import { planComposerSend } from "./composerSend";
 import { terminalCommandApiFor } from "./commands/commandApi";
+import { forwardApiFor } from "./forwardApi";
 import { pathPreviewAlias } from "./pathPreviewAlias";
 import { useSameDestination } from "./useSameDestination";
 import { previewPathsInBuffer, previewPathTargetsInBuffer } from "./previewPaths";
@@ -697,7 +698,7 @@ export function TerminalView({
               setQuickCommandSelection(terminal.current?.getSelection() ?? "");
               setQuickCommandsOpen(true);
             }}
-            onPortForwarding={session.kind === "ssh" && runTarget === undefined ? () => setPortForwardsOpen(true) : undefined}
+            onPortForwarding={session.kind === "ssh" ? () => setPortForwardsOpen(true) : undefined}
             onOpenRemoteDirectory={runTarget === undefined && session.kind === "ssh" && session.alias !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
               ? () => onOpenRemotePath(session.alias!, currentDirectory, "browse")
               : undefined}
@@ -765,6 +766,8 @@ export function TerminalView({
       {portForwardsOpen ? (
         <TerminalPortForwards
           session={session}
+          api={forwardApiFor(runTarget)}
+          isRunTargetSession={runTarget !== undefined}
           {...(onForwardsChanged === undefined ? {} : { onChanged: onForwardsChanged })}
           onClose={() => setPortForwardsOpen(false)}
         />

@@ -52,8 +52,10 @@ While an action runs, the dialog shows what the host's `sshc` writes as it is wr
 - When a release changes how this computer talks to a run target, update the run target to that release or later too. The release notes of such a release say that run targets need updating. If sshc on the host does not work with this computer’s, update the host right from the terminal area.
 - The host's SSH server must allow TCP forwarding to its `127.0.0.1` (`AllowTcpForwarding yes` or `local`).
 - If the host has no vault yet, create it through **Open its full screen in a new tab**.
-- Port forwarding, sending a command to several sessions, and Quick Commands work only for terminals running on this computer.
-- Notifications (unread marks) are not shown for a run target that is not chosen.
+- SSH sessions opened on a run target can use Local and Dynamic forwards. This computer listens on its `127.0.0.1` and carries each connection to the run target. These forwards are temporary and cannot be saved to the connection's settings. Remote forwards work only for terminals running on this computer.
+- Quick Commands and sending a command to several sessions also work for sessions on a run target. The snippets are this computer's, and variables and secrets are filled in on this computer. The confirmation shows the command with secrets hidden, and only the run target receives the filled-in command. A command is sent only to sessions on the run target being shown (never across this computer and a run target, or across run targets).
+- Path preview and Open in SFTP for an SSH session opened on a run target work only when this computer's settings have the same alias with the same destination (HostName, Port and User) as the run target's.
+- When a terminal on a run target that is not chosen sends a notification, the run target switcher and that run target's row get a mark. Only run targets that this computer's engine is connected to get marks (sshc does not connect or ask for a password to show one). sshc checks every 15 seconds, so a mark can appear a little late.
 - The host must run macOS or Linux.
 
 ## How it works
