@@ -209,6 +209,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		process:       process,
 		cleanup:       spec.Cleanup,
 		done:          make(chan struct{}),
+		replies:       make(chan []byte, maxQueuedReplies),
 		// 繋ぎ直せるのは、開き方を知っているセッションだけである。
 		reopen:         spec.Reopen,
 		reconnectError: spec.ReconnectError,
