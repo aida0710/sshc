@@ -58,7 +58,8 @@ func DeclaredGroups(file *config.File) []string {
 	return names
 }
 
-// BuildGroupsView は、Groups 画面が表示するものを組み立てる:
+// BuildGroupsView は、Connections のグループの一覧と編集欄に出すもの（宣言済みのグループと、
+// フォルダの食い違いの注意）を組み立てる。
 func BuildGroupsView(entry *config.File, hosts []HostEntry, metadata Metadata, present []string) ([]GroupView, []Notice) {
 	declared := DeclaredGroups(entry)
 	declaredSet := make(map[string]bool, len(declared))

@@ -24,11 +24,6 @@ const ConfigExplorer = lazy(() =>
     default: ConfigExplorer,
   })),
 );
-const GroupsPanel = lazy(() =>
-  import("../groups/GroupsPanel").then(({ GroupsPanel }) => ({
-    default: GroupsPanel,
-  })),
-);
 const HistoryPanel = lazy(() =>
   import("../history/HistoryPanel").then(({ HistoryPanel }) => ({
     default: HistoryPanel,
@@ -227,15 +222,6 @@ function SectionPage({
         selectedSnippetId={new URLSearchParams(navigation.location.search).get(
           "snippet",
         )}
-      />
-    );
-  }
-  if (section === "Groups") {
-    return (
-      <GroupsPanel
-        onInspector={onInspector}
-        onNavigationBlockerChange={navigation.onNavigationBlockerChange}
-        onNavigateLocation={onNavigateLocation}
       />
     );
   }

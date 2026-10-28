@@ -1,5 +1,6 @@
 import { clickAndAwait, expect, openSection, openSettingsPage, test, openApplication } from "./support/environment";
 import type { Page } from "@playwright/test";
+import { createGroups } from "./support/groups";
 
 async function openBastion(page: Page, url: string) {
   await openApplication(page, { url });
@@ -178,12 +179,7 @@ test("creates a key-authenticated connection in an empty nested declared group",
   });
 
   await openApplication(page, installation);
-  await openSection(page, "Groups");
-  for (const name of ["home-lab", "home-lab/others"]) {
-    await page.getByLabel("New group name").fill(name);
-    await page.getByRole("button", { name: "Add group" }).click();
-  }
-  expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
+  await createGroups(page, ["home-lab", "home-lab/others"]);
 
   await openSection(page, "Keys");
   await page.getByLabel("File name").fill("id_connection_e2e");
@@ -772,12 +768,8 @@ test("shows an empty group in the management tree and moves an ungrouped connect
   installation,
 }) => {
   await openApplication(page, installation);
-  await openSection(page, "Groups");
-  await page.getByLabel("New group name").fill("work");
-  await page.getByRole("button", { name: "Add group" }).click();
-  expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
+  await createGroups(page, ["work"]);
 
-  await openSection(page, "Connections");
   const browser = page.getByRole("navigation", { name: "Connections" });
   const groups = page.getByRole("navigation", { name: "Groups" });
   await expect(groups.getByRole("button", { name: "work", exact: true })).toBeVisible();

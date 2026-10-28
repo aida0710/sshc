@@ -51,6 +51,8 @@ import { useSelectedConnection } from "./useSelectedConnection";
 import { useConnectionSave } from "./useConnectionSave";
 import { useConnectionManagement } from "./useConnectionManagement";
 import { useGroupOperations } from "./useGroupOperations";
+import { folderNoticesOf } from "./groupFolderContents";
+import { GroupFolders } from "./GroupFolders";
 import { useConnectionListActions } from "./useConnectionListActions";
 import { ConnectionListDialogs } from "./ConnectionListDialogs";
 import { manageConnectionHandlers } from "./manageConnectionHandlers";
@@ -63,11 +65,13 @@ import { useConnectionDrag } from "./useConnectionDrag";
 // The design's width for the connection list; the groups sit beside the card, outside it. The editor keeps the rest.
 const connectionListWidth: StoredColumnWidth = { key: localStorageKeys.connectionListWidth, fallback: 300, minimum: 256, maximum: 720 };
 
+// グループのフォルダについての注意は、右側ではなくグループの一覧の上に出す（folderNoticesOf）。
 const groupNoticeCodes = new Set([
   "group_not_declared",
   "group_directory_missing",
   "group_empty",
   "group_directory_leftover",
+  "group_file_unreached",
 ]);
 
 const selectionNoticeCodes = new Set([
@@ -223,6 +227,8 @@ export function ConnectionsPage({
     moveConnections: management.moveConnections,
     deleteConnections: management.deleteConnections,
     duplicateConnection: management.duplicateConnection,
+    reorderGroups: groups.reorderGroups,
+    setGroupHidden: groups.setGroupHidden,
   });
   const { checked, checkedHosts, clearChecked, selectionMode, groupEditorName } = listActions;
   const drag = useConnectionDrag({
@@ -242,10 +248,12 @@ export function ConnectionsPage({
   const editedGroup = groupEditorName === null
     ? null
     : (overview?.metadata.groups ?? []).find((group) => group.name === groupEditorName) ?? { name: groupEditorName };
+  const editedGroupView = overview?.groups.find((group) => group.name === groupEditorName);
 
   // 右側に出す設定全体の注意。接続先を開いているときは、その接続先に関わるものだけにする。
   // alias を持つ注意（重複など）は alias で、持たない注意はファイルで見分ける。同じファイルにある
   // ほかの接続先の注意まで出さないため。ほかの接続先の注意は、一覧のその行の印で分かる。
+  const folderNotices = folderNoticesOf(overview?.notices ?? []);
   const paneNotices = (overview?.notices ?? []).filter((notice) => {
     if (groupNoticeCodes.has(notice.code) || selectionNoticeCodes.has(notice.code)) return false;
     if (selection === null) return true;
@@ -412,6 +420,8 @@ export function ConnectionsPage({
           drag={drag}
           groupActions={(name) => listActions.groupActionItems(name)}
           onCreateGroup={() => listActions.openCreateGroup("")}
+          folderNotices={folderNotices}
+          onDeclareGroup={(name) => void groups.createGroup(name)}
         />
       )}
     >
@@ -456,6 +466,8 @@ export function ConnectionsPage({
             groupActions: (name) => listActions.groupActionItems(name),
             connectionActions: listActions.connectionActionItems,
             onCreateGroup: () => listActions.openCreateGroup(""),
+            folderNotices,
+            onDeclareGroup: (name: string) => void groups.createGroup(name),
             topBar: !compact && checked.keys.size >= 2 ? selectionBar("top") : null,
             bottomBar: compact && selectionMode ? selectionBar("bottom") : null,
           }}
@@ -488,6 +500,7 @@ export function ConnectionsPage({
               group={editedGroup}
               memberCount={listActions.groupListings.find((group) => group.name === editedGroup.name)?.count ?? 0}
               actions={listActions.groupActionItems(editedGroup.name, { inEditor: true })}
+              folders={editedGroupView === undefined ? null : <GroupFolders group={editedGroupView} hosts={overview.hosts} />}
               onSave={groups.saveGroup}
               onDirtyChange={setGroupDraftDirty}
             />
@@ -573,6 +586,7 @@ export function ConnectionsPage({
         groups={overview.groups}
         initialDraft={creationDraft ?? undefined}
         onOpenPrerequisite={leaveForCreationPrerequisite}
+        onCreateGroup={groups.createGroup}
         onClose={() => {
           setCreating(false);
           onCreationDraftChange?.(null);

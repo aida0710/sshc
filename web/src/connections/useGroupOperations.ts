@@ -8,7 +8,7 @@ type GroupOperationsOptions = {
   reload: () => Promise<Overview | null>;
 };
 
-// useGroupOperations は、Connections 画面から行うグループの作成と設定の保存を持つ。どちらも metadata の
+// useGroupOperations は、Connections 画面から行うグループの作成と、設定・表示順・隠すの保存を持つ。どちらも metadata の
 // グループの設定を書き換える操作で、Groups 画面と同じ sshcエンジンの保存を呼ぶ。名前の変更と削除は
 // 開いている接続先の場所も変えるので、useConnectionManagement が持つ。
 export function useGroupOperations({ overview, feedback, reload }: GroupOperationsOptions) {
@@ -31,12 +31,21 @@ export function useGroupOperations({ overview, feedback, reload }: GroupOperatio
     }
   }
 
+  // 宣言だけあって metadata に設定が無いグループは、変えるときに足す。
+  function changeGroups(changes: ReadonlyMap<string, Partial<GroupMetadata>>): Promise<boolean> {
+    return saveGroups((current) => {
+      const known = new Set(current.map((group) => group.name));
+      const added = [...changes.keys()].filter((name) => !known.has(name)).map((name) => ({ name }));
+      return [...current, ...added].map((group) => ({ ...group, ...changes.get(group.name) }));
+    });
+  }
+
   return {
     createGroup: (name: string) => saveGroups((current) => [...current, { name }]),
-    // 宣言だけあって metadata に設定が無いグループは、ここで足す。
-    saveGroup: (updated: GroupMetadata) =>
-      saveGroups((current) => current.some((group) => group.name === updated.name)
-        ? current.map((group) => (group.name === updated.name ? updated : group))
-        : [...current, updated]),
+    saveGroup: (updated: GroupMetadata) => changeGroups(new Map([[updated.name, updated]])),
+    // reorderGroups は、ordersAfterMove が返した兄弟の表示順を書く。
+    reorderGroups: (orders: ReadonlyMap<string, number>) =>
+      changeGroups(new Map([...orders].map(([name, order]) => [name, { order }]))),
+    setGroupHidden: (name: string, hidden: boolean) => changeGroups(new Map([[name, { hidden }]])),
   };
 }

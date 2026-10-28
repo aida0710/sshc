@@ -74,7 +74,7 @@ vi.mock("./connections/ConnectionsPage", () => ({
     onInspector: (content: InspectorContent) => void;
     creationDraft?: { alias: string } | null;
     onCreationDraftChange?: (draft: Record<string, string> | null) => void;
-    onNavigateForCreation?: (section: "Groups" | "Keys") => void;
+    onNavigateForCreation?: (section: "Keys") => void;
     location?: { pathname: string; search: string };
     onNavigateLocation?: (url: string, options?: { replace?: boolean }) => void;
     onNavigationBlockerChange?: (
@@ -131,7 +131,6 @@ vi.mock("./explorer/ConfigExplorer", () => ({
     <div>{`config panel ${target === null || target === undefined ? "no target" : `${target.path}:${target.line}`}`}</div>
   ),
 }));
-vi.mock("./groups/GroupsPanel", () => ({ GroupsPanel: () => <div>groups panel</div> }));
 vi.mock("./history/HistoryPanel", () => ({ HistoryPanel: () => <div>history panel</div> }));
 vi.mock("./keys/KeysScreen", () => ({
   KeysScreen: ({
@@ -496,7 +495,6 @@ describe("App", () => {
 
     for (const label of [
       "Config",
-      "Groups",
       "Keys",
       "Known Hosts",
       "Install Key on Server",

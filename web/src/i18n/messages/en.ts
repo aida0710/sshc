@@ -1227,12 +1227,9 @@ export const en = {
   "terminal.exitedWithSignal":
     "The program was ended by {signal}. The output above is kept until you close this session.",
   "inspector.appOnly": "sshc-only settings",
-  "inspector.groupLabel": "Group display settings",
   "inspector.hostSave": "Save sshc-only settings",
   "inspector.hostSaveFailed":
     "The sshc-only settings could not be saved. Check the error and save again.",
-  "inspector.groupChangesStaged":
-    "Changes here are staged until you choose Save groups.",
   "inspector.notices": "Notices",
   "inspector.inherited": "Inherited values",
   "inspector.noNotices": "Nothing to report for this connection.",
@@ -1311,7 +1308,6 @@ export const en = {
   "menu.signOutCancel": "Cancel",
   "menu.signOutFailed": "Could not sign out.",
   "menu.configDescription": "Edit config files and their Includes",
-  "menu.groupsDescription": "Group connections and keys to share settings",
   "menu.keysDescription": "Create, change and delete keys",
   "menu.knownHostsDescription": "Check and add trusted host keys",
   "menu.remoteKeysDescription": "Install a public key on a server",
@@ -1341,7 +1337,6 @@ export const en = {
   "section.connections": "Connections",
   "section.terminal": "Terminal",
   "section.config": "Config",
-  "section.groups": "Groups",
   "section.keys": "Keys",
   "section.knownHosts": "Known Hosts",
   "section.remoteKeys": "Install Key on Server",
@@ -1867,7 +1862,7 @@ export const en = {
     "The directory is not empty. Delete its files first; Include lines that directly reference those files will be updated at the same time.",
   "refusal.not_a_directory": "The specified path is a file, not a directory.",
   "refusal.group_is_declared":
-    "{detail} is a declared group. Rename or remove it on the Groups screen so its connections, shared settings, and keys are moved together.",
+    "{detail} is a declared group. Rename or remove it from the group’s … menu in Connections so its connections, connection defaults, and keys move with it.",
   "refusal.destination_exists":
     "A file or directory with that name already exists at the destination.",
   "refusal.alias_already_declared":
@@ -2504,7 +2499,7 @@ export const en = {
   "explorer.submitDelete": "Delete",
   "explorer.submitRename": "Rename",
   "explorer.cancelPathTask": "Cancel",
-  "explorer.createDirectoryNote": "Manage the directories of declared groups in Groups.",
+  "explorer.createDirectoryNote": "Manage the folders of declared groups in the group list of Connections.",
   "explorer.deleteDirectoryNote": "Only empty directories can be deleted. Delete their files first.",
   "explorer.renameNote":
     "Renaming this file also updates Include lines that directly reference it. Wildcard patterns are not changed; a warning appears if the new path no longer matches.",
@@ -2536,79 +2531,30 @@ export const en = {
   "explorer.createdDirectory": "Created the directory {path}.",
   "explorer.deletedDirectory": "Deleted the directory {path}.",
 
-  "groups.loading": "Loading groups…",
-  "groups.pageTitle": "Groups",
-  "groups.metricGroups": "Groups",
-  "groups.metricConnections": "Connections",
-  "groups.metricDraft": "Unsaved drafts",
-  "groups.empty":
-    "No groups yet.",
-  "groups.nameTaken":
-    "A group with this name already exists. Enter a different name.",
-  "groups.chooseGroupAndKeyword": "Choose a group and a directive keyword.",
   "groups.unbalancedQuote":
     "A value has a quote that is not closed. Close it, or put a backslash before a quote you want to keep as a character.",
-  "groups.renameNeedsName": "Enter a new name for the group.",
-  "groups.renameCollides":
-    "{name} already exists. Rename it to something else, or remove one of the two.",
-  "groups.compileNote":
-    "Groups compile into ordinary Host blocks in {file}, with child groups written before their parents so OpenSSH keeps the most specific value it reads first.",
-  "groups.members": "Members:",
-  "groups.noMembers": "none",
-  "groups.colour": "Colour",
-  "groups.clearColour": "Clear {name} colour",
-  "groups.renameTo": "Rename {name} to",
-  "groups.renameShort": "New name",
-  "groups.rename": "Rename {name}",
-  "groups.displayOrder": "Display order",
-  "groups.hide": "Hide {name} from Connections",
-  "groups.hideOnlyContainers":
-    "This group contains direct connections, which would also be hidden. Move them into a child group first.",
-  "groups.remove": "Remove {name}",
-  "groups.newName": "New group name",
-  "groups.invalidName":
-    "A group name is a relative directory path: letters, digits, dot, dash and underscore, slash-separated, at most six levels deep.",
-  "groups.directoryNote":
-    "Each group is a directory. Connections are stored in {connections}/<group>/ and keys in {keys}/<group>/. sshc adds one Include line per group to ~/.ssh/config, making the read order and setting precedence explicit instead of relying on a wildcard.",
-  "groups.howItWorks": "How groups map to SSH files",
-  "groups.directories": "{connections}/ · {keys}/",
-  "groups.nestingNote": "Use a slash to nest: work/eu is a group inside work.",
-  "groups.addChild": "Add a group inside {name}",
-  "groups.listLabel": "Groups, parent before child",
-  "groups.orderNote":
-    "Listed as a tree, parent first. The Include lines are written in the opposite order — deepest group first — because OpenSSH keeps the first value it reads, so a child's setting has to be read before its parent's.",
-  "groups.removeInto": "Remove {name}",
-  "groups.removeIntoShort": "Move its connections to",
-  "groups.removeIntoNone": "No group (connections/ itself)",
-  "groups.removeExplain":
-    "Removing {name} takes away its Include line and its group settings. Its {count} connections have to go somewhere:",
-  "groups.removeExplainEmpty":
-    "Removing {name} deletes its Include line and group settings. The group contains no connections, so no connection files are moved.",
-  "groups.removeKeepsFiles":
-    "No configuration file is deleted. The change is one transaction, so History can undo it.",
-  "groups.removeConfirm": "Remove {name}",
-  "groups.removeCancel": "Keep it",
-  "groups.unsaved": "Not saved",
-  "groups.unsavedBarLabel": "Unsaved group changes",
-  "groups.unsavedBarNote":
-    "Group additions and display settings are not saved yet. Save or discard them before renaming or removing a group.",
-  "groups.discard": "Discard group changes",
-  "groups.saveDraftFirst":
-    "Save or discard the pending group changes before renaming or removing a group.",
-  "groups.savedNote":
-    "There are no unsaved changes. Colour, display order, new groups, and new settings are applied with Save groups. Rename and Remove write to disk immediately.",
-  "groups.immediateActions": "Rename and remove write to disk immediately.",
-  "groups.newGroupNote":
-    "This group does not have a directory yet. Save groups creates it; Rename and Remove become available afterwards.",
-  "groups.addHeading": "Add a group",
-  "groups.add": "Add group",
-  "groups.settingHeadingFor": "Add a setting to {name}",
-  "groups.directive": "Directive",
-  "groups.value": "Value",
-  "groups.addSetting": "Add setting",
-  "groups.previewChanges": "Preview group changes",
-  "groups.save": "Save groups",
 
+  "groupFolders.heading": "Folders",
+  "groupFolders.missing": "The folder is missing.",
+  "groupFolders.noConnections": "No connections directly in it.",
+  "groupFolders.noKeys": "No keys.",
+  "groupFolders.keysLoading": "Reading the keys…",
+  "groupFolders.keysFailed": "Could not read the keys.",
+  "groupFolders.includeLine": "Line in ~/.ssh/config that reads it",
+  "groupNotices.summary": "Folder checks: {count}",
+  "groupNotices.notDeclared": "{path}/ is not read: no Include line names it.",
+  "groupNotices.directoryMissing": "The folder of group {name} ({path}/) is missing.",
+  "groupNotices.leftover": "{path}/ is left empty. Delete it if you no longer need it.",
+  "groupNotices.fileUnreached": "{path} is not read by the Include line of any group.",
+  "groupNotices.declare": "Make it a group",
+  "tree.moveGroupUp": "Move up",
+  "tree.moveGroupDown": "Move down",
+  "tree.hideGroup": "Hide in Connections",
+  "tree.showGroup": "Stop hiding",
+  "tree.hideNeedsEmptyGroup": "A group with connections directly in it cannot be hidden.",
+  "tree.hiddenMark": "Hidden",
+  "tree.showHiddenGroups": "Show hidden groups ({count})",
+  "tree.hideHiddenGroups": "Close hidden groups",
   "tree.navLabel": "Connections",
   "tree.ungrouped": "Ungrouped",
   "tree.movedGroupToTop": "Moved {name} to the top level.",
@@ -2657,6 +2603,7 @@ export const en = {
   "groupDialog.noSlash": "A name cannot contain “/”. To create a group inside another one, choose New group inside from that group’s … menu.",
   "groupDialog.tooDeep": "Groups can be nested at most {count} levels deep.",
   "groupDialog.deleteKeepsConnections": "Deleting the group does not delete its connections. They move to the group you choose.",
+  "groupDialog.nameTaken": "A group with this name already exists. Enter a different name.",
   "groupDialog.cancel": "Cancel",
   "groupDialog.deleted": "Deleted {name}.",
   "groupDialog.renamed": "Renamed the group to {name}.",
@@ -2715,7 +2662,8 @@ export const en = {
   "conn.createName": "Connection name",
   "conn.createNameRequired": "Connection name (required)",
   "conn.createGroup": "Save in group",
-  "conn.createManageGroups": "Manage groups",
+  "conn.createNewGroupName": "Name of the new group",
+  "conn.createGroupFailed": "Could not create the group. Try again.",
   "conn.createNoGroup": "No group",
   "conn.createHostName": "Host name or IP address",
   "conn.createHostNameRequired": "Host name or IP address (required)",

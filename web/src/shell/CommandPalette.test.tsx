@@ -19,7 +19,6 @@ const labels = {
   Files: "section.files",
   Snippets: "section.snippets",
   Config: "section.config",
-  Groups: "section.groups",
   Keys: "section.keys",
   "Known Hosts": "section.knownHosts",
   "Remote Keys": "section.remoteKeys",

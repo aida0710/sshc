@@ -1,4 +1,5 @@
 import type { Overview } from "../api/config";
+import { buildGroupTree, decorateHosts, type GroupNode } from "./connectionTreeIndex";
 
 // グループを選ぶ一覧（移動先、スマホのグループの一覧）に並べる 1 行。
 export type GroupListing = {
@@ -9,22 +10,13 @@ export type GroupListing = {
   count: number;
 };
 
-export function belongsToGroup(group: string, name: string): boolean {
-  return group === name || group.startsWith(`${name}/`);
-}
-
-// listGroups は、宣言済みのグループを親が先になる名前順で返す。
+// listGroups は、宣言済みのグループを、広い画面の左のグループの一覧と同じ順（親が先、兄弟は表示順）で返す。
 export function listGroups(overview: Overview): GroupListing[] {
-  const groups = overview.hosts.filter((host) => host.identity.alias !== "").map((host) => host.group ?? "");
-  return overview.groups
-    .map((group) => group.name)
-    .sort((left, right) => left.localeCompare(right, "ja"))
-    .map((name) => ({
-      name,
-      label: name.slice(name.lastIndexOf("/") + 1),
-      depth: name.split("/").length - 1,
-      count: groups.filter((group) => belongsToGroup(group, name)).length,
-    }));
+  const flatten = (nodes: readonly GroupNode[], depth: number): GroupListing[] => nodes.flatMap((node) => [
+    { name: node.name, label: node.label, depth, count: node.descendantCount },
+    ...flatten(node.children, depth + 1),
+  ]);
+  return flatten(buildGroupTree(overview, decorateHosts(overview)), 0);
 }
 
 export function ungroupedCount(overview: Overview): number {

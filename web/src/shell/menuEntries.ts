@@ -35,7 +35,7 @@ const settingsDescriptions: Record<SettingsPage, MessageKey> = {
 
 const configuration: MenuGroup = {
   label: "shell.navConnections",
-  items: [sectionItem("Config", "menu.configDescription"), sectionItem("Groups", "menu.groupsDescription")],
+  items: [sectionItem("Config", "menu.configDescription")],
 };
 
 const security: MenuGroup = {

@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useState, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
-import type { HostEntry, Overview } from "../api/config";
+import type { HostEntry, Notice, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { hostMatchesQuery, normalizeHostQuery } from "./hostSearch";
 import { control } from "../ui/form";
@@ -48,6 +48,9 @@ export type ConnectionTreeProps = {
   groupActions?: (name: string) => ActionMenuItem[];
   connectionActions?: (host: HostEntry) => ActionMenuItem[];
   onCreateGroup?: () => void;
+  // スマホのグループのシートに出す、フォルダとグループの食い違い（folderNoticesOf）。
+  folderNotices?: readonly Notice[];
+  onDeclareGroup?: (name: string) => void;
   topBar?: ReactNode;
   bottomBar?: ReactNode;
 };
@@ -83,6 +86,8 @@ export function ConnectionTree({
   groupActions,
   connectionActions,
   onCreateGroup,
+  folderNotices = [],
+  onDeclareGroup,
   topBar = null,
   bottomBar = null,
 }: ConnectionTreeProps) {
@@ -325,6 +330,11 @@ export function ConnectionTree({
               item.onSelect();
             },
           }))}
+          folderNotices={folderNotices}
+          {...(onDeclareGroup === undefined ? {} : { onDeclare: (name: string) => {
+            setGroupSheetOpen(false);
+            onDeclareGroup(name);
+          } })}
           onClose={() => setGroupSheetOpen(false)}
         />
       ) : null}

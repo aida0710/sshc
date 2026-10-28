@@ -6,6 +6,8 @@ import { useToast } from "../ui/useToast";
 import { identityKey } from "./connectionBrowser";
 import { duplicateAliasOf } from "./duplicateAlias";
 import { groupAfterRename } from "./connectionMoves";
+import { buildGroupTree, decorateHosts, type GroupNode } from "./connectionTreeIndex";
+import { ordersAfterMove, type MoveDirection } from "./groupOrder";
 import type { HostSelection, Scope } from "./ConnectionTree";
 import type { GroupDialogState } from "./GroupDialogs";
 import { listGroups } from "./groupListing";
@@ -27,7 +29,19 @@ type ConnectionListActionsOptions = {
   deleteConnections: (hosts: readonly HostIdentity[]) => Promise<boolean>;
   // 保存できたかを返す。
   duplicateConnection: (host: HostIdentity) => Promise<boolean>;
+  reorderGroups: (orders: ReadonlyMap<string, number>) => Promise<boolean>;
+  setGroupHidden: (name: string, hidden: boolean) => Promise<boolean>;
 };
+
+// siblingsOf は、グループと同じ親の下に並ぶグループの名前を、表示の順に返す。
+function siblingsOf(nodes: readonly GroupNode[], name: string): string[] | null {
+  if (nodes.some((node) => node.name === name)) return nodes.map((node) => node.name);
+  for (const node of nodes) {
+    const found = siblingsOf(node.children, name);
+    if (found !== null) return found;
+  }
+  return null;
+}
 
 // useConnectionListActions は、Connections の一覧で選んでいるもの（グループの絞り込み、複数選択）と、
 // 一覧の「…」や帯から開くダイアログの状態を持つ。ダイアログで確かめたあとの書き込みは呼び手の関数を使う。
@@ -42,6 +56,8 @@ export function useConnectionListActions({
   moveConnections,
   deleteConnections,
   duplicateConnection,
+  reorderGroups,
+  setGroupHidden,
 }: ConnectionListActionsOptions) {
   const t = useTranslate();
   const showToast = useToast();
@@ -56,6 +72,7 @@ export function useConnectionListActions({
   const [renamingConnection, setRenamingConnection] = useState<HostEntry | null>(null);
 
   const groupListings = useMemo(() => (overview === null ? [] : listGroups(overview)), [overview]);
+  const groupTree = useMemo(() => (overview === null ? [] : buildGroupTree(overview, decorateHosts(overview))), [overview]);
   const hostsByKey = useMemo(
     () => new Map((overview?.hosts ?? []).filter((host) => host.identity.alias !== "").map((host) => [identityKey(host.identity), host])),
     [overview],
@@ -107,10 +124,23 @@ export function useConnectionListActions({
   function groupActionItems(name: string, { inEditor = false }: { inEditor?: boolean } = {}): ActionMenuItem[] {
     const memberCount = groupListings.find((group) => group.name === name)?.count ?? 0;
     const edit: ActionMenuItem[] = inEditor ? [] : [{ label: t("tree.editGroup"), onSelect: () => openGroupEditor(name) }];
+    const siblings = siblingsOf(groupTree, name) ?? [name];
+    const move = (direction: MoveDirection) => {
+      const orders = ordersAfterMove(siblings, name, direction);
+      if (orders !== null) void reorderGroups(orders);
+    };
+    const hidden = overview?.metadata.groups?.find((group) => group.name === name)?.hidden === true;
+    // 直下に接続先があるグループを隠すと、その接続先も一覧から見えなくなるので、隠せるのは入れ物のグループだけ。
+    const directMembers = overview?.hosts.filter((host) => host.identity.alias !== "" && (host.group ?? "") === name).length ?? 0;
     return [
       { label: t("tree.newSubgroup"), onSelect: () => setGroupDialog({ kind: "create", parent: name }) },
       { label: t("tree.rename"), onSelect: () => setGroupDialog({ kind: "rename", name }), disabled: movesDisabled },
       ...edit,
+      { label: t("tree.moveGroupUp"), onSelect: () => move("up"), disabled: siblings[0] === name },
+      { label: t("tree.moveGroupDown"), onSelect: () => move("down"), disabled: siblings.at(-1) === name },
+      hidden
+        ? { label: t("tree.showGroup"), onSelect: () => void setGroupHidden(name, false) }
+        : { label: t("tree.hideGroup"), onSelect: () => void setGroupHidden(name, true), disabled: directMembers > 0, title: directMembers > 0 ? t("tree.hideNeedsEmptyGroup") : undefined },
       { label: t("tree.deleteEllipsis"), tone: "danger", onSelect: () => setGroupDialog({ kind: "delete", name, memberCount }), disabled: movesDisabled },
     ];
   }
