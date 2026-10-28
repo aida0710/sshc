@@ -26,7 +26,7 @@ sshc is a local terminal application for SSH and local shells. It combines SFTP 
 - Parse `~/.ssh/config`, `Include` and `Match`
 - Preserve comments, ordering and whitespace while editing
 - Search, organize, create, duplicate, and rename connections in [Connections and groups](/en/connections/manage)
-- Search hosts, configuration files, snippets and settings with `Ctrl/Cmd+K`
+- Search hosts, configuration files, snippets and settings with command search (**Search everything** or `Ctrl/Cmd+K`)
 - Use ProxyJump, keys, and saved credentials along the same resolved route
 - Run a configured `ProxyCommand` locally and use its standard input and output as the SSH transport
 - Keep the same aliases available to regular ssh, VS Code, Codex, and other OpenSSH clients
