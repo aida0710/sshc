@@ -1,4 +1,5 @@
 import type { ConflictReport, DiffLine, FileDiff, SavePreview } from "../api/config";
+import { ConfigDiagnosticList } from "../sshconfig/ConfigDiagnosticList";
 import type { Problem } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
@@ -66,15 +67,7 @@ export function SavePreviewPanel({
         <Band tone="danger">{saveProblemMessage(problem, t)}</Band>
       )}
 
-      {problem?.diagnostics === undefined ? null : (
-        <ul className="flex flex-col gap-1">
-          {problem.diagnostics.map((diagnostic, index) => (
-            <li key={`${diagnostic.code}-${index}`} className="text-xs text-danger">
-              {`${diagnostic.severity}: ${diagnostic.code} ${diagnostic.path ?? ""}${diagnostic.line === undefined ? "" : `:${diagnostic.line}`}`}
-            </li>
-          ))}
-        </ul>
-      )}
+      {problem?.diagnostics === undefined ? null : <ConfigDiagnosticList diagnostics={problem.diagnostics} />}
 
       {conflict === null ? null : (
         <div className="flex flex-col gap-2">

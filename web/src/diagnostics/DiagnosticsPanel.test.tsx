@@ -339,8 +339,10 @@ describe("DiagnosticsPanel", () => {
     });
     render(<DiagnosticsPanel api={api} />);
 
-    expect(await screen.findByText(/include_cycle/)).toBeInTheDocument();
-    expect(screen.getByText(/This file includes itself/)).toBeInTheDocument();
+    expect(await screen.findByText(
+      "This Include reads a file that is already being read (a loop): This file includes itself. (~/.ssh/conf.d/10-home.conf:3)",
+    )).toBeInTheDocument();
+    expect(screen.queryByText(/include_cycle/)).not.toBeInTheDocument();
   });
 
   it("diagnoses a fixed host without asking for an alias", async () => {
