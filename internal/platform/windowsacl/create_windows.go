@@ -68,41 +68,15 @@ func OpenOrCreateFileAt(directory *os.File, name string) (*os.File, error) {
 	if directory == nil || name == "" || name != filepath.Base(name) || strings.ContainsAny(name, `/\\`) {
 		return nil, os.ErrInvalid
 	}
-	descriptor, userSID, err := newPrivateSecurityDescriptor(false)
-	if err != nil {
-		return nil, err
-	}
-	objectName, err := windows.NewNTUnicodeString(name)
-	if err != nil {
-		return nil, err
-	}
-	attributes := &windows.OBJECT_ATTRIBUTES{
-		Length:             uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})),
-		RootDirectory:      windows.Handle(directory.Fd()),
-		ObjectName:         objectName,
-		Attributes:         windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE,
-		SecurityDescriptor: descriptor,
-	}
-	var handle windows.Handle
-	status := windows.IO_STATUS_BLOCK{}
-	err = windows.NtCreateFile(
-		&handle,
-		windows.GENERIC_READ|windows.GENERIC_WRITE|windows.READ_CONTROL|windows.WRITE_DAC|windows.DELETE|windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE,
-		attributes,
-		&status,
-		nil,
-		0,
-		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
-		windows.FILE_OPEN_IF,
-		windows.FILE_NON_DIRECTORY_FILE|windows.FILE_SYNCHRONOUS_IO_NONALERT,
-		0,
-		0,
-	)
+	handle, err := OpenRelative(windows.Handle(directory.Fd()), name, RelativeOpen{
+		Access:        windows.GENERIC_READ | windows.GENERIC_WRITE | windows.READ_CONTROL | windows.WRITE_DAC | windows.DELETE | windows.FILE_READ_ATTRIBUTES | windows.SYNCHRONIZE,
+		Disposition:   windows.FILE_OPEN_IF,
+		CreateOptions: windows.FILE_NON_DIRECTORY_FILE | windows.FILE_SYNCHRONOUS_IO_NONALERT,
+		Private:       true,
+	})
 	runtime.KeepAlive(directory)
-	runtime.KeepAlive(descriptor)
-	runtime.KeepAlive(userSID)
 	if err != nil {
-		return nil, mapNoReparseError(err)
+		return nil, err
 	}
 	file := os.NewFile(uintptr(handle), filepath.Join(directory.Name(), name))
 	if file == nil {

@@ -5,18 +5,23 @@ package windowsacl
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"sshc/internal/platform/nofollow"
 )
 
 var (
 	ErrUnexpectedOwner = errors.New("private Windows object has an unexpected owner")
 	ErrUnexpectedType  = errors.New("private Windows object has an unexpected type")
-	ErrReparsePoint    = errors.New("private Windows object is a reparse point")
-	ErrInvalidACL      = errors.New("private Windows object does not have the required ACL")
+	// ErrReparsePoint は nofollow.ErrSymlinkPath でもある。Unix で symlink に当たったときと
+	// 同じ errors.Is で、呼び出し側が見分けられるようにする。
+	ErrReparsePoint = fmt.Errorf("private Windows object is a reparse point: %w", nofollow.ErrSymlinkPath)
+	ErrInvalidACL   = errors.New("private Windows object does not have the required ACL")
 )
 
 // RestrictDirectory は末尾の reparse point を追わずにディレクトリを開き、その
