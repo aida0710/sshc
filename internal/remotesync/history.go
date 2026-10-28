@@ -185,12 +185,7 @@ func (s *Service) History(ctx context.Context, syncKey string) (HistoryView, err
 	if err != nil {
 		return HistoryView{}, err
 	}
-	sort.Slice(infos, func(i, j int) bool {
-		if infos[i].LastModified.Equal(infos[j].LastModified) {
-			return infos[i].Key > infos[j].Key
-		}
-		return infos[i].LastModified.After(infos[j].LastModified)
-	})
+	sortSnapshotsNewestFirst(infos)
 
 	view := HistoryView{
 		CheckedAt: s.now(), HeadRevision: liveManifest.Revision,
@@ -347,4 +342,15 @@ func entriesByPath(entries []Entry) map[string]Entry {
 		byPath[entry.Path] = entry
 	}
 	return byPath
+}
+
+// sortSnapshotsNewestFirst は、スナップショットを新しい順に並べる。同じ時刻なら、名前の
+// 大きい方を先にして、並びを毎回同じにする。
+func sortSnapshotsNewestFirst(infos []objectstore.ObjectInfo) {
+	sort.Slice(infos, func(i, j int) bool {
+		if infos[i].LastModified.Equal(infos[j].LastModified) {
+			return infos[i].Key > infos[j].Key
+		}
+		return infos[i].LastModified.After(infos[j].LastModified)
+	})
 }

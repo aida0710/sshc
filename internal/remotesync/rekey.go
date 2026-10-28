@@ -182,19 +182,8 @@ func (s *Service) resolveKeyRecovery(ctx context.Context, binding remoteBinding,
 		return true, err
 	}
 	if etag == journal.OldETag {
-		current, err := s.readState()
-		if err != nil {
+		if err := s.adoptRecoveredETag(binding.config, etag, nil); err != nil {
 			return true, err
-		}
-		if !stateMatchesTarget(current, binding.config) || current.Base == nil {
-			return true, ErrRecoveryRequired
-		}
-		current.ETag = etag
-		if err := s.writeState(current); err != nil {
-			return true, errors.Join(ErrRecoveryRequired, err)
-		}
-		if err := s.removeKeyRecovery(); err != nil {
-			return true, errors.Join(ErrRecoveryRequired, err)
 		}
 		return false, nil
 	}
@@ -207,19 +196,8 @@ func (s *Service) resolveKeyRecovery(ctx context.Context, binding remoteBinding,
 	}
 	bodyDigest := Digest(object.Body)
 	if bodyDigest == journal.OldCiphertextSHA256 {
-		current, err := s.readState()
-		if err != nil {
+		if err := s.adoptRecoveredETag(binding.config, etag, nil); err != nil {
 			return true, err
-		}
-		if !stateMatchesTarget(current, binding.config) || current.Base == nil {
-			return true, ErrRecoveryRequired
-		}
-		current.ETag = etag
-		if err := s.writeState(current); err != nil {
-			return true, errors.Join(ErrRecoveryRequired, err)
-		}
-		if err := s.removeKeyRecovery(); err != nil {
-			return true, errors.Join(ErrRecoveryRequired, err)
 		}
 		// The remote conclusively contains the original ciphertext, so the
 		// encrypted vault must remain on the original key. ReplaceKey may now
@@ -240,24 +218,36 @@ func (s *Service) resolveKeyRecovery(ctx context.Context, binding remoteBinding,
 	if _, _, err := Read(archive); err != nil {
 		return true, err
 	}
-	current, err := s.readState()
-	if err != nil {
+	if err := s.adoptRecoveredETag(binding.config, etag, commit); err != nil {
 		return true, err
 	}
-	if !stateMatchesTarget(current, binding.config) || current.Base == nil {
-		return true, ErrRecoveryRequired
+	return true, nil
+}
+
+// adoptRecoveredETag は、鍵の作り直しの途中で止まった同期を、接続先に今ある etag に
+// 合わせて終える。state が同じ接続先のものでなければ ErrRecoveryRequired を返す。
+// commit は、state を書いてから復旧の記録を消す前に呼ぶ（nil なら呼ばない）。
+func (s *Service) adoptRecoveredETag(target Config, etag string, commit func() error) error {
+	current, err := s.readState()
+	if err != nil {
+		return err
+	}
+	if !stateMatchesTarget(current, target) || current.Base == nil {
+		return ErrRecoveryRequired
 	}
 	current.ETag = etag
 	if err := s.writeState(current); err != nil {
-		return true, errors.Join(ErrRecoveryRequired, err)
+		return errors.Join(ErrRecoveryRequired, err)
 	}
-	if err := commit(); err != nil {
-		return true, errors.Join(ErrRecoveryRequired, err)
+	if commit != nil {
+		if err := commit(); err != nil {
+			return errors.Join(ErrRecoveryRequired, err)
+		}
 	}
 	if err := s.removeKeyRecovery(); err != nil {
-		return true, errors.Join(ErrRecoveryRequired, err)
+		return errors.Join(ErrRecoveryRequired, err)
 	}
-	return true, nil
+	return nil
 }
 
 func (s *Service) keyRecoveryPath() string {

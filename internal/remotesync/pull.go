@@ -397,10 +397,8 @@ func (s *Service) exchangeSnippets(request *storage.Request) error {
 		if err != nil {
 			return err
 		}
-		precondition := storage.Precondition{}
-		if body, err := s.workspace.FileSystem().ReadFile(local); err == nil {
-			precondition = storage.Precondition{Exists: true, Digest: storage.Digest(body)}
-		} else if !errors.Is(err, fs.ErrNotExist) {
+		precondition, err := s.localPrecondition(local)
+		if err != nil {
 			return err
 		}
 		request.Changes[index] = storage.Change{
@@ -490,10 +488,8 @@ func (s *Service) exchangeVault(request *storage.Request) error {
 		if err != nil {
 			return err
 		}
-		precondition := storage.Precondition{}
-		if body, err := s.workspace.FileSystem().ReadFile(local); err == nil {
-			precondition = storage.Precondition{Exists: true, Digest: storage.Digest(body)}
-		} else if !errors.Is(err, fs.ErrNotExist) {
+		precondition, err := s.localPrecondition(local)
+		if err != nil {
 			return err
 		}
 		request.Changes[index] = storage.Change{
@@ -593,4 +589,17 @@ func (s *Service) inspectRemoteGeneration(ctx context.Context) (remoteGeneration
 		return remoteGeneration{moved: true, etag: etag, target: target}, nil
 	}
 	return remoteGeneration{moved: etag != current.ETag, etag: etag, target: target}, nil
+}
+
+// localPrecondition は、ワークスペースの local が今の中身のままであることを、書き込みの
+// 前提条件にする。無ければ「無いこと」を前提にする。
+func (s *Service) localPrecondition(local string) (storage.Precondition, error) {
+	body, err := s.workspace.FileSystem().ReadFile(local)
+	if errors.Is(err, fs.ErrNotExist) {
+		return storage.Precondition{}, nil
+	}
+	if err != nil {
+		return storage.Precondition{}, err
+	}
+	return storage.Precondition{Exists: true, Digest: storage.Digest(body)}, nil
 }
