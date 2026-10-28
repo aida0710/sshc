@@ -235,16 +235,16 @@ describe("TerminalView", () => {
     expect(await screen.findByText("Invalid")).toBeVisible();
   });
 
-  it("requires explicit per-session opt-in before accepting OSC 52", async () => {
+  it("accepts OSC 52 only after it is turned on for every terminal", async () => {
     renderView();
     await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
     const toggle = screen.getByRole("menuitemcheckbox", { name: /OSC 52/ });
     expect(toggle).toHaveAttribute("aria-checked", "false");
     await userEvent.click(toggle);
-    expect(screen.getByText(/OSC 52 clipboard writes are allowed/)).toBeVisible();
+    expect(screen.getByText("OSC 52 clipboard writes are now allowed in every terminal.")).toBeVisible();
   });
 
-  it("reports an OSC 52 preference change for connection-level persistence", async () => {
+  it("reports an OSC 52 change so the setting for every terminal is saved", async () => {
     const onOsc52Change = vi.fn();
     render(<TerminalView session={session} osc52Enabled onOsc52Change={onOsc52Change} api={{ streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
     await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));

@@ -50,7 +50,7 @@ import { SectionView, navigationId, startSections } from "./shell/sections";
 import { sectionIcons, sectionLabels } from "./shell/sectionPresentation";
 import { TerminalScreen } from "./shell/TerminalScreen";
 import { useDeclaredConfig } from "./shell/useDeclaredConfig";
-import { useOSC52Policy } from "./shell/useOSC52Policy";
+import { useOSC52Setting } from "./shell/useOSC52Setting";
 import { useSectionHandoffs } from "./shell/useSectionHandoffs";
 import { useShellLayers } from "./shell/useShellLayers";
 import { useAppShortcuts } from "./shell/useAppShortcuts";
@@ -278,11 +278,7 @@ export function App({
     followSectionLink(event, target);
   }
 
-  const changeOSC52 = useOSC52Policy({
-    settings: terminalSettings,
-    setSettings: setTerminalSettings,
-    setHostPolicy: declared.setHostOSC52,
-  });
+  const changeOSC52 = useOSC52Setting({ settings: terminalSettings, setSettings: setTerminalSettings });
 
   // While the vault is rechecked on coming back to the page, the app is hidden and inert; the focus goes back
   // to the terminal (or whatever had it) afterwards.
@@ -430,7 +426,6 @@ export function App({
                       activeSessionId={activeSessionId}
                       settings={terminalSettings}
                       hostAppearance={declared.hostAppearance}
-                      hostOSC52={declared.hostOSC52}
                       hostVPN={declared.hostVPN}
                       api={runTargetApis.sessions}
                       runTargets={runTargets}

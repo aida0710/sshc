@@ -33,7 +33,6 @@ var (
 	ErrMetadataGroup    = errors.New("metadata group definition is invalid")
 	ErrMetadataTerminal = errors.New("metadata terminal settings are invalid")
 	ErrMetadataEncoding = errors.New("metadata terminal encoding is invalid")
-	ErrMetadataOSC52    = errors.New("metadata OSC 52 policy is invalid")
 	// ErrMetadataDuplicateHost は、同じ接続の entry が 2 つあることを表す。schema 9 より
 	// 前の形で、移行（DecodeMetadata）だけが 1 つにする。
 	ErrMetadataDuplicateHost = errors.New("metadata has two entries for one connection")
@@ -69,8 +68,6 @@ type HostMetadata struct {
 	Appearance *TerminalAppearance `json:"appearance,omitempty"`
 	// Encoding は、接続先との間で使う文字コード。空はUTF-8である。
 	Encoding string `json:"encoding,omitempty"`
-	// OSC52 は、このSSH接続だけのclipboard policyである。空は全体設定を継ぐ。
-	OSC52 string `json:"osc52,omitempty"`
 	// VPN は、この接続へ届くために通るVPNプロファイルの名前である。
 	//
 	// 空ならVPNを通らない。ssh_configには書かない。OpenSSHが解釈する語では
@@ -164,7 +161,8 @@ type EmbeddedTerminal struct {
 	// BrowserScrollbackLines はbrowserのxtermが保持する表示行数である。
 	// ScrollbackBytesはengineが再接続時に再生するbyte ringで、用途が異なる。
 	BrowserScrollbackLines int `json:"browserScrollbackLines,omitempty"`
-	// OSC52は全接続の既定。HostMetadata.OSC52が設定されていればそちらを優先する。
+	// OSC52は、すべてのターミナルで、リモートのプログラムがOSC 52でクリップボードへ書き込むのを許す。
+	// 接続先ごとの上書きは無い（以前の版が書いた hosts[].osc52 は読み飛ばす）。
 	OSC52 bool `json:"osc52,omitempty"`
 	// JISYenBackslashはJIS配列の¥キーをbackslashとして端末へ送る。
 	JISYenBackslash bool `json:"jisYenBackslash,omitempty"`
@@ -426,9 +424,6 @@ func ValidateMetadata(metadata Metadata) error {
 			if err != nil || string(canonical) != host.Encoding {
 				return ErrMetadataEncoding
 			}
-		}
-		if host.OSC52 != "" && host.OSC52 != "allow" && host.OSC52 != "deny" {
-			return ErrMetadataOSC52
 		}
 		if err := validateAppearance(host.Appearance); err != nil {
 			return err
