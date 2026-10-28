@@ -5,6 +5,8 @@ export type ClipboardAccess = {
   // writeTextAndHTML puts the same text in both forms: a rich editor pastes the
   // HTML, anything else the plain text.
   writeTextAndHTML(text: string, html: string): Promise<void>;
+  // writeItems puts every given form on the clipboard (text/plain, text/html, image/png).
+  writeItems(items: Record<string, Blob>): Promise<void>;
 };
 
 // execCommandCopy copies through a hidden text area, which has to take focus
@@ -73,5 +75,17 @@ export const clipboard: ClipboardAccess = {
     } catch {
     }
     if (!execCommandCopy(text, html)) throw new Error("clipboard_refused");
+  },
+  async writeItems(items: Record<string, Blob>) {
+    if (navigator.clipboard?.write !== undefined && typeof ClipboardItem !== "undefined") {
+      await navigator.clipboard.write([new ClipboardItem(items)]);
+      return;
+    }
+    // Without ClipboardItem only the text, and the HTML beside it, can be copied.
+    const text = await items["text/plain"]?.text();
+    if (text === undefined) throw new Error("clipboard_refused");
+    const html = await items["text/html"]?.text();
+    if (html === undefined) await clipboard.writeText(text);
+    else await clipboard.writeTextAndHTML(text, html);
   },
 };
