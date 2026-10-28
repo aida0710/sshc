@@ -3,6 +3,7 @@ import { Icon } from "../ui/icons";
 import { useTranslate } from "../i18n/context";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
+import { isScreenWakeLockSupported, saveKeepScreenAwake, useKeepScreenAwake } from "./keepScreenAwake";
 import type { PaneEdge } from "./splitView/layout";
 
 export function TerminalOverflowMenu({
@@ -33,6 +34,7 @@ export function TerminalOverflowMenu({
 }) {
   const t = useTranslate();
   const panel = useRef<HTMLDivElement>(null);
+  const keepScreenAwake = useKeepScreenAwake();
 
   useDismissibleLayer({
     open: true,
@@ -82,17 +84,27 @@ export function TerminalOverflowMenu({
       <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" title={t("terminal.copyContextHint")} onClick={action(onCopyContext)}>
         {t("terminal.copyContext")}
       </button>
-      <button
-        type="button"
-        role="menuitemcheckbox"
-        aria-checked={osc52Enabled}
-        className="flex min-h-10 w-full items-center justify-between gap-3 rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0"
-        title={t("terminal.osc52Hint")}
-        onClick={action(onToggleOsc52)}
-      >
-        <span>OSC 52</span>
-        <Icon name={osc52Enabled ? "check" : "minus"} className={`size-4 ${osc52Enabled ? "text-live" : "text-ink-faint"}`} />
-      </button>
+      <CheckboxMenuItem label="OSC 52" hint={t("terminal.osc52Hint")} checked={osc52Enabled} onSelect={action(onToggleOsc52)} />
+      {isScreenWakeLockSupported() ? (
+        <CheckboxMenuItem label={t("terminal.keepScreenAwake")} hint={t("terminal.keepScreenAwakeHint")} checked={keepScreenAwake}
+          onSelect={action(() => saveKeepScreenAwake(!keepScreenAwake))} />
+      ) : null}
     </div>
+  );
+}
+
+function CheckboxMenuItem({ label, hint, checked, onSelect }: { label: string; hint: string; checked: boolean; onSelect: () => void }) {
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={checked}
+      className="flex min-h-10 w-full items-center justify-between gap-3 rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0"
+      title={hint}
+      onClick={onSelect}
+    >
+      <span>{label}</span>
+      <Icon name={checked ? "check" : "minus"} className={`size-4 ${checked ? "text-live" : "text-ink-faint"}`} />
+    </button>
   );
 }

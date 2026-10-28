@@ -1,9 +1,23 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../i18n/context";
+import { loadKeepScreenAwake } from "./keepScreenAwake";
 import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
+
+function renderMenu(onClose = () => undefined) {
+  render(
+    <LanguageProvider>
+      <TerminalOverflowMenu osc52Enabled={false} onCopyContext={() => undefined} onToggleOsc52={() => undefined} onClose={onClose} />
+    </LanguageProvider>,
+  );
+}
+
+afterEach(() => {
+  Reflect.deleteProperty(navigator, "wakeLock");
+  window.localStorage.clear();
+});
 
 describe("TerminalOverflowMenu", () => {
   it("groups secondary terminal actions and closes after invoking one", async () => {
@@ -48,5 +62,24 @@ describe("TerminalOverflowMenu", () => {
 
     expect(close).toHaveBeenCalledOnce();
     expect(trigger).toHaveFocus();
+  });
+
+  it("keeps the screen on for every terminal of this browser from the checkbox", async () => {
+    Object.defineProperty(navigator, "wakeLock", { configurable: true, value: { request: vi.fn() } });
+    const close = vi.fn();
+    renderMenu(close);
+
+    const item = screen.getByRole("menuitemcheckbox", { name: "Keep screen on" });
+    expect(item).toHaveAttribute("aria-checked", "false");
+    await userEvent.click(item);
+
+    expect(loadKeepScreenAwake()).toBe(true);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("does not offer to keep the screen on where the browser cannot", () => {
+    renderMenu();
+
+    expect(screen.queryByRole("menuitemcheckbox", { name: "Keep screen on" })).toBeNull();
   });
 });
