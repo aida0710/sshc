@@ -15,7 +15,7 @@ The sshc terminal understands the standard escape sequences that programs alread
 
 ## Pane titles
 
-When a program sets a title with a sequence such as `ESC ] 0 ; name BEL`, the pane header, the session list, and the command palette all show that name. Titles sent by a remote shell over SSH are recorded by the engine and applied the same way.
+When a program sets a title with a sequence such as `ESC ] 0 ; name BEL`, the pane header, the session list, and command search all show that name. Titles sent by a remote shell over SSH are recorded by the engine and applied the same way.
 
 - While you have pinned a pane name, program titles never overwrite it. Choose **Use automatic name** to show the program title or the connection alias again.
 - When a program clears its title, the pane falls back to the connection alias or shell name.

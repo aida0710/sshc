@@ -11,7 +11,7 @@ Connections uses a group tree, a host list, and a detail pane. Drag the column d
 
 ## Find a connection
 
-The default order is by name. Search matches alias, address, user, and group. `Ctrl/Cmd+K` searches hosts, remote files, Snippets, and settings across the app. A host result menu opens its details directly.
+The default order is by name. Search matches alias, address, user, and group. Command search (`Ctrl/Cmd+K`) searches hosts, remote files, Snippets, and settings across the app. A host result menu opens its details directly.
 
 Home Quick Connect prioritizes recently connected hosts, then sorts unused entries by name. Panel/list preference is saved in the browser.
 

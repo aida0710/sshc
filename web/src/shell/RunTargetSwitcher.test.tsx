@@ -132,7 +132,7 @@ describe("RunTargetSwitcher", () => {
 
   it("shows the engine's version, Vault and sessions, and restarts it after saying its sessions end", async () => {
     // A compatible engine of another version answers its status; only the
-    // version line says that this computer differs.
+    // version line says that this machine differs.
     const user = userEvent.setup();
     const control = vi.fn(async () => ({ generation: 1 }));
     const actionLog = vi.fn(async () => engineActionLog({ action: "restart", output: "restarted sshc.service" }));
@@ -145,7 +145,7 @@ describe("RunTargetSwitcher", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Engine on r540" });
     await within(dialog).findByText("v0.51.0");
-    expect(within(dialog).getByText("this computer runs v0.53.0")).toBeInTheDocument();
+    expect(within(dialog).getByText("this machine runs v0.53.0")).toBeInTheDocument();
     expect(within(dialog).queryByText(/Cannot connect to r540/)).not.toBeInTheDocument();
     expect(within(dialog).getByText("locked")).toBeInTheDocument();
 
@@ -206,11 +206,11 @@ describe("EngineInfoDialog", () => {
     const api = enginesApi({ status });
     render(<EngineInfoDialog alias="r540" targets={targets({ api })} onClose={vi.fn()} />);
     const dialog = screen.getByRole("dialog", { name: "Engine on r540" });
-    const prompt = "Cannot connect to r540 because its sshc version does not work with this computer’s. Update it?";
+    const prompt = "Cannot connect to r540 because its sshc version does not work with this machine’s. Update it?";
     expect(await within(dialog).findByText(prompt)).toBeInTheDocument();
     expect(within(dialog).getAllByText("Version")).toHaveLength(1);
     expect(within(dialog).getByText("v0.51.0")).toBeInTheDocument();
-    expect(within(dialog).getByText("this computer runs v0.53.0")).toBeInTheDocument();
+    expect(within(dialog).getByText("this machine runs v0.53.0")).toBeInTheDocument();
     expect(within(dialog).queryByText("Vault")).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Update" }));
     const confirmation = screen.getByRole("dialog", { name: "Update sshc on r540?" });

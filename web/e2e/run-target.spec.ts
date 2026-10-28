@@ -3,7 +3,7 @@ import { changeDisplayLanguage, expect, openApplication, openSection, test } fro
 
 const localVersion = "v0.53.0";
 const remoteVersion = "v0.51.0";
-const incompatibleHeading = "The sshc on bastion does not work with this computer’s";
+const incompatibleHeading = "The sshc on bastion does not work with this machine’s";
 const vaultPassword = "bastion vault password";
 const sessionsPath = "/api/v1/engines/bastion/terminal/sessions";
 
@@ -315,7 +315,7 @@ test("uses a compatible engine of another version without a panel", async ({ pag
   await page.getByRole("button", { name: "Engine information…", exact: true }).click();
   const information = page.getByRole("dialog", { name: "Engine on bastion", exact: true });
   await expect(information.getByRole("definition").filter({ hasText: remoteVersion })).toBeVisible();
-  await expect(information.getByText(`this computer runs ${localVersion}`, { exact: true })).toBeVisible();
+  await expect(information.getByText(`this machine runs ${localVersion}`, { exact: true })).toBeVisible();
 });
 
 test("says the host is being reached while a session opens, and why it could not be", async ({ page, installation }) => {
