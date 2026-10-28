@@ -1,10 +1,11 @@
+import { segmentClass, segmentedStrip } from "./segmentedStyle";
 import { activateTabFromKeyboard } from "./tabKeyboard";
 
 export type SegmentedTab<T extends string> = { value: T; label: string };
 
 // SegmentedTabs is a second level of tabs inside a page or a panel (Settings > Terminal, the views of a
-// connection's Advanced): the names side by side in a sunken strip, the chosen one raised on the card's
-// colour. The page draws the panel itself; tabId and panelId tie the two together for screen readers.
+// connection's Advanced). It looks like Segmented (segmentedStyle.ts) but is a tab list: the page draws
+// the panel itself, and tabId and panelId tie the two together for screen readers.
 export function SegmentedTabs<T extends string>({
   label,
   tabs,
@@ -22,7 +23,7 @@ export function SegmentedTabs<T extends string>({
 }) {
   const values = tabs.map((tab) => tab.value);
   return (
-    <div role="tablist" aria-label={label} className="inline-flex gap-0.5 rounded-[9px] bg-well p-[3px]">
+    <div role="tablist" aria-label={label} className={segmentedStrip}>
       {tabs.map((tab, index) => {
         const selected = tab.value === value;
         return (
@@ -36,9 +37,7 @@ export function SegmentedTabs<T extends string>({
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(tab.value)}
             onKeyDown={(event) => activateTabFromKeyboard(event, index, values, onChange)}
-            className={`h-7 rounded-[7px] px-3.5 text-[13px] transition-colors ${
-              selected ? "bg-sidebar text-ink shadow-[0_1px_2px_rgba(0,0,0,0.25)]" : "text-ink-muted hover:text-ink"
-            }`}
+            className={segmentClass(selected)}
           >
             {tab.label}
           </button>
