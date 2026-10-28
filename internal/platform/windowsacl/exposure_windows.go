@@ -116,19 +116,18 @@ func accessEntryOf(header *windows.ACCESS_ALLOWED_ACE) accessEntry {
 // 所有者を入れるのは、それがこのトークンのものと言えるときだけである。
 // 書き込みの側（restrictNativeHandle）と同じく ownedByThisToken で判断する。
 func principalsNotOthers(owner *windows.SID) ([]string, error) {
-	me, err := currentUserSID()
+	me, err := CurrentUserSID()
 	if err != nil {
 		return nil, err
 	}
-	system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	trusted, err := trustedPrincipals(me)
 	if err != nil {
 		return nil, err
 	}
-	administrators, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
-	if err != nil {
-		return nil, err
+	notOthers := make([]string, 0, len(trusted)+1)
+	for _, principal := range trusted {
+		notOthers = append(notOthers, principal.String())
 	}
-	notOthers := []string{me.String(), system.String(), administrators.String()}
 	mine, err := ownedByThisToken(owner)
 	if err != nil {
 		return nil, err

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 
+	"sshc/internal/platform/windowsacl"
+
 	"golang.org/x/sys/windows"
 )
 
@@ -35,11 +37,11 @@ func verifyPipeOwner(handle windows.Handle) error {
 	if owner == nil {
 		return ErrUntrustedPipeOwner
 	}
-	currentUser, err := windows.GetCurrentProcessToken().GetTokenUser()
+	currentUser, err := windowsacl.CurrentUserSID()
 	if err != nil {
 		return fmt.Errorf("read the current user: %w", err)
 	}
-	if !isTrustedPipeOwner(owner, currentUser.User.Sid) {
+	if !isTrustedPipeOwner(owner, currentUser) {
 		return fmt.Errorf("%w: %s", ErrUntrustedPipeOwner, owner)
 	}
 	return nil
@@ -54,8 +56,5 @@ func verifyPipeOwner(handle windows.Handle) error {
 // agent の pipe は、そのユーザー自身が持ち主になる。LocalService や
 // NetworkService で動くサービスに鍵を預ける理由は無いので含めない。
 func isTrustedPipeOwner(owner, currentUser *windows.SID) bool {
-	if owner.IsWellKnown(windows.WinLocalSystemSid) || owner.IsWellKnown(windows.WinBuiltinAdministratorsSid) {
-		return true
-	}
-	return currentUser != nil && owner.Equals(currentUser)
+	return windowsacl.IsTrustedPrincipal(owner, currentUser)
 }
