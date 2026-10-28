@@ -7,19 +7,17 @@ import (
 	"strings"
 )
 
-// Matches the terminal API bound and avoids resolving unbounded input paths.
-const localWorkingDirectoryLimit = 4096
-
 var ErrInvalidLocalWorkingDirectory = errors.New("local working directory is unavailable")
 
 // ResolveLocalWorkingDirectory resolves a directory on the engine machine.
 // Its result is passed as the process working directory, never shell input.
 func ResolveLocalWorkingDirectory(candidate string) (string, error) {
-	if candidate == "" || len(candidate) > localWorkingDirectoryLimit || strings.ContainsRune(candidate, 0) {
+	if !isDirectoryText(candidate) {
 		return "", ErrInvalidLocalWorkingDirectory
 	}
 	directory := filepath.FromSlash(candidate)
-	if !filepath.IsAbs(directory) {
+	// The checks come before os.Stat, which would open a network volume.
+	if !filepath.IsAbs(directory) || !onLocalDrive(directory) {
 		return "", ErrInvalidLocalWorkingDirectory
 	}
 	cleaned := filepath.Clean(directory)
