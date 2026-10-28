@@ -2,16 +2,14 @@ package httpserver
 
 import (
 	"bytes"
-	"context"
 	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
-	"sshc/internal/api"
 	"sshc/internal/secret"
 	"sshc/internal/snippets"
-	"sshc/internal/terminal"
+	"sshc/internal/terminalopen"
 )
 
 // startupFixture は、alias「production」に起動スニペットを割り当てた snippets.Service と、
@@ -58,7 +56,7 @@ func TestAStartupSnippetIsSentWhileTheDestinationIsUnchanged(t *testing.T) {
 
 	got := prepareStartupSnippet(fixture.service, logger, "production")
 
-	if got != (StartupSnippet{Command: "cd /srv/app"}) {
+	if got != (terminalopen.StartupSnippet{Command: "cd /srv/app"}) {
 		t.Fatalf("startup = %#v", got)
 	}
 	if records.Len() != 0 {
@@ -75,7 +73,7 @@ func TestAStartupSnippetForAChangedDestinationIsHeldBackAndTheTerminalIsTold(t *
 
 	got := prepareStartupSnippet(fixture.service, logger, "production")
 
-	if got != (StartupSnippet{Notice: startupDestinationChangedNotice}) {
+	if got != (terminalopen.StartupSnippet{Notice: startupDestinationChangedNotice}) {
 		t.Fatalf("startup = %#v", got)
 	}
 	if !strings.Contains(records.String(), "level=WARN") {
@@ -98,7 +96,7 @@ func TestALockedLibraryDoesNotWarnAboutAStartupSnippetOnEveryConnection(t *testi
 
 	got := prepareStartupSnippet(service, logger, "production")
 
-	if got != (StartupSnippet{}) {
+	if got != (terminalopen.StartupSnippet{}) {
 		t.Fatalf("startup = %#v, want nothing to send or say", got)
 	}
 	if strings.Contains(records.String(), "level=WARN") {
@@ -106,29 +104,5 @@ func TestALockedLibraryDoesNotWarnAboutAStartupSnippetOnEveryConnection(t *testi
 	}
 	if !strings.Contains(records.String(), "level=DEBUG") {
 		t.Errorf("a locked library left no trace: %s", records.String())
-	}
-}
-
-// 送らなかったことの案内は、コマンドの代わりに接続のたびの知らせとして渡す。Ready を
-// 待ってからターミナルへ書くのは terminal.Session である（sendStartup）。
-func TestAHeldBackStartupSnippetIsHandedOverAsANoticeWithoutACommand(t *testing.T) {
-	handlers := TerminalHandlers{
-		Connect: func(context.Context, string, terminal.Size) (terminal.Process, error) {
-			return newScriptedPTY(), nil
-		},
-		Startup: func(string) StartupSnippet {
-			return StartupSnippet{Notice: startupDestinationChangedNotice}
-		},
-	}
-	alias := "production"
-	spec, err := handlers.spec(api.OpenTerminalSessionRequest{Kind: api.OpenTerminalSessionRequestKindSsh, Alias: &alias}, terminal.Size{Cols: 80, Rows: 24})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	got := spec.Startup()
-
-	if got.Notice != startupDestinationChangedNotice || len(got.Commands) != 0 {
-		t.Fatalf("startup = %#v, want only the notice", got)
 	}
 }

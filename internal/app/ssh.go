@@ -17,7 +17,6 @@ import (
 	"sshc/internal/application"
 	"sshc/internal/connectionlog"
 	"sshc/internal/effective"
-	"sshc/internal/httpserver"
 	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
 	"sshc/internal/platform/nativepath"
@@ -26,6 +25,7 @@ import (
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalopen"
 	"sshc/internal/textencoding"
 	"sshc/internal/totp"
 )
@@ -172,7 +172,7 @@ func appendAliases(listed []string, target sshclient.Target) []string {
 }
 
 // connector は、埋め込みターミナルが開く対話セッションである。
-func (p sshParts) connector() httpserver.Connector {
+func (p sshParts) connector() terminalopen.Connector {
 	return func(ctx context.Context, alias string, size terminal.Size) (terminal.Process, error) {
 		target, err := p.target(alias)
 		if err != nil {

@@ -1,17 +1,11 @@
 package httpserver
 
 import (
-	"context"
-	"errors"
 	"net/http"
 
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
-	"sshc/internal/platform"
-	"sshc/internal/terminal"
-	"sshc/internal/terminalrestore"
-	"sshc/internal/terminalworkspace"
 )
 
 func registerTerminalRestoreRoutes(engine *echo.Echo, handlers TerminalHandlers) {
@@ -52,7 +46,7 @@ func (h TerminalHandlers) Restore(c *echo.Context) error {
 	}
 	result := api.TerminalRestoreResult{}
 	for _, saved := range offer {
-		if h.reopen(c.Request().Context(), saved) != nil {
+		if _, err := h.opener().Reopen(c.Request().Context(), saved); err != nil {
 			result.Failed++
 			continue
 		}
@@ -67,48 +61,4 @@ func (h TerminalHandlers) DeclineRestore(c *echo.Context) error {
 		return unexpectedProblem(c, "terminal_restore_failed", err)
 	}
 	return c.NoContent(http.StatusNoContent)
-}
-
-// reopen opens one saved session. What changed since it was saved is let go
-// rather than refused: a removed workspace becomes default, a directory that
-// is gone becomes the start directory, and a shell profile this machine no
-// longer has becomes the default shell.
-func (h TerminalHandlers) reopen(ctx context.Context, saved terminalrestore.Session) error {
-	request := api.OpenTerminalSessionRequest{Kind: api.OpenTerminalSessionRequestKind(saved.Kind)}
-	if saved.Alias != "" {
-		request.Alias = &saved.Alias
-	}
-	if saved.ShellProfile != "" {
-		request.ProfileId = &saved.ShellProfile
-	}
-	if saved.WorkingDirectory != "" {
-		request.Cwd = &saved.WorkingDirectory
-	}
-	spec, err := h.spec(request, terminal.Size{})
-	if errors.Is(err, terminal.ErrInvalidRemoteWorkingDirectory) || errors.Is(err, terminal.ErrInvalidLocalWorkingDirectory) {
-		request.Cwd = nil
-		spec, err = h.spec(request, terminal.Size{})
-	}
-	if errors.Is(err, platform.ErrUnknownShellProfile) {
-		request.ProfileId = nil
-		spec, err = h.spec(request, terminal.Size{})
-	}
-	if err != nil {
-		return err
-	}
-	spec.Workspace = saved.Workspace
-	if h.requireWorkspace(saved.Workspace) != nil {
-		spec.Workspace = terminalworkspace.DefaultID
-	}
-	session, err := h.Registry.Open(ctx, spec)
-	if err != nil {
-		return err
-	}
-	if saved.PinnedTitle != "" {
-		_ = session.Rename(saved.PinnedTitle)
-	}
-	if saved.Kind == terminal.KindSSH && h.Connected != nil {
-		session.WhenConnected(func() { h.Connected(saved.Alias) })
-	}
-	return nil
 }
