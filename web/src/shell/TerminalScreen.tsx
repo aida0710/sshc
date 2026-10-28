@@ -118,7 +118,7 @@ export function TerminalScreen({
           copyOnSelect={settings.copyOnSelect ?? true}
           rightClickPaste={settings.rightClickPaste ?? true}
           webgl={settings.webgl ?? true}
-          onExit={() => terminalSessions.markExited(session.id)}
+          onExit={(exit) => terminalSessions.markExited(session.id, exit)}
           onReconnect={() => terminalSessions.reconnect(session.id)}
           onStopReconnect={() => terminalSessions.stopReconnect(session.id)}
           onOpenRemotePath={onOpenRemotePath}

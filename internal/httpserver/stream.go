@@ -29,6 +29,8 @@ type exitMessage struct {
 	Exit struct {
 		Code   int    `json:"code"`
 		Signal string `json:"signal"`
+		// ConnectionLost は、プログラムではなく SSH の接続が終わったことを表す。
+		ConnectionLost bool `json:"connectionLost,omitempty"`
 	} `json:"exit"`
 }
 
@@ -147,6 +149,7 @@ func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Con
 		if info := session.Exit(); info != nil {
 			var message exitMessage
 			message.Exit.Code, message.Exit.Signal = info.Code, info.Signal
+			message.Exit.ConnectionLost = info.TransportLost
 			if encoded, err := json.Marshal(message); err == nil {
 				writeFrame(ctx, connection, websocket.MessageText, encoded)
 			}
