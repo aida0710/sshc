@@ -148,3 +148,35 @@ test("moves a session to another workspace by dragging it onto the workspace", a
     await navigation.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/workspace-after-drag.png` });
   }
 });
+
+// Like the group headings of the connection list, a workspace's name stays under the Workspaces heading while
+// its sessions scroll by.
+test("keeps a workspace's name under the Workspaces heading while its sessions scroll", async ({ page, installation }) => {
+  const workspaces = [
+    { id: "default", name: "", hidden: false, builtIn: true },
+    { id: "w-gpu", name: "GPU", hidden: false, builtIn: false },
+  ];
+  const sessions = Array.from({ length: 16 }, (_, index) => ({
+    id: `s${index}`, kind: "shell", workspaceId: index < 8 ? "default" : "w-gpu", title: `Session ${index + 1}`,
+    startedAt: "2026-10-28T00:00:00Z", state: "connected", problem: "", forwards: [],
+  }));
+  await page.route("**/api/v1/terminal/sessions**", (route) => new URL(route.request().url()).pathname.endsWith("/stream")
+    ? route.fulfill({ status: 404, json: {} })
+    : route.fulfill({ json: { sessions, maxSessions: 50 } }));
+  await page.route("**/api/v1/terminal/workspaces", (route) => route.fulfill({ json: { workspaces, maxWorkspaces: 16 } }));
+  await page.setViewportSize({ width: 1280, height: 640 });
+  await openApplication(page, installation);
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await expect(navigation.getByText("Session 16")).toBeAttached({ timeout: 20_000 });
+
+  const list = page.locator("[data-navigation-scroll]");
+  const heading = navigation.getByText("Workspaces", { exact: true });
+  const main = navigation.getByRole("button", { name: /^Main/ });
+  await list.evaluate((element) => { element.scrollTop = 120; });
+  const headingBox = (await heading.boundingBox())!;
+  const listBox = (await list.boundingBox())!;
+  const mainBox = (await main.boundingBox())!;
+  expect(Math.abs(headingBox.y - listBox.y)).toBeLessThan(8);
+  expect(mainBox.y).toBeGreaterThanOrEqual(headingBox.y + headingBox.height - 2);
+  expect(mainBox.y).toBeLessThan(headingBox.y + headingBox.height + 16);
+});

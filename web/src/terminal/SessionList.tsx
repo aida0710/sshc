@@ -285,10 +285,11 @@ export function SessionList({
                       </span>
                     </button>
                   )}
-                  {/* On a PC-sized screen the actions show only on the selected or hovered row, over the end
-                      of the name line. The phone layout keeps them in the row, always shown. */}
-                  <div className={`flex shrink-0 items-center gap-0.5 desktop-layout:absolute desktop-layout:right-1.5 desktop-layout:top-[2px] desktop-layout:rounded-md ${
-                    isSelected ? "desktop-layout:bg-select-fill" : `desktop-layout:bg-hover ${revealOnHover}`
+                  {/* Where a pointer can hover (hover-reveal), the actions show only on the selected or hovered row,
+                      over the end of the name line. Elsewhere (a phone, a touch-only screen) they stay in the row,
+                      always shown, so they never cover the name. */}
+                  <div className={`flex shrink-0 items-center gap-0.5 hover-reveal:absolute hover-reveal:right-1.5 hover-reveal:top-[2px] hover-reveal:rounded-md ${
+                    isSelected ? "hover-reveal:bg-select-fill" : `hover-reveal:bg-hover ${revealOnHover}`
                   }`}>
                     <button
                       type="button"

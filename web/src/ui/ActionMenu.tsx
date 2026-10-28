@@ -5,10 +5,11 @@ import { useAnchoredMenu } from "./useAnchoredMenu";
 import { useDismissibleLayer } from "./useDismissibleLayer";
 import { useMenuKeyboard } from "./useMenuKeyboard";
 
-// revealOnHover は、行やカードの「…」を、PC の大きさの画面では乗せたとき（とキーボードで触れたとき）
-// だけ出し、スマホの組み方と、載せられる入力が1つも無い画面（any-hover: none）では常に出すための
-// class である。行やカードの側に group/row を付けて使う。
-export const revealOnHover = "opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 group-focus-within/row:opacity-100 mobile-layout:opacity-100 [@media(any-hover:none)]:opacity-100";
+// revealOnHover は、行やカードの「…」を、載せられる PC の画面（hover-reveal）では乗せたとき（とキーボードで
+// 触れたとき）だけ出し、それ以外（スマホの組み方、タッチだけの画面）では常に出すための class である。行やカードの
+// 側に group/row を付けて使う。「…」の下に重なるもの（件数、グループ名）は、hover-reveal のときだけ隠れ、
+// それ以外では「…」の分の場所を空けて並ぶ。
+export const revealOnHover = "transition-opacity duration-150 hover-reveal:opacity-0 hover-reveal:group-hover/row:opacity-100 hover-reveal:group-focus-within/row:opacity-100";
 
 export type ActionMenuItem = {
   label: string;
