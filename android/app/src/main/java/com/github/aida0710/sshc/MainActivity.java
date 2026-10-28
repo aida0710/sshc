@@ -34,7 +34,6 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Toast;
 
@@ -59,6 +58,11 @@ public final class MainActivity extends ComponentActivity {
     private static final int NOTIFICATION_PERMISSION_REQUEST = 22;
     private static final int FOLDER_CHOOSER_REQUEST = 23;
     private static final String NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked";
+    /** ページの帯の夜と昼の色。web/src/index.css の --ui-toolbar と同期し、ページ読込前の色差を防ぐ。 */
+    private static final int CHROME_NIGHT = 0xFF15171B;
+    private static final int CHROME_DAY = 0xFFFFFFFF;
+    /** 失敗の画面で、［コピー］と［やり直す］のあいだを詰める間隔。 */
+    private static final int RETRY_GAP_DP = 8;
 
     private WebView webView;
     private boolean bound;
@@ -599,23 +603,9 @@ public final class MainActivity extends ComponentActivity {
 
     /** renderer異常を真っ白な画面にせず、engineを維持したまま再読込できるようにする。 */
     private void showWebViewRecovery() {
-        int gap = dp(16);
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        content.setPadding(dp(24), dp(32), dp(24), dp(32));
-
-        TextView title = new TextView(this);
-        title.setText(R.string.webview_recovery_title);
-        title.setTextSize(20);
-        content.addView(title, matchWidthWrapHeight());
-
-        TextView explanation = new TextView(this);
-        explanation.setText(R.string.webview_recovery_body);
-        explanation.setTextSize(15);
-        LinearLayout.LayoutParams explanationLayout = matchWidthWrapHeight();
-        explanationLayout.setMargins(0, gap, 0, 0);
-        content.addView(explanation, explanationLayout);
+        NativeScreenContent content = new NativeScreenContent(this).centredVertically();
+        content.title(R.string.webview_recovery_title);
+        content.paragraph(R.string.webview_recovery_body);
 
         Button reload = new Button(this);
         reload.setText(R.string.webview_recovery_reload);
@@ -623,10 +613,8 @@ public final class MainActivity extends ComponentActivity {
         reload.setOnClickListener(view -> {
             if (lastEntrance != null) showEntrance(lastEntrance);
         });
-        LinearLayout.LayoutParams reloadLayout = matchWidthWrapHeight();
-        reloadLayout.setMargins(0, gap, 0, 0);
-        content.addView(reload, reloadLayout);
-        setContentView(frame(content));
+        content.add(reload, NativeScreenContent.GAP_DP);
+        setContentView(frame(content.view()));
         showNativeScreenColours();
     }
 
@@ -660,7 +648,7 @@ public final class MainActivity extends ComponentActivity {
 
     private void paintSystemBars(String appearance) {
         boolean dark = "dark".equals(appearance);
-        int colour = dark ? 0xFF15171B : 0xFFFFFFFF;
+        int colour = dark ? CHROME_NIGHT : CHROME_DAY;
         getWindow().setStatusBarColor(colour);
         getWindow().setNavigationBarColor(colour);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) getWindow().setNavigationBarDividerColor(colour);
@@ -707,31 +695,16 @@ public final class MainActivity extends ComponentActivity {
                 Build.VERSION.RELEASE, Build.VERSION.SDK_INT,
                 Build.MANUFACTURER, Build.MODEL,
                 String.join(", ", Arrays.asList(Build.SUPPORTED_ABIS)));
-        int gap = dp(16);
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(24), dp(32), dp(24), dp(32));
-
-        TextView title = new TextView(this);
-        title.setText(message);
-        title.setTextSize(20);
-        content.addView(title, matchWidthWrapHeight());
-
-        TextView explanation = new TextView(this);
-        explanation.setText(R.string.failure_explanation);
-        explanation.setTextSize(15);
-        LinearLayout.LayoutParams explanationLayout = matchWidthWrapHeight();
-        explanationLayout.setMargins(0, gap, 0, 0);
-        content.addView(explanation, explanationLayout);
+        NativeScreenContent content = new NativeScreenContent(this);
+        content.title(message);
+        content.paragraph(R.string.failure_explanation);
 
         TextView diagnostics = new TextView(this);
         diagnostics.setText(report);
         diagnostics.setTextIsSelectable(true);
         diagnostics.setTextSize(14);
         diagnostics.setTypeface(android.graphics.Typeface.MONOSPACE);
-        LinearLayout.LayoutParams diagnosticsLayout = matchWidthWrapHeight();
-        diagnosticsLayout.setMargins(0, gap, 0, 0);
-        content.addView(diagnostics, diagnosticsLayout);
+        content.add(diagnostics, NativeScreenContent.GAP_DP);
 
         Button copy = new Button(this);
         copy.setText(R.string.failure_copy);
@@ -740,9 +713,7 @@ public final class MainActivity extends ComponentActivity {
             clipboard.setPrimaryClip(ClipData.newPlainText("sshc diagnostics", report));
             Toast.makeText(this, R.string.failure_copied, Toast.LENGTH_SHORT).show();
         });
-        LinearLayout.LayoutParams copyLayout = matchWidthWrapHeight();
-        copyLayout.setMargins(0, gap, 0, 0);
-        content.addView(copy, copyLayout);
+        content.add(copy, NativeScreenContent.GAP_DP);
 
         Button retry = new Button(this);
         retry.setText(R.string.failure_retry);
@@ -757,24 +728,13 @@ public final class MainActivity extends ComponentActivity {
                 retry.setText(R.string.failure_retry);
             }
         });
-        LinearLayout.LayoutParams retryLayout = matchWidthWrapHeight();
-        retryLayout.setMargins(0, dp(8), 0, 0);
-        content.addView(retry, retryLayout);
+        content.add(retry, RETRY_GAP_DP);
 
         ScrollView scroll = new ScrollView(this);
-        scroll.addView(content, new ScrollView.LayoutParams(
+        scroll.addView(content.view(), new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
         setContentView(frame(scroll));
         showNativeScreenColours();
-    }
-
-    private LinearLayout.LayoutParams matchWidthWrapHeight() {
-        return new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     /** system bar、display cutout、IME の inset を padding に反映する。 */
@@ -810,7 +770,7 @@ public final class MainActivity extends ComponentActivity {
      */
     private int chromeColour() {
         int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        return night == Configuration.UI_MODE_NIGHT_YES ? 0xFF15171B : 0xFFFFFFFF;
+        return night == Configuration.UI_MODE_NIGHT_YES ? CHROME_NIGHT : CHROME_DAY;
     }
 
     /**
