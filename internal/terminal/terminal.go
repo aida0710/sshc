@@ -326,6 +326,11 @@ const (
 	MinBrowserScrollbackLines     = 1000
 	MaxBrowserScrollbackLines     = 100000
 	DefaultBrowserScrollbackLines = 5000
+	// 裏に残すターミナルの数の範囲と既定。1つごとにブラウザのスクロールバックを
+	// メモリに持つ（5,000 行で数 MB）。
+	MinRetainedTerminals     = 1
+	MaxRetainedTerminals     = 99
+	DefaultRetainedTerminals = 3
 
 	// 字の大きさは、このプロセスが何かに使う値ではない。PTY は px を知らない。
 	MinFontSize = 8

@@ -252,6 +252,23 @@ test("keeps the whole scrollback of a session shown again, past what the engine 
   await expect(page.getByText(/no longer in the engine replay buffer/)).toHaveCount(0);
 });
 
+test("keeps as many terminals hidden as the setting says", async ({ page, installation }) => {
+  await installation.write(
+    "sshc/metadata.json",
+    JSON.stringify({ schemaVersion: 9, embeddedTerminal: { retainedTerminals: 1 } }),
+  );
+  await openApplication(page, installation);
+  const panel = await openSessionList(page);
+  const rows = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
+  for (let opened = 1; opened <= 3; opened += 1) {
+    await openLocalShell(page);
+    await expect(rows).toHaveCount(opened);
+  }
+
+  // The two shown before the last one would both stay with the default of 3; the setting keeps one.
+  await expect(page.locator("[data-split-view-kept]")).toHaveCount(1);
+});
+
 test("keeps the link and stops a program flooding the terminal at once on Ctrl+C", async ({ page, installation }) => {
   test.skip(process.platform === "win32", "yes is POSIX here");
   await openApplication(page, installation);

@@ -3,6 +3,7 @@ import type { TerminalAppearance, TerminalSettings } from "../api/settings";
 import type { TerminalSession, TerminalSessionsApi } from "../api/terminalSessions";
 import { resolveAppearance } from "../terminal/appearance";
 import { TerminalSplitView } from "../terminal/splitView/TerminalSplitView";
+import { defaultRetainedTerminals } from "../terminal/splitView/retainedSessions";
 import type { SplitViewController } from "../terminal/splitView/useSplitView";
 import type { RemotePathAction } from "../sftp/SFTPPanel";
 import type { TerminalSessionsState } from "../terminal/sessions";
@@ -132,7 +133,7 @@ export function TerminalScreen({
   return <div className="relative h-full">
     {/* What the refusing engine listed before cannot be used, so it is kept out of reach. */}
     <div className="h-full" inert={refusal !== null}>
-      <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} renderTerminal={renderTerminal} />
+      <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} retainedTerminals={settings.retainedTerminals ?? defaultRetainedTerminals} renderTerminal={renderTerminal} />
     </div>
     {runTarget !== null && refusal === null && terminalSessions.opening ? <RunTargetConnectingPanel alias={runTarget} /> : null}
     {runTarget === null || refusal === null ? null : <RunTargetRefusalPanel

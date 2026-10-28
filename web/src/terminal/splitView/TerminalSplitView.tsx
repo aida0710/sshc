@@ -21,9 +21,11 @@ const previewClass = {
   bottom: "inset-x-0 bottom-0 h-1/2",
 };
 
-export function TerminalSplitView({ splitView, sessions, renderTerminal }: {
+export function TerminalSplitView({ splitView, sessions, retainedTerminals, renderTerminal }: {
   splitView: SplitViewController;
   sessions: TerminalSession[];
+  // retainedTerminals is how many terminals shown recently stay hidden behind the panes.
+  retainedTerminals: number;
   renderTerminal: (session: TerminalSession, headerActions: ReactNode) => ReactNode;
 }) {
   const t = useTranslate();
@@ -34,7 +36,7 @@ export function TerminalSplitView({ splitView, sessions, renderTerminal }: {
   const multiple = panes.length > 1;
   const singleVisible = compact || state.focusMode;
   const sessionById = new Map(sessions.map((session) => [session.id, session]));
-  const retained = useRetainedSessions(panes.map((pane) => pane.sessionId), new Set(sessionById.keys()));
+  const retained = useRetainedSessions(panes.map((pane) => pane.sessionId), new Set(sessionById.keys()), retainedTerminals);
   const selected = state.activeSessionId;
   function dropHint(swapping: boolean): string {
     if (swapping) return t("splitView.swap");
