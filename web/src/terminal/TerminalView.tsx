@@ -15,7 +15,8 @@ import { useBackgroundImage } from "./backgroundImage";
 import { clipboard } from "../ui/clipboard";
 import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
-import { linkAtPoint, type ScreenPoint } from "./tappedLink";
+import { cellAtPoint, linkAtPoint, type ScreenPoint } from "./tappedLink";
+import { attachPromptCursorClicks, trackPromptCursor, type PromptCursor } from "./promptCursor";
 import { useTouchTerminal } from "./touchMode";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
 import { attachTouchScroll } from "./touchScroll";
@@ -224,6 +225,7 @@ export function TerminalView({
   const { modifiers, tap: tapModifier, takeModifiers } = useModifierKeys();
   const send = useRef<(name: string) => void>(() => {});
   const sendInput = useRef<(text: string) => void>(() => {});
+  const promptCursor = useRef<PromptCursor | null>(null);
 
   useEffect(() => {
     setOsc52Enabled(initialOsc52Enabled);
@@ -330,6 +332,17 @@ export function TerminalView({
     // behind once the shell reports the command finished. The engine notifies
     // the end of a long command (internal/terminal/command_finished.go).
     const commandMarkers = attachCommandMarkers(view, () => setProgramProgress(noTerminalProgress));
+    // Registered after the command marks, so it sees OSC 133 before they consume it.
+    const prompt = trackPromptCursor(view);
+    promptCursor.current = prompt;
+    const detachPromptClicks = attachPromptCursorClicks({
+      container,
+      prompt,
+      cellAt: (point) => cellAtPoint(view, point),
+      hasSelection: () => view.hasSelection(),
+      enabled: () => !touchTerminalRef.current,
+      send: (keys) => sendInput.current(keys),
+    });
     const terminalLinks = attachLinkProvider(view, {
       open: openTerminalURL,
       select: selectLinkAt,
@@ -463,6 +476,9 @@ export function TerminalView({
       osc9Progress.dispose();
       inlineImages.dispose();
       commandMarkers.dispose();
+      detachPromptClicks();
+      prompt.dispose();
+      promptCursor.current = null;
       terminalLinks.dispose();
       renderer.dispose();
       unbindSearch();
@@ -489,9 +505,16 @@ export function TerminalView({
     const detachOverlay = attachSelectionOverlay(container, view, {
       onTap: (point) => {
         const link = linkAtPoint(view, point, windowsPathsRef.current);
-        if (link === null) return false;
-        selectLinkAt(link, point);
-        return true;
+        if (link !== null) {
+          selectLinkAt(link, point);
+          return true;
+        }
+        // A tap on the line being typed also moves the cursor there; it still
+        // raises the keyboard to type at the new place.
+        const cell = cellAtPoint(view, point);
+        const keys = cell === null ? null : promptCursor.current?.arrowsTo(cell) ?? null;
+        if (keys !== null) sendInput.current(keys);
+        return false;
       },
     });
     refit.current?.();
