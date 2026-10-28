@@ -17,11 +17,17 @@ Home Quick Connect prioritizes recently connected hosts, then sorts unused entri
 
 ## Groups
 
-Groups are directory-like categories. Create one with New group at the top of the group column, and use the … next to a group for New group inside, Rename, Edit, and Delete…. On a computer, right-clicking a group opens the same menu. Deleting a group asks where its connections go. Drag groups to nest them. Changes update the managed `Include` structure.
+Groups are folders: a group's connections live in `~/.ssh/connections/<group>/` and its keys in `~/.ssh/keys/<group>/`. Create one with New group at the top of the group column, and use the … next to a group for New group inside, Rename, Edit, Move up, Move down, Hide in Connections, and Delete…. On a computer, right-clicking a group opens the same menu. Deleting a group asks where its connections go. Drag groups to nest them. Changes update the managed `Include` structure.
 
-Selecting a group while no connection is open shows the group's editor on the right. User name, Port, Key, and Jump host become defaults for the connections in that group; a value set on a connection itself wins.
+Move up and Move down change the order of groups at the same level. Hide in Connections works on a group with no connections directly in it. Show hidden groups below the list brings hidden groups back into view, and Stop hiding in their … menu restores them.
 
-On narrow screens, the group button above the list opens the group list with the same … menus.
+Selecting a group while no connection is open shows the group's editor on the right. Folders lists the files in the group's folder with their connections, its keys, and the `Include` line in `~/.ssh/config` that reads the folder. User name, Port, Key, and Jump host become defaults for the connections in that group; a value set on a connection itself wins.
+
+When a folder under `~/.ssh/connections/` has no `Include` line, or a group's folder is missing, Folder checks appears above the group column. Make it a group turns a folder without an `Include` line into a group.
+
+On narrow screens, the group button above the list opens the group list with the same … menus and Folder checks.
+
+New group in the form for a new connection creates a top-level group without losing what you have typed.
 
 ## Act on several connections
 

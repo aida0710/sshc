@@ -165,6 +165,113 @@ describe("ConnectionsPage", () => {
     });
   });
 
+  describe("groups as folders", () => {
+    const group = (name: string) => ({ name, directory: `connections/${name}`, keyDirectory: `keys/${name}`, memberCount: 0, directoryPresent: true });
+    const lab = { path: "connections/lab/10-gpu.conf", absolute: "/home/tester/.ssh/connections/lab/10-gpu.conf" };
+    const threeGroups = {
+      ...overview,
+      hosts: [
+        ...overview.hosts,
+        { identity: { path: lab.path, alias: "gpu-01" }, file: lab, line: 1, patterns: ["gpu-01"], editable: true, group: "lab" },
+        { identity: { path: lab.path, alias: "gpu-02" }, file: lab, line: 4, patterns: ["gpu-02"], editable: true, group: "lab" },
+      ],
+      groups: [group("home"), group("lab"), group("work")],
+    };
+    const saved = { transactionId: "t1", written: ["sshc/metadata.json"], preview: { operation: "config.groups", diffs: [] } };
+
+    async function renderPage() {
+      render(<ToastProvider><ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} onNavigateLocation={vi.fn()} /></ToastProvider>);
+      return within(await screen.findByRole("navigation", { name: "Groups" }));
+    }
+
+    async function openGroupMenu(name: string) {
+      const user = userEvent.setup();
+      const groups = within(screen.getByRole("navigation", { name: "Groups" }));
+      await user.click(groups.getByRole("button", { name: `Actions for ${name}` }));
+      return user;
+    }
+
+    it("moves a group up with one save that numbers every sibling in its new place", async () => {
+      vi.mocked(configApi.overview).mockResolvedValue(threeGroups);
+      vi.mocked(configApi.save).mockResolvedValue(saved);
+      await renderPage();
+      let user = await openGroupMenu("home");
+      expect(screen.getByRole("menuitem", { name: "Move up" })).toBeDisabled();
+      await user.keyboard("{Escape}");
+
+      user = await openGroupMenu("lab");
+      await user.click(screen.getByRole("menuitem", { name: "Move up" }));
+      await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
+        kind: "groups",
+        groupsBase: [],
+        groups: [{ name: "lab", order: 0 }, { name: "home", order: 1 }, { name: "work", order: 2 }],
+      }));
+    });
+
+    it("hides only a group with no connections of its own, and shows hidden groups on request", async () => {
+      const hidden = { ...threeGroups, metadata: { schemaVersion: 1, groups: [{ name: "work", hidden: true }] } };
+      vi.mocked(configApi.overview).mockResolvedValueOnce(threeGroups).mockResolvedValue(hidden);
+      vi.mocked(configApi.save).mockResolvedValue(saved);
+      const groups = await renderPage();
+      let user = await openGroupMenu("lab");
+      const hideLab = screen.getByRole("menuitem", { name: "Hide in Connections" });
+      expect(hideLab).toBeDisabled();
+      expect(hideLab).toHaveAttribute("title", "A group with connections directly in it cannot be hidden.");
+      await user.keyboard("{Escape}");
+
+      user = await openGroupMenu("work");
+      await user.click(screen.getByRole("menuitem", { name: "Hide in Connections" }));
+      await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({ kind: "groups", groupsBase: [], groups: [{ name: "work", hidden: true }] }));
+      await waitFor(() => expect(groups.queryByRole("button", { name: "work" })).not.toBeInTheDocument());
+
+      await user.click(groups.getByRole("button", { name: "Show hidden groups (1)" }));
+      expect(groups.getByRole("button", { name: "work" })).toHaveTextContent("Hidden");
+      await user.click(groups.getByRole("button", { name: "Actions for work" }));
+      expect(screen.getByRole("menuitem", { name: "Stop hiding" })).toBeEnabled();
+    });
+
+    it("folds the folder checks above the groups and declares a folder as a group from there", async () => {
+      vi.mocked(configApi.overview).mockResolvedValue({
+        ...threeGroups,
+        notices: [
+          { code: "group_not_declared", path: "connections/old", detail: "old" },
+          { code: "group_file_unreached", path: "connections/old/10-old.conf" },
+        ],
+      });
+      vi.mocked(configApi.save).mockResolvedValue(saved);
+      const user = userEvent.setup();
+      const groups = await renderPage();
+      await user.click(await groups.findByText("Folder checks: 1"));
+      expect(groups.getByText("connections/old/ is not read: no Include line names it.")).toBeVisible();
+      // The file inside the folder is the same problem, so it is not listed again, beside the groups or in the pane.
+      expect(screen.queryByText(/10-old\.conf/)).not.toBeInTheDocument();
+
+      await user.click(groups.getByRole("button", { name: "Make it a group" }));
+      await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({ kind: "groups", groupsBase: [], groups: [{ name: "old" }] }));
+    });
+
+    it("lists the files and keys in the folders of the group being edited", async () => {
+      vi.mocked(configApi.overview).mockResolvedValue(threeGroups);
+      vi.mocked(keysApi.inventory).mockResolvedValue({
+        items: [
+          { id: "a", relativePath: "keys/lab/lab_ed25519", kind: "private_key", fingerprint: "SHA256:a" },
+          { id: "b", relativePath: "keys/lab/lab_ed25519.pub", kind: "public_key", fingerprint: "SHA256:a" },
+        ],
+        unreadable: [], agentDelegations: [], unresolvedReferences: [], agentAvailable: false, agentIdentities: [],
+      } as never);
+      await renderPage();
+      const user = await openGroupMenu("lab");
+      await user.click(screen.getByRole("menuitem", { name: "Edit" }));
+      const folders = within(await screen.findByRole("region", { name: "Folders" }));
+      expect(folders.getByText("connections/lab/")).toBeInTheDocument();
+      expect(folders.getByText("10-gpu.conf")).toBeInTheDocument();
+      expect(folders.getByText("gpu-01, gpu-02")).toBeInTheDocument();
+      expect(await folders.findByText("lab_ed25519")).toBeInTheDocument();
+      expect(folders.getByText(".pub")).toBeInTheDocument();
+      expect(folders.getByText("Include connections/lab/*.conf")).toBeInTheDocument();
+    });
+  });
+
   it("uses the expanded management tree instead of the quick-connect browser", async () => {
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,

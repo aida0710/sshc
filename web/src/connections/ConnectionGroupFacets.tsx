@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
-import type { Overview } from "../api/config";
+import type { Notice, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { ActionMenu, revealOnHover, type ActionMenuItem } from "../ui/ActionMenu";
 import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
@@ -11,6 +11,7 @@ import { useStoredColumnWidth, type StoredColumnWidth } from "../ui/useStoredCol
 import type { Scope } from "./ConnectionTree";
 import { buildGroupTree, decorateHosts, type GroupNode } from "./connectionTreeIndex";
 import type { ConnectionDrag } from "./useConnectionDrag";
+import { GroupFolderNotices } from "./GroupFolderNotices";
 
 // 220px は Settings のページの一覧の幅。この列は同じ位置に置く。
 const connectionGroupsWidth: StoredColumnWidth = { key: localStorageKeys.connectionGroupsWidth, fallback: 220, minimum: 112, maximum: 400 };
@@ -34,6 +35,8 @@ export function ConnectionGroupFacets({
   drag,
   groupActions,
   onCreateGroup,
+  folderNotices = [],
+  onDeclareGroup,
 }: {
   overview: Overview;
   scope: Scope;
@@ -41,17 +44,23 @@ export function ConnectionGroupFacets({
   drag: ConnectionDrag;
   groupActions?: (name: string) => ActionMenuItem[];
   onCreateGroup?: () => void;
+  // フォルダとグループの食い違い（folderNoticesOf）。Include 行の無いフォルダは onDeclareGroup でグループにする。
+  folderNotices?: readonly Notice[];
+  onDeclareGroup?: (name: string) => void;
 }) {
   const t = useTranslate();
   const [width, setWidth] = useStoredColumnWidth(connectionGroupsWidth);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  // 隠したグループ（中に接続先の無い入れ物）は、選んだときだけ一覧に出し、「…」から隠すのをやめられるようにする。
+  const [showHidden, setShowHidden] = useState(false);
   const decorated = useMemo(() => decorateHosts(overview), [overview]);
   const groupTree = useMemo(() => buildGroupTree(overview, decorated), [decorated, overview]);
   const ungrouped = decorated.filter((item) => item.group === "").length;
   // 入れ子のグループの開閉の印には、行の先頭に余白が要る。入れ子が無ければ余白を取らず、どの行も印から始める。
   const nested = overview.groups.some((group) => group.name.includes("/"));
   const gutter = nested ? <span aria-hidden="true" className="w-4 shrink-0" /> : null;
+  const hiddenCount = countHidden(groupTree);
 
   function toggle(name: string) {
     setCollapsed((current) => {
@@ -63,7 +72,8 @@ export function ConnectionGroupFacets({
   }
 
   function renderGroup(node: GroupNode, depth = 0): ReactNode {
-    if (node.hidden && node.descendantCount === 0) {
+    const tucked = node.hidden && node.descendantCount === 0;
+    if (tucked && !showHidden) {
       return <Fragment key={node.name}>{node.children.map((child) => renderGroup(child, depth))}</Fragment>;
     }
     const shut = collapsed.has(node.name);
@@ -104,13 +114,14 @@ export function ConnectionGroupFacets({
             onDragStart={(event) => drag.startDrag(event, { kind: "group", name: node.name })}
             onDragEnd={drag.endDrag}
             onClick={() => onScopeChange({ kind: "group", name: node.name })}
-            className={`${facetLook(active)} ${drag.movesDisabled ? "" : draggableCursor}`}
+            className={`${facetLook(active)} ${drag.movesDisabled ? "" : draggableCursor} ${tucked ? "opacity-60" : ""}`}
           >
             {gutter}
             <span className={`flex shrink-0 ${active && node.colour === "" ? "text-accent" : ""}`} style={node.colour === "" ? undefined : { color: node.colour }}>
               <Icon name="groups" className="size-[15px]" />
             </span>
             <span className="min-w-0 flex-1 truncate">{node.label}</span>
+            {tucked ? <span className="shrink-0 text-[11px] text-ink-faint">{t("tree.hiddenMark")}</span> : null}
             <span className={`shrink-0 font-mono text-[11.5px] font-normal text-ink-faint ${items.length === 0 ? "" : "group-hover/row:invisible group-focus-within/row:invisible"} ${openMenu === menuKey ? "invisible" : ""}`}>
               {node.descendantCount}
             </span>
@@ -155,6 +166,11 @@ export function ConnectionGroupFacets({
           </button>
         )}
       </div>
+      {onDeclareGroup === undefined ? null : (
+        <div className="px-0.5 pb-2">
+          <GroupFolderNotices notices={folderNotices} onDeclare={onDeclareGroup} />
+        </div>
+      )}
       <div data-connection-facets className="flex min-h-0 min-w-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
         <button type="button" aria-label={t("tree.allConnections")} aria-pressed={allActive} onClick={() => onScopeChange({ kind: "all" })} className={facetLook(allActive)}>
           {gutter}
@@ -171,6 +187,16 @@ export function ConnectionGroupFacets({
             <span className="shrink-0 font-mono text-[11.5px] font-normal text-ink-faint">{ungrouped}</span>
           </button>
         </div>
+        {hiddenCount === 0 ? null : (
+          <button
+            type="button"
+            aria-pressed={showHidden}
+            onClick={() => setShowHidden((current) => !current)}
+            className="mt-2 self-start rounded px-2 py-1 text-xs text-ink-faint hover:bg-hover hover:text-ink"
+          >
+            {t(showHidden ? "tree.hideHiddenGroups" : "tree.showHiddenGroups", { count: hiddenCount })}
+          </button>
+        )}
       </div>
       <ColumnResizeHandle
         label={t("conn.resizeGroups")}
@@ -182,4 +208,9 @@ export function ConnectionGroupFacets({
       />
     </nav>
   );
+}
+
+// countHidden は、一覧から外している隠したグループ（中に接続先が無いもの）を数える。
+function countHidden(nodes: readonly GroupNode[]): number {
+  return nodes.reduce((sum, node) => sum + (node.hidden && node.descendantCount === 0 ? 1 : 0) + countHidden(node.children), 0);
 }

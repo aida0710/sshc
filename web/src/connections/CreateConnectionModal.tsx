@@ -21,6 +21,7 @@ import { Button, Notice } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { meetsMasterPasswordMinimum } from "../secrets/masterPasswordLength";
+import { NewGroupField } from "./NewGroupField";
 
 type AuthenticationKind = CreateConnectionAuthentication["kind"];
 
@@ -36,7 +37,7 @@ export type CreateConnectionDraft = {
   keyId: string;
 };
 
-export type CreationPrerequisite = "Groups" | "Keys";
+export type CreationPrerequisite = "Keys";
 
 type CreateConnectionModalProps = {
   groups: Overview["groups"];
@@ -45,6 +46,8 @@ type CreateConnectionModalProps = {
   secrets?: Pick<ConnectionSecretsApi, "passwordVault" | "credentials" | "initialiseVault" | "unlockVault">;
   initialDraft?: CreateConnectionDraft | undefined;
   onOpenPrerequisite?: (section: CreationPrerequisite, draft: CreateConnectionDraft) => void;
+  // onCreateGroup は、グループを作れたかを返す。無ければ［新しいグループ］を出さない。
+  onCreateGroup?: (name: string) => Promise<boolean>;
   onClose: () => void;
   onCreated: (result: CreateConnectionResponse) => void;
 };
@@ -62,6 +65,7 @@ export function CreateConnectionModal({
   secrets = connectionSecretsApi,
   initialDraft,
   onOpenPrerequisite,
+  onCreateGroup,
   onClose,
   onCreated,
 }: CreateConnectionModalProps) {
@@ -328,7 +332,9 @@ export function CreateConnectionModal({
                       {groups.map((candidate) => <option key={candidate.name} value={candidate.name}>{candidate.name}</option>)}
                     </select>
                   </Field>
-                  <Button className="mt-2" onClick={() => openPrerequisite("Groups")}>{t("conn.createManageGroups")}</Button>
+                  {onCreateGroup === undefined ? null : (
+                    <NewGroupField groupNames={groups.map((candidate) => candidate.name)} onCreate={onCreateGroup} onCreated={setGroup} />
+                  )}
                 </div>
                 <div>
                   <Field label={t("conn.createHostNameRequired")}>

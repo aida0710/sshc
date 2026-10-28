@@ -56,7 +56,7 @@
 ## M5. 実 `~/.ssh` での読み取り専用リハーサル
 
 1. 本番の `~/.ssh` をコピーした使い捨て `HOME` で起動する。
-2. Connections、Config、Groups、Keys、Known Hosts、Remote Keys、Diagnostics、History の各画面を開くだけで、何も保存しない。
+2. Connections、Config、Keys、Known Hosts、Remote Keys、Diagnostics、History の各画面を開くだけで、何も保存しない。
 3. 終了後、`diff -r ~/.ssh "$work/.ssh"` が `sshc/` 配下以外で差分を出さないことを確認する。
 4. 期待: 読み取りだけで既存ファイルが 1 バイトも変わらない。
 

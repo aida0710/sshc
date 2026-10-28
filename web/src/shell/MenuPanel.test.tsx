@@ -13,7 +13,7 @@ const configuration: MenuGroup = {
   label: "shell.navConnections",
   items: [
     { key: "Config", label: "section.config", description: "menu.configDescription", icon: "config", href: "/config" },
-    { key: "Groups", label: "section.groups", description: "menu.groupsDescription", icon: "groups", href: "/groups" },
+    { key: "Keys", label: "section.keys", description: "menu.keysDescription", icon: "keys", href: "/keys" },
   ],
 };
 const settings: MenuGroup = {
