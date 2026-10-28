@@ -1028,6 +1028,9 @@ export const ja = {
   "terminal.copyContextHint":
     "制御シーケンスを除き、直近最大200行をコピーします",
   "terminal.copyContextDone": "直近のターミナル出力をコピーしました。",
+  "terminal.copyWithColors": "色つきでコピー",
+  "terminal.copyWithColorsHint": "選んだ範囲を、色とターミナルの背景を保ったまま（HTML）コピーします。文書に貼るときに使います。リンクは文字として残ります。",
+  "terminal.copyWithColorsEmpty": "先にターミナルの文字を選んでください。",
   "terminal.copyContextEmpty": "コピーできるターミナル出力がありません。",
   "terminal.keepScreenAwake": "画面を常にオン",
   "terminal.keepScreenAwakeHint":

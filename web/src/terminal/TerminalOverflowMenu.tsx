@@ -14,6 +14,7 @@ export function TerminalOverflowMenu({
   onPortForwarding,
   onOpenRemoteDirectory,
   onCopyContext,
+  onCopyWithColors,
   onSaveScrollback,
   onToggleOsc52,
   onClose,
@@ -30,6 +31,7 @@ export function TerminalOverflowMenu({
   onPortForwarding?: (() => void) | undefined;
   onOpenRemoteDirectory?: (() => void) | undefined;
   onCopyContext: () => void;
+  onCopyWithColors: () => void;
   onSaveScrollback: () => void;
   onToggleOsc52: () => void | Promise<void>;
   onClose: () => void;
@@ -112,6 +114,9 @@ export function TerminalOverflowMenu({
       )}
       <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" title={t("terminal.copyContextHint")} onClick={action(onCopyContext)}>
         {t("terminal.copyContext")}
+      </button>
+      <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" title={t("terminal.copyWithColorsHint")} onClick={action(onCopyWithColors)}>
+        {t("terminal.copyWithColors")}
       </button>
       <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onSaveScrollback)}>
         {t("terminal.saveScrollback")}

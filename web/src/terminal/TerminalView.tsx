@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
+import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
@@ -27,6 +28,7 @@ import { terminalTouchScrollTarget } from "./touchScrollTarget";
 import { KeyBar, applyModifiers, encodeKey } from "./KeyBar";
 import { useModifierKeys } from "./useModifierKeys";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
+import { selectionWithColors } from "./richCopy";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { recentBufferText } from "./buffer";
 import { attachOsc52Clipboard } from "./osc52";
@@ -199,6 +201,7 @@ export function TerminalView({
     },
   });
   const copyContext = useRef<() => void>(() => {});
+  const copyWithColors = useRef<() => void>(() => {});
   const saveScrollback = useRef<() => void>(() => {});
   const [osc52Enabled, setOsc52Enabled] = useState(initialOsc52Enabled);
   const osc52EnabledRef = useRef(initialOsc52Enabled);
@@ -306,6 +309,8 @@ export function TerminalView({
     const searchAddon = new SearchAddon({ highlightLimit: 1000 });
     view.loadAddon(fit);
     view.loadAddon(searchAddon);
+    const serializeAddon = new SerializeAddon();
+    view.loadAddon(serializeAddon);
     view.open(container);
     const inlineImages = attachInlineImages(view);
     const renderer = attachWebglWhileShown(view, {
@@ -333,6 +338,16 @@ export function TerminalView({
           lastSave = save;
         })
         .catch(() => setProblem(t("terminal.saveScrollbackFailed")));
+    };
+    copyWithColors.current = () => {
+      const copied = selectionWithColors(view, serializeAddon);
+      if (copied === null) {
+        setTerminalNotice(t("terminal.copyWithColorsEmpty"));
+        return;
+      }
+      void clipboard.writeTextAndHTML(copied.text, copied.html)
+        .then(() => setTerminalNotice(t("copy.done")))
+        .catch(() => setProblem(t("terminal.clipboardRefused")));
     };
     copyContext.current = () => {
       const text = recentBufferText(view.buffer.active);
@@ -528,6 +543,7 @@ export function TerminalView({
       sendInput.current = () => {};
       sendPaste.current = () => {};
       copyContext.current = () => {};
+      copyWithColors.current = () => {};
       saveScrollback.current = () => {};
       lastSave?.release();
     };
@@ -750,6 +766,7 @@ export function TerminalView({
               ? () => onOpenRemotePath(session.alias!, currentDirectory, "browse")
               : undefined}
             onCopyContext={() => copyContext.current()}
+            onCopyWithColors={() => copyWithColors.current()}
             onSaveScrollback={() => saveScrollback.current()}
             onToggleOsc52={async () => {
               const next = !osc52Enabled;

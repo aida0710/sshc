@@ -10,7 +10,7 @@ import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 function renderMenu(onClose = () => undefined) {
   render(
     <LanguageProvider>
-      <TerminalOverflowMenu osc52Enabled={false} onCopyContext={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={onClose} />
+      <TerminalOverflowMenu osc52Enabled={false} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={onClose} />
     </LanguageProvider>,
   );
 }
@@ -26,7 +26,7 @@ describe("TerminalOverflowMenu", () => {
     const close = vi.fn();
     render(
       <LanguageProvider>
-        <TerminalOverflowMenu osc52Enabled={false} onQuickCommands={() => undefined} onCopyContext={copy} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={close} />
+        <TerminalOverflowMenu osc52Enabled={false} onQuickCommands={() => undefined} onCopyContext={copy} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={close} />
       </LanguageProvider>,
     );
 
@@ -41,7 +41,7 @@ describe("TerminalOverflowMenu", () => {
     const close = vi.fn();
     const { unmount } = render(
       <LanguageProvider>
-        <TerminalOverflowMenu osc52Enabled={false} onRemoveFromSplit={remove} onCopyContext={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={close} />
+        <TerminalOverflowMenu osc52Enabled={false} onRemoveFromSplit={remove} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={close} />
       </LanguageProvider>,
     );
     await userEvent.click(screen.getByRole("menuitem", { name: "Remove from split view" }));
@@ -57,13 +57,26 @@ describe("TerminalOverflowMenu", () => {
     const save = vi.fn();
     render(
       <LanguageProvider>
-        <TerminalOverflowMenu osc52Enabled={false} onCopyContext={() => undefined} onSaveScrollback={save} onToggleOsc52={() => undefined} onClose={() => undefined} />
+        <TerminalOverflowMenu osc52Enabled={false} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={save} onToggleOsc52={() => undefined} onClose={() => undefined} />
       </LanguageProvider>,
     );
 
     await userEvent.click(screen.getByRole("menuitem", { name: "Save scrollback to a file" }));
 
     expect(save).toHaveBeenCalledOnce();
+  });
+
+  it("copies the selection with its colors from the menu", async () => {
+    const copy = vi.fn();
+    render(
+      <LanguageProvider>
+        <TerminalOverflowMenu osc52Enabled={false} onCopyContext={() => undefined} onCopyWithColors={copy} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={() => undefined} />
+      </LanguageProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("menuitem", { name: "Copy with colors" }));
+
+    expect(copy).toHaveBeenCalledOnce();
   });
 
   it("treats its trigger as part of the layer and restores focus on Escape", async () => {
@@ -77,7 +90,7 @@ describe("TerminalOverflowMenu", () => {
             triggerRef={trigger}
             osc52Enabled={false}
             onQuickCommands={() => undefined}
-            onCopyContext={() => undefined} onSaveScrollback={() => undefined}
+            onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined}
             onToggleOsc52={() => undefined}
             onClose={close}
           />
