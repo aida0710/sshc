@@ -40,7 +40,7 @@ func TestADirectoryThatSomeLoginShellWouldReadAsCodeIsNotTyped(t *testing.T) {
 }
 
 func TestRemoteWorkingDirectoriesOutsideTheAcceptedShapesAreRefused(t *testing.T) {
-	for _, candidate := range []string{"", "relative", "/srv/../etc", "/srv\nwhoami", "/srv\x7f", "~root", "~/", "~/../etc", "~/..", "~/a/../b", "~//etc", "//host/share"} {
+	for _, candidate := range []string{"", "relative", "/srv/../etc", "/srv\nwhoami", "/srv\x7f", "/srv/\u009b31m", "/srv/\u202etxt.exe", "~root", "~/", "~/../etc", "~/..", "~/a/../b", "~//etc", "//host/share"} {
 		if _, err := CheckRemoteWorkingDirectory(candidate); err == nil {
 			t.Errorf("accepted %q", candidate)
 		}

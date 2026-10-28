@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -19,7 +20,7 @@ const MaxWorkingDirectoryBytes = 4096
 
 // isDirectoryText reports whether a directory, reported by a shell or sent to
 // the API, is text every check below may look at further: not empty, within
-// MaxWorkingDirectoryBytes, without control characters, and not a network or
+// MaxWorkingDirectoryBytes, without control or format characters, and not a network or
 // device path. A `//host/share` or `\\host\share` value is a UNC path on Windows,
 // and merely checking that it exists connects to that host over SMB and offers
 // the user's Windows credentials to it. A shell's output decides the value, so
@@ -31,10 +32,17 @@ func isDirectoryText(directory string) bool {
 	if strings.HasPrefix(directory, "//") || strings.HasPrefix(directory, `\\`) {
 		return false
 	}
-	return strings.IndexFunc(directory, isControlCharacter) < 0
+	return strings.IndexFunc(directory, isControlOrFormatCharacter) < 0
 }
 
-func isControlCharacter(r rune) bool { return r < 0x20 || r == 0x7f }
+// isControlOrFormatCharacter covers C0, DEL and the C1 range U+0080 to U+009F,
+// which xterm.js reads as controls even when written in UTF-8 (U+009B starts a
+// CSI), and format characters such as bidirectional overrides that make a
+// path read differently from what it is. A directory goes back to the terminal
+// in a `cd` line the shell echoes, so none of them may be in it.
+func isControlOrFormatCharacter(r rune) bool {
+	return unicode.IsControl(r) || unicode.Is(unicode.Cf, r)
+}
 
 // parseOSC7Directory reads the path of `OSC 7 ; file://host/path`. The host is
 // not checked: over SSH it names the remote machine.

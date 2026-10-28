@@ -19,6 +19,7 @@ func TestOSC7DirectoryIsTheDecodedPathOfAFileURL(t *testing.T) {
 		"file://edge/home/a%0Ab":       "",
 		"file://edge//attacker/share":  "",
 		"file://edge/home/a%09b":       "",
+		"file://edge/home/a%C2%9Bb":    "",
 		"file://edge/" + strings.Repeat("a", MaxWorkingDirectoryBytes): "",
 		"not a url %": "",
 	}
