@@ -244,7 +244,6 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	if err := json.Unmarshal(contents, &metadata); err != nil {
 		return Metadata{}, err
 	}
-	fillWireGuardServers(&metadata)
 	// v3/v4→v5は追加fieldだけのmigrationである。v5は同期するキー設定を旧バージョンで消さないための境界。
 	// 旧scrollbackBytesはengineの
 	// replay bufferとして意味を変えず、browser側は未設定の既定行数から始める。
@@ -256,9 +255,8 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	// （openvpn、ikev2）のプロファイルを旧バージョンに読ませないための境界である。旧バージョンは知らない
 	// 方式を断るので、バージョンで先に断る方が、何が起きたかが利用者に分かる。
 	// v7→v8は、WireGuardのプロファイルに、Endpointのサーバー（wireguard.servers）を足す。
-	// 設定ファイルはVaultにあり、項目の形（server、peerPublicKey、address）のプロファイルは
-	// 保存し直すまで項目のまま読む（metadata_wireguard.go）。v8は、項目の無い設定ファイルの
-	// 形のプロファイルを旧バージョンに読ませないための境界である。
+	// 設定ファイルはVaultにある。v0.40.0までの項目の形（server、peerPublicKey、address）は
+	// 読まない（2026-10-28 に消した）。
 	// v8→v9は、IKEv2のサーバーのIDのうち、どのサーバーにも一致する値（`*`、`0.0.0.0`
 	// など）を外す（metadata_ikev2.go）。VPNプロファイルのbackendと違う節も外す
 	// （metadata_vpnsections.go）。v9は、空白や日本語を含むVPNプロファイル名を

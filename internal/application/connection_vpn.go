@@ -82,9 +82,6 @@ func (s *Service) VPNProfile(name string) (vpn.Profile, error) {
 }
 
 // StoredVPNProfile は、名前で保存済みのVPNプロファイルを、metadata.json に書いた形で返す。
-//
-// WireGuard の v0.40.0 までの項目は、この形にだけある。設定ファイルを組み立てる手順
-// （internal/vpnprofile）が読む。
 func (s *Service) StoredVPNProfile(name string) (VPNProfile, error) {
 	stored, _, err := s.metadata.Load()
 	if err != nil {

@@ -4225,9 +4225,6 @@ export interface components {
         };
         WireGuardProfile: {
             servers: string[];
-            server?: string;
-            peerPublicKey?: string;
-            address?: string;
         };
         BackgroundSettings: {
             capacityMiB?: number;

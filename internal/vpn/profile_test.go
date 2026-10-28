@@ -21,9 +21,25 @@ func validProfile() Profile {
 	}
 }
 
-// testWireGuardFields は、validProfile に合う設定ファイルを組み立てる項目である。
-func testWireGuardFields() WireGuardFields {
-	return WireGuardFields{Server: "vpn.example.jp:51820", PeerPublicKey: testPublicKey, Address: "10.9.9.2/32"}
+// wireGuardConfigParts は、validProfile に合う設定ファイルの項目である。項目ひとつを変えた
+// 設定ファイルを作るのに使う。
+type wireGuardConfigParts struct {
+	server, peerPublicKey, address string
+	dns                            []string
+}
+
+func validConfigParts() wireGuardConfigParts {
+	return wireGuardConfigParts{server: "vpn.example.jp:51820", peerPublicKey: testPublicKey, address: "10.9.9.2/32"}
+}
+
+// Config は、項目と秘密鍵から wg-quick の形の設定ファイルを書く。
+func (fields wireGuardConfigParts) Config(privateKey string) string {
+	lines := []string{"[Interface]", "PrivateKey = " + privateKey, "Address = " + fields.address}
+	if len(fields.dns) > 0 {
+		lines = append(lines, "DNS = "+strings.Join(fields.dns, ", "))
+	}
+	lines = append(lines, "", "[Peer]", "PublicKey = "+fields.peerPublicKey, "Endpoint = "+fields.server, "AllowedIPs = 0.0.0.0/0", "")
+	return strings.Join(lines, "\n")
 }
 
 // validSecrets は、validProfile に合う設定ファイルである。
@@ -33,7 +49,7 @@ func fixedRoute(profile Profile, secrets Secrets) RouteSource {
 }
 
 func validSecrets() Secrets {
-	return Secrets{WireGuard: &WireGuardSecrets{Config: testWireGuardFields().Config(testPrivateKey)}}
+	return Secrets{WireGuard: &WireGuardSecrets{Config: validConfigParts().Config(testPrivateKey)}}
 }
 
 func TestAProfileWithAServerAndKeysIsAccepted(t *testing.T) {
@@ -82,15 +98,15 @@ func TestAProfileIsRefusedWhenTheRouteCouldNotBeBuiltFromIt(t *testing.T) {
 }
 
 func TestSecretsAreRefusedWhenTheBackendCannotUseThem(t *testing.T) {
-	withConfig := func(fields WireGuardFields) Secrets {
+	withConfig := func(fields wireGuardConfigParts) Secrets {
 		return Secrets{WireGuard: &WireGuardSecrets{Config: fields.Config(testPrivateKey)}}
 	}
-	shortPublicKey, missingPort, otherServer := testWireGuardFields(), testWireGuardFields(), testWireGuardFields()
-	shortPublicKey.PeerPublicKey = "short"
-	missingPort.Server = "vpn.example.jp"
-	otherServer.Server = "other.example.jp:51820"
-	withDNS := testWireGuardFields()
-	withDNS.DNS = []string{"10.9.9.53"}
+	shortPublicKey, missingPort, otherServer := validConfigParts(), validConfigParts(), validConfigParts()
+	shortPublicKey.peerPublicKey = "short"
+	missingPort.server = "vpn.example.jp"
+	otherServer.server = "other.example.jp:51820"
+	withDNS := validConfigParts()
+	withDNS.dns = []string{"10.9.9.53"}
 	for _, test := range []struct {
 		name    string
 		secrets Secrets
@@ -99,7 +115,7 @@ func TestSecretsAreRefusedWhenTheBackendCannotUseThem(t *testing.T) {
 	}{
 		{"設定ファイルが無い", Secrets{}, "secrets.wireguardConfig", ReasonRequired},
 		{"秘密鍵の形式が違う", Secrets{WireGuard: &WireGuardSecrets{
-			Config: testWireGuardFields().Config("not-a-key"),
+			Config: validConfigParts().Config("not-a-key"),
 		}}, "secrets.wireguardConfig", ReasonFormat},
 		{"相手の公開鍵が短い", withConfig(shortPublicKey), "secrets.wireguardConfig", ReasonFormat},
 		{"サーバーのポートが無い", withConfig(missingPort), "secrets.wireguardConfig", ReasonFormat},
@@ -120,7 +136,7 @@ func TestSecretsAreRefusedWhenTheBackendCannotUseThem(t *testing.T) {
 		t.Fatalf("ValidateSecrets = %v", err)
 	}
 	profile := validProfile()
-	profile.DNS = withDNS.DNS
+	profile.DNS = withDNS.dns
 	if err := profile.ValidateSecrets(withConfig(withDNS)); err != nil {
 		t.Fatalf("設定ファイルと同じ DNS のプロファイル: ValidateSecrets = %v", err)
 	}
@@ -287,21 +303,6 @@ func TestTheStoredSecretsKeepTheirKeys(t *testing.T) {
 		if !strings.Contains(document, `"`+key+`"`) {
 			t.Errorf("記録に %q が無い: %s", key, document)
 		}
-	}
-}
-
-// v0.40.0 までの項目の形の記録から、秘密鍵を読める。設定ファイルの形の記録には無い。
-func TestTheFieldsPrivateKeyIsReadFromAnOldRecord(t *testing.T) {
-	key, err := DecodeWireGuardFieldsPrivateKey(`{"wireguardPrivateKey":"` + testPrivateKey + `"}`)
-	if err != nil || key != testPrivateKey {
-		t.Fatalf("DecodeWireGuardFieldsPrivateKey = %q, %v", key, err)
-	}
-	record, err := EncodeSecrets(validSecrets())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if key, err := DecodeWireGuardFieldsPrivateKey(record); err != nil || key != "" {
-		t.Fatalf("設定ファイルの形の記録: DecodeWireGuardFieldsPrivateKey = %q, %v", key, err)
 	}
 }
 

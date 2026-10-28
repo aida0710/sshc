@@ -28,7 +28,6 @@ type VPNProfileChange struct {
 //
 // 識別子は新しく決める。削除したプロファイルと同じ名前でも、前の識別子は引き継がない。
 func (s *Service) PlanVPNProfileCreate(profile VPNProfile) (VPNProfileChange, error) {
-	profile = profile.withoutWireGuardFields()
 	if _, err := profile.Profile(); err != nil {
 		return VPNProfileChange{}, err
 	}
@@ -51,11 +50,9 @@ func (s *Service) PlanVPNProfileCreate(profile VPNProfile) (VPNProfileChange, er
 // PlanVPNProfileUpdate は、保存済みのプロファイルを置き換える変更を作る。名前が
 // 無ければ ErrUnknownVPNProfile を返す。
 //
-// 作るときも置き換えるときも、WireGuard の v0.40.0 までの項目は書かない。設定ファイルは、
-// 呼び手が同じ書き込みで Vault に置く。識別子は保存済みのものを保つので、編集しても
-// 割り当ては停止中にならない。
+// WireGuard の設定ファイルは、呼び手が同じ書き込みで Vault に置く。識別子は保存済みの
+// ものを保つので、編集しても割り当ては停止中にならない。
 func (s *Service) PlanVPNProfileUpdate(profile VPNProfile) (VPNProfileChange, error) {
-	profile = profile.withoutWireGuardFields()
 	if _, err := profile.Profile(); err != nil {
 		return VPNProfileChange{}, err
 	}

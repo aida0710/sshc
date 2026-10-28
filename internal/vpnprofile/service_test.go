@@ -116,8 +116,9 @@ func labProfile() application.VPNProfile {
 
 // labSecrets は、labProfile の設定ファイルである。
 func labSecrets() vpn.SecretsDocument {
-	fields := vpn.WireGuardFields{Server: "vpn.example.jp:51820", PeerPublicKey: testPublicKey, Address: "10.9.9.2/32"}
-	return vpn.SecretsDocument{WireGuardConfig: fields.Config(testPrivateKey)}
+	config := "[Interface]\nPrivateKey = " + testPrivateKey + "\nAddress = 10.9.9.2/32\n\n" +
+		"[Peer]\nPublicKey = " + testPublicKey + "\nEndpoint = vpn.example.jp:51820\nAllowedIPs = 0.0.0.0/0\n"
+	return vpn.SecretsDocument{WireGuardConfig: config}
 }
 
 func officeProfile() application.VPNProfile {

@@ -79,34 +79,6 @@ type L2TPProfile struct {
 type WireGuardProfile struct {
 	// Servers は、設定ファイルの Endpoint のサーバーである。一覧に出す。
 	Servers []string `json:"servers"`
-	// Server、PeerPublicKey、Address は、v0.40.0 までの項目の形で保存したプロファイルだけが
-	// 持つ（秘密鍵は Vault の wireguardPrivateKey）。経路を起動するときと、編集で開くときは、
-	// これと秘密鍵から設定ファイルを組み立てる（internal/vpnprofile）。保存し直すと、設定
-	// ファイルの形になって消える。
-	Server        string `json:"server,omitempty"`
-	PeerPublicKey string `json:"peerPublicKey,omitempty"`
-	Address       string `json:"address,omitempty"`
-}
-
-// WireGuardFields は、v0.40.0 までの項目の形のプロファイルなら、その項目を返す。
-func (stored VPNProfile) WireGuardFields() (vpn.WireGuardFields, bool) {
-	settings := stored.WireGuard
-	if stored.Backend != vpn.WireGuard || settings == nil || settings.Server == "" {
-		return vpn.WireGuardFields{}, false
-	}
-	return vpn.WireGuardFields{
-		Server: settings.Server, PeerPublicKey: settings.PeerPublicKey, Address: settings.Address, DNS: stored.DNS,
-	}, true
-}
-
-// withoutWireGuardFields は、v0.40.0 までの項目を落とした写しを返す。保存し直すプロファイルの設定
-// ファイルは、Vault に書く。
-func (stored VPNProfile) withoutWireGuardFields() VPNProfile {
-	if stored.WireGuard == nil {
-		return stored
-	}
-	stored.WireGuard = &WireGuardProfile{Servers: stored.WireGuard.Servers}
-	return stored
 }
 
 // Profile は、保存した設定を internal/vpn が使う形へ直す。
@@ -121,11 +93,6 @@ func (stored VPNProfile) Profile() (vpn.Profile, error) {
 	}
 	if settings := stored.WireGuard; settings != nil {
 		profile.WireGuard = &vpn.WireGuardSettings{Servers: append([]string(nil), settings.Servers...)}
-	}
-	if fields, found := stored.WireGuardFields(); found {
-		if err := fields.Validate(); err != nil {
-			return vpn.Profile{}, fmt.Errorf("%w: %w", ErrMetadataVPN, err)
-		}
 	}
 	if settings := stored.OpenConnect; settings != nil {
 		profile.OpenConnect = &vpn.OpenConnectSettings{

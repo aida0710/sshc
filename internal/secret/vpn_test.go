@@ -12,7 +12,7 @@ import (
 	"sshc/internal/storage"
 )
 
-const wireGuardRecord = `{"wireguardPrivateKey":"fixture"}`
+const wireGuardRecord = `{"wireguardConfig":"fixture"}`
 
 // newVPNSecretsService は、vault を作った service と、呼び手の commit が使う
 // storage manager を返す。
@@ -76,7 +76,7 @@ func TestVPNSecretsAreStoredAndReadBack(t *testing.T) {
 func TestRenamingVPNSecretsReplacesALeftoverRecord(t *testing.T) {
 	service, manager := newVPNSecretsService(t)
 	setVPNSecrets(t, service, manager, "tundra", wireGuardRecord)
-	setVPNSecrets(t, service, manager, "kiwi01", `{"wireguardPrivateKey":"leftover"}`)
+	setVPNSecrets(t, service, manager, "kiwi01", `{"wireguardConfig":"leftover"}`)
 
 	if _, err := service.WithVPNSecretsTransaction(secret.VPNSecretsMutation{
 		Kind: secret.VPNSecretsRename, Profile: "tundra", NewName: "kiwi01",
@@ -94,7 +94,7 @@ func TestRenamingVPNSecretsReplacesALeftoverRecord(t *testing.T) {
 // 秘密を持たないプロファイルを改名しても、移し先に残っていた記録は引き継がない。
 func TestRenamingAProfileWithoutSecretsDropsTheLeftoverRecord(t *testing.T) {
 	service, manager := newVPNSecretsService(t)
-	setVPNSecrets(t, service, manager, "kiwi01", `{"wireguardPrivateKey":"leftover"}`)
+	setVPNSecrets(t, service, manager, "kiwi01", `{"wireguardConfig":"leftover"}`)
 
 	if _, err := service.WithVPNSecretsTransaction(secret.VPNSecretsMutation{
 		Kind: secret.VPNSecretsRename, Profile: "tundra", NewName: "kiwi01",
