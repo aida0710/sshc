@@ -498,10 +498,11 @@ export function App({
         {mobileNavigationShown ? <MobileNavigation section={section} onNavigate={navigateFromMenu} /> : null}
         {state === "ready" ? <TransferNotifications /> : null}
         {/* Asked of the engine in use: a run target asks the first time it is used after
-            it restarted, once its Vault is unlocked (it lists its sessions again). */}
+            it restarted, once its Vault is unlocked (it lists its sessions again). An
+            engine that restarted between two lists names a new offer, which asks again. */}
         {state === "ready" && terminalSessions.remoteRefusal === null ? (
           <TerminalRestorePrompt
-            key={runTargets.selected ?? ""}
+            key={`${runTargets.selected ?? ""}:${terminalSessions.restoreOffer ?? ""}`}
             api={runTargetApis.restore}
             host={runTargets.selected}
             onRestored={terminalSessions.refresh}

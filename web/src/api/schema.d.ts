@@ -3303,6 +3303,7 @@ export interface components {
         TerminalSessionList: {
             sessions: components["schemas"]["TerminalSession"][];
             maxSessions: number;
+            restoreOffer?: string;
         };
         TerminalRestoreOffer: {
             sessions: components["schemas"]["TerminalRestoreSession"][];

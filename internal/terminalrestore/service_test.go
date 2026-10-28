@@ -133,3 +133,43 @@ func TestAgentSessionsAreNotOpenedAgain(t *testing.T) {
 		t.Fatalf("FromReopenings() = %+v", sessions)
 	}
 }
+
+func TestAnOfferedSessionOpenedAgainByHandIsRecordedOnce(t *testing.T) {
+	workspace := newWorkspace(t)
+	second := edge
+	second.PinnedTitle = "logs"
+	if err := newService(t, workspace).SaveOnStop([]terminalrestore.Session{edge, second, local}); err != nil {
+		t.Fatal(err)
+	}
+	// The question was closed with Esc, and the user opened one session to
+	// edge again by hand; it starts in the home directory with no name.
+	byHand := terminalrestore.Session{Kind: terminal.KindSSH, Alias: "edge", Workspace: "default", WorkingDirectory: "~"}
+	if err := newService(t, workspace).SaveOnStop([]terminalrestore.Session{byHand}); err != nil {
+		t.Fatal(err)
+	}
+	want := []terminalrestore.Session{second, local, byHand}
+	if offer := newService(t, workspace).Offer(); !reflect.DeepEqual(offer, want) {
+		t.Fatalf("offer = %+v, want %+v", offer, want)
+	}
+}
+
+func TestEachEngineStartNamesItsOfferAnew(t *testing.T) {
+	workspace := newWorkspace(t)
+	if id := newService(t, workspace).OfferID(); id != "" {
+		t.Fatalf("an engine with nothing to offer names an offer %q", id)
+	}
+	if err := newService(t, workspace).SaveOnStop([]terminalrestore.Session{edge}); err != nil {
+		t.Fatal(err)
+	}
+	first := newService(t, workspace)
+	second := newService(t, workspace)
+	if first.OfferID() == "" || first.OfferID() == second.OfferID() {
+		t.Fatalf("offer ids of two starts = %q, %q; want two different ones", first.OfferID(), second.OfferID())
+	}
+	if err := second.Decline(); err != nil {
+		t.Fatal(err)
+	}
+	if id := second.OfferID(); id != "" {
+		t.Fatalf("an answered offer is still named %q", id)
+	}
+}
