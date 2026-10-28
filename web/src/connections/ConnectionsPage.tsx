@@ -40,6 +40,7 @@ import { parseConnectionLocation } from "../routing/connectionRoute";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import { ConnectionSummary } from "./ConnectionSummary";
 import { ConnectionActionPanel, type ConnectionAction } from "./ConnectionActionPanel";
+import { PhoneBackButton } from "../ui/PhoneBackButton";
 import { identityKey } from "./connectionBrowser";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PanelState } from "../ui/PanelState";
@@ -529,15 +530,15 @@ export function ConnectionsPage({
         />
         <div className={`gap-4 ${workspaceDetailPane(compact, detailOpen)}`}>
 
-        <Button
-          className={`w-fit ${compact ? "" : "md:hidden"}`}
-          onClick={creating ? cancelCreation : () => confirmBeforeLeaving(() => {
-            listActions.closeGroupEditor();
-            clearTarget();
-          }, { connectionDraft: false })}
-        >
-          {t("conn.allConnections")}
-        </Button>
+        {compact && detailOpen ? (
+          <PhoneBackButton
+            label={t("conn.backToList")}
+            onBack={creating ? cancelCreation : () => confirmBeforeLeaving(() => {
+              listActions.closeGroupEditor();
+              clearTarget();
+            }, { connectionDraft: false })}
+          />
+        ) : null}
 
         {creating ? null : (
           <>

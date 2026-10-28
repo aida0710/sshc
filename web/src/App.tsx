@@ -182,6 +182,7 @@ export function App({
   // A page's heading shows the inspector's toggle among its actions on a wide screen, and puts its actions
   // in the top bar on a phone, where its name is hidden (see pageChrome).
   const [phoneActionsSlot, setPhoneActionsSlot] = useState<HTMLDivElement | null>(null);
+  const [phoneBackSlot, setPhoneBackSlot] = useState<HTMLDivElement | null>(null);
   const pageChrome = useMemo<PageChrome>(() => ({
     inspectorToggle: inspector === null || mobileLayout ? null : (
       <span className="shrink-0 [&>button]:h-8">
@@ -195,7 +196,8 @@ export function App({
       </span>
     ),
     phoneActionsSlot: mobileLayout ? phoneActionsSlot : null,
-  }), [inspector, inspectorOpen, inspectorTriggerRef, mobileLayout, phoneActionsSlot, setInspectorOpen]);
+    phoneBackSlot: mobileLayout ? phoneBackSlot : null,
+  }), [inspector, inspectorOpen, inspectorTriggerRef, mobileLayout, phoneActionsSlot, phoneBackSlot, setInspectorOpen]);
 
   // SFTP and Home open terminals on this machine. With an engine on an SSH
   // host chosen, the run target goes back to this machine first and the
@@ -335,6 +337,7 @@ export function App({
           {...(mobileLayout ? { inspectorToggleRef: inspectorTriggerRef } : {})}
           onToggleInspector={() => setInspectorOpen((open) => !open)}
           actionsSlotRef={setPhoneActionsSlot}
+          backSlotRef={setPhoneBackSlot}
           sectionLabels={sectionLabels}
         />}
         {requestFailure === null ? null : (

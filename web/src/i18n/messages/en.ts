@@ -2647,7 +2647,6 @@ export const en = {
   "conn.new": "Add connection",
   "conn.resizeGroups": "Resize the groups column",
   "conn.resizeList": "Resize the connection list",
-  "conn.allConnections": "All connections",
   "conn.createAnother": "Create another connection",
   "conn.cancelCreate": "Cancel",
   "conn.create": "Create connection",
@@ -2833,8 +2832,6 @@ export const en = {
     "It may have been renamed, moved or deleted since this link was created.",
   "conn.backToList": "Back to connections",
   "conn.summaryUnsaved": "Unsaved changes",
-  "conn.summaryPasswordCleanup":
-    "A stored password is assigned but is not used and will be unassigned when Basic settings are saved.",
   "conn.summaryDraftBlocksActions":
     "Save or discard this draft before using the saved connection.",
   "conn.summaryRefreshing":

@@ -2650,7 +2650,6 @@ export const ja = {
   "conn.new": "接続先を追加",
   "conn.resizeGroups": "グループ列の幅を変更",
   "conn.resizeList": "接続一覧の幅を変更",
-  "conn.allConnections": "接続一覧",
   "conn.createAnother": "接続を追加",
   "conn.cancelCreate": "キャンセル",
   "conn.create": "接続を作成",
@@ -2836,8 +2835,6 @@ export const ja = {
     "このリンクの作成後に、名前変更・移動・削除された可能性があります。",
   "conn.backToList": "接続一覧へ戻る",
   "conn.summaryUnsaved": "未保存の変更あり",
-  "conn.summaryPasswordCleanup":
-    "保存済みパスワードが割り当てられていますが、現在のSSH設定では使用されません。基本設定を保存すると、この接続への割り当てを解除します。",
   "conn.summaryDraftBlocksActions":
     "下書きを保存または破棄してから、保存済みの接続を使用してください。",
   "conn.summaryRefreshing":
