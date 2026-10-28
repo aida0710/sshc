@@ -60,12 +60,18 @@ for name in sorted(modules):
     directory = Path(module.get("Replace", module)["Dir"])
     add(name, module["Version"], "Go", "https://pkg.go.dev/" + name + "@" + module["Version"], documents(directory))
 
+# Packages published without their notice, whose repository's notice covers them:
+# @xterm/addon-serialize is built from the xterm.js repository (addons/addon-serialize),
+# which @xterm/xterm ships the MIT notice of.
+NOTICE_FROM = {"node_modules/@xterm/addon-serialize": "node_modules/@xterm/xterm"}
+
 lock = json.loads((ROOT / "web/package-lock.json").read_text())
 for relative, package in sorted(lock["packages"].items()):
     if not relative or package.get("dev"): continue
     directory = ROOT / "web" / relative
     metadata = json.loads((directory / "package.json").read_text())
-    add(metadata["name"], package["version"], "Web", "https://www.npmjs.com/package/" + metadata["name"], documents(directory), metadata.get("license"))
+    notices = documents(directory) or documents(ROOT / "web" / NOTICE_FROM.get(relative, relative))
+    add(metadata["name"], package["version"], "Web", "https://www.npmjs.com/package/" + metadata["name"], notices, metadata.get("license"))
 
 add("JetBrains Mono", "", "Font", "https://github.com/JetBrains/JetBrainsMono", [{"name": "OFL.txt", "text": (ROOT / "web/public/fonts/OFL.txt").read_text()}], "OFL-1.1")
 add("Devicon", "7330accdbc47", "Icons", "https://github.com/devicons/devicon", documents(ROOT / "web/src/ui/os-icons"), "MIT")

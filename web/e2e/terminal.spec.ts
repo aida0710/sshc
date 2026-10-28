@@ -442,6 +442,36 @@ test("starts local shells where the setting says", async ({ page, installation }
   );
 });
 
+test("copies the selection with its colors as HTML from the terminal's menu", async ({ page, context, installation }) => {
+  test.skip(process.platform === "win32", "printf is POSIX here");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+  await openSessionList(page);
+  await openLocalShell(page);
+  const screen = await typeIntoTerminal(page, "printf '\\033[31mred-canary\\033[0m\\n'");
+  await expect(screen).toContainText("red-canary", { timeout: 20_000 });
+
+  const red = drawnSpan(page, "red-canary").last();
+  const box = await red.boundingBox();
+  if (box === null) throw new Error("the colored output is not drawn");
+  await page.mouse.move(box.x + 1, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 1, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await screen.getByRole("button", { name: "More terminal actions" }).click();
+  await page.getByRole("menuitem", { name: "Copy with colors" }).click();
+
+  const read = () => page.evaluate(async () => {
+    const [first] = await navigator.clipboard.read();
+    return { types: first?.types ?? [], html: first?.types.includes("text/html") ? await (await first.getType("text/html")).text() : "" };
+  });
+  await expect.poll(async () => (await read()).html).toContain("red-canary");
+  const item = await read();
+  expect(item.types).toEqual(expect.arrayContaining(["text/plain", "text/html"]));
+  expect(item.html).toContain("red-canary");
+  expect(item.html).toMatch(/color: ?#[0-9a-f]{6}/i);
+});
+
 test("copies what was selected in the terminal as soon as selection finishes", async ({ page, context, installation }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
