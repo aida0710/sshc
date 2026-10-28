@@ -1,6 +1,7 @@
 package application
 
 import (
+	"bytes"
 	"errors"
 	"path"
 	"path/filepath"
@@ -80,6 +81,22 @@ type planned struct {
 	baseline              map[string]bool
 	preview               SavePreview
 	keyRelocations        []RelocatedKeyFile
+}
+
+// addChange は、change を計画に足す。書く前の中身を読み、保存の直前に照合する基（base）と
+// プレビューの差分にする。中身が変わらない change は足さない。書く理由もプレビューに出す理由も無い。
+func (s *Service) addChange(prepared *planned, change storage.Change) error {
+	previous, _, err := s.readFile(change.Path)
+	if err != nil {
+		return err
+	}
+	if bytes.Equal(previous, change.Contents) {
+		return nil
+	}
+	prepared.changes = append(prepared.changes, change)
+	prepared.base[filepath.Clean(change.Path)] = previous
+	prepared.preview.Diffs = append(prepared.preview.Diffs, BuildFileDiff(s.displayPath(change.Path), previous, change.Contents))
+	return nil
 }
 
 // Preview は transaction を準備し、書き込まずにその diff を返す。

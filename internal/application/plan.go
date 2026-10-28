@@ -77,14 +77,9 @@ func (s *Service) planFileEdit(graph *config.Graph, request EditRequest) (planne
 		if err != nil {
 			return planned{}, err
 		}
-		previous, _, err := s.readFile(change.Path)
-		if err != nil {
+		if err := s.addChange(&prepared, change); err != nil {
 			return planned{}, err
 		}
-		prepared.changes = append(prepared.changes, change)
-		prepared.base[filepath.Clean(change.Path)] = previous
-		prepared.preview.Diffs = append(prepared.preview.Diffs,
-			BuildFileDiff(s.displayPath(change.Path), previous, change.Contents))
 	}
 
 	if request.Alias != "" {

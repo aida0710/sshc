@@ -210,16 +210,11 @@ func (s *Service) planKeyRelocation(inventory *keys.Inventory, request KeyReloca
 	if err != nil {
 		return planned{}, KeyRelocateResult{}, err
 	}
-	prepared.changes = changes
 	result.References = rewritten
 	for _, change := range changes {
-		previous, _, readErr := s.readFile(change.Path)
-		if readErr != nil {
-			return planned{}, KeyRelocateResult{}, readErr
+		if err := s.addChange(&prepared, change); err != nil {
+			return planned{}, KeyRelocateResult{}, err
 		}
-		prepared.base[filepath.Clean(change.Path)] = previous
-		prepared.preview.Diffs = append(prepared.preview.Diffs,
-			BuildFileDiff(s.displayPath(change.Path), previous, change.Contents))
 	}
 	result.Preview = prepared.preview
 	return prepared, result, nil
