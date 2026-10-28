@@ -81,6 +81,13 @@ func newSession(size terminal.Size, cancel context.CancelFunc) *Session {
 // Forwards は、このセッションが開いている転送を報告する。
 func (s *Session) Forwards() []terminal.Forward { return s.forwarded.list() }
 
+const (
+	// anyFreePort は、待ち受けるポートをこのマシンに選ばせる値である。
+	anyFreePort = "0"
+	// placeholderPort は、anyFreePort の転送の形を確かめるときに代わりに使うポートである。
+	placeholderPort = "1"
+)
+
 // StartForward opens one loopback-only local, remote or SOCKS5 forward on the existing
 // authenticated transport.
 func (s *Session) StartForward(kind, listenPort, destination string) (terminal.Forward, error) {
@@ -88,6 +95,12 @@ func (s *Session) StartForward(kind, listenPort, destination string) (terminal.F
 		spec ForwardSpec
 		err  error
 	)
+	// 0 は、このマシンが空いているポートを選ぶ一時転送である（実行先の転送を、このマシンの
+	// エンジンが取り次ぐときに使う）。設定の行には書けない値なので、検査には代わりのポートを渡す。
+	chosenByEngine := listenPort == anyFreePort && kind != terminal.ForwardRemote
+	if chosenByEngine {
+		listenPort = placeholderPort
+	}
 	switch kind {
 	case terminal.ForwardLocal:
 		spec, err = ParseLocalForward(listenPort + " " + destination)
@@ -103,6 +116,9 @@ func (s *Session) StartForward(kind, listenPort, destination string) (terminal.F
 	}
 	if err != nil {
 		return terminal.Forward{}, terminal.ErrInvalidForward
+	}
+	if chosenByEngine {
+		spec.ListenPort = anyFreePort
 	}
 	s.mutex.Lock()
 	client, closed := s.client, s.closed

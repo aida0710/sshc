@@ -763,3 +763,29 @@ func TestClosingTheSessionReleasesTheForwardedAgentSocket(t *testing.T) {
 	}
 	agentServer.waitForConnections(t, 0)
 }
+
+// 0 を求めると、このマシンが空いているポートを選び、選んだポートを待ち受けとして答える。
+// 実行先の転送を、このマシンのエンジンが取り次ぐときに使う。
+func TestATemporaryForwardOnPortZeroListensOnAFreePortAndReportsIt(t *testing.T) {
+	destination := echoServer(t)
+	process, server := forwardingSession(t, nil)
+	server.allow(destination)
+
+	controller := process.(terminal.ForwardController)
+	forward, err := controller.StartForward(terminal.ForwardLocal, "0", destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, port, err := net.SplitHostPort(forward.Listen)
+	if err != nil || host != "127.0.0.1" || port == "0" {
+		t.Fatalf("forward listens on %q, want a free port on 127.0.0.1", forward.Listen)
+	}
+	if conn, err := net.Dial("tcp", forward.Listen); err != nil {
+		t.Fatalf("the chosen port is not open: %v", err)
+	} else {
+		_ = conn.Close()
+	}
+	if _, err := controller.StartForward(terminal.ForwardRemote, "0", destination); err == nil {
+		t.Fatal("a remote forward on port 0 was accepted; the server would choose a port this machine cannot report")
+	}
+}
