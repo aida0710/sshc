@@ -213,27 +213,3 @@ func (s *Service) plainDigestAfterRekey(path string, rekey secret.TravelDigestRe
 		return "", false
 	}
 }
-
-// MigrateTravelDigest は、鍵付きにする前の版が書いた state の素の digest（vault
-// 文書とスニペットの文書）を、今の vault の鍵で鍵付きにした値へ書き換える。
-// 鍵が要るので、vault を開いたあとに呼ぶ。閉じていれば secret.ErrLocked を返す。
-//
-// vault の変更のロックの中で書くので、マスターパスワードの変更と入れ違って
-// 古い鍵の値を書くことはない。
-func (s *Service) MigrateTravelDigest() error {
-	return s.integrations.SecretMutation(func() error {
-		current, err := s.readState()
-		if err != nil {
-			return err
-		}
-		if current.Base == nil || !slices.ContainsFunc(current.Base.Files, hasPlainKeyedDigest) {
-			return nil
-		}
-		return s.writeState(current)
-	})
-}
-
-// hasPlainKeyedDigest は、鍵付きで残すべき entry が素の digest のままかを返す。
-func hasPlainKeyedDigest(entry Entry) bool {
-	return isKeyedPath(entry.Path) && !strings.HasPrefix(entry.SHA256, keyedDigestPrefix)
-}

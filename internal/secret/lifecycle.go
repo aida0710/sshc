@@ -64,26 +64,6 @@ func (s *Service) closeLocked() {
 	}
 }
 
-// SetAfterUnlock は、Unlock が vault を開いた直後に呼ぶ関数を取り付ける。vault の
-// 鍵が無いとできない移行（同期状態の digest を鍵付きにする）を、開いたときに一度
-// 行うためにある。
-func (s *Service) SetAfterUnlock(afterUnlock func()) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.afterUnlock = afterUnlock
-}
-
-// SetReportKeyBoundMigrationFailure は、ロックを解除したときの古い形の移行
-// （migrateKeyBoundArtifacts）が失敗したことを知らせる先を取り付ける。
-//
-// 移行に失敗してもロックの解除は止めない。検証に通らない平文のスニペットのように何度
-// やっても移せないものは、知らせないとマスターパスワードを変えようとするまで分からない。
-func (s *Service) SetReportKeyBoundMigrationFailure(report func(error)) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.keyBoundMigrationFailureReport = report
-}
-
 // SetAfterLock は、vault が閉じた直後に呼ぶ関数を取り付ける。vault の中の設定から
 // 組んだもの（同期先のアクセスキーとシークレット）を、閉じた vault の外に残さない
 // ためにある。
@@ -316,30 +296,11 @@ func (s *Service) refuse() {
 	sleep(delay)
 }
 
-// Unlock は passphrase で vault を開き、開けたら afterUnlock へ知らせる。
-//
-// afterUnlock は変更のロックを放してから呼ぶ。知らされた側は、vault の鍵を使う
-// 書き込み（同期状態の移行など）をこの Service を通して行ってよい。
+// Unlock は passphrase で vault を開く。
 func (s *Service) Unlock(passphrase string) error {
 	s.mutationMutex.Lock()
-	err := s.unlockHeld(passphrase)
-	s.mutationMutex.Unlock()
-	if err != nil {
-		return err
-	}
-	s.notifyUnlocked()
-	return nil
-}
-
-// notifyUnlocked は、SetAfterUnlock で取り付けた先へ、vault を開いたことを知らせる。
-// 呼び手は mutationMutex を持っていてはならない。
-func (s *Service) notifyUnlocked() {
-	s.mutex.Lock()
-	afterUnlock := s.afterUnlock
-	s.mutex.Unlock()
-	if afterUnlock != nil {
-		afterUnlock()
-	}
+	defer s.mutationMutex.Unlock()
+	return s.unlockHeld(passphrase)
 }
 
 // unlockHeld は Unlock の本体である。呼び手が mutationMutex を持っている。
@@ -392,28 +353,7 @@ func (s *Service) unlockHeld(passphrase string) error {
 		s.refusals = 0
 		s.mutex.Unlock()
 	}
-	// 旧バージョンが残した保護文書と控えは、ロックを解除したこの機会に今の形へ移す。
-	// 移せなくても（保留中の変更がある、など）ロックの解除は止めない。鍵を変える変更が
-	// 封じ直す前にもう一度移す。
-	if err := s.migrateKeyBoundArtifacts(keyBoundMigration{Key: key, Passphrase: passphrase}); err != nil {
-		s.reportKeyBoundMigrationFailure(err)
-	}
 	return nil
-}
-
-// reportKeyBoundMigrationFailure は、ロックを解除したときの移行の失敗を、
-// SetReportKeyBoundMigrationFailure で取り付けた先へ渡す。保留中の変更があって移せ
-// なかったときは、それが片付いたあとの機会に移すので渡さない。
-func (s *Service) reportKeyBoundMigrationFailure(err error) {
-	if errors.Is(err, storage.ErrPendingTransaction) {
-		return
-	}
-	s.mutex.Lock()
-	report := s.keyBoundMigrationFailureReport
-	s.mutex.Unlock()
-	if report != nil {
-		report(err)
-	}
 }
 
 // RecoverCompatibleBackup は、現在のvaultが復号後のschema不一致だった場合に限り、
@@ -472,11 +412,6 @@ func (s *Service) RecoverCompatibleBackup(passphrase string) error {
 		if keyErr != nil {
 			candidate.Destroy()
 			return keyErr
-		}
-		if migrateErr := s.migrateKeyBoundArtifacts(keyBoundMigration{Key: previous, Passphrase: passphrase}); migrateErr != nil {
-			previous.Destroy()
-			candidate.Destroy()
-			return migrateErr
 		}
 		documents, reSealErr := s.reSealKeyBoundArtifacts(keyBoundReSeal{
 			Vault: candidate, Previous: previous, Passphrase: passphrase,
@@ -538,11 +473,6 @@ func (s *Service) ResetUnsupported(passphrase string) error {
 
 	_, previous, err := envelope.Open(current, passphrase)
 	if err != nil {
-		candidate.Destroy()
-		return err
-	}
-	if err := s.migrateKeyBoundArtifacts(keyBoundMigration{Key: previous, Passphrase: passphrase}); err != nil {
-		previous.Destroy()
 		candidate.Destroy()
 		return err
 	}
