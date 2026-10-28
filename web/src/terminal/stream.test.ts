@@ -114,6 +114,18 @@ describe("openStream", () => {
     expect(onExit).toHaveBeenCalledWith({ code: -1, signal: "", connectionLost: true });
   });
 
+  it("tells the engine whether this browser shows the terminal", () => {
+    withFakeSocket();
+    const stream = openStream("one-time", "/terminal/stream", streamHandlers());
+    const socket = FakeSocket.last!;
+    socket.open();
+
+    stream.reportShown(false);
+    stream.reportShown(true);
+
+    expect(socket.sent.map((frame) => JSON.parse(String(frame)))).toEqual([{ visible: false }, { visible: true }]);
+  });
+
   it("sends keystrokes as bytes and resizes as JSON", () => {
     withFakeSocket();
     const stream = openStream("one-time", "/terminal/stream", streamHandlers());

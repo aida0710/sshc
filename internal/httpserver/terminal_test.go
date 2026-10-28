@@ -1118,6 +1118,29 @@ func readBinary(t *testing.T, connection *websocket.Conn, ctx context.Context, s
 	return received
 }
 
+// ブラウザが「ターミナルを見せていない」と知らせると、mode 2033 を有効にした
+// プログラムへ、見えていないことを知らせる。
+func TestTheBrowserSayingItHidesTheTerminalReachesTheProgram(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	_, ticket := fixture.openShell(t)
+	process := fixture.starter.last()
+	connection, _ := fixture.dial(t, ticket)
+	if connection == nil {
+		t.Fatal("the stream refused a fresh ticket")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	readReplayNotice(t, connection, ctx)
+
+	process.feed("\x1b[?2033h")
+	// A browser that has not said yet is taken to show the terminal.
+	testwait.Until(t, func() bool { return process.keystrokes() == "\x1b[?999;1n" })
+	if err := connection.Write(ctx, websocket.MessageText, []byte(`{"visible":false}`)); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Until(t, func() bool { return process.keystrokes() == "\x1b[?999;1n\x1b[?999;2n" })
+}
+
 // newTicket は、すでに開いているセッションへ繋ぎ直すためのチケットを取る。
 func (f *terminalFixture) newTicket(t *testing.T, id string, cursors ...uint64) string {
 	t.Helper()

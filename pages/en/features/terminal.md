@@ -37,6 +37,7 @@ When the sshc engine stops (an update, a restart of the computer, a manual stop)
 - Quick Commands and snippets
 - Pre-send review for pastes containing line breaks or control characters
 - OSC 52 clipboard, Kitty keyboard protocol and JIS keyboards
+- Visibility reports (mode 2033): a program that asks is told whether any browser shows the terminal, so it can stop drawing while nobody sees it. sshc answers "not visible" when no browser shows the session, when its tab is in the background, or when it is out of the split view or off the screen. A program on the server therefore learns whether someone is looking at the terminal
 - Per-connection UTF-8, Shift_JIS, EUC-JP and ISO-2022-JP
 - A 16 KiB–4 MiB engine replay buffer, 1,000–100,000 lines of browser scrollback, and configurable font size
 - WebGL rendering with an automatic DOM-renderer fallback when unavailable or when a background image is active, plus an option to disable WebGL permanently

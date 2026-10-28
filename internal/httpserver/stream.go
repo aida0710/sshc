@@ -20,13 +20,15 @@ import (
 //   - テキストフレーム、JSON の制御メッセージ。
 //
 // clientMessage は、ブラウザからの制御メッセージである。大きさを変えたか、
-// 出力をどこまで解析し終えたか（outputFlow）のどちらかを持つ。
+// 出力をどこまで解析し終えたか（outputFlow）か、ターミナルを見せているか
+// （visibility reports、internal/terminal/visibility_reports.go）を持つ。
 type clientMessage struct {
 	Resize *struct {
 		Cols int `json:"cols"`
 		Rows int `json:"rows"`
 	} `json:"resize,omitempty"`
-	Ack *uint64 `json:"ack,omitempty"`
+	Ack     *uint64 `json:"ack,omitempty"`
+	Visible *bool   `json:"visible,omitempty"`
 }
 
 type exitMessage struct {
@@ -188,6 +190,9 @@ func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Con
 			}
 			if message.Ack != nil {
 				flow.acknowledge(*message.Ack)
+			}
+			if message.Visible != nil {
+				session.SetStreamVisible(stream, *message.Visible)
 			}
 			if message.Resize == nil {
 				continue
