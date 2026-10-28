@@ -322,7 +322,8 @@ export function TerminalView({
         setTerminalNotice(t("terminal.saveScrollbackEmpty"));
         return;
       }
-      void saveFile(new Blob([`${text}\n`], { type: "text/plain;charset=utf-8" }), scrollbackFileName(terminalDisplayTitle(session), new Date()))
+      // The Android app takes a bare media type for its save dialog (NativeBridge.safeMimeType), so no charset.
+      void saveFile(new Blob([`${text}\n`], { type: "text/plain" }), scrollbackFileName(terminalDisplayTitle(session), new Date()))
         .then((save) => {
           lastSave?.release();
           lastSave = save;
