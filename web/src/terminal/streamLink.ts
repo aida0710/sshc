@@ -24,11 +24,16 @@ export const stableStreamResetMs = 10_000;
 // The waiting banner counts down in whole seconds.
 const countdownTickMs = 1000;
 
-export type StreamLinkOptions = Omit<StreamHandlers, "onReplay"> & {
+export type StreamLinkOptions = Omit<StreamHandlers, "onReplay" | "onOutput" | "onSkipped"> & {
+  // parsed is to be called once xterm.js has parsed the chunk; it acknowledges
+  // the chunk to the stream that delivered it.
+  onOutput: (chunk: Uint8Array, parsed: () => void) => void;
   // resumed is true when the stream continues from what this view had already
   // shown, after the link was offline; false for a view that starts afresh
   // (a session shown again, a reloaded page), whose screen begins at the replay.
   onReplay: (replay: ReplayReport, resumed: boolean) => void;
+  // The engine skipped output this view fell too far behind to receive.
+  onSkipped: () => void;
   sessionId: string;
   api: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath">;
   // Receives every phase change so the view can show where the link stands.
@@ -98,8 +103,13 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
           },
           onOutput: (chunk) => {
             if (muted.has(attached)) return;
-            options.onOutput(chunk);
+            options.onOutput(chunk, () => attached.acknowledge(chunk.byteLength));
             cursor = (cursor ?? 0) + chunk.byteLength;
+          },
+          onSkipped: (start) => {
+            if (muted.has(attached)) return;
+            cursor = start;
+            options.onSkipped();
           },
           onShellReplaced: () => {
             if (!muted.has(attached)) options.onShellReplaced();
