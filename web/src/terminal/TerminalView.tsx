@@ -376,10 +376,12 @@ export function TerminalView({
         }
         fitAndSync();
       },
-      onReplay: (replay) => {
+      onReplay: (replay, resumed) => {
         output.beginReplay(replay);
         if (!replay.truncated) return;
-        setTerminalNotice(t("terminal.replayTruncated"));
+        // Only a link that was offline lost output; a view shown afresh lacks
+        // only the session's oldest output.
+        setTerminalNotice(t(resumed ? "terminal.replayTruncated" : "terminal.replayTruncatedOldest"));
       },
       // Output alone keeps a pending paste: full-screen programs redraw all
       // the time, and on the focus change that opening the review causes.
