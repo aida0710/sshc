@@ -1948,7 +1948,6 @@ export const ja = {
   "orphan.entry": "{path}の{alias}",
   "orphan.noSettings": "設定なし",
   "orphan.tags": "タグ：{tags}",
-  "orphan.note": "メモ「{note}」",
   "orphan.colour": "色：{colour}",
   "orphan.reassociateWith": "{alias}を関連付け直す接続",
   "orphan.reassociatePlaceholder": "関連付け直す接続…",
@@ -2963,8 +2962,6 @@ export const ja = {
   "host.comment": "コメント",
   "host.commentNote":
     "Host行の上に設定ファイルへ書き込まれます。sshcを使わずにファイルを開いた場合にも表示されます。",
-  "host.commentFromNote":
-    "これはsshcだけが保存していたメモです。保存すると設定ファイルへ書き込まれ、sshc内のメモは削除されます。",
   "host.saveComment": "コメントを保存",
   "host.commentSaved": "コメントを保存しました。",
   "host.os": "OSアイコン",

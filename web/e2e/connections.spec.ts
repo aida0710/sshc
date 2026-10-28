@@ -695,7 +695,7 @@ test("brings the reload button into view when the reload after a save at the bot
   await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
 });
 
-test("re-associates a note whose connection is gone, without guessing", async ({
+test("re-associates settings whose connection is gone, without guessing", async ({
   page,
   installation,
 }) => {
@@ -705,7 +705,7 @@ test("re-associates a note whose connection is gone, without guessing", async ({
       schemaVersion: 9,
       groups: [{ name: "work" }],
       hosts: [
-        { identity: { path: "config", alias: "retired" }, tags: ["ci"], note: "the old builder" },
+        { identity: { path: "config", alias: "retired" }, tags: ["ci"], colour: "#f97316" },
       ],
     }),
   );
@@ -724,7 +724,8 @@ test("re-associates a note whose connection is gone, without guessing", async ({
   expect(saved.hosts).toHaveLength(1);
   expect(saved.hosts[0]).toMatchObject({
     identity: { path: "config", alias: "bastion" },
-    note: "the old builder",
+    tags: ["ci"],
+    colour: "#f97316",
   });
   expect(saved.hosts[0].orphan).toBeUndefined();
 });

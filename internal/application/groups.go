@@ -22,7 +22,6 @@ type GroupView struct {
 	Directory        string    `json:"directory"`
 	KeyDirectory     string    `json:"keyDirectory"`
 	Colour           string    `json:"colour,omitempty"`
-	Note             string    `json:"note,omitempty"`
 	Order            int       `json:"order,omitempty"`
 	Settings         []Setting `json:"settings,omitempty"`
 	MemberCount      int       `json:"memberCount"`
@@ -95,7 +94,6 @@ func BuildGroupsView(entry *config.File, hosts []HostEntry, metadata Metadata, p
 			Directory:        GroupDirectory(name),
 			KeyDirectory:     GroupKeyDirectory(name),
 			Colour:           stored.Colour,
-			Note:             stored.Note,
 			Order:            stored.Order,
 			Settings:         stored.Settings,
 			MemberCount:      members[name],

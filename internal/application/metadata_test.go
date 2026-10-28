@@ -135,7 +135,7 @@ func TestValidateMetadataRefusesKeyMaterialAndUnknownPaths(t *testing.T) {
 	withNote := NewMetadata()
 	withNote.Hosts = []HostMetadata{{
 		Identity: HostIdentity{Path: "config", Alias: "bastion"},
-		Note:     "-----BEGIN OPENSSH PRIVATE KEY-----",
+		Tags:     []string{"-----BEGIN OPENSSH PRIVATE KEY-----"},
 	}}
 	if err := ValidateMetadata(withNote); !errors.Is(err, ErrMetadataSecret) {
 		t.Fatalf("note error = %v, want ErrMetadataSecret", err)
@@ -215,7 +215,7 @@ func TestMetadataAcceptsOnlyCanonicalTerminalEncodings(t *testing.T) {
 
 func TestMetadataCarriesOnlyPresentation(t *testing.T) {
 	metadata := NewMetadata()
-	metadata.Groups = []GroupMetadata{{Name: "work", Colour: "#f97316", Note: "the office", Order: 2}}
+	metadata.Groups = []GroupMetadata{{Name: "work", Colour: "#f97316", Order: 2}}
 	metadata.Hosts = []HostMetadata{{
 		Identity: HostIdentity{Path: "connections/work/web.conf", Alias: "web-1"},
 		Tags:     []string{"prod"},
@@ -252,7 +252,6 @@ func TestMetadataStoreRoundTripsThroughOneTransaction(t *testing.T) {
 		Identity: HostIdentity{Path: "config", Alias: "bastion"},
 		Tags:     []string{"personal"},
 		Colour:   "#22d3ee",
-		Note:     "office jump host",
 		Order:    1,
 	}}
 
@@ -289,8 +288,8 @@ func TestMetadataStoreRoundTripsThroughOneTransaction(t *testing.T) {
 func TestReconcileMetadataMarksVanishedTargetsAsOrphansWithoutGuessing(t *testing.T) {
 	metadata := NewMetadata()
 	metadata.Hosts = []HostMetadata{
-		{Identity: HostIdentity{Path: "config", Alias: "bastion"}, Note: "kept"},
-		{Identity: HostIdentity{Path: "conf.d/10-home.conf", Alias: "nas"}, Note: "vanished"},
+		{Identity: HostIdentity{Path: "config", Alias: "bastion"}, Tags: []string{"kept"}},
+		{Identity: HostIdentity{Path: "conf.d/10-home.conf", Alias: "nas"}, Tags: []string{"vanished"}},
 	}
 	present := []HostIdentity{
 		{Path: "config", Alias: "bastion"},
@@ -301,7 +300,7 @@ func TestReconcileMetadataMarksVanishedTargetsAsOrphansWithoutGuessing(t *testin
 	if reconciled.Hosts[0].Orphan {
 		t.Fatalf("present host became an orphan: %#v", reconciled.Hosts[0])
 	}
-	if !reconciled.Hosts[1].Orphan || reconciled.Hosts[1].Note != "vanished" {
+	if !reconciled.Hosts[1].Orphan || strings.Join(reconciled.Hosts[1].Tags, ",") != "vanished" {
 		t.Fatalf("orphan entry = %#v", reconciled.Hosts[1])
 	}
 	if reconciled.Hosts[1].Identity.Alias != "nas" {
@@ -315,14 +314,14 @@ func TestReconcileMetadataMarksVanishedTargetsAsOrphansWithoutGuessing(t *testin
 func TestRenameHostIdentityMovesExactlyOneEntry(t *testing.T) {
 	metadata := NewMetadata()
 	metadata.Hosts = []HostMetadata{
-		{Identity: HostIdentity{Path: "config", Alias: "bastion"}, Note: "renamed"},
-		{Identity: HostIdentity{Path: "config", Alias: "nas"}, Note: "untouched"},
+		{Identity: HostIdentity{Path: "config", Alias: "bastion"}, Tags: []string{"renamed"}},
+		{Identity: HostIdentity{Path: "config", Alias: "nas"}, Tags: []string{"untouched"}},
 	}
 	renamed := RenameHostIdentity(metadata,
 		HostIdentity{Path: "config", Alias: "bastion"},
 		HostIdentity{Path: "config", Alias: "jump"},
 	)
-	if renamed.Hosts[0].Identity.Alias != "jump" || renamed.Hosts[0].Note != "renamed" || renamed.Hosts[0].Orphan {
+	if renamed.Hosts[0].Identity.Alias != "jump" || strings.Join(renamed.Hosts[0].Tags, ",") != "renamed" || renamed.Hosts[0].Orphan {
 		t.Fatalf("renamed entry = %#v", renamed.Hosts[0])
 	}
 	if renamed.Hosts[1].Identity.Alias != "nas" {
@@ -337,11 +336,11 @@ func TestRenameHostIdentityReplacesAnEntryLeftAtTheDestination(t *testing.T) {
 	bastion := HostIdentity{Path: "config", Alias: "bastion"}
 	jump := HostIdentity{Path: "config", Alias: "jump"}
 	metadata := NewMetadata()
-	metadata.Hosts = []HostMetadata{{Identity: jump, Note: "retired", Orphan: true}, {Identity: bastion, Note: "renamed"}}
+	metadata.Hosts = []HostMetadata{{Identity: jump, Tags: []string{"retired"}, Orphan: true}, {Identity: bastion, Tags: []string{"renamed"}}}
 
 	renamed := RenameHostIdentity(metadata, bastion, jump)
 
-	if len(renamed.Hosts) != 1 || renamed.Hosts[0].Identity != jump || renamed.Hosts[0].Note != "renamed" {
+	if len(renamed.Hosts) != 1 || renamed.Hosts[0].Identity != jump || strings.Join(renamed.Hosts[0].Tags, ",") != "renamed" {
 		t.Fatalf("hosts = %#v, want only the renamed entry", renamed.Hosts)
 	}
 }
@@ -349,11 +348,11 @@ func TestRenameHostIdentityReplacesAnEntryLeftAtTheDestination(t *testing.T) {
 func TestRenameHostIdentityKeepsTheDestinationEntryWhenNothingMoves(t *testing.T) {
 	jump := HostIdentity{Path: "config", Alias: "jump"}
 	metadata := NewMetadata()
-	metadata.Hosts = []HostMetadata{{Identity: jump, Note: "retired", Orphan: true}}
+	metadata.Hosts = []HostMetadata{{Identity: jump, Tags: []string{"retired"}, Orphan: true}}
 
 	renamed := RenameHostIdentity(metadata, HostIdentity{Path: "config", Alias: "bastion"}, jump)
 
-	if len(renamed.Hosts) != 1 || renamed.Hosts[0].Note != "retired" {
+	if len(renamed.Hosts) != 1 || strings.Join(renamed.Hosts[0].Tags, ",") != "retired" {
 		t.Fatalf("hosts = %#v, want the destination entry kept", renamed.Hosts)
 	}
 }
@@ -361,9 +360,9 @@ func TestRenameHostIdentityKeepsTheDestinationEntryWhenNothingMoves(t *testing.T
 func TestRelocateHostIdentitiesReplacesEntriesLeftAtTheDestinationWithTheSameAlias(t *testing.T) {
 	metadata := NewMetadata()
 	metadata.Hosts = []HostMetadata{
-		{Identity: HostIdentity{Path: "conf.d/new.conf", Alias: "nas"}, Note: "retired", Orphan: true},
-		{Identity: HostIdentity{Path: "conf.d/new.conf", Alias: "printer"}, Note: "other host"},
-		{Identity: HostIdentity{Path: "conf.d/old.conf", Alias: "nas"}, Note: "moved"},
+		{Identity: HostIdentity{Path: "conf.d/new.conf", Alias: "nas"}, Tags: []string{"retired"}, Orphan: true},
+		{Identity: HostIdentity{Path: "conf.d/new.conf", Alias: "printer"}, Tags: []string{"other host"}},
+		{Identity: HostIdentity{Path: "conf.d/old.conf", Alias: "nas"}, Tags: []string{"moved"}},
 	}
 
 	relocated := RelocateHostIdentities(metadata, "conf.d/old.conf", "conf.d/new.conf")
@@ -375,7 +374,7 @@ func TestRelocateHostIdentitiesReplacesEntriesLeftAtTheDestinationWithTheSameAli
 		if host.Identity.Path != "conf.d/new.conf" {
 			t.Fatalf("host = %#v, want every entry under the destination", host)
 		}
-		if host.Identity.Alias == "nas" && host.Note != "moved" {
+		if host.Identity.Alias == "nas" && strings.Join(host.Tags, ",") != "moved" {
 			t.Fatalf("nas = %#v, want the moved entry", host)
 		}
 	}
