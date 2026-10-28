@@ -160,6 +160,8 @@ test("keeps the header's buttons inside a pane of a nested split, however narrow
   const bounds = (await middle.boundingBox())!;
   const close = (await middle.getByRole("button", { name: "Remove Middle from split view" }).boundingBox())!;
   expect(close.x + close.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+});
+
 test("takes one session out of a split from the terminal's menu on a phone, and keeps the session", async ({ page, installation }) => {
   await openApplication(page, installation);
   const one = await openNamedShell(page, "Build");
