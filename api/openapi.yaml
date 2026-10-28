@@ -6693,13 +6693,6 @@ components:
         line: { type: integer }
         keyword: { type: string }
         values: { type: array, items: { type: string } }
-    HostEdit:
-      type: object
-      additionalProperties: false
-      required: [path, alias]
-      properties:
-        path: { type: string }
-        alias: { type: string }
     # 一括操作で書き換えるファイルと、画面が読み込んだときのその中身。同じファイルに
     # 接続先がいくつあっても 1 回だけ送るので、要求の大きさは接続先の数に比例しない。
     FileBase:
@@ -6734,7 +6727,7 @@ components:
           minItems: 1
           maxItems: 256
           description: Targets for move_hosts or delete_hosts. Each path must have exactly one entry in bases.
-          items: { $ref: "#/components/schemas/HostEdit" }
+          items: { $ref: "#/components/schemas/HostIdentity" }
         bases:
           type: array
           minItems: 1
