@@ -84,6 +84,8 @@ type TerminalViewProps = {
   focusRequest?: number;
   headerActions?: ReactNode;
   onSplit?: (edge: PaneEdge) => void;
+  // onRemoveFromSplit takes this session out of the split it is shown in.
+  onRemoveFromSplit?: () => void;
   canSplit?: boolean;
   api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
   // onExit hands over how the program ended, as the stream reported it.
@@ -133,6 +135,7 @@ export function TerminalView({
   focusRequest,
   headerActions,
   onSplit,
+  onRemoveFromSplit,
   canSplit = false,
   api = terminalSessionsApi,
   onExit,
@@ -691,6 +694,7 @@ export function TerminalView({
           <TerminalOverflowMenu
             {...(mobile ? { onSearch: search.toggle } : {})}
             onSplit={onSplit}
+            onRemoveFromSplit={onRemoveFromSplit}
             canSplit={canSplit}
             triggerRef={overflowTrigger}
             osc52Enabled={osc52Enabled}

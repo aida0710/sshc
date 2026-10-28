@@ -101,7 +101,7 @@ test("splits real shells, routes input independently, resizes and closes only th
   expect(await terminalHostBottomOverflow(left)).toBeLessThanOrEqual(1);
   expect(await terminalHostBottomOverflow(right)).toBeLessThanOrEqual(1);
 
-  await right.getByRole("button", { name: "Close Logs pane" }).click();
+  await right.getByRole("button", { name: "Remove Logs from split view" }).click();
   await expect(page.locator("[data-split-view-pane]")).toHaveCount(1);
   await expect(left).toBeVisible();
   await expect(left.locator("[data-pane-toolbar]")).toHaveCount(0);
@@ -158,8 +158,32 @@ test("keeps the header's buttons inside a pane of a nested split, however narrow
 
   await waitForTerminalLayout(page);
   const bounds = (await middle.boundingBox())!;
-  const close = (await middle.getByRole("button", { name: "Close Middle pane" }).boundingBox())!;
+  const close = (await middle.getByRole("button", { name: "Remove Middle from split view" }).boundingBox())!;
   expect(close.x + close.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+});
+
+test("takes one session out of a split from the terminal's menu on a phone, and keeps the session", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Build");
+  const two = await openNamedShell(page, "Logs");
+  await openNamedShell(page, "Tests");
+  await page.getByRole("button", { name: "Build", exact: true }).click();
+  await splitWithMenu(page, "Logs");
+  await splitWithMenu(page, "Tests");
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(3);
+
+  // A phone shows one pane of the split at a time and has no pane header buttons.
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.getByRole("navigation", { name: "Split view panes" }).getByRole("button", { name: "Logs", exact: true }).click();
+  const logs = pane(page, two);
+  await expect(logs).toBeVisible();
+  await logs.getByRole("button", { name: "More terminal actions" }).click();
+  await page.getByRole("menuitem", { name: "Remove from split view" }).click();
+
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(2);
+  await expect(pane(page, one)).toHaveCount(1);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(sessionRow(page, "Logs")).toHaveCount(1);
 });
 
 test("preserves terminal mounts through swaps, focus mode, sidebar selection and mobile widths", async ({ page, installation }) => {
@@ -414,7 +438,7 @@ test("limits split view to four panes and shows the Japanese desktop layout", as
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) await page.screenshot({ path: `${visualDirectory}/split-view-four-panes-ja.png` });
   for (const index of [2, 3]) {
-    await pane(page, ids[index]!).getByRole("button", { name: `${titles[index]}のペインを閉じる`, exact: true }).click();
+    await pane(page, ids[index]!).getByRole("button", { name: `${titles[index]}を分割表示から外す`, exact: true }).click();
   }
   await expect(page.locator("[data-split-view-pane]")).toHaveCount(2);
   const leftBounds = (await pane(page, ids[0]!).boundingBox())!;

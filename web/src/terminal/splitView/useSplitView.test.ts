@@ -32,6 +32,19 @@ describe("split view session lifecycle", () => {
     act(() => result.current.splitView.dispatch({ type: "select-group", number: 1 }));
     expect(paneSessionIds(result.current.splitView.state.root)).toEqual(["one", "two"]);
   });
+  it("takes a session out of a split that is not the one shown, and keeps the session", () => {
+    const { result } = setup();
+    act(() => result.current.splitView.split({ sourceSessionId: "two", targetSessionId: "one", edge: "right" }));
+    act(() => result.current.splitView.split({ sourceSessionId: "three", targetSessionId: "two", edge: "bottom" }));
+    act(() => result.current.showSession("four"));
+    expect(paneSessionIds(result.current.splitView.groups[0]?.view.root ?? null)).toEqual(["one", "two", "three"]);
+
+    act(() => result.current.splitView.removeFromSplit("two"));
+
+    expect(paneSessionIds(result.current.splitView.groups[0]?.view.root ?? null)).toEqual(["one", "three"]);
+    expect(result.current.splitView.groupBySession.has("two")).toBe(false);
+    expect(paneSessionIds(result.current.splitView.state.root)).toEqual(["four"]);
+  });
   it.each(["deleted", "exited"])("keeps surviving panes when the active session is %s", (kind) => {
     const { result, rerender } = setup();
     act(() => result.current.splitView.split({ sourceSessionId: "two", targetSessionId: "one", edge: "right" }));

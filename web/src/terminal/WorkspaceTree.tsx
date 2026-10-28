@@ -34,6 +34,7 @@ type WorkspaceTreeProps = {
   onSelect: (id: string) => void;
   canSplitSession?: (id: string) => boolean;
   onSplitSession?: (id: string, edge: PaneEdge) => void;
+  onRemoveSessionFromSplit?: (id: string) => void;
   onDuplicate: (id: string) => void;
   onReorder: (order: string[]) => void;
   localShellProfiles?: LocalShellProfile[];
@@ -68,6 +69,7 @@ export function WorkspaceTree({
   onSelect,
   canSplitSession,
   onSplitSession,
+  onRemoveSessionFromSplit,
   onDuplicate,
   onReorder,
   localShellProfiles = [],
@@ -251,6 +253,7 @@ export function WorkspaceTree({
                     onSelect={onSelect}
                     {...(canSplitSession === undefined ? {} : { canSplitSession })}
                     {...(onSplitSession === undefined ? {} : { onSplitSession })}
+                    {...(onRemoveSessionFromSplit === undefined ? {} : { onRemoveSessionFromSplit })}
                     onClose={(id) => void terminalSessions.close(id)}
                     onRename={terminalSessions.rename}
                     onUnpinTitle={(id) => terminalSessions.unpinTitle?.(id) ?? Promise.resolve(false)}

@@ -39,8 +39,14 @@ export function useSplitView({ sessions, runTarget }: { sessions: TerminalSessio
     if (compact || !liveSessionIds.has(sourceSessionId) || !liveSessionIds.has(targetSessionId)) return;
     dispatch({ type: "split", sourceSessionId, targetSessionId, edge });
   }
+  // removeFromSplit takes a session out of whichever split it is in, active or
+  // not; the session goes on outside the split. It leaves the split the same
+  // way a closed session does.
+  const removeFromSplit = useCallback((sessionId: string) => {
+    dispatch({ type: "prune", sessionIds: new Set([sessionId]) });
+  }, [dispatch]);
   const groupBySession = new Map(groupState.groups.flatMap((group) => paneSessionIds(group.view.root).map((id) => [id, group] as const)));
-  return { state, groups: groupState.groups, activeGroupNumber: groupState.activeGroupNumber, groupBySession, compact, dispatch, selectSession, canSplit, split };
+  return { state, groups: groupState.groups, activeGroupNumber: groupState.activeGroupNumber, groupBySession, compact, dispatch, selectSession, canSplit, split, removeFromSplit };
 }
 
 export type SplitViewController = ReturnType<typeof useSplitView>;
