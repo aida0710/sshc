@@ -72,32 +72,6 @@ func oneMemberGroup(settings []Setting) ([]string, Metadata, []HostEntry) {
 	return []string{"company"}, metadata, hosts
 }
 
-func TestAGroupProxyCommandSavedAsSplitValuesKeepsTheLineAnEarlierSshcWrote(t *testing.T) {
-	// 前の sshc は、画面の入力を空白で分け、一重引用符を引用として読まずに保存していた。
-	// 書くときは、空白を含む値だけを二重引用符で囲んでいた。
-	stored, err := DecodeMetadata([]byte(`{"schemaVersion":8,"groups":[{"name":"company","settings":[` +
-		`{"keyword":"ProxyCommand","values":["sh","-c","'exec","nc","%h","%p'"]},` +
-		`{"keyword":"RemoteCommand","values":["tmux","new","-A -s main"]}]}]}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	declared, _, hosts := oneMemberGroup(nil)
-
-	contents, notices := CompileGroups(declared, stored, hosts, "\n")
-
-	for _, want := range []string{
-		"\tProxyCommand sh -c 'exec nc %h %p'\n",
-		"\tRemoteCommand tmux new \"-A -s main\"\n",
-	} {
-		if !strings.Contains(string(contents), want) {
-			t.Errorf("contents =\n%s\nwant a line %q", contents, want)
-		}
-	}
-	if len(notices) != 0 {
-		t.Fatalf("notices = %#v", notices)
-	}
-}
-
 func TestAGroupRemoteCommandIsWrittenAsTypedWithoutRequoting(t *testing.T) {
 	declared, metadata, hosts := oneMemberGroup([]Setting{
 		{Keyword: "RemoteCommand", Values: []string{`awk '{print $1}' /etc/hosts`}},

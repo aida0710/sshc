@@ -52,7 +52,7 @@ Host secret-route
 		t.Fatal(err)
 	}
 	metadata := `{
-  "schemaVersion": 3,
+  "schemaVersion": 9,
   "groupsFile": "groups.sshc.conf",
   "vpnProfiles": [{
     "name": "tohoku",

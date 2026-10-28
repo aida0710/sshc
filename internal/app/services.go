@@ -80,12 +80,6 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		dependencies.Logger.Error("prune the change history", "error", err)
 	}
 	configService := application.NewService(workspace, transactions)
-	// 受け口のポートと Vault の時計が読む前に、このマシンの sshc エンジンの設定を決める。
-	// 前の metadata.json から移せなくても起動は止めない。設定は既定のまま動き、設定の
-	// ファイルを作らないので、直したあとの起動で移し直す。
-	if err := configService.InitialiseEngineSettings(); err != nil && dependencies.Logger != nil {
-		dependencies.Logger.Error("move the engine settings from metadata.json", "error", err)
-	}
 	// 背景画像を受け取っている途中にsshcエンジンが落ちて残った一時ファイルを消す。HTTPを受け付ける
 	// 前なので、受け取っている途中のものは無い。消せなくても起動は止めない。
 	if err := configService.RemoveLeftoverBackgroundUploads(); err != nil && dependencies.Logger != nil {
