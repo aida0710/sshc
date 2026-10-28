@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ConfigDiagnosticList } from "../sshconfig/ConfigDiagnosticList";
 import { diagnosticsApi, type AuthenticationResponse, type ConfigCheckResponse, type DiagnosticsApi, type EffectiveResponse, type ReachabilityResponse } from "../api/diagnostics";
 import {
   Field,
@@ -173,22 +174,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
             ))}
           </ul>
           {config.diagnostics.length > 0 ? (
-            <ul className="mt-2 rounded-[9px] bg-well px-3 py-2">
-              {config.diagnostics.map((diagnostic, index) => (
-                <li
-                  key={`${diagnostic.code}-${index}`}
-                  className={`py-1 font-mono text-xs ${
-                    diagnostic.severity === "error"
-                      ? "text-danger"
-                      : diagnostic.severity === "warning"
-                        ? "text-notice-ink"
-                        : "text-ink-muted"
-                  }`}
-                >
-                  {`${diagnostic.code} ${diagnostic.path}${diagnostic.line > 0 ? `:${diagnostic.line}` : ""} ${diagnostic.detail}`}
-                </li>
-              ))}
-            </ul>
+            <ConfigDiagnosticList diagnostics={config.diagnostics} className="mt-2 rounded-[9px] bg-well px-3 py-2" />
           ) : null}
         </PageSection>
       ) : null}
