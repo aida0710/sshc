@@ -112,6 +112,40 @@ func TestOSCObserverBoundsPayloads(t *testing.T) {
 	}
 }
 
+// A program that sends a long notification (Claude Code quoting a long
+// message, say) still gets one; only its beginning is shown anyway.
+func TestOSCObserverKeepsTheBeginningOfALongNotification(t *testing.T) {
+	observer, seen := newTestObserver()
+	long := strings.Repeat("長い通知", MaxOSCPayload/3)
+	observer.Observe([]byte("\x1b]9;" + long + "\a\x1b]777;notify;build;" + long + "\x1b\\"))
+
+	if len(seen.notifications) != 2 {
+		t.Fatalf("notifications = %d, want 2", len(seen.notifications))
+	}
+	for _, notification := range seen.notifications {
+		body := []rune(notification[1])
+		if len(body) != MaxNotificationBodyRunes || !strings.HasPrefix(long, string(body)) {
+			t.Fatalf("body = %d runes %q…", len(body), string(body[:min(len(body), 8)]))
+		}
+	}
+	if seen.notifications[1][0] != "build" {
+		t.Fatalf("title = %q", seen.notifications[1][0])
+	}
+	if len(observer.payload) != 0 || observer.truncated {
+		t.Fatalf("observer did not reset: payload=%d truncated=%v", len(observer.payload), observer.truncated)
+	}
+}
+
+func TestOSCObserverIgnoresALongDirectory(t *testing.T) {
+	var directories []string
+	observer := newOSCObserver(oscReports{Directory: func(directory string) { directories = append(directories, directory) }})
+	observer.Observe([]byte("\x1b]7;file:///" + strings.Repeat("d", MaxOSCPayload) + "\a\x1b]7;file:///tmp\a"))
+
+	if len(directories) != 1 || directories[0] != "/tmp" {
+		t.Fatalf("directories = %q", directories)
+	}
+}
+
 func TestOSCObserverRecoversFromMalformedSequences(t *testing.T) {
 	observer, seen := newTestObserver()
 	observer.Observe([]byte("\x1b]0;unterminated\x1bXnope\x1b]0;good\a"))

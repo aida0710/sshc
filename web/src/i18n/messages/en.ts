@@ -750,6 +750,7 @@ export const en = {
   "terminal.connecting": "connecting",
   "terminal.connected": "connected",
   "terminal.longCommandCompleted": "A command in {subject} finished after {seconds} seconds.",
+  "terminal.notificationSessionClosed": "That session is closed.",
   "terminal.unreadNotification": "Unread notification",
   "terminal.unreadCount": "Unread {count}",
   "terminal.openNextUnread": "Open the next unread notification",

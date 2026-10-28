@@ -14,6 +14,7 @@ export function fakeAndroidBridge(overrides: Partial<AndroidBridge> = {}): Andro
     notificationPermission: vi.fn(() => "granted"),
     requestNotificationPermission: vi.fn(),
     showNotification: vi.fn(() => ""),
+    cancelNotification: vi.fn(),
     takeOpenedNotification: vi.fn(() => ""),
     chooseFolder: vi.fn(() => ""),
     takeChosenFolder: vi.fn(() => ""),

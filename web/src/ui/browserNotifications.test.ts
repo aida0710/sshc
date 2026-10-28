@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   browserNotificationPermission,
+  closeBrowserNotification,
   notificationsComeFromAndroid,
   requestBrowserNotificationPermission,
   showBrowserNotification,
@@ -57,6 +58,37 @@ describe("browser notification permission", () => {
     expect(focus).toHaveBeenCalledOnce();
     expect(onClick).toHaveBeenCalledOnce();
     expect(instance!.close).toHaveBeenCalledOnce();
+  });
+});
+
+describe("taking a notification back", () => {
+  it("closes the notification shown under that tag and leaves the others", () => {
+    const shown: { tag: string; close: () => void }[] = [];
+    class FakeNotification {
+      static permission: NotificationPermission = "granted";
+      static requestPermission = vi.fn();
+      close = vi.fn();
+      tag: string;
+      constructor(_title: string, options: { tag: string }) { this.tag = options.tag; shown.push(this); }
+    }
+    const target = { Notification: FakeNotification } as unknown as Window;
+    showBrowserNotification({ title: "sshc", body: "x", tag: "sshc-terminal-one" }, target);
+    showBrowserNotification({ title: "sshc", body: "y", tag: "sshc-terminal-two" }, target);
+
+    closeBrowserNotification("sshc-terminal-one", target);
+    closeBrowserNotification("sshc-terminal-one", target);
+
+    expect(shown[0]!.close).toHaveBeenCalledOnce();
+    expect(shown[1]!.close).not.toHaveBeenCalled();
+  });
+
+  it("asks Android to cancel its notification", () => {
+    const cancelNotification = vi.fn();
+    const target = { sshcAndroid: { notificationPermission: () => "granted", cancelNotification } } as unknown as Window;
+
+    closeBrowserNotification("sshc-terminal-one", target);
+
+    expect(cancelNotification).toHaveBeenCalledWith("sshc-terminal-one");
   });
 });
 

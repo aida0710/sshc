@@ -52,6 +52,13 @@ public final class NativeBridgeTest {
             notified = tag + "|" + title + "|" + body;
         }
 
+        String cancelled;
+
+        @Override
+        public void cancelNotification(String tag) {
+            cancelled = tag;
+        }
+
         String opened = "";
 
         @Override
@@ -110,6 +117,15 @@ public final class NativeBridgeTest {
         host.permission = "default";
         assertEquals("notifications_blocked", new NativeBridge(host).showNotification("sshc-terminal-1", "build", "done"));
         assertEquals(null, host.notified);
+    }
+
+    @Test
+    public void 通知を取り下げる_不正な_tag_は渡さない() {
+        Host host = new Host();
+        new NativeBridge(host).cancelNotification("../x");
+        assertEquals(null, host.cancelled);
+        new NativeBridge(host).cancelNotification("sshc-terminal-1");
+        assertEquals("sshc-terminal-1", host.cancelled);
     }
 
     @Test
