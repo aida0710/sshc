@@ -39,6 +39,7 @@ const jaSidebar = [
   ] },
   { text: "リファレンス", items: [
     { text: "設定", link: "/reference/settings" },
+    { text: "エスケープシーケンス", link: "/reference/escape-sequences" },
     { text: "セキュリティ", link: "/reference/security" },
     { text: "トラブルシューティング", link: "/reference/troubleshooting" },
   ] },
@@ -80,6 +81,7 @@ const enSidebar = [
   ] },
   { text: "Reference", items: [
     { text: "Settings", link: "/en/reference/settings" },
+    { text: "Escape sequences", link: "/en/reference/escape-sequences" },
     { text: "Security", link: "/en/reference/security" },
     { text: "Troubleshooting", link: "/en/reference/troubleshooting" },
   ] },
