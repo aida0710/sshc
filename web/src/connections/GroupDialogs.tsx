@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { groupBaseName, isGroupOrDescendant, parentGroupName } from "../rules/groupPath";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { control, fieldLabel } from "../ui/form";
@@ -21,15 +22,6 @@ type GroupDialogsProps = {
   onClose: () => void;
   error?: string;
 };
-
-function lastSegment(name: string): string {
-  return name.slice(name.lastIndexOf("/") + 1);
-}
-
-function parentOf(name: string): string {
-  const index = name.lastIndexOf("/");
-  return index < 0 ? "" : name.slice(0, index);
-}
 
 export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete, onClose, error = "" }: GroupDialogsProps) {
   const t = useTranslate();
@@ -57,13 +49,13 @@ export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete,
   }
 
   if (dialog.kind === "rename") {
-    const parent = parentOf(dialog.name);
+    const parent = parentGroupName(dialog.name);
     return (
       <InputDialog
         id="group-rename-heading"
         heading={t("groupDialog.renameHeading", { name: dialog.name })}
         label={t("groupDialog.nameLabel")}
-        initialValue={lastSegment(dialog.name)}
+        initialValue={groupBaseName(dialog.name)}
         submitLabel={t("tree.rename")}
         cancelLabel={t("groupDialog.cancel")}
         validate={validateSegment(parent, dialog.name)}
@@ -81,7 +73,7 @@ export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete,
     );
   }
 
-  const candidates = groupNames.filter((name) => name !== dialog.name && !name.startsWith(`${dialog.name}/`));
+  const candidates = groupNames.filter((name) => !isGroupOrDescendant(name, dialog.name));
   return (
     <ConfirmDialog
       id="group-delete-heading"

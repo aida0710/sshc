@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState, type MouseEvent, type PointerEvent, type ReactNode } from "react";
+import { isGroupOrDescendant } from "../rules/groupPath";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import type { HostEntry, Notice, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
@@ -143,7 +144,7 @@ export function ConnectionTree({
 
     const declared = new Set(orderedGroups.map((group) => group.name));
     const sections = orderedGroups
-      .filter((group) => scope.kind === "all" || group.name === scope.name || group.name.startsWith(`${scope.name}/`))
+      .filter((group) => scope.kind === "all" || isGroupOrDescendant(group.name, scope.name))
       .filter((group) => visible.some((item) => belongsToGroup(item, group.name)))
       .map((group) => ({ name: group.name, items: exact.get(group.name) ?? [] }));
     const undeclared = [...exact.keys()]

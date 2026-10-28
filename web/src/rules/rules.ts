@@ -1,3 +1,4 @@
+import { groupSegments } from "./groupPath";
 import {
   aliasPattern,
   groupSegmentPattern,
@@ -23,7 +24,7 @@ export function isValidGroupSegment(segment: string): boolean {
 
 export function isValidGroupName(name: string): boolean {
   if (name === "") return false;
-  const segments = name.split("/");
+  const segments = groupSegments(name);
   if (segments.length > maxGroupSegments) return false;
   return segments.every(isValidGroupSegment);
 }

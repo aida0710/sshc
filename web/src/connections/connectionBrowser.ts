@@ -1,4 +1,5 @@
 import type { HostEntry, HostIdentity, HostMetadata, Overview } from "../api/config";
+import { groupAncestry, groupBaseName, isGroupOrDescendant, parentGroupName } from "../rules/groupPath";
 
 export type BrowserServer = {
   host: HostEntry;
@@ -43,17 +44,11 @@ export function hostMetadataByIdentity(entries: readonly HostMetadata[] | undefi
 // The closest ancestor group that is declared, so an undeclared "a/b/c" hangs
 // under "a" when only "a" exists.
 export function nearestDeclaredParent(name: string, declared: ReadonlySet<string>): string {
-  let candidate = name;
-  while (true) {
-    const cut = candidate.lastIndexOf("/");
-    if (cut < 0) return "";
-    candidate = candidate.slice(0, cut);
-    if (declared.has(candidate)) return candidate;
-  }
+  return groupAncestry(parentGroupName(name)).find((candidate) => declared.has(candidate)) ?? "";
 }
 
 function belongsBelow(server: BrowserServer, group: string): boolean {
-  return server.group === group || server.group.startsWith(`${group}/`);
+  return isGroupOrDescendant(server.group, group);
 }
 
 export function duplicateAliasesOf(hosts: readonly HostEntry[]): ReadonlySet<string> {
@@ -100,7 +95,7 @@ export function buildConnectionBrowserIndex(overview: Overview): ConnectionBrows
       const descendants = servers.filter((server) => belongsBelow(server, group.name));
       return {
         name: group.name,
-        label: group.name.slice(group.name.lastIndexOf("/") + 1),
+        label: groupBaseName(group.name),
         parent: nearestDeclaredParent(group.name, declaredNames),
         hidden: metadata?.hidden === true,
         colour: metadata?.colour ?? group.colour ?? "",
