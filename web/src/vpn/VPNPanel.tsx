@@ -264,13 +264,15 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
 
       {overview.available || overview.checking ? null : <VPNUnavailableNotice overview={overview} />}
       {operation.error === "" ? null : (
-        <Notice tone="danger">
-          <span className="grow">{operation.error}</span>
-          {failedProfile === "" ? null : (
-            <Button className="shrink-0" onClick={() => setShownLogs(failedProfile)}>
+        <Notice
+          tone="danger"
+          actions={failedProfile === "" ? undefined : (
+            <Button small onClick={() => setShownLogs(failedProfile)}>
               {t("vpn.failureShowLogs")}
             </Button>
           )}
+        >
+          {operation.error}
         </Notice>
       )}
 
