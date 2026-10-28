@@ -1579,8 +1579,11 @@ func TestChangingTheMasterPasswordAlsoSealsRegisteredApplicationDocuments(t *tes
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// A legacy plaintext document can exist before its screen is first opened.
-	acltest.WritePrivateFile(t, path, plain)
+	firstSealed, err := service.SealDocument(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acltest.WritePrivateFile(t, path, firstSealed)
 	sealedPath := filepath.Join(root, "sshc", "snippets-secondary")
 	if err := service.RegisterProtectedDocument(secret.ProtectedDocument{
 		Path: sealedPath, Validate: func(document []byte) error {

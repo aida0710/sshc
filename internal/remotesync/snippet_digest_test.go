@@ -3,10 +3,8 @@ package remotesync_test
 import (
 	"bytes"
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
 	"testing"
 	"time"
 
@@ -22,13 +20,7 @@ func withVaultAndSnippets(t *testing.T, machine *installation, master string) (*
 	secrets := withVault(t, machine, master)
 	store := snippets.NewStore(machine.workspace, snippets.Protection{
 		Seal: secrets.SealDocument,
-		Open: func(contents []byte) ([]byte, error) {
-			plaintext, err := secrets.OpenDocument(contents)
-			if errors.Is(err, secret.ErrNotAVault) {
-				return nil, snippets.ErrNotEncrypted
-			}
-			return plaintext, err
-		},
+		Open: secrets.OpenDocument,
 		WithMutation: func(mutation func() error) error {
 			return secrets.WithStableSnapshot(func() error {
 				return machine.manager.WithSnapshot(mutation)
@@ -107,38 +99,4 @@ func TestTheSyncStateKeepsOnlyAKeyedDigestOfTheSnippetDocument(t *testing.T) {
 		t.Fatalf("ChangeMasterPassword = %v", err)
 	}
 	assertNothingToPush(t, machine, "after changing the master password")
-}
-
-// 鍵付きにする前の版は、スニペットの文書の素の SHA-256 を state に書いていた。移行は
-// それを今の鍵の値へ書き換え、前回の同期との比較は変えない。
-func TestMigratingTheTravelDigestReplacesAPlainSnippetDigestLeftByAnEarlierRelease(t *testing.T) {
-	machine, _, plain, statePath := pushedSnippetState(t)
-	state, err := os.ReadFile(statePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 鍵付きの値は vault 文書とスニペットの文書の 2 つ。どちらも素の値へ戻すと、
-	// 前の版が書いた state と同じ形になる。スニペットの値を確かめられるよう、
-	// vault 文書の値は鍵付きのまま残す。
-	keyed := regexp.MustCompile(`("path": "` + regexp.QuoteMeta(remotesync.SnippetsPath) + `",\s*"sha256": )"hmac-sha256:[0-9a-f]+"`)
-	earlier := keyed.ReplaceAll(state, []byte(`${1}"`+plain+`"`))
-	if bytes.Equal(earlier, state) {
-		t.Fatalf("the sync state has no keyed snippet digest to replace:\n%s", state)
-	}
-	if err := os.WriteFile(statePath, earlier, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	assertNothingToPush(t, machine, "before the migration")
-
-	if err := machine.service.MigrateTravelDigest(); err != nil {
-		t.Fatalf("MigrateTravelDigest = %v", err)
-	}
-	migrated, err := os.ReadFile(statePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Contains(migrated, []byte(plain)) {
-		t.Fatalf("the plain snippet digest was not replaced by a keyed one:\n%s", migrated)
-	}
-	assertNothingToPush(t, machine, "after the migration")
 }

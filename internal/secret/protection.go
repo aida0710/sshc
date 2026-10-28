@@ -40,9 +40,6 @@ func (s *Service) localKey() ([]byte, error) {
 
 // unlockPasswordlessHeld は、ロック中のパスワードなしの Vault のロックを解除する。呼び手が
 // mutationMutex を持っている。パスワードのある Vault とロックを解除した Vault には何もしない。
-//
-// 呼び手が錠を持っているので afterUnlock へは知らせない。鍵を付ける前の同期状態の
-// digest は、次の Unlock か engine の起動のときに移す。
 func (s *Service) unlockPasswordlessHeld() error {
 	if s.Unlocked() {
 		return nil
@@ -51,8 +48,7 @@ func (s *Service) unlockPasswordlessHeld() error {
 	if err != nil || !passwordless {
 		return err
 	}
-	_, err = s.autoUnlockHeld()
-	return err
+	return s.autoUnlockHeld()
 }
 
 // hasLocalKey は、このマシンにロックの解除に使う鍵がある（パスワードなしの Vault）かを返す。
@@ -113,37 +109,31 @@ func (s *Service) prepareProtection(passphrase string) (storage.Change, string, 
 // 鍵の無いまま巻き戻そうとすると ErrLocked で engine が起動できない。
 func (s *Service) AutoUnlock() error {
 	s.mutationMutex.Lock()
-	unlocked, err := s.autoUnlockHeld()
-	s.mutationMutex.Unlock()
-	if unlocked {
-		s.notifyUnlocked()
-	}
-	return err
+	defer s.mutationMutex.Unlock()
+	return s.autoUnlockHeld()
 }
 
 // autoUnlockHeld は AutoUnlock の本体である。呼び手が mutationMutex を持っている。
-// パスワードなしの Vault のロックを解除できたかを返す。afterUnlock へは知らせないので、
-// 呼び手が mutationMutex を放してから notifyUnlocked で知らせる。
 //
 // 中断した secret.vault と secret.rekey を完了・巻き戻しするので、mutationMutex の外で
 // 走らせてはならない。storage の Pending は実行中のトランザクションの記録も読むので、
 // 走っている ChangeMasterPassword の rekey を、中断したものとして扱ってしまう。
-func (s *Service) autoUnlockHeld() (bool, error) {
+func (s *Service) autoUnlockHeld() error {
 	if err := s.recoverPending(func(item storage.Pending) bool {
 		return slices.Contains(recoveredBeforeUnlock, item.Operation) ||
 			slices.Contains(vaultOnlyOperations, item.Operation) && !rollbackOpensSealedBackup(item)
 	}); err != nil {
-		return false, err
+		return err
 	}
 
 	passwordless, err := s.hasLocalKey()
 	if err != nil || !passwordless {
-		return false, err
+		return err
 	}
 	if err := s.unlockHeld(""); err != nil {
-		return false, err
+		return err
 	}
-	return true, s.recoverPending(func(item storage.Pending) bool {
+	return s.recoverPending(func(item storage.Pending) bool {
 		return slices.Contains(vaultOnlyOperations, item.Operation)
 	})
 }

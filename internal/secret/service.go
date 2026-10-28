@@ -116,12 +116,6 @@ type Service struct {
 	// afterLock は、開いていた vault が閉じた直後に呼ぶ（SetAfterLock）。nil なら
 	// 何もしない。
 	afterLock func()
-	// afterUnlock は、Unlock が vault を開いた直後に呼ぶ（SetAfterUnlock）。nil なら
-	// 何もしない。
-	afterUnlock func()
-	// keyBoundMigrationFailureReport は、ロックを解除したときの古い形の移行の失敗を
-	// 受け取る（SetReportKeyBoundMigrationFailure）。nil なら何もしない。
-	keyBoundMigrationFailureReport func(error)
 	// travelDigestRekey は、vault の鍵が変わる変更に載せる同期の記録の書き換えを
 	// 作る（SetTravelDigestRekey）。nil なら何も載せない。
 	travelDigestRekey func(TravelDigestRekey) ([]storage.Change, error)
