@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptySplitView, paneSessionIds, reduceSplitView, type PaneEdge } from "./layout";
 import { fitSplitRatio } from "../../ui/SplitResizeHandle";
-import { minimumExtentPx, minimumPanePx, nearestPaneEdge, splitViewGeometry } from "./geometry";
+import { minimumExtentPx, minimumPanePx, nearestPaneEdge, paneDropZone, splitViewGeometry } from "./geometry";
 
 const single = reduceSplitView(emptySplitView, { type: "select", sessionId: "one" });
 const pair = reduceSplitView(single, { type: "split", sourceSessionId: "two", targetSessionId: "one", edge: "right" });
@@ -99,5 +99,17 @@ describe("how small a split pane can be dragged", () => {
     // When neither minimum fits, the two share the room.
     expect(fitSplitRatio(10, 100, minimum)).toBe(50);
     expect(fitSplitRatio(10, 100, { first: 3 * minimumPanePx.height, second: minimumPanePx.height })).toBe(75);
+  });
+});
+
+describe("where a pane dragged by its handle goes", () => {
+  const size = { width: 600, height: 400 };
+  it("swaps in the middle of another pane and moves beside an edge near one", () => {
+    expect(paneDropZone({ x: 300, y: 200 }, size)).toBeNull();
+    // Just inside the middle: 151px of 600 from the left, 101px of 400 from the top.
+    expect(paneDropZone({ x: 151, y: 101 }, size)).toBeNull();
+    expect(paneDropZone({ x: 149, y: 200 }, size)).toBe("left");
+    expect(paneDropZone({ x: 300, y: 390 }, size)).toBe("bottom");
+    expect(paneDropZone({ x: 590, y: 20 }, size)).toBe("right");
   });
 });
