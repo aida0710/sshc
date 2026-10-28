@@ -60,6 +60,7 @@ import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { TerminalComposer } from "./TerminalComposer";
 import { planComposerSend } from "./composerSend";
+import { terminalCommandApiFor } from "./commands/commandApi";
 import { pathPreviewAlias } from "./pathPreviewAlias";
 import { useSameDestination } from "./useSameDestination";
 import { previewPathsInBuffer, previewPathTargetsInBuffer } from "./previewPaths";
@@ -682,7 +683,7 @@ export function TerminalView({
             canSplit={canSplit}
             triggerRef={overflowTrigger}
             osc52Enabled={osc52Enabled}
-            onQuickCommands={runTarget !== undefined ? undefined : () => {
+            onQuickCommands={() => {
               setQuickCommandSelection(terminal.current?.getSelection() ?? "");
               setQuickCommandsOpen(true);
             }}
@@ -746,6 +747,7 @@ export function TerminalView({
           session={session}
           initialCommand={quickCommandSelection}
           returnFocusRef={overflowTrigger}
+          api={terminalCommandApiFor(runTarget)}
           onClose={() => setQuickCommandsOpen(false)}
           onCopied={() => setTerminalNotice(t("copy.done"))}
         />

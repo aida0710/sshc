@@ -18,9 +18,10 @@ const updateOutput = [
 // refusal is what the stubbed engine on bastion answers until it is fixed:
 // an incompatible version, which updating fixes, a locked Vault, which its
 // password unlocks, or a host that cannot be reached until the test says it can.
-async function stubRunTarget(page: Page, { added = true, refusal = "version", compatibleVersion }: { added?: boolean; refusal?: "version" | "unreachable" | "locked"; compatibleVersion?: string } = {}) {
+async function stubRunTarget(page: Page, { added = true, refusal = "version", compatibleVersion, sessions = [] }: { added?: boolean; refusal?: "version" | "unreachable" | "locked"; compatibleVersion?: string; sessions?: unknown[] } = {}) {
   let fixed = compatibleVersion !== undefined;
   const actions: unknown[] = [];
+  const commandPreviews: unknown[] = [];
   let finishUpdate = () => {};
   const updateFinished = new Promise<void>((resolve) => { finishUpdate = resolve; });
   await page.route("**/api/v1/health", async (route) => {
@@ -71,7 +72,18 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
     if (path.endsWith("/status")) {
       await route.fulfill({ json: { alias: "bastion", version: compatibleVersion ?? localVersion, vault: true, unlocked: true, passwordless: true, sessions: 0 } });
     } else if (path.endsWith("/terminal/sessions")) {
-      await route.fulfill({ json: { sessions: [], maxSessions: 50 } });
+      await route.fulfill({ json: { sessions, maxSessions: 50 } });
+    } else if (path.endsWith("/stream")) {
+      // A session shown in the terminal asks for its stream; the test does not need its output.
+      await route.fulfill({ json: { streamTicket: "bastion-ticket" } });
+    } else if (path.endsWith("/terminal/commands/preview")) {
+      // This machine's engine answers this in the real thing: it expands the snippet and asks bastion.
+      const request = route.request().postDataJSON() as { targets: { targetId: string; sessionId: string }[] };
+      commandPreviews.push(request);
+      await route.fulfill({ json: {
+        snippetId: "", evidence: "e".repeat(64), reviewEvidence: "r".repeat(64), actionToken: "", actionExpiresAt: "",
+        targets: request.targets.map((target) => ({ ...target, alias: "web", title: "web", command: "uptime" })),
+      } });
     } else if (path.endsWith("/terminal/restore")) {
       // The engine on bastion has nothing to reopen.
       await route.fulfill({ json: { sessions: [] } });
@@ -84,7 +96,7 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
       throw new Error(`Unexpected remote engine request: ${path}`);
     }
   });
-  return { actions, fix: () => { fixed = true; }, finishUpdate };
+  return { actions, commandPreviews, fix: () => { fixed = true; }, finishUpdate };
 }
 
 // actionLog is the log of the update on bastion from the cursor at from.
@@ -218,6 +230,23 @@ test("shows an unreachable host in the terminal area and goes away on Reconnect 
   ]);
   await expect(panel).toBeHidden();
   await expect(page.getByRole("button", { name: /^Choose where terminals run \(now: bastion\)/ })).toBeVisible();
+});
+
+test("sends a command to the sessions of the run target through the run target", async ({ page, installation }) => {
+  const session = {
+    id: "bastion-web", kind: "ssh", workspaceId: "default", alias: "web", title: "web",
+    startedAt: "2026-10-28T01:00:00Z", state: "connected", problem: "", forwards: [],
+  };
+  const remote = await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [session] });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  await page.getByRole("button", { name: "Workspace actions for Main", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Send a command…", exact: true }).click();
+  await page.getByLabel("Command", { exact: true }).fill("uptime");
+  await page.getByRole("button", { name: "Preview execution", exact: true }).click();
+  await expect(page.getByText("uptime", { exact: true }).last()).toBeVisible();
+  expect(remote.commandPreviews).toHaveLength(1);
+  expect(remote.commandPreviews[0]).toMatchObject({ command: "uptime", targets: [{ sessionId: "bastion-web" }] });
 });
 
 test("switches back to localhost from the terminal area", async ({ page, installation }) => {

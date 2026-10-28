@@ -39,6 +39,9 @@ type fakeEngineDirectory struct {
 
 func (f *fakeEngineDirectory) Engines() ([]string, error)  { return f.engines, nil }
 func (f *fakeEngineDirectory) Connected(alias string) bool { return f.connected[alias] }
+func (f *fakeEngineDirectory) CallTerminalAPI(context.Context, string, remoteengine.TerminalCall) (remoteengine.TerminalAnswer, error) {
+	return remoteengine.TerminalAnswer{}, remoteengine.ErrNotAdded
+}
 func (f *fakeEngineDirectory) AddEngine(_ context.Context, alias string) error {
 	if f.addErr != nil {
 		return f.addErr

@@ -78,7 +78,11 @@ func remoteEngineProblem(c *echo.Context, err error) error {
 func remoteEngineFailure(err error) (status int, payload problemPayload, known bool) {
 	var connectErr *remoteengine.ConnectError
 	var incompatible *remoteengine.IncompatibleEngineError
+	var refusal *remoteengine.RemoteRefusalError
 	switch {
+	case errors.As(err, &refusal):
+		// 接続先へ届かなかったか、接続先が資格や Vault を断った。語は取り次ぎの断りと同じである。
+		return refusal.Status, problemPayload{Code: refusal.Code}, true
 	case errors.Is(err, remoteengine.ErrClosed):
 		return http.StatusServiceUnavailable, problemPayload{Code: "server_stopping"}, true
 	case errors.Is(err, remoteengine.ErrNotAdded):
