@@ -17,6 +17,7 @@ export function SessionRowMenu({
   canDuplicate,
   canSplit = false,
   onSplit,
+  onRemoveFromSplit,
   canMoveUp,
   canMoveDown,
   onRename,
@@ -34,6 +35,8 @@ export function SessionRowMenu({
   canDuplicate: boolean;
   canSplit?: boolean;
   onSplit?: (edge: PaneEdge) => void;
+  // onRemoveFromSplit is offered while the session is in a split. The session goes on outside it.
+  onRemoveFromSplit?: () => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onRename: () => void;
@@ -69,6 +72,9 @@ export function SessionRowMenu({
           <SessionRowMenuItem disabled={!canSplit} onClick={choose(() => onSplit("right"))}>{t("splitView.right")}</SessionRowMenuItem>
           <SessionRowMenuItem disabled={!canSplit} onClick={choose(() => onSplit("bottom"))}>{t("splitView.below")}</SessionRowMenuItem>
         </>
+      )}
+      {onRemoveFromSplit === undefined ? null : (
+        <SessionRowMenuItem onClick={choose(onRemoveFromSplit)}>{t("splitView.remove")}</SessionRowMenuItem>
       )}
       <SessionRowMenuItem disabled={!canMoveUp} onClick={choose(onMoveUp)}>{t("terminal.moveUp")}</SessionRowMenuItem>
       <SessionRowMenuItem disabled={!canMoveDown} onClick={choose(onMoveDown)}>{t("terminal.moveDown")}</SessionRowMenuItem>

@@ -8,7 +8,7 @@ const buttonClass = "flex size-7 shrink-0 items-center justify-center rounded-[7
 // header keeps the design's three actions: search, more, close.
 const revealOnHeaderHover = "opacity-0 group-hover/header:opacity-100 group-focus-within/header:opacity-100 mobile-layout:opacity-100 [@media(any-hover:none)]:opacity-100";
 
-export function PaneToolbar({ title, moving, focusMode, onSwap, onDragStart, onDragEnd, onFocusMode, onClose }: {
+export function PaneToolbar({ title, moving, focusMode, onSwap, onDragStart, onDragEnd, onFocusMode, onRemove }: {
   title: string;
   moving: boolean;
   focusMode: boolean;
@@ -16,12 +16,13 @@ export function PaneToolbar({ title, moving, focusMode, onSwap, onDragStart, onD
   onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
   onDragEnd: () => void;
   onFocusMode: () => void;
-  onClose: () => void;
+  onRemove: () => void;
 }) {
   const t = useTranslate();
   const swapLabel = t("splitView.swapPane", { title });
   const focusLabel = t(focusMode ? "splitView.exitFocus" : "splitView.focusPane", { title });
-  const closeLabel = t("splitView.closePane", { title });
+  // The session goes on outside the split, so the button does not say close.
+  const removeLabel = t("splitView.removePane", { title });
   return (
     <div className="flex shrink-0 items-center gap-0.5" data-pane-toolbar>
       <button
@@ -47,7 +48,7 @@ export function PaneToolbar({ title, moving, focusMode, onSwap, onDragStart, onD
       >
         <Icon name="focus" className="size-[15px]" />
       </button>
-      <button type="button" aria-label={closeLabel} title={closeLabel} className={buttonClass} onClick={onClose}>
+      <button type="button" aria-label={removeLabel} title={removeLabel} className={buttonClass} onClick={onRemove}>
         <Icon name="close" className="size-[15px]" />
       </button>
     </div>

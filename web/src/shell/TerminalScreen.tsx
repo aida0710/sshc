@@ -90,6 +90,7 @@ export function TerminalScreen({
           headerActions={headerActions}
           {...(splitView.compact ? {} : { onSplit: (edge: PaneEdge) => setSplitRequest({ targetSessionId: session.id, edge }) })}
           canSplit={terminalSessions.sessions.some((candidate) => splitView.canSplit(candidate.id, session.id))}
+          {...(splitView.groupBySession.has(session.id) ? { onRemoveFromSplit: () => splitView.removeFromSplit(session.id) } : {})}
           api={api}
           {...(runTarget === null ? {} : { runTarget })}
           searchShortcutActive={visible && activeSessionId === session.id}

@@ -36,6 +36,23 @@ describe("TerminalOverflowMenu", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it("takes the terminal out of its split when offered, and offers it only then", async () => {
+    const remove = vi.fn();
+    const close = vi.fn();
+    const { unmount } = render(
+      <LanguageProvider>
+        <TerminalOverflowMenu osc52Enabled={false} onRemoveFromSplit={remove} onCopyContext={() => undefined} onToggleOsc52={() => undefined} onClose={close} />
+      </LanguageProvider>,
+    );
+    await userEvent.click(screen.getByRole("menuitem", { name: "Remove from split view" }));
+    expect(remove).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    unmount();
+
+    renderMenu();
+    expect(screen.queryByRole("menuitem", { name: "Remove from split view" })).not.toBeInTheDocument();
+  });
+
   it("treats its trigger as part of the layer and restores focus on Escape", async () => {
     const close = vi.fn();
     function Fixture() {
