@@ -330,27 +330,6 @@ func (a *Auto) currentSyncKey() (string, bool) {
 
 // receive はリモート更新を取り込む。done はこの巡回を終了すべきことを示す。
 func (a *Auto) receive(ctx context.Context, syncKey string) (AutoPhase, string, bool) {
-	if a.service.Direction() == DirectionPush {
-		generation, err := a.service.inspectRemoteGeneration(ctx)
-		if err != nil {
-			return AutoFailed, failureDetail(err), true
-		}
-		if !generation.moved {
-			a.clearBlocked()
-			a.clearFailed()
-			return AutoIdle, "", false
-		}
-		if generation.deleted {
-			return AutoBlocked, blockedRemoteDeleted, true
-		}
-		if detail, ok := a.blocked(generation.target, generation.etag); ok {
-			return AutoBlocked, detail, true
-		}
-		// A send-only installation cannot resolve a remote generation by
-		// downloading it. Stop before creating a history candidate and wait for
-		// an explicit force push or a direction change.
-		return a.block(generation.target, generation.etag, blockedRemoteMoved)
-	}
 	// 動いていないものは取りに行かない。HEAD は ETag だけを返す。
 	generation, err := a.service.inspectRemoteGeneration(ctx)
 	if err != nil {
@@ -366,6 +345,12 @@ func (a *Auto) receive(ctx context.Context, syncKey string) (AutoPhase, string, 
 	}
 	if detail, ok := a.blocked(generation.target, generation.etag); ok {
 		return AutoBlocked, detail, true
+	}
+	if a.service.Direction() == DirectionPush {
+		// A send-only installation cannot resolve a remote generation by
+		// downloading it. Stop before creating a history candidate and wait for
+		// an explicit force push or a direction change.
+		return a.block(generation.target, generation.etag, blockedRemoteMoved)
 	}
 	if detail, ok := a.failed(generation, syncKey); ok {
 		return AutoFailed, detail, true
