@@ -4,13 +4,19 @@ type WritableTerminal = {
   write(text: string, callback?: () => void): void;
 };
 
+// xterm.js reads U+0080–U+009F as C1 controls even when they come as UTF-8
+// text: U+009B starts a CSI and U+009D an OSC. xterm and Ghostty ignore them
+// there, so output that a program cleaned of ESC cannot still drive the screen.
+const utf8C1Controls = /[\u0080-\u009f]/gu;
+
 export function createTerminalOutput(terminal: WritableTerminal) {
   let decoder = new TextDecoder();
   let replayBytesRemaining = 0;
   let replaying = false;
   let disposed = false;
 
-  const writeDecodedText = (text: string, isReplay: boolean) => {
+  const writeDecodedText = (decoded: string, isReplay: boolean) => {
+    const text = decoded.replace(utf8C1Controls, "");
     if (disposed || text === "") return;
     if (!isReplay) {
       terminal.write(text);

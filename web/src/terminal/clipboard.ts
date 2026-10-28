@@ -31,7 +31,10 @@ type TerminalClipboardOptions = {
 
 export function prepareTerminalPaste(text: string, bracketed: boolean): string {
   const normalized = text.replace(/\r?\n/g, "\r");
-  return bracketed ? `\u001b[200~${normalized}\u001b[201~` : normalized;
+  if (!bracketed) return normalized;
+  // An ESC inside would let the text end the bracket early (ESC [201~) and
+  // have the rest typed. xterm.js shows it as ␛ the same way.
+  return `\u001b[200~${normalized.replace(/\u001b/g, "\u241b")}\u001b[201~`;
 }
 
 export function attachTerminalClipboard({
@@ -110,6 +113,17 @@ export function attachTerminalClipboard({
     event.stopImmediatePropagation();
     if (text !== "") pasteText(text);
   };
+  // A keyboard's clipboard suggestion can arrive as an input event instead of
+  // a paste event, and xterm.js would send its text as typed. Text that would
+  // run lines goes through the same review as a paste.
+  const onBeforeInput = (event: InputEvent) => {
+    const text = event.data ?? event.dataTransfer?.getData("text/plain") ?? "";
+    const pasted = event.inputType === "insertFromPaste" || (event.inputType === "insertText" && /[\r\n]/u.test(text));
+    if (!pasted || text === "") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    pasteText(text);
+  };
   const onContextMenu = (event: MouseEvent) => {
     if (coarsePointer()) return;
     if (!settings().rightClickPaste) return;
@@ -117,12 +131,14 @@ export function attachTerminalClipboard({
     readAndPaste();
   };
   container.addEventListener("paste", onPaste, { capture: true });
+  container.addEventListener("beforeinput", onBeforeInput, { capture: true });
   container.addEventListener("contextmenu", onContextMenu);
 
   return () => {
     active = false;
     selection.dispose();
     container.removeEventListener("paste", onPaste, { capture: true });
+    container.removeEventListener("beforeinput", onBeforeInput, { capture: true });
     container.removeEventListener("contextmenu", onContextMenu);
   };
 }
