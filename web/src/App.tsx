@@ -1,7 +1,7 @@
 import { usePresetSync } from "./keyconfig/presets";
 import { opensInThisPage } from "./ui/linkClick";
 import { useBindings } from "./keyconfig/bindings";
-import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { type HealthResponse } from "./api/client";
 import { createTerminalSessionsApi, terminalSessionsApi } from "./api/terminalSessions";
 import { createTerminalWorkspacesApi, terminalWorkspacesApi } from "./api/terminalWorkspaces";
@@ -55,6 +55,7 @@ import { useSectionHandoffs } from "./shell/useSectionHandoffs";
 import { useShellLayers } from "./shell/useShellLayers";
 import { useAppShortcuts } from "./shell/useAppShortcuts";
 import { TerminalRestorePrompt } from "./terminal/TerminalRestorePrompt";
+import { useFocusBackAfterInert } from "./ui/useFocusBackAfterInert";
 
 const transferReconcileIntervalMs = 2_000;
 
@@ -281,6 +282,12 @@ export function App({
     setHostPolicy: declared.setHostOSC52,
   });
 
+  // While the vault is rechecked on coming back to the page, the app is hidden and inert; the focus goes back
+  // to the terminal (or whatever had it) afterwards.
+  const hiddenForRecheck = state === "ready" && vaultRecheck !== "idle";
+  const rechecked = useRef<HTMLDivElement>(null);
+  useFocusBackAfterInert(rechecked, hiddenForRecheck);
+
   if (state === "locked") {
     return (
       <LockScreen
@@ -311,11 +318,10 @@ export function App({
   return (
     <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout} data-mobile-navigation={mobileNavigationShown}>
       <div
+        ref={rechecked}
         className="contents"
-        inert={state === "ready" && vaultRecheck !== "idle"}
-        aria-hidden={
-          state === "ready" && vaultRecheck !== "idle" ? true : undefined
-        }
+        inert={hiddenForRecheck}
+        aria-hidden={hiddenForRecheck ? true : undefined}
       >
         {/* On a phone the terminal draws its own top bar (‹ opens this navigation), as in the design. */}
         {terminalTopBar ? null : <AppHeader
@@ -536,7 +542,7 @@ export function App({
           />
         ) : null}
       </div>
-      {state === "ready" && vaultRecheck !== "idle" ? <VaultRecheckOverlay phase={vaultRecheck} /> : null}
+      {hiddenForRecheck ? <VaultRecheckOverlay phase={vaultRecheck} /> : null}
     </div>
   );
 }
