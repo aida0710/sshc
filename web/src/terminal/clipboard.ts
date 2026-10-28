@@ -1,3 +1,4 @@
+import type { PastedItem } from "./kittyClipboard";
 import { matchesShortcut } from "../keyconfig/bindings";
 export type TerminalClipboardSettings = {
   copyOnSelect: boolean;
@@ -26,6 +27,10 @@ type TerminalClipboardOptions = {
   // 画像だけだったか（ターミナルへ送れるのは文字だけである）。黙っていると、貼り付けが
   // 効かなかったのか、何も起きなかったのかが分からない。
   nothingToPaste?: (image: boolean) => void;
+  // takePaste hands a paste, in every form the clipboard gave it, to a program
+  // that asked for paste events (OSC 5522, kittyClipboard.ts), and says
+  // whether it did; then nothing is typed. The forms are gathered only then.
+  takePaste?: (items: () => PastedItem[]) => boolean;
   // copied は、コピーのショートカットで選択を写せたときだけ呼ぶ。選ぶだけで写す設定のときに
   // 毎回知らせると、選び直すたびに知らせが出てうるさい。
   copied?: () => void;
@@ -35,6 +40,16 @@ type TerminalClipboardOptions = {
   // match it moved to. Copying that would replace the clipboard with the query.
   selectionIsSearchMatch?: () => boolean;
 };
+
+// pastedItems is every form a paste holds: the text forms as text, the files
+// (an image) as they are.
+function pastedItems(data: DataTransfer): PastedItem[] {
+  return [...data.items].flatMap((item): PastedItem[] => {
+    if (item.kind === "string") return [{ mime: item.type, data: data.getData(item.type) }];
+    const file = item.getAsFile();
+    return file === null ? [] : [{ mime: item.type || file.type, data: file }];
+  });
+}
 
 export function prepareTerminalPaste(text: string, bracketed: boolean): string {
   const normalized = text.replace(/\r?\n/g, "\r");
@@ -53,6 +68,7 @@ export function attachTerminalClipboard({
   settings,
   refuse,
   nothingToPaste,
+  takePaste = () => false,
   copied,
   enhancedKey,
   sendEnhancedKey,
@@ -77,7 +93,7 @@ export function attachTerminalClipboard({
         if (!active) return;
         // readText cannot tell an image from an empty clipboard; the paste event below can.
         if (text === "") nothingToPaste?.(false);
-        else pasteText(text);
+        else if (!takePaste(() => [{ mime: "text/plain", data: text }])) pasteText(text);
       })
       .catch(() => {
         if (active) refuse();
@@ -123,6 +139,7 @@ export function attachTerminalClipboard({
     // a custom keyboard shortcut can duplicate terminal input.
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (takePaste(() => pastedItems(data))) return;
     const text = data.getData("text/plain");
     if (text !== "") {
       pasteText(text);

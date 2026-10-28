@@ -18,8 +18,9 @@ const leftoverModeReset = "" +
 	"\x1b7\x1b[?1049l" +
 	// マウスの報告の方式と形式のすべて。
 	"\x1b[?9;1000;1002;1003;1005;1006;1015;1016l" +
-	// フォーカスの報告とbracketed paste。新しいシェルは要るなら自分で有効にし直す。
-	"\x1b[?1004;2004l" +
+	// フォーカスの報告、bracketed paste、貼り付けの知らせ（mode 5522、
+	// web/src/terminal/kittyClipboard.ts）。新しいシェルは要るなら自分で有効にし直す。
+	"\x1b[?1004;2004;5522l" +
 	// 同期出力。DECSTRでも戻るが、DECRSTでないとxterm.jsが止めていた描画を再開しない。
 	"\x1b[?2026l" +
 	// kitty keyboard protocolのフラグを0にする。残るとシェルへCtrl+CがCSI uの形で届く。
