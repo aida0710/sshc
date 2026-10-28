@@ -46,10 +46,17 @@ func (c *Client) RealPath(path string) (string, error) { return c.client.RealPat
 func (c *Client) ReadDir(ctx context.Context, path string) ([]fs.FileInfo, error) {
 	infos, err := c.client.ReadDirContext(ctx, path)
 	var status *pkgsftp.StatusError
-	if errors.As(err, &status) && status.Code == directoryEntryLimitStatus {
-		return nil, fmt.Errorf("%w: %s has more than %d entries", ErrTraversalLimit, path, maxDirectoryEntries)
+	if !errors.As(err, &status) {
+		return infos, err
 	}
-	return infos, err
+	switch status.Code {
+	case directoryEntryLimitStatus:
+		return nil, fmt.Errorf("%w: %s has more than %d entries", ErrTraversalLimit, path, maxDirectoryEntries)
+	case directoryBytesLimitStatus:
+		return nil, fmt.Errorf("%w: the listing of %s is larger than %d bytes", ErrTraversalLimit, path, maxDirectoryListingBytes)
+	default:
+		return infos, err
+	}
 }
 
 func (c *Client) Lstat(path string) (fs.FileInfo, error) { return c.client.Lstat(path) }
