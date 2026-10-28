@@ -225,7 +225,8 @@ func (h TerminalHandlers) StartForward(c *echo.Context) error {
 	if request.Destination != nil {
 		destination = *request.Destination
 	}
-	if request.ListenPort < 1 || request.ListenPort > 65535 || len(destination) > 512 ||
+	// 0 は、エンジンが空いているポートを選ぶ（local・dynamic だけ）。
+	if request.ListenPort < 0 || request.ListenPort > 65535 || (request.ListenPort == 0 && request.Kind == "remote") || len(destination) > 512 ||
 		(request.Kind != "dynamic" && destination == "") ||
 		(request.Kind == "dynamic" && destination != "") {
 		return problem(c, http.StatusBadRequest, "invalid_request")

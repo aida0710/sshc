@@ -26,8 +26,8 @@ func TestAListenFailureIsRecordedAsAWordTheScreenTranslates(t *testing.T) {
 		"anything else":      {listenError(syscall.EADDRNOTAVAIL), terminal.ForwardProblemFailed},
 		"not a system error": {errors.New("closed"), terminal.ForwardProblemFailed},
 	} {
-		if got := listenProblem(test.err); got != test.want {
-			t.Errorf("%s: listenProblem = %q, want %q", name, got, test.want)
+		if got := ListenProblem(test.err); got != test.want {
+			t.Errorf("%s: ListenProblem = %q, want %q", name, got, test.want)
 		}
 	}
 }

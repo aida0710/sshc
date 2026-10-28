@@ -18,11 +18,16 @@ export function TerminalPortForwards({
   session,
   api = terminalSessionsApi,
   saveApi = configApi,
+  isRunTargetSession = false,
   onChanged,
   onClose,
 }: {
   session: TerminalSession;
   api?: ForwardApi;
+  // isRunTargetSession is true for a session opened on a run target. Its forwards listen on this machine and
+  // are carried to the run target, so they are temporary only (the session uses the run target's SSH
+  // config) and only local and dynamic forwards are offered.
+  isRunTargetSession?: boolean;
   saveApi?: SaveApi;
   onChanged?: () => void | Promise<void>;
   onClose: () => void;
@@ -161,7 +166,7 @@ export function TerminalPortForwards({
               <Field label={t("conn.forwardType")}>
                 <select className={control} value={kind} disabled={!connected || busy} onChange={(event) => setKind(event.currentTarget.value as PortForwardKind)}>
                   <option value="local">{t("conn.forwardLocal")}</option>
-                  <option value="remote">{t("conn.forwardRemote")}</option>
+                  {isRunTargetSession ? null : <option value="remote">{t("conn.forwardRemote")}</option>}
                   <option value="dynamic">{t("conn.forwardDynamic")}</option>
                 </select>
               </Field>
@@ -177,13 +182,15 @@ export function TerminalPortForwards({
               ) : null}
             </div>
             <p className={hintText}>{t(forwardHintKeys[kind])}</p>
-            <CheckboxField
-              label={t("terminal.forwardSaveConnection")}
-              hint={t(canSave ? "terminal.forwardSaveHint" : "terminal.forwardSaveUnavailable")}
-              checked={save}
-              disabled={!canSave || busy}
-              onChange={setSave}
-            />
+            {isRunTargetSession ? null : (
+              <CheckboxField
+                label={t("terminal.forwardSaveConnection")}
+                hint={t(canSave ? "terminal.forwardSaveHint" : "terminal.forwardSaveUnavailable")}
+                checked={save}
+                disabled={!canSave || busy}
+                onChange={setSave}
+              />
+            )}
             {!connected ? <Notice>{t("terminal.forwardNeedsConnection")}</Notice> : null}
             <div className="flex justify-end">
               <Button kind="primary" disabled={!canStart || busy} onClick={() => void start()}>

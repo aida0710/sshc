@@ -1019,6 +1019,76 @@ paths:
         "500": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /api/v1/engines/{alias}/terminal/sessions/{id}/forwards:
+    post:
+      operationId: remoteEngineStartTerminalForward
+      description: >-
+        Starts a local or dynamic forward for a session of the run target {alias}. This machine listens on
+        127.0.0.1 at listenPort; the run target opens the same forward on a free port of its own 127.0.0.1,
+        and connections are carried to it over this machine's SSH connection to the run target. The listen
+        address in the answer is this machine's. Remote forwards are not available yet.
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 64 }
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StartTerminalForwardRequest" }
+      responses:
+        "201":
+          description: The run target's sessions, with this machine's listener for the new forward
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalSessionList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /api/v1/engines/{alias}/terminal/sessions/{id}/forwards/{forwardId}:
+    delete:
+      operationId: remoteEngineStopTerminalForward
+      description: Closes this machine's listener for a forward of the run target {alias} and stops the forward there.
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 64 }
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 64 }
+      - name: forwardId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          description: The run target's sessions after the forward stopped
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalSessionList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /api/v1/engines/{alias}/terminal/shell-profiles:
     get:
       operationId: remoteEngineListLocalShellProfiles
@@ -4852,7 +4922,9 @@ components:
       required: [kind, listenPort]
       properties:
         kind: { type: string, pattern: "^(local|remote|dynamic)$" }
-        listenPort: { type: integer, minimum: 1, maximum: 65535 }
+        # 0 は、エンジンが空いているポートを選ぶ（local と dynamic だけ）。実行先の転送を、
+        # このマシンのエンジンが取り次ぐときに使う。
+        listenPort: { type: integer, minimum: 0, maximum: 65535 }
         destination: { type: string, maxLength: 512 }
     TerminalSession:
       type: object

@@ -89,12 +89,14 @@ type TerminalCall struct {
 
 // TerminalAnswer は、接続先のエンジンの答えである。
 type TerminalAnswer struct {
-	Status int
-	Body   []byte
+	Status      int
+	ContentType string
+	Body        []byte
 }
 
 // maxCalledAnswer は、CallTerminalAPI が読む答えの上限である。答えは、最大 64 の宛先と
-// それぞれのコマンドを並べた JSON までである。
+// それぞれのコマンドを並べた JSON か、セッションの一覧（転送を中継している実行先の取り次ぎ）
+// までである。
 const maxCalledAnswer = 1 << 20
 
 // ErrAnswerTooLarge は、接続先の答えが maxCalledAnswer を超えたことを表す。
@@ -113,6 +115,7 @@ func (m *Manager) CallTerminalAPI(ctx context.Context, alias string, call Termin
 	err = m.exchange(ctx, engine, call, func(response *http.Response) {
 		defer func() { _ = response.Body.Close() }()
 		answer.Status = response.StatusCode
+		answer.ContentType = response.Header.Get("Content-Type")
 		answer.Body, readErr = io.ReadAll(io.LimitReader(response.Body, maxCalledAnswer+1))
 		if readErr == nil && len(answer.Body) > maxCalledAnswer {
 			readErr = ErrAnswerTooLarge
