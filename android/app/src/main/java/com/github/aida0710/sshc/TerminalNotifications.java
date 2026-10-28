@@ -1,7 +1,6 @@
 package com.github.aida0710.sshc;
 
 import android.app.Notification;
-import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -33,18 +32,11 @@ final class TerminalNotifications {
     }
 
     void show(String tag, String title, String body) {
-        NotificationManager manager = context.getSystemService(NotificationManager.class);
-        NotificationChannel channel = new NotificationChannel(
-                CHANNEL, context.getString(R.string.terminal_channel), NotificationManager.IMPORTANCE_DEFAULT);
-        // 音は Web 画面が設定の「通知音」で鳴らす。WebView は裏でも音を出せるため、ここでも鳴らすと二重になる。
-        channel.setSound(null, null);
-        manager.createNotificationChannel(channel);
-        Intent open = new Intent(context, MainActivity.class)
-                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                .putExtra(EXTRA_TAG, tag);
+        // 音は Web 画面が設定の「通知音」で鳴らす。
+        NotificationManager manager = AppNotifications.silentChannel(
+                context, CHANNEL, context.getString(R.string.terminal_channel), NotificationManager.IMPORTANCE_DEFAULT);
         // request code を tag ごとに変え、別の通知の extra で上書きされないようにする。
-        PendingIntent content = PendingIntent.getActivity(
-                context, tag.hashCode(), open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent content = AppNotifications.openApp(context, tag.hashCode(), new Intent().putExtra(EXTRA_TAG, tag));
         Notification notification = new Notification.Builder(context, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_notify_chat)
                 // 見出しと本文は接続先のプログラムが決める。sshc 自身の通知と見分けられるよう、
