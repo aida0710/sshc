@@ -2326,8 +2326,9 @@ type TerminalSessionState string
 
 // TerminalSessionList defines model for TerminalSessionList.
 type TerminalSessionList struct {
-	MaxSessions int               `json:"maxSessions"`
-	Sessions    []TerminalSession `json:"sessions"`
+	MaxSessions  int               `json:"maxSessions"`
+	RestoreOffer *string           `json:"restoreOffer,omitempty"`
+	Sessions     []TerminalSession `json:"sessions"`
 }
 
 // TerminalSettings defines model for TerminalSettings.

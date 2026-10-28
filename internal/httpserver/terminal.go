@@ -264,7 +264,13 @@ func (h TerminalHandlers) list() api.TerminalSessionList {
 	for _, view := range views {
 		sessions = append(sessions, describeSession(view))
 	}
-	return api.TerminalSessionList{Sessions: sessions, MaxSessions: h.Registry.MaxSessions()}
+	list := api.TerminalSessionList{Sessions: sessions, MaxSessions: h.Registry.MaxSessions()}
+	if h.RestoreOffers != nil {
+		if id := h.RestoreOffers.OfferID(); id != "" {
+			list.RestoreOffer = &id
+		}
+	}
+	return list
 }
 
 // List は、生存と終了済みの両方を返す。
