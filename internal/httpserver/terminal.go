@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"path"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -400,7 +398,7 @@ func (h TerminalHandlers) spec(request api.OpenTerminalSessionRequest, size term
 	initialDirectory := ""
 	if cwd != nil {
 		var err error
-		initialDirectory, err = remoteWorkingDirectory(*cwd)
+		initialDirectory, err = terminal.CheckRemoteWorkingDirectory(*cwd)
 		if err != nil {
 			return terminal.Spec{}, err
 		}
@@ -428,8 +426,8 @@ func (h TerminalHandlers) spec(request api.OpenTerminalSessionRequest, size term
 		// 後に世代ごとに送る。再接続のたびに解決し直すので、割り当ての変更と停止がすぐ効く。
 		Startup: func() terminal.Startup {
 			commands := make([]string, 0, 2)
-			if initialDirectory != "" {
-				commands = append(commands, changeRemoteDirectory(initialDirectory))
+			if command, ok := terminal.ChangeRemoteDirectoryCommand(initialDirectory); initialDirectory != "" && ok {
+				commands = append(commands, command)
 			}
 			var startup StartupSnippet
 			if h.Startup != nil {
@@ -449,44 +447,6 @@ func (h TerminalHandlers) spec(request api.OpenTerminalSessionRequest, size term
 		ReconnectStopNotice: reconnectStopNotice,
 	}
 	return spec, nil
-}
-
-// remoteWorkingDirectory accepts an absolute POSIX directory on the SSH server,
-// or one under the remote home (`~`, `~/src`) as a shell reports it in its title.
-func remoteWorkingDirectory(candidate string) (string, error) {
-	if candidate == "" || len(candidate) > 4096 || containsControlCharacter(candidate) {
-		return "", errInvalidRemoteWorkingDirectory
-	}
-	underHome, isUnderHome := strings.CutPrefix(candidate, "~/")
-	switch {
-	case candidate == "~":
-		return candidate, nil
-	case isUnderHome:
-		if path.Clean(underHome) != underHome || strings.HasPrefix(underHome, "/") || strings.HasPrefix(underHome, "../") || underHome == ".." {
-			return "", errInvalidRemoteWorkingDirectory
-		}
-		return candidate, nil
-	case strings.HasPrefix(candidate, "/") && path.Clean(candidate) == candidate:
-		return candidate, nil
-	}
-	return "", errInvalidRemoteWorkingDirectory
-}
-
-// changeRemoteDirectory is the command that moves the remote shell into a
-// directory remoteWorkingDirectory accepted. The `~` is left outside the quotes
-// so the shell expands it to the home directory.
-func changeRemoteDirectory(directory string) string {
-	if directory == "~" {
-		return "cd"
-	}
-	if underHome, ok := strings.CutPrefix(directory, "~/"); ok {
-		return "cd -- ~/" + quotePOSIXShell(underHome)
-	}
-	return "cd -- " + quotePOSIXShell(directory)
-}
-
-func quotePOSIXShell(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func (h TerminalHandlers) shellSpec(requested, cwd *string, size terminal.Size) (terminal.Spec, error) {
@@ -512,7 +472,6 @@ func (h TerminalHandlers) shellSpec(requested, cwd *string, size terminal.Size) 
 }
 
 var errMissingAlias = errors.New("an ssh session needs an alias")
-var errInvalidRemoteWorkingDirectory = errors.New("remote working directory is invalid")
 
 // shellTitle は、タブに出す名前である。
 //
@@ -603,7 +562,7 @@ func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "terminal_session_limit")
 	case errors.Is(err, validate.ErrUnsafeAlias), errors.Is(err, errMissingAlias):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
-	case errors.Is(err, errInvalidRemoteWorkingDirectory):
+	case errors.Is(err, terminal.ErrInvalidRemoteWorkingDirectory):
 		// SFTP で開いているフォルダの名前は接続先が決める。制御文字を含む名前は
 		// cd の行に書けないので、そのフォルダでは開けないと伝える。
 		return problem(c, http.StatusBadRequest, "remote_working_directory_unsupported")
