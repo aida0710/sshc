@@ -178,6 +178,15 @@ export function App({
   // the terminal inert), the app header keeps the navigation reachable.
   const terminalTopBar = mobileLayout && terminalFace && activeSessionId !== null && terminalSessions.remoteRefusal === null;
   const mobileNavigationShown = state === "ready" && mobileLayout && !terminalTopBar;
+  // What sits above the floating bottom bar outside the app's own tree (the toast region) reads its height
+  // from the root element too (--mobile-navigation-inset in index.css).
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.mobileNavigation = String(mobileNavigationShown);
+    return () => {
+      delete root.dataset.mobileNavigation;
+    };
+  }, [mobileNavigationShown]);
   useNavigationSwipe({ enabled: mobileLayout && state === "ready", open: navigationOpen, panelRef: navigationPanelRef, onOpenChange: setNavigationOpen });
 
   // A page's heading shows the inspector's toggle among its actions on a wide screen, and puts its actions
@@ -315,7 +324,7 @@ export function App({
   if (state === "session-ended") return <SessionEndedScreen />;
 
   return (
-    <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout} data-mobile-navigation={mobileNavigationShown}>
+    <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout}>
       <div
         ref={rechecked}
         className="contents"

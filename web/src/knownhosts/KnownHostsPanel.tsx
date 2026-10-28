@@ -106,7 +106,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
     if (removed === null) {
       return;
     }
-    showToast(t("kh.removed", { id: removed.transactionId }), { tone: "success" });
+    showToast(t("kh.removed"), { tone: "success" });
     setPending(null);
     await search(query);
   }
@@ -150,12 +150,12 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
     await action.start("addToKnownHosts", async () => {
       setError("");
       try {
-        const result = await api.addKnownHost(
+        await api.addKnownHost(
           { host: candidate.host, port: candidate.port, keyType: candidate.keyType, key: candidate.key },
           typed,
           acknowledged,
         );
-        showToast(t("kh.added", { host: candidate.host, id: result.transactionId }), { tone: "success" });
+        showToast(t("kh.added", { host: candidate.host }), { tone: "success" });
         closeAdd();
         await search(query);
       } catch (failure) {
