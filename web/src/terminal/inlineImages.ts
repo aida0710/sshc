@@ -31,6 +31,9 @@ export function attachInlineImages(view: Terminal): { dispose(): void } {
     parser: view.parser,
     images: addon,
     limits: { pixelLimit: imagePixelLimit, imageByteLimit: kittyImageByteLimit },
+    // As typed input, so that an answer found again in replayed output is
+    // held back like xterm.js's own answers.
+    answer: (response) => view.input(response, false),
   });
   return {
     dispose() {
