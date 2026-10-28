@@ -62,7 +62,7 @@ A passwordless Vault is neither auto-locked nor lockable by hand: it opens when 
 - JIS yen-key to backslash behavior
 - Whether Enter sends from the phone's text box (it starts a new line by default)
 
-The engine replay buffer retains bytes in memory so it can replay output when a browser reconnects. Browser scrollback is the separate number of display lines retained by xterm. Neither setting writes terminal output to disk.
+The engine replay buffer retains bytes in memory so it can replay output when a browser reconnects. Browser scrollback is the separate number of display lines retained by xterm. Neither setting writes terminal output to disk. When output keeps coming faster than the browser can draw it and the browser falls further behind than the replay buffer holds, the part no longer in the buffer is skipped and the terminal says so.
 
 Encoding may be overridden per connection. OSC 8 and Kitty keyboard behavior are protocol-driven.
 

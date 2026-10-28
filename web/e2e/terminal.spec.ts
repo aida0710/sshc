@@ -251,6 +251,26 @@ test("keeps the whole scrollback of a session shown again, past what the engine 
   await expect(page.getByText(/no longer in the engine replay buffer/)).toHaveCount(0);
 });
 
+test("keeps the link and stops a program flooding the terminal at once on Ctrl+C", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "yes is POSIX here");
+  await openApplication(page, installation);
+  await openSessionList(page);
+  let sockets = 0;
+  page.on("websocket", () => { sockets += 1; });
+  await openLocalShell(page);
+
+  // yes writes without end, far faster than xterm.js parses, so the engine
+  // gets more than its replay buffer ahead of the browser and skips.
+  const screen = await typeIntoTerminal(page, "yes flooding-the-terminal");
+  await expect(page.getByText(/Output came faster than this window could draw it/)).toBeVisible({ timeout: 20_000 });
+  await page.keyboard.press("Control+c");
+  await page.keyboard.type("echo stopped-$((6*7))");
+  await page.keyboard.press("Enter");
+
+  await expect(screen).toContainText("stopped-42", { timeout: 10_000 });
+  expect(sockets).toBe(1);
+});
+
 test("refuses to open more sessions than the configured limit", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",

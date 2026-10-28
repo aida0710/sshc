@@ -7,6 +7,9 @@ export type ReplayReport = { start: number; next: number; end: number; truncated
 export type StreamHandlers = {
   onReplay: (replay: ReplayReport) => void;
   onOutput: (chunk: Uint8Array) => void;
+  // The engine skipped output that left its replay buffer while this browser
+  // fell behind; the next output begins at start.
+  onSkipped: (start: number) => void;
   onExit: (exit: ExitReport) => void;
   // A reconnect replaced the shell behind this stream with a new one.
   onShellReplaced: () => void;
@@ -15,6 +18,10 @@ export type StreamHandlers = {
 
 export type TerminalStream = {
   send: (data: string) => void;
+  // acknowledge tells the engine that xterm.js has parsed this many more bytes
+  // of the output received on this stream. The engine keeps at most a couple of
+  // MiB ahead of what was acknowledged (internal/httpserver/output_flow.go).
+  acknowledge: (bytes: number) => void;
   // sendBinary sends what xterm.js reports through onBinary, one byte per
   // character: the default-format mouse reports, whose coordinates above 95
   // would turn into two bytes if they were encoded as UTF-8.
@@ -27,6 +34,10 @@ export type TerminalStream = {
 // limit. A terminal is a byte stream, so UTF-8 and bracketed-paste sequences
 // may safely span WebSocket messages as long as their order is preserved.
 const inputFrameBytes = 64 * 1024;
+// The parsed output is told in steps of this many bytes: far below the engine's
+// 2 MiB window, so the engine never waits for an acknowledgement still to come,
+// and rare enough to add almost nothing to interactive traffic.
+const acknowledgementStepBytes = 64 * 1024;
 
 // streamPath is where the engine that issued the ticket redeems it: this
 // machine's /terminal/stream, or the forwarded stream of a run-target engine.
@@ -40,6 +51,8 @@ export function openStream(ticket: string, streamPath: string, handlers: StreamH
   socket.binaryType = "arraybuffer";
   const encoder = new TextEncoder();
   let exited = false;
+  let parsed = 0;
+  let acknowledged = 0;
 
   let pending: (string | Uint8Array)[] | null = [];
   socket.addEventListener("open", () => {
@@ -68,6 +81,12 @@ export function openStream(ticket: string, streamPath: string, handlers: StreamH
       const replay = (message as { replay?: unknown }).replay;
       if (validReplay(replay)) {
         handlers.onReplay(replay);
+        return;
+      }
+      const skipped = (message as { skipped?: { start?: unknown } }).skipped;
+      if (skipped !== undefined) {
+        const start = skipped.start;
+        if (typeof start === "number" && Number.isSafeInteger(start) && start >= 0) handlers.onSkipped(start);
         return;
       }
       if ((message as { shellReplaced?: unknown }).shellReplaced !== undefined) {
@@ -106,6 +125,12 @@ export function openStream(ticket: string, streamPath: string, handlers: StreamH
     },
     resize(cols, rows) {
       push(JSON.stringify({ resize: { cols, rows } }));
+    },
+    acknowledge(bytes) {
+      parsed += bytes;
+      if (parsed - acknowledged < acknowledgementStepBytes) return;
+      acknowledged = parsed;
+      push(JSON.stringify({ ack: parsed }));
     },
     close() {
       exited = true;

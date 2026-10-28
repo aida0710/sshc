@@ -396,9 +396,9 @@ func TestAttachReplaysTheBufferAndThenFollowsTheLiveOutput(t *testing.T) {
 
 	process.feed("after-attach\n")
 	select {
-	case chunk := <-stream.Output():
-		if string(chunk) != "after-attach\n" {
-			t.Fatalf("live chunk = %q", chunk)
+	case <-stream.Ready():
+		if read, _ := stream.Take(1 << 20); string(read.Data) != "after-attach\n" {
+			t.Fatalf("live chunk = %q", read.Data)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("the live output never arrived")
@@ -465,29 +465,67 @@ func TestAttachFromReplaysOnlyMissingBytesAndReportsARingGap(t *testing.T) {
 	}
 }
 
-func TestAnAttachmentThatDoesNotReadIsDroppedAndThePTYKeepsRunning(t *testing.T) {
-	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
+// Output read in many small pieces (a macOS PTY returns about 1 KiB at a
+// time) reaches an attachment as one chunk once it is taken.
+func TestAnAttachmentTakesQueuedOutputTogether(t *testing.T) {
+	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: terminal.MinScrollback})
+	session := openShell(t, registry)
+	process := starter.last()
+
+	_, stream := attach(t, session)
+	for index := 0; index < 300; index++ {
+		process.feed("y")
+	}
+	testwait.Until(t, func() bool { return len(snapshotOf(session)) >= 300 })
+
+	<-stream.Ready()
+	read, open := stream.Take(1 << 20)
+	if !open || read.Skipped || string(read.Data) != strings.Repeat("y", 300) {
+		t.Fatalf("took %d bytes (open %v, skipped %v), want the 300 queued bytes at once", len(read.Data), open, read.Skipped)
+	}
+	if more, _ := stream.Take(1 << 20); len(more.Data) != 0 {
+		t.Fatalf("took %q after draining", more.Data)
+	}
+}
+
+// An attachment further behind than the replay buffer holds could not catch up
+// by attaching again either, so it goes on from the oldest output the buffer
+// still holds, says it skipped, and keeps following the live output.
+func TestAnAttachmentThatFallsBehindSkipsToWhatTheBufferStillHolds(t *testing.T) {
+	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: terminal.MinScrollback})
 	session := openShell(t, registry)
 	process := starter.last()
 
 	_, stalled := attach(t, session)
-	for index := 0; index < 2000; index++ {
-		process.feed("x")
+	kibibyte := strings.Repeat("x", 1<<10)
+	for written := 0; written <= terminal.MinScrollback; written += len(kibibyte) {
+		process.feed(kibibyte)
 	}
-	testwait.Until(t, func() bool { return stalled.Dropped() })
-
+	process.feed("still-alive")
+	testwait.Until(t, func() bool { return strings.HasSuffix(string(snapshotOf(session)), "still-alive") })
 	if session.Exit() != nil {
 		t.Fatal("the session died with its slow attachment")
 	}
-	process.feed("still-alive")
-	testwait.Until(t, func() bool { return strings.Contains(string(snapshotOf(session)), "still-alive") })
 
-	_, fresh := attach(t, session)
+	read, open := stalled.Take(1 << 20)
+	retained := snapshotOf(session)
+	if !open || !read.Skipped || string(read.Data) != string(retained) {
+		t.Fatalf("took %d bytes (open %v, skipped %v), want the %d retained bytes after a skip", len(read.Data), open, read.Skipped, len(retained))
+	}
+
+	// The notice left by the output already taken says nothing new.
+	select {
+	case <-stalled.Ready():
+	default:
+	}
 	process.feed("!")
 	select {
-	case <-fresh.Output():
+	case <-stalled.Ready():
+		if next, _ := stalled.Take(1 << 20); next.Skipped || string(next.Data) != "!" {
+			t.Fatalf("after the skip took %q (skipped %v), want the live output", next.Data, next.Skipped)
+		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("a fresh attachment received nothing")
+		t.Fatal("the attachment stopped following the output after the skip")
 	}
 }
 
@@ -501,7 +539,7 @@ func TestExitLeavesTheSessionReadableAndClosesEveryAttachment(t *testing.T) {
 	process.exit(terminal.ExitInfo{Code: 255})
 
 	select {
-	case <-stream.Output():
+	case <-stream.Ready():
 	case <-time.After(2 * time.Second):
 		t.Fatal("the queued output never arrived")
 	}
@@ -511,16 +549,19 @@ func TestExitLeavesTheSessionReadableAndClosesEveryAttachment(t *testing.T) {
 	if info == nil || info.Code != 255 {
 		t.Fatalf("Exit() = %+v, want code 255", info)
 	}
-	if stream.Dropped() {
-		t.Fatal("a stream closed by the exit must not be reported as dropped")
+	if read, open := stream.Take(1 << 20); !open || !strings.Contains(string(read.Data), "Could not resolve hostname") {
+		t.Fatalf("an attachment closed by the exit took %q (open %v), want the output written before it", read.Data, open)
+	}
+	if _, open := stream.Take(1 << 20); open {
+		t.Fatal("the attachment closed by the exit stayed open after its output was taken")
 	}
 	replay, closed := attach(t, session)
 	if !strings.Contains(string(replay), "Could not resolve hostname") {
 		t.Fatalf("replay after exit = %q", replay)
 	}
 	select {
-	case _, open := <-closed.Output():
-		if open {
+	case <-closed.Ready():
+		if _, open := closed.Take(1); open {
 			t.Fatal("attaching to an exited session must not deliver live output")
 		}
 	case <-time.After(time.Second):
