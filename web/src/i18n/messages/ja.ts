@@ -1005,6 +1005,9 @@ export const ja = {
     "制御シーケンスを除き、直近最大200行をコピーします",
   "terminal.copyContextDone": "直近のターミナル出力をコピーしました。",
   "terminal.copyContextEmpty": "コピーできるターミナル出力がありません。",
+  "terminal.keepScreenAwake": "画面を常にオン",
+  "terminal.keepScreenAwakeHint":
+    "ターミナルを表示している間、画面を消しません。このブラウザだけの設定で、すべてのターミナルに効きます",
   "terminal.osc52Hint":
     "このターミナルセッションからOSC 52でシステムのクリップボードへ書き込むことを許可します",
   "terminal.osc52Enabled":

@@ -12,6 +12,8 @@ import { SplitSessionPicker } from "../terminal/splitView/SplitSessionPicker";
 import { RunTargetConnectingPanel } from "../terminal/RunTargetConnectingPanel";
 import { RunTargetRefusalPanel } from "../terminal/RunTargetRefusalPanel";
 import type { RunTargetsState } from "../terminal/useRunTargets";
+import { useKeepScreenAwake } from "../terminal/keepScreenAwake";
+import { useScreenWakeLock } from "../terminal/useScreenWakeLock";
 
 const TerminalView = lazy(() =>
   import("../terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
@@ -74,6 +76,9 @@ export function TerminalScreen({
   const refusal = runTarget === null ? null : terminalSessions.remoteRefusal;
   const [splitRequest, setSplitRequest] = useState<{ targetSessionId: string; edge: PaneEdge } | null>(null);
   const session = terminalSessions.sessions.find((session) => session.id === activeSessionId) ?? null;
+  const keepScreenAwake = useKeepScreenAwake();
+  // Only while a terminal is on the screen: other sections let the screen turn off as usual.
+  useScreenWakeLock(keepScreenAwake && visible && session !== null);
   useEffect(() => {
     document.title = session === null ? "sshc" : `${session.presentation?.displayTitle ?? session.title} · sshc`;
     return () => { document.title = "sshc"; };

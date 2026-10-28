@@ -1002,6 +1002,9 @@ export const en = {
     "Copy up to the latest 200 terminal rows without control sequences",
   "terminal.copyContextDone": "Recent terminal context copied.",
   "terminal.copyContextEmpty": "There is no terminal context to copy.",
+  "terminal.keepScreenAwake": "Keep screen on",
+  "terminal.keepScreenAwakeHint":
+    "Keep the screen on while a terminal is shown. This browser only; applies to every terminal",
   "terminal.osc52Hint":
     "Allow this terminal session to write to the system clipboard via OSC 52",
   "terminal.osc52Enabled":
