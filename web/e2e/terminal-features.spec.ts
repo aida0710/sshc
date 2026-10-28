@@ -99,6 +99,28 @@ test("renders the documented non-interactive CLI example", async ({ page, instal
   }
 });
 
+test("keeps what Ctrl+L clears at the prompt in the scrollback", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "Ctrl+L is readline's clear-screen here");
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  await openLocalShell(page);
+
+  const terminal = page.getByRole("region", { name: /^Terminal for / });
+  await expect(terminal).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await terminalKeyboard(page).focus();
+  // Fewer lines than the screen holds, so only the clear can move them up.
+  await page.keyboard.type("for i in 1 2 3; do echo cleared-line-$((i * 11)); done");
+  await page.keyboard.press("Enter");
+  await expect(terminal).toContainText("cleared-line-33", { timeout: 20_000 });
+
+  await page.keyboard.press("Control+L");
+  await expect(terminal).not.toContainText("cleared-line-33");
+  await terminal.hover();
+  await page.mouse.wheel(0, -800);
+
+  await expect(terminal).toContainText("cleared-line-33");
+});
+
 test("uses a thin rounded scrollbar for terminal scrollback", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSection(page, "Terminal");

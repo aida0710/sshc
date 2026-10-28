@@ -260,6 +260,10 @@ export function TerminalView({
       fontSize: resolvedFontSize,
       theme: terminalTheme(container, hasBackground),
       scrollback: scrollbackLines,
+      // Clearing the screen at a prompt (Ctrl+L in bash and zsh) moves what
+      // was on it into the scrollback instead of erasing it, as VTE, Windows
+      // Terminal and Ghostty do. `clear` still empties the scrollback (CSI 3 J).
+      scrollOnEraseInDisplay: true,
       // A drag goes to a program that reads the mouse (Claude Code, vim, tmux).
       // xterm.js lets Shift take the drag back for selecting, except on macOS,
       // where only Option does and only with this on.
