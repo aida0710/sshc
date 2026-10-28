@@ -3,8 +3,7 @@ import type { CreateConnectionDraft } from "../connections/CreateConnectionModal
 import type { FileTarget } from "../explorer/ConfigExplorer";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "../keys/workflow";
 import type { Section } from "../routing/sectionRoute";
-import type { SFTPTarget } from "../sftp/SFTPPanel";
-import type { RemotePathAction } from "../terminal/TerminalLinkPopover";
+import type { RemotePathAction, SFTPTarget } from "../sftp/SFTPPanel";
 
 // A handoff the receiving section clears by the request number it took, so a
 // newer handoff sent while the section was acting on the old one survives.

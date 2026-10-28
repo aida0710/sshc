@@ -5,8 +5,6 @@ import { clipboard } from "../ui/clipboard";
 import { isSafeHttpURL, type TerminalLinkMatch } from "./links";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 
-export type RemotePathAction = "browse" | "edit" | "download";
-
 export type TerminalLinkSelection = {
   link: TerminalLinkMatch;
   x: number;
@@ -21,19 +19,15 @@ export function openTerminalURL(target: string): boolean {
   return opened !== null;
 }
 
+// TerminalLinkPopover is the menu a clicked URL opens: it shows where the link goes before the browser
+// opens it. A file path opens its preview instead, and comes here only when this session's files cannot
+// be read, to be copied.
 export function TerminalLinkPopover({
   selection,
   onClose,
-  onPreviewPath,
-  onRemotePath,
 }: {
   selection: TerminalLinkSelection;
   onClose: () => void;
-  // onPreviewPath opens a path over the terminal, from the machine the shell
-  // runs on. A relative path is resolved by the caller.
-  onPreviewPath?: (path: string) => void;
-  // onRemotePath sends a path of an SSH session to the SFTP screen.
-  onRemotePath?: (path: string, action: RemotePathAction) => void;
 }) {
   const t = useTranslate();
   const panel = useRef<HTMLDivElement>(null);
@@ -60,31 +54,8 @@ export function TerminalLinkPopover({
     onClose();
   }
 
-  function preview() {
-    if (selection.link.kind === "url" || onPreviewPath === undefined) return;
-    onPreviewPath(selection.link.target);
-    onClose();
-  }
-
-  function remote(action: RemotePathAction) {
-    if (selection.link.kind !== "path" || onRemotePath === undefined) return;
-    onRemotePath(selection.link.target, action);
-    onClose();
-  }
-
   const actions: { label: string; run: () => void }[] = [
-    ...(selection.link.kind === "url"
-      ? [{ label: t("terminal.linkOpenBrowser"), run: openURL }]
-      : [
-          ...(onPreviewPath === undefined ? [] : [{ label: t("terminal.linkPreview"), run: preview }]),
-          ...(onRemotePath === undefined || selection.link.kind !== "path"
-            ? []
-            : [
-                { label: t("terminal.linkBrowseSFTP"), run: () => remote("browse") },
-                { label: t("terminal.linkEditSFTP"), run: () => remote("edit") },
-                { label: t("terminal.linkDownloadSFTP"), run: () => remote("download") },
-              ]),
-        ]),
+    ...(selection.link.kind === "url" ? [{ label: t("terminal.linkOpenBrowser"), run: openURL }] : []),
     { label: t("terminal.linkCopy"), run: copy },
   ];
 

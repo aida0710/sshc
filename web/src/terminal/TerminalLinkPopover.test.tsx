@@ -9,8 +9,8 @@ const writeText = vi.hoisted(() => vi.fn());
 vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText } }));
 
 describe("TerminalLinkPopover", () => {
-  it("passes a remote file action to SFTP", async () => {
-    const onRemotePath = vi.fn();
+  it("offers only copying for a file path whose file this session cannot read", async () => {
+    writeText.mockResolvedValue(undefined);
     const onClose = vi.fn();
     render(
       <LanguageProvider>
@@ -20,63 +20,15 @@ describe("TerminalLinkPopover", () => {
             x: 20,
             y: 30,
           }}
-          onRemotePath={onRemotePath}
           onClose={onClose}
         />
       </LanguageProvider>,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Edit with SFTP" }));
-
-    expect(onRemotePath).toHaveBeenCalledWith("/var/log/app.log", "edit");
-    expect(onClose).toHaveBeenCalledOnce();
-  });
-
-  it("previews a path from a shell without offering SFTP actions", async () => {
-    const onPreviewPath = vi.fn();
-    const onClose = vi.fn();
-    render(
-      <LanguageProvider>
-        <TerminalLinkPopover
-          selection={{
-            link: { kind: "path", text: "/tmp/shot.png", target: "/tmp/shot.png", start: 0, end: 13 },
-            x: 20,
-            y: 30,
-          }}
-          onPreviewPath={onPreviewPath}
-          onClose={onClose}
-        />
-      </LanguageProvider>,
-    );
-
-    expect(screen.queryByRole("button", { name: "Edit with SFTP" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Preview" }));
-
-    expect(onPreviewPath).toHaveBeenCalledWith("/tmp/shot.png");
-    expect(onClose).toHaveBeenCalledOnce();
-  });
-
-  it("previews a relative path but leaves SFTP to full paths", async () => {
-    const onPreviewPath = vi.fn();
-    render(
-      <LanguageProvider>
-        <TerminalLinkPopover
-          selection={{
-            link: { kind: "relative-path", text: "shots/a.png", target: "shots/a.png", start: 0, end: 11 },
-            x: 20,
-            y: 30,
-          }}
-          onPreviewPath={onPreviewPath}
-          onRemotePath={vi.fn()}
-          onClose={() => undefined}
-        />
-      </LanguageProvider>,
-    );
-
-    expect(screen.queryByRole("button", { name: "Browse in SFTP" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Preview" }));
-
-    expect(onPreviewPath).toHaveBeenCalledWith("shots/a.png");
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["Copy link"]);
+    await userEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    expect(writeText).toHaveBeenCalledWith("/var/log/app.log");
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   });
 
   it("opens an HTTP link in a new isolated browser tab", async () => {
