@@ -39,10 +39,12 @@ type fakeRemoteEngine struct {
 	expired atomic.Bool
 	// stalled が立つと、セッションの一覧に答えない（黙って切れた SSH の接続を真似る）。
 	stalled atomic.Bool
-	mutex   sync.Mutex
-	cookie  string
-	csrf    string
-	seen    []string
+	// sessionStalled が立つと、/cli/session に答えない（身元は示すのに止まったエンジン）。
+	sessionStalled atomic.Bool
+	mutex          sync.Mutex
+	cookie         string
+	csrf           string
+	seen           []string
 }
 
 func newFakeRemoteEngine(t *testing.T) *fakeRemoteEngine {
@@ -94,6 +96,10 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 	case cliSessionPath:
 		if r.Header.Get(handoff.HeaderName) != fakeSecret {
 			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if f.sessionStalled.Load() {
+			<-r.Context().Done()
 			return
 		}
 		number := f.sessions.Add(1)
