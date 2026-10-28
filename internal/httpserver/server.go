@@ -37,6 +37,7 @@ import (
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/snippets"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalopen"
 	"sshc/internal/terminalrestore"
 	"sshc/internal/terminalworkspace"
 	"sshc/internal/vpn"
@@ -84,7 +85,7 @@ type Options struct {
 	VPNProfiles *vpnprofile.Service
 	Keys        KeyService
 	// Connect は、alias ひとつ分の対話セッションを開く。合成の根が組み立てる。
-	Connect Connector
+	Connect terminalopen.Connector
 	// RemoteEngines は、SSH の接続先のエンジンへの中継と、実行先としての取り次ぎを持つ。
 	// nil なら `sshc open <alias>` と実行先の受け口を登録しない。
 	RemoteEngines RemoteEngineDirectory
@@ -583,7 +584,7 @@ func newTerminalHandlers(options Options, actions ActionHandlers, host string) T
 		Connected:           options.ConnectionOpened,
 		Workspaces:          options.TerminalWorkspaces,
 		RestoreOffers:       options.TerminalRestore,
-		Startup: func(alias string) StartupSnippet {
+		Startup: func(alias string) terminalopen.StartupSnippet {
 			return prepareStartupSnippet(options.Snippets, options.Logger, alias)
 		},
 		ExpectedOrigin: "http://" + host,
