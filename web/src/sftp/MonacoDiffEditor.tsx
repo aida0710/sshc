@@ -6,7 +6,7 @@ import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
 
 export function MonacoDiffEditor({ path, original, modified }: { path: string; original: string; modified: string }) {
   const container = useRef<HTMLDivElement>(null);
-  const { resolved } = useTheme();
+  const { scheme } = useTheme();
   useEffect(() => {
     if (container.current === null) return;
     const originalModel = monaco.editor.createModel(original, languageFor(path));
@@ -18,7 +18,7 @@ export function MonacoDiffEditor({ path, original, modified }: { path: string; o
       renderGutterMenu: false,
       minimap: { enabled: false }, scrollBeyondLastLine: false,
       fontFamily: "JetBrains Mono, ui-monospace, monospace", fontSize: 13,
-      theme: resolved === "dark" ? "vs-dark" : "vs", unusualLineTerminators: "off",
+      theme: scheme === "dark" ? "vs-dark" : "vs", unusualLineTerminators: "off",
     });
     editor.setModel({ original: originalModel, modified: modifiedModel });
     return () => {
@@ -31,6 +31,6 @@ export function MonacoDiffEditor({ path, original, modified }: { path: string; o
     // Theme updates do not discard the comparison's scroll position.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, original, modified]);
-  useEffect(() => { monaco.editor.setTheme(resolved === "dark" ? "vs-dark" : "vs"); }, [resolved]);
+  useEffect(() => { monaco.editor.setTheme(scheme === "dark" ? "vs-dark" : "vs"); }, [scheme]);
   return <div ref={container} {...keyboardOwnerProps} className="h-full min-h-64 w-full overflow-hidden" />;
 }

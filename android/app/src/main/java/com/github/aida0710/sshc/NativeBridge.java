@@ -11,7 +11,8 @@ final class NativeBridge {
     interface Host {
         void chooseSaveDestination(String requestId, String suggestedName, String mimeType);
         void notifyTransfer(String status);
-        void setAppearance(String appearance);
+        /** barColour は 0xFFrrggbb。 */
+        void setAppearance(String appearance, int barColour);
         /** "granted"、"denied"、"default" のいずれか。 */
         String notificationPermission();
         void requestNotificationPermission();
@@ -87,10 +88,15 @@ final class NativeBridge {
         if ("completed".equals(status) || "failed".equals(status)) host.notifyTransfer(status);
     }
 
-    /** Web UIとsystem barの明暗を一致させる。 */
+    /**
+     * Web UIとsystem barの明暗と色を一致させる。barColour はWebの上のバーの色（#rrggbb）。
+     * テーマごとに違うので、Android側に色の表を持たずWebから受け取る。
+     */
     @JavascriptInterface
-    public void setAppearance(String appearance) {
-        if ("light".equals(appearance) || "dark".equals(appearance)) host.setAppearance(appearance);
+    public void setAppearance(String appearance, String barColour) {
+        if (!"light".equals(appearance) && !"dark".equals(appearance)) return;
+        if (barColour == null || !barColour.matches("#[0-9a-fA-F]{6}")) return;
+        host.setAppearance(appearance, 0xFF000000 | Integer.parseInt(barColour.substring(1), 16));
     }
 
     /** Android の通知の許可の状態。ブラウザの Notification.permission と同じ 3 つの値を返す。 */

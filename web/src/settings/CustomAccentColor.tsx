@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { contrastRatio, minimumAccentContrast, parseAccentColor } from "../theme/accentColor";
 import { useTheme } from "../theme/context";
+import { themeAttributes } from "../theme/theme";
 import { narrowControl } from "../ui/form";
 import { Notice } from "../ui/surface";
 
@@ -58,7 +59,7 @@ export function CustomAccentColor({ color, disabled, onPreview, onChoose }: {
 
   return (
     <div className="mt-4 flex flex-col gap-3">
-      <span ref={pageProbe} data-theme={resolved} hidden />
+      <span ref={pageProbe} {...themeAttributes(resolved)} hidden />
       <div className="flex items-center gap-2.5">
         <input
           ref={picker}
