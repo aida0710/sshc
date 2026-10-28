@@ -1,15 +1,16 @@
+import { chooseConnectionAction } from "./support/connections";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { clickAndAwait, expect, openSection, test, openApplication } from "./support/environment";
 import { createGroups, groupList, openGroupMenu } from "./support/groups";
 
-// moveNasInto moves the fixture's nas connection into a group from its Manage connection panel.
+// moveNasInto moves the fixture's nas connection into a group from the 「…」 in its header.
 async function moveNasInto(page: Page, group: string) {
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas", exact: true }).click();
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
-  await page.getByRole("button", { name: "Manage connection" }).click();
+  await chooseConnectionAction(page, "Move to group…");
   await page.getByLabel("Primary group").selectOption(group);
   expect(await clickAndAwait(page, "Move to this group", "/api/v1/config/save")).toBe(200);
 }
@@ -98,7 +99,7 @@ test("refuses to move a connection into a group nothing declares", async ({ page
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas", exact: true }).click();
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Manage connection" }).click();
+  await chooseConnectionAction(page, "Move to group…");
   await expect(page.getByRole("button", { name: "Move to this group" })).toBeDisabled();
   expect(await installation.read("conf.d/10-home.conf")).toContain("Host nas");
 });

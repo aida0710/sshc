@@ -1,3 +1,4 @@
+import { chooseConnectionAction } from "./support/connections";
 import type { Page } from "@playwright/test";
 import { expect, openApplication, openSection, test, type Installation } from "./support/environment";
 
@@ -184,14 +185,13 @@ test("follows the open connection and the group editor when their group is renam
   await expect(page.getByRole("region", { name: "ops", exact: true })).toBeVisible();
 });
 
-test("deletes the open connection from its management panel with the file's contents sent once", async ({ page, installation }) => {
+test("deletes the open connection from its header menu with the file's contents sent once", async ({ page, installation }) => {
   await installWorkGroup(installation);
   const tree = await openConnections(page, installation);
   const saves = savesTo(page);
 
   await tree.getByRole("button", { name: "alpha", exact: true }).click();
-  await page.getByRole("button", { name: "Manage connection" }).click();
-  await page.getByRole("button", { name: "Delete connection" }).click();
+  await chooseConnectionAction(page, "Delete…");
   await page.getByRole("button", { name: "Delete it" }).click();
 
   await expect(tree.getByRole("button", { name: "alpha", exact: true })).toHaveCount(0);

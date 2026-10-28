@@ -1,3 +1,4 @@
+import { chooseConnectionAction } from "./support/connections";
 import { expect, test } from "./support/environment";
 import { chooseTheme, openApplication, openSection, sessionStatus } from "./support/environment";
 import { everySection } from "./support/sectionNavigation";
@@ -110,8 +111,8 @@ for (const appearance of ["light", "dark"] as const) {
       });
     }
 
-    await page.getByRole("tab", { name: "Analysis" }).click();
-    await expect(page.getByRole("tabpanel", { name: "Analysis" })).toBeVisible();
+    await page.getByRole("tab", { name: "Resolved values" }).click();
+    await expect(page.getByRole("tabpanel", { name: "Resolved values" })).toBeVisible();
     if (process.env.SSHC_VISUAL_DIR !== undefined) {
       await page.screenshot({
         path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-connection-analysis-${appearance}.png`,
@@ -129,13 +130,13 @@ for (const appearance of ["light", "dark"] as const) {
         fullPage: true,
       });
     }
-    for (const subview of ["Directives", "Raw"] as const) {
-      await page.getByRole("tab", { name: subview }).click();
-      await expect(page.getByRole("tab", { name: subview })).toHaveAttribute("aria-selected", "true");
+    for (const subview of ["raw"] as const) {
+      await chooseConnectionAction(page, "Edit as text");
+      await expect(page.getByLabel(/Block text/)).toBeVisible();
       await page.waitForTimeout(250);
       if (process.env.SSHC_VISUAL_DIR !== undefined) {
         await page.screenshot({
-          path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-connection-advanced-${subview.toLowerCase()}-${appearance}.png`,
+          path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-connection-advanced-${subview}-${appearance}.png`,
           fullPage: true,
         });
       }
