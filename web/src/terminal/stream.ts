@@ -13,6 +13,10 @@ export type StreamHandlers = {
 
 export type TerminalStream = {
   send: (data: string) => void;
+  // sendBinary sends what xterm.js reports through onBinary, one byte per
+  // character: the default-format mouse reports, whose coordinates above 95
+  // would turn into two bytes if they were encoded as UTF-8.
+  sendBinary: (data: string) => void;
   resize: (cols: number, rows: number) => void;
   close: () => void;
 };
@@ -85,12 +89,18 @@ export function openStream(ticket: string, streamPath: string, handlers: StreamH
   socket.addEventListener("close", finish);
   socket.addEventListener("error", finish);
 
+  const pushInput = (bytes: Uint8Array) => {
+    for (let offset = 0; offset < bytes.byteLength; offset += inputFrameBytes) {
+      push(bytes.subarray(offset, offset + inputFrameBytes));
+    }
+  };
+
   return {
     send(data) {
-      const encoded = encoder.encode(data);
-      for (let offset = 0; offset < encoded.byteLength; offset += inputFrameBytes) {
-        push(encoded.subarray(offset, offset + inputFrameBytes));
-      }
+      pushInput(encoder.encode(data));
+    },
+    sendBinary(data) {
+      pushInput(Uint8Array.from(data, (character) => character.charCodeAt(0) & 0xff));
     },
     resize(cols, rows) {
       push(JSON.stringify({ resize: { cols, rows } }));
