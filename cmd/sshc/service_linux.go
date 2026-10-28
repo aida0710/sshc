@@ -95,48 +95,35 @@ func (manager *linuxServiceManager) DisablePlan() string {
 	return fmt.Sprintf("stop, disable, and remove the systemd user service at %s", manager.unitPath())
 }
 
-func (manager *linuxServiceManager) Install(ctx context.Context, executable string) (result error) {
-	release, err := manager.acquireOperationLock()
-	if err != nil {
-		return err
+func (manager *linuxServiceManager) Install(ctx context.Context, executable string) error {
+	return manager.definitionSteps().install(ctx, executable)
+}
+
+// definitionSteps は、systemd の user service の登録と外し方である。
+func (manager *linuxServiceManager) definitionSteps() serviceDefinitionSteps {
+	return serviceDefinitionSteps{
+		definition:      manager.definitionFile(),
+		lock:            manager.lock,
+		temporaryPrefix: ".sshc-service-",
+		start: func(ctx context.Context) error {
+			if err := manager.run(ctx, "--user", "daemon-reload"); err != nil {
+				return err
+			}
+			if err := manager.run(ctx, "--user", "enable", serviceUnitName); err != nil {
+				return err
+			}
+			// enable --nowは既に動いているunitのExecStartを更新しないため、再導入でも
+			// 新しいbinaryへ確実に切り替わるよう明示的にrestartする。
+			return manager.run(ctx, "--user", "restart", serviceUnitName)
+		},
+		waitReady: manager.waitUntilReady,
+		stopForRemoval: func(ctx context.Context) error {
+			return manager.run(ctx, "--user", "disable", "--now", serviceUnitName)
+		},
+		afterRemoval: func(ctx context.Context) error {
+			return manager.run(ctx, "--user", "daemon-reload")
+		},
 	}
-	defer func() { result = errors.Join(result, release()) }()
-	definition := manager.definitionFile()
-	snapshot, err := definition.readSnapshot()
-	if err != nil {
-		return err
-	}
-	if snapshot.state == serviceUnmanaged {
-		return errUnmanagedServiceUnit
-	}
-	unit, err := systemdUnit(executable)
-	if err != nil {
-		return err
-	}
-	if err := manager.files.MkdirAll(filepath.Dir(manager.unitPath()), 0o700); err != nil {
-		return fmt.Errorf("create systemd user directory: %w", err)
-	}
-	if err := definition.ensureUnchanged(snapshot); err != nil {
-		return err
-	}
-	if err := storage.WriteAtomicFile(manager.files, manager.unitPath(), ".sshc-service-", 0o600, []byte(unit)); err != nil {
-		return fmt.Errorf("write %s: %w", manager.unitPath(), err)
-	}
-	if err := manager.run(ctx, "--user", "daemon-reload"); err != nil {
-		return err
-	}
-	if err := manager.run(ctx, "--user", "enable", serviceUnitName); err != nil {
-		return err
-	}
-	// enable --nowは既に動いているunitのExecStartを更新しないため、再導入でも
-	// 新しいbinaryへ確実に切り替わるよう明示的にrestartする。
-	if err := manager.run(ctx, "--user", "restart", serviceUnitName); err != nil {
-		return err
-	}
-	if err := manager.waitUntilReady(ctx); err != nil {
-		return fmt.Errorf("service did not become ready: %w", err)
-	}
-	return definition.ensureStillMatches(executable, "starting")
 }
 
 func (manager *linuxServiceManager) Status(ctx context.Context) (serviceState, error) {
@@ -229,36 +216,8 @@ func serviceFailureDetail(ctx context.Context, runner serviceCommandRunner) stri
 	return "systemd reports " + strings.Join(lines, "/")
 }
 
-func (manager *linuxServiceManager) Disable(ctx context.Context) (removed bool, result error) {
-	release, err := manager.acquireOperationLock()
-	if err != nil {
-		return false, err
-	}
-	defer func() { result = errors.Join(result, release()) }()
-	definition := manager.definitionFile()
-	snapshot, err := definition.readSnapshot()
-	if err != nil {
-		return false, err
-	}
-	if snapshot.state == serviceAbsent {
-		return false, nil
-	}
-	if snapshot.state == serviceUnmanaged {
-		return false, errUnmanagedServiceUnit
-	}
-	if err := manager.run(ctx, "--user", "disable", "--now", serviceUnitName); err != nil {
-		return false, err
-	}
-	if err := definition.ensureUnchanged(snapshot); err != nil {
-		return false, err
-	}
-	if err := manager.files.Remove(manager.unitPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return false, fmt.Errorf("remove %s: %w", manager.unitPath(), err)
-	}
-	if err := manager.run(ctx, "--user", "daemon-reload"); err != nil {
-		return false, err
-	}
-	return true, nil
+func (manager *linuxServiceManager) Disable(ctx context.Context) (bool, error) {
+	return manager.definitionSteps().disable(ctx)
 }
 
 func (manager *linuxServiceManager) run(ctx context.Context, arguments ...string) error {
