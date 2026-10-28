@@ -71,8 +71,8 @@ export const ja = {
   "shell.inspectorHideNamed": "{label}を隠す",
   "shell.inspectorAttention": "確認が必要な項目があります",
   "palette.open": "Search",
-  "palette.heading": "セッション・ホスト・ファイル・スニペット・設定を検索",
-  "palette.placeholder": "セッション、ホスト、ファイル、スニペット、設定を検索",
+  "palette.heading": "セッション・接続先・ファイル・スニペット・設定を検索",
+  "palette.placeholder": "セッション、接続先、ファイル、スニペット、設定を検索",
   "palette.results": "検索結果",
   "palette.loading": "検索項目を読み込んでいます…",
   "palette.empty": "一致する項目がありません",
@@ -81,15 +81,15 @@ export const ja = {
   "palette.openHostSettings": "{alias}の接続設定を開く",
   "palette.openSection": "セクションを開く",
   "palette.kind.session": "セッション",
-  "palette.kind.host": "ホスト",
+  "palette.kind.host": "接続先",
   "palette.kind.file": "ファイル",
   "palette.kind.snippet": "スニペット",
   "palette.kind.setting": "設定",
   "palette.kind.command": "操作",
-  "palette.newConnection": "接続を作成する",
+  "palette.newConnection": "接続先を作成する",
   "palette.newConnectionDetail": "新規接続のフォームを開く",
   "palette.openRemoteFiles": "リモートファイルを開く",
-  "palette.openRemoteFilesDetail": "SFTPでホストのファイルを見る",
+  "palette.openRemoteFilesDetail": "SFTPで接続先のファイルを見る",
   "palette.openLocalShell": "ローカルシェルを開く",
   "palette.openLocalShellDetail": "このマシンでターミナルを起動する",
   "palette.lockVault": "Vaultをロック",
@@ -151,11 +151,11 @@ export const ja = {
   "sftp.local.upload": "選択項目をアップロード",
   "sftp.local.loading": "ローカルのディレクトリを読み込み中…",
   "sftp.local.dropZone": "ローカルのファイル一覧とドロップ先",
-  "sftp.local.connectRemote": "アップロードするには、リモートのホストに接続してください。",
-  "sftp.host": "ホスト",
-  "sftp.noHosts": "保存済みホストなし",
-  "sftp.chooseHost": "ホストを選択",
-  "sftp.chooseHostHint": "ローカルか保存済みのSSHホストを選択してください。SSHホストは選ぶと接続します。",
+  "sftp.local.connectRemote": "アップロードするには、接続先に接続してください。",
+  "sftp.host": "接続先",
+  "sftp.noHosts": "保存した接続先はありません",
+  "sftp.chooseHost": "接続先を選択",
+  "sftp.chooseHostHint": "ローカルか保存した接続先を選んでください。接続先は選ぶと接続します。",
   "sftp.chooseHostAction": "接続先を選択",
   "sftp.connect": "接続",
   "sftp.connecting": "{alias}に接続しています…",
@@ -183,15 +183,15 @@ export const ja = {
   "sftp.leaveDiscard": "破棄して移動",
   "sftp.leaveStay": "編集を続ける",
   "sftp.chooseHostHeading": "接続先を選択",
-  "sftp.closeHostPicker": "ホスト選択を閉じる",
+  "sftp.closeHostPicker": "接続先の選択を閉じる",
   "sftp.searchHosts": "接続先を検索",
-  "sftp.searchHostsPlaceholder": "名前、グループ、ホスト、ユーザーを検索",
-  "sftp.hostViews": "ホスト一覧の表示",
+  "sftp.searchHostsPlaceholder": "名前、グループ、ホスト名、ユーザーを検索",
+  "sftp.hostViews": "接続先の一覧の表示",
   "sftp.recentHosts": "最近接続した順",
   "sftp.hostGroups": "グループ",
   "sftp.ungroupedHosts": "グループなし",
-  "sftp.noHostMatches": "検索に一致するホストはありません。",
-  "sftp.hostNoDetails": "SSHホスト",
+  "sftp.noHostMatches": "検索に一致する接続先はありません。",
+  "sftp.hostNoDetails": "SSHの接続先",
   "sftp.hostCurrent": "選択中",
   "sftp.connectionFailed": "接続できませんでした。",
   "sftp.pathCannotOpen": "パスを開けませんでした。絶対パスか、~/で始まるパスを入力してください。",
@@ -687,7 +687,7 @@ export const ja = {
   "snippets.loading": "スニペットを読み込んでいます…",
   "snippets.failed": "スニペットの操作に失敗しました。",
   "snippets.notFound": "スニペットか実行の記録が見つかりませんでした。ほかの画面で削除された可能性があります。",
-  "snippets.previewChanged": "確認したあとでスニペットか対象ホストが変わりました。もう一度確認してください。",
+  "snippets.previewChanged": "確認したあとでスニペットか対象の接続先が変わりました。もう一度確認してください。",
   "snippets.jobsFull": "実行中のスニペットが多すぎます。どれかが終わってから、もう一度実行してください。",
   "snippets.jobFinished": "中止する前に実行が終わりました。",
   "snippets.invalid": "スニペットか変数に使用できない値があります。",
@@ -707,14 +707,14 @@ export const ja = {
   "snippets.saved": "スニペットを保存しました。",
   "snippets.delete": "削除",
   "snippets.deleteHeading": "{name}を削除しますか？",
-  "snippets.deleteBody": "このスニペットはすべての対象ホストから消え、元に戻せません。",
+  "snippets.deleteBody": "このスニペットはすべての対象の接続先から消え、元に戻せません。",
   "snippets.confirmDelete": "削除する",
   "snippets.deleteCancel": "キャンセル",
   "snippets.runHeading": "実行する",
-  "snippets.targets": "対象ホスト",
+  "snippets.targets": "対象の接続先",
   "snippets.preview": "実行内容を確認",
   "snippets.confirm": "実際のコマンドを確認",
-  "snippets.run": "このホストで実行",
+  "snippets.run": "この接続先で実行",
   "snippets.results": "実行結果",
   "snippets.status.running": "実行中",
   "snippets.status.completed": "完了",
@@ -734,11 +734,11 @@ export const ja = {
   "snippets.startupHintWithSecret":
     "シェルの準備ができるたびに送ります（自動再接続を含む）。シークレット変数の値は、リモートのシェル履歴や画面に残ることがあります。接続先や認証の設定を変えると止まります。",
   "snippets.startupStale":
-    "停止中です。割り当てた後で接続先、認証の設定、またはVPNプロファイルが変わったため、このホストには送りません。接続先を確認してから、もう一度割り当ててください。",
+    "停止中です。割り当てた後で接続先の行き先、認証の設定、またはVPNプロファイルが変わったため、送りません。接続先の設定を確認してから、もう一度割り当ててください。",
   "snippets.startupStaleCount":
-    "停止中の割り当てが{count}件あります。ホストを選んで接続先を確認し、もう一度割り当ててください。",
-  "snippets.startupStaleHosts": "停止中の割り当てのホスト",
-  "snippets.startupHost": "自動実行するホスト",
+    "停止中の割り当てが{count}件あります。接続先を選んで設定を確認し、もう一度割り当ててください。",
+  "snippets.startupStaleHosts": "停止中の割り当ての接続先",
+  "snippets.startupHost": "自動実行する接続先",
   "snippets.setStartup": "接続時に自動実行",
   "snippets.clearStartup": "解除",
   "host.duplicateKeyword":
@@ -845,7 +845,7 @@ export const ja = {
   "terminal.localhost": "localhost",
   "terminal.emptyHeading": "開いているセッションがありません",
   "terminal.emptyHint":
-    "［新しいセッション］か、HomeやConnectionsのホストの［接続］から開きます。",
+    "［新しいセッション］か、HomeやConnectionsの接続先の［接続］から開きます。",
   "terminal.forwardLocal": "{listen} → {to}を転送中",
   "terminal.forwardRemote": "SSH接続先の{listen} → {to}を転送中",
   "terminal.forwardDynamic": "{listen}でSOCKS5プロキシ",
@@ -885,7 +885,7 @@ export const ja = {
   "terminal.limitRefused":
     "これ以上セッションを開けません。どれかを閉じてください。",
   "terminal.unresolvable":
-    "この接続の設定を読み込めませんでした。理由は「Analysis」で確認できます。",
+    "この接続先の設定を読み込めませんでした。理由は「Analysis」で確認できます。",
   "terminal.localWorkingDirectoryUnavailable": "このローカルフォルダでシェルを開けません。フォルダの存在とアクセス権を確認してください。",
   "terminal.remoteWorkingDirectoryUnsupported":
     "このフォルダではターミナルを開けません。フォルダのパスに制御文字が含まれています。",
@@ -1044,7 +1044,7 @@ export const ja = {
     "{title}へのSSH接続を使うトンネルを管理します。",
   "terminal.forwardClose": "閉じる",
   "terminal.forwardActive": "動作中の転送",
-  "terminal.forwardNone": "この接続で動作中の転送はありません。",
+  "terminal.forwardNone": "このセッションで動作中の転送はありません。",
   "terminal.forwardTemporary": "このセッションのみ",
   "terminal.forwardSaved": "保存済み",
   "terminal.forwardSavedStopHint":
@@ -1060,9 +1060,9 @@ export const ja = {
   "terminal.forwardStopped": "転送を停止しました。",
   "terminal.forwardRemoteAddress": "SSH接続先 {listen} → sshcエンジン側 {to}",
   "terminal.forwardNew": "ポート転送を開始",
-  "terminal.forwardSaveConnection": "この接続設定にも保存する",
+  "terminal.forwardSaveConnection": "この接続先の設定にも保存する",
   "terminal.forwardSaveHint":
-    "今すぐ開始し、次回この接続を開いたときにも復元します。",
+    "今すぐ開始し、次にこの接続先を開いたときにも復元します。",
   "terminal.forwardSaveUnavailable":
     "ローカルシェルまたは未保存の接続には設定を保存できません。",
   "terminal.forwardNeedsConnection":
@@ -1208,17 +1208,17 @@ export const ja = {
   "connection.paletteLabel": "配色",
   "connection.encodingLabel": "文字コード",
   "connection.encodingHint":
-    "ブラウザのターミナルとコマンドラインのsshcの両方で、この接続に使用します。",
+    "ブラウザのターミナルとコマンドラインのsshcの両方で、この接続先に使います。",
   "connection.encodingUTF8": "UTF-8（既定）",
   "connection.encodingShiftJIS": "Shift_JIS（日本語）",
   "connection.encodingEUCJP": "EUC-JP（日本語）",
   "connection.encodingISO2022JP": "ISO-2022-JP（日本語）",
   "connection.vpnLabel": "使用するVPNプロファイル",
-  "connection.vpnHint": "この接続を、選択したVPNプロファイルのVPN経由で接続します。接続先はこの接続のHostNameとPortです。VPNプロファイルはVPN画面で作成します。",
+  "connection.vpnHint": "この接続先へは、選んだVPNプロファイルのVPNを経由して接続します。VPNの先で接続するのは、この接続先のHostNameとPortです。VPNプロファイルはVPN画面で作成します。",
   "connection.vpnNone": "VPNを使わない",
   "connection.vpnMissing": "{name}（削除されたプロファイル）",
   "connection.vpnNeedsDNS": "このHostNameはホスト名のため、{name}にVPN内のDNSサーバーの指定が必要です。VPN画面で{name}を編集してDNSサーバーを指定するか、HostNameにIPv4アドレスを指定してください。",
-  "connection.vpnChangeStopsAssignments": "この接続に保存済みパスワード、ワンタイムパスワード、起動スニペットを割り当てている場合、保存すると停止中になります。パスワードとワンタイムパスワードは［Basic］で基本設定を保存し直し、起動スニペットは［Snippets］で割り当て直してください。",
+  "connection.vpnChangeStopsAssignments": "この接続先に保存済みパスワード、ワンタイムパスワード、起動スニペットを割り当てている場合、保存すると停止中になります。パスワードとワンタイムパスワードは［Basic］で基本設定を保存し直し、起動スニペットは［Snippets］で割り当て直してください。",
   "terminal.fontSizeHint": "空欄なら狭い画面で15、それ以外で13。",
   "terminal.copyOnSelectLabel": "選択した文字列を自動的にコピーする",
   "terminal.copyOnSelectHint": "選択を終えたときに一度だけコピーします。",
@@ -1371,15 +1371,15 @@ export const ja = {
   "secrets.save": "保存",
   "secrets.colName": "名前",
   "secrets.colCode": "コード",
-  "secrets.colKeysAndHosts": "対象の鍵とホスト",
-  "secrets.rowHosts": "ホスト：{hosts}",
+  "secrets.colKeysAndHosts": "対象の鍵と接続先",
+  "secrets.rowHosts": "接続先：{hosts}",
   "secrets.rowKeys": "対象の鍵：{keys}",
   "secrets.rowUnassigned": "割り当てなし",
   "secrets.partSeparator": "、",
   "secrets.listSeparator": "・",
   "secrets.showNeighbourCodes": "前後のコードを表示",
   "secrets.hideNeighbourCodes": "前後のコードを隠す",
-  "secrets.assignedHostsCount": "割り当て先のホスト（{count}）",
+  "secrets.assignedHostsCount": "割り当てた接続先（{count}）",
   "secrets.editShort": "編集",
   "secrets.deleteShort": "削除",
   "secrets.unassign": "解除",
@@ -1395,12 +1395,12 @@ export const ja = {
   "secrets.inUse":
     "この認証情報は使用中です。削除する前に割り当て先を変更してください。",
   "secrets.none": "まだ何も保存されていません。",
-  "secrets.assignedHosts": "割り当て先のホスト",
-  "secrets.noAssignedHosts": "割り当て先のホストはありません",
+  "secrets.assignedHosts": "割り当てた接続先",
+  "secrets.noAssignedHosts": "割り当てた接続先はありません",
   "secrets.dedicated": "この鍵専用",
   "secrets.keyHostUsageIncomplete":
-    "SSH設定をすべて読み込めなかったため、この鍵を使用しているホストを完全には確認できませんでした。SSH Configの診断を確認してください。",
-  "secrets.keyHostsUnavailable": "割り当て先ホストを確認できません",
+    "SSH設定をすべて読み込めなかったため、この鍵を使っている接続先を完全には確認できませんでした。SSH Configの診断を確認してください。",
+  "secrets.keyHostsUnavailable": "割り当てた接続先を確認できません",
   "secrets.deleteHeading": "{name}を削除しますか？",
   "secrets.deleteBody": "この認証情報はVaultから削除され、元に戻せません。",
   "secrets.confirmDelete": "削除する",
@@ -1626,7 +1626,7 @@ export const ja = {
   "vpn.logsEmpty": "出力はまだありません。",
   "vpn.close": "閉じる",
   "vpn.profileChip": "VPN経由：{name}",
-  "vpn.profileChipHint": "この接続は、VPN経路「{name}」を経由します。",
+  "vpn.profileChipHint": "この接続先へは、VPN経路「{name}」を経由して接続します。",
   "vpn.tunnelInterface": "インターフェース",
   "vpn.tunnelAddress": "トンネルのアドレス",
   "vpn.tunnelSince": "接続開始時刻",
@@ -1635,10 +1635,10 @@ export const ja = {
   "vpn.removeTitle": "{name}を削除しますか？",
   "vpn.removeBody": "このプロファイルと保存済みのシークレットを削除し、このプロファイルを付けた接続からも設定を外します。その接続に割り当てた保存済みパスワード、ワンタイムパスワード、起動スニペットは停止中になります。接続中の経路は切断します。",
   "vpn.connections": "このプロファイルを使う接続",
-  "vpn.connectionsHint": "接続にプロファイルを付けたり外したりするには、［Connections］で接続を選び、［sshc］タブの「使用するVPNプロファイル」を変更します。",
+  "vpn.connectionsHint": "接続先にプロファイルを付けたり外したりするには、［Connections］で接続先を選び、［sshc］タブの「使用するVPNプロファイル」を変更します。",
   "vpn.noConnections": "まだありません。",
   "vpn.addHeading": "VPNプロファイルを追加",
-  "vpn.addHint": "接続先は、このプロファイルを付けた接続のHostNameとPortです。",
+  "vpn.addHint": "接続先は、このプロファイルを付けた接続先のHostNameとPortです。",
   "vpn.editHeading": "{name}を編集",
   "vpn.editHint": "保存済みのシークレットはVaultから取り出して表示します。方式を変えた場合は、新しい方式のシークレットを入力してください。",
   "vpn.secretsRevealing": "保存済みのシークレットをVaultから取り出しています…",
@@ -1730,7 +1730,7 @@ export const ja = {
   "vpn.targetFailure.target_unresolved": "VPN内のDNSサーバーで接続先の名前解決に失敗しました。DNSサーバーとHostNameを確認してください。",
   "vpn.targetFailure.target_is_server": "接続先がVPNサーバーと同じアドレスです。VPNサーバーそのものにはVPN経由で接続できません。",
   "vpn.targetFailure.target_unreachable": "接続先が応答しないか、接続を拒否しました。HostNameとPortを確認してください。",
-  "vpn.targetFailure.target_not_allowed": "接続先が、WireGuardのどの[Peer]のAllowedIPsにも含まれていません。設定ファイルのAllowedIPsと、接続のHostNameを確認してください。",
+  "vpn.targetFailure.target_not_allowed": "接続先が、WireGuardのどの[Peer]のAllowedIPsにも含まれていません。設定ファイルのAllowedIPsと、接続先のHostNameを確認してください。",
   "vpn.targetFailure.tunnel_lost": "VPNが切断されました。もう一度接続してください。",
   "vpn.destination.format": "接続先のHostNameの形式が正しくありません。",
   "vpn.destination.out_of_range": "接続先のPortは1〜65535で指定してください。",
@@ -1742,7 +1742,7 @@ export const ja = {
   "vpn.profileInvalid": "VPNプロファイルに使用できない値があります。VPNサーバーとDNSサーバーの指定を確認してください。",
   "vpn.profileUnknown": "指定したVPNプロファイルが見つかりません。",
   "vpn.profileExists": "同じ名前のVPNプロファイルがすでにあります。別の名前にするか、既存のプロファイルを削除してから作成してください。",
-  "vpn.connectionUnknown": "この接続にはVPNプロファイルを設定できません。IncludeしたファイルやワイルドカードのHostだけで定義された接続は、sshcで編集できません。",
+  "vpn.connectionUnknown": "この接続先にはVPNプロファイルを設定できません。IncludeしたファイルやワイルドカードのHostだけで定義された接続先は、sshcで編集できません。",
   "vpn.vaultLocked": "Vaultがロックされています。ロックを解除してからやり直してください。",
   "vpn.vaultMissing": "Vaultがまだありません。作成してからやり直してください。",
   "vpn.field.required": "入力してください。",
@@ -1850,18 +1850,18 @@ export const ja = {
   "history.backupRetentionMore": "新しい方から200件まで、かつ90日以内の変更の分を残し、それより古いものは自動で消します。復元も新しい変更として履歴に残るので、同じ方法で取り消せます。",
 
   "notice.complex_external_rule":
-    "ワイルドカード、否定、Matchブロック、aliasの重複のいずれかが含まれるため、この値を単純な形式では編集できません。値の参照元を表示します。",
+    "ワイルドカード、否定、Matchブロック、接続名の重複のいずれかが含まれるため、この値を単純な形式では編集できません。値の参照元を表示します。",
   "notice.duplicate_alias":
-    "別のブロックも同じaliasを宣言しています。OpenSSHは多くの設定項目で、最初に読み込んだ値を使用します。",
+    "別のブロックも同じ接続名を宣言しています。OpenSSHは多くの設定項目で、最初に読み込んだ値を使用します。",
   "notice.duplicate_alias_both": "{alias}は{first}と{second}の両方で宣言されています。OpenSSHは多くの設定項目で、先に読み込む{first}の値を使用します。使わない方を削除するか、名前を変更してください。",
   "notice.summary": "警告 {count}件",
   "notice.proxy_ignored":
     "ProxyCommandとProxyJumpの両方が書かれています。OpenSSHは先に読み込んだ方だけを使い、この行は無視されます。",
   "notice.wildcard_shadow":
-    "すべてに一致するブロックが、このホストの値に影響する可能性があります。",
+    "すべてに一致するブロックが、この接続先の値に影響する可能性があります。",
   "notice.negated_pattern": "否定パターンがここに適用されます。",
   "notice.unnamed_host_block":
-    "このブロックには具体的なaliasがないため、Rawテキストでのみ編集できます。",
+    "このブロックには具体的な接続名がないため、Rawテキストでのみ編集できます。",
   "notice.match_block":
     "Matchブロックが見つかりました。Match execはコマンドを実行しうるため、ここでは評価しません。",
   "notice.dangerous_directive":
@@ -1871,7 +1871,7 @@ export const ja = {
   "notice.external_file":
     "このファイルは~/.sshの外にあります。表示のみで、書き込みは行いません。",
   "notice.orphan_metadata":
-    "このsshc固有の設定に対応するホストが存在しません。接続先を確認して関連付け直してください。",
+    "このsshc固有の設定に対応する接続先がありません。接続先を選んで関連付け直してください。",
   "notice.group_cycle":
     "このグループの親子関係が循環しているため、スキップしました。",
   "notice.group_member_missing":
@@ -1952,7 +1952,7 @@ export const ja = {
   "orphan.heading": "接続先が存在しない設定",
   "orphan.explain":
     "これらのsshc固有の設定に対応するHostブロックは設定から削除されています。関連付け先の接続を指定してください。",
-  "orphan.chooseTarget": "このsshc固有の設定が属する接続を選んでください。",
+  "orphan.chooseTarget": "このsshc固有の設定が属する接続先を選んでください。",
   "orphan.occupied":
     "{alias}には既に独自の設定があります。先にそちらを消すか、この設定を破棄してください。",
   "orphan.entry": "{path}の{alias}",
@@ -1965,15 +1965,15 @@ export const ja = {
   "orphan.discard": "{alias}の設定を破棄",
 
   "password.blocker.authenticationOff":
-    "このホストはPasswordAuthenticationがnoのため、sshはパスワード認証を行いません。",
+    "この接続先はPasswordAuthenticationがnoのため、sshはパスワード認証を行いません。",
   "password.blocker.aliasNotSimple":
-    "これは具体的なホストではなくパターンです。パスワードを保存するには、単一ホストのアカウントを指定してください。",
+    "これは具体的な接続先ではなくパターンです。パスワードを保存するには、1つの接続先のアカウントを指定してください。",
   "password.blocker.identityFile":
-    "このホストには秘密鍵が直接設定されています。sshcはパスワードの保存も自動入力も行いません。パスワードはOpenSSHのプロンプトで入力してください。",
+    "この接続先には秘密鍵が直接設定されています。sshcはパスワードの保存も自動入力も行いません。パスワードはOpenSSHのプロンプトで入力してください。",
   "password.warn.hostKeyUnknown":
     "このホストの鍵はknown_hostsに無いため、保存済みパスワードの自動入力は初回の接続で失敗します。先にKnown Hostsで登録してください。",
   "password.warn.hostNameUnresolved":
-    "このaliasのHostNameを特定できませんでした。パスワードはaliasに紐づけて保存されます。",
+    "この接続名のHostNameを特定できませんでした。パスワードは接続名に紐づけて保存されます。",
   "password.show": "表示",
   "password.showNamed": "{label}を表示",
   "password.hideNamed": "{label}を隠す",
@@ -2315,14 +2315,14 @@ export const ja = {
   "sync.result.completed": "操作完了：{at}",
   "diag.heading": "Diagnostics",
   "diag.pageDescription":
-    "検査を始めるまで、どのホストにも接続しません。",
+    "検査を始めるまで、どの接続先にも接続しません。",
   "diag.configUnreadable": "設定を読み取れませんでした。",
   "diag.running": "選択した検査を実行しています…",
   "diag.idle": "開始するまで、どの検査も実行されません。",
-  "diag.hostAlias": "Host alias",
-  "diag.needsAlias": "検査するにはHost aliasを入力してください。",
+  "diag.hostAlias": "接続名",
+  "diag.needsAlias": "検査するには接続名を入力してください。",
   "diag.explain": "設定を解析",
-  "diag.explainFailed": "この接続の設定を解析できませんでした。",
+  "diag.explainFailed": "この接続先の設定を解析できませんでした。",
   "diag.checkReachability": "疎通を確認",
   "diag.reachabilityFailed": "疎通確認を実行できませんでした。",
   "diag.testAuthentication": "認証を確認",
@@ -2330,7 +2330,7 @@ export const ja = {
   "diag.configuration": "設定ファイル",
   "diag.missingSuffix": "（存在しません）",
   "diag.canRunCommand":
-    "この接続には、OpenSSHがコマンドを実行する可能性のある設定があります",
+    "この接続先には、OpenSSHがコマンドを実行する可能性のある設定があります",
   "diag.directiveAt": "{keyword}（{path}:{line}）",
   "diag.sourcesCaption":
     "各値の参照元。「不採用」と表示された行は、採用された行より後に読み込まれたため効果がありません。",
@@ -2344,7 +2344,7 @@ export const ja = {
   "diag.superseded": "不採用",
   "diag.route": "接続経路",
   "diag.hopComplex":
-    "このホップはaliasだけで指定されていないため、接続先を特定できません",
+    "このホップは接続名だけで指定されていないため、行き先を特定できません",
   "diag.reachedThrough": "{parent}を経由",
   "diag.notSimple": "この設定は簡易表示では値を確定できません",
   "diag.notSimpleDetail":
@@ -2367,11 +2367,11 @@ export const ja = {
   "diag.outcome.authenticationFailed": "認証テストに失敗しました。",
   "diag.directDialNotice": "この確認は接続先へ直接接続しました。ProxyJump、ProxyCommand、踏み台のファイアウォールは使っていないため、踏み台を経由しないと届かないホストはここで失敗します。",
   "diag.vpnRouteNotice":
-    "この接続はVPNを経由するので、接続先へは接続していません。このマシンから直接つないでもVPNの経路は通りません。VPNを経由した確認は、認証の確認で行えます。",
+    "この接続先へはVPNを経由するので、直接は接続していません。このマシンから直接つないでもVPNの経路は通りません。VPNを経由した確認は、認証の確認で行えます。",
   "diag.complexity.wildcardPattern": "このブロックはワイルドカードのパターンで一致しています。",
   "diag.complexity.negatedPattern": "このブロックは否定のパターン（!）で一部のホストを除外しています。",
   "diag.complexity.matchBlock": "Matchの条件は接続時に評価されるため、このブロックがここに表示した値を上書きする可能性があります。",
-  "diag.complexity.duplicateAlias": "このaliasを指定するHostブロックが複数あります。",
+  "diag.complexity.duplicateAlias": "この接続名を指定するHostブロックが複数あります。",
   "diag.complexity.proxyIgnored": "ProxyJumpとProxyCommandの両方が設定されているため、あとの設定は使われません。",
   "diag.complexity.unresolvedInclude": "このIncludeが読み込むファイルを特定できません。",
   "diag.complexity.jumpInvalid": "ProxyJumpの値を読み取れません。",
@@ -2440,17 +2440,17 @@ export const ja = {
   "rk.hostStep": "2. 接続先",
   "rk.typeInstead": "公開鍵を手動で入力",
   "rk.candidatesLoadFailed": "~/.sshの公開鍵を読み込めませんでした。公開鍵は手動で入力できます。",
-  "rk.hostAlias": "Host alias",
-  "rk.hostSearchPlaceholder": "ホストを検索、またはaliasを入力",
+  "rk.hostAlias": "接続名",
+  "rk.hostSearchPlaceholder": "接続先を検索、または接続名を入力",
   "rk.hostTypeHint":
-    "上にHost aliasを入力してください。保存済みの接続があればここに表示されます。",
+    "上に接続名を入力してください。保存した接続先があればここに表示されます。",
   "rk.hostsSelected": "{count}件を選択中",
   "rk.hostChoices": "接続先の候補",
   "rk.selectMatches": "一致する項目を選択",
   "rk.clearSelection": "解除",
   "rk.noHostMatches": "一致する接続先がありません",
   "rk.chooseHost":
-    "接続先を1件以上選択するか、Host aliasを入力してください。",
+    "接続先を1件以上選択するか、接続名を入力してください。",
   "rk.publicKeyFile": "公開鍵ファイル",
   "rk.publicKeyLine": "公開鍵の行",
   "rk.showWhatWouldHappen": "登録内容を確認",
@@ -2458,9 +2458,9 @@ export const ja = {
   "rk.registerMany": "{count}台へ鍵を登録",
   "rk.plannedHosts": "{count}台の内容を確認済み",
   "rk.planFailed":
-    "登録内容を確認できませんでした。どのホストにも接続していません。",
+    "登録内容を確認できませんでした。どの接続先にも接続していません。",
   "rk.configNotConfirmable":
-    "登録内容を確認できませんでした。SSH設定のIncludeに、OpenSSHと同じように読めない箇所（読めないファイル、${…}を含むパス、循環、深すぎる入れ子など）があるか、Includeで読み込む設定の合計が4 MiBを超えています。設定を直してから、もう一度確認してください。どのホストにも接続していません。",
+    "登録内容を確認できませんでした。SSH設定のIncludeに、OpenSSHと同じように読めない箇所（読めないファイル、${…}を含むパス、循環、深すぎる入れ子など）があるか、Includeで読み込む設定の合計が4 MiBを超えています。設定を直してから、もう一度確認してください。どの接続先にも接続していません。",
   "rk.registerFailed":
     "鍵は登録されませんでした。リモートホストはそのままです。",
   "rk.publicKeyUnreadable":
@@ -2486,7 +2486,7 @@ export const ja = {
   "rk.connectingRuns": "接続時にリモートコマンドが実行されます",
   "rk.acknowledgeRuns": "実行されるリモートコマンドを確認しました",
   "rk.manualHeading":
-    "sshcからこのホストへ鍵を登録できません。次の手順を手動で実行してください：",
+    "sshcからこの接続先へ鍵を登録できません。次の手順を手動で実行してください：",
   "rk.result": "結果",
   "rk.someRegistrationsFailed":
     "更新できなかった接続先があります。接続先ごとの結果を確認してください。",
@@ -2612,7 +2612,7 @@ export const ja = {
   "tree.noMatch": "この条件に一致する接続はありません。",
   "tree.collapse": "{name}を折りたたむ",
   "tree.expand": "{name}を展開する",
-  "tree.duplicateAlias": "alias重複",
+  "tree.duplicateAlias": "接続名の重複",
   "tree.dragGroupHint":
     "グループをドラッグすると、階層と表示順を変更できます。",
   "tree.newGroup": "新しいグループ",
@@ -2679,8 +2679,8 @@ export const ja = {
   "groupEditor.useFieldAbove": "{field}は上の欄で指定してください。",
 
   "browser.invalidUrl": "この接続URLは認識できません。",
-  "browser.backToServers": "接続一覧へ戻る",
-  "browser.duplicateAlias": "alias重複",
+  "browser.backToServers": "接続先の一覧へ戻る",
+  "browser.duplicateAlias": "接続名の重複",
 
   "conn.loading": "接続を読み込んでいます…",
   "conn.loadingConnection": "{alias}を読み込んでいます…",
@@ -2690,11 +2690,11 @@ export const ja = {
   "conn.count": "接続先{count}件",
   "conn.new": "接続先を追加",
   "conn.resizeGroups": "グループ列の幅を変更",
-  "conn.resizeList": "接続一覧の幅を変更",
-  "conn.createAnother": "接続を追加",
+  "conn.resizeList": "接続先の一覧の幅を変更",
+  "conn.createAnother": "接続先を追加",
   "conn.cancelCreate": "キャンセル",
-  "conn.create": "接続を作成",
-  "conn.createTitle": "新しい接続",
+  "conn.create": "接続先を作成",
+  "conn.createTitle": "新しい接続先",
   "conn.createDescription": "保存するまで設定ファイルには書きません",
   "conn.createNameSection": "名前と保存先",
   "conn.createConnectionSection": "接続先",
@@ -2709,7 +2709,7 @@ export const ja = {
   "conn.createGroupDefaults": "空欄はグループ{group}の既定値を使います。",
   "conn.createAuthenticationSection": "認証",
   "conn.createAuthenticationMethod": "認証方法",
-  "conn.createDedicatedPassword": "この接続専用の暗号化パスワード",
+  "conn.createDedicatedPassword": "この接続先専用の暗号化パスワード",
   "conn.createSavedPassword": "保存済みパスワード",
   "conn.createNewSharedPassword": "新しい保存済みパスワード",
   "conn.createIdentityFile": "SSH秘密鍵",
@@ -2718,7 +2718,7 @@ export const ja = {
     "Vault内で暗号化され、保存済みパスワードの一覧には表示されません。",
   "conn.createChooseSavedPassword": "保存済みパスワード",
   "conn.createSavedHint":
-    "選択した保存済みパスワードを、この接続でも使用します。",
+    "選択した保存済みパスワードを、この接続先でも使います。",
   "conn.createNoSavedPasswords": "保存済みパスワードはありません",
   "conn.createSavedPasswordName": "保存するパスワードの名前",
   "conn.createNewPassword": "新しいパスワード",
@@ -2756,7 +2756,7 @@ export const ja = {
   "conn.createUserInvalid": "ユーザー名に空白や制御文字は使用できません。",
   "conn.createPortInvalid": "ポートは1〜65535の整数にしてください。",
   "conn.creating": "作成しています…",
-  "conn.createFailed": "接続を作成できませんでした。",
+  "conn.createFailed": "接続先を作成できませんでした。",
   "conn.createAliasTaken": "この名前は別の接続で使用されています。",
   "conn.duplicateAliasTaken": "{alias}は既に存在するため複製できません。",
   "conn.createGroupMissing":
@@ -2777,14 +2777,14 @@ export const ja = {
   "conn.basicCredentialMissing":
     "選択した保存済みパスワードは存在しなくなりました。再読み込みして選び直してください。",
   "conn.basicPasswordMissing":
-    "この接続には削除できる保存済みパスワードがありません。",
+    "この接続先には削除できる保存済みパスワードがありません。",
   "conn.basicUser": "ユーザー",
   "conn.basicPort": "ポート",
   "conn.basicPrivateKey": "SSH秘密鍵",
   "conn.basicPassword": "パスワード",
   "conn.basicTOTP": "ワンタイムパスワード",
   "conn.basicNotAssigned": "割り当てない",
-  "conn.basicPasswordDedicated": "この接続専用のパスワード",
+  "conn.basicPasswordDedicated": "この接続先専用のパスワード",
   "conn.basicPasswordNamed": "{name}（保存済みパスワード）",
   "conn.basicChooseSaved": "保存済みから選ぶ",
   "conn.basicUnassign": "割り当てを外す",
@@ -2793,7 +2793,7 @@ export const ja = {
   "conn.basicSSHDefault":
     "SSHの既定値です。他の項目を保存しても、この値は書き込みません。",
   "conn.basicComplex":
-    "この接続には{keyword}が複数あります。詳細タブで整理してください。",
+    "この接続先には{keyword}が複数あります。詳細タブで整理してください。",
   "conn.basicUseInheritedHost": "ホスト名を継承値・既定値に戻す",
   "conn.basicUseInheritedUser": "ユーザーを継承値・既定値に戻す",
   "conn.basicUseInheritedPort": "ポートを継承値・既定値に戻す",
@@ -2823,22 +2823,22 @@ export const ja = {
   "conn.basicKeyPassphraseChanged":
     "選択した秘密鍵が変更されました。再読み込みしてから保存してください。",
   "conn.basicGeneratedKeyStaged":
-    "{path}をこの接続の下書きに追加しました。「基本設定を保存」で反映します。",
+    "{path}をこの接続先の下書きに追加しました。「基本設定を保存」で反映します。",
   "conn.basicCustomKey":
-    "この接続は独自のIdentityFileパス{path}を使っています。詳細タブで編集してください。",
+    "この接続先は独自のIdentityFileパス{path}を使っています。詳細タブで編集してください。",
   "conn.basicComplexKey":
-    "この接続にはIdentityFileが複数あります。詳細タブで整理してください。",
+    "この接続先にはIdentityFileが複数あります。詳細タブで整理してください。",
   "conn.basicRouteConfirmHeading": "保存済みの認証情報を変更後の設定で使いますか？",
   "conn.basicRouteConfirmBody":
-    "HostName、User、Port、ProxyJump、VPNプロファイルなどの接続の設定が、認証情報を割り当てたときと変わっています。保存すると、割り当て済みのパスワードまたはワンタイムパスワードを変更後の設定で使用できるようにします。起動スニペットの割り当ては結び直さないため、停止中になります。［Snippets］画面で接続先を確認して、もう一度割り当ててください。",
+    "HostName、User、Port、ProxyJump、VPNプロファイルなどの接続先の設定が、認証情報を割り当てたときと変わっています。保存すると、割り当て済みのパスワードまたはワンタイムパスワードを変更後の設定で使用できるようにします。起動スニペットの割り当ては結び直さないため、停止中になります。［Snippets］画面で接続先を確認して、もう一度割り当ててください。",
   "conn.basicRouteConfirmSave": "保存して再確認",
   "conn.basicRouteConfirmCancel": "キャンセル",
   "conn.basicChooseSavedTOTP": "保存済みTOTP",
   "conn.basicNoSavedTOTPs": "Vaultに保存済みTOTPがありません",
   "conn.basicTOTPNote": "「Verification code」など、認証コードを求める入力欄にだけ自動で入力します。",
   "conn.basicPasswordCleanup":
-    "保存済みパスワードが割り当てられていますが、現在のSSH設定では使用されません。基本設定を保存すると、この接続への割り当てだけを解除します。保存済みパスワードと、ほかの接続への割り当ては変更しません。",
-  "conn.basicReplaceDedicated": "この接続専用パスワードで置き換える",
+    "保存済みパスワードが割り当てられていますが、現在のSSH設定では使用されません。基本設定を保存すると、この接続先への割り当てだけを解除します。保存済みパスワードと、ほかの接続先への割り当ては変更しません。",
+  "conn.basicReplaceDedicated": "この接続先専用のパスワードで置き換える",
   "conn.basicConfirmRemove": "保存済みパスワードを外すことを確認",
   "conn.basicEmptyPasswordUnchanged":
     "空欄のままならパスワードを変更しません。",
@@ -2853,28 +2853,28 @@ export const ja = {
   "conn.basicSaveFailed":
     "基本設定を保存できませんでした。変更は行われていません。エラーを確認するか、再読み込みしてもう一度試してください。",
   "conn.basicRefreshFailed":
-    "設定は保存されましたが、更新後のパスワード状態を読み込めませんでした。この接続を再読み込みしてください。",
+    "設定は保存されましたが、更新後のパスワード状態を読み込めませんでした。この接続先を再読み込みしてください。",
   "conn.connectionRefreshFailed":
-    "設定は保存されましたが、更新後の接続を読み込めませんでした。この接続を再読み込みしてください。",
+    "設定は保存されましたが、更新後の接続先を読み込めませんでした。この接続先を再読み込みしてください。",
   "conn.basicSave": "基本設定を保存",
   "conn.saving": "保存しています…",
   "conn.discardChanges": "変更を破棄",
-  "conn.emptyHeading": "接続を選択",
+  "conn.emptyHeading": "接続先を選択",
   "conn.emptyHint":
-    "一覧からホストを選んでSSH設定を編集するか、新しい接続を作成してください。",
-  "conn.assignKeyHeading": "この鍵を使う接続を選択",
+    "一覧から接続先を選んでSSH設定を編集するか、新しい接続先を作成してください。",
+  "conn.assignKeyHeading": "この鍵を使う接続先を選択",
   "conn.assignKeyHint":
-    "接続を選ぶと{path}が基本設定の下書きに入ります。保存するまで変更はありません。",
-  "conn.missingHeading": "この接続は現在利用できません",
+    "接続先を選ぶと{path}が基本設定の下書きに入ります。保存するまで変更はありません。",
+  "conn.missingHeading": "この接続先は今使えません",
   "conn.missingHint":
     "このリンクの作成後に、名前変更・移動・削除された可能性があります。",
-  "conn.backToList": "接続一覧へ戻る",
+  "conn.backToList": "接続先の一覧へ戻る",
   "conn.summaryUnsaved": "未保存の変更あり",
   "conn.summaryDraftBlocksActions":
-    "下書きを保存または破棄してから、保存済みの接続を使用してください。",
+    "下書きを保存または破棄してから、保存した接続先を使ってください。",
   "conn.summaryRefreshing":
-    "保存済みの接続を再読み込みしています。完了後に操作できます。",
-  "conn.summaryReloadFirst": "保存済みの接続を再読み込みしてから操作できます。",
+    "保存した接続先を再読み込みしています。完了後に操作できます。",
+  "conn.summaryReloadFirst": "保存した接続先を再読み込みしてから操作できます。",
   "conn.editorLabel": "接続エディタ",
   "conn.areaBasic": "基本",
   "conn.areaAnalysis": "最終的な値",
@@ -2895,15 +2895,15 @@ export const ja = {
   "conn.analysisLabel": "Config Analysis",
   "conn.analysisExplained": "保存済み設定から求めた値",
   "conn.analysisExplainedHint":
-    "この接続で使用する値です。コマンドを実行せずに解析し、値を確定できない設定は理由を表示します。",
+    "この接続先で使う値です。コマンドを実行せずに解析し、値を確定できない設定は理由を表示します。",
   "conn.analysisAuthoritative": "各値の参照元",
   "conn.analysisRun": "参照元を表示",
   "conn.analysisRunning": "読み取っています…",
   "conn.analysisExecutableHeading":
-    "この接続には、OpenSSHがコマンドを実行する可能性のあるディレクティブがあります",
+    "この接続先には、OpenSSHがコマンドを実行する可能性のあるディレクティブがあります",
   "conn.analysisTokenWarning":
     "OpenSSHは展開したトークンをシェル向けにエスケープしません。そのため、ホスト名、ポート、ユーザー名の値が、エスケープされないままコマンドを実行するシェルに渡る可能性があります。",
-  "conn.analysisSources": "この接続に関係する設定行",
+  "conn.analysisSources": "この接続先に関係する設定行",
   "advanced.jumpHeading": "踏み台",
   "advanced.jumpVia": "経由する接続先",
   "advanced.jumpNone": "なし（直接つなぐ）",
@@ -2926,7 +2926,7 @@ export const ja = {
   "conn.portForwarding": "ポート転送",
   "conn.forwardLoopbackOnly":
     "待ち受けはローカルまたはSSH接続先の127.0.0.1に限定します。同じマシンの別のOSユーザーから利用される可能性があります。",
-  "conn.forwardNoneSaved": "この接続にはポート転送が保存されていません。",
+  "conn.forwardNoneSaved": "この接続先にはポート転送が保存されていません。",
   "conn.forwardLocal": "Localトンネル",
   "conn.forwardRemote": "逆向きトンネル",
   "conn.forwardRemoteListenPort": "SSH接続先のポート",
@@ -2951,10 +2951,10 @@ export const ja = {
   "conn.manageDraftBlocked":
     "接続名や保存場所を変更する前に、編集中の下書きを保存または破棄してください。",
   "conn.discardPrompt":
-    "未保存の接続設定を破棄して、この接続から移動しますか？",
-  "conn.discardCreationPrompt": "入力中の新しい接続を破棄しますか？",
+    "未保存の設定を破棄して、この接続先から移動しますか？",
+  "conn.discardCreationPrompt": "入力中の新しい接続先を破棄しますか？",
   "conn.keepEditing": "編集を続ける",
-  "conn.reloadConnection": "保存済み接続を再読み込み",
+  "conn.reloadConnection": "保存した接続先を再読み込み",
   "conn.moveToFile": "保存ファイル",
   "conn.moveToFilePlaceholder": "保存ファイルを選択…",
   "conn.move": "保存ファイルを変更",
@@ -2970,7 +2970,7 @@ export const ja = {
     "値の引用符が閉じていません。引用符を閉じるか、文字として残す引用符の前に\\を付けてください。",
   "host.needsKeyword": "ディレクティブにはキーワードが必要です。",
   "host.dangerousField":
-    "{keyword}は、OpenSSHがこのホストを評価するときにコマンドを実行する可能性があります。記述どおり保存され、ここで実行されることはありません。",
+    "{keyword}は、OpenSSHがこの接続先を評価するときにコマンドを実行する可能性があります。記述どおり保存され、ここで実行されることはありません。",
   "host.keep": "戻す",
   "host.newDirective": "新しいディレクティブ",
   "host.newValue": "新しい値",
@@ -2979,7 +2979,7 @@ export const ja = {
     "ブロック本文。コメント、空行、未知のディレクティブは入力したとおりに書き戻されます。",
   "host.saveBlock": "ブロックを保存",
   "host.noDestination":
-    "このHostブロックはパターンに一致する接続へ設定を適用するもので、単独では接続先を特定できません。診断するには、具体的なaliasを持つ接続を開いてください。",
+    "このHostブロックはパターンに一致する接続先へ設定を適用するもので、単独では行き先を特定できません。診断するには、具体的な接続名を持つ接続先を開いてください。",
   "host.primaryGroup": "所属グループ",
   "host.groupNone": "なし",
   "host.groupNoneMeans":
@@ -2997,13 +2997,13 @@ export const ja = {
   "host.colour": "色",
   "host.clearColour": "色を消す",
   "host.tags": "タグ（カンマ区切り）",
-  "host.renameAlias": "aliasの変更",
+  "host.renameAlias": "接続名の変更",
   "host.rename": "変更",
 
   "keys.heading": "SSH Keys",
   "keys.listHeading": "鍵",
   "keys.search": "鍵を検索",
-  "keys.searchPlaceholder": "ファイル、ホスト、フィンガープリント",
+  "keys.searchPlaceholder": "ファイル、接続先、フィンガープリント",
   "keys.metricFiles": "確認済みSSHファイル",
   "keys.metricPrivate": "秘密鍵",
   "keys.metricAttention": "確認が必要",

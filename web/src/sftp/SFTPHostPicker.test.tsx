@@ -66,7 +66,7 @@ describe("SFTPHostPicker", () => {
       onChange={() => undefined}
     /></LanguageProvider>);
 
-    await userEvent.click(screen.getByRole("button", { name: "ホスト" }));
+    await userEvent.click(screen.getByRole("button", { name: "接続先" }));
     await screen.findByRole("tab", { name: "最近接続した順" });
     expect(screen.getByRole("button", { name: /miyabi/ })).toHaveTextContent(`最終接続：${formatDateTime("2026-09-01T07:00:00Z", "ja")}`);
   });

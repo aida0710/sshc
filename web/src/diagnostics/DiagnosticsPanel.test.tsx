@@ -247,7 +247,7 @@ describe("DiagnosticsPanel", () => {
     });
     render(<LanguageProvider initial="ja"><DiagnosticsPanel api={api} /></LanguageProvider>);
 
-    await userEvent.type(screen.getByLabelText("Host alias"), "bastion");
+    await userEvent.type(screen.getByLabelText("接続名"), "bastion");
     await userEvent.click(screen.getByRole("button", { name: "疎通を確認" }));
     expect(await screen.findByText("到達しました。ポートがTCP接続を受け付けました。")).toBeInTheDocument();
     expect(screen.getByText(/踏み台を経由しないと届かないホストはここで失敗します/)).toBeInTheDocument();
