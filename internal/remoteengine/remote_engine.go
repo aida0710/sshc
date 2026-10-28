@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"sshc/internal/handoff"
 )
@@ -89,6 +90,8 @@ func newSessionTransport(link *hostLink, identity engineIdentity) *http.Transpor
 type remoteEngine struct {
 	link         *hostLink
 	localVersion string
+	// sessionLimit は、/cli/session の答えを待つ上限（sessionAnswerLimit）である。試験だけが短くする。
+	sessionLimit time.Duration
 	// attaching は、同時に来た要求に、ひとつの資格の受け取りを待たせる。
 	attaching sharedAttempt[*remoteSession]
 
@@ -98,8 +101,8 @@ type remoteEngine struct {
 	generation uint64
 }
 
-func newRemoteEngine(link *hostLink, localVersion string) *remoteEngine {
-	engine := &remoteEngine{link: link, localVersion: localVersion}
+func newRemoteEngine(link *hostLink, localVersion string, sessionLimit time.Duration) *remoteEngine {
+	engine := &remoteEngine{link: link, localVersion: localVersion, sessionLimit: sessionLimit}
 	link.whenEnded(engine.closeIdleConnections)
 	return engine
 }
@@ -114,7 +117,7 @@ func (e *remoteEngine) current(ctx context.Context) (*remoteSession, error) {
 	if session != nil {
 		return session, nil
 	}
-	return e.attaching.do(ctx, func(ctx context.Context) (*remoteSession, error) {
+	return e.attaching.do(ctx, e.attachLimit(), func(ctx context.Context) (*remoteSession, error) {
 		session, err := e.attach(ctx)
 		if err != nil {
 			return nil, err
@@ -126,6 +129,12 @@ func (e *remoteEngine) current(ctx context.Context) (*remoteSession, error) {
 		}
 		return session, nil
 	})
+}
+
+// attachLimit は、資格の受け取りひとつの上限である。SSH の接続を待ち、handoff を読み、
+// /cli/session の答えを受け取るまでの、各段の上限の和にする。
+func (e *remoteEngine) attachLimit() time.Duration {
+	return e.link.attemptLimit + handoffLimit + e.sessionLimit
 }
 
 // forget は、断られた資格を捨てる。次の要求で受け取り直す。
@@ -186,6 +195,8 @@ func (e *remoteEngine) attach(ctx context.Context) (*remoteSession, error) {
 
 // openSession は、handoff の秘密と引き換えに、API の cookie と CSRF のトークンを受け取る。
 func (e *remoteEngine) openSession(ctx context.Context, session *remoteSession) error {
+	ctx, cancel := context.WithTimeout(ctx, e.sessionLimit)
+	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, session.origin()+cliSessionPath, nil)
 	if err != nil {
 		return err
@@ -216,6 +227,10 @@ func (e *remoteEngine) openSession(ctx context.Context, session *remoteSession) 
 	session.csrf = answer.CSRFToken
 	return nil
 }
+
+// sessionAnswerLimit は、接続先のエンジンが /cli/session に答え終えるまでの上限である。新しい
+// TCP の接続なら身元の確かめ（proofLimit）を含むので、答えそのものにも同じだけ待つ。
+const sessionAnswerLimit = 2 * proofLimit
 
 // maxRemoteAnswer は、接続先のエンジンの /cli/ の答えを読む上限である。答えは短い JSON だけである。
 const maxRemoteAnswer = 64 << 10
