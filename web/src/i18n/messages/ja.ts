@@ -518,6 +518,8 @@ export const ja = {
   "runTarget.heading": "実行中のsshcエンジン",
   "runTarget.thisMachine": "localhost",
   "runTarget.thisMachineNote": "このマシン",
+  "runTarget.unread": "新しい通知があります",
+  "runTarget.unreadElsewhere": "ほかの実行先に新しい通知があります",
   "runTarget.actions": "sshcエンジン{alias}の操作",
   "runTarget.openInNewTab": "別タブで画面をまるごと開く",
   "runTarget.remove": "一覧から外す",

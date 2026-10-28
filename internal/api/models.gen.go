@@ -1464,7 +1464,8 @@ type RelocatedKeyFile struct {
 
 // RemoteEngine defines model for RemoteEngine.
 type RemoteEngine struct {
-	Alias string `json:"alias"`
+	Alias     string `json:"alias"`
+	Connected bool   `json:"connected"`
 }
 
 // RemoteEngineAction defines model for RemoteEngineAction.

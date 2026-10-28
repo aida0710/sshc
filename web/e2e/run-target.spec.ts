@@ -30,9 +30,9 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
     if (route.request().method() === "POST") {
       expect(route.request().postDataJSON()).toEqual({ alias: "bastion" });
       added = true;
-      await route.fulfill({ status: 201, json: { alias: "bastion" } });
+      await route.fulfill({ status: 201, json: { alias: "bastion", connected: true } });
     } else {
-      await route.fulfill({ json: { engines: added ? [{ alias: "bastion" }] : [] } });
+      await route.fulfill({ json: { engines: added ? [{ alias: "bastion", connected: true }] : [] } });
     }
   });
   await page.route("**/api/v1/engines/bastion/**", async (route) => {

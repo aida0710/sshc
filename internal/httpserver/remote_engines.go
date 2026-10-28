@@ -17,6 +17,8 @@ import (
 type RemoteEngineDirectory interface {
 	RemoteEngineOpener
 	Engines() ([]string, error)
+	// Connected は、alias の実行先へ今繋がっているかを、繋ぎに行かずに答える。
+	Connected(alias string) bool
 	AddEngine(ctx context.Context, alias string) error
 	RemoveEngine(alias string) error
 	EngineStatus(ctx context.Context, alias string) (remoteengine.Status, error)
@@ -83,7 +85,7 @@ func (h RemoteEngineHandlers) engineList() (api.RemoteEngineList, error) {
 	}
 	engines := make([]api.RemoteEngine, 0, len(aliases))
 	for _, alias := range aliases {
-		engines = append(engines, api.RemoteEngine{Alias: alias})
+		engines = append(engines, api.RemoteEngine{Alias: alias, Connected: h.Engines.Connected(alias)})
 	}
 	return api.RemoteEngineList{Engines: engines}, nil
 }
@@ -115,7 +117,8 @@ func (h RemoteEngineHandlers) Add(c *echo.Context) error {
 	if err := h.Engines.AddEngine(c.Request().Context(), request.Alias); err != nil {
 		return remoteEngineProblem(c, err)
 	}
-	return c.JSON(http.StatusCreated, api.RemoteEngine{Alias: request.Alias})
+	// 足すときに繋いで確かめたので、繋がっている。
+	return c.JSON(http.StatusCreated, api.RemoteEngine{Alias: request.Alias, Connected: true})
 }
 
 // Remove は、実行先からエンジンを外す。接続先のエンジンとそのターミナルは止めない。

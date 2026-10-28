@@ -6,6 +6,7 @@ import { failureCode } from "../api/client";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 import { runTargetProblemText } from "./runTargetProblem";
 import { useRemoteVaultUnlock, type RemoteVaultUnlockState } from "./useRemoteVaultUnlock";
+import { useRunTargetUnread } from "./useRunTargetUnread";
 
 export type RunTargetsState = {
   // engines are the SSH hosts whose engine was added as a run target.
@@ -23,6 +24,9 @@ export type RunTargetsState = {
   api: RemoteEnginesApi;
   localVersion: string;
   vaultUnlock: RemoteVaultUnlockState;
+  // unread are the run targets other than the selected one whose terminals sent a notification since
+  // this browser last looked (useRunTargetUnread).
+  unread: ReadonlySet<string>;
   // engineInfo is the engine information dialog, from which an engine whose
   // version differs from this machine's is updated.
   engineInfo: EngineInfoDialogState;
@@ -70,6 +74,7 @@ export function useRunTargets({
   // A remembered engine that is no longer a run target falls back to this
   // machine once the list is known.
   const selected = stored !== "" && (!loaded || engines.includes(stored)) ? stored : null;
+  const unread = useRunTargetUnread({ api, selected, enabled: enabled && engines.length > 0 });
 
   const select = useCallback((alias: string | null) => {
     setProblem("");
@@ -126,7 +131,7 @@ export function useRunTargets({
     }
   }, [api, report]);
 
-  return { engines, selected, problem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock,
+  return { engines, selected, problem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock, unread,
     engineInfo: { openFor: engineInfoFor, ask: setEngineInfoFor, close: closeEngineInfo },
   };
 }
