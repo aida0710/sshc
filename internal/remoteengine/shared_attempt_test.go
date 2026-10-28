@@ -27,7 +27,7 @@ func TestCallersArrivingDuringAnAttemptShareItsResult(t *testing.T) {
 		waiting.Add(1)
 		go func() {
 			defer waiting.Done()
-			_, err := attempts.do(context.Background(), start)
+			_, err := attempts.do(context.Background(), time.Minute, start)
 			results <- err
 		}()
 	}
@@ -65,13 +65,13 @@ func TestACallerThatGivesUpDoesNotCancelTheAttemptOthersWaitFor(t *testing.T) {
 	impatient, giveUp := context.WithCancel(context.Background())
 	gaveUp := make(chan error, 1)
 	go func() {
-		_, err := attempts.do(impatient, start)
+		_, err := attempts.do(impatient, time.Minute, start)
 		gaveUp <- err
 	}()
 	time.Sleep(10 * time.Millisecond)
 	patient := make(chan string, 1)
 	go func() {
-		value, _ := attempts.do(context.Background(), start)
+		value, _ := attempts.do(context.Background(), time.Minute, start)
 		patient <- value
 	}()
 	giveUp()
@@ -102,7 +102,7 @@ func TestALinkFinishedAfterCloseIsClosedRatherThanKept(t *testing.T) {
 	host := newHostLink(func(context.Context) (Link, error) {
 		<-release
 		return link, nil
-	})
+	}, time.Minute)
 	result := make(chan error, 1)
 	go func() {
 		_, err := host.live(context.Background())
@@ -152,5 +152,98 @@ func TestARemoteEngineThatStopsAnsweringIsGivenUpOnAndReachedAgainOverANewConnec
 	}
 	if connections.Load() != 2 {
 		t.Fatalf("opened %d SSH connections, want a new one after the silent one was given up", connections.Load())
+	}
+}
+
+func TestAnAttemptThatNeverEndsIsCancelledAtItsLimitAndTheNextCallerStartsAnew(t *testing.T) {
+	var attempts sharedAttempt[string]
+	var started atomic.Int32
+	start := func(ctx context.Context) (string, error) {
+		started.Add(1)
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+	if _, err := attempts.do(context.Background(), 50*time.Millisecond, start); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("an attempt that never ends = %v, want its limit", err)
+	}
+	if _, err := attempts.do(context.Background(), 50*time.Millisecond, start); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("the next attempt = %v, want its limit", err)
+	}
+	if started.Load() != 2 {
+		t.Fatalf("started %d attempts, want a new one after the first reached its limit", started.Load())
+	}
+}
+
+func TestAConnectionThatNeverAuthenticatesEndsAtTheLinkLimit(t *testing.T) {
+	manager := NewManager(ManagerOptions{
+		Store: newStore(t), LocalVersion: "v9",
+		Connect: func(ctx context.Context, _ string) (Link, error) {
+			// sshclient stops its ConnectTimeout once authentication begins, so
+			// only the attempt's own limit ends a server that never answers.
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	})
+	t.Cleanup(manager.Close)
+	manager.linkLimit = 100 * time.Millisecond
+	if err := manager.options.Store.AddEngine("r540"); err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 1; attempt <= 2; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, err := manager.EngineStatus(ctx, "r540")
+		callerExpired := ctx.Err() != nil
+		cancel()
+		if err == nil || callerExpired {
+			t.Fatalf("status #%d = %v, want the connection attempt to end on its own", attempt, err)
+		}
+	}
+}
+
+func TestClosingTheManagerCancelsAConnectionAttemptInProgress(t *testing.T) {
+	cancelled := make(chan struct{})
+	manager := NewManager(ManagerOptions{
+		Store: newStore(t), LocalVersion: "v9",
+		Connect: func(ctx context.Context, _ string) (Link, error) {
+			<-ctx.Done()
+			close(cancelled)
+			return nil, ctx.Err()
+		},
+	})
+	if err := manager.options.Store.AddEngine("r540"); err != nil {
+		t.Fatal(err)
+	}
+	go func() { _, _ = manager.EngineStatus(context.Background(), "r540") }()
+	time.Sleep(50 * time.Millisecond)
+	manager.Close()
+	select {
+	case <-cancelled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the connection attempt kept running after the manager closed")
+	}
+}
+
+func TestAnEngineThatNeverAnswersTheSessionRequestDoesNotHoldLaterRequests(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	remote.sessionStalled.Store(true)
+	manager := NewManager(ManagerOptions{
+		Store: newStore(t), LocalVersion: "v9",
+		Connect: func(context.Context, string) (Link, error) {
+			return &handoffLink{fakeLink: newFakeLink(remote.server.URL+"/#x", 0), handoff: remote.handoffDocument("v9")}, nil
+		},
+	})
+	t.Cleanup(manager.Close)
+	manager.sessionLimit = 100 * time.Millisecond
+	if err := manager.options.Store.AddEngine("r540"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := manager.EngineStatus(ctx, "r540"); err == nil || ctx.Err() != nil {
+		t.Fatalf("status from an engine that never answers /cli/session = %v, want the attach to end on its own", err)
+	}
+	remote.sessionStalled.Store(false)
+	if _, err := manager.EngineStatus(ctx, "r540"); err != nil {
+		t.Fatalf("status after the engine answers again = %v", err)
 	}
 }

@@ -35,12 +35,20 @@ type RunResult struct {
 	ExitCode int
 }
 
+// linkAttemptLimit は、接続先への SSH の接続ひとつを試す上限である。sshclient は認証に入ると
+// ConnectTimeout の時計を止めるので、認証に答えない相手との試みはここで終える。VPN の経路の
+// 起動（スマートフォンでの承認の待ちが2分）と、認証の待ち（OpenSSH の LoginGraceTime の既定が
+// 2分）を足しても収まる長さにする。
+const linkAttemptLimit = 5 * time.Minute
+
 // hostLink は、接続先ひとつへの SSH の接続を持つ。別タブの中継とターミナルの取り次ぎが
 // 同じ接続を使い、接続先ひとつに SSH の接続を二本開かない。
 type hostLink struct {
 	connect func(context.Context) (Link, error)
 	// connecting は、同時に来た要求に、ひとつの接続の試みを待たせる。
 	connecting sharedAttempt[Link]
+	// attemptLimit は、接続の試みひとつの上限（linkAttemptLimit）である。試験だけが短くする。
+	attemptLimit time.Duration
 
 	mutex sync.Mutex
 	link  Link
@@ -50,8 +58,8 @@ type hostLink struct {
 	ended []func()
 }
 
-func newHostLink(connect func(context.Context) (Link, error)) *hostLink {
-	return &hostLink{connect: connect}
+func newHostLink(connect func(context.Context) (Link, error), attemptLimit time.Duration) *hostLink {
+	return &hostLink{connect: connect, attemptLimit: attemptLimit}
 }
 
 // whenEnded は、接続が終わるたびに呼ぶ処理を足す。
@@ -66,7 +74,7 @@ func (h *hostLink) whenEnded(action func()) {
 // 繋ぎ直せなければ、そのまま失敗を返す。回数を重ねて試すと、繋がらない理由
 // （ノートパソコンのスリープではなく、鍵や接続先の変更）が見えなくなる。
 //
-// 接続はロックの外で試す。接続先が応答しないと、試みは SSH の接続の上限まで続く。
+// 接続はロックの外で試す。接続先が応答しないと、試みは attemptLimit まで続く。
 // そのあいだに来た要求は、同じ試みの結果を待つ。
 func (h *hostLink) live(ctx context.Context) (Link, error) {
 	h.mutex.Lock()
@@ -78,7 +86,7 @@ func (h *hostLink) live(ctx context.Context) (Link, error) {
 	if link != nil {
 		return link, nil
 	}
-	return h.connecting.do(ctx, h.connectOnce)
+	return h.connecting.do(ctx, h.attemptLimit, h.connectOnce)
 }
 
 func (h *hostLink) connectOnce(ctx context.Context) (Link, error) {
@@ -133,12 +141,14 @@ func (h *hostLink) dialLoopback(ctx context.Context, port int) (net.Conn, error)
 	return link.DialContext(ctx, "tcp", loopbackHost(port))
 }
 
+// close は接続を閉じ、走っている接続の試みも取り消す。以後の要求は ErrClosed で断る。
 func (h *hostLink) close() {
 	h.mutex.Lock()
 	link := h.link
 	h.link = nil
 	h.closed = true
 	h.mutex.Unlock()
+	h.connecting.abandon()
 	if link != nil {
 		_ = link.Close()
 	}

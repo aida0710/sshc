@@ -52,6 +52,9 @@ type Manager struct {
 	options ManagerOptions
 	// answerLimit は forwardedAnswerLimit である。試験だけが短くする。
 	answerLimit time.Duration
+	// linkLimit は linkAttemptLimit、sessionLimit は sessionAnswerLimit である。試験だけが短くする。
+	linkLimit    time.Duration
+	sessionLimit time.Duration
 
 	mutex  sync.Mutex
 	hosts  map[string]*remoteHost
@@ -68,7 +71,7 @@ type Manager struct {
 func NewManager(options ManagerOptions) *Manager {
 	actionContext, stopActions := context.WithCancel(context.Background())
 	return &Manager{
-		options: options, answerLimit: forwardedAnswerLimit,
+		options: options, answerLimit: forwardedAnswerLimit, linkLimit: linkAttemptLimit, sessionLimit: sessionAnswerLimit,
 		hosts: map[string]*remoteHost{}, actions: map[string]*actionLog{},
 		actionContext: actionContext, stopActions: stopActions,
 	}
@@ -80,7 +83,7 @@ func (m *Manager) host(alias string) *remoteHost {
 	if target == nil {
 		target = &remoteHost{link: newHostLink(func(ctx context.Context) (Link, error) {
 			return m.connect(ctx, alias)
-		})}
+		}, m.linkLimit)}
 		m.hosts[alias] = target
 	}
 	return target
@@ -175,7 +178,7 @@ func (m *Manager) hostEngine(alias string) (*remoteEngine, error) {
 	}
 	target := m.host(alias)
 	if target.engine == nil {
-		target.engine = newRemoteEngine(target.link, m.options.LocalVersion)
+		target.engine = newRemoteEngine(target.link, m.options.LocalVersion, m.sessionLimit)
 	}
 	return target.engine, nil
 }
