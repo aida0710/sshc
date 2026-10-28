@@ -3,6 +3,7 @@ import type { HostEntry } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import type { RunTargetsState } from "../terminal/useRunTargets";
 import { Icon } from "../ui/icons";
+import { menuItemClass } from "../ui/menuStyle";
 import { Notice } from "../ui/surface";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { EngineInfoDialog } from "./EngineInfoDialog";
@@ -66,13 +67,13 @@ export function RunTargetSwitcher({
         )}
         {alias === null || actionsFor !== alias ? null : (
           <div className="basis-full pb-1 pl-5">
-            <button type="button" onClick={() => { setActionsFor(null); setOpen(false); targets.engineInfo.ask(alias); }} className="block min-h-10 w-full rounded px-2 text-left text-xs text-ink hover:bg-hover md:min-h-7">
+            <button type="button" onClick={() => { setActionsFor(null); setOpen(false); targets.engineInfo.ask(alias); }} className={menuItemClass()}>
               {t("engineInfo.open")}
             </button>
-            <button type="button" onClick={() => void targets.openInNewTab(alias)} className="block min-h-10 w-full rounded px-2 text-left text-xs text-ink hover:bg-hover md:min-h-7">
+            <button type="button" onClick={() => void targets.openInNewTab(alias)} className={menuItemClass()}>
               {t("runTarget.openInNewTab")}
             </button>
-            <button type="button" onClick={() => { setActionsFor(null); void targets.remove(alias); }} className="block min-h-10 w-full rounded px-2 text-left text-xs text-danger hover:bg-hover md:min-h-7">
+            <button type="button" onClick={() => { setActionsFor(null); void targets.remove(alias); }} className={menuItemClass("danger")}>
               {t("runTarget.remove")}
             </button>
           </div>

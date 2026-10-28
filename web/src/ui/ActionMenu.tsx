@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
+import { menuItemClass, menuSurface } from "./menuStyle";
 import { useAnchoredMenu } from "./useAnchoredMenu";
 import { useDismissibleLayer } from "./useDismissibleLayer";
 import { useMenuKeyboard } from "./useMenuKeyboard";
@@ -86,7 +87,7 @@ export function ActionMenu({ label, items, triggerClassName, iconClassName = "si
         <Icon name="moreHorizontal" className={iconClassName} />
       </button>
       {open ? createPortal(
-        <div ref={menuRef} role="menu" className="fixed z-50 w-56 overflow-y-auto rounded-lg border border-line bg-card p-1 shadow-lg">
+        <div ref={menuRef} role="menu" className={`fixed z-50 w-56 overflow-y-auto ${menuSurface}`}>
           {items.map((item) => (
             <button
               key={item.label}
@@ -95,7 +96,7 @@ export function ActionMenu({ label, items, triggerClassName, iconClassName = "si
               disabled={item.disabled}
               title={item.title}
               onClick={() => select(item)}
-              className={`block min-h-10 w-full rounded-md px-3 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0 ${item.tone === "danger" ? "text-danger" : "text-ink"}`}
+              className={menuItemClass(item.tone)}
             >
               {item.label}
             </button>
