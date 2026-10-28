@@ -71,6 +71,12 @@ While a preview is open, the left and right arrow keys, or **Previous** and **Ne
 
 **New session** in the session list opens the same picker SFTP uses for its destination: **Local shell** at the top (one row per detected shell profile), then search, recent connections and groups for SSH hosts. Local shells use the same subsystem as SSH: search and Quick Commands both apply. On macOS and Linux, sshc supplies the terminal information needed by line editors such as zsh and fish even when the engine was started as a background service.
 
+On Windows the default local shell is PowerShell 7 when it is installed, otherwise Windows PowerShell. PSReadLine 2.0, which comes with Windows PowerShell 5.1, can show the line being typed away from its prompt after the terminal's width changes. Install PowerShell 7, or update PSReadLine from the terminal:
+
+```powershell
+Install-Module PSReadLine -Scope CurrentUser -Force -SkipPublisherCheck
+```
+
 ## Images and character widths
 
 SIXEL, iTerm2 inline images (OSC 1337 File=), and the kitty graphics protocol are drawn inside the terminal. Try them with `chafa`, `img2sixel`, `timg`, or `imgcat`. The iTerm2 form accepts PNG, JPEG, and GIF and does not animate. Images are also shown when the file size in bytes (`size=`) is omitted. Kitty graphics support is experimental and shows only images sent as data; sending a file path or shared memory is not supported, and sshc says so when a program asks. Each terminal keeps up to 32 MB of images and drops the oldest beyond that. Kitty images sent only to be stored (`a=t`) get another 32 MB, after which the next one is refused. Placing a stored image (`a=p`) decodes it again each time, so placements are limited to four 4096 × 4096 images a second and the rest are refused. A single image may be up to 4096 × 4096 pixels. A kitty image may be up to about 7.5 MB as sent, and a zlib-compressed one (`o=z`) that inflates past its declared size is not shown. When an image sent in chunks is refused partway through, the images already shown in that terminal are cleared as well. Reopening a session redraws images from the retained output; an image the engine could only keep part of is skipped instead of printed as text.
