@@ -279,9 +279,9 @@ type Conn struct {
 	reader  *bufio.Reader
 	context context.Context
 
-	readMu  sync.Mutex
-	writeMu sync.Mutex
-	stateMu sync.Mutex
+	readMutex  sync.Mutex
+	writeMutex sync.Mutex
+	stateMutex sync.Mutex
 
 	terminalType      string
 	windowWidth       uint16
@@ -310,8 +310,8 @@ func (c *Conn) Read(destination []byte) (int, error) {
 	if len(destination) == 0 {
 		return 0, nil
 	}
-	c.readMu.Lock()
-	defer c.readMu.Unlock()
+	c.readMutex.Lock()
+	defer c.readMutex.Unlock()
 	if err := c.context.Err(); err != nil {
 		return 0, err
 	}
@@ -344,9 +344,9 @@ func (c *Conn) Read(destination []byte) (int, error) {
 // WILL BINARY. CR NUL represents a literal carriage return, so the padding NUL
 // is not application data; CR LF is preserved for a raw local terminal.
 func (c *Conn) appendApplicationByte(destination []byte, written *int, value byte) {
-	c.stateMu.Lock()
+	c.stateMutex.Lock()
 	binary := c.remoteEnabled[optionBinary]
-	c.stateMu.Unlock()
+	c.stateMutex.Unlock()
 	if binary {
 		c.afterNVTCR = false
 		destination[*written] = value
@@ -385,17 +385,17 @@ func (c *Conn) configuredReadTimeout(err error) bool {
 	if !errors.As(err, &networkError) || !networkError.Timeout() {
 		return false
 	}
-	c.stateMu.Lock()
+	c.stateMutex.Lock()
 	enabled := c.readTimeout
-	c.stateMu.Unlock()
+	c.stateMutex.Unlock()
 	return enabled
 }
 
 // Write sends application data, doubling each literal IAC byte as required by
 // RFC 854. Large writes are chunked so escaping has a fixed memory bound.
 func (c *Conn) Write(source []byte) (int, error) {
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
+	c.writeMutex.Lock()
+	defer c.writeMutex.Unlock()
 	if err := c.context.Err(); err != nil {
 		return 0, err
 	}
@@ -404,9 +404,9 @@ func (c *Conn) Write(source []byte) (int, error) {
 	for len(source) > 0 {
 		count := min(len(source), writeChunkBytes)
 		chunk := source[:count]
-		c.stateMu.Lock()
+		c.stateMutex.Lock()
 		binary := c.localEnabled[optionBinary]
-		c.stateMu.Unlock()
+		c.stateMutex.Unlock()
 		application := encodeApplication(chunk, binary, &c.outboundNVTCR)
 		if err := c.writeApplicationLocked(application); err != nil {
 			return written, err
@@ -480,8 +480,8 @@ func (c *Conn) writeApplicationLocked(application []byte) error {
 // it after each logical terminal write so pressing Enter is delivered without
 // waiting for the next keystroke.
 func (c *Conn) Flush() error {
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
+	c.writeMutex.Lock()
+	defer c.writeMutex.Unlock()
 	return c.flushPendingLocked()
 }
 
@@ -502,10 +502,10 @@ func (c *Conn) SetWindowSize(width, height uint16) error {
 	if width == 0 || height == 0 {
 		return ErrInvalidWindowSize
 	}
-	c.stateMu.Lock()
+	c.stateMutex.Lock()
 	c.windowWidth, c.windowHeight = width, height
 	enabled := c.localEnabled[optionNAWS]
-	c.stateMu.Unlock()
+	c.stateMutex.Unlock()
 	if !enabled {
 		return nil
 	}
@@ -518,9 +518,9 @@ func (c *Conn) SetReadTimeout(timeout time.Duration) error {
 	if timeout < 0 {
 		return errors.New("invalid Telnet read timeout")
 	}
-	c.stateMu.Lock()
+	c.stateMutex.Lock()
 	c.readTimeout = timeout > 0
-	c.stateMu.Unlock()
+	c.stateMutex.Unlock()
 	deadline := time.Time{}
 	if timeout > 0 {
 		deadline = time.Now().Add(timeout)
@@ -566,7 +566,7 @@ func (c *Conn) Close() error {
 	if c.stopContext != nil {
 		c.stopContext()
 	}
-	// Close must never wait for writeMu: raw.Write may be blocked indefinitely
+	// Close must never wait for writeMutex: raw.Write may be blocked indefinitely
 	// when a peer stops reading. Closing the socket first is what releases that
 	// writer and lets automation timeouts actually terminate the process.
 	c.closeRaw()
@@ -578,8 +578,8 @@ func (c *Conn) closeRaw() {
 }
 
 func (c *Conn) sendControl(payload ...byte) error {
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
+	c.writeMutex.Lock()
+	defer c.writeMutex.Unlock()
 	if err := c.context.Err(); err != nil {
 		return err
 	}

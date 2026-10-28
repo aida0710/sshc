@@ -104,15 +104,15 @@ func scriptedConnection(t *testing.T, raw *scriptedConn) *Conn {
 type scriptedConn struct {
 	net.Conn
 
-	mu      sync.Mutex
+	mutex   sync.Mutex
 	reads   [][]byte
 	written bytes.Buffer
 	closed  bool
 }
 
 func (connection *scriptedConn) Read(buffer []byte) (int, error) {
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
+	connection.mutex.Lock()
+	defer connection.mutex.Unlock()
 	if connection.closed {
 		return 0, net.ErrClosed
 	}
@@ -134,8 +134,8 @@ func (connection *scriptedConn) Read(buffer []byte) (int, error) {
 }
 
 func (connection *scriptedConn) Write(buffer []byte) (int, error) {
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
+	connection.mutex.Lock()
+	defer connection.mutex.Unlock()
 	if connection.closed {
 		return 0, net.ErrClosed
 	}
@@ -143,8 +143,8 @@ func (connection *scriptedConn) Write(buffer []byte) (int, error) {
 }
 
 func (connection *scriptedConn) Close() error {
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
+	connection.mutex.Lock()
+	defer connection.mutex.Unlock()
 	connection.closed = true
 	return nil
 }
@@ -152,13 +152,13 @@ func (connection *scriptedConn) Close() error {
 func (connection *scriptedConn) SetReadDeadline(time.Time) error { return nil }
 
 func (connection *scriptedConn) writtenBytes() []byte {
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
+	connection.mutex.Lock()
+	defer connection.mutex.Unlock()
 	return bytes.Clone(connection.written.Bytes())
 }
 
 func (connection *scriptedConn) isClosed() bool {
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
+	connection.mutex.Lock()
+	defer connection.mutex.Unlock()
 	return connection.closed
 }

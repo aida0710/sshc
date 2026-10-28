@@ -138,9 +138,9 @@ type convertedStream struct {
 	reader io.Reader
 	writer io.Writer
 
-	writeMu   sync.Mutex
-	closeOnce sync.Once
-	closeErr  error
+	writeMutex sync.Mutex
+	closeOnce  sync.Once
+	closeErr   error
 }
 
 func (stream *convertedStream) Read(buffer []byte) (int, error) {
@@ -148,8 +148,8 @@ func (stream *convertedStream) Read(buffer []byte) (int, error) {
 }
 
 func (stream *convertedStream) Write(buffer []byte) (int, error) {
-	stream.writeMu.Lock()
-	defer stream.writeMu.Unlock()
+	stream.writeMutex.Lock()
+	defer stream.writeMutex.Unlock()
 	return stream.writer.Write(buffer)
 }
 

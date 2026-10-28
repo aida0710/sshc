@@ -70,7 +70,7 @@ const (
 var browserExpiry = Expiry{Lifetime: BrowserSessionLifetime, IdleTimeout: BrowserSessionIdleTimeout}
 
 type Manager struct {
-	mu            sync.RWMutex
+	mutex         sync.RWMutex
 	random        io.Reader
 	bootstrapHash [sha256.Size]byte
 	bootstrapUsed bool
@@ -109,8 +109,8 @@ func (m *Manager) Reissue() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	m.bootstrapHash = sha256.Sum256([]byte(fresh))
 	m.bootstrapUsed = false
 	return fresh, nil
@@ -120,8 +120,8 @@ func (m *Manager) Reissue() (string, error) {
 // そのsessionへ新しいtab用CSRF tokenを追加する。cookieを差し替えないことで、
 // 同じブラウザで開いている別tabを切断しない。
 func (m *Manager) BootstrapForSession(presented, existingSessionID string) (Credentials, bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	if m.bootstrapUsed {
 		return Credentials{}, false, ErrBootstrapUsed
@@ -147,8 +147,8 @@ func (m *Manager) BootstrapForSession(presented, existingSessionID string) (Cred
 // セッションがあればそこへ加え、無ければ新しく発行する。どちらの場合もセッションを
 // その登録に結び付けるので、登録が消えたときに RevokeRegistration で失効できる。
 func (m *Manager) JoinOrIssue(existingSessionID, registration string) (Credentials, bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	credentials, setCookie, err := m.joinOrIssueLocked(existingSessionID)
 	if err != nil {
@@ -182,8 +182,8 @@ func (m *Manager) RevokeRegistration(registration string) int {
 	if registration == "" {
 		return 0
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	revoked := 0
 	for key, sessionValue := range m.sessions {
@@ -208,8 +208,8 @@ func (m *Manager) IssueExpiring(expiry Expiry) (Credentials, error) {
 	if expiry.Lifetime <= 0 || expiry.IdleTimeout < 0 {
 		return Credentials{}, ErrInvalidLifetime
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	now := m.clock()
 	m.pruneExpiredLocked(now)
 	return m.issueLocked(now, expiry)
@@ -252,8 +252,8 @@ func (m *Manager) issueLocked(now time.Time, expiry Expiry) (Credentials, error)
 
 // Revoke はセッションを直ちに削除し、実際に存在したときだけ true を返す。
 func (m *Manager) Revoke(sessionID string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	key := sha256.Sum256([]byte(sessionID))
 	if _, ok := m.sessions[key]; !ok {
@@ -264,7 +264,7 @@ func (m *Manager) Revoke(sessionID string) bool {
 }
 
 // sessionLocked は有効なセッションを返し、使った時刻を進める。呼び出し側は
-// m.mu の書き込みロックを保持しなければならない。期限に達したセッションは
+// m.mutex の書き込みロックを保持しなければならない。期限に達したセッションは
 // 検索時に削除する。
 func (m *Manager) sessionLocked(sessionID string) (Session, bool) {
 	key := sha256.Sum256([]byte(sessionID))
@@ -291,8 +291,8 @@ func (m *Manager) sessionLocked(sessionID string) (Session, bool) {
 // 置き換えられたtokenとして上限付きで保持する。更新したページはもう使わないので、
 // 上限を越えたときは使われているtokenより先に退役する。
 func (m *Manager) RenewCSRF(sessionID, presented string) (string, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	key := sha256.Sum256([]byte(sessionID))
 	existing, ok := m.sessionLocked(sessionID)
@@ -322,8 +322,8 @@ func (m *Manager) RenewCSRF(sessionID, presented string) (string, bool) {
 // Session 内の actions マップは Manager のロックで保護する必要があるため、呼び出し側へ
 // Session 自体は返さない。
 func (m *Manager) BeginRequest(sessionID string) (endRequest func(), ok bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	sessionValue, ok := m.sessionLocked(sessionID)
 	if !ok {
@@ -336,8 +336,8 @@ func (m *Manager) BeginRequest(sessionID string) (endRequest func(), ok bool) {
 }
 
 func (m *Manager) endRequest(key [sha256.Size]byte) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	sessionValue, ok := m.sessions[key]
 	if !ok {
@@ -350,8 +350,8 @@ func (m *Manager) endRequest(key [sha256.Size]byte) {
 }
 
 func (m *Manager) VerifyCSRF(sessionID, csrf string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	sessionValue, ok := m.sessionLocked(sessionID)
 	if !ok {

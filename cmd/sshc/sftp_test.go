@@ -93,10 +93,10 @@ func TestSFTPProgressDrawsOnlyDownloadsInProgressAndCountsFinishedOnes(t *testin
 	display := &sftpCLIProgressDisplay{output: &output, state: sftpCLIProgressState{files: 3}}
 	display.track("get_b", "first.txt")
 	display.track("get_a", "second.txt")
-	display.mu.Lock()
+	display.mutex.Lock()
 	display.state.record(httpserver.SFTPTransferJob{ID: "get_b", DownloadParts: []httpserver.SFTPDownloadPartProgress{{Index: 0, TransferredBytes: 1, TotalBytes: 2}}})
 	lines := display.state.lines()
-	display.mu.Unlock()
+	display.mutex.Unlock()
 	if len(lines) != 3 || lines[0] != "finished   0 / 3 files" ||
 		!strings.HasPrefix(lines[1], "connection 1 ") || !strings.HasSuffix(lines[1], "first.txt") ||
 		lines[2] != "preparing  second.txt" {
@@ -104,10 +104,10 @@ func TestSFTPProgressDrawsOnlyDownloadsInProgressAndCountsFinishedOnes(t *testin
 	}
 
 	display.untrack("get_b")
-	display.mu.Lock()
+	display.mutex.Lock()
 	display.state.record(httpserver.SFTPTransferJob{ID: "get_b", DownloadParts: []httpserver.SFTPDownloadPartProgress{{Index: 0, TransferredBytes: 2, TotalBytes: 2}}})
 	lines = display.state.lines()
-	display.mu.Unlock()
+	display.mutex.Unlock()
 	if len(lines) != 2 || lines[0] != "finished   1 / 3 files" || lines[1] != "preparing  second.txt" {
 		t.Fatalf("lines after a download finished = %q", lines)
 	}
