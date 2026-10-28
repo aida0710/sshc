@@ -14,6 +14,9 @@ type Link interface {
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 	// Run は、接続先でコマンドをひとつ走らせる。接続は開いたままにする。
 	Run(ctx context.Context, request RunRequest) (RunResult, error)
+	// Ping は、keepalive を1回送り、limit のうちに SSH サーバーが答えるかを確かめる。
+	// 答えなければその理由を返す。
+	Ping(limit time.Duration) error
 	// Wait は、接続が終わるまで待つ。
 	Wait() error
 	Close() error
@@ -106,16 +109,30 @@ func (h *hostLink) connectOnce(ctx context.Context) (Link, error) {
 	return link, nil
 }
 
-// reset は、応答しなくなった接続を閉じ、次の要求で繋ぎ直させる。SSH の接続は、
-// 相手が黙って消えると keepalive が気づくまで（数十秒から2分ほど）生きているように見える。
-func (h *hostLink) reset() {
+// linkResponseLimit は、SSH の接続が keepalive に答えるのを待つ上限である。答えは SSH の
+// 往復1回で返るので、遅い回線でも数秒で足りる。
+const linkResponseLimit = 5 * time.Second
+
+// resetIfSilent は、SSH の接続が keepalive に答えなければ閉じ、次の要求で繋ぎ直させる。
+// SSH の接続は、相手が黙って消えると keepalive が気づくまで（数十秒から2分ほど）生きている
+// ように見える。
+//
+// 答えるなら閉じない。止まったのは接続先のエンジンで、同じ接続の上で走っている操作
+// （更新・再起動の出力）や別タブの中継、ほかのセッションの入出力まで巻き添えで切らないため
+// である。
+func (h *hostLink) resetIfSilent() {
 	h.mutex.Lock()
 	link := h.link
-	h.link = nil
 	h.mutex.Unlock()
-	if link != nil {
-		_ = link.Close()
+	if link == nil || link.Ping(linkResponseLimit) == nil {
+		return
 	}
+	h.mutex.Lock()
+	if h.link == link {
+		h.link = nil
+	}
+	h.mutex.Unlock()
+	_ = link.Close()
 }
 
 // forgetWhenEnded は、接続が終わったら、次の要求で繋ぎ直すよう手放す。
