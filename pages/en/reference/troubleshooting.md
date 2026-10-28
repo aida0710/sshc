@@ -18,7 +18,11 @@ If startup stops with `was recorded by an sshc release before v0.24.0`, an inter
 
 ## The vault does not unlock
 
-A master password cannot be recovered. If a new vault fails immediately, inspect the error code and detailed cause. `vault_too_new` means the vault format is newer than this binary supports; update sshc and try again.
+A master password cannot be recovered. If a new vault fails immediately, inspect the error code and detailed cause. What to do for each error code:
+
+- `vault_schema_newer`: a newer sshc saved the vault in a newer format. Update sshc and try again.
+- `vault_schema_older`: the vault is in an older format this sshc cannot read. Unlock it once with the sshc release you used before, which moves it to the newer format, and then update to this release.
+- `vault_migration_failed`: moving the vault to the newer format failed. The original vault is left as it was before the move. Check the free disk space and the permissions of `~/.ssh/sshc/`, then unlock again.
 
 ## A private key is missing after sync
 

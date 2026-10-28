@@ -11,9 +11,13 @@ sshcは、SSHとローカルシェルを扱うターミナルアプリです。S
 
 - SSHとローカルシェルを同じ画面で操作し、[ワークスペース](./workspace)ごとにまとめる。LLMが開いた接続は非表示のワークスペースへ
 - 接続の進行状況を表示し、終了したSSHセッションへ、ペインとスクロールバックを残したまま再接続
+- [分割表示](./split-view)で、複数のセッションを1画面に並べる
+- sshcエンジンが止まる前に開いていたセッションを、次の起動で[開き直す](./terminal#止めたあとにセッションを開き直す)
+- 画面に出たファイルのパスを押して、画像・テキスト・音声・動画を[その場でプレビュー](./terminal#リンクとリモートパス)
+- [実行先](./run-target)で、SSHの接続先に常駐するsshcエンジンのターミナルを、このマシンのブラウザから使う
 - 検索、文字コード、リンクやリモートパスを開く操作
 - [クイックコマンドとスニペット](/terminal/commands)を、実行前の確認、接続時の自動実行、複数の接続先への実行に利用
-- [タイトルと通知](/terminal/notifications)で、プログラムが送るペイン名や通知を表示。Claude CodeやCodexの通知にも対応
+- [タイトルと通知](/terminal/notifications)で、プログラムが送るセッション名や通知を表示。Claude CodeやCodexの通知にも対応
 - [ポート転送](/terminal/port-forwarding)はLocal forwarding、Remote forwarding、Dynamic SOCKSに対応し、保存済みの設定と一時的な転送を使い分け
 - Terminalのカラーパレット、フォント、背景を[設定](/reference/settings)で変更
 
