@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"path/filepath"
 	"time"
 
@@ -193,48 +192,6 @@ func (s *Service) SetEngineSettings(settings EngineSettings) (SaveResult, error)
 	}
 	s.applyVaultAutoLock()
 	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
-}
-
-// InitialiseEngineSettings は、このマシンの sshc エンジンの設定のファイルが無ければ作る。
-// sshc エンジンが起動するとき、受け口と Vault の時計がこの設定を読む前に呼ぶ。
-//
-// 前のバージョンは、この設定を metadata.json の engine 節に書いていた。metadata.json が
-// schema 9 より前の形なら、その engine 節をこのマシンの設定として移す。移すのは、
-// ファイルがまだ無いとき（このバージョンで初めて起動したとき）だけである。そのあとに
-// 同期や履歴の復元で前の形の metadata.json が届いても、別のマシンの設定なので移さない。
-// 移すものが無くても空の設定でファイルを作り、移し終えたことを残す。metadata.json が
-// JSON として読めなければ、直したあとの起動で移せるよう、まだ作らない。ファイルを
-// 読めないなどで失敗したときも何も作らずに理由を返す。sshc エンジンは起動を止めず、
-// 既定の設定で動く（internal/app の newEngineServices）。
-//
-// metadata.json は書き換えない。engine 節は、次に metadata.json を保存するときに消える。
-// Vault のロックを解除する前に動くので、変更の履歴を通さずに書く。
-func (s *Service) InitialiseEngineSettings() error {
-	target := s.engineSettingsPath()
-	_, err := s.workspace.FileSystem().Lstat(target)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	metadata, err := s.workspace.FileSystem().ReadFile(s.metadata.Path())
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	moved, readable := olderMetadataEngineSection(metadata)
-	if !readable {
-		return nil
-	}
-	contents, err := encodeEngineSettings(moved)
-	if err != nil {
-		return err
-	}
-	if err := s.workspace.EnsureDirectory(s.workspace.StateDir()); err != nil {
-		return err
-	}
-	return storage.WriteAtomicFile(s.workspace.FileSystem(), target, engineSettingsTemporaryPrefix,
-		storage.FilePermission, contents)
 }
 
 // applyVaultAutoLock は、このマシンの自動ロックの時間を Vault の時計へ移す。

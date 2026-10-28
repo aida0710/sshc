@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -50,40 +49,12 @@ func TestDecodeMetadataAcceptsAnAbsentFileAndRejectsUnsupportedSchemas(t *testin
 	}
 }
 
-func TestMetadataMigratesVersionThreeAndRoundTripsVersionFive(t *testing.T) {
-	migrated, err := DecodeMetadata([]byte(`{"schemaVersion":3,"embeddedTerminal":{"scrollbackBytes":32768},"hosts":[{"identity":{"path":"config","alias":"host"}}]}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if migrated.SchemaVersion != MetadataSchemaVersion || migrated.EmbeddedTerminal == nil || migrated.EmbeddedTerminal.ScrollbackBytes != 32768 {
-		t.Fatalf("migrated = %#v", migrated)
-	}
-	encoded, err := EncodeMetadata(migrated)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 9`) {
-		t.Fatalf("encoded migration = %s", encoded)
-	}
-	decoded, err := DecodeMetadata(encoded)
-	if err != nil || decoded.SchemaVersion != MetadataSchemaVersion {
-		t.Fatalf("v5 round trip = %#v, %v", decoded, err)
-	}
-}
-
-func TestMetadataMigratesVersionFourWithoutLosingSettings(t *testing.T) {
-	stored, err := DecodeMetadata([]byte(`{"schemaVersion":4,"embeddedTerminal":{"fontSize":18}}`))
-	if err != nil || stored.SchemaVersion != MetadataSchemaVersion || stored.EmbeddedTerminal == nil || stored.EmbeddedTerminal.FontSize != 18 {
-		t.Fatalf("migration failed: %v", err)
-	}
-}
-
 func TestDecodeMetadataFallsBackToTheDefaultLimits(t *testing.T) {
 	for name, document := range map[string]string{
-		"zero":        `{"schemaVersion":3,"embeddedTerminal":{"maxSessions":0,"scrollbackBytes":0}}`,
-		"below range": `{"schemaVersion":3,"embeddedTerminal":{"maxSessions":0,"scrollbackBytes":1}}`,
-		"above range": `{"schemaVersion":3,"embeddedTerminal":{"maxSessions":9999,"scrollbackBytes":99999999}}`,
-		"negative":    `{"schemaVersion":3,"embeddedTerminal":{"maxSessions":-1,"scrollbackBytes":-1}}`,
+		"zero":        `{"schemaVersion":9,"embeddedTerminal":{"maxSessions":0,"scrollbackBytes":0}}`,
+		"below range": `{"schemaVersion":9,"embeddedTerminal":{"maxSessions":0,"scrollbackBytes":1}}`,
+		"above range": `{"schemaVersion":9,"embeddedTerminal":{"maxSessions":9999,"scrollbackBytes":99999999}}`,
+		"negative":    `{"schemaVersion":9,"embeddedTerminal":{"maxSessions":-1,"scrollbackBytes":-1}}`,
 	} {
 		decoded, err := DecodeMetadata([]byte(document))
 		if err != nil {
@@ -94,7 +65,7 @@ func TestDecodeMetadataFallsBackToTheDefaultLimits(t *testing.T) {
 		}
 	}
 
-	kept, err := DecodeMetadata([]byte(`{"schemaVersion":3,"embeddedTerminal":{"maxSessions":8,"scrollbackBytes":32768}}`))
+	kept, err := DecodeMetadata([]byte(`{"schemaVersion":9,"embeddedTerminal":{"maxSessions":8,"scrollbackBytes":32768}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,9 +171,8 @@ func TestValidateMetadataRefusesKeyMaterialAndUnknownPaths(t *testing.T) {
 	}
 }
 
-// ProxyCommand などの複数の値は schema 9 より前の形で、読み込みの移行だけが 1 つの値に
-// する。今の形で受け付けると、空白でつないで書いた行と、同じ値を前の形として移行した行とが
-// 食い違う。同じ値から違う行ができないよう、受け付けない。
+// ProxyCommand などは行の残りを 1 つの値で持つ。複数の値に分けた形は、同じ値から違う行が
+// できないよう、受け付けない。
 func TestValidateMetadataRefusesSeveralValuesForAKeywordThatTakesTheRestOfTheLine(t *testing.T) {
 	split := NewMetadata()
 	split.Groups = []GroupMetadata{{Name: "company", Settings: []Setting{
@@ -219,69 +189,6 @@ func TestValidateMetadataRefusesSeveralValuesForAKeywordThatTakesTheRestOfTheLin
 	}}}
 	if err := ValidateMetadata(whole); err != nil {
 		t.Errorf("one ProxyCommand value and several SendEnv values: %v", err)
-	}
-}
-
-// 前の形（ProxyCommand などを空白で分けた複数の値）を読み替えるのは、schema 9 より前の
-// metadata を移行するときだけである。今の schema の文書は読み替えず、保存で断る。
-func TestSplitRestOfLineValuesAreJoinedOnlyWhenMigratingAnOlderSchema(t *testing.T) {
-	document := func(version int) []byte {
-		return []byte(fmt.Sprintf(`{"schemaVersion":%d,"groups":[{"name":"company","settings":[`+
-			`{"keyword":"ProxyCommand","values":["sh","-c","exec nc %%h %%p"]}]}]}`, version))
-	}
-
-	migrated, err := DecodeMetadata(document(8))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := migrated.Groups[0].Settings[0].Values; len(got) != 1 || got[0] != `sh -c "exec nc %h %p"` {
-		t.Errorf("schema 8 values = %q, want the line an earlier sshc wrote", got)
-	}
-
-	current, err := DecodeMetadata(document(MetadataSchemaVersion))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := current.Groups[0].Settings[0].Values; len(got) != 3 {
-		t.Errorf("schema %d values = %q, want them left as stored", MetadataSchemaVersion, got)
-	}
-	if _, err := EncodeMetadata(current); !errors.Is(err, ErrMetadataGroup) {
-		t.Errorf("saving schema %d split values = %v, want ErrMetadataGroup", MetadataSchemaVersion, err)
-	}
-}
-
-// 同じ接続の entry が 2 つある metadata.json は、schema 9 より前の sshc が書いた形である。
-// 1 つにするのは schema 9 より前の metadata を移行するときだけで、今の形は保存で断る。
-func TestEntriesForTheSameConnectionAreMergedOnlyWhenMigratingAnOlderSchema(t *testing.T) {
-	document := func(version int) []byte {
-		return []byte(fmt.Sprintf(`{"schemaVersion":%d,"hosts":[`+
-			`{"identity":{"path":"config","alias":"jump"},"note":"first"},`+
-			`{"identity":{"path":"config","alias":"web"},"note":"left behind","orphan":true},`+
-			`{"identity":{"path":"config","alias":"jump"},"note":"second"},`+
-			`{"identity":{"path":"config","alias":"web"},"note":"renamed here"}]}`, version))
-	}
-
-	migrated, err := DecodeMetadata(document(8))
-	if err != nil {
-		t.Fatal(err)
-	}
-	notes := make([]string, 0, len(migrated.Hosts))
-	for _, host := range migrated.Hosts {
-		notes = append(notes, host.Note)
-	}
-	if want := []string{"first", "renamed here"}; !reflect.DeepEqual(notes, want) {
-		t.Errorf("schema 8 notes = %q, want %q: the entry without the orphan mark, else the first", notes, want)
-	}
-
-	current, err := DecodeMetadata(document(MetadataSchemaVersion))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(current.Hosts) != 4 {
-		t.Errorf("schema %d hosts = %#v, want them left as stored", MetadataSchemaVersion, current.Hosts)
-	}
-	if _, err := EncodeMetadata(current); !errors.Is(err, ErrMetadataDuplicateHost) {
-		t.Errorf("saving schema %d duplicate entries = %v, want ErrMetadataDuplicateHost", MetadataSchemaVersion, err)
 	}
 }
 
@@ -376,32 +283,6 @@ func TestMetadataStoreRoundTripsThroughOneTransaction(t *testing.T) {
 	}
 	if store.Path() != filepath.Join(workspace.StateDir(), MetadataFileName) {
 		t.Fatalf("store path = %q", store.Path())
-	}
-}
-
-func TestMetadataStoreDropsTheRetiredFavouriteFieldOnTheNextWrite(t *testing.T) {
-	workspace := newTestWorkspace(t)
-	store := NewMetadataStore(workspace)
-	if err := store.EnsureDirectory(); err != nil {
-		t.Fatal(err)
-	}
-	acltest.WritePrivateFile(t, store.Path(), []byte(
-		`{"schemaVersion":3,"hosts":[{"identity":{"path":"config","alias":"bastion"},"favourite":true,"tags":["prod"]}]}`,
-	))
-
-	loaded, precondition, err := store.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(loaded.Hosts) != 1 || len(loaded.Hosts[0].Tags) != 1 {
-		t.Fatalf("loaded hosts = %#v", loaded.Hosts)
-	}
-	change, err := store.Change(loaded, precondition)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(change.Contents), "favourite") {
-		t.Fatalf("retired field survived: %s", change.Contents)
 	}
 }
 
@@ -534,60 +415,20 @@ func TestAGroupThatIsNotHiddenWritesNoHiddenKey(t *testing.T) {
 	}
 }
 
-// v5のVPNプロファイルの接続先は、読んだ時点で捨てる。接続先は、プロファイルを
-// 付けた接続が決める。付けていた接続はそのまま残る。
-func TestVersionFiveVPNProfilesLoseTheirTargetWhenRead(t *testing.T) {
-	stored := `{"schemaVersion":5,` +
-		`"vpnProfiles":[{"name":"lab","backend":"l2tp_ipsec","target":"10.9.9.1:22",` +
-		`"l2tp":{"server":"vpn.example.jp","username":"user"}}],` +
-		`"hosts":[{"identity":{"path":"config","alias":"lab"},"vpn":"lab"}]}`
-
-	migrated, err := DecodeMetadata([]byte(stored))
-	if err != nil {
-		t.Fatalf("DecodeMetadata = %v", err)
-	}
-	if migrated.SchemaVersion != MetadataSchemaVersion || len(migrated.VPNProfiles) != 1 {
-		t.Fatalf("migrated = %+v", migrated)
-	}
-	if _, err := migrated.VPNProfiles[0].Profile(); err != nil {
-		t.Fatalf("Profile = %v", err)
-	}
-	if len(migrated.Hosts) != 1 || migrated.Hosts[0].VPN != "lab" {
-		t.Fatalf("hosts = %+v", migrated.Hosts)
-	}
-	encoded, err := EncodeMetadata(migrated)
-	if err != nil {
-		t.Fatalf("EncodeMetadata = %v", err)
-	}
-	if strings.Contains(string(encoded), "target") {
-		t.Fatalf("書き直した文書に接続先が残った: %s", encoded)
-	}
-}
-
-// v6のファイルはそのまま読み、書くときはいまのバージョンになる。v7は、新しいVPNの方式の
-// プロファイルを旧バージョンに読ませない境界である。
-func TestVersionSixMetadataIsReadAndWrittenAsTheCurrentVersion(t *testing.T) {
-	stored := `{"schemaVersion":6,` +
-		`"vpnProfiles":[{"name":"lab","backend":"l2tp_ipsec","l2tp":{"server":"vpn.example.jp","username":"user"}}],` +
-		`"hosts":[{"identity":{"path":"config","alias":"lab"},"vpn":"lab"}]}`
-
-	migrated, err := DecodeMetadata([]byte(stored))
-	if err != nil {
-		t.Fatalf("DecodeMetadata = %v", err)
-	}
-	encoded, err := EncodeMetadata(migrated)
-	if err != nil {
-		t.Fatalf("EncodeMetadata = %v", err)
-	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 9`) || len(migrated.VPNProfiles) != 1 {
-		t.Fatalf("encoded = %s", encoded)
-	}
-}
-
 // これより新しいバージョンのファイルは読まない。知らない項目を読み飛ばして書き直すと消える。
 func TestMetadataFromANewerSshcIsRefused(t *testing.T) {
 	newer := fmt.Sprintf(`{"schemaVersion":%d}`, MetadataSchemaVersion+1)
 	if _, err := DecodeMetadata([]byte(newer)); !errors.Is(err, ErrMetadataVersion) {
 		t.Fatalf("DecodeMetadata = %v", err)
+	}
+}
+
+// 前の schema の metadata.json は読み替えずに断る。
+func TestMetadataFromAnOlderSchemaIsRefused(t *testing.T) {
+	for _, version := range []int{3, 8} {
+		document := fmt.Sprintf(`{"schemaVersion":%d,"hosts":[]}`, version)
+		if _, err := DecodeMetadata([]byte(document)); !errors.Is(err, ErrMetadataVersion) {
+			t.Errorf("schema %d = %v, want ErrMetadataVersion", version, err)
+		}
 	}
 }
