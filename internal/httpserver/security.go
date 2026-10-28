@@ -185,16 +185,9 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return next(c)
 		}
 
-		cookie, err := request.Cookie(SessionCookie)
-		if err != nil {
-			return problem(c, http.StatusUnauthorized, "session_required")
-		}
-		if s.Sessions == nil {
-			return problem(c, http.StatusUnauthorized, "invalid_session")
-		}
-		endRequest, authenticated := s.Sessions.BeginRequest(cookie.Value)
-		if !authenticated {
-			return problem(c, http.StatusUnauthorized, "invalid_session")
+		sessionID, endRequest, refusal := s.beginSessionRequest(request)
+		if refusal != "" {
+			return problem(c, http.StatusUnauthorized, refusal)
 		}
 		defer endRequest()
 		// トークンは書き込みだけでなく読み取りにも必要である。cookie は
@@ -214,7 +207,7 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		// （mediaTickets）。cookie だけでは引き換えられない点はトークンと同じである。
 		isMediaStream := request.Method == http.MethodGet && c.Path() == sftpMediaRoute
 		if (isStateChanging || claimed) && !isHealth && !isMediaStream &&
-			!s.Sessions.VerifyCSRF(cookie.Value, request.Header.Get(CSRFHeader)) {
+			!s.Sessions.VerifyCSRF(sessionID, request.Header.Get(CSRFHeader)) {
 			return problem(c, http.StatusForbidden, "invalid_csrf")
 		}
 
@@ -223,7 +216,7 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return problem(c, http.StatusConflict, "vault_locked")
 		}
 
-		c.Set(SessionContextKey, cookie.Value)
+		c.Set(SessionContextKey, sessionID)
 		return next(c)
 	}
 }
@@ -238,16 +231,9 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 // 完全一致を求める）で同じページからの要求に限る。ロック中に断るのは、取り次ぐ
 // ターミナルの API と同じ扱いにするためである。
 func (s Security) requireSignedInAndUnlocked(c *echo.Context, next echo.HandlerFunc) error {
-	cookie, err := c.Request().Cookie(SessionCookie)
-	if err != nil {
-		return problem(c, http.StatusUnauthorized, "session_required")
-	}
-	if s.Sessions == nil {
-		return problem(c, http.StatusUnauthorized, "invalid_session")
-	}
-	endRequest, authenticated := s.Sessions.BeginRequest(cookie.Value)
-	if !authenticated {
-		return problem(c, http.StatusUnauthorized, "invalid_session")
+	_, endRequest, refusal := s.beginSessionRequest(c.Request())
+	if refusal != "" {
+		return problem(c, http.StatusUnauthorized, refusal)
 	}
 	// 入出力が続くあいだセッションを使用中として持ち続けない。このマシンの
 	// /terminal/stream と同じく、開くときに一度だけ確かめる。
@@ -256,6 +242,29 @@ func (s Security) requireSignedInAndUnlocked(c *echo.Context, next echo.HandlerF
 		return problem(c, http.StatusConflict, "vault_locked")
 	}
 	return next(c)
+}
+
+// beginSessionRequest は、要求の cookie のうち有効なセッションのものを選び、そのセッションの
+// 要求を始める。断るときは空でない code を返す。
+//
+// 同じ名前の cookie は複数届きうる。cookie はポートを区別しないので、127.0.0.1 の別のポートの
+// ページ（悪性の実行先を別タブで開いた中継の画面など）が JS で `Path=/api` の sshc_session を
+// 置くと、ブラウザはパスの長いそれを先に送る。最初の1つだけを読むと、正しい cookie があるのに
+// このマシンの画面が入れなくなる。
+func (s Security) beginSessionRequest(request *http.Request) (string, func(), string) {
+	cookies := request.CookiesNamed(SessionCookie)
+	if len(cookies) == 0 {
+		return "", nil, "session_required"
+	}
+	if s.Sessions == nil {
+		return "", nil, "invalid_session"
+	}
+	for _, cookie := range cookies {
+		if endRequest, authenticated := s.Sessions.BeginRequest(cookie.Value); authenticated {
+			return cookie.Value, endRequest, ""
+		}
+	}
+	return "", nil, "invalid_session"
 }
 
 func setSecurityHeaders(header http.Header, apiResponse bool) {

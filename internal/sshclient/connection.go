@@ -72,6 +72,12 @@ func (c *Connection) Run(ctx context.Context, command Command) (Output, error) {
 	})
 }
 
+// Ping sends one keepalive and reports whether the SSH server answers within
+// limit: context.DeadlineExceeded when it does not, context.Canceled after Close.
+func (c *Connection) Ping(limit time.Duration) error {
+	return keepAliveReply(c.client, limit, c.done)
+}
+
 // Wait blocks until the final transport ends, whether the peer or Close ended it.
 func (c *Connection) Wait() error { return c.client.Wait() }
 
