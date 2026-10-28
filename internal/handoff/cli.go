@@ -16,6 +16,9 @@ const (
 	SessionPath   = "/cli/session"
 	SessionCookie = "sshc_session"
 	CSRFHeader    = "X-SSHC-CSRF"
+	// ActionHeader は、一度限りの確認のトークンを運ぶヘッダーである。実行先のエンジンへ確認の
+	// 要る操作を送るときに、このマシンのエンジンも使う。
+	ActionHeader = "X-SSHC-Action"
 )
 
 // ErrInvalidCLIAnswer is an answer to a /cli/ step that lacks what the engine always sends.

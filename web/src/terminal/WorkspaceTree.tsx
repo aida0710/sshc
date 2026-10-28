@@ -13,6 +13,7 @@ import { localStorageKeys } from "../ui/browserStorageKeys";
 import { Icon } from "../ui/icons";
 import { Notice } from "../ui/surface";
 import { commandTargetsForWorkspace } from "./commands/workspaceCommandTargets";
+import { terminalCommandApiFor } from "./commands/commandApi";
 import { WorkspaceCommandCenter } from "./commands/WorkspaceCommandCenter";
 import { SessionList } from "./SessionList";
 import type { TerminalSessionsState } from "./sessions";
@@ -42,9 +43,6 @@ type WorkspaceTreeProps = {
   hosts?: HostEntry[];
   onOpenShell: (profileId: string | undefined, workspaceId: string) => void;
   onConnect?: (alias: string, workspaceId: string) => void;
-  // canBroadcast is false for an engine on an SSH host: sending a command to
-  // several sessions is confirmed by an action token only this machine issues.
-  canBroadcast?: boolean;
   // runTarget is the SSH alias of the engine the shells open on, or null for
   // this machine.
   runTarget?: string | null;
@@ -78,7 +76,6 @@ export function WorkspaceTree({
   hosts = [],
   onOpenShell,
   onConnect,
-  canBroadcast = true,
 }: WorkspaceTreeProps) {
   const t = useTranslate();
   const [showHidden, setShowHidden] = useState(() => readStoredValue(localStorageKeys.showHiddenTerminalWorkspaces) === "true");
@@ -158,13 +155,12 @@ export function WorkspaceTree({
         onSelect: () => void workspaces.update(workspace.id, { hidden: !workspace.hidden }),
       },
     ];
-    if (canBroadcast) {
-      items.push({
-        label: t("workspace.broadcast"),
-        disabled: !members.some((session) => session.state === "connected"),
-        onSelect: () => setBroadcasting(members),
-      });
-    }
+    // The tree shows the sessions of one run target, so a broadcast stays within it.
+    items.push({
+      label: t("workspace.broadcast"),
+      disabled: !members.some((session) => session.state === "connected"),
+      onSelect: () => setBroadcasting(members),
+    });
     if (!workspace.builtIn) {
       items.push({
         label: t("workspace.delete"),
@@ -327,7 +323,7 @@ export function WorkspaceTree({
         />
       )}
       {broadcasting === null ? null : (
-        <WorkspaceCommandCenter paneTargets={commandTargetsForWorkspace(broadcasting)} onClose={() => setBroadcasting(null)} />
+        <WorkspaceCommandCenter paneTargets={commandTargetsForWorkspace(broadcasting)} api={terminalCommandApiFor(runTarget)} onClose={() => setBroadcasting(null)} />
       )}
     </div>
   );

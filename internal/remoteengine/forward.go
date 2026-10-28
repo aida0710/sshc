@@ -62,40 +62,108 @@ func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, ali
 	if len(body) > maxForwardedBody {
 		return ErrRequestTooLarge
 	}
+	call := TerminalCall{
+		Method: r.Method, Path: remotePath, RawQuery: r.URL.RawQuery, ContentType: r.Header.Get("Content-Type"), Body: body,
+	}
+	err = m.exchange(r.Context(), engine, call, func(response *http.Response) { copyResponse(w, response) })
+	var refusal *RemoteRefusalError
+	if errors.As(err, &refusal) {
+		writeProblem(w, refusal.Status, refusal.Code)
+		return nil
+	}
+	return err
+}
+
+// TerminalCall は、このマシンのエンジン自身が、接続先のエンジンのターミナルの API へ送る要求1つ
+// である（ブラウザの要求の取り次ぎではない）。
+type TerminalCall struct {
+	Method string
+	// Path は /api/v1/terminal/… である。
+	Path        string
+	RawQuery    string
+	ContentType string
+	Body        []byte
+	// ActionToken は、接続先のエンジンが出した一度限りの確認のトークンである。あれば送る。
+	ActionToken string
+}
+
+// TerminalAnswer は、接続先のエンジンの答えである。
+type TerminalAnswer struct {
+	Status int
+	Body   []byte
+}
+
+// maxCalledAnswer は、CallTerminalAPI が読む答えの上限である。答えは、最大 64 の宛先と
+// それぞれのコマンドを並べた JSON までである。
+const maxCalledAnswer = 1 << 20
+
+// ErrAnswerTooLarge は、接続先の答えが maxCalledAnswer を超えたことを表す。
+var ErrAnswerTooLarge = errors.New("the remote engine's answer is too large")
+
+// CallTerminalAPI は、call を接続先のエンジンへ送り、答えを返す。資格の扱いと送り直しは
+// ForwardTerminalAPI と同じである。接続先へ届かなかったときや、接続先が資格や Vault を
+// 断ったときは *RemoteRefusalError を返す。
+func (m *Manager) CallTerminalAPI(ctx context.Context, alias string, call TerminalCall) (TerminalAnswer, error) {
+	engine, err := m.engine(alias)
+	if err != nil {
+		return TerminalAnswer{}, err
+	}
+	var answer TerminalAnswer
+	var readErr error
+	err = m.exchange(ctx, engine, call, func(response *http.Response) {
+		defer func() { _ = response.Body.Close() }()
+		answer.Status = response.StatusCode
+		answer.Body, readErr = io.ReadAll(io.LimitReader(response.Body, maxCalledAnswer+1))
+		if readErr == nil && len(answer.Body) > maxCalledAnswer {
+			readErr = ErrAnswerTooLarge
+		}
+	})
+	if err != nil {
+		return TerminalAnswer{}, err
+	}
+	return answer, readErr
+}
+
+// RemoteRefusalError は、接続先へ届かなかったこと、または接続先のエンジンが資格や Vault を
+// 断ったことを、このマシンの画面へ返す状態コードと語にしたものである。
+type RemoteRefusalError struct {
+	Status int
+	Code   string
+}
+
+func (e *RemoteRefusalError) Error() string { return "the remote engine refused: " + e.Code }
+
+// exchange は call を送り、答えを receive に渡す。receive は本文を閉じる。資格が古いか、
+// 前のポートに繋がらなかった1回目は、資格を受け取り直して一度だけ送り直す。
+func (m *Manager) exchange(ctx context.Context, engine *remoteEngine, call TerminalCall, receive func(*http.Response)) error {
 	for attempt := 0; ; attempt++ {
-		retry, err := m.forwardOnce(w, r, forwardAttempt{engine: engine, remotePath: remotePath, body: body, first: attempt == 0})
+		retry, err := m.exchangeOnce(ctx, engine, exchangeAttempt{call: call, first: attempt == 0}, receive)
 		if !retry {
 			return err
 		}
 	}
 }
 
-// forwardAttempt は、取り次ぎの1回分である。first は、断られたら送り直してよい1回目かどうか。
-type forwardAttempt struct {
-	engine     *remoteEngine
-	remotePath string
-	body       []byte
-	first      bool
+// exchangeAttempt は、送る要求の1回分である。first は、断られたら送り直してよい1回目かどうか。
+type exchangeAttempt struct {
+	call  TerminalCall
+	first bool
 }
 
-// forwardOnce は、要求を1回送り、答えをブラウザへ写す。資格が古いか、前のポートに
-// 繋がらなかった1回目は、何も書かずに retry を返す。答えを待つ期限は、本文を写し終える
-// までこの1回の中で持つ。
-func (m *Manager) forwardOnce(w http.ResponseWriter, r *http.Request, attempt forwardAttempt) (retry bool, _ error) {
-	engine := attempt.engine
-	session, err := engine.current(r.Context())
+// exchangeOnce は、要求を1回送る。答えを待つ期限は、receive が本文を読み終えるまでこの1回の中で持つ。
+func (m *Manager) exchangeOnce(ctx context.Context, engine *remoteEngine, attempt exchangeAttempt, receive func(*http.Response)) (retry bool, _ error) {
+	session, err := engine.current(ctx)
 	if err != nil {
 		return false, err
 	}
-	answerContext, stopWaiting := context.WithTimeout(r.Context(), m.answerLimit)
+	answerContext, stopWaiting := context.WithTimeout(ctx, m.answerLimit)
 	defer stopWaiting()
-	response, err := session.client().Do(forwardedRequest(answerContext, r, session, attempt.remotePath, attempt.body))
-	if err != nil && r.Context().Err() == nil && errors.Is(answerContext.Err(), context.DeadlineExceeded) {
+	response, err := session.client().Do(attempt.call.request(answerContext, session))
+	if err != nil && ctx.Err() == nil && errors.Is(answerContext.Err(), context.DeadlineExceeded) {
 		// 接続先が答えない。資格を捨て、SSH の接続も答えなければ捨てて、次の要求で繋ぎ直す。
 		engine.forget(session)
 		engine.link.resetIfSilent()
-		writeProblem(w, http.StatusBadGateway, "remote_engine_unreachable")
-		return false, nil
+		return false, &RemoteRefusalError{Status: http.StatusBadGateway, Code: "remote_engine_unreachable"}
 	}
 	if err != nil {
 		if isDialFailure(err) {
@@ -107,8 +175,7 @@ func (m *Manager) forwardOnce(w http.ResponseWriter, r *http.Request, attempt fo
 		if errors.Is(err, ErrUnproven) {
 			return false, ErrUnproven
 		}
-		writeProblem(w, http.StatusBadGateway, "remote_engine_unreachable")
-		return false, nil
+		return false, &RemoteRefusalError{Status: http.StatusBadGateway, Code: "remote_engine_unreachable"}
 	}
 	if response.StatusCode == http.StatusUnauthorized && attempt.first {
 		_ = response.Body.Close()
@@ -116,10 +183,9 @@ func (m *Manager) forwardOnce(w http.ResponseWriter, r *http.Request, attempt fo
 		return true, nil
 	}
 	if code := remoteRefusal(response); code != "" {
-		writeProblem(w, http.StatusBadGateway, code)
-		return false, nil
+		return false, &RemoteRefusalError{Status: http.StatusBadGateway, Code: code}
 	}
-	copyResponse(w, response)
+	receive(response)
 	return false, nil
 }
 
@@ -168,13 +234,17 @@ var remoteRefusalCodes = map[string]string{
 	"invalid_csrf":     "remote_engine_refused",
 }
 
-func forwardedRequest(ctx context.Context, r *http.Request, session *remoteSession, remotePath string, body []byte) *http.Request {
-	target := url.URL{Scheme: "http", Host: loopbackHost(session.port), Path: remotePath, RawQuery: r.URL.RawQuery}
-	request, _ := http.NewRequestWithContext(ctx, r.Method, target.String(), bytes.NewReader(body))
-	if contentType := r.Header.Get("Content-Type"); contentType != "" {
-		request.Header.Set("Content-Type", contentType)
+// request は、call を接続先のエンジンへの要求にし、このマシンのエンジンが受け取った資格を付ける。
+func (call TerminalCall) request(ctx context.Context, session *remoteSession) *http.Request {
+	target := url.URL{Scheme: "http", Host: loopbackHost(session.port), Path: call.Path, RawQuery: call.RawQuery}
+	request, _ := http.NewRequestWithContext(ctx, call.Method, target.String(), bytes.NewReader(call.Body))
+	if call.ContentType != "" {
+		request.Header.Set("Content-Type", call.ContentType)
 	}
 	authorizeRemoteRequest(request, session)
+	if call.ActionToken != "" {
+		request.Header.Set(handoff.ActionHeader, call.ActionToken)
+	}
 	return request
 }
 

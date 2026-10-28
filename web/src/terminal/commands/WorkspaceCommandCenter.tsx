@@ -8,6 +8,7 @@ import { ModalShell } from "../../ui/ModalShell";
 import { SnippetVariableInputs } from "../../snippets/SnippetVariableInputs";
 import {
   terminalCommandApi,
+  type TerminalCommandApi,
   type TerminalCommandDispatch,
   type TerminalCommandPreview,
   type TerminalCommandRequest,
@@ -31,9 +32,12 @@ type Prepared = {
 export function WorkspaceCommandCenter({
   paneTargets,
   onClose,
+  api = terminalCommandApi,
 }: {
   paneTargets: WorkspaceCommandTarget[];
   onClose: () => void;
+  // api is the command API of the engine the sessions run on (terminalCommandApiFor).
+  api?: TerminalCommandApi;
 }) {
   const t = useTranslate();
   const [source, setSource] = useState<"command" | "snippet">("command");
@@ -117,7 +121,7 @@ export function WorkspaceCommandCenter({
     setProblem("");
     setDispatch(null);
     try {
-      const nextPreview = await terminalCommandApi.preview(next);
+      const nextPreview = await api.preview(next);
       if (operationSequence.current === operation)
         setPrepared({ request: next, preview: nextPreview });
     } catch (error) {
@@ -134,7 +138,7 @@ export function WorkspaceCommandCenter({
     setBusy(true);
     setProblem("");
     try {
-      const nextDispatch = await terminalCommandApi.dispatch(
+      const nextDispatch = await api.dispatch(
         prepared.preview,
         prepared.request,
       );
