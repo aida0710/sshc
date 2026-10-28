@@ -69,9 +69,9 @@ func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, ali
 		defer stopWaiting()
 		response, err := session.client().Do(forwardedRequest(answerContext, r, session, remotePath, body))
 		if err != nil && r.Context().Err() == nil && errors.Is(answerContext.Err(), context.DeadlineExceeded) {
-			// 接続先が答えない。SSH の接続ごと捨て、次の要求で繋ぎ直す。
+			// 接続先が答えない。資格を捨て、SSH の接続も答えなければ捨てて、次の要求で繋ぎ直す。
 			engine.forget(session)
-			engine.link.reset()
+			engine.link.resetIfSilent()
 			writeProblem(w, http.StatusBadGateway, "remote_engine_unreachable")
 			return nil
 		}
@@ -119,7 +119,9 @@ func remoteRefusal(response *http.Response) string {
 		_ = response.Body.Close()
 		return "remote_engine_refused"
 	}
-	if response.StatusCode < http.StatusBadRequest {
+	// 2xx は画面が成功として読み、code を見ない。それ以外（fetch が追わない 3xx を含む）は
+	// 画面が code で読むので、本文を確かめる。
+	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
 		return ""
 	}
 	body, _ := io.ReadAll(io.LimitReader(response.Body, maxRefusalBody))

@@ -36,6 +36,9 @@ func newRelayHandler(localPort int, remotePort func() int, transport http.RoundT
 		},
 		ModifyResponse: func(response *http.Response) error {
 			prefixSetCookies(response.Header, cookiePrefix)
+			// Clear-Site-Data はポートを区別せずに 127.0.0.1 の cookie を消すので、渡すと
+			// 接続先の画面のサインアウトが、このマシンの画面のセッションまで消す。
+			response.Header.Del("Clear-Site-Data")
 			return nil
 		},
 		Transport: transport,

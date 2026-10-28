@@ -121,15 +121,17 @@ func TestALinkFinishedAfterCloseIsClosedRatherThanKept(t *testing.T) {
 	}
 }
 
-func TestARemoteEngineThatStopsAnsweringIsGivenUpOnAndReachedAgainOverANewConnection(t *testing.T) {
+func TestASilentSSHConnectionIsGivenUpOnAndTheEngineReachedAgainOverANewOne(t *testing.T) {
 	remote := newFakeRemoteEngine(t)
 	var connections atomic.Int32
+	var current *fakeLink
 	manager := NewManager(ManagerOptions{
 		Store:        newStore(t),
 		LocalVersion: "v9",
 		Connect: func(context.Context, string) (Link, error) {
 			connections.Add(1)
-			return &handoffLink{fakeLink: newFakeLink(remote.server.URL+"/#x", 0), handoff: remote.handoffDocument("v9")}, nil
+			current = newFakeLink(remote.server.URL+"/#x", 0)
+			return &handoffLink{fakeLink: current, handoff: remote.handoffDocument("v9")}, nil
 		},
 	})
 	t.Cleanup(manager.Close)
@@ -138,6 +140,7 @@ func TestARemoteEngineThatStopsAnsweringIsGivenUpOnAndReachedAgainOverANewConnec
 		t.Fatal(err)
 	}
 	remote.stalled.Store(true)
+	current.silent.Store(true)
 	started := time.Now()
 	status, body, _ := forward(t, manager, http.MethodGet, "")
 	if status != http.StatusBadGateway || !strings.Contains(body, "remote_engine_unreachable") {
@@ -245,5 +248,41 @@ func TestAnEngineThatNeverAnswersTheSessionRequestDoesNotHoldLaterRequests(t *te
 	remote.sessionStalled.Store(false)
 	if _, err := manager.EngineStatus(ctx, "r540"); err != nil {
 		t.Fatalf("status after the engine answers again = %v", err)
+	}
+}
+
+func TestAStalledEngineOverAnAnsweringSSHConnectionKeepsTheConnection(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	var connections atomic.Int32
+	var current *fakeLink
+	manager := NewManager(ManagerOptions{
+		Store: newStore(t), LocalVersion: "v9",
+		Connect: func(context.Context, string) (Link, error) {
+			connections.Add(1)
+			current = newFakeLink(remote.server.URL+"/#x", 0)
+			return &handoffLink{fakeLink: current, handoff: remote.handoffDocument("v9")}, nil
+		},
+	})
+	t.Cleanup(manager.Close)
+	manager.answerLimit = 100 * time.Millisecond
+	if err := manager.AddEngine(context.Background(), "r540"); err != nil {
+		t.Fatal(err)
+	}
+	remote.stalled.Store(true)
+	if status, body, _ := forward(t, manager, http.MethodGet, ""); status != http.StatusBadGateway {
+		t.Fatalf("a request the remote never answers = %d %s", status, body)
+	}
+	// 同じ SSH の接続の上で、エンジンの更新の出力や別タブの中継が続いている。
+	select {
+	case <-current.done:
+		t.Fatal("the SSH connection was closed although it still answers keepalives")
+	default:
+	}
+	remote.stalled.Store(false)
+	if status, body, _ := forward(t, manager, http.MethodGet, ""); status != http.StatusOK {
+		t.Fatalf("the next request = %d %s", status, body)
+	}
+	if connections.Load() != 1 {
+		t.Fatalf("opened %d SSH connections, want the answering one kept", connections.Load())
 	}
 }

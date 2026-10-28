@@ -33,11 +33,11 @@ func (h Handlers) Renew(c *echo.Context) error {
 	if h.Sessions == nil {
 		return unexpectedProblem(c, "bootstrap_failed", nil)
 	}
-	cookie, err := c.Request().Cookie(SessionCookie)
-	if err != nil {
+	sessionID, _ := c.Get(SessionContextKey).(string)
+	if sessionID == "" {
 		return problem(c, http.StatusUnauthorized, "session_required")
 	}
-	csrf, ok := h.Sessions.RenewCSRF(cookie.Value, c.Request().Header.Get(CSRFHeader))
+	csrf, ok := h.Sessions.RenewCSRF(sessionID, c.Request().Header.Get(CSRFHeader))
 	if !ok {
 		return problem(c, http.StatusUnauthorized, "invalid_session")
 	}
@@ -151,7 +151,8 @@ func (h Handlers) SignOut(c *echo.Context) error {
 	if h.Sessions == nil {
 		return unexpectedProblem(c, "bootstrap_failed", nil)
 	}
-	if err := h.entrance().SignOut(sessionCookie(c.Request()), c.Request().Header.Get("X-SSHC-Browser")); err != nil {
+	sessionID, _ := c.Get(SessionContextKey).(string)
+	if err := h.entrance().SignOut(sessionID, c.Request().Header.Get("X-SSHC-Browser")); err != nil {
 		return unexpectedProblem(c, "browser_registration_failed", err)
 	}
 	clearSessionCookie(c)
