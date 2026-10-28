@@ -18,18 +18,33 @@ export function sessionStatusText(t: Translate, session: TerminalSession): strin
     case "exited":
       if (session.exited?.connectionLost === true) return t("terminal.exitedConnectionLost");
       if (session.exited !== undefined && session.exited.signal !== "") return t("terminal.exitedBySignal", { signal: session.exited.signal });
+      if (session.exited?.code === 0 && endedRightAway(session)) return t("terminal.exitedRightAway");
       return t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
     default:
       return t("terminal.connected");
   }
 }
 
+// endedRightAwayMs より早く終わったセッションは、終了コードが0でも、シェルやその
+// プロファイルの設定が誤っていて動かなかったとみなす。Ghostty の
+// abnormal-command-exit-runtime の既定と同じ長さである。
+const endedRightAwayMs = 250;
+
+// endedRightAway は、セッションが開いてすぐ（endedRightAwayMs 未満で）終わったかである。
+// 終わった時刻は一覧が届くまで分からないので、それまでは false になる。
+export function endedRightAway(session: TerminalSession): boolean {
+  const exited = session.exited;
+  if (session.state !== "exited" || exited === undefined) return false;
+  const ranMs = Date.parse(exited.at) - Date.parse(session.startedAt);
+  return Number.isFinite(ranMs) && ranMs < endedRightAwayMs;
+}
+
 // exitedAbnormally は、セッションが失敗で終わったか（終了コードが0以外、シグナル、接続が
-// 切れた）である。行の点と状態の文、ターミナルの終了の帯を赤にする。
+// 切れた、開いてすぐ終わった）である。行の点と状態の文、ターミナルの終了の帯を赤にする。
 export function exitedAbnormally(session: TerminalSession): boolean {
   const exited = session.exited;
   if (session.state !== "exited" || exited === undefined) return false;
-  return exited.code !== 0 || exited.signal !== "" || exited.connectionLost === true;
+  return exited.code !== 0 || exited.signal !== "" || exited.connectionLost === true || endedRightAway(session);
 }
 
 // sessionMarkerClass は、行の先頭の点の形と色である。未読の通知は注意の色で塗り、接続を

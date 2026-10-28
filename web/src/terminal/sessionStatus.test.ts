@@ -18,6 +18,19 @@ describe("a session that has ended", () => {
     expect(exitedAbnormally({ ...base, state: "connected" })).toBe(false);
   });
 
+  it("counts a session that ended as soon as it opened as a failure, even with status 0", () => {
+    const rightAway: TerminalSession = { ...ended({ code: 0, signal: "", at: "2026-10-28T09:00:00.120Z" }) };
+    const ranAWhile: TerminalSession = { ...ended({ code: 0, signal: "", at: "2026-10-28T09:00:01Z" }) };
+    const t = translatorFor("en");
+
+    expect(exitedAbnormally(rightAway)).toBe(true);
+    expect(sessionStatusText(t, rightAway)).toBe("exited right after opening");
+    expect(exitedAbnormally(ranAWhile)).toBe(false);
+    expect(sessionStatusText(t, ranAWhile)).toBe("exited 0");
+    // The stream reports the exit before the list says when it happened.
+    expect(exitedAbnormally(ended({ code: 0, signal: "", at: "" }))).toBe(false);
+  });
+
   it("marks a failure in red and a clean exit faintly", () => {
     const failed = ended({ code: 3, signal: "", at: "" });
     const clean = ended({ code: 0, signal: "", at: "" });
