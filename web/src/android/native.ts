@@ -40,6 +40,11 @@ function base64(bytes: Uint8Array): string {
   return globalThis.btoa(binary);
 }
 
+/** Android版のアプリの WebView の中で動いているか。 */
+export function runsInAndroidApp(target: Window = window): boolean {
+  return target.sshcAndroid !== undefined;
+}
+
 /** Android版は転送の結果を transferLedger が notifyAndroidTransfer で知らせる。 */
 export function notifiesTransfersNatively(): boolean {
   return window.sshcAndroid !== undefined;

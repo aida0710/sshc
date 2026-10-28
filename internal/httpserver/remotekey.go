@@ -120,7 +120,6 @@ func (h RemoteKeyHandlers) Plan(c *echo.Context) error {
 		Manual:               plan.Manual,
 		ExecutableDirectives: describeDirectives(prepared.report.Directives),
 		ActionToken:          issued.Token,
-		ActionExpiresAt:      issued.ExpiresAt,
 	})
 }
 

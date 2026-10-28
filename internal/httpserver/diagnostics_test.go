@@ -133,9 +133,6 @@ func TestEffectiveEndpointAnswersWithoutStartingAnything(t *testing.T) {
 	if len(payload.ExecutableDirectives) != 0 {
 		t.Errorf("bastion included another host's executable directives = %#v", payload.ExecutableDirectives)
 	}
-	if payload.TokenWarning == "" {
-		t.Error("the response must carry the token-escaping warning")
-	}
 	if len(payload.Sources) == 0 || payload.Sources[0].Path == "" {
 		t.Errorf("sources = %#v", payload.Sources)
 	}

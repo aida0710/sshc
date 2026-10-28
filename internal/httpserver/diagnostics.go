@@ -113,7 +113,6 @@ func (h DiagnosticsHandlers) Effective(c *echo.Context) error {
 
 	response := api.EffectiveResponse{
 		Alias:                inspection.Alias,
-		TokenWarning:         effective.TokenEscapeWarning,
 		ExecutableDirectives: describeDirectives(inspection.Report.Directives),
 		Sources:              make([]api.ValueSource, 0, len(inspection.Projection.Sources)),
 		Complexities:         make([]api.ComplexityNote, 0, len(inspection.Projection.Complexities)),
@@ -163,11 +162,10 @@ func (h DiagnosticsHandlers) Reachability(c *echo.Context) error {
 		return diagnosticsProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, api.ReachabilityResponse{
-		Address:   result.Address,
-		Outcome:   result.Outcome,
-		ElapsedMs: int(result.Elapsed.Milliseconds()),
-		Detail:    result.Detail,
-		Notice:    result.Notice,
+		Address: result.Address,
+		Outcome: result.Outcome,
+		Detail:  result.Detail,
+		Notice:  result.Notice,
 	})
 }
 
@@ -198,7 +196,6 @@ func (h DiagnosticsHandlers) Authentication(c *echo.Context) error {
 		Method:        result.Method,
 		Detail:        result.Detail,
 		Truncated:     result.Truncated,
-		ElapsedMs:     int(result.Elapsed.Milliseconds()),
 	})
 }
 
@@ -211,7 +208,6 @@ func describeDirectives(directives []effective.Executable) []api.ExecutableDirec
 			Path:        directive.Path,
 			Line:        directive.Line,
 			Condition:   directive.Condition,
-			OnEvaluate:  directive.OnEvaluate,
 			OnConnect:   directive.OnConnect,
 			Overridable: directive.Overridable,
 		})

@@ -14,7 +14,7 @@ description: Understand account passwords, key passphrases, and the vault master
 
 Sync uses a separate encryption key.
 
-Create labelled account passwords under **Menu → Vault → Account passwords** and assign them to connections. Editing decrypts the saved value back into the form; leaving the page, locking the vault, or saving discards plaintext UI state.
+Create labelled account passwords under **Menu → Vault → Account passwords** and assign them to connections. Editing decrypts the saved value back into the form. An account password starts masked and can be checked and edited after revealing it. Leaving the page, locking the vault, or saving discards plaintext UI state.
 
 The assigned password is reused when the same connection is opened from the terminal, SFTP, a ProxyJump route, or the CLI. It does not need to be configured separately for each feature.
 

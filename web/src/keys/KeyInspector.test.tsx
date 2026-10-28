@@ -17,7 +17,6 @@ const item: KeyItem = {
   comment: "aida@laptop",
   permission: "0600",
   permissionRisk: false,
-  sizeBytes: 400,
   references: [
     {
       directive: "IdentityFile",

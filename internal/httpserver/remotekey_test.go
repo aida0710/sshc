@@ -128,7 +128,7 @@ func remoteKeyPlanToken(t *testing.T, engine *echo.Echo, credentials session.Cre
 	if err := json.Unmarshal(response.Body.Bytes(), &plan); err != nil {
 		t.Fatal(err)
 	}
-	if plan.ActionToken == "" || plan.ActionExpiresAt == "" {
+	if plan.ActionToken == "" {
 		t.Fatalf("plan confirmation = %#v", plan)
 	}
 	return plan.ActionToken
@@ -164,7 +164,7 @@ func TestRemoteKeyPlanDescribesTheChangeWithoutContactingAnything(t *testing.T) 
 	if len(payload.ExecutableDirectives) != 0 {
 		t.Errorf("the bastion plan included another host's directives: %#v", payload.ExecutableDirectives)
 	}
-	if payload.ActionToken == "" || payload.ActionExpiresAt == "" {
+	if payload.ActionToken == "" {
 		t.Fatal("the displayed plan must carry its own confirmation")
 	}
 	if len(runner.commands) != 0 {

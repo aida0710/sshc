@@ -7,7 +7,6 @@ import type { DiagnosticsApi } from "../api/diagnostics";
 
 const safeInspection: EffectiveResponse = {
   alias: "bastion",
-  tokenWarning: "OpenSSH does not shell-escape expanded tokens.",
   executableDirectives: [],
   sources: [],
   complexities: [],
@@ -20,7 +19,6 @@ function api(overrides: Partial<Pick<DiagnosticsApi, "effective" | "reachability
     reachability: vi.fn().mockResolvedValue({
       address: "203.0.113.10:22",
       outcome: "reached",
-      elapsedMs: 12,
       detail: "",
       notice: "Engine notice that the screen does not show.",
     }),
@@ -30,7 +28,6 @@ function api(overrides: Partial<Pick<DiagnosticsApi, "effective" | "reachability
       method: "publickey",
       detail: "",
       truncated: false,
-      elapsedMs: 40,
     }),
     ...overrides,
   } as Pick<DiagnosticsApi, "effective" | "reachability" | "authentication">;
@@ -64,7 +61,6 @@ describe("ConnectionChecks", () => {
       reachability: vi.fn().mockResolvedValue({
         address: "10.9.9.1:22",
         outcome: "not_checked",
-        elapsedMs: 0,
         detail: "",
         notice,
       }),
@@ -99,7 +95,6 @@ describe("ConnectionChecks", () => {
         path: "config",
         line: 9,
         condition: "Host bastion",
-        onEvaluate: false,
         onConnect: true,
         overridable: false,
       }],
@@ -122,7 +117,7 @@ describe("ConnectionChecks", () => {
       ...safeInspection,
       executableDirectives: [{
         keyword: "LocalCommand", command: "notify-send connected", path: "config", line: 9,
-        condition: "Host bastion", onEvaluate: false, onConnect: true, overridable: true,
+        condition: "Host bastion", onConnect: true, overridable: true,
       }],
     };
     const integrations = api({ effective: vi.fn().mockResolvedValue(overridable) });

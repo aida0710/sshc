@@ -9,6 +9,12 @@ The Keys screen shows private and public keys under `~/.ssh`, with fingerprints,
 
 Keys generated with a group selected are saved under `~/.ssh/keys/<group>/`; without a group they go directly under `~/.ssh`. Moving a key into a group relocates it the same way. An `IdentityFile` that points to a missing path fails when the key is loaded before connecting.
 
+### Trash
+
+**Move to trash** in a key's "…" menu moves the key into `~/.ssh/sshc/trash/` instead of deleting it. Files that belong to the same key, such as its public key and certificate, move with it. Before the move, sshc shows how many Host blocks reference the key. Their `IdentityFile` lines stay, so those connections no longer find the key and ssh tries other authentication methods.
+
+**Trash** in the group list restores a moved key to where it was, or deletes it permanently. A key cannot be restored while a file of the same name is in its old place. Keys in the trash are never removed automatically; those older than 30 days are marked as such.
+
 ### How a connection reads IdentityFile
 
 When connecting, sshc expands each `IdentityFile` value by the same rules as OpenSSH before opening the key:

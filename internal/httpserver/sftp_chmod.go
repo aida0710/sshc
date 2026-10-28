@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -47,14 +46,10 @@ func (h SFTPHandlers) PlanChmod(c *echo.Context) error {
 	if !allowed {
 		return response
 	}
-	expiresAt, err := time.Parse(time.RFC3339, issued.ExpiresAt)
-	if err != nil {
-		return err
-	}
 	return c.JSON(http.StatusOK, api.SFTPChmodPlan{Revision: plan.Revision,
 		SelectionCount: len(body.Entries), Files: plan.Files, Directories: plan.Directories,
 		SkippedSymlinks: plan.SkippedSymlinks, Options: body.Options,
-		ActionToken: issued.Token, ActionExpiresAt: expiresAt,
+		ActionToken: issued.Token,
 	})
 }
 

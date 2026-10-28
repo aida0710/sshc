@@ -11,7 +11,7 @@ const available: UpdateStatus = { current: "v1.0.0", latest: "v1.1.0", available
 function updater(): UpdateApi {
   return {
     checkUpdate: vi.fn(), updateStatus: vi.fn().mockResolvedValue(available),
-    previewUpdate: vi.fn().mockResolvedValue({ current: "v1.0.0", target: "v1.1.0", manager: "install.sh", actionToken: "confirmed-plan", actionExpiresAt: "2026-10-07T09:00:00Z" }),
+    previewUpdate: vi.fn().mockResolvedValue({ current: "v1.0.0", target: "v1.1.0", manager: "install.sh", actionToken: "confirmed-plan" }),
     startUpdate: vi.fn().mockResolvedValue({ id: "job-one", target: "v1.1.0", state: "accepted", problem: "" }),
     updateLog: vi.fn(),
   };
@@ -56,7 +56,7 @@ describe("Web self update", () => {
   it("reviews the PowerShell installation before updating Windows", async () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, manager: "install.ps1" });
-    vi.mocked(api.previewUpdate).mockResolvedValue({ current: "v1.0.0", target: "v1.1.0", manager: "install.ps1", actionToken: "windows-plan", actionExpiresAt: "2026-10-19T09:00:00Z" });
+    vi.mocked(api.previewUpdate).mockResolvedValue({ current: "v1.0.0", target: "v1.1.0", manager: "install.ps1", actionToken: "windows-plan" });
     await renderControls(api);
     await userEvent.click(await screen.findByRole("button", { name: "Update sshc" }));
     const dialog = await screen.findByRole("dialog");
@@ -99,7 +99,7 @@ describe("Web self update", () => {
   it("reviews Homebrew's formula update before starting it", async () => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, manager: "homebrew" });
-    vi.mocked(api.previewUpdate).mockResolvedValue({ current: "v1.0.0", target: "v1.1.0", manager: "homebrew", actionToken: "confirmed-plan", actionExpiresAt: "2026-10-10T09:00:00Z" });
+    vi.mocked(api.previewUpdate).mockResolvedValue({ current: "v1.0.0", target: "v1.1.0", manager: "homebrew", actionToken: "confirmed-plan" });
     await renderControls(api);
     await userEvent.click(await screen.findByRole("button", { name: "Update sshc" }));
     const dialog = await screen.findByRole("dialog");
