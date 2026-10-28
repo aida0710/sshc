@@ -138,34 +138,6 @@ func TestShownLogsHideTheWireGuardKeys(t *testing.T) {
 	}
 }
 
-// v0.40.0 までの項目の形のプロファイルは、同じ接続先へ届く設定ファイルになる。
-func TestFieldsBecomeAConfigThatReachesTheSameTargets(t *testing.T) {
-	fields := WireGuardFields{
-		Server: "vpn.example.jp:51820", PeerPublicKey: testPublicKey, Address: "10.9.9.2/32", DNS: []string{"10.9.9.53"},
-	}
-	if err := fields.Validate(); err != nil {
-		t.Fatalf("Validate = %v", err)
-	}
-	profile := Profile{
-		Name: "lab", Backend: WireGuard, DNS: fields.DNS, WireGuard: &WireGuardSettings{Servers: fields.Servers()},
-	}
-	secrets := Secrets{WireGuard: &WireGuardSecrets{Config: fields.Config(testPrivateKey)}}
-	if err := profile.ValidateSecrets(secrets); err != nil {
-		t.Fatalf("ValidateSecrets = %v\n%s", err, secrets.WireGuard.Config)
-	}
-	configuration := decodeAgentDocument(t, profile, secrets).WireGuard.Configuration
-	for _, wanted := range []string{"PrivateKey = " + testPrivateKey, "Endpoint = vpn.example.jp:51820",
-		"AllowedIPs = 0.0.0.0/0", "PersistentKeepalive = 25"} {
-		if !strings.Contains(configuration, wanted+"\n") {
-			t.Fatalf("configuration に %q が無い:\n%s", wanted, configuration)
-		}
-	}
-	fields.PeerPublicKey = "short"
-	if err := fields.Validate(); err == nil {
-		t.Fatal("組み立てられない項目を通した")
-	}
-}
-
 // 接続先が、どの Peer の AllowedIPs にも無ければ、connect は理由を返して繋ぎに行かない。
 func TestATargetOutsideTheAllowedIPsIsRefusedByTheContainer(t *testing.T) {
 	if runtime.GOOS == "windows" {

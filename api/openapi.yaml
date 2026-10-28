@@ -6419,12 +6419,6 @@ components:
           minItems: 1
           maxItems: 64
           items: { type: string, minLength: 1, maxLength: 320 }
-        # server、peerPublicKey、address は、v0.40.0 までの項目の形で保存したプロファイル
-        # だけが持つ。engine は、これと Vault の秘密鍵から設定ファイルを組み立てて使い、
-        # reveal はその設定ファイルを返す。保存し直すと消える。保存要求で送っても使わない。
-        server: { type: string, minLength: 3, maxLength: 320 }
-        peerPublicKey: { type: string, minLength: 44, maxLength: 44 }
-        address: { type: string, minLength: 9, maxLength: 43 }
     BackgroundSettings:
       type: object
       additionalProperties: false

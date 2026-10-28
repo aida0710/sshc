@@ -116,7 +116,7 @@ An item that cannot be used, or one written in a wrong form, is reported on the 
 
 `AllowedIPs` is how WireGuard chooses the `[Peer]` a packet goes to. sshc installs no routes for it: as with the other types, only the targets your connections use get a route. A target outside the `AllowedIPs` of every `[Peer]` is refused with that reason, because WireGuard would not send its packets anywhere. Writing `AllowedIPs = 0.0.0.0/0` does not change the container's default route.
 
-Profiles created up to v0.40.0 with a server, a peer public key and a tunnel address keep working as they are. When the route starts, and when **Edit** is opened on the VPN screen, a configuration file is built from those fields and the private key in the vault, with `AllowedIPs = 0.0.0.0/0` and `PersistentKeepalive = 25` added so that it reaches the same targets as before. Nothing has to be entered again. Saving the profile again, on the VPN screen or with `sshc vpn edit`, stores the built (or edited) file in the vault and removes the old fields and the old private-key entry. Once sshc is updated, its metadata.json can no longer be read by sshc v0.40.0 or earlier.
+Profiles created up to v0.40.0 with a server, a peer public key and a tunnel address can no longer be used. Create them again from a configuration file.
 
 ### OpenVPN configuration files
 
