@@ -163,7 +163,7 @@ func TestTUILoadsConcreteHostsAndSortsByAlias(t *testing.T) {
 		0o600); err != nil {
 		t.Fatal(err)
 	}
-	metadata := `{"schemaVersion":3,"hosts":[` +
+	metadata := `{"schemaVersion":9,"hosts":[` +
 		`{"identity":{"path":"config","alias":"bastion"},"tags":["eu"]}]}`
 	acltest.WritePrivateFile(t, filepath.Join(ssh, "sshc", "metadata.json"), []byte(metadata))
 	var stderr bytes.Buffer

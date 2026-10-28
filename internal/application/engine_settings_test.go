@@ -3,7 +3,6 @@ package application
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -11,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
 )
@@ -158,95 +156,5 @@ func TestEngineSettingsOutsideTheirRangeAreRefusedWithTheirKind(t *testing.T) {
 				t.Fatalf("the refusal wrote %#v", got)
 			}
 		})
-	}
-}
-
-// このバージョンで初めて起動したときに、前のバージョンが metadata.json に書いた
-// engine 節をこのマシンの設定として移す。
-func TestTheFirstStartMovesTheEngineSectionOfAnOlderMetadata(t *testing.T) {
-	service, _ := newTerminalService(t)
-	older := []byte(`{"schemaVersion":8,"engine":{"port":43123,` +
-		`"vaultAutoLock":{"mode":"idle","value":45,"unit":"minutes"}}}`)
-	acltest.WritePrivateFile(t, service.metadata.Path(), older)
-
-	if err := service.InitialiseEngineSettings(); err != nil {
-		t.Fatal(err)
-	}
-
-	got := service.EngineSettings()
-	if got.Port != 43123 || got.VaultAutoLock == nil || got.VaultAutoLock.Value != 45 ||
-		got.VaultAutoLock.Unit != VaultAutoLockMinutes {
-		t.Fatalf("EngineSettings = %#v, want the engine section of the older metadata.json", got)
-	}
-	contents, err := os.ReadFile(service.metadata.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(contents, older) {
-		t.Fatalf("metadata.json was rewritten:\n%s", contents)
-	}
-}
-
-func TestAnEngineSectionThatArrivesAfterTheFirstStartIsNotMoved(t *testing.T) {
-	service, _ := newTerminalService(t)
-	if err := service.InitialiseEngineSettings(); err != nil {
-		t.Fatal(err)
-	}
-	// 同期や履歴の復元で、前の形の metadata.json が届く。
-	acltest.WritePrivateFile(t, service.metadata.Path(), []byte(`{"schemaVersion":8,"engine":{"port":60000}}`))
-
-	if err := service.InitialiseEngineSettings(); err != nil {
-		t.Fatal(err)
-	}
-
-	if got := service.EngineSettings(); got != (EngineSettings{}) {
-		t.Fatalf("EngineSettings = %#v, want this machine's (none)", got)
-	}
-}
-
-func TestAnEngineSectionInTheCurrentSchemaIsNotMoved(t *testing.T) {
-	service, _ := newTerminalService(t)
-	acltest.WritePrivateFile(t, service.metadata.Path(),
-		[]byte(fmt.Sprintf(`{"schemaVersion":%d,"engine":{"port":60000}}`, MetadataSchemaVersion)))
-
-	if err := service.InitialiseEngineSettings(); err != nil {
-		t.Fatal(err)
-	}
-
-	if got := service.EngineSettings(); got != (EngineSettings{}) {
-		t.Fatalf("EngineSettings = %#v, want none", got)
-	}
-}
-
-func TestOutOfRangeValuesInAnOlderEngineSectionFallBackToTheDefaults(t *testing.T) {
-	service, _ := newTerminalService(t)
-	acltest.WritePrivateFile(t, service.metadata.Path(), []byte(`{"schemaVersion":8,"engine":{"port":80,`+
-		`"vaultAutoLock":{"mode":"idle","value":30,"unit":"minutes"}}}`))
-
-	if err := service.InitialiseEngineSettings(); err != nil {
-		t.Fatal(err)
-	}
-
-	got := service.EngineSettings()
-	if got.Port != 0 || got.VaultAutoLock == nil || got.VaultAutoLock.Value != 30 {
-		t.Fatalf("EngineSettings = %#v, want the default port and the valid auto-lock", got)
-	}
-}
-
-func TestAnUnreadableMetadataIsMovedOnALaterStart(t *testing.T) {
-	service, _ := newTerminalService(t)
-	acltest.WritePrivateFile(t, service.metadata.Path(), []byte(`{"schemaVersion":8,"engine":{"port":43123}`))
-	if err := service.InitialiseEngineSettings(); err != nil {
-		t.Fatal(err)
-	}
-
-	// 利用者が metadata.json を直してから起動し直す。
-	acltest.WritePrivateFile(t, service.metadata.Path(), []byte(`{"schemaVersion":8,"engine":{"port":43123}}`))
-	if err := service.InitialiseEngineSettings(); err != nil {
-		t.Fatal(err)
-	}
-
-	if got := service.EngineSettings().Port; got != 43123 {
-		t.Fatalf("port = %d, want the port of the repaired metadata.json", got)
 	}
 }

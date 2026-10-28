@@ -183,7 +183,7 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 		".DS_Store":            "opaque os metadata",
 		"arbitrary.bin":        "\x00\x01\x02not ssh config",
 		"scripts/connect":      "#!/bin/sh\nexit 0\n",
-		"sshc/metadata.json":   `{"schemaVersion":3}`,
+		"sshc/metadata.json":   `{"schemaVersion":9}`,
 	})
 	if err := os.Chmod(filepath.Join(first.workspace.Root(), "scripts", "connect"), 0o700); err != nil {
 		t.Fatal(err)

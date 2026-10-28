@@ -235,47 +235,13 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	if err := json.Unmarshal(contents, &version); err != nil {
 		return Metadata{}, err
 	}
-	switch version.SchemaVersion {
-	case MetadataSchemaVersion, 8, 7, 6, 5, 4, 3:
-	default:
+	// 今の schema だけを読む。下位互換は持たないので、前の schema は読み替えずに断る。
+	if version.SchemaVersion != MetadataSchemaVersion {
 		return Metadata{}, ErrMetadataVersion
 	}
 	var metadata Metadata
 	if err := json.Unmarshal(contents, &metadata); err != nil {
 		return Metadata{}, err
-	}
-	// v3/v4→v5は追加fieldだけのmigrationである。v5は同期するキー設定を旧バージョンで消さないための境界。
-	// 旧scrollbackBytesはengineの
-	// replay bufferとして意味を変えず、browser側は未設定の既定行数から始める。
-	// v5→v6は、VPNプロファイルの接続先（vpnProfiles[].target）を捨てる。接続先は
-	// プロファイルを付けた接続のHostNameとPortで決まる。知らない項目として読み
-	// 飛ばすので、書き直すと消える。v6はtargetの無いプロファイルを旧バージョンに読ませない
-	// ための境界でもある。
-	// v6→v7は項目を足すだけである。v7は、v0.39.7までのsshcが知らないVPNの方式
-	// （openvpn、ikev2）のプロファイルを旧バージョンに読ませないための境界である。旧バージョンは知らない
-	// 方式を断るので、バージョンで先に断る方が、何が起きたかが利用者に分かる。
-	// v7→v8は、WireGuardのプロファイルに、Endpointのサーバー（wireguard.servers）を足す。
-	// 設定ファイルはVaultにある。v0.40.0までの項目の形（server、peerPublicKey、address）は
-	// 読まない（2026-10-28 に消した）。
-	// v8→v9は、IKEv2のサーバーのIDのうち、どのサーバーにも一致する値（`*`、`0.0.0.0`
-	// など）を外す（metadata_ikev2.go）。VPNプロファイルのbackendと違う節も外す
-	// （metadata_vpnsections.go）。v9は、空白や日本語を含むVPNプロファイル名を
-	// 旧バージョンに読ませないための境界でもある。旧バージョンはその名前の metadata を
-	// 書けなくなる。グループ設定の ProxyCommand などを複数の値で保存した前の形は、
-	// 行の残りの 1 つの値にする（metadata_groupsettings.go）。同じ接続の entry が 2 つ
-	// あれば 1 つにする（metadata_duplicatehosts.go）。sshc エンジンの設定（engine 節）は
-	// 読まない。このマシンの設定として engine-settings.json へ移すのは、初めて起動した
-	// ときの InitialiseEngineSettings である（metadata_engine.go）。engine 節は、書き直すと
-	// 消える。VPN プロファイルに、名前から決めた識別子を与える（vpnprofile_id.go）。
-	// appearance（さし色）は v9 のまま項目を足しただけである。旧バージョンは知らない
-	// 項目として読み飛ばし、書き直すと消えるが、失うのは見た目の好みだけなので、
-	// 旧バージョンに metadata ごと読ませない境界（schema の番号）は上げない。
-	if version.SchemaVersion < 9 {
-		clearUnpinnedServerIdentities(&metadata)
-		clearForeignVPNSections(&metadata)
-		joinSplitRestOfLineSettings(&metadata)
-		keepOneEntryPerConnection(&metadata)
-		giveVPNProfilesMigratedIDs(&metadata)
 	}
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {
@@ -383,10 +349,8 @@ func ValidateMetadata(metadata Metadata) error {
 					return ErrMetadataSecret
 				}
 			}
-			// ProxyCommand などは行の残りを 1 つの値で持つ（metadata_groupsettings.go）。
-			// 複数の値は schema 9 より前の形で、読み込みの移行だけが 1 つの値にする。
-			// 今の形で受け付けると、空白でつないで書いた行と、同じ値を前の形として
-			// 移行した行とが食い違う。
+			// ProxyCommand などは行の残りを 1 つの値で持つ。複数の値に分けた形は受け付けない。
+			// 空白でつないで書くかどうかで、同じ値から違う行ができるためである。
 			if effective.TakesRestOfLine(setting.Keyword) && len(setting.Values) > 1 {
 				return fmt.Errorf("%w: %s takes the rest of the line as one value", ErrMetadataGroup, setting.Keyword)
 			}
