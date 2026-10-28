@@ -597,6 +597,54 @@ test("keeps terminal drawing stable while scrollback search overlays it", async 
   await expect.poll(async () => Math.abs((await terminalFitRects(page)).root.height - before.root.height)).toBeLessThanOrEqual(1);
 });
 
+test("types into the terminal again after closing the search with Escape, and offers the last query next time", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSessionList(page);
+  await openLocalShell(page);
+  const terminal = page.getByRole("region", { name: /^Terminal for / });
+  await typeIntoTerminal(page, "echo search-focus-canary");
+  await expect(terminal).toContainText("search-focus-canary", { timeout: 20_000 });
+
+  await terminal.getByRole("button", { name: "Find" }).click();
+  const searchInput = terminal.getByRole("textbox", { name: "Search terminal output" });
+  await searchInput.fill("search-focus");
+  await terminal.getByRole("button", { name: "Match case" }).click();
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/terminal-search-bar.png` });
+  }
+  await expect(searchInput).toBeFocused();
+  await terminal.getByRole("button", { name: "Next match" }).click();
+  await expect(searchInput).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(searchInput).toHaveCount(0);
+
+  await page.keyboard.type("echo after-search-$((5+5))");
+  await page.keyboard.press("Enter");
+  await expect(terminal).toContainText("after-search-10", { timeout: 20_000 });
+
+  await terminal.getByRole("button", { name: "Find" }).click();
+  await expect(terminal.getByRole("textbox", { name: "Search terminal output" })).toHaveValue("search-focus");
+});
+
+test("leaves the clipboard alone while the search selects its matches", async ({ page, context, installation }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+  await openSessionList(page);
+  await openLocalShell(page);
+  const terminal = page.getByRole("region", { name: /^Terminal for / });
+  await typeIntoTerminal(page, "echo search-clipboard-canary");
+  await expect(terminal).toContainText("search-clipboard-canary", { timeout: 20_000 });
+  await page.evaluate(() => navigator.clipboard.writeText("copied-before-search"));
+
+  await terminal.getByRole("button", { name: "Find" }).click();
+  const searchInput = terminal.getByRole("textbox", { name: "Search terminal output" });
+  await searchInput.fill("search-clipboard");
+  await expect(searchInput.locator("..").getByRole("status")).toHaveText(/\d+\/\d+/);
+  await terminal.getByRole("button", { name: "Next match" }).click();
+
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("copied-before-search");
+});
+
 test("can turn automatic selection copy off for an already open session", async ({
   page,
   context,

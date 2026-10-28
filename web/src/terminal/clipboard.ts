@@ -27,6 +27,9 @@ type TerminalClipboardOptions = {
   copied?: () => void;
   enhancedKey?: (event: KeyboardEvent) => string | null;
   sendEnhancedKey?: (sequence: string) => void;
+  // selectionIsSearchMatch is true while the scrollback search selects the
+  // match it moved to. Copying that would replace the clipboard with the query.
+  selectionIsSearchMatch?: () => boolean;
 };
 
 export function prepareTerminalPaste(text: string, bracketed: boolean): string {
@@ -48,6 +51,7 @@ export function attachTerminalClipboard({
   copied,
   enhancedKey,
   sendEnhancedKey,
+  selectionIsSearchMatch = () => false,
 }: TerminalClipboardOptions): () => void {
   let active = true;
   const copySelection = ({ announce }: { announce: boolean }) => {
@@ -101,7 +105,7 @@ export function attachTerminalClipboard({
   });
 
   const selection = terminal.onSelectionChange(() => {
-    if (!settings().copyOnSelect) return;
+    if (!settings().copyOnSelect || selectionIsSearchMatch()) return;
     copySelection({ announce: false });
   });
   const onPaste = (event: ClipboardEvent) => {
