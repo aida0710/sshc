@@ -8,11 +8,11 @@ export type AdvancedPart = "jump" | "forwards" | "other";
 // 基本のタブが2つ目を出せないので、消せるようにその他の設定に残す。
 const basicFormKeywords = new Set(["hostname", "user", "port", "identityfile"]);
 
-export function isForwardKeyword(keyword: string): boolean {
+function isForwardKeyword(keyword: string): boolean {
   return forwardKindForKeyword(keyword) !== undefined;
 }
 
-export function partOf(field: FormField): AdvancedPart | null {
+function partOf(field: FormField): AdvancedPart | null {
   if (isForwardKeyword(field.keyword)) return "forwards";
   if (field.category === "jump") return "jump";
   if (basicFormKeywords.has(field.keyword.toLowerCase()) && field.duplicate !== true) return null;

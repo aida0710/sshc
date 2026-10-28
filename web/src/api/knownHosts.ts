@@ -9,8 +9,8 @@ export type KnownHostsChangeResponse = components["schemas"]["KnownHostsChangeRe
 export type KnownHostsScanResponse = components["schemas"]["KnownHostsScanResponse"];
 export type KnownHostCandidate = components["schemas"]["KnownHostCandidate"];
 
-export const KNOWN_HOSTS_DELETE_ACTION_KIND = "known_hosts.delete";
-export const KNOWN_HOSTS_SCAN_ACTION_KIND = "known_hosts.scan";
+const KNOWN_HOSTS_DELETE_ACTION_KIND = "known_hosts.delete";
+const KNOWN_HOSTS_SCAN_ACTION_KIND = "known_hosts.scan";
 export const KNOWN_HOSTS_ADD_ACTION_KIND = "known_hosts.add";
 
 export type KnownHostAddition = Pick<

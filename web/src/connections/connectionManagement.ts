@@ -31,9 +31,9 @@ type ConnectionManagementOptions = {
   clearTarget: (options?: NavigateLocationOptions) => boolean;
 };
 
-// useConnectionManagement は、管理のパネルとツリーから行う接続の操作（名前の変更、グループや
+// createConnectionManagement は、管理のパネルとツリーから行う接続の操作（名前の変更、グループや
 // ファイルへの移動、コメント、複製、削除）を持つ。移動した接続を選んでいたら、選択も移動先へ追う。
-export function useConnectionManagement({
+export function createConnectionManagement({
   overview,
   selection,
   detail,

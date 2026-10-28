@@ -6,7 +6,7 @@ import { hintText } from "../ui/form";
 import { formatDateTime, formatOptionalDateTime } from "../ui/format";
 import { PanelState } from "../ui/PanelState";
 import { Button } from "../ui/surface";
-import { formatBytes } from "./SyncResultCard";
+import { formatStorageBytes } from "./SyncResultCard";
 import type { BucketStatusState } from "./useSyncRemoteState";
 
 // History entries shown before "show all" is asked for.
@@ -57,7 +57,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
               <div className="mt-2 flex flex-col gap-1">
                 <p className={hintText}>
                   {t("sync.bucketObjectMeta", {
-                    size: formatBytes(
+                    size: formatStorageBytes(
                       bucketState.value.live.size,
                       locale,
                     ),
@@ -116,7 +116,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
                     >
                       <p className={hintText}>
                         {t("sync.bucketObjectMeta", {
-                          size: formatBytes(item.size, locale),
+                          size: formatStorageBytes(item.size, locale),
                           at: formatOptionalDateTime(item.lastModified, locale),
                         })}
                       </p>

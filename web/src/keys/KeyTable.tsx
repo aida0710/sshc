@@ -301,7 +301,7 @@ export function certificateLines(
   return lines;
 }
 
-export function renameable(item: KeyItem, items: KeyItem[]): boolean {
+function renameable(item: KeyItem, items: KeyItem[]): boolean {
   if (item.kind === "private_key") return true;
   if (item.kind !== "public_key" && item.kind !== "certificate") return false;
   const fingerprint =
@@ -312,7 +312,7 @@ export function renameable(item: KeyItem, items: KeyItem[]): boolean {
   return !items.some((candidate) => candidate.kind === "private_key" && candidate.fingerprint === fingerprint);
 }
 
-export function agentHolds(inventory: KeyInventoryResponse, item: KeyItem): boolean {
+function agentHolds(inventory: KeyInventoryResponse, item: KeyItem): boolean {
   if (!inventory.agentAvailable || item.fingerprint === "") return false;
   return inventory.agentIdentities.some((identity) => identity.fingerprint === item.fingerprint);
 }

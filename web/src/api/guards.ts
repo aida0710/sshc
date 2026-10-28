@@ -28,7 +28,7 @@ export function asBoolean(value: unknown): boolean {
   return value;
 }
 
-export const jsonHeaders = { "Content-Type": "application/json" } as const;
+const jsonHeaders = { "Content-Type": "application/json" } as const;
 
 export function toProblem(error: unknown): Problem {
   if (error instanceof ApiError && error.problem !== null) return error.problem;

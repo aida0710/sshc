@@ -49,8 +49,8 @@ import { hostDetailApi } from "./HostDetail";
 import { useConnectionSelection } from "./useConnectionSelection";
 import { useSelectedConnection } from "./useSelectedConnection";
 import { useConnectionSave } from "./useConnectionSave";
-import { useConnectionManagement } from "./useConnectionManagement";
-import { useGroupOperations } from "./useGroupOperations";
+import { createConnectionManagement } from "./connectionManagement";
+import { createGroupOperations } from "./groupOperations";
 import { folderNoticesOf } from "./groupFolderContents";
 import { GroupFolders } from "./GroupFolders";
 import { useConnectionListActions } from "./useConnectionListActions";
@@ -207,7 +207,7 @@ export function ConnectionsPage({
     followCommittedIdentity,
   });
   const movesDisabled = editorDirty || refreshState !== "idle";
-  const management = useConnectionManagement({
+  const management = createConnectionManagement({
     overview,
     selection,
     detail,
@@ -221,7 +221,7 @@ export function ConnectionsPage({
     clearTarget,
   });
 
-  const groups = useGroupOperations({ overview, feedback, reload });
+  const groups = createGroupOperations({ overview, feedback, reload });
   const listActions = useConnectionListActions({
     overview,
     compact,

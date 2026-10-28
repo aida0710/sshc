@@ -5,7 +5,7 @@ export function isTextEntry(element: Element | null): element is HTMLElement {
 }
 
 // useAppViewport marks the root while the on-screen keyboard is up.
-export function isSoftKeyboardOpen(): boolean {
+function isSoftKeyboardOpen(): boolean {
   return document.documentElement.dataset.keyboardOpen === "true";
 }
 

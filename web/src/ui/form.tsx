@@ -48,8 +48,6 @@ export const dialogHeading = "text-base font-semibold text-ink";
 
 export const fieldLabel = "text-[12.5px] text-ink-muted";
 export const hintText = "text-xs text-ink-muted";
-export const sectionCard =
-  "flex flex-col gap-4 rounded-lg border border-line bg-card p-4";
 export const sectionHeading = "text-sm font-medium text-ink";
 
 export const tableHeadRow =

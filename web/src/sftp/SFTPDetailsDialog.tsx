@@ -1,12 +1,12 @@
 import { useEffect, useId, useState, type ReactNode, type RefObject } from "react";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
-import { useTranslate } from "../i18n/context";
+import { useLanguage } from "../i18n/context";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { localHostAlias } from "./localHost";
 import { sftpApi, type RemoteDirectoryStats, type RemoteEntry } from "./api";
-import { formatBytes } from "../ui/format";
+import { formatBytes, formatDateTime } from "../ui/format";
 import { entryKind } from "./entryKind";
 import { entryTypeLabelKeys } from "./sftpMessageKeys";
 import { symbolicModeToOctal } from "./transfers";
@@ -54,7 +54,7 @@ export function SFTPDetailsDialog({
   onChangeOwnership?: ((entry: RemoteEntry) => void) | undefined;
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
-  const t = useTranslate();
+  const { locale, t } = useLanguage();
   const headingId = useId();
   const mobileViewport = useMediaQuery(mobileViewportQuery);
   const [directoryStats, setDirectoryStats] = useState<DirectoryStatsState>({ kind: "idle" });
@@ -84,8 +84,8 @@ export function SFTPDetailsDialog({
         <dl role="group" className="min-h-0 overflow-auto border-t border-line px-3 py-2 md:border-l md:border-t-0" aria-label={t("sftp.properties")}>
           {entry === null ? (
             <>
-              <Property label={t("sftp.selectedItems")}>{entries.length.toLocaleString()}</Property>
-              <Property label={t("sftp.totalSize")}>{`${totalBytes.toLocaleString()} (${formatBytes(totalBytes)})`}</Property>
+              <Property label={t("sftp.selectedItems")}>{entries.length.toLocaleString(locale)}</Property>
+              <Property label={t("sftp.totalSize")}>{`${totalBytes.toLocaleString(locale)} (${formatBytes(totalBytes)})`}</Property>
             </>
           ) : (
             <>
@@ -98,21 +98,21 @@ export function SFTPDetailsDialog({
               ) : null}
               <Property label={t("sftp.size")}>
                 {kind === "file"
-                  ? `${entry.size.toLocaleString()} (${formatBytes(entry.size)})`
+                  ? `${entry.size.toLocaleString(locale)} (${formatBytes(entry.size)})`
                   : directoryStats.kind === "loading"
                     ? t("sftp.calculating")
                     : directoryStats.kind === "loaded"
-                      ? `${directoryStats.stats.truncated ? t("sftp.partialSizePrefix") : ""}${directoryStats.stats.bytes.toLocaleString()} (${formatBytes(directoryStats.stats.bytes)})`
+                      ? `${directoryStats.stats.truncated ? t("sftp.partialSizePrefix") : ""}${directoryStats.stats.bytes.toLocaleString(locale)} (${formatBytes(directoryStats.stats.bytes)})`
                       : t("sftp.sizeUnavailable")}
               </Property>
               {kind === "directory" && directoryStats.kind === "loaded" ? (
                 <>
-                  <Property label={t("sftp.containedFiles")}>{directoryStats.stats.files.toLocaleString()}</Property>
-                  <Property label={t("sftp.containedDirectories")}>{Math.max(0, directoryStats.stats.directories - 1).toLocaleString()}</Property>
+                  <Property label={t("sftp.containedFiles")}>{directoryStats.stats.files.toLocaleString(locale)}</Property>
+                  <Property label={t("sftp.containedDirectories")}>{Math.max(0, directoryStats.stats.directories - 1).toLocaleString(locale)}</Property>
                 </>
               ) : null}
               <Property label={t("sftp.modified")}>
-                <time dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleString()}</time>
+                <time dateTime={entry.modifiedAt}>{formatDateTime(entry.modifiedAt, locale)}</time>
               </Property>
               <Property label={t("sftp.permissions")}>{`${entry.mode} (${symbolicModeToOctal(entry.mode)})`}</Property>
               <Property label={t("sftp.uid")}>{entry.uid ?? t("sftp.ownershipUnavailable")}</Property>
