@@ -9,7 +9,6 @@ const routes = [
   ["Files", "/files"],
   ["Snippets", "/snippets"],
   ["Config", "/config"],
-  ["Groups", "/groups"],
   ["Keys", "/keys"],
   ["Known Hosts", "/known-hosts"],
   ["Remote Keys", "/install-key"],

@@ -19,7 +19,6 @@ const navigationBySection: Record<Section, SectionNavigation> = {
   Files: { navigation: "SFTP", heading: "Remote files" },
   Snippets: { navigation: "Snippets", heading: "Snippets" },
   Config: { navigation: "Config", heading: "Configuration files" },
-  Groups: { navigation: "Groups", heading: "Groups" },
   Keys: { navigation: "Keys", heading: "Keys" },
   "Known Hosts": { navigation: "Known Hosts", heading: "Known Hosts" },
   "Remote Keys": { navigation: "Install Key on Server", heading: "Install Key on Server" },

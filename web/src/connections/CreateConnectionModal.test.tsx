@@ -282,17 +282,50 @@ describe("CreateConnectionModal", () => {
     await user.type(screen.getByLabelText("Connection name"), "lab-node");
     await user.type(screen.getByLabelText("Host name or IP address"), "host.example");
     await user.type(await screen.findByLabelText("Connection password"), "must-not-leave-modal");
-    await user.click(screen.getByRole("button", { name: "Manage groups" }));
+    await user.click(screen.getByRole("button", { name: "Create a private key" }));
 
-    expect(harness.onOpenPrerequisite).toHaveBeenCalledWith("Groups", expect.objectContaining({
+    expect(harness.onOpenPrerequisite).toHaveBeenCalledWith("Keys", expect.objectContaining({
       alias: "lab-node",
       hostName: "host.example",
       authentication: "dedicated_password",
     }));
     expect(JSON.stringify(harness.onOpenPrerequisite.mock.calls[0])).not.toContain("must-not-leave-modal");
+  });
 
-    await user.click(screen.getByRole("button", { name: "Create a private key" }));
-    expect(harness.onOpenPrerequisite).toHaveBeenCalledWith("Keys", expect.any(Object));
+  it("creates a group in place and chooses it, keeping what was typed", async () => {
+    const user = userEvent.setup();
+    const props = {
+      config: { createConnection: vi.fn() },
+      keys: { inventory: vi.fn().mockResolvedValue(inventory) },
+      secrets: { passwordVault: vi.fn().mockResolvedValue(vaultStatus()), credentials: vi.fn().mockResolvedValue({ credentials: [] }), initialiseVault: vi.fn(), unlockVault: vi.fn() },
+      onClose: vi.fn(),
+      onCreated: vi.fn(),
+    };
+    const withLab = [...groups, { ...groups[0]!, name: "lab", directory: "connections/lab", keyDirectory: "keys/lab", memberCount: 0 }];
+    // The page reads the groups again after saving, so the new group is in the list when creation answers.
+    const onCreateGroup = vi.fn(async () => {
+      rendered.rerender(<CreateConnectionModal groups={withLab} onCreateGroup={onCreateGroup} {...props} />);
+      return true;
+    });
+    const rendered = render(<CreateConnectionModal groups={groups} onCreateGroup={onCreateGroup} {...props} />);
+
+    await user.type(screen.getByLabelText("Connection name"), "lab-node");
+    await user.click(screen.getByRole("button", { name: "New group" }));
+    await user.type(screen.getByLabelText("Name of the new group"), "lab/x");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("cannot contain “/”");
+    expect(onCreateGroup).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByLabelText("Name of the new group")).toBeNull();
+    expect(props.onClose).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "New group" }));
+    await user.type(screen.getByLabelText("Name of the new group"), "lab{Enter}");
+    expect(onCreateGroup).toHaveBeenCalledWith("lab");
+    expect(props.config.createConnection).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByLabelText("Save in group")).toHaveValue("lab"));
+    expect(screen.queryByLabelText("Name of the new group")).toBeNull();
+    expect(screen.getByLabelText("Connection name")).toHaveValue("lab-node");
   });
 
   it("restores a safe draft and explains why creation is disabled", async () => {

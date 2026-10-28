@@ -1,4 +1,5 @@
 import { clickAndAwait, expect, openSection, test, openApplication } from "./support/environment";
+import { createGroups } from "./support/groups";
 
 test("hands a generated private key to one connection exactly once", async ({
   page,
@@ -236,10 +237,7 @@ test("moves several chosen keys into a folder at once", async ({ page, installat
   await installation.write("conf.d/30-bulk.conf", "Host bulk\n\tIdentityFile ~/.ssh/id_bulk_a\n");
   await openApplication(page, installation);
 
-  await openSection(page, "Groups");
-  await page.getByLabel("New group name").fill("archive");
-  await page.getByRole("button", { name: "Add group" }).click();
-  expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
+  await createGroups(page, ["archive"]);
 
   await openSection(page, "Keys");
   for (const name of ["id_bulk_a", "id_bulk_b"]) {
@@ -263,10 +261,7 @@ test("moves several chosen keys into a folder at once", async ({ page, installat
 
 test("shows one folder at a time", async ({ page, installation }) => {
   await openApplication(page, installation);
-  await openSection(page, "Groups");
-  await page.getByLabel("New group name").fill("archive");
-  await page.getByRole("button", { name: "Add group" }).click();
-  expect(await clickAndAwait(page, "Save groups", "/api/v1/config/save")).toBe(200);
+  await createGroups(page, ["archive"]);
 
   await openSection(page, "Keys");
   for (const name of ["id_kept", "id_filed"]) {
