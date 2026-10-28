@@ -3,7 +3,7 @@ import { newTouchScroll } from "./touchScroll";
 
 function recorder() {
   const sent: number[] = [];
-  return { view: { rows: 24, scrollLines: (amount: number) => sent.push(amount) }, sent };
+  return { view: { scrollLines: (amount: number) => sent.push(amount) }, sent };
 }
 
 describe("newTouchScroll", () => {

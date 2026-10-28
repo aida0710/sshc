@@ -180,7 +180,9 @@ test("one tap opens folders with immediate loading feedback and checkboxes enter
   await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/workspace");
 });
 
-test("quick navigation and terminal keys remain available in portrait and touch landscape", async ({ page, installation }) => {
+// mockTerminalSession stands in for one shell whose output is the given text, and returns what the page sends it.
+// redraw is sent again each time the page resizes the terminal, as a full-screen program redraws its screen then.
+async function mockTerminalSession(page: Page, output: string, redraw = ""): Promise<string[]> {
   const messages: string[] = [];
   await page.route("**/api/v1/terminal/sessions**", (route) => {
     if (new URL(route.request().url()).pathname.endsWith("/stream")) {
@@ -189,9 +191,18 @@ test("quick navigation and terminal keys remain available in portrait and touch 
     return route.fulfill({ json: { sessions: [{ id: "mobile-demo-shell", kind: "shell", workspaceId: "default", title: "Demo shell", startedAt: "2026-09-12T00:00:00Z", state: "connected", problem: "", forwards: [] }], maxSessions: 12 } });
   });
   await page.routeWebSocket("**/terminal/stream?**", (socket) => {
-    socket.send(Buffer.from("Mobile terminal demo\r\nFiles: projects/  archives/  report.txt\r\n$ "));
-    socket.onMessage((data) => messages.push(typeof data === "string" ? data : data.toString("utf8")));
+    socket.send(Buffer.from(output + redraw));
+    socket.onMessage((data) => {
+      const message = typeof data === "string" ? data : data.toString("utf8");
+      messages.push(message);
+      if (redraw !== "" && message.startsWith('{"resize"')) socket.send(Buffer.from(redraw));
+    });
   });
+  return messages;
+}
+
+test("quick navigation and terminal keys remain available in portrait and touch landscape", async ({ page, installation }) => {
+  const messages = await mockTerminalSession(page, "Mobile terminal demo\r\nFiles: projects/  archives/  report.txt\r\n$ ");
   await page.setViewportSize({ width: 390, height: 640 });
   await openApplication(page, installation);
   const navigation = page.getByRole("navigation", { name: "Quick navigation" });
@@ -252,6 +263,39 @@ async function swipe(page: Page, from: { x: number; y: number }, to: { x: number
   }
   await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await client.detach();
+}
+
+// A full-screen program draws on the alternate screen, which has no scrollback, and scrolls its own text.
+// Claude Code also asks for mouse reports (1000, 1002, 1003 with the SGR encoding 1006); less does not.
+const longOutput = Array.from({ length: 80 }, (_, index) => `line ${index + 1}`).join("\r\n");
+const fullScreenPrograms = [
+  { name: "asks for mouse reports, as Claude Code does", modes: "\x1b[?1049h\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h", forward: /\x1b\[<65;\d+;\d+M/, back: /\x1b\[<64;\d+;\d+M/ },
+  { name: "does not ask for mouse reports, as less does", modes: "\x1b[?1049h", forward: /\x1b\[B/, back: /\x1b\[A/ },
+];
+for (const program of fullScreenPrograms) {
+  test(`a swipe reaches a full-screen program that ${program.name}`, async ({ page, installation }) => {
+    // The program starts once it knows the terminal's size, so it draws (and sets its modes) on each resize.
+    const messages = await mockTerminalSession(page, `${longOutput}\r\n`, `${program.modes}\x1b[2J\x1b[HFull-screen program`);
+    // A flick coasts on after the finger lifts. With reduced motion it does not, so each swipe sends only its own turns.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApplication(page, installation);
+    await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+    const screen = page.getByRole("region", { name: "Terminal for Demo shell" });
+    await expect(screen).toContainText("Full-screen program");
+    const box = await screen.boundingBox();
+    if (box === null) throw new Error("the terminal has no box");
+    const middle = box.x + box.width / 2;
+
+    // A finger moving up moves the text forward, as the wheel turned towards the person does.
+    await swipe(page, { x: middle, y: box.y + box.height * 0.7 }, { x: middle, y: box.y + box.height * 0.3 });
+    await expect.poll(() => messages.some((message) => program.forward.test(message))).toBe(true);
+    expect(messages.some((message) => program.back.test(message))).toBe(false);
+
+    messages.length = 0;
+    await swipe(page, { x: middle, y: box.y + box.height * 0.3 }, { x: middle, y: box.y + box.height * 0.7 });
+    await expect.poll(() => messages.some((message) => program.back.test(message))).toBe(true);
+    expect(messages.some((message) => program.forward.test(message))).toBe(false);
+  });
 }
 
 test("a swipe across the page opens the navigation and a swipe back closes it", async ({ page, installation }) => {
