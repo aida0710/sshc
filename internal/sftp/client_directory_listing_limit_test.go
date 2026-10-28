@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 
 	pkgsftp "github.com/pkg/sftp"
@@ -80,5 +81,38 @@ func TestReadDirListsAFolderUpToTheEntryLimitAndCanListItAgain(t *testing.T) {
 		if len(infos) != maxDirectoryEntries {
 			t.Fatalf("ReadDir() = %d entries, want %d", len(infos), maxDirectoryEntries)
 		}
+	}
+}
+
+// longNameLister は、件数の上限に届く前にメモリを使い果たそうとする SFTP サーバーとして、
+// 1つの応答に長い名前を1項目ずつ入れて返し続ける。
+type longNameLister struct {
+	nameBytes int
+	listed    *int
+}
+
+func (lister longNameLister) ListAt(destination []os.FileInfo, _ int64) (int, error) {
+	*lister.listed++
+	suffix := "-" + strconv.Itoa(*lister.listed)
+	destination[0] = fixtureInfo{name: strings.Repeat("n", lister.nameBytes-len(suffix)) + suffix}
+	return 1, nil
+}
+
+func (lister longNameLister) Filelist(*pkgsftp.Request) (pkgsftp.ListerAt, error) {
+	return lister, nil
+}
+
+func TestReadDirStopsAtTheByteLimitWhenTheServerSendsLongNames(t *testing.T) {
+	// pkg/sftp の1つの応答（256 KiB）に、名前と、名前を含む longname が収まる長さ。
+	const nameBytes = 100 << 10
+	listed := 0
+	client := directoryLimitClient(t, longNameLister{nameBytes: nameBytes, listed: &listed})
+	infos, err := client.ReadDir(t.Context(), "/long")
+	if !errors.Is(err, ErrTraversalLimit) {
+		t.Fatalf("ReadDir() = %d entries, %v; want %v", len(infos), err, ErrTraversalLimit)
+	}
+	// 名前だけで上限に届く項目数に、送り手が先に出した分の余裕を足した数で止まる。
+	if limit := maxDirectoryListingBytes/nameBytes + 8; listed > limit {
+		t.Fatalf("server listed %d long names before the byte limit stopped the listing, want at most %d", listed, limit)
 	}
 }
