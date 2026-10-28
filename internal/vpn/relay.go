@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"sshc/internal/netaccept"
 )
 
 // engine が経路ごとに差し出す中継である。
@@ -39,9 +41,6 @@ const (
 	// relayRequestTimeout は、繋いでから1行目が届くまで待つ上限の既定値である。
 	// 繋いだまま何も送らない接続に、goroutine とファイル記述子を持たせ続けない。
 	relayRequestTimeout = 10 * time.Second
-	// acceptRetryLimit は、受け付けが一時的に失敗したときに待つ上限である
-	// （ファイル記述子が尽きた、など）。
-	acceptRetryLimit = time.Second
 )
 
 // 中継の答えのコードである。HTTP API の problem と同じ語を使い、CLI は同じ訳で見せる。
@@ -108,22 +107,7 @@ func openEngineRelay(path string, dial relayDialer, requestTimeout time.Duration
 
 func (relay *engineRelay) accept(dial relayDialer) {
 	defer close(relay.accepting)
-	wait := time.Duration(0)
-	for {
-		client, err := relay.listener.Accept()
-		if errors.Is(err, net.ErrClosed) {
-			return
-		}
-		if err != nil {
-			// 一時的な失敗で受け付けをやめると、待ち受けは開いたまま、誰も受け
-			// 取らない。少し待って受け付け直す。
-			wait = min(max(2*wait, 5*time.Millisecond), acceptRetryLimit)
-			time.Sleep(wait)
-			continue
-		}
-		wait = 0
-		go relay.serve(client, dial)
-	}
+	netaccept.Serve(relay.listener, 0, func(client net.Conn) { relay.serve(client, dial) })
 }
 
 // serve は、1行目の接続先へ繋ぎ、答えを返してから、両方向へバイト列を運ぶ。
