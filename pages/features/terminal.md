@@ -103,6 +103,12 @@ Sixel、iTerm2のインライン画像（OSC 1337 File=）、kittyの画像形�
 
 セッション一覧の［新しいセッション］を選ぶと、SFTPの接続先選択と同じ画面が開きます。先頭の［Local shell］（検出したシェルプロファイルがあればプロファイルごとの行）でローカルシェルを、検索・最近使った接続・グループからSSHホストを選べます。ローカルシェルも、SSHと同じTerminalの仕組みで動作しています。［Settings］→［Terminal］ではシェルプロファイルを選べ、検索とクイックコマンドを同じように利用できます。macOSやLinuxでsshcエンジンを常駐起動した場合も、zshやfishの行編集に必要なTerminal情報をsshcが設定します。
 
+Windowsのローカルシェルは、PowerShell 7が入っていればPowerShell 7を、無ければWindows PowerShellを既定で開きます。Windows PowerShell 5.1に付属するPSReadLine 2.0は、ターミナルの幅を変えたあと、入力した行をプロンプトから離れた位置に表示することがあります。PowerShell 7を入れるか、ターミナルで次のコマンドを実行してPSReadLineを更新してください。
+
+```powershell
+Install-Module PSReadLine -Scope CurrentUser -Force -SkipPublisherCheck
+```
+
 ## タイトルと通知
 
 シェルやプログラムがOSC 0／1／2で設定したタイトルは、ペインの見出しとセッション一覧の表示名になります。OSC 9／99／777で送られた通知は未読の印になり、sshcのタブがバックグラウンドにあるときはブラウザ通知と通知音になります。OSC 9;4で送られた進み具合は、ペインの見出しとセッション一覧の各行の下端に細い線で表示します。別のセッションを見ている間も、一覧で進み具合を確認できます。Claude CodeやCodexの通知設定を含む詳細は[タイトルと通知](/terminal/notifications)を参照してください。
