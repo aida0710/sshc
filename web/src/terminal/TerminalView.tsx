@@ -403,6 +403,10 @@ export function TerminalView({
     });
 
     const typed = (data: string) => {
+      // xterm answers the queries in replayed history (DA1, cursor position,
+      // kitty image checks) as if they were new. The program that asked has
+      // long had its answer; this one would land in the shell as typed text.
+      if (output.isReplaying()) return;
       const { ctrl, alt } = takeModifiers();
       sendInput.current(applyModifiers(data, ctrl, alt));
     };
