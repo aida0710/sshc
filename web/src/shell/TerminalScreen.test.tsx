@@ -182,7 +182,7 @@ describe("TerminalScreen while the run target refuses its session list", () => {
     const user = userEvent.setup();
     const api = enginesApi({ status: vi.fn().mockRejectedValue(refusal("remote_engine_incompatible", undefined, "v0.51.0")) });
     const { panel, terminalSessions } = await renderRefused(refusal("remote_engine_incompatible", undefined, "v0.51.0"), runTargets("r540", api));
-    expect(panel).toHaveAccessibleName("The sshc on r540 does not work with this computer’s");
+    expect(panel).toHaveAccessibleName("The sshc on r540 does not work with this machine’s");
     expect(within(panel).getByText("v0.51.0")).toBeInTheDocument();
     expect(within(panel).getByText("v0.54.0")).toBeInTheDocument();
     const calls = terminalSessions.mock.calls.length;
