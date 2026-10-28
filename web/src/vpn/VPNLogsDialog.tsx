@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { VPNApi } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
-import { hintText } from "../ui/form";
+import { dialogHeading, hintText } from "../ui/form";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
 
@@ -48,7 +48,7 @@ export function VPNLogsDialog({
       panelClassName="flex w-full max-w-3xl flex-col gap-3 rounded-lg p-4"
     >
       <div>
-        <h2 id="vpn-logs" className="text-base font-semibold text-ink">
+        <h2 id="vpn-logs" className={dialogHeading}>
           {t("vpn.logsTitle", { name })}
         </h2>
         <p className={`mt-1 ${hintText}`}>{t("vpn.logsHint")}</p>

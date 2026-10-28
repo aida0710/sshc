@@ -1,3 +1,4 @@
+import { tagClass } from "../ui/Tag";
 import { Fragment, type DragEvent, type ReactNode } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { KeyCertificate, KeyInventoryResponse, KeyItem } from "./api";
@@ -36,10 +37,9 @@ export type KeyRowActions = {
 // Tailwind can find them.
 
 // A row's state, as the small round tags of the design: green for in use, amber for something to look at.
-const tag = "inline-flex h-5 items-center gap-1 whitespace-nowrap rounded-full px-[7px] text-[11.5px]";
-const neutralTag = `${tag} bg-well text-ink-muted`;
-const goodTag = `${tag} bg-live/15 text-live`;
-const attentionTag = `${tag} bg-notice text-notice-ink`;
+const neutralTag = tagClass("neutral");
+const goodTag = tagClass("ok");
+const attentionTag = tagClass("warn");
 
 export function KeyTable({
   items,

@@ -1,3 +1,4 @@
+import { dialogHeading } from "../ui/form";
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
@@ -32,7 +33,7 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocati
     <>
       <ModalShell labelledBy="sftp-compare-heading" onDismiss={onDismiss} panelClassName="flex h-[min(44rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-lg">
         <header className="border-b border-line/60 px-5 py-4">
-          <h2 id="sftp-compare-heading" className="text-base font-semibold text-ink">{t("sftp.compare.heading")}</h2>
+          <h2 id="sftp-compare-heading" className={dialogHeading}>{t("sftp.compare.heading")}</h2>
           <p className="mt-1 truncate font-mono text-xs text-ink-muted">{leftLabel}:{left.path} ⇄ {rightLabel}:{right.path}</p>
           <details className="mt-2 text-xs text-ink-muted"><DisclosureSummary>{t("sftp.compare.explanation")}</DisclosureSummary><p className="mt-2">{t(readOnly ? "sftp.compare.readOnlyDescription" : "sftp.compare.description")}</p>{mode === "content" ? <p className="mt-2">{t("sftp.compare.contentHint")}</p> : null}</details>
           <label className="mt-3 flex items-center gap-2 text-sm text-ink-muted">

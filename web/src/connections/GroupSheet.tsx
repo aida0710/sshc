@@ -1,3 +1,4 @@
+import { dialogHeading } from "../ui/form";
 import { useTranslate } from "../i18n/context";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { Icon } from "../ui/icons";
@@ -72,7 +73,7 @@ export function GroupSheet({ groups, total, ungrouped, active, onChoose, onCreat
       panelClassName="flex max-h-[80dvh] w-full max-w-md flex-col rounded-lg"
     >
       <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2">
-        <h2 id="group-sheet-heading" className="text-base font-semibold text-ink">{t("tree.byGroups")}</h2>
+        <h2 id="group-sheet-heading" className={dialogHeading}>{t("tree.byGroups")}</h2>
         {onCreate === null ? null : (
           <Button className="inline-flex items-center gap-1.5" onClick={onCreate}>
             <Icon name="plus" className="size-4" />

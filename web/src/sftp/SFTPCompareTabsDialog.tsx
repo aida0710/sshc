@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from "react";
 import { useTranslate } from "../i18n/context";
-import { control, hintText } from "../ui/form";
+import { control, dialogHeading, hintText } from "../ui/form";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { localHostAlias } from "./localHost";
@@ -32,7 +32,7 @@ export function SFTPCompareTabsDialog({ tabs, currentTabId, onCompare, onDismiss
   }
 
   return <ModalShell labelledBy={id} describedBy={`${id}-hint`} onDismiss={onDismiss} initialFocusRef={initialFocus} panelClassName="w-full max-w-md rounded-lg p-5">
-    <h2 id={id} className="text-base font-semibold">{t("sftp.compare.chooseTabsHeading")}</h2>
+    <h2 id={id} className={dialogHeading}>{t("sftp.compare.chooseTabsHeading")}</h2>
     <p id={`${id}-hint`} className={`mt-2 ${hintText}`}>{t("sftp.compare.chooseTabsHint")}</p>
     <form className="mt-4 space-y-4" onSubmit={(event) => { event.preventDefault(); compare(); }}>
       <label className="flex flex-col gap-1 text-sm">

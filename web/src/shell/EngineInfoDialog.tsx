@@ -1,3 +1,4 @@
+import { dialogHeading } from "../ui/form";
 import { useId, useRef, useState, type RefObject } from "react";
 import type { RemoteEngineAction, RemoteEngineStatus } from "../api/remoteEngines";
 import { useTranslate, type Translate } from "../i18n/context";
@@ -53,7 +54,7 @@ export function EngineInfoDialog({
         {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
         panelClassName="flex w-full max-w-md flex-col gap-3 rounded-lg p-4"
       >
-        <h2 id={headingId} className="text-sm font-medium text-ink">
+        <h2 id={headingId} className={dialogHeading}>
           {t("engineInfo.heading", { alias })}
         </h2>
         {info.status === null && info.remoteVersion === null ? null : (

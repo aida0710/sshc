@@ -1,3 +1,4 @@
+import { Tag } from "../ui/Tag";
 import { useEffect, useState } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
 import { failureCode } from "../api/client";
@@ -251,7 +252,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
                     <td className={tableCell}>{candidate.host}</td>
                     <td className={`${tableCell} font-mono text-xs text-ink-muted`}>{candidate.keyType}</td>
                     <td className={`${tableCell} font-mono text-xs text-ink-muted`}>{candidate.fingerprint}</td>
-                    <td className={tableCell}><span className="rounded-full bg-notice px-2 py-0.5 text-[11.5px] text-notice-ink">{candidateTrustText}</span></td>
+                    <td className={tableCell}><Tag tone="warn">{candidateTrustText}</Tag></td>
                     <td className={`${tableCell} text-right`}>
                       <Button onClick={() => openAdd(candidate)}>{t("kh.add")}</Button>
                     </td>
