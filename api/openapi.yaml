@@ -917,6 +917,46 @@ paths:
           minLength: 1
           maxLength: 64
       description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/destinations/{connectionAlias}:
+    get:
+      operationId: remoteEngineResolveTerminalDestination
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - name: connectionAlias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      responses:
+        '200':
+          description: The destination the alias resolves to on the remote engine
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalDestination'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
   /api/v1/engines/{alias}/terminal/shell-profiles:
     get:
       operationId: remoteEngineListLocalShellProfiles
@@ -1421,6 +1461,28 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/destinations/{connectionAlias}:
+    get:
+      operationId: resolveTerminalDestination
+      description: >-
+        Where this engine's SSH configuration takes the alias (the last hop). It does not connect. The
+        screen compares a run target's answer with this machine's before it reads that host's files from here.
+      parameters:
+        - name: connectionAlias
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          description: The destination the alias resolves to
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalDestination" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/commands/preview:
     post:
       operationId: previewTerminalCommand
@@ -4803,6 +4865,15 @@ components:
         title: { type: string }
         body: { type: string }
         occurredAt: { type: string, format: date-time }
+    TerminalDestination:
+      type: object
+      additionalProperties: false
+      required: [alias, hostName, port, user]
+      properties:
+        alias: { type: string }
+        hostName: { type: string }
+        port: { type: string }
+        user: { type: string }
     TerminalConnectionProgress:
       type: object
       additionalProperties: false

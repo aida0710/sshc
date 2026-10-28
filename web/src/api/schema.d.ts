@@ -492,6 +492,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/engines/{alias}/terminal/destinations/{connectionAlias}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
+        get: operations["remoteEngineResolveTerminalDestination"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/engines/{alias}/terminal/shell-profiles": {
         parameters: {
             query?: never;
@@ -672,6 +689,23 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listLocalShellProfiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminal/destinations/{connectionAlias}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Where this engine's SSH configuration takes the alias (the last hop). It does not connect. The screen compares a run target's answer with this machine's before it reads that host's files from here. */
+        get: operations["resolveTerminalDestination"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3278,6 +3312,12 @@ export interface components {
             body: string;
             /** Format: date-time */
             occurredAt: string;
+        };
+        TerminalDestination: {
+            alias: string;
+            hostName: string;
+            port: string;
+            user: string;
         };
         TerminalConnectionProgress: {
             /** @enum {string} */
@@ -6105,6 +6145,36 @@ export interface operations {
             502: components["responses"]["Problem"];
         };
     };
+    remoteEngineResolveTerminalDestination: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                connectionAlias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The destination the alias resolves to on the remote engine */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalDestination"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
     remoteEngineListLocalShellProfiles: {
         parameters: {
             query?: never;
@@ -6503,6 +6573,33 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+        };
+    };
+    resolveTerminalDestination: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionAlias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The destination the alias resolves to */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalDestination"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
     previewTerminalCommand: {

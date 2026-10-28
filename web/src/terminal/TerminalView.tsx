@@ -61,6 +61,7 @@ import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { TerminalComposer } from "./TerminalComposer";
 import { planComposerSend } from "./composerSend";
 import { pathPreviewAlias } from "./pathPreviewAlias";
+import { useSameDestination } from "./useSameDestination";
 import { previewPathsInBuffer, previewPathTargetsInBuffer } from "./previewPaths";
 import { isHomePath, resolveTerminalPath } from "./relativePaths";
 import { useLocalWindowsPaths } from "./useLocalWindowsPaths";
@@ -548,7 +549,8 @@ export function TerminalView({
   const displayTitle = terminalDisplayTitle(session);
   const subtitle = terminalSubtitle(session, t);
   const remoteAlias = session.kind === "ssh" ? session.alias : undefined;
-  const previewAlias = pathPreviewAlias(session, runTarget);
+  const sameDestination = useSameDestination(remoteAlias, runTarget);
+  const previewAlias = pathPreviewAlias(session, runTarget, sameDestination);
 
   // A relative path is relative to where the program that printed it works.
   // The engine reads that for a local shell; an SSH session only has the
@@ -575,8 +577,8 @@ export function TerminalView({
   previewLinkedPath.current = previewAlias === undefined ? null : (path) => void previewPath(path);
 
   // SFTP can open a file of an SSH session at its host. A session opened on a run target reached its host
-  // through that engine's SSH config, which this PC may not share.
-  const openInSFTP = runTarget === undefined && remoteAlias !== undefined && onOpenRemotePath !== undefined
+  // through that engine's SSH config, which this machine may not share; only the same destination will do.
+  const openInSFTP = (runTarget === undefined || sameDestination) && remoteAlias !== undefined && onOpenRemotePath !== undefined
     ? (path: string, action: RemotePathAction) => {
       setPathPreview(null);
       onOpenRemotePath(remoteAlias, path, action);
