@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
+import type { TerminalSession, TerminalSessionsApi } from "../api/terminalSessions";
 import type { UpdateApi, UpdateStatus } from "../api/update";
 import { UpdateBadge } from "./UpdateBadge";
 import { UpdateControls } from "./UpdateControls";
@@ -16,9 +17,13 @@ function updater(): UpdateApi {
   };
 }
 
+function localSessions(sessions: TerminalSession[] = []): Pick<TerminalSessionsApi, "terminalSessions"> {
+  return { terminalSessions: vi.fn().mockResolvedValue({ sessions, maxSessions: 12 }) };
+}
+
 // The update is confirmed on About; these tests give the controls the status the page loaded.
-async function renderControls(api: UpdateApi) {
-  render(<UpdateControls status={await api.updateStatus()} api={api} onStart={vi.fn()} />);
+async function renderControls(api: UpdateApi, sessions = localSessions()) {
+  render(<UpdateControls status={await api.updateStatus()} api={api} sessions={sessions} onStart={vi.fn()} />);
 }
 
 describe("Web self update", () => {
@@ -36,6 +41,16 @@ describe("Web self update", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Update sshc" }));
     expect(api.startUpdate).toHaveBeenCalledExactlyOnceWith("v1.1.0", "confirmed-plan");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("names the running terminals of this machine that the update ends", async () => {
+    const running: TerminalSession = { id: "one", kind: "ssh", alias: "osaka", workspaceId: "default", title: "API認証の修正", startedAt: "2026-10-28T09:00:00Z", state: "connected", problem: "" };
+    const ended: TerminalSession = { ...running, id: "two", title: "build", state: "exited", exited: { code: 0, signal: "", at: "2026-10-28T09:10:00Z" } };
+    await renderControls(updater(), localSessions([running, ended]));
+    await userEvent.click(await screen.findByRole("button", { name: "Update sshc" }));
+
+    const listed = await within(await screen.findByRole("dialog", { name: "Update sshc?" })).findByRole("list", { name: "Sessions that end" });
+    expect(within(listed).getAllByRole("listitem").map((row) => row.textContent)).toEqual(["API認証の修正osaka"]);
   });
 
   it("reviews the PowerShell installation before updating Windows", async () => {

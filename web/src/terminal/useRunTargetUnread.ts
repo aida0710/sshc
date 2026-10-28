@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { engineStreamPath, engineTerminalBase, type RemoteEnginesApi } from "../api/remoteEngines";
-import { createTerminalSessionsApi } from "../api/terminalSessions";
+import type { RemoteEnginesApi } from "../api/remoteEngines";
+import { runTargetTerminalSessionsApi } from "../api/terminalSessions";
 import { usePolling } from "../ui/usePolling";
 import { noteNotificationVersions, type NotificationVersions } from "./runTargetUnread";
 
@@ -43,7 +43,7 @@ export function useRunTargetUnread({ api, selected, enabled }: {
     }
     const notified: string[] = [];
     await Promise.all(watched.map(async (alias) => {
-      const sessions = await createTerminalSessionsApi(engineTerminalBase(alias), engineStreamPath(alias)).terminalSessions().catch(() => null);
+      const sessions = await runTargetTerminalSessionsApi(alias).terminalSessions().catch(() => null);
       if (sessions === null || !isCurrent()) return;
       const noted = noteNotificationVersions(seen.current.get(alias), sessions.sessions);
       seen.current.set(alias, noted.seen);

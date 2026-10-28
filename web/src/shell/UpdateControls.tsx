@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
 import { failureCode } from "../api/client";
+import type { TerminalSessionsApi } from "../api/terminalSessions";
 import type { UpdateApi, UpdateJob, UpdatePreview, UpdateStatus } from "../api/update";
 import { useTranslate } from "../i18n/context";
+import { EngineEndingSessionsList } from "../terminal/EndingSessionsList";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Button } from "../ui/surface";
 import { updateMessage } from "./updateMessage";
@@ -10,10 +12,13 @@ import { isUpdateActive } from "./useUpdateStatus";
 type UpdateControlsProps = {
   status: UpdateStatus;
   api: UpdateApi;
+  // sessions is this machine's terminal API: the update restarts this
+  // machine's engine, whatever run target the terminal shows.
+  sessions: Pick<TerminalSessionsApi, "terminalSessions">;
   onStart: (job: UpdateJob) => void;
 };
 
-export function UpdateControls({ status, api, onStart }: UpdateControlsProps) {
+export function UpdateControls({ status, api, sessions, onStart }: UpdateControlsProps) {
   const t = useTranslate();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [preview, setPreview] = useState<UpdatePreview | null>(null);
@@ -72,6 +77,7 @@ export function UpdateControls({ status, api, onStart }: UpdateControlsProps) {
                 manager: preview.manager === "homebrew" ? "Homebrew" : preview.manager,
               })}</p>
               <p>{t("update.disconnectWarning")}</p>
+              <EngineEndingSessionsList api={sessions} />
               <p>{t("update.vaultWarning")}</p>
             </>
           }

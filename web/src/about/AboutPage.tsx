@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { aboutApi, type AboutApi } from "../api/about";
+import { terminalSessionsApi, type TerminalSessionsApi } from "../api/terminalSessions";
 import { updateApi, type UpdateApi } from "../api/update";
 import { useLanguage } from "../i18n/context";
 import { UpdateControls } from "../shell/UpdateControls";
@@ -18,9 +19,9 @@ import { UpdateOutput } from "./UpdateOutput";
 import { useUpdateActivity } from "./useUpdateActivity";
 import { useUpdateOutput } from "./useUpdateOutput";
 
-type AboutPageProps = { api?: AboutApi; updates?: UpdateApi };
+type AboutPageProps = { api?: AboutApi; updates?: UpdateApi; sessions?: Pick<TerminalSessionsApi, "terminalSessions"> };
 
-export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProps) {
+export function AboutPage({ api = aboutApi, updates = updateApi, sessions = terminalSessionsApi }: AboutPageProps) {
   const { t, locale } = useLanguage();
   const aboutLoad = useLoad(useCallback(() => api.about(), [api]));
   const about = aboutLoad.state === "loaded" ? aboutLoad.value : null;
@@ -89,7 +90,7 @@ export function AboutPage({ api = aboutApi, updates = updateApi }: AboutPageProp
           {reason === undefined ? null : <p>{t(updateMessage(reason))}</p>}
           <div className="flex flex-wrap items-baseline gap-4">
             <Button disabled={checking} onClick={() => { void checkUpdate(); }}>{t(checking ? "about.checking" : "about.check")}</Button>
-            {status === null ? null : <UpdateControls status={status} api={updates} onStart={(job) => setStatus({ ...status, canUpdate: false, job })} />}
+            {status === null ? null : <UpdateControls status={status} api={updates} sessions={sessions} onStart={(job) => setStatus({ ...status, canUpdate: false, job })} />}
             {/* The sidebar's progress dialog stays closed here, so its reload button is offered on the page. */}
             {status?.job?.state === "restarting" ? <Button onClick={() => window.location.reload()}>{t("update.reload")}</Button> : null}
           </div>
