@@ -28,7 +28,7 @@ function metadataWithOrphan(): Metadata {
       {
         identity: { path: "config", alias: "old-build" },
         tags: ["ci"],
-        note: "the retired builder",
+        colour: "#f97316",
         orphan: true,
       },
       { identity: { path: "config", alias: "bastion" }, tags: ["kept"] },
@@ -47,12 +47,12 @@ describe("OrphanPanel", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("says what the stranded note holds, so discarding it is an informed choice", () => {
+  it("says what the stranded settings hold, so discarding them is an informed choice", () => {
     render(<OrphanPanel metadata={metadataWithOrphan()} hosts={hosts} onSave={vi.fn()} />);
 
     expect(screen.getByText("old-build in config")).toBeInTheDocument();
     expect(screen.getByText(/tags ci/)).toBeInTheDocument();
-    expect(screen.getByText(/the retired builder/)).toBeInTheDocument();
+    expect(screen.getByText(/#f97316/)).toBeInTheDocument();
   });
 
   it("re-points the entry at the host the user chose and drops the server's flag", async () => {
@@ -66,7 +66,7 @@ describe("OrphanPanel", () => {
     expect(onSave).toHaveBeenCalledTimes(1);
     const [base, moved] = onSave.mock.calls[0]! as [HostMetadata, HostMetadata];
     expect(base.identity).toEqual({ path: "config", alias: "old-build" });
-    expect(moved).toMatchObject({ identity: { path: "config", alias: "nas" }, tags: ["ci"], note: "the retired builder" });
+    expect(moved).toMatchObject({ identity: { path: "config", alias: "nas" }, tags: ["ci"], colour: "#f97316" });
     expect(moved).not.toHaveProperty("orphan");
   });
 

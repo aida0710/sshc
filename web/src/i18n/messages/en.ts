@@ -1946,7 +1946,6 @@ export const en = {
   "orphan.entry": "{alias} in {path}",
   "orphan.noSettings": "no settings",
   "orphan.tags": "tags {tags}",
-  "orphan.note": "note “{note}”",
   "orphan.colour": "colour {colour}",
   "orphan.reassociateWith": "Re-associate {alias} with",
   "orphan.reassociatePlaceholder": "Re-associate with…",
@@ -2958,8 +2957,6 @@ export const en = {
   "host.comment": "Comment",
   "host.commentNote":
     "Written into the configuration file above the Host line, so it is there for anyone reading the file without sshc.",
-  "host.commentFromNote":
-    "This started as a note stored only by sshc. Saving it writes it into the configuration file and retires the note.",
   "host.saveComment": "Save comment",
   "host.commentSaved": "Saved the comment.",
   "host.os": "Operating system icon",

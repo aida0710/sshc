@@ -40,7 +40,7 @@ export function ConnectionActionPanel({
   const t = useTranslate();
   const identity = detail.form.entry.identity;
   const currentGroup = detail.form.entry.group ?? "";
-  const initialComment = detail.form.comment || detail.metadata.note || "";
+  const initialComment = detail.form.comment;
   const [renameTo, setRenameTo] = useState(identity.alias);
   const [group, setGroup] = useState(currentGroup);
   const [comment, setComment] = useState(initialComment);
@@ -83,7 +83,7 @@ export function ConnectionActionPanel({
       submitLabel: t("host.saveComment"),
       run: () => onComment(comment),
       body: <textarea id={fieldId} value={comment} onChange={(event) => setComment(event.target.value)} rows={3} className={control} />,
-      hint: detail.form.comment === "" && (detail.metadata.note ?? "") !== "" ? t("host.commentFromNote") : t("host.commentNote"),
+      hint: t("host.commentNote"),
     },
     file: {
       title: t("conn.moveToFile"),

@@ -29,14 +29,14 @@ func TestConnectionOSPersistsAndDoesNotOverwriteAnOverride(t *testing.T) {
 	}
 	metadata := overview.Metadata
 	metadata.Hosts[0].OS = "debian"
-	metadata.Hosts[0].Note = "keep this note"
+	metadata.Hosts[0].Tags = []string{"keep this note"}
 	writeServiceMetadata(t, service, workspace, metadata)
 	observed("redhat")
 	stored, _, err := service.metadata.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.Hosts[0].OS != "debian" || stored.Hosts[0].Note != "keep this note" || stored.Hosts[0].DetectedOS != "amazonlinux" {
+	if stored.Hosts[0].OS != "debian" || strings.Join(stored.Hosts[0].Tags, ",") != "keep this note" || stored.Hosts[0].DetectedOS != "amazonlinux" {
 		t.Fatalf("override lost: %+v", stored.Hosts[0])
 	}
 	if service.ObserveConnectionOS(target) != nil {
