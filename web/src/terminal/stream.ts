@@ -1,5 +1,7 @@
 
-export type ExitReport = { code: number; signal: string };
+// connectionLost is set when the SSH connection, not the program, ended; the
+// code is then -1 and means nothing.
+export type ExitReport = { code: number; signal: string; connectionLost?: boolean };
 export type ReplayReport = { start: number; next: number; end: number; truncated: boolean };
 
 export type StreamHandlers = {
@@ -75,7 +77,7 @@ export function openStream(ticket: string, streamPath: string, handlers: StreamH
       const exit = (message as { exit?: ExitReport }).exit;
       if (exit === undefined) return;
       exited = true;
-      handlers.onExit({ code: exit.code, signal: exit.signal });
+      handlers.onExit({ code: exit.code, signal: exit.signal, ...(exit.connectionLost === true ? { connectionLost: true } : {}) });
     } catch {
       return;
     }

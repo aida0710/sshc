@@ -5,6 +5,7 @@ import { ApiError, failureCode } from "../api/client";
 import type { OpenTerminalSessionRequest, TerminalSession, TerminalSessionList, TerminalSessionsApi as SessionsApi } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
+import type { ExitReport } from "./stream";
 
 // A hop or an authentication prompt should appear as soon as a person can
 // notice it; a settled list only needs to catch exits and notifications.
@@ -42,7 +43,9 @@ export type TerminalSessionsState = {
   close: (id: string) => Promise<void>;
   closeAll: () => Promise<void>;
   refresh: () => Promise<void>;
-  markExited: (id: string) => void;
+  // markExited records how a session ended as soon as its stream says so,
+  // before the next list shows it.
+  markExited: (id: string, exit: ExitReport) => void;
   moveToWorkspace: (id: string, workspaceId: string) => Promise<boolean>;
 };
 
@@ -295,12 +298,12 @@ export function useTerminalSessions(
     [api, applyMutation, translate],
   );
 
-  const markExited = useCallback((id: string) => {
+  const markExited = useCallback((id: string, exit: ExitReport) => {
     beginMutation();
     setSessions((current) =>
       current.map((session) =>
         session.id === id && session.exited === undefined
-          ? { ...session, state: "exited", exited: { code: 0, signal: "", at: "" } }
+          ? { ...session, state: "exited", exited: { ...exit, at: "" } }
           : session,
       ),
     );

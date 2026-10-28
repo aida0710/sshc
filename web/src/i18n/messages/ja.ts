@@ -839,6 +839,8 @@ export const ja = {
   "terminal.reconnectingIn": "再接続中（{attempt}/{limit}）・あと{seconds}秒で試します",
   "terminal.reconnectingNow": "再接続中（{attempt}/{limit}）・接続を試しています",
   "terminal.exitedWith": "終了コード{code}",
+  "terminal.exitedBySignal": "シグナル{signal}で終了",
+  "terminal.exitedConnectionLost": "接続が切れました",
   "terminal.localhost": "localhost",
   "terminal.emptyHeading": "開いているセッションがありません",
   "terminal.emptyHint":
@@ -1235,6 +1237,8 @@ export const ja = {
     "プログラムが終了コード{code}で終了しました。出力は、このセッションを閉じるまで表示されます。",
   "terminal.exitedWithSignal":
     "プログラムがシグナル{signal}で終了しました。出力は、このセッションを閉じるまで表示されます。",
+  "terminal.exitedWithConnectionLost":
+    "SSHの接続が切れました。出力は、このセッションを閉じるまで表示されます。",
   "inspector.lookHeading": "表示",
   "inspector.terminalHeading": "ターミナル",
   "inspector.terminalFollowsApp": "空欄はアプリ全体の設定に従う",

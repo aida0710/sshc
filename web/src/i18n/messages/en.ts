@@ -835,6 +835,8 @@ export const en = {
   "terminal.reconnectingIn": "reconnecting {attempt}/{limit} · next try in {seconds} s",
   "terminal.reconnectingNow": "reconnecting {attempt}/{limit} · connecting",
   "terminal.exitedWith": "exited {code}",
+  "terminal.exitedBySignal": "ended by {signal}",
+  "terminal.exitedConnectionLost": "connection lost",
   "terminal.localhost": "localhost",
   "terminal.emptyHeading": "No session is open",
   "terminal.emptyHint":
@@ -1236,6 +1238,8 @@ export const en = {
     "The program exited with status {code}. The output above is kept until you close this session.",
   "terminal.exitedWithSignal":
     "The program was ended by {signal}. The output above is kept until you close this session.",
+  "terminal.exitedWithConnectionLost":
+    "The SSH connection was lost. The output above is kept until you close this session.",
   "inspector.lookHeading": "Display",
   "inspector.terminalHeading": "Terminal",
   "inspector.terminalFollowsApp": "Empty follows the app's settings",
