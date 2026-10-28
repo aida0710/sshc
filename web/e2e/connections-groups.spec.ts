@@ -199,9 +199,10 @@ test("deletes the open connection from its header menu with the file's contents 
   expect(await installation.read("config")).toContain("Host beta");
 });
 
-// On a screen without a pointer that can hover, the 「…」 of a group or a connection is always shown, so what it
-// would cover on hover (the count, the address) makes room for it instead.
-test("keeps the counts and addresses clear of an always-shown 「…」 on a touch-only screen", async ({ browser, installation }) => {
+// On a PC-sized screen, the group list keeps its counts and shows the 「…」 only under the pointer, even where the
+// screen says it has no pointer that can hover (a long press opens the menu there). The connection list has room,
+// so its 「…」 stays shown there, beside the address rather than over it.
+test("keeps the group counts and shows the connection 「…」 beside the address on a touch-only screen", async ({ browser, installation }) => {
   await installWorkGroup(installation);
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
@@ -209,11 +210,8 @@ test("keeps the counts and addresses clear of an always-shown 「…」 on a tou
 
   const groups = page.getByRole("navigation", { name: "Groups" });
   const work = groups.getByRole("button", { name: "work", exact: true });
-  const menu = groups.getByRole("button", { name: "Actions for work" });
-  await expect(menu).toBeVisible();
-  const countBox = (await work.getByText(/^\d+$/).boundingBox())!;
-  const menuBox = (await menu.boundingBox())!;
-  expect(countBox.x + countBox.width).toBeLessThanOrEqual(menuBox.x);
+  await expect(work.getByText(/^\d+$/)).toBeVisible();
+  await expect(groups.getByRole("button", { name: "Actions for work" }).locator("xpath=ancestor::div[contains(@class, 'absolute')][1]")).toHaveCSS("opacity", "0");
 
   const alpha = tree.getByRole("button", { name: "alpha", exact: true });
   const alphaMenu = tree.getByRole("button", { name: /^Actions for alpha/ });
