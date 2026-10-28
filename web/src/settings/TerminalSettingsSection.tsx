@@ -26,7 +26,7 @@ import {
   settingsOf,
   type TerminalDraft,
 } from "./terminalSettingsDraft";
-import { useSettingsLoad } from "./useSettingsLoad";
+import { useLoad } from "../ui/useLoad";
 
 export type TerminalSettingsApi = Pick<SettingsApi, "terminalSettings" | "setTerminalSettings" | "localShellProfiles">;
 
@@ -84,7 +84,7 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
   const [tab, setTab] = useState<TerminalSettingsTab>("look");
   const save = useAsyncOperation();
   const loadSettings = useCallback(async () => { setDraft(draftOf(await api.terminalSettings())); }, [api]);
-  const settingsLoad = useSettingsLoad(loadSettings);
+  const settingsLoad = useLoad(loadSettings);
   const loaded = settingsLoad.state === "loaded";
 
   useEffect(() => {
