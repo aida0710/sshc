@@ -19,6 +19,7 @@ import { linkAtPoint, type ScreenPoint } from "./tappedLink";
 import { prefersNativeSelection } from "./nativeSelection";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
 import { attachTouchScroll } from "./touchScroll";
+import { terminalTouchScrollTarget } from "./touchScrollTarget";
 import { KeyBar, applyModifiers, encodeKey } from "./KeyBar";
 import { useModifierKeys } from "./useModifierKeys";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
@@ -376,7 +377,7 @@ export function TerminalView({
     // observeTerminalSize makes the first fit, once the rest of the terminal is attached.
     refit.current = fitAndSync;
 
-    const detachTouchScroll = attachTouchScroll(container, view, () => cellHeight(view, container), {
+    const detachTouchScroll = attachTouchScroll(container, terminalTouchScrollTarget(view), () => cellHeight(view, container), {
       selectionHeld: () => selectionHeldIn(container),
       reducedMotion: () => reducedMotionRef.current,
     });

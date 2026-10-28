@@ -1,5 +1,11 @@
+import type { ScreenPoint } from "./tappedLink";
 
-export type Scroller = { rows: number; scrollLines(amount: number): void };
+export type Scroller = { scrollLines(amount: number): void };
+// Finger is where the finger is now and what it first touched. Coasting after the finger lifts keeps its last place.
+export type Finger = ScreenPoint & { touched: EventTarget | null };
+// TouchScrollTarget is what a finger scrolls. It is told about the finger because a program that reports the mouse
+// wheel is told where the wheel turned.
+export type TouchScrollTarget = { scrollLines(amount: number, finger: Finger): void };
 type TouchScrollOptions = {
   now?: () => number;
   requestFrame?: (callback: FrameRequestCallback) => number;
@@ -98,22 +104,34 @@ export function newTouchScroll(view: Scroller, cellHeight: () => number, options
 // selection held inside the container wins over scrolling.
 export function attachTouchScroll(
   container: HTMLElement,
-  view: Scroller,
+  target: TouchScrollTarget,
   cellHeight: () => number,
   options: TouchScrollOptions & { selectionHeld: () => boolean },
 ): () => void {
-  const scroll = newTouchScroll(view, cellHeight, { ...options, canScroll: () => !options.selectionHeld() });
+  let finger: Finger = { clientX: 0, clientY: 0, touched: null };
+  const scroll = newTouchScroll({ scrollLines: (amount) => target.scrollLines(amount, finger) }, cellHeight, {
+    ...options,
+    canScroll: () => !options.selectionHeld(),
+  });
   const single = (event: TouchEvent): Touch | null =>
     event.touches.length === 1 ? (event.touches[0] ?? null) : null;
   const touchStart = (event: TouchEvent) => {
-    const finger = single(event);
-    if (finger !== null) scroll.start(finger.clientY);
-    else scroll.cancel();
+    const touch = single(event);
+    if (touch === null) {
+      scroll.cancel();
+      return;
+    }
+    finger = { clientX: touch.clientX, clientY: touch.clientY, touched: event.target };
+    scroll.start(touch.clientY);
   };
   const touchMove = (event: TouchEvent) => {
-    const finger = single(event);
-    if (finger !== null) scroll.move(finger.clientY);
-    else scroll.cancel();
+    const touch = single(event);
+    if (touch === null) {
+      scroll.cancel();
+      return;
+    }
+    finger = { ...finger, clientX: touch.clientX, clientY: touch.clientY };
+    scroll.move(touch.clientY);
   };
   const touchEnd = () => scroll.end();
   const selectionChanged = () => {
