@@ -137,6 +137,14 @@ type ExactInput interface {
 // 接続の種類ごとに違う制御列を送ってくる。
 const DefaultTerminalType = "xterm-256color"
 
+// ColorTerm は、sshc のターミナルが 24 ビット色を描けることを知らせる COLORTERM の値である。
+// TERM の xterm-256color は 256 色までしか言わないので、vim・bat・delta などはこれを見て
+// 真色を選ぶ。
+const ColorTerm = "truecolor"
+
+// TerminalProgram は、中のプログラムが sshc のターミナルを名前で見分ける TERM_PROGRAM の値である。
+const TerminalProgram = "sshc"
+
 // Size はターミナルの桁数と行数である。
 type Size struct {
 	Cols uint16
