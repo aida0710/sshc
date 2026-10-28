@@ -135,15 +135,8 @@ func (s *Service) planFileRename(graph *config.Graph, request EditRequest) (plan
 	if err != nil {
 		return planned{}, err
 	}
-	previous, _, err := s.readFile(change.Path)
-	if err != nil {
+	if err := s.addChange(&prepared, change); err != nil {
 		return planned{}, err
-	}
-	if !bytes.Equal(previous, change.Contents) {
-		prepared.changes = append(prepared.changes, change)
-		prepared.base[filepath.Clean(change.Path)] = previous
-		prepared.preview.Diffs = append(prepared.preview.Diffs,
-			BuildFileDiff(s.displayPath(change.Path), previous, change.Contents))
 	}
 	return prepared, nil
 }
