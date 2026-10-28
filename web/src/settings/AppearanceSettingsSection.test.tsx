@@ -80,7 +80,7 @@ describe("AppearanceSettingsSection", () => {
 
     // The test page has no stylesheet, so the colour on screen is the lavender fallback.
     // The preset stays beside the colour, for an older sshc that knows only the presets.
-    expect(api.setAppearanceSettings).toHaveBeenCalledWith({ accent: "lavender", accentColor: "#6550d0" });
+    expect(api.setAppearanceSettings).toHaveBeenCalledWith({ accent: "#6550d0" });
     expect(document.documentElement).toHaveAttribute("data-accent", "custom");
     expect(document.documentElement.style.getPropertyValue("--ui-custom-accent")).toBe("#6550d0");
     expect(await screen.findByRole("textbox", { name: "Custom colour code" })).toHaveValue("#6550d0");
@@ -94,7 +94,7 @@ describe("AppearanceSettingsSection", () => {
 
     await userEvent.clear(code);
     await userEvent.type(code, "3FA86B{Enter}");
-    expect(api.setAppearanceSettings).toHaveBeenLastCalledWith({ accent: "lavender", accentColor: "#3fa86b" });
+    expect(api.setAppearanceSettings).toHaveBeenLastCalledWith({ accent: "#3fa86b" });
 
     await userEvent.clear(code);
     await userEvent.type(code, "green{Enter}");

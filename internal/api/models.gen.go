@@ -32,33 +32,6 @@ func (e AboutManager) Valid() bool {
 	}
 }
 
-// Defines values for AppearanceSettingsAccent.
-const (
-	Blue     AppearanceSettingsAccent = "blue"
-	Lavender AppearanceSettingsAccent = "lavender"
-	Mono     AppearanceSettingsAccent = "mono"
-	Pink     AppearanceSettingsAccent = "pink"
-	Sky      AppearanceSettingsAccent = "sky"
-)
-
-// Valid indicates whether the value is a known member of the AppearanceSettingsAccent enum.
-func (e AppearanceSettingsAccent) Valid() bool {
-	switch e {
-	case Blue:
-		return true
-	case Lavender:
-		return true
-	case Mono:
-		return true
-	case Pink:
-		return true
-	case Sky:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for AutoSyncPhase.
 const (
 	AutoSyncPhaseBlocked AutoSyncPhase = "blocked"
@@ -743,12 +716,8 @@ type AliasRequest struct {
 
 // AppearanceSettings defines model for AppearanceSettings.
 type AppearanceSettings struct {
-	Accent      *AppearanceSettingsAccent `json:"accent,omitempty"`
-	AccentColor *string                   `json:"accentColor,omitempty"`
+	Accent *string `json:"accent,omitempty"`
 }
-
-// AppearanceSettingsAccent defines model for AppearanceSettings.Accent.
-type AppearanceSettingsAccent string
 
 // AssignCredentialRequest defines model for AssignCredentialRequest.
 type AssignCredentialRequest struct {

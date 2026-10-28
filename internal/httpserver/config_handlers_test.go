@@ -174,7 +174,7 @@ func TestTheAccentIsSavedAndAnUnknownOneIsRefused(t *testing.T) {
 	if err := json.Unmarshal(read.Body.Bytes(), &metadata); err != nil {
 		t.Fatal(err)
 	}
-	if metadata.Appearance == nil || metadata.Appearance.Accent == nil || *metadata.Appearance.Accent != api.Blue {
+	if metadata.Appearance == nil || metadata.Appearance.Accent == nil || *metadata.Appearance.Accent != "blue" {
 		t.Fatalf("metadata appearance = %#v, want accent blue; read %d", metadata.Appearance, read.Code)
 	}
 
@@ -184,10 +184,10 @@ func TestTheAccentIsSavedAndAnUnknownOneIsRefused(t *testing.T) {
 	}
 }
 
-func TestACustomAccentColourIsSavedBesideItsPresetAndReadBack(t *testing.T) {
+func TestACustomAccentColourIsSavedAsTheAccentAndReadBack(t *testing.T) {
 	harness := newConfigHarness(t)
 
-	saved := harness.call(t, http.MethodPut, "/api/v1/metadata/appearance", map[string]any{"accent": "sky", "accentColor": "#3fa86b"}, true, true)
+	saved := harness.call(t, http.MethodPut, "/api/v1/metadata/appearance", map[string]any{"accent": "#3fa86b"}, true, true)
 	if saved.Code != http.StatusOK {
 		t.Fatalf("save = %d, body %s", saved.Code, saved.Body.String())
 	}
@@ -198,14 +198,13 @@ func TestACustomAccentColourIsSavedBesideItsPresetAndReadBack(t *testing.T) {
 	if err := json.Unmarshal(read.Body.Bytes(), &metadata); err != nil {
 		t.Fatal(err)
 	}
-	if metadata.Appearance == nil || metadata.Appearance.Accent == nil || *metadata.Appearance.Accent != api.Sky ||
-		metadata.Appearance.AccentColor == nil || *metadata.Appearance.AccentColor != "#3fa86b" {
-		t.Fatalf("metadata appearance = %#v, want sky with #3fa86b; read %d", metadata.Appearance, read.Code)
+	if metadata.Appearance == nil || metadata.Appearance.Accent == nil || *metadata.Appearance.Accent != "#3fa86b" {
+		t.Fatalf("metadata appearance = %#v, want #3fa86b; read %d", metadata.Appearance, read.Code)
 	}
 
-	refused := harness.call(t, http.MethodPut, "/api/v1/metadata/appearance", map[string]any{"accentColor": "green"}, true, true)
+	refused := harness.call(t, http.MethodPut, "/api/v1/metadata/appearance", map[string]any{"accent": "green"}, true, true)
 	if refused.Code != http.StatusBadRequest {
-		t.Fatalf("unreadable accent colour = %d, want 400; body %s", refused.Code, refused.Body.String())
+		t.Fatalf("unreadable accent = %d, want 400; body %s", refused.Code, refused.Body.String())
 	}
 }
 

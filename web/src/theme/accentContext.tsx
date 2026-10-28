@@ -21,15 +21,14 @@ type AccentState = AccentChoice & {
 
 const AccentContext = createContext<AccentState | null>(null);
 
+// The engine keeps one accent: a preset's name or a colour of one's own.
 function choiceFrom(settings: AppearanceSettings): AccentChoice {
-  return {
-    accent: isAccent(settings.accent) ? settings.accent : defaultAccentChoice.accent,
-    customColor: isAccentColor(settings.accentColor) ? settings.accentColor : null,
-  };
+  if (isAccentColor(settings.accent)) return { accent: defaultAccentChoice.accent, customColor: settings.accent };
+  return { accent: isAccent(settings.accent) ? settings.accent : defaultAccentChoice.accent, customColor: null };
 }
 
 function settingsFrom(choice: AccentChoice): AppearanceSettings {
-  return choice.customColor === null ? { accent: choice.accent } : { accent: choice.accent, accentColor: choice.customColor };
+  return { accent: choice.customColor ?? choice.accent };
 }
 
 // AccentProvider keeps <html data-accent> on the accent saved in this
