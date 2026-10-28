@@ -62,7 +62,7 @@ func TestMoveHosts同じファイルの2件を移すと両方とMetadataが移�
 	}
 	metadata := loadMetadata(t, service)
 	metadata.Hosts = []HostMetadata{
-		{Identity: HostIdentity{Path: "config", Alias: "bastion"}, Note: "first"},
+		{Identity: HostIdentity{Path: "config", Alias: "bastion"}, Tags: []string{"first"}},
 		{Identity: HostIdentity{Path: "config", Alias: "second"}, Tags: []string{"second"}},
 	}
 	seedMetadata(t, service, metadata)
@@ -197,7 +197,7 @@ func TestDeleteHosts同一ファイル2件と別ファイル1件を消すと単�
 	path := writeGroupFile(t, workspace, "work", "hosts.conf", base)
 	declareGroup(t, service, "work")
 	metadata := loadMetadata(t, service)
-	metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: path, Alias: "first"}, Note: "keep orphan"}}
+	metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: path, Alias: "first"}, Tags: []string{"keep orphan"}}}
 	seedMetadata(t, service, metadata)
 	metadataBefore := readFile(t, workspace, service.displayPath(service.metadata.Path()))
 	// HostForm が画面へ返す line/raw/commentLines を使い、removeHostBlock と

@@ -6122,7 +6122,6 @@ components:
           description: Last operating system detected after connecting.
         detectedOSBinding: { type: string, maxLength: 64 }
         colour: { type: string }
-        note: { type: string }
         order: { type: integer }
         orphan: { type: boolean }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
@@ -6166,7 +6165,6 @@ components:
       properties:
         name: { type: string }
         colour: { type: string }
-        note: { type: string }
         order: { type: integer }
         # 表示だけのもの。他のグループを収めることが目的のグループは、接続の
         # ツリーに自分自身として見せるものを持たない。これはその見出しをツリーから
@@ -6605,7 +6603,6 @@ components:
         directory: { type: string }
         keyDirectory: { type: string }
         colour: { type: string }
-        note: { type: string }
         order: { type: integer }
         settings: { type: array, items: { $ref: "#/components/schemas/Setting" } }
         memberCount: { type: integer }

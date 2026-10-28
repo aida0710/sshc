@@ -661,7 +661,7 @@ func TestEveryEditKindTheApplicationAcceptsPassesValidation(t *testing.T) {
 		case application.EditMetadata:
 			request.Alias = "nas"
 			request.HostMetadata = &application.HostMetadata{
-				Identity: application.HostIdentity{Path: request.Path, Alias: "nas"}, Note: "rack 3",
+				Identity: application.HostIdentity{Path: request.Path, Alias: "nas"}, Colour: "#f97316",
 			}
 		}
 		if err := validateEditRequest(request); err != nil {
