@@ -52,3 +52,34 @@ for (const mode of [
     await expect(page.getByRole("button", { name: "New workspace", exact: true })).toBeFocused();
   });
 }
+
+test("answers a program that asks for the kitty keyboard protocol before turning it on", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "stty and od require a POSIX shell");
+  // Asks with CSI ? u, as fish, Neovim and Helix do, then turns on
+  // disambiguation and reads the Escape key that follows.
+  await installation.write("kitty-query.sh", [
+    "saved=$(stty -g)",
+    "trap 'stty \"$saved\"; printf \"\\033[<u\"' EXIT",
+    "stty raw -echo",
+    "printf '\\033[?u'",
+    "before=$(dd bs=1 count=5 2>/dev/null | od -An -c | tr -d ' \\n')",
+    "printf '\\033[>1u\\033[?u'",
+    "after=$(dd bs=1 count=5 2>/dev/null | od -An -c | tr -d ' \\n')",
+    "printf 'flags:%s:%s\\r\\nkey-ready\\r\\n' \"$before\" \"$after\"",
+    "escape=$(dd bs=1 count=5 2>/dev/null | od -An -c | tr -d ' \\n')",
+    "printf 'escape:%s\\r\\n' \"$escape\"",
+    "",
+  ].join("\n"));
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/);
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type("sh ~/.ssh/kitty-query.sh");
+  await page.keyboard.press("Enter");
+
+  await expect(screen).toContainText("flags:033[?0u:033[?1u", { timeout: 20_000 });
+  await expect(screen).toContainText("key-ready");
+  await page.keyboard.press("Escape");
+  await expect(screen).toContainText("escape:033[27u");
+});
