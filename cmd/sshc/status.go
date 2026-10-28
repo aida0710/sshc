@@ -42,17 +42,17 @@ func runStatus(ctx context.Context, environment commandEnvironment, asJSON bool)
 
 // verifiedStatus は、handoff の engine が秘密を持つことを確かめてから、その engine に
 // 状態を尋ねる。
-func verifiedStatus(ctx context.Context, stateDir string, client *http.Client) (handoff.Handoff, statusAnswer, error) {
+func verifiedStatus(ctx context.Context, stateDir string, client *http.Client) (handoff.Handoff, handoff.EngineStatus, error) {
 	found, err := verifiedHandoff(ctx, stateDir, client)
 	if err != nil {
-		return handoff.Handoff{}, statusAnswer{}, err
+		return handoff.Handoff{}, handoff.EngineStatus{}, err
 	}
 	answer, err := requestStatus(ctx, found, client)
 	return found, answer, err
 }
 
 // writeStatus は status と vault status で共有する表形式を出力する。
-func writeStatus(out io.Writer, found handoff.Handoff, answer statusAnswer) {
+func writeStatus(out io.Writer, found handoff.Handoff, answer handoff.EngineStatus) {
 	rows := [][2]string{
 		{"engine", fmt.Sprintf("running (pid %d)", found.PID)},
 		{"address", found.URL},
@@ -75,7 +75,7 @@ func writeStatus(out io.Writer, found handoff.Handoff, answer statusAnswer) {
 }
 
 // vaultState は Vault の状態を CLI 表示用の値に変換する。
-func vaultState(answer statusAnswer) string {
+func vaultState(answer handoff.EngineStatus) string {
 	switch {
 	case answer.Vault && answer.Unlocked && answer.Passwordless:
 		return "unlocked (passwordless)"
@@ -90,20 +90,8 @@ func vaultState(answer statusAnswer) string {
 
 // requestStatus は取得済みの handoff が示す engine に状態を要求する。
 // 要求中の接続先変更を防ぐため handoff は読み直さない。
-func requestStatus(ctx context.Context, found handoff.Handoff, client *http.Client) (statusAnswer, error) {
+func requestStatus(ctx context.Context, found handoff.Handoff, client *http.Client) (handoff.EngineStatus, error) {
 	return fetchEngineStatus(ctx, client, found, httpserver.StatusPath)
-}
-
-// statusAnswer は engine の状態応答である。
-type statusAnswer struct {
-	Passwordless    bool          `json:"passwordless"`
-	Owner           handoff.Owner `json:"owner"`
-	Version         string        `json:"version"`
-	ProtocolVersion int           `json:"protocolVersion"`
-	// Vault は、開けるべき錠がそもそも有るか。
-	Vault    bool `json:"vault"`
-	Unlocked bool `json:"unlocked"`
-	Sessions int  `json:"sessions"`
 }
 
 // verifiedHandoff は handoff を読み、その URL にいる process が handoff の秘密を持つ

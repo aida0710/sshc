@@ -10,6 +10,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"time"
+
+	"sshc/internal/handoff"
 )
 
 // maxForwardedBody は、取り次ぐターミナルの API の要求の本文の上限である。取り次ぐのは
@@ -161,8 +163,8 @@ func forwardedRequest(ctx context.Context, r *http.Request, session *remoteSessi
 // 受け取った資格を付ける。
 func authorizeRemoteRequest(request *http.Request, session *remoteSession) {
 	request.Header.Set("Accept", "application/json")
-	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: session.cookie})
-	request.Header.Set(csrfHeaderName, session.csrf)
+	request.AddCookie(&http.Cookie{Name: handoff.SessionCookie, Value: session.cookie})
+	request.Header.Set(handoff.CSRFHeader, session.csrf)
 	// 接続先のエンジンは、同じページからの要求だけを受け付ける。このマシンのエンジンは
 	// ブラウザからの要求をこのマシンの規則で確かめ終えているので、接続先の規則を満たして送る。
 	request.Header.Set("Sec-Fetch-Site", "same-origin")
