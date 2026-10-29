@@ -250,7 +250,7 @@ async function openShellFromNavigation(page: Page) {
   await expect(dialog).toBeHidden();
 }
 
-test("opening and closing sessions leaves the keyboard down until the terminal or the text box is tapped", async ({ page, installation }) => {
+test("opening and closing sessions leaves the keyboard down until a tap types into the text box", async ({ page, installation }) => {
   await page.setViewportSize({ width: 390, height: 640 });
   await openApplication(page, installation);
   // The navigation is closed (and hidden from the accessibility tree) while a terminal is shown.
@@ -272,11 +272,16 @@ test("opening and closing sessions leaves the keyboard down until the terminal o
   await expect(drawnRows(page).filter({ visible: true })).toContainText(/[$#%>]/);
   expect(await terminalInputFocused(page)).toBe(false);
 
-  // A tap on the text box gives it the focus.
+  // A tap on the terminal types into the text box, where Japanese is composed before it is sent.
   await page.locator("[data-navigation-backdrop]").tap({ position: { x: 370, y: 300 } });
-  const field = page.getByLabel("Text to send to the terminal", { exact: true });
-  await field.tap();
-  await expect(field).toBeFocused();
+  const screenBox = (await drawnRows(page).filter({ visible: true }).boundingBox())!;
+  await page.touchscreen.tap(screenBox.x + screenBox.width / 2, screenBox.y + screenBox.height / 2);
+  await expect(page.getByLabel("Text to send to the terminal", { exact: true })).toBeFocused();
+  // The key bar's Ctrl hands the next key to the terminal itself. An emulated phone raises no keyboard, so
+  // the page is told the one a real phone raises for the text box is up (useAppViewport).
+  await page.evaluate(() => { document.documentElement.dataset.keyboardOpen = "true"; });
+  await page.getByLabel("On-screen keys", { exact: true }).getByRole("button", { name: "Ctrl", exact: true }).tap();
+  await expect.poll(() => terminalInputFocused(page)).toBe(true);
 });
 
 test("the navigation on a phone links only Home and gives the sessions the height", async ({ page, installation }) => {
@@ -448,6 +453,24 @@ test("a swipe across the page opens the navigation and a swipe back closes it", 
   await swipe(page, { x: 260, y: 360 }, { x: 40, y: 360 });
   await expect(navigation).toHaveAttribute("data-navigation-open", "false");
   await expect(navigation).not.toBeInViewport();
+});
+
+test("a sideways swipe over the terminal opens the navigation, and one up and down scrolls the terminal", async ({ page, installation }) => {
+  await mockTerminalSession(page, longOutput);
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  const rows = drawnRows(page).filter({ visible: true });
+  await expect(rows).toContainText("line 80");
+  const box = (await rows.boundingBox())!;
+  const navigation = page.locator("[data-app-navigation]");
+
+  await swipe(page, { x: 120, y: box.y + box.height * 0.3 }, { x: 125, y: box.y + box.height * 0.8 });
+  await expect(rows).not.toContainText("line 80");
+  await expect(navigation).toHaveAttribute("data-navigation-open", "false");
+
+  await swipe(page, { x: 80, y: box.y + box.height / 2 }, { x: 330, y: box.y + box.height / 2 + 6 });
+  await expect(navigation).toHaveAttribute("data-navigation-open", "true");
+  await expect(navigation).toBeInViewport();
 });
 
 // placedByHand reads whether a swipe left the navigation's position written on it rather than in the
