@@ -5,7 +5,8 @@ import { ActionMenu } from "../../ui/ActionMenu";
 import { draggableCursor } from "../../ui/dragAndDropLook";
 import { SessionDestinationLine } from "../SessionDestinationLine";
 import { sessionDragMimeType } from "../sessionDrag";
-import { sessionMarkerClass } from "../sessionStatus";
+import { rowProgramStatus, type SeenProgramStatus } from "../programStatus";
+import { SessionMarker } from "../SessionMarker";
 import type { UnreadSessions } from "../terminalNotifications";
 import { terminalDisplayTitle } from "../terminalPresentation";
 import { paneSessionIds } from "./layout";
@@ -14,11 +15,12 @@ import { SplitLayoutMap } from "./SplitLayoutMap";
 
 // The split groups in the sidebar. Each group shows how its panes are arranged and, under it,
 // the sessions it holds, so it is clear what opening it will show.
-export function SplitGroupList({ groups, sessions, selected, unreadBySession = new Set(), onSelect, onSelectSession, onDissolve }: {
+export function SplitGroupList({ groups, sessions, selected, unreadBySession = new Set(), seenProgramStatus = new Map(), onSelect, onSelectSession, onDissolve }: {
   groups: SplitGroup[];
   sessions: TerminalSession[];
   selected: number | null;
   unreadBySession?: UnreadSessions;
+  seenProgramStatus?: SeenProgramStatus;
   onSelect: (number: number) => void;
   // onSelectSession opens a session of a group, which shows the group with that pane focused.
   onSelectSession: (sessionId: string) => void;
@@ -40,6 +42,7 @@ export function SplitGroupList({ groups, sessions, selected, unreadBySession = n
               return session === undefined ? [] : [session];
             })}
             unreadBySession={unreadBySession}
+            seenProgramStatus={seenProgramStatus}
             onSelect={() => onSelect(group.number)} onSelectSession={onSelectSession} onDissolve={() => onDissolve(group.number)} />
         ))}
       </ul>
@@ -47,11 +50,12 @@ export function SplitGroupList({ groups, sessions, selected, unreadBySession = n
   );
 }
 
-function SplitGroupRow({ group, members, selected, unreadBySession, onSelect, onSelectSession, onDissolve }: {
+function SplitGroupRow({ group, members, selected, unreadBySession, seenProgramStatus, onSelect, onSelectSession, onDissolve }: {
   group: SplitGroup;
   members: TerminalSession[];
   selected: boolean;
   unreadBySession: UnreadSessions;
+  seenProgramStatus: SeenProgramStatus;
   onSelect: () => void;
   onSelectSession: (sessionId: string) => void;
   onDissolve: () => void;
@@ -81,6 +85,7 @@ function SplitGroupRow({ group, members, selected, unreadBySession, onSelect, on
         {members.map((session) => {
           const title = terminalDisplayTitle(session);
           const active = session.id === activeSessionId;
+          const programStatus = rowProgramStatus(session, seenProgramStatus);
           return (
             // A row drags like the session's row in the workspaces below: onto a pane's edge to put it there.
             <li key={session.id} draggable className={draggableCursor}
@@ -91,11 +96,11 @@ function SplitGroupRow({ group, members, selected, unreadBySession, onSelect, on
               {/* The dot sits where the dots of the workspace rows below sit. */}
               <button type="button" aria-label={t("splitView.groupSession", { name, title })} aria-describedby={`split-member-${session.id}`} aria-current={active ? "true" : undefined} onClick={() => onSelectSession(session.id)}
                 className={`flex min-h-10 w-full min-w-0 items-start gap-2.5 rounded-[7px] py-1 pl-4 pr-2 text-left hover:bg-hover md:min-h-0 md:py-[3px] ${draggableCursor} ${active ? "ring-1 ring-inset ring-accent/45" : ""}`}>
-                <span aria-hidden="true" className={`mt-[5px] size-2 shrink-0 rounded-full ${sessionMarkerClass(session, unreadBySession.has(session.id))}`} />
+                <SessionMarker session={session} unread={unreadBySession.has(session.id)} programStatus={programStatus} />
                 {/* As in the workspace rows, the name gets the whole line and the destination is under it. */}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[12.5px] leading-[18px] text-ink">{title}</span>
-                  <SessionDestinationLine session={session} id={`split-member-${session.id}`} />
+                  <SessionDestinationLine session={session} programStatus={programStatus} id={`split-member-${session.id}`} />
                 </span>
               </button>
             </li>

@@ -10,7 +10,9 @@ import { Icon } from "../ui/icons";
 import { describeForwardProblem } from "./forwardProblem";
 import { sessionDragMimeType } from "./sessionDrag";
 import { SessionDestinationLine } from "./SessionDestinationLine";
-import { sessionMarkerClass, sessionStatusText } from "./sessionStatus";
+import { SessionMarker } from "./SessionMarker";
+import { sessionStatusText } from "./sessionStatus";
+import { programStatusText, rowProgramStatus, type SeenProgramStatus } from "./programStatus";
 import { SessionRowMenu, type WorkspaceMoveTarget } from "./SessionRowMenu";
 import { terminalDisplayTitle } from "./terminalPresentation";
 import { notificationText, type UnreadSessions } from "./terminalNotifications";
@@ -30,6 +32,7 @@ type SessionListProps = {
   atSessionLimit: boolean;
   busy: boolean;
   unreadBySession?: UnreadSessions;
+  seenProgramStatus?: SeenProgramStatus;
   onSelect: (id: string) => void;
   canSplitSession?: (id: string) => boolean;
   onSplitSession?: (id: string, edge: PaneEdge) => void;
@@ -72,6 +75,7 @@ export function SessionList({
   atSessionLimit,
   busy,
   unreadBySession = new Set(),
+  seenProgramStatus = new Map(),
   onSelect,
   canSplitSession,
   onSplitSession,
@@ -174,12 +178,11 @@ export function SessionList({
             const displayTitle = terminalDisplayTitle(session);
             const splitGroup = splitGroupBySession?.get(session.id);
             const unread = unreadBySession.has(session.id);
-            const status = sessionStatusText(t, session);
+            const programStatus = rowProgramStatus(session, seenProgramStatus);
+            const status = programStatus === null ? sessionStatusText(t, session) : programStatusText(t, programStatus);
             const isSelected = session.id === selected;
             const statusId = `session-status-${session.id}`;
-            const marker = (
-              <span aria-hidden="true" className={`mt-[5px] size-2 shrink-0 rounded-full ${sessionMarkerClass(session, unread)}`} />
-            );
+            const marker = <SessionMarker session={session} unread={unread} programStatus={programStatus} />;
             // The dot carries the status for the eye; screen readers get it as the row's description.
             const statusDescription = (
               <span id={statusId} className="sr-only">
@@ -292,7 +295,7 @@ export function SessionList({
                             </span>
                           )}
                         </span>
-                        <SessionDestinationLine session={session} />
+                        <SessionDestinationLine session={session} programStatus={programStatus} />
                         {details}
                         {statusDescription}
                       </span>

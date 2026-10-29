@@ -12,6 +12,7 @@ The sshc terminal understands the standard escape sequences that programs alread
 | Rename the pane | OSC 0, OSC 1, OSC 2 | zsh/bash prompt setup, vim, tmux, Claude Code, Codex |
 | Raise a notification | OSC 9 (iTerm2 style), OSC 99 (kitty style), OSC 777 (rxvt/tmux style) | Claude Code, Codex, notify commands such as `cmux notify` |
 | Show progress | OSC 9;4 (ConEmu style) | `cargo`, `winget`, and other commands that report progress to Windows Terminal or Ghostty |
+| Say what a program is doing | OSC 7501 (Program Status Protocol) | Programs that support it, or a shell function |
 
 ## Pane titles
 
@@ -67,6 +68,21 @@ To try it, run this inside a pane:
 
 ```sh
 printf '\e]9;4;1;40\a'; sleep 3; printf '\e]9;4;0\a'
+```
+
+## Program status
+
+When a program reports its state (working, waiting for you, done, failed) with [OSC 7501](https://control-codes.page/proposals/osc-7501/), the session list turns the row's dot into a status mark and shows the state and the program's words on the second line, such as "Needs permission · Run rm -rf build?".
+
+- Working and waiting (for permission, an answer or a sign-in) clear when the program returns to the shell prompt (OSC 133 A) or the shell is replaced.
+- Done and failed clear once you view the session. As with unread notifications, this browser decides whether you have seen it.
+- Idle shows no mark. A session that is connecting, reconnecting or has ended shows its connection state instead.
+- It raises no desktop notification and plays no sound.
+
+To try it, run this inside a pane, then open another session and wait:
+
+```sh
+printf '\e]7501;state=working\e\\'; sleep 5; printf '\e]7501;state=done:msg=%s\e\\' "$(printf 'Docs built' | base64)"
 ```
 
 ## Receiving Claude Code notifications

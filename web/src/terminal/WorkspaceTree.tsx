@@ -18,6 +18,7 @@ import { WorkspaceCommandCenter } from "./commands/WorkspaceCommandCenter";
 import { SessionList } from "./SessionList";
 import type { TerminalSessionsState } from "./sessions";
 import type { UnreadSessions } from "./terminalNotifications";
+import type { SeenProgramStatus } from "./programStatus";
 import type { TerminalWorkspacesState } from "./useTerminalWorkspaces";
 import { DeleteWorkspaceDialog, WorkspaceNameDialog } from "./WorkspaceDialogs";
 import { WorkspaceRow } from "./WorkspaceRow";
@@ -39,6 +40,7 @@ type WorkspaceTreeProps = {
   selected: string | null;
   splitGroupBySession?: ReadonlyMap<string, SplitGroup>;
   unreadBySession?: UnreadSessions;
+  seenProgramStatus?: SeenProgramStatus;
   onSelect: (id: string) => void;
   canSplitSession?: (id: string) => boolean;
   onSplitSession?: (id: string, edge: PaneEdge) => void;
@@ -75,6 +77,7 @@ export function WorkspaceTree({
   selected,
   splitGroupBySession,
   unreadBySession = new Set(),
+  seenProgramStatus = new Map(),
   onSelect,
   canSplitSession,
   onSplitSession,
@@ -293,6 +296,7 @@ export function WorkspaceTree({
                     atSessionLimit={atSessionLimit}
                     busy={terminalSessions.busy}
                     unreadBySession={unreadBySession}
+                    seenProgramStatus={seenProgramStatus}
                     onSelect={onSelect}
                     {...(canSplitSession === undefined ? {} : { canSplitSession })}
                     {...(onSplitSession === undefined ? {} : { onSplitSession })}
