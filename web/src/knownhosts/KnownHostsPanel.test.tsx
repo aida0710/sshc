@@ -71,6 +71,22 @@ describe("KnownHostsPanel", () => {
     expect(within(row).getByText(/SHA256:bytFrSjx/)).toBeInTheDocument();
   });
 
+  it("names the saved connections of a hashed entry, and says only that it is hashed when none is known", async () => {
+    const hashed = { ...entry, hosts: ["|1|u94nmAngiqvuJf3A9CcExCUb2oE=|tDiE1i4vIaZJu8QmzSCwb54jMP4="], hashed: true, comment: "" };
+    const api = buildApi({
+      knownHosts: vi.fn().mockResolvedValue({
+        path: "~/.ssh/known_hosts",
+        entries: [{ ...hashed, aliases: ["bastion", "jump"] }, { ...hashed, line: 3, digest: "b".repeat(64), keyType: "ssh-rsa" }],
+      }),
+    });
+    render(<KnownHostsPanel api={api} />);
+
+    expect(await screen.findByRole("row", { name: /bastion, jump \(hashed\)/ })).toBeInTheDocument();
+    const unnamed = screen.getByRole("row", { name: /ssh-rsa/ });
+    expect(within(unnamed).getByText("(hashed)")).toBeInTheDocument();
+    expect(screen.queryByText(/\|1\|/)).toBeNull();
+  });
+
   it("keeps the listing of the latest query when an earlier search answers last", async () => {
     const path = "~/.ssh/known_hosts";
     const web0 = { ...entry, line: 3, hosts: ["web0.example.com"] };
