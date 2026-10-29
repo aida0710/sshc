@@ -50,6 +50,7 @@ import { attachOSC9Progress, noTerminalProgress, type TerminalProgress } from ".
 import { TerminalProgressBar } from "./TerminalProgressBar";
 import { attachInlineImages } from "./inlineImages";
 import { applyCurrentUnicodeWidths } from "./unicodeWidths";
+import { attachGraphemeClusterMode } from "./graphemeClusterMode";
 import { attachCommandMarkers } from "./commandMarkers";
 import { attachVisibilityReportQuestions } from "./visibilityReports";
 import { isTerminalShown, watchTerminalShown } from "./terminalVisibility";
@@ -378,6 +379,10 @@ export function TerminalView({
       reply: (sequence) => sendInput.current(sequence),
       copied: () => setTerminalNotice(t("terminal.osc52Copied")),
     });
+    const graphemeClusterMode = attachGraphemeClusterMode(view, {
+      replaying: () => output.isReplaying(),
+      reply: (sequence) => sendInput.current(sequence),
+    });
     const osc7Directory = attachOSC7Directory(view.parser, setCurrentDirectory);
     const osc9Directory = attachOSC9Directory(view.parser, setCurrentDirectory);
     const osc9Progress = attachOSC9Progress(view.parser, setProgramProgress);
@@ -535,6 +540,7 @@ export function TerminalView({
       detachClipboard();
       detachOsc52();
       kittyClipboard.dispose();
+      graphemeClusterMode.dispose();
       output.dispose();
       osc7Directory.dispose();
       osc9Directory.dispose();

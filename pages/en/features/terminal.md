@@ -93,6 +93,8 @@ SIXEL, iTerm2 inline images (OSC 1337 File=), and the kitty graphics protocol ar
 
 Character widths follow the Unicode 17 tables. Emoji, including recent ones, take two cells, so programs that print emoji (Claude Code, for example) stay aligned with the text after them.
 
+While a program has mode 2027 (grapheme clusters) on, emoji joined with ZWJ (👨‍👩‍👧), flags (🇯🇵), emoji with a skin tone (👍🏽) and characters with VS16 (❤️) are drawn as one character in two cells. Otherwise each character is counted as wcwidth counts it (six cells for the family), so that the cursor stays where programs counting with wcwidth expect it.
+
 ## Titles and notifications
 
 Titles set by shells and programs through OSC 0/1/2 become the pane header and the session list name. Notifications sent through OSC 9/99/777 become unread marks, and browser notifications with a sound while the sshc tab is in the background. Progress reported through OSC 9;4 appears as a thin line along the bottom edge of the pane header and its entry in the session list. The list shows progress even while you are viewing another session. See [Titles and notifications](/en/terminal/notifications) for details, including the Claude Code and Codex settings.

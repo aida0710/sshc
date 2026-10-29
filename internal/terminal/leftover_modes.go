@@ -28,6 +28,7 @@ const leftoverModeReset = "" +
 	// プログラムがpopしたときに、終わったプログラムのフラグへ戻る。99は、xterm.jsが画面ごとに
 	// 持つスタックの上限（16）より大きい数である。
 	"\x1b[<99u\x1b[=0;1u" +
-	// DECSTR: 文字の属性、スクロール範囲、カーソルの表示、カーソルキーとキーパッドのモード。
+	// DECSTR: 文字の属性、スクロール範囲、カーソルの表示、カーソルキーとキーパッドのモード、
+	// 書記素クラスタ（mode 2027、web/src/terminal/graphemeClusterMode.ts）。
 	// xterm.jsでは、代替画面の側に残したkitty keyboard protocolのフラグとスタックもここで戻る。
 	"\x1b[!p"
