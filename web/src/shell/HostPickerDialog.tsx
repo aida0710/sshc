@@ -8,6 +8,7 @@ import { formatDateTime } from "../ui/format";
 import { ModalShell } from "../ui/ModalShell";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { iconAction } from "../ui/form";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 
 type HostChoice = { alias: string; group: string; hostName: string; user: string };
 
@@ -49,7 +50,7 @@ export function HostPickerDialog({
   value = "",
   local = noLocal,
   loadRecent = loadDefaultRecent,
-  initialFocus = "search",
+  initialFocus,
   returnFocusRef,
   onChoose,
   onChooseLocal,
@@ -62,6 +63,8 @@ export function HostPickerDialog({
   value?: string;
   local?: LocalChoice[];
   loadRecent?: () => Promise<{ connections: RecentConnection[] }>;
+  // initialFocus is where focus lands when the picker opens. Left out, it is the search on a PC and Close on a
+  // phone, where focusing the search would raise the keyboard over the list the person came to pick from.
   initialFocus?: "search" | "close";
   returnFocusRef?: RefObject<HTMLElement | null>;
   onChoose: (alias: string) => void;
@@ -72,6 +75,8 @@ export function HostPickerDialog({
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"recent" | "groups">("groups");
   const [recent, setRecent] = useState<RecentConnection[]>([]);
+  const mobileLayout = useMediaQuery(mobileViewportQuery);
+  const focusFirst = initialFocus ?? (mobileLayout ? "close" : "search");
   const search = useRef<HTMLInputElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const available = useMemo(() => hostChoices(aliases, hosts), [aliases, hosts]);
@@ -135,7 +140,7 @@ export function HostPickerDialog({
       labelledBy="host-picker-heading"
       onDismiss={close}
       closeOnOutside
-      initialFocusRef={initialFocus === "close" ? closeButton : search}
+      initialFocusRef={focusFirst === "close" ? closeButton : search}
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
       placement="palette"
       panelClassName="flex max-h-[76vh] w-full max-w-xl flex-col overflow-hidden rounded-xl"
