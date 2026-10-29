@@ -371,6 +371,24 @@ describe("DiagnosticsPanel", () => {
     expect(screen.queryByText(/include_cycle/)).not.toBeInTheDocument();
   });
 
+  it("lists the configuration files by their path in the SSH folder and keeps the full path in the tooltip", async () => {
+    const api = buildApi({
+      configCheck: vi.fn().mockResolvedValue({
+        root: "/home/demo/.ssh/config",
+        files: [
+          { path: "/home/demo/.ssh/config", editable: true, missing: false, loads: 1, includes: 1 },
+          { path: "/home/demo/.ssh/connections/production/osaka/osaka.conf", editable: true, missing: false, loads: 1, includes: 0 },
+        ],
+        diagnostics: [],
+      }),
+    });
+    render(<DiagnosticsPanel api={api} />);
+
+    const nested = await screen.findByText("connections/production/osaka/osaka.conf");
+    expect(nested).toHaveAttribute("title", "/home/demo/.ssh/connections/production/osaka/osaka.conf");
+    expect(screen.getByText("config")).toHaveAttribute("title", "/home/demo/.ssh/config");
+  });
+
   it("diagnoses a fixed host without asking for an alias", async () => {
     const api = buildApi();
     render(<DiagnosticsPanel api={api} host="bastion" />);

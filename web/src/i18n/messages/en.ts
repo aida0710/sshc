@@ -2395,6 +2395,7 @@ export const en = {
   "diag.running": "Running the requested check…",
   "diag.idle": "No check is running.",
   "diag.hostAlias": "Host alias",
+  "diag.hostAliasPlaceholder": "Type an alias or pick one of your connections",
   "diag.needsAlias": "Type a host alias to run a check.",
   "diag.explain": "Explain",
   "diag.explainFailed": "Could not analyse the settings for this alias.",

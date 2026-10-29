@@ -24,6 +24,7 @@ import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { ExecutableDirectiveConfirmation } from "./ExecutableDirectiveConfirmation";
 import { unavoidableDirectives, type ExecutableDirective } from "./executableDirectives";
+import { relativeConfigPath } from "./relativeConfigPath";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -155,7 +156,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
                     value={typedAlias}
                     onChange={(event) => setTypedAlias(event.target.value)}
                     list="diagnostic-host-options"
-                    placeholder="bastion"
+                    placeholder={t("diag.hostAliasPlaceholder")}
                     className={`${control} font-mono`}
                   />
                 </Field>
@@ -192,10 +193,10 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
         <PageSection heading={t("diag.configuration")} meta={String(config.files.length)}>
           <ul className="divide-y divide-line">
             {config.files.map((file) => (
-              <li key={file.path} className="flex items-center gap-2 py-2.5 font-mono text-xs text-ink-muted">
-                <span className={`h-1.5 w-1.5 rounded-full ${file.missing ? "bg-notice-ink" : "bg-live"}`} />
-                {file.path}
-                {file.missing ? <span className="text-notice-ink">{t("diag.missingSuffix")}</span> : null}
+              <li key={file.path} className="flex items-baseline gap-2 py-2.5 font-mono text-xs text-ink-muted">
+                <span className={`size-1.5 shrink-0 -translate-y-px rounded-full ${file.missing ? "bg-notice-ink" : "bg-live"}`} />
+                <span title={file.path} className="min-w-0 break-all">{relativeConfigPath(config.root, file.path)}</span>
+                {file.missing ? <span className="shrink-0 text-notice-ink">{t("diag.missingSuffix")}</span> : null}
               </li>
             ))}
           </ul>
