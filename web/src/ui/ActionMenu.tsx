@@ -16,7 +16,13 @@ export const revealOnHover = "transition-opacity duration-150 hover-reveal:opaci
 // revealOnHover である。PC の組み方の画面では、タッチ対応でも、乗せたとき（とキーボードで触れたとき）だけ出し、
 // その間だけ件数や名前の上に重ねる。いつも出して件数や名前の場所を削らない（スマホの組み方では常に出す）。
 // 乗せられない画面では、行を長押ししたときのメニューで同じ操作ができる。
-export const revealOnHoverAtPcSize = "transition-opacity duration-150 desktop-layout:opacity-0 desktop-layout:group-hover/row:opacity-100 desktop-layout:group-focus-within/row:opacity-100";
+// 乗せたかどうかは、ブラウザの答える「乗せられる入力があるか」（any-hover。hover: の variant が見る）ではなく、
+// 実際に乗っているか（:hover）で決める。タッチ画面付きの PC は、マウスで操作していても any-hover を none と
+// 答えることがあり、隠したまま出せなくなるためである（2026-10-29、押した瞬間しか出ないと報告があった）。
+export const revealOnHoverAtPcSize = "transition-opacity duration-150 desktop-layout:opacity-0 desktop-layout:group-[:hover]/row:opacity-100 desktop-layout:group-focus-within/row:opacity-100";
+
+// hideOnHoverAtPcSize は、revealOnHoverAtPcSize で出す「…」に場所を譲るもの（グループの件数）に付ける。
+export const hideOnHoverAtPcSize = "desktop-layout:group-[:hover]/row:invisible desktop-layout:group-focus-within/row:invisible";
 
 export type ActionMenuItem = {
   label: string;
