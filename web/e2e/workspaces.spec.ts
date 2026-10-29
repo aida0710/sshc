@@ -204,3 +204,27 @@ test("shows a session's actions only on hover and opens its menu with a right cl
   await navigation.getByText("Logs", { exact: true }).click({ button: "right" });
   await expect(navigation.getByRole("button", { name: "Actions for Logs" })).toHaveAttribute("aria-expanded", "true");
 });
+
+// A PC with a touch screen can say it has no pointer that hovers (any-hover: none) while a mouse is in use. The
+// actions hidden at PC size must still come up under the mouse there, not only while a press holds the focus.
+test.describe("touch PC", () => {
+  test.use({ viewport: { width: 1280, height: 800 }, hasTouch: true });
+
+  test("shows a session's actions under the mouse though the screen says nothing hovers", async ({ page, installation }) => {
+    const sessions = [
+      { id: "s1", kind: "shell", workspaceId: "default", title: "Build", startedAt: "2026-10-28T00:00:00Z", state: "connected", problem: "", forwards: [] },
+    ];
+    await page.route("**/api/v1/terminal/sessions**", (route) => new URL(route.request().url()).pathname.endsWith("/stream")
+      ? route.fulfill({ status: 404, json: {} })
+      : route.fulfill({ json: { sessions, maxSessions: 50 } }));
+    await openApplication(page, installation);
+    expect(await page.evaluate(() => matchMedia("(any-hover: hover)").matches)).toBe(false);
+    const navigation = page.getByRole("navigation", { name: "Primary" });
+    const actions = navigation.getByRole("button", { name: "Actions for Build" }).locator("..");
+    await expect(actions).toHaveCSS("opacity", "0");
+
+    await navigation.getByText("Build", { exact: true }).hover();
+    await expect(actions).toHaveCSS("opacity", "1");
+    await expect(navigation.getByRole("button", { name: "Close Build" })).toBeVisible();
+  });
+});
