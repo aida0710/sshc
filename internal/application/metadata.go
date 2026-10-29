@@ -170,6 +170,8 @@ type EmbeddedTerminal struct {
 	ComposerEnterSends bool `json:"composerEnterSends,omitempty"`
 	// Ligaturesは、ターミナルの文字をフォントの合字（->、!= など）で描く。falseなら1文字ずつ描く。
 	Ligatures bool `json:"ligatures,omitempty"`
+	// StatusLineは、プログラムが出すVT320のステータス行を表示するか。nilなら表示する。
+	StatusLine *bool `json:"statusLine,omitempty"`
 	// LocalShellProfileは検出済みprofileの安定IDであり、command文字列ではない。
 	LocalShellProfile string `json:"localShellProfile,omitempty"`
 	// StartDirectory は、ローカルシェルが始まる場所である。

@@ -4361,6 +4361,7 @@ export interface components {
             jisYenBackslash?: boolean;
             composerEnterSends?: boolean;
             ligatures?: boolean;
+            statusLine?: boolean;
             localShellProfile?: string;
             startDirectory?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
@@ -4381,6 +4382,7 @@ export interface components {
             jisYenBackslash?: boolean;
             composerEnterSends?: boolean;
             ligatures?: boolean;
+            statusLine?: boolean;
             localShellProfile?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
         };

@@ -38,6 +38,7 @@ When the sshc engine stops (an update, a restart of the computer, a manual stop)
 - Pre-send review for pastes containing line breaks or control characters
 - OSC 52 clipboard, Kitty keyboard protocol and JIS keyboards (every OSC sequence sshc takes is listed in [Supported escape sequences](/en/reference/escape-sequences))
 - Visibility reports (mode 2033): a program that asks is told whether any browser shows the terminal, so it can stop drawing while nobody sees it. sshc answers "not visible" when no browser shows the session, when its tab is in the background, or when it is out of the split view or off the screen. A program on the server therefore learns whether someone is looking at the terminal
+- The VT320 status line (DECSSDT, DECSASD): when a program shows it, it appears as one line under the terminal, and the program is told the terminal has one row fewer. Only the line a program writes (DECSSDT 2) is supported; the indicator line the terminal writes (DECSSDT 1) is not shown
 - Per-connection UTF-8, Shift_JIS, EUC-JP and ISO-2022-JP
 - A 16 KiB–4 MiB engine replay buffer, 1,000–100,000 lines of browser scrollback, and configurable font size
 - WebGL rendering with an automatic DOM-renderer fallback when unavailable or when a background image is active, plus an option to disable WebGL permanently
@@ -95,6 +96,8 @@ SIXEL, iTerm2 inline images (OSC 1337 File=), and the kitty graphics protocol ar
 Character widths follow the Unicode 17 tables. Emoji, including recent ones, take two cells, so programs that print emoji (Claude Code, for example) stay aligned with the text after them.
 
 While a program has mode 2027 (grapheme clusters) on, emoji joined with ZWJ (👨‍👩‍👧), flags (🇯🇵), emoji with a skin tone (👍🏽) and characters with VS16 (❤️) are drawn as one character in two cells. Otherwise each character is counted as wcwidth counts it (six cells for the family), so that the cursor stays where programs counting with wcwidth expect it.
+
+In a local shell on Windows, mode 2027 and the VT320 status line have no effect: Windows' ConPTY sends these sequences ahead of the text around them. They work on hosts reached over SSH from an sshc engine on Windows.
 
 ## Titles and notifications
 

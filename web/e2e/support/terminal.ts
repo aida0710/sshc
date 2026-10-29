@@ -2,8 +2,9 @@ import type { Locator, Page } from "@playwright/test";
 
 
 // The terminals on the screen, not the ones of sessions kept hidden after
-// they were left (data-split-view-kept).
-const SHOWN = ":not([data-split-view-kept] *)";
+// they were left (data-split-view-kept), nor the one-row terminal of a VT320
+// status line (data-terminal-status-line).
+const SHOWN = ":not([data-split-view-kept] *):not([data-terminal-status-line] *)";
 const ROOT = `.xterm${SHOWN}`;
 const DRAWN_ROWS = `.xterm-rows${SHOWN}`;
 const SCREEN = `.xterm-screen${SHOWN}`;

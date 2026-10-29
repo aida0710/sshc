@@ -2323,6 +2323,7 @@ type TerminalSettings struct {
 	RightClickPaste        *bool               `json:"rightClickPaste,omitempty"`
 	ScrollbackBytes        *int                `json:"scrollbackBytes,omitempty"`
 	StartDirectory         *string             `json:"startDirectory,omitempty"`
+	StatusLine             *bool               `json:"statusLine,omitempty"`
 	Verbosity              *int                `json:"verbosity,omitempty"`
 	Webgl                  *bool               `json:"webgl,omitempty"`
 }
