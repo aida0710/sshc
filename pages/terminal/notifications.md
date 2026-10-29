@@ -12,6 +12,7 @@ sshcのTerminalは、ターミナル内で動くプログラムが送る標準�
 | ペイン名を変える | OSC 0、OSC 1、OSC 2 | zsh／bashのプロンプト設定、vim、tmux、Claude Code、Codex |
 | 通知を出す | OSC 9（iTerm2形式）、OSC 99（kitty形式）、OSC 777（rxvt／tmux形式） | Claude Code、Codex、`cmux notify`のような通知コマンド |
 | 進み具合を出す | OSC 9;4（ConEmu形式） | `cargo`、`winget`など、Windows TerminalやGhosttyの進捗表示に対応したコマンド |
+| 何をしているかを知らせる | OSC 7501（Program Status Protocol） | 対応したプログラムやシェルの関数 |
 
 ## ペイン名
 
@@ -67,6 +68,21 @@ sleep 31; false
 
 ```sh
 printf '\e]9;4;1;40\a'; sleep 3; printf '\e]9;4;0\a'
+```
+
+## プログラムの状態
+
+プログラムが[OSC 7501](https://control-codes.page/proposals/osc-7501/)で自分の状態（作業中、入力待ち、完了、失敗）を知らせると、セッション一覧の行の点を状態の印に替え、2行目に「許可待ち」などの状態と、プログラムが送った文を続けて出します。
+
+- 作業中と入力待ち（許可待ち・回答待ち・認証待ち）は、プログラムが終わってシェルのプロンプト（OSC 133のA）に戻るか、シェルが替わると消えます。
+- 完了と失敗は、そのセッションを表示すると消えます。未読の通知と同じく、このブラウザで見たかで決めます。
+- 待機中（idle）は印を出しません。接続中・再接続中・終了したセッションは、接続の状態を出します。
+- デスクトップ通知や通知音は出しません。
+
+試すには、ペイン内で次を実行し、別のセッションを開いて待ちます。
+
+```sh
+printf '\e]7501;state=working\e\\'; sleep 5; printf '\e]7501;state=done:msg=%s\e\\' "$(printf 'Docs built' | base64)"
 ```
 
 ## Claude Codeで通知を受け取る

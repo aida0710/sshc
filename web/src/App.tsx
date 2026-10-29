@@ -41,6 +41,7 @@ import { SectionNotices } from "./shell/SectionNotices";
 import { usePaletteCommands } from "./shell/usePaletteCommands";
 import { setAndroidAppearance } from "./android/native";
 import { useTerminalNotifications } from "./terminal/useTerminalNotifications";
+import { useSeenProgramStatus } from "./terminal/useSeenProgramStatus";
 import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
 import { mobileViewportQuery, useMediaQuery } from "./ui/useMediaQuery";
@@ -274,6 +275,7 @@ export function App({
     t,
     showSession,
   );
+  const seenProgramStatus = useSeenProgramStatus(terminalSessions.sessions, terminalFace ? activeSessionId : null);
 
 
   const paletteCommands = usePaletteCommands({
@@ -404,6 +406,7 @@ export function App({
             orderedSessions={orderedSessions}
             activeSessionId={activeSessionId}
             unreadBySession={unreadSessions}
+            seenProgramStatus={seenProgramStatus}
             onShowSession={showSession}
             splitView={splitView}
             onShowSplitGroup={(number) => {
