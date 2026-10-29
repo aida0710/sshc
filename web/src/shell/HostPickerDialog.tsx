@@ -7,6 +7,7 @@ import { Icon } from "../ui/icons";
 import { formatDateTime } from "../ui/format";
 import { ModalShell } from "../ui/ModalShell";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
+import { iconAction } from "../ui/form";
 
 type HostChoice = { alias: string; group: string; hostName: string; user: string };
 
@@ -147,7 +148,7 @@ export function HostPickerDialog({
             type="button"
             aria-label={t("sftp.closeHostPicker")}
             onClick={close}
-            className="flex size-8 items-center justify-center rounded text-ink-muted hover:bg-select-fill"
+            className={`${iconAction} size-8`}
           >
             <Icon name="close" className="size-4" />
           </button>
@@ -175,7 +176,7 @@ export function HostPickerDialog({
               disabled={recentChoices.length === 0}
               onClick={() => setView("recent")}
               onKeyDown={(event) => activateTabFromKeyboard(event, 0, views, setView)}
-              className={`grow rounded px-3 py-1.5 text-sm ${view === "recent" ? "bg-card shadow-card" : "text-ink-muted"}`}
+              className={`grow rounded-md px-3 py-1.5 text-sm ${view === "recent" ? "bg-card shadow-card" : "text-ink-muted"}`}
             >
               {t("sftp.recentHosts")}
             </button>
@@ -186,7 +187,7 @@ export function HostPickerDialog({
               tabIndex={view === "groups" ? 0 : -1}
               onClick={() => setView("groups")}
               onKeyDown={(event) => activateTabFromKeyboard(event, views.length - 1, views, setView)}
-              className={`grow rounded px-3 py-1.5 text-sm ${view === "groups" ? "bg-card shadow-card" : "text-ink-muted"}`}
+              className={`grow rounded-md px-3 py-1.5 text-sm ${view === "groups" ? "bg-card shadow-card" : "text-ink-muted"}`}
             >
               {t("sftp.hostGroups")}
             </button>
