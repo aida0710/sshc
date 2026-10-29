@@ -96,6 +96,15 @@ describe("QuickConnectBrowser", () => {
     expect(screen.getByRole("img", { name: "OS unknown" })).toBeVisible();
   });
 
+  it("names the group of a grouped connection and nothing for one in no group", () => {
+    renderBrowser();
+
+    const nas = screen.getByRole("button", { name: /^Connect to nas\./u });
+    expect(within(nas).getByText("home")).toHaveAttribute("title", "home");
+    const bastion = screen.getByRole("button", { name: /^Connect to bastion\./u });
+    expect(within(bastion).queryByText("Ungrouped")).toBeNull();
+  });
+
   it("orders recent connections first and shows the resolved destination", () => {
     renderBrowser();
 

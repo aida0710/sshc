@@ -80,6 +80,14 @@ describe("SessionList", () => {
     expect(screen.getByRole("progressbar", { name: "Program progress" })).not.toHaveAttribute("aria-valuenow");
   });
 
+  it("says in a word that a session did not open and keeps the reason for the tooltip", () => {
+    renderList({ sessions: [{ ...live, state: "exited", problem: "connect_failed" }] });
+
+    const line = screen.getByText("Could not open", { selector: "[data-session-status-text]" });
+    expect(line).toBeVisible();
+    expect(line).toHaveAttribute("title", expect.stringMatching(/^The connection could not be established\./u));
+  });
+
   it("removes the bar when the engine clears program progress", () => {
     const background = { ...live, programProgress: { state: "normal" as const, percent: 0 } };
     const { rerender, ...props } = renderList({ sessions: [background] });

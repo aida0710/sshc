@@ -1,3 +1,4 @@
+import type { MessageKey } from "../i18n/messages";
 import type { KeyInventoryResponse } from "./api";
 import { useTranslate } from "../i18n/context";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
@@ -23,8 +24,15 @@ function agentSortValue(identity: AgentIdentity, column: AgentSort): SortValue {
 
 // What the SSH agent currently holds, and the config lines that delegate to
 // it. Read-only: keys are added and removed from their own rows.
-export function AgentSection({ inventory }: {
+// agentUnavailableKey says how to give sshc an agent on the engine's system; both ways while it is not known.
+function agentUnavailableKey(os: string | null): MessageKey {
+  if (os === null) return "keys.agentUnavailable";
+  return os === "windows" ? "keys.agentUnavailableWindows" : "keys.agentUnavailableUnix";
+}
+
+export function AgentSection({ inventory, engineOS }: {
   inventory: Pick<KeyInventoryResponse, "agentAvailable" | "agentIdentities" | "agentDelegations">;
+  engineOS: string | null;
 }) {
   const t = useTranslate();
   const agentSort = useTableSort<AgentSort>("algorithm");
@@ -71,7 +79,7 @@ export function AgentSection({ inventory }: {
       ) : (
         <p className="flex gap-2.5 rounded-[9px] bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">
           <Icon name="warning" className="mt-0.5 size-[15px]" />
-          {t("keys.agentUnavailable")}
+          {t(agentUnavailableKey(engineOS))}
         </p>
       )}
       {inventory.agentDelegations.length > 0 && (

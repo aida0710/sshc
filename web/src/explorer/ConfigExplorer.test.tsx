@@ -129,6 +129,14 @@ describe("ConfigExplorer", () => {
     expect(screen.getByText("No file matches this Include: conf.d/*.conf (config:2)")).toBeInTheDocument();
   });
 
+  it("names each file in the tree by its file name and keeps the path as its name and tooltip", async () => {
+    render(<ConfigExplorer />);
+
+    const file = await screen.findByRole("button", { name: "conf.d/10-home.conf" });
+    expect(file).toHaveTextContent(/^10-home\.conf$/u);
+    expect(file).toHaveAttribute("title", "conf.d/10-home.conf");
+  });
+
   it("sums up the files and diagnostics beside the heading", async () => {
     render(<ConfigExplorer />);
 
@@ -145,13 +153,14 @@ describe("ConfigExplorer", () => {
     expect(within(screen.getByRole("region", { name: "Include hierarchy" })).queryByText("editable")).not.toBeInTheDocument();
   });
 
-  it("wraps long Include paths and conditions inside the hierarchy card", async () => {
+  it("wraps long Include paths after a slash and conditions inside the hierarchy card", async () => {
     render(<ConfigExplorer />);
 
     const pattern = await screen.findByText("connections/dubguild/high-performance-computing/*.conf");
     const condition = screen.getByText("inside Host mado-office-with-a-long-condition");
 
-    expect(pattern).toHaveClass("block", "break-all");
+    expect(pattern).toHaveClass("block", "break-words");
+    expect(pattern.querySelectorAll("wbr")).toHaveLength(3);
     expect(pattern.closest("div")).toHaveClass("min-w-0", "overflow-hidden");
     expect(condition).toHaveClass("block", "break-words");
   });

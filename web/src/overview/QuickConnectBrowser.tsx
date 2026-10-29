@@ -110,7 +110,6 @@ export function QuickConnectBrowser({
     const lastConnected = recentConnection === undefined
       ? ""
       : t("connection.lastConnected", { at: formatDateTime(recentConnection.lastConnectedAt, locale) });
-    const groupName = server.group === "" ? t("tree.ungrouped") : server.group;
     const selected = selectedAlias === alias;
     const opening = launching === alias;
     const connect = () => {
@@ -171,13 +170,15 @@ export function QuickConnectBrowser({
             </span>
           </span>
           {/* Where the "…" shows only under the pointer (hover-reveal), it appears over the group name; elsewhere the
-              card keeps room for it. */}
-          <span
-            className="max-w-[30%] shrink-0 truncate text-[11px] text-ink-faint transition-opacity duration-150 hover-reveal:group-hover/row:opacity-0 hover-reveal:group-focus-within/row:opacity-0"
-            title={groupName}
-          >
-            {groupName}
-          </span>
+              card keeps room for it. A connection in no group shows no name: "no group" would only fill the room. */}
+          {server.group === "" ? null : (
+            <span
+              className="max-w-[30%] shrink-0 truncate text-[11px] text-ink-faint transition-opacity duration-150 hover-reveal:group-hover/row:opacity-0 hover-reveal:group-focus-within/row:opacity-0"
+              title={server.group}
+            >
+              {server.group}
+            </span>
+          )}
         </button>
         <div className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 ${revealOnHover}`}>
           <ConnectionActions

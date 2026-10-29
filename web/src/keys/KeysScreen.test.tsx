@@ -7,6 +7,7 @@ import type { InspectorContent } from "../ui/Inspector";
 import { KeysScreen } from "./KeysScreen";
 import type { KeyInventoryResponse, KeysApi } from "./api";
 import type { KeySecretsApi } from "./secretsApi";
+import type { AboutApi } from "../api/about";
 
 function buildSecrets(overrides: Partial<KeySecretsApi> = {}): KeySecretsApi {
   const listed = {
@@ -733,6 +734,19 @@ describe("KeysScreen", () => {
     expect(within(actions).getByRole("menuitem", { name: "Add to ssh-agent" })).toBeDisabled();
     expect(screen.getByText(/This process cannot connect to ssh-agent/)).toBeInTheDocument();
     expect(api.registerWithAgent).not.toHaveBeenCalled();
+  });
+
+  it("says how to give sshc an agent only for the system its engine runs on", async () => {
+    const onWindows = { about: vi.fn().mockResolvedValue({ os: "windows" }) } as unknown as AboutApi;
+    const { unmount } = render(<KeysScreen api={buildApi()} about={onWindows} />);
+    expect(await screen.findByText(/Start the OpenSSH Authentication Agent service\./u)).toBeInTheDocument();
+    expect(screen.queryByText(/SSH_AUTH_SOCK/u)).toBeNull();
+    unmount();
+
+    const onLinux = { about: vi.fn().mockResolvedValue({ os: "linux" }) } as unknown as AboutApi;
+    render(<KeysScreen api={buildApi()} about={onLinux} />);
+    expect(await screen.findByText(/SSH_AUTH_SOCK environment variable/u)).toBeInTheDocument();
+    expect(screen.queryByText(/OpenSSH Authentication Agent/u)).toBeNull();
   });
 
   it("registers a key with the agent and the lifetime the user chose", async () => {
