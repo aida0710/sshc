@@ -5013,6 +5013,8 @@ components:
         progress: { $ref: "#/components/schemas/TerminalConnectionProgress" }
         # プログラムの OSC 9;4。消去時は省略する。SSH 接続の段階とは独立。
         programProgress: { $ref: "#/components/schemas/TerminalProgramProgress" }
+        # プログラムが OSC 7501 で知らせた状態のうち、いちばん利用者の手を要するもの。無ければ省略する。
+        programStatus: { $ref: "#/components/schemas/TerminalProgramStatus" }
         exited: { $ref: "#/components/schemas/TerminalExit" }
         # 現在開いている転送。
         forwards: { type: array, items: { $ref: "#/components/schemas/TerminalForward" } }
@@ -5048,6 +5050,23 @@ components:
       required: [state]
       properties:
         state: { type: string, enum: [indeterminate] }
+    # OSC 7501（https://control-codes.page/proposals/osc-7501/）の記録ひとつ。title と message は
+    # 制御文字と書式の文字を除いた文で、接続先のプログラムが決めた中身である。
+    TerminalProgramStatus:
+      type: object
+      additionalProperties: false
+      required: [state, version]
+      properties:
+        state: { type: string, enum: [idle, working, blocked, done, error] }
+        # blocked のときだけ。何を待っているか。
+        kind: { type: string, enum: [permission, question, auth] }
+        # working と blocked のときだけ。省略は進み具合が分からないこと。
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        app: { type: string, maxLength: 32 }
+        title: { type: string }
+        message: { type: string }
+        # この記録を設定した報告の番号。セッションの中で増える一方なので、画面はまだ見せていない記録を見分けられる。
+        version: { type: integer, minimum: 1 }
     TerminalPresentation:
       type: object
       additionalProperties: false

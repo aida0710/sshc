@@ -183,6 +183,9 @@ func describeSession(view terminal.View) api.TerminalSession {
 		described.ProgramProgress = new(json.RawMessage)
 		*described.ProgramProgress, _ = json.Marshal(progress)
 	}
+	if view.ProgramStatus != nil {
+		described.ProgramStatus = describeProgramStatus(*view.ProgramStatus)
+	}
 	if view.Alias != "" {
 		alias := view.Alias
 		described.Alias = &alias
@@ -555,6 +558,29 @@ func (h TerminalHandlers) Close(c *echo.Context) error {
 }
 
 // describeConnectionProgress は、接続の段階を API の形にする。ターミナルと SFTP の接続で同じ形を使う。
+// describeProgramStatus leaves out what the program did not say.
+func describeProgramStatus(status terminal.ProgramStatus) *api.TerminalProgramStatus {
+	described := &api.TerminalProgramStatus{
+		State:    api.TerminalProgramStatusState(status.State),
+		Progress: status.Progress,
+		Version:  int(status.Version),
+	}
+	if status.Kind != "" {
+		kind := api.TerminalProgramStatusKind(status.Kind)
+		described.Kind = &kind
+	}
+	if status.App != "" {
+		described.App = stringPointer(status.App)
+	}
+	if status.Title != "" {
+		described.Title = stringPointer(status.Title)
+	}
+	if status.Message != "" {
+		described.Message = stringPointer(status.Message)
+	}
+	return described
+}
+
 func describeConnectionProgress(progress terminal.ConnectionProgress) *api.TerminalConnectionProgress {
 	return &api.TerminalConnectionProgress{
 		Phase: api.TerminalConnectionProgressPhase(progress.Phase),
