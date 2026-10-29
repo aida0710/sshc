@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
 import { translatorFor } from "../testing/translator";
-import { exitedAbnormally, sessionMarkerClass, sessionStatusText, sessionStatusTone } from "./sessionStatus";
+import { exitedAbnormally, sessionMarkerClass, sessionStateText, sessionStatusText, sessionStatusTone } from "./sessionStatus";
 
 
 const base: TerminalSession = {
@@ -46,5 +46,21 @@ describe("a session that has ended", () => {
     expect(sessionStatusText(t, ended({ code: -1, signal: "", at: "", connectionLost: true }))).toBe("connection lost");
     expect(sessionStatusText(t, ended({ code: -1, signal: "SIGTERM", at: "" }))).toBe("ended by SIGTERM");
     expect(sessionStatusText(t, ended({ code: 3, signal: "", at: "" }))).toBe("exited 3");
+  });
+});
+
+describe("sessionStateText", () => {
+  const t = translatorFor("en");
+  const base: TerminalSession = { id: "s", kind: "ssh", alias: "bastion", workspaceId: "default", title: "bastion", startedAt: "2026-10-30T00:00:00Z", state: "connected", problem: "" };
+
+  it("says the state alone, leaving the reason to the rows that explain it", () => {
+    const waiting: TerminalSession = { ...base, state: "reconnecting", problem: "reconnect_failed", reconnect: { attempt: 2, limit: 5, retryAt: "2026-10-30T00:01:00Z", problem: "reconnect_failed" } };
+    expect(sessionStateText(t, waiting)).toBe("reconnecting 2/5");
+    const stopped: TerminalSession = { ...base, state: "exited", problem: "reconnect_stopped", exited: { code: -1, signal: "", at: "", connectionLost: true } };
+    expect(sessionStateText(t, stopped)).toBe("connection lost");
+  });
+
+  it("does not give the engine's unknown exit status as a status", () => {
+    expect(sessionStateText(t, { ...base, state: "exited", exited: { code: -1, signal: "", at: "" } })).toBe("exited");
   });
 });
