@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { androidJapaneseLabels, japanesePages } from "../testing/japaneseDocuments";
+import { labelPatterns } from "../testing/catalogueLabels";
 import { ja } from "./messages";
 
 // 日本語のpagesは、画面のボタン名を［…］、画面に出る文を「…」で引用する。
@@ -24,12 +25,6 @@ const quotesOutsideTheCatalogue = new Map<string, string>([
 ]);
 
 const quotePattern = /［([^［］]+)］|「([^「」]+)」/g;
-const placeholderPattern = /\{[^{}]+\}/g;
-// 「（バイト）」のような末尾の補足は、本文で省いて引用してよい。
-const trailingNotePattern = /（[^（）]*）$/;
-// {name}の差し込みは、pagesでは英数字の例（「bastionへ接続中 · 1/2」）か<名前>の形で書く。
-// 日本語の文字を差し込みに含めると、「{a}の{b}」のような文言が「の」を含むどの引用とも一致してしまう。
-const placeholderExample = String.raw`(?:<[^<>]*>|[\x20-\x7E]*)`;
 
 type Quote = { text: string; location: string };
 
@@ -42,25 +37,6 @@ function quotesInJapanesePages(): Quote[] {
       })),
     ),
   );
-}
-
-function escapeForPattern(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function toPattern(label: string): RegExp {
-  const source = label.split(placeholderPattern).map(escapeForPattern).join(placeholderExample);
-  return new RegExp(`^${source}$`, "u");
-}
-
-// 差し込みを除いて文字が残らない文言（「{detail}」など）は、どんな引用とも一致してしまうので照合に使わない。
-function hasWording(label: string): boolean {
-  return /\p{L}/u.test(label.replace(placeholderPattern, ""));
-}
-
-function labelPatterns(labels: string[]): RegExp[] {
-  const variants = labels.flatMap((label) => [label, label.replace(trailingNotePattern, "")]);
-  return [...new Set(variants)].filter(hasWording).map(toPattern);
 }
 
 describe("pagesの［…］と「…」の引用", () => {
