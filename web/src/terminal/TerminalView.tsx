@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
@@ -202,6 +202,9 @@ export function TerminalView({
   clipboardSettings.current = { copyOnSelect, rightClickPaste };
   const [problem, setProblem] = useState("");
   const [link, setLink] = useState<StreamLink>({ phase: "connecting", attempt: 1 });
+  // drawnLive tells whether the screen is drawn as it is while the link is live, without the banner
+  // above it that says the link is connecting (see the layout effect below).
+  const drawnLive = useRef(false);
   const activeRef = useRef(active);
   activeRef.current = active;
   const search = useTerminalSearch({
@@ -309,6 +312,7 @@ export function TerminalView({
       theme: terminalTheme(container, hasBackground),
       scrollback: scrollbackLines,
       webgl: webglEnabled,
+      webglSettled: () => refit.current?.(),
       ligatures: ligaturesRef.current,
       selectLink: selectLinkAt,
     });
@@ -384,6 +388,11 @@ export function TerminalView({
       // Restoring a hidden session must preserve its PTY size until this
       // host can be measured, rather than sending xterm's initial 80x24.
       if (container.clientWidth === 0 || container.clientHeight === 0) return;
+      // While the WebGL renderer loads, the cells are the DOM renderer's, wider than the whole
+      // pixels WebGL draws them in: the program would get fewer columns, then the right ones.
+      // The view is fitted again once the renderer is settled.
+      if (renderer.attaching()) return;
+      if (!drawnLive.current) return;
       const stream = linkController.currentStream();
       const size = `${view.cols}x${view.rows}`;
       if (stream === null || view.cols === 0 || view.rows === 0 || size === sent) return;
@@ -588,6 +597,15 @@ export function TerminalView({
     terminal.current.options.fontFamily = resolvedFontFamily;
     refit.current?.();
   }, [resolvedFontFamily]);
+
+  // A stream is attached as the link turns live, while the banner that says it is connecting still
+  // takes a row or two above the screen. A size measured then would be followed by the right one
+  // once the banner goes, and a shell or a full-screen program would redraw twice. A layout effect
+  // runs after React has drawn the screen without the banner.
+  useLayoutEffect(() => {
+    drawnLive.current = link.phase === "live";
+    if (drawnLive.current) refit.current?.();
+  }, [link.phase]);
 
   useEffect(() => {
     ligatureDrawing.current?.set(ligatures);

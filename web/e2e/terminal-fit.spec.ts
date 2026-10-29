@@ -72,3 +72,15 @@ test("refits terminal columns and rows after WebGL context loss switches to DOM 
   await expect.poll(() => drawnRowCount(page)).toBe(observed.sizes.at(-1)!.rows);
   await expectTerminalPTYSize(page, observed);
 });
+
+test("sends a new session one size, measured without the connecting banner and with the WebGL renderer", async ({ page, installation }) => {
+  const observed = watchTerminalStream(page);
+  await openApplication(page, installation);
+  await openWebGLShell(page);
+  await expect.poll(() => observed.sizes.length).toBeGreaterThan(0);
+  await expectTerminalPTYSize(page, observed);
+  // A size measured under the banner (fewer rows) or before WebGL was in place (fewer columns)
+  // would come first and be followed by the right one.
+  const sizes = observed.sizes.map((size) => `${size.cols}x${size.rows}`);
+  expect([...new Set(sizes)]).toEqual([sizes.at(-1)]);
+});
