@@ -4360,6 +4360,7 @@ export interface components {
             osc52?: boolean;
             jisYenBackslash?: boolean;
             composerEnterSends?: boolean;
+            ligatures?: boolean;
             localShellProfile?: string;
             startDirectory?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
@@ -4379,6 +4380,7 @@ export interface components {
             osc52?: boolean;
             jisYenBackslash?: boolean;
             composerEnterSends?: boolean;
+            ligatures?: boolean;
             localShellProfile?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
         };

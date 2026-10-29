@@ -105,6 +105,7 @@ export function TerminalScreen({
           vpnProfile={vpnProfile}
           jisYenBackslash={settings.jisYenBackslash ?? false}
           composerEnterSends={settings.composerEnterSends ?? false}
+          ligatures={settings.ligatures ?? false}
           onOsc52Change={onOSC52Change}
           onForwardsChanged={terminalSessions.refresh}
           {...(appearance.palette === ""

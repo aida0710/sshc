@@ -234,7 +234,7 @@ export function TerminalStartFields({ draft, edit, profiles }: GroupProps & { pr
   );
 }
 
-type Switch = "copyOnSelect" | "rightClickPaste" | "osc52" | "jisYenBackslash" | "composerEnterSends" | "webgl";
+type Switch = "copyOnSelect" | "rightClickPaste" | "osc52" | "jisYenBackslash" | "composerEnterSends" | "webgl" | "ligatures";
 
 // In reading order: two to a row on a computer.
 const switches: { key: Switch; label: MessageKey; hint: MessageKey }[] = [
@@ -244,6 +244,7 @@ const switches: { key: Switch; label: MessageKey; hint: MessageKey }[] = [
   { key: "jisYenBackslash", label: "terminal.jisYenBackslashLabel", hint: "terminal.jisYenBackslashHint" },
   { key: "composerEnterSends", label: "terminal.composerEnterSendsLabel", hint: "terminal.composerEnterSendsHint" },
   { key: "webgl", label: "terminal.webglLabel", hint: "terminal.webglHint" },
+  { key: "ligatures", label: "terminal.ligaturesLabel", hint: "terminal.ligaturesHint" },
 ];
 
 // The clipboard, keyboard and drawing switches, in two columns with a line between rows. The first row of
