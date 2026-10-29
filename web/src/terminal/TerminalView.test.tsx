@@ -189,8 +189,12 @@ describe("TerminalView", () => {
     }));
     const focus = vi.spyOn(Terminal.prototype, "focus");
     try {
-      renderView();
+      const api = { streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
+      const { rerender } = render(<TerminalView session={session} api={api} active focusRequest={1} />);
       await waitFor(() => expect(streams).toHaveLength(1));
+      expect(focus).not.toHaveBeenCalled();
+      // The session is shown again, as when the one shown before it is closed.
+      rerender(<TerminalView session={session} api={api} active focusRequest={2} />);
       expect(focus).not.toHaveBeenCalled();
       const overlay = document.querySelector(".sshc-select-overlay")!;
       fireEvent.touchStart(overlay, { touches: [{ clientX: 20, clientY: 20 }] });

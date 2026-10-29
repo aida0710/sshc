@@ -567,8 +567,10 @@ export function TerminalView({
     };
   }, [touchTerminal, selectLinkAt, session.id, api, backgroundConfigured, webglEnabled]);
 
+  // Showing a session (opening one, picking one, or the one left after closing another) focuses it. A touch
+  // terminal is left alone: focusing it raises the software keyboard, which comes up only for a tap on the terminal.
   useEffect(() => {
-    if (focusRequest !== undefined && activeRef.current && !region.current?.contains(document.activeElement)) terminal.current?.focus();
+    if (focusRequest !== undefined && activeRef.current && !touchTerminalRef.current && !region.current?.contains(document.activeElement)) terminal.current?.focus();
   }, [focusRequest]);
 
   useEffect(() => {
