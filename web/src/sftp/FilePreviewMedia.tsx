@@ -3,6 +3,7 @@ import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
 import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FilePreviewRefusal } from "./FilePreviewRefusal";
 import type { PlayableMediaKind } from "./playableMedia";
+import type { PreviewSwipe } from "./previewSwipe";
 import { videoViewBox } from "./previewZoom";
 import { PreviewZoomBar } from "./PreviewZoomBar";
 import { usePreviewZoom } from "./usePreviewZoom";
@@ -20,11 +21,12 @@ const videosZoom = typeof CSS !== "undefined" && typeof CSS.supports === "functi
 // recording does not wait for the whole file. A format the browser cannot
 // decode (HEVC in a .mov, for example) falls back to the download. The
 // player owns the arrow keys while it has focus, to seek, as the editor does.
-export function FilePreviewMedia({ element, url, name, onDownload }: {
+export function FilePreviewMedia({ element, url, name, onDownload, onSwipe }: {
   element: PlayableMediaKind;
   url: string;
   name: string;
   onDownload?: (() => void) | undefined;
+  onSwipe?: ((swipe: PreviewSwipe) => void) | undefined;
 }) {
   const [failed, setFailed] = useState(false);
   // waiting is true until the first frame (or the length of the audio) has
@@ -32,7 +34,7 @@ export function FilePreviewMedia({ element, url, name, onDownload }: {
   // With preload="metadata" some browsers never fire canplay before play is
   // pressed, so the first frame and the audio's length also end the wait.
   const [waiting, setWaiting] = useState(true);
-  const { target, zoom, size, areaProps, zoomIn, zoomOut, fit } = usePreviewZoom<HTMLVideoElement>({ keepBottom: videoControlsHeight });
+  const { target, zoom, size, areaProps, zoomIn, zoomOut, fit } = usePreviewZoom<HTMLVideoElement>({ keepBottom: videoControlsHeight, onSwipe });
   if (failed) return <FilePreviewRefusal reason="sftp.previewMediaUnsupported" onDownload={onDownload} />;
   const playerEvents = {
     onError: () => setFailed(true),

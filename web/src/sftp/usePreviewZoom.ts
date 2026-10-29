@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { swipeOf, type PreviewSwipe } from "./previewSwipe";
 import { fittedZoom, movedBy, previewZoomStep, zoomedAround, type PreviewZoom } from "./previewZoom";
 
 // wheelZoomRate turns the wheel's pixels into a zoom factor: one notch of a mouse wheel (100px) is about a
@@ -22,9 +23,13 @@ type Size = { width: number; height: number };
 //
 // keepBottom is the height at the bottom of the picture that never starts a drag: where a video's own
 // controls are, so pressing them still plays and seeks.
-export function usePreviewZoom<Target extends HTMLElement>({ keepBottom = 0, doubleClickZooms = false }: {
+//
+// A finger stroked across the fitted picture does not zoom it: the stroke is a swipe (swipeOf), given to
+// onSwipe. A zoomed picture moves under the finger instead, and two fingers are always a pinch.
+export function usePreviewZoom<Target extends HTMLElement>({ keepBottom = 0, doubleClickZooms = false, onSwipe }: {
   keepBottom?: number;
   doubleClickZooms?: boolean;
+  onSwipe?: ((swipe: PreviewSwipe) => void) | undefined;
 } = {}) {
   const target = useRef<Target>(null);
   const area = useRef<HTMLDivElement>(null);
@@ -35,6 +40,8 @@ export function usePreviewZoom<Target extends HTMLElement>({ keepBottom = 0, dou
   zoomRef.current = zoom;
   const pointers = useRef(new Map<number, Point>());
   const dragged = useRef(false);
+  // stroke is the one finger on the picture and where it was put down; a second finger ends it.
+  const stroke = useRef<{ pointerId: number; from: Point } | null>(null);
 
   // The fitted picture's size and centre on the screen. A transform does not move the layout box, so the
   // offsets are those of the fitted picture whatever the zoom.
@@ -74,6 +81,8 @@ export function usePreviewZoom<Target extends HTMLElement>({ keepBottom = 0, dou
     if (keepBottom > 0 && event.clientY > measured.centre.y + measured.size.height / 2 - keepBottom) return;
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     dragged.current = false;
+    const alone = event.pointerType === "touch" && pointers.current.size === 1;
+    stroke.current = alone ? { pointerId: event.pointerId, from: { x: event.clientX, y: event.clientY } } : null;
   }
 
   // The pointer is captured once a drag or a pinch starts, not on the press: a captured press clicks the area
@@ -111,8 +120,19 @@ export function usePreviewZoom<Target extends HTMLElement>({ keepBottom = 0, dou
     setZoom((current) => movedBy(current, now.x - previous.x, now.y - previous.y, measured.size));
   }
 
-  function onPointerEnd(event: ReactPointerEvent<HTMLDivElement>) {
+  function onPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
     pointers.current.delete(event.pointerId);
+    const started = stroke.current;
+    if (started === null || started.pointerId !== event.pointerId) return;
+    stroke.current = null;
+    if (onSwipe === undefined || zoomRef.current.scale !== 1) return;
+    const swipe = swipeOf(started.from, { x: event.clientX, y: event.clientY });
+    if (swipe !== null) onSwipe(swipe);
+  }
+
+  function onPointerCancel(event: ReactPointerEvent<HTMLDivElement>) {
+    pointers.current.delete(event.pointerId);
+    stroke.current = null;
   }
 
   // A drag ends with a click on what was under it. A video would take it as play or pause.
@@ -137,8 +157,8 @@ export function usePreviewZoom<Target extends HTMLElement>({ keepBottom = 0, dou
       ref: area,
       onPointerDown,
       onPointerMove,
-      onPointerUp: onPointerEnd,
-      onPointerCancel: onPointerEnd,
+      onPointerUp,
+      onPointerCancel,
       onClickCapture,
       onDoubleClick,
     },
