@@ -39,6 +39,7 @@ type TerminalSettings struct {
 	OSC52                  bool
 	JISYenBackslash        bool
 	ComposerEnterSends     bool
+	Ligatures              bool
 	LocalShellProfile      string
 	// Appearance は、どの接続にも選ばれていないときの見た目である。
 	Appearance TerminalAppearance
@@ -65,6 +66,7 @@ func (s *Service) TerminalSettings() TerminalSettings {
 		OSC52:                  stored.EmbeddedTerminal.OSC52,
 		JISYenBackslash:        stored.EmbeddedTerminal.JISYenBackslash,
 		ComposerEnterSends:     stored.EmbeddedTerminal.ComposerEnterSends,
+		Ligatures:              stored.EmbeddedTerminal.Ligatures,
 		LocalShellProfile:      stored.EmbeddedTerminal.LocalShellProfile,
 		Appearance:             appearanceOf(stored.EmbeddedTerminal.Appearance),
 	}
@@ -120,6 +122,7 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 			OSC52:                  settings.OSC52,
 			JISYenBackslash:        settings.JISYenBackslash,
 			ComposerEnterSends:     settings.ComposerEnterSends,
+			Ligatures:              settings.Ligatures,
 			LocalShellProfile:      settings.LocalShellProfile,
 			// 空の節は書かない。 残せば、次に読む者は何か選ばれていると思う。
 			Appearance: storedAppearance(settings.Appearance),

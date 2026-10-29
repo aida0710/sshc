@@ -1246,6 +1246,8 @@ export const ja = {
   "terminal.rightClickPasteHint": "オフにすると、通常のコンテキストメニューが出ます。",
   "terminal.webglLabel": "WebGL描画を使用する",
   "terminal.webglHint": "文字が二重に見える・残像が残るときはオフにします。",
+  "terminal.ligaturesLabel": "合字（リガチャ）を使う",
+  "terminal.ligaturesHint": "->、!=、===などを1つの記号のように表示します。字体がJetBrains Monoのときに効きます。",
   "terminal.limitsOutOfRange": "指定値が有効範囲外です。",
   "terminal.startLabel": "開始ディレクトリ",
   "terminal.startHint": "~/workか絶対パス。空欄ならホームディレクトリから始めます。",

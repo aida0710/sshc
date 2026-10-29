@@ -168,6 +168,8 @@ type EmbeddedTerminal struct {
 	JISYenBackslash bool `json:"jisYenBackslash,omitempty"`
 	// ComposerEnterSendsは、スマホの入力欄でEnterを押すと送る。falseなら改行し、送るのは横のボタンである。
 	ComposerEnterSends bool `json:"composerEnterSends,omitempty"`
+	// Ligaturesは、ターミナルの文字をフォントの合字（->、!= など）で描く。falseなら1文字ずつ描く。
+	Ligatures bool `json:"ligatures,omitempty"`
 	// LocalShellProfileは検出済みprofileの安定IDであり、command文字列ではない。
 	LocalShellProfile string `json:"localShellProfile,omitempty"`
 	// StartDirectory は、ローカルシェルが始まる場所である。

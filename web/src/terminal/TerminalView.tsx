@@ -50,6 +50,7 @@ import { attachOSC9Progress, noTerminalProgress, type TerminalProgress } from ".
 import { TerminalProgressBar } from "./TerminalProgressBar";
 import { attachInlineImages } from "./inlineImages";
 import { applyCurrentUnicodeWidths } from "./unicodeWidths";
+import { attachLigatures, type LigatureDrawing } from "./ligatures";
 import { attachGraphemeClusterMode } from "./graphemeClusterMode";
 import { attachCommandMarkers } from "./commandMarkers";
 import { attachVisibilityReportQuestions } from "./visibilityReports";
@@ -125,6 +126,8 @@ type TerminalViewProps = {
   jisYenBackslash?: boolean;
   // composerEnterSends: Enter in the phone's text box sends; otherwise it starts a new line.
   composerEnterSends?: boolean;
+  // ligatures draws sequences such as -> and != with the font's ligatures.
+  ligatures?: boolean;
 };
 
 // The link popover opens just below and to the right of the pointer so it does
@@ -168,6 +171,7 @@ export function TerminalView({
   onForwardsChanged,
   jisYenBackslash = false,
   composerEnterSends = false,
+  ligatures = false,
 }: TerminalViewProps) {
   const t = useTranslate();
   const showToast = useToast();
@@ -223,6 +227,9 @@ export function TerminalView({
   const allowWindowsPaths = useLocalWindowsPaths(session.kind, runTarget);
   const windowsPathsRef = useRef(allowWindowsPaths);
   windowsPathsRef.current = allowWindowsPaths;
+  const ligaturesRef = useRef(ligatures);
+  ligaturesRef.current = ligatures;
+  const ligatureDrawing = useRef<LigatureDrawing | null>(null);
   const [currentDirectory, setCurrentDirectory] = useState("");
   const [programProgress, setProgramProgress] = useState<TerminalProgress>(noTerminalProgress);
 
@@ -315,6 +322,7 @@ export function TerminalView({
     view.loadAddon(serializeAddon);
     view.open(container);
     const inlineImages = attachInlineImages(view);
+    ligatureDrawing.current = attachLigatures(view, ligaturesRef.current);
     const renderer = attachWebglWhileShown(view, {
       enabled: webglEnabled,
       backgroundImage: backgroundConfigured,
@@ -546,6 +554,8 @@ export function TerminalView({
       osc9Directory.dispose();
       osc9Progress.dispose();
       inlineImages.dispose();
+      ligatureDrawing.current?.dispose();
+      ligatureDrawing.current = null;
       commandMarkers.dispose();
       detachPromptClicks();
       prompt.dispose();
@@ -615,6 +625,10 @@ export function TerminalView({
     terminal.current.options.fontFamily = resolvedFontFamily;
     refit.current?.();
   }, [resolvedFontFamily]);
+
+  useEffect(() => {
+    ligatureDrawing.current?.set(ligatures);
+  }, [ligatures]);
 
   useEffect(() => {
     if (terminal.current === null) return;

@@ -1246,6 +1246,8 @@ export const en = {
   "terminal.rightClickPasteHint": "Turn this off to keep the normal context menu.",
   "terminal.webglLabel": "Use WebGL rendering",
   "terminal.webglHint": "Turn this off if characters look doubled or leave traces.",
+  "terminal.ligaturesLabel": "Use font ligatures",
+  "terminal.ligaturesHint": "Draws ->, != and === as single symbols. Works with the JetBrains Mono font.",
   "terminal.limitsOutOfRange":
     "Those numbers are outside the range this build accepts.",
   "terminal.startLabel": "Starting directory",
