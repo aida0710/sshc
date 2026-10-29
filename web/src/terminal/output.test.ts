@@ -216,3 +216,96 @@ describe("terminal output replay", () => {
     expect(parsed).toHaveBeenCalledOnce();
   });
 });
+
+describe("replaying at the size the output was written for", () => {
+  // sizedHarness is a terminal of the browser's own size (cols), whose output takes the sizes a replay asks for
+  // and goes back to that size when the replay is over, as TerminalView does.
+  function sizedHarness(cols: number) {
+    const terminal = new Terminal({ cols, rows: 10, allowProposedApi: true });
+    const asked: string[] = [];
+    const output = createTerminalOutput(terminal, {
+      replayAt: (size) => {
+        asked.push(`${size.cols}x${size.rows}`);
+        terminal.resize(size.cols, size.rows);
+      },
+      replayed: () => {
+        asked.push("replayed");
+        terminal.resize(cols, 10);
+      },
+    });
+    cleanups.push(() => {
+      output.dispose();
+      terminal.dispose();
+    });
+    // logicalLines joins rows that wrapped, so a line reads the same at any width.
+    const logicalLines = () => {
+      const lines: string[] = [];
+      const buffer = terminal.buffer.active;
+      for (let row = 0; row < buffer.length; row++) {
+        const line = buffer.getLine(row)!;
+        const text = line.translateToString(true);
+        if (line.isWrapped && lines.length > 0) lines[lines.length - 1] += text;
+        else lines.push(text);
+      }
+      return lines.filter((line) => line !== "");
+    };
+    return { output, asked, logicalLines };
+  }
+
+  // A shell that edits a long line moves its cursor for the width it has: here back to the start of the line and
+  // 50 columns on, which at 120 columns is inside the same row and at 60 columns is on the next one. The next
+  // prompt follows on a line of its own (xterm.js leaves the cursor's line as it is when it rewraps).
+  const edited = encoder.encode(`${"a".repeat(100)}\r\u001b[50CB\r\n$ `);
+  const editedAt120 = `${"a".repeat(50)}B${"a".repeat(49)}`;
+
+  it("writes the history at the width it was written for and rewraps it to the terminal's own", async () => {
+    const subject = sizedHarness(60);
+    subject.output.beginReplay(
+      { start: 0, next: edited.byteLength, end: edited.byteLength, truncated: false, sizes: [{ at: 0, cols: 120, rows: 10 }] },
+      { sized: true },
+    );
+    subject.output.write(edited);
+
+    await vi.waitFor(() => expect(subject.asked).toEqual(["120x10", "replayed"]));
+    expect(subject.logicalLines()).toEqual([editedAt120, "$ "]);
+  });
+
+  it("takes each later size where the history reached it, even inside one chunk", async () => {
+    const subject = sizedHarness(60);
+    const before = encoder.encode("first\r\n");
+    const history = new Uint8Array([...before, ...edited]);
+    subject.output.beginReplay(
+      { start: 0, next: history.byteLength, end: history.byteLength, truncated: false, sizes: [{ at: 0, cols: 40, rows: 10 }, { at: before.byteLength, cols: 120, rows: 10 }] },
+      { sized: true },
+    );
+    subject.output.write(history);
+
+    await vi.waitFor(() => expect(subject.asked).toEqual(["40x10", "120x10", "replayed"]));
+    expect(subject.logicalLines()).toEqual(["first", editedAt120, "$ "]);
+  });
+
+  it("writes at the terminal's own size when it was offline and only catches up", async () => {
+    const subject = sizedHarness(60);
+    subject.output.beginReplay(
+      { start: 0, next: edited.byteLength, end: edited.byteLength, truncated: false, sizes: [{ at: 0, cols: 120, rows: 10 }] },
+      { sized: false },
+    );
+    subject.output.write(edited);
+    await new Promise<void>((resolve) => subject.output.write(new Uint8Array(), resolve));
+
+    expect(subject.asked).toEqual([]);
+  });
+
+  it("gives the terminal its own size back when the stream closes before the history is over", async () => {
+    const subject = sizedHarness(60);
+    subject.output.beginReplay(
+      { start: 0, next: 1000, end: 1000, truncated: false, sizes: [{ at: 0, cols: 120, rows: 10 }] },
+      { sized: true },
+    );
+    subject.output.write(edited);
+    await vi.waitFor(() => expect(subject.asked).toEqual(["120x10"]));
+
+    subject.output.abandonReplay();
+    expect(subject.asked).toEqual(["120x10", "replayed"]);
+  });
+});

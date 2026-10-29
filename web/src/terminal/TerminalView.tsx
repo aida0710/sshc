@@ -340,6 +340,9 @@ export function TerminalView({
 
     const statusLineTerminal = createStatusLineTerminal(view);
     statusLine.current = statusLineTerminal;
+    // replaySizeHeld is true while the history is replayed at the size it was written for (output.ts): the
+    // terminal neither fits its container nor tells the engine those sizes until the history is over.
+    let replaySizeHeld = false;
     const output = createTerminalOutput(createStatusLineRouter({
       screen: view,
       statusLine: () => statusLineTerminal,
@@ -347,7 +350,16 @@ export function TerminalView({
         if (shown) statusLineTerminal.clear();
         setStatusLineHeight(shown ? cellHeight(view, container) : null);
       },
-    }));
+    }), {
+      replayAt: (size) => {
+        replaySizeHeld = true;
+        if (view.cols !== size.cols || view.rows !== size.rows) view.resize(size.cols, size.rows);
+      },
+      replayed: () => {
+        replaySizeHeld = false;
+        fitAndSync();
+      },
+    });
     const sequences = attachTerminalSequences({
       view,
       t,
@@ -408,6 +420,7 @@ export function TerminalView({
       onLink: setLink,
       onAttached: () => {
         sent = "";
+        output.abandonReplay();
         // A new stream starts as shown to the engine; it is told the truth at once.
         linkController.currentStream()?.reportShown(isTerminalShown(container));
         if (activeRef.current && !touchTerminalRef.current && session.state !== "exited" && !search.hasFocus() && !isTypingElsewhere(region.current)) {
@@ -416,7 +429,7 @@ export function TerminalView({
         fitAndSync();
       },
       onReplay: (replay, resumed) => {
-        output.beginReplay(replay);
+        output.beginReplay(replay, { sized: !resumed });
         if (!replay.truncated) return;
         // Only a link that was offline lost output; a view shown afresh lacks
         // only the session's oldest output.
@@ -436,13 +449,16 @@ export function TerminalView({
         setPendingPaste(null);
         onExit?.(exit);
       },
-      onClose: () => setPendingPaste(null),
+      onClose: () => {
+        output.abandonReplay();
+        setPendingPaste(null);
+      },
     });
     streamLinkController.current = linkController;
 
     const fitAndSync = () => {
       renderer.shown(measured());
-      if (!measured()) return;
+      if (!measured() || replaySizeHeld) return;
       try {
         fit.fit();
         if (touchTerminalRef.current) syncTerminalInputPosition(view);

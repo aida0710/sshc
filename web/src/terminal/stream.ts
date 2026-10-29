@@ -4,7 +4,9 @@
 export type ExitReport = { code: number; signal: string; connectionLost?: boolean };
 // screen comes with a truncated replay: the sequences that show the screen as it stood at start, written before
 // the replayed output (internal/terminal/screen_checkpoint.go). An engine older than this sends none.
-export type ReplayReport = { start: number; next: number; end: number; truncated: boolean; screen?: string };
+// ReplaySize says that the session's output from position at on was written for a terminal of cols × rows.
+export type ReplaySize = { at: number; cols: number; rows: number };
+export type ReplayReport = { start: number; next: number; end: number; truncated: boolean; screen?: string; sizes?: ReplaySize[] };
 
 export type StreamHandlers = {
   onReplay: (replay: ReplayReport) => void;
@@ -158,5 +160,17 @@ function validReplay(value: unknown): value is ReplayReport {
     Number.isSafeInteger(replay.end) && replay.truncated !== undefined &&
     typeof replay.truncated === "boolean" && replay.start! >= 0 &&
     replay.start! <= replay.next! && replay.next! <= replay.end! &&
-    (replay.screen === undefined || typeof replay.screen === "string");
+    (replay.screen === undefined || typeof replay.screen === "string") &&
+    (replay.sizes === undefined || validSizes(replay.sizes));
+}
+
+function validSizes(value: unknown): value is ReplaySize[] {
+  if (!Array.isArray(value)) return false;
+  let at = 0;
+  return value.every((size: Partial<ReplaySize>) => {
+    const valid = Number.isSafeInteger(size.at) && size.at! >= at &&
+      Number.isSafeInteger(size.cols) && size.cols! > 0 && Number.isSafeInteger(size.rows) && size.rows! > 0;
+    if (valid) at = size.at!;
+    return valid;
+  });
 }

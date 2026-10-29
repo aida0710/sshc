@@ -110,6 +110,39 @@ func TestTheCheckpointTakesEachSizeWhereTheOutputReachedIt(t *testing.T) {
 	}
 }
 
+// A browser that attaches replays the output at the size it was written for: the size in effect where the
+// replay starts, then each later change at the position it was made.
+func TestAReplayCarriesTheSizesItsOutputWasWrittenFor(t *testing.T) {
+	session := &Session{buffer: NewRing(MinScrollback), screen: newScreenCheckpoint(Size{Cols: 80, Rows: 24}), streams: map[*Stream]bool{}}
+	session.publish([]byte("written at 80 columns\r\n"))
+	session.screen.resized(session.buffer.Written(), Size{Cols: 240, Rows: 60})
+	wide := session.buffer.Written()
+	session.publish([]byte("written at 240 columns\r\n"))
+	session.screen.resized(session.buffer.Written(), Size{Cols: 120, Rows: 40})
+	narrow := session.buffer.Written()
+	session.publish([]byte("written at 120 columns\r\n"))
+
+	whole, stream, ok := session.AttachFrom(0)
+	if !ok {
+		t.Fatal("AttachFrom(0) failed")
+	}
+	session.Detach(stream)
+	want := []SizeAt{{At: 0, Size: Size{Cols: 80, Rows: 24}}, {At: wide, Size: Size{Cols: 240, Rows: 60}}, {At: narrow, Size: Size{Cols: 120, Rows: 40}}}
+	if fmt.Sprint(whole.Sizes) != fmt.Sprint(want) {
+		t.Fatalf("sizes from the start = %v, want %v", whole.Sizes, want)
+	}
+
+	later, stream, ok := session.AttachFrom(wide + 3)
+	if !ok {
+		t.Fatal("AttachFrom(later) failed")
+	}
+	session.Detach(stream)
+	want = []SizeAt{{At: wide + 3, Size: Size{Cols: 240, Rows: 60}}, {At: narrow, Size: Size{Cols: 120, Rows: 40}}}
+	if fmt.Sprint(later.Sizes) != fmt.Sprint(want) {
+		t.Fatalf("sizes from the middle = %v, want %v", later.Sizes, want)
+	}
+}
+
 // A full-screen program draws its screen once and then rewrites only what changes. Once the buffer has let the
 // drawing go, a terminal that replays from the start gets the screen from the checkpoint and the rest as written.
 func TestAReplayFromTheStartShowsWhatTheBufferLetGo(t *testing.T) {

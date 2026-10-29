@@ -40,6 +40,21 @@ func newScreenCheckpoint(size Size) screenCheckpoint {
 	return screenCheckpoint{sizes: []sizeChange{{at: 0, size: size}}}
 }
 
+// sizesFrom returns the size the output at position start was written for, and each later change: what a browser
+// needs to replay the output at the width it was written for (Replay.Sizes). The sizes reach back to the oldest
+// output the buffer keeps, so start is never older than the first.
+func (c *screenCheckpoint) sizesFrom(start uint64) []SizeAt {
+	var sizes []SizeAt
+	for _, change := range c.sizes {
+		if change.at <= start {
+			sizes = []SizeAt{{At: start, Size: change.size}}
+			continue
+		}
+		sizes = append(sizes, SizeAt{At: change.at, Size: change.size})
+	}
+	return sizes
+}
+
 // resized records that the output from position at on is written for size.
 func (c *screenCheckpoint) resized(at uint64, size Size) {
 	if last := len(c.sizes) - 1; last > 0 && c.sizes[last].at == at {

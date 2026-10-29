@@ -55,6 +55,16 @@ type Replay struct {
 	// Screen は、Truncated のとき、Start の時点の画面を表示させる列である
 	// （screen_checkpoint.go）。受け手は Data より先に書く。
 	Screen string
+	// Sizes は、Start からの出力を書いたときの端末の大きさと、その後の変更である。受け手は
+	// その大きさで書いてから自分の大きさへ戻す。シェルの行の編集は書いた時の幅を前提に
+	// カーソルを動かすので、別の幅で流し直すと行の途中が消える。
+	Sizes []SizeAt
+}
+
+// SizeAt は、出力の位置 At から後の出力が Size の端末へ書かれたことを表す。
+type SizeAt struct {
+	At   uint64
+	Size Size
 }
 
 // Take は、届いている出力を limit バイトまで取り出す。open は、アタッチが外れて
@@ -142,12 +152,12 @@ func (s *Session) readOutputLocked(cursor uint64, limit int) (Replay, bool) {
 	}
 	if cursor >= s.buffer.Oldest() {
 		read, ok := s.buffer.ReadAvailableFrom(cursor, limit)
-		return Replay{RingRead: read}, ok
+		return Replay{RingRead: read, Sizes: s.screen.sizesFrom(read.Start)}, ok
 	}
 	screen, position := s.screen.snapshot()
 	read, ok := s.buffer.ReadAvailableFrom(position, limit)
 	read.Truncated = true
-	return Replay{RingRead: read, Screen: screen}, ok
+	return Replay{RingRead: read, Screen: screen, Sizes: s.screen.sizesFrom(read.Start)}, ok
 }
 
 // Detach は接続を解除する。セッション自体は継続する。
