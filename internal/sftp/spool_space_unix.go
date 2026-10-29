@@ -15,7 +15,17 @@ func spoolFreeBytes(directory string) (uint64, error) {
 	if err := unix.Statfs(directory, &stat); err != nil {
 		return 0, err
 	}
-	return uint64(stat.Bavail) * uint64(stat.Bsize), nil
+	return statfsFreeBytes(&stat), nil
+}
+
+// availableBlocks reads a free-block count whose type differs by OS. FreeBSD
+// and OpenBSD count it signed, and it goes below zero once the root reserve is
+// in use.
+func availableBlocks[Count int64 | uint64](count Count) uint64 {
+	if count < 0 {
+		return 0
+	}
+	return uint64(count)
 }
 
 func isNoSpaceLeft(err error) bool {

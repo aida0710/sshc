@@ -42,6 +42,9 @@ test:
 	@# Android 向けのビルドタグを検証する。実機向けビルドは CI の Android
 	@# ジョブで gomobile と NDK を使って検証する。
 	GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
+	@# FreeBSD・OpenBSD はリリースしていないが、ビルドが通る状態を保つ。
+	GOOS=freebsd GOARCH=amd64 CGO_ENABLED=0 go build ./...
+	GOOS=openbsd GOARCH=amd64 CGO_ENABLED=0 go build ./...
 	$(MAKE) deadcode
 	npm run lint --prefix web
 	npm test --prefix web
