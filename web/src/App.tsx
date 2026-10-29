@@ -1,4 +1,6 @@
 import { usePresetSync } from "./keyconfig/presets";
+import { presetInUse, useTerminalPresets, useTerminalPresetSync } from "./settings/terminalPresetLibrary";
+import { withPreset } from "./settings/terminalPresets";
 import { opensInThisPage } from "./ui/linkClick";
 import { useBindings } from "./keyconfig/bindings";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
@@ -98,6 +100,7 @@ export function App({
     vaultMigration,
   } = session;
   usePresetSync(state === "ready");
+  useTerminalPresetSync(state === "ready");
   const handoffs = useSectionHandoffs(navigate);
   const declared = useDeclaredConfig(state === "ready", section);
   const [desktopNavigationWidth, resizeDesktopNavigation] = useStoredColumnWidth(navigationWidth);
@@ -180,6 +183,13 @@ export function App({
     reorderSessions: setSessionOrder,
     setSettings: setTerminalSettings,
   } = terminalWorkspace;
+  // The terminals draw with the preset this browser uses. Saving the settings (the OSC 52 switch) keeps to
+  // terminalSettings, so a preset's values never end up in the standard set.
+  const terminalPresets = useTerminalPresets();
+  const appliedTerminalSettings = useMemo(
+    () => withPreset(terminalSettings, presetInUse(terminalPresets)),
+    [terminalSettings, terminalPresets],
+  );
   // A phone shows the terminal's own top bar instead of the app header and the bottom tabs only
   // while a session can be used: with none open, or while the run target refuses (the panel makes
   // the terminal inert), the app header keeps the navigation reachable.
@@ -448,7 +458,7 @@ export function App({
                       splitView={splitView}
                       terminalSessions={terminalSessions}
                       activeSessionId={activeSessionId}
-                      settings={terminalSettings}
+                      settings={appliedTerminalSettings}
                       hostAppearance={declared.hostAppearance}
                       hostVPN={declared.hostVPN}
                       api={runTargetApis.sessions}

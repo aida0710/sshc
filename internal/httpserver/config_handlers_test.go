@@ -214,11 +214,12 @@ func TestTerminalAndEngineSettingsReturnTheirWireSaveResult(t *testing.T) {
 		"terminal":   "/api/v1/metadata/terminal",
 		"engine":     "/api/v1/metadata/engine",
 		"shortcuts":  "/api/v1/metadata/shortcuts",
+		"presets":    "/api/v1/metadata/terminal-presets",
 		"appearance": "/api/v1/metadata/appearance",
 	} {
 		t.Run(name, func(t *testing.T) {
 			body := map[string]any{}
-			if name == "shortcuts" {
+			if name == "shortcuts" || name == "presets" {
 				body = map[string]any{"base": []any{}, "presets": []any{}}
 			}
 			response := harness.call(t, http.MethodPut, target, body, true, true)
@@ -240,6 +241,32 @@ func TestTerminalAndEngineSettingsReturnTheirWireSaveResult(t *testing.T) {
 				t.Fatalf("settings save unexpectedly returned an edit preview: %s", response.Body.String())
 			}
 		})
+	}
+}
+
+func TestTerminalPresetsRefuseAStaleListAndEngineSettings(t *testing.T) {
+	harness := newConfigHarness(t)
+	phone := map[string]any{"id": "phone", "name": "スマホ", "settings": map[string]any{"fontSize": 12, "composerEnterSends": true}}
+	saved := harness.call(t, http.MethodPut, "/api/v1/metadata/terminal-presets", map[string]any{"base": []any{}, "presets": []any{phone}}, true, true)
+	if saved.Code != http.StatusOK {
+		t.Fatalf("save = %d, body %s", saved.Code, saved.Body.String())
+	}
+	read := harness.call(t, http.MethodGet, "/api/v1/metadata", nil, true, true)
+	var metadata struct {
+		TerminalPresets []application.TerminalPreset `json:"terminalPresets"`
+	}
+	if err := json.Unmarshal(read.Body.Bytes(), &metadata); err != nil || len(metadata.TerminalPresets) != 1 || metadata.TerminalPresets[0].Settings.FontSize != 12 {
+		t.Fatalf("metadata = %s, want the phone preset", read.Body.String())
+	}
+
+	stale := harness.call(t, http.MethodPut, "/api/v1/metadata/terminal-presets", map[string]any{"base": []any{}, "presets": []any{}}, true, true)
+	if stale.Code != http.StatusConflict {
+		t.Fatalf("stale save = %d, want 409; body %s", stale.Code, stale.Body.String())
+	}
+	engineWide := map[string]any{"id": "pc", "name": "PC", "settings": map[string]any{"maxSessions": 10}}
+	refused := harness.call(t, http.MethodPut, "/api/v1/metadata/terminal-presets", map[string]any{"base": []any{phone}, "presets": []any{engineWide}}, true, true)
+	if refused.Code != http.StatusBadRequest {
+		t.Fatalf("engine setting in a preset = %d, want 400; body %s", refused.Code, refused.Body.String())
 	}
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import type { LocalShellProfile, SettingsApi, TerminalSettings } from "../api/settings";
 import { useTranslate } from "../i18n/context";
@@ -27,6 +27,11 @@ import {
   type TerminalDraft,
 } from "./terminalSettingsDraft";
 import { useLoad } from "../ui/useLoad";
+import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
+import { TerminalPresetBar } from "./TerminalPresetBar";
+import { refreshTerminalPresets, selectTerminalPreset, updateTerminalPresets, useTerminalPresets } from "./terminalPresetLibrary";
+import { presetSettingsOf, sharedSettingsOf, standardPresetId, withPreset, type TerminalPreset } from "./terminalPresets";
+import { newIdentifier } from "../ui/randomIdentifier";
 
 export type TerminalSettingsApi = Pick<SettingsApi, "terminalSettings" | "setTerminalSettings" | "localShellProfiles">;
 
@@ -72,6 +77,10 @@ function saveFailureOf(error: unknown, draft: TerminalDraft): { message: Message
 // The embedded terminal: where it starts, its limits, how it looks and how it treats the clipboard and
 // keyboard. A computer shows the groups as tabs so each fits on one screen; a phone shows every group as a
 // card. Either way there is one draft and one save, so moving between tabs keeps what was typed.
+//
+// The page edits one set of settings at a time (TerminalPresetBar): the standard set, or a preset. A preset
+// holds only what the browser applies; the rest of the draft is the settings every browser shares, saved with
+// the standard set whichever set is open.
 export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: {
   api: TerminalSettingsApi;
   showHeading: boolean;
@@ -83,9 +92,30 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
   const [profiles, setProfiles] = useState<LocalShellProfile[]>([]);
   const [tab, setTab] = useState<TerminalSettingsTab>("look");
   const save = useAsyncOperation();
-  const loadSettings = useCallback(async () => { setDraft(draftOf(await api.terminalSettings())); }, [api]);
+  // stored is the standard set as saved; the draft starts from it, or from it with the open preset.
+  const [stored, setStored] = useState<TerminalSettings>({});
+  const loadSettings = useCallback(async () => { setStored(await api.terminalSettings()); }, [api]);
   const settingsLoad = useLoad(loadSettings);
   const loaded = settingsLoad.state === "loaded";
+  // drafted is whether the draft holds the loaded settings; the fields wait for it, not just for the load.
+  const [drafted, setDrafted] = useState(false);
+  const library = useTerminalPresets();
+  // opened is the set the person chose to edit; until then the page opens the one this browser uses.
+  const [opened, setOpened] = useState<string | null>(null);
+  const editedPreset: TerminalPreset | undefined = library.presets.find((preset) => preset.id === (opened ?? library.selected));
+  const editing = editedPreset?.id ?? standardPresetId;
+  const inUse = library.presets.some((preset) => preset.id === library.selected) ? library.selected : standardPresetId;
+  // edited is whether the draft has changes not saved yet; until it has, it follows the open set.
+  const edited = useRef(false);
+  const [discarding, setDiscarding] = useState<string | null>(null);
+
+  // The presets come in on their own; until they do, the draft is the standard set's, and it moves to this
+  // browser's preset once they arrive, if nothing was typed yet.
+  useEffect(() => {
+    if (!loaded || edited.current) return;
+    setDraft(draftOf(withPreset(stored, editedPreset)));
+    setDrafted(true);
+  }, [loaded, stored, editedPreset]);
 
   useEffect(() => {
     let active = true;
@@ -99,7 +129,60 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
 
   function edit(patch: Partial<TerminalDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
+    edited.current = true;
     save.touch();
+  }
+
+  function open(id: string) {
+    if (edited.current) {
+      setDiscarding(id);
+      return;
+    }
+    edited.current = false;
+    setOpened(id);
+    save.touch();
+  }
+
+  // applied tells the rest of the app the standard set changed. The save is done by then, so a failure here
+  // does not make it look failed; the session poll catches up.
+  async function applied(settings: TerminalSettings) {
+    setStored(settings);
+    try {
+      await onSettingsChange?.(settings);
+    } catch {
+      // The normal session poll will reconcile the view shortly.
+    }
+  }
+
+  async function createPreset(name: string) {
+    const settings = settingsOf(draft) ?? withPreset(stored, editedPreset);
+    const preset: TerminalPreset = { id: newIdentifier(), name, settings: presetSettingsOf(settings) };
+    await updateTerminalPresets([...library.presets, preset]);
+    edited.current = false;
+    setOpened(preset.id);
+  }
+
+  async function renamePreset(name: string) {
+    await updateTerminalPresets(library.presets.map((preset) => preset.id === editing ? { ...preset, name } : preset));
+  }
+
+  async function deletePreset() {
+    try {
+      await updateTerminalPresets(library.presets.filter((preset) => preset.id !== editing));
+      if (inUse === editing) selectTerminalPreset(standardPresetId);
+      edited.current = false;
+      setOpened(standardPresetId);
+    } catch {
+      save.fail(t("terminal.presetSaveFailed"));
+    }
+  }
+
+  function useHere() {
+    try {
+      selectTerminalPreset(editing);
+    } catch {
+      save.fail(t("terminal.presetSaveFailed"));
+    }
   }
 
   async function submit() {
@@ -110,15 +193,20 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
       return;
     }
     await save.run(async () => {
-      await api.setTerminalSettings(next);
-      // The PUT above is the durable operation. A live-session refresh is a
-      // best-effort follow-up and must not turn a completed save into a false
-      // failure message.
-      try {
-        await onSettingsChange?.(next);
-      } catch {
-        // The normal session poll will reconcile the view shortly.
+      if (editedPreset === undefined) {
+        await api.setTerminalSettings(next);
+        await applied(next);
+      } else {
+        await updateTerminalPresets(library.presets.map((preset) =>
+          preset.id === editedPreset.id ? { ...preset, settings: presetSettingsOf(next) } : preset));
+        // The shared part goes to the standard set, which keeps its own part as it was.
+        const shared = { ...presetSettingsOf(stored), ...sharedSettingsOf(next) };
+        if (JSON.stringify(sharedSettingsOf(shared)) !== JSON.stringify(sharedSettingsOf(stored))) {
+          await api.setTerminalSettings(shared);
+          await applied(shared);
+        }
       }
+      edited.current = false;
     }, {
       describe: (error) => {
         const failure = saveFailureOf(error, draft);
@@ -130,6 +218,8 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
   }
 
   const busy = save.busy;
+  const ready = loaded && drafted;
+  const presetsUnavailable = !ready || busy || library.loading || library.busy || library.error;
   const groupProps = { draft, edit };
   // The preview takes a column of its own only where the board leaves the fields room beside it. It goes by
   // the board's width, not the screen's: on a PC the navigation and the list of settings pages take 470px.
@@ -148,6 +238,34 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
   return (
     <SettingsSection id="settings-terminal" label={t("terminal.settingsHeading")} icon="terminal" showHeading={showHeading}>
       <SettingsLoadFailure settingsLoad={settingsLoad} title={t("terminal.settingsLoadFailed")} />
+      {library.error ? (
+        <Notice tone="danger" actions={<Button small onClick={() => { void refreshTerminalPresets(); }}>{t("terminal.presetsReload")}</Button>}>
+          {t("terminal.presetsReloadRequired")}
+        </Notice>
+      ) : null}
+      <TerminalPresetBar
+        presets={library.presets}
+        editing={editing}
+        inUse={inUse}
+        disabled={presetsUnavailable}
+        onOpen={open}
+        onUseHere={useHere}
+        onCreate={createPreset}
+        onRename={renamePreset}
+        onDelete={deletePreset}
+      />
+      {discarding === null ? null : (
+        <DiscardDraftDialog
+          id="terminal-preset-discard"
+          onCancel={() => setDiscarding(null)}
+          onConfirm={() => {
+            edited.current = false;
+            setOpened(discarding);
+            setDiscarding(null);
+            save.touch();
+          }}
+        />
+      )}
       {compact ? null : (
         <SegmentedTabs
           label={t("terminal.settingsGroups")}
@@ -158,7 +276,7 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
           panelId={panelId}
         />
       )}
-      <fieldset disabled={!loaded || busy} className="min-w-0 border-0 p-0 disabled:opacity-70">
+      <fieldset disabled={!ready || busy} className="min-w-0 border-0 p-0 disabled:opacity-70">
         {compact ? (
           <div className="flex flex-col gap-3.5">
             {/* Each card's rows sit in their own box so the first row, right under the heading, has no line above it. */}
@@ -188,10 +306,10 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
       <ActionArea status={save.error === ""
         ? (settingsLoad.state === "loading"
             ? <p role="status" className="text-sm text-ink-muted">{t("terminal.settingsLoading")}</p>
-            : !loaded || !save.saved ? undefined : <Notice tone="success">{t("terminal.settingsSaved")}</Notice>)
+            : !ready || !save.saved ? undefined : <Notice tone="success">{t("terminal.settingsSaved")}</Notice>)
         : <Notice tone="danger">{save.error}</Notice>}
       >
-        <Button kind="primary" busy={busy} disabled={!loaded} onClick={() => void submit()}>
+        <Button kind="primary" busy={busy} disabled={!ready} onClick={() => void submit()}>
           {t("terminal.startSave")}
         </Button>
       </ActionArea>
