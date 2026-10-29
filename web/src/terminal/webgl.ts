@@ -78,34 +78,53 @@ export async function attachWebglRenderer(
   };
 }
 
+type WhileShownOptions = WebglOptions & {
+  // webglSettled is called when an attach has ended, with the WebGL renderer in place or not.
+  webglSettled?: () => void;
+};
+
 // attachWebglWhileShown keeps the WebGL renderer only while the terminal is on
 // the screen. A hidden terminal (a session kept after it was left, a pane
 // behind Focus mode) gives back its GPU context and glyph textures and draws
 // with the DOM renderer, which costs nothing while nothing is displayed.
-export function attachWebglWhileShown(terminal: WebglTerminal, options: WebglOptions = {}): {
+export function attachWebglWhileShown(terminal: WebglTerminal, options: WhileShownOptions = {}): {
   shown(visible: boolean): void;
+  // attaching tells whether the WebGL renderer is loading: until it is in place,
+  // the cells are still measured by the renderer it replaces.
+  attaching(): boolean;
   dispose(): void;
 } {
   let renderer: IDisposable | null = null;
   let attaching = false;
   let wanted = false;
   let disposed = false;
+  // unavailable is set when an attach ended without a renderer (WebGL turned off, unsupported
+  // or not loaded). Each fit asks for the renderer, so it is tried again only once the
+  // terminal has been hidden and shown.
+  let unavailable = false;
   const settle = () => {
     if (disposed) return;
     if (!wanted) {
       renderer?.dispose();
       renderer = null;
+      unavailable = false;
       return;
     }
-    if (renderer !== null || attaching) return;
+    if (renderer !== null || attaching || unavailable) return;
     attaching = true;
     void attachWebglRenderer(terminal, options).then((attached) => {
       attaching = false;
-      if (disposed || !wanted) {
+      if (disposed) {
         attached?.dispose();
         return;
       }
-      renderer = attached;
+      if (wanted) {
+        renderer = attached;
+        unavailable = attached === null;
+      } else {
+        attached?.dispose();
+      }
+      options.webglSettled?.();
     });
   };
   return {
@@ -113,6 +132,7 @@ export function attachWebglWhileShown(terminal: WebglTerminal, options: WebglOpt
       wanted = visible;
       settle();
     },
+    attaching: () => attaching,
     dispose() {
       disposed = true;
       renderer?.dispose();

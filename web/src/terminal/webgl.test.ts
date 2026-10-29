@@ -121,4 +121,67 @@ describe("WebGL terminal renderer", () => {
       await vi.waitFor(() => expect(addon.dispose).toHaveBeenCalledOnce());
     });
   });
+
+  describe("while the renderer loads", () => {
+    it("says it is attaching until the renderer is in place, then that the attach has settled", async () => {
+      const terminal = { loadAddon: vi.fn() };
+      const { addon } = addonHarness();
+      let finish: (value: never) => void = () => undefined;
+      const load = vi.fn(() => new Promise<never>((resolve) => { finish = resolve; }));
+      const webglSettled = vi.fn();
+      const renderer = attachWebglWhileShown(terminal, { supported: () => true, load, webglSettled });
+
+      renderer.shown(true);
+      expect(renderer.attaching()).toBe(true);
+      finish(addon as never);
+
+      await vi.waitFor(() => expect(webglSettled).toHaveBeenCalledOnce());
+      expect(renderer.attaching()).toBe(false);
+      expect(terminal.loadAddon).toHaveBeenCalledWith(addon);
+    });
+
+    it("says the attach has settled when the renderer could not be loaded", async () => {
+      const terminal = { loadAddon: vi.fn() };
+      const webglSettled = vi.fn();
+      const renderer = attachWebglWhileShown(terminal, {
+        supported: () => true,
+        load: () => Promise.reject(new Error("no WebGL addon")),
+        webglSettled,
+      });
+
+      renderer.shown(true);
+
+      await vi.waitFor(() => expect(webglSettled).toHaveBeenCalledOnce());
+      expect(renderer.attaching()).toBe(false);
+    });
+
+    it("does not try again on every fit when WebGL is turned off, only after being hidden and shown", async () => {
+      const terminal = { loadAddon: vi.fn() };
+      const webglSettled = vi.fn();
+      const renderer = attachWebglWhileShown(terminal, { enabled: false, webglSettled });
+
+      renderer.shown(true);
+      await vi.waitFor(() => expect(webglSettled).toHaveBeenCalledOnce());
+      renderer.shown(true);
+      expect(renderer.attaching()).toBe(false);
+
+      renderer.shown(false);
+      renderer.shown(true);
+      expect(renderer.attaching()).toBe(true);
+      await vi.waitFor(() => expect(webglSettled).toHaveBeenCalledTimes(2));
+    });
+
+    it("says nothing once the terminal is disposed", async () => {
+      const terminal = { loadAddon: vi.fn() };
+      const { addon } = addonHarness();
+      const webglSettled = vi.fn();
+      const renderer = attachWebglWhileShown(terminal, { supported: () => true, load: async () => addon as never, webglSettled });
+
+      renderer.shown(true);
+      renderer.dispose();
+
+      await vi.waitFor(() => expect(addon.dispose).toHaveBeenCalledOnce());
+      expect(webglSettled).not.toHaveBeenCalled();
+    });
+  });
 });
