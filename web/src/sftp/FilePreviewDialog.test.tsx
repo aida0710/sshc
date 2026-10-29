@@ -24,12 +24,25 @@ vi.mock("./MonacoEditor", () => ({
 
 const png = { contentType: "image/png", revision: "r1", blob: new Blob([new Uint8Array([1])]) };
 
-function renderDialog(path: string, { paths, alias = "web" }: { paths?: string[]; alias?: string } = {}) {
+function renderDialog(path: string, { paths, alias = "web", onClose = () => undefined }: { paths?: string[]; alias?: string; onClose?: () => void } = {}) {
   return render(
     <LanguageProvider>
-      <FilePreviewDialog alias={alias} path={path} {...(paths === undefined ? {} : { paths })} onClose={() => undefined} />
+      <FilePreviewDialog alias={alias} path={path} {...(paths === undefined ? {} : { paths })} onClose={onClose} />
     </LanguageProvider>,
   );
+}
+
+// swipe strokes one finger across the picture, from one point to another.
+function swipe(area: Element, from: { x: number; y: number }, to: { x: number; y: number }, pointerId = 1) {
+  fireEvent.pointerDown(area, { pointerId, pointerType: "touch", clientX: from.x, clientY: from.y });
+  fireEvent.pointerMove(area, { pointerId, pointerType: "touch", clientX: to.x, clientY: to.y });
+  fireEvent.pointerUp(area, { pointerId, pointerType: "touch", clientX: to.x, clientY: to.y });
+}
+
+function zoomArea(): Element {
+  const area = document.querySelector("[data-preview-zoom-area]");
+  if (area === null) throw new Error("no picture is shown");
+  return area;
 }
 
 describe("FilePreviewDialog", () => {
@@ -237,5 +250,40 @@ describe("FilePreviewDialog", () => {
     renderDialog("/srv/plot", { paths: ["/tmp/a.png"] });
     await screen.findByRole("img", { name: "plot" });
     expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+  });
+
+  it("steps to the next and previous image with a finger's swipe, and closes on a swipe down", async () => {
+    vi.mocked(sftpApi.previewFile).mockResolvedValue(png);
+    const onClose = vi.fn();
+    renderDialog("/tmp/b.png", { paths: ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"], onClose });
+    await screen.findByRole("img", { name: "b.png" });
+
+    swipe(zoomArea(), { x: 300, y: 300 }, { x: 150, y: 310 });
+    expect(await screen.findByRole("img", { name: "c.png" })).toBeTruthy();
+    swipe(zoomArea(), { x: 100, y: 300 }, { x: 260, y: 290 });
+    expect(await screen.findByRole("img", { name: "b.png" })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+
+    swipe(zoomArea(), { x: 200, y: 100 }, { x: 210, y: 260 });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("leaves a stroke across a zoomed image, and a pinch, to the zoom", async () => {
+    vi.mocked(sftpApi.previewFile).mockResolvedValue(png);
+    renderDialog("/tmp/b.png", { paths: ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"] });
+    await screen.findByRole("img", { name: "b.png" });
+
+    fireEvent.pointerDown(zoomArea(), { pointerId: 1, pointerType: "touch", clientX: 100, clientY: 300 });
+    fireEvent.pointerDown(zoomArea(), { pointerId: 2, pointerType: "touch", clientX: 300, clientY: 300 });
+    fireEvent.pointerUp(zoomArea(), { pointerId: 2, pointerType: "touch", clientX: 300, clientY: 300 });
+    fireEvent.pointerUp(zoomArea(), { pointerId: 1, pointerType: "touch", clientX: 260, clientY: 300 });
+    expect(screen.getByText("2 / 3")).toBeTruthy();
+
+    fireEvent.doubleClick(zoomArea());
+    // jsdom has no pointer capture, which a drag across the zoomed image takes.
+    Object.assign(zoomArea(), { hasPointerCapture: () => false, setPointerCapture: vi.fn() });
+    swipe(zoomArea(), { x: 300, y: 300 }, { x: 150, y: 300 });
+    expect(screen.getByText("2 / 3")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "b.png" })).toBeTruthy();
   });
 });

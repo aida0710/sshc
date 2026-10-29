@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, openApplication, test } from "./support/environment";
+import { expect, openApplication, test, type Installation } from "./support/environment";
 import { samplePNG } from "./support/images";
 import { drawnRows, drawnSpan } from "./support/terminal";
 
@@ -363,10 +363,9 @@ test("a tap on the line being typed at a prompt moves the shell's cursor there",
   expect(messages.join("")).not.toContain("\x1b[D".repeat(6));
 });
 
-test("a tap on a file path the terminal printed opens its preview at once", async ({ page, installation }) => {
-  const imagePath = join(installation.home, "shot.png");
-  test.skip(!imagePath.startsWith("/"), "terminal paths are detected only when they start with /");
-  await writeFile(imagePath, samplePNG());
+// openShellPrinting opens a shell that printed output, which names files on the engine's own disk: the
+// preview of a printed path reads the real file.
+async function openShellPrinting(page: Page, installation: Installation, output: string) {
   await page.route("**/api/v1/terminal/sessions**", (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/stream")) return route.fulfill({ status: 201, json: { streamTicket: "mobile-path-ticket" } });
@@ -374,14 +373,26 @@ test("a tap on a file path the terminal printed opens its preview at once", asyn
     return route.fulfill({ json: { sessions: [{ id: "mobile-path-shell", kind: "shell", workspaceId: "default", title: "claude", startedAt: "2026-09-12T00:00:00Z", state: "connected", problem: "", forwards: [] }], maxSessions: 12 } });
   });
   await page.routeWebSocket("**/terminal/stream?**", (socket) => {
-    socket.send(Buffer.from(`Saved \x1b[36m${imagePath}\x1b[0m\r\n$ `));
+    socket.send(Buffer.from(output));
   });
   await openApplication(page, installation);
   await page.goto(new URL("/terminal", page.url()).href);
-  const printed = drawnSpan(page, "shot.png").last();
+}
+
+async function printedBounds(page: Page, text: string) {
+  const printed = drawnSpan(page, text).last();
   await expect(printed).toBeVisible();
   const bounds = await printed.boundingBox();
   if (bounds === null) throw new Error("the printed path is not on screen");
+  return bounds;
+}
+
+test("a tap on a file path the terminal printed opens its preview at once", async ({ page, installation }) => {
+  const imagePath = join(installation.home, "shot.png");
+  test.skip(!imagePath.startsWith("/"), "terminal paths are detected only when they start with /");
+  await writeFile(imagePath, samplePNG());
+  await openShellPrinting(page, installation, `Saved \x1b[36m${imagePath}\x1b[0m\r\n$ `);
+  const bounds = await printedBounds(page, "shot.png");
 
   await page.touchscreen.tap(bounds.x + bounds.width - 4, bounds.y + bounds.height / 2);
 
@@ -401,6 +412,38 @@ async function swipe(page: Page, from: { x: number; y: number }, to: { x: number
   await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await client.detach();
 }
+
+test("a swipe across a previewed image steps to the next and previous file, and a swipe down closes it", async ({ page, installation }) => {
+  const first = join(installation.home, "first.png");
+  const second = join(installation.home, "second.png");
+  test.skip(!first.startsWith("/"), "terminal paths are detected only when they start with /");
+  await writeFile(first, samplePNG());
+  await writeFile(second, samplePNG());
+  await openShellPrinting(page, installation, `Saved \x1b[36m${first}\x1b[0m\r\nSaved \x1b[36m${second}\x1b[0m\r\n$ `);
+  const bounds = await printedBounds(page, "first.png");
+  await page.touchscreen.tap(bounds.x + bounds.width - 4, bounds.y + bounds.height / 2);
+
+  const firstPreview = page.getByRole("dialog", { name: first });
+  const firstImage = firstPreview.getByRole("img", { name: "first.png" });
+  await expect(firstImage).toBeVisible();
+  await expect(firstPreview).toContainText("1 / 2");
+  const picture = await firstImage.locator("xpath=..").boundingBox();
+  if (picture === null) throw new Error("the preview shows no picture");
+  const middle = { x: picture.x + picture.width / 2, y: picture.y + picture.height / 2 };
+
+  await swipe(page, { x: middle.x + 100, y: middle.y }, { x: middle.x - 100, y: middle.y + 10 });
+  const secondPreview = page.getByRole("dialog", { name: second });
+  await expect(secondPreview.getByRole("img", { name: "second.png" })).toBeVisible();
+  await expect(secondPreview).toContainText("2 / 2");
+  // The navigation behind the preview stays where it was.
+  await expect(page.locator("[data-app-navigation]")).toHaveAttribute("data-navigation-open", "false");
+
+  await swipe(page, { x: middle.x - 100, y: middle.y }, { x: middle.x + 100, y: middle.y });
+  await expect(firstImage).toBeVisible();
+
+  await swipe(page, { x: middle.x, y: middle.y - 80 }, { x: middle.x + 10, y: middle.y + 80 });
+  await expect(firstPreview).toBeHidden();
+});
 
 // A full-screen program draws on the alternate screen, which has no scrollback, and scrolls its own text.
 // Claude Code also asks for mouse reports (1000, 1002, 1003 with the SGR encoding 1006); less does not.
