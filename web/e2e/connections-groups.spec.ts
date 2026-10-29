@@ -211,7 +211,13 @@ test("keeps the group counts and shows the connection 「…」 beside the addre
   const groups = page.getByRole("navigation", { name: "Groups" });
   const work = groups.getByRole("button", { name: "work", exact: true });
   await expect(work.getByText(/^\d+$/)).toBeVisible();
-  await expect(groups.getByRole("button", { name: "Actions for work" }).locator("xpath=ancestor::div[contains(@class, 'absolute')][1]")).toHaveCSS("opacity", "0");
+  const groupMenu = groups.getByRole("button", { name: "Actions for work" }).locator("xpath=ancestor::div[contains(@class, 'absolute')][1]");
+  await expect(groupMenu).toHaveCSS("opacity", "0");
+  // Such a screen can still have a mouse: under it, the 「…」 takes the count's place.
+  await work.hover();
+  await expect(groupMenu).toHaveCSS("opacity", "1");
+  await expect(work.getByText(/^\d+$/)).toBeHidden();
+  await page.mouse.move(0, 0);
 
   const alpha = tree.getByRole("button", { name: "alpha", exact: true });
   const alphaMenu = tree.getByRole("button", { name: /^Actions for alpha/ });

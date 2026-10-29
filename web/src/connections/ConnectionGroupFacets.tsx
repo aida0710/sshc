@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import type { Notice, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
-import { ActionMenu, revealOnHoverAtPcSize, type ActionMenuItem } from "../ui/ActionMenu";
+import { ActionMenu, hideOnHoverAtPcSize, revealOnHoverAtPcSize, type ActionMenuItem } from "../ui/ActionMenu";
 import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { draggableCursor, dropTargetLook } from "../ui/dragAndDropLook";
@@ -122,7 +122,7 @@ export function ConnectionGroupFacets({
             </span>
             <span className="min-w-0 flex-1 truncate">{node.label}</span>
             {tucked ? <span className="shrink-0 text-[11px] text-ink-faint">{t("tree.hiddenMark")}</span> : null}
-            <span className={`shrink-0 font-mono text-[11.5px] font-normal text-ink-faint ${items.length === 0 ? "" : "group-hover/row:invisible group-focus-within/row:invisible"} ${openMenu === menuKey ? "invisible" : ""}`}>
+            <span className={`shrink-0 font-mono text-[11.5px] font-normal text-ink-faint ${items.length === 0 ? "" : hideOnHoverAtPcSize} ${openMenu === menuKey ? "invisible" : ""}`}>
               {node.descendantCount}
             </span>
           </button>
