@@ -2397,6 +2397,7 @@ export const ja = {
   "diag.running": "選択した検査を実行しています…",
   "diag.idle": "開始するまで、どの検査も実行されません。",
   "diag.hostAlias": "接続名",
+  "diag.hostAliasPlaceholder": "接続名を入力するか、候補から選ぶ",
   "diag.needsAlias": "検査するには接続名を入力してください。",
   "diag.explain": "設定を解析",
   "diag.explainFailed": "この接続先の設定を解析できませんでした。",
