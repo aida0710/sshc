@@ -15,7 +15,7 @@ beforeEach(async () => {
   });
   await refreshPresets();
 });
-afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => vi.restoreAllMocks());
 
 describe("application shortcuts", () => {
   it("shows the paste defaults and preserves saved paste bindings", () => {
