@@ -94,7 +94,10 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
       // bastion's own shells, which this machine does not have.
       await route.fulfill({ json: { profiles: [{ id: "bastion-fish", label: "fish on bastion", path: "/usr/bin/fish", arguments: [], default: true }] } });
     } else if (path.endsWith("/terminal/workspaces")) {
-      await route.fulfill({ json: { workspaces: [{ id: "default", name: "", hidden: false, builtIn: true }], maxWorkspaces: 50 } });
+      await route.fulfill({ json: { workspaces: [
+        { id: "default", name: "", hidden: false, builtIn: true },
+        { id: "agents", name: "", hidden: true, builtIn: true },
+      ], maxWorkspaces: 50 } });
     } else {
       throw new Error(`Unexpected remote engine request: ${path}`);
     }
@@ -121,6 +124,32 @@ function refusalResponse(refusal: "version" | "unreachable" | "locked") {
     case "unreachable":
       return { status: 502, contentType: "application/problem+json", json: { code: "remote_engine_unreachable", message: "request rejected" } };
   }
+}
+
+// terminalSession is one session as an engine lists it.
+function terminalSession(id: string, title: string, workspaceId = "default") {
+  return { id, kind: "shell", workspaceId, title, startedAt: "2026-10-29T00:00:00Z", state: "connected", problem: "", forwards: [] };
+}
+
+// stubLocalSessions makes this machine's engine list the sessions given, and add what Home opens to them.
+async function stubLocalSessions(page: Page, sessions: ReturnType<typeof terminalSession>[]) {
+  await page.route("**/api/v1/terminal/sessions**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/stream")) {
+      await route.fulfill({ status: 404, json: {} });
+    } else if (path === "/api/v1/terminal/sessions" && route.request().method() === "POST") {
+      const opened = terminalSession("from-home", "From Home");
+      sessions.push(opened);
+      await route.fulfill({ status: 201, json: { session: opened, streamTicket: "local-ticket" } });
+    } else {
+      await route.fulfill({ json: { sessions, maxSessions: 50 } });
+    }
+  });
+}
+
+async function chooseLocalhost(page: Page) {
+  await page.getByRole("button", { name: /^Choose where terminals run/ }).click();
+  await page.getByRole("list", { name: "Engines", exact: true }).getByRole("button", { name: /^localhost/ }).click();
 }
 
 async function chooseBastion(page: Page) {
@@ -398,4 +427,41 @@ test("offers the run target's own shells for a new session", async ({ page, inst
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("button", { name: /^Local shell · fish on bastion, \/usr\/bin\/fish/ })).toBeVisible();
   await expect(dialog.getByRole("button", { name: /^Local shell, bastion/ })).toBeVisible();
+});
+
+test("shows again the session that was open on each run target when switching back to it", async ({ page, installation }) => {
+  await stubLocalSessions(page, [terminalSession("build", "Build"), terminalSession("logs", "Logs")]);
+  // bastion lists a session in the hidden agents workspace first: the top of the sidebar is web.
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [
+    terminalSession("agent-job", "Agent job", "agents"), terminalSession("web", "web"), terminalSession("db", "db"),
+  ] });
+  await openApplication(page, installation);
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  const sessionRow = (title: string) => navigation.getByRole("button", { name: title, exact: true });
+  await sessionRow("Logs").click();
+  await expect(sessionRow("Logs")).toHaveAttribute("aria-current", "true");
+
+  await chooseBastion(page);
+  await expect(sessionRow("web")).toHaveAttribute("aria-current", "true");
+  await sessionRow("db").click();
+  await expect(sessionRow("db")).toHaveAttribute("aria-current", "true");
+
+  await chooseLocalhost(page);
+  await expect(sessionRow("Logs")).toHaveAttribute("aria-current", "true");
+  await chooseBastion(page);
+  await expect(sessionRow("db")).toHaveAttribute("aria-current", "true");
+});
+
+test("shows a session Home opened on this machine while terminals ran on a run target", async ({ page, installation }) => {
+  await stubLocalSessions(page, [terminalSession("build", "Build")]);
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "web", exact: true })).toBeVisible();
+
+  await openSection(page, "Home");
+  await page.getByRole("button", { name: /^Connect to bastion\./ }).dblclick();
+  await expect(page.getByRole("button", { name: /^Choose where terminals run \(now: localhost\)/ })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "From Home", exact: true }))
+    .toHaveAttribute("aria-current", "true");
 });

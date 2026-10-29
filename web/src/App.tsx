@@ -59,6 +59,10 @@ import { useFocusBackAfterInert } from "./ui/useFocusBackAfterInert";
 
 const transferReconcileIntervalMs = 2_000;
 
+// What SFTP or Home asked of this machine's terminals while they ran on a run
+// target: a session to open there, or one Home opened there to show.
+type PendingLocalRequest = { kind: "open"; alias: string; cwd?: string } | { kind: "show"; sessionId: string };
+
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
   health: () => Promise<HealthResponse>;
@@ -155,6 +159,7 @@ export function App({
     api: settingsApi,
     shells: runTargetApis.sessions,
     terminalSessions,
+    workspaces: terminalWorkspaces.workspaces,
     enabled: state === "ready",
     section,
     navigate,
@@ -211,12 +216,12 @@ export function App({
   }), [inspector, inspectorOpen, inspectorTriggerRef, mobileLayout, phoneActionsSlot, phoneBackSlot, setInspectorOpen]);
 
   // SFTP and Home open terminals on this machine. With an engine on an SSH
-  // host chosen, the run target goes back to this machine first and the
-  // session is opened once its terminal API is the one in use.
-  const [pendingLocalOpen, setPendingLocalOpen] = useState<{ alias: string; cwd?: string } | null>(null);
+  // host chosen, the run target goes back to this machine first, and what was
+  // asked for is done once this machine's terminal API is the one in use.
+  const [pendingLocalRequest, setPendingLocalRequest] = useState<PendingLocalRequest | null>(null);
   const openSFTPTerminal = useCallback(async (alias: string, cwd?: string) => {
     if (runTargets.selected !== null) {
-      setPendingLocalOpen(cwd === undefined ? { alias } : { alias, cwd });
+      setPendingLocalRequest(cwd === undefined ? { kind: "open", alias } : { kind: "open", alias, cwd });
       runTargets.select(null);
       return;
     }
@@ -227,17 +232,22 @@ export function App({
     await openSSHSession(alias, cwd);
   }, [openLocalShell, openSSHSession, runTargets]);
 
-  useEffect(() => {
-    if (pendingLocalOpen === null || runTargets.selected !== null) return;
-    setPendingLocalOpen(null);
-    void openSFTPTerminal(pendingLocalOpen.alias, pendingLocalOpen.cwd);
-  }, [openSFTPTerminal, pendingLocalOpen, runTargets.selected]);
-
   // Home opens a session on this machine itself, so it is shown there.
   const showLocalSession = useCallback((id: string) => {
-    runTargets.select(null);
+    if (runTargets.selected !== null) {
+      setPendingLocalRequest({ kind: "show", sessionId: id });
+      runTargets.select(null);
+      return;
+    }
     showSession(id);
   }, [runTargets, showSession]);
+
+  useEffect(() => {
+    if (pendingLocalRequest === null || runTargets.selected !== null) return;
+    setPendingLocalRequest(null);
+    if (pendingLocalRequest.kind === "show") showSession(pendingLocalRequest.sessionId);
+    else void openSFTPTerminal(pendingLocalRequest.alias, pendingLocalRequest.cwd);
+  }, [openSFTPTerminal, pendingLocalRequest, runTargets.selected, showSession]);
 
   useAppShortcuts({
     enabled: state === "ready",
