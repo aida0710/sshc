@@ -18,6 +18,8 @@ import {
   StoredPassphrasePanel,
 } from "./KeyForms";
 import { AgentSection } from "./AgentSection";
+import { useEngineOS } from "../about/useEngineOS";
+import { aboutApi, type AboutApi } from "../api/about";
 import { KeyTrashConfirmation } from "./KeyTrashConfirmation";
 import { KeyTrashTable } from "./KeyTrashTable";
 import { KeyGenerationSection } from "./KeyGenerationSection";
@@ -65,6 +67,8 @@ type KeysScreenProps = {
   secrets?: KeySecretsApi;
   onAssignGeneratedKey?: (key: GeneratedPrivateKeyHandoff) => void;
   onInstallGeneratedKey?: (key: GeneratedPublicKeyHandoff) => void;
+  // about tells which system the engine runs on, for the ssh-agent advice.
+  about?: AboutApi;
 };
 
 // Certificate expiry is shown to the minute, so the clock only needs to move
@@ -79,8 +83,10 @@ export function KeysScreen({
   secrets = keySecretsApi,
   onAssignGeneratedKey,
   onInstallGeneratedKey,
+  about = aboutApi,
 }: KeysScreenProps) {
   const t = useTranslate();
+  const engineOS = useEngineOS(true, about);
   const [rowPanel, setRowPanel] = useState<KeyRowPanelState | null>(null);
   const storedPhrases = useKeyPassphrases(secrets);
   const { load: loadPhrases } = storedPhrases;
@@ -428,7 +434,7 @@ export function KeysScreen({
 
       <KeyInventoryProblems inventory={inventory} />
 
-      <AgentSection inventory={inventory} />
+      <AgentSection inventory={inventory} engineOS={engineOS} />
 
       <KeyGenerationSection
         api={api}
