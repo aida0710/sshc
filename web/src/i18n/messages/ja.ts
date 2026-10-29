@@ -2489,6 +2489,7 @@ export const ja = {
   "kh.added": "{host}を追加しました。",
   "kh.search": "検索",
   "kh.hashed": "（ハッシュ済み）",
+  "kh.hashedFor": "{aliases}（ハッシュ済み）",
   "kh.delete": "削除",
   "kh.confirmRemove":
     "{line}行目（{fingerprint}）を削除しますか？ 操作は履歴に記録され、バックアップも保存されます。",

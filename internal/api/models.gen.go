@@ -1199,14 +1199,16 @@ type KnownHostCandidate struct {
 
 // KnownHostEntry defines model for KnownHostEntry.
 type KnownHostEntry struct {
-	Comment     string   `json:"comment"`
-	Digest      string   `json:"digest"`
-	Fingerprint string   `json:"fingerprint"`
-	Hashed      bool     `json:"hashed"`
-	Hosts       []string `json:"hosts"`
-	KeyType     string   `json:"keyType"`
-	Line        int      `json:"line"`
-	Marker      string   `json:"marker"`
+	// Aliases The saved connections whose key this entry holds, matched by the name ssh looks the key up under (HostKeyAlias, or HostName and Port). A hashed entry is matched by hashing that name. Absent when the entry holds no saved connection's key.
+	Aliases     *[]string `json:"aliases,omitempty"`
+	Comment     string    `json:"comment"`
+	Digest      string    `json:"digest"`
+	Fingerprint string    `json:"fingerprint"`
+	Hashed      bool      `json:"hashed"`
+	Hosts       []string  `json:"hosts"`
+	KeyType     string    `json:"keyType"`
+	Line        int       `json:"line"`
+	Marker      string    `json:"marker"`
 }
 
 // KnownHostTarget defines model for KnownHostTarget.

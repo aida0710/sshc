@@ -25,6 +25,9 @@ const problemKnownHostsSymlink = "known_hosts_symlink"
 type KnownHostsHandlers struct {
 	Service *knownhosts.Service
 	Actions ActionHandlers
+	// ConnectionNames は、保存した接続先と、その鍵が known_hosts で探される名前を返す。
+	// 一覧の各エントリに、どの接続先の鍵かを添えるのに使う。nil なら添えない。
+	ConnectionNames func() ([]knownhosts.ConnectionName, error)
 }
 
 func registerKnownHostsRoutes(engine *echo.Echo, handlers KnownHostsHandlers) {
@@ -98,13 +101,19 @@ func (h KnownHostsHandlers) List(c *echo.Context) error {
 	if err != nil {
 		return knownHostsProblem(c, err)
 	}
+	names := h.connectionNames()
 
 	response := api.KnownHostsResponse{
 		Path:    listing.Path,
 		Entries: make([]api.KnownHostEntry, 0, len(listing.Lines)),
 	}
 	for _, line := range listing.Lines {
+		var aliases *[]string
+		if matched := line.Entry.AliasesAmong(names); len(matched) > 0 {
+			aliases = &matched
+		}
 		response.Entries = append(response.Entries, api.KnownHostEntry{
+			Aliases:     aliases,
 			Line:        line.Number,
 			Digest:      knownhosts.ContentDigest([]byte(line.Raw)),
 			Marker:      line.Entry.Marker,
@@ -116,6 +125,19 @@ func (h KnownHostsHandlers) List(c *echo.Context) error {
 		})
 	}
 	return c.JSON(http.StatusOK, response)
+}
+
+// connectionNames は、一覧に添える接続先の名前を返す。設定が読めないときは添えずに
+// 一覧だけを返す。名前は手がかりで、known_hosts の保守はそれ無しでもできる。
+func (h KnownHostsHandlers) connectionNames() []knownhosts.ConnectionName {
+	if h.ConnectionNames == nil {
+		return nil
+	}
+	names, err := h.ConnectionNames()
+	if err != nil {
+		return nil
+	}
+	return names
 }
 
 // Delete はトランザクションマネージャ経由で確認済みのエントリを削除する。
