@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"slices"
 
 	"sshc/internal/storage"
 )
@@ -27,8 +26,8 @@ func (s store) path() string {
 	return filepath.Join(s.workspace.Root(), filepath.FromSlash(PathRelative))
 }
 
-// load は、保存したワークスペースを返す。ファイルが無いときと、分割の頃の形の
-// ときは、消せないワークスペースだけを返す。
+// load は、保存したワークスペースを、保存した順（画面に並べる順）で返す。ファイルが
+// 無いときと、分割の頃の形のときは、消せないワークスペースだけを返す。
 func (s store) load() ([]Workspace, error) {
 	contents, err := s.workspace.FileSystem().ReadFile(s.path())
 	if errors.Is(err, fs.ErrNotExist) {
@@ -53,27 +52,7 @@ func (s store) load() ([]Workspace, error) {
 	if err := json.Unmarshal(contents, &stored); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidDocument, err)
 	}
-	workspaces, err := validDocument(stored.Workspaces)
-	if err != nil {
-		return nil, err
-	}
-	return ordered(workspaces), nil
-}
-
-// ordered は、default を先頭に、agents を末尾に置き、そのあいだに作った順で並べる。
-// 画面から開いたセッションの入る先が一番上に、普段は隠すものが一番下に来る。
-func ordered(workspaces []Workspace) []Workspace {
-	rank := func(w Workspace) int {
-		switch w.ID {
-		case DefaultID:
-			return 0
-		case AgentsID:
-			return 2
-		}
-		return 1
-	}
-	slices.SortStableFunc(workspaces, func(a, b Workspace) int { return rank(a) - rank(b) })
-	return workspaces
+	return validDocument(stored.Workspaces)
 }
 
 // validDocument は、読んだ定義を確かめ、消せないワークスペースが欠けていれば足す。

@@ -1225,6 +1225,11 @@ type MoveTerminalSessionRequest struct {
 	WorkspaceId string `json:"workspaceId"`
 }
 
+// MoveTerminalWorkspaceRequest defines model for MoveTerminalWorkspaceRequest.
+type MoveTerminalWorkspaceRequest struct {
+	BeforeId *string `json:"beforeId,omitempty"`
+}
+
 // Notice defines model for Notice.
 type Notice struct {
 	Code    string          `json:"code"`

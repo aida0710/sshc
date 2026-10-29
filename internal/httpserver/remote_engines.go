@@ -100,6 +100,7 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.POST("/api/v1/engines/:alias/terminal/workspaces", handlers.ForwardTerminal)
 	engine.PATCH("/api/v1/engines/:alias/terminal/workspaces/:id", handlers.ForwardTerminal)
 	engine.DELETE("/api/v1/engines/:alias/terminal/workspaces/:id", handlers.ForwardTerminal)
+	engine.PUT("/api/v1/engines/:alias/terminal/workspaces/:id/position", handlers.ForwardTerminal)
 	engine.GET(remoteEngineStreamRoute, handlers.ForwardStream)
 }
 
