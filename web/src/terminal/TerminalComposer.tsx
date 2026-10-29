@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef, type KeyboardEvent, type RefObject } from "react";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { isImeComposing } from "../ui/imeComposition";
@@ -14,25 +14,30 @@ function keepFocus(event: { preventDefault(): void }) {
 
 // TerminalComposer is the phone's text box under the key bar. Japanese is
 // composed and corrected here, and only the finished text reaches the terminal.
-// Typing into the terminal directly still works; this is an extra way in.
+// A tap on the terminal types here (TerminalView); the key bar's Ctrl and Alt
+// hand the next key to the terminal itself.
 // Enter starts a new line and the button beside the box sends, unless the
 // settings choose enterSends.
 export function TerminalComposer({
   value,
   disabled,
   enterSends,
+  fieldRef,
   onChange,
   onSubmit,
 }: {
   value: string;
   disabled: boolean;
   enterSends: boolean;
+  // fieldRef is given the text box while it is shown, and null otherwise.
+  fieldRef?: RefObject<HTMLTextAreaElement | null>;
   onChange: (value: string) => void;
   onSubmit: () => void;
 }) {
   const t = useTranslate();
   const visible = useMediaQuery(mobileViewportQuery);
-  const field = useRef<HTMLTextAreaElement>(null);
+  const ownField = useRef<HTMLTextAreaElement>(null);
+  const field = fieldRef ?? ownField;
 
   // Fit the field to its text. CSS field-sizing is not in every mobile browser yet.
   useLayoutEffect(() => {
@@ -44,7 +49,7 @@ export function TerminalComposer({
     element.style.height = "auto";
     const tallest = Number.isFinite(lineHeight) ? maximumComposerLines * lineHeight + padding : Number.POSITIVE_INFINITY;
     element.style.height = `${Math.min(element.scrollHeight, tallest)}px`;
-  }, [value, visible]);
+  }, [field, value, visible]);
 
   if (!visible) return null;
 

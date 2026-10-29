@@ -181,12 +181,22 @@ describe("TerminalView", () => {
     expect(screen.getByText("connected", { exact: true })).toBeVisible();
   });
 
-  it("waits for a deliberate tap before focusing input on a touch device", async () => {
+  // touchScreen makes this browser a touch screen; phone also gives it a phone's width.
+  function touchScreen({ phone }: { phone: boolean }) {
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query.includes("pointer: coarse"), media: query,
+      matches: query === mobileViewportQuery ? phone : query.includes("pointer: coarse"), media: query,
       addEventListener: vi.fn(), removeEventListener: vi.fn(),
       addListener: vi.fn(), removeListener: vi.fn(),
     }));
+  }
+
+  function tap(target: Element) {
+    fireEvent.touchStart(target, { touches: [{ clientX: 20, clientY: 20 }] });
+    fireEvent.touchEnd(target);
+  }
+
+  it("waits for a deliberate tap before focusing input on a touch device", async () => {
+    touchScreen({ phone: false });
     const focus = vi.spyOn(Terminal.prototype, "focus");
     try {
       const api = { streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
@@ -201,10 +211,34 @@ describe("TerminalView", () => {
       fireEvent.touchMove(overlay, { touches: [{ clientX: 20, clientY: 60 }] });
       fireEvent.touchEnd(overlay);
       expect(focus).not.toHaveBeenCalled();
-      fireEvent.touchStart(overlay, { touches: [{ clientX: 20, clientY: 20 }] });
-      fireEvent.touchEnd(overlay);
+      tap(overlay);
       expect(focus).toHaveBeenCalledOnce();
     } finally {
+      focus.mockRestore();
+    }
+  });
+
+  it("types into the phone's text box on a tap, and into the terminal after the key bar's Ctrl", async () => {
+    touchScreen({ phone: true });
+    const focus = vi.spyOn(Terminal.prototype, "focus");
+    document.documentElement.dataset.keyboardOpen = "true";
+    try {
+      renderView();
+      await waitFor(() => expect(streams).toHaveLength(1));
+      const field = screen.getByRole("textbox", { name: "Text to send to the terminal" });
+      await waitFor(() => expect(field).toBeEnabled());
+
+      tap(document.querySelector(".sshc-select-overlay")!);
+      expect(field).toHaveFocus();
+      expect(focus).not.toHaveBeenCalled();
+
+      // The next key typed takes Ctrl, and the terminal is what reads it.
+      const ctrl = screen.getByRole("button", { name: "Ctrl" });
+      fireEvent.pointerDown(ctrl);
+      fireEvent.click(ctrl);
+      expect(focus).toHaveBeenCalledOnce();
+    } finally {
+      delete document.documentElement.dataset.keyboardOpen;
       focus.mockRestore();
     }
   });
