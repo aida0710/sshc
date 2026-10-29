@@ -3,10 +3,20 @@ import type { Translate } from "../i18n/context";
 import { connectionProgressText } from "./progress";
 import { terminalProblemKey } from "./sessions";
 
+// exitCodeUnknown is the engine's code for an exit whose status it could not learn (terminal.ExitCodeUnknown).
+// It is not a status the program returned, so it is never shown as one.
+const exitCodeUnknown = -1;
+
 // sessionStatusText は、ターミナルの一覧の行に出す状態の文言である。失敗の理由が
 // あればそれを、無ければ再接続・接続中・接続済み・終了のどれかを出す。
 export function sessionStatusText(t: Translate, session: TerminalSession): string {
   if (session.problem !== "") return t(terminalProblemKey(session.problem));
+  return sessionStateText(t, session);
+}
+
+// sessionStateText は、状態だけを短く言う（再接続中（2/5）、接続が切れました、終了コード1 など）。
+// 失敗の理由は言わない。ペインの見出しと、行の2行目（理由の無いとき）に出す。
+export function sessionStateText(t: Translate, session: TerminalSession): string {
   switch (session.state) {
     case "reconnecting":
       return t("terminal.reconnectingAttempt", {
@@ -19,6 +29,7 @@ export function sessionStatusText(t: Translate, session: TerminalSession): strin
       if (session.exited?.connectionLost === true) return t("terminal.exitedConnectionLost");
       if (session.exited !== undefined && session.exited.signal !== "") return t("terminal.exitedBySignal", { signal: session.exited.signal });
       if (session.exited?.code === 0 && endedRightAway(session)) return t("terminal.exitedRightAway");
+      if (session.exited?.code === exitCodeUnknown) return t("terminal.exitedUnknown");
       return t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
     default:
       return t("terminal.connected");

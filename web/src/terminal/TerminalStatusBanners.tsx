@@ -57,9 +57,23 @@ function ReconnectMessage({ reconnect }: { reconnect: TerminalSession["reconnect
   );
 }
 
+// exitText says how the program ended, in a sentence for the ended row.
+function exitText(t: ReturnType<typeof useTranslate>, exited: NonNullable<TerminalSession["exited"]>, session: TerminalSession): string {
+  if (exited.connectionLost === true) return t("terminal.exitedWithConnectionLost");
+  if (exited.signal !== "") return t("terminal.exitedWithSignal", { signal: exited.signal });
+  if (exited.code === 0 && endedRightAway(session)) return t("terminal.exitedWithCodeRightAway");
+  if (exited.code === exitCodeUnknown) return t("terminal.exitedWithUnknownCode");
+  return t("terminal.exitedWithCode", { code: String(exited.code) });
+}
+
+// exitCodeUnknown is the engine's code for an exit whose status it could not learn (terminal.ExitCodeUnknown).
+const exitCodeUnknown = -1;
+
 // The strip of one-line notices between the terminal header and the screen:
 // the engine's reconnect progress, the browser's own stream link, and how
-// the program ended. Each row only appears while it has something to say.
+// the program ended. Each row only appears while it has something to say, and
+// one thing is said once: an ended session's reason (why reconnecting stopped,
+// why it could not connect) is its ended row, not a row of its own above it.
 export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLinkStop, onStopReconnect, onReconnect }: {
   session: TerminalSession;
   // A message from the view itself, such as a refused clipboard write.
@@ -128,7 +142,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
         </div>
       )}
 
-      {session.problem === "" ? null : (
+      {session.problem === "" || session.exited !== undefined ? null : (
         <p role="alert" className={notice}>
           {t(terminalProblemKey(session.problem))}
         </p>
@@ -152,15 +166,9 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
         </div>
       )}
       {session.exited === undefined ? null : (
-        <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-card px-3 py-1.5 text-xs">
-          <p className={`min-w-0 grow ${exitedAbnormally(session) ? "text-danger" : "text-ink-muted"}`}>
-            {session.exited.connectionLost === true
-              ? t("terminal.exitedWithConnectionLost")
-              : session.exited.signal !== ""
-                ? t("terminal.exitedWithSignal", { signal: session.exited.signal })
-                : session.exited.code === 0 && endedRightAway(session)
-                  ? t("terminal.exitedWithCodeRightAway")
-                  : t("terminal.exitedWithCode", { code: String(session.exited.code) })}
+        <div role={session.problem === "" ? "status" : "alert"} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-card px-3 py-1.5 text-xs">
+          <p className={`min-w-0 grow ${session.problem !== "" || exitedAbnormally(session) ? "text-danger" : "text-ink-muted"}`}>
+            {session.problem === "" ? exitText(t, session.exited, session) : t(terminalProblemKey(session.problem))}
           </p>
           {session.kind !== "ssh" || session.alias === undefined || onReconnect === undefined ? null : (
             <Button small disabled={reconnectBusy} onClick={() => void reconnectExitedSession()} className={bannerButton}>
