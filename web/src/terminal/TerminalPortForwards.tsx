@@ -24,9 +24,8 @@ export function TerminalPortForwards({
 }: {
   session: TerminalSession;
   api?: ForwardApi;
-  // isRunTargetSession is true for a session opened on a run target. Its forwards listen on this machine and
-  // are carried to the run target, so they are temporary only (the session uses the run target's SSH
-  // config) and only local and dynamic forwards are offered.
+  // isRunTargetSession is true for a session opened on a run target. Its forwards are temporary only, because
+  // the session uses the run target's SSH config.
   isRunTargetSession?: boolean;
   saveApi?: SaveApi;
   onChanged?: () => void | Promise<void>;
@@ -166,7 +165,7 @@ export function TerminalPortForwards({
               <Field label={t("conn.forwardType")}>
                 <select className={control} value={kind} disabled={!connected || busy} onChange={(event) => setKind(event.currentTarget.value as PortForwardKind)}>
                   <option value="local">{t("conn.forwardLocal")}</option>
-                  {isRunTargetSession ? null : <option value="remote">{t("conn.forwardRemote")}</option>}
+                  <option value="remote">{t("conn.forwardRemote")}</option>
                   <option value="dynamic">{t("conn.forwardDynamic")}</option>
                 </select>
               </Field>

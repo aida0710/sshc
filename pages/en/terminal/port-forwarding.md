@@ -35,7 +35,7 @@ RemoteForward 9080 127.0.0.1:3000
 
 The server must allow remote forwarding, for example with `AllowTcpForwarding remote` or `yes`. A server denial is reported without ending the Terminal session. SSH does not include a reason in its negative reply, so check the server policy and whether the port is already occupied.
 
-The bind request always uses `127.0.0.1`, even when the config asks for a different address. Connections whose reported origin is not loopback are also rejected. Whether the server honors the requested bind address is controlled by the server. The destination is resolved from the engine, which may be different from the device displaying the browser.
+The bind request always uses `127.0.0.1`, even when the config asks for a different address. Connections whose reported origin is not loopback are also rejected. Whether the server honors the requested bind address is controlled by the server. The destination is resolved from the engine, which may be different from the device displaying the browser. For a session opened on a run target, it is resolved from the run target's engine.
 
 Stopping closes the listener and active tunnels. Saved forwards reopen on the next SSH connection; temporary forwards need to be added again after reconnection. Destination-free remote SOCKS and automatic port allocation with port `0` are not supported.
 
