@@ -16,6 +16,7 @@ import { attachPromptCursorClicks, type PromptCursor } from "./promptCursor";
 import { attachPromptJumpKeys, type PromptJump } from "./promptJump";
 import { useTouchTerminal } from "./touchMode";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
+import { attachFontZoom } from "./attachFontZoom";
 import { attachTouchScroll } from "./touchScroll";
 import { terminalTouchScrollTarget } from "./touchScrollTarget";
 import { KeyBar, applyModifiers, encodeKey } from "./KeyBar";
@@ -182,7 +183,15 @@ export function TerminalView({
   const touchTerminalRef = useRef(touchTerminal);
   touchTerminalRef.current = touchTerminal;
   const resolvedFontSize = fontSize ?? (mobile ? mobileTerminalFontSize : desktopTerminalFontSize);
-  const resolvedFontFamily = useTerminalFont(font ?? "", resolvedFontSize);
+  // zoomedFontSize is the size a pinch, or the wheel with Ctrl, gave this terminal over the settings' size
+  // (base). It is this view's alone and is not saved. When the settings' size changes, the view follows it again.
+  const [zoomedFontSize, setZoomedFontSize] = useState<{ base: number; size: number } | null>(null);
+  const shownFontSize = zoomedFontSize !== null && zoomedFontSize.base === resolvedFontSize ? zoomedFontSize.size : resolvedFontSize;
+  const shownFontSizeRef = useRef(shownFontSize);
+  shownFontSizeRef.current = shownFontSize;
+  const resolvedFontSizeRef = useRef(resolvedFontSize);
+  resolvedFontSizeRef.current = resolvedFontSize;
+  const resolvedFontFamily = useTerminalFont(font ?? "", shownFontSize);
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
   const host = useRef<HTMLDivElement>(null);
@@ -310,7 +319,7 @@ export function TerminalView({
       backgroundImage: backgroundConfigured,
       cursorBlink: session.state !== "exited" && cursorAnimationEnabled(reducedMotion),
       fontFamily: resolvedFontFamily,
-      fontSize: resolvedFontSize,
+      fontSize: shownFontSize,
       theme: terminalTheme(container, hasBackground),
       scrollback: scrollbackLines,
       webgl: webglEnabled,
@@ -477,6 +486,10 @@ export function TerminalView({
       selectionHeld: () => selectionHeldIn(container),
       reducedMotion: () => reducedMotionRef.current,
     });
+    const detachFontZoom = attachFontZoom(container, {
+      fontSize: () => shownFontSizeRef.current,
+      setFontSize: (size) => setZoomedFontSize({ base: resolvedFontSizeRef.current, size }),
+    });
 
     const typed = (data: string) => {
       // xterm answers the queries in replayed history (DA1, cursor position,
@@ -531,6 +544,7 @@ export function TerminalView({
       stopObservingSize();
       stopWatchingShown();
       detachTouchScroll();
+      detachFontZoom();
       detachClipboard();
       output.dispose();
       statusLineTerminal.dispose();
@@ -645,11 +659,11 @@ export function TerminalView({
     if (terminal.current === null) return;
     const changed = applyTerminalRuntimeOptions(terminal.current.options, {
       cursorBlink: session.state !== "exited" && cursorAnimationEnabled(reducedMotion),
-      fontSize: resolvedFontSize,
+      fontSize: shownFontSize,
       scrollback: scrollbackLines,
     });
     if (changed.refit) refit.current?.();
-  }, [resolvedFontSize, reducedMotion, scrollbackLines, session.state]);
+  }, [shownFontSize, reducedMotion, scrollbackLines, session.state]);
 
   const connectionStatus = sessionStateText(t, session);
   // The header puts the state in words only while it is connecting. Connected, the dot says it; reconnecting,
@@ -810,7 +824,8 @@ export function TerminalView({
             // The screen gives up a row to the status line; the size observer refits it.
             ...(statusLineHeight === null ? {} : { bottom: `${statusLineHeight}px` }),
           }}
-          className="absolute inset-0 bg-term-bg"
+          // Two fingers on the screen pinch its text (attachFontZoom), not the page.
+          className="absolute inset-0 bg-term-bg [touch-action:pan-x_pan-y]"
         />
         <div
           ref={statusLineHost}

@@ -983,3 +983,27 @@ test("keeps the icons of the terminal and its search bar in the middle of their 
   await expect(screen.getByRole("textbox", { name: "Search terminal output" })).toBeVisible();
   await expectIconsCentered(page, "Terminal search");
 });
+
+test("two fingers pinch the text of the terminal, not the page", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  await openLocalShell(page);
+  await expect(drawnRows(page)).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const before = Number.parseFloat((await drawnRowFont(page)).fontSize);
+
+  // Two fingers move apart through real touch events, from 80px apart to 160px.
+  const screen = await screenRect(page);
+  const middle = { x: screen.x + screen.width / 2, y: screen.y + screen.height / 2 };
+  const client = await page.context().newCDPSession(page);
+  const fingers = (gap: number) => [{ x: middle.x - gap / 2, y: middle.y, id: 1 }, { x: middle.x + gap / 2, y: middle.y, id: 2 }];
+  await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: fingers(80) });
+  for (let gap = 90; gap <= 160; gap += 10) {
+    await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: fingers(gap) });
+  }
+  await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await client.detach();
+
+  await expect.poll(async () => Number.parseFloat((await drawnRowFont(page)).fontSize)).toBe(Math.min(32, before * 2));
+  expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1);
+});

@@ -1,8 +1,6 @@
 import type { TerminalSettings } from "../api/settings";
 import { appearanceOf } from "../terminal/appearance";
-
-// The font sizes the engine accepts (EmbeddedTerminal.fontSize).
-export const fontSizeRange = { min: 8, max: 32 } as const;
+import { fontSizeRange } from "../terminal/fontSize";
 
 // Every field is kept as the text the user typed; numbers are read once, on
 // save, so that a half-typed value never snaps back under the cursor.
