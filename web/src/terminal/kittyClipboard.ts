@@ -1,9 +1,6 @@
-type Disposable = { dispose(): void };
-type ClipboardParser = {
-  registerOscHandler(identifier: number, handler: (data: string) => boolean): Disposable;
-  registerCsiHandler(id: { prefix?: string; intermediates?: string; final: string }, handler: (params: (number | number[])[]) => boolean): Disposable;
-  registerEscHandler(id: { final: string }, handler: () => boolean): Disposable;
-};
+import type { IDisposable, IParser } from "@xterm/xterm";
+
+type ClipboardParser = Pick<IParser, "registerOscHandler" | "registerCsiHandler" | "registerEscHandler">;
 
 // The Kitty clipboard protocol (OSC 5522, https://sw.kovidgoyal.net/kitty/clipboard/)
 // lets a program put more than text on the clipboard (an image, HTML), and with
@@ -32,7 +29,7 @@ export type KittyClipboardOptions = {
   randomBytes?: (size: number) => Uint8Array;
 };
 
-export type KittyClipboard = Disposable & {
+export type KittyClipboard = IDisposable & {
   // takePaste hands a paste to the program when it turned paste events on, and
   // says whether it did. items is asked for only then.
   takePaste(items: () => PastedItem[]): boolean;

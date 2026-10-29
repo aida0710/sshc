@@ -1,5 +1,5 @@
-type Disposable = { dispose(): void };
-type OSCParser = { registerOscHandler(identifier: number, handler: (data: string) => boolean): Disposable };
+import type { IDisposable } from "@xterm/xterm";
+import type { OSCParser } from "./escapeSequenceParser";
 
 // attachOSC133Commands follows the shell integration's command marks. The
 // engine times commands and notifies the long ones; the view needs only where
@@ -10,7 +10,7 @@ export function attachOSC133Commands(
     onCommandStarted?: () => void;
     onCommandCompleted?: () => void;
   },
-): Disposable {
+): IDisposable {
   let running = false;
   return parser.registerOscHandler(133, (data) => {
     const [kind] = data.split(";", 1);
