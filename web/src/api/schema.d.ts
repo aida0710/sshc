@@ -10015,8 +10015,10 @@ export interface operations {
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             415: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
         };
     };
     revokeSFTPMediaTicket: {
