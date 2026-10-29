@@ -445,19 +445,19 @@ func (e TerminalControlResponseState) Valid() bool {
 
 // Defines values for TerminalDeterminateProgressState.
 const (
-	Error  TerminalDeterminateProgressState = "error"
-	Normal TerminalDeterminateProgressState = "normal"
-	Paused TerminalDeterminateProgressState = "paused"
+	TerminalDeterminateProgressStateError  TerminalDeterminateProgressState = "error"
+	TerminalDeterminateProgressStateNormal TerminalDeterminateProgressState = "normal"
+	TerminalDeterminateProgressStatePaused TerminalDeterminateProgressState = "paused"
 )
 
 // Valid indicates whether the value is a known member of the TerminalDeterminateProgressState enum.
 func (e TerminalDeterminateProgressState) Valid() bool {
 	switch e {
-	case Error:
+	case TerminalDeterminateProgressStateError:
 		return true
-	case Normal:
+	case TerminalDeterminateProgressStateNormal:
 		return true
-	case Paused:
+	case TerminalDeterminateProgressStatePaused:
 		return true
 	default:
 		return false
@@ -497,6 +497,54 @@ func (e TerminalPresentationTitleSource) Valid() bool {
 	case Terminal:
 		return true
 	case User:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TerminalProgramStatusKind.
+const (
+	Auth       TerminalProgramStatusKind = "auth"
+	Permission TerminalProgramStatusKind = "permission"
+	Question   TerminalProgramStatusKind = "question"
+)
+
+// Valid indicates whether the value is a known member of the TerminalProgramStatusKind enum.
+func (e TerminalProgramStatusKind) Valid() bool {
+	switch e {
+	case Auth:
+		return true
+	case Permission:
+		return true
+	case Question:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TerminalProgramStatusState.
+const (
+	TerminalProgramStatusStateBlocked TerminalProgramStatusState = "blocked"
+	TerminalProgramStatusStateDone    TerminalProgramStatusState = "done"
+	TerminalProgramStatusStateError   TerminalProgramStatusState = "error"
+	TerminalProgramStatusStateIdle    TerminalProgramStatusState = "idle"
+	TerminalProgramStatusStateWorking TerminalProgramStatusState = "working"
+)
+
+// Valid indicates whether the value is a known member of the TerminalProgramStatusState enum.
+func (e TerminalProgramStatusState) Valid() bool {
+	switch e {
+	case TerminalProgramStatusStateBlocked:
+		return true
+	case TerminalProgramStatusStateDone:
+		return true
+	case TerminalProgramStatusStateError:
+		return true
+	case TerminalProgramStatusStateIdle:
+		return true
+	case TerminalProgramStatusStateWorking:
 		return true
 	default:
 		return false
@@ -2245,6 +2293,23 @@ type TerminalPresentationTitleSource string
 // TerminalProgramProgress defines model for TerminalProgramProgress.
 type TerminalProgramProgress = json.RawMessage
 
+// TerminalProgramStatus defines model for TerminalProgramStatus.
+type TerminalProgramStatus struct {
+	App      *string                    `json:"app,omitempty"`
+	Kind     *TerminalProgramStatusKind `json:"kind,omitempty"`
+	Message  *string                    `json:"message,omitempty"`
+	Progress *int                       `json:"progress,omitempty"`
+	State    TerminalProgramStatusState `json:"state"`
+	Title    *string                    `json:"title,omitempty"`
+	Version  int                        `json:"version"`
+}
+
+// TerminalProgramStatusKind defines model for TerminalProgramStatus.Kind.
+type TerminalProgramStatusKind string
+
+// TerminalProgramStatusState defines model for TerminalProgramStatus.State.
+type TerminalProgramStatusState string
+
 // TerminalReconnect defines model for TerminalReconnect.
 type TerminalReconnect struct {
 	Attempt int       `json:"attempt"`
@@ -2288,6 +2353,7 @@ type TerminalSession struct {
 	Presentation        *TerminalPresentation       `json:"presentation,omitempty"`
 	Problem             string                      `json:"problem"`
 	ProgramProgress     *TerminalProgramProgress    `json:"programProgress,omitempty"`
+	ProgramStatus       *TerminalProgramStatus      `json:"programStatus,omitempty"`
 	Progress            *TerminalConnectionProgress `json:"progress,omitempty"`
 	Reconnect           *TerminalReconnect          `json:"reconnect,omitempty"`
 	ShellProfileId      *string                     `json:"shellProfileId,omitempty"`

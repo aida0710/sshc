@@ -3378,6 +3378,7 @@ export interface components {
             reconnect?: components["schemas"]["TerminalReconnect"];
             progress?: components["schemas"]["TerminalConnectionProgress"];
             programProgress?: components["schemas"]["TerminalProgramProgress"];
+            programStatus?: components["schemas"]["TerminalProgramStatus"];
             exited?: components["schemas"]["TerminalExit"];
             forwards?: components["schemas"]["TerminalForward"][];
             presentation?: components["schemas"]["TerminalPresentation"];
@@ -3395,6 +3396,17 @@ export interface components {
         TerminalIndeterminateProgress: {
             /** @enum {string} */
             state: "indeterminate";
+        };
+        TerminalProgramStatus: {
+            /** @enum {string} */
+            state: "idle" | "working" | "blocked" | "done" | "error";
+            /** @enum {string} */
+            kind?: "permission" | "question" | "auth";
+            progress?: number;
+            app?: string;
+            title?: string;
+            message?: string;
+            version: number;
         };
         TerminalPresentation: {
             displayTitle: string;
