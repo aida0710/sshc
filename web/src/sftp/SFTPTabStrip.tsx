@@ -45,7 +45,7 @@ const stripLook = {
   regular: "gap-1.5 px-3 pt-2.5",
 };
 const tabLook = {
-  compact: { selected: "rounded bg-card shadow-sm", other: "rounded hover:bg-card/50" },
+  compact: { selected: "rounded bg-card shadow-card", other: "rounded hover:bg-card/50" },
   regular: { selected: "rounded-t-md bg-well", other: "rounded-md hover:bg-hover" },
 };
 

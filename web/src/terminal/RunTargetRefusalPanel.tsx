@@ -84,7 +84,7 @@ export function RunTargetRefusalPanel({
 
   return (
     <div className="absolute inset-x-0 top-0 bottom-(--mobile-navigation-inset) z-30 flex items-center justify-center overflow-y-auto bg-canvas p-4">
-      <section aria-labelledby={headingId} className="flex w-full max-w-lg flex-col gap-4 rounded-lg border border-line bg-card p-5 shadow-sm">
+      <section aria-labelledby={headingId} className="flex w-full max-w-lg flex-col gap-4 rounded-lg border border-line bg-card p-5 shadow-card">
         <div className="flex items-start gap-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-control text-ink-muted">
             <Icon name={refusalIcon(refusal.code)} className="size-[18px]" />

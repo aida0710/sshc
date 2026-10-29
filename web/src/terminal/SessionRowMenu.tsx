@@ -58,7 +58,7 @@ export function SessionRowMenu({
       ref={menuRef}
       role="menu"
       aria-label={t("terminal.rowMenu", { title: session.title })}
-      className={`absolute right-1 z-10 w-48 rounded-lg border border-control-line bg-card p-1 shadow-lg ${placement === "up" ? "bottom-full mb-0.5" : "mt-0.5"}`}
+      className={`absolute right-1 z-10 w-48 rounded-lg border border-control-line bg-card p-1 shadow-float ${placement === "up" ? "bottom-full mb-0.5" : "mt-0.5"}`}
     >
       <SessionRowMenuItem onClick={choose(onRename)}>{t("terminal.rename")}</SessionRowMenuItem>
       {session.presentation?.titlePinned !== true ? null : (

@@ -7,7 +7,7 @@ import type { MessageKey } from "../i18n/messages";
 import type { Problem } from "../api/client";
 import { configApi, type HistoryEntry, type PendingTransaction } from "../api/config";
 import { Button, Notice } from "../ui/surface";
-import { PageHeader, PageSection, SummaryStat, SummaryStats } from "../ui/page";
+import { PageHeader, PageSection, PageStateFrame, SummaryStat, SummaryStats } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
 import { formatDateTime } from "../ui/format";
@@ -95,7 +95,11 @@ export function HistoryPanel() {
   }
 
   if (entries === null) {
-    return <PanelState tone="loading" title={t("history.loading")} />;
+    return (
+      <PageStateFrame title={t("history.pageTitle")} description={t("history.pageDescription")}>
+        <PanelState tone="loading" title={t("history.loading")} />
+      </PageStateFrame>
+    );
   }
 
   const restorableCount = entries.reduce((count, entry) => count + (entry.restorable?.length ?? 0), 0);

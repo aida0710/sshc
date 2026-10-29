@@ -53,7 +53,7 @@ export function TransferNotifications() {
           <div
             key={notice.id}
             role={failed ? "alert" : "status"}
-            className={`rounded-lg border p-3 shadow-lg ${failed ? "border-danger/40 bg-card text-danger" : "border-live/40 bg-card text-ink"}`}
+            className={`rounded-lg border p-3 shadow-float ${failed ? "border-danger/40 bg-card text-danger" : "border-live/40 bg-card text-ink"}`}
           >
             <div className="flex items-start gap-2">
               <p className="min-w-0 grow text-sm">{message}</p>
