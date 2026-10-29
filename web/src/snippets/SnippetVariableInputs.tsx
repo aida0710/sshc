@@ -1,8 +1,8 @@
 import type { SnippetVariable } from "./api";
 import { SnippetVariableValue } from "./SnippetVariableValue";
+import { control } from "../ui/form";
 
-const variableInputClass =
-  "mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink";
+const variableInputClass = `mt-1 block ${control}`;
 
 // SnippetVariableInputs は、スニペットの変数ごとに、名前と説明の下へ値の欄を並べる。
 export function SnippetVariableInputs({

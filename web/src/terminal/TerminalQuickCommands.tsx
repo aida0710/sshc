@@ -10,7 +10,8 @@ import { describeTerminalCommandFailure, terminalCommandProblemText } from "./co
 import { describeSnippetFailure } from "../snippets/snippetFailure";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { SnippetVariableInputs } from "../snippets/SnippetVariableInputs";
-import { Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
+import { codeBlock, control, iconAction } from "../ui/form";
 
 type Prepared = {
   command: string;
@@ -255,7 +256,7 @@ export function TerminalQuickCommands({
       role="dialog"
       aria-label={t("terminal.quickCommands")}
       tabIndex={-1}
-      className="focus:outline-none absolute right-2 top-11 z-30 flex max-h-[min(32rem,75vh)] w-[min(24rem,calc(100vw-1rem))] flex-col gap-3 overflow-auto rounded-md border border-control-line bg-card p-3 shadow-overlay"
+      className="focus:outline-none absolute right-2 top-11 z-30 flex max-h-[min(32rem,75vh)] w-[min(24rem,calc(100vw-1rem))] flex-col gap-3 overflow-auto rounded-lg border border-line bg-card p-3 shadow-float"
     >
       <div className="flex items-center gap-2">
         <h3 className="grow text-sm font-semibold">
@@ -264,7 +265,7 @@ export function TerminalQuickCommands({
         <button
           type="button"
           aria-label={t("terminal.quickCommandsClose")}
-          className="rounded px-2 py-1 text-ink-muted hover:bg-select-fill"
+          className={`${iconAction} size-8`}
           onClick={onClose}
         >
           <Icon name="close" className="size-3.5" />
@@ -272,53 +273,35 @@ export function TerminalQuickCommands({
       </div>
       {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
       {terminalSelectionSaved ? (
-        <p
-          role="status"
-          className="rounded bg-notice px-2 py-1.5 text-xs text-notice-ink"
-        >
-          {t("terminal.quickCommandSaved")}
-        </p>
+        <Notice compact>{t("terminal.quickCommandSaved")}</Notice>
       ) : null}
       {initialCommand.trim() === "" ? null : saveOpen ? (
-        <div className="grid gap-2 rounded border border-line p-2">
+        <div className="grid gap-2 rounded-md border border-line p-2">
           <label className="text-xs text-ink-muted">
             {t("terminal.quickCommandName")}
             <input
               autoFocus
               value={saveName}
               onChange={(event) => setSaveName(event.target.value)}
-              className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink"
+              className={`mt-1 block ${control}`}
             />
           </label>
-          <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded bg-code-bg p-2 text-xs text-code-fg">
+          <pre className={`max-h-24 whitespace-pre-wrap ${codeBlock}`}>
             {initialCommand}
           </pre>
           <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={busy || saveName.trim() === ""}
-              onClick={() => void saveSelection()}
-              className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-ink"
-            >
+            <Button kind="primary" disabled={busy || saveName.trim() === ""} onClick={() => void saveSelection()}>
               {t("terminal.quickCommandSave")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setSaveOpen(false)}
-              className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill"
-            >
+            </Button>
+            <Button onClick={() => setSaveOpen(false)}>
               {t("snippets.cancel")}
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          className="min-h-8 self-start rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill"
-          onClick={() => setSaveOpen(true)}
-        >
+        <Button className="self-start" onClick={() => setSaveOpen(true)}>
           {t("terminal.quickCommandSaveSelection")}
-        </button>
+        </Button>
       )}
       {busy && snippets.length === 0 ? (
         <p className="text-xs text-ink-muted">{t("palette.loading")}</p>
@@ -334,7 +317,7 @@ export function TerminalQuickCommands({
                 setSelectedId(event.target.value);
                 invalidate({});
               }}
-              className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink"
+              className={`mt-1 block ${control}`}
             >
               {snippets.map((snippet) => (
                 <option key={snippet.id} value={snippet.id}>
@@ -354,47 +337,27 @@ export function TerminalQuickCommands({
             />
           )}
           {prepared === null ? (
-            <button
-              type="button"
-              disabled={busy || selected === null}
-              onClick={() => void prepare()}
-              className="min-h-8 self-start rounded border border-control-line bg-control px-3 py-1 text-sm font-medium hover:bg-select-fill"
-            >
+            <Button className="self-start" disabled={busy || selected === null} onClick={() => void prepare()}>
               {t("snippets.preview")}
-            </button>
+            </Button>
           ) : (
             <>
-              <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-code-bg p-2 text-xs text-code-fg">
+              <pre className={`max-h-32 whitespace-pre-wrap ${codeBlock}`}>
                 {prepared.command}
               </pre>
               <p className="text-[11px] leading-4 text-ink-muted">
                 {t("terminal.quickCommandContextWarning")}
               </p>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void insertPrepared()}
-                  className="min-h-8 rounded border border-control-line bg-control px-3 py-1 text-sm hover:bg-select-fill"
-                >
+                <Button disabled={busy} onClick={() => void insertPrepared()}>
                   {t("terminal.quickCommandInsert")}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void runPrepared()}
-                  className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-ink"
-                >
+                </Button>
+                <Button kind="primary" disabled={busy} onClick={() => void runPrepared()}>
                   {t("terminal.quickCommandRun")}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void copyPrepared()}
-                  className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill"
-                >
+                </Button>
+                <Button disabled={busy} onClick={() => void copyPrepared()}>
                   {t("terminal.quickCommandCopy")}
-                </button>
+                </Button>
               </div>
             </>
           )}

@@ -7,6 +7,7 @@ import { SFTPHostPicker } from "./SFTPHostPicker";
 import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 import { isImeComposing } from "../ui/imeComposition";
+import { iconAction } from "../ui/form";
 
 // Navigation uses one row; on phones selection or search replaces that row.
 // The workspace tab already identifies the source, so its picker stays hidden here.
@@ -91,15 +92,15 @@ export function SFTPToolbar({
       <input ref={pathInput} aria-label={labels.input} value={pathDraft}
         onChange={(event) => setPathDraft(event.target.value)}
         onKeyDown={(event) => { if (!isImeComposing(event) && event.key === "Escape") cancelEdit(); }}
-        className={`min-w-0 flex-1 rounded border border-control-line bg-control px-2 font-mono outline-none focus:border-accent ${mobile ? "h-12 text-base" : "h-9 text-sm"}`} />
+        className={`min-w-0 flex-1 rounded-md border border-control-line bg-control px-2 font-mono outline-none focus:border-accent ${mobile ? "h-12 text-base" : "h-9 text-sm"}`} />
       <Button type="submit" disabled={navigationDisabled}>{t("sftp.go")}</Button>
       <button type="button" aria-label={t("sftp.cancel")} onClick={cancelEdit}
-        className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover"><Icon name="close" className="size-4" /></button>
+        className={`${iconAction} min-h-11 min-w-11`}><Icon name="close" className="size-4" /></button>
     </form>
   ) : mobile ? (
     <button type="button" data-testid="sftp-current-path" data-path={path}
       aria-label={labels.editPath} title={path} disabled={navigationDisabled} onClick={() => setPathEditing(true)}
-      className="flex min-h-12 min-w-0 flex-1 items-center gap-1 rounded px-2 text-left active:bg-select-fill">
+      className="flex min-h-12 min-w-0 flex-1 items-center gap-1 rounded-md px-2 text-left active:bg-select-fill">
       <span className="min-w-0 flex-1 truncate font-mono text-sm font-medium">{current?.label ?? "/"}</span>
       <Icon name="chevronRight" className="size-3 shrink-0 rotate-90 text-ink-muted" />
     </button>
@@ -112,7 +113,7 @@ export function SFTPToolbar({
           {index > 0 && !crumbs[index - 1]!.label.endsWith("/") ? <span aria-hidden="true" className="px-0.5 text-ink-faint">/</span> : null}
           {index === crumbs.length - 1 ? <span aria-current="location" className="max-w-40 truncate px-1 py-1.5 font-medium text-ink" title={crumb.path}>{crumb.label}</span>
             : <button type="button" disabled={navigationDisabled} onClick={() => void browser.load(crumb.path)}
-              className="max-w-28 truncate rounded px-1 py-1.5 text-ink-muted hover:bg-hover hover:text-ink" title={crumb.path}>{crumb.label}</button>}
+              className="max-w-28 truncate rounded-md px-1 py-1.5 text-ink-muted hover:bg-hover hover:text-ink" title={crumb.path}>{crumb.label}</button>}
         </span>)}
       </nav>
       <button type="button" aria-label={labels.editPath} title={labels.editPath} disabled={navigationDisabled} onClick={() => setPathEditing(true)}
@@ -128,7 +129,7 @@ export function SFTPToolbar({
       {content ?? <>
         <button type="button" aria-label={t(mobile ? "sftp.parentDirectory" : "sftp.back")} title={t(mobile ? "sftp.parentDirectory" : "sftp.back")}
           disabled={busy || locked || (mobile ? !canParent : !browser.canBack)} onClick={() => { if (mobile) onParent?.(); else void browser.back(); }}
-          className={`flex shrink-0 items-center justify-center text-ink-muted hover:bg-hover ${mobile ? "size-12 rounded" : "size-7 rounded-[7px]"}`}>
+          className={`flex shrink-0 items-center justify-center text-ink-muted hover:bg-hover ${mobile ? "size-12 rounded-md" : "size-7 rounded-[7px]"}`}>
           <Icon name={mobile ? "arrowUp" : "arrowLeft"} className={mobile ? "size-4" : "size-[15px]"} />
         </button>
         {mobile ? null : <button type="button" aria-label={t("sftp.forward")} title={t("sftp.forward")}

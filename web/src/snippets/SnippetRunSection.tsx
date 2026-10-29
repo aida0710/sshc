@@ -3,6 +3,7 @@ import { PageSection } from "../ui/page";
 import { Button } from "../ui/surface";
 import type { Job, Preview } from "./api";
 import { snippetProblemLabelKey, snippetStatusLabelKey } from "./snippetLabels";
+import { codeBlock } from "../ui/form";
 
 // SnippetRunSection は、開いているスニペットを選んだホストでまとめて実行する節である。実行の前に、
 // ホストごとに展開したコマンドと経路を確認させ、実行中と終わった後はホストごとの出力を並べる。
@@ -69,7 +70,7 @@ export function SnippetRunSection({
                   {hop.proxyCommand === undefined || hop.proxyCommand === "" ? "" : ` · ProxyCommand: ${hop.proxyCommand}`}
                 </p>
               ))}
-              <pre className="mt-1 overflow-auto rounded bg-code-bg p-2 text-xs text-code-fg">{target.command}</pre>
+              <pre className={`mt-1 ${codeBlock}`}>{target.command}</pre>
             </div>
           ))}
           <Button kind="primary" className="mt-3" busy={running} disabled={busy} onClick={onRun}>
@@ -99,10 +100,10 @@ export function SnippetRunSection({
                   {problemKey ? ` · ${t(problemKey)}` : ""}
                 </p>
                 {result.stdout ? (
-                  <pre className="mt-1 max-h-40 overflow-auto rounded bg-code-bg p-2 text-xs text-code-fg">{result.stdout}</pre>
+                  <pre className={`mt-1 max-h-40 ${codeBlock}`}>{result.stdout}</pre>
                 ) : null}
                 {result.stderr ? (
-                  <pre className="mt-1 max-h-40 overflow-auto rounded bg-danger/10 p-2 text-xs text-danger">{result.stderr}</pre>
+                  <pre className="mt-1 max-h-40 overflow-auto rounded-md bg-danger/10 p-2 text-xs text-danger">{result.stderr}</pre>
                 ) : null}
               </div>
             );
