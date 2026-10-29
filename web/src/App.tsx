@@ -485,6 +485,7 @@ export function App({
                             navigate(target),
                           onOpenFile: handoffs.openFile,
                           onNavigationBlockerChange: setNavigationBlocker,
+                          onOpenSearch: openPalette,
                         }}
                         handoff={{
                           connectionKey: handoffs.connectionKey,
