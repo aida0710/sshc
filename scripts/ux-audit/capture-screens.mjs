@@ -2,7 +2,8 @@
 // 架空のデータだけを入れた一時 HOME で sshc engine を起動し、フォームファクタごとに各画面を撮る。
 // 画像と一緒に、画面ごとの数値（横のはみ出し、小さい押す場所、切れた文字、主の領域の幅）を manifest.json に残す。
 //
-// 使い方: node scripts/ux-audit/capture-screens.mjs <出力先> [撮る段: all|entry|routes|states|lock]
+// 使い方: node scripts/ux-audit/capture-screens.mjs <出力先> [撮る段: all|entry|routes|states|lock|options]
+// options の段は UX_OPTIONS（案の定義のモジュール）を読んで撮る。all には含めず、options と書いたときだけ流す。
 // 前提: bin/sshc を作ってあること。docker のイメージ sshc-ux-audit-sshd:2026-10-30 を作ってあること。
 import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -822,6 +823,32 @@ try {
       await signIn(page);
       try { await captureConnectionDetail(page, formFactor); } catch (error) { console.log("connections failed", formFactor.id, String(error).split("\n")[0]); }
       await context.close();
+    }
+  }
+
+  // 12. 試作: 案ごとの CSS や操作を今の画面に差し込んで撮る。案の定義は UX_OPTIONS のモジュール（default で
+  // { id, formFactor, open(page, helpers), options: [{ id, css?, apply?(page, helpers), context?, launch? }] } の配列）。
+  // 案ごとに新しいページで開き直すので、前の案の差し込みは残らない。
+  if (stages.has("options")) {
+    const specs = (await import(resolve(process.env.UX_OPTIONS))).default;
+    const only = process.env.UX_OPTIONS_ONLY === undefined ? null : new Set(process.env.UX_OPTIONS_ONLY.split(","));
+    for (const spec of specs.filter((each) => only === null || only.has(each.id))) {
+      const formFactor = formFactors.find((each) => each.id === spec.formFactor);
+      for (const option of spec.options) {
+        const shown = { ...formFactor, launch: option.launch ?? formFactor.launch, context: { ...formFactor.context, ...option.context } };
+        const { context, page } = await newPage(browsers, shown);
+        const csrf = watchCSRF(page);
+        await signIn(page);
+        const mobileLayout = await page.evaluate(() => matchMedia("(max-width: 767px), (pointer: coarse) and (max-width: 1023px)").matches);
+        const helpers = { go, ja, home, selectSession, clickPrintedPath, openEntry, openDrawer, settle, mobileLayout, signIn, api: (method, path, body) => api(page, csrf, method, path, body) };
+        try {
+          await spec.open(page, helpers);
+          if (option.css !== undefined) await page.addStyleTag({ content: option.css });
+          if (option.apply !== undefined) await option.apply(page, helpers);
+          await capture(page, shown, `option-${spec.id}-${option.id}`, { wait: option.wait ?? 800 });
+        } catch (error) { console.log("option failed", spec.id, option.id, String(error).split("\n")[0]); }
+        await context.close();
+      }
     }
   }
 
