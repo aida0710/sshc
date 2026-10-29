@@ -1,4 +1,5 @@
 import { Suspense, lazy } from "react";
+import { FilePreviewImage } from "./FilePreviewImage";
 import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FilePreviewMedia } from "./FilePreviewMedia";
 import { FilePreviewRefusal } from "./FilePreviewRefusal";
@@ -29,7 +30,7 @@ export function FilePreviewBody({ preview, path, name, onDownload }: {
     case "loading":
       return <FilePreviewLoading />;
     case "image":
-      return <img src={preview.url} alt={name} className="mx-auto max-h-full max-w-full object-contain" />;
+      return <FilePreviewImage key={preview.url} url={preview.url} name={name} />;
     case "text":
       return (
         <Suspense fallback={<FilePreviewLoading />}>

@@ -1,10 +1,20 @@
+import type { ReactNode } from "react";
 import { useTranslate } from "../i18n/context";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
+import { Icon, type IconName } from "../ui/icons";
 
-// The controls never shrink: a squeezed button wraps its label one character
-// per line. On a narrow screen the path takes the first row on its own and
-// the controls move to the second.
-const controlClassName = "min-h-11 shrink-0 whitespace-nowrap px-1 text-xs text-ink-muted hover:text-ink disabled:opacity-40 md:min-h-0";
+// The controls are signs alone, with their names for screen readers and as the tooltip. On a narrow screen
+// the path takes the first row on its own and the controls move to the second; there they keep the 44px a
+// finger needs.
+const iconButtonClassName = "flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent md:size-7 md:min-h-0 md:min-w-0";
+
+function IconButton({ icon, label, disabled = false, onClick }: { icon: IconName; label: string; disabled?: boolean; onClick: () => void }): ReactNode {
+  return (
+    <button type="button" className={iconButtonClassName} aria-label={label} title={label} disabled={disabled} onClick={onClick}>
+      <Icon name={icon} className="size-4" />
+    </button>
+  );
+}
 
 // FilePreviewHeader names the shown file and holds the preview's controls:
 // stepping through the other printed files, downloading, the "…" of what
@@ -37,29 +47,21 @@ export function FilePreviewHeader({
       <h2 id={headingId} dir="rtl" className="min-w-0 basis-full truncate text-left font-mono text-sm font-medium md:basis-0 md:grow" title={path}>
         <bdi dir="ltr">{path}</bdi>
       </h2>
-      <div className="ml-auto flex shrink-0 items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-1">
         {count > 1 ? (
           <>
-            <button type="button" className={controlClassName} disabled={position === 0} onClick={() => onStep(position - 1)}>
-              {t("sftp.previewPrevious")}
-            </button>
+            <IconButton icon="chevronLeft" label={t("sftp.previewPrevious")} disabled={position === 0} onClick={() => onStep(position - 1)} />
             <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-ink-muted">
               {t("sftp.previewPosition", { position: String(position + 1), count: String(count) })}
             </span>
-            <button type="button" className={controlClassName} disabled={position === count - 1} onClick={() => onStep(position + 1)}>
-              {t("sftp.previewNext")}
-            </button>
+            <IconButton icon="chevronRight" label={t("sftp.previewNext")} disabled={position === count - 1} onClick={() => onStep(position + 1)} />
           </>
         ) : null}
-        <button type="button" className={controlClassName} onClick={onDownload}>{t("sftp.download")}</button>
+        <IconButton icon="download" label={t("sftp.download")} onClick={onDownload} />
         {menu === undefined ? null : (
-          <ActionMenu
-            label={menu.label}
-            items={menu.items}
-            triggerClassName="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink md:size-7 md:min-h-0 md:min-w-0"
-          />
+          <ActionMenu label={menu.label} items={menu.items} triggerClassName={iconButtonClassName} />
         )}
-        <button type="button" className={controlClassName} onClick={onClose}>{t("sftp.close")}</button>
+        <IconButton icon="close" label={t("sftp.close")} onClick={onClose} />
       </div>
     </div>
   );
