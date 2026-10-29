@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { defaultTint } from "../terminal/appearance";
 import { useBackgroundImage } from "../terminal/backgroundImage";
 import { fontStack } from "../terminal/fonts";
-import { fontSizeRange } from "./terminalSettingsDraft";
+import { fontSizeRange } from "../terminal/fontSize";
 
 // A still terminal that shows what the chosen palette, font, size and
 // background will look like before they are saved.
