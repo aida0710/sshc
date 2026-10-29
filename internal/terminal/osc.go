@@ -44,7 +44,7 @@ const (
 	// maxKittyPendingIdentifiers * 2 * maxKittyChunkBytes (title and body).
 	maxKittyPendingIdentifiers = 8
 	// maxOSCNumberDigits bounds the number read before ';'. Every number this
-	// observer handles (0, 1, 2, 7, 9, 99, 133, 777) fits; a longer one is skipped to the
+	// observer handles (0, 1, 2, 7, 9, 99, 133, 777, 7501) fits; a longer one is skipped to the
 	// end of its sequence without buffering a payload.
 	maxOSCNumberDigits = 4
 )
@@ -62,7 +62,7 @@ const (
 )
 
 // oscObserver watches the output stream for titles, notifications, program
-// progress and the working directory a shell reports. It never removes bytes: the browser terminal still receives
+// progress and status, and the working directory a shell reports. It never removes bytes: the browser terminal still receives
 // everything and applies these sequences itself. The engine only records what
 // it saw so the session list, other tabs and headless clients can show it.
 type oscObserver struct {
@@ -83,10 +83,17 @@ type oscReports struct {
 	Notify    func(title, body string)
 	Progress  func(*ProgramProgress)
 	Directory func(directory string)
-	// CommandStarted and CommandFinished follow the shell integration's
-	// OSC 133;C and OSC 133;D. exitCode is nil when the shell sent none.
+	// PromptStarted, CommandStarted and CommandFinished follow the shell
+	// integration's OSC 133;A, OSC 133;C and OSC 133;D. exitCode is nil when
+	// the shell sent none.
+	PromptStarted   func()
 	CommandStarted  func()
 	CommandFinished func(exitCode *int)
+	// ProgramStatus receives each OSC 7501 report and query that is not
+	// dropped (program_status.go).
+	ProgramStatus func(programStatusReport)
+	// Reset follows a full terminal reset (RIS, ESC c).
+	Reset func()
 }
 
 type kittyNotification struct {
@@ -107,14 +114,7 @@ func (o *oscObserver) Observe(chunk []byte) {
 				o.state = oscEscape
 			}
 		case oscEscape:
-			switch value {
-			case ']':
-				o.state = oscNumber
-				o.number = o.number[:0]
-			case '\x1b':
-			default:
-				o.state = oscText
-			}
+			o.afterEscape(value)
 		case oscNumber:
 			switch {
 			case value >= '0' && value <= '9' && len(o.number) < maxOSCNumberDigits:
@@ -169,16 +169,29 @@ func (o *oscObserver) Observe(chunk []byte) {
 	}
 }
 
+// afterEscape reads the byte that followed an ESC.
+func (o *oscObserver) afterEscape(value byte) {
+	switch value {
+	case ']':
+		o.state = oscNumber
+		o.number = o.number[:0]
+	case 'c':
+		o.state = oscText
+		if o.reports.Reset != nil {
+			o.reports.Reset()
+		}
+	case '\x1b':
+		o.state = oscEscape
+	default:
+		o.state = oscText
+	}
+}
+
 // abandon drops the sequence in progress and re-reads value as the byte that
 // followed an ESC.
 func (o *oscObserver) abandon(value byte) {
 	o.reset()
-	switch value {
-	case ']':
-		o.state = oscNumber
-	case '\x1b':
-		o.state = oscEscape
-	}
+	o.afterEscape(value)
 }
 
 func (o *oscObserver) reset() {
@@ -214,6 +227,10 @@ func (o *oscObserver) complete() {
 	case "133":
 		kind, detail, _ := strings.Cut(payload, ";")
 		switch kind {
+		case "A":
+			if o.reports.PromptStarted != nil {
+				o.reports.PromptStarted()
+			}
 		case "C":
 			if o.reports.CommandStarted != nil {
 				o.reports.CommandStarted()
@@ -228,6 +245,10 @@ func (o *oscObserver) complete() {
 		}
 	case "777":
 		o.notifyRxvt(payload)
+	case "7501":
+		if report, ok := parseProgramStatus(payload); ok && o.reports.ProgramStatus != nil {
+			o.reports.ProgramStatus(report)
+		}
 	}
 }
 
