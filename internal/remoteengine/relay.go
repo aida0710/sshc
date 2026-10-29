@@ -20,6 +20,7 @@ const relayReadHeaderTimeout = 10 * time.Second
 type relay struct {
 	link      *hostLink
 	localPort int
+	listener  net.Listener
 	server    *http.Server
 	transport *http.Transport
 
@@ -63,6 +64,7 @@ func (r *relay) currentRemotePort() int { return r.currentRemote().port }
 // serve は、listener で中継を始める。
 func (r *relay) serve(listener net.Listener, port int) {
 	r.localPort = port
+	r.listener = listener
 	r.server = &http.Server{
 		Handler:           newRelayHandler(port, r.currentRemotePort, r.transport),
 		ReadHeaderTimeout: relayReadHeaderTimeout,
@@ -76,6 +78,10 @@ func (r *relay) listening() bool { return r.server != nil }
 func (r *relay) close() {
 	if r.server != nil {
 		_ = r.server.Close()
+		// http.Server.Close は、Serve が受け取り済みの待ち受けしか閉じない。Serve の goroutine が
+		// まだ走っていなければ、待ち受けはあとで Serve が閉じるまで残り、起動し直したエンジンは
+		// 同じポートで待ち受けられない。戻る前にポートを空けておく。
+		_ = r.listener.Close()
 	}
 	r.transport.CloseIdleConnections()
 }
