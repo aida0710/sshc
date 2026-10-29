@@ -184,7 +184,12 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
       case "trust": return candidateTrustText;
     }
   };
-  const trustedHostText = (entry: KnownHostEntry) => (entry.hashed ? t("kh.hashed") : entry.hosts.join(", "));
+  // A hashed entry cannot be read back, but the engine names the saved connections whose key it holds.
+  const trustedHostText = (entry: KnownHostEntry) => {
+    if (!entry.hashed) return entry.hosts.join(", ");
+    const aliases = entry.aliases ?? [];
+    return aliases.length === 0 ? t("kh.hashed") : t("kh.hashedFor", { aliases: aliases.join(", ") });
+  };
   const trustedSortValue = (entry: KnownHostEntry, column: TrustedSort): SortValue => {
     switch (column) {
       case "host": return trustedHostText(entry);
