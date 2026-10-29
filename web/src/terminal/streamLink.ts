@@ -33,7 +33,7 @@ export type StreamLinkOptions = Omit<StreamHandlers, "onReplay" | "onOutput" | "
   // (a session shown again, a reloaded page), whose screen begins at the replay.
   onReplay: (replay: ReplayReport, resumed: boolean) => void;
   // The engine skipped output this view fell too far behind to receive.
-  onSkipped: () => void;
+  onSkipped: (screen?: string) => void;
   sessionId: string;
   api: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath">;
   // Receives every phase change so the view can show where the link stands.
@@ -106,10 +106,10 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
             options.onOutput(chunk, () => attached.acknowledge(chunk.byteLength));
             cursor = (cursor ?? 0) + chunk.byteLength;
           },
-          onSkipped: (start) => {
+          onSkipped: (start, screen) => {
             if (muted.has(attached)) return;
             cursor = start;
-            options.onSkipped();
+            options.onSkipped(screen);
           },
           onShellReplaced: () => {
             if (!muted.has(attached)) options.onShellReplaced();

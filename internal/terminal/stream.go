@@ -44,6 +44,17 @@ type StreamRead struct {
 	// Skipped は、前に取り出した出力と Start のあいだが、受け手が遅れているうちに
 	// 再生バッファから押し出されたことを表す。Data は空のこともある。
 	Skipped bool
+	// Screen は、Skipped のとき、Start の時点の画面を表示させる列である
+	// （screen_checkpoint.go）。受け手は Data より先に書く。
+	Screen string
+}
+
+// Replay は、アタッチしたときに送る出力である。
+type Replay struct {
+	RingRead
+	// Screen は、Truncated のとき、Start の時点の画面を表示させる列である
+	// （screen_checkpoint.go）。受け手は Data より先に書く。
+	Screen string
 }
 
 // Take は、届いている出力を limit バイトまで取り出す。open は、アタッチが外れて
@@ -58,7 +69,7 @@ func (s *Stream) Take(limit int) (read StreamRead, open bool) {
 	if output.Next < output.End || !s.open {
 		s.signal()
 	}
-	read = StreamRead{Data: output.Data, Start: output.Start, Skipped: output.Truncated}
+	read = StreamRead{Data: output.Data, Start: output.Start, Skipped: output.Truncated, Screen: output.Screen}
 	return read, s.open || len(read.Data) > 0 || read.Skipped
 }
 
@@ -103,12 +114,12 @@ func (s *Session) CanAttachFrom(cursor uint64) bool {
 // AttachFrom atomically returns only output after cursor and then follows live
 // output. The stream starts where the replay ends, under the same lock as the
 // range read, so nothing falls between replay and live delivery.
-func (s *Session) AttachFrom(cursor uint64) (RingRead, *Stream, bool) {
+func (s *Session) AttachFrom(cursor uint64) (Replay, *Stream, bool) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	replay, ok := s.readOutputLocked(cursor, s.buffer.Capacity())
 	if !ok {
-		return RingRead{}, nil, false
+		return Replay{}, nil, false
 	}
 	stream := newStream(s, replay.Next)
 	if s.exited != nil {
@@ -122,19 +133,21 @@ func (s *Session) AttachFrom(cursor uint64) (RingRead, *Stream, bool) {
 }
 
 // readOutputLocked は、cursor 以後の出力を limit バイトまで読む。cursor が再生
-// バッファより古いときは、残っているうちで制御文字列の途中でない最初の位置から
-// 読み、Truncated を立てる。ブラウザが、バッファが半分に切った制御文字列の
-// 後ろ半分を文字として表示しないためである。s.mutex を持って呼ぶ。
-func (s *Session) readOutputLocked(cursor uint64, limit int) (RingRead, bool) {
+// バッファより古いときは、Truncated を立て、バッファが手放した出力が残した画面
+// （Screen）と、その続きの出力を返す。続きはエスケープシーケンスの途中から
+// 始まらない。s.mutex を持って呼ぶ。
+func (s *Session) readOutputLocked(cursor uint64, limit int) (Replay, bool) {
 	if !s.buffer.CanReadFrom(cursor) {
-		return RingRead{}, false
+		return Replay{}, false
 	}
 	if cursor >= s.buffer.Oldest() {
-		return s.buffer.ReadAvailableFrom(cursor, limit)
+		read, ok := s.buffer.ReadAvailableFrom(cursor, limit)
+		return Replay{RingRead: read}, ok
 	}
-	read, ok := s.buffer.ReadAvailableFrom(s.controlStrings.SafeStart(s.buffer.Oldest()), limit)
+	screen, position := s.screen.snapshot()
+	read, ok := s.buffer.ReadAvailableFrom(position, limit)
 	read.Truncated = true
-	return read, ok
+	return Replay{RingRead: read, Screen: screen}, ok
 }
 
 // Detach は接続を解除する。セッション自体は継続する。
@@ -172,9 +185,9 @@ func (s *Session) announceShellReplacedLocked() {
 func (s *Session) publish(chunk []byte) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	s.screen.keepUp(s.buffer, chunk)
 	_, _ = s.buffer.Write(chunk)
-	s.controlStrings.Write(chunk)
-	s.controlStrings.Forget(s.buffer.Oldest())
+	s.screen.settle(s.buffer)
 	for stream := range s.streams {
 		stream.signal()
 	}

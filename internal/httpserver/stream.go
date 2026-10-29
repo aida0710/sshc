@@ -46,15 +46,19 @@ type replayMessage struct {
 		Next      uint64 `json:"next"`
 		End       uint64 `json:"end"`
 		Truncated bool   `json:"truncated"`
+		// Screen は、Truncated のとき、start の時点の画面を表示させる列である。
+		// ブラウザは再生するバイトより先に書く（terminal.Replay）。
+		Screen string `json:"screen,omitempty"`
 	} `json:"replay"`
 }
 
 // skippedMessage は、ブラウザが遅れているうちに再生バッファから押し出された出力を
 // 飛ばしたことを伝える。次のバイナリフレームは start から始まる。ブラウザは
-// cursor を start へ進め、途中で切れたエスケープシーケンスの解析を捨てる。
+// cursor を start へ進め、screen を書いてから続きを書く。
 type skippedMessage struct {
 	Skipped struct {
-		Start uint64 `json:"start"`
+		Start  uint64 `json:"start"`
+		Screen string `json:"screen,omitempty"`
 	} `json:"skipped"`
 }
 
@@ -146,6 +150,7 @@ func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Con
 		announced.Replay.Next = replay.Next
 		announced.Replay.End = replay.End
 		announced.Replay.Truncated = replay.Truncated
+		announced.Replay.Screen = replay.Screen
 		encoded, err := json.Marshal(announced)
 		if err != nil || !writeFrame(ctx, connection, websocket.MessageText, encoded) {
 			return
@@ -230,7 +235,7 @@ func forwardOutput(ctx context.Context, connection *websocket.Conn, stream *term
 			if !open {
 				return true
 			}
-			if output.Skipped && !writeSkipped(ctx, connection, output.Start) {
+			if output.Skipped && !writeSkipped(ctx, connection, output.Start, output.Screen) {
 				return false
 			}
 			if len(output.Data) == 0 {
@@ -250,9 +255,11 @@ func forwardOutput(ctx context.Context, connection *websocket.Conn, stream *term
 }
 
 // writeSkipped は、次の出力が start から始まり、その手前が飛ばされたことを伝える。
-func writeSkipped(ctx context.Context, connection *websocket.Conn, start uint64) bool {
+// screen は start の時点の画面である。
+func writeSkipped(ctx context.Context, connection *websocket.Conn, start uint64, screen string) bool {
 	var message skippedMessage
 	message.Skipped.Start = start
+	message.Skipped.Screen = screen
 	encoded, err := json.Marshal(message)
 	return err == nil && writeFrame(ctx, connection, websocket.MessageText, encoded)
 }

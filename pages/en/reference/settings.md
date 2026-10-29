@@ -68,6 +68,8 @@ A passwordless Vault is neither auto-locked nor lockable by hand: it opens when 
 
 The engine replay buffer retains bytes in memory so it can replay output when a browser reconnects. Browser scrollback is the separate number of display lines retained by xterm. Neither setting writes terminal output to disk. When output keeps coming faster than the browser can draw it and the browser falls further behind than the replay buffer holds, the part no longer in the buffer is skipped and the terminal says so.
 
+When a terminal needs output older than the replay buffer holds (one rebuilt after more than the kept hidden terminals were shown, or a new tab), the engine first shows the screen it keeps and then replays what the buffer holds. A program that draws its screen once and then rewrites only what changes, such as Claude Code, is shown with what it drew earlier. Lines from before the replay buffer cannot be scrolled back to.
+
 Encoding may be overridden per connection. OSC 8 and Kitty keyboard behavior are protocol-driven.
 
 Rendering uses WebGL by default and automatically falls back to the DOM renderer when WebGL is unavailable or a background image is active. If a GPU or browser duplicates characters or leaves visual traces, turn off **Use WebGL rendering** to always use DOM rendering.

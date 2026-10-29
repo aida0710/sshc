@@ -134,6 +134,31 @@ describe("terminal output replay", () => {
     expect(subject.writeText).toHaveBeenCalledWith("new text");
   });
 
+  it("draws the engine's screen before the retained output when the replay is truncated", async () => {
+    const subject = harness();
+    subject.output.write(encoder.encode("left over"));
+    const replay = encoder.encode(" retained");
+    const start = 100;
+    const next = start + replay.byteLength;
+    // What the engine sends for the screen as it stood at start: a line drawn earlier, and the cursor after it.
+    subject.output.beginReplay({ start, next, end: next, truncated: true, screen: "\u001b[H\u001b[2Jdrawn earlier\u001b[1;14H\u001b[6n" });
+
+    subject.output.write(replay);
+    await subject.expectLine("drawn earlier retained");
+    // The screen is history, like the replay: what xterm answers to it is marked so and not sent.
+    await vi.waitFor(() => expect(subject.answers).toHaveLength(1));
+    expect(subject.answers[0]?.replaying).toBe(true);
+  });
+
+  it("draws the engine's screen where output was skipped", async () => {
+    const subject = harness();
+    subject.output.write(encoder.encode("before"));
+
+    subject.output.skip("\u001b[H\u001b[2Jcaught up");
+    subject.output.write(encoder.encode(" after"));
+    await subject.expectLine("caught up after");
+  });
+
   it("abandons an incomplete escape sequence where output was skipped and treats what follows as live", async () => {
     const subject = harness();
     subject.output.write(encoder.encode(`before\u001b]52;c;${btoa("incomplete")}`));
