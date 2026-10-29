@@ -499,20 +499,44 @@
   background-color: transparent !important;
 }
 
-.sshc-command-marker {
+/* The command marks in the gutter left of the text (terminal/commandGutter.ts): a line from each
+   prompt to the end of its output, in the colour of how the command ended. The line is thin; the
+   place to point at is as wide as the gutter. */
+.sshc-command-gutter {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
   pointer-events: none;
 }
-.sshc-command-marker::after {
+.sshc-command-gutter-mark {
   position: absolute;
-  top: 50%;
-  left: 2px;
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--ui-accent);
+  left: -0.4375rem;
+  width: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ui-ink-faint) 55%, transparent);
+  pointer-events: auto;
+}
+.sshc-command-gutter-mark::before {
+  position: absolute;
+  inset: 0 -0.25rem 0 -0.0625rem;
   content: "";
-  opacity: 0.7;
-  transform: translateY(-50%);
+}
+.sshc-command-gutter-mark[data-status="failed"] {
+  background: var(--ui-danger);
+}
+.sshc-command-gutter-mark[data-status="running"] {
+  background: var(--ui-notice-ink);
+}
+/* How a command ended, in its details (TerminalCommandCard) and its line kept above the output
+   (TerminalCommandHeader), in the colours of the gutter. */
+.sshc-command-result {
+  color: var(--ui-ink-faint);
+}
+[data-status="failed"] .sshc-command-result {
+  color: var(--ui-danger);
+}
+[data-status="running"] .sshc-command-result {
+  color: var(--ui-notice-ink);
 }
 
 /* Visible viewport follows browser chrome and the soft keyboard. */

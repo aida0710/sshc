@@ -2,12 +2,13 @@ import type { Dispatch, SetStateAction } from "react";
 import type { Terminal } from "@xterm/xterm";
 import type { Translate } from "../i18n/context";
 import { clipboard } from "../ui/clipboard";
-import { attachCommandMarkers } from "./commandMarkers";
+import { trackCommandBlocks, type CommandBlocks } from "./commandBlocks";
 import { attachGraphemeClusterMode } from "./graphemeClusterMode";
 import { attachKittyClipboard, type KittyClipboard } from "./kittyClipboard";
 import { attachOSC7Directory } from "./osc7";
 import { attachOsc52Clipboard } from "./osc52";
 import { attachOSC9Directory } from "./osc9Directory";
+import { attachOSC133Commands } from "./osc133";
 import { attachOSC9Progress, noTerminalProgress, type TerminalProgress } from "./osc9Progress";
 import { trackPromptCursor, type PromptCursor } from "./promptCursor";
 import { trackPromptJumps, type PromptJump } from "./promptJump";
@@ -16,6 +17,7 @@ import { attachVisibilityReportQuestions } from "./visibilityReports";
 // TerminalSequences are the handlers attached to one terminal, with the ones the view calls into.
 export type TerminalSequences = {
   kittyClipboard: KittyClipboard;
+  commandBlocks: CommandBlocks;
   prompt: PromptCursor;
   prompts: PromptJump;
   dispose: () => void;
@@ -55,19 +57,29 @@ export function attachTerminalSequences({ view, t, replaying, clipboardWritesAll
     copied: () => notice(t("terminal.osc52Copied")),
   });
   const graphemeClusterMode = attachGraphemeClusterMode(view, { replaying, reply });
-  const osc7Directory = attachOSC7Directory(view.parser, setDirectory);
-  const osc9Directory = attachOSC9Directory(view.parser, setDirectory);
+  // directory is the working directory as of the output parsed so far, for the commands that start in it;
+  // the view's state follows later.
+  let directory = "";
+  const directoryChanged = (path: string) => {
+    directory = path;
+    setDirectory(path);
+  };
+  const osc7Directory = attachOSC7Directory(view.parser, directoryChanged);
+  const osc9Directory = attachOSC9Directory(view.parser, directoryChanged);
   const osc9Progress = attachOSC9Progress(view.parser, setProgress);
   // A program that quit without clearing its OSC 9;4 progress leaves no bar
   // behind once the shell reports the command finished. The engine notifies
   // the end of a long command (internal/terminal/command_finished.go).
-  const commandMarkers = attachCommandMarkers(view, () => setProgress(noTerminalProgress));
+  const commands = attachOSC133Commands(view.parser, { onCommandCompleted: () => setProgress(noTerminalProgress) });
   const visibilityQuestions = attachVisibilityReportQuestions(view.parser);
-  // Registered after the command marks, so it sees OSC 133 before they consume it.
+  // Registered after the command marks and the working directory, so they see OSC 133 and OSC 7 before
+  // those consume them.
   const prompt = trackPromptCursor(view);
   const prompts = trackPromptJumps(view);
+  const commandBlocks = trackCommandBlocks(view, { directory: () => directory });
   return {
     kittyClipboard,
+    commandBlocks,
     prompt,
     prompts,
     dispose: () => {
@@ -77,7 +89,8 @@ export function attachTerminalSequences({ view, t, replaying, clipboardWritesAll
       osc7Directory.dispose();
       osc9Directory.dispose();
       osc9Progress.dispose();
-      commandMarkers.dispose();
+      commands.dispose();
+      commandBlocks.dispose();
       visibilityQuestions.dispose();
       prompt.dispose();
       prompts.dispose();
