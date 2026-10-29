@@ -64,6 +64,7 @@ A passwordless Vault is neither auto-locked nor lockable by hand: it opens when 
 - Whether Enter sends from the phone's text box (it starts a new line by default)
 - Whether to use font ligatures (off by default)
 - Whether to show the VT320 status line a program shows (on by default; when off, what is written to it stays off the screen as well)
+- With shell integration (OSC 133): command marks, the command kept above its output, and command marks on the scrollbar (all on by default)
 
 The engine replay buffer retains bytes in memory so it can replay output when a browser reconnects. Browser scrollback is the separate number of display lines retained by xterm. Neither setting writes terminal output to disk. When output keeps coming faster than the browser can draw it and the browser falls further behind than the replay buffer holds, the part no longer in the buffer is skipped and the terminal says so.
 

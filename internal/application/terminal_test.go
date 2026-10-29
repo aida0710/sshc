@@ -152,6 +152,7 @@ func TestTerminalDisplayAndSecurityChoicesRoundTrip(t *testing.T) {
 	service, _ := newTerminalService(t)
 	webgl := false
 	statusLine := false
+	off := false
 	want := TerminalSettings{
 		BrowserScrollbackLines: 12000,
 		RetainedTerminals:      20,
@@ -161,6 +162,9 @@ func TestTerminalDisplayAndSecurityChoicesRoundTrip(t *testing.T) {
 		ComposerEnterSends:     true,
 		Ligatures:              true,
 		StatusLine:             &statusLine,
+		CommandMarks:           &off,
+		StickyCommand:          &off,
+		CommandScrollbarMarks:  &off,
 		LocalShellProfile:      "fish",
 	}
 	if _, err := service.SetTerminalSettings(want); err != nil {
@@ -168,7 +172,10 @@ func TestTerminalDisplayAndSecurityChoicesRoundTrip(t *testing.T) {
 	}
 	got := service.TerminalSettings()
 	if got.BrowserScrollbackLines != want.BrowserScrollbackLines || got.RetainedTerminals != want.RetainedTerminals || got.WebGL == nil || *got.WebGL || got.OSC52 != want.OSC52 ||
-		got.JISYenBackslash != want.JISYenBackslash || got.ComposerEnterSends != want.ComposerEnterSends || got.Ligatures != want.Ligatures || got.StatusLine == nil || *got.StatusLine || got.LocalShellProfile != want.LocalShellProfile {
+		got.JISYenBackslash != want.JISYenBackslash || got.ComposerEnterSends != want.ComposerEnterSends || got.Ligatures != want.Ligatures ||
+		got.StatusLine == nil || *got.StatusLine ||
+		got.CommandMarks == nil || *got.CommandMarks || got.StickyCommand == nil || *got.StickyCommand || got.CommandScrollbarMarks == nil || *got.CommandScrollbarMarks ||
+		got.LocalShellProfile != want.LocalShellProfile {
 		t.Fatalf("settings = %#v, want %#v", got, want)
 	}
 }

@@ -107,6 +107,9 @@ export function TerminalScreen({
           composerEnterSends={settings.composerEnterSends ?? false}
           ligatures={settings.ligatures ?? false}
           statusLine={settings.statusLine ?? true}
+          commandMarks={settings.commandMarks ?? true}
+          stickyCommand={settings.stickyCommand ?? true}
+          commandScrollbarMarks={settings.commandScrollbarMarks ?? true}
           onOsc52Change={onOSC52Change}
           onForwardsChanged={terminalSessions.refresh}
           {...(appearance.palette === ""

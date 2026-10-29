@@ -209,6 +209,9 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	settings.RightClickPaste = request.RightClickPaste
 	settings.WebGL = request.Webgl
 	settings.StatusLine = request.StatusLine
+	settings.CommandMarks = request.CommandMarks
+	settings.StickyCommand = request.StickyCommand
+	settings.CommandScrollbarMarks = request.CommandScrollbarMarks
 	if request.Osc52 != nil {
 		settings.OSC52 = *request.Osc52
 	}

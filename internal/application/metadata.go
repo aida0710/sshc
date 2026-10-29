@@ -172,6 +172,11 @@ type EmbeddedTerminal struct {
 	Ligatures bool `json:"ligatures,omitempty"`
 	// StatusLineは、プログラムが出すVT320のステータス行を表示するか。nilなら表示する。
 	StatusLine *bool `json:"statusLine,omitempty"`
+	// CommandMarks、StickyCommand、CommandScrollbarMarksは、シェル統合（OSC 133）のコマンドの印、
+	// さかのぼっている出力のコマンドを上に残す見出し、スクロールバーのコマンドの印を出すか。nilなら出す。
+	CommandMarks          *bool `json:"commandMarks,omitempty"`
+	StickyCommand         *bool `json:"stickyCommand,omitempty"`
+	CommandScrollbarMarks *bool `json:"commandScrollbarMarks,omitempty"`
 	// LocalShellProfileは検出済みprofileの安定IDであり、command文字列ではない。
 	LocalShellProfile string `json:"localShellProfile,omitempty"`
 	// StartDirectory は、ローカルシェルが始まる場所である。

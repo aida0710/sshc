@@ -23,6 +23,13 @@ func TestPlainTextDoesNotExposeOSCOrControlStringPayloads(t *testing.T) {
 	}
 }
 
+func TestPlainTextLeavesOutTheCommandTimesTheEngineAdds(t *testing.T) {
+	input := []byte("$ make\r\n\x1b]133;C\x07\x1b]7742;C;1761700000000\x07built\r\n\x1b]133;D;0\x07\x1b]7742;D;1761700004200\x07$ ")
+	if got := terminal.PlainTextFrom(input, 0); got != "$ make\nbuilt\n$ " {
+		t.Fatalf("PlainTextFrom() = %q", got)
+	}
+}
+
 func TestPlainTextTurnsStandaloneCarriageReturnsIntoTranscriptLines(t *testing.T) {
 	if got := terminal.PlainTextFrom([]byte("10%\r20%\r\nDone"), 0); got != "10%\n20%\nDone" {
 		t.Fatalf("PlainTextFrom() = %q", got)

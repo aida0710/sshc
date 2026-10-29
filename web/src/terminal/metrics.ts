@@ -24,6 +24,12 @@ function surface(view: MeasurableTerminal): HTMLElement | null {
   return view.element?.querySelector<HTMLElement>(".xterm-screen") ?? null;
 }
 
+// terminalScreen is the element the rows are drawn in, for what is laid over
+// them, such as the command marks (commandGutter.ts).
+export function terminalScreen(view: MeasurableTerminal): HTMLElement | null {
+  return surface(view);
+}
+
 // The part of xterm's render dimensions that a font or DPI change alters.
 type CellDimensions = { readonly css: { readonly cell: { readonly width: number; readonly height: number } } };
 

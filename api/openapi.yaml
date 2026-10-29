@@ -6686,6 +6686,11 @@ components:
         # プログラムが出す VT320 のステータス行を表示するか。無いときは表示する。
         # false でも、ステータス行あての出力は画面に出さない。
         statusLine: { type: boolean }
+        # シェル統合（OSC 133）のコマンドの印、上に残るコマンドの見出し、スクロールバーの
+        # コマンドの印を出すか。どれも無いときは出す。
+        commandMarks: { type: boolean }
+        stickyCommand: { type: boolean }
+        commandScrollbarMarks: { type: boolean }
         localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
         # ローカルシェルの開始ディレクトリ。`~` を維持し、空なら home を使う。
         startDirectory: { type: string, maxLength: 4096 }
@@ -6733,6 +6738,11 @@ components:
         # プログラムが出す VT320 のステータス行を表示するか。無いときは表示する。
         # false でも、ステータス行あての出力は画面に出さない。
         statusLine: { type: boolean }
+        # シェル統合（OSC 133）のコマンドの印、上に残るコマンドの見出し、スクロールバーの
+        # コマンドの印を出すか。どれも無いときは出す。
+        commandMarks: { type: boolean }
+        stickyCommand: { type: boolean }
+        commandScrollbarMarks: { type: boolean }
         localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
     # このマシンの sshc エンジンの設定。同期しない。
