@@ -1248,6 +1248,8 @@ export const en = {
   "terminal.webglHint": "Turn this off if characters look doubled or leave traces.",
   "terminal.ligaturesLabel": "Use font ligatures",
   "terminal.ligaturesHint": "Draws ->, != and === as single symbols. Works with the JetBrains Mono font.",
+  "terminal.statusLineLabel": "Show the status line",
+  "terminal.statusLineHint": "When a program shows a VT320 status line, it appears as one line under the terminal. When off, it is not shown, and what is written to it stays off the screen.",
   "terminal.limitsOutOfRange":
     "Those numbers are outside the range this build accepts.",
   "terminal.startLabel": "Starting directory",

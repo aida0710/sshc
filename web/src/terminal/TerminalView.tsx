@@ -24,6 +24,8 @@ import { useModifierKeys } from "./useModifierKeys";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { createTerminalOutput } from "./output";
+import { createStatusLineRouter } from "./statusLine";
+import { createStatusLineTerminal, type StatusLineTerminal } from "./statusLineTerminal";
 import type { ExitReport } from "./stream";
 import { encodeIntlYen } from "./intlYenKey";
 import { attachLinkProvider } from "./linkProvider";
@@ -106,7 +108,14 @@ type TerminalViewProps = {
   composerEnterSends?: boolean;
   // ligatures draws sequences such as -> and != with the font's ligatures.
   ligatures?: boolean;
+  // statusLine shows the VT320 status line a program shows (statusLine.ts). When off, what is written
+  // to it stays off the screen too.
+  statusLine?: boolean;
 };
+
+// The status line takes exactly one row from the screen. Its padding above and below its row (index.css)
+// lies over the screen's own padding under the last row, which holds no text.
+const statusLinePadding = "0.5rem";
 
 // The link popover opens just below and to the right of the pointer so it does
 // not cover the link that was clicked.
@@ -150,6 +159,7 @@ export function TerminalView({
   jisYenBackslash = false,
   composerEnterSends = false,
   ligatures = false,
+  statusLine: statusLineEnabled = true,
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
@@ -163,6 +173,12 @@ export function TerminalView({
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
   const host = useRef<HTMLDivElement>(null);
+  const statusLineHost = useRef<HTMLDivElement>(null);
+  const statusLine = useRef<StatusLineTerminal | null>(null);
+  // shownStatusLineHeight is the row height of the VT320 status line a program shows (statusLine.ts), or null.
+  // The line is drawn under the screen only with the setting on; it is written to either way.
+  const [shownStatusLineHeight, setStatusLineHeight] = useState<number | null>(null);
+  const statusLineHeight = statusLineEnabled ? shownStatusLineHeight : null;
   const region = useRef<HTMLElement>(null);
   const backgroundURL = useBackgroundImage(background ?? "");
   const backgroundConfigured = (background ?? "") !== "";
@@ -293,7 +309,16 @@ export function TerminalView({
     copyWithColors.current = copyActions.copyWithColors;
     copyContext.current = copyActions.copyContext;
 
-    const output = createTerminalOutput(view);
+    const statusLineTerminal = createStatusLineTerminal(view);
+    statusLine.current = statusLineTerminal;
+    const output = createTerminalOutput(createStatusLineRouter({
+      screen: view,
+      statusLine: () => statusLineTerminal,
+      shownChanged: (shown) => {
+        if (shown) statusLineTerminal.clear();
+        setStatusLineHeight(shown ? cellHeight(view, container) : null);
+      },
+    }));
     const sequences = attachTerminalSequences({
       view,
       t,
@@ -450,6 +475,9 @@ export function TerminalView({
       detachTouchScroll();
       detachClipboard();
       output.dispose();
+      statusLineTerminal.dispose();
+      statusLine.current = null;
+      setStatusLineHeight(null);
       detachPromptClicks();
       detachPromptJumpKeys();
       sequences.dispose();
@@ -521,6 +549,10 @@ export function TerminalView({
   useEffect(() => {
     ligatureDrawing.current?.set(ligatures);
   }, [ligatures]);
+
+  useEffect(() => {
+    if (statusLineHeight !== null && statusLineHost.current !== null) statusLine.current?.open(statusLineHost.current);
+  }, [statusLineHeight]);
 
   useEffect(() => {
     if (terminal.current === null) return;
@@ -673,15 +705,24 @@ export function TerminalView({
           {...(palette === undefined || palette === "" ? {} : { "data-term-palette": palette })}
           {...(font === undefined || font === "" ? {} : { "data-term-font": font })}
           {...(hasBackground ? { "data-term-background": background ?? "" } : {})}
-          style={
-            hasBackground
+          style={{
+            ...(hasBackground
               ? {
                   "--ui-term-image": `url("${backgroundURL}")`,
                   "--ui-term-tint": String(tint ?? defaultTint),
                 } as CSSProperties
-              : undefined
-          }
+              : {}),
+            // The screen gives up a row to the status line; the size observer refits it.
+            ...(statusLineHeight === null ? {} : { bottom: `${statusLineHeight}px` }),
+          }}
           className="absolute inset-0 bg-term-bg"
+        />
+        <div
+          ref={statusLineHost}
+          data-terminal-status-line=""
+          hidden={statusLineHeight === null}
+          style={statusLineHeight === null ? undefined : { height: `calc(${statusLineHeight}px + ${statusLinePadding})` }}
+          className="absolute inset-x-0 bottom-0 overflow-hidden"
         />
         {search.open ? <TerminalSearchBar search={search} mobile={mobile} /> : null}
         {terminalNotice === "" ? null : (
