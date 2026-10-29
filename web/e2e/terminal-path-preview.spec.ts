@@ -416,3 +416,113 @@ test("previews paths hard-wrapped by a real shell from every row and navigates w
     }
   }
 });
+
+// The preview's controls are signs; their names stay for screen readers and the tooltip.
+function transformOf(locator: import("@playwright/test").Locator): Promise<string> {
+  return locator.evaluate((element) => (element as HTMLElement).style.transform);
+}
+
+test("zooms an image with the zoom bar, the wheel and a double-click, and moves it by dragging", async ({ page, installation }) => {
+  const imagePath = join(installation.home, "shot.png");
+  test.skip(!imagePath.startsWith("/"), "terminal paths are detected only when they start with /");
+  await writeFile(imagePath, samplePNG());
+  await mockShellPrinting(page, `› [image] \x1b[36m${imagePath}\x1b[0m (1 KB)`);
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  await previewPrintedPath(page, "shot.png");
+
+  const preview = page.getByRole("dialog", { name: imagePath });
+  const image = preview.getByRole("img", { name: "shot.png" });
+  await expect(image).toBeVisible();
+  for (const name of ["Download", "Close"]) {
+    await expect(preview.getByRole("button", { name, exact: true })).toHaveAttribute("title", name);
+    await expect(preview.getByRole("button", { name, exact: true })).not.toHaveText(name);
+  }
+
+  const zoom = preview.getByRole("group", { name: "Zoom" });
+  await expect(zoom.getByRole("button", { name: "Zoom out" })).toBeDisabled();
+  for (let press = 0; press < 4; press += 1) await zoom.getByRole("button", { name: "Zoom in" }).click();
+  await expect(zoom.getByRole("button", { name: /^Fit to the preview/ })).toHaveText("200%");
+  expect(await transformOf(image)).toContain("scale(2)");
+
+  // A drag moves the zoomed image; the edge stops it.
+  const box = (await image.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 2000, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.up();
+  const moved = await transformOf(image);
+  expect(moved).not.toContain("translate(0px, 0px)");
+
+  await zoom.getByRole("button", { name: /^Fit to the preview/ }).click();
+  expect(await transformOf(image)).toBe("translate(0px, 0px) scale(1)");
+
+  // The wheel zooms around the pointer, and a double-click goes back to the fitted size.
+  const fitted = (await image.boundingBox())!;
+  await page.mouse.move(fitted.x + fitted.width / 2, fitted.y + fitted.height / 2);
+  await page.mouse.wheel(0, -300);
+  await expect.poll(() => transformOf(image)).not.toContain("scale(1)");
+  await image.dblclick();
+  expect(await transformOf(image)).toBe("translate(0px, 0px) scale(1)");
+  await image.dblclick();
+  await expect.poll(() => transformOf(image)).toContain("scale(2)");
+});
+
+// A short WebM made by the browser itself, so the test needs no video file in the repository.
+async function recordedWebM(page: Page): Promise<Buffer> {
+  const base64 = await page.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 160;
+    canvas.height = 90;
+    const context = canvas.getContext("2d")!;
+    const recorder = new MediaRecorder(canvas.captureStream(30), { mimeType: "video/webm" });
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (event) => chunks.push(event.data);
+    const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
+    recorder.start();
+    for (let frame = 0; frame < 15; frame += 1) {
+      context.fillStyle = frame % 2 === 0 ? "#d03030" : "#3060d0";
+      context.fillRect(0, 0, 160, 90);
+      await new Promise((resolve) => setTimeout(resolve, 33));
+    }
+    recorder.stop();
+    await stopped;
+    const bytes = new Uint8Array(await new Blob(chunks).arrayBuffer());
+    let text = "";
+    for (const byte of bytes) text += String.fromCharCode(byte);
+    return btoa(text);
+  });
+  return Buffer.from(base64, "base64");
+}
+
+test("zooms a video by showing part of its frame, keeping the player's own controls", async ({ page, installation }) => {
+  const clipPath = join(installation.home, "clip.webm");
+  test.skip(!clipPath.startsWith("/"), "terminal paths are detected only when they start with /");
+  await writeFile(clipPath, await recordedWebM(page));
+  await mockShellPrinting(page, `Rendered \x1b[36m${clipPath}\x1b[0m`);
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  await previewPrintedPath(page, "clip.webm");
+
+  const preview = page.getByRole("dialog", { name: clipPath });
+  const video = preview.locator("video");
+  await expect(video).toBeVisible();
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.videoWidth)).toBe(160);
+  // The dialog grows in as it opens; the video's place is measured once that is over.
+  await preview.evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)));
+  const fittedBox = (await video.boundingBox())!;
+
+  const zoom = preview.getByRole("group", { name: "Zoom" });
+  for (let press = 0; press < 4; press += 1) await zoom.getByRole("button", { name: "Zoom in" }).click();
+  await expect(zoom.getByRole("button", { name: /^Fit to the preview/ })).toHaveText("200%");
+  const viewBox = await video.evaluate((element) => getComputedStyle(element).getPropertyValue("object-view-box"));
+  // The middle half of the frame, which the browser writes as one value.
+  expect(viewBox).toBe("inset(25%)");
+  // The video keeps its place and size, and with them the browser's controls.
+  const zoomedBox = (await video.boundingBox())!;
+  for (const side of ["x", "y", "width", "height"] as const) expect(Math.abs(zoomedBox[side] - fittedBox[side])).toBeLessThanOrEqual(1);
+  expect(await video.evaluate((element: HTMLVideoElement) => element.controls)).toBe(true);
+
+  await zoom.getByRole("button", { name: /^Fit to the preview/ }).click();
+  expect(await video.evaluate((element) => getComputedStyle(element).getPropertyValue("object-view-box"))).toBe("none");
+});
