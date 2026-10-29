@@ -121,11 +121,22 @@ export function SFTPToolbar({
     </div>
   );
 
+  const hostPicker = (
+    <SFTPHostPicker aliases={aliases} {...(hosts === undefined ? {} : { hosts })} value={alias}
+      disabled={locked} onChange={onHostChange} compact={mobile} includeLocal
+      hideTrigger={hostPickerRequest !== undefined} {...(hostPickerRequest === undefined ? {} : { openRequest: hostPickerRequest })} />
+  );
+  const bandClassName = `flex min-w-0 shrink-0 items-center border-b border-line ${mobile ? "gap-1 py-1" : "gap-1.5 bg-well px-3 py-2"}`;
+
+  // Before a host is chosen there is no folder to move in or act on, so the band holds only the host picker.
+  // When the empty pane opens the picker itself (hostPickerRequest), the picker has no trigger and no band.
+  if (alias === "") {
+    return hostPickerRequest === undefined ? <div className={bandClassName}>{hostPicker}</div> : hostPicker;
+  }
+
   return (
-    <div className={`flex min-w-0 shrink-0 items-center border-b border-line ${mobile ? "gap-1 py-1" : "gap-1.5 bg-well px-3 py-2"}`}>
-      <SFTPHostPicker aliases={aliases} {...(hosts === undefined ? {} : { hosts })} value={alias}
-        disabled={locked} onChange={onHostChange} compact={mobile} includeLocal
-        hideTrigger={hostPickerRequest !== undefined} {...(hostPickerRequest === undefined ? {} : { openRequest: hostPickerRequest })} />
+    <div className={bandClassName}>
+      {hostPicker}
       {content ?? <>
         <button type="button" aria-label={t(mobile ? "sftp.parentDirectory" : "sftp.back")} title={t(mobile ? "sftp.parentDirectory" : "sftp.back")}
           disabled={busy || locked || (mobile ? !canParent : !browser.canBack)} onClick={() => { if (mobile) onParent?.(); else void browser.back(); }}
