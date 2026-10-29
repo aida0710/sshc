@@ -26,7 +26,7 @@ These are the OSC (Operating System Command) sequences that sshc acts on when a 
 | 777 | Notification (rxvt form, `notify;title;body`) | sshc engine | |
 | 1337 | iTerm2 inline images (`File=`) | browser | PNG, JPEG and GIF |
 | 5522 | Kitty clipboard protocol | browser | Writes are taken only while OSC 52 is allowed, and put text/plain, text/html and image/png on the clipboard. Reads are refused, except a read with the one-time password a paste event (mode 5522) gave, which gets what was pasted |
-| 7501 | Program status (idle, working, blocked, done, error) | sshc engine | Answers the query (`?`) and keeps the status per session. Working and blocked are dropped when the shell prompt comes back (OSC 133 A) or the shell is replaced, and everything is dropped on RIS (`ESC c`). A title or msg with a control character is refused, and format characters (such as direction overrides) are removed |
+| 7501 | Program status (idle, working, blocked, done, error) | sshc engine, browser | Shown in the dot and second line of the session's row. [Titles and notifications](/en/terminal/notifications#program-status). Answers the query (`?`) and keeps the status per session. Working and blocked are dropped when the shell prompt comes back (OSC 133 A) or the shell is replaced, and everything is dropped on RIS (`ESC c`). A title or msg with a control character is refused, and format characters (such as direction overrides) are removed |
 
 A notification (9, 99, 777) longer than 4096 bytes keeps its beginning. How unread marks, browser notifications and the sound work is in [Titles and notifications](/en/terminal/notifications).
 

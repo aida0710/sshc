@@ -143,3 +143,33 @@ test("shows where an OSC 8 link after Japanese text goes before opening it, unle
   await popup;
   await expect(actions).toBeHidden();
 });
+
+// Programs say what they are doing with OSC 7501. The session's row shows it in
+// place of its dot and destination: working and blocked while they last, a done
+// result until the session has been on screen since it came.
+test("shows what a program says it is doing in its session's row until the result is seen", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "printf escape sequences are POSIX shell syntax");
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const report = (fields: string) => `printf '\\033]7501;${fields}\\033\\\\'`;
+  const message = (text: string) => Buffer.from(text).toString("base64");
+  await terminalKeyboard(page).focus();
+  // The result comes after a pause, while another session is on screen.
+  await page.keyboard.type(`printf '\\033]0;agent\\a'; ${report(`state=blocked:kind=permission:msg=${message("Run rm -rf build?")}`)}; sleep 8; ${report(`state=done:msg=${message("Docs built")}`)}; read -r _`);
+  await page.keyboard.press("Enter");
+
+  const sessions = page.getByRole("navigation", { name: "Primary" }).getByRole("list", { name: "Open sessions" });
+  const agent = sessions.getByRole("button", { name: "agent", exact: true });
+  await expect(agent).toHaveAccessibleDescription("Needs permission · Run rm -rf build?", { timeout: 15_000 });
+  await expect(agent.locator("[data-program-status]")).toHaveAttribute("data-program-status", "blocked");
+
+  await openLocalShell(page);
+  await expect(agent).toHaveAccessibleDescription("Done · Docs built", { timeout: 20_000 });
+  await expect(agent.locator("[data-program-status]")).toHaveAttribute("data-program-status", "done");
+
+  await agent.click();
+  await expect(agent).toHaveAccessibleDescription("connected");
+  await expect(agent.locator("[data-program-status]")).toHaveCount(0);
+});
