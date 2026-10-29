@@ -4,8 +4,7 @@ import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } f
 import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
-import { connectionProgressText } from "./progress";
-import { exitedAbnormally, sessionShowsDestination, sessionStatusTone } from "./sessionStatus";
+import { exitedAbnormally, sessionStateText, sessionStatusTone } from "./sessionStatus";
 import { useTerminalFont } from "./useTerminalFont";
 import { defaultTint } from "./appearance";
 import { useBackgroundImage } from "./backgroundImage";
@@ -636,11 +635,11 @@ export function TerminalView({
     if (changed.refit) refit.current?.();
   }, [resolvedFontSize, reducedMotion, scrollbackLines, session.state]);
 
-  const connectionStatus = session.state === "connecting" || session.state === "reconnecting"
-    ? connectionProgressText(t, session)
-    : session.state === "connected"
-      ? t("terminal.connected")
-      : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
+  const connectionStatus = sessionStateText(t, session);
+  // The header puts the state in words only while it is connecting. Connected, the dot says it; reconnecting,
+  // ended or with the browser's link down, the row under the header says it, and says it once. The words stay
+  // for screen readers either way.
+  const headerSaysState = session.state === "connecting" && link.phase === "live";
   const displayTitle = terminalDisplayTitle(session);
   const subtitle = terminalSubtitle(session, t);
   // Ctrl and Alt apply to the next key typed into the terminal, so one held while typing in the text box
@@ -694,7 +693,7 @@ export function TerminalView({
             {mobile ? null : <span className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{subtitle}</span>}
             {/* While connected the dot says it; the words stay for screen readers. A phone has no room for them
                 either way, but they are still read out there. */}
-            <span role="status" className={(sessionShowsDestination(session) && link.phase === "live") || mobile ? "sr-only" : `shrink-0 text-[11.5px] ${sessionStatusTone(session)}`}>{connectionStatus}</span>
+            <span role="status" className={!headerSaysState || mobile ? "sr-only" : `shrink-0 text-[11.5px] ${sessionStatusTone(session)}`}>{connectionStatus}</span>
             {mobile ? null : <VPNProfileChip name={vpnProfile} />}
             {mobile || runTarget === undefined ? null : (
               <span className="shrink-0 rounded-full bg-accent/15 px-2 py-px font-mono text-[11px] text-accent">{t("runTarget.runningOn", { alias: runTarget })}</span>
@@ -703,7 +702,7 @@ export function TerminalView({
           {mobile ? (
             <p className="mt-px flex min-w-0 items-center gap-1 pl-[17px] text-xs text-ink-faint">
               <span className="truncate">{subtitle}</span>
-              {sessionShowsDestination(session) && link.phase === "live" ? null : <span className={`shrink-0 ${sessionStatusTone(session)}`}>· {connectionStatus}</span>}
+              {headerSaysState ? <span className={`shrink-0 ${sessionStatusTone(session)}`}>· {connectionStatus}</span> : null}
             </p>
           ) : null}
         </div>

@@ -858,6 +858,7 @@ export const en = {
   "terminal.exitedBySignal": "ended by {signal}",
   "terminal.exitedConnectionLost": "connection lost",
   "terminal.exitedRightAway": "exited right after opening",
+  "terminal.exitedUnknown": "exited",
   "terminal.localhost": "localhost",
   "terminal.emptyHeading": "No session is open",
   "terminal.emptyHint":
@@ -933,10 +934,10 @@ export const en = {
   "terminal.reconnectFailed":
     "The reconnect attempt failed. sshc will retry within the configured limit.",
   "terminal.reconnectExhausted":
-    "The reconnect limit was reached. Open a new connection when the network is ready.",
+    "The SSH connection was lost and did not come back within the reconnect attempts.",
   "terminal.manualReconnect": "Reconnect",
   "terminal.stopReconnect": "Stop reconnecting",
-  "terminal.reconnectStopped": "Automatic reconnection was stopped. Reconnect when you are ready.",
+  "terminal.reconnectStopped": "The SSH connection was lost and automatic reconnecting was stopped.",
   "terminal.notReconnecting": "This session is not waiting to reconnect.",
   "terminal.manualReconnecting": "Connecting…",
   "terminal.manualReconnectFailed":
@@ -1310,14 +1311,12 @@ export const en = {
   "terminal.presetsReload": "Reload",
   "terminal.sharedSetting": "Shared",
   "terminal.screenLabel": "Terminal for {title}",
-  "terminal.exitedWithCode":
-    "The program exited with status {code}. The output above is kept until you close this session.",
+  "terminal.exitedWithCode": "The program exited with status {code}.",
+  "terminal.exitedWithUnknownCode": "The program exited. Its exit status could not be read.",
   "terminal.exitedWithCodeRightAway":
-    "The program exited with status 0 as soon as it started, so its shell or profile may be misconfigured. The output above is kept until you close this session.",
-  "terminal.exitedWithSignal":
-    "The program was ended by {signal}. The output above is kept until you close this session.",
-  "terminal.exitedWithConnectionLost":
-    "The SSH connection was lost. The output above is kept until you close this session.",
+    "The program exited with status 0 as soon as it started, so its shell or profile may be misconfigured.",
+  "terminal.exitedWithSignal": "The program was ended by {signal}.",
+  "terminal.exitedWithConnectionLost": "The SSH connection was lost.",
   "inspector.lookHeading": "Display",
   "inspector.terminalHeading": "Terminal",
   "inspector.terminalFollowsApp": "Empty follows the app's settings",
