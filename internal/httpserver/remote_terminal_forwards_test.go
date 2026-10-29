@@ -215,12 +215,35 @@ func TestARunTargetForwardListensHereAndReachesThePortTheRunTargetOpened(t *test
 	}
 }
 
-func TestARunTargetRemoteForwardIsRefusedForNow(t *testing.T) {
-	local, credentials, sessionID, _ := runTargetForwardFixture(t)
-	request := api.StartTerminalForwardRequest{Kind: "remote", ListenPort: 8080, Destination: stringPointer("127.0.0.1:80")}
-	refused := sendKeyRequest(t, local, credentials, http.MethodPost, "/api/v1/engines/r540/terminal/sessions/"+sessionID+"/forwards", mustMarshal(t, request), "")
-	if refused.Code != http.StatusConflict || problemCode(t, refused.Body.Bytes()) != "run_target_remote_forward_unavailable" {
-		t.Fatalf("remote = %d: %s", refused.Code, refused.Body.String())
+func TestARunTargetRemoteForwardOpensOnTheRunTargetAsAsked(t *testing.T) {
+	local, credentials, sessionID, process := runTargetForwardFixture(t)
+	free, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := free.Addr().(*net.TCPAddr).Port
+	_ = free.Close()
+	request := api.StartTerminalForwardRequest{Kind: "remote", ListenPort: port, Destination: stringPointer("127.0.0.1:3000")}
+	started := sendKeyRequest(t, local, credentials, http.MethodPost, "/api/v1/engines/r540/terminal/sessions/"+sessionID+"/forwards", mustMarshal(t, request), "")
+	if started.Code != http.StatusCreated {
+		t.Fatalf("start = %d: %s", started.Code, started.Body.String())
+	}
+	want := "remote " + strconv.Itoa(port) + " 127.0.0.1:3000"
+	if got := process.asked; len(got) != 1 || got[0] != want {
+		t.Fatalf("the run target was asked %q, want %q: the same port and destination", got, want)
+	}
+	var listed api.TerminalSessionList
+	if err := json.Unmarshal(started.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	reported := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	if forwards := *listed.Sessions[0].Forwards; len(forwards) != 1 || forwards[0].Listen != reported || forwards[0].To != "127.0.0.1:3000" {
+		t.Fatalf("forwards = %+v, want the listener the run target reported (%s)", forwards, reported)
+	}
+
+	stopped := sendKeyRequest(t, local, credentials, http.MethodDelete, "/api/v1/engines/r540/terminal/sessions/"+sessionID+"/forwards/pf-1", nil, "")
+	if stopped.Code != http.StatusOK || len(process.Forwards()) != 0 {
+		t.Fatalf("stop = %d: %s, run target forwards %+v", stopped.Code, stopped.Body.String(), process.Forwards())
 	}
 }
 
