@@ -397,6 +397,7 @@ export const en = {
   "sftp.previewZoomFit": "Fit to the preview (now {percent})",
   "sftp.previewPosition": "{position} / {count}",
   "sftp.previewTooLarge": "This file is too large to preview.",
+  "sftp.previewNotFound": "The file was not found.",
   "sftp.previewUnsupported": "This file type can't be previewed.",
   "sftp.previewMediaUnsupported": "This browser can't play this file.",
   "sftp.selectedItems": "Selected items",

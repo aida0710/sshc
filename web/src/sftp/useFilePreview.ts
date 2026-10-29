@@ -31,6 +31,8 @@ function unavailableReason(error: unknown): MessageKey {
     case "sftp_text_too_large":
     case "sftp_preview_too_large":
       return "sftp.previewTooLarge";
+    case "sftp_not_found":
+      return "sftp.previewNotFound";
     default:
       return "sftp.previewUnavailable";
   }
