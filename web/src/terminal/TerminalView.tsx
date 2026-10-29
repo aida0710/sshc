@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { FitAddon } from "@xterm/addon-fit";
-import { SearchAddon } from "@xterm/addon-search";
-import { SerializeAddon } from "@xterm/addon-serialize";
-import { Terminal } from "@xterm/xterm";
-import "@xterm/xterm/css/xterm.css";
+import type { Terminal } from "@xterm/xterm";
 import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
@@ -17,10 +13,8 @@ import { clipboard } from "../ui/clipboard";
 import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
 import { cellAtPoint, linkAtPoint, type ScreenPoint } from "./tappedLink";
-import { scrollbackFileName, scrollbackText } from "./scrollbackFile";
-import { saveFile, type BrowserSave } from "../ui/saveFile";
-import { attachPromptCursorClicks, trackPromptCursor, type PromptCursor } from "./promptCursor";
-import { attachPromptJumpKeys, trackPromptJumps, type PromptJump } from "./promptJump";
+import { attachPromptCursorClicks, type PromptCursor } from "./promptCursor";
+import { attachPromptJumpKeys, type PromptJump } from "./promptJump";
 import { useTouchTerminal } from "./touchMode";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
 import { attachTouchScroll } from "./touchScroll";
@@ -28,32 +22,22 @@ import { terminalTouchScrollTarget } from "./touchScrollTarget";
 import { KeyBar, applyModifiers, encodeKey } from "./KeyBar";
 import { useModifierKeys } from "./useModifierKeys";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
-import { selectionWithColors } from "./richCopy";
-import { attachKittyClipboard } from "./kittyClipboard";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
-import { recentBufferText } from "./buffer";
-import { attachOsc52Clipboard } from "./osc52";
 import { createTerminalOutput } from "./output";
 import type { ExitReport } from "./stream";
 import { encodeIntlYen } from "./intlYenKey";
-import { linkTextNamesTarget, modifierOpensLink, osc8Link } from "./links";
-import { bufferRangeText } from "./bufferLinks";
 import { attachLinkProvider } from "./linkProvider";
 import { openTerminalURL, TerminalLinkPopover, type TerminalLinkSelection } from "./TerminalLinkPopover";
 import { TerminalQuickCommands } from "./TerminalQuickCommands";
 import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 import { TerminalPortForwards } from "./TerminalPortForwards";
-import { attachWebglWhileShown } from "./webgl";
-import { attachOSC7Directory } from "./osc7";
-import { attachOSC9Directory } from "./osc9Directory";
-import { attachOSC9Progress, noTerminalProgress, type TerminalProgress } from "./osc9Progress";
+import { noTerminalProgress, type TerminalProgress } from "./osc9Progress";
 import { TerminalProgressBar } from "./TerminalProgressBar";
-import { attachInlineImages } from "./inlineImages";
-import { applyCurrentUnicodeWidths } from "./unicodeWidths";
-import { attachLigatures, type LigatureDrawing } from "./ligatures";
-import { attachGraphemeClusterMode } from "./graphemeClusterMode";
-import { attachCommandMarkers } from "./commandMarkers";
-import { attachVisibilityReportQuestions } from "./visibilityReports";
+import type { LigatureDrawing } from "./ligatures";
+import { createTerminalView } from "./createTerminalView";
+import { terminalCopyActions } from "./terminalCopyActions";
+import { attachTerminalSequences } from "./attachTerminalSequences";
+import { useTerminalPathPreview } from "./useTerminalPathPreview";
 import { isTerminalShown, watchTerminalShown } from "./terminalVisibility";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
@@ -70,16 +54,9 @@ import { TerminalComposer } from "./TerminalComposer";
 import { planComposerSend } from "./composerSend";
 import { terminalCommandApiFor } from "./commands/commandApi";
 import { forwardApiFor } from "./forwardApi";
-import { pathPreviewAlias } from "./pathPreviewAlias";
-import { useSameDestination } from "./useSameDestination";
-import { previewPathsInBuffer, previewPathTargetsInBuffer } from "./previewPaths";
-import { isHomePath, resolveTerminalPath } from "./relativePaths";
 import { useLocalWindowsPaths } from "./useLocalWindowsPaths";
-import { pathPreviewHome } from "./pathPreviewHome";
 import { FilePreviewDialog } from "../sftp/FilePreviewDialog";
 import type { RemotePathAction } from "../sftp/SFTPPanel";
-import type { ActionMenuItem } from "../ui/ActionMenu";
-import { useToast } from "../ui/useToast";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
 import { ToastMessage } from "../ui/ToastMessage";
@@ -117,8 +94,9 @@ type TerminalViewProps = {
   // vpnProfile は、この接続が通るVPN経路の名前である。空なら通らない。
   vpnProfile?: string;
   // runTarget is the SSH alias of the engine this session runs on, when it is
-  // not this machine. Port forwarding, Quick Commands and opening remote paths
-  // in SFTP act on this machine's engine, so they are not offered for it.
+  // not this machine. Quick Commands and port forwarding then go to that
+  // engine; opening a path in SFTP is offered only when this machine reaches
+  // the same destination.
   runTarget?: string;
   scrollbackLines?: number;
   onOsc52Change?: (enabled: boolean) => void | Promise<void>;
@@ -174,7 +152,6 @@ export function TerminalView({
   ligatures = false,
 }: TerminalViewProps) {
   const t = useTranslate();
-  const showToast = useToast();
   const { resolved } = useTheme();
   const reducedMotion = useMediaQuery(reducedMotionQuery);
   const mobile = useMediaQuery(mobileViewportQuery);
@@ -239,9 +216,17 @@ export function TerminalView({
   const overflowTrigger = useRef<HTMLButtonElement>(null);
   const [portForwardsOpen, setPortForwardsOpen] = useState(false);
   const [linkSelection, setLinkSelection] = useState<TerminalLinkSelection | null>(null);
-  const [pathPreview, setPathPreview] = useState<{ path: string; paths: string[] } | null>(null);
-  // previewLinkedPath opens a clicked file path's preview at once; null where this session's files cannot be read.
-  const previewLinkedPath = useRef<((path: string) => void) | null>(null);
+  const pathPreview = useTerminalPathPreview({
+    session,
+    runTarget,
+    api,
+    terminal,
+    currentDirectory,
+    allowWindowsPaths,
+    onOpenRemotePath,
+    notice: setTerminalNotice,
+  });
+  const previewLinkedPath = pathPreview.previewLinkedPath;
   const streamLinkController = useRef<StreamLinkController | null>(null);
 
   const { modifiers, tap: tapModifier, takeModifiers } = useModifierKeys();
@@ -272,136 +257,55 @@ export function TerminalView({
       return;
     }
     setLinkSelection({ link, x: point.clientX + linkPopoverOffsetPx, y: point.clientY + linkPopoverOffsetPx });
-  }, []);
+  }, [previewLinkedPath]);
 
   useEffect(() => {
     const container = host.current;
     if (container === null) return;
 
-    let view: Terminal;
-    view = new Terminal({
-      allowProposedApi: true,
-      allowTransparency: backgroundConfigured,
-      cols: 80,
-      rows: 24,
-      convertEol: false,
+    const parts = createTerminalView(container, {
+      backgroundImage: backgroundConfigured,
       cursorBlink: session.state !== "exited" && cursorAnimationEnabled(reducedMotion),
       fontFamily: resolvedFontFamily,
       fontSize: resolvedFontSize,
       theme: terminalTheme(container, hasBackground),
       scrollback: scrollbackLines,
-      // Clearing the screen at a prompt (Ctrl+L in bash and zsh) moves what
-      // was on it into the scrollback instead of erasing it, as VTE, Windows
-      // Terminal and Ghostty do. `clear` still empties the scrollback (CSI 3 J).
-      scrollOnEraseInDisplay: true,
-      // A drag goes to a program that reads the mouse (Claude Code, vim, tmux).
-      // xterm.js lets Shift take the drag back for selecting, except on macOS,
-      // where only Option does and only with this on.
-      macOptionClickForcesSelection: true,
-      // Programs ask whether the kitty keyboard protocol is there (CSI ? u)
-      // before they turn it on; xterm.js answers and encodes the keys itself.
-      vtExtensions: { kittyKeyboard: true },
-      linkHandler: {
-        activate: (event, target, range) => {
-          const link = osc8Link(target, bufferRangeText(view.buffer.active, range), range.start.x - 1, range.end.x);
-          if (link === null) return;
-          if (modifierOpensLink(event) && linkTextNamesTarget(link)) {
-            openTerminalURL(link.target);
-            return;
-          }
-          selectLinkAt(link, event);
-        },
-      },
+      webgl: webglEnabled,
+      ligatures: ligaturesRef.current,
+      selectLink: selectLinkAt,
     });
-    applyCurrentUnicodeWidths(view);
-    const fit = new FitAddon();
-    const searchAddon = new SearchAddon({ highlightLimit: 1000 });
-    view.loadAddon(fit);
-    view.loadAddon(searchAddon);
-    const serializeAddon = new SerializeAddon();
-    view.loadAddon(serializeAddon);
-    view.open(container);
-    const inlineImages = attachInlineImages(view);
-    ligatureDrawing.current = attachLigatures(view, ligaturesRef.current);
-    const renderer = attachWebglWhileShown(view, {
-      enabled: webglEnabled,
-      backgroundImage: backgroundConfigured,
-    });
+    const { view, fit, searchAddon, serializeAddon, renderer } = parts;
+    ligatureDrawing.current = parts.ligatureDrawing;
     const measured = () => container.clientWidth !== 0 && container.clientHeight !== 0;
     renderer.shown(measured());
     terminal.current = view;
 
     const unbindSearch = search.bind(view, searchAddon, container);
-    // The browser may read the last saved file after the click; it is let go
-    // once the next save replaces it or the terminal goes away.
-    let lastSave: BrowserSave | null = null;
-    saveScrollback.current = () => {
-      const text = scrollbackText(view.buffer.active);
-      if (text === "") {
-        setTerminalNotice(t("terminal.saveScrollbackEmpty"));
-        return;
-      }
-      // The Android app takes a bare media type for its save dialog (NativeBridge.safeMimeType), so no charset.
-      void saveFile(new Blob([`${text}\n`], { type: "text/plain" }), scrollbackFileName(terminalDisplayTitle(session), new Date()))
-        .then((save) => {
-          lastSave?.release();
-          lastSave = save;
-        })
-        .catch(() => setProblem(t("terminal.saveScrollbackFailed")));
-    };
-    copyWithColors.current = () => {
-      const copied = selectionWithColors(view, serializeAddon);
-      if (copied === null) {
-        setTerminalNotice(t("terminal.copyWithColorsEmpty"));
-        return;
-      }
-      void clipboard.writeTextAndHTML(copied.text, copied.html)
-        .then(() => setTerminalNotice(t("copy.done")))
-        .catch(() => setProblem(t("terminal.clipboardRefused")));
-    };
-    copyContext.current = () => {
-      const text = recentBufferText(view.buffer.active);
-      if (text === "") {
-        setTerminalNotice(t("terminal.copyContextEmpty"));
-        return;
-      }
-      void clipboard.writeText(text)
-        .then(() => setTerminalNotice(t("terminal.copyContextDone")))
-        .catch(() => setProblem(t("terminal.clipboardRefused")));
-    };
+    const copyActions = terminalCopyActions({
+      view,
+      serializeAddon,
+      title: () => terminalDisplayTitle(session),
+      t,
+      notice: setTerminalNotice,
+      problem: setProblem,
+    });
+    saveScrollback.current = copyActions.saveScrollback;
+    copyWithColors.current = copyActions.copyWithColors;
+    copyContext.current = copyActions.copyContext;
 
     const output = createTerminalOutput(view);
-    const detachOsc52 = attachOsc52Clipboard({
-      parser: view.parser,
-      enabled: () => osc52EnabledRef.current && !output.isReplaying(),
-      writeText: (text) => clipboard.writeText(text),
-      copied: () => setTerminalNotice(t("terminal.osc52Copied")),
-      refused: () => setProblem(t("terminal.clipboardRefused")),
-    });
-    const kittyClipboard = attachKittyClipboard({
-      parser: view.parser,
-      // A program may change the clipboard only where OSC 52 is allowed: the same setting governs both.
-      writesAllowed: () => osc52EnabledRef.current,
+    const sequences = attachTerminalSequences({
+      view,
+      t,
       replaying: () => output.isReplaying(),
-      writeClipboard: (items) => clipboard.writeItems(items),
+      clipboardWritesAllowed: () => osc52EnabledRef.current,
       reply: (sequence) => sendInput.current(sequence),
-      copied: () => setTerminalNotice(t("terminal.osc52Copied")),
+      notice: setTerminalNotice,
+      problem: setProblem,
+      setDirectory: setCurrentDirectory,
+      setProgress: setProgramProgress,
     });
-    const graphemeClusterMode = attachGraphemeClusterMode(view, {
-      replaying: () => output.isReplaying(),
-      reply: (sequence) => sendInput.current(sequence),
-    });
-    const osc7Directory = attachOSC7Directory(view.parser, setCurrentDirectory);
-    const osc9Directory = attachOSC9Directory(view.parser, setCurrentDirectory);
-    const osc9Progress = attachOSC9Progress(view.parser, setProgramProgress);
-    // A program that quit without clearing its OSC 9;4 progress leaves no bar
-    // behind once the shell reports the command finished. The engine notifies
-    // the end of a long command (internal/terminal/command_finished.go).
-    const commandMarkers = attachCommandMarkers(view, () => setProgramProgress(noTerminalProgress));
-    const visibilityQuestions = attachVisibilityReportQuestions(view.parser);
-    // Registered after the command marks, so it sees OSC 133 before they consume it.
-    const prompt = trackPromptCursor(view);
-    const prompts = trackPromptJumps(view);
+    const { kittyClipboard, prompt, prompts } = sequences;
     promptJump.current = prompts;
     const detachPromptJumpKeys = attachPromptJumpKeys(container, prompts);
     promptCursor.current = prompt;
@@ -543,37 +447,25 @@ export function TerminalView({
       streamLinkController.current = null;
       stopObservingSize();
       stopWatchingShown();
-      visibilityQuestions.dispose();
       detachTouchScroll();
       detachClipboard();
-      detachOsc52();
-      kittyClipboard.dispose();
-      graphemeClusterMode.dispose();
       output.dispose();
-      osc7Directory.dispose();
-      osc9Directory.dispose();
-      osc9Progress.dispose();
-      inlineImages.dispose();
-      ligatureDrawing.current?.dispose();
-      ligatureDrawing.current = null;
-      commandMarkers.dispose();
       detachPromptClicks();
-      prompt.dispose();
       detachPromptJumpKeys();
-      prompts.dispose();
+      sequences.dispose();
       promptJump.current = null;
       promptCursor.current = null;
       terminalLinks.dispose();
-      renderer.dispose();
       unbindSearch();
-      view.dispose();
+      parts.dispose();
+      ligatureDrawing.current = null;
       terminal.current = null;
       sendInput.current = () => {};
       sendPaste.current = () => {};
       copyContext.current = () => {};
       copyWithColors.current = () => {};
       saveScrollback.current = () => {};
-      lastSave?.release();
+      copyActions.release();
     };
     // The terminal is built once per session; settings, callbacks and
     // translations it reads are applied by the effects below without
@@ -647,58 +539,6 @@ export function TerminalView({
       : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
   const displayTitle = terminalDisplayTitle(session);
   const subtitle = terminalSubtitle(session, t);
-  const remoteAlias = session.kind === "ssh" ? session.alias : undefined;
-  const sameDestination = useSameDestination(remoteAlias, runTarget);
-  const previewAlias = pathPreviewAlias(session, runTarget, sameDestination);
-
-  // A relative path is relative to where the program that printed it works.
-  // The engine reads that for a local shell; an SSH session only has the
-  // directory its shell reported through OSC 7.
-  async function previewPath(path: string) {
-    if (previewAlias === undefined) return;
-    const buffer = terminal.current?.buffer.active;
-    const needsHome = isHomePath(path) || (buffer !== undefined && previewPathTargetsInBuffer(buffer, allowWindowsPaths).some(isHomePath));
-    const [engineDirectory, home] = await Promise.all([
-      api.terminalSessionDirectory(session.id).catch(() => null),
-      needsHome ? pathPreviewHome(previewAlias).catch(() => null) : null,
-    ]);
-    const directory = engineDirectory ?? (currentDirectory === "" ? null : currentDirectory);
-    const resolvedPath = resolveTerminalPath(path, directory, home);
-    if (resolvedPath === null) {
-      setTerminalNotice(t(isHomePath(path) ? "terminal.homePathUnknown" : "terminal.relativePathUnknown"));
-      return;
-    }
-    setPathPreview({
-      path: resolvedPath,
-      paths: terminal.current === null ? [] : previewPathsInBuffer(terminal.current.buffer.active, { directory, home, allowWindowsPaths }),
-    });
-  }
-  previewLinkedPath.current = previewAlias === undefined ? null : (path) => void previewPath(path);
-
-  // SFTP can open a file of an SSH session at its host. A session opened on a run target reached its host
-  // through that engine's SSH config, which this machine may not share; only the same destination will do.
-  const openInSFTP = (runTarget === undefined || sameDestination) && remoteAlias !== undefined && onOpenRemotePath !== undefined
-    ? (path: string, action: RemotePathAction) => {
-      setPathPreview(null);
-      onOpenRemotePath(remoteAlias, path, action);
-    }
-    : undefined;
-  function previewedFileActions(path: string): ActionMenuItem[] {
-    return [
-      ...(openInSFTP === undefined ? [] : [
-        { label: t("terminal.linkBrowseSFTP"), onSelect: () => openInSFTP(path, "browse") },
-        { label: t("terminal.linkEditSFTP"), onSelect: () => openInSFTP(path, "edit") },
-        { label: t("terminal.linkDownloadSFTP"), onSelect: () => openInSFTP(path, "download") },
-      ]),
-      {
-        label: t("sftp.copyPath"),
-        onSelect: () => void clipboard.writeText(path)
-          .then(() => showToast(t("copy.done"), { tone: "success" }))
-          .catch(() => showToast(t("copy.refused"))),
-      },
-    ];
-  }
-
   function submitComposer() {
     const plan = planComposerSend(composerText, { bracketedPaste: terminal.current?.modes.bracketedPasteMode ?? false });
     if (plan.kind === "confirm") {
@@ -875,13 +715,13 @@ export function TerminalView({
           onClose={() => setLinkSelection(null)}
         />
       )}
-      {previewAlias === undefined || pathPreview === null ? null : (
+      {pathPreview.previewAlias === undefined || pathPreview.shown === null ? null : (
         <FilePreviewDialog
-          alias={previewAlias}
-          path={pathPreview.path}
-          paths={pathPreview.paths}
-          actions={previewedFileActions}
-          onClose={() => setPathPreview(null)}
+          alias={pathPreview.previewAlias}
+          path={pathPreview.shown.path}
+          paths={pathPreview.shown.paths}
+          actions={pathPreview.fileActions}
+          onClose={pathPreview.close}
         />
       )}
       {pendingPaste === null || pendingPaste.sessionId !== session.id ? null : (
