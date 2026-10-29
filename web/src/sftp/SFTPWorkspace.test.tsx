@@ -192,6 +192,19 @@ describe("SFTP tabs", () => {
     expect(screen.getAllByRole("tab")).toHaveLength(1);
   });
 
+  it("shows no path band in a tab that has no host yet, and shows it once one is chosen", async () => {
+    render(<SFTPWorkspace title="SFTP" aliases={["edge"]} />);
+
+    const pane = screen.getByRole("tabpanel");
+    expect(within(pane).queryByRole("button", { name: "Back" })).toBeNull();
+    expect(within(pane).queryByRole("button", { name: "Edit path" })).toBeNull();
+    expect(within(pane).queryByRole("button", { name: "Folder actions" })).toBeNull();
+
+    await userEvent.click(within(pane).getByRole("button", { name: "Choose a connection" }));
+    await chooseConnection("edge");
+    expect(await within(screen.getByRole("tabpanel")).findByRole("button", { name: "Back" })).toBeInTheDocument();
+  });
+
   it("asks before closing a tab that holds an SSH connection", async () => {
     render(<SFTPWorkspace title="SFTP" aliases={["edge", "miyabi"]} />);
     await chooseHost("edge");
