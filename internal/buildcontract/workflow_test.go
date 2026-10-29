@@ -690,7 +690,8 @@ func validateSeparatedRunShells(id string, job workflowJob) []string {
 			if step.Shell != "bash" || !strings.HasPrefix(strings.TrimSpace(step.Run), "echo ") {
 				problems = append(problems, fmt.Sprintf("%s step %q must only echo, in bash", id, step.Name))
 			}
-		case gated("${{ runner.os != 'Windows' }}"):
+		// Linux だけの手順は、どのランナーでも結果の同じ検査（別の OS 向けのビルドなど）を1回で済ませる。
+		case gated("${{ runner.os != 'Windows' }}"), gated("${{ runner.os == 'Linux' }}"):
 			if step.Shell != "bash" {
 				problems = append(problems, fmt.Sprintf("%s step %q must use bash for its Unix-only command", id, step.Name))
 			}
