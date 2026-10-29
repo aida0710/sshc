@@ -2,14 +2,17 @@
 // connectionLost is set when the SSH connection, not the program, ended; the
 // code is then -1 and means nothing.
 export type ExitReport = { code: number; signal: string; connectionLost?: boolean };
-export type ReplayReport = { start: number; next: number; end: number; truncated: boolean };
+// screen comes with a truncated replay: the sequences that show the screen as it stood at start, written before
+// the replayed output (internal/terminal/screen_checkpoint.go). An engine older than this sends none.
+export type ReplayReport = { start: number; next: number; end: number; truncated: boolean; screen?: string };
 
 export type StreamHandlers = {
   onReplay: (replay: ReplayReport) => void;
   onOutput: (chunk: Uint8Array) => void;
   // The engine skipped output that left its replay buffer while this browser
-  // fell behind; the next output begins at start.
-  onSkipped: (start: number) => void;
+  // fell behind; the next output begins at start, and screen shows the screen
+  // as it stood there.
+  onSkipped: (start: number, screen?: string) => void;
   onExit: (exit: ExitReport) => void;
   // A reconnect replaced the shell behind this stream with a new one.
   onShellReplaced: () => void;
@@ -86,10 +89,12 @@ export function openStream(ticket: string, streamPath: string, handlers: StreamH
         handlers.onReplay(replay);
         return;
       }
-      const skipped = (message as { skipped?: { start?: unknown } }).skipped;
+      const skipped = (message as { skipped?: { start?: unknown; screen?: unknown } }).skipped;
       if (skipped !== undefined) {
-        const start = skipped.start;
-        if (typeof start === "number" && Number.isSafeInteger(start) && start >= 0) handlers.onSkipped(start);
+        const { start, screen } = skipped;
+        if (typeof start !== "number" || !Number.isSafeInteger(start) || start < 0) return;
+        if (typeof screen === "string") handlers.onSkipped(start, screen);
+        else handlers.onSkipped(start);
         return;
       }
       if ((message as { shellReplaced?: unknown }).shellReplaced !== undefined) {
@@ -152,5 +157,6 @@ function validReplay(value: unknown): value is ReplayReport {
   return Number.isSafeInteger(replay.start) && Number.isSafeInteger(replay.next) &&
     Number.isSafeInteger(replay.end) && replay.truncated !== undefined &&
     typeof replay.truncated === "boolean" && replay.start! >= 0 &&
-    replay.start! <= replay.next! && replay.next! <= replay.end!;
+    replay.start! <= replay.next! && replay.next! <= replay.end! &&
+    (replay.screen === undefined || typeof replay.screen === "string");
 }

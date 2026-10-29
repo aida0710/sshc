@@ -277,10 +277,14 @@ test("keeps the link and stops a program flooding the terminal at once on Ctrl+C
   page.on("websocket", () => { sockets += 1; });
   await openLocalShell(page);
 
-  // yes writes without end, far faster than xterm.js parses, so the engine
-  // gets more than its replay buffer ahead of the browser and skips.
+  // yes writes without end. The engine takes output only as fast as it follows it on its own screen
+  // (internal/terminal/screen_checkpoint.go), which a fast machine's xterm.js keeps up with; with the browser
+  // slowed down, the engine gets more than its replay buffer ahead of it and skips.
+  const browser = await page.context().newCDPSession(page);
+  await browser.send("Emulation.setCPUThrottlingRate", { rate: 20 });
   const screen = await typeIntoTerminal(page, "yes flooding-the-terminal");
   await expect(page.getByText(/Output came faster than this window could draw it/)).toBeVisible({ timeout: 20_000 });
+  await browser.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   await page.keyboard.press("Control+c");
   await page.keyboard.type("echo stopped-$((6*7))");
   await page.keyboard.press("Enter");

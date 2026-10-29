@@ -60,6 +60,9 @@ for name in sorted(modules):
     directory = Path(module.get("Replace", module)["Dir"])
     add(name, module["Version"], "Go", "https://pkg.go.dev/" + name + "@" + module["Version"], documents(directory))
 
+# A package sshc carries a copy of (third_party/vt/README.sshc.md) is not a module it depends on.
+add("github.com/charmbracelet/x/vt", "v0.1.0", "Go", "https://pkg.go.dev/github.com/charmbracelet/x/vt@v0.1.0", documents(ROOT / "third_party/vt"))
+
 # Packages published without their notice, whose repository's notice covers them:
 # @xterm/addon-serialize is built from the xterm.js repository (addons/addon-serialize),
 # which @xterm/xterm ships the MIT notice of.
@@ -123,5 +126,5 @@ output = ROOT / "web/src/licenses/catalogue.generated.json"
 output.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n")
 print(f"Collected {len(entries)} components into {output.relative_to(ROOT)}")
 
-inputs = ["go.mod", "go.sum", "web/package-lock.json", "android/app/build.gradle.kts", "LICENSE", "web/public/fonts/OFL.txt", "web/src/ui/os-icons/LICENSE", "web/src/ui/os-icons/README.md", "third_party/go-serial/LICENSE", "scripts/licenses/generate.py", "scripts/licenses/artifacts.gradle"]
+inputs = ["go.mod", "go.sum", "web/package-lock.json", "android/app/build.gradle.kts", "LICENSE", "web/public/fonts/OFL.txt", "web/src/ui/os-icons/LICENSE", "web/src/ui/os-icons/README.md", "third_party/go-serial/LICENSE", "third_party/vt/LICENSE", "scripts/licenses/generate.py", "scripts/licenses/artifacts.gradle"]
 (ROOT / "web/src/licenses/sources.generated.json").write_text(json.dumps({name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in inputs}, indent=2) + "\n")
