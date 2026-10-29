@@ -12,6 +12,9 @@ import { openTerminalURL, type TerminalLinkSelection } from "./TerminalLinkPopov
 import { applyCurrentUnicodeWidths } from "./unicodeWidths";
 import { attachWebglWhileShown } from "./webgl";
 
+// The width xterm.js gives its scrollbar when none is named.
+const scrollbarWidthPx = 14;
+
 export type TerminalViewOptions = {
   // backgroundImage lets the picture behind the terminal show through its cells.
   backgroundImage: boolean;
@@ -59,6 +62,9 @@ export function createTerminalView(container: HTMLElement, options: TerminalView
     // xterm.js lets Shift take the drag back for selecting, except on macOS,
     // where only Option does and only with this on.
     macOptionClickForcesSelection: true,
+    // Naming the scrollbar's width, xterm.js's own default, turns on the overview ruler in it: the marks of
+    // search matches (useTerminalSearch.ts) and of commands (commandScrollbarMarks.ts) are drawn there.
+    scrollbar: { width: scrollbarWidthPx },
     // Programs ask whether the kitty keyboard protocol is there (CSI ? u)
     // before they turn it on; xterm.js answers and encodes the keys itself.
     vtExtensions: { kittyKeyboard: true },

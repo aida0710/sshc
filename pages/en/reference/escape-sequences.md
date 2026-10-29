@@ -21,7 +21,8 @@ These are the OSC (Operating System Command) sequences that sshc acts on when a 
 | 10, 11, 12, 110, 111, 112 | Set, query or reset the text, background and cursor colors | xterm.js | |
 | 52 | Write to the clipboard | browser | Off by default. A request to read (`?`) gets no answer |
 | 99 | Notification (kitty form) | sshc engine | Notifications sent in parts and base64 bodies are supported |
-| 133 | Shell integration (A, B, C, D) | sshc engine, browser | Marks where commands start, notifies the end of a command that ran 30 seconds or more, and lets a click at the prompt move the cursor |
+| 133 | Shell integration (A, B, C, D) | sshc engine, browser | Draws the line left of each command and its output (coloured by the exit code from D), keeps the command above its output, marks the scrollbar, notifies the end of a command that ran 30 seconds or more, and lets a click at the prompt move the cursor |
+| 7742 | Command times (`7742;C;Unix milliseconds`, `7742;D;Unix milliseconds`) | browser | Added to the output by the sshc engine, with the time it saw the shell's OSC 133 C and D; programs do not send it. Used for when a command started and how long it took |
 | 777 | Notification (rxvt form, `notify;title;body`) | sshc engine | |
 | 1337 | iTerm2 inline images (`File=`) | browser | PNG, JPEG and GIF |
 | 5522 | Kitty clipboard protocol | browser | Writes are taken only while OSC 52 is allowed, and put text/plain, text/html and image/png on the clipboard. Reads are refused, except a read with the one-time password a paste event (mode 5522) gave, which gets what was pasted |
