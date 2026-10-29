@@ -24,6 +24,8 @@ export type TerminalViewOptions = {
   theme: ITheme;
   scrollback: number;
   webgl: boolean;
+  // webglSettled is called when the WebGL renderer has loaded, or could not be.
+  webglSettled: () => void;
   ligatures: boolean;
   // selectLink opens what an OSC 8 link offers, for a click without the modifier that opens it at once.
   selectLink: (link: TerminalLinkSelection["link"], point: ScreenPoint) => void;
@@ -93,6 +95,7 @@ export function createTerminalView(container: HTMLElement, options: TerminalView
   const renderer = attachWebglWhileShown(view, {
     enabled: options.webgl,
     backgroundImage: options.backgroundImage,
+    webglSettled: options.webglSettled,
   });
   return {
     view,
