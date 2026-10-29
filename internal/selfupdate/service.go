@@ -146,7 +146,9 @@ func (service *Service) install(job Job) {
 	installedVersion, err := service.installPlan(ctx, job)
 	if err != nil {
 		code := failureCode(err, "update_install_failed")
-		if errors.Is(ctx.Err(), context.Canceled) {
+		// 止めるときは workerContext を取り消す。ctx はその子で、親の取り消しが子に届く前に、
+		// Inspect が親を見て ErrUnavailable で断ることがある。止められたかは親で見る。
+		if errors.Is(service.workerContext.Err(), context.Canceled) {
 			code = "update_interrupted"
 		}
 		service.finish(job.ID, JobFailed, code)
