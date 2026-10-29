@@ -41,6 +41,7 @@ When the sshc engine stops (an update, a restart of the computer, a manual stop)
 - Per-connection UTF-8, Shift_JIS, EUC-JP and ISO-2022-JP
 - A 16 KiB–4 MiB engine replay buffer, 1,000–100,000 lines of browser scrollback, and configurable font size
 - WebGL rendering with an automatic DOM-renderer fallback when unavailable or when a background image is active, plus an option to disable WebGL permanently
+- JetBrains Mono ligatures (`->`, `!=` and so on), only when turned on in the settings, with every character kept in its own cell position
 - An uncompressed background image library with search, selection, rename, delete, a 1–1024 MiB storage limit, and atomic updates to overall and per-connection references
 - Static cursors in Terminal and the SFTP text editor when the operating system requests reduced motion, avoiding distracting rapid animation
 - **Keep screen on** under **Global settings** in a terminal's "…" menu keeps the screen from turning off while Terminal is shown (Screen Wake Lock API). It applies to every terminal and is saved in this browser only. It appears only when the browser opened sshc over HTTPS or `localhost`

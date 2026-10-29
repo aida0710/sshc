@@ -464,10 +464,20 @@
   font-display: block;
 }
 
-[data-term-font] .xterm,
+/* The DOM renderer sets a run of cells in one element, where the font would draw -> as one
+   shape. With ligatures on (terminal/ligatures.ts), the runs that hold one are set apart, and the
+   features are named outright: xterm.js gives the rows a letter-spacing to fit the cells, which
+   turns optional ligatures off. The WebGL renderer draws a cell, or a joined run, at a time on a
+   canvas it keeps in .xterm, so .xterm itself keeps the features: a canvas holds on to the
+   features it first drew with. The touch selection overlay lies over the cells as plain text. */
+[data-term-font] .xterm-rows,
 [data-term-font] .sshc-select-overlay {
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0;
+}
+[data-term-font] .xterm[data-ligatures] .xterm-rows {
+  font-variant-ligatures: normal;
+  font-feature-settings: "liga" 1, "calt" 1;
 }
 [data-term-background] {
   --ui-term-veil: color-mix(in srgb, var(--ui-term-bg) calc(var(--ui-term-tint) * 1%), transparent);

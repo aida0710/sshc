@@ -217,6 +217,9 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	if request.ComposerEnterSends != nil {
 		settings.ComposerEnterSends = *request.ComposerEnterSends
 	}
+	if request.Ligatures != nil {
+		settings.Ligatures = *request.Ligatures
+	}
 	if request.LocalShellProfile != nil {
 		settings.LocalShellProfile = *request.LocalShellProfile
 	}
