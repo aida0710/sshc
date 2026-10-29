@@ -83,7 +83,7 @@ describe("OverviewPanel", () => {
     expect(screen.queryByRole("heading", { name: "Quick connect" })).not.toBeInTheDocument();
     const attention = screen.getByRole("region", { name: "Needs attention" });
     expect(browser.compareDocumentPosition(attention) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-    expect(within(attention).getByRole("button", { name: "Review configuration" })).toBeEnabled();
+    expect(within(attention).getByRole("button", { name: "Open SSH Config" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Open sync" })).toBeEnabled();
   });
 
@@ -200,10 +200,60 @@ describe("OverviewPanel", () => {
     );
 
     await screen.findByText("database");
-    await userEvent.click(screen.getByRole("button", { name: "Review configuration" }));
+    await userEvent.click(screen.getByRole("button", { name: "Open SSH Config" }));
     expect(navigate).toHaveBeenCalledWith("Config");
     expect(screen.queryByRole("button", { name: "Open diagnostics" })).not.toBeInTheDocument();
     expect(loadOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not ask for attention for a Host * that only explains how connections get their values", async () => {
+    render(
+      <OverviewPanel
+        loadOverview={vi.fn().mockResolvedValue({
+          ...overview,
+          diagnostics: [],
+          notices: [
+            { code: "unnamed_host_block", path: "config", line: 26, detail: "Host *" },
+            { code: "wildcard_shadow", path: "config", line: 26, detail: "Host *" },
+          ],
+        })}
+        loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
+        launch={vi.fn()}
+        onNavigate={vi.fn()}
+        onNavigateLocation={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("database");
+    expect(screen.queryByRole("region", { name: "Needs attention" })).not.toBeInTheDocument();
+  });
+
+  it("says what needs fixing and sends a group folder notice to Connections, with the button under the words", async () => {
+    const navigate = vi.fn();
+    render(
+      <OverviewPanel
+        loadOverview={vi.fn().mockResolvedValue({
+          ...overview,
+          diagnostics: [],
+          notices: [{ code: "group_directory_leftover", path: "connections/old" }],
+        })}
+        loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
+        launch={vi.fn()}
+        onNavigate={navigate}
+        onNavigateLocation={vi.fn()}
+      />,
+    );
+
+    const attention = await screen.findByRole("region", { name: "Needs attention" });
+    expect(attention).toHaveTextContent("1 notice(s) about connections or group folders need fixing.");
+    expect(within(attention).queryByRole("button", { name: "Open SSH Config" })).not.toBeInTheDocument();
+    const words = within(attention).getByText("1 notice(s) about connections or group folders need fixing.");
+    const button = within(attention).getByRole("button", { name: "Open Connections" });
+    expect(words.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    await userEvent.click(button);
+    expect(navigate).toHaveBeenCalledWith("Connections");
   });
 
   it("reads the SSH configuration again when asked after it could not be read", async () => {
@@ -285,7 +335,7 @@ describe("OverviewPanel", () => {
     );
 
     await screen.findByText("database");
-    expect(screen.queryByRole("button", { name: "Review configuration" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open SSH Config" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Recover changes" }));
     expect(navigate).toHaveBeenCalledWith("History");
   });
