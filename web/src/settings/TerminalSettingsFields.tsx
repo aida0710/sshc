@@ -101,17 +101,25 @@ const verbosityChoices: { value: string; label: MessageKey }[] = [
   { value: "3", label: "terminal.verbosityFull" },
 ];
 
+// SharedTag marks a setting every browser shares: the engine applies it, so it is not part of a preset
+// (settings/terminalPresets.ts). The page's description says what the mark means; it stays out of the
+// field's name.
+function SharedTag() {
+  const t = useTranslate();
+  return <span aria-hidden="true" className="ml-1.5 inline-block rounded-full bg-well px-1.5 align-[1px] text-[10.5px] font-normal leading-4 text-ink-muted">{t("terminal.sharedSetting")}</span>;
+}
+
 // Reconnecting, the connection log, and the three limits on one row.
 export function TerminalConnectionFields({ draft, edit }: GroupProps) {
   const t = useTranslate();
   return (
     <>
-      <FieldRow label={t("terminal.reconnectLabel")} hint={t("terminal.reconnectHint")}>
+      <FieldRow label={<>{t("terminal.reconnectLabel")}<SharedTag /></>} hint={t("terminal.reconnectHint")}>
         <select className={control} value={draft.reconnect} onChange={(event) => edit({ reconnect: event.target.value })}>
           {reconnectChoices.map((choice) => <option key={choice.value} value={choice.value}>{t(choice.label)}</option>)}
         </select>
       </FieldRow>
-      <FieldRow label={t("terminal.verbosityLabel")} hint={t("terminal.verbosityHint")}>
+      <FieldRow label={<>{t("terminal.verbosityLabel")}<SharedTag /></>} hint={t("terminal.verbosityHint")}>
         <select className={control} value={draft.verbosity} onChange={(event) => edit({ verbosity: event.target.value })}>
           {verbosityChoices.map((choice) => <option key={choice.value} value={choice.value}>{t(choice.label)}</option>)}
         </select>
@@ -141,7 +149,7 @@ function TerminalLimitInputs({ draft, edit, ...description }: GroupProps & Descr
   return (
     <span className={`flex flex-wrap items-center gap-x-[18px] gap-y-2 ${unitText}`}>
       <label className="inline-flex items-center gap-2">
-        {t("terminal.maxSessionsShort")}
+        <span>{t("terminal.maxSessionsShort")}<SharedTag /></span>
         <input
           type="number"
           min={1}
@@ -155,7 +163,7 @@ function TerminalLimitInputs({ draft, edit, ...description }: GroupProps & Descr
         />
       </label>
       <label className="inline-flex items-center gap-2">
-        {t("terminal.scrollbackShort")}
+        <span>{t("terminal.scrollbackShort")}<SharedTag /></span>
         <input
           type="number"
           min={16384}
@@ -207,7 +215,7 @@ export function TerminalStartFields({ draft, edit, profiles }: GroupProps & { pr
   const t = useTranslate();
   return (
     <>
-      <FieldRow label={t("terminal.startLabel")} hint={t("terminal.startHint")}>
+      <FieldRow label={<>{t("terminal.startLabel")}<SharedTag /></>} hint={t("terminal.startHint")}>
         <input
           type="text"
           className={`${control} font-mono`}
@@ -217,7 +225,7 @@ export function TerminalStartFields({ draft, edit, profiles }: GroupProps & { pr
           onChange={(event) => edit({ startDirectory: event.target.value })}
         />
       </FieldRow>
-      <FieldRow label={t("terminal.localShellProfileLabel")}>
+      <FieldRow label={<>{t("terminal.localShellProfileLabel")}<SharedTag /></>}>
         <select
           className={control}
           value={draft.localShellProfile}

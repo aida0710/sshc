@@ -41,6 +41,7 @@ func registerConfigRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.GET("/api/v1/metadata", handlers.Metadata)
 	engine.PUT("/api/v1/metadata/shortcuts", handlers.SetShortcuts)
 	engine.PUT("/api/v1/metadata/terminal", handlers.SetTerminal)
+	engine.PUT("/api/v1/metadata/terminal-presets", handlers.SetTerminalPresets)
 	engine.PUT("/api/v1/metadata/appearance", handlers.SetAppearance)
 	engine.GET("/api/v1/metadata/engine", handlers.Engine)
 	engine.PUT("/api/v1/metadata/engine", handlers.SetEngine)
@@ -403,6 +404,31 @@ func (h ConfigHandlers) SetShortcuts(c *echo.Context) error {
 		return problem(c, http.StatusBadRequest, "invalid_shortcut_presets")
 	}
 	if err != nil {
+		return serviceProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, api.SettingsSaveResult{TransactionId: result.TransactionID, Written: result.Written})
+}
+
+// SetTerminalPresets は、ターミナルの設定の組の一覧を置き換える。組の中身は
+// TerminalSettings と同じ名前で書くので、metadata の形のまま受け取る。
+func (h ConfigHandlers) SetTerminalPresets(c *echo.Context) error {
+	var request struct {
+		Base    []application.TerminalPreset `json:"base"`
+		Presets []application.TerminalPreset `json:"presets"`
+	}
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if request.Base == nil || request.Presets == nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	result, err := h.Service.SetTerminalPresets(request.Base, request.Presets)
+	switch {
+	case errors.Is(err, application.ErrTerminalPresetConflict):
+		return problem(c, http.StatusConflict, "terminal_presets_changed")
+	case errors.Is(err, application.ErrTerminalPresets), errors.Is(err, application.ErrMetadataTerminal):
+		return problem(c, http.StatusBadRequest, "invalid_terminal_presets")
+	case err != nil:
 		return serviceProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, api.SettingsSaveResult{TransactionId: result.TransactionID, Written: result.Written})

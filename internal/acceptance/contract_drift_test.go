@@ -71,6 +71,7 @@ var servedTypes = []struct {
 	{"Setting", application.Setting{}},
 	{"Source", application.Source{}},
 	{"TerminalAppearance", application.TerminalAppearance{}},
+	{"TerminalPreset", application.TerminalPreset{}},
 }
 
 // servedEnums は、application の型が OpenAPI の enum を名前付きの型で持つものの値である。

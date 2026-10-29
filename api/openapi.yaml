@@ -3334,6 +3334,31 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/metadata/terminal-presets:
+    put:
+      operationId: setTerminalPresets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [base, presets]
+              properties:
+                # base は画面が読んだときの一覧。そのあとに変わっていたら 409 で断る。
+                base: { type: array, maxItems: 16, items: { $ref: "#/components/schemas/TerminalPreset" } }
+                presets: { type: array, maxItems: 16, items: { $ref: "#/components/schemas/TerminalPreset" } }
+      responses:
+        "200":
+          description: Saved terminal presets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SettingsSaveResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/metadata:
     get:
       operationId: getMetadata
@@ -6501,6 +6526,18 @@ components:
             previousSession: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             home: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             sftp: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+    # 埋め込みターミナルの設定の組。どの組を使うかはブラウザごとに選ぶ。標準の組は
+    # embeddedTerminal そのもので、ここには無い。settings にはブラウザが当てる設定だけを書く
+    # （startDirectory・maxSessions・scrollbackBytes・verbosity・reconnect・osc52・
+    # localShellProfile は書くと断る）。
+    TerminalPreset:
+      type: object
+      additionalProperties: false
+      required: [id, name, settings]
+      properties:
+        id: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        settings: { $ref: "#/components/schemas/EmbeddedTerminal" }
     Metadata:
       type: object
       additionalProperties: false
@@ -6508,6 +6545,7 @@ components:
       properties:
         schemaVersion: { type: integer }
         shortcutPresets: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/ShortcutPreset" } }
+        terminalPresets: { type: array, maxItems: 16, items: { $ref: "#/components/schemas/TerminalPreset" } }
         groupsFile: { type: string }
         embeddedTerminal: { $ref: "#/components/schemas/EmbeddedTerminal" }
         # sshc エンジンの設定（ポートと Vault の自動ロック）は、このマシンだけの設定なので

@@ -34,6 +34,8 @@ export const localStorageKeys = {
   showHiddenTerminalWorkspaces: "sshc.terminal.show-hidden-workspaces.v1",
   // "true" while this browser keeps the screen on with a terminal shown.
   keepScreenAwake: "sshc.terminal.keep-screen-awake.v1",
+  // The terminal preset this browser uses (TerminalPreset.id), or "default" for the standard set.
+  terminalPresetSelection: "sshc.terminal.preset.v1",
   // How terminals take touch in this browser: "auto", "touch" or "mouse".
   touchMode: "sshc.terminal.touch-mode.v1",
   // The SSH alias of the engine whose terminals are shown; empty for this machine.

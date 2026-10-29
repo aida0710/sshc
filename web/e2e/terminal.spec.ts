@@ -1257,3 +1257,40 @@ test("expands the transfer manager from its empty header space", async ({ page, 
   await page.mouse.click(box.x + box.width * 0.75, box.y + box.height / 2);
   await expect(page.getByRole("button", { name: "Collapse transfer manager" })).toHaveAttribute("aria-expanded", "true");
 });
+
+// A preset (#467) holds how terminals look and behave in a browser. A browser that uses it draws its
+// terminals with it, and the standard set stays as it was for the browsers that do not.
+test("draws the terminals with the preset this browser uses", async ({ page, installation }) => {
+  await seedTerminalSettings(installation);
+  await openApplication(page, installation);
+  const region = await openLoadedTerminalSettings(page);
+  await openTerminalSettingsTab(region, "Display");
+
+  await region.getByRole("button", { name: "New preset" }).click();
+  const naming = page.getByRole("dialog", { name: "New preset from Standard" });
+  await naming.getByRole("textbox", { name: "Preset name" }).fill("Large");
+  await naming.getByRole("button", { name: "New preset" }).click();
+  await expect(naming).toBeHidden();
+  await expect(region.getByRole("combobox", { name: "Preset" }).locator("option:checked")).toHaveText("Large");
+
+  await region.getByLabel("Font size").fill("22");
+  const presetSave = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === "/api/v1/metadata/terminal-presets" && response.request().method() === "PUT");
+  await region.getByRole("button", { name: "Save" }).click();
+  expect((await presetSave).ok()).toBe(true);
+  await region.getByRole("button", { name: "Use in this browser" }).click();
+  await expect(region.getByText("In use in this browser")).toBeVisible();
+
+  await openSessionList(page);
+  await openLocalShell(page);
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
+  await expect.poll(async () => (await drawnRowFont(page)).fontSize).toBe("22px");
+
+  // The standard set kept its size; the preset's lives in the preset alone.
+  const metadata = JSON.parse(await installation.read("sshc/metadata.json")) as {
+    embeddedTerminal?: { fontSize?: number };
+    terminalPresets?: { name: string; settings: { fontSize?: number } }[];
+  };
+  expect(metadata.embeddedTerminal?.fontSize).toBeUndefined();
+  expect(metadata.terminalPresets).toEqual([expect.objectContaining({ name: "Large", settings: expect.objectContaining({ fontSize: 22 }) })]);
+});
