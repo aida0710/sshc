@@ -858,6 +858,7 @@ export const ja = {
   "terminal.exitedBySignal": "シグナル{signal}で終了",
   "terminal.exitedConnectionLost": "接続が切れました",
   "terminal.exitedRightAway": "開いてすぐ終了",
+  "terminal.exitedUnknown": "終了しました",
   "terminal.localhost": "localhost",
   "terminal.emptyHeading": "開いているセッションがありません",
   "terminal.emptyHint":
@@ -933,10 +934,10 @@ export const ja = {
   "terminal.reconnectFailed":
     "再接続に失敗しました。設定された上限まで再試行します。",
   "terminal.reconnectExhausted":
-    "再接続の上限に達しました。ネットワーク復旧後に新しい接続を開いてください。",
+    "SSHの接続が切れ、再接続できる回数の上限まで試してもつながりませんでした。",
   "terminal.manualReconnect": "再接続",
   "terminal.stopReconnect": "再接続を停止",
-  "terminal.reconnectStopped": "自動再接続を停止しました。必要なときに再接続してください。",
+  "terminal.reconnectStopped": "SSHの接続が切れ、自動再接続を停止しました。",
   "terminal.notReconnecting": "このセッションは再接続待ちではありません。",
   "terminal.manualReconnecting": "接続中…",
   "terminal.manualReconnectFailed":
@@ -1305,14 +1306,12 @@ export const ja = {
   "terminal.presetsReload": "読み込み直す",
   "terminal.sharedSetting": "共通",
   "terminal.screenLabel": "{title}のターミナル",
-  "terminal.exitedWithCode":
-    "プログラムが終了コード{code}で終了しました。出力は、このセッションを閉じるまで表示されます。",
+  "terminal.exitedWithCode": "プログラムが終了コード{code}で終了しました。",
+  "terminal.exitedWithUnknownCode": "プログラムが終了しました。終了コードは分かりませんでした。",
   "terminal.exitedWithCodeRightAway":
-    "プログラムが開いてすぐ終了コード0で終了しました。シェルやプロファイルの設定を確かめてください。出力は、このセッションを閉じるまで表示されます。",
-  "terminal.exitedWithSignal":
-    "プログラムがシグナル{signal}で終了しました。出力は、このセッションを閉じるまで表示されます。",
-  "terminal.exitedWithConnectionLost":
-    "SSHの接続が切れました。出力は、このセッションを閉じるまで表示されます。",
+    "プログラムが開いてすぐ終了コード0で終了しました。シェルやプロファイルの設定を確かめてください。",
+  "terminal.exitedWithSignal": "プログラムがシグナル{signal}で終了しました。",
+  "terminal.exitedWithConnectionLost": "SSHの接続が切れました。",
   "inspector.lookHeading": "表示",
   "inspector.terminalHeading": "ターミナル",
   "inspector.terminalFollowsApp": "空欄はアプリ全体の設定に従う",

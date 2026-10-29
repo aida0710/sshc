@@ -75,7 +75,7 @@ test("stops the automatic reconnect loop from the pane", async ({ page, installa
   await page.getByRole("button", { name: "Stop reconnecting" }).click();
 
   await expect.poll(() => stopRequests).toBe(1);
-  await expect(screen.getByText("Automatic reconnection was stopped. Reconnect when you are ready.")).toBeVisible();
+  await expect(screen.getByText("The SSH connection was lost and automatic reconnecting was stopped.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Reconnect", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Stop reconnecting" })).toHaveCount(0);
   await expect(screen).toContainText("再接続を停止しました");

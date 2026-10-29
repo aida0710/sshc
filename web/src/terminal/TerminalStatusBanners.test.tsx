@@ -59,9 +59,36 @@ it("says a lost SSH connection ended the session, in red, rather than exit statu
   };
   render(<TerminalStatusBanners session={lost} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} />);
 
-  const message = screen.getByText("The SSH connection was lost. The output above is kept until you close this session.");
+  const message = screen.getByText("The SSH connection was lost.");
   expect(message).toHaveClass("text-danger");
   expect(screen.queryByText(/status -1/)).toBeNull();
+});
+
+// After a dropped connection the reason reconnecting stopped is the ended row itself, with Reconnect beside
+// it: one row, not the reason above a row that says the connection was lost.
+it("says why an ended session stopped reconnecting once, in its ended row", () => {
+  for (const [problem, reason] of [
+    ["reconnect_exhausted", "The SSH connection was lost and did not come back within the reconnect attempts."],
+    ["reconnect_stopped", "The SSH connection was lost and automatic reconnecting was stopped."],
+  ] as const) {
+    const ended: TerminalSession = {
+      ...session, kind: "ssh", alias: "bastion", state: "exited", problem,
+      exited: { code: -1, signal: "", at: "2026-10-28T09:00:00Z", connectionLost: true },
+    };
+    const { unmount } = render(<TerminalStatusBanners session={ended} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} onReconnect={async () => true} />);
+    expect(screen.getByRole("alert")).toHaveTextContent(reason);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.queryByText(/^The SSH connection was lost\.$/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Reconnect" })).toBeVisible();
+    unmount();
+  }
+});
+
+it("never shows the engine's unknown exit status as a status", () => {
+  const unknown: TerminalSession = { ...session, state: "exited", exited: { code: -1, signal: "", at: "2026-10-28T09:00:00Z" } };
+  render(<TerminalStatusBanners session={unknown} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} />);
+  expect(screen.getByText("The program exited. Its exit status could not be read.")).toBeVisible();
+  expect(screen.queryByText(/-1/)).toBeNull();
 });
 
 it("shows a clean exit quietly and a failed one in red", () => {
