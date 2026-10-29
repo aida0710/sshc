@@ -10,6 +10,7 @@ import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { PageBoard } from "../ui/PageBoard";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
+import { attentionNoticesOf } from "../connections/noticeKinds";
 import { PanelState } from "../ui/PanelState";
 import { formatOptionalDateTime } from "../ui/format";
 
@@ -29,7 +30,6 @@ const loadDefaultOverview = () => configApi.overview();
 const loadDefaultSync = () => syncApi.syncStatus();
 const loadDefaultRecent = () => recentConnectionsApi.recentConnections();
 const launchDefault = (alias: string) => terminalSessionsApi.openTerminalSession({ kind: "ssh", alias });
-const informationalNoticeCodes = new Set(["group_empty"]);
 
 export function OverviewPanel({
   loadOverview = loadDefaultOverview,
@@ -95,12 +95,15 @@ export function OverviewPanel({
     }
   }
 
-  const configurationAttention = overview === null
+  // Home counts only what asks the person to fix something, and says where to fix it: problems in the SSH
+  // configuration files are shown in SSH Config, notices about connections and group folders in Connections,
+  // and changes that stopped partway in History. A note that only explains a connection's values is not counted.
+  const configProblems = overview === null
     ? 0
-    : overview.diagnostics.filter((item) => item.severity === "error" || item.severity === "warning").length +
-      overview.notices.filter((item) => !informationalNoticeCodes.has(item.code)).length;
-  const recoveryAttention = overview?.pending?.length ?? 0;
-  const attention = configurationAttention + recoveryAttention;
+    : overview.diagnostics.filter((item) => item.severity === "error" || item.severity === "warning").length;
+  const connectionNotices = overview === null ? 0 : attentionNoticesOf(overview.notices).length;
+  const pendingRecovery = overview?.pending?.length ?? 0;
+  const attention = configProblems + connectionNotices + pendingRecovery;
 
   return (
     <PageBoard labelledBy="home-heading" className="flex flex-col gap-[18px]">
@@ -117,10 +120,7 @@ export function OverviewPanel({
 
       {problem === "" ? null : <Notice tone="danger">{problem}</Notice>}
       {loading || overview === null || !listsFailed ? null : (
-        <Notice>
-          <span className="grow">{t("home.listsLoadFailed")}</span>
-          {retryButton}
-        </Notice>
+        <Notice actions={retryButton}>{t("home.listsLoadFailed")}</Notice>
       )}
 
       <section aria-label={t("home.quickConnect")}>
@@ -140,17 +140,23 @@ export function OverviewPanel({
       </section>
 
       {attention === 0 ? null : (
-        <section aria-label={t("home.attention")} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[9px] bg-notice px-3 py-2.5">
-          <div className="flex min-w-0 flex-1 items-center gap-2.5 text-[12.5px] leading-[19px] text-notice-ink">
+        <section aria-label={t("home.attention")}>
+          <Notice
+            actions={(
+              <>
+                {configProblems === 0 ? null : <Button small onClick={() => onNavigate("Config")}>{t("home.openConfig")}</Button>}
+                {connectionNotices === 0 ? null : <Button small onClick={() => onNavigate("Connections")}>{t("home.openConnectionNotices")}</Button>}
+                {pendingRecovery === 0 ? null : <Button small onClick={() => onNavigate("History")}>{t("home.recoverChanges")}</Button>}
+              </>
+            )}
+          >
             <Icon name="warning" className="size-[15px] shrink-0" />
-            <p>{t("home.workspaceAttention", { count: attention })}</p>
-          </div>
-          {configurationAttention === 0 ? null : (
-            <Button small onClick={() => onNavigate("Config")}>{t("home.openConfig")}</Button>
-          )}
-          {recoveryAttention === 0 ? null : (
-            <Button small onClick={() => onNavigate("History")}>{t("home.recoverChanges")}</Button>
-          )}
+            <div className="min-w-0">
+              {configProblems === 0 ? null : <p>{t("home.configProblems", { count: configProblems })}</p>}
+              {connectionNotices === 0 ? null : <p>{t("home.connectionNotices", { count: connectionNotices })}</p>}
+              {pendingRecovery === 0 ? null : <p>{t("home.pendingRecovery", { count: pendingRecovery })}</p>}
+            </div>
+          </Notice>
         </section>
       )}
 
