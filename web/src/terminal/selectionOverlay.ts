@@ -21,12 +21,19 @@ export function selectionHeldIn(node: HTMLElement): boolean {
   return node.contains(selection.anchorNode);
 }
 
+// Focusable is what a tap types into: the terminal, or the phone's text box under it.
+export type Focusable = { focus(): void; blur(): void };
+
 // onTap returns true when it handled the tap (for example by opening a link),
 // so the tap does not also focus the terminal and raise the keyboard.
+// typingTarget is where a tap types, the terminal unless it says otherwise.
 export function attachSelectionOverlay(
   container: HTMLElement,
   view: OverlayTerminal,
-  { onTap }: { onTap?: ((point: ScreenPoint) => boolean) | undefined } = {},
+  { onTap, typingTarget }: {
+    onTap?: ((point: ScreenPoint) => boolean) | undefined;
+    typingTarget?: (() => Focusable) | undefined;
+  } = {},
 ): () => void {
   const overlay = container.ownerDocument.createElement("pre");
   overlay.className = `${overlayClass} absolute m-0 select-text overflow-hidden whitespace-pre text-transparent`;
@@ -105,8 +112,9 @@ export function attachSelectionOverlay(
     if (onTap?.({ clientX: touchedX, clientY: touchedY }) === true) return;
     // Android may keep the textarea focused after Back hides the IME. Refocus
     // only after a deliberate tap so that tapping can reopen that keyboard.
-    view.blur();
-    view.focus();
+    const target = typingTarget?.() ?? view;
+    target.blur();
+    target.focus();
   };
   const cancelled = () => { touching = false; };
   const swallowCompatMouse = (event: MouseEvent) => event.preventDefault();

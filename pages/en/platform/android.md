@@ -16,10 +16,10 @@ Install the signed APK from GitHub Releases. Android 13+ back navigation closes 
 - Connections switches between the list and editor. Rotating a phone keeps this single-pane layout.
 - Terminal scrolling continues with deceleration after a swipe. Touching again stops it; selection and leaving the screen also stop momentum. The system's reduced-motion preference is respected.
 - Esc, Tab, Ctrl, and arrows occupy one row of extra keys. Open “…” for Alt and symbols. Double-tap Ctrl or Alt to lock it. The keys remain available in landscape and preserve terminal input focus.
-- Tap a URL or path shown in the terminal to open a menu for opening it in the browser, copying it, and other actions. Tapping anywhere else opens the keyboard. OSC 8 hyperlinks printed by programs cannot be opened by tapping.
+- Tap a URL or path shown in the terminal to open a menu for opening it in the browser, copying it, and other actions. Tapping anywhere else moves the focus to the text box under the terminal and opens the keyboard. After Ctrl or Alt on the key bar, the next key goes straight to the terminal. OSC 8 hyperlinks printed by programs cannot be opened by tapping.
 - Dialogs and action sheets stay within the visible area above the keyboard. Long content scrolls inside them. Android Back dismisses the topmost menu before its parent dialog.
 
-The top-left menu button, or swiping right across the page, opens a drawer with running terminals and **Search everything**, which opens command search. Swiping over a terminal or over something that scrolls sideways does not open it. Screen-edge gestures remain available for Android Back. Tap outside the drawer, swipe left or use Back to close it.
+The top-left menu button, or swiping right across the page, opens a drawer with running terminals and **Search everything**, which opens command search. A sideways swipe over a terminal opens it too. Swiping over something that scrolls sideways or over a text field does not, nor does dragging after a long press to select text. Screen-edge gestures remain available for Android Back. Tap outside the drawer, swipe left or use Back to close it.
 
 ## SFTP on a phone
 

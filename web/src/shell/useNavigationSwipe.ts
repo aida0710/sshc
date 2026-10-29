@@ -9,10 +9,14 @@ const sidewaysRatio = 1.2;
 const settleShare = 0.35;
 // A flick this fast (px per ms) settles it the same way, however short it was.
 const flickSpeed = 0.35;
+// A finger that rests this long before it moves is pressing long to select text, not swiping. Android's
+// long press takes 400 ms.
+const longPressMillis = 400;
 
-// Where a swipe must not start: the terminal reads touches itself (scrolling, selecting), text fields
-// select by dragging, and anything that scrolls sideways needs the sideways swipe for itself.
-const ownsTouchSelector = "[data-terminal-host], input, textarea, select, [contenteditable='true']";
+// Where a swipe must not start: text fields select by dragging, and anything that scrolls sideways needs the
+// sideways swipe for itself. The terminal scrolls only up and down, so a sideways swipe over it is the
+// navigation's; its text is selected with a long press, which longPressMillis leaves alone.
+const ownsTouchSelector = "input, textarea, select, [contenteditable='true']";
 
 type Gesture = {
   // The panel the finger moves, taken when the finger goes down.
@@ -22,6 +26,7 @@ type Gesture = {
   offset: number;
   startX: number;
   startY: number;
+  startTime: number;
   dragging: boolean;
   width: number;
   lastX: number;
@@ -34,9 +39,19 @@ function scrollsSideways(element: Element): boolean {
   return (overflow === "auto" || overflow === "scroll") && element.scrollWidth > element.clientWidth + 1;
 }
 
+// A finger on selected text may be moving the selection's ends.
+function onSelectedText(target: Element): boolean {
+  const selection = target.ownerDocument.getSelection();
+  if (selection === null || selection.isCollapsed) return false;
+  for (let index = 0; index < selection.rangeCount; index += 1) {
+    if (selection.getRangeAt(index).intersectsNode(target)) return true;
+  }
+  return false;
+}
+
 function ownsTheTouch(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  if (target.closest(ownsTouchSelector) !== null) return true;
+  if (target.closest(ownsTouchSelector) !== null || onSelectedText(target)) return true;
   for (let element: Element | null = target; element !== null && element !== document.body; element = element.parentElement) {
     if (scrollsSideways(element)) return true;
   }
@@ -116,6 +131,7 @@ export function useNavigationSwipe({ enabled, open, panelRef, onOpenChange }: {
         opening: !openRef.current,
         startX: touch.clientX,
         startY: touch.clientY,
+        startTime: event.timeStamp,
         dragging: false,
         offset: openRef.current ? 0 : -panel.getBoundingClientRect().width,
         width: panel.getBoundingClientRect().width,
@@ -134,7 +150,8 @@ export function useNavigationSwipe({ enabled, open, panelRef, onOpenChange }: {
         if (Math.abs(across) < directionThreshold && Math.abs(down) < directionThreshold) return;
         const sideways = Math.abs(across) > Math.abs(down) * sidewaysRatio;
         const towardsSettling = gesture.opening ? across > 0 : across < 0;
-        if (!sideways || !towardsSettling) {
+        const pressedLong = event.timeStamp - gesture.startTime >= longPressMillis;
+        if (!sideways || !towardsSettling || pressedLong) {
           gesture = null;
           return;
         }
