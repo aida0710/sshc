@@ -83,6 +83,14 @@ describe("FilePreviewDialog", () => {
     expect(sftpApi.readText).not.toHaveBeenCalled();
   });
 
+  it("says a video that is not there was not found, instead of calling it a format the browser cannot play", async () => {
+    vi.mocked(sftpApi.issueMediaTicket).mockRejectedValue(new ApiError("sftp_not_found", 404, null));
+    renderDialog("/home/me/Pictures/IMG_2041.jpgcording.mp4");
+
+    expect(await screen.findByText("The file was not found.")).toBeTruthy();
+    expect(screen.queryByText("This browser can't play this file.")).toBeNull();
+  });
+
   it("downloads a file of the engine's own disk directly and saves it in the browser", async () => {
     vi.mocked(sftpApi.previewFile).mockResolvedValue(png);
     const contents = new Blob(["bytes"]);
