@@ -423,7 +423,7 @@ func validateBuildRequest(request nativeBuildRequest) error {
 	if strings.TrimSpace(request.cgo) == "" {
 		return errors.New("CGO is required")
 	}
-	if !supportedOS(request.goos) {
+	if !supportedTargetOS(request.goos) {
 		return errors.New("unsupported GOOS")
 	}
 	if !supportedArchitecture(request.goarch) {
@@ -692,8 +692,15 @@ func canonicalizeNativeEnvironment(environment []string) ([]string, error) {
 	return result, nil
 }
 
+// supportedOS is a machine that builds and runs the release jobs.
 func supportedOS(value string) bool {
 	return value == "darwin" || value == "linux" || value == "windows"
+}
+
+// supportedTargetOS is what a binary may be built for. FreeBSD and OpenBSD have
+// no runner of their own; the Linux job cross-compiles them.
+func supportedTargetOS(value string) bool {
+	return supportedOS(value) || value == "freebsd" || value == "openbsd"
 }
 
 func supportedArchitecture(value string) bool {

@@ -138,6 +138,11 @@ verify_public_release() {
   if [ "$tag" != v0.52.1 ] && [ "$(printf '%s\n' v0.52.1 "$tag" | sort -V | head -1)" = v0.52.1 ]; then
     expected_assets=$(printf '%s\n' "$expected_assets" install.sh | sort)
   fi
+  # v0.58.1より後は、FreeBSDとOpenBSDのCLIも公開契約に含む。
+  if [ "$tag" != v0.58.1 ] && [ "$(printf '%s\n' v0.58.1 "$tag" | sort -V | head -1)" = v0.58.1 ]; then
+    expected_assets=$(printf '%s\n' "$expected_assets" \
+      sshc-freebsd-amd64 sshc-freebsd-arm64 sshc-openbsd-amd64 sshc-openbsd-arm64 | sort)
+  fi
   actual_assets=$(printf '%s' "$release" | jq -r '.assets[].name' | sort)
   [ "$actual_assets" = "$expected_assets" ] || die 'release asset set differs from the publication contract'
 
@@ -163,6 +168,10 @@ verify_public_release() {
     Linux/aarch64|Linux/arm64) host_asset=sshc-linux-arm64 ;;
     Darwin/x86_64) host_asset=sshc-darwin-amd64 ;;
     Darwin/arm64) host_asset=sshc-darwin-arm64 ;;
+    FreeBSD/amd64) host_asset=sshc-freebsd-amd64 ;;
+    FreeBSD/arm64) host_asset=sshc-freebsd-arm64 ;;
+    OpenBSD/amd64) host_asset=sshc-openbsd-amd64 ;;
+    OpenBSD/arm64) host_asset=sshc-openbsd-arm64 ;;
   esac
   if [ -n "$host_asset" ]; then
     chmod +x "$release_tmp/$host_asset"

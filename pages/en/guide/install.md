@@ -1,11 +1,11 @@
 ---
 title: Installation
-description: Install sshc on macOS, Linux, Windows or Android.
+description: Install sshc on macOS, Linux, FreeBSD, OpenBSD, Windows or Android.
 ---
 
 # Installation
 
-sshc is a terminal app for macOS, Linux, Windows, and Android. On desktop, one `sshc` binary provides the engine, CLI, and local web UI.
+sshc is a terminal app for macOS, Linux, FreeBSD, OpenBSD, Windows, and Android. On desktop, one `sshc` binary provides the engine, CLI, and local web UI.
 
 ## macOS / Linux
 
@@ -23,6 +23,22 @@ SSHC_VERSION=v0.58.1 sh -c \
 ```
 
 After installation, `sshc update` delegates upgrades to Homebrew or to a receipt-aware installer. It shows the planned change and asks for confirmation. In non-interactive automation, review the plan and use `sshc update --yes`.
+
+## FreeBSD / OpenBSD
+
+Binaries for FreeBSD and OpenBSD (amd64 and arm64) are published from the release after v0.58.1. Homebrew is not available there, so use the install script. Without curl or wget, the script downloads with `fetch` from the FreeBSD base system or `ftp` on OpenBSD, and checks the SHA-256 with `sha256`.
+
+```sh
+# FreeBSD
+SSHC_VERSION=v0.58.1 sh -c \
+  'fetch -qo - https://raw.githubusercontent.com/aida0710/sshc/v0.58.1/install.sh | sh'
+
+# OpenBSD
+SSHC_VERSION=v0.58.1 sh -c \
+  'ftp -Vo - https://raw.githubusercontent.com/aida0710/sshc/v0.58.1/install.sh | sh'
+```
+
+`sshc update` works as for an `install.sh` installation on macOS and Linux. `sshc service install` is not supported; to keep the engine running after you log out, run `sshc engine` inside tmux or screen.
 
 ## Windows
 

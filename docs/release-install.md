@@ -1,6 +1,6 @@
 # インストールとアップグレード
 
-sshcは、macOS、Linux、Windows向けのCLIバイナリとAndroidのAPKを配布しています。デスクトップアプリ、macOSのapp bundle、AppImage、パッケージ形式のWindowsインストーラーは配布していません。
+sshcは、macOS、Linux、FreeBSD、OpenBSD、Windows向けのCLIバイナリとAndroidのAPKを配布しています（FreeBSDとOpenBSDはv0.58.1より後のリリースから）。デスクトップアプリ、macOSのapp bundle、AppImage、パッケージ形式のWindowsインストーラーは配布していません。
 
 ## Homebrew（macOS / Linux）
 
@@ -10,12 +10,14 @@ brew install aida0710/tap/sshc
 
 Homebrewのformulaはソースからビルドするため、GoとNode.js 22もHomebrewによってインストールされます（どちらもビルドのときだけ使います）。
 
-## インストールスクリプト（macOS / Linux）
+## インストールスクリプト（macOS / Linux / FreeBSD / OpenBSD）
 
 ```sh
 SSHC_VERSION=v0.58.1 sh -c \
   'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.58.1/install.sh | sh'
 ```
+
+FreeBSDとOpenBSDでは、curlの代わりにベースシステムの`fetch -qo -`（FreeBSD）、`ftp -Vo -`（OpenBSD）でスクリプトを取得できます。スクリプトも、curlとwgetが無ければこれらで取得し、`sha256 -q`でSHA-256を確かめます。
 
 URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`上のスクリプトは次の変更で内容が変わるため、パイプで直接実行しません。新しいバージョンへ更新するときは、[GitHub Releases](https://github.com/aida0710/sshc/releases)でタグを確認して両方を置き換えます。
 
@@ -126,7 +128,7 @@ sshc engine      # フォアグラウンドでエンジンを起動
 sshc             # URLを表示し、可能であればブラウザで開く
 ```
 
-`sshc engine`はデーモン化しません。Homebrew版と、receiptに対応した`install.sh`版は、Linuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェントへ`sshc service install`で登録できます。その他の環境ではtmuxやscreenなどを手動で使用してください。
+`sshc engine`はデーモン化しません。Homebrew版と、receiptに対応した`install.sh`版は、Linuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェントへ`sshc service install`で登録できます。その他の環境（FreeBSD、OpenBSDなど）ではtmuxやscreenなどを手動で使用してください。
 
 ```sh
 tmux new -d -s sshc 'sshc engine'
