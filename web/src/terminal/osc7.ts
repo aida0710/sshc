@@ -1,5 +1,5 @@
-type Disposable = { dispose(): void };
-type OSCParser = { registerOscHandler(identifier: number, handler: (data: string) => boolean): Disposable };
+import type { IDisposable } from "@xterm/xterm";
+import type { OSCParser } from "./escapeSequenceParser";
 
 export function parseOSC7Directory(data: string): string | null {
   try {
@@ -13,7 +13,7 @@ export function parseOSC7Directory(data: string): string | null {
   }
 }
 
-export function attachOSC7Directory(parser: OSCParser, changed: (path: string) => void): Disposable {
+export function attachOSC7Directory(parser: OSCParser, changed: (path: string) => void): IDisposable {
   return parser.registerOscHandler(7, (data) => {
     const path = parseOSC7Directory(data);
     if (path === null) return false;
