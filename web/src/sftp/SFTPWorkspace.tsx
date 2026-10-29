@@ -183,6 +183,18 @@ export function SFTPWorkspace({
     setFocusedPaneId(paneId);
   }
 
+  // openSideBySide opens this machine in a new pane on the right, the way two-pane file managers start, so a
+  // remote folder and a local one stand side by side with one press.
+  function openSideBySide() {
+    const first = panes[0];
+    if (first === undefined || panes.length > 1 || !canSplit(panes)) return;
+    const opened = { ...blankTab(), alias: localHostAlias };
+    restoring.current.set(opened.id, { alias: localHostAlias, path: "", connect: true });
+    const next = moveTab(addTab(panes, first.id, opened), opened.id, { side: "right" });
+    setPanes(next);
+    setFocusedPaneId(findTab(next, opened.id)?.pane.id ?? first.id);
+  }
+
   function removeTab(tabId: string) {
     forgetTab(tabId);
     setPanes((current) => closeTab(current, tabId));
@@ -335,10 +347,17 @@ export function SFTPWorkspace({
   const canCompare = comparisonTabs.length > 1;
   // Compare sits at the end of the last pane's tab strip, the right edge of the workspace.
   const comparisonAction = compactViewport ? null : (
-    <Button small aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")} disabled={!canCompare}
-      onClick={requestComparison} className="my-auto ml-auto inline-flex shrink-0 items-center gap-1.5">
-      <Icon name="arrowLeftRight" className="size-[13px]" />{t("sftp.compare.action")}
-    </Button>
+    <div className="my-auto ml-auto flex shrink-0 items-center gap-1.5">
+      {panes.length === 1 && canSplit(panes) ? (
+        <Button small title={t("sftp.sideBySideHint")} onClick={openSideBySide} className="inline-flex items-center gap-1.5">
+          <Icon name="splitView" className="size-[13px]" />{t("sftp.sideBySide")}
+        </Button>
+      ) : null}
+      <Button small aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")} disabled={!canCompare}
+        onClick={requestComparison} className="inline-flex items-center gap-1.5">
+        <Icon name="arrowLeftRight" className="size-[13px]" />{t("sftp.compare.action")}
+      </Button>
+    </div>
   );
   // The transfer queue's card does not clip: its resize grip reaches above its top edge.
   const boardFrame = "rounded-xl border border-line bg-sidebar shadow-pane";

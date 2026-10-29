@@ -11,6 +11,7 @@ import type { UnreadSessions } from "../terminal/terminalNotifications";
 import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
 import { isImeComposing } from "../ui/imeComposition";
+import { searchPalette } from "./paletteSearch";
 
 // A command is something the palette performs, rather than somewhere it goes.
 export type PaletteCommand = {
@@ -44,13 +45,6 @@ const searchableSections: Section[] = [
   "Connections", "Config", "Keys", "Known Hosts", "Remote Keys",
   "Diagnostics", "Passwords", "Key Passphrases", "OTP", "Snippets", "Settings", "Sync", "VPN", "History",
 ];
-
-function matches(item: PaletteItem, query: string): boolean {
-  const tokens = query.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return true;
-  const haystack = `${item.label} ${item.detail} ${item.search}`.toLocaleLowerCase();
-  return tokens.every((token) => haystack.includes(token));
-}
 
 export function CommandPalette({
   open,
@@ -173,7 +167,7 @@ export function CommandPalette({
     })),
   ], [commands, files, hosts, onConnect, onNavigate, onOpenFile, onOpenSession, onOpenSnippet, sectionLabels, sessions, snippets, t, unreadBySession]);
 
-  const visible = useMemo(() => items.filter((item) => matches(item, query)).slice(0, 40), [items, query]);
+  const visible = useMemo(() => searchPalette(items.map((item) => ({ ...item, name: item.host?.alias ?? item.label })), query).slice(0, 40), [items, query]);
 
   useEffect(() => {
     if (selected >= visible.length) setSelected(Math.max(0, visible.length - 1));
@@ -274,4 +268,3 @@ export function CommandPalette({
   );
 }
 
-export { matches };

@@ -122,6 +122,14 @@ export function QuickConnectBrowser({
       <li
         key={identityKey(server.identity)}
         aria-busy={opening}
+        // A right click or a long press opens the card's menu: on a PC with a touch screen the 「…」 shows only
+        // under a pointer, and a tap on the card connects.
+        onContextMenu={(event) => {
+          const trigger = event.currentTarget.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
+          if (trigger === null || trigger.getAttribute("aria-expanded") === "true") return;
+          event.preventDefault();
+          trigger.click();
+        }}
         className={`group/row relative min-w-0 rounded-xl border transition-colors ${
           selected || opening ? "border-accent bg-select-fill" : "border-transparent bg-well hover:border-accent/45"
         }`}

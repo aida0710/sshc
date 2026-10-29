@@ -18,10 +18,14 @@ import { availableRelease, useUpdateStatus } from "./useUpdateStatus";
 export function MenuPanel({
   columns,
   onNavigate,
+  onOpenSearch,
   api = defaultUpdateApi,
 }: {
   columns: MenuGroup[][];
   onNavigate: (href: string) => void;
+  // onOpenSearch opens the search. On a phone the Menu leads with it: the pages fill three screens, and the
+  // search in the side navigation is behind the drawer.
+  onOpenSearch?: () => void;
   api?: UpdateApi;
 }) {
   const { t } = useLanguage();
@@ -55,6 +59,16 @@ export function MenuPanel({
   return (
     <PageBoard labelledBy="menu-heading" className={compact ? "flex flex-col gap-[18px]" : ""}>
       <PageHeader title={t("section.menu")} headingId="menu-heading" className="mb-[18px]" />
+      {compact && onOpenSearch !== undefined ? (
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="flex h-11 w-full items-center gap-2 rounded-[14px] border border-line bg-sidebar px-3.5 text-left text-[15px] text-ink-faint"
+        >
+          <Icon name="search" className="size-4 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{t("menu.search")}</span>
+        </button>
+      ) : null}
       {compact ? groups : <div className="grid items-start gap-x-7 gap-y-[18px] @2xl:grid-cols-2 @4xl:grid-cols-3">{groups}</div>}
     </PageBoard>
   );

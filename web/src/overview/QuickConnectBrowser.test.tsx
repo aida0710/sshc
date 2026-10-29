@@ -105,6 +105,16 @@ describe("QuickConnectBrowser", () => {
     expect(within(bastion).queryByText("Ungrouped")).toBeNull();
   });
 
+  it("opens a card's menu on a right click or a long press, without connecting", () => {
+    const onConnect = vi.fn();
+    renderBrowser({ onConnect });
+
+    const card = screen.getByRole("button", { name: /^Connect to nas\./u }).closest("li")!;
+    fireEvent.contextMenu(card);
+    expect(screen.getByRole("menuitem", { name: "Open connection settings" })).toBeVisible();
+    expect(onConnect).not.toHaveBeenCalled();
+  });
+
   it("orders recent connections first and shows the resolved destination", () => {
     renderBrowser();
 
