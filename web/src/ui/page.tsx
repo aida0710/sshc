@@ -52,6 +52,18 @@ export function PageHeader({
   );
 }
 
+// PageStateFrame is a page whose contents are not there yet: its heading, then the state in their place
+// (reading, or why they could not be read). The heading stays where it will be once the contents arrive,
+// so it does not appear late and push the page down.
+export function PageStateFrame({ title, description, children }: { title: string; description?: string | undefined; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-[22px]">
+      <PageHeader title={title} description={description} />
+      {children}
+    </div>
+  );
+}
+
 // SummaryStats is the row of small counts under a page's heading.
 export function SummaryStats({ children, className = "", ...rest }: ComponentPropsWithoutRef<"dl">) {
   return (

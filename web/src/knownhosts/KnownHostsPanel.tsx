@@ -15,7 +15,7 @@ import {
 import { revealOnHover } from "../ui/ActionMenu";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
-import { PageHeader, PageSection, SummaryStat, SummaryStats } from "../ui/page";
+import { PageHeader, PageSection, PageStateFrame, SummaryStat, SummaryStats } from "../ui/page";
 import { SortableTableHeader } from "../ui/tableSort";
 import { useTableSort, type SortValue } from "../ui/useTableSort";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -197,7 +197,11 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
 
   // 最初の一覧が届くまでは、件数を「0」と言わない。
   if (!firstListingAnswered) {
-    return <PanelState tone="loading" title={t("kh.loading")} />;
+    return (
+      <PageStateFrame title={t("kh.heading")}>
+        <PanelState tone="loading" title={t("kh.loading")} />
+      </PageStateFrame>
+    );
   }
 
   return (

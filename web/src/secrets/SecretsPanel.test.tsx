@@ -68,8 +68,8 @@ describe("SecretsPanel", () => {
   it("names the page as Menu does and lists only its own kind, each with where it is used", async () => {
     render(<SecretsPanel api={buildApi()} kind="password" />);
 
-    expect(await screen.findByRole("heading", { name: "Account passwords", level: 2 })).toBeInTheDocument();
-    const list = screen.getByRole("region", { name: "Account passwords" });
+    const list = await screen.findByRole("region", { name: "Account passwords" });
+    expect(screen.getByRole("heading", { name: "Account passwords", level: 2 })).toBeInTheDocument();
     const office = within(list).getByRole("article", { name: "office-vm" });
     expect(within(office).getAllByText("web-1, web-2")[0]).toBeInTheDocument();
     expect(within(list).queryByText("build-key")).not.toBeInTheDocument();
