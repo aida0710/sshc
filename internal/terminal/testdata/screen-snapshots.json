@@ -1,0 +1,114 @@
+[
+  {
+    "name": "a full-screen program that rewrites one row",
+    "cols": 40,
+    "rows": 12,
+    "output": "\u001b[?1049h\u001b[?1000h\u001b[?1002h\u001b[?1006h\u001b[?2004h\u001b[>1u\u001b[2J\u001b[1;1H\u001b[1;38;5;161m●\u001b[0m Message 1 \u001b[48;2;30;60;90m done \u001b[0m\u001b[2;1H\u001b[1;38;5;162m●\u001b[0m Message 2 \u001b[48;2;30;60;90m done \u001b[0m\u001b[3;1H\u001b[1;38;5;163m●\u001b[0m Message 3 \u001b[48;2;30;60;90m done \u001b[0m\u001b[4;1H\u001b[1;38;5;164m●\u001b[0m Message 4 \u001b[48;2;30;60;90m done \u001b[0m\u001b[5;1H\u001b[1;38;5;165m●\u001b[0m Message 5 \u001b[48;2;30;60;90m done \u001b[0m\u001b[6;1H\u001b[1;38;5;166m●\u001b[0m Message 6 \u001b[48;2;30;60;90m done \u001b[0m\u001b[7;1H\u001b[1;38;5;167m●\u001b[0m Message 7 \u001b[48;2;30;60;90m done \u001b[0m\u001b[8;1H\u001b[1;38;5;168m●\u001b[0m Message 8 \u001b[48;2;30;60;90m done \u001b[0m\u001b[9;1H\u001b[1;38;5;169m●\u001b[0m Message 9 \u001b[48;2;30;60;90m done \u001b[0m\u001b[?2026h\u001b[12;1H\u001b[2K| Working 7\u001b[?2026l\u001b[5;3Hchanged",
+    "tail": "\u001b[?2026h\u001b[12;1H\u001b[2K| Working 7\u001b[?2026l\u001b[5;3Hchanged",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H\u001b[?1049h\u001b[<99u\u001b[H\u001b[m\u001b[1;38;5;161m●\u001b[m Message 1 \u001b[m\u001b[48;2;30;60;90m\u001b[X\u001b[14Gdone\u001b[X\u001b[19G\u001b[m\u001b[2;1H\u001b[m\u001b[1;38;5;162m●\u001b[m Message 2 \u001b[m\u001b[48;2;30;60;90m\u001b[X\u001b[14Gdone\u001b[X\u001b[19G\u001b[m\u001b[3;1H\u001b[m\u001b[1;38;5;163m●\u001b[m Message 3 \u001b[m\u001b[48;2;30;60;90m\u001b[X\u001b[14Gdone\u001b[X\u001b[19G\u001b[m\u001b[4;1H\u001b[m\u001b[1;38;5;164m●\u001b[m Message 4 \u001b[m\u001b[48;2;30;60;90m\u001b[X\u001b[14Gdone\u001b[X\u001b[19G\u001b[m\u001b[5;1H\u001b[m\u001b[1;38;5;165m●\u001b[m Message 5 \u001b[m\u001b[48;2;30;60;90m\u001b[X\u001b[14Gdone\u001b[X\u001b[19G\u001b[m\u001b[6;1H\u001b[m\u001b[1;38;5;166m●\u001b[m Message 6 \u001b[m\u001b[48;2;30;60;90m\u001b[X\u001b[14Gdone\u001b[X\u001b[19G\u001b[m\u001b[7;1H\u001b[m\u001b[1;38;5;167m●\u001b[m Message 7 \u001b[m\u001b[48;2;30;60;90m\u001b[X\u001b[14Gdone\u001b[X\u001b[19G\u001b[m\u001b[8;1H\u001b[m\u001b[1;38;5;168m●\u001b[m Message 8 \u001b[m\u001b[48;2;30;60;90m\u001b[X\u001b[14Gdone\u001b[X\u001b[19G\u001b[m\u001b[9;1H\u001b[m\u001b[1;38;5;169m●\u001b[m Message 9 \u001b[m\u001b[48;2;30;60;90m\u001b[X\u001b[14Gdone\u001b[X\u001b[19G\u001b[m\u001b[=0;1u\u001b[>1u\u001b[?1000h\u001b[?1002h\u001b[?1006h\u001b[?2004h\u001b[9;19H"
+  },
+  {
+    "name": "leaving the alternate screen gives the normal screen and its cursor back",
+    "cols": 40,
+    "rows": 10,
+    "output": "$ build\r\nok\r\n$ claude\u001b[?1049h\u001b[2J\u001b[Hdrawn on the alternate screen\u001b[?1049l\r\n$ ",
+    "tail": "\u001b[?1049l\r\n$ ",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H$ build\u001b[2;1Hok\u001b[3;1H$ claude\u001b[3;9H\u001b[m\u001b7\u001b[m\u001b[3;9H\u001b[?1049h\u001b[<99u\u001b[Hdrawn on the alternate screen\u001b[1;30H"
+  },
+  {
+    "name": "a shell whose output scrolled",
+    "cols": 50,
+    "rows": 8,
+    "output": "\u001b[31mline 1\u001b[0m of the build log\r\n\u001b[32mline 2\u001b[0m of the build log\r\n\u001b[33mline 3\u001b[0m of the build log\r\n\u001b[34mline 4\u001b[0m of the build log\r\n\u001b[35mline 5\u001b[0m of the build log\r\n\u001b[36mline 6\u001b[0m of the build log\r\n\u001b[37mline 7\u001b[0m of the build log\r\n\u001b[30mline 8\u001b[0m of the build log\r\n\u001b[31mline 9\u001b[0m of the build log\r\n\u001b[32mline 10\u001b[0m of the build log\r\n\u001b[33mline 11\u001b[0m of the build log\r\n\u001b[34mline 12\u001b[0m of the build log\r\n\u001b[35mline 13\u001b[0m of the build log\r\n\u001b[36mline 14\u001b[0m of the build log\r\n\u001b[37mline 15\u001b[0m of the build log\r\n\u001b[30mline 16\u001b[0m of the build log\r\n\u001b[31mline 17\u001b[0m of the build log\r\n\u001b[32mline 18\u001b[0m of the build log\r\n\u001b[33mline 19\u001b[0m of the build log\r\n\u001b[34mline 20\u001b[0m of the build log\r\n\u001b[35mline 21\u001b[0m of the build log\r\n\u001b[36mline 22\u001b[0m of the build log\r\n\u001b[37mline 23\u001b[0m of the build log\r\n\u001b[30mline 24\u001b[0m of the build log\r\n\u001b[31mline 25\u001b[0m of the build log\r\n\u001b[32mline 26\u001b[0m of the build log\r\n\u001b[33mline 27\u001b[0m of the build log\r\n\u001b[34mline 28\u001b[0m of the build log\r\n\u001b[35mline 29\u001b[0m of the build log\r\n\u001b[36mline 30\u001b[0m of the build log\r\n$ make test\r\nPASS\r\n$ ",
+    "tail": "make test\r\nPASS\r\n$ ",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H\u001b[m\u001b[30mline 24\u001b[m of the build log\u001b[2;1H\u001b[m\u001b[31mline 25\u001b[m of the build log\u001b[3;1H\u001b[m\u001b[32mline 26\u001b[m of the build log\u001b[4;1H\u001b[m\u001b[33mline 27\u001b[m of the build log\u001b[5;1H\u001b[m\u001b[34mline 28\u001b[m of the build log\u001b[6;1H\u001b[m\u001b[35mline 29\u001b[m of the build log\u001b[7;1H\u001b[m\u001b[36mline 30\u001b[m of the build log\u001b[8;1H$\u001b[8;3H"
+  },
+  {
+    "name": "wide characters and emoji keep the rest of the row in place",
+    "cols": 40,
+    "rows": 6,
+    "output": "日本語のテキスト 🎉 rest\r\n● ⏺ ✻ marks\r\n\u001b[1;1H\u001b[30Cend",
+    "tail": "\u001b[1;1H\u001b[30Cend",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H日\u001b[3G本\u001b[5G語\u001b[7Gの\u001b[9Gテ\u001b[11Gキ\u001b[13Gス\u001b[15Gト\u001b[17G 🎉\u001b[20G rest\u001b[2;1H● ⏺ ✻ marks\u001b[3;1H"
+  },
+  {
+    "name": "a row filled to the last column waits to wrap",
+    "cols": 10,
+    "rows": 4,
+    "output": "0123456789X",
+    "tail": "X",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H0123456789\u001b[1;10H\u001b[m9\u001b[m"
+  },
+  {
+    "name": "the saved cursor and the pen survive",
+    "cols": 30,
+    "rows": 6,
+    "output": "\u001b[3;5H\u001b[4;35m\u001b7\u001b[1;1Hhome\u001b[0m\u001b8saved",
+    "tail": "\u001b8saved",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H\u001b[m\u001b[4;35mhome\u001b[m\u001b[3;5H\u001b[4;35m\u001b7\u001b[m\u001b[1;5H"
+  },
+  {
+    "name": "a scroll region with origin mode",
+    "cols": 30,
+    "rows": 10,
+    "output": "top\u001b[3;7r\u001b[?6h\u001b[2;1Hin region\u001b[1;1Hfirst\u001bD\u001bD\u001bD\u001bD\u001bD\u001bDafter scrolling\u001b[r",
+    "tail": "\u001b[1;1Hfirst\u001bD\u001bD\u001bD\u001bD\u001bD\u001bDafter scrolling\u001b[r",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Htop\u001b[4;1Hin region\u001b[3;7r\u001b[?6h\u001b[2;10H"
+  },
+  {
+    "name": "line drawing characters keep their character set",
+    "cols": 20,
+    "rows": 4,
+    "output": "\u001b(0lqqk\r\nx  x\r\nmqqj\u001b(B ok",
+    "tail": "x  x\r\nmqqj\u001b(B ok",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H┌──┐\u001b(0\u001b[2;1H"
+  },
+  {
+    "name": "modes and keys carry over",
+    "cols": 30,
+    "rows": 4,
+    "output": "\u001b[?1h\u001b=\u001b[?2004h\u001b[?1004h\u001b[4h\u001b[?25l\u001b[5 qab\u001b[1;1HX",
+    "tail": "ab\u001b[1;1HX",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[?1h\u001b[?66h\u001b[?1004h\u001b[?2004h\u001b[4h\u001b[?25l\u001b[5 q\u001b[H"
+  },
+  {
+    "name": "a link stays a link",
+    "cols": 40,
+    "rows": 4,
+    "output": "see \u001b]8;;https://example.com/docs\u001b\\the docs\u001b]8;;\u001b\\ here\r\nnext",
+    "tail": "\r\nnext",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Hsee \u001b]8;;https://example.com/docs\u0007the docs\u001b]8;;\u0007 here\u001b[1;18H"
+  },
+  {
+    "name": "wraparound off",
+    "cols": 10,
+    "rows": 4,
+    "output": "\u001b[?7l0123456789XYZ",
+    "tail": "XYZ",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H0123456789\u001b[?7l\u001b[1;10H"
+  },
+  {
+    "name": "rows scrolled with a background colour",
+    "cols": 20,
+    "rows": 4,
+    "output": "\u001b[44mone\r\ntwo\r\nthree\r\nfour\r\nfive\r\nsix\u001b[0m\r\nseven",
+    "tail": "\u001b[0m\r\nseven",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H\u001b[m\u001b[44mthree\u001b[m\u001b[2;1H\u001b[m\u001b[44mfour\u001b[m\u001b[3;1H\u001b[m\u001b[44mfive\u001b[16X\u001b[m\u001b[4;1H\u001b[m\u001b[44msix\u001b[17X\u001b[m\u001b[4;4H\u001b[44m"
+  },
+  {
+    "name": "a reset forgets the kitty keyboard flags",
+    "cols": 20,
+    "rows": 4,
+    "output": "\u001b[>5u\u001b[>1u\u001bcafter reset\r\nnext",
+    "tail": "\r\nnext",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Hafter reset\u001b[1;12H"
+  },
+  {
+    "name": "a soft reset puts the modes and the pen back",
+    "cols": 30,
+    "rows": 4,
+    "output": "\u001b[?1h\u001b[4h\u001b[?2004h\u001b[>3u\u001b[31m\u001b[2;3r\u001b[!pplain\r\nlines\r\nscroll\r\nfreely",
+    "tail": "plain\r\nlines\r\nscroll\r\nfreely",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H"
+  }
+]

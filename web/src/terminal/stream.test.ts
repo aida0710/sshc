@@ -87,9 +87,17 @@ describe("openStream", () => {
     socket.emit("message", { data: JSON.stringify({ replay: { start: 10, next: 15, end: 15, truncated: false } }) });
     expect(onReplay).toHaveBeenCalledWith({ start: 10, next: 15, end: 15, truncated: false });
 
+    const screen = "\u001b[H\u001b[2Jdrawn earlier";
+    socket.emit("message", { data: JSON.stringify({ replay: { start: 20, next: 25, end: 25, truncated: true, screen } }) });
+    expect(onReplay).toHaveBeenLastCalledWith({ start: 20, next: 25, end: 25, truncated: true, screen });
+    socket.emit("message", { data: JSON.stringify({ replay: { start: 20, next: 25, end: 25, truncated: true, screen: 7 } }) });
+    expect(onReplay).toHaveBeenCalledTimes(2);
+
     socket.emit("message", { data: JSON.stringify({ skipped: { start: -1 } }) });
     socket.emit("message", { data: JSON.stringify({ skipped: { start: 20 } }) });
     expect(onSkipped).toHaveBeenCalledExactlyOnceWith(20);
+    socket.emit("message", { data: JSON.stringify({ skipped: { start: 30, screen } }) });
+    expect(onSkipped).toHaveBeenLastCalledWith(30, screen);
 
     const payload = new TextEncoder().encode("hello");
     const buffer = new ArrayBuffer(payload.byteLength);

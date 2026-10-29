@@ -423,8 +423,8 @@ export function TerminalView({
         // only the session's oldest output.
         setTerminalNotice(t(resumed ? "terminal.replayTruncated" : "terminal.replayTruncatedOldest"));
       },
-      onSkipped: () => {
-        output.skip();
+      onSkipped: (screen) => {
+        output.skip(screen);
         setTerminalNotice(t("terminal.outputSkipped"));
       },
       // Output alone keeps a pending paste: full-screen programs redraw all

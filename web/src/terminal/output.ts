@@ -29,20 +29,26 @@ export function createTerminalOutput(terminal: WritableTerminal) {
     terminal.write(text, () => { replaying = false; });
   };
 
+  // continueFrom starts over after output that will not arrive: the engine's screen as it stood where the output
+  // goes on, which also starts the parser afresh. An engine older than that sends no screen; output from it can
+  // start halfway through CSI or OSC, and CAN abandons the old parser state while keeping the screen as it is.
+  const continueFrom = (screen: string | undefined, isReplay: boolean) => {
+    decoder = new TextDecoder();
+    // The screen is history, like a replay: xterm must not answer what it holds.
+    if (screen !== undefined) writeDecodedText(screen, true);
+    else writeDecodedText("\u0018", isReplay);
+  };
+
   return {
     beginReplay(replay: ReplayReport) {
       replayBytesRemaining = replay.next - replay.start;
       if (!replay.truncated) return;
-      decoder = new TextDecoder();
-      // A retained buffer can start halfway through CSI or OSC. CAN abandons
-      // the old parser state while keeping the displayed screen intact.
-      writeDecodedText("\u0018", true);
+      continueFrom(replay.screen, true);
     },
     // skip follows output the engine skipped: like a truncated replay, the
-    // output goes on from wherever the buffer still held it.
-    skip() {
-      decoder = new TextDecoder();
-      writeDecodedText("\u0018", false);
+    // output goes on from where the engine's screen stood.
+    skip(screen?: string) {
+      continueFrom(screen, false);
     },
     // parsed is called once xterm.js has parsed everything written so far.
     write(chunk: Uint8Array, parsed?: () => void) {

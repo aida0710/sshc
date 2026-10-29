@@ -28,6 +28,10 @@ export async function waitForTerminalLayout(page: Page): Promise<void> {
 export function terminalRoot(page: Page): Locator {
   return page.locator(ROOT);
 }
+// mountedTerminals is every terminal on the page, the ones kept hidden after their sessions were left included.
+export function mountedTerminals(page: Page): Locator {
+  return page.locator(".xterm:not([data-terminal-status-line] *)");
+}
 export function drawnRows(page: Page): Locator {
   return page.locator(DRAWN_ROWS);
 }
