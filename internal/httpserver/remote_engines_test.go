@@ -132,6 +132,7 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 		{http.MethodPut, "/api/v1/engines/r540/terminal/sessions/abc/workspace", "r540 /api/v1/terminal/sessions/abc/workspace"},
 		{http.MethodPost, "/api/v1/engines/r540/terminal/sessions/abc/reconnect/stop", "r540 /api/v1/terminal/sessions/abc/reconnect/stop"},
 		{http.MethodPatch, "/api/v1/engines/r540/terminal/workspaces/w1", "r540 /api/v1/terminal/workspaces/w1"},
+		{http.MethodPut, "/api/v1/engines/r540/terminal/workspaces/w1/position", "r540 /api/v1/terminal/workspaces/w1/position"},
 		{http.MethodGet, "/api/v1/engines/r540/terminal/restore", "r540 /api/v1/terminal/restore"},
 		{http.MethodPost, "/api/v1/engines/r540/terminal/restore", "r540 /api/v1/terminal/restore"},
 		{http.MethodDelete, "/api/v1/engines/r540/terminal/restore", "r540 /api/v1/terminal/restore"},

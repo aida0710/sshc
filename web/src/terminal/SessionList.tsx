@@ -166,7 +166,9 @@ export function SessionList({
           onDragOver={(event: DragEvent) => {
             if (event.dataTransfer.types.includes(sessionDragMimeType)) event.preventDefault();
           }}
-          onDrop={() => drop(null)}
+          onDrop={(event: DragEvent) => {
+            if (event.dataTransfer.types.includes(sessionDragMimeType)) drop(null);
+          }}
         >
           {sessions.map((session, index) => {
             const displayTitle = terminalDisplayTitle(session);
@@ -220,6 +222,8 @@ export function SessionList({
                   setDropBefore(session.id);
                 }}
                 onDrop={(event: DragEvent) => {
+                  // A dragged workspace goes on to the workspace this row is in.
+                  if (!event.dataTransfer.types.includes(sessionDragMimeType)) return;
                   event.stopPropagation();
                   drop(session.id);
                 }}

@@ -33,12 +33,13 @@ Connections that LLMs and scripts open with `sshc terminal create` go into Agent
 - **See hidden workspaces**: the heading's **…** → **Show hidden workspaces**. Hidden ones appear dimmed.
 - **Open a session**: **+** on a workspace row. **New session** below the tree opens in the selected session's workspace.
 - **Move**: drag a session onto another workspace's row, or onto a session inside it. Dropped on the row, it goes to the end of that workspace; dropped on a session, it goes just before it. Folded and empty workspaces take drops too. A session's **…** → **Move to workspace** does the same
-- **A workspace's …**: rename, hide or show, [send a command](/en/terminal/commands), delete
+- **Reorder**: drag a workspace's row onto another workspace. Dropped on its upper half, it goes before that workspace; on its lower half, after it. A workspace's **…** → **Move up** / **Move down** does the same (the way on a phone). Main and Agents can be moved too
+- **A workspace's …**: rename, hide or show, move up or down, [send a command](/en/terminal/commands), delete
 
 Deleting a workspace closes nothing: its sessions move to Main.
 
 ## What is stored
 
-The engine keeps workspace names and whether each is hidden in `~/.ssh/sshc/workspaces.json`. Which session is in which workspace lives in the engine's memory, like the sessions themselves. When the engine stops cleanly, the record kept for reopening includes each session's workspace, so sessions [reopened](./terminal#reopen-sessions-after-a-stop) on the next start return to the same workspace. The file is excluded from encrypted sync.
+The engine keeps workspace names, their order, and whether each is hidden in `~/.ssh/sshc/workspaces.json`. Because the engine holds the order, every browser and machine that opens it sees the same order. A new workspace goes to the end, or just before Agents when Agents is last. Which session is in which workspace lives in the engine's memory, like the sessions themselves. When the engine stops cleanly, the record kept for reopening includes each session's workspace, so sessions [reopened](./terminal#reopen-sessions-after-a-stop) on the next start return to the same workspace. The file is excluded from encrypted sync.
 
 Use [Split view](./split-view) to arrange sessions on screen. Split arrangements are not saved.

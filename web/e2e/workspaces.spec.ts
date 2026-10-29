@@ -149,6 +149,43 @@ test("moves a session to another workspace by dragging it onto the workspace", a
   }
 });
 
+test("reorders workspaces by dragging a row and from a workspace's menu, and the engine keeps the order", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  const tree = navigation.getByRole("list", { name: "Workspaces" });
+  // The name on the first button of each workspace, top to bottom.
+  const workspaceOrder = () => tree.evaluate((list) =>
+    [...list.children].map((item) => item.querySelector("button")?.textContent?.replace(/\d+$/, "") ?? ""));
+  await navigation.getByRole("button", { name: "New workspace" }).click();
+  await page.getByRole("textbox", { name: "Workspace name" }).fill("sshc dev");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  const main = tree.getByRole("button", { name: /^Main/ });
+  const workspace = tree.getByRole("button", { name: /^sshc dev/ });
+  await expect(workspace).toBeVisible();
+  await expect.poll(workspaceOrder).toEqual(["Main", "sshc dev"]);
+
+  // Held over the upper half of Main, the line shows where it goes; let go, it goes before Main.
+  const from = (await workspace.boundingBox())!;
+  const to = (await main.locator("xpath=ancestor::li[1]").boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width / 2, to.y + 4, { steps: 8 });
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await navigation.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/workspace-reorder-drag.png` });
+  }
+  await page.mouse.up();
+  await expect.poll(workspaceOrder).toEqual(["sshc dev", "Main"]);
+
+  await page.reload();
+  await expect.poll(workspaceOrder).toEqual(["sshc dev", "Main"]);
+
+  await workspace.hover();
+  await navigation.getByRole("button", { name: "Workspace actions for sshc dev" }).click();
+  await expect(page.getByRole("menuitem", { name: "Move up" })).toBeDisabled();
+  await page.getByRole("menuitem", { name: "Move down" }).click();
+  await expect.poll(workspaceOrder).toEqual(["Main", "sshc dev"]);
+});
+
 // Like the group headings of the connection list, a workspace's name stays under the Workspaces heading while
 // its sessions scroll by.
 test("keeps a workspace's name under the Workspaces heading while its sessions scroll", async ({ page, installation }) => {

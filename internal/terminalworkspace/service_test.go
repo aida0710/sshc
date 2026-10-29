@@ -3,6 +3,7 @@ package terminalworkspace
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"sshc/internal/platform/windowsacl/acltest"
@@ -137,5 +138,65 @@ func TestNoMoreThanTheLimitCanBeCreated(t *testing.T) {
 	}
 	if _, err := service.Create("one too many", false); !errors.Is(err, ErrLimit) {
 		t.Fatalf("Create past the limit = %v, want ErrLimit", err)
+	}
+}
+
+func TestAMovedWorkspaceKeepsItsPlaceAcrossReads(t *testing.T) {
+	service, _ := newService(t)
+	first, err := service.Create("A", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.Create("B", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(t, service); !slices.Equal(got, []string{DefaultID, first.ID, second.ID, AgentsID}) {
+		t.Fatalf("created = %v, want each new one before agents", got)
+	}
+	if err := service.Move(second.ID, DefaultID); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(t, service); !slices.Equal(got, []string{second.ID, DefaultID, first.ID, AgentsID}) {
+		t.Fatalf("moved before default = %v", got)
+	}
+	if err := service.Move(DefaultID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(t, service); !slices.Equal(got, []string{second.ID, first.ID, AgentsID, DefaultID}) {
+		t.Fatalf("moved to the end = %v", got)
+	}
+	if err := service.Move(first.ID, first.ID); err != nil {
+		t.Fatalf("moved before itself = %v", err)
+	}
+	if got := ids(t, service); !slices.Equal(got, []string{second.ID, first.ID, AgentsID, DefaultID}) {
+		t.Fatalf("moved before itself = %v, want no change", got)
+	}
+}
+
+func TestAWorkspaceCreatedAfterAgentsWasMovedUpGoesToTheEnd(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Move(AgentsID, DefaultID); err != nil {
+		t.Fatal(err)
+	}
+	created, err := service.Create("Ops", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(t, service); !slices.Equal(got, []string{AgentsID, DefaultID, created.ID}) {
+		t.Fatalf("ids = %v", got)
+	}
+}
+
+func TestMovingAnUnknownWorkspaceOrBeforeOneIsRefused(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Move("missing", ""); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Move(missing) = %v, want ErrNotFound", err)
+	}
+	if err := service.Move(DefaultID, "missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Move(before missing) = %v, want ErrNotFound", err)
+	}
+	if got := ids(t, service); !slices.Equal(got, []string{DefaultID, AgentsID}) {
+		t.Fatalf("ids after the refusals = %v", got)
 	}
 }
