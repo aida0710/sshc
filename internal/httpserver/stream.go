@@ -49,7 +49,17 @@ type replayMessage struct {
 		// Screen は、Truncated のとき、start の時点の画面を表示させる列である。
 		// ブラウザは再生するバイトより先に書く（terminal.Replay）。
 		Screen string `json:"screen,omitempty"`
+		// Sizes は、出力を書いたときの端末の大きさ。ブラウザはその大きさで再生してから
+		// 自分の大きさへ戻す（terminal.Replay）。
+		Sizes []replaySize `json:"sizes,omitempty"`
 	} `json:"replay"`
+}
+
+// replaySize は、出力の位置 at から後の出力が cols×rows の端末へ書かれたことを表す。
+type replaySize struct {
+	At   uint64 `json:"at"`
+	Cols uint16 `json:"cols"`
+	Rows uint16 `json:"rows"`
 }
 
 // skippedMessage は、ブラウザが遅れているうちに再生バッファから押し出された出力を
@@ -151,6 +161,9 @@ func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Con
 		announced.Replay.End = replay.End
 		announced.Replay.Truncated = replay.Truncated
 		announced.Replay.Screen = replay.Screen
+		for _, size := range replay.Sizes {
+			announced.Replay.Sizes = append(announced.Replay.Sizes, replaySize{At: size.At, Cols: size.Size.Cols, Rows: size.Size.Rows})
+		}
 		encoded, err := json.Marshal(announced)
 		if err != nil || !writeFrame(ctx, connection, websocket.MessageText, encoded) {
 			return
