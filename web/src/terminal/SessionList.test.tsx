@@ -272,18 +272,21 @@ describe("SessionList", () => {
     expect(trigger).toHaveFocus();
   });
 
-  it("opens the row menu upward when the navigation has no room below", async () => {
+  it("opens the row menu above its button when the window has no room below", async () => {
     const user = userEvent.setup();
     renderList();
-    document.body.setAttribute("data-navigation-scroll", "");
     const trigger = screen.getByRole("button", { name: "Actions for db-primary" });
-    vi.spyOn(document.body, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 220 } as DOMRect);
-    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({ top: 180, bottom: 200 } as DOMRect);
+    const menuHeight = 200;
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({ top: window.innerHeight - 40, bottom: window.innerHeight - 20, right: 200 } as DOMRect);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return (this.getAttribute("role") === "menu" ? { width: 240, height: menuHeight } : { top: 0, bottom: 0, width: 0, height: 0 }) as DOMRect;
+    });
 
     await user.click(trigger);
 
-    expect(screen.getByRole("menu")).toHaveClass("bottom-full", "mb-0.5");
-    document.body.removeAttribute("data-navigation-scroll");
+    const menu = screen.getByRole("menu");
+    expect(menu.parentElement).toBe(document.body);
+    expect(menu.style.top).toBe(`${window.innerHeight - 40 - menuHeight - 4}px`);
   });
 
   it("reports selection and closing separately", async () => {
