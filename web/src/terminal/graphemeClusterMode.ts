@@ -1,7 +1,5 @@
-import type { Terminal } from "@xterm/xterm";
+import type { IDisposable, Terminal } from "@xterm/xterm";
 import { setGraphemeClusters } from "./unicodeWidths";
-
-type Disposable = { dispose(): void };
 
 // Mode 2027 (grapheme cluster processing, https://github.com/contour-terminal/terminal-unicode-core)
 // lets a program that counts a family emoji as two cells say so. Many still
@@ -18,7 +16,7 @@ type GraphemeClusterModeOptions = {
   reply(sequence: string): void;
 };
 
-export function attachGraphemeClusterMode(view: Terminal, options: GraphemeClusterModeOptions): Disposable {
+export function attachGraphemeClusterMode(view: Terminal, options: GraphemeClusterModeOptions): IDisposable {
   let on = false;
   const set = (value: boolean) => {
     on = value;

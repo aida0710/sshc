@@ -1,5 +1,5 @@
-type Disposable = { dispose(): void };
-type OSCParser = { registerOscHandler(identifier: number, handler: (data: string) => boolean): Disposable };
+import type { IDisposable } from "@xterm/xterm";
+import type { OSCParser } from "./escapeSequenceParser";
 
 // parseOSC9Directory reads ConEmu's `OSC 9 ; 9 ; "path"` (the text after
 // "9;"), which Windows Terminal recommends for PowerShell and cmd prompts. A
@@ -18,7 +18,7 @@ export function parseOSC9Directory(data: string): string | null {
   return path.startsWith("/") && !path.startsWith("//") ? path : null;
 }
 
-export function attachOSC9Directory(parser: OSCParser, changed: (path: string) => void): Disposable {
+export function attachOSC9Directory(parser: OSCParser, changed: (path: string) => void): IDisposable {
   return parser.registerOscHandler(9, (data) => {
     const path = parseOSC9Directory(data);
     if (path === null) return false;

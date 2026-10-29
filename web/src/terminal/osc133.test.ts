@@ -3,7 +3,7 @@ import { attachOSC133Commands } from "./osc133";
 
 describe("OSC 133 command lifecycle", () => {
   it("reports where a command starts and that it ended", () => {
-    let handler: (data: string) => boolean = () => false;
+    let handler: (data: string) => boolean | Promise<boolean> = () => false;
     const parser = {
       registerOscHandler: vi.fn((_identifier: number, next: (data: string) => boolean) => {
         handler = next;
@@ -24,7 +24,7 @@ describe("OSC 133 command lifecycle", () => {
   });
 
   it("ignores a completion that has no matching command start", () => {
-    let handler: (data: string) => boolean = () => false;
+    let handler: (data: string) => boolean | Promise<boolean> = () => false;
     const completed = vi.fn();
     attachOSC133Commands({
       registerOscHandler: (_identifier, next) => {
