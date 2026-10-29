@@ -5,6 +5,7 @@ import type { Problem } from "../api/client";
 import { diagnosticsApi, type DiagnosticsApi } from "../api/diagnostics";
 import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
 import { useTranslate } from "../i18n/context";
+import { useMoreToTheRight } from "../ui/useMoreToTheRight";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import {
   type AdvancedArea,
@@ -22,6 +23,9 @@ import { HostInspector } from "./HostInspector";
 import { useReportDirty } from "./useReportDirty";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { editorContainer } from "../ui/FieldRow";
+
+// fadeAtTheRight fades the last 2rem of a row that scrolls sideways, where it goes on past the edge.
+const fadeAtTheRight = "[mask-image:linear-gradient(to_right,#000_calc(100%-2rem),transparent)]";
 
 // The detail view checks a host and edits its secrets, so it is handed both.
 export type HostDetailApi = DiagnosticsApi & ConnectionSecretsApi;
@@ -137,6 +141,10 @@ export function HostDetailPanel({
     else setLocalPanel(area);
   }
 
+  // On a phone the four tabs do not fit; the row scrolls, and fades at the right while a tab is still past it.
+  const tabRow = useRef<HTMLDivElement>(null);
+  const tabsGoOn = useMoreToTheRight(tabRow);
+
   function selectAdvanced(area: AdvancedArea) {
     setLastAdvanced(area);
     if (onLocationChange !== undefined) onLocationChange("Advanced", area);
@@ -148,7 +156,13 @@ export function HostDetailPanel({
       <NoticeList collapsible notices={detail.form.notices ?? []} />
 
       <div data-connection-editor className="min-w-0">
-        <div role="tablist" aria-label={t("conn.editorLabel")} className="flex gap-5 overflow-x-auto border-b border-line [scrollbar-width:none]">
+        <div
+          ref={tabRow}
+          role="tablist"
+          aria-label={t("conn.editorLabel")}
+          data-more-to-the-right={tabsGoOn || undefined}
+          className={`flex gap-5 overflow-x-auto border-b border-line [scrollbar-width:none] ${tabsGoOn ? fadeAtTheRight : ""}`}
+        >
           {areas.map((item, index) => (
             <button
               key={item.area}

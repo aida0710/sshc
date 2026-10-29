@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from "react";
 import type { FileNode } from "../api/config";
 import { useTranslate, type Translate } from "../i18n/context";
 import { Icon } from "../ui/icons";
@@ -19,6 +20,20 @@ function fileNotes(t: Translate, node: FileNode): string {
 
 // ConfigFileList は、Include をたどって読み込まれる設定ファイルを、読み込んだ Include の下に字下げして並べる。
 // ~/.ssh の外のファイルは開けないので、パスと理由だけを出す。
+// The tree already shows which folder a file is in, so a row names only the file; its path is the button's name
+// and tooltip. In a narrow column the whole path was cut off before the file's name.
+function fileName(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
+// breakablePath lets an Include pattern wrap after a slash rather than in the middle of a folder's name.
+function breakablePath(pattern: string): ReactNode {
+  const parts = pattern.split("/");
+  return parts.map((part, index) => (
+    <Fragment key={index}>{part}{index < parts.length - 1 ? <>/<wbr /></> : null}</Fragment>
+  ));
+}
+
 export function ConfigFileList({
   files,
   openPath,
@@ -41,7 +56,7 @@ export function ConfigFileList({
               className="px-2.5 pb-1.5 pt-0.5"
             >
               <div className="min-w-0 overflow-hidden text-xs">
-                <span className="block break-all font-mono text-ink-faint">{include.pattern}</span>
+                <span className="block break-words font-mono text-ink-faint">{breakablePath(include.pattern)}</span>
                 {include.condition === undefined ? null : (
                   <span className="mt-0.5 block break-words text-notice-ink">
                     {t("explorer.insideCondition", { condition: include.condition })}
@@ -76,13 +91,15 @@ export function ConfigFileList({
             <button
               type="button"
               aria-current={current ? "true" : "false"}
+              aria-label={path}
+              title={path}
               onClick={() => onOpen(path)}
               className="flex min-h-10 w-full min-w-0 items-center gap-2 px-2.5 py-2 text-left md:min-h-0"
             >
               <span data-config-node-icon aria-hidden="true" className={`shrink-0 ${current ? "text-ink" : "text-ink-muted"}`}>
                 <Icon name="config" className="size-[15px]" />
               </span>
-              <span className={`min-w-0 truncate font-mono text-[13px] text-ink ${current ? "font-semibold" : ""}`}>{path}</span>
+              <span className={`min-w-0 truncate font-mono text-[13px] text-ink ${current ? "font-semibold" : ""}`}>{fileName(path)}</span>
             </button>
             {notes === "" ? null : <p className="-mt-1 pb-2 pl-[35px] pr-2.5 text-xs text-ink-faint">{notes}</p>}
           </li>

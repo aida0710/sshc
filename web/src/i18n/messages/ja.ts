@@ -934,6 +934,7 @@ export const ja = {
     "秘密鍵のパスフレーズが必要です。Vaultのロックを解除するか、この鍵に正しいパスフレーズを保存してください。",
   "terminal.vpnRouteRefused": "VPN経路を用意できないため、自動再接続を停止しました。ターミナルに表示された理由を確認してください。",
   "terminal.vpnRouteDisconnected": "VPN経路が切断されたため、接続を中止しました。もう一度接続すると、VPN経路を起動してから接続します。",
+  "terminal.rowProblem": "開けませんでした",
   "terminal.connectFailed":
     "接続できませんでした。理由はターミナルに表示されています。設定とネットワークを確認してから再接続してください。",
   "terminal.reconnectFailed":
@@ -3175,6 +3176,10 @@ export const ja = {
   "keys.colComment": "コメント",
   "keys.agentUnavailable":
     "sshcからssh-agentに接続できないため、鍵を登録できません。macOSとLinuxでは、sshcの環境変数SSH_AUTH_SOCKでssh-agentのソケットを指定してください。Windowsでは、OpenSSH Authentication Agentサービスを起動してください。",
+  "keys.agentUnavailableUnix":
+    "sshcからssh-agentに接続できないため、鍵を登録できません。sshcの環境変数SSH_AUTH_SOCKでssh-agentのソケットを指定してください。",
+  "keys.agentUnavailableWindows":
+    "sshcからssh-agentに接続できないため、鍵を登録できません。OpenSSH Authentication Agentサービスを起動してください。",
   "keys.agentDelegationsNote":
     "次の設定エントリは、鍵ファイルではなくssh-agentの鍵を使用します：",
   "keys.registerHeading": "ssh-agentに追加：{path}",
