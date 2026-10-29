@@ -14,7 +14,8 @@ import { palettes } from "../terminal/palettes";
 import type { DescribableControlProps } from "../ui/describeControl";
 import { FieldRow } from "../ui/FieldRow";
 import { CheckboxField, control, sizedControl } from "../ui/form";
-import { fontSizeRange, type TerminalDraft } from "./terminalSettingsDraft";
+import { fontSizeRange } from "../terminal/fontSize";
+import type { TerminalDraft } from "./terminalSettingsDraft";
 
 // The rows of Settings > Terminal, in the groups the page shows together: on a computer each group (or two)
 // is a tab, on a phone each is a card. All of them edit the one draft the page saves.
