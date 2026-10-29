@@ -3,7 +3,7 @@ import { describeControl } from "./describeControl";
 
 // The two columns of a form: the names, then the controls. FieldRowNote lines up with the second. The names'
 // column fits twelve characters, so names such as 現在のマスターパスワード do not break mid-word. Other
-// name-and-value rows (FactRows, Appearance) use the same columns so the pages line up.
+// name-and-value rows (FactRows) use the same columns so the pages line up.
 export const formColumns = "lg:grid-cols-[184px_minmax(0,1fr)] lg:gap-x-6";
 
 // The connection editor sits beside the list, so it is narrower than a page and its width does not follow the
@@ -13,9 +13,12 @@ export const editorContainer = "@container/editor";
 
 type Density = "page" | "editor";
 
+// A page row's one column below lg is minmax(0, 1fr), not the implicit auto: a control that is itself an
+// auto-fill grid (Appearance's themes) needs a definite width to count its columns, or it lays all of them in
+// one row past the edge.
 const looks: Record<Density, { row: string; name: string; pair: string; second: string }> = {
   page: {
-    row: `grid gap-y-1.5 border-t border-line py-3.5 first:border-t-0 first:pt-0.5 ${formColumns}`,
+    row: `grid grid-cols-[minmax(0,1fr)] gap-y-1.5 border-t border-line py-3.5 first:border-t-0 first:pt-0.5 ${formColumns}`,
     name: "pt-1.5 text-[13.5px] font-medium text-ink",
     pair: "grid gap-2 lg:col-span-2 lg:grid-cols-subgrid lg:gap-x-6",
     second: "lg:col-start-2",

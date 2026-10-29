@@ -7,7 +7,7 @@ import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmat
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
 import { InputDialog } from "../ui/InputDialog";
-import { PageHeader, PageSection } from "../ui/page";
+import { PageHeader, PageSection, PageStateFrame } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { Button, Notice } from "../ui/surface";
@@ -248,13 +248,15 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
 
   if (overview === null) {
     return (
-      <PanelState
-        tone={operation.error === "" ? "loading" : "failed"}
-        title={operation.error === "" ? t("vpn.loading") : operation.error}
-        {...(operation.error === ""
-          ? {}
-          : { action: <Button onClick={loadOverview}>{t("shell.bootstrapRetry")}</Button> })}
-      />
+      <PageStateFrame title={t("vpn.heading")} description={t("vpn.description")}>
+        <PanelState
+          tone={operation.error === "" ? "loading" : "failed"}
+          title={operation.error === "" ? t("vpn.loading") : operation.error}
+          {...(operation.error === ""
+            ? {}
+            : { action: <Button onClick={loadOverview}>{t("shell.bootstrapRetry")}</Button> })}
+        />
+      </PageStateFrame>
     );
   }
 

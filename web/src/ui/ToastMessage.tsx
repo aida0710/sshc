@@ -18,7 +18,7 @@ export function ToastMessage({
   return (
     <p
       role={role}
-      className={`pointer-events-none flex items-center gap-2 rounded border border-line bg-toolbar/95 px-3 py-2 text-xs text-ink shadow-lg animate-[sshc-dialog-enter_150ms_ease-out] ${className}`}
+      className={`pointer-events-none flex items-center gap-2 rounded border border-line bg-toolbar/95 px-3 py-2 text-xs text-ink shadow-float animate-[sshc-dialog-enter_150ms_ease-out] ${className}`}
     >
       {tone === "success" ? <Icon name="check" className="size-3.5 shrink-0 text-live" /> : null}
       {children}

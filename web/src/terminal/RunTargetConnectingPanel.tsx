@@ -20,7 +20,7 @@ export function RunTargetConnectingPanel({ alias }: { alias: string }) {
   if (!shown) return null;
   return (
     <div className="absolute inset-x-0 top-0 bottom-(--mobile-navigation-inset) z-30 flex items-center justify-center bg-canvas p-4">
-      <section role="status" className="flex w-full max-w-lg items-start gap-3 rounded-lg border border-line bg-card p-5 shadow-sm">
+      <section role="status" className="flex w-full max-w-lg items-start gap-3 rounded-lg border border-line bg-card p-5 shadow-card">
         <Spinner className="mt-0.5 size-[18px] shrink-0 text-ink-muted" />
         <div className="flex min-w-0 flex-col gap-1">
           <h2 className="break-words text-sm font-medium text-ink">{t("runTarget.connecting", { alias })}</h2>

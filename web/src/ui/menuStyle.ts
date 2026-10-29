@@ -3,7 +3,7 @@
 // so a menu looks the same whichever one opens.
 
 // menuSurface is the panel. The caller adds where it sits and how wide it is.
-export const menuSurface = "rounded-lg border border-line bg-card p-1 shadow-lg";
+export const menuSurface = "rounded-lg border border-line bg-card p-1 shadow-float";
 
 // menuItemClass is one item. Items are taller on touch layouts, where they are tapped.
 export function menuItemClass(tone?: "danger"): string {

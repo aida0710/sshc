@@ -170,7 +170,11 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   }
 
   if (statusState.phase === "loading") {
-    return <PanelState tone="loading" title={t("sync.loading")} />;
+    return (
+      <SyncPageFrame>
+        <PanelState tone="loading" title={t("sync.loading")} />
+      </SyncPageFrame>
+    );
   }
 
   if (statusState.phase === "error") {

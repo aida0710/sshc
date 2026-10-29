@@ -36,6 +36,8 @@
   --ui-brand-cursor: color-mix(in srgb, var(--ui-accent-ink) 70%, var(--ui-accent));
   --ui-card-shadow: 0 1px 2px rgb(20 24 27 / 0.06);
   --ui-pane-shadow: 0 6px 20px rgb(20 24 40 / 0.08);
+  --ui-float-shadow: 0 10px 15px -3px rgb(20 24 27 / 0.1), 0 4px 6px -4px rgb(20 24 27 / 0.1);
+  --ui-overlay-shadow: 0 25px 50px -12px rgb(20 24 27 / 0.25);
   --ui-skeleton: #e1e3e1;
   --ui-skeleton-highlight: #f7f7f6;
   --ui-term-bg: #ffffff;

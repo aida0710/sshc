@@ -158,7 +158,12 @@
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-pane: 11px;
+  /* 影は4つだけ。カード（shadow-card）、板（shadow-pane）、メニューや知らせのように浮かぶもの
+     （shadow-float）、モーダルと引き出しのように画面を覆うもの（shadow-overlay）。 */
+  --shadow-card: var(--ui-card-shadow);
   --shadow-pane: var(--ui-pane-shadow);
+  --shadow-float: var(--ui-float-shadow);
+  --shadow-overlay: var(--ui-overlay-shadow);
 }
 
 /* ページの左上に、さし色をうっすら入れる。サイドバーとターミナルの板は不透明なので、見えるのは
@@ -520,9 +525,9 @@
 .sshc-app[data-mobile="true"] [data-navigation-open="true"] {
   transform: translateX(0);
 }
-/* 指でメニューを引き出している間も、開いたときと同じ影で板の端を見せる（shadow-2xl と同じ値）。 */
+/* 指でメニューを引き出している間も、開いたときと同じ影（shadow-overlay）で板の端を見せる。 */
 .sshc-app[data-mobile="true"] [data-navigation-dragging] {
-  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  box-shadow: var(--ui-overlay-shadow);
 }
 .sshc-app[data-mobile="true"] [data-app-navigation] > [role="separator"] {
   display: none;

@@ -10,7 +10,7 @@ import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { CustomAccentColor } from "./CustomAccentColor";
 import { SettingsSection } from "./SettingsSection";
-import { formColumns } from "../ui/FieldRow";
+import { FieldRow } from "../ui/FieldRow";
 
 const accentLabelKeys: Record<AccentOption, MessageKey> = {
   lavender: "appearance.accent.lavender",
@@ -55,9 +55,7 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
 
   return (
     <SettingsSection id="settings-appearance" label={t("appearance.heading")} icon="appearance" showHeading={showHeading}>
-      {/* Each choice is a row: its name on the left, the options on the right, a line between rows. */}
-      <div className={fieldRow}>
-        <div className={fieldLabel}>{t("appearance.theme")}</div>
+      <FieldRow label={t("appearance.theme")} interactiveChildren>
         <div className="grid max-w-[720px] grid-cols-2 gap-3.5 md:grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))]" role="radiogroup" aria-label={t("appearance.theme")}>
           {themes.map((option) => (
             <label key={option} className="flex min-w-0 cursor-pointer flex-col gap-2 text-[13px]">
@@ -78,12 +76,8 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
             </label>
           ))}
         </div>
-      </div>
-      <div className={fieldRow}>
-        <div className={fieldLabel}>
-          {t("appearance.accent")}
-          <p className="mt-1 text-xs font-normal leading-5 text-ink-faint">{t("appearance.accentHint")}</p>
-        </div>
+      </FieldRow>
+      <FieldRow label={t("appearance.accent")} hint={t("appearance.accentHint")} interactiveChildren>
         <div>
           <div className="flex flex-wrap gap-[18px]" role="radiogroup" aria-label={t("appearance.accent")}>
             {accentOptions.map((option) => (
@@ -115,15 +109,10 @@ export function AppearanceSettingsSection({ showHeading }: { showHeading: boolea
           ) : null}
           {saving.error === "" ? null : <div className="mt-4"><Notice tone="danger">{saving.error}</Notice></div>}
         </div>
-      </div>
+      </FieldRow>
     </SettingsSection>
   );
 }
-
-// One column below lg is minmax(0, 1fr), not the implicit auto: the themes' auto-fill grid needs a definite
-// width to count its columns, or it lays all of them in one row past the edge.
-const fieldRow = `grid grid-cols-[minmax(0,1fr)] gap-4 border-t border-line py-5 lg:gap-6 ${formColumns}`;
-const fieldLabel = "pt-1.5 text-[13.5px] font-medium text-ink";
 
 // ThemeThumbnail is a small picture of the app in a theme: a sidebar with the
 // current item in the accent, and a terminal board. "System" shows both halves.
