@@ -45,6 +45,10 @@ func TestTheArchitectureOfEachTargetIsRead(t *testing.T) {
 		{"darwin", "arm64"},
 		{"linux", "amd64"},
 		{"linux", "arm64"},
+		{"freebsd", "amd64"},
+		{"freebsd", "arm64"},
+		{"openbsd", "amd64"},
+		{"openbsd", "arm64"},
 	} {
 		name := target.goos + "/" + target.goarch
 		t.Run(name, func(t *testing.T) {
@@ -63,6 +67,8 @@ func TestABinaryForTheWrongArchitectureIsRefused(t *testing.T) {
 		{"windows", "arm64", "amd64"},
 		{"darwin", "amd64", "arm64"},
 		{"linux", "arm64", "amd64"},
+		{"freebsd", "amd64", "arm64"},
+		{"openbsd", "arm64", "amd64"},
 	} {
 		name := target.goos + " " + target.built + " as " + target.claimed
 		t.Run(name, func(t *testing.T) {
@@ -85,6 +91,10 @@ func TestABinaryForTheWrongOperatingSystemIsRefused(t *testing.T) {
 		{"darwin", "linux"},
 		{"linux", "windows"},
 		{"windows", "darwin"},
+		// The BSDs share ELF with Linux and with each other; only the OS/ABI byte tells them apart.
+		{"linux", "freebsd"},
+		{"openbsd", "freebsd"},
+		{"freebsd", "openbsd"},
 	} {
 		t.Run(target.built+" as "+target.claimed, func(t *testing.T) {
 			path := buildFor(t, target.built, runtime.GOARCH)

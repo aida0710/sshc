@@ -194,11 +194,20 @@ jobs:
       # ファイル名の検査ではアーキテクチャを保証できないため、成果物を実行する。
       - name: Smoke the built CLI
         run: scripts/ci/cli-smoke.sh dist "$RELEASE_TAG"
+      # FreeBSD と OpenBSD には GitHub-hosted runner が無いので、ここでクロスコンパイルする。
+      # 起動しては確かめられない。nativebuild がヘッダーの OS/ABI とアーキテクチャを確かめる。
+      - name: Build the CLI for FreeBSD and OpenBSD
+        env:
+          SSHC_NATIVE_VERSION: ${{ env.RELEASE_TAG }}
+        run: go run ./internal/nativebuild/cmd/nativebuild matrix --targets "freebsd/amd64:0 freebsd/arm64:0 openbsd/amd64:0 openbsd/arm64:0" --output-dir dist
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-linux
-          path: dist/sshc-linux-*
+          path: |
+            dist/sshc-linux-*
+            dist/sshc-freebsd-*
+            dist/sshc-openbsd-*
           if-no-files-found: error
           retention-days: 1
 
@@ -430,6 +439,10 @@ jobs:
           sshc-darwin-arm64
           sshc-linux-amd64
           sshc-linux-arm64
+          sshc-freebsd-amd64
+          sshc-freebsd-arm64
+          sshc-openbsd-amd64
+          sshc-openbsd-arm64
           sshc-windows-amd64.exe
           sshc-windows-arm64.exe
           sshc-android-${RELEASE_TAG}.apk
@@ -446,8 +459,8 @@ jobs:
             cp "$matches" "dist/$name"
           done
           count=$(find incoming -type f -name 'sshc-*' | wc -l | tr -d ' ')
-          [ "$count" -eq 9 ] || {
-            echo "expected exactly 9 release artifacts, found $count" >&2
+          [ "$count" -eq 13 ] || {
+            echo "expected exactly 13 release artifacts, found $count" >&2
             exit 1
           }
           # sshc update は、タグの install.sh と install.ps1 をこの checksums.txt と
@@ -550,6 +563,10 @@ jobs:
               "sshc-darwin-arm64",
               "sshc-linux-amd64",
               "sshc-linux-arm64",
+              "sshc-freebsd-amd64",
+              "sshc-freebsd-arm64",
+              "sshc-openbsd-amd64",
+              "sshc-openbsd-arm64",
               "sshc-windows-amd64.exe",
               "sshc-windows-arm64.exe"
             ] | sort) and

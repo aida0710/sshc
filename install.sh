@@ -37,12 +37,19 @@ regex_literal() {
 }
 
 # ── ダウンロードツール ─────────────────────────────────────────
+# curl も wget も無いときは、FreeBSD のベースシステムの fetch、OpenBSD の ftp を使う。
+# どちらも https の証明書を確かめる。関数を fetch と名付けると FreeBSD の fetch コマンドを
+# 隠してしまうので、download と呼ぶ。
 if command -v curl >/dev/null 2>&1; then
-  fetch() { curl -fsSL --connect-timeout 10 --max-time 180 "$1" -o "$2"; }
+  download() { curl -fsSL --connect-timeout 10 --max-time 180 "$1" -o "$2"; }
 elif command -v wget >/dev/null 2>&1; then
-  fetch() { wget -q -T 30 -t 3 -O "$2" "$1"; }
+  download() { wget -q -T 30 -t 3 -O "$2" "$1"; }
+elif [ "$(uname -s)" = FreeBSD ] && command -v fetch >/dev/null 2>&1; then
+  download() { fetch -q -T 30 -o "$2" "$1"; }
+elif [ "$(uname -s)" = OpenBSD ] && command -v ftp >/dev/null 2>&1; then
+  download() { ftp -V -w 30 -o "$2" "$1"; }
 else
-  die "neither curl nor wget is available"
+  die "none of curl, wget, FreeBSD's fetch or OpenBSD's ftp is available"
 fi
 
 # ── ① 対応する成果物を選択する ─────────────────────────────────
@@ -52,7 +59,9 @@ arch=$(uname -m)
 case "$os" in
   Linux) goos=linux ;;
   Darwin) goos=darwin ;;
-  *) die "$os is not one of the systems this script installs (Linux, macOS). On Windows, run: powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm https://github.com/$REPO/releases/latest/download/install.ps1 | iex\"" ;;
+  FreeBSD) goos=freebsd ;;
+  OpenBSD) goos=openbsd ;;
+  *) die "$os is not one of the systems this script installs (Linux, macOS, FreeBSD, OpenBSD). On Windows, run: powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm https://github.com/$REPO/releases/latest/download/install.ps1 | iex\"" ;;
 esac
 case "$arch" in
   x86_64 | amd64) goarch=amd64 ;;
@@ -130,19 +139,22 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'cleanup; exit 130' INT TERM
-fetch "$base/$asset" "$work/sshc" || die "could not download $base/$asset"
+download "$base/$asset" "$work/sshc" || die "could not download $base/$asset"
 
 # ── ② 公開された checksum と一致するか ────────────────────────
 # 公開された checksums.txt と一致しない成果物はインストールしない。
-if fetch "$base/checksums.txt" "$work/checksums.txt" 2>/dev/null; then
+if download "$base/checksums.txt" "$work/checksums.txt" 2>/dev/null; then
   expected=$(grep " $asset\$" "$work/checksums.txt" | cut -d' ' -f1 || true)
   [ -n "$expected" ] || die "checksums.txt does not list $asset"
   if command -v sha256sum >/dev/null 2>&1; then
     actual=$(sha256sum "$work/sshc" | cut -d' ' -f1)
   elif command -v shasum >/dev/null 2>&1; then
     actual=$(shasum -a 256 "$work/sshc" | cut -d' ' -f1)
+  elif command -v sha256 >/dev/null 2>&1; then
+    # FreeBSD と OpenBSD の sha256。-q で値だけを出す。
+    actual=$(sha256 -q "$work/sshc")
   else
-    die "neither sha256sum nor shasum is available, so the download cannot be verified"
+    die "none of sha256sum, shasum or sha256 is available, so the download cannot be verified"
   fi
   [ "$actual" = "$expected" ] || die "the download does not match its published checksum
   expected $expected
