@@ -106,6 +106,7 @@ export function TerminalScreen({
           jisYenBackslash={settings.jisYenBackslash ?? false}
           composerEnterSends={settings.composerEnterSends ?? false}
           ligatures={settings.ligatures ?? false}
+          statusLine={settings.statusLine ?? true}
           onOsc52Change={onOSC52Change}
           onForwardsChanged={terminalSessions.refresh}
           {...(appearance.palette === ""

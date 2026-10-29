@@ -232,6 +232,15 @@
   padding: 0.5rem;
 }
 
+/* The VT320 status line a program shows under the screen (terminal/statusLine.ts), its text in
+   line with the screen's. Its terminal is transparent, so the colour of the line is set here. */
+[data-terminal-status-line] {
+  background: var(--ui-surface);
+}
+[data-terminal-status-line] > .xterm {
+  padding: 0.25rem 0.5rem;
+}
+
 /* xterm's legacy viewport spans the padding and defaults to black, making
    the margin look like a frame even when the renderer uses another color.
    xterm 6.1 sets that black through .xterm:not(.allow-transparency), so this

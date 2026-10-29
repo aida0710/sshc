@@ -11,6 +11,10 @@ package terminal
 // xterm.jsでの効き方は web/src/terminal/leftoverModeReset.test.ts が
 // testdata/leftover-mode-reset.json の同じ列で確かめる。
 const leftoverModeReset = "" +
+	// VT320のステータス行へ書いている途中で終わったプログラムのあとも、ここから先が画面に
+	// 届くよう、まずステータス行を抜けて（DECSASD 0）消す（DECSSDT 0）。xterm.jsは知らない
+	// 列なので、画面の側が出力から抜き出して扱う（web/src/terminal/statusLine.ts）。
+	"\x1b[0$}\x1b[0$~" +
 	// 代替画面を抜けて、スクロールバックのある通常の画面へ戻る。?1049lは抜けたあとに
 	// 通常の画面で保存したカーソル位置へ戻す。すでに通常の画面にいるときに古い位置へ
 	// 飛ばないよう、先にDECSC（ESC 7）で今の位置を保存する。保存先は画面ごとに別なので、
