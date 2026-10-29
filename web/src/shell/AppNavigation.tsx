@@ -23,6 +23,7 @@ import type { LocalShellProfile } from "../api/settings";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { HostEntry } from "../api/config";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
+import type { SeenProgramStatus } from "../terminal/programStatus";
 import { navigationWidth } from "./navigationLayout";
 import { sftpTransferManager } from "../sftp/transferManager";
 
@@ -51,6 +52,7 @@ export function AppNavigation({
   orderedSessions,
   activeSessionId,
   unreadBySession,
+  seenProgramStatus,
   onShowSession,
   splitView,
   onShowSplitGroup,
@@ -84,6 +86,7 @@ export function AppNavigation({
   orderedSessions: TerminalSession[];
   activeSessionId: string | null;
   unreadBySession: UnreadSessions;
+  seenProgramStatus: SeenProgramStatus;
   onShowSession: (id: string) => void;
   splitView: SplitViewController;
   onShowSplitGroup: (number: number) => void;
@@ -190,6 +193,7 @@ export function AppNavigation({
         <SplitGroupList groups={splitView.groups} sessions={orderedSessions}
           selected={section === "Terminal" ? splitView.activeGroupNumber : null}
           unreadBySession={unreadBySession}
+          seenProgramStatus={seenProgramStatus}
           onSelect={onShowSplitGroup}
           onSelectSession={onShowSession}
           onDissolve={(number) => splitView.dispatch({ type: "dissolve-group", number })} />
@@ -199,6 +203,7 @@ export function AppNavigation({
           sessions={orderedSessions}
           selected={section === "Terminal" ? activeSessionId : null}
           unreadBySession={unreadBySession}
+          seenProgramStatus={seenProgramStatus}
           onSelect={onShowSession}
           splitGroupBySession={splitView.groupBySession}
           {...(canSplitSession === undefined ? {} : { canSplitSession })}

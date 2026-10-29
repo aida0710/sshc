@@ -103,6 +103,26 @@ describe("SessionList", () => {
     }
   });
 
+  it("puts what the program says it is doing in place of the dot and the destination, until a seen result", () => {
+    const { rerender, ...props } = renderList({
+      sessions: [
+        { ...live, programStatus: { state: "blocked", kind: "permission", message: "Run rm -rf build?", version: 2 } },
+        { ...shell, programStatus: { state: "done", message: "Docs built", version: 4 } },
+        { ...dead, programStatus: { state: "working", version: 1 } },
+      ],
+    });
+    expect(screen.getByRole("button", { name: "bastion" })).toHaveAccessibleDescription("Needs permission · Run rm -rf build?");
+    expect(screen.getByRole("button", { name: "bastion" }).querySelector("[data-program-status-text]")).toHaveClass("text-notice-ink");
+    expect(screen.getByRole("button", { name: "zsh" })).toHaveAccessibleDescription("Done · Docs built");
+    expect(screen.getByRole("button", { name: "zsh" }).querySelector("[data-program-status]")).toHaveAttribute("data-program-status", "done");
+    // An ended session says how it ended, whatever its program last said.
+    expect(screen.getByRole("button", { name: "db-primary" })).toHaveAccessibleDescription("exited 255");
+
+    rerender(<SessionList {...props} seenProgramStatus={new Map([["b", 4]])} />);
+    expect(screen.getByRole("button", { name: "zsh" })).toHaveAccessibleDescription("connected");
+    expect(screen.getByRole("button", { name: "zsh" }).querySelector("[data-program-status]")).toBeNull();
+  });
+
   it("shows unread terminal notifications without changing the session order", () => {
     const asking = { ...live, lastNotification: { title: "", body: "Claude needs your permission to use Bash", occurredAt: "2026-08-13T09:03:00Z" } };
     renderList({ sessions: [asking, shell, dead], unreadBySession: new Set(["b", "a"]) });
