@@ -5,6 +5,7 @@ import { snippetsApi, type Snippet } from "../../snippets/api";
 import { describeTerminalCommandFailure, terminalCommandProblemText } from "./terminalCommandProblem";
 import { Button, Notice, Segmented } from "../../ui/surface";
 import { ModalShell } from "../../ui/ModalShell";
+import { codeBlock, control, iconAction } from "../../ui/form";
 import { SnippetVariableInputs } from "../../snippets/SnippetVariableInputs";
 import {
   terminalCommandApi,
@@ -195,7 +196,7 @@ export function WorkspaceCommandCenter({
             disabled={busy}
             onClick={onClose}
             aria-label={t("workspace.commandClose")}
-            className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill"
+            className={`${iconAction} size-8`}
           >
             <Icon name="close" className="size-4" />
           </button>
@@ -227,7 +228,7 @@ export function WorkspaceCommandCenter({
                     invalidate();
                   }}
                   placeholder="uname -a"
-                  className="mt-1 block w-full rounded border border-control-line bg-control p-2 font-mono text-sm text-ink"
+                  className={`mt-1 block font-mono ${control}`}
                 />
               </label>
             ) : (
@@ -241,7 +242,7 @@ export function WorkspaceCommandCenter({
                       setInputs({});
                       invalidate();
                     }}
-                    className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
+                    className={`mt-1 block ${control}`}
                   >
                     <option value="">{t("workspace.chooseSnippet")}</option>
                     {snippets.map((snippet) => (
@@ -252,7 +253,7 @@ export function WorkspaceCommandCenter({
                   </select>
                 </label>
                 {selectedSnippet === null ? null : (
-                  <code className="whitespace-pre-wrap rounded bg-code-bg p-2 text-xs text-code-fg">
+                  <code className={`whitespace-pre-wrap ${codeBlock}`}>
                     {selectedSnippet.command}
                   </code>
                 )}
@@ -287,7 +288,7 @@ export function WorkspaceCommandCenter({
               {paneTargets.map((target) => (
                 <div
                   key={target.targetId}
-                  className={`rounded border border-line px-2 py-1 text-xs ${target.connected ? "" : "opacity-60"}`}
+                  className={`rounded-md border border-line px-2 py-1 text-xs ${target.connected ? "" : "opacity-60"}`}
                 >
                   <span className="font-medium">{target.alias}</span>
                   <span className="ml-2 text-ink-muted">
@@ -325,7 +326,7 @@ export function WorkspaceCommandCenter({
                   <p className="truncate text-xs font-medium">
                     {targetLabel(target)}
                   </p>
-                  <pre className="mt-1 overflow-auto rounded bg-code-bg p-2 text-xs text-code-fg">
+                  <pre className={`mt-1 ${codeBlock}`}>
                     {target.command}
                   </pre>
                 </div>
@@ -355,7 +356,7 @@ export function WorkspaceCommandCenter({
               {dispatch.results.map((result) => (
                 <div
                   key={result.targetId}
-                  className="min-w-0 rounded border border-line p-2"
+                  className="min-w-0 rounded-md border border-line p-2"
                 >
                   <p className="text-xs font-medium">
                     {targetLabel(result)} ·{" "}

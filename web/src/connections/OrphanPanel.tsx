@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "../ui/surface";
+import { sizedControl } from "../ui/form";
 import type { HostEntry, HostMetadata, Metadata } from "../api/config";
 import { useTranslate, type Translate } from "../i18n/context";
 import { identityKey } from "./connectionBrowser";
@@ -96,7 +97,7 @@ export function OrphanPanel({ metadata, hosts, onSave }: OrphanPanelProps) {
                   id={`orphan-target-${key}`}
                   value={targets[key] ?? ""}
                   onChange={(event) => setTargets({ ...targets, [key]: event.target.value })}
-                  className="min-w-48 rounded-md border border-control-line bg-control px-2 py-1.5 text-xs"
+                  className={sizedControl("min-w-48")}
                 >
                   <option value="">{t("orphan.reassociatePlaceholder")}</option>
                   {Array.from(candidateIdentities, ([candidateKey, identity]) => (
@@ -110,13 +111,9 @@ export function OrphanPanel({ metadata, hosts, onSave }: OrphanPanelProps) {
                 >
                   {t("orphan.reassociate", { alias: entry.identity.alias })}
                 </Button>
-                <button
-                  type="button"
-                  onClick={() => discard(entry)}
-                  className="rounded border border-control-line px-2 py-1 text-xs text-danger"
-                >
+                <Button kind="danger" onClick={() => discard(entry)}>
                   {t("orphan.discard", { alias: entry.identity.alias })}
-                </button>
+                </Button>
               </div>
             </li>
           );
