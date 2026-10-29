@@ -1,6 +1,5 @@
 import type { WebglAddon } from "@xterm/addon-webgl";
-
-type Disposable = { dispose(): void };
+import type { IDisposable } from "@xterm/xterm";
 
 type WebglTerminal = {
   loadAddon(addon: WebglAddon): void;
@@ -52,7 +51,7 @@ export async function attachWebglRenderer(
       return new WebglAddon();
     },
   }: WebglOptions = {},
-): Promise<Disposable | null> {
+): Promise<IDisposable | null> {
   // The WebGL addon repaints by drawing the terminal background over the
   // previous frame. A fully transparent background cannot erase old glyphs
   // reliably (notably in Chromium on macOS), so edited command lines leave
@@ -87,7 +86,7 @@ export function attachWebglWhileShown(terminal: WebglTerminal, options: WebglOpt
   shown(visible: boolean): void;
   dispose(): void;
 } {
-  let renderer: Disposable | null = null;
+  let renderer: IDisposable | null = null;
   let attaching = false;
   let wanted = false;
   let disposed = false;

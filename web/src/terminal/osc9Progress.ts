@@ -1,7 +1,6 @@
+import type { IDisposable } from "@xterm/xterm";
+import type { OSCParser } from "./escapeSequenceParser";
 import type { components } from "../api/schema";
-
-type Disposable = { dispose(): void };
-type OSCParser = { registerOscHandler(identifier: number, handler: (data: string) => boolean): Disposable };
 
 // What a program reported through ConEmu's OSC 9;4, which Windows Terminal,
 // Ghostty and WezTerm also show. "none" means nothing to show.
@@ -28,7 +27,7 @@ export function nextTerminalProgress(previous: TerminalProgress, data: string): 
   return { state: reportedStates[Number(state) as 1 | 2 | 4], percent: parsed ?? kept };
 }
 
-export function attachOSC9Progress(parser: OSCParser, changed: (update: (previous: TerminalProgress) => TerminalProgress) => void): Disposable {
+export function attachOSC9Progress(parser: OSCParser, changed: (update: (previous: TerminalProgress) => TerminalProgress) => void): IDisposable {
   return parser.registerOscHandler(9, (data) => {
     if (!data.startsWith("4;")) return false;
     changed((previous) => nextTerminalProgress(previous, data) ?? previous);

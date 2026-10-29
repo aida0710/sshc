@@ -1,7 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { RemoteEnginesApi } from "../api/remoteEngines";
 import type { Translate } from "../i18n/context";
 import { runTargetProblemText } from "./runTargetProblem";
+import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { useLoad } from "../ui/useLoad";
 
 export type RemoteVaultUnlockForm = {
   password: string;
@@ -31,39 +33,28 @@ export function useRemoteVaultUnlockForm({
   onUnlocked: () => void;
 }): RemoteVaultUnlockForm {
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [vaultMissing, setVaultMissing] = useState<boolean | null>(null);
-
+  const operation = useAsyncOperation();
+  const readStatus = useCallback(() => api.status(alias), [alias, api]);
+  const status = useLoad(readStatus);
+  // Unlocked elsewhere in the meantime: there is nothing to ask.
+  const unlockedElsewhere = status.state === "loaded" && status.value.vault && status.value.unlocked;
   useEffect(() => {
-    let active = true;
-    void api.status(alias)
-      .then((status) => {
-        if (!active) return;
-        // Unlocked elsewhere in the meantime: there is nothing to ask.
-        if (status.vault && status.unlocked) onUnlocked();
-        else setVaultMissing(!status.vault);
-      })
-      // The password is still asked for; unlocking says what is wrong.
-      .catch(() => { if (active) setVaultMissing(false); });
-    return () => { active = false; };
-  }, [alias, api, onUnlocked]);
+    if (unlockedElsewhere) onUnlocked();
+  }, [unlockedElsewhere, onUnlocked]);
+  // A status that could not be read still asks for the password; unlocking says what is wrong.
+  const vaultMissing = status.state === "loading" ? null : status.state === "loaded" && !status.value.vault;
 
   async function unlock(event: FormEvent) {
     event.preventDefault();
-    if (busy || password === "") return;
-    setBusy(true);
-    setError("");
-    try {
-      await api.unlockVault(alias, password);
-      setPassword("");
-      onUnlocked();
-    } catch (caught) {
-      setError(runTargetProblemText(translate, caught, alias));
-    } finally {
-      setBusy(false);
-    }
+    if (operation.busy || password === "") return;
+    await operation.run(() => api.unlockVault(alias, password), {
+      apply: () => {
+        setPassword("");
+        onUnlocked();
+      },
+      describe: (caught) => runTargetProblemText(translate, caught, alias),
+    });
   }
 
-  return { password, setPassword, busy, error, vaultMissing, unlock };
+  return { password, setPassword, busy: operation.busy, error: operation.error, vaultMissing, unlock };
 }

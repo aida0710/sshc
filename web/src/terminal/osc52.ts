@@ -1,14 +1,10 @@
+import type { OSCParser } from "./escapeSequenceParser";
+
 const maxClipboardBytes = 256 * 1024;
 const base64Characters = /^[A-Za-z0-9+/]*={0,2}$/;
 
-type Disposable = { dispose(): void };
-
-type OscParser = {
-  registerOscHandler(identifier: number, handler: (data: string) => boolean): Disposable;
-};
-
 type Osc52Options = {
-  parser: OscParser;
+  parser: OSCParser;
   enabled: () => boolean;
   writeText: (text: string) => Promise<void>;
   copied?: () => void;
