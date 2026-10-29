@@ -42,6 +42,9 @@ func (r *Ring) Capacity() int { return len(r.data) }
 // Oldest is the absolute position of the oldest retained byte.
 func (r *Ring) Oldest() uint64 { return r.written - uint64(r.size) }
 
+// Written is the absolute position just after the newest byte.
+func (r *Ring) Written() uint64 { return r.written }
+
 func (r *Ring) Write(p []byte) (int, error) {
 	written := len(p)
 	r.written += uint64(written)

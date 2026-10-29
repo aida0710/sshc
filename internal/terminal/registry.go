@@ -205,6 +205,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		workspace:     spec.Workspace,
 		started:       r.now(),
 		buffer:        NewRing(limits.Scrollback),
+		screen:        newScreenCheckpoint(size),
 		streams:       map[*Stream]bool{},
 		process:       process,
 		cleanup:       spec.Cleanup,
