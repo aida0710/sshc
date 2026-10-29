@@ -14,6 +14,7 @@ import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { mobileViewportQuery, useCompactViewport, useMediaQuery } from "../ui/useMediaQuery";
 import type { RemoteEntry } from "./api";
 import { formatBytes } from "../ui/format";
+import { iconAction } from "../ui/form";
 import { entryKind, movable } from "./entryKind";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
 import { SFTPEntryList } from "./SFTPEntryList";
@@ -505,14 +506,14 @@ export function SFTPPanel({
               title={t("sftp.openTerminalHere")}
               disabled={busy || dirty || !connected || path === ""}
               onClick={() => void onOpenTerminal(alias, path)}
-              className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover ${mobileInteraction ? "size-12" : "size-9"}`}
+              className={`${iconAction} ${mobileInteraction ? "size-12" : "size-9"}`}
             >
               <Icon name="terminal" className="size-4" />
             </button>
           ) : null}
           actions={<>
-            {mobileInteraction ? <button type="button" aria-label={t(search.searching ? "sftp.search.stop" : "sftp.mobile.search")} aria-expanded={search.mobileSearchOpen} disabled={!search.searching && (busy || !connected)} onClick={() => { if (search.searching) search.cancelSearch(); else search.setMobileSearchOpen((value) => !value); }} className={`flex shrink-0 items-center justify-center rounded active:bg-select-fill ${mobileInteraction ? "size-12" : "size-9"} ${search.mobileSearchOpen || search.filter !== "" ? "text-accent" : "text-ink-muted"}`}><Icon name="search" className="size-5" /></button> : null}
-            <button type="button" aria-label={t("sftp.mobile.actions")} aria-haspopup={mobileInteraction ? "dialog" : "menu"} aria-expanded={menu?.kind === "folder"} onClick={(event) => toggleMenu("folder", event.currentTarget)} className={`flex shrink-0 items-center justify-center rounded text-ink-muted transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-select-fill ${mobileInteraction ? "size-12" : "size-9"}`}><Icon name="moreHorizontal" className="size-5" /></button>
+            {mobileInteraction ? <button type="button" aria-label={t(search.searching ? "sftp.search.stop" : "sftp.mobile.search")} aria-expanded={search.mobileSearchOpen} disabled={!search.searching && (busy || !connected)} onClick={() => { if (search.searching) search.cancelSearch(); else search.setMobileSearchOpen((value) => !value); }} className={`flex shrink-0 items-center justify-center rounded-md active:bg-select-fill ${mobileInteraction ? "size-12" : "size-9"} ${search.mobileSearchOpen || search.filter !== "" ? "text-accent" : "text-ink-muted"}`}><Icon name="search" className="size-5" /></button> : null}
+            <button type="button" aria-label={t("sftp.mobile.actions")} aria-haspopup={mobileInteraction ? "dialog" : "menu"} aria-expanded={menu?.kind === "folder"} onClick={(event) => toggleMenu("folder", event.currentTarget)} className={`${iconAction} active:bg-select-fill ${mobileInteraction ? "size-12" : "size-9"}`}><Icon name="moreHorizontal" className="size-5" /></button>
           </>}
         />
       {!mobileInteraction && menu?.kind === "folder" ? <div ref={menuPanel} role="menu" aria-label={t("sftp.mobile.actions")} className={`absolute right-0 top-full z-20 max-h-[70dvh] w-60 overflow-y-auto ${menuSurface}`}><MenuActionList actions={folderMenuActions()} /></div> : null}
@@ -521,7 +522,7 @@ export function SFTPPanel({
       {problem === "" || listingFailed ? null : <Notice tone="danger">{problem}</Notice>}
       {transfers.exclusionNotice === "" ? null : <Notice compact>{transfers.exclusionNotice}</Notice>}
       {searchOptionsOpen && can?.search ? <ModalShell labelledBy={`${headingId}-search-options`} onDismiss={() => setSearchOptionsOpen(false)} closeOnOutside panelClassName="w-full max-w-md rounded-xl p-4">
-        <div className="flex items-center justify-between gap-2"><h3 id={`${headingId}-search-options`} className="font-medium">{t("sftp.search.mode")}</h3><button type="button" aria-label={t("sftp.close")} onClick={() => setSearchOptionsOpen(false)} className="flex size-12 items-center justify-center rounded text-ink-muted"><Icon name="close" className="size-5" /></button></div>
+        <div className="flex items-center justify-between gap-2"><h3 id={`${headingId}-search-options`} className="font-medium">{t("sftp.search.mode")}</h3><button type="button" aria-label={t("sftp.close")} onClick={() => setSearchOptionsOpen(false)} className="flex size-12 items-center justify-center rounded-md text-ink-muted"><Icon name="close" className="size-5" /></button></div>
         <SFTPSearchControls search={search} disabled={busy || dirty} mobile />
       </ModalShell> : null}
       {search.search === null ? null : (
@@ -533,14 +534,14 @@ export function SFTPPanel({
               path: search.search.root,
             })}
           </span>
-          <button type="button" disabled={busy} onClick={search.endSearch} className={`shrink-0 rounded text-accent transition-colors duration-150 hover:bg-hover ${mobileInteraction ? "min-h-12 px-2" : "px-1.5"}`}>{t("sftp.searchEnd")}</button>
+          <button type="button" disabled={busy} onClick={search.endSearch} className={`shrink-0 rounded-md text-accent transition-colors duration-150 hover:bg-hover ${mobileInteraction ? "min-h-12 px-2" : "px-1.5"}`}>{t("sftp.searchEnd")}</button>
         </p>
       )}
       {actions.undo === null ? null : (
         <p role="status" className="flex items-center gap-3 rounded-md border border-line bg-surface-subtle px-3 py-2 text-sm text-ink-muted">
           <span className="min-w-0 grow truncate">{actions.undo.label}</span>
-          <button type="button" disabled={busy} onClick={() => void actions.undo?.run()} className={`shrink-0 rounded text-accent transition-colors duration-150 hover:bg-hover ${mobileInteraction ? "min-h-12 px-2" : "px-1.5"}`}>{t("sftp.undo")}</button>
-          <button type="button" aria-label={t("sftp.dismissUndo")} onClick={actions.dismissUndo} className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:text-ink ${mobileInteraction ? "size-12" : "size-6"}`}>
+          <button type="button" disabled={busy} onClick={() => void actions.undo?.run()} className={`shrink-0 rounded-md text-accent transition-colors duration-150 hover:bg-hover ${mobileInteraction ? "min-h-12 px-2" : "px-1.5"}`}>{t("sftp.undo")}</button>
+          <button type="button" aria-label={t("sftp.dismissUndo")} onClick={actions.dismissUndo} className={`${iconAction} ${mobileInteraction ? "size-12" : "size-6"}`}>
             <Icon name="close" className={mobileInteraction ? "size-5" : "size-3"} />
           </button>
         </p>
@@ -559,7 +560,7 @@ export function SFTPPanel({
           <div ref={menuRoot} hidden={mobileInteraction} className={mobileInteraction ? "hidden" : "relative flex shrink-0 items-center gap-1 border-b border-line px-3 py-1.5"}>
             {selectedEntries.length > 0 && !(mobileInteraction && search.mobileSearchOpen) ? (
               <>
-                <button type="button" aria-label={t("sftp.clearSelection")} onClick={list.clearSelection} className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink ${mobileInteraction ? "size-12" : "size-10 md:size-7"}`}>
+                <button type="button" aria-label={t("sftp.clearSelection")} onClick={list.clearSelection} className={`${iconAction} ${mobileInteraction ? "size-12" : "size-10 md:size-7"}`}>
                   <Icon name="close" className={mobileInteraction ? "size-5" : "size-3.5"} />
                 </button>
                 <span className={`min-w-0 grow truncate font-medium text-ink ${mobileInteraction ? "text-sm" : "text-xs"}`}>
@@ -575,16 +576,16 @@ export function SFTPPanel({
                   <Icon name="search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" />
                   {filterInput}
                 </label>
-                {compactViewport || !can?.details ? null : <button type="button" disabled={busy} onClick={showDetails} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink">{t("sftp.details")}</button>}
-                {compactViewport && !local ? null : <button type="button" disabled={busy || !transferableSelection || !transfers.canTransferOut} title={transfers.canTransferOut ? undefined : t("sftp.local.connectRemote")} onClick={() => void transfers.transferOut(selectedEntries)} className={`rounded text-ink-muted hover:bg-hover hover:text-ink ${mobileInteraction ? "min-h-12 px-3 text-sm" : "px-2 py-1 text-xs"}`}>{transferOutLabel}</button>}
-                {compactViewport || selectedEntry === null || !can?.rename ? null : <button type="button" disabled={busy} onClick={actions.renameSelection} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink">{t("sftp.rename")}</button>}
+                {compactViewport || !can?.details ? null : <button type="button" disabled={busy} onClick={showDetails} className="rounded-md px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink">{t("sftp.details")}</button>}
+                {compactViewport && !local ? null : <button type="button" disabled={busy || !transferableSelection || !transfers.canTransferOut} title={transfers.canTransferOut ? undefined : t("sftp.local.connectRemote")} onClick={() => void transfers.transferOut(selectedEntries)} className={`rounded-md text-ink-muted hover:bg-hover hover:text-ink ${mobileInteraction ? "min-h-12 px-3 text-sm" : "px-2 py-1 text-xs"}`}>{transferOutLabel}</button>}
+                {compactViewport || selectedEntry === null || !can?.rename ? null : <button type="button" disabled={busy} onClick={actions.renameSelection} className="rounded-md px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink">{t("sftp.rename")}</button>}
                 <button
                   type="button"
                   aria-label={selectionMenuLabel()}
                   aria-haspopup="menu"
                   aria-expanded={!mobileInteraction && menu?.kind === "selected"}
                   onClick={(event) => toggleMenu("selected", event.currentTarget)}
-                  className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none ${mobileInteraction ? "size-12" : "size-11 md:size-7"}`}
+                  className={`${iconAction} focus:bg-select-fill focus:outline-none ${mobileInteraction ? "size-12" : "size-11 md:size-7"}`}
                 >
                   <Icon name="moreHorizontal" className={mobileInteraction ? "size-5" : "size-4"} />
                 </button>
@@ -599,7 +600,7 @@ export function SFTPPanel({
                 aria-expanded={!mobileInteraction && menu?.kind === "create"}
                 disabled={busy || !connected}
                 onClick={(event) => toggleMenu("create", event.currentTarget)}
-                className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-7"
+                className={`${iconAction} size-10 focus:bg-select-fill focus:outline-none md:size-7`}
               >
                 <Icon name="plus" className="size-4" />
               </button>
@@ -609,7 +610,7 @@ export function SFTPPanel({
               <Icon name="search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" />
               {filterInput}
             </label>
-            {can?.search ? <button type="button" aria-label={t("sftp.search.mode")} title={t("sftp.search.mode")} disabled={!connected || dirty} onClick={() => setSearchOptionsOpen(true)} className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover md:size-7"><Icon name="settings" className="size-4" /></button> : null}
+            {can?.search ? <button type="button" aria-label={t("sftp.search.mode")} title={t("sftp.search.mode")} disabled={!connected || dirty} onClick={() => setSearchOptionsOpen(true)} className={`${iconAction} size-10 md:size-7`}><Icon name="settings" className="size-4" /></button> : null}
             {can?.search ? (
               <button
                 type="button"
@@ -617,7 +618,7 @@ export function SFTPPanel({
                 title={t(search.searching ? "sftp.search.stop" : "sftp.searchBelow")}
                 disabled={!search.searching && (busy || !connected || search.filter.trim() === "")}
                 onClick={() => { if (search.searching) search.cancelSearch(); else void search.runSearch(); }}
-                className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-7"
+                className={`${iconAction} size-10 focus:bg-select-fill focus:outline-none md:size-7`}
               >
                 <Icon name="search" className="size-4" />
               </button>
@@ -755,7 +756,7 @@ export function SFTPPanel({
         <ModalShell labelledBy={`${headingId}-mobile-actions`} onDismiss={() => setMenu(null)} closeOnOutside returnFocusRef={menuTrigger} placement="sheet" panelClassName="flex max-h-[80dvh] w-full max-w-lg flex-col overflow-hidden rounded-xl">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-1">
             <h3 id={`${headingId}-mobile-actions`} className="min-w-0 truncate font-medium">{menu.kind === "selected" || menu.kind === "context" ? selectionMenuLabel() : t("sftp.mobile.actions")}</h3>
-            <button type="button" aria-label={t("sftp.close")} onClick={() => setMenu(null)} className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted"><Icon name="close" className="size-5" /></button>
+            <button type="button" aria-label={t("sftp.close")} onClick={() => setMenu(null)} className={`${iconAction} size-12`}><Icon name="close" className="size-5" /></button>
           </div>
           <div role="menu" className="min-h-0 space-y-1 overflow-y-auto overscroll-contain p-2">
             {menu.kind === "selected" || menu.kind === "context" ? <MenuActionList actions={selectedMenuActions()} mobile /> : <MenuActionList actions={folderMenuActions()} mobile />}
