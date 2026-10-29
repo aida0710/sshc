@@ -11,7 +11,9 @@ import { entryKind } from "./entryKind";
 import { entryTypeLabelKeys } from "./sftpMessageKeys";
 import { symbolicModeToOctal } from "./transfers";
 import { FilePreviewBody } from "./FilePreviewBody";
+import { PreviewStepper } from "./PreviewStepper";
 import { useFilePreview } from "./useFilePreview";
+import { usePreviewStepping } from "./usePreviewStepping";
 import { useLoad } from "../ui/useLoad";
 
 function Property({ label, children }: { label: string; children: ReactNode }) {
@@ -23,9 +25,14 @@ function Property({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+// SFTPDetailsDialog shows the properties of the inspected entries, and a preview of a single file. steps are
+// the files of the pane in the order it shows them: the step buttons, the arrow keys and a finger's swipe
+// across the previewed picture go through them, asking the pane to inspect another (onStep).
 export function SFTPDetailsDialog({
   alias,
   entries,
+  steps = [],
+  onStep,
   busy,
   onClose,
   onEdit,
@@ -38,6 +45,8 @@ export function SFTPDetailsDialog({
 }: {
   alias: string;
   entries: RemoteEntry[];
+  steps?: RemoteEntry[];
+  onStep?: (entry: RemoteEntry) => void;
   busy: boolean;
   onClose: () => void;
   onEdit: (entry: RemoteEntry) => void;
@@ -58,6 +67,15 @@ export function SFTPDetailsDialog({
   const directoryPath = entry !== null && kind === "directory" && alias !== localHostAlias ? entry.path : null;
   const totalBytes = entries.reduce((sum, item) => sum + (entryKind(item) === "file" ? item.size : 0), 0);
   const preview = useFilePreview(alias, previewPath);
+  // An entry that is not among the steps (a folder, or several entries) is shown alone.
+  const stepIndex = entry === null || onStep === undefined ? -1 : steps.findIndex((item) => item.path === entry.path);
+  const stepPosition = Math.max(0, stepIndex);
+  const stepCount = stepIndex < 0 ? 1 : steps.length;
+  const stepTo = (position: number) => {
+    const next = steps[position];
+    if (next !== undefined) onStep?.(next);
+  };
+  const onSwipe = usePreviewStepping({ position: stepPosition, count: stepCount, onStep: stepTo, onClose });
   const heading = entry === null ? t("sftp.detailsForCount", { count: entries.length }) : t("sftp.detailsFor", { name: entry.name });
 
   // Only a remote directory has its size counted; anything else reads nothing.
@@ -121,6 +139,7 @@ export function SFTPDetailsDialog({
     >
       <div className="flex items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
         <h2 id={headingId} className="min-w-0 grow truncate text-sm font-medium">{heading}</h2>
+        <PreviewStepper position={stepPosition} count={stepCount} onStep={stepTo} />
         <button type="button" className="text-xs text-ink-muted hover:text-ink" onClick={onClose}>{t("sftp.close")}</button>
       </div>
 
@@ -133,7 +152,7 @@ export function SFTPDetailsDialog({
               ))}
             </ul>
           ) : preview.kind !== "idle" ? (
-            <FilePreviewBody preview={preview} path={entry.path} name={entry.name} />
+            <FilePreviewBody preview={preview} path={entry.path} name={entry.name} onSwipe={onSwipe} />
           ) : (
             <p className="text-sm text-ink-muted">{t(entryTypeLabelKeys[entry.type])}</p>
           )}

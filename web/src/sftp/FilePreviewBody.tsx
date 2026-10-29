@@ -4,6 +4,7 @@ import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FilePreviewMedia } from "./FilePreviewMedia";
 import { FilePreviewRefusal } from "./FilePreviewRefusal";
 import { loadMonacoEditor } from "./loadMonacoEditor";
+import type { PreviewSwipe } from "./previewSwipe";
 import type { FilePreviewState } from "./useFilePreview";
 
 const MonacoEditor = lazy(() => loadMonacoEditor().then(({ MonacoEditor }) => ({ default: MonacoEditor })));
@@ -18,11 +19,13 @@ function ignoreEdit() {}
 // need a renderer this preview does not otherwise need.
 //
 // onDownload, when given, is offered under a refusal (FilePreviewRefusal).
-export function FilePreviewBody({ preview, path, name, onDownload }: {
+// onSwipe, when given, takes a finger's swipe across a fitted image or video.
+export function FilePreviewBody({ preview, path, name, onDownload, onSwipe }: {
   preview: FilePreviewState;
   path: string;
   name: string;
   onDownload?: () => void;
+  onSwipe?: (swipe: PreviewSwipe) => void;
 }) {
   switch (preview.kind) {
     case "idle":
@@ -30,7 +33,7 @@ export function FilePreviewBody({ preview, path, name, onDownload }: {
     case "loading":
       return <FilePreviewLoading />;
     case "image":
-      return <FilePreviewImage key={preview.url} url={preview.url} name={name} />;
+      return <FilePreviewImage key={preview.url} url={preview.url} name={name} onSwipe={onSwipe} />;
     case "text":
       return (
         <Suspense fallback={<FilePreviewLoading />}>
@@ -38,7 +41,7 @@ export function FilePreviewBody({ preview, path, name, onDownload }: {
         </Suspense>
       );
     case "media":
-      return <FilePreviewMedia key={preview.url} element={preview.element} url={preview.url} name={name} onDownload={onDownload} />;
+      return <FilePreviewMedia key={preview.url} element={preview.element} url={preview.url} name={name} onDownload={onDownload} onSwipe={onSwipe} />;
     case "unavailable":
       return <FilePreviewRefusal reason={preview.reason} onDownload={onDownload} />;
   }

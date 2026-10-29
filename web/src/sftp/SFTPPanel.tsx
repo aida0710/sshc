@@ -790,6 +790,8 @@ export function SFTPPanel({
         <SFTPDetailsDialog
           alias={alias}
           entries={details}
+          steps={displayedEntries.filter((entry) => entryKind(entry) === "file")}
+          onStep={(entry) => setDetails([entry])}
           busy={busy}
           returnFocusRef={activeRow}
           onClose={() => setDetails(null)}

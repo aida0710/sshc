@@ -1,12 +1,12 @@
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { ModalShell } from "../ui/ModalShell";
-import { insideKeyboardOwner } from "../ui/useDismissibleLayer";
 import { FilePreviewBody } from "./FilePreviewBody";
 import { FilePreviewHeader } from "./FilePreviewHeader";
 import { useFilePreview } from "./useFilePreview";
 import { usePreviewDownload } from "./usePreviewDownload";
+import { usePreviewStepping } from "./usePreviewStepping";
 
 function baseName(path: string): string {
   const components = path.split("/").filter(Boolean);
@@ -41,23 +41,7 @@ export function FilePreviewDialog({
   const shown = steps[position] ?? path;
   const preview = useFilePreview(alias, shown);
   const { download, problem } = usePreviewDownload(alias);
-  const hasPrevious = position > 0;
-  const hasNext = position < steps.length - 1;
-
-  // The arrows are read from the whole document: a step button that just
-  // became disabled gives up focus, and the keys must keep working after it.
-  // Inside the text preview they move the editor's cursor instead.
-  useEffect(() => {
-    const step = (event: KeyboardEvent) => {
-      if (insideKeyboardOwner(event.target)) return;
-      if (event.key === "ArrowLeft" && hasPrevious) setPosition(position - 1);
-      else if (event.key === "ArrowRight" && hasNext) setPosition(position + 1);
-      else return;
-      event.preventDefault();
-    };
-    document.addEventListener("keydown", step);
-    return () => document.removeEventListener("keydown", step);
-  }, [position, hasPrevious, hasNext]);
+  const onSwipe = usePreviewStepping({ position, count: steps.length, onStep: setPosition, onClose });
 
   return (
     <ModalShell
@@ -78,7 +62,7 @@ export function FilePreviewDialog({
       />
       {problem === "" ? null : <p role="alert" className="border-b border-line px-3 py-2 text-xs text-danger">{problem}</p>}
       <div role="group" className="min-h-0 flex-1 overflow-auto overscroll-contain bg-surface-subtle p-3" aria-label={t("sftp.preview")}>
-        <FilePreviewBody preview={preview} path={shown} name={baseName(shown)} onDownload={() => download(shown)} />
+        <FilePreviewBody preview={preview} path={shown} name={baseName(shown)} onDownload={() => download(shown)} onSwipe={onSwipe} />
       </div>
     </ModalShell>
   );

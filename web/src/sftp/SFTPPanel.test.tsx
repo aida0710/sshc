@@ -1137,6 +1137,30 @@ describe("SFTPPanel uploads", () => {
     expect(screen.queryByRole("dialog", { name: "Details for photo.png" })).not.toBeInTheDocument();
   });
 
+  it("steps the details through the files the pane shows, passing over folders", async () => {
+    const file = (name: string) => ({ name, path: `/remote/${name}`, type: "file" as const, size: 10, mode: "-rw-r--r--", modifiedAt: "", revision: name });
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [file("a.png"), { name: "photos", path: "/remote/photos", type: "directory", size: 0, mode: "drwxr-xr-x", modifiedAt: "", revision: "d" }, file("b.png"), file("c.png")],
+    });
+    api.previewFile.mockResolvedValue({ contentType: "image/png", revision: "r", blob: new Blob(["png"], { type: "image/png" }) });
+
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    await userEvent.dblClick(await screen.findByRole("button", { name: "b.png" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Details for b.png" });
+    expect(within(dialog).getByText("2 / 3")).toBeVisible();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("dialog", { name: "Details for c.png" })).toBeVisible();
+    expect(api.previewFile).toHaveBeenLastCalledWith("edge", "/remote/c.png");
+
+    await userEvent.keyboard("{ArrowLeft}{ArrowLeft}");
+    const first = await screen.findByRole("dialog", { name: "Details for a.png" });
+    expect(within(first).getByRole("group", { name: "Properties" })).toHaveTextContent("/remote/a.png");
+    expect(within(first).getByRole("button", { name: "Previous" })).toBeDisabled();
+  });
+
   it("summarises the count and the total size when several entries are inspected together", async () => {
     api.list.mockResolvedValue({
       path: "/remote",
