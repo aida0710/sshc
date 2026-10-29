@@ -74,8 +74,8 @@ export function HistoryPanel() {
 
   async function restore(transactionId: string, path: string) {
     try {
-      const result = await configApi.restore(transactionId, path);
-      setMessage(t("history.restored", { path, id: result.transactionId }));
+      await configApi.restore(transactionId, path);
+      setMessage(t("history.restored", { path }));
       setProblem(null);
       await reload();
     } catch (error) {
