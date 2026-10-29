@@ -2314,6 +2314,7 @@ type TerminalSettings struct {
 	CopyOnSelect           *bool               `json:"copyOnSelect,omitempty"`
 	FontSize               *int                `json:"fontSize,omitempty"`
 	JisYenBackslash        *bool               `json:"jisYenBackslash,omitempty"`
+	Ligatures              *bool               `json:"ligatures,omitempty"`
 	LocalShellProfile      *string             `json:"localShellProfile,omitempty"`
 	MaxSessions            *int                `json:"maxSessions,omitempty"`
 	Osc52                  *bool               `json:"osc52,omitempty"`

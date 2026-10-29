@@ -436,6 +436,7 @@ describe("SettingsPanel", () => {
     await user.selectOptions(within(region).getByLabelText("Default local shell"), "fish");
     await user.click(within(region).getByRole("checkbox", { name: /Allow OSC 52/ }));
     await user.click(within(region).getByRole("checkbox", { name: /Send the JIS/ }));
+    await user.click(within(region).getByRole("checkbox", { name: /Use font ligatures/ }));
     await user.click(within(region).getByRole("button", { name: "Save" }));
 
     expect(setTerminalSettings).toHaveBeenCalledWith({
@@ -445,6 +446,7 @@ describe("SettingsPanel", () => {
       localShellProfile: "fish",
       osc52: true,
       jisYenBackslash: true,
+      ligatures: true,
     });
   });
 

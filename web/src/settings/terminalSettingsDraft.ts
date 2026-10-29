@@ -26,12 +26,13 @@ export type TerminalDraft = {
   osc52: boolean;
   jisYenBackslash: boolean;
   composerEnterSends: boolean;
+  ligatures: boolean;
 };
 
 export const initialTerminalDraft: TerminalDraft = {
   startDirectory: "", localShellProfile: "", maxSessions: "", scrollback: "", browserScrollbackLines: "", retainedTerminals: "", fontSize: "",
   verbosity: "0", reconnect: "", palette: "", font: "", background: "", tint: undefined,
-  copyOnSelect: true, rightClickPaste: true, webgl: true, osc52: false, jisYenBackslash: false, composerEnterSends: false,
+  copyOnSelect: true, rightClickPaste: true, webgl: true, osc52: false, jisYenBackslash: false, composerEnterSends: false, ligatures: false,
 };
 
 export function draftOf(settings: TerminalSettings): TerminalDraft {
@@ -56,6 +57,7 @@ export function draftOf(settings: TerminalSettings): TerminalDraft {
     osc52: settings.osc52 ?? false,
     jisYenBackslash: settings.jisYenBackslash ?? false,
     composerEnterSends: settings.composerEnterSends ?? false,
+    ligatures: settings.ligatures ?? false,
   };
 }
 
@@ -98,6 +100,7 @@ export function settingsOf(draft: TerminalDraft): TerminalSettings | null {
     ...(draft.osc52 ? { osc52: true } : {}),
     ...(draft.jisYenBackslash ? { jisYenBackslash: true } : {}),
     ...(draft.composerEnterSends ? { composerEnterSends: true } : {}),
+    ...(draft.ligatures ? { ligatures: true } : {}),
     ...(draft.localShellProfile === "" ? {} : { localShellProfile: draft.localShellProfile }),
     ...appearanceOf({ palette: draft.palette, font: draft.font, background: draft.background, tint: draft.tint }),
   };
