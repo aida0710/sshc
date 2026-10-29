@@ -207,6 +207,15 @@ jobs:
         shell: bash
         run: GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
 
+      # FreeBSD・OpenBSD はリリースしていないが、ビルドが通る状態を保つ。build tag の
+      # 整合性はどのランナーでも同じなので、Linux でだけ見る。
+      - name: BSD build (Linux)
+        if: ${{ runner.os == 'Linux' && env.NATIVE_TESTS == 'true' }}
+        shell: bash
+        run: |
+          GOOS=freebsd GOARCH=amd64 CGO_ENABLED=0 go build ./...
+          GOOS=openbsd GOARCH=amd64 CGO_ENABLED=0 go build ./...
+
       - name: go build (Windows)
         if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: pwsh
