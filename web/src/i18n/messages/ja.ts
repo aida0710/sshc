@@ -401,6 +401,7 @@ export const ja = {
   "sftp.previewZoomFit": "全体を表示（今は{percent}）",
   "sftp.previewPosition": "{position} / {count}",
   "sftp.previewTooLarge": "ファイルが大きいため、プレビューできません。",
+  "sftp.previewNotFound": "ファイルが見つかりません。",
   "sftp.previewUnsupported": "この形式のファイルはプレビューできません。",
   "sftp.previewMediaUnsupported": "このブラウザでは再生できない形式です。",
   "sftp.selectedItems": "選択中の項目",

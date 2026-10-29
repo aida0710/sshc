@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -74,6 +75,14 @@ func TestOnlyFilesThatPlayGetAMediaTicket(t *testing.T) {
 	fixture := newLocalMutationHTTPFixture(t)
 	if refused := issueMediaTicket(t, fixture, filepath.Join(fixture.directory, "notes.txt")); refused.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("text = %d: %s", refused.Code, refused.Body.String())
+	}
+}
+
+func TestAMissingFileGetsNoMediaTicketAndSaysItIsNotFound(t *testing.T) {
+	fixture := newLocalMutationHTTPFixture(t)
+	refused := issueMediaTicket(t, fixture, filepath.Join(fixture.directory, "IMG_2041.jpgcording.mp4"))
+	if refused.Code != http.StatusNotFound || !strings.Contains(refused.Body.String(), "sftp_not_found") {
+		t.Fatalf("missing = %d: %s", refused.Code, refused.Body.String())
 	}
 }
 

@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/labstack/echo/v5"
@@ -36,6 +37,15 @@ func (h SFTPHandlers) IssueMediaTicket(c *echo.Context) error {
 	if sshcSFTP.MediaContentType(body.Path) == "" {
 		return problem(c, http.StatusUnsupportedMediaType, "sftp_preview_type")
 	}
+	// The file is opened once before the ticket is given, so a missing or unreadable file is answered now with
+	// its reason. Once the player has the ticket, every failure reaches the page as the same player error.
+	media, err := h.openMedia(c.Request().Context(), body.Alias, body.Path)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	if err := media.Close(); err != nil {
+		return sftpProblem(c, err)
+	}
 	ticket, err := h.MediaTickets.issue(sessionOf(c), body.Alias, body.Path)
 	if err != nil {
 		return unexpectedProblem(c, "sftp_failed", err)
@@ -55,13 +65,7 @@ func (h SFTPHandlers) StreamMedia(c *echo.Context) error {
 	if !ok {
 		return problem(c, http.StatusNotFound, "sftp_not_found")
 	}
-	var media sshcSFTP.MediaFile
-	var err error
-	if claim.alias == sshcSFTP.LocalAlias {
-		media, err = sshcSFTP.OpenLocalMedia(claim.path)
-	} else {
-		media, err = h.Service.OpenMedia(c.Request().Context(), claim.alias, claim.path)
-	}
+	media, err := h.openMedia(c.Request().Context(), claim.alias, claim.path)
 	if err != nil {
 		return sftpProblem(c, err)
 	}
@@ -71,4 +75,12 @@ func (h SFTPHandlers) StreamMedia(c *echo.Context) error {
 	header.Set("Content-Disposition", "inline")
 	http.ServeContent(c.Response(), c.Request(), "", media.ModTime, media.Content)
 	return nil
+}
+
+// openMedia opens an audio or video file on this machine or over SFTP.
+func (h SFTPHandlers) openMedia(ctx context.Context, alias, path string) (sshcSFTP.MediaFile, error) {
+	if alias == sshcSFTP.LocalAlias {
+		return sshcSFTP.OpenLocalMedia(path)
+	}
+	return h.Service.OpenMedia(ctx, alias, path)
 }
