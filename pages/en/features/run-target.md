@@ -18,6 +18,8 @@ Only the terminals change: sessions and [workspaces](./workspace). Connections, 
 3. Open **Run on** at the bottom of the sidebar and choose the host from **Add an engine…**.
 4. Choose the host in the list: the workspaces and sessions become that engine's, and the terminal heading says it runs there.
 
+Switching run targets opens the session you last had open on that run target. If it has been closed, the session at the top of the sidebar opens instead (sessions in hidden workspaces are not picked). Only this browser tab remembers it; after a reload, the top of the sidebar opens first.
+
 Each host's **…** offers **Engine information…**, **Open its full screen in a new tab** (the host engine's own screen, like `sshc open <alias>`) and **Remove from the list**. Removing it stops neither the host's engine nor its terminals.
 
 If the chosen host's vault is locked, the terminal area shows a field for that vault's password. This machine's engine passes it to the host's engine inside the SSH connection and does not save it here.

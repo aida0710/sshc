@@ -23,6 +23,14 @@ export function groupSessionsByWorkspace(
     .map((workspace) => ({ workspace, sessions: sessions.filter((session) => groupOf(session) === workspace.id) }));
 }
 
+// The session at the top of the sidebar: the first of the first workspace that
+// has any. Hidden workspaces are passed over even while the tree shows them, so
+// what an agent opened is not chosen for the person. Before the workspaces are
+// read the tree has no top, and this is null.
+export function topSessionId(workspaces: readonly TerminalWorkspace[], sessions: readonly TerminalSession[]): string | null {
+  return groupSessionsByWorkspace(workspaces, sessions, false).flatMap((group) => group.sessions)[0]?.id ?? null;
+}
+
 // A built-in workspace with no name of its own is shown by the name this
 // language gives it.
 export function workspaceDisplayName(t: Translate, workspace: TerminalWorkspace): string {
