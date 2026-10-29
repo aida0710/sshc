@@ -20,15 +20,17 @@ import (
 	"sshc/internal/sshclient"
 )
 
-// 実行先のセッションのポート転送（local と dynamic）。
+// 実行先のセッションのポート転送。
 //
-// 利用者がつなぐのはこのマシンなので、待ち受けはこのマシンの 127.0.0.1 に開く。実行先のエンジンには、
+// local と dynamic は、利用者がつなぐのはこのマシンなので、待ち受けはこのマシンの 127.0.0.1 に開く。実行先のエンジンには、
 // 実行先の 127.0.0.1 の空いたポートで同じ転送を開かせ、このマシンの待ち受けに来た接続を、取り次ぎに
 // 使っている SSH の接続の上で、そのポートへつなぐ。画面に出す待ち受けのアドレスは、このマシンの
 // 待ち受けである。実行先のセッションは実行先の SSH の設定で開いているので、転送を接続先の設定へ
 // 保存する選択は無い（その場かぎりの転送だけ）。
 //
-// remote の転送（接続先で待ち受ける）は、まだ取り次がない。
+// remote の転送（接続先の SSH サーバーで待ち受ける）は、このマシンで待ち受けるものが無いので、
+// 実行先のエンジンにそのまま開かせる。宛先は、このマシンで開いたセッションの転送と同じく、
+// セッションを開いたエンジン（実行先）から見たホストである。
 
 // runTargetForwardConnectionLimit は、1つの転送の待ち受けが同時に中継する接続の数の上限である。
 // このマシンのローカルの転送（sshclient）と同じ値にする。
@@ -125,10 +127,10 @@ func (h RemoteEngineHandlers) StartRunTargetForward(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	destination := stringValue(request.Destination)
 	if request.Kind == "remote" {
-		return problem(c, http.StatusConflict, "run_target_remote_forward_unavailable")
+		return h.startRunTargetRemoteForward(c, alias, sessionID, request)
 	}
+	destination := stringValue(request.Destination)
 	if (request.Kind != "local" && request.Kind != "dynamic") || request.ListenPort < 1 || request.ListenPort > 65535 ||
 		len(destination) > 512 || (request.Kind == "local" && destination == "") || (request.Kind == "dynamic" && destination != "") {
 		return problem(c, http.StatusBadRequest, "invalid_request")
@@ -177,6 +179,30 @@ func (h RemoteEngineHandlers) StartRunTargetForward(c *echo.Context) error {
 	go netaccept.Serve(listener, runTargetForwardConnectionLimit, func(local net.Conn) {
 		h.relayRunTargetConnection(alias, remotePort, local)
 	})
+	return c.JSON(http.StatusCreated, h.withLocalListens(alias, listed))
+}
+
+// startRunTargetRemoteForward は、実行先のエンジンに remote の転送を開かせ、その答えを返す。
+// 要求の検査は、転送を開く実行先のエンジンに任せる。
+func (h RemoteEngineHandlers) startRunTargetRemoteForward(c *echo.Context, alias, sessionID string, request api.StartTerminalForwardRequest) error {
+	body, err := json.Marshal(request)
+	if err != nil {
+		return unexpectedProblem(c, "terminal_forward_failed", err)
+	}
+	reply, err := h.Engines.CallTerminalAPI(c.Request().Context(), alias, remoteengine.TerminalCall{
+		Method: http.MethodPost, Path: "/api/v1/terminal/sessions/" + sessionID + "/forwards",
+		ContentType: echo.MIMEApplicationJSON, Body: body,
+	})
+	if err != nil {
+		return remoteEngineProblem(c, err)
+	}
+	if reply.Status != http.StatusCreated {
+		return c.Blob(reply.Status, "application/problem+json", reply.Body)
+	}
+	var listed api.TerminalSessionList
+	if err := json.Unmarshal(reply.Body, &listed); err != nil {
+		return unexpectedProblem(c, "terminal_forward_failed", err)
+	}
 	return c.JSON(http.StatusCreated, h.withLocalListens(alias, listed))
 }
 

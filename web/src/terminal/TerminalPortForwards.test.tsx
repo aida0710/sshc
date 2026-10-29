@@ -42,11 +42,11 @@ describe("TerminalPortForwards", () => {
     expect(api.stopTerminalForward).toHaveBeenCalledWith("session-1", "pf-remote");
   });
 
-  it("offers only temporary local and dynamic forwards on a run target", async () => {
+  it("offers every kind of forward on a run target, but only as a temporary one", async () => {
     const api = { startTerminalForward: vi.fn(), stopTerminalForward: vi.fn() };
     render(<LanguageProvider><TerminalPortForwards session={session} api={api} isRunTargetSession onClose={vi.fn()} /></LanguageProvider>);
     const options = Array.from(screen.getByLabelText<HTMLSelectElement>("Type").options).map((option) => option.value);
-    expect(options).toEqual(["local", "dynamic"]);
+    expect(options).toEqual(["local", "remote", "dynamic"]);
     expect(screen.queryByRole("checkbox", { name: /Save to this connection/ })).toBeNull();
   });
 
