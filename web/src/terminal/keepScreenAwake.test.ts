@@ -1,9 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 import { loadKeepScreenAwake, saveKeepScreenAwake, useKeepScreenAwake } from "./keepScreenAwake";
-
-afterEach(() => window.localStorage.clear());
 
 describe("keepScreenAwake", () => {
   it("is off until this browser turns it on", () => {

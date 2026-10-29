@@ -46,7 +46,7 @@ function vaultUnlockState(overrides: Partial<RemoteVaultUnlockState> = {}): Remo
   };
 }
 
-afterEach(() => { window.localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => vi.restoreAllMocks());
 
 function incompatibleEngine() {
   return new ApiError("remote_engine_incompatible", 409, { code: "remote_engine_incompatible", message: "request rejected", detail: "v0.51.0" });
