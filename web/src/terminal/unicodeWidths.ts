@@ -1,4 +1,13 @@
 import type { IUnicodeVersionProvider, Terminal } from "@xterm/xterm";
+import {
+  completesFlag,
+  continuesEmojiSequence,
+  graphemeBreakStateBits,
+  isPlainAfter,
+  joinsPreviousCluster,
+  nextGraphemeBreakState,
+  plainState,
+} from "./graphemeBreaks";
 import { unicodeVersion, wideRanges, zeroWidthRanges } from "./unicodeWidthTable.generated";
 
 // xterm.js counts character widths with Unicode 6 unless told otherwise, and
@@ -48,9 +57,14 @@ function cellWidth(codepoint: number): 0 | 1 | 2 {
 
 // The value xterm.js keeps per character, laid out as its own Unicode 6 and
 // the Unicode 11 addon lay it out: bit 0 joins the character to the one
-// before it, bits 1 and 2 are its width.
-function characterProperties(width: number, joinsPrevious: boolean): number {
-  return (width << 1) | (joinsPrevious ? 1 : 0);
+// before it, bits 1 and 2 are its width, and the bits above are the
+// provider's own state, handed back with the next character.
+function characterProperties(width: number, joinsPrevious: boolean, state = 0): number {
+  return (state << 3) | (width << 1) | (joinsPrevious ? 1 : 0);
+}
+
+function widthOf(properties: number): number {
+  return (properties >> 1) & 0x3;
 }
 
 const currentUnicode: IUnicodeVersionProvider = {
@@ -70,7 +84,49 @@ const currentUnicode: IUnicodeVersionProvider = {
   },
 };
 
+// With grapheme clusters on (mode 2027, graphemeClusterMode.ts), the characters
+// of one user-perceived character share a cell: a family emoji with its zero
+// width joiners, a flag of two regional indicators, a hand with a skin tone.
+// A cluster is as wide as its widest character, and two cells when it is an
+// emoji: after VS16 (U+FE0F), as a flag, or as an emoji ZWJ sequence.
+const variationSelector16 = 0xfe0f;
+
+// Set on a zero-width character that started a cluster of its own but was put
+// in the cell before, as with clusters off; the next character that would join
+// it takes a new cell instead of joining that cell.
+const placedBefore = 1 << graphemeBreakStateBits;
+const breakStateMask = placedBefore - 1;
+
+const plainProperties = characterProperties(1, false, plainState);
+
+const graphemeClusters: IUnicodeVersionProvider = {
+  version: `${unicodeVersion}-graphemes`,
+  wcwidth: cellWidth,
+  charProperties(codepoint, preceding) {
+    const previous = (preceding >> 3) & breakStateMask;
+    if (isPlainAfter(previous, codepoint)) return plainProperties;
+    const state = nextGraphemeBreakState(previous, codepoint);
+    const previousWidth = widthOf(preceding);
+    const width = cellWidth(codepoint);
+    if (joinsPreviousCluster(state) && previousWidth !== 0 && ((preceding >> 3) & placedBefore) === 0) {
+      const emoji = codepoint === variationSelector16 || completesFlag(state) || continuesEmojiSequence(previous, state);
+      return characterProperties(emoji ? 2 : Math.max(previousWidth, width), true, state);
+    }
+    // xterm.js gives every character that does not join a cell of its own,
+    // which would move the cursor for a character wcwidth counts as zero.
+    if (width === 0 && previousWidth !== 0) return characterProperties(previousWidth, true, state | placedBefore);
+    return characterProperties(width, false, state);
+  },
+};
+
 export function applyCurrentUnicodeWidths(view: Terminal): void {
   view.unicode.register(currentUnicode);
+  view.unicode.register(graphemeClusters);
   view.unicode.activeVersion = currentUnicode.version;
+}
+
+// setGraphemeClusters switches how the characters printed from now on are
+// counted. Those already on the screen keep the cells they were given.
+export function setGraphemeClusters(view: Terminal, on: boolean): void {
+  view.unicode.activeVersion = on ? graphemeClusters.version : currentUnicode.version;
 }
