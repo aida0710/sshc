@@ -21,6 +21,7 @@ import { HostDetailPanel } from "./HostDetail";
 import { CreateConnectionPane } from "./CreateConnectionPane";
 import type { CreateConnectionDraft, CreationPrerequisite } from "./createConnectionDraft";
 import { NoticeList } from "./NoticeList";
+import { configurationNoticesOf } from "./noticeKinds";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { OrphanPanel } from "./OrphanPanel";
 import { useTranslate } from "../i18n/context";
@@ -64,25 +65,6 @@ import { useConnectionDrag } from "./useConnectionDrag";
 
 // The design's width for the connection list; the groups sit beside the card, outside it. The editor keeps the rest.
 const connectionListWidth: StoredColumnWidth = { key: localStorageKeys.connectionListWidth, fallback: 300, minimum: 256, maximum: 720 };
-
-// グループのフォルダについての注意は、右側ではなくグループの一覧の上に出す（folderNoticesOf）。
-const groupNoticeCodes = new Set([
-  "group_not_declared",
-  "group_directory_missing",
-  "group_empty",
-  "group_directory_leftover",
-  "group_file_unreached",
-]);
-
-const selectionNoticeCodes = new Set([
-  "complex_external_rule",
-  "wildcard_shadow",
-  "negated_pattern",
-  "unnamed_host_block",
-  "match_block",
-  "dangerous_directive",
-  "explained_values_only",
-]);
 
 
 type ConnectionsPageProps = {
@@ -260,8 +242,7 @@ export function ConnectionsPage({
   // alias を持つ注意（重複など）は alias で、持たない注意はファイルで見分ける。同じファイルにある
   // ほかの接続先の注意まで出さないため。ほかの接続先の注意は、一覧のその行の印で分かる。
   const folderNotices = folderNoticesOf(overview?.notices ?? []);
-  const paneNotices = (overview?.notices ?? []).filter((notice) => {
-    if (groupNoticeCodes.has(notice.code) || selectionNoticeCodes.has(notice.code)) return false;
+  const paneNotices = configurationNoticesOf(overview?.notices ?? []).filter((notice) => {
     if (selection === null) return true;
     if (notice.detail !== undefined && notice.detail !== "") return notice.detail === selection.alias;
     return notice.path === selection.path;
