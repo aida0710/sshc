@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
+import { menuChoiceItemClass, menuGroupClass, menuGroupHeadingClass, menuItemClass, menuSurface } from "../ui/menuStyle";
 import { isScreenWakeLockSupported, saveKeepScreenAwake, useKeepScreenAwake } from "./keepScreenAwake";
 import { saveTouchMode, useDetectedTouchMode, useTouchMode, type FixedTouchMode } from "./touchMode";
 import type { PaneEdge } from "./splitView/layout";
@@ -70,60 +71,59 @@ export function TerminalOverflowMenu({
       ref={panel}
       role="menu"
       aria-label={t("terminal.moreActions")}
-      className="absolute right-2 top-[calc(100%-0.25rem)] z-40 w-64 rounded-md border border-control-line bg-card p-1.5 shadow-overlay"
+      className={`absolute right-2 top-[calc(100%-0.25rem)] z-40 w-64 ${menuSurface}`}
     >
       {onSearch === undefined ? null : (
-        <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onSearch)}>
+        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onSearch)}>
           {t("terminal.search")}
         </button>
       )}
       {onPreviousPrompt === undefined ? null : (
-        <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onPreviousPrompt)}>
+        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onPreviousPrompt)}>
           {t("shortcuts.previousPrompt")}
         </button>
       )}
       {onNextPrompt === undefined ? null : (
-        <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onNextPrompt)}>
+        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onNextPrompt)}>
           {t("shortcuts.nextPrompt")}
         </button>
       )}
       {onSplit === undefined ? null : (["right", "bottom"] as const).map((edge) => (
-        <button key={edge} type="button" role="menuitem" disabled={!canSplit}
-          className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:opacity-50 md:min-h-0"
+        <button key={edge} type="button" role="menuitem" disabled={!canSplit} className={menuItemClass()}
           onClick={action(() => onSplit(edge))}>{t(edge === "right" ? "splitView.right" : "splitView.below")}</button>
       ))}
       {onRemoveFromSplit === undefined ? null : (
-        <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onRemoveFromSplit)}>
+        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onRemoveFromSplit)}>
           {t("splitView.remove")}
         </button>
       )}
       {onQuickCommands === undefined ? null : (
-        <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onQuickCommands)}>
+        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onQuickCommands)}>
           {t("terminal.quickCommands")}
         </button>
       )}
       {onPortForwarding === undefined ? null : (
-        <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onPortForwarding)}>
+        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onPortForwarding)}>
           {t("terminal.portForwarding")}
         </button>
       )}
       {onOpenRemoteDirectory === undefined ? null : (
-        <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onOpenRemoteDirectory)}>
+        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onOpenRemoteDirectory)}>
           {t("terminal.openDirectoryInSFTP")}
         </button>
       )}
-      <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" title={t("terminal.copyContextHint")} onClick={action(onCopyContext)}>
+      <button type="button" role="menuitem" className={menuItemClass()} title={t("terminal.copyContextHint")} onClick={action(onCopyContext)}>
         {t("terminal.copyContext")}
       </button>
-      <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" title={t("terminal.copyWithColorsHint")} onClick={action(onCopyWithColors)}>
+      <button type="button" role="menuitem" className={menuItemClass()} title={t("terminal.copyWithColorsHint")} onClick={action(onCopyWithColors)}>
         {t("terminal.copyWithColors")}
       </button>
-      <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onSaveScrollback)}>
+      <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onSaveScrollback)}>
         {t("terminal.saveScrollback")}
       </button>
       {/* These apply to every terminal, not only this one, so they sit apart under their own heading. */}
-      <div role="group" aria-label={t("terminal.globalSettings")} className="mt-1 border-t border-line pt-1">
-        <p aria-hidden="true" className="px-2.5 py-1 text-[11px] text-ink-faint">{t("terminal.globalSettings")}</p>
+      <div role="group" aria-label={t("terminal.globalSettings")} className={menuGroupClass}>
+        <p aria-hidden="true" className={menuGroupHeadingClass}>{t("terminal.globalSettings")}</p>
         <ChoiceMenuItem role="menuitemcheckbox" label="OSC 52" hint={t("terminal.osc52Hint")} checked={osc52Enabled} onSelect={action(onToggleOsc52)} />
         {isScreenWakeLockSupported() ? (
           <ChoiceMenuItem role="menuitemcheckbox" label={t("terminal.keepScreenAwake")} hint={t("terminal.keepScreenAwakeHint")} checked={keepScreenAwake}
@@ -160,7 +160,7 @@ function ChoiceMenuItem({ role, label, hint, checked, onSelect, indent = false }
       type="button"
       role={role}
       aria-checked={checked}
-      className={`flex min-h-10 w-full items-center justify-between gap-3 rounded py-2 pr-2.5 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0 ${indent ? "pl-6" : "pl-2.5"}`}
+      className={menuChoiceItemClass({ indent })}
       title={hint}
       onClick={onSelect}
     >
