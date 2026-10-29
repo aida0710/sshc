@@ -16,6 +16,7 @@ output-options:
   # 引き続き生成される。
   exclude-operation-ids:
     - setShortcutPresets
+    - setTerminalPresets
     - listTerminalBackgrounds
     - addTerminalBackground
     - getTerminalBackground
@@ -58,6 +59,7 @@ output-options:
     - SFTPMediaTicket
     - SFTPMediaTicketRequest
     - ShortcutPreset
+    - TerminalPreset
     - CreateConnectionResponse
     - BackgroundSettings
     - Effective

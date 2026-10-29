@@ -2008,6 +2008,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metadata/terminal-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setTerminalPresets"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/metadata": {
         parameters: {
             query?: never;
@@ -4273,9 +4289,15 @@ export interface components {
                 sftp: string[];
             };
         };
+        TerminalPreset: {
+            id: string;
+            name: string;
+            settings: components["schemas"]["EmbeddedTerminal"];
+        };
         Metadata: {
             schemaVersion: number;
             shortcutPresets?: components["schemas"]["ShortcutPreset"][];
+            terminalPresets?: components["schemas"]["TerminalPreset"][];
             groupsFile?: string;
             embeddedTerminal?: components["schemas"]["EmbeddedTerminal"];
             fileTransfers?: components["schemas"]["FileTransferSettings"];
@@ -9268,6 +9290,37 @@ export interface operations {
         };
         responses: {
             /** @description Saved shortcut presets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsSaveResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    setTerminalPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    base: components["schemas"]["TerminalPreset"][];
+                    presets: components["schemas"]["TerminalPreset"][];
+                };
+            };
+        };
+        responses: {
+            /** @description Saved terminal presets */
             200: {
                 headers: {
                     [name: string]: unknown;

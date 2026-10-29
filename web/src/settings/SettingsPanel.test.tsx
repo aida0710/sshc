@@ -400,7 +400,7 @@ describe("SettingsPanel", () => {
 
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Behaviour");
-    await user.type(within(region).getByLabelText("Starting directory"), "~/work");
+    await user.type(within(region).getByLabelText(/^Starting directory/), "~/work");
     await user.click(within(region).getByRole("button", { name: "Save" }));
 
     expect(setTerminalSettings).toHaveBeenCalledWith({ startDirectory: "~/work" });
@@ -432,8 +432,8 @@ describe("SettingsPanel", () => {
     await user.type(within(region).getByLabelText("Browser scrollback (lines)"), "12000");
     await user.type(within(region).getByLabelText("Terminals kept hidden"), "20");
     openTerminalTab(region, "Behaviour");
-    await waitFor(() => expect(within(region).getByLabelText("Default local shell")).toBeEnabled());
-    await user.selectOptions(within(region).getByLabelText("Default local shell"), "fish");
+    await waitFor(() => expect(within(region).getByLabelText(/^Default local shell/)).toBeEnabled());
+    await user.selectOptions(within(region).getByLabelText(/^Default local shell/), "fish");
     await user.click(within(region).getByRole("checkbox", { name: /Allow OSC 52/ }));
     await user.click(within(region).getByRole("checkbox", { name: /Send the JIS/ }));
     await user.click(within(region).getByRole("checkbox", { name: /Use font ligatures/ }));
@@ -453,7 +453,7 @@ describe("SettingsPanel", () => {
   it("says the terminal settings sync, and keeps the engine's and the browser's limits apart", async () => {
     render(<SettingsPanel api={buildApi()} page="Terminal" />);
 
-    expect(screen.getByText("These settings sync between machines.")).toBeVisible();
+    expect(screen.getByText("Presets sync between machines, and each browser chooses the one it uses. Shared settings are the same whichever preset is in use.")).toBeVisible();
     const terminal = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(terminal, "Connection");
     expect(within(terminal).getByLabelText("Engine replay buffer (bytes)"))
@@ -464,7 +464,7 @@ describe("SettingsPanel", () => {
       .toHaveAttribute("max", "200");
     expect(within(terminal).getByLabelText("Terminals kept hidden"))
       .toHaveAttribute("max", "99");
-    expect(within(terminal).getByLabelText("Connection log")).toBeVisible();
+    expect(within(terminal).getByLabelText(/^Connection log/)).toBeVisible();
   });
 
   it("shows both clipboard conveniences on by default and saves each disabled choice", async () => {
@@ -522,7 +522,7 @@ describe("SettingsPanel", () => {
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Connection");
     await user.selectOptions(
-      within(region).getByLabelText("Reconnect after a dropped connection"),
+      within(region).getByLabelText(/^Reconnect after a dropped connection/),
       "0",
     );
     await user.click(within(region).getByRole("button", { name: "Save" }));
@@ -539,7 +539,7 @@ describe("SettingsPanel", () => {
 
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Connection");
-    await waitFor(() => expect(within(region).getByLabelText("Reconnect after a dropped connection")).toHaveValue("0"));
+    await waitFor(() => expect(within(region).getByLabelText(/^Reconnect after a dropped connection/)).toHaveValue("0"));
   });
 
   it("shows the stored numbers and leaves the unset ones blank", async () => {
@@ -554,7 +554,7 @@ describe("SettingsPanel", () => {
     await waitFor(() => expect(within(region).getByLabelText("Sessions open at once")).toHaveValue(4));
     expect(within(region).getByLabelText("Engine replay buffer (bytes)")).toHaveValue(null);
     openTerminalTab(region, "Behaviour");
-    expect(within(region).getByLabelText("Starting directory")).toHaveValue("");
+    expect(within(region).getByLabelText(/^Starting directory/)).toHaveValue("");
   });
 
   it("updates the terminal preview from the appearance controls", async () => {
@@ -562,6 +562,8 @@ describe("SettingsPanel", () => {
     const { container } = render(<SettingsPanel api={buildApi()} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
+    // The fields open once the loaded settings are in the draft.
+    await waitFor(() => expect(within(region).getByLabelText("Colour scheme")).toBeEnabled());
     await user.selectOptions(within(region).getByLabelText("Colour scheme"), "nord");
     await user.type(within(region).getByLabelText("Font size"), "16");
 
@@ -582,7 +584,7 @@ describe("SettingsPanel", () => {
 
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Behaviour");
-    await user.type(within(region).getByLabelText("Starting directory"), "~/nowhere");
+    await user.type(within(region).getByLabelText(/^Starting directory/), "~/nowhere");
     await user.click(within(region).getByRole("button", { name: "Save" }));
 
     expect(await within(region).findByText("The specified directory does not exist.")).toBeVisible();
@@ -617,7 +619,7 @@ describe("SettingsPanel", () => {
 
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Behaviour");
-    const directory = within(region).getByLabelText("Starting directory");
+    const directory = within(region).getByLabelText(/^Starting directory/);
     await waitFor(() => expect(directory).toBeEnabled());
     await user.type(directory, "~/nowhere");
     openTerminalTab(region, "Display");
@@ -625,7 +627,7 @@ describe("SettingsPanel", () => {
 
     expect(await within(region).findByText("The specified directory does not exist.")).toBeVisible();
     expect(within(region).getByRole("tab", { name: "Behaviour" })).toHaveAttribute("aria-selected", "true");
-    expect(within(region).getByLabelText("Starting directory")).toHaveValue("~/nowhere");
+    expect(within(region).getByLabelText(/^Starting directory/)).toHaveValue("~/nowhere");
   });
 
   it("shows every terminal group as its own card on a phone, without tabs", async () => {
@@ -646,7 +648,7 @@ describe("SettingsPanel", () => {
     for (const heading of ["Startup", "Connection", "Display", "Behaviour"]) {
       expect(within(region).getByRole("region", { name: heading })).toBeVisible();
     }
-    expect(within(region).getByLabelText("Starting directory")).toBeInTheDocument();
+    expect(within(region).getByLabelText(/^Starting directory/)).toBeInTheDocument();
     expect(within(region).getByRole("checkbox", { name: "Use WebGL rendering" })).toBeInTheDocument();
   });
 
