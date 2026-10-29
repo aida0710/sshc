@@ -61,3 +61,19 @@ func TestTheSnapshotEmulatorDrawsWhatTheUpstreamOneDraws(t *testing.T) {
 		}
 	}
 }
+
+// An inline image is a control string far longer than the emulator keeps of one: the emulator stays inside it to
+// its end, and none of it shows as text.
+func TestALongControlStringIsReadToItsEnd(t *testing.T) {
+	emulator := NewSnapshotEmulator(40, 10)
+	image := strings.Repeat("A", 100<<10)
+	_, _ = emulator.WriteString("\x1b]1337;File=inline=1:" + image[:len(image)/2])
+	if emulator.AtGround() {
+		t.Fatal("the emulator left the image halfway through")
+	}
+	_, _ = emulator.WriteString(image[len(image)/2:] + "\aafter")
+	emulator.flushGrapheme()
+	if !emulator.AtGround() || strings.TrimSpace(emulator.String()) != "after" {
+		t.Fatalf("after the image the screen shows %q", emulator.String())
+	}
+}
