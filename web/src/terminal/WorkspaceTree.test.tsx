@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { TerminalWorkspace } from "../api/terminalWorkspaces";
@@ -60,8 +60,6 @@ function renderTree(options: {
   render(<WorkspaceTree {...props} />);
   return props;
 }
-
-afterEach(() => window.localStorage.clear());
 
 // jsdom has no DataTransfer; this one carries what a drag sets between events.
 function dragData() {

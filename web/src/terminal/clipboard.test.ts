@@ -1,5 +1,5 @@
 import { defaultBindings, saveBindings } from "../keyconfig/bindings";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
 
 function harness(initial: TerminalClipboardSettings = { copyOnSelect: true, rightClickPaste: true }) {
@@ -54,8 +54,6 @@ function harness(initial: TerminalClipboardSettings = { copyOnSelect: true, righ
     },
   };
 }
-
-afterEach(() => localStorage.clear());
 
 // pasteEvent is a browser paste of what clipboardData holds: text, and files such as an image.
 function pasteEvent(text: string, files: { type: string }[] = []): Event {

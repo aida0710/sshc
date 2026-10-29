@@ -30,4 +30,10 @@ Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
   },
 });
 
-afterEach(() => cleanup());
+// Unmounting runs the effects React still had pending, and one may store a choice (an update result
+// shown, a folded notice). Storage is cleared after that, so no test starts with what the last one stored.
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+  sessionStorage.clear();
+});

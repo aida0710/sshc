@@ -15,7 +15,7 @@ beforeEach(async () => {
   });
   await refreshPresets();
 });
-afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => vi.restoreAllMocks());
 it("stores nothing while the browser only shows the default shortcuts", async () => {
   expect(localStorage.length).toBe(0);
   remote = [{ id: "work", name: "Work", bindings: { ...defaultBindings, home: ["Alt+H"] } }];
