@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, openApplication, test } from "./support/environment";
 import { samplePNG } from "./support/images";
-import { drawnSpan } from "./support/terminal";
+import { drawnRows, drawnSpan } from "./support/terminal";
 
 // All screenshots are opt-in and contain only the isolated installation's
 // example hosts and synthetic SFTP/terminal data. Never capture real servers.
@@ -218,7 +218,7 @@ test("quick navigation and terminal keys remain available in portrait and touch 
   await expect(page.getByRole("region", { name: "Terminal for Demo shell" })).toContainText("Mobile terminal demo");
   await capture(page, "mobile-terminal-390x640");
   // On the terminal the screen's own top bar replaces the bottom tabs, as in the design; its
-  // ‹ opens the navigation, which has the same places.
+  // ‹ opens the navigation, whose Home brings the tabs back.
   await expect(navigation).toHaveCount(0);
   const openNavigation = page.getByRole("button", { name: "Navigation", exact: true });
   for (const viewport of [{ width: 390, height: 640 }, { width: 844, height: 390 }]) {
@@ -235,6 +235,72 @@ test("quick navigation and terminal keys remain available in portrait and touch 
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home", exact: true }).tap();
   await expect(page).toHaveURL(new URL("/", installation.url).toString());
   await expect(navigation.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
+});
+
+// The terminal's own text field: focusing it raises the phone's keyboard.
+async function terminalInputFocused(page: Page): Promise<boolean> {
+  return page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea") === true);
+}
+
+async function openShellFromNavigation(page: Page) {
+  await page.getByRole("button", { name: "Navigation", exact: true }).first().tap();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "New session", exact: true }).tap();
+  const dialog = page.getByRole("dialog", { name: "New session" });
+  await dialog.getByRole("button", { name: /^Local shell, localhost/ }).tap();
+  await expect(dialog).toBeHidden();
+}
+
+test("opening and closing sessions leaves the keyboard down until the terminal or the text box is tapped", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  await openApplication(page, installation);
+  // The navigation is closed (and hidden from the accessibility tree) while a terminal is shown.
+  const navigation = page.getByRole("navigation", { name: "Primary", includeHidden: true });
+  const closeButtons = navigation.getByRole("button", { name: /^Close /, includeHidden: true });
+  for (const count of [1, 2]) {
+    await openShellFromNavigation(page);
+    await expect(closeButtons).toHaveCount(count);
+    // Attaching to the stream finishes a moment after the session is shown; neither may take the focus.
+    await expect(drawnRows(page).filter({ visible: true })).toContainText(/[$#%>]/, { timeout: 20_000 });
+    expect(await terminalInputFocused(page)).toBe(false);
+  }
+
+  // Closing the session being shown shows the other one.
+  await page.getByRole("button", { name: "Navigation", exact: true }).first().tap();
+  await closeButtons.last().tap();
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).tap();
+  await expect(closeButtons).toHaveCount(1);
+  await expect(drawnRows(page).filter({ visible: true })).toContainText(/[$#%>]/);
+  expect(await terminalInputFocused(page)).toBe(false);
+
+  // A tap on the text box gives it the focus.
+  await page.locator("[data-navigation-backdrop]").tap({ position: { x: 370, y: 300 } });
+  const field = page.getByLabel("Text to send to the terminal", { exact: true });
+  await field.tap();
+  await expect(field).toBeFocused();
+});
+
+test("the navigation on a phone links only Home and gives the sessions the height", async ({ page, installation }) => {
+  const sessions = Array.from({ length: 12 }, (_, index) => ({
+    id: `phone-${index + 1}`, kind: "shell", workspaceId: "default", title: `Session ${index + 1}`,
+    startedAt: "2026-10-29T00:00:00Z", state: "connected", problem: "", forwards: [],
+  }));
+  await page.route("**/api/v1/terminal/sessions", (route) => route.request().method() === "GET"
+    ? route.fulfill({ json: { sessions, maxSessions: 50 } })
+    : route.fallback());
+  await page.setViewportSize({ width: 390, height: 640 });
+  await openApplication(page, installation);
+  await page.getByRole("button", { name: "Navigation", exact: true }).tap();
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await expect(navigation.getByText("Session 12", { exact: true })).toBeAttached();
+  // The bar at the bottom holds the other sections and Menu.
+  await expect(navigation.getByRole("list", { name: "Start" }).getByRole("link")).toHaveText(["Home"]);
+  await expect(navigation.getByRole("link", { name: "Menu", exact: true })).toHaveCount(0);
+  // The sessions' list starts right under Home and runs down to the run target.
+  const list = navigation.locator("[data-navigation-scroll]");
+  const [homeBox, listBox] = await Promise.all([navigation.getByRole("link", { name: "Home", exact: true }).boundingBox(), list.boundingBox()]);
+  expect(listBox!.y - (homeBox!.y + homeBox!.height)).toBeLessThanOrEqual(4);
+  expect(listBox!.height).toBeGreaterThanOrEqual(320);
+  await capture(page, "mobile-navigation-390x640");
 });
 
 test("a page's button in the top bar is drawn small and still answers a tap just below it", async ({ page, installation }) => {

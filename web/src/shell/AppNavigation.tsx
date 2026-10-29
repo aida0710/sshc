@@ -26,6 +26,11 @@ import type { UnreadSessions } from "../terminal/terminalNotifications";
 import { navigationWidth } from "./navigationLayout";
 import { sftpTransferManager } from "../sftp/transferManager";
 
+// A phone reaches the other sections and Menu from the bar at the bottom (MobileNavigation), so its
+// navigation links only Home: the way back to that bar from a terminal, whose own top bar takes its place.
+// The sessions get the height the other links took.
+const phoneSections: Section[] = ["Home"];
+
 export function AppNavigation({
   navigationRef,
   navigationId,
@@ -166,15 +171,17 @@ export function AppNavigation({
 
       <div className="shrink-0">
         <ul aria-label={t("shell.navStart")} className="flex flex-col gap-0.5">
-          {startSections.map((name) => (
+          {(mobileLayout ? phoneSections : startSections).map((name) => (
             <li key={name}>{navigationLink(name)}</li>
           ))}
         </ul>
       </div>
 
-      <div className="mt-0.5 shrink-0">
-        {navigationLink("Menu")}
-      </div>
+      {mobileLayout ? null : (
+        <div className="mt-0.5 shrink-0">
+          {navigationLink("Menu")}
+        </div>
+      )}
 
       {/* The Workspaces heading and the workspace's name under it stick to the top of this list (see
           WorkspaceTree). The scroll padding is their height, so a row brought into view by the keyboard stops
