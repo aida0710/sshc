@@ -1,19 +1,21 @@
 import type { PaneEdge } from "./splitView/layout";
 import type { ReactNode, RefObject } from "react";
+import { createPortal } from "react-dom";
 import type { TerminalSession } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
-
-export type SessionRowMenuPlacement = "up" | "down";
+import { menuGroupClass, menuGroupHeadingClass, menuItemClass, menuSurface } from "../ui/menuStyle";
+import { useAnchoredMenu } from "../ui/useAnchoredMenu";
 
 // A workspace the session can be moved to, already named for this screen.
 export type WorkspaceMoveTarget = { id: string; label: string };
 
 // The menu of one row in the terminal list. Every item closes the menu after
-// it acts.
+// it acts. It is portaled and placed beside its 「…」 button (triggerRef), so the
+// list's scrolling and the phone's sliding drawer neither clip nor move it.
 export function SessionRowMenu({
   session,
   menuRef,
-  placement,
+  triggerRef,
   canDuplicate,
   canSplit = false,
   onSplit,
@@ -31,7 +33,7 @@ export function SessionRowMenu({
 }: {
   session: TerminalSession;
   menuRef: RefObject<HTMLDivElement | null>;
-  placement: SessionRowMenuPlacement;
+  triggerRef: RefObject<HTMLButtonElement | null>;
   canDuplicate: boolean;
   canSplit?: boolean;
   onSplit?: (edge: PaneEdge) => void;
@@ -49,16 +51,17 @@ export function SessionRowMenu({
   onClose: () => void;
 }) {
   const t = useTranslate();
+  useAnchoredMenu({ open: true, anchorRef: triggerRef, menuRef });
   const choose = (action: () => void) => () => {
     action();
     onClose();
   };
-  return (
+  return createPortal(
     <div
       ref={menuRef}
       role="menu"
       aria-label={t("terminal.rowMenu", { title: session.title })}
-      className={`absolute right-1 z-10 w-48 rounded-lg border border-control-line bg-card p-1 shadow-float ${placement === "up" ? "bottom-full mb-0.5" : "mt-0.5"}`}
+      className={`fixed z-50 w-60 overflow-y-auto ${menuSurface}`}
     >
       <SessionRowMenuItem onClick={choose(onRename)}>{t("terminal.rename")}</SessionRowMenuItem>
       {session.presentation?.titlePinned !== true ? null : (
@@ -79,8 +82,8 @@ export function SessionRowMenu({
       <SessionRowMenuItem disabled={!canMoveUp} onClick={choose(onMoveUp)}>{t("terminal.moveUp")}</SessionRowMenuItem>
       <SessionRowMenuItem disabled={!canMoveDown} onClick={choose(onMoveDown)}>{t("terminal.moveDown")}</SessionRowMenuItem>
       {moveTargets.length === 0 ? null : (
-        <div role="group" aria-label={t("workspace.moveTo")} className="mt-1 border-t border-line pt-1">
-          <p aria-hidden="true" className="px-2 py-1 text-[11px] text-ink-faint">{t("workspace.moveTo")}</p>
+        <div role="group" aria-label={t("workspace.moveTo")} className={menuGroupClass}>
+          <p aria-hidden="true" className={menuGroupHeadingClass}>{t("workspace.moveTo")}</p>
           {moveTargets.map((target) => (
             <SessionRowMenuItem key={target.id} onClick={choose(() => onMoveToWorkspace(target.id))}>
               {target.label}
@@ -88,7 +91,8 @@ export function SessionRowMenu({
           ))}
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -107,7 +111,7 @@ function SessionRowMenuItem({
       role="menuitem"
       disabled={disabled}
       onClick={onClick}
-      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0"
+      className={menuItemClass()}
     >
       {children}
     </button>

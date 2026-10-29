@@ -4,10 +4,13 @@ import { useTranslate } from "../i18n/context";
 import { terminalProblemKey } from "./sessions";
 import { endedRightAway, exitedAbnormally } from "./sessionStatus";
 import type { StreamLink } from "./streamLink";
+import { Button } from "../ui/surface";
 
+// 帯は、ターミナルの上に1行ずつ重なる。共通の Notice のように操作を文の下に置くと、帯ごとに1行増えて
+// ターミナルの行が減るので、操作は文の右に並べ、ボタンは知らせの中に置く低いボタン（Button small）にする。
 const notice = "shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink";
-// 経路の帯のボタンは、ほかの帯のボタン（再接続をやめる・再接続）と同じく、載せると選択の色になる。
-const linkButton = "shrink-0 rounded border border-notice-line px-2 py-0.5 text-notice-ink transition-colors duration-150 hover:bg-select-fill";
+// スマホの組み方では、指で押せるように帯のボタンを少し高くする。
+const bannerButton = "shrink-0 mobile-layout:min-h-8";
 
 function StreamLinkMessage({ link }: { link: Exclude<StreamLink, { phase: "live" }> }) {
   const t = useTranslate();
@@ -118,14 +121,9 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
             <ReconnectMessage reconnect={session.reconnect} />
           </p>
           {onStopReconnect === undefined ? null : (
-            <button
-              type="button"
-              disabled={stopBusy}
-              onClick={() => void stopReconnecting()}
-              className="min-h-8 shrink-0 rounded border border-notice-line px-3 py-1 font-medium text-notice-ink hover:bg-select-fill"
-            >
+            <Button small disabled={stopBusy} onClick={() => void stopReconnecting()} className={bannerButton}>
               {t("terminal.stopReconnect")}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -142,23 +140,14 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
             <StreamLinkMessage link={link} />
           </p>
           {link.phase === "stopped" && link.gone ? null : (
-            <button
-              type="button"
-              disabled={link.phase === "connecting"}
-              onClick={onLinkNow}
-              className={linkButton}
-            >
+            <Button small disabled={link.phase === "connecting"} onClick={onLinkNow} className={bannerButton}>
               {t("terminal.linkNow")}
-            </button>
+            </Button>
           )}
           {link.phase === "stopped" ? null : (
-            <button
-              type="button"
-              onClick={onLinkStop}
-              className={linkButton}
-            >
+            <Button small onClick={onLinkStop} className={bannerButton}>
               {t("terminal.linkStop")}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -174,14 +163,9 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
                   : t("terminal.exitedWithCode", { code: String(session.exited.code) })}
           </p>
           {session.kind !== "ssh" || session.alias === undefined || onReconnect === undefined ? null : (
-            <button
-              type="button"
-              disabled={reconnectBusy}
-              onClick={() => void reconnectExitedSession()}
-              className="min-h-8 shrink-0 rounded border border-control-line bg-control px-3 py-1 font-medium text-ink hover:bg-select-fill"
-            >
+            <Button small disabled={reconnectBusy} onClick={() => void reconnectExitedSession()} className={bannerButton}>
               {t(reconnectBusy ? "terminal.manualReconnecting" : "terminal.manualReconnect")}
-            </button>
+            </Button>
           )}
         </div>
       )}

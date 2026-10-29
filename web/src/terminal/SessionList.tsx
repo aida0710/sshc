@@ -11,7 +11,7 @@ import { describeForwardProblem } from "./forwardProblem";
 import { sessionDragMimeType } from "./sessionDrag";
 import { SessionDestinationLine } from "./SessionDestinationLine";
 import { sessionMarkerClass, sessionStatusText } from "./sessionStatus";
-import { SessionRowMenu, type SessionRowMenuPlacement, type WorkspaceMoveTarget } from "./SessionRowMenu";
+import { SessionRowMenu, type WorkspaceMoveTarget } from "./SessionRowMenu";
 import { terminalDisplayTitle } from "./terminalPresentation";
 import { notificationText, type UnreadSessions } from "./terminalNotifications";
 import { revealOnHoverAtPcSize } from "../ui/ActionMenu";
@@ -89,7 +89,6 @@ export function SessionList({
 }: SessionListProps) {
   const t = useTranslate();
   const [menuFor, setMenuFor] = useState<string | null>(null);
-  const [menuPlacement, setMenuPlacement] = useState<SessionRowMenuPlacement>("down");
   const [closing, setClosing] = useState<TerminalSession | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -312,13 +311,6 @@ export function SessionList({
                           setMenuFor(null);
                           return;
                         }
-                        const trigger = event.currentTarget.getBoundingClientRect();
-                        const scroll = event.currentTarget.closest("[data-navigation-scroll]")?.getBoundingClientRect();
-                        const lowerEdge = scroll?.bottom ?? window.innerHeight;
-                        const upperEdge = scroll?.top ?? 0;
-                        const spaceBelow = lowerEdge - trigger.bottom;
-                        const spaceAbove = trigger.top - upperEdge;
-                        setMenuPlacement(spaceBelow < 132 && spaceAbove > spaceBelow ? "up" : "down");
                         setMenuFor(session.id);
                       }}
                       className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5"
@@ -345,7 +337,7 @@ export function SessionList({
                   <SessionRowMenu
                     session={session}
                     menuRef={menuRef}
-                    placement={menuPlacement}
+                    triggerRef={menuTriggerRef}
                     canDuplicate={!busy && !atSessionLimit}
                     canSplit={canSplitSession?.(session.id) ?? false}
                     {...(onSplitSession === undefined ? {} : { onSplit: (edge: PaneEdge) => onSplitSession(session.id, edge) })}
