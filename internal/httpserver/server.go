@@ -399,7 +399,11 @@ func New(options Options) (*Server, error) {
 		registerDiagnosticsRoutes(e, DiagnosticsHandlers{Service: options.Diagnostics, Actions: actions})
 	}
 	if options.KnownHosts != nil {
-		registerKnownHostsRoutes(e, KnownHostsHandlers{Service: options.KnownHosts, Actions: actions})
+		handlers := KnownHostsHandlers{Service: options.KnownHosts, Actions: actions}
+		if options.Config != nil {
+			handlers.ConnectionNames = options.Config.KnownHostNames
+		}
+		registerKnownHostsRoutes(e, handlers)
 	}
 	if options.RemoteKeys != nil && options.Diagnostics != nil {
 		registerRemoteKeyRoutes(e, RemoteKeyHandlers{

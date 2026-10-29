@@ -3331,6 +3331,8 @@ export interface components {
             keyType: string;
             fingerprint: string;
             comment: string;
+            /** @description The saved connections whose key this entry holds, matched by the name ssh looks the key up under (HostKeyAlias, or HostName and Port). A hashed entry is matched by hashing that name. Absent when the entry holds no saved connection's key. */
+            aliases?: string[];
         };
         KnownHostTarget: {
             line: number;

@@ -275,7 +275,7 @@ func (h HostKeys) entriesFor(target Target) ([]hostEntry, error) {
 	if h.Read == nil {
 		return nil, nil
 	}
-	field := knownHostsField(target)
+	field := target.KnownHostsField()
 	var found []hostEntry
 	for _, path := range target.KnownHosts.all() {
 		contents, err := h.Read(path)
@@ -437,14 +437,14 @@ func UnknownHostPrompt(target Target, key ssh.PublicKey) string {
 		where, strings.ToUpper(key.Type()), fingerprint)
 }
 
-// knownHostsField は、known_hosts でこのホストを探す名前である。
+// KnownHostsField は、known_hosts でこのホストを探す名前である。
 //
 // HostKeyAlias があればそれをそのまま使う。無ければ HostName と Port から
 // internal/knownhosts の HostField が作る。鍵を書く Service も同じ関数を使うので、
 // 受け入れて書いた鍵に次の接続が一致する。
-func knownHostsField(target Target) string {
-	if target.HostKeyAlias != "" {
-		return target.HostKeyAlias
+func (t Target) KnownHostsField() string {
+	if t.HostKeyAlias != "" {
+		return t.HostKeyAlias
 	}
-	return knownhosts.HostField(target.HostName, knownhosts.ParsePort(target.Port))
+	return knownhosts.HostField(t.HostName, knownhosts.ParsePort(t.Port))
 }

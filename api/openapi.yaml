@@ -4934,6 +4934,13 @@ components:
         keyType: { type: string }
         fingerprint: { type: string }
         comment: { type: string }
+        aliases:
+          type: array
+          description: >-
+            The saved connections whose key this entry holds, matched by the name ssh looks the key up
+            under (HostKeyAlias, or HostName and Port). A hashed entry is matched by hashing that name.
+            Absent when the entry holds no saved connection's key.
+          items: { type: string }
     KnownHostTarget:
       type: object
       additionalProperties: false
