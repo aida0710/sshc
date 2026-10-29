@@ -43,6 +43,7 @@ description: sshcのTerminalが受け取るOSCと、画像やキーボードに�
 | APC `G`（kittyの画像形式） | 画像 | データとして送られた画像だけを表示します |
 | Kitty keyboard protocol | キーボード | 問い合わせと、要求に応じた切り替えに対応します |
 | mode 5522（貼り付けの知らせ） | 貼り付け | プログラムが有効にしていると、貼り付けたときに文字を打ち込まず、貼り付けた中身の形（text/plain、image/pngなど）の一覧と一度きりのパスワードを知らせます |
+| mode 2027（書記素クラスタ） | 文字幅 | プログラムが有効にしている間、ZWJでつないだ絵文字や国旗などを1つの文字として2マスに描きます。[画像と文字幅](/features/terminal#画像と文字幅) |
 | mode 2033、`CSI ? 998 n`（visibility reports） | 見えているかの知らせ | sshcエンジンが答えます。どこかのブラウザがターミナルを表示していれば見えている、どれも表示していなければ見えていないと知らせます |
 
 そのほかのCSIやモード（マウス、bracketed paste、代替画面など）は、xterm.jsの[対応表](https://xtermjs.org/docs/api/vtfeatures/)のとおりです。
