@@ -1,11 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createStoredChoice, useStoredChoice } from "./storedChoice";
 
 const key = "sshc.test.choice.v1";
 const size = () => createStoredChoice({ key, choices: ["small", "large"], fallback: "small" });
-
-afterEach(() => window.localStorage.clear());
 
 describe("createStoredChoice", () => {
   it("reads the fallback until this browser saves a choice, and for a value it does not know", () => {

@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { TerminalSession, TerminalSessionsApi } from "../api/terminalSessions";
 import type { UpdateApi, UpdateStatus } from "../api/update";
@@ -27,8 +27,6 @@ async function renderControls(api: UpdateApi, sessions = localSessions()) {
 }
 
 describe("Web self update", () => {
-  afterEach(() => localStorage.clear());
-
   it("shows terminal and transfer disconnection before consuming the preview token", async () => {
     const api = updater();
     await renderControls(api);
