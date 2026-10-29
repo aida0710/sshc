@@ -297,6 +297,19 @@ describe("SFTP tabs", () => {
     expect(await screen.findByRole("dialog", { name: "Choose tabs to compare" })).toBeVisible();
   });
 
+  it("opens this machine in a pane on the right with one press, and offers it only while there is one pane", async () => {
+    seedStoredPanes([{ tabs: [{ alias: "edge", path: "/var/log" }] }]);
+    render(<SFTPWorkspace title="SFTP" aliases={["edge"]} />);
+    expect(document.querySelectorAll("[data-sftp-pane-tabs]")).toHaveLength(1);
+
+    await userEvent.click(screen.getByRole("button", { name: "Side by side" }));
+
+    const strips = document.querySelectorAll<HTMLElement>("[data-sftp-pane-tabs]");
+    expect(strips).toHaveLength(2);
+    expect(within(strips[1]!).getByRole("tab", { selected: true })).toHaveTextContent(/Local/u);
+    expect(screen.queryByRole("button", { name: "Side by side" })).toBeNull();
+  });
+
   it("restores tab locations without reconnecting until requested", async () => {
     seedStoredPanes([{ tabs: [
       { alias: "edge", path: "/var/log" },

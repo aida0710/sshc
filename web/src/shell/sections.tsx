@@ -144,7 +144,7 @@ export function SectionView(props: SectionViewProps) {
     // The Menu keeps its own margins: 8px around its card on a wide screen, as in the design.
     return (
       <div className={pageScroller}>
-        <MenuPanel columns={menuColumns} onNavigate={props.navigation.onNavigateLocation} />
+        <MenuPanel columns={menuColumns} onNavigate={props.navigation.onNavigateLocation} onOpenSearch={props.navigation.onOpenSearch} />
       </div>
     );
   }
