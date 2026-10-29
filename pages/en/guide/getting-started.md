@@ -9,7 +9,7 @@ sshc is a terminal app that uses your existing OpenSSH configuration. Open SSH s
 
 ![A local shell open in a named workspace](/images/terminal-desktop.png)
 
-On desktop, the left navigation opens Home, Connections, SFTP, Menu, and your live terminals. On mobile, open the same navigation with the menu button or a swipe to the right across the screen, and close it by tapping outside it or swiping left. A swipe on the terminal or on something that scrolls sideways does not open it.
+On desktop, the left navigation opens Home, Connections, SFTP, Menu, and your live terminals. On mobile, Connections, SFTP, and Menu are in the bar at the bottom of the screen. The navigation lists Home and your live terminals: open it with the menu button or a swipe to the right across the screen, and close it by tapping outside it or swiping left. A swipe on the terminal or on something that scrolls sideways does not open it.
 
 ## When to use it
 

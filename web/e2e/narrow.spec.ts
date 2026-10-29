@@ -6,7 +6,10 @@ import { answerNoVPNProfiles } from "./support/vpn";
 
 const hosts = "Host alpha\n\tHostName 198.51.100.10\n\nHost bravo\n\tHostName 198.51.100.11\n";
 
-async function openSectionThroughDrawer(
+// openSectionOnPhone goes the way a phone does: through the bar at the bottom, and through its Menu for
+// the sections the bar does not hold. A terminal covers the bar with its own top bar; Home in the drawer
+// brings the bar back.
+async function openSectionOnPhone(
   page: import("@playwright/test").Page,
   name: string,
   heading = name,
@@ -20,13 +23,16 @@ async function openSectionThroughDrawer(
     await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
     return;
   }
-  await page.getByRole("button", { name: "Navigation", exact: true }).click();
-  const navigation = page.getByRole("navigation", { name: "Primary" });
-  const direct = navigation.getByRole("link", { name, exact: true });
+  const bar = page.getByRole("navigation", { name: "Quick navigation" });
+  if (await bar.count() === 0) {
+    await page.getByRole("button", { name: "Navigation", exact: true }).click();
+    await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home", exact: true }).click();
+  }
+  const direct = bar.getByRole("link", { name, exact: true });
   if (await direct.count()) {
     await direct.click();
   } else {
-    await navigation.getByRole("link", { name: "Menu", exact: true }).click();
+    await bar.getByRole("link", { name: "Menu", exact: true }).click();
     await page.getByRole("link", { name: `Open ${name}`, exact: true }).click();
   }
   await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
@@ -87,7 +93,7 @@ test("moves from the compact connection browser to detail at 360 pixels", async 
   await installation.write("connections/home/eu/api.conf", "Host eu-api\n\tHostName 198.51.100.21\n\tUser aida\n");
   await installation.write("conf.d/10-home.conf", "");
   await openApplication(page, installation);
-  await openSectionThroughDrawer(page, "Connections");
+  await openSectionOnPhone(page, "Connections");
   const browser = page.getByRole("navigation", { name: "Connections" });
   await expect(browser.getByRole("button", { name: "Group: All" })).toBeVisible();
   await expect(browser.getByRole("group", { name: "Arrange connections by" })).toHaveCount(0);
@@ -190,7 +196,7 @@ test("keeps password setup inside 360 pixels without a decorative icon", async (
   await page.getByLabel("Confirm master password", { exact: true }).fill(masterPassword);
   await page.getByRole("button", { name: "Create the vault" }).click();
   await expect(sessionStatus(page)).toContainText("Local session active");
-  await openSectionThroughDrawer(page, "Account passwords", "Account passwords");
+  await openSectionOnPhone(page, "Account passwords", "Account passwords");
   await page.getByRole("button", { name: "Lock sshc" }).click();
 
   await expect(page.getByText("Enter your master password to unlock sshc.")).toBeVisible();
@@ -312,18 +318,21 @@ test("shows the version beside the brand in the mobile drawer", async ({ page, i
     expect(Math.abs(versionBox.y + versionBox.height / 2 - statusBox.y - statusBox.height / 2)).toBeLessThanOrEqual(1);
   }
 
-  const menu = navigation.getByRole("link", { name: "Menu", exact: true });
-  // The first workspace of the tree sits right under Menu; its sessions and
+  // The bar at the bottom holds the other sections and Menu, so the drawer links only Home.
+  await expect(navigation.getByRole("list", { name: "Start" }).getByRole("link")).toHaveText(["Home"]);
+  await expect(navigation.getByRole("link", { name: "Menu", exact: true })).toHaveCount(0);
+  const home = navigation.getByRole("link", { name: "Home", exact: true });
+  // The first workspace of the tree sits right under Home; its sessions and
   // the new session button follow it.
   const localShell = navigation.getByRole("button", { name: /^Main/ });
-  const [menuBox, shellBox] = await Promise.all([menu.boundingBox(), localShell.boundingBox()]);
-  expect(menuBox).not.toBeNull();
+  const [homeBox, shellBox] = await Promise.all([home.boundingBox(), localShell.boundingBox()]);
+  expect(homeBox).not.toBeNull();
   expect(shellBox).not.toBeNull();
-  if (menuBox !== null && shellBox !== null) {
+  if (homeBox !== null && shellBox !== null) {
     expect(shellBox.height).toBeGreaterThanOrEqual(44);
-    expect(menuBox.height).toBeGreaterThanOrEqual(44);
+    expect(homeBox.height).toBeGreaterThanOrEqual(44);
     // Between them sit only the Workspaces heading and its actions button.
-    expect(shellBox.y - (menuBox.y + menuBox.height)).toBeLessThanOrEqual(96);
+    expect(shellBox.y - (homeBox.y + homeBox.height)).toBeLessThanOrEqual(96);
   }
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-mobile-drawer-dark.png`, fullPage: true });
@@ -340,17 +349,20 @@ test("uses established product names in the Japanese navigation", async ({ page,
   await expect(quickConnect).toBeVisible();
   await expect(quickConnect).not.toContainText(">_");
 
+  // A phone holds the sections in the bar at the bottom; the drawer links only Home.
+  const bar = page.getByRole("navigation", { name: "クイックナビゲーション" });
+  for (const section of ["Home", "Connections", "SFTP", "Menu"]) {
+    await expect(bar.getByRole("link", { name: section, exact: true })).toBeVisible();
+  }
   await page.getByRole("button", { name: "ナビゲーション", exact: true }).click();
   const navigation = page.getByRole("navigation", { name: "メインナビゲーション" });
 
-  await expect(navigation.getByRole("link", { name: "Menu", exact: true })).toBeVisible();
-  for (const section of ["Home", "Connections", "SFTP"]) {
-    await expect(navigation.getByRole("link", { name: section, exact: true })).toBeVisible();
-  }
+  await expect(navigation.getByRole("link", { name: "Home", exact: true })).toBeVisible();
   await expect(navigation.getByText("Workspaces", { exact: true })).toBeVisible();
   await expect(navigation.getByRole("button", { name: "新しいセッション", exact: true })).toBeVisible();
   await expect(navigation.getByRole("tab")).toHaveCount(0);
-  await navigation.getByRole("link", { name: "Menu", exact: true }).click();
+  await page.locator("[data-navigation-backdrop]").click({ position: { x: 340, y: 200 } });
+  await bar.getByRole("link", { name: "Menu", exact: true }).click();
 
   for (const group of ["Configuration", "Security", "Vault", "Settings", "Tools"]) {
     await expect(page.getByRole("heading", { name: group, exact: true })).toBeVisible();
@@ -463,8 +475,7 @@ test("keeps mobile navigation and display controls predictable at 360 and 390 pi
   await expect(page.getByRole("button", { name: "Navigation", exact: true })).toBeFocused();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "Navigation", exact: true }).click();
-  await primaryNavigation.getByRole("link", { name: "Menu", exact: true }).click();
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Menu", exact: true }).click();
   const menu = page.getByRole("region", { name: "Menu" });
   await expect(menu.getByRole("heading", { name: "Preferences" })).toBeVisible();
   await expect(menu.getByLabel("Theme")).toHaveCount(0);
@@ -486,7 +497,7 @@ test("keeps the removed connection view switch absent and Config structure align
   await installation.write("conf.d/20-lab.conf", hosts);
   await openApplication(page, installation);
 
-  await openSectionThroughDrawer(page, "Connections", "Connections");
+  await openSectionOnPhone(page, "Connections", "Connections");
   await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
   await page.reload();
   await expect(page.getByRole("group", { name: "接続の並べ方" })).toHaveCount(0);
@@ -590,7 +601,7 @@ test("keeps every section inside 360 pixels", async ({ page, installation }) => 
   }
 
   for (const section of everySection) {
-    await openSectionThroughDrawer(page, section.navigation, section.heading);
+    await openSectionOnPhone(page, section.navigation, section.heading);
     await expectNoHorizontalOverflow(page, section.navigation);
     await expectNothingCutOff(page, section.navigation);
     await expectIconsCentered(page, section.navigation);
@@ -679,27 +690,31 @@ test("keeps Menu in mobile history after opening SSH Config", async ({ page, ins
   const restingLeft = await drawer.evaluate((element) => element.getBoundingClientRect().left);
   expect(restingLeft).toBeLessThan(0);
 
-  await hamburger.click();
-  await expect(hamburger).toHaveAttribute("aria-expanded", "true");
-  await drawer.getByRole("link", { name: "Menu", exact: true }).click();
-
+  // Menu is in the bar at the bottom, not in the drawer.
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Menu", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
-  await expect(hamburger).toHaveAttribute("aria-expanded", "false");
   await page.getByRole("link", { name: "Open Config", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "Configuration files", exact: true })).toBeVisible();
-  await expect
-    .poll(() => drawer.evaluate((element) => element.getBoundingClientRect().left))
-    .toBeLessThan(0);
 
   await page.goBack();
   await expect(page).toHaveURL(/\/menu$/);
   await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
+
+  // A link in the drawer closes it as it goes.
+  await hamburger.click();
+  await expect(hamburger).toHaveAttribute("aria-expanded", "true");
+  await drawer.getByRole("link", { name: "Home", exact: true }).click();
+  await expect(page).toHaveURL(new URL("/", installation.url).toString());
+  await expect(hamburger).toHaveAttribute("aria-expanded", "false");
+  await expect
+    .poll(() => drawer.evaluate((element) => element.getBoundingClientRect().left))
+    .toBeLessThan(0);
 });
 
 test("keeps key actions in the list and opens private material in a modal", async ({ page, installation }) => {
   await openApplication(page, installation);
-  await openSectionThroughDrawer(page, "Keys");
+  await openSectionOnPhone(page, "Keys");
   await page.getByLabel("File name").fill("id_keys_layout");
   await page.getByLabel(/Create without a passphrase/).check();
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
@@ -749,7 +764,7 @@ test("lets the connection detail replace the list and hands back a way out", asy
 }) => {
   await installation.write("conf.d/20-lab.conf", hosts);
   await openApplication(page, installation);
-  await openSectionThroughDrawer(page, "Connections");
+  await openSectionOnPhone(page, "Connections");
 
   const tree = page.getByRole("navigation", { name: "Connections" });
   await expect(tree.getByRole("button", { name: "alpha", exact: true })).toBeVisible();
