@@ -61,6 +61,8 @@ import {
   Unplug,
   Upload,
   X,
+  ZoomIn,
+  ZoomOut,
   type LucideIcon,
 } from "lucide-react";
 
@@ -120,6 +122,8 @@ const shapes = {
   pause: Pause,
   upload: Upload,
   download: Download,
+  zoomIn: ZoomIn,
+  zoomOut: ZoomOut,
   delete: Trash2,
   warning: TriangleAlert,
   edit: Pencil,
