@@ -234,7 +234,7 @@ export function TerminalStartFields({ draft, edit, profiles }: GroupProps & { pr
   );
 }
 
-type Switch = "copyOnSelect" | "rightClickPaste" | "osc52" | "jisYenBackslash" | "composerEnterSends" | "webgl" | "ligatures" | "statusLine";
+type Switch = "copyOnSelect" | "rightClickPaste" | "osc52" | "jisYenBackslash" | "composerEnterSends" | "webgl" | "ligatures" | "statusLine" | "commandMarks" | "stickyCommand" | "commandScrollbarMarks";
 
 // In reading order: two to a row on a computer.
 const switches: { key: Switch; label: MessageKey; hint: MessageKey }[] = [
@@ -246,6 +246,9 @@ const switches: { key: Switch; label: MessageKey; hint: MessageKey }[] = [
   { key: "webgl", label: "terminal.webglLabel", hint: "terminal.webglHint" },
   { key: "ligatures", label: "terminal.ligaturesLabel", hint: "terminal.ligaturesHint" },
   { key: "statusLine", label: "terminal.statusLineLabel", hint: "terminal.statusLineHint" },
+  { key: "commandMarks", label: "terminal.commandMarksLabel", hint: "terminal.commandMarksHint" },
+  { key: "stickyCommand", label: "terminal.stickyCommandLabel", hint: "terminal.stickyCommandHint" },
+  { key: "commandScrollbarMarks", label: "terminal.commandScrollbarMarksLabel", hint: "terminal.commandScrollbarMarksHint" },
 ];
 
 // The clipboard, keyboard and drawing switches, in two columns with a line between rows. The first row of

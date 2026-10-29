@@ -2310,6 +2310,8 @@ type TerminalSessionList struct {
 type TerminalSettings struct {
 	Appearance             *TerminalAppearance `json:"appearance,omitempty"`
 	BrowserScrollbackLines *int                `json:"browserScrollbackLines,omitempty"`
+	CommandMarks           *bool               `json:"commandMarks,omitempty"`
+	CommandScrollbarMarks  *bool               `json:"commandScrollbarMarks,omitempty"`
 	ComposerEnterSends     *bool               `json:"composerEnterSends,omitempty"`
 	CopyOnSelect           *bool               `json:"copyOnSelect,omitempty"`
 	FontSize               *int                `json:"fontSize,omitempty"`
@@ -2324,6 +2326,7 @@ type TerminalSettings struct {
 	ScrollbackBytes        *int                `json:"scrollbackBytes,omitempty"`
 	StartDirectory         *string             `json:"startDirectory,omitempty"`
 	StatusLine             *bool               `json:"statusLine,omitempty"`
+	StickyCommand          *bool               `json:"stickyCommand,omitempty"`
 	Verbosity              *int                `json:"verbosity,omitempty"`
 	Webgl                  *bool               `json:"webgl,omitempty"`
 }

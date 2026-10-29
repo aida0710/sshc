@@ -39,6 +39,11 @@ import type { LigatureDrawing } from "./ligatures";
 import { createTerminalView } from "./createTerminalView";
 import { terminalCopyActions } from "./terminalCopyActions";
 import { attachTerminalSequences } from "./attachTerminalSequences";
+import type { CommandBlock } from "./commandBlocks";
+import { attachCommandDisplay, type CommandDisplay } from "./commandDisplay";
+import { TerminalCommandCard } from "./TerminalCommandCard";
+import { TerminalCommandHeader } from "./TerminalCommandHeader";
+import { useCommandCard } from "./useCommandCard";
 import { useTerminalPathPreview } from "./useTerminalPathPreview";
 import { isTerminalShown, watchTerminalShown } from "./terminalVisibility";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
@@ -111,6 +116,11 @@ type TerminalViewProps = {
   // statusLine shows the VT320 status line a program shows (statusLine.ts). When off, what is written
   // to it stays off the screen too.
   statusLine?: boolean;
+  // With shell integration (OSC 133): the marks left of each command (commandGutter.ts), the command kept
+  // above its output while that is scrolled through, and the marks on the scrollbar.
+  commandMarks?: boolean;
+  stickyCommand?: boolean;
+  commandScrollbarMarks?: boolean;
 };
 
 // The status line takes exactly one row from the screen. Its padding above and below its row (index.css)
@@ -160,6 +170,9 @@ export function TerminalView({
   composerEnterSends = false,
   ligatures = false,
   statusLine: statusLineEnabled = true,
+  commandMarks = true,
+  stickyCommand = true,
+  commandScrollbarMarks = true,
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
@@ -202,6 +215,15 @@ export function TerminalView({
   const copyContext = useRef<() => void>(() => {});
   const copyWithColors = useRef<() => void>(() => {});
   const saveScrollback = useRef<() => void>(() => {});
+  const commandOutput = useRef<{ copy: (block: CommandBlock) => void; save: (block: CommandBlock) => void } | null>(null);
+  const commandDisplay = useRef<CommandDisplay | null>(null);
+  const commandMarksRef = useRef(commandMarks);
+  commandMarksRef.current = commandMarks;
+  const commandScrollbarMarksRef = useRef(commandScrollbarMarks);
+  commandScrollbarMarksRef.current = commandScrollbarMarks;
+  const commandCard = useCommandCard();
+  // topCommand is the command whose output fills the top of the view while its prompt is above it.
+  const [topCommand, setTopCommand] = useState<CommandBlock | null>(null);
   const [osc52Enabled, setOsc52Enabled] = useState(initialOsc52Enabled);
   const osc52EnabledRef = useRef(initialOsc52Enabled);
   osc52EnabledRef.current = osc52Enabled;
@@ -308,6 +330,7 @@ export function TerminalView({
     saveScrollback.current = copyActions.saveScrollback;
     copyWithColors.current = copyActions.copyWithColors;
     copyContext.current = copyActions.copyContext;
+    commandOutput.current = { copy: copyActions.copyCommandOutput, save: copyActions.saveCommandOutput };
 
     const statusLineTerminal = createStatusLineTerminal(view);
     statusLine.current = statusLineTerminal;
@@ -331,6 +354,14 @@ export function TerminalView({
       setProgress: setProgramProgress,
     });
     const { kittyClipboard, prompt, prompts } = sequences;
+    commandDisplay.current = attachCommandDisplay(view, sequences.commandBlocks, {
+      container,
+      marks: () => commandMarksRef.current,
+      scrollbarMarks: () => commandScrollbarMarksRef.current,
+      point: commandCard.point,
+      leave: commandCard.leave,
+      topChanged: setTopCommand,
+    });
     promptJump.current = prompts;
     const detachPromptJumpKeys = attachPromptJumpKeys(container, prompts);
     promptCursor.current = prompt;
@@ -480,6 +511,11 @@ export function TerminalView({
       setStatusLineHeight(null);
       detachPromptClicks();
       detachPromptJumpKeys();
+      commandDisplay.current?.dispose();
+      commandDisplay.current = null;
+      commandOutput.current = null;
+      commandCard.close();
+      setTopCommand(null);
       sequences.dispose();
       promptJump.current = null;
       promptCursor.current = null;
@@ -539,6 +575,13 @@ export function TerminalView({
     if (terminal.current === null || host.current === null) return;
     terminal.current.options.theme = terminalTheme(host.current, hasBackground);
   }, [resolved, palette, hasBackground]);
+
+  // The command marks follow their settings and the theme's colours.
+  const { pointed: pointedCommand, close: closeCommandCard } = commandCard;
+  useEffect(() => {
+    commandDisplay.current?.refresh();
+    if (!commandMarks) closeCommandCard();
+  }, [commandMarks, commandScrollbarMarks, resolved, palette, closeCommandCard]);
 
   useEffect(() => {
     if (terminal.current === null) return;
@@ -724,6 +767,9 @@ export function TerminalView({
           style={statusLineHeight === null ? undefined : { height: `calc(${statusLineHeight}px + ${statusLinePadding})` }}
           className="absolute inset-x-0 bottom-0 overflow-hidden"
         />
+        {stickyCommand && topCommand !== null && !search.open ? (
+          <TerminalCommandHeader block={topCommand} onGoTo={() => terminal.current?.scrollToLine(topCommand.start.line)} />
+        ) : null}
         {search.open ? <TerminalSearchBar search={search} mobile={mobile} /> : null}
         {terminalNotice === "" ? null : (
           <ToastMessage role="status" className="absolute bottom-3 right-3 z-20 max-w-[min(24rem,calc(100%-1.5rem))]">
@@ -748,6 +794,17 @@ export function TerminalView({
           isRunTargetSession={runTarget !== undefined}
           {...(onForwardsChanged === undefined ? {} : { onChanged: onForwardsChanged })}
           onClose={() => setPortForwardsOpen(false)}
+        />
+      ) : null}
+      {commandMarks && pointedCommand !== null ? (
+        <TerminalCommandCard
+          block={pointedCommand.block}
+          mark={pointedCommand.mark}
+          onCopy={() => commandOutput.current?.copy(pointedCommand.block)}
+          onSave={() => commandOutput.current?.save(pointedCommand.block)}
+          onClose={commandCard.close}
+          onPointerEnter={commandCard.keep}
+          onPointerLeave={commandCard.leave}
         />
       ) : null}
       {linkSelection === null ? null : (

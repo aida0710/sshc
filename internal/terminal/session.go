@@ -472,13 +472,23 @@ func (s *Session) pump(now func() time.Time) {
 		s.mutex.Lock()
 		process, ready, generation := s.process, s.ready, s.generation
 		s.mutex.Unlock()
+		// commandTimes are the starts and ends of commands seen in the chunk being read (command_times.go).
+		var commandTimes []commandTime
 		observer := newOSCObserver(oscReports{
-			Title:           func(title string) { s.acceptTitle(generation, title) },
-			Notify:          func(title, body string) { s.acceptNotification(generation, title, body, now()) },
-			Progress:        func(progress *ProgramProgress) { s.acceptProgramProgress(generation, progress) },
-			Directory:       func(directory string) { s.acceptWorkingDirectory(generation, directory) },
-			CommandStarted:  func() { s.acceptCommandStarted(generation, now()) },
-			CommandFinished: func(exitCode *int) { s.acceptCommandFinished(generation, exitCode, now()) },
+			Title:     func(title string) { s.acceptTitle(generation, title) },
+			Notify:    func(title, body string) { s.acceptNotification(generation, title, body, now()) },
+			Progress:  func(progress *ProgramProgress) { s.acceptProgramProgress(generation, progress) },
+			Directory: func(directory string) { s.acceptWorkingDirectory(generation, directory) },
+			CommandStarted: func() {
+				at := now()
+				s.acceptCommandStarted(generation, at)
+				commandTimes = append(commandTimes, commandTime{kind: 'C', at: at})
+			},
+			CommandFinished: func(exitCode *int) {
+				at := now()
+				s.acceptCommandFinished(generation, exitCode, at)
+				commandTimes = append(commandTimes, commandTime{kind: 'D', at: at})
+			},
 		})
 		visibilityRequests := newVisibilityRequestObserver(func(request visibilityRequest) { s.acceptVisibilityRequest(generation, request) })
 		buffer := make([]byte, readChunk)
@@ -488,6 +498,10 @@ func (s *Session) pump(now func() time.Time) {
 				observer.Observe(buffer[:read])
 				visibilityRequests.Observe(buffer[:read])
 				s.publish(buffer[:read])
+				if len(commandTimes) > 0 {
+					s.publish(commandTimesSequence(commandTimes))
+					commandTimes = commandTimes[:0]
+				}
 			}
 			if err != nil {
 				break

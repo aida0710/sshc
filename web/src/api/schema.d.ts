@@ -4362,6 +4362,9 @@ export interface components {
             composerEnterSends?: boolean;
             ligatures?: boolean;
             statusLine?: boolean;
+            commandMarks?: boolean;
+            stickyCommand?: boolean;
+            commandScrollbarMarks?: boolean;
             localShellProfile?: string;
             startDirectory?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
@@ -4383,6 +4386,9 @@ export interface components {
             composerEnterSends?: boolean;
             ligatures?: boolean;
             statusLine?: boolean;
+            commandMarks?: boolean;
+            stickyCommand?: boolean;
+            commandScrollbarMarks?: boolean;
             localShellProfile?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
         };
