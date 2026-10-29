@@ -86,7 +86,7 @@ export function RunTargetSwitcher({
   return (
     <div ref={rootRef} className="relative pt-2">
       {open ? (
-        <div className="absolute bottom-full left-1 right-1 z-20 mb-1 rounded-lg border border-line bg-card p-1.5 shadow-lg">
+        <div className="absolute bottom-full left-1 right-1 z-20 mb-1 rounded-lg border border-line bg-card p-1.5 shadow-float">
           <p className="px-2 pb-1 pt-0.5 text-[11px] font-semibold text-ink-faint">{t("runTarget.heading")}</p>
           <ul aria-label={t("runTarget.heading")} className="flex flex-col gap-0.5">
             {row(null)}

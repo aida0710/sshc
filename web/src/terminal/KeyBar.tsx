@@ -117,7 +117,7 @@ export function KeyBar({
         {isModifierHeld(modifiers.alt) ? "Alt" : <Icon name="moreHorizontal" className="mx-auto size-4" />}
       </button>
       {extraOpen ? (
-        <div className="absolute inset-x-1 bottom-full z-30 mb-1 grid grid-cols-5 gap-1 rounded border border-line bg-toolbar p-1 shadow-lg">
+        <div className="absolute inset-x-1 bottom-full z-30 mb-1 grid grid-cols-5 gap-1 rounded border border-line bg-toolbar p-1 shadow-float">
           <ModifierKeyButton label="Alt" latch={modifiers.alt} onTap={tapAlt} />
           {extraKeys.map((label) => (
             <button key={label} type="button" onPointerDown={keepKeyboardAsIs} onMouseDown={keepKeyboardAsIs} onClick={() => press(label)} className={`${keyShape} ${idleKey}`}>{label}</button>

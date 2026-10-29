@@ -6,7 +6,7 @@ import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault"
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { Button, Notice } from "../ui/surface";
-import { PageHeader, phoneCardFrame } from "../ui/page";
+import { PageHeader, PageStateFrame, phoneCardFrame } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -101,10 +101,14 @@ export function SecretsPanel({
   }
 
   if (status === null) {
-    return error === "" ? (
-      <PanelState tone="loading" title={t("secrets.loading")} />
-    ) : (
-      <PanelState tone="failed" title={error} action={<Button onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>} />
+    return (
+      <PageStateFrame title={t(pages[kind].title)}>
+        {error === "" ? (
+          <PanelState tone="loading" title={t("secrets.loading")} />
+        ) : (
+          <PanelState tone="failed" title={error} action={<Button onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>} />
+        )}
+      </PageStateFrame>
     );
   }
 

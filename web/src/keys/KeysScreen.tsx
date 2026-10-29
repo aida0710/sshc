@@ -25,7 +25,7 @@ import { useTranslate } from "../i18n/context";
 import { primaryAction } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { Icon } from "../ui/icons";
-import { PageHeader, PageSection, SummaryStat, SummaryStats } from "../ui/page";
+import { PageHeader, PageSection, PageStateFrame, SummaryStat, SummaryStats } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { keysApi, type KeyItem, type KeysApi, type RelocateKeyResponse } from "./api";
 import type {
@@ -276,15 +276,21 @@ export function KeysScreen({
   }
 
   if (state === "loading") {
-    return <PanelState tone="loading" title={t("keys.reading")} />;
+    return (
+      <PageStateFrame title={t("keys.heading")}>
+        <PanelState tone="loading" title={t("keys.reading")} />
+      </PageStateFrame>
+    );
   }
   if (state === "error" || inventory === null || trash === null) {
     return (
-      <PanelState
-        tone="failed"
-        title={t("keys.unreadable")}
-        action={<Button onClick={() => void loadKeys()}>{t("shell.bootstrapRetry")}</Button>}
-      />
+      <PageStateFrame title={t("keys.heading")}>
+        <PanelState
+          tone="failed"
+          title={t("keys.unreadable")}
+          action={<Button onClick={() => void loadKeys()}>{t("shell.bootstrapRetry")}</Button>}
+        />
+      </PageStateFrame>
     );
   }
 

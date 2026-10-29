@@ -66,7 +66,7 @@ export function ModalShell({
         aria-modal="true"
         aria-labelledby={labelledBy}
         aria-describedby={describedBy}
-        className={`sshc-card sshc-modal-panel border border-control-line bg-card shadow-2xl ${panelClassName}`}
+        className={`sshc-card sshc-modal-panel border border-control-line bg-card shadow-overlay ${panelClassName}`}
       >
         {children}
       </section>
