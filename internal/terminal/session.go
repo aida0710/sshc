@@ -50,6 +50,8 @@ type Session struct {
 	notificationVersion uint64
 	lastNotification    *Notification
 	programProgress     *ProgramProgress
+	// programStatus holds the OSC 7501 records. See program_status_records.go.
+	programStatus programStatusRecords
 	// visibilityReports is whether the program turned visibility reports
 	// (mode 2033) on; visible is whether any attached browser may show the
 	// session. replies holds the answers on their way to the program. See
@@ -112,6 +114,8 @@ type View struct {
 	Progress *ConnectionProgress
 	// ProgramProgress is the current program's OSC 9;4 report, independent of SSH connection progress.
 	ProgramProgress *ProgramProgress
+	// ProgramStatus is the OSC 7501 record to show, or nil when there is none.
+	ProgramStatus *ProgramStatus
 	// Forwards は、このセッションが開いている転送である。
 	Forwards     []Forward
 	Presentation Presentation
@@ -207,6 +211,7 @@ func (s *Session) View() View {
 		progress := *s.programProgress
 		view.ProgramProgress = &progress
 	}
+	view.ProgramStatus = s.programStatus.summary()
 	if s.reconnectView != nil {
 		status := *s.reconnectView
 		view.Reconnect = &status
@@ -393,6 +398,10 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 	// linger on the pane while it starts.
 	s.resetTerminalTitleLocked()
 	s.programProgress = nil
+	// The old process is gone, and so is what it was doing. A result it left
+	// done or failed stays for the browser to show until it has been seen.
+	s.endActiveProgramStatusLocked()
+	s.programStatus.drop(ProgramStatusIdle)
 	s.commandStartedAt = time.Time{}
 	// The new shell asked for no reports; the old program's answers are not for it.
 	s.visibilityReports = false
@@ -477,10 +486,11 @@ func (s *Session) pump(now func() time.Time) {
 		// commandTimes are the starts and ends of commands seen in the chunk being read (command_times.go).
 		var commandTimes []commandTime
 		observer := newOSCObserver(oscReports{
-			Title:     func(title string) { s.acceptTitle(generation, title) },
-			Notify:    func(title, body string) { s.acceptNotification(generation, title, body, now()) },
-			Progress:  func(progress *ProgramProgress) { s.acceptProgramProgress(generation, progress) },
-			Directory: func(directory string) { s.acceptWorkingDirectory(generation, directory) },
+			Title:         func(title string) { s.acceptTitle(generation, title) },
+			Notify:        func(title, body string) { s.acceptNotification(generation, title, body, now()) },
+			Progress:      func(progress *ProgramProgress) { s.acceptProgramProgress(generation, progress) },
+			Directory:     func(directory string) { s.acceptWorkingDirectory(generation, directory) },
+			PromptStarted: func() { s.acceptPromptStarted(generation) },
 			CommandStarted: func() {
 				at := now()
 				s.acceptCommandStarted(generation, at)
@@ -491,6 +501,8 @@ func (s *Session) pump(now func() time.Time) {
 				s.acceptCommandFinished(generation, exitCode, at)
 				commandTimes = append(commandTimes, commandTime{kind: 'D', at: at})
 			},
+			ProgramStatus: func(report programStatusReport) { s.acceptProgramStatus(generation, report) },
+			Reset:         func() { s.acceptTerminalReset(generation) },
 		})
 		visibilityRequests := newVisibilityRequestObserver(func(request visibilityRequest) { s.acceptVisibilityRequest(generation, request) })
 		buffer := make([]byte, readChunk)

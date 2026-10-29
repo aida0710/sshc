@@ -26,6 +26,7 @@ description: sshcのTerminalが受け取るOSCと、画像やキーボードに�
 | 777 | 通知（rxvt形式、`notify;タイトル;本文`） | sshcエンジン | |
 | 1337 | iTerm2のインライン画像（`File=`） | ブラウザ | PNG、JPEG、GIFを表示します |
 | 5522 | Kitty clipboard protocol | ブラウザ | 書き込みは、OSC 52を有効にしているときだけ受け付け、text/plain、text/html、image/pngをクリップボードへ入れます。読み取りは断り、貼り付けの知らせ（mode 5522）で渡した一度きりのパスワードを付けたときだけ、貼り付けた中身を渡します |
+| 7501 | プログラムの状態（idle、working、blocked、done、error） | sshcエンジン | 問い合わせ（`?`）に答え、セッションごとに状態を記録します。シェルのプロンプト（OSC 133のA）が出たときとシェルが替わったときにworkingとblockedを消し、RIS（`ESC c`）ですべて消します。titleとmsgは制御文字を含むと受け取らず、書式の文字（文字の向きの指定など）を取り除きます |
 
 通知（9、99、777）は4096バイトを超えると、初めの部分だけを使います。未読の印、ブラウザ通知、通知音の出方は[タイトルと通知](/terminal/notifications)にあります。
 
@@ -34,7 +35,6 @@ description: sshcのTerminalが受け取るOSCと、画像やキーボードに�
 - 52の読み取り（クリップボードの中身をプログラムへ渡すこと）
 - 1337のうち`File=`以外（`SetUserVar`など）
 - 5522の、貼り付け以外の読み取りとprimary selection
-- 7501（プログラムの状態の知らせ）
 
 ## OSC以外
 
