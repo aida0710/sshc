@@ -22,6 +22,7 @@ function Harness({ initiallyOpen = false, onOpenChange }: { initiallyOpen?: bool
       <nav ref={panelRef} aria-label="navigation" />
       <p>page</p>
       <div data-terminal-host="">terminal</div>
+      <p>selected text</p>
       <span>{open ? "open" : "closed"}</span>
     </div>
   );
@@ -103,10 +104,37 @@ describe("useNavigationSwipe", () => {
     expect(panel.style.transform).toBe("");
   });
 
-  it("does not take a swipe that starts on the terminal", () => {
+  it("opens the navigation with a sideways swipe over the terminal, which scrolls only up and down", () => {
     const { onOpenChange } = renderHarness();
 
     swipe(screen.getByText("terminal"), [100, 400], [300, 400]);
+
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it("leaves a finger that pressed long before moving to the text it selects", () => {
+    const { onOpenChange, panel } = renderHarness();
+    const terminal = screen.getByText("terminal");
+
+    touch(terminal, "touchstart", 100, 400, 0);
+    touch(terminal, "touchmove", 102, 400, 450);
+    touch(terminal, "touchmove", 200, 400, 500);
+    touch(terminal, "touchmove", 300, 400, 600);
+    touch(terminal, "touchend", 300, 400, 610);
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(panel.style.transform).toBe("");
+  });
+
+  it("leaves a swipe that starts on selected text to the selection", () => {
+    const { onOpenChange } = renderHarness();
+    const selected = screen.getByText("selected text");
+    window.getSelection()?.selectAllChildren(selected);
+    try {
+      swipe(selected, [100, 400], [300, 400]);
+    } finally {
+      window.getSelection()?.removeAllRanges();
+    }
 
     expect(onOpenChange).not.toHaveBeenCalled();
   });

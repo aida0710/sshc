@@ -21,6 +21,7 @@ import { attachTouchScroll } from "./touchScroll";
 import { terminalTouchScrollTarget } from "./touchScrollTarget";
 import { KeyBar, applyModifiers, encodeKey } from "./KeyBar";
 import { useModifierKeys } from "./useModifierKeys";
+import type { ModifierName } from "./modifierLatch";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { createTerminalOutput } from "./output";
@@ -271,6 +272,8 @@ export function TerminalView({
   const streamLinkController = useRef<StreamLinkController | null>(null);
 
   const { modifiers, tap: tapModifier, takeModifiers } = useModifierKeys();
+  // The phone's text box, while it is shown (TerminalComposer).
+  const composerField = useRef<HTMLTextAreaElement>(null);
   const send = useRef<(name: string) => void>(() => {});
   const sendInput = useRef<(text: string) => void>(() => {});
   const promptCursor = useRef<PromptCursor | null>(null);
@@ -568,6 +571,12 @@ export function TerminalView({
         if (keys !== null) sendInput.current(keys);
         return false;
       },
+      // A phone types into its text box, where Japanese is composed before it is sent; the terminal
+      // takes the keys typed with the key bar's Ctrl or Alt (holdModifier below).
+      typingTarget: () => {
+        const field = composerField.current;
+        return field === null || field.disabled ? view : field;
+      },
     });
     refit.current?.();
     return () => {
@@ -634,6 +643,14 @@ export function TerminalView({
       : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
   const displayTitle = terminalDisplayTitle(session);
   const subtitle = terminalSubtitle(session, t);
+  // Ctrl and Alt apply to the next key typed into the terminal, so one held while typing in the text box
+  // moves the typing there, keeping the keyboard up. A closed keyboard stays closed: the key bar has already
+  // let go of the focus then (keepKeyboardAsIs).
+  function holdModifier(name: ModifierName) {
+    if (modifiers[name] === "off" && document.activeElement === composerField.current) terminal.current?.focus();
+    tapModifier(name);
+  }
+
   function submitComposer() {
     const plan = planComposerSend(composerText, { bracketedPaste: terminal.current?.modes.bracketedPasteMode ?? false });
     if (plan.kind === "confirm") {
@@ -859,13 +876,14 @@ export function TerminalView({
       )}
       <KeyBar
         modifiers={modifiers}
-        onTap={tapModifier}
+        onTap={holdModifier}
         onKey={(name) => send.current(name)}
       />
       <TerminalComposer
         value={composerText}
         disabled={link.phase !== "live"}
         enterSends={composerEnterSends}
+        fieldRef={composerField}
         onChange={setComposerText}
         onSubmit={submitComposer}
       />
