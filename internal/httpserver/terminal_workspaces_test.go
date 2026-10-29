@@ -3,6 +3,7 @@ package httpserver
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"testing"
 
 	"sshc/internal/api"
@@ -95,6 +96,8 @@ func TestWorkspaceRefusalsCarryTheirOwnCodes(t *testing.T) {
 		{http.MethodDelete, "/api/v1/terminal/workspaces/default", "", http.StatusConflict, "terminal_workspace_built_in"},
 		{http.MethodPost, "/api/v1/terminal/workspaces", `{"name":"   "}`, http.StatusBadRequest, "invalid_terminal_workspace_name"},
 		{http.MethodPatch, "/api/v1/terminal/workspaces/missing", `{"hidden":true}`, http.StatusNotFound, "terminal_workspace_not_found"},
+		{http.MethodPut, "/api/v1/terminal/workspaces/missing/position", `{}`, http.StatusNotFound, "terminal_workspace_not_found"},
+		{http.MethodPut, "/api/v1/terminal/workspaces/default/position", `{"beforeId":"missing"}`, http.StatusNotFound, "terminal_workspace_not_found"},
 		{http.MethodPut, "/api/v1/terminal/sessions/missing/workspace", `{"workspaceId":"default"}`, http.StatusNotFound, "terminal_session_not_found"},
 	} {
 		response, body := fixture.do(t, tc.method, tc.path, tc.body)
@@ -110,5 +113,33 @@ func TestHidingAndRenamingAWorkspaceIsKept(t *testing.T) {
 	updated := decodeAs[api.TerminalWorkspace](t, body)
 	if response.StatusCode != http.StatusOK || updated.Name != "メイン" || !updated.Hidden {
 		t.Fatalf("update = %d %s", response.StatusCode, body)
+	}
+}
+
+func TestAMovedWorkspaceIsListedInItsNewPlace(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.DefaultLimits())
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/workspaces", `{"name":"sshc開発"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("create = %d %s", response.StatusCode, body)
+	}
+	created := decodeAs[api.TerminalWorkspace](t, body)
+	response, body = fixture.do(t, http.MethodPut, "/api/v1/terminal/workspaces/"+created.Id+"/position", `{"beforeId":"default"}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("move = %d %s", response.StatusCode, body)
+	}
+	workspaceIDs := func(list api.TerminalWorkspaceList) []string {
+		listed := make([]string, 0, len(list.Workspaces))
+		for _, workspace := range list.Workspaces {
+			listed = append(listed, workspace.Id)
+		}
+		return listed
+	}
+	want := []string{created.Id, terminalworkspace.DefaultID, terminalworkspace.AgentsID}
+	if got := workspaceIDs(decodeAs[api.TerminalWorkspaceList](t, body)); !slices.Equal(got, want) {
+		t.Fatalf("answered order = %v, want %v", got, want)
+	}
+	_, body = fixture.do(t, http.MethodGet, "/api/v1/terminal/workspaces", "")
+	if got := workspaceIDs(decodeAs[api.TerminalWorkspaceList](t, body)); !slices.Equal(got, want) {
+		t.Fatalf("listed order = %v, want %v", got, want)
 	}
 }

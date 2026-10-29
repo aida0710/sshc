@@ -16,6 +16,7 @@ func registerTerminalWorkspaceRoutes(engine *echo.Echo, handlers TerminalHandler
 	engine.POST("/api/v1/terminal/workspaces", handlers.CreateWorkspace)
 	engine.PATCH("/api/v1/terminal/workspaces/:id", handlers.UpdateWorkspace)
 	engine.DELETE("/api/v1/terminal/workspaces/:id", handlers.DeleteWorkspace)
+	engine.PUT("/api/v1/terminal/workspaces/:id/position", handlers.MoveWorkspace)
 	engine.PUT("/api/v1/terminal/sessions/:id/workspace", handlers.MoveSession)
 }
 
@@ -109,6 +110,30 @@ func (h TerminalHandlers) DeleteWorkspace(c *echo.Context) error {
 		return problem(c, http.StatusNotFound, "terminal_workspace_not_found")
 	}
 	if err := h.Workspaces.Delete(id, h.Registry.MoveWorkspaceSessions); err != nil {
+		return terminalWorkspaceProblem(c, err)
+	}
+	list, err := h.workspaceList()
+	if err != nil {
+		return terminalWorkspaceProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, list)
+}
+
+// MoveWorkspace は、ワークスペースを beforeId の前へ、無ければ末尾へ移し、新しい並びを返す。
+func (h TerminalHandlers) MoveWorkspace(c *echo.Context) error {
+	id, ok := identifierParam(c, "id")
+	if !ok {
+		return problem(c, http.StatusNotFound, "terminal_workspace_not_found")
+	}
+	var request api.MoveTerminalWorkspaceRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	beforeID := ""
+	if request.BeforeId != nil {
+		beforeID = *request.BeforeId
+	}
+	if err := h.Workspaces.Move(id, beforeID); err != nil {
 		return terminalWorkspaceProblem(c, err)
 	}
 	list, err := h.workspaceList()

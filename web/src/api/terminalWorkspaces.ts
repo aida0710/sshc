@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { patchJSON, postJSON } from "./guards";
+import { patchJSON, postJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -17,6 +17,9 @@ export type TerminalWorkspacesApi = {
   create(name: string): Promise<TerminalWorkspace>;
   update(id: string, change: UpdateTerminalWorkspaceRequest): Promise<TerminalWorkspace>;
   remove(id: string): Promise<TerminalWorkspaceList>;
+  // move puts the workspace before beforeId, or at the end when it is null,
+  // and answers every workspace in the new order.
+  move(id: string, beforeId: string | null): Promise<TerminalWorkspaceList>;
 };
 
 function validateList(value: unknown): TerminalWorkspaceList {
@@ -44,6 +47,9 @@ export function createTerminalWorkspacesApi(base: string): TerminalWorkspacesApi
     },
     async remove(id) {
       return validateList(await apiClient.mutate<unknown>(workspacePath(id), { method: "DELETE" }));
+    },
+    async move(id, beforeId) {
+      return validateList(await putJSON<unknown>(`${workspacePath(id)}/position`, beforeId === null ? {} : { beforeId }));
     },
   };
 }

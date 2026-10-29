@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { TerminalWorkspace } from "../api/terminalWorkspaces";
-import { groupSessionsByWorkspace, orderWithGroupReordered, orderWithSessionMovedInto, workspaceDisplayName } from "./workspaceGrouping";
+import { beforeIdForWorkspaceMove, groupSessionsByWorkspace, orderWithGroupReordered, orderWithSessionMovedInto, workspaceDisplayName } from "./workspaceGrouping";
 
 const workspaces: TerminalWorkspace[] = [
   { id: "default", name: "", hidden: false, builtIn: true },
@@ -31,6 +31,16 @@ describe("workspace grouping", () => {
     expect(workspaceDisplayName(t as never, workspaces[0]!)).toBe("workspace.defaultName");
     expect(workspaceDisplayName(t as never, workspaces[1]!)).toBe("workspace.agentsName");
     expect(workspaceDisplayName(t as never, workspaces[2]!)).toBe("sshc開発");
+  });
+
+  it("puts a workspace moved before another right in front of it", () => {
+    expect(beforeIdForWorkspaceMove(["default", "agents", "w1"], "w1", { targetId: "default", side: "before" })).toBe("default");
+  });
+
+  it("puts a workspace moved after another before the one that follows it, hidden or not", () => {
+    expect(beforeIdForWorkspaceMove(["default", "agents", "w1"], "w1", { targetId: "default", side: "after" })).toBe("agents");
+    expect(beforeIdForWorkspaceMove(["default", "agents", "w1"], "default", { targetId: "w1", side: "after" })).toBeNull();
+    expect(beforeIdForWorkspaceMove(["w1", "default", "agents"], "w1", { targetId: "default", side: "after" })).toBe("agents");
   });
 
   it("reorders one workspace without moving the sessions of another", () => {

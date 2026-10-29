@@ -40,6 +40,19 @@ export function orderWithGroupReordered(allSessionIds: readonly string[], reorde
   return allSessionIds.map((id) => members.has(id) ? next.shift() ?? id : id);
 }
 
+// Where a workspace is moved to: right before or right after the target workspace.
+export type WorkspacePlaceSide = "before" | "after";
+export type WorkspacePlace = { targetId: string; side: WorkspacePlaceSide };
+
+// The engine puts a moved workspace before another one, or at the end (null). Right after target is
+// before whatever follows target in the engine's whole list, hidden workspaces included, so the moved
+// workspace lands next to target even when a hidden one comes after it.
+export function beforeIdForWorkspaceMove(allWorkspaceIds: readonly string[], workspaceId: string, place: WorkspacePlace): string | null {
+  if (place.side === "before") return place.targetId;
+  const rest = allWorkspaceIds.filter((id) => id !== workspaceId);
+  return rest[rest.indexOf(place.targetId) + 1] ?? null;
+}
+
 // A session dragged into another workspace lands before the session it was
 // dropped on, or after that workspace's last session when it was dropped on the
 // workspace itself. An empty workspace has no place to give, so the session

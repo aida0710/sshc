@@ -17,6 +17,7 @@ export type TerminalWorkspacesState = {
   create: (name: string) => Promise<TerminalWorkspace | null>;
   update: (id: string, change: UpdateTerminalWorkspaceRequest) => Promise<boolean>;
   remove: (id: string) => Promise<boolean>;
+  move: (id: string, beforeId: string | null) => Promise<boolean>;
 };
 
 // The engine's terminal workspaces. The list is read again whenever a session
@@ -100,7 +101,19 @@ export function useTerminalWorkspaces({
     return true;
   }, [api, onSessionsMoved, run]);
 
-  return { workspaces, maxWorkspaces, problem, create, update, remove };
+  const move = useCallback(async (id: string, beforeId: string | null) => {
+    const listed = await run(() => api.move(id, beforeId));
+    if (listed === null) {
+      // The workspace or its neighbour is gone (another tab deleted it), so the tree is drawn from the
+      // engine's list again.
+      await reload();
+      return false;
+    }
+    setWorkspaces(listed.workspaces);
+    return true;
+  }, [api, reload, run]);
+
+  return { workspaces, maxWorkspaces, problem, create, update, remove, move };
 }
 
 function workspaceProblemKey(code: string): MessageKey {
