@@ -35,7 +35,7 @@ func TestNativeBuildRejectsInvalidExplicitInputs(t *testing.T) {
 		{name: "empty architecture", args: []string{"build", "--goos", "linux", "--goarch", "", "--output", "dist/sshc", "--cgo", "0"}, wantErr: "GOARCH is required"},
 		{name: "empty output", args: []string{"build", "--goos", "linux", "--goarch", "amd64", "--output", "", "--cgo", "0"}, wantErr: "OUTPUT is required"},
 		{name: "empty cgo", args: []string{"build", "--goos", "linux", "--goarch", "amd64", "--output", "dist/sshc", "--cgo", ""}, wantErr: "CGO is required"},
-		{name: "unsupported OS", args: []string{"build", "--goos", "freebsd", "--goarch", "amd64", "--output", "dist/sshc", "--cgo", "0"}, wantErr: "unsupported GOOS"},
+		{name: "unsupported OS", args: []string{"build", "--goos", "plan9", "--goarch", "amd64", "--output", "dist/sshc", "--cgo", "0"}, wantErr: "unsupported GOOS"},
 		{name: "unsupported architecture", args: []string{"build", "--goos", "linux", "--goarch", "386", "--output", "dist/sshc", "--cgo", "0"}, wantErr: "unsupported GOARCH"},
 		{name: "invalid cgo", args: []string{"build", "--goos", "linux", "--goarch", "amd64", "--output", "dist/sshc", "--cgo", "2"}, wantErr: "CGO must be 0 or 1"},
 		{name: "directory output", args: []string{"build", "--goos", "linux", "--goarch", "amd64", "--output", ".", "--cgo", "0"}, wantErr: "OUTPUT must name a file"},

@@ -1,11 +1,11 @@
 ---
 title: インストール
-description: macOS、Linux、Windows、Androidにsshcをインストールする。
+description: macOS、Linux、FreeBSD、OpenBSD、Windows、Androidにsshcをインストールする。
 ---
 
 # インストール
 
-sshcはmacOS、Linux、Windows、Androidで利用できるターミナルアプリです。デスクトップ版では、1つの`sshc`バイナリがsshcエンジン、CLI、Web UIを提供しています。
+sshcはmacOS、Linux、FreeBSD、OpenBSD、Windows、Androidで利用できるターミナルアプリです。デスクトップ版では、1つの`sshc`バイナリがsshcエンジン、CLI、Web UIを提供しています。
 
 ## macOS / Linux
 
@@ -23,6 +23,22 @@ SSHC_VERSION=v0.58.1 sh -c \
 ```
 
 導入後は`sshc update`で更新できます。Homebrewで入れた場合はHomebrewから、`install.sh`で入れた場合は同じ配布元から更新されます。スクリプトなどで確認を省略する場合は、`sshc update --yes`を指定してください。
+
+## FreeBSD / OpenBSD
+
+FreeBSDとOpenBSD（amd64・arm64）向けのバイナリは、v0.58.1より後のリリースから配布しています。Homebrewは使えないので、インストールスクリプトで導入します。curlもwgetも無ければ、スクリプトはFreeBSDのベースシステムの`fetch`、OpenBSDの`ftp`で取得し、`sha256`でSHA-256を確かめます。
+
+```sh
+# FreeBSD
+SSHC_VERSION=v0.58.1 sh -c \
+  'fetch -qo - https://raw.githubusercontent.com/aida0710/sshc/v0.58.1/install.sh | sh'
+
+# OpenBSD
+SSHC_VERSION=v0.58.1 sh -c \
+  'ftp -Vo - https://raw.githubusercontent.com/aida0710/sshc/v0.58.1/install.sh | sh'
+```
+
+`sshc update`での更新はmacOS・Linuxの`install.sh`版と同じです。`sshc service install`には対応していません。ログインしたあとも動かし続けるには、tmuxやscreenの中で`sshc engine`を実行してください。
 
 ## Windows
 

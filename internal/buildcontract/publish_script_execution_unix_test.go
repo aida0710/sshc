@@ -30,6 +30,10 @@ func publishedReleaseAssets() []string {
 		"sshc-darwin-arm64",
 		"sshc-linux-amd64",
 		"sshc-linux-arm64",
+		"sshc-freebsd-amd64",
+		"sshc-freebsd-arm64",
+		"sshc-openbsd-amd64",
+		"sshc-openbsd-arm64",
 		"sshc-windows-amd64.exe",
 		"sshc-windows-arm64.exe",
 	}

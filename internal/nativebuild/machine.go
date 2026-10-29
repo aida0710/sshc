@@ -16,7 +16,14 @@ func VerifyBinaryArchitecture(path, goos, goarch string) error {
 	case "darwin":
 		return verifyMachO(path, goarch)
 	case "linux", "android":
-		return verifyELF(path, goarch)
+		return verifyELF(path, goarch, nil)
+	// Go marks FreeBSD and OpenBSD binaries with their own ELF OS/ABI. A Linux
+	// binary, marked none (or GNU when an external linker added GNU extensions),
+	// is not checked for one.
+	case "freebsd":
+		return verifyELF(path, goarch, &freeBSDABI)
+	case "openbsd":
+		return verifyELF(path, goarch, &openBSDABI)
 	default:
 		return fmt.Errorf("no way to read the architecture of a %s binary", goos)
 	}
@@ -63,7 +70,13 @@ func verifyMachO(path, goarch string) error {
 	return nil
 }
 
-func verifyELF(path, goarch string) error {
+var (
+	freeBSDABI = elf.ELFOSABI_FREEBSD
+	openBSDABI = elf.ELFOSABI_OPENBSD
+)
+
+// verifyELF checks the machine and, when wantABI is set, the OS/ABI byte.
+func verifyELF(path, goarch string, wantABI *elf.OSABI) error {
 	file, err := elf.Open(path)
 	if err != nil {
 		return fmt.Errorf("read %s as an ELF binary: %w", path, err)
@@ -79,6 +92,9 @@ func verifyELF(path, goarch string) error {
 	}
 	if file.Machine != want {
 		return fmt.Errorf("%s is machine %s, want %s for %s", path, file.Machine, want, goarch)
+	}
+	if wantABI != nil && file.OSABI != *wantABI {
+		return fmt.Errorf("%s is OS/ABI %s, want %s", path, file.OSABI, *wantABI)
 	}
 	return nil
 }

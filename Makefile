@@ -117,7 +117,7 @@ build-cli:
 # Linux では /etc/passwd を参照できるため CGO_ENABLED=0 とする。
 #
 # RELEASE_TARGETS は公開する CLI 成果物の一覧と一致させる。
-RELEASE_TARGETS = darwin/arm64:1 darwin/amd64:1 linux/amd64:0 linux/arm64:0 windows/amd64:0 windows/arm64:0
+RELEASE_TARGETS = darwin/arm64:1 darwin/amd64:1 linux/amd64:0 linux/arm64:0 freebsd/amd64:0 freebsd/arm64:0 openbsd/amd64:0 openbsd/arm64:0 windows/amd64:0 windows/arm64:0
 RELEASE_CURRENT_ARCHES = amd64 arm64
 RELEASE_DIR ?= dist
 

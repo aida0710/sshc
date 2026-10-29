@@ -36,6 +36,9 @@ type installScriptSetup struct {
 	// runningEngineVersion は、PATHに置くsshcの偽物が`sshc status --json`で答える、動いている
 	// engineのバージョンである。空ならsshcの無いマシンになる。
 	runningEngineVersion string
+	// bsdDownloader は、curlの代わりに置くBSDのベースシステムの取得の道具（fetchかftp）である。
+	// 置くときは、sha256sumとshasumの代わりにsha256も置く。空ならcurlのあるマシンになる。
+	bsdDownloader string
 }
 
 // signedInGitHubCLI は、github.comにログインしたghの偽物である。attestation verifyは、
@@ -102,13 +105,18 @@ var installScriptSystemTools = []string{
 }
 
 // linkInstallScriptSystemTools は、installScriptSystemToolsをdirectoryへsymlinkで並べる。
-// sha256sumとshasumは、install.shがどちらか一方で足りるので、無いものは飛ばす。
-func linkInstallScriptSystemTools(t *testing.T, directory string) {
+// sha256sumとshasumは、install.shがどちらか一方で足りるので、無いものは飛ばす。withoutChecksumTools
+// なら、どちらも並べない（BSDのsha256で確かめるマシン）。
+func linkInstallScriptSystemTools(t *testing.T, directory string, withoutChecksumTools bool) {
 	t.Helper()
 	for _, tool := range installScriptSystemTools {
+		isChecksumTool := tool == "sha256sum" || tool == "shasum"
+		if isChecksumTool && withoutChecksumTools {
+			continue
+		}
 		path, err := exec.LookPath(tool)
 		if err != nil {
-			if tool == "sha256sum" || tool == "shasum" {
+			if isChecksumTool {
 				continue
 			}
 			t.Skipf("install.sh needs %s", tool)
@@ -132,23 +140,6 @@ if [ -n "${SSHC_TEST_FAIL_MV_TO:-}" ] && [ "$destination" = "$SSHC_TEST_FAIL_MV_
 fi
 exec /bin/mv "$@"
 `,
-	"curl": `#!/bin/sh
-set -eu
-url=""
-output=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    -o) output=$2; shift 2 ;;
-    http*) url=$1; shift ;;
-    *) shift ;;
-  esac
-done
-case "$url" in
-  */checksums.txt) cp "$SSHC_TEST_FIXTURES/checksums.txt" "$output" ;;
-  */sshc-*) cp "$SSHC_TEST_FIXTURES/${url##*/}" "$output" ;;
-  *) exit 22 ;;
-esac
-`,
 	"uname": `#!/bin/sh
 case "$1" in
   -s) printf '%s\n' "$SSHC_TEST_UNAME_SYSTEM" ;;
@@ -166,9 +157,50 @@ exit 1
 `,
 }
 
-// installScriptAssets は、install.shが選びうるmacOSとLinuxの成果物の名前である。偽のunameが
+// fakeDownloader は、curl、FreeBSDのfetch、OpenBSDのftpの偽物である。どれも取得先を-oで受け、
+// URLの最後の名前の配布物かchecksums.txtを置く。ほかの引数は読み飛ばす。
+const fakeDownloader = `#!/bin/sh
+set -eu
+url=""
+output=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) output=$2; shift 2 ;;
+    http*) url=$1; shift ;;
+    *) shift ;;
+  esac
+done
+case "$url" in
+  */checksums.txt) cp "$SSHC_TEST_FIXTURES/checksums.txt" "$output" ;;
+  */sshc-*) cp "$SSHC_TEST_FIXTURES/${url##*/}" "$output" ;;
+  *) exit 22 ;;
+esac
+`
+
+// fakeBSDSHA256 は、FreeBSDとOpenBSDのsha256の偽物である。-qで値だけを出す形にだけ答え、
+// 計算はホストのsha256sumかshasum（checksumCommand）に任せる。
+func fakeBSDSHA256(t *testing.T) string {
+	t.Helper()
+	checksumCommand := ""
+	if path, err := exec.LookPath("sha256sum"); err == nil {
+		checksumCommand = path
+	} else if path, err := exec.LookPath("shasum"); err == nil {
+		checksumCommand = path + " -a 256"
+	} else {
+		t.Skip("neither sha256sum nor shasum is available to stand behind sha256")
+	}
+	return `#!/bin/sh
+[ "$1" = -q ] || exit 64
+` + checksumCommand + ` "$2" | cut -d' ' -f1
+`
+}
+
+// installScriptAssets は、install.shが選びうる成果物の名前である。偽のunameが
 // どれを名乗らせても取得できるよう、すべて同じ本文で用意する。
-var installScriptAssets = []string{"sshc-linux-amd64", "sshc-linux-arm64", "sshc-darwin-amd64", "sshc-darwin-arm64"}
+var installScriptAssets = []string{
+	"sshc-linux-amd64", "sshc-linux-arm64", "sshc-darwin-amd64", "sshc-darwin-arm64",
+	"sshc-freebsd-amd64", "sshc-freebsd-arm64", "sshc-openbsd-amd64", "sshc-openbsd-arm64",
+}
 
 // defaultFixturePlatform は、偽のunameが既定で名乗るLinuxのx86_64に対応する成果物の対象である。
 const defaultFixturePlatform = "linux/amd64"
@@ -219,7 +251,7 @@ func runInstallScriptWith(t *testing.T, setup installScriptSetup) installScriptR
 			t.Fatal(err)
 		}
 	}
-	linkInstallScriptSystemTools(t, systemTools)
+	linkInstallScriptSystemTools(t, systemTools, setup.bsdDownloader != "")
 	assetBody := setup.assetBody
 
 	digest := sha256.Sum256([]byte(assetBody))
@@ -235,6 +267,12 @@ func runInstallScriptWith(t *testing.T, setup installScriptSetup) installScriptR
 	}
 	for name, body := range installScriptCommands {
 		writeFakeCommand(t, filepath.Join(commands, name), body)
+	}
+	if setup.bsdDownloader == "" {
+		writeFakeCommand(t, filepath.Join(commands, "curl"), fakeDownloader)
+	} else {
+		writeFakeCommand(t, filepath.Join(commands, setup.bsdDownloader), fakeDownloader)
+		writeFakeCommand(t, filepath.Join(commands, "sha256"), fakeBSDSHA256(t))
 	}
 	if setup.gitHubCLI != "" {
 		writeFakeCommand(t, filepath.Join(commands, "gh"), setup.gitHubCLI)
@@ -473,6 +511,32 @@ func TestInstallScriptChoosesTheBuildForTheMacCPUEvenUnderRosetta(t *testing.T) 
 			}
 			if got := strings.Contains(run.output, "Rosetta 2"); got != test.wantRosettaNote {
 				t.Errorf("install.sh mentioned Rosetta 2 = %v, want %v:\n%s", got, test.wantRosettaNote, run.output)
+			}
+		})
+	}
+}
+
+// FreeBSDとOpenBSDには、curlもsha256sumも無いことがある。ベースシステムのfetch・ftpとsha256で
+// その OS の成果物を入れ、checksumも確かめる。
+func TestInstallScriptInstallsOnFreeBSDAndOpenBSDWithTheirBaseTools(t *testing.T) {
+	for _, test := range []struct{ system, machine, downloader, platform string }{
+		{system: "FreeBSD", machine: "amd64", downloader: "fetch", platform: "freebsd/amd64"},
+		{system: "OpenBSD", machine: "arm64", downloader: "ftp", platform: "openbsd/arm64"},
+	} {
+		t.Run(test.system, func(t *testing.T) {
+			run := runInstallScriptWith(t, installScriptSetup{
+				assetBody:     assetReporting(fixtureVersionLine(test.platform)),
+				bsdDownloader: test.downloader,
+				environment:   []string{"SSHC_TEST_UNAME_SYSTEM=" + test.system, "SSHC_TEST_UNAME_MACHINE=" + test.machine},
+			})
+			if run.err != nil {
+				t.Fatalf("install.sh = %v\n%s", run.err, run.output)
+			}
+			asset := "sshc-" + strings.Replace(test.platform, "/", "-", 1)
+			for _, want := range []string{"sshc: installing " + asset + " (v9.8.7)", "checksum matches", "sshc: installed " + fixtureVersionLine(test.platform)} {
+				if !strings.Contains(run.output, want) {
+					t.Errorf("install.sh did not say %q:\n%s", want, run.output)
+				}
 			}
 		})
 	}
