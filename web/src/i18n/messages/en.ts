@@ -930,6 +930,7 @@ export const en = {
     "The private key needs a passphrase. Unlock the Vault or save the correct passphrase for this key.",
   "terminal.vpnRouteRefused": "The VPN route cannot be prepared, so automatic reconnection was stopped. Check the reason shown in the terminal.",
   "terminal.vpnRouteDisconnected": "The VPN route was disconnected, so the connection was cancelled. Connecting again starts the VPN route first.",
+  "terminal.rowProblem": "Could not open",
   "terminal.connectFailed":
     "The connection could not be established. The reason is shown in the terminal. Check the settings and network, then reconnect.",
   "terminal.reconnectFailed":
@@ -3170,6 +3171,10 @@ export const en = {
   "keys.colComment": "Comment",
   "keys.agentUnavailable":
     "This process cannot connect to ssh-agent, so keys cannot be registered. On macOS and Linux, set sshc's SSH_AUTH_SOCK environment variable to the ssh-agent socket. On Windows, start the OpenSSH Authentication Agent service.",
+  "keys.agentUnavailableUnix":
+    "This process cannot connect to ssh-agent, so keys cannot be registered. Set sshc's SSH_AUTH_SOCK environment variable to the ssh-agent socket.",
+  "keys.agentUnavailableWindows":
+    "This process cannot connect to ssh-agent, so keys cannot be registered. Start the OpenSSH Authentication Agent service.",
   "keys.agentDelegationsNote":
     "These configuration entries use a key from ssh-agent instead of referencing a key file:",
   "keys.registerHeading": "Add to ssh-agent: {path}",

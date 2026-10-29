@@ -20,5 +20,13 @@ export function SessionDestinationLine({ session, programStatus = null, id }: {
   if (sessionShowsDestination(session)) {
     return <span id={id} data-session-destination className="block truncate font-mono text-[10.5px] leading-[14px] text-ink-faint">{terminalSubtitle(session, t)}</span>;
   }
-  return <span id={id} data-session-status-text className={`block truncate text-[10.5px] leading-[14px] ${sessionStatusTone(session)}`}>{sessionStatusText(t, session)}</span>;
+  // A problem is explained in sentences where the session is shown. The row has one short line under the name,
+  // so it says only that the session did not open, and keeps the sentences for the tooltip.
+  const status = sessionStatusText(t, session);
+  const shown = session.problem === "" ? status : t("terminal.rowProblem");
+  return (
+    <span id={id} data-session-status-text title={shown === status ? undefined : status} className={`block truncate text-[10.5px] leading-[14px] ${sessionStatusTone(session)}`}>
+      {shown}
+    </span>
+  );
 }
