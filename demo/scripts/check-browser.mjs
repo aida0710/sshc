@@ -138,7 +138,7 @@ try {
 
   await ui.getByRole("link", { name: "SFTP", exact: true }).click();
   const fileTabs = ui.getByRole("tablist", { name: "左ペインのタブ", exact: true });
-  await fileTabs.getByRole("button", { name: "ホスト", exact: true }).click();
+  await fileTabs.getByRole("button", { name: "接続先", exact: true }).click();
   await ui.getByRole("dialog", { name: "接続先を選択", exact: true })
     .getByRole("button", { name: /^demo-a(?:\s|$)/ }).click();
   // Choosing the host connects at once, so the tab goes straight to its first directory.
