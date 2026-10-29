@@ -51,6 +51,31 @@ describe("useTerminalSessions", () => {
     expect(result.current.remoteRefusal).toBeNull();
   });
 
+  it("hands out no session of the previous engine, not even in the render that switches to the next", async () => {
+    const listed = (id: string) => ({
+      sessions: [{ id, kind: "shell", workspaceId: "default", title: id, startedAt: "2026-10-29T00:00:00Z", state: "connected", problem: "" } as TerminalSession],
+      maxSessions: 50,
+    });
+    const here = api({ terminalSessions: vi.fn().mockResolvedValue(listed("here")) });
+    let answerBastion = (_answer: ReturnType<typeof listed>) => {};
+    const bastion = api({ terminalSessions: vi.fn(() => new Promise<ReturnType<typeof listed>>((resolve) => { answerBastion = resolve; })) });
+    const seen: string[][] = [];
+    const { result, rerender } = renderHook(({ client }) => {
+      const sessions = useTerminalSessions(client, translate);
+      seen.push(sessions.sessions.map((session) => session.id));
+      return sessions;
+    }, { initialProps: { client: here } });
+    await waitFor(() => expect(result.current.sessions.map((session) => session.id)).toEqual(["here"]));
+
+    seen.length = 0;
+    rerender({ client: bastion });
+    expect(seen[0]).toEqual([]);
+    expect(result.current.loaded).toBe(false);
+    await act(async () => answerBastion(listed("bastion")));
+    expect(result.current.sessions.map((session) => session.id)).toEqual(["bastion"]);
+    expect(seen.flat()).not.toContain("here");
+  });
+
   it("does not offer the previous engine's refusal when switching to another engine", async () => {
     const refused = api({ terminalSessions: vi.fn().mockRejectedValue(new ApiError("remote_engine_incompatible", 409, null)) });
     const available = api();

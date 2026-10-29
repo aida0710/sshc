@@ -1,15 +1,16 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
+import type { TerminalWorkspace } from "../api/terminalWorkspaces";
 import type { TerminalSessionsState } from "./sessions";
 import { useTerminalWorkspaceController } from "./useTerminalWorkspaceController";
 import type { SettingsApi } from "../api/settings";
 import type { Section } from "../routing/sectionRoute";
 
-function session(id: string): TerminalSession {
+function session(id: string, workspaceId = "default"): TerminalSession {
   return {
     id,
-    kind: "ssh", workspaceId: "default",
+    kind: "ssh", workspaceId,
     alias: id,
     title: id,
     startedAt: "2026-01-01T00:00:00Z",
@@ -17,6 +18,11 @@ function session(id: string): TerminalSession {
     problem: "",
   };
 }
+
+const workspaces: TerminalWorkspace[] = [
+  { id: "default", name: "", hidden: false, builtIn: true },
+  { id: "agents", name: "", hidden: true, builtIn: true },
+];
 
 const api = {
   terminalSettings: vi.fn().mockResolvedValue({}),
@@ -35,6 +41,7 @@ function useController(list: TerminalSession[], refresh: () => Promise<void>, se
       loaded: true,
       refresh,
     } as unknown as TerminalSessionsState,
+    workspaces,
     enabled: true,
     section,
     navigate: () => undefined,
@@ -51,6 +58,7 @@ describe("useTerminalWorkspaceController", () => {
       api,
       shells: engine,
       terminalSessions: { sessions: [], refresh: vi.fn().mockResolvedValue(undefined) } as unknown as TerminalSessionsState,
+      workspaces,
       enabled: true,
       section: "Terminal",
       navigate: () => undefined,
@@ -72,6 +80,7 @@ describe("useTerminalWorkspaceController", () => {
       api,
       shells,
       terminalSessions: { sessions: [local], refresh: vi.fn().mockResolvedValue(undefined), open } as unknown as TerminalSessionsState,
+      workspaces,
       enabled: true,
       section: "Files",
       navigate,
@@ -107,7 +116,7 @@ describe("useTerminalWorkspaceController", () => {
     expect(result.current.activeSessionId).toBe("s3");
   });
 
-  it("falls back to the first session once the selected session is gone", async () => {
+  it("falls back to the top of the sidebar once the shown session is gone", async () => {
     const refresh = vi.fn().mockResolvedValue(undefined);
     const listed = [session("s1"), session("s2")];
     const { result, rerender } = renderHook(
@@ -140,6 +149,7 @@ describe("useTerminalWorkspaceController", () => {
           refresh: vi.fn().mockResolvedValue(undefined),
           open,
         } as unknown as TerminalSessionsState,
+        workspaces,
         enabled: true,
         section: "Files",
         navigate,
@@ -169,6 +179,7 @@ describe("useTerminalWorkspaceController", () => {
       api,
       shells,
       terminalSessions: { sessions: [remote, local, unknown], refresh: vi.fn().mockResolvedValue(undefined), open } as unknown as TerminalSessionsState,
+      workspaces,
       enabled: true,
       section: "Terminal",
       navigate: () => undefined,
@@ -191,6 +202,7 @@ describe("useTerminalWorkspaceController", () => {
       shells,
       runTarget: "r540",
       terminalSessions: { sessions: [], refresh: vi.fn().mockResolvedValue(undefined), open } as unknown as TerminalSessionsState,
+      workspaces,
       enabled: true,
       section: "Home",
       navigate,
@@ -201,5 +213,63 @@ describe("useTerminalWorkspaceController", () => {
     act(() => { opening = result.current.openSSHSession("db"); });
     expect(navigate).toHaveBeenCalledWith("Terminal");
     await act(async () => { finish(null); await opening; });
+  });
+
+  it("shows again the session last shown on each run target when coming back to it", async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const here = [session("s1"), session("s2")];
+    const bastion = [session("b1"), session("b2")];
+    const { result, rerender } = renderHook(
+      ({ list, runTarget }: { list: TerminalSession[]; runTarget: string | null }) => useTerminalWorkspaceController({
+        api, shells, workspaces, enabled: true, section: "Terminal", navigate: () => undefined, closeNavigation: () => undefined, runTarget,
+        terminalSessions: { sessions: list, refresh } as unknown as TerminalSessionsState,
+      }),
+      { initialProps: { list: here, runTarget: null as string | null } },
+    );
+    await waitFor(() => expect(result.current.activeSessionId).toBe("s1"));
+    await act(async () => result.current.showSession("s2"));
+
+    // The switching render has no list yet: the next engine has not answered.
+    await act(async () => rerender({ list: [], runTarget: "bastion" }));
+    expect(result.current.activeSessionId).toBeNull();
+    await act(async () => rerender({ list: bastion, runTarget: "bastion" }));
+    expect(result.current.activeSessionId).toBe("b1");
+    await act(async () => result.current.showSession("b2"));
+
+    await act(async () => rerender({ list: [], runTarget: null }));
+    await act(async () => rerender({ list: here, runTarget: null }));
+    expect(result.current.activeSessionId).toBe("s2");
+    await act(async () => rerender({ list: [], runTarget: "bastion" }));
+    await act(async () => rerender({ list: bastion, runTarget: "bastion" }));
+    expect(result.current.activeSessionId).toBe("b2");
+
+    // A session closed on bastion while away is not waited for: the top of the sidebar is shown.
+    await act(async () => rerender({ list: [], runTarget: null }));
+    await act(async () => rerender({ list: here, runTarget: null }));
+    await act(async () => rerender({ list: [], runTarget: "bastion" }));
+    await act(async () => rerender({ list: [session("b1")], runTarget: "bastion" }));
+    expect(result.current.activeSessionId).toBe("b1");
+  });
+
+  it("passes over the sessions of hidden workspaces for the top of the sidebar", async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useController([session("agent-job", "agents"), session("main")], refresh));
+    await waitFor(() => expect(result.current.activeSessionId).toBe("main"));
+  });
+
+  it("chooses no session before the workspaces are read, for the sidebar has no top yet", async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const listed = [session("s1")];
+    const { result, rerender } = renderHook(
+      ({ read }: { read: TerminalWorkspace[] }) => useTerminalWorkspaceController({
+        api, shells, workspaces: read, enabled: true, section: "Terminal", navigate: () => undefined, closeNavigation: () => undefined,
+        terminalSessions: { sessions: listed, refresh } as unknown as TerminalSessionsState,
+      }),
+      { initialProps: { read: [] as TerminalWorkspace[] } },
+    );
+    await act(async () => undefined);
+    expect(result.current.activeSessionId).toBeNull();
+    await act(async () => rerender({ read: workspaces }));
+    expect(result.current.activeSessionId).toBe("s1");
   });
 });

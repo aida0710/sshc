@@ -30,6 +30,8 @@ export type TerminalSessionsState = {
   // opening is true while a session is being opened. On a run target that may
   // last as long as the SSH connection to it takes to fail.
   opening: boolean;
+  // loaded is true once the engine in use has answered a listing (or a
+  // change), whether it listed its sessions or refused.
   loaded: boolean;
   // restoreOffer names the engine's offer to reopen the sessions from before
   // it last stopped, while that waits for an answer. A new name means a new
@@ -49,6 +51,10 @@ export type TerminalSessionsState = {
   moveToWorkspace: (id: string, workspaceId: string) => Promise<boolean>;
 };
 
+// noSessions is what is handed out before the engine in use answers. It is one
+// array, so that hooks depending on the list do not run again on every render.
+const noSessions: TerminalSession[] = [];
+
 export function useTerminalSessions(
   api: TerminalSessionsApi,
   translate: Translate,
@@ -66,7 +72,11 @@ export function useTerminalSessions(
   const currentFailure = listFailure?.api === api ? listFailure : null;
   const remoteRefusal = currentFailure?.error ?? null;
   const remoteRefusalAt = currentFailure?.at ?? null;
-  const [loaded, setLoaded] = useState(false);
+  // answeredApi is the engine whose answer `sessions` holds. The previous
+  // engine's list is not handed out under a new one, not even in the render
+  // that switches, before the reset below has run.
+  const [answeredApi, setAnsweredApi] = useState<TerminalSessionsApi | null>(null);
+  const loaded = answeredApi === api;
   const refreshGeneration = useRequestGeneration();
   const mutationGeneration = useRequestGeneration();
   const busy = pendingOperations > 0;
@@ -98,8 +108,9 @@ export function useTerminalSessions(
     setSessions(listed.sessions);
     setMaxSessions(listed.maxSessions);
     setRestoreOffer(listed.restoreOffer);
+    setAnsweredApi(api);
     return true;
-  }, [refreshGeneration]);
+  }, [api, refreshGeneration]);
 
   const refresh = useCallback(async () => {
     if (!enabled) return;
@@ -119,7 +130,7 @@ export function useTerminalSessions(
         setListFailure({ api, error, at: new Date() });
       }
     } finally {
-      if (isCurrent()) setLoaded(true);
+      if (isCurrent()) setAnsweredApi(api);
     }
   }, [api, enabled, refreshGeneration]);
 
@@ -164,7 +175,6 @@ export function useTerminalSessions(
     // An open still waiting belongs to the previous engine; the new one is not
     // being connected to.
     setPendingOpens(0);
-    setLoaded(false);
   }, [api, mutationGeneration, refreshGeneration]);
 
   useEffect(() => {
@@ -310,7 +320,8 @@ export function useTerminalSessions(
   }, [beginMutation]);
 
   return {
-    sessions, maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded, restoreOffer,
+    sessions: loaded ? sessions : noSessions,
+    maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded, restoreOffer,
     rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited, moveToWorkspace,
   };
 }

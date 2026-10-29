@@ -8,13 +8,14 @@ import { paneSessionIds } from "./layout";
 const sessions: TerminalSession[] = ["one", "two", "three", "four", "five"].map((id) => ({
   id, title: id, kind: "shell", workspaceId: id === "three" ? "other" : "default", state: "connected", problem: "", startedAt: "2026-10-23T00:00:00Z",
 }));
+const workspaces = [{ id: "default", name: "", hidden: false, builtIn: true }];
 const api = { terminalSettings: vi.fn().mockResolvedValue({}) };
 const shells = { shellProfiles: vi.fn().mockResolvedValue({ profiles: [] }) };
 const refresh = vi.fn().mockResolvedValue(undefined);
 
 function setup() {
   return renderHook(({ listed, runTarget }: { listed: TerminalSession[]; runTarget: string | null }) => useTerminalWorkspaceController({
-    api, shells, terminalSessions: { sessions: listed, refresh } as unknown as TerminalSessionsState,
+    api, shells, terminalSessions: { sessions: listed, refresh } as unknown as TerminalSessionsState, workspaces,
     enabled: false, section: "Terminal", navigate: vi.fn(), closeNavigation: vi.fn(), runTarget,
   }), { initialProps: { listed: sessions, runTarget: null as string | null } });
 }
@@ -65,8 +66,9 @@ describe("split view session lifecycle", () => {
     expect(paneSessionIds(result.current.splitView.state.root)).toHaveLength(1);
     rerender({ listed: sessions, runTarget: null });
     expect(result.current.splitView.groups).toEqual([]);
-    expect(paneSessionIds(result.current.splitView.state.root)).toHaveLength(1);
-    act(() => result.current.splitView.split({ sourceSessionId: "two", targetSessionId: "one", edge: "right" }));
+    // The session last focused on this machine (the pane the last split added) comes back, on its own.
+    expect(paneSessionIds(result.current.splitView.state.root)).toEqual(["five"]);
+    act(() => result.current.splitView.split({ sourceSessionId: "four", targetSessionId: "five", edge: "right" }));
     expect(result.current.splitView.groups[0]!.number).toBe(1);
   });
   it("prunes ended sessions while their group is not displayed", () => {

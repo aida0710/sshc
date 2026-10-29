@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalShellProfileList, SettingsApi, TerminalSettings } from "../api/settings";
 import type { OpenTerminalSessionRequest, TerminalSessionsApi } from "../api/terminalSessions";
+import type { TerminalWorkspace } from "../api/terminalWorkspaces";
 import type { Section } from "../routing/sectionRoute";
 import { useSplitView } from "./splitView/useSplitView";
 import type { TerminalSessionsState } from "./sessions";
+import { topSessionId } from "./workspaceGrouping";
 
 type TerminalWorkspaceControllerOptions = {
   api: Pick<SettingsApi, "terminalSettings">;
@@ -11,6 +13,9 @@ type TerminalWorkspaceControllerOptions = {
   // a new session can open, on this machine or on the run target.
   shells: Pick<TerminalSessionsApi, "shellProfiles">;
   terminalSessions: TerminalSessionsState;
+  // workspaces are the run target's, in the sidebar's order, to know which
+  // session is at the top of it.
+  workspaces: readonly TerminalWorkspace[];
   enabled: boolean;
   runTarget?: string | null;
   section: Section | null;
@@ -22,6 +27,7 @@ export function useTerminalWorkspaceController({
   api,
   shells,
   terminalSessions,
+  workspaces,
   enabled,
   runTarget = null,
   section,
@@ -35,6 +41,10 @@ export function useTerminalWorkspaceController({
   const { activeSessionId } = splitView.state;
   const [sessionOrder, setSessionOrder] = useState<string[]>([]);
   const pendingSessionId = useRef<string | null>(null);
+  // The session last shown on each run target (null is this machine), shown
+  // again when the person comes back to it. A run target's selection starts
+  // empty in useSplitView, so what is recorded here is always that target's.
+  const lastSessionByRunTarget = useRef(new Map<string | null, string>());
 
   useEffect(() => {
     if (!enabled) return;
@@ -67,6 +77,17 @@ export function useTerminalWorkspaceController({
     };
   }, [shells, enabled, section]);
 
+  const orderedSessions = useMemo(() => {
+    const rank = new Map(sessionOrder.map((id, index) => [id, index]));
+    return terminalSessions.sessions
+      .map((session, index) => ({
+        session,
+        rank: rank.get(session.id) ?? sessionOrder.length + index,
+      }))
+      .sort((left, right) => left.rank - right.rank)
+      .map((entry) => entry.session);
+  }, [terminalSessions.sessions, sessionOrder]);
+
   useEffect(() => {
     if (activeSessionId === null) return;
     // Split view removes ended or deleted members and selects a surviving pane.
@@ -82,9 +103,19 @@ export function useTerminalWorkspaceController({
   }, [terminalSessions.sessions, activeSessionId, setActiveSessionId, splitView.state.root]);
 
   useEffect(() => {
-    if (activeSessionId !== null || terminalSessions.sessions.length === 0) return;
-    setActiveSessionId(terminalSessions.sessions[0]?.id ?? null);
-  }, [terminalSessions.sessions, activeSessionId, setActiveSessionId]);
+    if (activeSessionId !== null) lastSessionByRunTarget.current.set(runTarget, activeSessionId);
+  }, [activeSessionId, runTarget]);
+
+  // With no session shown (the run target changed, or the shown one is gone),
+  // the one last shown on this run target comes back while it is listed, and
+  // otherwise the top of the sidebar.
+  useEffect(() => {
+    if (activeSessionId !== null || orderedSessions.length === 0) return;
+    const lastShown = lastSessionByRunTarget.current.get(runTarget);
+    const lastShownIsListed = lastShown !== undefined && orderedSessions.some((session) => session.id === lastShown);
+    const next = lastShownIsListed ? lastShown : topSessionId(workspaces, orderedSessions);
+    if (next !== null) setActiveSessionId(next);
+  }, [orderedSessions, workspaces, activeSessionId, runTarget, setActiveSessionId]);
 
   const showSession = useCallback(
     (id: string) => {
@@ -102,17 +133,6 @@ export function useTerminalWorkspaceController({
   // The terminal screen stays drawn behind other sections while it holds a
   // session.
   const terminalScreenMounted = section === "Terminal" || activeSessionId !== null;
-
-  const orderedSessions = useMemo(() => {
-    const rank = new Map(sessionOrder.map((id, index) => [id, index]));
-    return terminalSessions.sessions
-      .map((session, index) => ({
-        session,
-        rank: rank.get(session.id) ?? sessionOrder.length + index,
-      }))
-      .sort((left, right) => left.rank - right.rank)
-      .map((entry) => entry.session);
-  }, [terminalSessions.sessions, sessionOrder]);
 
   // openSession opens a session and shows it. On a run target, opening waits on
   // the SSH connection to that host, which takes until its timeout when the
