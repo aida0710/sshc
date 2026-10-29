@@ -187,7 +187,10 @@ type EmbeddedTerminal struct {
 
 // Metadata は~/.ssh/sshc/metadata.json の全体である。
 type Metadata struct {
-	ShortcutPresets  []ShortcutPreset  `json:"shortcutPresets,omitempty"`
+	ShortcutPresets []ShortcutPreset `json:"shortcutPresets,omitempty"`
+	// TerminalPresets は、ブラウザごとに選んで使う埋め込みターミナルの設定の組である
+	// （terminal_presets.go）。標準の組は EmbeddedTerminal そのもので、ここには無い。
+	TerminalPresets  []TerminalPreset  `json:"terminalPresets,omitempty"`
 	SchemaVersion    int               `json:"schemaVersion"`
 	GroupsFile       string            `json:"groupsFile,omitempty"`
 	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
@@ -258,6 +261,7 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	}
 	withoutUnreadableAppearance(&metadata)
 	withoutUnreadableShortcutPresets(&metadata)
+	withoutUnreadableTerminalPresets(&metadata)
 	return metadata, nil
 }
 
@@ -298,46 +302,11 @@ func ValidateMetadata(metadata Metadata) error {
 	if err := validateShortcutPresets(metadata.ShortcutPresets); err != nil {
 		return err
 	}
-	if settings := metadata.EmbeddedTerminal; settings != nil {
-		if settings.MaxSessions != 0 &&
-			(settings.MaxSessions < terminal.MinMaxSessions || settings.MaxSessions > terminal.MaxMaxSessions) {
-			return fmt.Errorf("%w: maxSessions %d", ErrMetadataTerminal, settings.MaxSessions)
-		}
-		if settings.ScrollbackBytes != 0 &&
-			(settings.ScrollbackBytes < terminal.MinScrollback || settings.ScrollbackBytes > terminal.MaxScrollback) {
-			return fmt.Errorf("%w: scrollbackBytes %d", ErrMetadataTerminal, settings.ScrollbackBytes)
-		}
-		if settings.FontSize != 0 &&
-			(settings.FontSize < terminal.MinFontSize || settings.FontSize > terminal.MaxFontSize) {
-			return fmt.Errorf("%w: fontSize %d", ErrMetadataTerminal, settings.FontSize)
-		}
-		if settings.BrowserScrollbackLines != 0 &&
-			(settings.BrowserScrollbackLines < terminal.MinBrowserScrollbackLines ||
-				settings.BrowserScrollbackLines > terminal.MaxBrowserScrollbackLines) {
-			return fmt.Errorf("%w: browserScrollbackLines %d", ErrMetadataTerminal, settings.BrowserScrollbackLines)
-		}
-		if settings.RetainedTerminals != 0 &&
-			(settings.RetainedTerminals < terminal.MinRetainedTerminals ||
-				settings.RetainedTerminals > terminal.MaxRetainedTerminals) {
-			return fmt.Errorf("%w: retainedTerminals %d", ErrMetadataTerminal, settings.RetainedTerminals)
-		}
-		if settings.LocalShellProfile != "" && !validShellProfileID(settings.LocalShellProfile) {
-			return fmt.Errorf("%w: localShellProfile", ErrMetadataTerminal)
-		}
-		// 上限は接続ログの段の数で決まるので、sshclient.MaxVerbosity を見る。api/openapi.yaml の
-		// EmbeddedTerminal・TerminalSettings の verbosity の maximum もこの値にそろえる。
-		if settings.Verbosity < 0 || settings.Verbosity > sshclient.MaxVerbosity {
-			return fmt.Errorf("%w: verbosity %d", ErrMetadataTerminal, settings.Verbosity)
-		}
-		if settings.Reconnect != nil && (*settings.Reconnect < 0 || *settings.Reconnect > terminal.MaxReconnects) {
-			return fmt.Errorf("%w: reconnect %d", ErrMetadataTerminal, *settings.Reconnect)
-		}
-		if len(settings.StartDirectory) > maxStartDirectoryLength {
-			return fmt.Errorf("%w: startDirectory", ErrMetadataTerminal)
-		}
-		if err := validateAppearance(settings.Appearance); err != nil {
-			return err
-		}
+	if err := validateEmbeddedTerminal(metadata.EmbeddedTerminal); err != nil {
+		return err
+	}
+	if err := validateTerminalPresets(metadata.TerminalPresets); err != nil {
+		return err
 	}
 	if err := validateAppearanceSettings(metadata.Appearance); err != nil {
 		return err
@@ -411,6 +380,54 @@ func ValidateMetadata(metadata Metadata) error {
 				return ErrMetadataSecret
 			}
 		}
+	}
+	return nil
+}
+
+// validateEmbeddedTerminal は、埋め込みターミナルの設定が範囲の中かを確かめる。nil は
+// 何も設定していないこととして通す。設定の組の中身にも同じ決まりを使う。
+func validateEmbeddedTerminal(settings *EmbeddedTerminal) error {
+	if settings == nil {
+		return nil
+	}
+	if settings.MaxSessions != 0 &&
+		(settings.MaxSessions < terminal.MinMaxSessions || settings.MaxSessions > terminal.MaxMaxSessions) {
+		return fmt.Errorf("%w: maxSessions %d", ErrMetadataTerminal, settings.MaxSessions)
+	}
+	if settings.ScrollbackBytes != 0 &&
+		(settings.ScrollbackBytes < terminal.MinScrollback || settings.ScrollbackBytes > terminal.MaxScrollback) {
+		return fmt.Errorf("%w: scrollbackBytes %d", ErrMetadataTerminal, settings.ScrollbackBytes)
+	}
+	if settings.FontSize != 0 &&
+		(settings.FontSize < terminal.MinFontSize || settings.FontSize > terminal.MaxFontSize) {
+		return fmt.Errorf("%w: fontSize %d", ErrMetadataTerminal, settings.FontSize)
+	}
+	if settings.BrowserScrollbackLines != 0 &&
+		(settings.BrowserScrollbackLines < terminal.MinBrowserScrollbackLines ||
+			settings.BrowserScrollbackLines > terminal.MaxBrowserScrollbackLines) {
+		return fmt.Errorf("%w: browserScrollbackLines %d", ErrMetadataTerminal, settings.BrowserScrollbackLines)
+	}
+	if settings.RetainedTerminals != 0 &&
+		(settings.RetainedTerminals < terminal.MinRetainedTerminals ||
+			settings.RetainedTerminals > terminal.MaxRetainedTerminals) {
+		return fmt.Errorf("%w: retainedTerminals %d", ErrMetadataTerminal, settings.RetainedTerminals)
+	}
+	if settings.LocalShellProfile != "" && !validShellProfileID(settings.LocalShellProfile) {
+		return fmt.Errorf("%w: localShellProfile", ErrMetadataTerminal)
+	}
+	// 上限は接続ログの段の数で決まるので、sshclient.MaxVerbosity を見る。api/openapi.yaml の
+	// EmbeddedTerminal・TerminalSettings の verbosity の maximum もこの値にそろえる。
+	if settings.Verbosity < 0 || settings.Verbosity > sshclient.MaxVerbosity {
+		return fmt.Errorf("%w: verbosity %d", ErrMetadataTerminal, settings.Verbosity)
+	}
+	if settings.Reconnect != nil && (*settings.Reconnect < 0 || *settings.Reconnect > terminal.MaxReconnects) {
+		return fmt.Errorf("%w: reconnect %d", ErrMetadataTerminal, *settings.Reconnect)
+	}
+	if len(settings.StartDirectory) > maxStartDirectoryLength {
+		return fmt.Errorf("%w: startDirectory", ErrMetadataTerminal)
+	}
+	if err := validateAppearance(settings.Appearance); err != nil {
+		return err
 	}
 	return nil
 }
