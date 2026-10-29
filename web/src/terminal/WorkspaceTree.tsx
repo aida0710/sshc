@@ -21,7 +21,15 @@ import type { UnreadSessions } from "./terminalNotifications";
 import type { TerminalWorkspacesState } from "./useTerminalWorkspaces";
 import { DeleteWorkspaceDialog, WorkspaceNameDialog } from "./WorkspaceDialogs";
 import { WorkspaceRow } from "./WorkspaceRow";
-import { groupSessionsByWorkspace, orderWithGroupReordered, orderWithSessionMovedInto, workspaceDisplayName } from "./workspaceGrouping";
+import {
+  beforeIdForWorkspaceMove,
+  groupSessionsByWorkspace,
+  orderWithGroupReordered,
+  orderWithSessionMovedInto,
+  workspaceDisplayName,
+  type WorkspacePlace,
+} from "./workspaceGrouping";
+import { useWorkspaceReorderDrag } from "./useWorkspaceReorderDrag";
 
 type WorkspaceTreeProps = {
   workspaces: TerminalWorkspacesState;
@@ -56,7 +64,8 @@ function readCollapsed(): Set<string> {
   return new Set(Array.isArray(stored) ? stored.filter((id): id is string => typeof id === "string") : []);
 }
 
-// The sidebar's sessions, grouped by workspace. Hidden workspaces, where
+// The sidebar's sessions, grouped by workspace in the engine's order, which a
+// workspace's menu or a drag of its row changes. Hidden workspaces, where
 // `sshc terminal create` puts what agents open, stay out of the tree unless the
 // heading's menu shows them.
 export function WorkspaceTree({
@@ -111,9 +120,15 @@ export function WorkspaceTree({
   const newSessionWorkspace = groups.some((group) => group.workspace.id === selectedWorkspace)
     ? selectedWorkspace ?? defaultWorkspaceId
     : defaultWorkspaceId;
-  const heldWorkspace = heldSession === null
+  const heldSessionWorkspace = heldSession === null
     ? null
     : groups.find((group) => group.sessions.some((session) => session.id === heldSession))?.workspace.id ?? null;
+
+  function moveWorkspace(workspaceId: string, place: WorkspacePlace) {
+    const allWorkspaceIds = workspaces.workspaces.map((workspace) => workspace.id);
+    void workspaces.move(workspaceId, beforeIdForWorkspaceMove(allWorkspaceIds, workspaceId, place));
+  }
+  const workspaceDrag = useWorkspaceReorderDrag(moveWorkspace);
 
   function moveSessionInto(workspaceId: string, members: readonly TerminalSession[], sessionId: string, beforeId: string | null) {
     setHeldSession(null);
@@ -149,12 +164,29 @@ export function WorkspaceTree({
     });
   }
 
-  function workspaceActions(workspace: TerminalWorkspace, members: TerminalSession[]): ActionMenuItem[] {
+  // Moving up and down steps over the workspaces the tree shows; hidden ones left out of it keep their places.
+  function workspaceActions(workspace: TerminalWorkspace, members: TerminalSession[], index: number): ActionMenuItem[] {
+    const above = groups[index - 1]?.workspace.id;
+    const below = groups[index + 1]?.workspace.id;
     const items: ActionMenuItem[] = [
       { label: t("workspace.rename"), onSelect: () => setNameRequest({ kind: "rename", workspace }) },
       {
         label: workspace.hidden ? t("workspace.show") : t("workspace.hide"),
         onSelect: () => void workspaces.update(workspace.id, { hidden: !workspace.hidden }),
+      },
+      {
+        label: t("terminal.moveUp"),
+        disabled: above === undefined,
+        onSelect: () => {
+          if (above !== undefined) moveWorkspace(workspace.id, { targetId: above, side: "before" });
+        },
+      },
+      {
+        label: t("terminal.moveDown"),
+        disabled: below === undefined,
+        onSelect: () => {
+          if (below !== undefined) moveWorkspace(workspace.id, { targetId: below, side: "after" });
+        },
       },
     ];
     // The tree shows the sessions of one run target, so a broadcast stays within it.
@@ -217,12 +249,22 @@ export function WorkspaceTree({
       {terminalSessions.problem === "" ? null : <Notice tone="danger" compact>{terminalSessions.problem}</Notice>}
       {workspaces.problem === "" ? null : <Notice tone="danger" compact>{workspaces.problem}</Notice>}
       <ul aria-label={t("workspace.heading")} className="flex flex-col gap-0.5">
-        {groups.map(({ workspace, sessions: members }) => {
+        {groups.map(({ workspace, sessions: members }, index) => {
           const name = workspaceDisplayName(t, workspace);
           const expanded = !collapsed.has(workspace.id);
+          const held = workspaceDrag.heldWorkspaceId === workspace.id;
+          const dropSide = workspaceDrag.dropPlace?.targetId === workspace.id && !held ? workspaceDrag.dropPlace.side : null;
           return (
             // A hidden workspace shown on request is dimmed, sessions and all.
-            <li key={workspace.id} className={`not-first:mt-1.5 ${workspace.hidden ? "opacity-60" : ""}`}>
+            <li
+              key={workspace.id}
+              {...workspaceDrag.dropTargetProps(workspace.id)}
+              className={`relative not-first:mt-1.5 ${held ? "opacity-40" : workspace.hidden ? "opacity-60" : ""}`}
+            >
+              {/* The line sits in the gap between workspaces, where the dragged one would go. */}
+              {dropSide === null ? null : (
+                <span aria-hidden="true" className={`absolute inset-x-2 z-[2] block h-0.5 rounded bg-accent ${dropSide === "before" ? "-top-1" : "-bottom-1"}`} />
+              )}
               {/* Like the group headings of the connection list, a workspace's name stays under the Workspaces
                   heading while its sessions scroll by, and gives way to the next workspace's. The offset is the
                   heading's height (48px on a phone, where its buttons are 44px touch targets). */}
@@ -234,11 +276,12 @@ export function WorkspaceTree({
                 expanded={expanded}
                 unread={members.some((session) => unreadBySession.has(session.id))}
                 canOpenSession={canOpenSession}
-                actions={workspaceActions(workspace, members)}
+                actions={workspaceActions(workspace, members, index)}
                 onToggle={() => toggleCollapsed(workspace.id)}
                 onNewSession={() => setPickerWorkspace(workspace.id)}
-                acceptsSession={heldWorkspace !== null && heldWorkspace !== workspace.id}
+                acceptsSession={heldSessionWorkspace !== null && heldSessionWorkspace !== workspace.id}
                 onDropSession={(id) => moveSessionInto(workspace.id, members, id, null)}
+                dragSourceProps={workspaceDrag.dragSourceProps(workspace.id)}
               />
               </div>
               {expanded ? (

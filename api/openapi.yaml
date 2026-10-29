@@ -482,6 +482,32 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/workspaces/{id}/position:
+    put:
+      operationId: moveTerminalWorkspace
+      description: Moves the workspace before beforeId, or to the end without it. The others keep their order.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MoveTerminalWorkspaceRequest" }
+      responses:
+        "200":
+          description: Every terminal workspace in the new order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalWorkspaceList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/sessions/{id}/workspace:
     put:
       operationId: moveTerminalSession
@@ -1562,6 +1588,52 @@ paths:
       responses:
         '200':
           description: The remaining workspaces; the deleted one's sessions moved to default
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalWorkspaceList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/workspaces/{id}/position:
+    put:
+      operationId: remoteEngineMoveTerminalWorkspace
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveTerminalWorkspaceRequest'
+      responses:
+        '200':
+          description: Every terminal workspace in the new order
           content:
             application/json:
               schema:
@@ -5268,6 +5340,12 @@ components:
       properties:
         name: { type: string, maxLength: 64 }
         hidden: { type: boolean }
+    # ワークスペースを beforeId のワークスペースの前へ移す。beforeId が無ければ末尾へ移す。
+    MoveTerminalWorkspaceRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        beforeId: { type: string, minLength: 1, maxLength: 64 }
     MoveTerminalSessionRequest:
       type: object
       additionalProperties: false

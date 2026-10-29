@@ -324,6 +324,23 @@ export interface paths {
         patch: operations["updateTerminalWorkspace"];
         trace?: never;
     };
+    "/api/v1/terminal/workspaces/{id}/position": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Moves the workspace before beforeId, or to the end without it. The others keep their order. */
+        put: operations["moveTerminalWorkspace"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/terminal/sessions/{id}/workspace": {
         parameters: {
             query?: never;
@@ -747,6 +764,23 @@ export interface paths {
         head?: never;
         /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
         patch: operations["remoteEngineUpdateTerminalWorkspace"];
+        trace?: never;
+    };
+    "/api/v1/engines/{alias}/terminal/workspaces/{id}/position": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
+        put: operations["remoteEngineMoveTerminalWorkspace"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/terminal/shell-profiles": {
@@ -3532,6 +3566,9 @@ export interface components {
             name?: string;
             hidden?: boolean;
         };
+        MoveTerminalWorkspaceRequest: {
+            beforeId?: string;
+        };
         MoveTerminalSessionRequest: {
             workspaceId: string;
         };
@@ -5796,6 +5833,38 @@ export interface operations {
             500: components["responses"]["Problem"];
         };
     };
+    moveTerminalWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveTerminalWorkspaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Every terminal workspace in the new order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalWorkspaceList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
     moveTerminalSession: {
         parameters: {
             query?: never;
@@ -6754,6 +6823,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TerminalWorkspace"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    remoteEngineMoveTerminalWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveTerminalWorkspaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Every terminal workspace in the new order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalWorkspaceList"];
                 };
             };
             400: components["responses"]["Problem"];

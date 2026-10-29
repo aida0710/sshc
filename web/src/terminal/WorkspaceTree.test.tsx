@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -22,6 +22,7 @@ function workspacesState(overrides: Partial<TerminalWorkspacesState> = {}): Term
   return {
     workspaces, maxWorkspaces: 50, problem: "",
     create: vi.fn(async () => null), update: vi.fn(async () => true), remove: vi.fn(async () => true),
+    move: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -71,6 +72,26 @@ function dragData() {
     effectAllowed: "",
     dropEffect: "",
   };
+}
+
+// The row a workspace is dragged by, and the item (its row and its sessions) another workspace is dropped on.
+function workspaceRow(name: string): HTMLElement {
+  return screen.getByRole("button", { name: new RegExp(`^${name}`) }).parentElement!;
+}
+
+function workspaceItem(name: string): HTMLElement {
+  const item = workspaceRow(name).closest("li");
+  if (item === null) throw new Error(`no workspace ${name}`);
+  // jsdom lays nothing out; each workspace is 100px tall from the top of the page.
+  item.getBoundingClientRect = () => ({ top: 0, bottom: 100, height: 100, left: 0, right: 200, width: 200, x: 0, y: 0, toJSON: () => ({}) });
+  return item;
+}
+
+// jsdom has no DragEvent either, so the pointer's height is put on the event by hand.
+function dragAt(kind: "dragOver" | "drop", element: HTMLElement, clientY: number, dataTransfer: ReturnType<typeof dragData>) {
+  const event = createEvent[kind](element, { dataTransfer });
+  Object.defineProperty(event, "clientY", { value: clientY });
+  fireEvent(element, event);
 }
 
 function sessionRow(name: string): HTMLElement {
@@ -261,5 +282,53 @@ describe("WorkspaceTree", () => {
 
     expect(props.onReorder).toHaveBeenCalledWith(["second", "first"]);
     expect(props.terminalSessions.moveToWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("moves a workspace up and down its menu over the shown workspaces, stepping over hidden ones", async () => {
+    const user = userEvent.setup();
+    const props = renderTree();
+    await user.click(screen.getByRole("button", { name: "Workspace actions for Main" }));
+    expect(screen.getByRole("menuitem", { name: "Move up" })).toBeDisabled();
+    await user.click(screen.getByRole("menuitem", { name: "Move down" }));
+    expect(props.workspaces.move).toHaveBeenLastCalledWith("default", null);
+
+    await user.click(screen.getByRole("button", { name: "Workspace actions for sshc dev" }));
+    expect(screen.getByRole("menuitem", { name: "Move down" })).toBeDisabled();
+    await user.click(screen.getByRole("menuitem", { name: "Move up" }));
+    expect(props.workspaces.move).toHaveBeenLastCalledWith("w1", "default");
+  });
+
+  it("moves a workspace dropped on the upper half of another before it and on the lower half after it", () => {
+    const props = renderTree();
+    const dataTransfer = dragData();
+    fireEvent.dragStart(workspaceRow("sshc dev"), { dataTransfer });
+    dragAt("dragOver", workspaceItem("Main"), 10, dataTransfer);
+    dragAt("drop", workspaceItem("Main"), 10, dataTransfer);
+    expect(props.workspaces.move).toHaveBeenLastCalledWith("w1", "default");
+
+    fireEvent.dragStart(workspaceRow("Main"), { dataTransfer });
+    dragAt("drop", workspaceItem("sshc dev"), 90, dataTransfer);
+    expect(props.workspaces.move).toHaveBeenLastCalledWith("default", null);
+  });
+
+  it("takes a workspace dropped on a session for the session's workspace, leaving the sessions alone", () => {
+    const props = renderTree();
+    const dataTransfer = dragData();
+    fireEvent.dragStart(workspaceRow("sshc dev"), { dataTransfer });
+    workspaceItem("Main");
+    dragAt("dragOver", sessionRow("main-shell"), 10, dataTransfer);
+    dragAt("drop", sessionRow("main-shell"), 10, dataTransfer);
+
+    expect(props.workspaces.move).toHaveBeenCalledWith("w1", "default");
+    expect(props.onReorder).not.toHaveBeenCalled();
+    expect(props.terminalSessions.moveToWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("does not move a workspace dropped on itself", () => {
+    const props = renderTree();
+    const dataTransfer = dragData();
+    fireEvent.dragStart(workspaceRow("sshc dev"), { dataTransfer });
+    dragAt("drop", workspaceItem("sshc dev"), 10, dataTransfer);
+    expect(props.workspaces.move).not.toHaveBeenCalled();
   });
 });

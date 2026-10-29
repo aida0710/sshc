@@ -2,13 +2,13 @@ import { useEffect, useState, type DragEvent } from "react";
 import { useTranslate } from "../i18n/context";
 import { ActionMenu, revealOnHover, type ActionMenuItem } from "../ui/ActionMenu";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
-import { dropTargetLook } from "../ui/dragAndDropLook";
+import { draggableCursor, dropTargetLook } from "../ui/dragAndDropLook";
 import { Icon } from "../ui/icons";
 import { sessionDragMimeType } from "./sessionDrag";
 
 // One workspace in the sidebar tree: opens and closes its sessions, starts a
-// session in it, holds its own actions, and takes a session dragged onto it
-// from another workspace.
+// session in it, holds its own actions, takes a session dragged onto it from
+// another workspace, and is the handle to drag the workspace itself by.
 export function WorkspaceRow({
   name,
   sessionCount,
@@ -21,6 +21,7 @@ export function WorkspaceRow({
   onNewSession,
   acceptsSession,
   onDropSession,
+  dragSourceProps,
 }: {
   name: string;
   sessionCount: number;
@@ -34,6 +35,8 @@ export function WorkspaceRow({
   // acceptsSession is true while a session from another workspace is dragged.
   acceptsSession: boolean;
   onDropSession: (sessionId: string) => void;
+  // dragSourceProps start the drag of this workspace, to move it in the tree.
+  dragSourceProps: { draggable: boolean; onDragStart: (event: DragEvent) => void; onDragEnd: () => void };
 }) {
   const t = useTranslate();
   const [over, setOver] = useState(false);
@@ -66,16 +69,17 @@ export function WorkspaceRow({
 
   return (
     <div
+      {...dragSourceProps}
       onDragOver={dragOver}
       onDragLeave={dragLeave}
       onDrop={drop}
-      className={`group/row flex items-center gap-1 rounded-md px-1 ${dropTargetLook({ accepts: acceptsSession, over })}`}
+      className={`group/row flex items-center gap-1 rounded-md px-1 ${draggableCursor} ${dropTargetLook({ accepts: acceptsSession, over })}`}
     >
       <button
         type="button"
         aria-expanded={expanded}
         onClick={onToggle}
-        className="flex min-h-10 min-w-0 grow items-center gap-1 rounded-md px-0.5 text-left text-sm hover:bg-hover md:min-h-[26px]"
+        className={`flex min-h-10 min-w-0 grow items-center gap-1 rounded-md px-0.5 text-left text-sm hover:bg-hover md:min-h-[26px] ${draggableCursor}`}
       >
         <DisclosureChevron expanded={expanded} className="size-[13px] shrink-0 text-ink-faint" />
         {/* The workspace name labels its sessions, so it stays quieter than they are. */}
