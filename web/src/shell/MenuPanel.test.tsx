@@ -44,6 +44,20 @@ function renderMenu({ onNavigate = vi.fn(), status = { current: "v1.0.0", availa
 }
 
 describe("MenuPanel", () => {
+  it("leads with the search on a phone and opens it", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ matches: true, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    const onOpenSearch = vi.fn();
+    render(
+      <LanguageProvider initial="en">
+        <MenuPanel columns={[[configuration], [settings], [others]]} onNavigate={vi.fn()} onOpenSearch={onOpenSearch} api={updateApi({ current: "v1.0.0", available: false })} />
+      </LanguageProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Search pages, settings and connections" }));
+    expect(onOpenSearch).toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it("lists each page with a line on what it is for", () => {
     renderMenu();
 

@@ -19,6 +19,8 @@ export type Navigation = {
   onNavigateForCreation: (section: CreationPrerequisite) => void;
   onOpenFile: (path: string, line: number) => void;
   onNavigationBlockerChange: (blocker: NavigationBlocker | null) => void;
+  // onOpenSearch opens the search over sessions, connections, files, snippets and settings (the palette).
+  onOpenSearch: () => void;
 };
 
 export type Handoff = {

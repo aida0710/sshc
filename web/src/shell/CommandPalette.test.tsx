@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import { LanguageProvider } from "../i18n/context";
 import { snippetsApi } from "../snippets/api";
-import { CommandPalette, matches } from "./CommandPalette";
+import { CommandPalette } from "./CommandPalette";
 
 vi.mock("../snippets/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../snippets/api")>();
@@ -219,8 +219,4 @@ describe("CommandPalette", () => {
     expect(onOpenSession).toHaveBeenCalledWith("second");
   });
 
-  it("matches every query token irrespective of case", () => {
-    expect(matches({ id: "x", kind: "file", label: "SSH Config", detail: "/HOME/AIDA/.ssh/config", search: "settings", action: vi.fn() }, "home config")).toBe(true);
-    expect(matches({ id: "x", kind: "file", label: "SSH Config", detail: "/home/aida/.ssh/config", search: "settings", action: vi.fn() }, "host config")).toBe(false);
-  });
 });

@@ -45,6 +45,7 @@ import { SFTPPermissionsDialog } from "./SFTPPermissionsDialog";
 import { SFTPWaitingOverlay } from "./SFTPWaitingOverlay";
 import { isImeComposing } from "../ui/imeComposition";
 import { menuItemClass, menuSurface } from "../ui/menuStyle";
+import { SFTPQuickHosts } from "./SFTPQuickHosts";
 
 const noHosts: HostEntry[] = [];
 
@@ -680,7 +681,12 @@ export function SFTPPanel({
           <div data-testid="sftp-file-list" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" inert={connected && busy} onKeyDown={list.handleListKeys}>
             {alias === "" || can === undefined ? (
               <div className="flex h-full p-4"><EmptyState icon="files" title={t("sftp.chooseHost")} detail={t("sftp.chooseHostHint")}
-                {...(onChooseHost === undefined ? {} : { action: <Button kind="primary" onClick={onChooseHost}>{t("sftp.chooseHostAction")}</Button> })} /></div>
+                action={(
+                  <div className="flex flex-col items-center">
+                    {onChooseHost === undefined ? null : <Button kind="primary" onClick={onChooseHost}>{t("sftp.chooseHostAction")}</Button>}
+                    <SFTPQuickHosts aliases={aliases} onChoose={browser.selectHost} />
+                  </div>
+                )} /></div>
             ) : !connected && busy ? (
               <SFTPConnectionStatus
                 tone="loading"
