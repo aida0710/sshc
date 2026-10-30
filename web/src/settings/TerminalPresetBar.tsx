@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
+import { ActionMenu } from "../ui/ActionMenu";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { sizedControl } from "../ui/form";
 import { InputDialog } from "../ui/InputDialog";
 import { Button } from "../ui/surface";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { standardPresetId, type TerminalPreset } from "./terminalPresets";
 
 // The limits the engine keeps to (application.MaxTerminalPresets and MaxTerminalPresetNameLength).
@@ -12,9 +14,10 @@ const maxTerminalPresetNameLength = 80;
 
 type Naming = { kind: "create" } | { kind: "rename"; name: string };
 
-// TerminalPresetBar sits under the Terminal heading: which set of settings the page edits, whether this
-// browser uses it, and the buttons that add, rename and delete sets. The standard set cannot be renamed or
-// deleted.
+// TerminalPresetBar sits under the Terminal heading: which preset the page edits, whether this browser uses
+// it, and the actions that add, rename and delete presets. The standard preset cannot be renamed or deleted.
+// On a phone the preset fills the first row beside a "…" that holds the actions, and whether this browser
+// uses it goes on the row under it, so a long name is cut short rather than pushing the row apart.
 export function TerminalPresetBar({ presets, editing, inUse, disabled, onOpen, onUseHere, onCreate, onRename, onDelete }: {
   presets: TerminalPreset[];
   editing: string;
@@ -27,6 +30,7 @@ export function TerminalPresetBar({ presets, editing, inUse, disabled, onOpen, o
   onDelete: () => Promise<void>;
 }) {
   const t = useTranslate();
+  const mobile = useMediaQuery(mobileViewportQuery);
   const [naming, setNaming] = useState<Naming | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [failure, setFailure] = useState("");
@@ -44,30 +48,46 @@ export function TerminalPresetBar({ presets, editing, inUse, disabled, onOpen, o
     }
   }
 
+  const actions = [
+    { label: t("terminal.presetCreate"), disabled: disabled || presets.length >= maxTerminalPresets, run: () => { setFailure(""); setNaming({ kind: "create" }); } },
+    { label: t("terminal.presetRename"), disabled: disabled || edited === undefined, run: () => { setFailure(""); setNaming({ kind: "rename", name: editedName }); } },
+    { label: t("terminal.presetDelete"), disabled: disabled || edited === undefined, run: () => setDeleting(true) },
+  ];
+  const presetSelect = (
+    <select aria-label={mobile ? t("terminal.presetLabel") : undefined} className={sizedControl(mobile ? "min-w-0 flex-1 truncate" : "w-[min(20rem,100%)] min-w-[190px] truncate")}
+      value={editing} disabled={disabled} onChange={(event) => onOpen(event.target.value)}>
+      <option value={standardPresetId}>{t("terminal.presetStandard")}</option>
+      {presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+    </select>
+  );
+  const usage = editing === inUse ? (
+    <span className="rounded-full bg-accent/15 px-2 text-[11.5px] leading-5 text-accent">{t("terminal.presetInUse")}</span>
+  ) : (
+    <Button small disabled={disabled} onClick={onUseHere}>{t("terminal.presetUseHere")}</Button>
+  );
+
   return (
-    <div data-terminal-preset-bar className="mb-3.5 flex flex-wrap items-center gap-2 rounded-[10px] border border-hairline bg-surface-subtle px-3 py-2.5">
-      <label className="flex min-w-0 items-center gap-2">
-        <span className="text-[12.5px] text-ink-muted">{t("terminal.presetLabel")}</span>
-        <select className={sizedControl("min-w-[190px]")} value={editing} disabled={disabled} onChange={(event) => onOpen(event.target.value)}>
-          <option value={standardPresetId}>{t("terminal.presetStandard")}</option>
-          {presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
-        </select>
-      </label>
-      {editing === inUse ? (
-        <span className="rounded-full bg-accent/15 px-2 text-[11.5px] leading-5 text-accent">{t("terminal.presetInUse")}</span>
+    <div data-terminal-preset-bar className={`mb-3.5 rounded-[10px] border border-hairline bg-surface-subtle px-3 py-2.5 ${mobile ? "flex flex-col items-start gap-2" : "flex flex-wrap items-center gap-2"}`}>
+      {mobile ? (
+        <>
+          <div className="flex w-full min-w-0 items-center gap-1">
+            {presetSelect}
+            <ActionMenu label={t("terminal.presetActions")} items={actions.map(({ label, disabled: off, run }) => ({ label, disabled: off, onSelect: run }))}
+              triggerClassName="flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover" />
+          </div>
+          {usage}
+        </>
       ) : (
-        <Button small disabled={disabled} onClick={onUseHere}>{t("terminal.presetUseHere")}</Button>
+        <>
+          <label className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 text-[12.5px] text-ink-muted">{t("terminal.presetLabel")}</span>
+            {presetSelect}
+          </label>
+          {usage}
+          <span className="grow" />
+          {actions.map(({ label, disabled: off, run }) => <Button key={label} small disabled={off} onClick={run}>{label}</Button>)}
+        </>
       )}
-      <span className="grow" />
-      <Button small disabled={disabled || presets.length >= maxTerminalPresets} onClick={() => { setFailure(""); setNaming({ kind: "create" }); }}>
-        {t("terminal.presetCreate")}
-      </Button>
-      <Button small disabled={disabled || edited === undefined} onClick={() => { setFailure(""); setNaming({ kind: "rename", name: editedName }); }}>
-        {t("terminal.presetRename")}
-      </Button>
-      <Button small disabled={disabled || edited === undefined} onClick={() => setDeleting(true)}>
-        {t("terminal.presetDelete")}
-      </Button>
       {naming === null ? null : (
         <InputDialog
           id="terminal-preset-name"

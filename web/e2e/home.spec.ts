@@ -40,7 +40,8 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
   const bastion = launcher.getByRole("listitem").filter({ hasText: "bastion" });
   await expect(bastion).toBeVisible();
   await expect(bastion.getByText("ops@203.0.113.10:2222", { exact: true })).toBeVisible();
-  await expect(bastion).toContainText("Last connected");
+  // The last connection is a badge (2 months ago); its name holds the whole time.
+  await expect(bastion.getByLabel(/^Last connected /u)).toBeVisible();
   await expect(page.getByText("nas", { exact: true })).toBeVisible();
   expect(terminalRequests).toEqual([]);
 

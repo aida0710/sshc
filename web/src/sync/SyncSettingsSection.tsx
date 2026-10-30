@@ -8,6 +8,7 @@ import { PageSection } from "../ui/page";
 import { PasswordInput } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
 import { SyncKeySection } from "./SyncKeySection";
+import { SyncWarning } from "./SyncWarning";
 import { syncDirectionHintKeys, syncSetupStateKeys } from "./syncMessageKeys";
 import type { SyncSetupForm } from "./useSyncSetupForm";
 
@@ -52,9 +53,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
   } = form;
   const body = (
       <div className={status.configured ? "flex flex-col gap-5 pt-4" : "flex flex-col gap-[22px]"}>
-        <p className="rounded-[9px] bg-well px-3 py-2.5 text-xs leading-[18px] text-ink-muted">
-          {t("sync.warning")}
-        </p>
+        <SyncWarning />
         <PageSection
           heading={t("sync.bucketHeading")}
           actions={status.configured ? (
