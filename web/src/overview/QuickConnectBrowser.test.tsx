@@ -96,6 +96,18 @@ describe("QuickConnectBrowser", () => {
     expect(screen.getByRole("img", { name: "OS unknown" })).toBeVisible();
   });
 
+  it("gives the search the whole row on a phone and puts the layout switch, small, at the end of the count's row", () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ matches: true, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    try {
+      renderBrowser();
+      const layout = screen.getByRole("group", { name: "Connection layout" });
+      expect(layout.parentElement).toContainElement(screen.getByRole("heading", { name: "3 of 3" }));
+      for (const button of within(layout).getAllByRole("button")) expect(button).toHaveAttribute("data-touch-compact");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("names the group of a grouped connection and nothing for one in no group", () => {
     renderBrowser();
 
