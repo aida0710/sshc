@@ -15,11 +15,11 @@ sshcはmacOS、Linux、FreeBSD、OpenBSD、Windows、Androidで利用できる�
 brew install aida0710/tap/sshc
 ```
 
-Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.59.1`を導入する例です。
+Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.59.2`を導入する例です。
 
 ```sh
-SSHC_VERSION=v0.59.1 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.59.1/install.sh | sh'
+SSHC_VERSION=v0.59.2 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.59.2/install.sh | sh'
 ```
 
 導入後は`sshc update`で更新できます。Homebrewで入れた場合はHomebrewから、`install.sh`で入れた場合は同じ配布元から更新されます。スクリプトなどで確認を省略する場合は、`sshc update --yes`を指定してください。
@@ -30,12 +30,12 @@ FreeBSDとOpenBSD（amd64・arm64）向けのバイナリは、v0.59.1から配�
 
 ```sh
 # FreeBSD
-SSHC_VERSION=v0.59.1 sh -c \
-  'fetch -qo - https://raw.githubusercontent.com/aida0710/sshc/v0.59.1/install.sh | sh'
+SSHC_VERSION=v0.59.2 sh -c \
+  'fetch -qo - https://raw.githubusercontent.com/aida0710/sshc/v0.59.2/install.sh | sh'
 
 # OpenBSD
-SSHC_VERSION=v0.59.1 sh -c \
-  'ftp -Vo - https://raw.githubusercontent.com/aida0710/sshc/v0.59.1/install.sh | sh'
+SSHC_VERSION=v0.59.2 sh -c \
+  'ftp -Vo - https://raw.githubusercontent.com/aida0710/sshc/v0.59.2/install.sh | sh'
 ```
 
 `sshc update`での更新はmacOS・Linuxの`install.sh`版と同じです。`sshc service install`には対応していません。ログインしたあとも動かし続けるには、tmuxやscreenの中で`sshc engine`を実行してください。
