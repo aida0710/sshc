@@ -15,27 +15,27 @@ sshc is a terminal app for macOS, Linux, FreeBSD, OpenBSD, Windows, and Android.
 brew install aida0710/tap/sshc
 ```
 
-Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.58.1`.
+Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.59.0`.
 
 ```sh
-SSHC_VERSION=v0.58.1 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.58.1/install.sh | sh'
+SSHC_VERSION=v0.59.0 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.59.0/install.sh | sh'
 ```
 
 After installation, `sshc update` delegates upgrades to Homebrew or to a receipt-aware installer. It shows the planned change and asks for confirmation. In non-interactive automation, review the plan and use `sshc update --yes`.
 
 ## FreeBSD / OpenBSD
 
-Binaries for FreeBSD and OpenBSD (amd64 and arm64) are published from the release after v0.58.1. Homebrew is not available there, so use the install script. Without curl or wget, the script downloads with `fetch` from the FreeBSD base system or `ftp` on OpenBSD, and checks the SHA-256 with `sha256`.
+Binaries for FreeBSD and OpenBSD (amd64 and arm64) are published from v0.59.0. Homebrew is not available there, so use the install script. Without curl or wget, the script downloads with `fetch` from the FreeBSD base system or `ftp` on OpenBSD, and checks the SHA-256 with `sha256`.
 
 ```sh
 # FreeBSD
-SSHC_VERSION=v0.58.1 sh -c \
-  'fetch -qo - https://raw.githubusercontent.com/aida0710/sshc/v0.58.1/install.sh | sh'
+SSHC_VERSION=v0.59.0 sh -c \
+  'fetch -qo - https://raw.githubusercontent.com/aida0710/sshc/v0.59.0/install.sh | sh'
 
 # OpenBSD
-SSHC_VERSION=v0.58.1 sh -c \
-  'ftp -Vo - https://raw.githubusercontent.com/aida0710/sshc/v0.58.1/install.sh | sh'
+SSHC_VERSION=v0.59.0 sh -c \
+  'ftp -Vo - https://raw.githubusercontent.com/aida0710/sshc/v0.59.0/install.sh | sh'
 ```
 
 `sshc update` works as for an `install.sh` installation on macOS and Linux. `sshc service install` is not supported; to keep the engine running after you log out, run `sshc engine` inside tmux or screen.
