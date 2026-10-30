@@ -19,8 +19,8 @@ brew install aida0710/tap/sshc
 Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。
 
 ```sh
-SSHC_VERSION=v0.58.1 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.58.1/install.sh | sh'
+SSHC_VERSION=v0.59.0 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.59.0/install.sh | sh'
 ```
 
 Windows PowerShell:
@@ -31,7 +31,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/a
 
 Windowsではユーザーの`PATH`の先頭へ追加し、「インストール済みアプリ」へ登録します。`install.ps1`で導入した場合は、`sshc update`とWeb画面から更新できます。削除は「インストール済みアプリ」から行い、`%USERPROFILE%\.ssh\sshc`のデータとSSH設定・鍵は残します。
 
-FreeBSDとOpenBSDでは、curlの代わりに`fetch -qo -`（FreeBSD）か`ftp -Vo -`（OpenBSD）でインストールスクリプトを取得します（v0.58.1より後のリリースから）。手順は[インストールガイド](https://aida0710.github.io/sshc/guide/install#freebsd--openbsd)にあります。
+FreeBSDとOpenBSDでは、curlの代わりに`fetch -qo -`（FreeBSD）か`ftp -Vo -`（OpenBSD）でインストールスクリプトを取得します（v0.59.0から）。手順は[インストールガイド](https://aida0710.github.io/sshc/guide/install#freebsd--openbsd)にあります。
 
 Android APKと各OS向けのバイナリは[GitHub Releases](https://github.com/aida0710/sshc/releases)から取得できます。詳しい検証方法と更新手順は[インストールガイド](https://aida0710.github.io/sshc/guide/install)を参照してください。
 
