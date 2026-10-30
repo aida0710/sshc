@@ -1,15 +1,13 @@
-import { usePresetSync } from "./keyconfig/presets";
-import { presetInUse, useTerminalPresets, useTerminalPresetSync } from "./settings/terminalPresetLibrary";
-import { withPreset } from "./settings/terminalPresets";
+import { useBindings, usePresetSync } from "./keyconfig/presets";
+import { useSettingsSync } from "./settings/settingsStore";
+import { useTerminalSettings } from "./settings/terminalSettings";
 import { opensInThisPage } from "./ui/linkClick";
-import { useBindings } from "./keyconfig/bindings";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { type HealthResponse } from "./api/client";
 import { runTargetTerminalSessionsApi, terminalSessionsApi } from "./api/terminalSessions";
 import { createTerminalWorkspacesApi, terminalWorkspacesApi } from "./api/terminalWorkspaces";
 import { createTerminalRestoreApi, terminalRestoreApi } from "./api/terminalRestore";
 import { engineTerminalBase } from "./api/remoteEngines";
-import { settingsApi } from "./api/settings";
 import { vaultApi, type PasswordVaultStatus } from "./api/vault";
 import type { SessionState } from "./session/bootstrap";
 import type { CreationPrerequisite } from "./connections/createConnectionDraft";
@@ -17,7 +15,6 @@ import { LockScreen } from "./secrets/LockScreen";
 import { useLanguage } from "./i18n/context";
 import { InspectorPane, InspectorToggle } from "./ui/Inspector";
 import { PageChromeContext, type PageChrome } from "./ui/pageChrome";
-import { useAccent } from "./theme/accentContext";
 import { useTheme } from "./theme/context";
 import { usePolling } from "./ui/usePolling";
 import { RouteSkeleton } from "./ui/RouteSkeleton";
@@ -26,7 +23,7 @@ import { connectionLocation } from "./routing/connectionRoute";
 import { AppHeader } from "./shell/AppHeader";
 import { AppNavigation } from "./shell/AppNavigation";
 import { navigationWidth } from "./shell/navigationLayout";
-import { useStoredColumnWidth } from "./ui/useStoredColumnWidth";
+import { usePresetColumnWidth } from "./settings/usePresetColumnWidth";
 import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
 import { useTerminalWorkspaces } from "./terminal/useTerminalWorkspaces";
@@ -100,10 +97,12 @@ export function App({
     vaultMigration,
   } = session;
   usePresetSync(state === "ready");
-  useTerminalPresetSync(state === "ready");
+  // The settings come with the engine being ready; the shell waits for them (settingsLoaded) so the screens
+  // open with the widths and views this machine chose rather than the defaults first.
+  const settingsLoaded = useSettingsSync(state === "ready");
   const handoffs = useSectionHandoffs(navigate);
   const declared = useDeclaredConfig(state === "ready", section);
-  const [desktopNavigationWidth, resizeDesktopNavigation] = useStoredColumnWidth(navigationWidth);
+  const [desktopNavigationWidth, resizeDesktopNavigation] = usePresetColumnWidth(navigationWidth);
   const {
     navigationOpen,
     setNavigationOpen,
@@ -145,11 +144,6 @@ export function App({
       vaultRevision,
     };
   }, [runTargets.selected, vaultRevision]);
-  // The accent is kept in this machine's metadata, which can be read once the engine is ready.
-  const { loadAccent } = useAccent();
-  useEffect(() => {
-    if (state === "ready") loadAccent();
-  }, [state, loadAccent]);
   const terminalSessions = useTerminalSessions(runTargetApis.sessions, t, state === "ready");
   const terminalWorkspaces = useTerminalWorkspaces({
     sessions: terminalSessions.sessions,
@@ -160,7 +154,6 @@ export function App({
   });
   const terminalWorkspace = useTerminalWorkspaceController({
     runTarget: runTargets.selected,
-    api: settingsApi,
     shells: runTargetApis.sessions,
     terminalSessions,
     workspaces: terminalWorkspaces.workspaces,
@@ -171,7 +164,6 @@ export function App({
   });
   const {
     splitView,
-    settings: terminalSettings,
     localShellProfiles,
     activeSessionId,
     terminalScreenMounted,
@@ -181,15 +173,9 @@ export function App({
     openSSHSession,
     duplicateSession,
     reorderSessions: setSessionOrder,
-    setSettings: setTerminalSettings,
   } = terminalWorkspace;
-  // The terminals draw with the preset this browser uses. Saving the settings (the OSC 52 switch) keeps to
-  // terminalSettings, so a preset's values never end up in the standard set.
-  const terminalPresets = useTerminalPresets();
-  const appliedTerminalSettings = useMemo(
-    () => withPreset(terminalSettings, presetInUse(terminalPresets)),
-    [terminalSettings, terminalPresets],
-  );
+  // The terminals draw with the preset this machine uses and the global settings.
+  const terminalSettings = useTerminalSettings();
   // A phone shows the terminal's own top bar instead of the app header and the bottom tabs only
   // while a session can be used: with none open, or while the run target refuses (the panel makes
   // the terminal inert), the app header keeps the navigation reachable.
@@ -311,7 +297,7 @@ export function App({
     followSectionLink(event, target);
   }
 
-  const changeOSC52 = useOSC52Setting({ settings: terminalSettings, setSettings: setTerminalSettings });
+  const changeOSC52 = useOSC52Setting();
 
   // While the vault is rechecked on coming back to the page, the app is hidden and inert; the focus goes back
   // to the terminal (or whatever had it) afterwards.
@@ -449,7 +435,7 @@ export function App({
               connectionDraft={handoffs.connectionDraft}
               onReturnToConnectionDraft={() => navigate("Connections")}
             />
-            {state === "ready" ? (
+            {state === "ready" && settingsLoaded ? (
               <div className="relative min-h-0 flex-1 overflow-hidden">
                 {terminalScreenMounted ? (
                   <div className={terminalFace ? "h-full" : "hidden"}>
@@ -458,7 +444,7 @@ export function App({
                       splitView={splitView}
                       terminalSessions={terminalSessions}
                       activeSessionId={activeSessionId}
-                      settings={appliedTerminalSettings}
+                      settings={terminalSettings}
                       hostAppearance={declared.hostAppearance}
                       hostVPN={declared.hostVPN}
                       api={runTargetApis.sessions}
@@ -507,10 +493,6 @@ export function App({
                           onShowSession: showLocalSession,
                           onOpenSSHSession: openSSHSession,
                           onOpenTerminal: openSFTPTerminal,
-                          onTerminalSettingsChange: async (settings) => {
-                            setTerminalSettings(settings);
-                            await terminalSessions.refresh();
-                          },
                         }}
                         declared={{ groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN }}
                         sftpTarget={handoffs.sftpTarget}

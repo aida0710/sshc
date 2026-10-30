@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import type { Locator, Page } from "@playwright/test";
 import type { TransferJob, TransferJobList } from "../src/sftp/api";
 import { expect, openApplication, openSection, test } from "./support/environment";
+import { keepMachineState, readMachineState } from "./support/settings";
 import { openLocalSFTPDirectory } from "./support/sftp";
 
 // Phones keep touch controls when rotated beyond the portrait breakpoint.
@@ -133,17 +134,19 @@ async function expectFileRowInsideList(pane: Locator, name: string): Promise<voi
   }).toBe(true);
 }
 
+// keptPanes is the SFTP layout this machine keeps: the panes from left to right, each with its tabs.
+async function keptPanes(page: Page): Promise<Array<{ tabs: Array<{ alias: string; path: string }> }>> {
+  const kept = await readMachineState(page, "sftpPanes");
+  return kept === "" ? [] : JSON.parse(kept) as Array<{ tabs: Array<{ alias: string; path: string }> }>;
+}
+
 async function expectSelectedLocation(page: Page, location: { alias: string; path: string }): Promise<void> {
   const host = location.alias === "sshc://local" ? "Local" : location.alias;
   // Selection replaces the compact toolbar; the active tab still identifies
   // its folder, and its persisted location must survive the tab switch.
   await expect(page.getByRole("tab", { selected: true })).toHaveAttribute("title", `${host}:${location.path}`);
-  await expect.poll(() => page.evaluate(({ alias, path }) => {
-    const panes = JSON.parse(localStorage.getItem("sshc.sftp.panes.v1") ?? "[]") as Array<{
-      tabs: Array<{ alias: string; path: string }>;
-    }>;
-    return panes.some((pane) => pane.tabs.some((tab) => tab.alias === alias && tab.path === path));
-  }, location)).toBe(true);
+  await expect.poll(async () => keptPanes(page).then((panes) =>
+    panes.some((pane) => pane.tabs.some((tab) => tab.alias === location.alias && tab.path === location.path)))).toBe(true);
 }
 
 async function captureCompactFiles(page: Page, name: string): Promise<void> {
@@ -195,12 +198,6 @@ test("adds a compact file tab and preserves both directories and selections with
 });
 
 test("restores two compact sources in one tab strip and preserves the host, path and selection", async ({ page, installation }) => {
-  await page.addInitScript(() => {
-    window.localStorage.setItem("sshc.sftp.panes.v1", JSON.stringify([
-      { tabs: [{ alias: "sshc://local", path: "/home/engine" }], activeIndex: 0 },
-      { tabs: [{ alias: "bastion", path: "/srv" }], activeIndex: 0 },
-    ]));
-  });
   const entry = (name: string, parent: string) => ({
     name, path: `${parent}/${name}`, type: "file", size: 4096, mode: "0644",
     modifiedAt: "2026-10-10T00:00:00Z", revision: `${name}-v1`,
@@ -214,6 +211,11 @@ test("restores two compact sources in one tab strip and preserves the host, path
     return route.fulfill({ json: { path: "/srv", entries: [entry("report.txt", "/srv")] } });
   });
   await openApplication(page, installation);
+  await keepMachineState(page, "sftpPanes", JSON.stringify([
+    { tabs: [{ alias: "sshc://local", path: "/home/engine" }], activeIndex: 0 },
+    { tabs: [{ alias: "bastion", path: "/srv" }], activeIndex: 0 },
+  ]));
+  await page.reload();
   await openSection(page, "SFTP");
   await page.setViewportSize({ width: 390, height: 640 });
   const strip = page.getByRole("tablist", { name: "File tabs", exact: true });
@@ -240,7 +242,7 @@ test("restores two compact sources in one tab strip and preserves the host, path
   await expect(pane.getByRole("checkbox", { name: "Select report.txt", exact: true })).toBeChecked();
   await expectSelectedLocation(page, { alias: "bastion", path: "/srv" });
   expect(remoteReads).toBe(1);
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("sshc.sftp.panes.v1") ?? "[]"))).toHaveLength(2);
+  expect(await keptPanes(page)).toHaveLength(2);
   await expectCompactControls(page);
   await expectFileRowInsideList(pane, "report.txt");
   await captureCompactFiles(page, "compact-sftp-restored-tabs-390x640-en");

@@ -33,6 +33,15 @@ type Service struct {
 	// factsFor は、トークン展開と既定の GlobalKnownHostsFile に要るこのマシンの事実を読む。
 	// テストは本物の /etc/ssh の known_hosts へ届かないように差し替える。
 	factsFor func(home string) effective.LocalFacts
+
+	// machineID はこのマシンの ID で、PrepareMachine が決める（machine_identity.go）。
+	machineID string
+	// stateMemory は、このマシンの今の状態のうち、まだ書いていないものを持つ（machine_state.go）。
+	stateMemory machineStateMemory
+	// settingsListeners は、設定が変わったかもしれないときに呼ぶ関数である（settings_effective.go）。
+	settingsListeners []func()
+	// stateListeners は、このマシンの今の状態を書いたときに呼ぶ関数である（machine_state.go）。
+	stateListeners []func()
 }
 
 func resolverFor(workspace *storage.Workspace) config.Resolver {
@@ -62,8 +71,8 @@ func NewService(workspace *storage.Workspace, manager *storage.Manager) *Service
 // Vault を書く変更は secret.ErrNoVault で、鍵のパス変更は ErrKeyPassphraseVaultMissing
 // で断り、alias の改名は設定だけを書く。
 //
-// 渡した Vault には、このマシンの自動ロックの時間を移す。以後は、sshc エンジンの設定を
-// 変える操作のたびに移し直す（applyVaultAutoLock）。
+// 渡した Vault には、このマシンが使うプリセットの自動ロックの時間を移す。以後は、設定が
+// 変わりうる操作のたびに移し直す（SettingsMayHaveChanged）。
 //
 // 生成時ではなく setter で受けるのは、engine の組み立てで Vault がこの service のあとに
 // 作られるからである。鍵の検証（SetKeyPassphraseVerifier）と起動スニペットの改名・削除

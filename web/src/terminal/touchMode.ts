@@ -1,5 +1,4 @@
-import { localStorageKeys } from "../ui/browserStorageKeys";
-import { createStoredChoice, useStoredChoice } from "../ui/storedChoice";
+import { updatePresetInterface, usePresetInterface } from "../settings/presetInterface";
 import { useMediaQuery } from "../ui/useMediaQuery";
 
 // How terminals take touch. A touch terminal lays a layer of plain text over
@@ -10,24 +9,21 @@ import { useMediaQuery } from "../ui/useMediaQuery";
 //
 // "auto" follows what the browser says its main pointer is. A 2-in-1 PC can
 // say touch while its keyboard and touchpad are attached, so the user can fix
-// either one. The choice is about the device in front of the user, so it stays
-// in this browser.
+// either one. The choice is about the device in front of the user, so it is
+// kept in the preset this machine uses.
 export type TouchMode = "auto" | "touch" | "mouse";
 export type FixedTouchMode = Exclude<TouchMode, "auto">;
 
 export const touchFirstQuery = "(hover: none) and (pointer: coarse)";
 
-const touchMode = createStoredChoice<TouchMode>({
-  key: localStorageKeys.touchMode,
-  choices: ["auto", "touch", "mouse"],
-  fallback: "auto",
-});
+// saveTouchMode keeps the choice in a preset (the one this machine uses when presetId is left out); "auto" is
+// the default and is not written.
+export function saveTouchMode(mode: TouchMode, presetId?: string): void {
+  void updatePresetInterface((settings) => ({ ...settings, touchMode: mode === "auto" ? undefined : mode }), presetId).catch(() => undefined);
+}
 
-export const loadTouchMode = touchMode.load;
-export const saveTouchMode = touchMode.save;
-
-export function useTouchMode(): TouchMode {
-  return useStoredChoice(touchMode);
+export function useTouchMode(presetId?: string): TouchMode {
+  return usePresetInterface(presetId).touchMode ?? "auto";
 }
 
 // What "auto" picks now. The browser answers again when a 2-in-1 PC changes shape.

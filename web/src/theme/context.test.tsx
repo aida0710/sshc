@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider, useTheme } from "./context";
 import { localStorageKeys } from "../ui/browserStorageKeys";
+import { resetSettingsForTests } from "../settings/settingsStore";
+import { settingsDocument } from "../testing/settingsServer";
 
 let prefersDark = false;
 const listeners = new Set<() => void>();
@@ -38,6 +40,26 @@ function Probe() {
 }
 
 describe("ThemeProvider", () => {
+  it("keeps the theme on screen while the preset in use chooses none", () => {
+    window.localStorage.setItem(localStorageKeys.theme, "light");
+    render(<ThemeProvider><Probe /></ThemeProvider>);
+
+    act(() => resetSettingsForTests(settingsDocument()));
+
+    expect(screen.getByText("choice light resolved light")).toBeInTheDocument();
+    expect(window.localStorage.getItem(localStorageKeys.theme)).toBe("light");
+  });
+
+  it("switches to the theme of the preset in use, and copies it", () => {
+    window.localStorage.setItem(localStorageKeys.theme, "light");
+    render(<ThemeProvider><Probe /></ThemeProvider>);
+
+    act(() => resetSettingsForTests(settingsDocument({ presets: [{ id: "default", appearance: { theme: "dark" } }] })));
+
+    expect(screen.getByText("choice dark resolved dark")).toBeInTheDocument();
+    expect(window.localStorage.getItem(localStorageKeys.theme)).toBe("dark");
+  });
+
   it("starts in the dark product theme when nothing was chosen", () => {
     render(<ThemeProvider><Probe /></ThemeProvider>);
 

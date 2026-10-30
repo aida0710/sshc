@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, openApplication, openLocalShell, test } from "./support/environment";
+import { standardPresetMetadata } from "./support/settings";
 import { terminalKeyboard } from "./support/terminal";
 
 // bash marks its prompt, the start of each command and how it ended (OSC 133 A, B, C and D), as shell
@@ -51,7 +52,7 @@ test("marks each command by how it ended, with its details on pointing and its l
 
 test("shows none of it with the settings off", async ({ page, installation }) => {
   test.skip(process.platform === "win32", "the marks come from bash here");
-  await installation.write("sshc/metadata.json", JSON.stringify({ schemaVersion: 9, embeddedTerminal: { commandMarks: false, stickyCommand: false, commandScrollbarMarks: false } }));
+  await installation.write("sshc/metadata.json", standardPresetMetadata({ terminal: { commandMarks: false, stickyCommand: false, commandScrollbarMarks: false } }));
   const screen = await openShell(page, installation);
   await run(page, "seq 1 80");
   await run(page, "echo done-$((40+2))");

@@ -1,4 +1,5 @@
 import { expect, openApplication, openLocalShell, test } from "./support/environment";
+import { standardPresetMetadata } from "./support/settings";
 import { drawnRows, mountedTerminals, terminalKeyboard } from "./support/terminal";
 
 // A full-screen program draws its screen once and then rewrites only what changes, as Claude Code does. This one
@@ -13,10 +14,7 @@ const program = [
 ].join("\n");
 
 test("a terminal rebuilt for a full-screen program shows what the program drew before the replay buffer", async ({ page, installation }) => {
-  await installation.write("sshc/metadata.json", JSON.stringify({
-    schemaVersion: 9,
-    embeddedTerminal: { scrollbackBytes: 16 << 10, retainedTerminals: 1 },
-  }));
+  await installation.write("sshc/metadata.json", standardPresetMetadata({ terminal: { scrollbackBytes: 16 << 10, retainedTerminals: 1 } }));
   await installation.write("full-screen.sh", program);
   await openApplication(page, installation);
   await openLocalShell(page);

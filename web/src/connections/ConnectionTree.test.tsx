@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HostEntry, Overview } from "../api/config";
 import { ConnectionGroupFacets } from "./ConnectionGroupFacets";
 import { ConnectionTree, type ConnectionTreeProps, type HostSelection, type Scope } from "./ConnectionTree";
@@ -41,7 +42,7 @@ const overview: Overview = {
     { name: "empty", directory: "connections/empty", keyDirectory: "keys/empty", memberCount: 0, directoryPresent: true },
   ],
   metadata: {
-    schemaVersion: 2,
+    schemaVersion: 10, presets: [{ id: "default" }],
     groups: [{ name: "home", order: 1 }, { name: "empty", order: 2 }, { name: "home/eu", order: 1 }],
     hosts: [{ identity: homeNas.identity, colour: "#f97316", tags: ["storage"] }],
   },
@@ -81,6 +82,8 @@ function ConnectionLists({
   );
 }
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("the connection list and the list of groups", () => {
   it("shows the complete declared hierarchy and ungrouped connections at once", () => {
     render(
@@ -103,7 +106,7 @@ describe("the connection list and the list of groups", () => {
   });
 
   it("lets the groups column be resized from the keyboard and remembers the width", () => {
-    window.localStorage.removeItem("sshc.connections.groups-width.v1");
+    fakeSettingsServer();
     render(
       <ConnectionLists />,
     );
@@ -112,7 +115,6 @@ describe("the connection list and the list of groups", () => {
     expect(handle).toHaveAttribute("aria-valuenow", "220");
     fireEvent.keyDown(handle, { key: "ArrowRight", shiftKey: true });
     expect(handle).toHaveAttribute("aria-valuenow", "252");
-    expect(window.localStorage.getItem("sshc.connections.groups-width.v1")).toBe("252");
     fireEvent.keyDown(handle, { key: "Home" });
     expect(handle).toHaveAttribute("aria-valuenow", "112");
   });
@@ -129,7 +131,7 @@ describe("the connection list and the list of groups", () => {
   it("sorts connections by name by default", async () => {
     const zeta = host("config", "zeta");
     const alpha = host("config", "alpha");
-    const orderOverview = { ...overview, hosts: [zeta, alpha], groups: [], metadata: { schemaVersion: 2 } };
+    const orderOverview = { ...overview, hosts: [zeta, alpha], groups: [], metadata: { schemaVersion: 10, presets: [{ id: "default" }] } };
     const user = userEvent.setup();
     render(
       <ConnectionLists overview={orderOverview} />,
@@ -163,7 +165,7 @@ describe("the connection list and the list of groups", () => {
       ...overview,
       hosts: [projected, { ...projected }],
       groups: overview.groups.filter((group) => group.name === "home"),
-      metadata: { schemaVersion: 2 },
+      metadata: { schemaVersion: 10, presets: [{ id: "default" }] },
     };
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 

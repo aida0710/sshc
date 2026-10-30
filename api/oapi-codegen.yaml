@@ -16,7 +16,13 @@ output-options:
   # 引き続き生成される。
   exclude-operation-ids:
     - setShortcutPresets
-    - setTerminalPresets
+    - getSettings
+    - setGlobalSettings
+    - setPresets
+    - setPreset
+    - setMachineSettings
+    - removeMachine
+    - setMachineState
     - listTerminalBackgrounds
     - addTerminalBackground
     - getTerminalBackground
@@ -59,7 +65,23 @@ output-options:
     - SFTPMediaTicket
     - SFTPMediaTicketRequest
     - ShortcutPreset
-    - TerminalPreset
+    # 設定（全体の設定・プリセット・マシン）は metadata とマシンごとのファイルの形のまま運ぶ。
+    - AppearanceSettings
+    - GlobalSettings
+    - GlobalTerminalSettings
+    - GlobalFileTransferSettings
+    - SettingsPreset
+    - InterfaceSettings
+    - NotificationSound
+    - VaultAutoLockSettings
+    - MachineSettings
+    - MachineFacts
+    - Machine
+    - InterfaceState
+    - MachineState
+    - SettingsDocument
+    - SettingsSaveResult
+    - TerminalAppearance
     - CreateConnectionResponse
     - BackgroundSettings
     - Effective

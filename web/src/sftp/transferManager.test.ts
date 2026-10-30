@@ -7,7 +7,6 @@ import type {
   StreamDownloadOptions,
   TransferJob,
   TransferJobAction,
-  TransferSettings,
   UploadChunk,
   UploadCompletion,
   UploadStart,
@@ -75,9 +74,6 @@ function engineAPI(overrides: Record<string, unknown> = {}) {
     jobs,
     recoverySettings,
     listTransfers: vi.fn(async () => ({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, ...recoverySettings, jobs: [...jobs.values()] })),
-    updateTransferSettings: vi.fn(async (settings: TransferSettings) => ({
-      ...settings, jobs: [...jobs.values()],
-    })),
     moveTransfer: vi.fn(async () => ({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, speedLimitBytesPerSecond: 0, ...recoverySettings, jobs: [...jobs.values()] })),
     createTransfer,
     updateTransfer,
@@ -541,19 +537,6 @@ describe("SFTPTransferManager engine ownership", () => {
     await vi.waitFor(() => expect(releases.length).toBeGreaterThan(0));
     while (releases.length > 0) releases.shift()?.();
     await vi.waitFor(() => expect(manager.getSnapshot().every((job) => job.status === "completed")).toBe(true));
-  });
-
-  it("sends a change to one setting together with the others the engine reported", async () => {
-    const api = engineAPI();
-    const manager = new SFTPTransferManager(api, 0);
-    await manager.reconcile();
-    await manager.applySettings({ speedLimitBytesPerSecond: 2048 });
-    expect(api.updateTransferSettings).toHaveBeenCalledWith(expect.objectContaining({
-      maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false,
-      largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20,
-      speedLimitBytesPerSecond: 2048,
-    }));
-    expect(manager.getSettings().speedLimitBytesPerSecond).toBe(2048);
   });
 
   it("lets an engine-side copy that met an existing target be overwritten", async () => {

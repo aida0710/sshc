@@ -4,21 +4,18 @@ import { patchJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
-export type Metadata = components["schemas"]["Metadata"];
-export type TerminalSettings = components["schemas"]["TerminalSettings"];
+export type { TerminalSettings } from "../settings/terminalSettings";
 export type LocalShellProfile = components["schemas"]["LocalShellProfile"];
 export type LocalShellProfileList = components["schemas"]["LocalShellProfileList"];
-export type EngineSettings = components["schemas"]["EngineSettings"];
 export type TerminalAppearance = components["schemas"]["TerminalAppearance"];
 export type TerminalBackground = components["schemas"]["TerminalBackground"];
 export type TerminalBackgroundList = components["schemas"]["TerminalBackgroundList"];
 
+// The settings themselves (the global settings, the presets and the machines) are read and written through
+// settings/settingsStore. This is what the settings pages ask the engine besides them: this machine's shells
+// and the background images.
 export type SettingsApi = {
-  terminalSettings(): Promise<TerminalSettings>;
-  setTerminalSettings(settings: TerminalSettings): Promise<void>;
   localShellProfiles?(): Promise<LocalShellProfileList>;
-  engineSettings(): Promise<EngineSettings>;
-  setEngineSettings(settings: EngineSettings): Promise<void>;
   terminalBackgrounds(): Promise<TerminalBackgroundList>;
   addTerminalBackground(
     suggested: string,
@@ -29,40 +26,14 @@ export type SettingsApi = {
   deleteTerminalBackground(name: string): Promise<void>;
 };
 
-function validateMetadata(value: unknown): Metadata {
-  return validateOpenAPISchema<Metadata>("Metadata", value);
-}
-
 function validateBackground(value: unknown): TerminalBackground {
   return validateOpenAPISchema<TerminalBackground>("TerminalBackground", value);
 }
 
-// Settings the engine stores for every browser: the embedded terminal, the
-// engine itself, the local shell profiles it found, and the background images.
 export const settingsApi: SettingsApi = {
-  // The engine already clamps stored settings to the contract when it reads
-  // them, so the generated validator is the whole check here.
-  async terminalSettings() {
-    const metadata = validateMetadata(await apiClient.read("/api/v1/metadata"));
-    return metadata.embeddedTerminal ?? {};
-  },
-  async setTerminalSettings(settings) {
-    await putJSON("/api/v1/metadata/terminal", settings);
-  },
   // Settings choose among this machine's shells, whichever engine runs the
   // terminals.
   localShellProfiles: () => terminalSessionsApi.shellProfiles(),
-  // The engine settings belong to this machine and are not part of the synced
-  // metadata, so they have their own endpoint.
-  async engineSettings() {
-    return validateOpenAPISchema<EngineSettings>(
-      "EngineSettings",
-      await apiClient.read("/api/v1/metadata/engine"),
-    );
-  },
-  async setEngineSettings(settings) {
-    await putJSON("/api/v1/metadata/engine", settings);
-  },
   async terminalBackgrounds() {
     return validateOpenAPISchema<TerminalBackgroundList>(
       "TerminalBackgroundList",

@@ -16,7 +16,7 @@ func TestSyncNeverCarriesTheDeviceLocalStateThatAppAndApplicationOwn(t *testing.
 		vpnStateDirectory,
 		path.Join(vpnStateDirectory, "relay.sock"),
 		path.Join(storage.StateDirectoryName, sftpTransferStateName),
-		application.EngineSettingsPathRelative,
+		application.MachineIDPathRelative,
 	} {
 		if !remotesync.NeverTravels(relative) {
 			t.Errorf("%s would travel to other machines", relative)

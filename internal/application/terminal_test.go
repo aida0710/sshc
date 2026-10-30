@@ -20,6 +20,26 @@ func newTerminalService(t *testing.T) (*Service, *storage.Workspace) {
 	return NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader)), workspace
 }
 
+// setStandardTerminal は、標準のプリセットのターミナルの設定を置き換える。
+func setStandardTerminal(t *testing.T, service *Service, settings EmbeddedTerminal) error {
+	t.Helper()
+	return editStandardPreset(t, service, func(preset *SettingsPreset) { preset.Terminal = storedSection(settings) })
+}
+
+// setGlobalTerminal は、全体の設定のうちターミナルのものを置き換える。
+func setGlobalTerminal(t *testing.T, service *Service, settings GlobalTerminalSettings) error {
+	t.Helper()
+	stored, _, err := service.metadata.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := globalSettingsOf(stored)
+	next := base
+	next.Terminal = storedSection(settings)
+	_, err = service.SetGlobalSettings(base, next)
+	return err
+}
+
 func TestTheStartDirectoryDefaultsToTheHome(t *testing.T) {
 	service, workspace := newTerminalService(t)
 
@@ -35,16 +55,12 @@ func TestTheStartDirectoryKeepsTheTildeAndResolvesItWhenRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~/work"}); err != nil {
+	if err := setStandardTerminal(t, service, EmbeddedTerminal{StartDirectory: "~/work"}); err != nil {
 		t.Fatal(err)
 	}
 
-	stored, _, err := service.metadata.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.TerminalStartDirectory() != "~/work" {
-		t.Fatalf("stored = %q, want the tilde kept", stored.TerminalStartDirectory())
+	if stored := service.terminalPresetSettings().StartDirectory; stored != "~/work" {
+		t.Fatalf("stored = %q, want the tilde kept", stored)
 	}
 	if got := service.TerminalStartDirectory(); got != work {
 		t.Fatalf("start directory = %q, want %q", got, work)
@@ -69,7 +85,7 @@ func TestTheStartDirectoryIsRefusedWhenItCannotBeUsed(t *testing.T) {
 		{name: "a file", given: file, want: ErrStartDirectoryNotADirectory},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: test.given}); !errors.Is(err, test.want) {
+			if err := setStandardTerminal(t, service, EmbeddedTerminal{StartDirectory: test.given}); !errors.Is(err, test.want) {
 				t.Fatalf("error = %v, want %v", err, test.want)
 			}
 			if got := service.TerminalStartDirectory(); got != workspace.Home() {
@@ -83,7 +99,7 @@ func TestSavingDoesNotWriteSettingsNobodyChose(t *testing.T) {
 	service, workspace := newTerminalService(t)
 
 	for round := 0; round < 2; round++ {
-		if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~"}); err != nil {
+		if err := setStandardTerminal(t, service, EmbeddedTerminal{StartDirectory: "~"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -92,7 +108,7 @@ func TestSavingDoesNotWriteSettingsNobodyChose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, unwanted := range []string{"maxSessions", "scrollbackBytes"} {
+	for _, unwanted := range []string{"maxSessions", "scrollbackBytes", "appearance"} {
 		if strings.Contains(string(contents), unwanted) {
 			t.Fatalf("saving the start directory wrote %q into metadata:\n%s", unwanted, contents)
 		}
@@ -102,88 +118,57 @@ func TestSavingDoesNotWriteSettingsNobodyChose(t *testing.T) {
 func TestTheLimitsRoundTripAndCanBeCleared(t *testing.T) {
 	service, _ := newTerminalService(t)
 
-	if _, err := service.SetTerminalSettings(TerminalSettings{
-		MaxSessions: 4, ScrollbackBytes: 32768,
-	}); err != nil {
+	if err := setStandardTerminal(t, service, EmbeddedTerminal{MaxSessions: 4, ScrollbackBytes: 32768}); err != nil {
 		t.Fatal(err)
 	}
-	if got := service.TerminalSettings(); got.MaxSessions != 4 || got.ScrollbackBytes != 32768 {
-		t.Fatalf("settings = %#v", got)
-	}
-	stored, _, err := service.metadata.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if limits := stored.TerminalLimits(); limits.MaxSessions != 4 || limits.Scrollback != 32768 {
+	if limits := service.TerminalLimits(); limits.MaxSessions != 4 || limits.Scrollback != 32768 {
 		t.Fatalf("limits = %#v, want the stored numbers to reach the terminal", limits)
 	}
 
-	if _, err := service.SetTerminalSettings(TerminalSettings{}); err != nil {
+	if err := setStandardTerminal(t, service, EmbeddedTerminal{}); err != nil {
 		t.Fatal(err)
 	}
-	if got := service.TerminalSettings(); got != (TerminalSettings{}) {
-		t.Fatalf("settings after clearing = %#v", got)
+	if limits := service.TerminalLimits(); limits != terminal.DefaultLimits() {
+		t.Fatalf("limits after clearing = %#v", limits)
 	}
 }
 
-func TestTheClipboardChoicesRoundTripAndCanBeCleared(t *testing.T) {
+func TestTerminalChoicesRoundTripThroughThePreset(t *testing.T) {
 	service, _ := newTerminalService(t)
 	off := false
-
-	if _, err := service.SetTerminalSettings(TerminalSettings{
-		CopyOnSelect: &off, RightClickPaste: &off,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	got := service.TerminalSettings()
-	if got.CopyOnSelect == nil || *got.CopyOnSelect || got.RightClickPaste == nil || *got.RightClickPaste {
-		t.Fatalf("settings = %#v, want both choices explicitly off", got)
-	}
-
-	if _, err := service.SetTerminalSettings(TerminalSettings{}); err != nil {
-		t.Fatal(err)
-	}
-	if got := service.TerminalSettings(); got != (TerminalSettings{}) {
-		t.Fatalf("settings after clearing = %#v", got)
-	}
-}
-
-func TestTerminalDisplayAndSecurityChoicesRoundTrip(t *testing.T) {
-	service, _ := newTerminalService(t)
-	webgl := false
-	statusLine := false
-	off := false
-	want := TerminalSettings{
+	want := EmbeddedTerminal{
+		CopyOnSelect:           &off,
+		RightClickPaste:        &off,
 		BrowserScrollbackLines: 12000,
 		RetainedTerminals:      20,
-		WebGL:                  &webgl,
-		OSC52:                  true,
+		WebGL:                  &off,
 		JISYenBackslash:        true,
 		ComposerEnterSends:     true,
 		Ligatures:              true,
-		StatusLine:             &statusLine,
+		StatusLine:             &off,
 		CommandMarks:           &off,
 		StickyCommand:          &off,
 		CommandScrollbarMarks:  &off,
 		LocalShellProfile:      "fish",
+		Appearance:             &TerminalAppearance{Palette: "dracula"},
 	}
-	if _, err := service.SetTerminalSettings(want); err != nil {
+	if err := setStandardTerminal(t, service, want); err != nil {
 		t.Fatal(err)
 	}
-	got := service.TerminalSettings()
-	if got.BrowserScrollbackLines != want.BrowserScrollbackLines || got.RetainedTerminals != want.RetainedTerminals || got.WebGL == nil || *got.WebGL || got.OSC52 != want.OSC52 ||
-		got.JISYenBackslash != want.JISYenBackslash || got.ComposerEnterSends != want.ComposerEnterSends || got.Ligatures != want.Ligatures ||
-		got.StatusLine == nil || *got.StatusLine ||
-		got.CommandMarks == nil || *got.CommandMarks || got.StickyCommand == nil || *got.StickyCommand || got.CommandScrollbarMarks == nil || *got.CommandScrollbarMarks ||
-		got.LocalShellProfile != want.LocalShellProfile {
+
+	if got := service.terminalPresetSettings(); !sameSettings(got, want) {
 		t.Fatalf("settings = %#v, want %#v", got, want)
+	}
+	if got := service.TerminalLocalShellProfile(); got != "fish" {
+		t.Fatalf("local shell profile = %q, want fish", got)
 	}
 }
 
 func TestTheLimitsAreRefusedOutsideTheirRange(t *testing.T) {
 	service, _ := newTerminalService(t)
+	tint := 500
 
-	for name, settings := range map[string]TerminalSettings{
+	for name, settings := range map[string]EmbeddedTerminal{
 		"too many sessions":       {MaxSessions: 9999},
 		"negative sessions":       {MaxSessions: -1},
 		"scrollback too small":    {ScrollbackBytes: 1},
@@ -193,12 +178,14 @@ func TestTheLimitsAreRefusedOutsideTheirRange(t *testing.T) {
 		"no terminal kept":        {RetainedTerminals: -1},
 		"too many terminals kept": {RetainedTerminals: 100},
 		"invalid shell profile":   {LocalShellProfile: "../../bin/sh"},
+		"backgroundTint":          {Appearance: &TerminalAppearance{BackgroundTint: &tint}},
+		"palette":                 {Appearance: &TerminalAppearance{Palette: strings.Repeat("p", 65)}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := service.SetTerminalSettings(settings); !errors.Is(err, ErrMetadataTerminal) {
+			if err := setStandardTerminal(t, service, settings); !errors.Is(err, ErrMetadataTerminal) {
 				t.Fatalf("error = %v, want ErrMetadataTerminal", err)
 			}
-			if got := service.TerminalSettings(); got != (TerminalSettings{}) {
+			if got := service.terminalPresetSettings(); !sameSettings(got, EmbeddedTerminal{}) {
 				t.Fatalf("the refusal wrote %#v", got)
 			}
 		})
@@ -211,7 +198,7 @@ func TestAStartDirectoryThatDisappearedFallsBackToTheHome(t *testing.T) {
 	if err := os.Mkdir(work, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~/work"}); err != nil {
+	if err := setStandardTerminal(t, service, EmbeddedTerminal{StartDirectory: "~/work"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(work); err != nil {
@@ -229,78 +216,36 @@ func TestAnUnchangedMissingStartDirectoryDoesNotBlockOtherTerminalSettings(t *te
 	if err := os.Mkdir(work, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~/work"}); err != nil {
+	if err := setStandardTerminal(t, service, EmbeddedTerminal{StartDirectory: "~/work"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(work); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := service.SetTerminalSettings(TerminalSettings{
-		StartDirectory: "~/work",
-		FontSize:       16,
-	}); err != nil {
+	if err := setStandardTerminal(t, service, EmbeddedTerminal{StartDirectory: "~/work", FontSize: 16}); err != nil {
 		t.Fatalf("saving an unrelated setting with the unchanged directory = %v", err)
 	}
-	if got := service.TerminalSettings(); got.StartDirectory != "~/work" || got.FontSize != 16 {
+	if got := service.terminalPresetSettings(); got.StartDirectory != "~/work" || got.FontSize != 16 {
 		t.Fatalf("settings = %#v", got)
 	}
 }
 
 func TestClearingTheStartDirectoryReturnsToTheHome(t *testing.T) {
 	service, workspace := newTerminalService(t)
-	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~"}); err != nil {
+	if err := setStandardTerminal(t, service, EmbeddedTerminal{StartDirectory: "~"}); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: ""}); err != nil {
+	if err := setStandardTerminal(t, service, EmbeddedTerminal{}); err != nil {
 		t.Fatal(err)
 	}
 
-	stored, _, err := service.metadata.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.TerminalStartDirectory() != "" {
-		t.Fatalf("stored = %q, want it cleared", stored.TerminalStartDirectory())
+	if stored := service.terminalPresetSettings().StartDirectory; stored != "" {
+		t.Fatalf("stored = %q, want it cleared", stored)
 	}
 	if got := service.TerminalStartDirectory(); got != workspace.Home() {
 		t.Fatalf("start directory = %q, want the home", got)
-	}
-}
-
-func TestTheAppearanceRoundTripsAndCanBeCleared(t *testing.T) {
-	service, _ := newTerminalService(t)
-
-	if _, err := service.SetTerminalSettings(TerminalSettings{
-		Appearance: TerminalAppearance{Palette: "dracula"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if got := service.TerminalSettings().Appearance.Palette; got != "dracula" {
-		t.Fatalf("palette = %q, want it read back", got)
-	}
-
-	if _, err := service.SetTerminalSettings(TerminalSettings{}); err != nil {
-		t.Fatal(err)
-	}
-	if got := service.TerminalSettings().Appearance; !got.Empty() {
-		t.Fatalf("appearance = %#v, want it cleared", got)
-	}
-}
-
-func TestSavingDoesNotWriteAnAppearanceNobodyChose(t *testing.T) {
-	service, workspace := newTerminalService(t)
-
-	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~"}); err != nil {
-		t.Fatal(err)
-	}
-	contents, err := os.ReadFile(filepath.Join(workspace.Root(), "sshc", MetadataFileName))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(contents), "appearance") {
-		t.Fatalf("saving the start directory wrote an appearance into metadata:\n%s", contents)
 	}
 }
 
@@ -308,19 +253,12 @@ func TestChoosingNoReconnectSurvivesTheRoundTrip(t *testing.T) {
 	service, _ := newTerminalService(t)
 	never := 0
 
-	if _, err := service.SetTerminalSettings(TerminalSettings{Reconnect: &never}); err != nil {
+	if err := setGlobalTerminal(t, service, GlobalTerminalSettings{Reconnect: &never}); err != nil {
 		t.Fatal(err)
 	}
 
-	settings := service.TerminalSettings()
-	if settings.Reconnect == nil {
-		t.Fatal("繋ぎ直さないという選択が、書かれていない状態として読まれた")
-	}
-	if *settings.Reconnect != 0 {
-		t.Fatalf("Reconnect = %d, want 0", *settings.Reconnect)
-	}
 	if attempts := service.TerminalReconnects(); attempts != 0 {
-		t.Fatalf("TerminalReconnects = %d, want 0", attempts)
+		t.Fatalf("TerminalReconnects = %d, want 0 (繋ぎ直さないという選択が、書かれていない状態として読まれた)", attempts)
 	}
 }
 
@@ -330,27 +268,25 @@ func TestAnUnsetReconnectFallsBackToTheDefault(t *testing.T) {
 		t.Fatalf("TerminalReconnects = %d, want %d", attempts, terminal.MaxReconnects)
 	}
 
-	// The contract rejects out-of-range values on write; a value that still
-	// reaches the file (an older engine, a hand edit) is normalised on read.
 	tooMany := 99
-	if _, err := service.SetTerminalSettings(TerminalSettings{Reconnect: &tooMany}); !errors.Is(err, ErrMetadataTerminal) {
-		t.Fatalf("SetTerminalSettings(reconnect 99) = %v, want ErrMetadataTerminal", err)
+	if err := setGlobalTerminal(t, service, GlobalTerminalSettings{Reconnect: &tooMany}); !errors.Is(err, ErrMetadataTerminal) {
+		t.Fatalf("reconnect 99 = %v, want ErrMetadataTerminal", err)
 	}
 	if attempts := service.TerminalReconnects(); attempts != terminal.MaxReconnects {
 		t.Fatalf("after a refused write = %d, want %d", attempts, terminal.MaxReconnects)
 	}
 }
 
-func TestTerminalSettingsRejectTheRangesTheContractDeclares(t *testing.T) {
+func TestTheConnectionLogLevelIsRefusedOutsideItsRange(t *testing.T) {
 	service, _ := newTerminalService(t)
-	tint := 500
-	for name, settings := range map[string]TerminalSettings{
-		"verbosity":      {Verbosity: 9},
-		"backgroundTint": {Appearance: TerminalAppearance{BackgroundTint: &tint}},
-		"palette":        {Appearance: TerminalAppearance{Palette: strings.Repeat("p", 65)}},
-	} {
-		if _, err := service.SetTerminalSettings(settings); !errors.Is(err, ErrMetadataTerminal) {
-			t.Errorf("%s out of range was accepted: %v", name, err)
-		}
+
+	if err := setGlobalTerminal(t, service, GlobalTerminalSettings{Verbosity: 9}); !errors.Is(err, ErrMetadataTerminal) {
+		t.Fatalf("verbosity 9 = %v, want ErrMetadataTerminal", err)
+	}
+	if err := setGlobalTerminal(t, service, GlobalTerminalSettings{Verbosity: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.TerminalVerbosity(); got != 2 {
+		t.Fatalf("verbosity = %d, want 2", got)
 	}
 }

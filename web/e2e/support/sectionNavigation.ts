@@ -26,7 +26,7 @@ const navigationBySection: Record<Section, SectionNavigation> = {
   Passwords: { navigation: "Account passwords", heading: "Account passwords" },
   "Key Passphrases": { navigation: "Key passphrases", heading: "Key passphrases" },
   OTP: { navigation: "OTP", heading: "OTP" },
-  Settings: { navigation: "Engine", heading: "Engine" },
+  Settings: { navigation: "General", heading: "General" },
   Sync: { navigation: "Sync", heading: "Remote sync" },
   VPN: { navigation: "VPN", heading: "VPN" },
   History: { navigation: "History", heading: "History" },

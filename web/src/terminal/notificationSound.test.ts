@@ -7,30 +7,29 @@ import {
   primeNotificationSound,
   saveNotificationSoundPreferences,
 } from "./notificationSound";
+import { fakeSettingsServer } from "../testing/settingsServer";
 
 afterEach(() => {
-  window.localStorage.clear();
   vi.restoreAllMocks();
 });
 
 describe("notification sound preferences", () => {
-  it("uses safe defaults, stores browser-local choices, and rejects unknown presets", () => {
+  it("uses safe defaults and keeps a chosen sound in the preset in use", async () => {
+    const server = fakeSettingsServer();
     expect(loadNotificationSoundPreferences()).toEqual(defaultNotificationSoundPreferences);
-    saveNotificationSoundPreferences({ sound: "pulse", volume: 35 });
-    expect(loadNotificationSoundPreferences()).toEqual({ sound: "pulse", volume: 35 });
 
-    window.localStorage.setItem("sshc.terminal-notification-sound.v1", JSON.stringify({ sound: "remote-url", volume: 999 }));
-    expect(loadNotificationSoundPreferences()).toEqual({ sound: "bell", volume: 100 });
+    await saveNotificationSoundPreferences({ sound: "pulse", volume: 35 });
+
+    expect(loadNotificationSoundPreferences()).toEqual({ sound: "pulse", volume: 35 });
+    expect(server.document().presets[0]).toEqual({ id: "default", interface: { notificationSound: { sound: "pulse", volume: 35 } } });
   });
 
-  it("falls back to the defaults and keeps working when the browser refuses storage", () => {
-    window.localStorage.setItem("sshc.terminal-notification-sound.v1", "{not json");
-    expect(loadNotificationSoundPreferences()).toEqual(defaultNotificationSoundPreferences);
+  it("does not write the default sound into the preset", async () => {
+    const server = fakeSettingsServer({ presets: [{ id: "default", interface: { notificationSound: { sound: "pulse", volume: 35 } } }] });
 
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new DOMException("denied", "SecurityError"); });
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("denied", "SecurityError"); });
-    expect(() => saveNotificationSoundPreferences({ sound: "pulse", volume: 35 })).not.toThrow();
-    expect(loadNotificationSoundPreferences()).toEqual(defaultNotificationSoundPreferences);
+    await saveNotificationSoundPreferences(defaultNotificationSoundPreferences);
+
+    expect(server.document().presets[0]).toEqual({ id: "default" });
   });
 
   it("primes one reusable audio context from a user gesture", async () => {

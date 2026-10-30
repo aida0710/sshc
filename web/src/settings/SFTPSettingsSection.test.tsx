@@ -1,106 +1,59 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../api/client";
-import type { TransferSettings } from "../sftp/api";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { apiClient, ApiError } from "../api/client";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import { SFTPSettingsSection } from "./SFTPSettingsSection";
 
-const savedSettings: TransferSettings = {
-  maxConcurrent: 2,
-  clearCompletedAfterSeconds: 300,
-  processingStopped: false,
-  largeFileThresholdBytes: 100 << 20,
-  largeFileParallelism: 4,
-  largeFileChunkBytes: 32 << 20,
-  speedLimitBytesPerSecond: 0,
-  autoReconnect: false,
-  maxReconnectAttempts: 0,
-  excludePatterns: [],
-};
+afterEach(() => vi.restoreAllMocks());
 
-const manager = vi.hoisted(() => {
-  // useSyncExternalStore needs the same snapshot until something changes.
-  const noJobs: unknown[] = [];
-  return {
-    subscribe: () => () => undefined,
-    getSnapshot: () => noJobs,
-    getSettings: vi.fn(),
-    reconcile: vi.fn(),
-    applySettings: vi.fn(),
-  };
-});
-
-vi.mock("../sftp/transferManager", () => ({ sftpTransferManager: manager }));
+// fileTransfersOf is a preset's transfer settings as the engine keeps them.
+function fileTransfersOf(server: ReturnType<typeof fakeSettingsServer>, id: string): unknown {
+  return server.document().presets.find((preset) => preset.id === id)?.fileTransfers;
+}
 
 describe("Settings > SFTP", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    manager.getSettings.mockReturnValue(savedSettings);
-    manager.reconcile.mockResolvedValue(undefined);
-    manager.applySettings.mockResolvedValue(undefined);
-  });
+  it("shows the preset's transfer settings and the exclusions, with the defaults for what it left out", () => {
+    fakeSettingsServer({ presets: [{ id: "default", fileTransfers: { largeFileParallelism: 4 } }] });
+    render(<SFTPSettingsSection presetId="default" showHeading={false} />);
 
-  it("shows the transfer settings and the exclusions as two sections once the engine's queue is read", async () => {
-    render(<SFTPSettingsSection showHeading={false} />);
-    const transfers = await screen.findByRole("region", { name: "Transfers" });
+    const transfers = screen.getByRole("region", { name: "Transfers" });
     const exclusions = screen.getByRole("region", { name: "Transfer exclusions" });
-    expect(within(transfers).getByRole("spinbutton", { name: "Speed limit" })).toBeVisible();
-    expect(within(transfers).getByRole("checkbox", { name: "Resume automatically" })).not.toBeChecked();
-    expect(within(exclusions).getByRole("textbox", { name: "Exclusion patterns (one per line)" })).toBeVisible();
-    expect(screen.getByRole("combobox", { name: "Finished transfers" })).toHaveValue("300");
+    expect(within(transfers).getByRole("spinbutton", { name: "Speed limit" })).toHaveValue(0);
+    expect(within(transfers).getByRole("combobox", { name: "Concurrent transfers" })).toHaveValue("2");
     expect(screen.getByRole("spinbutton", { name: "Split at" })).toHaveValue(100);
     expect(screen.getByRole("spinbutton", { name: "Streams" })).toHaveValue(4);
     expect(screen.getByRole("spinbutton", { name: "Chunk" })).toHaveValue(32);
-    expect(manager.reconcile).toHaveBeenCalledOnce();
+    expect(within(exclusions).getByRole("textbox", { name: "Exclusion patterns (one per line)" })).toBeVisible();
+    // Finishing transfers and reconnecting are global settings, on the General page.
+    expect(screen.queryByRole("combobox", { name: "Finished transfers" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Resume automatically" })).not.toBeInTheDocument();
   });
 
-  it("says it is reading the settings until the engine's queue answers", async () => {
-    let answer: () => void = () => undefined;
-    manager.reconcile.mockReturnValue(new Promise<void>((resolve) => { answer = resolve; }));
-    render(<SFTPSettingsSection showHeading={false} />);
-    expect(screen.getByText("Loading SFTP settings…")).toBeVisible();
-    expect(screen.queryByRole("region", { name: "Transfers" })).not.toBeInTheDocument();
+  it("saves each change in the preset being edited, leaving the defaults out", async () => {
+    const server = fakeSettingsServer({ presets: [{ id: "default" }, { id: "phone", name: "Phone" }] });
+    render(<SFTPSettingsSection presetId="phone" showHeading={false} />);
 
-    answer();
-    expect(await screen.findByRole("region", { name: "Transfers" })).toBeVisible();
-    expect(screen.queryByText("Loading SFTP settings…")).not.toBeInTheDocument();
-  });
-
-  it("sends each change to the engine on its own", async () => {
-    render(<SFTPSettingsSection showHeading={false} />);
-    await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Concurrent transfers" }), "5");
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 5 });
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "5");
+    await waitFor(() => expect(fileTransfersOf(server, "phone")).toEqual({ maxConcurrent: 5 }));
 
     const speed = screen.getByRole("spinbutton", { name: "Speed limit" });
     fireEvent.change(speed, { target: { value: "2048" } });
     fireEvent.blur(speed);
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ speedLimitBytesPerSecond: 2048 * 1024 });
-    expect(screen.getByText("KiB/s")).toBeVisible();
+    await waitFor(() => expect(fileTransfersOf(server, "phone")).toEqual({ maxConcurrent: 5, speedLimitBytesPerSecond: 2048 * 1024 }));
 
-    await userEvent.click(screen.getByRole("checkbox", { name: "Resume automatically" }));
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ autoReconnect: true, maxReconnectAttempts: 3 });
-
-    const chunk = screen.getByRole("spinbutton", { name: "Chunk" });
-    fireEvent.change(chunk, { target: { value: "41" } });
-    fireEvent.blur(chunk);
-    expect(manager.applySettings).toHaveBeenLastCalledWith({ largeFileChunkBytes: 41 << 20 });
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "2");
+    await waitFor(() => expect(fileTransfersOf(server, "phone")).toEqual({ speedLimitBytesPerSecond: 2048 * 1024 }));
+    expect(fileTransfersOf(server, "default")).toBeUndefined();
   });
 
-  it("keeps the form closed until the queue can be read, so defaults are never saved", async () => {
-    manager.reconcile.mockRejectedValueOnce(new Error("offline"));
-    render(<SFTPSettingsSection showHeading={false} />);
-    expect(await screen.findByText("SFTP settings could not be loaded. They cannot be saved until they load.")).toBeVisible();
-    expect(screen.queryByRole("region", { name: "Transfers" })).not.toBeInTheDocument();
+  it("says when a change could not be saved", async () => {
+    fakeSettingsServer();
+    render(<SFTPSettingsSection presetId="default" showHeading={false} />);
+    vi.mocked(apiClient.mutate).mockRejectedValue(new ApiError("disk_full", 500, null));
 
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByRole("region", { name: "Transfers" })).toBeVisible();
-  });
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "5");
 
-  it("says why a change did not go through and reads the queue again", async () => {
-    manager.applySettings.mockRejectedValueOnce(new ApiError("sftp_transfer_state", 409, null));
-    render(<SFTPSettingsSection showHeading={false} />);
-    await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Concurrent transfers" }), "5");
-    expect(await screen.findByText("The transfer state changed. The list has been refreshed.")).toBeVisible();
-    expect(manager.reconcile).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText("The SFTP settings could not be saved.")).toBeVisible();
   });
 });

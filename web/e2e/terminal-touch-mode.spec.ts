@@ -25,9 +25,9 @@ test("fixes a touch-first PC to the mouse, so drag selection and link clicks wor
   await expect(overlay).toHaveCount(1);
 
   await terminal.getByRole("button", { name: "More terminal actions" }).click();
-  const globalSettings = terminal.getByRole("group", { name: "Global settings" });
-  await globalSettings.getByRole("menuitemcheckbox", { name: "Detect touch automatically" }).click();
-  await globalSettings.getByRole("menuitemradio", { name: "Use by mouse" }).click();
+  const allTerminals = terminal.getByRole("group", { name: "All terminals" });
+  await allTerminals.getByRole("menuitemcheckbox", { name: "Detect touch automatically" }).click();
+  await allTerminals.getByRole("menuitemradio", { name: "Use by mouse" }).click();
   // The same terminal, without reconnecting: the output stays and only the layer goes.
   await expect(overlay).toHaveCount(0);
   await expect(urlRow).toBeVisible();
@@ -57,5 +57,8 @@ test("fixes a touch-first PC to the mouse, so drag selection and link clicks wor
   await expect(settings.getByRole("combobox", { name: "Fixed input" })).toHaveValue("mouse");
   await detect.click();
   await expect(settings.getByRole("combobox", { name: "Fixed input" })).toBeDisabled();
-  expect(await page.evaluate(() => window.localStorage.getItem("sshc.terminal.touch-mode.v1"))).toBe("auto");
+  // The choice is kept in the preset this machine uses, and detection, the default, is not written.
+  await expect.poll(async () => (JSON.parse(await installation.read("sshc/metadata.json")) as {
+    presets: { interface?: { touchMode?: string } }[];
+  }).presets[0]?.interface?.touchMode).toBeUndefined();
 });

@@ -12,8 +12,7 @@ import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
-import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
-import { localStorageKeys } from "../ui/browserStorageKeys";
+import { updatePresetInterface, usePresetInterface } from "../settings/presetInterface";
 import { ConnectionActions } from "./ConnectionActions";
 import { hostMatchesQuery, normalizeHostQuery } from "../connections/hostSearch";
 import { connectionAddress } from "../connections/connectionAddress";
@@ -33,12 +32,9 @@ type QuickConnectBrowserProps = {
 
 type QuickConnectView = "panel" | "list";
 
-function storedView(): QuickConnectView {
-  return readStoredValue(localStorageKeys.quickConnectView) === "list" ? "list" : "panel";
-}
-
+// rememberView keeps the view in the preset this machine uses; the panels are the default and are not written.
 function rememberView(view: QuickConnectView) {
-  writeStoredValue(localStorageKeys.quickConnectView, view);
+  void updatePresetInterface((settings) => ({ ...settings, homeView: view === "panel" ? undefined : view })).catch(() => undefined);
 }
 
 function connectionDestination(server: BrowserServer): string {
@@ -67,7 +63,7 @@ export function QuickConnectBrowser({
   const mobile = useMediaQuery(mobileViewportQuery);
   const [query, setQuery] = useState("");
   const [groupTrail, setGroupTrail] = useState<string[]>([]);
-  const [view, setView] = useState<QuickConnectView>(storedView);
+  const view: QuickConnectView = usePresetInterface().homeView === "list" ? "list" : "panel";
   const [selectedAlias, setSelectedAlias] = useState("");
   const pointerType = useRef("keyboard");
   const index = useMemo(() => buildConnectionBrowserIndex(overview), [overview]);
@@ -102,7 +98,6 @@ export function QuickConnectBrowser({
   );
 
   function changeView(next: QuickConnectView) {
-    setView(next);
     rememberView(next);
   }
 

@@ -43,7 +43,7 @@ func loadMetadata(t *testing.T, service *Service) Metadata {
 func changeTransferSettingsElsewhere(t *testing.T, service *Service) {
 	t.Helper()
 	stored := loadMetadata(t, service)
-	stored.FileTransfers = &FileTransferSettings{MaxConcurrent: 3}
+	stored.Presets[0].FileTransfers = &FileTransferSettings{MaxConcurrent: 3}
 	seedMetadata(t, service, stored)
 }
 
@@ -61,8 +61,8 @@ func TestSavingOneHostsMetadataKeepsSectionsChangedElsewhere(t *testing.T) {
 	}
 
 	stored := loadMetadata(t, service)
-	if stored.FileTransfers == nil || stored.FileTransfers.MaxConcurrent != 3 {
-		t.Fatalf("transfer settings = %#v, want the value written elsewhere", stored.FileTransfers)
+	if transfers := stored.Presets[0].FileTransfers; transfers == nil || transfers.MaxConcurrent != 3 {
+		t.Fatalf("transfer settings = %#v, want the value written elsewhere", transfers)
 	}
 	if len(stored.Hosts) != 1 || stored.Hosts[0].Tags[0] != "prod" {
 		t.Fatalf("hosts = %#v", stored.Hosts)
@@ -207,7 +207,7 @@ func TestRenamingOntoALeftoverOrphanKeepsOnlyTheRenamedHostsMetadata(t *testing.
 func TestRestoringAMetadataFileThatCouldNotBeSavedIsRefused(t *testing.T) {
 	service, _ := newTestService(t)
 	seedMetadata(t, service, NewMetadata())
-	handEdited := []byte(`{"schemaVersion":9,"hosts":[` +
+	handEdited := []byte(`{"schemaVersion":10,"hosts":[` +
 		`{"identity":{"path":"config","alias":"bastion"},"note":"first"},` +
 		`{"identity":{"path":"config","alias":"bastion"},"note":"second"}]}`)
 	acltest.WritePrivateFile(t, service.metadata.Path(), handEdited)

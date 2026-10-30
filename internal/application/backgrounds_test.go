@@ -129,7 +129,7 @@ func TestRenamingABackgroundMovesSavedReferencesInTheSameTransaction(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	metadata.EmbeddedTerminal = &EmbeddedTerminal{Appearance: &TerminalAppearance{Background: added.Name}}
+	metadata.Presets[0].Terminal = &EmbeddedTerminal{Appearance: &TerminalAppearance{Background: added.Name}}
 	metadata.Hosts = []HostMetadata{{
 		Identity:   HostIdentity{Path: "connections/work/host.conf", Alias: "host"},
 		Appearance: &TerminalAppearance{Background: added.Name},
@@ -160,7 +160,7 @@ func TestRenamingABackgroundMovesSavedReferencesInTheSameTransaction(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := stored.EmbeddedTerminal.Appearance.Background; got != renamed.Name {
+	if got := stored.Presets[0].Terminal.Appearance.Background; got != renamed.Name {
 		t.Fatalf("overall background = %q", got)
 	}
 	if got := stored.Hosts[0].Appearance.Background; got != renamed.Name {

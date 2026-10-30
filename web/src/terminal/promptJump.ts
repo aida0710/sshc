@@ -1,5 +1,6 @@
 import type { IBuffer, IMarker, IParser } from "@xterm/xterm";
 import { matchesShortcut, shortcutsBlocked } from "../keyconfig/bindings";
+import { currentBindings } from "../keyconfig/presets";
 
 type JumpTerminal = {
   readonly parser: Pick<IParser, "registerOscHandler">;
@@ -60,7 +61,7 @@ export function trackPromptJumps(view: JumpTerminal): PromptJump {
 // nextPrompt shortcuts pressed in the terminal.
 export function attachPromptJumpKeys(container: HTMLElement, prompts: PromptJump): () => void {
   const pressed = (event: KeyboardEvent) => {
-    const direction = matchesShortcut(event, "previousPrompt") ? -1 : matchesShortcut(event, "nextPrompt") ? 1 : 0;
+    const direction = matchesShortcut(event, "previousPrompt", currentBindings()) ? -1 : matchesShortcut(event, "nextPrompt", currentBindings()) ? 1 : 0;
     if (direction === 0 || shortcutsBlocked(event) || !prompts.jump(direction)) return;
     event.preventDefault();
     event.stopPropagation();

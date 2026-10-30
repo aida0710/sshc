@@ -21,60 +21,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("settingsApi terminal settings", () => {
-  it("keeps explicitly disabled clipboard choices and leaves absent defaults unset", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse({
-          schemaVersion: 3,
-          embeddedTerminal: { copyOnSelect: false, rightClickPaste: false },
-        }),
-      ),
-    );
-
-    await expect(settingsApi.terminalSettings()).resolves.toEqual({
-      copyOnSelect: false,
-      rightClickPaste: false,
-    });
-  });
-
-  it("brings every stored field back", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse({
-          schemaVersion: 3,
-          embeddedTerminal: {
-            startDirectory: "~/work",
-            maxSessions: 4,
-            scrollbackBytes: 65536,
-            browserScrollbackLines: 12000,
-            fontSize: 18,
-            copyOnSelect: false,
-            rightClickPaste: false,
-            osc52: true,
-            jisYenBackslash: true,
-            localShellProfile: "fish",
-          },
-        }),
-      ),
-    );
-
-    await expect(settingsApi.terminalSettings()).resolves.toEqual({
-      startDirectory: "~/work",
-      maxSessions: 4,
-      scrollbackBytes: 65536,
-      browserScrollbackLines: 12000,
-      fontSize: 18,
-      copyOnSelect: false,
-      rightClickPaste: false,
-      osc52: true,
-      jisYenBackslash: true,
-      localShellProfile: "fish",
-    });
-  });
-
+describe("settingsApi local shell profiles", () => {
   it("validates detected local shell profiles", async () => {
     vi.stubGlobal(
       "fetch",
@@ -107,30 +54,3 @@ describe("settingsApi terminal settings", () => {
   });
 });
 
-describe("settingsApi engine settings", () => {
-  it("restores timed and restart-only Vault locking without inventing defaults", async () => {
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ port: 43123, vaultAutoLock: { mode: "idle", value: 45, unit: "minutes" } }))
-      .mockResolvedValueOnce(jsonResponse({ vaultAutoLock: { mode: "restart" } }))
-      .mockResolvedValueOnce(jsonResponse({}));
-    vi.stubGlobal("fetch", fetcher);
-
-    await expect(settingsApi.engineSettings()).resolves.toEqual({
-      port: 43123,
-      vaultAutoLock: { mode: "idle", value: 45, unit: "minutes" },
-    });
-    await expect(settingsApi.engineSettings()).resolves.toEqual({
-      vaultAutoLock: { mode: "restart" },
-    });
-    await expect(settingsApi.engineSettings()).resolves.toEqual({});
-  });
-
-  it("reads this machine's settings, which the synced metadata does not carry", async () => {
-    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ port: 43123 }));
-    vi.stubGlobal("fetch", fetcher);
-
-    await settingsApi.engineSettings();
-
-    expect(String(fetcher.mock.calls[0]?.[0])).toMatch(/\/api\/v1\/metadata\/engine$/);
-  });
-});

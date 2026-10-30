@@ -5,56 +5,74 @@ import { putJSON } from "../api/guards";
 import type { Metadata } from "../api/config";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
-import { defaultBindings, loadBindings, saveBindings, type Bindings } from "./bindings";
-import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
-import { localStorageKeys } from "../ui/browserStorageKeys";
+import { presetInterfaceOf, updatePresetInterface } from "../settings/presetInterface";
+import { currentSettings, useSettings, type SettingsDocument } from "../settings/settingsStore";
+import { defaultBindings, type Bindings } from "./bindings";
 import { newIdentifier } from "../ui/randomIdentifier";
 
 // Presets edited on another synced device arrive on the next push; a few
 // seconds keeps the two in step without a request per keystroke.
 const presetPollIntervalMs = 5_000;
 
+// defaultShortcutPresetId stands for the default bindings, which are not a saved preset.
+export const defaultShortcutPresetId = "default";
+
 export type Preset = components["schemas"]["ShortcutPreset"];
-type State = { presets: Preset[]; selected: string; loading: boolean; busy: boolean; error: boolean };
-let state: State = { presets: [], selected: "default", loading: true, busy: false, error: false };
+type State = { presets: Preset[]; loading: boolean; busy: boolean; error: boolean };
+let state: State = { presets: [], loading: true, busy: false, error: false };
 const listeners = new Set<() => void>();
 let generation = 0;
 let refreshing = false;
 let revision = 0;
 const publish = (patch: Partial<State>) => { state = { ...state, ...patch }; listeners.forEach((fn) => fn()); };
 const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
-export const usePresets = () => useSyncExternalStore(subscribe, () => state);
+
+// chosenShortcutPreset is the shortcut preset a settings preset chose (the one this machine uses when
+// settingsPresetId is left out), or the default bindings. It is the choice as stored, which may name a shortcut
+// preset deleted since.
+function chosenShortcutPreset(document: SettingsDocument | null, settingsPresetId?: string): string {
+  return presetInterfaceOf(document, settingsPresetId).shortcutPreset ?? defaultShortcutPresetId;
+}
+
+// bindingsOf is the shortcuts in force: those of the chosen shortcut preset, or the defaults when it chose
+// none or the one it chose is gone.
+function bindingsOf(presets: Preset[], selected: string): Bindings {
+  const bindings = presets.find((preset) => preset.id === selected)?.bindings;
+  return bindings === undefined ? defaultBindings : { ...defaultBindings, ...bindings };
+}
+
+// usePresets is the shortcut presets and the one a settings preset chose (the one this machine uses when
+// settingsPresetId is left out).
+export function usePresets(settingsPresetId?: string): State & { selected: string } {
+  const library = useSyncExternalStore(subscribe, () => state);
+  const chosen = chosenShortcutPreset(useSettings().document, settingsPresetId);
+  // A choice of a deleted shortcut preset is shown as the default bindings, which are the ones in force.
+  const selected = library.presets.some((preset) => preset.id === chosen) ? chosen : defaultShortcutPresetId;
+  return { ...library, selected };
+}
+
+// useBindings is the shortcuts of a settings preset (the ones in force when settingsPresetId is left out), for
+// the screens that show or match them.
+export function useBindings(settingsPresetId?: string): Bindings {
+  const library = useSyncExternalStore(subscribe, () => state);
+  return bindingsOf(library.presets, chosenShortcutPreset(useSettings().document, settingsPresetId));
+}
+
+// currentBindings is the shortcuts in force, for key handlers outside React.
+export function currentBindings(): Bindings {
+  return bindingsOf(state.presets, chosenShortcutPreset(currentSettings()));
+}
 
 async function put(base: Preset[], presets: Preset[]) {
-  await putJSON<unknown>("/api/v1/metadata/shortcuts", { base, presets });
+  await putJSON("/api/v1/metadata/shortcuts", { base, presets });
 }
-// `remember` is false only while nothing has ever been chosen: a browser that
-// is merely showing the defaults must not gain a stored preference for it.
-// activate throws when the browser refuses to store the bindings, and then
-// leaves the selection as it was, so the chosen preset never disagrees with
-// the shortcuts in force.
-function activate(id: string, presets: Preset[], remember = true) {
-  const preset = presets.find((item) => item.id === id);
-  const selected = preset ? id : "default";
-  const bindings = preset?.bindings ?? defaultBindings;
-  if (JSON.stringify(loadBindings()) !== JSON.stringify(bindings)) saveBindings(bindings);
-  if (remember) writeStoredValue(localStorageKeys.shortcutPresetSelection, selected);
-  publish({ selected });
+
+// selectPreset makes a settings preset (the one this machine uses when settingsPresetId is left out) take the
+// shortcut preset id.
+export function selectPreset(id: string, settingsPresetId?: string): Promise<void> {
+  return updatePresetInterface((settings) => ({ ...settings, shortcutPreset: id === defaultShortcutPresetId ? undefined : id }), settingsPresetId);
 }
-export function selectPreset(id: string) {
-  ++revision;
-  activate(id, state.presets);
-}
-// A refresh runs from polling, focus and other tabs rather than from anything
-// the user just did, so it does not report a refused storage.
-function activateInBackground(id: string, presets: Preset[], remember: boolean) {
-  try {
-    activate(id, presets, remember);
-  } catch {
-    // The presets stay editable and this tab keeps its previous shortcuts.
-    // The next refresh tries again, since the stored bindings still differ.
-  }
-}
+
 export async function refreshPresets() {
   if (refreshing || state.busy) return;
   refreshing = true;
@@ -63,31 +81,36 @@ export async function refreshPresets() {
   try {
     const metadata = validateOpenAPISchema<Metadata>("Metadata", await apiClient.read("/api/v1/metadata"));
     if (currentGeneration !== generation || currentRevision !== revision) return;
-    const presets: Preset[] = metadata.shortcutPresets ?? [];
-    const selected = readStoredValue(localStorageKeys.shortcutPresetSelection);
-    activateInBackground(selected ?? "default", presets, selected !== null);
-    publish({ presets, loading: false, error: false });
+    publish({ presets: metadata.shortcutPresets ?? [], loading: false, error: false });
   } catch { if (currentGeneration === generation) publish({ loading: false, error: true }); }
   finally { refreshing = false; }
 }
-export async function updatePresets(next: Preset[], selected = state.selected) {
+
+// updatePresets replaces the list of shortcut presets and makes a settings preset (the one this machine uses
+// when settingsPresetId is left out) take selected.
+export async function updatePresets(next: Preset[], selected: string, settingsPresetId?: string) {
   if (state.busy || state.loading || state.error) throw new Error("Presets are not ready; reload before saving");
   ++revision;
   publish({ busy: true });
   try {
     await put(state.presets, next);
     publish({ presets: next });
-    activate(selected, next);
   } catch (error) {
     publish({ error: true });
     throw error;
   } finally { publish({ busy: false }); }
+  if (selected !== chosenShortcutPreset(currentSettings(), settingsPresetId)) await selectPreset(selected, settingsPresetId);
 }
-export async function savePresetBindings(bindings: Bindings) {
-  const selected = state.presets.find((p) => p.id === state.selected);
+
+// savePresetBindings keeps edited bindings in the shortcut preset a settings preset chose, or in a new one when
+// it chose the default bindings.
+export async function savePresetBindings(bindings: Bindings, settingsPresetId?: string) {
+  const selectedId = chosenShortcutPreset(currentSettings(), settingsPresetId);
+  const selected = state.presets.find((p) => p.id === selectedId);
   const preset = selected ? { ...selected, bindings } : { id: newIdentifier(), name: "My shortcuts", bindings };
-  await updatePresets(selected ? state.presets.map((p) => p.id === preset.id ? preset : p) : [...state.presets, preset], preset.id);
+  await updatePresets(selected ? state.presets.map((p) => p.id === preset.id ? preset : p) : [...state.presets, preset], preset.id, settingsPresetId);
 }
+
 export function usePresetSync(ready: boolean) {
   useEffect(() => {
     if (!ready) return;
@@ -96,8 +119,7 @@ export function usePresetSync(ready: boolean) {
     void refreshPresets();
     const refresh = () => { void refreshPresets(); };
     window.addEventListener("focus", refresh);
-    window.addEventListener("storage", refresh);
-    return () => { ++generation; window.removeEventListener("focus", refresh); window.removeEventListener("storage", refresh); };
+    return () => { ++generation; window.removeEventListener("focus", refresh); };
   }, [ready]);
   usePolling(refreshPresets, { intervalMs: presetPollIntervalMs, enabled: ready, whileHidden: true });
 }

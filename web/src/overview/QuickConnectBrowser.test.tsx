@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Overview } from "../api/config";
 import type { RecentConnection } from "../api/recentConnections";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
@@ -47,7 +48,7 @@ const overview = {
     { name: "home/lab", directory: "connections/home/lab", keyDirectory: "keys/home/lab", memberCount: 1, directoryPresent: true },
   ],
   metadata: {
-    schemaVersion: 1,
+    schemaVersion: 10, presets: [{ id: "default" }],
     hosts: [
       { identity: { path: "connections/home/lab/eu.conf", alias: "eu-api" }, tags: ["production"] },
     ],
@@ -80,8 +81,10 @@ function renderBrowser(overrides: Partial<React.ComponentProps<typeof QuickConne
 
 describe("QuickConnectBrowser", () => {
   beforeEach(() => {
-    window.localStorage.clear();
+    fakeSettingsServer();
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   it("shows detected OS icons, manual overrides, and unknown hosts", () => {
     const data = structuredClone(overview);

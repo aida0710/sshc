@@ -1,17 +1,23 @@
-import { apiClient } from "../api/client";
-import { refreshPresets, type Preset } from "./presets";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { apiClient } from "../api/client";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import { KeyConfig } from "./KeyConfig";
-import { defaultBindings, loadBindings, matchesShortcut, parseBindings, shortcutKey, shortcutsBlocked } from "./bindings";
-import { localStorageKeys } from "../ui/browserStorageKeys";
+import { defaultBindings, matchesShortcut, shortcutKey, shortcutsBlocked } from "./bindings";
+import { currentBindings, refreshPresets, type Preset } from "./presets";
 
+let presets: Preset[];
+let failWrites: boolean;
 beforeEach(async () => {
-  let presets: Preset[] = [];
-  vi.spyOn(apiClient, "read").mockImplementation(async () => ({ schemaVersion: 5, shortcutPresets: presets }));
-  vi.spyOn(apiClient, "mutate").mockImplementation(async (_path, options) => {
-    presets = JSON.parse(options?.body as string).presets as Preset[];
-    return {};
+  presets = [];
+  failWrites = false;
+  fakeSettingsServer({}, {
+    read: async () => ({ schemaVersion: 10, presets: [{ id: "default" }], shortcutPresets: presets }),
+    mutate: async (_path, init) => {
+      if (failWrites) throw new Error("denied");
+      presets = (JSON.parse(init?.body as string) as { presets: Preset[] }).presets;
+      return {};
+    },
   });
   await refreshPresets();
 });
@@ -21,12 +27,6 @@ describe("application shortcuts", () => {
   it("shows the paste defaults and preserves saved paste bindings", () => {
     render(<KeyConfig />);
     expect(screen.getByRole("button", { name: "Assign shortcut: Paste" })).toHaveTextContent("Ctrl+V / Meta+V / Ctrl+Shift+V");
-    expect(parseBindings(JSON.stringify(defaultBindings))).toEqual(defaultBindings);
-    expect(parseBindings(JSON.stringify({ paste: ["Ctrl+Shift+V", "Meta+V"] })).paste).toEqual(["Ctrl+Shift+V", "Meta+V"]);
-    expect(parseBindings(JSON.stringify({ paste: ["Alt+V"] })).paste).toEqual(["Alt+V"]);
-    expect(parseBindings(JSON.stringify({ paste: [] })).paste).toEqual([]);
-    const custom = { ...defaultBindings, home: ["Ctrl+V"], paste: ["Ctrl+Shift+V", "Meta+V"] };
-    expect(parseBindings(JSON.stringify(custom))).toEqual(custom);
   });
 
   it("records, persists, disables and restores shortcuts without accepting duplicates", async () => {
@@ -35,16 +35,16 @@ describe("application shortcuts", () => {
     fireEvent.click(assign());
     fireEvent.keyDown(assign(), { key: "f", ctrlKey: true });
     expect(screen.getByRole("alert")).toHaveTextContent("Terminal search");
-    expect(loadBindings().palette).toEqual(defaultBindings.palette);
+    expect(currentBindings().palette).toEqual(defaultBindings.palette);
     fireEvent.keyDown(assign(), { key: "p", ctrlKey: true, shiftKey: true });
-    await waitFor(() => expect(loadBindings().palette).toEqual(["Ctrl+Shift+P"]));
+    await waitFor(() => expect(currentBindings().palette).toEqual(["Ctrl+Shift+P"]));
     view.unmount();
     render(<KeyConfig />);
     expect(assign()).toHaveTextContent("Ctrl+Shift+P");
     fireEvent.click(screen.getByRole("button", { name: "Clear shortcut: Command search" }));
-    await waitFor(() => expect(loadBindings().palette).toEqual([]));
+    await waitFor(() => expect(currentBindings().palette).toEqual([]));
     fireEvent.click(screen.getByRole("button", { name: "Restore defaults" }));
-    await waitFor(() => expect(loadBindings()).toEqual(defaultBindings));
+    await waitFor(() => expect(currentBindings()).toEqual(defaultBindings));
   });
 
   it("records a function key with Shift and one past F12, and saves what it recorded", async () => {
@@ -52,10 +52,10 @@ describe("application shortcuts", () => {
     const assign = () => screen.getByRole("button", { name: "Assign shortcut: Open Home" });
     fireEvent.click(assign());
     fireEvent.keyDown(assign(), { key: "F2", shiftKey: true });
-    await waitFor(() => expect(loadBindings().home).toEqual(["Shift+F2"]));
+    await waitFor(() => expect(currentBindings().home).toEqual(["Shift+F2"]));
     fireEvent.click(assign());
     fireEvent.keyDown(assign(), { key: "F13" });
-    await waitFor(() => expect(loadBindings().home).toEqual(["F13"]));
+    await waitFor(() => expect(currentBindings().home).toEqual(["F13"]));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -65,30 +65,29 @@ describe("application shortcuts", () => {
     expect(shortcutKey(new KeyboardEvent("keydown", { key: "F1", shiftKey: true }))).toBe("Shift+F1");
   });
 
-  it("reports failed storage writes and leaves current bindings intact", async () => {
+  it("reports a refused save and leaves current bindings intact", async () => {
     render(<KeyConfig />);
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("denied"); });
+    failWrites = true;
     fireEvent.click(screen.getByRole("button", { name: "Clear shortcut: Command search" }));
     await waitFor(() => expect(screen.getAllByRole("alert").some((element) => element.textContent?.includes("Could not save"))).toBe(true));
-    expect(loadBindings().palette).toEqual(defaultBindings.palette);
+    expect(currentBindings().palette).toEqual(defaultBindings.palette);
   });
 
-  it("reflects settings changed in another tab", () => {
+  it("reflects shortcuts changed on another machine", async () => {
     render(<KeyConfig />);
-    act(() => {
-      localStorage.setItem(localStorageKeys.shortcutBindings, JSON.stringify({ palette: ["Alt+K"] }));
-      window.dispatchEvent(new StorageEvent("storage", { key: localStorageKeys.shortcutBindings }));
+    presets = [{ id: "work", name: "Work", bindings: { ...defaultBindings, palette: ["Alt+K"] } }];
+    await act(async () => {
+      await refreshPresets();
+      fireEvent.change(screen.getByRole("combobox", { name: "Shortcut preset" }), { target: { value: "work" } });
     });
-    expect(screen.getByRole("button", { name: "Assign shortcut: Command search" })).toHaveTextContent("Alt+K");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Assign shortcut: Command search" })).toHaveTextContent("Alt+K"));
   });
 
   it("ignores composing/plain keys and matches exact modifiers", () => {
     expect(shortcutKey(new KeyboardEvent("keydown", { key: "a" }))).toBeNull();
     expect(shortcutKey(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, isComposing: true }))).toBeNull();
-    expect(matchesShortcut(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, altKey: true }), "palette")).toBe(false);
-    expect(matchesShortcut(new KeyboardEvent("keydown", { key: "K", metaKey: true }), "palette")).toBe(true);
-    expect(parseBindings('{"palette":["Ctrl+F"]}')).toEqual(defaultBindings);
-    expect(parseBindings('{"palette":["a"]}')).toEqual(defaultBindings);
+    expect(matchesShortcut(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, altKey: true }), "palette", defaultBindings)).toBe(false);
+    expect(matchesShortcut(new KeyboardEvent("keydown", { key: "K", metaKey: true }), "palette", defaultBindings)).toBe(true);
   });
 
   it.each([
@@ -106,7 +105,7 @@ describe("application shortcuts", () => {
     expect(apiClient.mutate).not.toHaveBeenCalled();
 
     fireEvent.keyDown(assign, { key: "F2" });
-    await waitFor(() => expect(loadBindings().home).toEqual(["F2"]));
+    await waitFor(() => expect(currentBindings().home).toEqual(["F2"]));
   });
 
   it("keeps shortcuts out of modal dialogs and the binding editor", () => {

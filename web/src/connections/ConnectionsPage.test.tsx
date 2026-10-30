@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectionsPage } from "./ConnectionsPage";
@@ -51,7 +52,7 @@ const overview = {
     file: { path: "config", absolute: "/home/tester/.ssh/config" },
     line: 1, patterns: ["bastion"], editable: true,
   }],
-  metadata: { schemaVersion: 1 },
+  metadata: { schemaVersion: 10, presets: [{ id: "default" }] },
   groups: [],
   diagnostics: [],
   notices: [],
@@ -216,7 +217,7 @@ describe("ConnectionsPage", () => {
     });
 
     it("hides only a group with no connections of its own, and shows hidden groups on request", async () => {
-      const hidden = { ...threeGroups, metadata: { schemaVersion: 1, groups: [{ name: "work", hidden: true }] } };
+      const hidden = { ...threeGroups, metadata: { schemaVersion: 10, presets: [{ id: "default" }], groups: [{ name: "work", hidden: true }] } };
       vi.mocked(configApi.overview).mockResolvedValueOnce(threeGroups).mockResolvedValue(hidden);
       vi.mocked(configApi.save).mockResolvedValue(saved);
       const groups = await renderPage();
@@ -326,7 +327,7 @@ describe("ConnectionsPage", () => {
   });
 
   it("offers a resizable divider between the connection list and the detail pane", async () => {
-    window.localStorage.removeItem("sshc.connections.list-width.v2");
+    const server = fakeSettingsServer();
     render(
       <ConnectionsPage
         {...terminalSessionProps}
@@ -341,7 +342,8 @@ describe("ConnectionsPage", () => {
     fireEvent.pointerMove(handle, { pointerId: 3, clientX: 360 });
     fireEvent.pointerUp(handle, { pointerId: 3, clientX: 360 });
     await waitFor(() => expect(handle).toHaveAttribute("aria-valuenow", "360"));
-    expect(window.localStorage.getItem("sshc.connections.list-width.v2")).toBe("360");
+    await waitFor(() => expect(server.document().presets[0]?.interface?.connectionListWidth).toBe(360));
+    vi.restoreAllMocks();
   });
 
   it("opens a connection and tab from the URL", async () => {
@@ -1007,7 +1009,7 @@ describe("ConnectionsPage", () => {
     const user = userEvent.setup();
     vi.mocked(configApi.overview).mockResolvedValue({
       ...overview,
-      metadata: { schemaVersion: 1, hosts: [{ identity: { path: "config", alias: "retired" }, tags: ["old"], orphan: true }] },
+      metadata: { schemaVersion: 10, presets: [{ id: "default" }], hosts: [{ identity: { path: "config", alias: "retired" }, tags: ["old"], orphan: true }] },
     });
     vi.mocked(configApi.save).mockRejectedValue(new ApiError("metadata_changed", 409, {
       code: "metadata_changed",
@@ -1588,7 +1590,7 @@ describe("dropping in the tree", () => {
         memberCount: 0, directoryPresent: true,
       },
     ],
-    metadata: { schemaVersion: 2, groups: [{ name: "home" }, { name: "work" }, { name: "home/eu" }] },
+    metadata: { schemaVersion: 10, presets: [{ id: "default" }], groups: [{ name: "home" }, { name: "work" }, { name: "home/eu" }] },
   };
 
   function drag(source: HTMLElement, target: HTMLElement, payload: DragPayload) {
@@ -1704,7 +1706,7 @@ describe("dropping in the tree", () => {
         group: "work/home",
       }],
       metadata: {
-        schemaVersion: 2,
+        schemaVersion: 10, presets: [{ id: "default" }],
         groups: [{ name: "work" }, { name: "work/home" }, { name: "work/home/eu" }],
       },
       groups: [

@@ -19,7 +19,7 @@ const configuration: MenuGroup = {
 const settings: MenuGroup = {
   label: "section.settings",
   items: [
-    { key: "Engine", label: "engine.heading", description: "menu.engineDescription", icon: "engine", href: "/settings/engine" },
+    { key: "General", label: "settings.generalHeading", description: "menu.generalDescription", icon: "global", href: "/settings/general" },
     { key: "Terminal", label: "terminal.settingsHeading", description: "menu.terminalDescription", icon: "terminal", href: "/settings/terminal" },
   ],
 };
@@ -65,7 +65,7 @@ describe("MenuPanel", () => {
     const config = screen.getByRole("link", { name: "Open Config" });
     expect(config).toHaveAttribute("href", "/config");
     expect(config).toHaveTextContent("Edit config files and their Includes");
-    expect(screen.getByRole("link", { name: "Open Engine" })).toHaveAttribute("href", "/settings/engine");
+    expect(screen.getByRole("link", { name: "Open General" })).toHaveAttribute("href", "/settings/general");
     expect(screen.getByRole("link", { name: "Open Terminal" })).toHaveAttribute("href", "/settings/terminal");
     expect(screen.queryByRole("link", { name: "Open Home" })).not.toBeInTheDocument();
   });

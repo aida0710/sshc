@@ -184,7 +184,6 @@ function SectionPage({
     onShowInspector,
     terminalSessions,
     onOpenTerminal,
-    onTerminalSettingsChange,
   } = shell;
   if (section === "About") return <AboutPage />;
   if (section === "License") return <LicensePage />;
@@ -236,9 +235,8 @@ function SectionPage({
   if (section === "Settings") {
     return (
       <SettingsPanel
-        page={parseSettingsPage(navigation.location.pathname) ?? "Engine"}
+        page={parseSettingsPage(navigation.location.pathname) ?? "General"}
         terminalSessions={terminalSessions}
-        onTerminalSettingsChange={onTerminalSettingsChange}
         onVaultChanged={onVaultChanged}
         passwordless={passwordless}
         onNavigatePage={(path) => navigation.onNavigateLocation(path)}

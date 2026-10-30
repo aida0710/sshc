@@ -9,7 +9,6 @@ import type {
   TransferJobAction,
   TransferJobList,
   TransferQueueMove,
-  TransferSettings,
   UploadChunk,
   UploadCompletion,
   UploadStart,
@@ -19,7 +18,6 @@ import type { TransferLedger } from "./transferLedger";
 
 export type TransferManagerAPI = {
   listTransfers(): Promise<TransferJobList>;
-  updateTransferSettings(settings: TransferSettings): Promise<TransferJobList>;
   moveTransfer(id: string, move: TransferQueueMove): Promise<TransferJobList>;
   createTransfer(input: CreateTransferJob): Promise<TransferJob>;
   clearFinishedTransfers(): Promise<void>;

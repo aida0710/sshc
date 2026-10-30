@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppearanceApi } from "../api/appearance";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import { AccentProvider } from "../theme/accentContext";
 import { ThemeProvider } from "../theme/context";
 import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
@@ -16,32 +16,33 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  window.localStorage.clear();
+  vi.restoreAllMocks();
   document.documentElement.removeAttribute("data-accent");
   document.documentElement.removeAttribute("data-theme");
   document.documentElement.removeAttribute("style");
 });
 
-function renderSection(api: AppearanceApi) {
+function renderSection() {
   return render(
     <ThemeProvider initial="dark">
-      <AccentProvider api={api}>
-        <AppearanceSettingsSection showHeading />
+      <AccentProvider>
+        <AppearanceSettingsSection presetId="default" showHeading />
       </AccentProvider>
     </ThemeProvider>,
   );
 }
 
-function fakeApi(): AppearanceApi & { setAppearanceSettings: ReturnType<typeof vi.fn> } {
-  return {
-    appearanceSettings: vi.fn(async () => ({})),
-    setAppearanceSettings: vi.fn(async () => undefined),
-  };
+
+// accentsWritten is every accent saved in the standard preset, oldest first.
+function accentsWritten(server: ReturnType<typeof fakeSettingsServer>): unknown[] {
+  return server.writesTo("/api/v1/settings/presets/default")
+    .map((body) => (body as { preset: { appearance?: { accent?: string } } }).preset.appearance?.accent);
 }
 
 describe("AppearanceSettingsSection", () => {
   it("offers the five presets and a custom colour with lavender chosen by default", () => {
-    renderSection(fakeApi());
+    fakeSettingsServer();
+    renderSection();
 
     const accents = screen.getByRole("radiogroup", { name: "Accent colour" });
     const names = within(accents).getAllByRole("radio").map((radio) => radio.closest("label")?.textContent);
@@ -49,21 +50,22 @@ describe("AppearanceSettingsSection", () => {
     expect(within(accents).getByRole("radio", { name: "Lavender" })).toBeChecked();
   });
 
-  it("saves the accent the user picks and paints the page with it", async () => {
-    const api = fakeApi();
-    renderSection(api);
+  it("saves the accent the user picks in the preset in use and paints the page with it", async () => {
+    const server = fakeSettingsServer();
+    renderSection();
 
     await userEvent.click(screen.getByRole("radio", { name: "Sky" }));
 
-    expect(api.setAppearanceSettings).toHaveBeenCalledWith({ accent: "sky" });
     expect(document.documentElement).toHaveAttribute("data-accent", "sky");
+    await waitFor(() => expect(accentsWritten(server)).toEqual(["sky"]));
     await waitFor(() => expect(screen.getByRole("radio", { name: "Sky" })).toBeChecked());
   });
 
   it("says the accent was not saved and keeps the previous one", async () => {
-    const api = fakeApi();
-    api.setAppearanceSettings.mockRejectedValue(new Error("disk full"));
-    renderSection(api);
+    fakeSettingsServer();
+    const { apiClient } = await import("../api/client");
+    vi.mocked(apiClient.mutate).mockRejectedValue(new Error("disk full"));
+    renderSection();
 
     await userEvent.click(screen.getByRole("radio", { name: "Pink" }));
 
@@ -73,50 +75,50 @@ describe("AppearanceSettingsSection", () => {
   });
 
   it("starts a custom accent from the colour on screen and saves it", async () => {
-    const api = fakeApi();
-    renderSection(api);
+    const server = fakeSettingsServer();
+    renderSection();
 
     await userEvent.click(screen.getByRole("radio", { name: "Custom" }));
 
     // The test page has no stylesheet, so the colour on screen is the lavender fallback.
-    // The preset stays beside the colour, for an older sshc that knows only the presets.
-    expect(api.setAppearanceSettings).toHaveBeenCalledWith({ accent: "#6550d0" });
+    await waitFor(() => expect(accentsWritten(server)).toEqual(["#6550d0"]));
     expect(document.documentElement).toHaveAttribute("data-accent", "custom");
     expect(document.documentElement.style.getPropertyValue("--ui-custom-accent")).toBe("#6550d0");
     expect(await screen.findByRole("textbox", { name: "Custom colour code" })).toHaveValue("#6550d0");
   });
 
   it("saves a typed colour code and says when it cannot read one", async () => {
-    const api = fakeApi();
-    renderSection(api);
+    const server = fakeSettingsServer();
+    renderSection();
     await userEvent.click(screen.getByRole("radio", { name: "Custom" }));
     const code = await screen.findByRole("textbox", { name: "Custom colour code" });
 
     await userEvent.clear(code);
     await userEvent.type(code, "3FA86B{Enter}");
-    expect(api.setAppearanceSettings).toHaveBeenLastCalledWith({ accent: "#3fa86b" });
+    await waitFor(() => expect(accentsWritten(server).at(-1)).toBe("#3fa86b"));
 
     await userEvent.clear(code);
     await userEvent.type(code, "green{Enter}");
     expect(screen.getByText("Enter the colour as #rrggbb.")).toBeVisible();
-    expect(api.setAppearanceSettings).toHaveBeenCalledTimes(2);
+    expect(accentsWritten(server)).toHaveLength(2);
   });
 
   it("gives up the custom colour when a preset is chosen", async () => {
-    const api = fakeApi();
-    renderSection(api);
+    const server = fakeSettingsServer();
+    renderSection();
     await userEvent.click(screen.getByRole("radio", { name: "Custom" }));
     await screen.findByRole("textbox", { name: "Custom colour code" });
 
     await userEvent.click(screen.getByRole("radio", { name: "Blue" }));
 
-    expect(api.setAppearanceSettings).toHaveBeenLastCalledWith({ accent: "blue" });
+    await waitFor(() => expect(accentsWritten(server).at(-1)).toBe("blue"));
     expect(document.documentElement).toHaveAttribute("data-accent", "blue");
     expect(screen.queryByRole("textbox", { name: "Custom colour code" })).toBeNull();
   });
 
   it("switches the theme from the same page", async () => {
-    renderSection(fakeApi());
+    fakeSettingsServer();
+    renderSection();
 
     await userEvent.click(screen.getByRole("radio", { name: "Light" }));
 

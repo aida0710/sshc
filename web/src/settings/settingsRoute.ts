@@ -2,68 +2,87 @@ import type { MessageKey } from "../i18n/messages";
 import type { IconName } from "../ui/icons";
 
 export const settingsPages = [
+  "General",
   "Appearance",
-  "Engine",
   "Terminal",
   "SFTP",
   "Shortcuts",
   "Notifications",
+  "Vault",
+  "Machines",
   "Connections",
-  "Password",
 ] as const;
 
 export type SettingsPage = (typeof settingsPages)[number];
 
+// SettingsGroup is where a page sits in the list beside it: the global settings, the settings of the preset
+// being edited, the machines, and what acts on this machine's sessions.
+export type SettingsGroup = "global" | "preset" | "machines" | "actions";
+
 export const settingsPageMeta: Record<
   SettingsPage,
-  // description is only for what a person would not learn from the page itself, such as that Engine's
-  // settings stay on this machine. A line that restates what the page shows is left out.
-  { path: string; label: MessageKey; description?: MessageKey; icon: IconName }
+  // description is only for what a person would not learn from the page itself. A line that restates what
+  // the page shows is left out.
+  { path: string; label: MessageKey; description?: MessageKey; icon: IconName; group: SettingsGroup }
 > = {
+  General: {
+    path: "/settings/general",
+    label: "settings.generalHeading",
+    description: "settings.generalDescription",
+    icon: "global",
+    group: "global",
+  },
   Appearance: {
     path: "/settings/appearance",
     label: "appearance.heading",
     icon: "appearance",
-  },
-  Engine: {
-    path: "/settings/engine",
-    label: "engine.heading",
-    description: "settings.engineDescription",
-    icon: "engine",
+    group: "preset",
   },
   Terminal: {
     path: "/settings/terminal",
     label: "terminal.settingsHeading",
-    // Terminal settings are kept in metadata.json, which Sync carries; only engine-settings.json stays on the machine.
-    description: "settings.terminalDescription",
+    description: "settings.presetDescription",
     icon: "terminal",
+    group: "preset",
   },
   SFTP: {
     path: "/settings/sftp",
     label: "sftp.settingsHeading",
     description: "settings.sftpDescription",
     icon: "files",
+    group: "preset",
   },
   Shortcuts: {
     path: "/settings/shortcuts",
     label: "shortcuts.heading",
     description: "shortcuts.description",
     icon: "keyboard",
+    group: "preset",
   },
   Notifications: {
     path: "/settings/notifications",
     label: "terminal.browserNotificationsHeading",
     icon: "notification",
+    group: "preset",
+  },
+  Vault: {
+    path: "/settings/vault",
+    label: "settings.vaultHeading",
+    icon: "secrets",
+    group: "preset",
+  },
+  Machines: {
+    path: "/settings/machines",
+    label: "settings.machinesHeading",
+    description: "settings.machinesDescription",
+    icon: "engine",
+    group: "machines",
   },
   Connections: {
     path: "/settings/connections",
     label: "desktop.closeAllHeading",
     icon: "disconnect",
-  },
-  Password: {
-    path: "/settings/password",
-    label: "secrets.changeHeading",
-    icon: "secrets",
+    group: "actions",
   },
 };
 

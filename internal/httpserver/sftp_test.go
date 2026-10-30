@@ -118,8 +118,9 @@ func TestAnUnusableDownloadSpoolIsLoggedWhenTheTransferManagerStarts(t *testing.
 func TestTheTransferManagerStartsWithTheStoredSettingsAndLogsTheOutOfRangeOnes(t *testing.T) {
 	harness := newConfigHarness(t)
 	// A hand-edited metadata.json can hold a value out of range.
-	if _, err := harness.service.SetFileTransferSettings(application.FileTransferSettings{
-		MaxConcurrent: 3, ProcessingStopped: true, LargeFileParallelism: sshcSFTP.MaxLargeFileParallelism + 1,
+	if err := harness.service.SetTransferSettings(application.TransferSettings{
+		Preset:  application.FileTransferSettings{MaxConcurrent: 3, LargeFileParallelism: sshcSFTP.MaxLargeFileParallelism + 1},
+		Stopped: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -170,16 +171,19 @@ func TestSavedTransferSettingsAreAppliedAndKeptForTheNextStart(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("save = %d: %s", response.Code, response.Body.String())
 	}
-	want := application.FileTransferSettings{
-		MaxConcurrent: 5, ClearCompletedAfterSeconds: 600, ProcessingStopped: true,
-		LargeFileThresholdBytes: 104857600, LargeFileParallelism: 2, LargeFileChunkBytes: 33554432,
-		SpeedLimitBytesPerSecond: 2048, AutoReconnect: true, MaxReconnectAttempts: 3, ExcludePatterns: []string{".git", "*.log"},
+	want := application.TransferSettings{
+		Preset: application.FileTransferSettings{
+			MaxConcurrent: 5, LargeFileThresholdBytes: 104857600, LargeFileParallelism: 2, LargeFileChunkBytes: 33554432,
+			SpeedLimitBytesPerSecond: 2048, ExcludePatterns: []string{".git", "*.log"},
+		},
+		Global:  application.GlobalFileTransferSettings{ClearCompletedAfterSeconds: 600, AutoReconnect: true, MaxReconnectAttempts: 3},
+		Stopped: true,
 	}
-	if stored := harness.service.FileTransferSettings(); !reflect.DeepEqual(stored, want) {
-		t.Fatalf("metadata.json holds %+v, want %+v", stored, want)
+	if stored := harness.service.TransferSettings(); !reflect.DeepEqual(stored, want) {
+		t.Fatalf("stored settings = %+v, want %+v", stored, want)
 	}
 	if manager.MaxConcurrent() != 5 || manager.ClearCompletedAfter() != 10*time.Minute || !manager.ProcessingStopped() ||
-		manager.SpeedLimitBytesPerSecond() != 2048 || !manager.AutoReconnect() || manager.MaxReconnectAttempts() != 3 || !slices.Equal(manager.ExcludePatterns(), want.ExcludePatterns) {
+		manager.SpeedLimitBytesPerSecond() != 2048 || !manager.AutoReconnect() || manager.MaxReconnectAttempts() != 3 || !slices.Equal(manager.ExcludePatterns(), want.Preset.ExcludePatterns) {
 		t.Fatalf("the engine runs %d concurrent, clears after %v, stopped %v",
 			manager.MaxConcurrent(), manager.ClearCompletedAfter(), manager.ProcessingStopped())
 	}
@@ -188,7 +192,7 @@ func TestSavedTransferSettingsAreAppliedAndKeptForTheNextStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer restarted.Close()
-	if restarted.SpeedLimitBytesPerSecond() != 2048 || !restarted.AutoReconnect() || restarted.MaxReconnectAttempts() != 3 || !slices.Equal(restarted.ExcludePatterns(), want.ExcludePatterns) {
+	if restarted.SpeedLimitBytesPerSecond() != 2048 || !restarted.AutoReconnect() || restarted.MaxReconnectAttempts() != 3 || !slices.Equal(restarted.ExcludePatterns(), want.Preset.ExcludePatterns) {
 		t.Fatal("restarting did not restore the saved speed and recovery settings")
 	}
 }
@@ -357,7 +361,7 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 
 func TestTransferSettingsOmissionPreservesExclusionsAndExplicitEmptyClearsThem(t *testing.T) {
 	harness := newConfigHarness(t)
-	if _, err := harness.service.SetFileTransferSettings(application.FileTransferSettings{MaxConcurrent: 2, ExcludePatterns: []string{".git", "*.log"}}); err != nil {
+	if err := harness.service.SetTransferSettings(application.TransferSettings{Preset: application.FileTransferSettings{MaxConcurrent: 2, ExcludePatterns: []string{".git", "*.log"}}}); err != nil {
 		t.Fatal(err)
 	}
 	request := map[string]any{
@@ -386,8 +390,8 @@ func TestTransferSettingsOmissionPreservesExclusionsAndExplicitEmptyClearsThem(t
 				t.Fatal(err)
 			}
 			manager, response := putTransferSettings(t, harness, string(encoded))
-			if response.Code != test.status || !slices.Equal(manager.ExcludePatterns(), test.want) || !slices.Equal(harness.service.FileTransferSettings().ExcludePatterns, test.want) {
-				t.Fatalf("response = %d %s, engine = %v, stored = %v", response.Code, response.Body.String(), manager.ExcludePatterns(), harness.service.FileTransferSettings().ExcludePatterns)
+			if response.Code != test.status || !slices.Equal(manager.ExcludePatterns(), test.want) || !slices.Equal(harness.service.TransferSettings().Preset.ExcludePatterns, test.want) {
+				t.Fatalf("response = %d %s, engine = %v, stored = %v", response.Code, response.Body.String(), manager.ExcludePatterns(), harness.service.TransferSettings().Preset.ExcludePatterns)
 			}
 		})
 	}

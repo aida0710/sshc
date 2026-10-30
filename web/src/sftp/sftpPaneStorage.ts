@@ -2,8 +2,7 @@ import { sftpSortColumns, type SFTPSort, type SFTPSortState } from "./sftpEntryS
 import { isLocalPath, localHostAlias } from "./localHost";
 import { blankPane, maxPanes, maxTabsPerPane, paneOf, type SFTPPane, type SFTPTab } from "./sftpPanes";
 import { clampSplitRatio } from "../ui/SplitResizeHandle";
-import { readStoredJSON, readStoredValue, writeStoredJSON, writeStoredValue } from "../ui/browserStorage";
-import { localStorageKeys } from "../ui/browserStorageKeys";
+import { keepMachineState, keepMachineStateJSON, readMachineState, readMachineStateJSON } from "../settings/machineState";
 import { newIdentifier } from "../ui/randomIdentifier";
 
 type StoredTab = { alias: string; path: string; sortKey: SFTPSort; sortDirection: SFTPSortState["direction"] };
@@ -43,7 +42,7 @@ function restorePane(value: unknown): SFTPPane[] {
 }
 
 export function restorePanes(): SFTPPane[] {
-  const stored = readStoredJSON(localStorageKeys.sftpPanes, []);
+  const stored = readMachineStateJSON("sftpPanes", []);
   const panes = Array.isArray(stored) ? stored.flatMap(restorePane).slice(0, maxPanes) : [];
   return panes.length === 0 ? [blankPane()] : panes;
 }
@@ -57,14 +56,14 @@ function storedPane(pane: SFTPPane): StoredPane {
 }
 
 export function rememberPanes(panes: SFTPPane[]): void {
-  writeStoredJSON(localStorageKeys.sftpPanes, panes.map(storedPane));
+  keepMachineStateJSON("sftpPanes", panes.map(storedPane));
 }
 
 export function restoreSplitRatio(): number {
-  const stored = readStoredValue(localStorageKeys.sftpSplitRatio);
+  const stored = readMachineState("sftpSplitRatio");
   return stored === null || stored.trim() === "" ? 50 : clampSplitRatio(Number(stored));
 }
 
 export function rememberSplitRatio(ratio: number): void {
-  writeStoredValue(localStorageKeys.sftpSplitRatio, String(ratio));
+  keepMachineState("sftpSplitRatio", String(ratio));
 }

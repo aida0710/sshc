@@ -1,4 +1,4 @@
-import type { TerminalSettings } from "../api/settings";
+import type { PresetTerminalSettings } from "./terminalSettings";
 import { appearanceOf } from "../terminal/appearance";
 import { fontSizeRange } from "../terminal/fontSize";
 
@@ -12,8 +12,6 @@ export type TerminalDraft = {
   browserScrollbackLines: string;
   retainedTerminals: string;
   fontSize: string;
-  verbosity: string;
-  reconnect: string;
   palette: string;
   font: string;
   background: string;
@@ -21,7 +19,6 @@ export type TerminalDraft = {
   copyOnSelect: boolean;
   rightClickPaste: boolean;
   webgl: boolean;
-  osc52: boolean;
   jisYenBackslash: boolean;
   composerEnterSends: boolean;
   ligatures: boolean;
@@ -33,12 +30,12 @@ export type TerminalDraft = {
 
 export const initialTerminalDraft: TerminalDraft = {
   startDirectory: "", localShellProfile: "", maxSessions: "", scrollback: "", browserScrollbackLines: "", retainedTerminals: "", fontSize: "",
-  verbosity: "0", reconnect: "", palette: "", font: "", background: "", tint: undefined,
-  copyOnSelect: true, rightClickPaste: true, webgl: true, osc52: false, jisYenBackslash: false, composerEnterSends: false, ligatures: false, statusLine: true,
+  palette: "", font: "", background: "", tint: undefined,
+  copyOnSelect: true, rightClickPaste: true, webgl: true, jisYenBackslash: false, composerEnterSends: false, ligatures: false, statusLine: true,
   commandMarks: true, stickyCommand: true, commandScrollbarMarks: true,
 };
 
-export function draftOf(settings: TerminalSettings): TerminalDraft {
+export function draftOf(settings: PresetTerminalSettings): TerminalDraft {
   const text = (value: number | undefined) => value === undefined ? "" : String(value);
   return {
     startDirectory: settings.startDirectory ?? "",
@@ -48,8 +45,6 @@ export function draftOf(settings: TerminalSettings): TerminalDraft {
     browserScrollbackLines: text(settings.browserScrollbackLines),
     retainedTerminals: text(settings.retainedTerminals),
     fontSize: text(settings.fontSize),
-    verbosity: String(settings.verbosity ?? 0),
-    reconnect: text(settings.reconnect),
     palette: settings.appearance?.palette ?? "",
     font: settings.appearance?.font ?? "",
     background: settings.appearance?.background ?? "",
@@ -57,7 +52,6 @@ export function draftOf(settings: TerminalSettings): TerminalDraft {
     copyOnSelect: settings.copyOnSelect ?? true,
     rightClickPaste: settings.rightClickPaste ?? true,
     webgl: settings.webgl ?? true,
-    osc52: settings.osc52 ?? false,
     jisYenBackslash: settings.jisYenBackslash ?? false,
     composerEnterSends: settings.composerEnterSends ?? false,
     ligatures: settings.ligatures ?? false,
@@ -82,9 +76,9 @@ export function isFontSizeUnusable(draft: TerminalDraft): boolean {
   return size !== undefined && (Number.isNaN(size) || size < fontSizeRange.min || size > fontSizeRange.max);
 }
 
-// Turns the draft back into the settings document, leaving out every field
+// Turns the draft back into the preset's terminal settings, leaving out every field
 // that still has its default so the stored document says only what changed.
-export function settingsOf(draft: TerminalDraft): TerminalSettings | null {
+export function settingsOf(draft: TerminalDraft): PresetTerminalSettings | null {
   const sessions = numberOr(draft.maxSessions);
   const bytes = numberOr(draft.scrollback);
   const lines = numberOr(draft.browserScrollbackLines);
@@ -99,12 +93,9 @@ export function settingsOf(draft: TerminalDraft): TerminalSettings | null {
     ...(lines === undefined ? {} : { browserScrollbackLines: lines }),
     ...(retained === undefined ? {} : { retainedTerminals: retained }),
     ...(size === undefined ? {} : { fontSize: size }),
-    ...(draft.verbosity === "0" ? {} : { verbosity: Number(draft.verbosity) }),
-    ...(draft.reconnect === "" ? {} : { reconnect: Number(draft.reconnect) }),
     ...(draft.copyOnSelect ? {} : { copyOnSelect: false }),
     ...(draft.rightClickPaste ? {} : { rightClickPaste: false }),
     ...(draft.webgl ? {} : { webgl: false }),
-    ...(draft.osc52 ? { osc52: true } : {}),
     ...(draft.jisYenBackslash ? { jisYenBackslash: true } : {}),
     ...(draft.composerEnterSends ? { composerEnterSends: true } : {}),
     ...(draft.ligatures ? { ligatures: true } : {}),

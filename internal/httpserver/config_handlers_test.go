@@ -2,9 +2,8 @@ package httpserver
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
-	"errors"
-	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -52,6 +51,10 @@ func newConfigHarness(t *testing.T) *testHarness {
 	service := application.NewService(workspace, manager)
 	// 本番と同じく Vault を渡す。Vault のファイルはまだ作らない。
 	service.SetVault(secret.NewService(workspace, manager, time.Now))
+	// 本番と同じく、このマシンの ID を決めてから受け付ける。
+	if err := service.PrepareMachine(rand.Reader, application.MachineStart{Hostname: "desk", Facts: application.MachineFacts{OS: "linux"}}); err != nil {
+		t.Fatal(err)
+	}
 
 	sessions, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0xa1}, 96)))
 	if err != nil {
@@ -136,223 +139,20 @@ func TestConfigEndpointsRequireASessionAndCSRF(t *testing.T) {
 	}
 }
 
-func TestEngineSettingsStoreTheVaultAutoLockChoice(t *testing.T) {
-	harness := newConfigHarness(t)
-	response := harness.call(t, http.MethodPut, "/api/v1/metadata/engine", map[string]any{
-		"port":          43123,
-		"vaultAutoLock": map[string]any{"mode": "idle", "value": 45, "unit": "minutes"},
-	}, true, true)
-	if response.Code != http.StatusOK {
-		t.Fatalf("save = %d, body %s", response.Code, response.Body.String())
-	}
-	settings := harness.service.EngineSettings()
-	if settings.Port != 43123 || settings.VaultAutoLock == nil ||
-		settings.VaultAutoLock.Mode != application.VaultAutoLockIdle ||
-		settings.VaultAutoLock.Value != 45 || settings.VaultAutoLock.Unit != application.VaultAutoLockMinutes {
-		t.Fatalf("settings = %#v", settings)
-	}
-
-	response = harness.call(t, http.MethodPut, "/api/v1/metadata/engine", map[string]any{
-		"vaultAutoLock": map[string]any{"mode": "restart"},
-	}, true, true)
-	if response.Code != http.StatusOK || harness.service.EngineSettings().VaultAutoLock.Mode != application.VaultAutoLockRestart {
-		t.Fatalf("restart-only save = %d, settings %#v", response.Code, harness.service.EngineSettings())
-	}
-}
-
-func TestTheAccentIsSavedAndAnUnknownOneIsRefused(t *testing.T) {
-	harness := newConfigHarness(t)
-
-	saved := harness.call(t, http.MethodPut, "/api/v1/metadata/appearance", map[string]any{"accent": "blue"}, true, true)
-	if saved.Code != http.StatusOK {
-		t.Fatalf("save = %d, body %s", saved.Code, saved.Body.String())
-	}
-	read := harness.call(t, http.MethodGet, "/api/v1/metadata", nil, true, true)
-	var metadata struct {
-		Appearance *api.AppearanceSettings `json:"appearance"`
-	}
-	if err := json.Unmarshal(read.Body.Bytes(), &metadata); err != nil {
-		t.Fatal(err)
-	}
-	if metadata.Appearance == nil || metadata.Appearance.Accent == nil || *metadata.Appearance.Accent != "blue" {
-		t.Fatalf("metadata appearance = %#v, want accent blue; read %d", metadata.Appearance, read.Code)
-	}
-
-	refused := harness.call(t, http.MethodPut, "/api/v1/metadata/appearance", map[string]any{"accent": "orange"}, true, true)
-	if refused.Code != http.StatusBadRequest {
-		t.Fatalf("unknown accent = %d, want 400; body %s", refused.Code, refused.Body.String())
-	}
-}
-
-func TestACustomAccentColourIsSavedAsTheAccentAndReadBack(t *testing.T) {
-	harness := newConfigHarness(t)
-
-	saved := harness.call(t, http.MethodPut, "/api/v1/metadata/appearance", map[string]any{"accent": "#3fa86b"}, true, true)
-	if saved.Code != http.StatusOK {
-		t.Fatalf("save = %d, body %s", saved.Code, saved.Body.String())
-	}
-	read := harness.call(t, http.MethodGet, "/api/v1/metadata", nil, true, true)
-	var metadata struct {
-		Appearance *api.AppearanceSettings `json:"appearance"`
-	}
-	if err := json.Unmarshal(read.Body.Bytes(), &metadata); err != nil {
-		t.Fatal(err)
-	}
-	if metadata.Appearance == nil || metadata.Appearance.Accent == nil || *metadata.Appearance.Accent != "#3fa86b" {
-		t.Fatalf("metadata appearance = %#v, want #3fa86b; read %d", metadata.Appearance, read.Code)
-	}
-
-	refused := harness.call(t, http.MethodPut, "/api/v1/metadata/appearance", map[string]any{"accent": "green"}, true, true)
-	if refused.Code != http.StatusBadRequest {
-		t.Fatalf("unreadable accent = %d, want 400; body %s", refused.Code, refused.Body.String())
-	}
-}
-
-func TestTerminalAndEngineSettingsReturnTheirWireSaveResult(t *testing.T) {
-	harness := newConfigHarness(t)
-	for name, target := range map[string]string{
-		"terminal":   "/api/v1/metadata/terminal",
-		"engine":     "/api/v1/metadata/engine",
-		"shortcuts":  "/api/v1/metadata/shortcuts",
-		"presets":    "/api/v1/metadata/terminal-presets",
-		"appearance": "/api/v1/metadata/appearance",
-	} {
-		t.Run(name, func(t *testing.T) {
-			body := map[string]any{}
-			if name == "shortcuts" || name == "presets" {
-				body = map[string]any{"base": []any{}, "presets": []any{}}
-			}
-			response := harness.call(t, http.MethodPut, target, body, true, true)
-			if response.Code != http.StatusOK {
-				t.Fatalf("save = %d, body %s", response.Code, response.Body.String())
-			}
-			var result api.SettingsSaveResult
-			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
-				t.Fatal(err)
-			}
-			if result.TransactionId == "" || result.Written == nil {
-				t.Fatalf("result = %#v", result)
-			}
-			var raw map[string]json.RawMessage
-			if err := json.Unmarshal(response.Body.Bytes(), &raw); err != nil {
-				t.Fatal(err)
-			}
-			if _, exists := raw["preview"]; exists {
-				t.Fatalf("settings save unexpectedly returned an edit preview: %s", response.Body.String())
-			}
-		})
-	}
-}
-
-func TestTerminalPresetsRefuseAStaleListAndEngineSettings(t *testing.T) {
-	harness := newConfigHarness(t)
-	phone := map[string]any{"id": "phone", "name": "スマホ", "settings": map[string]any{"fontSize": 12, "composerEnterSends": true}}
-	saved := harness.call(t, http.MethodPut, "/api/v1/metadata/terminal-presets", map[string]any{"base": []any{}, "presets": []any{phone}}, true, true)
-	if saved.Code != http.StatusOK {
-		t.Fatalf("save = %d, body %s", saved.Code, saved.Body.String())
-	}
-	read := harness.call(t, http.MethodGet, "/api/v1/metadata", nil, true, true)
-	var metadata struct {
-		TerminalPresets []application.TerminalPreset `json:"terminalPresets"`
-	}
-	if err := json.Unmarshal(read.Body.Bytes(), &metadata); err != nil || len(metadata.TerminalPresets) != 1 || metadata.TerminalPresets[0].Settings.FontSize != 12 {
-		t.Fatalf("metadata = %s, want the phone preset", read.Body.String())
-	}
-
-	stale := harness.call(t, http.MethodPut, "/api/v1/metadata/terminal-presets", map[string]any{"base": []any{}, "presets": []any{}}, true, true)
-	if stale.Code != http.StatusConflict {
-		t.Fatalf("stale save = %d, want 409; body %s", stale.Code, stale.Body.String())
-	}
-	engineWide := map[string]any{"id": "pc", "name": "PC", "settings": map[string]any{"maxSessions": 10}}
-	refused := harness.call(t, http.MethodPut, "/api/v1/metadata/terminal-presets", map[string]any{"base": []any{phone}, "presets": []any{engineWide}}, true, true)
-	if refused.Code != http.StatusBadRequest {
-		t.Fatalf("engine setting in a preset = %d, want 400; body %s", refused.Code, refused.Body.String())
-	}
-}
-
-func TestEngineSettingsRejectInvalidVaultAutoLockChoices(t *testing.T) {
-	harness := newConfigHarness(t)
-	for name, chosen := range map[string]any{
-		"missing duration": map[string]any{"mode": "idle"},
-		"too large":        map[string]any{"mode": "idle", "value": 1000, "unit": "hours"},
-		"restart duration": map[string]any{"mode": "restart", "value": 1, "unit": "hours"},
-		"unknown mode":     map[string]any{"mode": "forever"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			response := harness.call(t, http.MethodPut, "/api/v1/metadata/engine", map[string]any{
-				"vaultAutoLock": chosen,
-			}, true, true)
-			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_vault_auto_lock") {
-				t.Fatalf("response = %d, body %s", response.Code, response.Body.String())
-			}
-		})
-	}
-}
-
-func TestEngineSettingsRejectAPortOutsideTheUnprivilegedRange(t *testing.T) {
-	harness := newConfigHarness(t)
-	for _, port := range []int{80, 65536} {
-		response := harness.call(t, http.MethodPut, "/api/v1/metadata/engine", map[string]any{
-			"port": port,
-		}, true, true)
-		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "port_out_of_range") {
-			t.Fatalf("port %d: response = %d, body %s", port, response.Code, response.Body.String())
-		}
-	}
-	if settings := harness.service.EngineSettings(); settings != (application.EngineSettings{}) {
-		t.Fatalf("a refused port was written: %#v", settings)
-	}
-}
-
-// config/save は metadata.json 全体を受け付けない。節ごとの設定は /metadata/* からだけ
+// config/save は metadata.json 全体を受け付けない。設定は /api/v1/settings/* からだけ
 // 書け、ここへ送られた metadata は要求の誤りとして断る。
 func TestSavingWholeMetadataThroughConfigSaveIsABadRequest(t *testing.T) {
 	harness := newConfigHarness(t)
 	metadata := application.NewMetadata()
-	metadata.FileTransfers = &application.FileTransferSettings{MaxConcurrent: 3}
+	metadata.Presets[0].FileTransfers = &application.FileTransferSettings{MaxConcurrent: 3}
 	response := harness.call(t, http.MethodPost, "/api/v1/config/save", map[string]any{
 		"kind": application.EditMetadata, "path": "config", "alias": "nas", "metadata": metadata,
 	}, true, true)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_request") {
 		t.Fatalf("response = %d, body %s", response.Code, response.Body.String())
 	}
-	if settings := harness.service.FileTransferSettings(); !reflect.DeepEqual(settings, application.FileTransferSettings{}) {
+	if settings := harness.service.TransferSettings(); !reflect.DeepEqual(settings, application.TransferSettings{}) {
 		t.Fatalf("a refused save wrote transfer settings: %#v", settings)
-	}
-}
-
-// sshc エンジンの設定はこのマシンだけのもので、同期する metadata.json には書かない。
-// 画面は /api/v1/metadata/engine で読む。
-func TestEngineSettingsAreReadFromThisMachineAndNotFromTheSyncedMetadata(t *testing.T) {
-	harness := newConfigHarness(t)
-	if response := harness.call(t, http.MethodPut, "/api/v1/metadata/engine", map[string]any{
-		"port": 43123,
-	}, true, true); response.Code != http.StatusOK {
-		t.Fatalf("save = %d, body %s", response.Code, response.Body.String())
-	}
-
-	response := harness.call(t, http.MethodGet, "/api/v1/metadata/engine", nil, true, true)
-	if response.Code != http.StatusOK {
-		t.Fatalf("engine = %d, body %s", response.Code, response.Body.String())
-	}
-	var engine api.EngineSettings
-	if err := json.Unmarshal(response.Body.Bytes(), &engine); err != nil {
-		t.Fatal(err)
-	}
-	if engine.Port == nil || *engine.Port != 43123 {
-		t.Fatalf("engine = %s, want this machine's port", response.Body.String())
-	}
-
-	metadata := harness.call(t, http.MethodGet, "/api/v1/metadata", nil, true, true)
-	if metadata.Code != http.StatusOK || strings.Contains(metadata.Body.String(), "43123") {
-		t.Fatalf("metadata = %d, body %s, want no engine settings", metadata.Code, metadata.Body.String())
-	}
-	stored, err := os.ReadFile(filepath.Join(harness.workspace.StateDir(), application.MetadataFileName))
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(stored), "43123") {
-		t.Fatalf("metadata.json carries the port to other machines:\n%s", stored)
 	}
 }
 
@@ -613,7 +413,8 @@ func TestPreviewAndSaveRoundTripThroughTheContract(t *testing.T) {
 	if err := historyDecoder.Decode(&servedHistory); err != nil {
 		t.Fatalf("history does not match the contract: %v", err)
 	}
-	if len(servedHistory.Entries) != 1 {
+	// 先頭はこの保存。その前には、エンジンの起動でこのマシンの設定のファイルを作った記録がある。
+	if len(servedHistory.Entries) == 0 || servedHistory.Entries[0].Operation != "config.host_fields" {
 		t.Fatalf("history entries = %#v", servedHistory.Entries)
 	}
 }

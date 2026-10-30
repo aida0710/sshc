@@ -18,7 +18,8 @@ function historyOperationLabelKey(operation: string): MessageKey {
   if (operation.startsWith("connection.")) return "history.operation.connection";
   if (operation.startsWith("key.")) return "history.operation.key";
   if (operation.startsWith("terminal.")) return "history.operation.terminal";
-  if (operation.startsWith("engine.")) return "history.operation.engine";
+  if (operation.startsWith("settings.") || operation.startsWith("metadata.")) return "history.operation.settings";
+  if (operation.startsWith("machine.")) return "history.operation.machine";
   if (operation.startsWith("secret.")) return "history.operation.vault";
   if (operation.startsWith("sync.")) return "history.operation.sync";
   if (operation.startsWith("config.") || operation.startsWith("directory.") || operation.startsWith("group.")) {

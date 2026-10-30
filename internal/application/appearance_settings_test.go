@@ -5,89 +5,32 @@ import (
 	"testing"
 )
 
-func TestAnAccentIsStoredInTheMetadataAndReadBack(t *testing.T) {
+func TestAnAccentAndAThemeAreStoredInThePresetAndReadBack(t *testing.T) {
 	service, _ := newTerminalService(t)
 
-	if _, err := service.SetAppearanceSettings(AppearanceSettings{Accent: "sky"}); err != nil {
+	if err := editStandardPreset(t, service, func(preset *SettingsPreset) {
+		preset.Appearance = &AppearanceSettings{Accent: "sky", Theme: "light"}
+	}); err != nil {
 		t.Fatal(err)
 	}
 
-	stored, _, err := service.metadata.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.Appearance == nil || stored.Appearance.Accent != "sky" {
-		t.Fatalf("stored appearance = %+v, want accent sky", stored.Appearance)
-	}
-}
-
-func TestChoosingNoAccentRemovesTheAppearanceSection(t *testing.T) {
-	service, _ := newTerminalService(t)
-	if _, err := service.SetAppearanceSettings(AppearanceSettings{Accent: "pink"}); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := service.SetAppearanceSettings(AppearanceSettings{}); err != nil {
-		t.Fatal(err)
-	}
-
-	stored, _, err := service.metadata.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.Appearance != nil {
-		t.Fatalf("stored appearance = %+v, want the section removed", stored.Appearance)
-	}
-}
-
-func TestAnUnknownAccentIsRefusedAndNothingIsWritten(t *testing.T) {
-	service, _ := newTerminalService(t)
-
-	_, err := service.SetAppearanceSettings(AppearanceSettings{Accent: "orange"})
-
-	if !errors.Is(err, ErrMetadataAppearance) {
-		t.Fatalf("err = %v, want ErrMetadataAppearance", err)
-	}
-	stored, _, loadErr := service.metadata.Load()
-	if loadErr != nil {
-		t.Fatal(loadErr)
-	}
-	if stored.Appearance != nil {
-		t.Fatalf("stored appearance = %+v, want nothing written", stored.Appearance)
-	}
-}
-
-func TestTheAccentSurvivesEncodingTheMetadata(t *testing.T) {
-	metadata := NewMetadata()
-	metadata.Appearance = &AppearanceSettings{Accent: "mono"}
-
-	encoded, err := EncodeMetadata(metadata)
-	if err != nil {
-		t.Fatal(err)
-	}
-	decoded, err := DecodeMetadata(encoded)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if decoded.Appearance == nil || decoded.Appearance.Accent != "mono" {
-		t.Fatalf("decoded appearance = %+v, want accent mono", decoded.Appearance)
+	appearance := service.EffectiveSettings().Preset.Appearance
+	if appearance == nil || appearance.Accent != "sky" || appearance.Theme != "light" {
+		t.Fatalf("appearance = %+v, want accent sky and theme light", appearance)
 	}
 }
 
 func TestACustomColourIsStoredAsTheAccent(t *testing.T) {
 	service, _ := newTerminalService(t)
 
-	if _, err := service.SetAppearanceSettings(AppearanceSettings{Accent: "#3fa86b"}); err != nil {
+	if err := editStandardPreset(t, service, func(preset *SettingsPreset) {
+		preset.Appearance = &AppearanceSettings{Accent: "#3fa86b"}
+	}); err != nil {
 		t.Fatal(err)
 	}
 
-	stored, _, err := service.metadata.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.Appearance == nil || stored.Appearance.Accent != "#3fa86b" {
-		t.Fatalf("stored appearance = %+v, want #3fa86b", stored.Appearance)
+	if appearance := service.EffectiveSettings().Preset.Appearance; appearance == nil || appearance.Accent != "#3fa86b" {
+		t.Fatalf("appearance = %+v, want #3fa86b", appearance)
 	}
 }
 
@@ -95,21 +38,38 @@ func TestAnAccentThatIsNeitherAPresetNorAColourIsRefused(t *testing.T) {
 	for _, accent := range []string{"custom", "green", "#3FA86B", "#3fa86", "#3fa86b80"} {
 		service, _ := newTerminalService(t)
 
-		_, err := service.SetAppearanceSettings(AppearanceSettings{Accent: accent})
+		err := editStandardPreset(t, service, func(preset *SettingsPreset) {
+			preset.Appearance = &AppearanceSettings{Accent: accent}
+		})
 
 		if !errors.Is(err, ErrMetadataAppearance) {
-			t.Fatalf("SetAppearanceSettings(%q) err = %v, want ErrMetadataAppearance", accent, err)
+			t.Fatalf("accent %q: err = %v, want ErrMetadataAppearance", accent, err)
 		}
 	}
 }
 
-// 同期で届いた metadata のさし色が読めなくても、metadata は読め、さし色だけが既定に戻る。
-func TestAnUnreadableAccentFromAnotherMachineIsDroppedWhenRead(t *testing.T) {
-	decoded, err := DecodeMetadata([]byte(`{"schemaVersion":9,"appearance":{"accent":"url(javascript:1)"},"hosts":[]}`))
+func TestAThemeNameThatIsNotAPlainWordIsRefused(t *testing.T) {
+	for _, theme := range []string{"Dark", "dark mode", "../dark", ""} {
+		err := validateAppearanceSettings(&AppearanceSettings{Theme: theme})
+		if theme == "" {
+			if err != nil {
+				t.Fatalf("an empty theme was refused: %v", err)
+			}
+			continue
+		}
+		if !errors.Is(err, ErrMetadataAppearance) {
+			t.Fatalf("theme %q: err = %v, want ErrMetadataAppearance", theme, err)
+		}
+	}
+}
+
+// 同期で届いた metadata のプリセットが読めなくても、metadata は読め、そのプリセットだけが捨てられる。
+func TestAnUnreadablePresetFromAnotherMachineIsDroppedWhenRead(t *testing.T) {
+	decoded, err := DecodeMetadata([]byte(`{"schemaVersion":10,"presets":[{"id":"default","appearance":{"accent":"url(javascript:1)"}},{"id":"phone","name":"スマホ"}],"hosts":[]}`))
 	if err != nil {
 		t.Fatalf("DecodeMetadata = %v, want the metadata read", err)
 	}
-	if decoded.Appearance != nil {
-		t.Fatalf("appearance = %+v, want it dropped", decoded.Appearance)
+	if len(decoded.Presets) != 2 || decoded.Presets[0].Appearance != nil || decoded.Presets[1].ID != "phone" {
+		t.Fatalf("presets = %+v, want the standard preset reset and the phone preset kept", decoded.Presets)
 	}
 }

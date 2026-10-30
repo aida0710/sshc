@@ -1,5 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import { saveTouchMode, touchFirstQuery, useTouchTerminal } from "./touchMode";
 
 // The browser's answer to touchFirstQuery, which a 2-in-1 PC changes when it changes shape.
@@ -18,8 +19,12 @@ function stubTouchFirst(initially: boolean) {
   };
 }
 
+beforeEach(() => {
+  fakeSettingsServer();
+});
+
 afterEach(() => {
-  window.localStorage.clear();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -34,18 +39,18 @@ describe("useTouchTerminal", () => {
     expect(result.current).toBe(false);
   });
 
-  it("keeps the mouse when fixed to it, though the browser says touch first", () => {
+  it("keeps the mouse when fixed to it, though the browser says touch first", async () => {
     stubTouchFirst(true);
     const { result } = renderHook(() => useTouchTerminal());
 
-    act(() => saveTouchMode("mouse"));
+    await act(async () => saveTouchMode("mouse"));
 
     expect(result.current).toBe(false);
   });
 
-  it("uses touch when fixed to it, though the browser says a mouse is there", () => {
+  it("uses touch when fixed to it, though the browser says a mouse is there", async () => {
     stubTouchFirst(false);
-    saveTouchMode("touch");
+    await act(async () => saveTouchMode("touch"));
 
     const { result } = renderHook(() => useTouchTerminal());
 

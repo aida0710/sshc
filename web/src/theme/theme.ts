@@ -40,12 +40,15 @@ export function themeLabel(theme: Theme): MessageKey {
   return theme === "system" ? "shell.themeSystem" : colorTheme(theme).label;
 }
 
+// detectTheme is the theme to draw with before the synced settings arrive: the copy kept from the last time
+// they were read. The screens before sign-in and unlock only ever see this.
 export function detectTheme(): Theme {
-  const stored = readStoredValue(localStorageKeys.theme);
-  return isTheme(stored) ? stored : defaultTheme;
+  const copied = readStoredValue(localStorageKeys.theme);
+  return isTheme(copied) ? copied : defaultTheme;
 }
 
-export function rememberTheme(theme: Theme): void {
+// copyTheme keeps the theme for the next first paint. It is a copy of the synced setting, never read back into it.
+export function copyTheme(theme: Theme): void {
   writeStoredValue(localStorageKeys.theme, theme);
 }
 

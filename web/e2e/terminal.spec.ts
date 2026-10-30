@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Installation, openApplication, openSection, openSettingsPage, shellSays, test, openLocalShell } from "./support/environment";
+import { metadataSchemaVersion, standardPresetMetadata } from "./support/settings";
 import type { Locator, Page, Response } from "@playwright/test";
 import {
   drawnRowCount,
@@ -47,10 +48,7 @@ async function reopenFirstSession(panel: Locator) {
 async function seedTerminalSettings(installation: Installation) {
   await installation.write(
     "sshc/metadata.json",
-    JSON.stringify({
-      schemaVersion: 9,
-      embeddedTerminal: { maxSessions: 2, scrollbackBytes: 16384 },
-    }),
+    standardPresetMetadata({ terminal: { maxSessions: 2, scrollbackBytes: 16384 } }),
   );
 }
 
@@ -73,7 +71,7 @@ async function saveTerminalSettings(page: Page, region: Locator): Promise<Respon
   const save = region.getByRole("button", { name: "Save" });
   const responsePromise = page.waitForResponse((response) => {
     const request = response.request();
-    return new URL(response.url()).pathname === "/api/v1/metadata/terminal" && request.method() === "PUT";
+    return new URL(response.url()).pathname === "/api/v1/settings/presets/default" && request.method() === "PUT";
   });
   await save.click();
   const response = await responsePromise;
@@ -108,10 +106,7 @@ test("opens a local shell, runs a command and shows its output", async ({ page, 
 test("keeps image-backed terminal editing free of stale glyphs", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",
-    JSON.stringify({
-      schemaVersion: 9,
-      embeddedTerminal: { appearance: { background: "terminal-wall.gif" } },
-    }),
+    standardPresetMetadata({ terminal: { appearance: { background: "terminal-wall.gif" } } }),
   );
   await page.route("**/api/v1/terminal/backgrounds/terminal-wall.gif", async (route) => {
     await route.fulfill({
@@ -143,10 +138,7 @@ test("keeps image-backed terminal editing free of stale glyphs", async ({ page, 
 test("keeps WebGL disabled when the terminal setting turns it off", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",
-    JSON.stringify({
-      schemaVersion: 9,
-      embeddedTerminal: { webgl: false },
-    }),
+    standardPresetMetadata({ terminal: { webgl: false } }),
   );
   await openApplication(page, installation);
 
@@ -212,7 +204,7 @@ test("says only the oldest output is gone, not that the link was offline, when a
   test.skip(process.platform === "win32", "seq is POSIX here");
   await installation.write(
     "sshc/metadata.json",
-    JSON.stringify({ schemaVersion: 9, embeddedTerminal: { scrollbackBytes: 16384 } }),
+    standardPresetMetadata({ terminal: { scrollbackBytes: 16384 } }),
   );
   await openApplication(page, installation);
   await openSessionList(page);
@@ -255,7 +247,7 @@ test("keeps the whole scrollback of a session shown again, past what the engine 
 test("keeps as many terminals hidden as the setting says", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",
-    JSON.stringify({ schemaVersion: 9, embeddedTerminal: { retainedTerminals: 1 } }),
+    standardPresetMetadata({ terminal: { retainedTerminals: 1 } }),
   );
   await openApplication(page, installation);
   const panel = await openSessionList(page);
@@ -382,7 +374,7 @@ test("moves between the prompts of a long output with the prompt keys", async ({
 test("refuses to open more sessions than the configured limit", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",
-    JSON.stringify({ schemaVersion: 9, embeddedTerminal: { maxSessions: 2, scrollbackBytes: 16384 } }),
+    standardPresetMetadata({ terminal: { maxSessions: 2, scrollbackBytes: 16384 } }),
   );
   await openApplication(page, installation);
 
@@ -424,10 +416,12 @@ test("applies the session limit set from the settings screen", async ({ page, in
   const region = await openLoadedTerminalSettings(page);
   await region.getByLabel("Sessions open at once").fill("1");
   const saved = await saveTerminalSettings(page, region);
-  expect(saved.request().postDataJSON()).toEqual(expect.objectContaining({ maxSessions: 1 }));
-  expect(JSON.parse(await installation.read("sshc/metadata.json"))).toEqual(
-    expect.objectContaining({ embeddedTerminal: expect.objectContaining({ maxSessions: 1 }) }),
-  );
+  expect(saved.request().postDataJSON()).toEqual(expect.objectContaining({
+    preset: expect.objectContaining({ terminal: expect.objectContaining({ maxSessions: 1 }) }),
+  }));
+  expect(JSON.parse(await installation.read("sshc/metadata.json"))).toEqual(expect.objectContaining({
+    presets: [expect.objectContaining({ id: "default", terminal: expect.objectContaining({ maxSessions: 1 }) })],
+  }));
 
   const panel = await openSessionList(page);
   const created = page.waitForResponse((response) => {
@@ -500,7 +494,7 @@ test("copies the selection with its colors as HTML from the terminal's menu", as
 
 test("lets a program write the clipboard through the Kitty clipboard protocol where OSC 52 is allowed", async ({ page, context, installation }) => {
   test.skip(process.platform === "win32", "printf and read are POSIX shell syntax here");
-  await installation.write("sshc/metadata.json", JSON.stringify({ schemaVersion: 9, embeddedTerminal: { osc52: true } }));
+  await installation.write("sshc/metadata.json", JSON.stringify({ schemaVersion: metadataSchemaVersion, settings: { terminal: { osc52: true } } }));
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
   await openSessionList(page);
@@ -1088,7 +1082,7 @@ test("keeps the same terminal alive while another screen is shown", async ({ pag
   const sameTerminal = await markTerminal(page, "1");
   await typeIntoTerminal(page, shellSays.lateEcho("late-42"));
 
-  await openSettingsPage(page, "Engine");
+  await openSettingsPage(page, "General");
   await expect(screen).toBeHidden();
 
   const reopened = await openSessionList(page);
@@ -1246,8 +1240,8 @@ test("selects only the visible screen and opens a session from row padding", asy
 });
 
 test("expands the transfer manager from its empty header space", async ({ page, installation }) => {
+  // The transfer manager starts folded.
   await openApplication(page, installation);
-  await page.evaluate(() => localStorage.setItem("sshc.sftp.queueView", JSON.stringify({ collapsed: true, height: 224, mobileHeight: 224 })));
   await openSection(page, "SFTP");
   const expand = page.getByRole("button", { name: "Expand transfer manager" });
   await expect(expand).toBeVisible();
@@ -1258,39 +1252,40 @@ test("expands the transfer manager from its empty header space", async ({ page, 
   await expect(page.getByRole("button", { name: "Collapse transfer manager" })).toHaveAttribute("aria-expanded", "true");
 });
 
-// A preset (#467) holds how terminals look and behave in a browser. A browser that uses it draws its
-// terminals with it, and the standard set stays as it was for the browsers that do not.
-test("draws the terminals with the preset this browser uses", async ({ page, installation }) => {
+// A preset holds how terminals look and behave on the machines that use it. A machine that uses it draws its
+// terminals with it, and the standard preset stays as it was for the machines that do not.
+test("draws the terminals with the preset this machine uses", async ({ page, installation }) => {
   await seedTerminalSettings(installation);
   await openApplication(page, installation);
   const region = await openLoadedTerminalSettings(page);
   await openTerminalSettingsTab(region, "Display");
 
-  await region.getByRole("button", { name: "New preset" }).click();
+  await page.getByRole("button", { name: "Actions for Standard" }).click();
+  await page.getByRole("menuitem", { name: "New preset" }).click();
   const naming = page.getByRole("dialog", { name: "New preset from Standard" });
   await naming.getByRole("textbox", { name: "Preset name" }).fill("Large");
   await naming.getByRole("button", { name: "New preset" }).click();
   await expect(naming).toBeHidden();
-  await expect(region.getByRole("combobox", { name: "Preset" }).locator("option:checked")).toHaveText("Large");
+  await expect(page.getByRole("combobox", { name: "Preset to edit" }).locator("option:checked")).toHaveText("Large");
 
+  await openTerminalSettingsTab(region, "Display");
   await region.getByLabel("Font size").fill("22");
   const presetSave = page.waitForResponse((response) =>
-    new URL(response.url()).pathname === "/api/v1/metadata/terminal-presets" && response.request().method() === "PUT");
+    new URL(response.url()).pathname.startsWith("/api/v1/settings/presets/") && response.request().method() === "PUT");
   await region.getByRole("button", { name: "Save" }).click();
   expect((await presetSave).ok()).toBe(true);
-  await region.getByRole("button", { name: "Use in this browser" }).click();
-  await expect(region.getByText("In use in this browser")).toBeVisible();
+  await page.getByRole("button", { name: "Use on this machine" }).click();
+  await expect(page.getByText("In use here")).toBeVisible();
 
   await openSessionList(page);
   await openLocalShell(page);
   await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
   await expect.poll(async () => (await drawnRowFont(page)).fontSize).toBe("22px");
 
-  // The standard set kept its size; the preset's lives in the preset alone.
+  // The standard preset kept its size; the new one's lives in that preset alone.
   const metadata = JSON.parse(await installation.read("sshc/metadata.json")) as {
-    embeddedTerminal?: { fontSize?: number };
-    terminalPresets?: { name: string; settings: { fontSize?: number } }[];
+    presets: { id: string; name?: string; terminal?: { fontSize?: number } }[];
   };
-  expect(metadata.embeddedTerminal?.fontSize).toBeUndefined();
-  expect(metadata.terminalPresets).toEqual([expect.objectContaining({ name: "Large", settings: expect.objectContaining({ fontSize: 22 }) })]);
+  expect(metadata.presets[0]?.terminal?.fontSize).toBeUndefined();
+  expect(metadata.presets.slice(1)).toEqual([expect.objectContaining({ name: "Large", terminal: expect.objectContaining({ fontSize: 22 }) })]);
 });

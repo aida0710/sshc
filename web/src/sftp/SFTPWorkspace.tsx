@@ -19,6 +19,7 @@ import { TransferManagerList } from "./TransferManagerList";
 import { SFTPCompareTabsDialog } from "./SFTPCompareTabsDialog";
 import type { SFTPLocation } from "./sftpLocation";
 import { rememberPanes, rememberSplitRatio, restorePanes, restoreSplitRatio } from "./sftpPaneStorage";
+import { useRestingSave } from "../settings/useRestingSave";
 import {
   activeTab, addTab, allTabs, blankTab, canSplit, closeTab, findTab, maxTabsPerPane, moveTab, relocateTab, resortTab, selectTab, swapPanes,
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
@@ -251,9 +252,11 @@ export function SFTPWorkspace({
     placeTab(tabId, side === null ? { paneId: pane.id } : { side });
   }
 
+  // A drag moves the split many times a second; it is kept once it rests.
+  const keepSplitRatio = useRestingSave(rememberSplitRatio);
   const changeSplitRatio = (ratio: number) => {
     setSplitRatio(ratio);
-    rememberSplitRatio(ratio);
+    keepSplitRatio(ratio);
   };
 
   // A tab reordered within its pane stays mounted, so it keeps its connection and any unsaved edit.
