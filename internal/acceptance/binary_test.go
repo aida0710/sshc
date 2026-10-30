@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sshc/internal/isolatedhome"
 )
 
 // 旧バージョンの launchd / systemd unit が使った -open=false を受け付けると、unit が
@@ -31,7 +33,7 @@ func TestLegacyOpenFlagIsRejected(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	process := exec.CommandContext(ctx, binary, "-open=false")
-	process.Env = isolatedEnvironment(t.TempDir())
+	process.Env = isolatedhome.Environment(t.TempDir())
 	output, err := process.CombinedOutput()
 	if ctx.Err() != nil {
 		t.Fatalf("-open=false never exited; it became a resident process: %v", ctx.Err())
