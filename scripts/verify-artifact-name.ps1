@@ -14,7 +14,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if ($OS -notin @("darwin", "linux", "windows")) {
+if ($OS -notin @("darwin", "linux", "freebsd", "openbsd", "windows")) {
     [Console]::Error.WriteLine("artifact OS rejected")
     exit 2
 }

@@ -28,6 +28,8 @@ func TestArtifactNameVerifierShell(t *testing.T) {
 		{name: "darwin amd64", artifact: "dist/sshc-darwin-amd64", goos: "darwin", goarch: "amd64", wantAccept: true},
 		{name: "linux arm64", artifact: "dist/sshc-linux-arm64", goos: "linux", goarch: "arm64", wantAccept: true},
 		{name: "windows amd64", artifact: `dist/sshc-windows-amd64.exe`, goos: "windows", goarch: "amd64", wantAccept: true},
+		{name: "freebsd amd64", artifact: "dist/sshc-freebsd-amd64", goos: "freebsd", goarch: "amd64", wantAccept: true},
+		{name: "openbsd arm64", artifact: "dist/sshc-openbsd-arm64", goos: "openbsd", goarch: "arm64", wantAccept: true},
 		{name: "wrong OS", artifact: "private/sshc-linux-amd64", goos: "darwin", goarch: "amd64", wantMessage: "artifact name rejected\n"},
 		{name: "wrong architecture", artifact: "private/sshc-darwin-arm64", goos: "darwin", goarch: "amd64", wantMessage: "artifact name rejected\n"},
 		{name: "windows suffix missing", artifact: "private/sshc-windows-arm64", goos: "windows", goarch: "arm64", wantMessage: "artifact name rejected\n"},

@@ -11,7 +11,7 @@ target_os=$2
 architecture=$3
 
 case "$target_os" in
-	darwin|linux) suffix= ;;
+	darwin|linux|freebsd|openbsd) suffix= ;;
 	windows) suffix=.exe ;;
 	*)
 		echo "artifact OS rejected" >&2

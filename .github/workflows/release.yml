@@ -428,7 +428,7 @@ jobs:
           [ "$count" -eq 1 ] || { echo "the APK must have exactly one signer" >&2; exit 1; }
           [ "$actual" = "$expected" ] || { echo "the APK was signed by an unexpected certificate" >&2; exit 1; }
 
-      # 公開契約の9成果物を各1件だけ受理する。広いglobで同名を上書きすると、
+      # 公開契約の13成果物を各1件だけ受理する。広いglobで同名を上書きすると、
       # job側の重複や欠落を隠したまま部分的なReleaseを作れてしまう。
       - name: Collect
         run: |
