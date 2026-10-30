@@ -208,12 +208,13 @@ describe("SyncPanel", () => {
     expect(syncStatus).toHaveBeenCalledTimes(2);
   });
 
-  it("says what travels before the form asks for anything", async () => {
+  it("says what travels before the form asks for anything, and who could read it on request", async () => {
     render(<SyncPanel api={buildApi(unconfigured, nothingToDo)} />);
 
     expect(
       await screen.findByText(/may include private keys/),
     ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(
       screen.getByText(/guess the encryption key offline/),
     ).toBeInTheDocument();

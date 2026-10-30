@@ -1,4 +1,4 @@
-"""docs/ux-audit.md の各項目（### UX-NN）から、GitHub のイシューの本文を作る。
+"""docs/2026-10-30-ux-audit.md の各項目（### UX-NN）から、GitHub のイシューの本文を作る。
 
 使い方: python3 scripts/ux-audit/make-issues.py <出力先> <まとめのイシューの番号>
 出力: <出力先>/UX-NN.md（本文）と <出力先>/issues.json（番号・タイトル・ラベル・本文のファイル・貼る画像）。
@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-AUDIT = ROOT / "docs" / "ux-audit.md"
+AUDIT = ROOT / "docs" / "2026-10-30-ux-audit.md"
 IMAGE_BASE = "https://raw.githubusercontent.com/aida0710/sshc/issue-assets/ux-audit-2026-10-30"
 SOURCE_COMMIT = "c68affe42"
 
