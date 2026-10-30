@@ -88,7 +88,7 @@ describe("SettingsPanel", () => {
     const navigation = screen.getByRole("navigation", { name: "Settings" });
     expect(within(navigation).getByText("Global")).toBeVisible();
     expect(within(navigation).getByRole("combobox", { name: "Preset to edit" })).toHaveValue("default");
-    expect(within(navigation).getByText("In use on this machine")).toBeVisible();
+    expect(within(navigation).getByText("In use here")).toBeVisible();
     expect(within(navigation).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "General", "Appearance", "Terminal", "SFTP", "Keyboard shortcuts", "Notifications", "Vault", "Machines", "Open connections",
     ]);
@@ -112,7 +112,7 @@ describe("SettingsPanel", () => {
 
     await user.click(within(navigation).getByRole("button", { name: "Use on this machine" }));
     await waitFor(() => expect(server.document().machines[0]?.settings.presetId).toBe("phone"));
-    expect(await within(navigation).findByText("In use on this machine")).toBeVisible();
+    expect(await within(navigation).findByText("In use here")).toBeVisible();
   });
 
   it("makes a new preset from the one open and names it", async () => {

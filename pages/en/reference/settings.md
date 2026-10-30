@@ -20,7 +20,7 @@ Menu lists each page with a line on what it is for, and links directly to the se
 To use different values on different machines, such as a larger font on a phone than on a PC, make a preset. A preset holds the appearance, the terminal settings, the SFTP transfer settings, the shortcuts, the notification sound, the Vault auto-lock, keeping the screen on, touch handling, the navigation and connection-list widths, and the Home view.
 
 - **Standard** is there from the start. A machine that has not chosen a preset uses Standard.
-- The preset this machine uses is marked **In use on this machine**. With another preset open, press **Use on this machine** to have this machine use it. Choose the preset another machine uses under **Machines**.
+- The preset this machine uses is marked **In use here**. With another preset open, press **Use on this machine** to have this machine use it. Choose the preset another machine uses under **Machines**.
 - **New preset** under "…" copies the values of the preset that is open. **Rename** and **Delete** do not apply to Standard. A machine that used a deleted preset goes back to Standard. Up to 16 presets, Standard included, can be made.
 - A change to a preset takes effect on the machines that use it once the change reaches them through Sync.
 

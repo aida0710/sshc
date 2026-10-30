@@ -28,8 +28,11 @@ function operatingSystemName(os: string | undefined): string {
   return operatingSystemNames[os] ?? os;
 }
 
-// columns lays a machine's row out like the heading above it, where the screen is wide enough.
-const columns = "md:grid md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_112px_120px_28px] md:items-center md:gap-3";
+// columns lays a machine's row out like the heading above it, where the screen is wide enough. On a phone the
+// row stacks, with the "…" beside the machine's name.
+const columns = "md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_112px_120px_28px] md:items-center md:gap-3";
+// onPhoneFullWidth stretches a stacked control across the row, under the name and the "…".
+const onPhoneFullWidth = "col-span-2 md:col-span-1";
 
 // The machines that sync: which preset each uses, the port its engine listens on, and when it last started.
 // Any machine's settings can be changed from here; its engine reads them when it next starts (the port) or at
@@ -49,12 +52,12 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
   return (
     <SettingsSection id="settings-machines" label={t("settings.machinesHeading")} icon="engine" showHeading={showHeading}>
       {document === null
-        ? (loadFailed ? <Notice tone="danger">{t("settings.machineSaveFailed")}</Notice> : <PanelState tone="loading" title={t("settings.machinesLoading")} />)
+        ? (loadFailed ? <Notice tone="danger">{t("settings.loadFailed")}</Notice> : <PanelState tone="loading" title={t("settings.machinesLoading")} />)
         : (
           <div className="flex flex-col gap-3">
             {failure === "" ? null : <Notice tone="danger" compact>{failure}</Notice>}
             <div className="overflow-hidden rounded-[10px] border border-line">
-              <div className={`hidden border-b border-line px-3 py-2 text-[11.5px] text-ink-faint ${columns}`} aria-hidden="true">
+              <div className={`hidden border-b border-line px-3 py-2 text-[11.5px] text-ink-faint md:grid ${columns}`} aria-hidden="true">
                 <span>{t("settings.machineColumnName")}</span>
                 <span>{t("settings.machineColumnPreset")}</span>
                 <span>{t("settings.machineColumnPort")}</span>
@@ -127,21 +130,21 @@ function MachineRow({ machine, document, onChange, onRename, onRemove }: {
     .filter((fact) => fact !== "").join(" · ");
   const started = machine.facts.startedAt === undefined
     ? t("settings.machineNeverStarted")
-    : new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(machine.facts.startedAt));
+    : new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(new Date(machine.facts.startedAt));
   // The Android app keeps its own port: the WebView keeps what a page stores per port, so another port would
   // lose the browser's registration.
   const portFixed = machine.facts.os === "android";
 
   return (
-    <div className={`flex flex-col gap-2 border-t border-line px-3 py-2.5 first-of-type:border-t-0 ${columns} ${self ? "bg-select-fill" : ""}`}>
+    <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 border-t border-line px-3 py-2.5 first-of-type:border-t-0 ${columns} ${self ? "bg-select-fill" : ""}`}>
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 text-[13.5px] font-medium text-ink">
           <span className="truncate">{name}</span>
-          {self ? <span className="rounded-full bg-accent/15 px-2 text-[11.5px] font-normal leading-5 text-accent">{t("settings.thisMachine")}</span> : null}
+          {self ? <span className="shrink-0 whitespace-nowrap rounded-full bg-accent/15 px-2 text-[11.5px] font-normal leading-5 text-accent">{t("settings.thisMachine")}</span> : null}
         </div>
         {facts === "" ? null : <div className="text-xs text-ink-faint">{facts}</div>}
       </div>
-      <select aria-label={t("settings.machineColumnPreset")} className={sizedControl("w-full")} value={presetId}
+      <select aria-label={t("settings.machineColumnPreset")} className={`${sizedControl("w-full")} ${onPhoneFullWidth}`} value={presetId}
         onChange={(event) => {
           // The value is read now: the write runs later, when the control shows the saved value again.
           const chosen = event.target.value;
@@ -150,13 +153,15 @@ function MachineRow({ machine, document, onChange, onRename, onRemove }: {
         {document.presets.map((preset) => <option key={preset.id} value={preset.id}>{presetName(preset, t("settings.presetStandard"))}</option>)}
       </select>
       <PortInput machine={machine} disabled={portFixed} onChange={onChange} />
-      <span className="text-xs text-ink-muted">{started}</span>
-      <ActionMenu label={t("settings.machineActions", { name })}
-        triggerClassName="flex size-9 items-center justify-center self-end rounded-md text-ink-muted hover:bg-hover hover:text-ink md:size-7 md:self-auto"
-        items={[
-        { label: t("settings.machineRename"), onSelect: onRename },
-        { label: t("settings.machineRemove"), onSelect: onRemove, tone: "danger", disabled: self },
-      ]} />
+      <span className={`whitespace-nowrap text-xs text-ink-muted ${onPhoneFullWidth}`}>{started}</span>
+      <div className="col-start-2 row-start-1 md:col-start-auto md:row-start-auto">
+        <ActionMenu label={t("settings.machineActions", { name })}
+          triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink md:size-7"
+          items={[
+          { label: t("settings.machineRename"), onSelect: onRename },
+          { label: t("settings.machineRemove"), onSelect: onRemove, tone: "danger", disabled: self },
+        ]} />
+      </div>
     </div>
   );
 }
@@ -195,7 +200,7 @@ function PortInput({ machine, disabled, onChange }: {
       min={minimumPort}
       max={maximumPort}
       aria-label={t("settings.machineColumnPort")}
-      className={`${sizedControl("w-full")} font-mono tabular-nums`}
+      className={`${sizedControl("w-full")} ${onPhoneFullWidth} font-mono tabular-nums`}
       value={draft}
       placeholder={t("settings.machinePortAutomatic")}
       disabled={disabled}

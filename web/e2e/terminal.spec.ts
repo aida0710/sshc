@@ -1275,7 +1275,7 @@ test("draws the terminals with the preset this machine uses", async ({ page, ins
   await region.getByRole("button", { name: "Save" }).click();
   expect((await presetSave).ok()).toBe(true);
   await page.getByRole("button", { name: "Use on this machine" }).click();
-  await expect(page.getByText("In use on this machine")).toBeVisible();
+  await expect(page.getByText("In use here")).toBeVisible();
 
   await openSessionList(page);
   await openLocalShell(page);

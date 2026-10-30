@@ -85,7 +85,7 @@ export function PresetPicker({ editing, onEdit, layout }: {
     </select>
   );
   const status = edited.id === inUse
-    ? <span className="rounded-full bg-accent/15 px-2 text-[11.5px] leading-5 text-accent">{t("settings.presetInUse")}</span>
+    ? <span className="min-w-0 truncate whitespace-nowrap rounded-full bg-accent/15 px-2 text-[11.5px] leading-5 text-accent">{t("settings.presetInUse")}</span>
     : <Button small disabled={unavailable} onClick={useHere}>{t("settings.presetUseHere")}</Button>;
   const menu = <ActionMenu label={t("settings.presetActions", { name: editedName })} items={actions}
     triggerClassName="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink md:size-6" />;

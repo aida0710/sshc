@@ -70,7 +70,7 @@ export function GeneralSettingsSection({ showHeading }: { showHeading: boolean }
   if (document === null) {
     return (
       <SettingsSection id="settings-general" label={t("settings.generalHeading")} icon="global" showHeading={showHeading}>
-        {loadFailed ? <Notice tone="danger">{t("settings.generalSaveFailed")}</Notice> : <PanelState tone="loading" title={t("terminal.settingsLoading")} />}
+        {loadFailed ? <Notice tone="danger">{t("settings.loadFailed")}</Notice> : <PanelState tone="loading" title={t("terminal.settingsLoading")} />}
       </SettingsSection>
     );
   }
