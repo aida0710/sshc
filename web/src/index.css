@@ -564,9 +564,15 @@
   width: min(20rem, calc(100vw - 2rem));
   max-width: none;
   transform: translateX(-100%);
+  /* 引き出すメニューは画面の端まで届かせる。広い画面の、浮かせた角丸の板の形は使わない。 */
+  margin: 0;
+  border-width: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 .sshc-app[data-mobile="true"] [data-navigation-open="true"] {
   transform: translateX(0);
+  box-shadow: var(--ui-overlay-shadow);
 }
 /* 指でメニューを引き出している間も、開いたときと同じ影（shadow-overlay）で板の端を見せる。 */
 .sshc-app[data-mobile="true"] [data-navigation-dragging] {
