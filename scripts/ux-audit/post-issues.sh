@@ -1,5 +1,5 @@
 #!/bin/sh
-# docs/ux-audit.md の各項目（UX-NN）を GitHub のイシューにする。先にまとめのイシューを作り、各項目の本文からその番号を指す。
+# docs/2026-10-30-ux-audit.md の各項目（UX-NN）を GitHub のイシューにする。先にまとめのイシューを作り、各項目の本文からその番号を指す。
 # 最後に、まとめの本文を各イシューの番号つきの一覧に置き換える。
 # 使い方: sh scripts/ux-audit/post-issues.sh <本文の出力先>
 set -eu

@@ -20,6 +20,8 @@ import { connectionAddress } from "../connections/connectionAddress";
 import { revealOnHover } from "../ui/ActionMenu";
 import { Spinner } from "../ui/Spinner";
 import { formatDateTime } from "../ui/format";
+import { relativeDay } from "../ui/relativeDay";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 
 type QuickConnectBrowserProps = {
   overview: Overview;
@@ -62,6 +64,7 @@ export function QuickConnectBrowser({
   onOpenSettings,
 }: QuickConnectBrowserProps) {
   const { t, locale } = useLanguage();
+  const mobile = useMediaQuery(mobileViewportQuery);
   const [query, setQuery] = useState("");
   const [groupTrail, setGroupTrail] = useState<string[]>([]);
   const [view, setView] = useState<QuickConnectView>(storedView);
@@ -107,9 +110,13 @@ export function QuickConnectBrowser({
     const alias = server.identity.alias;
     const recentConnection = recentByAlias.get(alias)?.connection;
     const target = connectionDestination(server);
+    // The last connection is a badge beside the name, so a card that has one is as tall as one that has not.
     const lastConnected = recentConnection === undefined
-      ? ""
-      : t("connection.lastConnected", { at: formatDateTime(recentConnection.lastConnectedAt, locale) });
+      ? null
+      : {
+          day: relativeDay(recentConnection.lastConnectedAt, new Date(), locale),
+          full: t("connection.lastConnected", { at: formatDateTime(recentConnection.lastConnectedAt, locale) }),
+        };
     const selected = selectedAlias === alias;
     const opening = launching === alias;
     const connect = () => {
@@ -163,6 +170,10 @@ export function QuickConnectBrowser({
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-[13.5px] font-semibold text-ink" title={alias}>{alias}</span>
+              {lastConnected === null || opening ? null : (
+                <span title={lastConnected.full} aria-label={lastConnected.full}
+                  className="shrink-0 whitespace-nowrap rounded-full bg-select-fill px-2 text-[11px] leading-[18px] text-accent">{lastConnected.day}</span>
+              )}
               {server.duplicateAlias ? <span role="img" aria-label={t("browser.duplicateAlias")} className="text-notice-ink"><Icon name="warning" className="size-3.5" /></span> : null}
             </span>
             <span className="mt-0.5 block truncate font-mono text-[11.5px] text-ink-faint" title={target}>{target}</span>
@@ -172,9 +183,7 @@ export function QuickConnectBrowser({
                   <Spinner className="size-3" />
                   {t("home.opening")}
                 </span>
-              ) : lastConnected === "" ? null : (
-                <span className="mt-1 block truncate text-[11px] text-ink-faint" title={lastConnected}>{lastConnected}</span>
-              )}
+              ) : null}
             </span>
           </span>
           {/* Where the "…" shows only under the pointer (hover-reveal), it appears over the group name; elsewhere the
@@ -202,10 +211,25 @@ export function QuickConnectBrowser({
     );
   }
 
+  // On a phone the search takes the whole row, so its example is not cut; the view switch sits small at the
+  // end of the count's row instead.
+  const viewSwitch = (
+    <Segmented
+      label={t("home.viewMode")}
+      value={view}
+      options={[
+        { value: "panel", label: t("home.panelView") },
+        { value: "list", label: t("home.listView") },
+      ]}
+      onChange={changeView}
+      touchCompact={mobile}
+    />
+  );
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-        <label className="relative min-w-0">
+      <div className={mobile ? "flex" : "grid grid-cols-[minmax(0,1fr)_auto] gap-2"}>
+        <label className="relative min-w-0 flex-1">
           <span className="sr-only">{t("home.search")}</span>
           <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint" />
           <input
@@ -216,17 +240,7 @@ export function QuickConnectBrowser({
             className={`${control} min-h-10 w-full pl-8 md:min-h-0`}
           />
         </label>
-        <div className="flex">
-          <Segmented
-            label={t("home.viewMode")}
-            value={view}
-            options={[
-              { value: "panel", label: t("home.panelView") },
-              { value: "list", label: t("home.listView") },
-            ]}
-            onChange={changeView}
-          />
-        </div>
+        {mobile ? null : <div className="flex">{viewSwitch}</div>}
       </div>
 
       {visibleGroups.length === 0 && groupTrail.length === 0 ? null : (
@@ -283,7 +297,10 @@ export function QuickConnectBrowser({
         </section>
       )}
 
-      <h3 className="text-xs font-normal text-ink-faint">{t("tree.resultCount", { visible: servers.length, total: index.servers.length })}</h3>
+      <div className="flex items-center gap-2">
+        <h3 className="min-w-0 flex-1 text-xs font-normal text-ink-faint">{t("tree.resultCount", { visible: servers.length, total: index.servers.length })}</h3>
+        {mobile ? viewSwitch : null}
+      </div>
 
       {servers.length === 0 ? (
         <p className="rounded-[10px] bg-well p-4 text-sm text-ink-muted">

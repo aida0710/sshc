@@ -144,16 +144,20 @@ export function Notice({
   );
 }
 
+// touchCompact keeps the segments their drawn size on a phone, where buttons are otherwise drawn 44px tall; a
+// transparent band above and below each still takes a 44px press.
 export function Segmented<T extends string>({
   label,
   value,
   options,
   onChange,
+  touchCompact = false,
 }: {
   label: string;
   value: T;
   options: { value: T; label: string }[];
   onChange: (value: T) => void;
+  touchCompact?: boolean;
 }) {
   return (
     <div
@@ -167,7 +171,8 @@ export function Segmented<T extends string>({
           type="button"
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
-          className={segmentClass(value === option.value)}
+          {...(touchCompact ? { "data-touch-compact": "" } : {})}
+          className={`${segmentClass(value === option.value)} ${touchCompact ? "relative after:absolute after:inset-x-0 after:-inset-y-[9px] after:content-['']" : ""}`}
         >
           {option.label}
         </button>
