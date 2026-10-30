@@ -18,15 +18,43 @@ import (
 // 起動した docker-buildx や、ログインシェルが起動したコマンドのような子プロセスが出力の
 // パイプを持ったまま残ると、Wait はパイプが閉じるまで戻らない。command を新しい
 // プロセスグループの先頭にして、グループごと SIGKILL で止める。
+//
+// 1回の SIGKILL では止め切れないことがある。macOS では、ちょうど fork している途中の子が
+// グループへの SIGKILL を受けずに残る（Linux は fork をやり直すので残らない）。残った子が
+// パイプを持つと、Wait は waitDelay まで戻らず、子は Wait が戻ったあとも動き続ける。
+// そこで、グループが空になるまで SIGKILL を送り直す。
 func KillGroupOnCancel(command *exec.Cmd, waitDelay time.Duration) {
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	command.Cancel = func() error {
 		if command.Process == nil {
 			return os.ErrProcessDone
 		}
-		return signalGroup(command.Process.Pid, syscall.SIGKILL)
+		leader := command.Process.Pid
+		if err := signalGroup(leader, syscall.SIGKILL); err != nil {
+			return err
+		}
+		go killUntilGroupIsGone(leader, time.Now().Add(waitDelay))
+		return nil
 	}
 	command.WaitDelay = waitDelay
+}
+
+// groupKillRetryInterval は、グループを止めたあと、残ったものへ SIGKILL を送り直す間隔である。
+// グループが空になったことを知らせる仕組みは無いので、間を置いて確かめる。残るのは fork と
+// 重なったときだけなので、ふつうは先頭が Wait で回収されてすぐ空（ESRCH）になって終わる。
+const groupKillRetryInterval = 10 * time.Millisecond
+
+// killUntilGroupIsGone は、leader が先頭だったグループが空になるか deadline を過ぎるまで、
+// SIGKILL を送り直す。グループに誰かが残っている間、その ID はほかのプロセスに再利用され
+// ないので、空になる前に送る分には別のプロセスを止めない。
+func killUntilGroupIsGone(leader int, deadline time.Time) {
+	ticker := time.NewTicker(groupKillRetryInterval)
+	defer ticker.Stop()
+	for range ticker.C {
+		if signalGroup(leader, syscall.SIGKILL) != nil || time.Now().After(deadline) {
+			return
+		}
+	}
 }
 
 // TerminateGroupOnCancel は、KillGroupOnCancel と同じく command が起動した子プロセスも
