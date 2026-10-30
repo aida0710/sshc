@@ -36,6 +36,10 @@ Homebrewのformulaは、タグのソースからNode.jsで画面を組み立て�
 
 Releaseワークフローの最初の`verify-source` jobは、タグのコミットが`main`の履歴にあり、同じコミットでmain CIが成功したことを確かめてから先へ進みます。`main`へのpushと手動の実行のCIは、3OSのGoのテスト（raceを含む）、Web、deadcodeなどを流します（VPNのイメージの検査だけは、`internal/vpn`のテストに関わる変更のときに流します）。このため、macOS・Linux・Windowsのjobはテストを流し直さず、成果物をビルドして起動し、バージョンと画面が入っていることを確かめます。Windowsのjobは、公開する`install.ps1`での導入も試します。
 
+CIのGo nativeのjobは、PRでも`main`へのpushでも、リリースのjobと同じ手順で各OSのCLIを組み立てて確かめます（「Release build」）。FreeBSD・OpenBSDの組み立て、成果物の名前と形式の確認、起動の確認、Windowsのインストーラーの確認を含みます。バージョンには仮の`v0.0.0`を使います。`publish.sh`はmain CIが通ってからタグを付けるので、これらで止まる不具合はタグを付ける前に分かります。
+
+同じjobは、前のリリース（GitHubの最新の安定版）が書いたデータで、今のビルドが起動するかも確かめます（「Upgrade from the previous release」、`cmd/sshc/upgrade_test.go`）。前のリリースの成果物を`checksums.txt`と照らしてから使い、マスターパスワードのあるVaultと設定を作ります。そのあと今のビルドが、ロックされたVaultのまま起動し、ロックを解除でき、設定が残っていることを見ます。手元で流すときは、`scripts/ci/previous-release.sh <ディレクトリ>`が出したパスを`SSHC_PREVIOUS_RELEASE_BINARY`に渡して`go test -run TestUpgradingFromThePreviousRelease ./cmd/sshc`を実行します。
+
 ## 公開
 
 ```sh
