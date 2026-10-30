@@ -206,8 +206,9 @@ test("resizes and restores the permanent desktop navigation", async ({ page, ins
   await page.mouse.up();
 
   await expect(handle).toHaveAttribute("aria-valuenow", "332");
+  // The width is the column's: the navigation floats 8px in from the window's edge and ends where the column does.
   await expect
-    .poll(() => navigation.evaluate((element) => Math.round(element.getBoundingClientRect().width)))
+    .poll(() => navigation.evaluate((element) => Math.round(element.getBoundingClientRect().right)))
     .toBe(332);
   expect((await saved).ok()).toBe(true);
 
