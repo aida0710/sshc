@@ -127,7 +127,7 @@ export function AppNavigation({
       inert={mobileLayout && !navigationOpen}
       data-navigation-open={navigationOpen}
       data-app-navigation
-      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden bg-sidebar px-2.5 pb-3 pt-3.5 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:flex md:w-auto md:max-w-none md:translate-x-0 md:shadow-none ${
+      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden bg-sidebar px-2.5 pb-3 pt-3.5 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:flex md:w-auto md:max-w-none md:m-2 md:mr-0 md:translate-x-0 md:rounded-xl md:border md:border-line md:shadow-pane ${
         navigationOpen ? "translate-x-0 shadow-overlay" : "-translate-x-full shadow-none"
       }`}
     >
