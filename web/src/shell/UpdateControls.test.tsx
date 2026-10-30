@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -153,6 +154,7 @@ describe("Web self update", () => {
   });
 
   it("folds the notice of a release under the version until a newer release", async () => {
+    fakeSettingsServer();
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, pageUrl: "https://github.com/aida0710/sshc/releases/tag/v1.1.0" });
     const first = render(<UpdateBadge api={api} />);
@@ -172,6 +174,7 @@ describe("Web self update", () => {
     render(<UpdateBadge api={api} />);
     expect(await screen.findByRole("button", { name: "Toggle update notice" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("link", { name: /v1.2.0 is available/ })).toBeVisible();
+    vi.restoreAllMocks();
   });
 
   it("asks to refresh Homebrew when the installation did not update", async () => {

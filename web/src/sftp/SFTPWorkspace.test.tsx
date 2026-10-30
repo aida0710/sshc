@@ -1,4 +1,6 @@
 import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { currentSettings } from "../settings/settingsStore";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SFTPWorkspace } from "./SFTPWorkspace";
@@ -65,20 +67,19 @@ function currentPath(): HTMLElement {
   return within(screen.getByRole("tabpanel")).getByTestId("sftp-current-path");
 }
 
-// The remembered layout in the shape the workspace stores it: the panes from
+// The remembered layout in the shape the workspace stores it in this machine's state: the panes from
 // left to right, each with its tabs and the position of the selected tab.
-const storedPanesKey = "sshc.sftp.panes.v1";
 type StoredPane = {
   tabs: { alias: string; path: string; sortKey?: string; sortDirection?: string }[];
   activeIndex?: number;
 };
 
-function seedStoredPanes(panes: StoredPane[]): void {
-  window.localStorage.setItem(storedPanesKey, JSON.stringify(panes));
+function seedStoredPanes(panes: unknown): void {
+  fakeSettingsServer({ state: { facts: {}, interface: { sftpPanes: JSON.stringify(panes) } } });
 }
 
 function storedPanes(): StoredPane[] {
-  return JSON.parse(window.localStorage.getItem(storedPanesKey) ?? "[]") as StoredPane[];
+  return JSON.parse(currentSettings()?.state.interface?.sftpPanes ?? "[]") as StoredPane[];
 }
 
 // Adds a tab connected to `connection` and moves it into a new pane on the right.
@@ -92,7 +93,7 @@ async function openSecondPane(connection: string): Promise<HTMLElement> {
 
 describe("SFTP tabs", () => {
   beforeEach(() => {
-    window.localStorage.clear();
+    fakeSettingsServer();
     vi.clearAllMocks();
     api.list.mockImplementation(async (_alias: string, requestedPath: string) => ({
       path: requestedPath === "" ? "/home/edge" : requestedPath,
@@ -858,10 +859,10 @@ describe("SFTP tabs", () => {
   });
 
   it("leaves out a remembered pane without usable tabs and selects the first tab when the stored position is out of range", () => {
-    window.localStorage.setItem(storedPanesKey, JSON.stringify([
+    seedStoredPanes([
       { tabs: "broken" },
       { tabs: [{ alias: "edge", path: "/srv" }, { alias: "miyabi", path: "/tmp" }], activeIndex: 5 },
-    ]));
+    ]);
 
     render(<SFTPWorkspace title="SFTP" aliases={["edge", "miyabi"]} />);
 

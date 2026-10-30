@@ -25,7 +25,8 @@ test("keeps sessions in the sidebar and moves product navigation to the Menu pag
   await expect(page.getByRole("region", { name: "Menu" }).locator('a[href="/files"]')).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open SFTP", exact: true })).toHaveAttribute("href", "/settings/sftp");
   await expect(page.getByRole("link", { name: "Open Settings", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Open Engine", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open General", exact: true })).toHaveAttribute("href", "/settings/general");
+  await expect(page.getByRole("link", { name: "Open Machines", exact: true })).toHaveAttribute("href", "/settings/machines");
   await expect(page.getByRole("link", { name: "Open Terminal", exact: true })).toHaveAttribute(
     "href",
     "/settings/terminal",
@@ -42,12 +43,13 @@ test("keeps sessions in the sidebar and moves product navigation to the Menu pag
     await expect(vault.getByText("OTP", { exact: true })).toBeVisible();
     const settings = page.getByRole("region", { name: "Settings", exact: true });
     for (const label of [
-      "Engine",
+      "General",
       "Terminal",
       "SFTP",
       "Notifications",
+      "Vault",
+      "Machines",
       "Open connections",
-      "Master password",
     ]) {
       await expect(settings.getByText(label, { exact: true })).toBeVisible();
     }

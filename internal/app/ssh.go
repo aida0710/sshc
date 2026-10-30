@@ -74,7 +74,7 @@ func newSSHParts(dependencies sshDependencies) sshParts {
 			},
 			// 接続のたびに読む。 設定は走っているあいだに変えられる。
 			Verbosity: func() connectionlog.Level {
-				return connectionlog.Level(config.TerminalSettings().Verbosity)
+				return connectionlog.Level(config.TerminalVerbosity())
 			},
 			Auth: sshclient.Auth{
 				// Keys 画面と同じ keys.NewAgent で、このプロセスから見た agent の宛先を

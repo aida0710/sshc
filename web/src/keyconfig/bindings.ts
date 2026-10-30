@@ -1,8 +1,5 @@
-import { useMemo, useSyncExternalStore } from "react";
 import { isValidShortcutChord } from "../rules/shortcutChord";
-import { maxShortcutKeysPerAction, shortcutActions } from "../rules/shortcuts.generated";
-import { readStoredValue } from "../ui/browserStorage";
-import { localStorageKeys } from "../ui/browserStorageKeys";
+import { shortcutActions } from "../rules/shortcuts.generated";
 import { isImeComposing } from "../ui/imeComposition";
 
 export { shortcutActions };
@@ -23,7 +20,6 @@ export const defaultBindings = {
   home: [],
   sftp: [],
 } satisfies Bindings;
-const changedEvent = "sshc-shortcuts-changed";
 
 // shortcutKey names the chord a key press makes, or null when it is not one
 // the engine stores. Both sides read the grammar from internal/validate, so a
@@ -37,50 +33,9 @@ export function shortcutKey(event: KeyboardEvent): string | null {
   return isValidShortcutChord(chord) ? chord : null;
 }
 
-function validShortcut(value: unknown): value is string {
-  return typeof value === "string" && isValidShortcutChord(value);
-}
-
-function snapshot(): string {
-  return readStoredValue(localStorageKeys.shortcutBindings) ?? "";
-}
-
-export function parseBindings(raw: string): Bindings {
-  try {
-    const value: unknown = JSON.parse(raw);
-    if (value === null || typeof value !== "object") return defaultBindings;
-    const result: Bindings = { ...defaultBindings };
-    for (const action of shortcutActions) {
-      const keys = (value as Record<string, unknown>)[action];
-      if (Array.isArray(keys) && keys.length <= maxShortcutKeysPerAction && keys.every(validShortcut)) result[action] = [...new Set(keys)];
-    }
-    // Reject conflicting storage (including hand edits) as a whole.
-    const all = Object.values(result).flat();
-    return new Set(all).size === all.length ? result : defaultBindings;
-  } catch { return defaultBindings; }
-}
-
-export function loadBindings(): Bindings { return parseBindings(snapshot()); }
-// saveBindings throws when the browser refuses storage instead of swallowing
-// it like the preferences in ui/browserStorage: this tab reads its shortcuts
-// back from storage, so a refused write leaves the old ones in force. Callers
-// decide whether that is worth telling the user.
-export function saveBindings(value: Bindings): void {
-  window.localStorage.setItem(localStorageKeys.shortcutBindings, JSON.stringify(value));
-  window.dispatchEvent(new Event(changedEvent));
-}
-function subscribe(listener: () => void): () => void {
-  window.addEventListener("storage", listener);
-  window.addEventListener(changedEvent, listener);
-  return () => { window.removeEventListener("storage", listener); window.removeEventListener(changedEvent, listener); };
-}
-export function useBindings(): Bindings {
-  const raw = useSyncExternalStore(subscribe, snapshot, () => "");
-  return useMemo(() => parseBindings(raw), [raw]);
-}
-export function matchesShortcut(event: KeyboardEvent, action: ShortcutAction, bindings?: Bindings): boolean {
+export function matchesShortcut(event: KeyboardEvent, action: ShortcutAction, bindings: Bindings): boolean {
   const key = shortcutKey(event);
-  return key !== null && (bindings ?? loadBindings())[action].includes(key);
+  return key !== null && bindings[action].includes(key);
 }
 export function shortcutsBlocked(event: KeyboardEvent): boolean {
   return event.defaultPrevented || isImeComposing(event) ||

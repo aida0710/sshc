@@ -104,7 +104,7 @@ func TestServiceTerminalLimitsFallBackToTheDefaults(t *testing.T) {
 	}
 
 	stored := NewMetadata()
-	stored.EmbeddedTerminal = &EmbeddedTerminal{MaxSessions: 8, ScrollbackBytes: 32768}
+	stored.Presets[0].Terminal = &EmbeddedTerminal{MaxSessions: 8, ScrollbackBytes: 32768}
 	writeServiceMetadata(t, service, workspace, stored)
 	if limits := service.TerminalLimits(); limits.MaxSessions != 8 || limits.Scrollback != 32768 {
 		t.Fatalf("stored limits = %#v", limits)

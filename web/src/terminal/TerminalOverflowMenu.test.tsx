@@ -1,10 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../i18n/context";
-import { loadKeepScreenAwake } from "./keepScreenAwake";
-import { loadTouchMode } from "./touchMode";
+import { presetInterfaceOf } from "../settings/presetInterface";
+import { currentSettings } from "../settings/settingsStore";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 
 function renderMenu(onClose = () => undefined) {
@@ -15,9 +16,13 @@ function renderMenu(onClose = () => undefined) {
   );
 }
 
+beforeEach(() => {
+  fakeSettingsServer();
+});
+
 afterEach(() => {
   Reflect.deleteProperty(navigator, "wakeLock");
-  window.localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 describe("TerminalOverflowMenu", () => {
@@ -108,7 +113,7 @@ describe("TerminalOverflowMenu", () => {
     expect(trigger).toHaveFocus();
   });
 
-  it("keeps the screen on for every terminal of this browser from the checkbox", async () => {
+  it("keeps the screen on for every terminal from the checkbox", async () => {
     Object.defineProperty(navigator, "wakeLock", { configurable: true, value: { request: vi.fn() } });
     const close = vi.fn();
     renderMenu(close);
@@ -117,7 +122,7 @@ describe("TerminalOverflowMenu", () => {
     expect(item).toHaveAttribute("aria-checked", "false");
     await userEvent.click(item);
 
-    expect(loadKeepScreenAwake()).toBe(true);
+    expect(presetInterfaceOf(currentSettings()).keepScreenAwake).toBe(true);
     expect(close).toHaveBeenCalledOnce();
   });
 
@@ -137,11 +142,11 @@ describe("TerminalOverflowMenu", () => {
     await userEvent.click(detect);
     // The menu stays open so that the fixed input can be picked; jsdom has no touch screen, so mouse is kept.
     expect(close).not.toHaveBeenCalled();
-    expect(loadTouchMode()).toBe("mouse");
+    expect(presetInterfaceOf(currentSettings()).touchMode).toBe("mouse");
     expect(screen.getByRole("menuitemradio", { name: "Use by mouse" })).toHaveAttribute("aria-checked", "true");
 
     await userEvent.click(screen.getByRole("menuitemradio", { name: "Use by touch" }));
-    expect(loadTouchMode()).toBe("touch");
+    expect(presetInterfaceOf(currentSettings()).touchMode).toBe("touch");
     expect(close).toHaveBeenCalledOnce();
   });
 });

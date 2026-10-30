@@ -1,4 +1,4 @@
-import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
+import { forgetStoredValue, readStoredValue, writeStoredValue } from "../ui/browserStorage";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 import type { MessageKey } from "./messages";
 
@@ -13,13 +13,12 @@ export const localeLabelKeys: Record<Locale, MessageKey> = {
   ja: "shell.languageJapanese",
 };
 
-function isLocale(value: unknown): value is Locale {
+export function isLocale(value: unknown): value is Locale {
   return typeof value === "string" && (locales as readonly string[]).includes(value);
 }
 
-export function detectLocale(): Locale {
-  const stored = readStoredValue(localStorageKeys.locale);
-  if (isLocale(stored)) return stored;
+// browserLocale is the browser's own language, used while the synced settings choose none.
+export function browserLocale(): Locale {
   for (const candidate of navigator.languages ?? [navigator.language]) {
     const subtag = candidate.split("-")[0];
     if (isLocale(subtag)) return subtag;
@@ -27,6 +26,20 @@ export function detectLocale(): Locale {
   return defaultLocale;
 }
 
-export function rememberLocale(locale: Locale): void {
+// detectLocale is the language to draw with before the synced settings arrive: the copy kept from the last
+// time they were read, or the browser's language. The screens before sign-in and unlock only ever see this.
+export function detectLocale(): Locale {
+  const copied = readStoredValue(localStorageKeys.locale);
+  return isLocale(copied) ? copied : browserLocale();
+}
+
+// copyLocale keeps the language for the next first paint. It is a copy of the synced setting, never read back
+// into it.
+export function copyLocale(locale: Locale): void {
   writeStoredValue(localStorageKeys.locale, locale);
+}
+
+// forgetLocale drops the copy, so the next first paint follows the browser's language.
+export function forgetLocale(): void {
+  forgetStoredValue(localStorageKeys.locale);
 }

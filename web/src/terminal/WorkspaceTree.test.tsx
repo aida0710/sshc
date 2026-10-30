@@ -1,6 +1,8 @@
 import { createEvent, fireEvent, render, screen, within } from "@testing-library/react";
+import { currentSettings } from "../settings/settingsStore";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { TerminalWorkspace } from "../api/terminalWorkspaces";
@@ -100,6 +102,8 @@ function sessionRow(name: string): HTMLElement {
   return row;
 }
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("WorkspaceTree", () => {
   it.each(["remote_engine_vault_locked", "remote_engine_incompatible", "remote_engine_unreachable"])(
     "leaves the run target's %s refusal to the terminal area",
@@ -140,7 +144,7 @@ describe("WorkspaceTree", () => {
 
   it("unfolds the workspace of the unread session it opens", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem("sshc.terminal.collapsed-workspaces.v1", '["w1"]');
+    fakeSettingsServer({ state: { facts: {}, interface: { collapsedTerminalWorkspaces: '["w1"]' } } });
     renderTree({ sessions: [session("one", "default"), session("three", "w1")], unread: new Set(["three"]) });
     expect(screen.queryByText("three")).not.toBeInTheDocument();
 
@@ -155,20 +159,22 @@ describe("WorkspaceTree", () => {
   });
 
   it("shows hidden workspaces from the heading menu and remembers it", async () => {
+    fakeSettingsServer();
     const user = userEvent.setup();
     renderTree();
     await user.click(screen.getByRole("button", { name: "Workspace list actions" }));
     await user.click(screen.getByRole("menuitem", { name: "Show hidden workspaces" }));
     expect(screen.getByText("agent-shell")).toBeInTheDocument();
-    expect(window.localStorage.getItem("sshc.terminal.show-hidden-workspaces.v1")).toBe("true");
+    expect(currentSettings()?.state.interface?.showHiddenTerminalWorkspaces).toBe("true");
   });
 
   it("folds a workspace and keeps it folded", async () => {
+    fakeSettingsServer();
     const user = userEvent.setup();
     renderTree();
     await user.click(screen.getByRole("button", { name: /^sshc dev/ }));
     expect(screen.queryByText("dev-shell")).not.toBeInTheDocument();
-    expect(window.localStorage.getItem("sshc.terminal.collapsed-workspaces.v1")).toBe('["w1"]');
+    expect(currentSettings()?.state.interface?.collapsedTerminalWorkspaces).toBe('["w1"]');
   });
 
   it("opens a session in the workspace whose plus was pressed", async () => {

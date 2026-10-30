@@ -43,7 +43,6 @@ var servedTypes = []struct {
 	{"EmbeddedTerminal", application.EmbeddedTerminal{}},
 	{"EditRequest", application.EditRequest{}},
 	{"FileBase", application.FileBase{}},
-	{"EngineSettings", application.EngineSettings{}},
 	{"FieldEdit", application.FieldEdit{}},
 	{"FileContents", application.FileContents{}},
 	{"FileDiff", application.FileDiff{}},
@@ -71,7 +70,22 @@ var servedTypes = []struct {
 	{"Setting", application.Setting{}},
 	{"Source", application.Source{}},
 	{"TerminalAppearance", application.TerminalAppearance{}},
-	{"TerminalPreset", application.TerminalPreset{}},
+	// 設定（全体の設定・プリセット・マシン）。
+	{"AppearanceSettings", application.AppearanceSettings{}},
+	{"FileTransferSettings", application.FileTransferSettings{}},
+	{"GlobalSettings", application.GlobalSettings{}},
+	{"GlobalTerminalSettings", application.GlobalTerminalSettings{}},
+	{"GlobalFileTransferSettings", application.GlobalFileTransferSettings{}},
+	{"SettingsPreset", application.SettingsPreset{}},
+	{"InterfaceSettings", application.InterfaceSettings{}},
+	{"NotificationSound", application.NotificationSound{}},
+	{"VaultAutoLockSettings", application.VaultAutoLock{}},
+	{"MachineSettings", application.MachineSettings{}},
+	{"MachineFacts", application.MachineFacts{}},
+	{"Machine", application.Machine{}},
+	{"MachineState", application.MachineState{}},
+	{"SettingsDocument", application.SettingsDocument{}},
+	{"SettingsSaveResult", application.SettingsSaveResult{}},
 }
 
 // servedEnums は、application の型が OpenAPI の enum を名前付きの型で持つものの値である。
@@ -100,14 +114,33 @@ var servedStringEnums = map[string]func(string) bool{
 	"VaultAutoLockSettings.unit":          oneOf(application.VaultAutoLockMinutes, application.VaultAutoLockHours),
 	"PasswordEligibility.passwordBinding": oneOf(authenticationBindingStates...),
 	"PasswordEligibility.totpBinding":     oneOf(authenticationBindingStates...),
-	"AppearanceSettings.accent":           acceptedAsAccent,
+	"AppearanceSettings.accent": acceptedAsPreset(func(preset *application.SettingsPreset, value string) {
+		preset.Appearance = &application.AppearanceSettings{Accent: value}
+	}),
+	"InterfaceSettings.touchMode": acceptedAsPreset(func(preset *application.SettingsPreset, value string) {
+		preset.Interface = &application.InterfaceSettings{TouchMode: value}
+	}),
+	"InterfaceSettings.homeView": acceptedAsPreset(func(preset *application.SettingsPreset, value string) {
+		preset.Interface = &application.InterfaceSettings{HomeView: value}
+	}),
+	"NotificationSound.sound": acceptedAsPreset(func(preset *application.SettingsPreset, value string) {
+		preset.Interface = &application.InterfaceSettings{NotificationSound: &application.NotificationSound{Sound: value}}
+	}),
+	"GlobalSettings.language": func(value string) bool {
+		metadata := application.NewMetadata()
+		metadata.Settings = &application.GlobalSettings{Language: value}
+		return application.ValidateMetadata(metadata) == nil
+	},
 }
 
-// acceptedAsAccent は、さし色の名前を application が保存できる metadata として受け付けるかを返す。
-func acceptedAsAccent(value string) bool {
-	metadata := application.NewMetadata()
-	metadata.Appearance = &application.AppearanceSettings{Accent: value}
-	return application.ValidateMetadata(metadata) == nil
+// acceptedAsPreset は、標準のプリセットの 1 項目に値を入れて、application が保存できる metadata
+// として受け付けるかを返す確かめ方を作る。
+func acceptedAsPreset(set func(preset *application.SettingsPreset, value string)) func(string) bool {
+	return func(value string) bool {
+		metadata := application.NewMetadata()
+		set(&metadata.Presets[0], value)
+		return application.ValidateMetadata(metadata) == nil
+	}
 }
 
 // authenticationBindingStates は、Vault が返す、保存した認証情報と接続先の紐付けの状態である。
@@ -140,7 +173,8 @@ func TestTheTypesWeSerialiseMatchTheContract(t *testing.T) {
 		Enums:       servedEnums,
 		StringEnums: servedStringEnums,
 		// 画面が送るキーの組は、application のショートカットの検査が確かめる。
-		MapObjects: []string{"ShortcutPreset.bindings"},
+		// 画面の並びは、application の今の状態の検査が名前を確かめる。
+		MapObjects: []string{"ShortcutPreset.bindings", "InterfaceState"},
 	}
 	for _, served := range servedTypes {
 		t.Run(served.schema, func(t *testing.T) {

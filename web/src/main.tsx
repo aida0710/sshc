@@ -6,7 +6,6 @@ import "./index.css";
 import { CrashBoundary } from "./shell/CrashBoundary";
 import { bootstrapSession } from "./session/bootstrap";
 import { LanguageProvider } from "./i18n/context";
-import { appearanceApi } from "./api/appearance";
 import { AccentProvider } from "./theme/accentContext";
 import { ThemeProvider } from "./theme/context";
 import { ToastProvider } from "./ui/ToastProvider";
@@ -43,7 +42,7 @@ createRoot(root).render(
 
     <CrashBoundary>
     <ThemeProvider>
-      <AccentProvider api={appearanceApi}>
+      <AccentProvider>
         <LanguageProvider>
           <ToastProvider>
             <App

@@ -75,6 +75,18 @@ type SaveResult struct {
 	Preview       SavePreview `json:"preview"`
 }
 
+// SettingsSaveResult は、設定（全体の設定・プリセット・マシン・ショートカット）を書いた結果である。
+// 編集のプレビューを持たない。空のプレビューを運ぶと、応答の約束（SaveResult.preview）に反する。
+type SettingsSaveResult struct {
+	TransactionID string   `json:"transactionId"`
+	Written       []string `json:"written"`
+}
+
+// Settings は、設定の保存の応答の形にする。
+func (result SaveResult) Settings() SettingsSaveResult {
+	return SettingsSaveResult{TransactionID: result.TransactionID, Written: result.Written}
+}
+
 // IncludeReference は、1 個の Include 引数と、それが解決した先である。
 type IncludeReference struct {
 	Line      int       `json:"line"`

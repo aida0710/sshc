@@ -1,5 +1,6 @@
 import type { PastedItem } from "./kittyClipboard";
 import { matchesShortcut } from "../keyconfig/bindings";
+import { currentBindings } from "../keyconfig/presets";
 export type TerminalClipboardSettings = {
   copyOnSelect: boolean;
   rightClickPaste: boolean;
@@ -102,12 +103,12 @@ export function attachTerminalClipboard({
 
   terminal.attachCustomKeyEventHandler((event) => {
     if (event.type !== "keydown") return true;
-    if (matchesShortcut(event, "copy") && terminal.hasSelection()) {
+    if (matchesShortcut(event, "copy", currentBindings()) && terminal.hasSelection()) {
       event.preventDefault();
       copySelection({ announce: true });
       return false;
     }
-    if (matchesShortcut(event, "paste")) {
+    if (matchesShortcut(event, "paste", currentBindings())) {
       const nativePaste = !event.altKey && ((event.metaKey && !event.ctrlKey && !event.shiftKey) || (event.ctrlKey && !event.metaKey)) && event.key.toLowerCase() === "v";
       if (!nativePaste) {
         event.preventDefault();

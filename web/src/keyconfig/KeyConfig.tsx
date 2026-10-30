@@ -1,4 +1,4 @@
-import { refreshPresets, savePresetBindings, selectPreset, updatePresets, usePresets } from "./presets";
+import { defaultShortcutPresetId, refreshPresets, savePresetBindings, selectPreset, updatePresets, useBindings, usePresets } from "./presets";
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
@@ -9,7 +9,7 @@ import { PageSection } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { newIdentifier } from "../ui/randomIdentifier";
-import { defaultBindings, shortcutActions, shortcutKey, useBindings, type Bindings, type ShortcutAction } from "./bindings";
+import { defaultBindings, shortcutActions, shortcutKey, type Bindings, type ShortcutAction } from "./bindings";
 import { maxShortcutPresetNameLength, maxShortcutPresets } from "../rules/shortcuts.generated";
 import { isImeComposing } from "../ui/imeComposition";
 
@@ -26,10 +26,11 @@ const actionLabelKeys: Record<ShortcutAction, MessageKey> = {
   sftp: "shortcuts.sftp",
 };
 
-export function KeyConfig() {
+// presetId is the settings preset being edited: the shortcut preset chosen here is the one it uses.
+export function KeyConfig({ presetId }: { presetId?: string } = {}) {
   const t = useTranslate();
-  const bindings = useBindings();
-  const library = usePresets();
+  const bindings = useBindings(presetId);
+  const library = usePresets(presetId);
   const [name, setName] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const unavailable = library.loading || library.busy || library.error;
@@ -42,7 +43,7 @@ export function KeyConfig() {
     setMessage("");
     setError("");
     try {
-      await savePresetBindings(next);
+      await savePresetBindings(next, presetId);
       setRecording(null);
       setMessage(t("shortcuts.saved"));
     } catch { setError(t("shortcuts.saveFailed")); }
@@ -56,7 +57,7 @@ export function KeyConfig() {
         ? [...library.presets, { id, name: name.trim(), bindings }]
         : action === "rename" ? library.presets.map((p) => p.id === id ? { ...p, name: name.trim() } : p)
         : library.presets.filter((p) => p.id !== id);
-      await updatePresets(next, action === "delete" ? "default" : id);
+      await updatePresets(next, action === "delete" ? defaultShortcutPresetId : id, presetId);
       setName(""); setMessage(t("shortcuts.saved"));
     } catch { setError(t("shortcuts.saveFailed")); }
   }
@@ -68,7 +69,7 @@ export function KeyConfig() {
       <FieldRow label={t("shortcuts.preset")} hint={library.selected === "default" ? t("shortcuts.defaultPresetHint") : undefined}
         actions={library.selected === "default" ? undefined : <Button kind="dangerText" disabled={unavailable} onClick={() => setConfirmingDelete(true)}>{t("shortcuts.delete")}</Button>}>
         <select className={sizedControl("w-full max-w-xs")} value={library.selected} disabled={unavailable}
-          onChange={(event) => { try { selectPreset(event.target.value); } catch { setError(t("shortcuts.saveFailed")); } }}>
+          onChange={(event) => { setError(""); selectPreset(event.target.value, presetId).catch(() => setError(t("shortcuts.saveFailed"))); }}>
           <option value="default">{t("shortcuts.defaultPreset")}</option>
           {library.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
         </select>

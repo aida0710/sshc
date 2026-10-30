@@ -13,8 +13,7 @@ import { ConnectionListPane } from "./ConnectionListPane";
 import { useToast } from "../ui/useToast";
 import { usePendingResult } from "../ui/usePendingResult";
 import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
-import { useStoredColumnWidth, type StoredColumnWidth } from "../ui/useStoredColumnWidth";
-import { localStorageKeys } from "../ui/browserStorageKeys";
+import { usePresetColumnWidth, type PresetColumnWidth } from "../settings/usePresetColumnWidth";
 import { MissingConnection, NoConnectionSelected } from "./DetailPlaceholders";
 import { useOverlays, useSaveFeedback } from "./pageState";
 import { HostDetailPanel } from "./HostDetail";
@@ -64,7 +63,7 @@ import { ConnectionGroupFacets } from "./ConnectionGroupFacets";
 import { useConnectionDrag } from "./useConnectionDrag";
 
 // The design's width for the connection list; the groups sit beside the card, outside it. The editor keeps the rest.
-const connectionListWidth: StoredColumnWidth = { key: localStorageKeys.connectionListWidth, fallback: 300, minimum: 256, maximum: 720 };
+const connectionListWidth: PresetColumnWidth = { field: "connectionListWidth", fallback: 300, minimum: 256, maximum: 720 };
 
 
 type ConnectionsPageProps = {
@@ -106,7 +105,7 @@ export function ConnectionsPage({
   const retry = usePendingResult();
   const compact = useMediaQuery(mobileViewportQuery);
   const [overview, setOverview] = useState<Overview | null>(null);
-  const [listWidth, setListWidth] = useStoredColumnWidth(connectionListWidth);
+  const [listWidth, setListWidth] = usePresetColumnWidth(connectionListWidth);
   const [discardIntent, setDiscardIntent] = useState<DiscardIntent | null>(null);
   // 見出しの「…」の［削除…］で、開いている接続先を消してよいかを確かめている間。
   const [confirmingDelete, setConfirmingDelete] = useState(false);

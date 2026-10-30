@@ -8,7 +8,6 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/application"
-	"sshc/internal/platform"
 )
 
 // ConfigHandlers は、configuration・metadata・history の各エンドポイントを提供する。
@@ -40,11 +39,7 @@ func registerConfigRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.POST("/api/v1/config/groups/delete", handlers.DeleteGroup)
 	engine.GET("/api/v1/metadata", handlers.Metadata)
 	engine.PUT("/api/v1/metadata/shortcuts", handlers.SetShortcuts)
-	engine.PUT("/api/v1/metadata/terminal", handlers.SetTerminal)
-	engine.PUT("/api/v1/metadata/terminal-presets", handlers.SetTerminalPresets)
-	engine.PUT("/api/v1/metadata/appearance", handlers.SetAppearance)
-	engine.GET("/api/v1/metadata/engine", handlers.Engine)
-	engine.PUT("/api/v1/metadata/engine", handlers.SetEngine)
+	registerSettingsRoutes(engine, handlers)
 	registerBackgroundRoutes(engine, handlers)
 	engine.GET("/api/v1/history", handlers.History)
 	engine.POST("/api/v1/history/restore", handlers.Restore)
@@ -172,122 +167,6 @@ func (h ConfigHandlers) Metadata(c *echo.Context) error {
 	return c.JSON(http.StatusOK, overview.Metadata)
 }
 
-// SetTerminal は、ローカルシェルの開始位置を書き戻す。
-//
-// 通らない指定はここで断る。保存を受け入れておいて、次に端末を開いた
-// ときに初めて失敗させると、設定画面と失敗の現れる場所が離れる。
-func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
-	var request api.TerminalSettings
-	if err := decodeJSON(c, &request); err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	settings := application.TerminalSettings{}
-	if request.StartDirectory != nil {
-		settings.StartDirectory = *request.StartDirectory
-	}
-	if request.MaxSessions != nil {
-		settings.MaxSessions = *request.MaxSessions
-	}
-	if request.ScrollbackBytes != nil {
-		settings.ScrollbackBytes = *request.ScrollbackBytes
-	}
-	if request.BrowserScrollbackLines != nil {
-		settings.BrowserScrollbackLines = *request.BrowserScrollbackLines
-	}
-	if request.RetainedTerminals != nil {
-		settings.RetainedTerminals = *request.RetainedTerminals
-	}
-	if request.FontSize != nil {
-		settings.FontSize = *request.FontSize
-	}
-	if request.Verbosity != nil {
-		settings.Verbosity = *request.Verbosity
-	}
-	// 0 は「繋ぎ直さない」であって「書かれていない」ではない。値で受けると、
-	// 切ったつもりのユーザーが既定へ戻される。
-	settings.Reconnect = request.Reconnect
-	settings.CopyOnSelect = request.CopyOnSelect
-	settings.RightClickPaste = request.RightClickPaste
-	settings.WebGL = request.Webgl
-	settings.StatusLine = request.StatusLine
-	settings.CommandMarks = request.CommandMarks
-	settings.StickyCommand = request.StickyCommand
-	settings.CommandScrollbarMarks = request.CommandScrollbarMarks
-	if request.Osc52 != nil {
-		settings.OSC52 = *request.Osc52
-	}
-	if request.JisYenBackslash != nil {
-		settings.JISYenBackslash = *request.JisYenBackslash
-	}
-	if request.ComposerEnterSends != nil {
-		settings.ComposerEnterSends = *request.ComposerEnterSends
-	}
-	if request.Ligatures != nil {
-		settings.Ligatures = *request.Ligatures
-	}
-	if request.LocalShellProfile != nil {
-		settings.LocalShellProfile = *request.LocalShellProfile
-	}
-	if request.Appearance != nil {
-		// 未知の配色名は保存できるようにする。UI 側は未知の名前を既定値として扱うため、
-		// 配色名を変更しても設定画面を利用できる。
-		if request.Appearance.Palette != nil {
-			settings.Appearance.Palette = *request.Appearance.Palette
-		}
-		if request.Appearance.Font != nil {
-			settings.Appearance.Font = *request.Appearance.Font
-		}
-		if request.Appearance.Background != nil {
-			settings.Appearance.Background = *request.Appearance.Background
-		}
-		// 0 は「かぶせない」であって「選んでいない」ではない。書かれて
-		// いないときだけ、上の段の選択と既定に譲る。
-		settings.Appearance.BackgroundTint = request.Appearance.BackgroundTint
-	}
-	result, err := h.Service.SetTerminalSettings(settings)
-	switch {
-	case errors.Is(err, platform.ErrDirectoryRelative), errors.Is(err, platform.ErrDirectoryUser):
-		return problem(c, http.StatusBadRequest, "start_directory_unusable")
-	case errors.Is(err, application.ErrStartDirectoryMissing):
-		return problem(c, http.StatusBadRequest, "start_directory_missing")
-	case errors.Is(err, application.ErrStartDirectoryNotADirectory):
-		return problem(c, http.StatusBadRequest, "start_directory_not_a_directory")
-	// 範囲の外は書き込みで断る。読み取りが既定へ戻すのとは対称ではない
-	// これはこのアプリケーション自身の操作であり、断ればユーザーが直せる。
-	case errors.Is(err, application.ErrMetadataTerminal):
-		return problem(c, http.StatusBadRequest, "terminal_limits_out_of_range")
-	case err != nil:
-		return serviceProblem(c, err)
-	}
-	return c.JSON(http.StatusOK, api.SettingsSaveResult{
-		TransactionId: result.TransactionID,
-		Written:       result.Written,
-	})
-}
-
-// SetAppearance は、アプリのさし色を書き戻す。テーマはブラウザだけに置くので、ここには来ない。
-func (h ConfigHandlers) SetAppearance(c *echo.Context) error {
-	var request api.AppearanceSettings
-	if err := decodeJSON(c, &request); err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	settings := application.AppearanceSettings{}
-	if request.Accent != nil {
-		settings.Accent = *request.Accent
-	}
-	result, err := h.Service.SetAppearanceSettings(settings)
-	switch {
-	case errors.Is(err, application.ErrMetadataAppearance):
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	case err != nil:
-		return serviceProblem(c, err)
-	}
-	return c.JSON(http.StatusOK, api.SettingsSaveResult{
-		TransactionId: result.TransactionID,
-		Written:       result.Written,
-	})
-}
-
 func (h ConfigHandlers) History(c *echo.Context) error {
 	entries, err := h.Service.History()
 	if err != nil {
@@ -334,57 +213,6 @@ func (h ConfigHandlers) Recover(c *echo.Context) error {
 	return c.JSON(http.StatusOK, api.RecoverResponse{Status: "ok"})
 }
 
-// Engine は、このマシンの sshc エンジンの設定を返す。同期する metadata.json には無いので、
-// GET /api/v1/metadata とは別に読む。
-func (h ConfigHandlers) Engine(c *echo.Context) error {
-	return c.JSON(http.StatusOK, h.Service.EngineSettings())
-}
-
-// SetEngine は、このマシンの sshc エンジンの設定を書き戻す。
-//
-// 受け口の番号は起動時にしか読まれない。変えても、次に engine を起動するまで
-// 効かない。画面はそう言う。自動ロックの時間は application がすぐに Vault へ移す。
-func (h ConfigHandlers) SetEngine(c *echo.Context) error {
-	var request api.EngineSettings
-	if err := decodeJSON(c, &request); err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	result, err := h.Service.SetEngineSettings(engineSettingsFromRequest(request))
-	switch {
-	// 範囲の外は保存で断る。通せば、断るのは次の起動の bind であり、
-	// そのとき画面はもう閉じている。
-	case errors.Is(err, application.ErrEnginePort):
-		return problem(c, http.StatusBadRequest, "port_out_of_range")
-	case errors.Is(err, application.ErrVaultAutoLock):
-		return problem(c, http.StatusBadRequest, "invalid_vault_auto_lock")
-	case err != nil:
-		return serviceProblem(c, err)
-	}
-	return c.JSON(http.StatusOK, api.SettingsSaveResult{
-		TransactionId: result.TransactionID,
-		Written:       result.Written,
-	})
-}
-
-// engineSettingsFromRequest は、通信の形を application の形へ移すだけで、範囲は
-// 検査しない。省いた値は 0 と空になり、application が未設定として扱う。
-func engineSettingsFromRequest(request api.EngineSettings) application.EngineSettings {
-	var settings application.EngineSettings
-	if request.Port != nil {
-		settings.Port = *request.Port
-	}
-	if chosen := request.VaultAutoLock; chosen != nil {
-		settings.VaultAutoLock = &application.VaultAutoLock{Mode: string(chosen.Mode)}
-		if chosen.Value != nil {
-			settings.VaultAutoLock.Value = *chosen.Value
-		}
-		if chosen.Unit != nil {
-			settings.VaultAutoLock.Unit = string(*chosen.Unit)
-		}
-	}
-	return settings
-}
-
 func (h ConfigHandlers) SetShortcuts(c *echo.Context) error {
 	var request struct {
 		Base    []application.ShortcutPreset `json:"base"`
@@ -406,30 +234,5 @@ func (h ConfigHandlers) SetShortcuts(c *echo.Context) error {
 	if err != nil {
 		return serviceProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, api.SettingsSaveResult{TransactionId: result.TransactionID, Written: result.Written})
-}
-
-// SetTerminalPresets は、ターミナルの設定の組の一覧を置き換える。組の中身は
-// TerminalSettings と同じ名前で書くので、metadata の形のまま受け取る。
-func (h ConfigHandlers) SetTerminalPresets(c *echo.Context) error {
-	var request struct {
-		Base    []application.TerminalPreset `json:"base"`
-		Presets []application.TerminalPreset `json:"presets"`
-	}
-	if err := decodeJSON(c, &request); err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	if request.Base == nil || request.Presets == nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	result, err := h.Service.SetTerminalPresets(request.Base, request.Presets)
-	switch {
-	case errors.Is(err, application.ErrTerminalPresetConflict):
-		return problem(c, http.StatusConflict, "terminal_presets_changed")
-	case errors.Is(err, application.ErrTerminalPresets), errors.Is(err, application.ErrMetadataTerminal):
-		return problem(c, http.StatusBadRequest, "invalid_terminal_presets")
-	case err != nil:
-		return serviceProblem(c, err)
-	}
-	return c.JSON(http.StatusOK, api.SettingsSaveResult{TransactionId: result.TransactionID, Written: result.Written})
+	return c.JSON(http.StatusOK, result.Settings())
 }

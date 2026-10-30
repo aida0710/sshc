@@ -10,7 +10,9 @@ import (
 	"io/fs"
 	"log/slog"
 	"net"
+	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -162,11 +164,17 @@ type runtime struct {
 	remoteEngines *remoteengine.Manager
 	releaseCancel context.CancelFunc
 	releaseDone   chan struct{}
+	// config は、止める前に、まだ書いていないこのマシンの今の状態を書く（FlushMachineState）。
+	config *application.Service
 }
 
 func build(dependencies Dependencies, version string) (runtime, error) {
 	services, err := newEngineServices(dependencies)
 	if err != nil {
+		return runtime{}, err
+	}
+	// このマシンの ID を決め、古い形の設定を移してから、ポートと設定を読む。
+	if err := prepareMachine(services.config, dependencies.Random, version); err != nil {
 		return runtime{}, err
 	}
 	// 接続先のエンジンへの中継と、実行先としての取り次ぎ。実行先は同じバージョンの
@@ -180,7 +188,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 	})
 	wanted := dependencies.Port
 	if wanted == 0 {
-		wanted = services.config.EngineSettings().Port
+		wanted = services.config.ThisMachineSettings().Port
 	}
 	strictPort := wanted != 0
 	persistBrowserPort := !strictPort && dependencies.DefaultPort != 0
@@ -330,6 +338,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		stateDir:      stateDir,
 		terminals:     services.terminals,
 		restore:       services.terminalRestore,
+		config:        services.config,
 		vault:         services.vault,
 		autoSync:      services.autoSync,
 		browserAuth:   services.browserAuth,
@@ -501,6 +510,12 @@ func (r runtime) unwind(dependencies Dependencies) error {
 		}
 	}
 
+	// HTTP の要求を受け付け終えたので、今の状態はもう変わらない。まとめて書くのを待っていた分を書く。
+	if r.config != nil {
+		if err := r.config.FlushMachineState(); err != nil {
+			joined = append(joined, fmt.Errorf("write this machine's state: %w", err))
+		}
+	}
 	// The server has drained its requests and closed the transfer manager, so
 	// every SFTP connection is back in the pool or already closed.
 	if r.sftpPool != nil {
@@ -578,4 +593,24 @@ func newOrigin(random io.Reader) func() (string, error) {
 		}
 		return hex.EncodeToString(raw), nil
 	}
+}
+
+// prepareMachine は、このマシンの ID を決め、古い形の設定を一度だけ移し、エンジンが起動したことを
+// 今の状態に書く（application.PrepareMachine）。そのあとで、このマシンのプリセットの自動ロックを
+// Vault へ移し直す。Vault は ID が決まる前に組み立てるので、それまでは標準のプリセットの値で動く。
+func prepareMachine(config *application.Service, random io.Reader, version string) error {
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = ""
+	}
+	if err := config.PrepareMachine(random, application.MachineStart{
+		Hostname: hostname,
+		Facts: application.MachineFacts{
+			OS: goruntime.GOOS, Version: version, StartedAt: time.Now().UTC().Format(time.RFC3339),
+		},
+	}); err != nil {
+		return fmt.Errorf("prepare this machine: %w", err)
+	}
+	config.SettingsMayHaveChanged()
+	return nil
 }

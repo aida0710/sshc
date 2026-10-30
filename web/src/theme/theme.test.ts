@@ -3,7 +3,7 @@ import {
   applyTheme,
   detectTheme,
   isTheme,
-  rememberTheme,
+  copyTheme,
   resolveTheme,
   schemeOf,
   themeLabel,
@@ -45,8 +45,8 @@ describe("detectTheme", () => {
     expect(detectTheme()).toBe("dark");
   });
 
-  it("reads a remembered choice", () => {
-    rememberTheme("light");
+  it("reads the copy kept for the first paint", () => {
+    copyTheme("light");
     expect(window.localStorage.getItem(localStorageKeys.theme)).toBe("light");
     expect(detectTheme()).toBe("light");
   });

@@ -531,11 +531,16 @@ func newTransferManager(options Options) (*sshcSFTP.TransferManager, error) {
 	if options.Config != nil {
 		// 保存された設定を持って起動する。範囲外の項目があっても engine は
 		// 止めず、その項目だけを既定値にして、理由をログに残す。以後の更新は
-		// metadata.json へ保存できたものだけを適用する。
-		stored := engineTransferSettings(options.Config.FileTransferSettings())
-		if rejected := transfers.RestoreTransferSettings(stored); len(rejected) != 0 && options.Logger != nil {
-			options.Logger.Warn("SFTP transfer settings out of range were replaced with the defaults", "settings", rejected)
+		// 保存できたものだけを適用する。
+		restore := func() {
+			stored := engineTransferSettings(options.Config.TransferSettings())
+			if rejected := transfers.RestoreTransferSettings(stored); len(rejected) != 0 && options.Logger != nil {
+				options.Logger.Warn("SFTP transfer settings out of range were replaced with the defaults", "settings", rejected)
+			}
 		}
+		restore()
+		// 使うプリセットを切り替えたとき、プリセットを編集したとき、同期で設定が届いたときにも読み直す。
+		options.Config.OnSettingsChanged(restore)
 		transfers.EnableTransferSettingsPersistence(saveTransferSettings(options.Config))
 	}
 	if options.SFTPTransferStatePath != "" {

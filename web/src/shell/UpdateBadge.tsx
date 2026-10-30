@@ -3,8 +3,7 @@ import { opensInThisPage } from "../ui/linkClick";
 import { useId, useState, type MouseEvent, type ReactNode } from "react";
 import { updateApi, type UpdateApi } from "../api/update";
 import { useTranslate } from "../i18n/context";
-import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
-import { localStorageKeys } from "../ui/browserStorageKeys";
+import { updateGlobalSettings, useSettings } from "../settings/settingsStore";
 import { availableRelease, isUpdateActive, useUpdateStatus } from "./useUpdateStatus";
 import { UpdateResultDialog } from "./UpdateResultDialog";
 import { isSafeHttpURL } from "../terminal/links";
@@ -34,7 +33,7 @@ export function UpdateBadge({ api = updateApi, current = "", leading, indicator,
   const { status } = useUpdateStatus(api, enabled);
   const [shownResultId] = useState(readShownUpdateResult);
   const [closedDialogKey, setClosedDialogKey] = useState<string | null>(null);
-  const [foldedRelease, setFoldedRelease] = useState(() => readStoredValue(localStorageKeys.updateFoldedRelease));
+  const foldedRelease = useSettings().document?.global.updateNoticeFoldedRelease ?? "";
   const [isReasonOpen, setReasonOpen] = useState(false);
   const detailsId = useId();
 
@@ -57,9 +56,9 @@ export function UpdateBadge({ api = updateApi, current = "", leading, indicator,
       setReasonOpen(!isReasonOpen);
       return;
     }
-    const folded = isOpen ? release : "";
-    writeStoredValue(localStorageKeys.updateFoldedRelease, folded);
-    setFoldedRelease(folded);
+    // The fold is kept for every machine, so a release folded on one is folded on the others.
+    void updateGlobalSettings(({ updateNoticeFoldedRelease: _unfolded, ...settings }) =>
+      isOpen ? { ...settings, updateNoticeFoldedRelease: release } : settings).catch(() => undefined);
   }
 
   function followAbout(event: MouseEvent<HTMLAnchorElement>) {

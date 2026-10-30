@@ -4,7 +4,6 @@ import type { TerminalSession } from "../api/terminalSessions";
 import type { TerminalWorkspace } from "../api/terminalWorkspaces";
 import type { TerminalSessionsState } from "./sessions";
 import { useTerminalWorkspaceController } from "./useTerminalWorkspaceController";
-import type { SettingsApi } from "../api/settings";
 import type { Section } from "../routing/sectionRoute";
 
 function session(id: string, workspaceId = "default"): TerminalSession {
@@ -24,14 +23,10 @@ const workspaces: TerminalWorkspace[] = [
   { id: "agents", name: "", hidden: true, builtIn: true },
 ];
 
-const api = {
-  terminalSettings: vi.fn().mockResolvedValue({}),
-} as unknown as SettingsApi;
 const shells = { shellProfiles: vi.fn().mockResolvedValue({ profiles: [] }) };
 
 function useController(list: TerminalSession[], refresh: () => Promise<void>, section: Section = "Terminal") {
   return useTerminalWorkspaceController({
-    api,
     shells,
     terminalSessions: {
       sessions: list,
@@ -55,7 +50,6 @@ describe("useTerminalWorkspaceController", () => {
     const here = { shellProfiles: vi.fn().mockResolvedValue({ profiles: [shell("zsh")] }) };
     const bastion = { shellProfiles: vi.fn().mockResolvedValue({ profiles: [shell("bash")] }) };
     const { result, rerender } = renderHook(({ engine }: { engine: typeof here }) => useTerminalWorkspaceController({
-      api,
       shells: engine,
       terminalSessions: { sessions: [], refresh: vi.fn().mockResolvedValue(undefined) } as unknown as TerminalSessionsState,
       workspaces,
@@ -77,7 +71,6 @@ describe("useTerminalWorkspaceController", () => {
     const open = vi.fn(async () => opened.shift() ?? null);
     const navigate = vi.fn();
     const { result } = renderHook(() => useTerminalWorkspaceController({
-      api,
       shells,
       terminalSessions: { sessions: [local], refresh: vi.fn().mockResolvedValue(undefined), open } as unknown as TerminalSessionsState,
       workspaces,
@@ -142,7 +135,6 @@ describe("useTerminalWorkspaceController", () => {
     const navigate = vi.fn();
     const { result } = renderHook(() =>
       useTerminalWorkspaceController({
-        api,
         shells,
         terminalSessions: {
           sessions: [session("s0"), session("s1")],
@@ -176,7 +168,6 @@ describe("useTerminalWorkspaceController", () => {
     const unknown: TerminalSession = session("plain");
     const open = vi.fn(async () => null);
     const { result } = renderHook(() => useTerminalWorkspaceController({
-      api,
       shells,
       terminalSessions: { sessions: [remote, local, unknown], refresh: vi.fn().mockResolvedValue(undefined), open } as unknown as TerminalSessionsState,
       workspaces,
@@ -198,7 +189,6 @@ describe("useTerminalWorkspaceController", () => {
     const open = vi.fn(() => new Promise<TerminalSession | null>((resolve) => { finish = resolve; }));
     const navigate = vi.fn();
     const { result } = renderHook(() => useTerminalWorkspaceController({
-      api,
       shells,
       runTarget: "r540",
       terminalSessions: { sessions: [], refresh: vi.fn().mockResolvedValue(undefined), open } as unknown as TerminalSessionsState,
@@ -220,8 +210,7 @@ describe("useTerminalWorkspaceController", () => {
     const here = [session("s1"), session("s2")];
     const bastion = [session("b1"), session("b2")];
     const { result, rerender } = renderHook(
-      ({ list, runTarget }: { list: TerminalSession[]; runTarget: string | null }) => useTerminalWorkspaceController({
-        api, shells, workspaces, enabled: true, section: "Terminal", navigate: () => undefined, closeNavigation: () => undefined, runTarget,
+      ({ list, runTarget }: { list: TerminalSession[]; runTarget: string | null }) => useTerminalWorkspaceController({ shells, workspaces, enabled: true, section: "Terminal", navigate: () => undefined, closeNavigation: () => undefined, runTarget,
         terminalSessions: { sessions: list, refresh } as unknown as TerminalSessionsState,
       }),
       { initialProps: { list: here, runTarget: null as string | null } },
@@ -261,8 +250,7 @@ describe("useTerminalWorkspaceController", () => {
     const refresh = vi.fn().mockResolvedValue(undefined);
     const listed = [session("s1")];
     const { result, rerender } = renderHook(
-      ({ read }: { read: TerminalWorkspace[] }) => useTerminalWorkspaceController({
-        api, shells, workspaces: read, enabled: true, section: "Terminal", navigate: () => undefined, closeNavigation: () => undefined,
+      ({ read }: { read: TerminalWorkspace[] }) => useTerminalWorkspaceController({ shells, workspaces: read, enabled: true, section: "Terminal", navigate: () => undefined, closeNavigation: () => undefined,
         terminalSessions: { sessions: listed, refresh } as unknown as TerminalSessionsState,
       }),
       { initialProps: { read: [] as TerminalWorkspace[] } },
