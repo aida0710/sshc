@@ -26,7 +26,8 @@ func TestTheArtifactNameCheckAcceptsExactlyTheOperatingSystemsThatAreBuilt(t *te
 			if goos == "windows" {
 				name += ".exe"
 			}
-			output, err := exec.Command("sh", script, filepath.Join("dist", name), goos, "amd64").CombinedOutput()
+			// The script reads the name after the last "/", as the release jobs pass it, on every host.
+			output, err := exec.Command("sh", script, "dist/"+name, goos, "amd64").CombinedOutput()
 			if accepted, built := err == nil, supportedTargetOS(goos); accepted != built {
 				t.Fatalf("the name check accepts %s: %v, nativebuild builds it: %v\n%s", goos, accepted, built, output)
 			}
