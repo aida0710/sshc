@@ -1,10 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider, useTranslate, useLanguage } from "./context";
 import { en, ja } from "./messages";
 import { detectLocale } from "./locale";
 import { localStorageKeys } from "../ui/browserStorageKeys";
+import { resetSettingsForTests } from "../settings/settingsStore";
+import { fakeSettingsServer, settingsDocument } from "../testing/settingsServer";
 
 afterEach(() => {
   window.localStorage.clear();
@@ -13,7 +15,7 @@ afterEach(() => {
 
 function Probe() {
   const t = useTranslate();
-  const { locale, setLocale } = useLanguage();
+  const { locale, setLocale, followBrowser } = useLanguage();
   return (
     <>
       <p>{t("shell.starting")}</p>
@@ -21,6 +23,9 @@ function Probe() {
       <p>{`locale:${locale}`}</p>
       <button type="button" onClick={() => setLocale("ja")}>
         to japanese
+      </button>
+      <button type="button" onClick={followBrowser}>
+        follow the browser
       </button>
     </>
   );
@@ -38,7 +43,6 @@ describe("the catalogue", () => {
         "appearance.heading",
         "conn.heading",
         "desktop.closeAllHeading",
-        "engine.heading",
         "engineInfo.vault",
         "history.pageTitle",
         "home.heading",
@@ -71,7 +75,10 @@ describe("the catalogue", () => {
         "section.sync",
         "section.terminal",
         "section.vpn",
+        "settings.generalHeading",
         "settings.heading",
+        "settings.machinesHeading",
+        "settings.vaultHeading",
         "sftp.previewPosition",
         "sftp.settingsHeading",
         "shell.languageEnglish",
@@ -184,6 +191,43 @@ describe("the language switch", () => {
 
     expect(Object.keys(window.localStorage)).toEqual([localStorageKeys.locale]);
     expect(window.sessionStorage.length).toBe(0);
+  });
+});
+
+describe("the synced language", () => {
+  it("keeps the language on screen while the synced settings choose none", () => {
+    window.localStorage.setItem(localStorageKeys.locale, "ja");
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-US"]);
+    render(<LanguageProvider><Probe /></LanguageProvider>);
+
+    act(() => resetSettingsForTests(settingsDocument()));
+
+    expect(screen.getByText("locale:ja")).toBeInTheDocument();
+    expect(window.localStorage.getItem(localStorageKeys.locale)).toBe("ja");
+  });
+
+  it("switches to the language the synced settings choose, and copies it", () => {
+    window.localStorage.setItem(localStorageKeys.locale, "en");
+    render(<LanguageProvider><Probe /></LanguageProvider>);
+
+    act(() => resetSettingsForTests(settingsDocument({ global: { language: "ja" } })));
+
+    expect(screen.getByText("locale:ja")).toBeInTheDocument();
+    expect(window.localStorage.getItem(localStorageKeys.locale)).toBe("ja");
+  });
+
+  it("follows the browser when asked, forgetting both the choice and the copy", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-US"]);
+    const server = fakeSettingsServer({ global: { language: "ja" } });
+    render(<LanguageProvider><Probe /></LanguageProvider>);
+    expect(screen.getByText("locale:ja")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "follow the browser" }));
+
+    expect(screen.getByText("locale:en")).toBeInTheDocument();
+    expect(window.localStorage.getItem(localStorageKeys.locale)).toBeNull();
+    await waitFor(() => expect(server.document().global.language).toBeUndefined());
   });
 });
 

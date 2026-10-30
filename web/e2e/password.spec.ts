@@ -92,7 +92,7 @@ test("passwordless vaults hide manual locks and current password while protected
   await page.getByRole("searchbox", { name: "Search sessions, hosts, files, snippets and settings" }).fill("Lock the vault");
   await expect(page.getByRole("option", { name: /Lock the vault/ })).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await openSection(page, "Master password");
+  await openSection(page, "Vault");
   await expect(page.getByLabel("Current master password", { exact: true })).toHaveCount(0);
   await page.getByLabel("New master password", { exact: true }).fill("1234");
   await page.getByLabel("Confirm new master password", { exact: true }).fill("1234");
@@ -106,7 +106,7 @@ test("passwordless vaults hide manual locks and current password while protected
   await expect(page.getByLabel("Master password", { exact: true })).toBeVisible();
   await page.getByLabel("Master password", { exact: true }).fill("1234");
   expect(await clickAndAwait(page, "Open", "/api/v1/passwords/unlock")).toBe(200);
-  await openSection(page, "Master password");
+  await openSection(page, "Vault");
   await page.getByLabel("Current master password", { exact: true }).fill("1234");
   await page.getByLabel("Use without a password").check();
   expect(await clickAndAwait(page, "Change the master password", "/api/v1/passwords/change")).toBe(200);

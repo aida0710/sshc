@@ -1,11 +1,12 @@
 import { expect, openApplication, openLocalShell, test } from "./support/environment";
+import { standardPresetMetadata } from "./support/settings";
 import { drawnSpan, terminalKeyboard } from "./support/terminal";
 
 // The suite draws with the DOM renderer, which sets a joined run of cells apart in its own element.
 for (const ligatures of [true, false]) {
   test(`draws -> ${ligatures ? "as one ligature with the setting on" : "a character at a time with the setting off"}`, async ({ page, installation }) => {
     test.skip(process.platform === "win32", "printf is POSIX shell syntax here");
-    await installation.write("sshc/metadata.json", JSON.stringify({ schemaVersion: 9, embeddedTerminal: { ligatures, appearance: { font: "jetbrains-mono" } } }));
+    await installation.write("sshc/metadata.json", standardPresetMetadata({ terminal: { ligatures, appearance: { font: "jetbrains-mono" } } }));
     await openApplication(page, installation);
     await openLocalShell(page);
     const screen = page.getByRole("region", { name: /^Terminal for / });

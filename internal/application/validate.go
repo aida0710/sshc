@@ -184,7 +184,7 @@ func (s *Service) validate(request storage.Request) error {
 	edit, planned := request.Validation.(configurationEdit)
 
 	metadataPath := filepath.Clean(s.metadata.Path())
-	engineSettingsPath := filepath.Clean(s.engineSettingsPath())
+	machinesDirectory := filepath.Clean(s.machinesDirectory())
 	stateDir := filepath.Clean(s.workspace.StateDir())
 	for _, changes := range [][]storage.Change{request.Changes, request.FinalChanges} {
 		for _, change := range changes {
@@ -201,8 +201,8 @@ func (s *Service) validate(request storage.Request) error {
 				}
 				continue
 			}
-			if cleaned == engineSettingsPath {
-				if _, err := decodeEngineSettings(change.Contents); err != nil {
+			if filepath.Dir(cleaned) == machinesDirectory {
+				if err := validateMachineFile(filepath.Base(cleaned), change.Contents); err != nil {
 					return err
 				}
 				continue
@@ -307,4 +307,15 @@ func (s *Service) touchesConfiguration(request storage.Request) bool {
 		}
 	}
 	return len(request.Directories) > 0 || len(request.RemoveDirectories) > 0
+}
+
+// validateMachineFile は、マシンごとのファイル（設定か今の状態）として読める内容かを確かめる。
+// 履歴から戻したファイルが読めないと、そのマシンの設定が画面から直せなくなる。
+func validateMachineFile(name string, contents []byte) error {
+	if strings.HasSuffix(name, ".state.json") {
+		_, err := decodeMachineState(contents)
+		return err
+	}
+	_, err := decodeMachineSettings(contents)
+	return err
 }

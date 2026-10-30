@@ -6,15 +6,14 @@ import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { draggableCursor, dropTargetLook } from "../ui/dragAndDropLook";
 import { Icon } from "../ui/icons";
-import { localStorageKeys } from "../ui/browserStorageKeys";
-import { useStoredColumnWidth, type StoredColumnWidth } from "../ui/useStoredColumnWidth";
+import { usePresetColumnWidth, type PresetColumnWidth } from "../settings/usePresetColumnWidth";
 import type { Scope } from "./ConnectionTree";
 import { buildGroupTree, decorateHosts, type GroupNode } from "./connectionTreeIndex";
 import type { ConnectionDrag } from "./useConnectionDrag";
 import { GroupFolderNotices } from "./GroupFolderNotices";
 
 // 220px は Settings のページの一覧の幅。この列は同じ位置に置く。
-const connectionGroupsWidth: StoredColumnWidth = { key: localStorageKeys.connectionGroupsWidth, fallback: 220, minimum: 112, maximum: 400 };
+const connectionGroupsWidth: PresetColumnWidth = { field: "connectionGroupsWidth", fallback: 220, minimum: 112, maximum: 400 };
 
 // 入れ子のグループは、1段ごとにこれだけ右へずらす。
 const depthIndent = "0.875rem";
@@ -49,7 +48,7 @@ export function ConnectionGroupFacets({
   onDeclareGroup?: (name: string) => void;
 }) {
   const t = useTranslate();
-  const [width, setWidth] = useStoredColumnWidth(connectionGroupsWidth);
+  const [width, setWidth] = usePresetColumnWidth(connectionGroupsWidth);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   // 隠したグループ（中に接続先の無い入れ物）は、選んだときだけ一覧に出し、「…」から隠すのをやめられるようにする。

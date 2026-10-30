@@ -1,4 +1,5 @@
 import { StrictMode, useEffect, useState } from "react";
+import { fakeSettingsServer } from "./testing/settingsServer";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -364,7 +365,7 @@ describe("App", () => {
   });
 
   it("keeps an in-progress form mounted while the resumed vault check conceals it", async () => {
-    window.history.replaceState(null, "", "/settings/engine");
+    window.history.replaceState(null, "", "/settings/machines");
     const resumed = deferred<PasswordVaultStatus>();
     const vault = vi
       .fn()
@@ -496,12 +497,13 @@ describe("App", () => {
       "Account passwords",
       "Key passphrases",
       "OTP",
-      "Engine",
+      "General",
       "Terminal",
       "SFTP",
       "Notifications",
+      "Vault",
+      "Machines",
       "Open connections",
-      "Master password",
       "Sync",
       "History",
     ]) {
@@ -511,14 +513,14 @@ describe("App", () => {
     expect(within(maintenance).queryByRole("heading", { name: "Maintenance" })).not.toBeNull();
     expect(within(maintenance).queryByRole("link", { name: "Open Settings" })).toBeNull();
     const settings = within(menu).getByRole("region", { name: "Settings" });
-    const engine = within(settings).getByRole("link", { name: "Open Engine" });
-    expect(engine).toHaveAttribute("href", "/settings/engine");
-    expect(engine.querySelector("[data-icon]")).toHaveAttribute("data-icon", "engine");
+    const machines = within(settings).getByRole("link", { name: "Open Machines" });
+    expect(machines).toHaveAttribute("href", "/settings/machines");
+    expect(machines.querySelector("[data-icon]")).toHaveAttribute("data-icon", "engine");
 
-    await user.click(engine);
-    expect(window.location.pathname).toBe("/settings/engine");
-    expect(await screen.findByRole("heading", { name: "Engine" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Engine" })).toBeInTheDocument();
+    await user.click(machines);
+    expect(window.location.pathname).toBe("/settings/machines");
+    expect(await screen.findByRole("heading", { name: "Machines" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Machines" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
   });
 
@@ -544,23 +546,23 @@ describe("App", () => {
 
     const settings = within(menu).getByRole("region", { name: "Settings" });
     for (const label of [
-      "Engine",
+      "General",
       "Terminal",
       "SFTP",
       "Notifications",
+      "Vault",
+      "Machines",
       "Open connections",
-      "Master password",
     ]) {
       expect(within(settings).getByText(label, { exact: true })).toBeInTheDocument();
     }
 
-    await user.click(within(settings).getByRole("link", { name: "Engineを開く" }));
-    expect(await screen.findByRole("heading", { name: "Engine" })).toBeInTheDocument();
+    await user.click(within(settings).getByRole("link", { name: "Machinesを開く" }));
+    expect(await screen.findByRole("heading", { name: "Machines" })).toBeInTheDocument();
   });
 
   it("keeps desktop navigation visible and restores its width", async () => {
-    window.localStorage.setItem("sshc.navigation.visible", "false");
-    window.localStorage.setItem("sshc.navigation.width", "312");
+    const server = fakeSettingsServer({ presets: [{ id: "default", interface: { navigationWidth: 312 } }] });
     const user = userEvent.setup();
     const { container } = render(
       <App
@@ -581,7 +583,8 @@ describe("App", () => {
     resize.focus();
     await user.keyboard("{ArrowRight}");
     expect(layout?.style.getPropertyValue("--navigation-width")).toBe("320px");
-    expect(window.localStorage.getItem("sshc.navigation.width")).toBe("320");
+    await waitFor(() => expect(server.document().presets[0]?.interface?.navigationWidth).toBe(320));
+    vi.restoreAllMocks();
   });
 
   it("keeps the inspector open across a section change", async () => {
@@ -786,7 +789,7 @@ describe("App", () => {
   });
 
   it("renders Settings directly and follows browser history back to it", async () => {
-    window.history.replaceState(null, "", "/settings/engine");
+    window.history.replaceState(null, "", "/settings/machines");
     render(
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
@@ -796,7 +799,7 @@ describe("App", () => {
     );
 
     expect(await screen.findByText("settings panel")).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/settings/engine");
+    expect(window.location.pathname).toBe("/settings/machines");
 
     act(() => {
       window.history.pushState(null, "", "/history");
@@ -805,7 +808,7 @@ describe("App", () => {
     expect(await screen.findByText("history panel")).toBeInTheDocument();
 
     act(() => {
-      window.history.replaceState(null, "", "/settings/engine");
+      window.history.replaceState(null, "", "/settings/machines");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
     expect(screen.getByText("settings panel")).toBeInTheDocument();
@@ -813,7 +816,7 @@ describe("App", () => {
 
   it("keeps Menu in browser history when opening a destination", async () => {
     const user = userEvent.setup();
-    window.history.replaceState(null, "", "/settings/engine");
+    window.history.replaceState(null, "", "/settings/machines");
     const pushed = vi.spyOn(window.history, "pushState");
     render(
       <App

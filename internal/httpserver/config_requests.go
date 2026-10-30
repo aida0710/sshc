@@ -243,7 +243,9 @@ func validateEditRequest(request application.EditRequest) error {
 		}
 		// 送られたグループの設定だけで形を確かめる。ほかの節はディスクの値を使うので、
 		// ここでは見ない。
-		if err := application.ValidateMetadata(application.Metadata{Groups: request.Groups}); err != nil {
+		withGroups := application.NewMetadata()
+		withGroups.Groups = request.Groups
+		if err := application.ValidateMetadata(withGroups); err != nil {
 			return err
 		}
 	}
@@ -270,7 +272,9 @@ func validateHostMetadataEdit(request application.EditRequest) error {
 	if err := validateHostBlockAlias(request.HostMetadata.Identity.Alias); err != nil {
 		return err
 	}
-	return application.ValidateMetadata(application.Metadata{Hosts: []application.HostMetadata{*request.HostMetadata}})
+	withHost := application.NewMetadata()
+	withHost.Hosts = []application.HostMetadata{*request.HostMetadata}
+	return application.ValidateMetadata(withHost)
 }
 
 func validateFieldEdit(edit application.FieldEdit) error {
@@ -375,7 +379,7 @@ func serviceProblem(c *echo.Context, err error) error {
 		errors.Is(err, application.ErrMetadataSecret), errors.Is(err, application.ErrMetadataPath),
 		errors.Is(err, application.ErrMetadataGroup), errors.Is(err, application.ErrMetadataVersion),
 		errors.Is(err, application.ErrMetadataTerminal), errors.Is(err, application.ErrMetadataEncoding),
-		errors.Is(err, application.ErrEngineSettings), errors.Is(err, application.ErrMetadataDuplicateHost),
+		errors.Is(err, application.ErrMachineSettings), errors.Is(err, application.ErrMetadataDuplicateHost),
 		errors.Is(err, application.ErrSameFileMove), errors.Is(err, application.ErrAmbiguousDestination),
 		errors.Is(err, application.ErrInvalidHostSelection),
 		errors.Is(err, application.ErrInvalidGroupName), errors.Is(err, application.ErrGroupSelfNesting),

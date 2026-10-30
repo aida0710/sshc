@@ -11,7 +11,7 @@ File upload, folder upload, file download, folder download, and remote-to-remote
 
 On desktop, drag the upper grip of the expanded list to resize it. With the grip focused, the arrow, Home, and End keys provide the same control from a keyboard. Height and folded state are saved in the browser. On phones, tap the bottom bar showing counts and progress to open the queue in a separate sheet.
 
-Transfer settings live under **Settings → SFTP**. **Transfer settings** in the Transfer Manager opens that page, even when the queue is empty or folded. The page has two sections: Transfers and Transfer exclusions. Number fields apply when focus leaves them; selections and checkboxes apply when changed. Exclusion rules require **Save exclusions**.
+Transfer settings chosen for each preset live under **Settings → SFTP**; those that are the same on every machine live under **Settings → General**. **Transfer settings** in the Transfer Manager opens that page, even when the queue is empty or folded. The page has two sections: Transfers and Transfer exclusions. Number fields apply when focus leaves them; selections and checkboxes apply when changed. Exclusion rules require **Save exclusions**.
 
 Each job shows its name, source → destination, progress, transferred and total bytes, speed, remaining time, status, and available actions. Open the row's details for full paths, the exclusions captured when it started, and failure information.
 
@@ -21,7 +21,7 @@ Each job shows its name, source → destination, progress, transferred and total
 - Cancel ends the job.
 - Clear finished removes completed and canceled entries from the view.
 - Remove from list dismisses one completed, canceled, or failed entry. Clear failed dismisses failed entries without clearing successful history.
-- **Finished transfers** set to anything but Keep (clear after 30 seconds, 5 minutes, 1 hour) removes completed entries that long after they finish. The setting is stored by the engine and shared by every screen.
+- **Finished transfers** set to anything but Keep (clear after 30 seconds, 5 minutes, 1 hour) removes completed entries that long after they finish. It is set under **Settings → General** and is the same on every machine and every screen.
 - **Stop starting new transfers** lets running transfers finish while queued entries show as Held and do not start; **Resume processing the transfer queue** reverts it.
 - Queued entries can be reordered with the ↑↓ controls on their rows; running and finished entries stay where they are.
 
@@ -35,7 +35,7 @@ File downloads resume through HTTP Range when the browser retains the downloaded
 
 When the sshc engine runs on Windows, a folder cannot be packaged as a ZIP, and its download fails, if the folder itself or anything inside it has a name that contains `:` or is a Windows reserved name such as `CON`, `NUL`, or `COM1`. Windows cannot store a file under such a name as it is: `:` selects a drive or an alternate data stream, and a reserved name refers to a device. Downloads to a folder on the engine's disk and `sshc sftp get` refuse the same names. An engine on Linux or macOS does not refuse them. If the folder itself or anything inside it has a name that contains `\`, the folder cannot be packaged as a ZIP, whatever platform the engine runs on.
 
-Edit split-transfer defaults under **Settings → SFTP**, even when the queue is empty. The stream count starts at one, so large uploads and downloads initially use a single SFTP connection without splitting. With two or more streams, files at or above the split threshold (initially 100 MiB) are divided into chunks (initially 32 MiB) and processed over up to that many independent SFTP connections. Enter any integer threshold from 16 to 1024 MiB, stream count from one to 128, and chunk size from 8 to 4096 MiB. The actual connection count is capped by the number of unfinished chunks. The engine persists these settings and shares them with the Web UI and CLI. A file already being transferred keeps the settings it started with when the defaults change. `sshc sftp settings` displays or saves the defaults, while the same options on `get` or `put` override one invocation.
+Edit split-transfer defaults under **Settings → SFTP**, even when the queue is empty. The stream count starts at one, so large uploads and downloads initially use a single SFTP connection without splitting. With two or more streams, files at or above the split threshold (initially 100 MiB) are divided into chunks (initially 32 MiB) and processed over up to that many independent SFTP connections. Enter any integer threshold from 16 to 1024 MiB, stream count from one to 128, and chunk size from 8 to 4096 MiB. The actual connection count is capped by the number of unfinished chunks. These settings are kept in the preset and shared by the Web UI and CLI of the machines that use it. A file already being transferred keeps the settings it started with when the defaults change. `sshc sftp settings` displays or saves the defaults, while the same options on `get` or `put` override one invocation.
 
 Regular files up to 512 GiB can be uploaded or downloaded. A split upload preallocates a remote temporary file and writes non-overlapping ranges through independent connections; the engine persists completed ranges in its transfer queue. To guarantee that download retries use the same remote contents, the engine first prepares the entire file in its private spool, so keep roughly the file size available there. The spool is `$XDG_CACHE_HOME/sshc/sftp-spool` on Linux (`~/.cache/sshc/sftp-spool` when the variable is unset), `~/Library/Caches/sshc/sftp-spool` on macOS, `%LocalAppData%\sshc\sftp-spool` on Windows, and `sftp-spool` in the app's cache directory on Android. If the spool cannot be used, for example because no user cache directory is known, the download fails with `sftp_spool_unavailable` instead of waiting, and the engine logs the reason when it starts. If the spool has less free space than the file size plus 64 MiB, or runs out while the file is written, the download fails with `sftp_spool_full`. Folder downloads packaged as ZIP use a separate limit.
 
@@ -61,7 +61,7 @@ A damaged queue file does not stop the engine from starting. The damaged content
 
 ## Speed limit
 
-**Speed limit** under **Settings → SFTP** uses KiB/s: 1 KiB/s is 1,024 bytes per second; 0 is unlimited. The setting is persisted by the engine and applies to running transfers. All jobs, range connections, browser windows and CLI transfers share one budget.
+**Speed limit** under **Settings → SFTP** uses KiB/s: 1 KiB/s is 1,024 bytes per second; 0 is unlimited. The setting is kept in the preset and applies to running transfers. All jobs, range connections, browser windows and CLI transfers share one budget.
 
 The budget counts file payload, including verification reads, rather than SSH headers or metadata requests. Remote copy counts both received and sent payload. Downloads count both the remote-to-spool and spool-to-browser/CLI legs. ZIP preparation counts uncompressed content; delivery counts ZIP bytes. Bounded read-ahead and SSH buffers mean instantaneous network usage and displayed progress speed can differ from this setting.
 
@@ -77,7 +77,7 @@ Sequential upload requests receive the existing bounded HTTP chunk before writin
 
 ## Automatic recovery
 
-Enable **Resume automatically** under **When the connection drops** and set **Reconnect limit** to 1–10. Recovery is disabled by default. Backoff starts at one second, doubles, and stops growing at 30 seconds. The queue shows **Waiting to reconnect** and the attempt count. Pause and cancel stop the wait and connection attempt. Stopping queue processing, disabling recovery or shutting down the engine also ends automatic recovery.
+Under **Settings → General**, enable **Resume automatically** under **When the connection drops** and set **Reconnect limit** to 1–10. Recovery is disabled by default. Backoff starts at one second, doubles, and stops growing at 30 seconds. The queue shows **Waiting to reconnect** and the attempt count. Pause and cancel stop the wait and connection attempt. Stopping queue processing, disabling recovery or shutting down the engine also ends automatic recovery.
 
 | Transfer path | Recovery |
 | --- | --- |
@@ -94,7 +94,7 @@ Files with missing type, size or modification-time attributes refuse recovery wi
 
 An engine shutdown leaves a server job that was waiting to reconnect paused after the next startup. A manual resume verifies its saved content and continues from that checkpoint.
 
-CLI settings use the same persisted engine defaults. `--speed-limit` is KiB/s; `--reconnect-attempts 0` disables recovery. Changes also affect other transfers.
+The CLI changes the same settings. `--speed-limit` is KiB/s and changes the speed limit of the preset this machine uses; `--reconnect-attempts` is a global setting, and `0` disables recovery. Changes also affect other transfers.
 
 ```sh
 sshc sftp settings --speed-limit 2048 --reconnect-attempts 3
@@ -109,4 +109,4 @@ Only `*` and `?` wildcard syntax is supported. `*` matches any sequence within o
 
 Rules apply to browser folder uploads, folder copies between hosts, folder transfers between a host and the engine's local disk, folder ZIP downloads, and CLI `get --recursive` / `put --recursive`. Explicit single-file selections, moves and deletion are unchanged. Omitted entries are not created at the destination and are not part of a successful transfer. Browser uploads report the omitted entry count; engine folder jobs show their captured exclusion rules.
 
-Settings persist in the engine. A queued folder job retains the rules captured when it was registered, including after settings changes or a restart. Prepared ZIP contents stay unchanged on retry. The CLI snapshots the rules at invocation start; `sshc sftp settings` also displays the current rules.
+The rules are kept in the preset. A queued folder job retains the rules captured when it was registered, including after settings changes or a restart. Prepared ZIP contents stay unchanged on retry. The CLI snapshots the rules at invocation start; `sshc sftp settings` also displays the current rules.

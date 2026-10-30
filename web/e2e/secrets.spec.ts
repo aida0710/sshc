@@ -216,8 +216,8 @@ test("keeps application controls in Settings and changes the master password the
   await openSection(page, "Account passwords");
   await expect(page.getByRole("region", { name: "Master password" })).toHaveCount(0);
 
-  await openSettingsPage(page, "Master password");
-  await expect(page).toHaveURL(/\/settings\/password$/);
+  await openSettingsPage(page, "Vault");
+  await expect(page).toHaveURL(/\/settings\/vault$/);
   const master = page.getByRole("region", { name: "Master password" });
   await expect(master).toBeVisible();
   await master.getByLabel("Current master password", { exact: true }).fill(masterPassword);
@@ -250,29 +250,29 @@ test("saves the Vault auto-lock policy and warns when automatic locking is disab
   installation,
 }) => {
   await openApplication(page, installation);
-  await openSettingsPage(page, "Engine");
+  await openSettingsPage(page, "Vault");
 
-  const engine = page.getByRole("region", { name: "Engine" });
-  const policy = engine.getByLabel("Vault auto-lock");
+  const autoLock = page.getByRole("region", { name: "Vault auto-lock" });
+  const policy = autoLock.getByLabel("Vault auto-lock");
   await expect(policy).toHaveValue("idle");
-  await expect(engine.getByLabel("Time")).toHaveValue("12");
-  await expect(engine.getByLabel("Unit")).toHaveValue("hours");
+  await expect(autoLock.getByLabel("Time")).toHaveValue("12");
+  await expect(autoLock.getByLabel("Unit")).toHaveValue("hours");
 
   await policy.selectOption("restart");
-  await expect(engine.getByText(
+  await expect(autoLock.getByText(
     "The Vault will not lock automatically. Unless you lock it manually, it remains unlocked until sshc is restarted. Use this setting only on a device you control.",
   )).toBeVisible();
 
   const saved = page.waitForResponse(
     (response) =>
-      new URL(response.url()).pathname === "/api/v1/metadata/engine" &&
+      new URL(response.url()).pathname === "/api/v1/settings/presets/default" &&
       response.request().method() === "PUT",
   );
-  await engine.getByRole("button", { name: "Save", exact: true }).click();
+  await autoLock.getByRole("button", { name: "Save", exact: true }).click();
   expect((await saved).status()).toBe(200);
 
   await page.reload();
-  const restored = page.getByRole("region", { name: "Engine" });
+  const restored = page.getByRole("region", { name: "Vault auto-lock" });
   await expect(restored.getByLabel("Vault auto-lock")).toHaveValue("restart");
   await expect(restored.getByText("The Vault will not lock automatically.", { exact: false })).toBeVisible();
 

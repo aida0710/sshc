@@ -1,9 +1,9 @@
-import { readStoredJSON, writeStoredJSON } from "../ui/browserStorage";
-import { localStorageKeys } from "../ui/browserStorageKeys";
+import { updatePresetInterface } from "../settings/presetInterface";
+import { currentSettings, presetInUse, type SettingsPreset } from "../settings/settingsStore";
 
-// The sound this browser plays when a terminal asks for attention while sshc
-// is out of sight. The choice stays in this browser and never reaches the
-// engine; the tones are synthesised, so nothing is fetched to play them.
+// The sound played when a terminal asks for attention while sshc is out of
+// sight. The choice is kept in the preset this machine uses; the engine never
+// plays it. The tones are synthesised, so nothing is fetched to play them.
 
 export const notificationSoundPresets = ["none", "gentle", "bell", "pulse"] as const;
 export type NotificationSoundPreset = typeof notificationSoundPresets[number];
@@ -22,21 +22,26 @@ function isSoundPreset(value: unknown): value is NotificationSoundPreset {
   return typeof value === "string" && (notificationSoundPresets as readonly string[]).includes(value);
 }
 
-export function loadNotificationSoundPreferences(): NotificationSoundPreferences {
-  const stored = readStoredJSON(localStorageKeys.notificationSound);
-  if (stored === null || typeof stored !== "object") return defaultNotificationSoundPreferences;
-  const candidate = stored as Partial<NotificationSoundPreferences>;
-  const volume = typeof candidate.volume === "number" && Number.isFinite(candidate.volume)
-    ? Math.max(0, Math.min(100, Math.round(candidate.volume)))
-    : defaultNotificationSoundPreferences.volume;
+// notificationSoundOf is the sound a preset keeps, or the default.
+export function notificationSoundOf(preset: SettingsPreset): NotificationSoundPreferences {
+  const stored = preset.interface?.notificationSound;
+  if (stored === undefined) return defaultNotificationSoundPreferences;
   return {
-    sound: isSoundPreset(candidate.sound) ? candidate.sound : defaultNotificationSoundPreferences.sound,
-    volume,
+    sound: isSoundPreset(stored.sound) ? stored.sound : defaultNotificationSoundPreferences.sound,
+    volume: Math.max(0, Math.min(100, Math.round(stored.volume))),
   };
 }
 
-export function saveNotificationSoundPreferences(preferences: NotificationSoundPreferences): void {
-  writeStoredJSON(localStorageKeys.notificationSound, preferences);
+// loadNotificationSoundPreferences is the sound of the preset this machine uses: the one a notification plays.
+export function loadNotificationSoundPreferences(): NotificationSoundPreferences {
+  return notificationSoundOf(presetInUse(currentSettings()));
+}
+
+// saveNotificationSoundPreferences keeps the sound in a preset (the one this machine uses when presetId is left
+// out). The default sound is not written, so a preset holds only a sound someone chose.
+export function saveNotificationSoundPreferences(preferences: NotificationSoundPreferences, presetId?: string): Promise<void> {
+  const isDefault = preferences.sound === defaultNotificationSoundPreferences.sound && preferences.volume === defaultNotificationSoundPreferences.volume;
+  return updatePresetInterface((settings) => ({ ...settings, notificationSound: isDefault ? undefined : preferences }), presetId);
 }
 
 function notificationAudioContext(target: Window): AudioContext | null {

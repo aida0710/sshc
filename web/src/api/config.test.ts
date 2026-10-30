@@ -13,7 +13,7 @@ const overviewPayload = {
     patterns: ["bastion"],
     editable: true,
   }],
-  metadata: { schemaVersion: 1 },
+  metadata: { schemaVersion: 10, presets: [{ id: "default" }] },
   groups: [],
   diagnostics: [],
   notices: [],

@@ -81,7 +81,7 @@ const overview: Overview = {
     },
   ],
   metadata: {
-    schemaVersion: 2,
+    schemaVersion: 10, presets: [{ id: "default" }],
     groups: [
       { name: "home", order: 1 },
       { name: "home/eu", order: 2 },

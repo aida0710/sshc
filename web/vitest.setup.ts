@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
+import { resetSettingsForTests } from "./src/settings/settingsStore";
 
 // jsdom leaves canvas rendering unimplemented. xterm 6.1's DOM renderer
 // measures glyph widths on a 2D canvas and will not start without one, so the
@@ -36,4 +37,5 @@ afterEach(() => {
   cleanup();
   localStorage.clear();
   sessionStorage.clear();
+  resetSettingsForTests();
 });

@@ -8,6 +8,8 @@ import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { ApiError } from "../api/client";
 import { sftpTransferManager } from "./transferManager";
 import { ToastProvider } from "../ui/ToastProvider";
+import { resetSettingsForTests } from "../settings/settingsStore";
+import { settingsDocument } from "../testing/settingsServer";
 import type { UploadChunk, UploadCompletion, UploadStart } from "./api";
 
 const api = vi.hoisted(() => ({
@@ -58,8 +60,9 @@ async function chooseHost(alias: string) {
 
 describe("SFTPPanel uploads", () => {
   beforeEach(async () => {
-	window.localStorage.clear();
-	window.localStorage.setItem("sshc.sftp.queueView", JSON.stringify({ collapsed: false, height: 224 }));
+	resetSettingsForTests(settingsDocument({
+	  state: { facts: { os: "linux" }, interface: { sftpQueueView: JSON.stringify({ collapsed: false, height: 224 }) } },
+	}));
 	await Promise.all(sftpTransferManager.getSnapshot().map((job) => sftpTransferManager.cancel(job.id)));
 	await sftpTransferManager.clearFinished();
     vi.clearAllMocks();

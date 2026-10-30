@@ -62,7 +62,7 @@
 - 保存は必ず「読み込んだ内容」を base として送り、その SHA-256 を precondition にします。外部変更があった場合は書き込まず、三者差分を表示します。
 - 保存前に再パースと Include グラフの再解決を行い、新しい構文エラーや Include エラーを生じる変更は拒否します。既存の問題だけで保存を拒否することはありません。
 - UI 専用情報は `~/.ssh/sshc/metadata.json` に保存します。対象はスキーマバージョン、グループの表示情報（色、表示順、共通設定）、タグ、色、表示順です。鍵本文とパスフレーズは保存しません。Host とグループの対応は metadata ではなくディレクトリ構造で管理します。VPNプロファイルの設定（`vpnProfiles`。シークレットはVaultに置く）と、接続が通るVPNプロファイルの名前（ホストごとの`vpn`）もmetadataに保存します。どちらもOpenSSHが解釈しないsshcだけの設定なので、`ssh_config`には書きません。
-- sshcエンジンのポートとVaultの自動ロックはマシンごとの設定なので、同期するmetadata.jsonではなく、同期しない`~/.ssh/sshc/engine-settings.json`に保存します。metadata.jsonに置くと、あるマシンで変えたポートが同期先の受け口とブラウザの登録を変え、自動ロックの選択も同期先のVaultに効くためです。metadata.jsonはschema 9だけを読み、前のschemaの形は読み替えずに断ります。
+- 全体の設定とプリセットもmetadata.jsonに置きます。マシンごとの設定とあわせて「設定の置き場所」に書きます。
 - Connectionsの表示とターミナルのタブと、接続先が存在しない設定（orphan）の関連付け直しと破棄は接続1件のmetadataだけを、Connectionsのグループの操作（既定値、色、表示順、隠す）はグループの設定だけを送ります。サーバーはいまのmetadata.jsonにその部分だけを合わせ、VPNプロファイルやターミナル設定などのほかの節を保ちます。画面が読み込んだときの値（base）がディスクと違えば、ほかの画面、CLI、同期のどれかが先に変えたので、409（`metadata_changed`）で断ります。
 - Host のコメントは metadata ではなく `Host` 行の直上のコメント行として設定ファイルに書きます。sshc を使わずにファイルを読む人にも残るためです。付随するコメントは `Host` 行の直上に連続するコメント行だけで、空行・ディレクティブ・ファイル先頭で切れます。空行で切るのは、ファイル冒頭の見出しコメントが最初の Host ブロックに取り込まれないようにするためです。
 - Host の識別は「正規化した相対パス + 具体的な主 alias」です。alias と設定ファイルの改名は config と metadata を同一トランザクションで更新し、対応先が消えた metadata は推測で付け替えず orphan として再関連付けを求めます。改名や移動の行き先にorphanのmetadataが残っていれば、移ってきたmetadataを残し、残っていた方は捨てます。同じ識別のmetadataが2つになると、画面に出す値と保存のときに比べる値が別のentryになり、保存が断られ続けるためです。以前のバージョンが残した同じ識別のmetadataは、schema 9へ移行するときに1つにします（orphanの印の無い方、決まらなければ先頭）。今の形では、同じ識別のmetadataが2つある文書を保存で断ります。グループはディレクトリなので、グループを変えるとパスが変わり、識別も変わります。移動は config と metadata を同一トランザクションで更新するため、識別が変わっても orphan にはなりません。Vault のロックを解除している間の alias 改名では、パスワード・TOTP の割り当てと startup snippet の binding も同じ atomic transaction に含め、失敗時は config を含めて巻き戻します。Vaultのロックを解除している間にfile_raw・block_rawの保存でHostの宣言が消えたaliasは、startup snippetの割り当ても同じatomic transactionで外します。削除したあと同じaliasで作り直した別の接続先へ、削除前の割り当てを送らないためです。移動先に残った専用パスワードを、移動元の名前付きパスワードの認証先 binding で解放しません。
@@ -92,9 +92,20 @@
 
 - API は同一オリジンのみです。CORS は有効化せず、bootstrap と health を除く**全ての登録済み `/api/` 要求が**（読み取りと session renew も含めて）`X-SSHC-CSRF` header を要求し、`/api/` 応答は `Cache-Control: no-store` を返します。エラー応答は安定コードと位置情報のみを含み、設定本文は返しません（利用者が解決すべき競合差分を除く）。
 
+## 設定の置き場所
+
+- 設定は、全体の設定・プリセット・マシンごとの設定の3つに分けます。どれも`~/.ssh/sshc`に置いて同期し、ブラウザには置きません。ブラウザに置くと、同じマシンでもブラウザごとに値が分かれ、ほかのマシンへも届かないためです。ブラウザに置くのは、テーマと表示言語の写し、ブラウザの登録、更新の結果を表示したかどうかだけで、`web/src/ui/browserStorageKeys.ts`に並べます。テーマと表示言語の写しは、engineが答える前の最初の画面をその色と言語で描くためのもので、同期する設定から一方向に写すだけです。
+- 全体の設定（metadata.jsonの`settings`）は、どのマシン・どのプリセットでも同じ値です。表示言語、ターミナルの再接続と接続のログとOSC 52、転送の自動再接続と回数、完了した転送を消すまでの時間、背景画像ライブラリの容量、更新のお知らせを折りたたんだリリースを持ちます（`internal/application/settings_global.go`）。
+- プリセット（metadata.jsonの`presets`）は、マシンごとに違う値を使いたい設定のまとまりです。テーマとさし色、ターミナルの表示と操作、最大セッション数、再生バッファ、開始ディレクトリ、ローカルシェル、SFTPの同時実行数・分割転送・速度上限・除外、Vaultの自動ロック、画面だけが読む設定（`interface`。タッチの扱い、通知音、画面を消さない、ショートカットのプリセット、列の幅、Homeの表示形式）を持ちます。一覧の先頭はid `default`の［標準］で、名前を持たず、消せません。上限は16個です（`internal/application/settings_presets.go`）。
+- マシンごとの設定（名前・使うプリセット・ポート）は`~/.ssh/sshc/machines/<id>.json`に、マシンの今の状態（起動したときのOS・バージョン・時刻、転送の処理を止めているか、ターミナルの実行先やSFTPのタブと分割などの画面の状態）は`~/.ssh/sshc/machines/<id>.state.json`に置き、どちらも同期します。マシンのidは初回の起動で乱数から決め、同期しない`~/.ssh/sshc/machine-id`に書きます。Syncはファイルごとに3方向で比べるので、マシンごとにファイルを分ければ、2台が同時にそれぞれの設定や状態を変えても競合しません。どのマシンの設定もどのマシンからでも変えられ、プリセットは変更が届いた時点で、ポートはそのマシンの次の起動から効きます。Android版のポートは画面で変えられません。WebViewが保存内容をoriginごとに分けるので、ポートを変えるとブラウザの登録が消えるためです。
+- 状態のファイルは画面の操作（タブ、分割、折りたたみなど）のたびに変わるので、journalと履歴に入れず、メモリに持って30秒ごとにまとめて書きます。転送の処理を止めたことだけは、すぐに再起動しても止まったままにするため、その場で書き、転送キューに当て直します。画面はこれを`PUT /api/v1/settings/state`の`transfersStopped`だけで送ります。転送の設定をまとめて送る`PUT /api/v1/sftp/transfers/settings`（CLIが使う）で送ると、画面が2秒ごとに読む転送の一覧の古い値で、プリセットと全体の設定を書き戻してしまうためです。書いたことは自動同期に知らせます（`OnMachineStateWritten`）。
+- engineは、全体の設定とこのマシンが使うプリセットを合わせた値（`EffectiveSettings`）を当てます。同期のpullを含むcommitのたびに`SettingsMayHaveChanged`を呼び、Vaultの自動ロックと転送キューに当て直します。
+- 画面は`GET /api/v1/settings`で全体の設定・プリセット・マシン・このマシンの状態をまとめて読みます。`web/src/settings/settingsStore.ts`が書き込みを1本の列に並べ、変更を先に画面へ出してから送ります。engineが`settings_changed`（409。ほかのマシンやタブが同じ設定を変えた）で断ったら、読み直して1回だけやり直します。5秒ごとに読み直し、変わっていなければ画面へ流しません。最初の読み込みが済むまで本体を出さないのは、既定値で描いてから値が変わるのを避けるためです。
+- metadata.jsonはschema 10です。schema 9のファイルは、起動時（`PrepareMachine`）と、同期で届いたファイルの読み込みで、schema 9のバイト列だけから決まる形へ移します（`internal/application/metadata_schema9.go`）。ホスト名・時刻・乱数を混ぜないので、同期している2台がそれぞれ移しても同じバイト列になり、同期は衝突と見なしません。schema 9の`engine-settings.json`のポートは、このマシンのマシンごとの設定へ移してファイルを消します。Vaultの自動ロックは移さず、既定に戻ります。全部のマシンがschema 10のビルドになったら、`metadata_schema9.go`と、`machine_startup.go`の`engine-settings.json`の読み替えを消します。schema 9より前の形は読み替えずに断ります。
+
 ## 見た目の境界
 
-- テーマはライトとダークの2つで、初期値はダークです。Settings > Appearance（ロック解除などログイン前の画面では隅の選択）から「システムに合わせる」か各テーマを選べ、選択は`localStorage`の`sshc.theme`に記録します。「システムに合わせる」はOSの明暗に合わせてライトかダークにします。ブラウザに保存する設定は`e2e/bootstrap.spec.ts`が、テーマや言語を操作した直後の`localStorage`／`sessionStorage`のキー集合を完全一致で検査します。
+- テーマはライトとダークの2つで、初期値はダークです。Settings > Appearance（ロック解除などログイン前の画面では隅の選択）から「システムに合わせる」か各テーマを選べ、選択はプリセットに保存し、`localStorage`の`sshc.theme`に写しを置きます。「システムに合わせる」はOSの明暗に合わせてライトかダークにします。ブラウザに保存するものは`e2e/bootstrap.spec.ts`が、テーマや言語を操作した直後の`localStorage`／`sessionStorage`のキー集合を完全一致で検査します。
 - 色は用途別のトークンとして、テーマごとに`web/src/theme/themes/<名前>.css`へ1組ずつ置き、`web/src/index.css`が読み込みます。各テーマは明暗（light／dark）を持ちます。`<html>`の`data-theme`がテーマの色を選び、`data-scheme`がさし色の組・コードエディタの配色・Androidのsystem barのアイコンを選びます。Androidのsystem barの色は、Webが表示中のテーマの`--ui-toolbar`を渡します。
 - テーマを足すときは、`web/src/theme/theme.ts`の`colorThemes`に1行、色のファイル、`index.css`の`@import`、両言語の名前（`shell.theme<名前>`）を足します。`web/src/theme/themes.test.ts`がファイルと一覧の対応、ライトと同じトークンを全部持つこと、`--ui-toolbar`が`#rrggbb`であることを検査し、`e2e/appearance.spec.ts`が全テーマで画面の描画とコントラストを検査します。
 - コンポーネントは`bg-card`のようにトークン名で参照し、色値やテーマ分岐を個別に持ちません。
@@ -124,7 +135,7 @@
 - タッチ対象は原則44px以上、通常の入力欄は16px以上の文字にします。アイコンの絵自体を大きくする必要はありません。ターミナルの8列補助キーなど、個別に幅を管理する部品は明示的な例外です。押下中の色変化を返し、シート／ダイアログの短い表示アニメーションとターミナルの慣性スクロールは`prefers-reduced-motion`に従います。
 - `ModalShell`は表示領域を上限として内部をスクロール可能にします。シートも同じfocus trapとdismissible layerを使い、子メニューを開いても親を閉じません。Escape・Android Backは最前面から1枚ずつ閉じ、閉じた後は対応する操作元へフォーカスを戻します。SFTPのエディタとターミナルの中で押したEscapeとTabは、先にその中で使います（`web/src/ui/useDismissibleLayer.ts`の`keyboardOwnerProps`）。エディタはEscapeで検索欄や補完を閉じ、Tabでインデントします。ターミナルはどちらもシェルへ送ります。使われなかったときだけ、Escapeは最前面を閉じ、Tabはフォーカスを最前面のダイアログの中で回します。Homeと認証情報の行メニューはportalへ出し、画面端とスクロール領域で切れない位置に置きます。
 - ターミナルはタッチ移動の速度から減速する慣性スクロールを行います。再タッチ、選択、画面の非表示・破棄で停止し、バックグラウンドで遅延したフレームによる大きな移動を避けます。Ctrl／Esc／Tab／矢印を1行に置き、Altと記号は展開して使います。補助キーの押下と選択解除では不用意にblur／focusせず、IMEをちらつかせません。タッチのターミナル（`touchMode.ts`）は、セッションを開いた・選んだ・表示中のセッションを閉じて別のセッションが表示されたときにフォーカスを取りません。キーボードはターミナルか入力欄をタップしたときだけ開きます。スマホの組み方では、ターミナルをタップすると下の入力欄（`TerminalComposer`）にフォーカスします。日本語を入力欄で変換してから送れるようにするためです。入力欄で打っている途中にキーバーのCtrl・Altを押すと、次のキーがその修飾を受け取れるようにターミナルへフォーカスを移します。PCの大きさの画面には入力欄が無いので、タッチでもターミナルにフォーカスします。ナビゲーションを開く横のスワイプ（`useNavigationSwipe.ts`）は、ターミナルの上でも受け取ります。ターミナルのタッチは縦のスクロールだけだからです。長押しのあとの指の移動と、選んだ文字の上から始めたスワイプは文字の選択に残します。
-- ターミナルを指で使う形（長押しの範囲選択用に文字の層を重ね、リンクはタップで開き、ターミナルを押したときだけキーボードを出す）にするかは、ブラウザごとの「タッチ操作」の設定で決めます。既定の自動判定は、ブラウザが`(hover: none) and (pointer: coarse)`と答える画面で指の形にし、2in1のPCが形を変えて答えが変わればその場で切り替えます。文字の層はマウスのドラッグ選択・リンクのクリック・ホイール・右クリックでの貼り付けも受け止めるため、2in1のPCがマウスやタッチパッドを付けたままタッチ優先と答える場合に備えて、自動判定をやめて「タッチ」か「マウス」に固定できます（#347）。設定はターミナルの「…」の全体設定とSettings > Terminalの「操作」タブの両方にあり、`localStorage`の`sshc.terminal.touch-mode.v1`に保存して、変えるとすぐ効きます。
+- ターミナルを指で使う形（長押しの範囲選択用に文字の層を重ね、リンクはタップで開き、ターミナルを押したときだけキーボードを出す）にするかは、プリセットの「タッチ操作」の設定で決めます。既定の自動判定は、ブラウザが`(hover: none) and (pointer: coarse)`と答える画面で指の形にし、2in1のPCが形を変えて答えが変わればその場で切り替えます。文字の層はマウスのドラッグ選択・リンクのクリック・ホイール・右クリックでの貼り付けも受け止めるため、2in1のPCがマウスやタッチパッドを付けたままタッチ優先と答える場合に備えて、自動判定をやめて「タッチ」か「マウス」に固定できます（#347）。設定はターミナルの「…」の「すべてのターミナル」（このマシンが使うプリセットを変える）とSettings > Terminalの「操作」タブ（編集中のプリセットを変える）の両方にあり、変えるとすぐ保存して効きます。
 - スマホのConfig Explorerは階層一覧を折り畳み、ファイルを開くと編集に集中します。読込中は空状態と区別して表示します。Snippetsは一覧を選択欄に置き換え、変数と接続先の長い名前が画面幅を押し広げないよう1列へ切り替えます。
 - 画面ごとの問題・修正と検証範囲は[スマホ操作レビュー](mobile-ux-review.md)に記録します。ブラウザのタッチエミュレーションとAndroidの実機での入力・描画の確認は区別します。
 
@@ -270,7 +281,7 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
 - Android版の画面には`FLAG_SECURE`を付けません。利用者がスクリーンショットで画面を共有できるようにするためです（2026-10-23の監査で付け、2026-10-27に利用者の判断で外しました）。
 - ターミナルの通知を押して開いたMainActivityは、このプロセスが出した通知のtagだけを受け取ります。MainActivityはランチャーから開くためexportedで、ほかのアプリも同じextraを付けて開けるためです。Androidの通知には、ターミナルのプログラムからの通知であることをアプリ名の横に表示し、見出しは接続エイリアスから始めます。見出しのペイン名と本文は接続先のプログラムが決めるためです。
 - Androidのdebug buildは`applicationIdSuffix = ".dev"`と`versionNameSuffix = "-dev"`を使い、`com.github.aida0710.sshc.dev`／`sshc Dev`として正式版と共存します。namespaceとActivityのclass名は従来どおりです。Vault、設定、WebView storageは別packageのapp dataに保存し、正式版から自動移行しません。release buildのpackageと署名方式は変えません。
-- Android版のengineも、desktopと同じく既定のportを使い、埋まっていれば選んだ空きportを保存します。WebViewの`localStorage`とOPFSはorigin（port）ごとに分かれるため、起動のたびにportが変わると、設定が既定値に戻り、途中で止まったダウンロードの一時データも片付けられなくなります。既定のportはdesktopの54447とは別の54448にし、同じデバイスで動くdesktop版とoriginを共有しません。
+- Android版のengineも、desktopと同じく既定のportを使い、埋まっていれば選んだ空きportを保存します。WebViewの`localStorage`とOPFSはorigin（port）ごとに分かれるため、起動のたびにportが変わると、ブラウザの登録とテーマ・表示言語の写しが失われ、途中で止まったダウンロードの一時データも片付けられなくなります。既定のportはdesktopの54447とは別の54448にし、同じデバイスで動くdesktop版とoriginを共有しません。
 - Android版のengine ownerは同一packageの単一app processです。desktop／CLI用のOS file lockは使わず、Go側のprocess内mutexでstart／stopを直列化します。Service再生成などで`Start`が重複した場合は二重起動エラーにせず、以前のengineを停止して新しいengineへ置き換えます。desktop／CLIは別processを起動できるため、引き続き`engine.lock`を保持します。
 
 ## 接続先のsshcエンジンを開く中継の境界
@@ -494,9 +505,9 @@ Menu末尾のOthersからLicense（`/license`）へ移動する。名前・バ�
 
 ### アプリのキーコンフィグ
 
-埋め込みターミナルのプリセット（#467）は、metadata.jsonのterminalPresetsに保存して同期し、どのプリセットを使うかはブラウザ内のsshc.terminal.preset.v1に保存する（同期しない）。標準のプリセットはembeddedTerminalそのもので、terminalPresetsには入らない。プリセットに入るのはブラウザが当てる設定（文字の大きさ、見た目、ブラウザのスクロールバック、裏に残す数、操作のチェックの項目）だけで、sshcエンジンが当てる設定（最大セッション数、再生バッファ、再接続、接続のログ、開始ディレクトリ、ローカルシェル）とOSC 52はembeddedTerminalに1つだけ置き、プリセットに書くとengineが断る（internal/application/terminal_presets.go）。画面はweb/src/settings/terminalPresets.tsのwithPresetで、共通の部分をembeddedTerminalから、残りを使うプリセットから取ってターミナルへ渡す。PUT /api/v1/metadata/terminal-presetsはショートカットと同じくbaseの一覧を比べて古い編集を409で断る。schemaは上げていない（上げると今のmetadata.jsonを読めなくなる）。このバージョンより前のsshcがmetadataを書き戻すとプリセットは消えるので、同期するすべてのマシンを対応したバージョンへ上げる。
+埋め込みターミナルの設定は、#467でブラウザごとに選ぶターミナルのプリセットとして始め、schema 10で設定のプリセットに広げた（「設定の置き場所」）。
 
-Menuの設定一覧から/settings/shortcutsを開き、コマンド検索・Terminal内検索・コピー・貼り付け・前後セッション・Home・SFTPの割り当てを編集する。web/src/keyconfig/bindings.tsが既定値、正規化、重複排除、localStorageのsshc.shortcuts.v1と同一タブ/他タブへの変更通知を管理する。和音の文法（キー名、修飾の順、修飾なしでも修飾付きでも許すファンクションキーF1〜F24）、操作の一覧、上限はinternal/validate/shortcut.goに置き、rulegenがweb/src/rules/shortcuts.generated.tsへ配る。画面が記録する和音とengineが保存する和音は同じ規則で決まる。プリセットの内容はmetadata.jsonのshortcutPresetsに保存し、既存の暗号化Syncへ含める。使用中のIDはブラウザ内のsshc.shortcuts.selected.v1へ保存し同期しない。標準は組み込みで、編集時は個人用を作成。選択中のプリセットが削除されたら標準へ戻る。PUT /api/v1/metadata/shortcutsはbaseの一覧を比較して古い編集を409で拒否し、metadataの他項目を保持する。同期完了後の変更は5秒間隔とfocus時の再取得で反映する。プリセットを足したときにmetadataのschemaをv5へ上げた。旧バージョンによる新しい設定の欠落を防ぐため、同期するすべてのマシンを対応したバージョンへ更新する。schemaのバージョンはその後も上がっているため、ここには書かない。今のバージョン、読み込める範囲、バージョンごとの境界は、internal/application/metadata.goの`MetadataSchemaVersion`と`DecodeMetadata`の移行のコメントを正本とする。
+Menuの設定一覧から/settings/shortcutsを開き、コマンド検索・Terminal内検索・コピー・貼り付け・前後セッション・Home・SFTPの割り当てを編集する。web/src/keyconfig/bindings.tsが既定値、正規化、重複排除を、web/src/keyconfig/presets.tsが使う割り当ての読み出しを管理する。和音の文法（キー名、修飾の順、修飾なしでも修飾付きでも許すファンクションキーF1〜F24）、操作の一覧、上限はinternal/validate/shortcut.goに置き、rulegenがweb/src/rules/shortcuts.generated.tsへ配る。画面が記録する和音とengineが保存する和音は同じ規則で決まる。プリセットの内容はmetadata.jsonのshortcutPresetsに保存し、既存の暗号化Syncへ含める。どのプリセットを使うかは、設定のプリセットの`interface.shortcutPreset`に保存する。標準は組み込みで、編集時は個人用を作成。選択中のプリセットが削除されたら標準へ戻る。PUT /api/v1/metadata/shortcutsはbaseの一覧を比較して古い編集を409で拒否し、metadataの他項目を保持する。同期完了後の変更は5秒間隔とfocus時の再取得で反映する。プリセットを足したときにmetadataのschemaをv5へ上げた。旧バージョンによる新しい設定の欠落を防ぐため、同期するすべてのマシンを対応したバージョンへ更新する。schemaのバージョンはその後も上がっているため、ここには書かない。今のバージョン、読み込める範囲、バージョンごとの境界は、internal/application/metadata.goの`MetadataSchemaVersion`と`DecodeMetadata`の移行のコメントを正本とする。
 
 全体ショートカットとTerminal内検索はcapture phaseで処理し、処理したkeydownをxtermへ渡さない。IME合成・AltGraph・割り当て編集中・modal表示中は発火させない。Terminalのコピーは選択範囲がある場合に動作し、標準paste chordはブラウザのpaste event、独自paste chordはClipboard APIから既存の検査/編集フローへ渡す。標準paste eventは割り当て解除後もブラウザ操作として利用できる。繰り返しkeydownによる重複貼り付けとモーダル展開を抑止する。
 
@@ -510,7 +521,7 @@ Amazon Linuxはos-releaseのID=amznをamazonlinuxへ正規化し、ID_LIKEのFed
 
 ### 転送速度上限と通信断復旧
 
-`TransferManager`が速度上限（bytes/s、0は無制限）と自動復旧の有効／無効・回数上限を保持し、既存の`FileTransferSettings`へ永続化します。`Service`のコピーも共有する`transferLimiter`が全jobと並列接続の合算を制御します。有限のgrantへ分け、contextと設定変更で待機を中断します。ローカルでのハッシュ計算には適用せず、転送用のリモート内容検証には適用します。prepared spoolの読み出しにも同じlimiterを使うため、キャッシュ済みの配信にも上限が効きます。
+`TransferManager`が速度上限（bytes/s、0は無制限）と自動復旧の有効／無効・回数上限を保持し、速度上限はプリセットの`FileTransferSettings`へ、自動復旧は全体の設定の`GlobalFileTransferSettings`へ永続化します。`Service`のコピーも共有する`transferLimiter`が全jobと並列接続の合算を制御します。有限のgrantへ分け、contextと設定変更で待機を中断します。ローカルでのハッシュ計算には適用せず、転送用のリモート内容検証には適用します。prepared spoolの読み出しにも同じlimiterを使うため、キャッシュ済みの配信にも上限が効きます。
 
 `reconnecting`は転送スロットを保持するdomainの状態です。試行回数と次回時刻をjobと転送台帳に記録します。backoffは1秒から最大30秒、復旧回数は最大10回です。remote workerのcontextがpause／cancel／shutdownで待機とI/Oを止め、設定変更も待機を起こします。move／deleteとフォルダのserver jobは自動再実行しません。
 

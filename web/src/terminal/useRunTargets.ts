@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { remoteEnginesApi, type RemoteEnginesApi } from "../api/remoteEngines";
 import type { Translate } from "../i18n/context";
-import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
+import { keepMachineState } from "../settings/machineState";
+import { interfaceState, useSettings } from "../settings/settingsStore";
 import { failureCode } from "../api/client";
-import { localStorageKeys } from "../ui/browserStorageKeys";
 import { runTargetProblemText } from "./runTargetProblem";
 import { useRemoteVaultUnlock, type RemoteVaultUnlockState } from "./useRemoteVaultUnlock";
 import { useRunTargetUnread } from "./useRunTargetUnread";
@@ -54,7 +54,8 @@ export function useRunTargets({
 }): RunTargetsState {
   const [engines, setEngines] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [stored, setStored] = useState(() => readStoredValue(localStorageKeys.runTarget) ?? "");
+  // The run target follows this machine's state, which choosing one here updates at once.
+  const stored = interfaceState(useSettings().document, "runTarget");
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
   const vaultUnlock = useRemoteVaultUnlock();
@@ -78,8 +79,7 @@ export function useRunTargets({
 
   const select = useCallback((alias: string | null) => {
     setProblem("");
-    setStored(alias ?? "");
-    writeStoredValue(localStorageKeys.runTarget, alias ?? "");
+    keepMachineState("runTarget", alias ?? "");
   }, []);
 
   // report shows why a request about an engine failed. A different version is

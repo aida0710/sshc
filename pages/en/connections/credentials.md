@@ -22,7 +22,7 @@ Key passphrases can be saved, edited, and removed per private key. A ProxyJump r
 
 ## Choose vault protection
 
-During setup or in **Settings → Master password**, choose password protection or use without a password. Passwords require at least four characters; digits alone are accepted. Short passwords offer limited protection if local files are copied.
+During setup or in **Settings → Vault**, choose password protection or use without a password. Passwords require at least four characters; digits alone are accepted. Short passwords offer limited protection if local files are copied.
 
 Without a password, sshc opens the vault automatically on startup and relies on your OS account and device security for local protection. Automatic and manual locking do not apply; the vault stays unlocked. Sync keeps using its independent encryption key. Switching protection modes preserves saved credentials.
 
@@ -61,4 +61,4 @@ sshc vault lock
 sshc vault change-password
 ```
 
-Locking the Vault does not close existing SSH sessions, but blocks new secret operations. A password-protected Vault locks after 12 hours of inactivity by default; Settings can change the duration or disable automatic locking. A passwordless Vault is never auto-locked.
+Locking the Vault does not close existing SSH sessions, but blocks new secret operations. A password-protected Vault locks after 12 hours of inactivity by default; **Settings → Vault** can change the duration for each preset or disable automatic locking. A passwordless Vault is never auto-locked.

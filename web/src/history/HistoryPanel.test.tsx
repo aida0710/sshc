@@ -22,7 +22,7 @@ beforeEach(() => {
   }] as never);
   vi.mocked(configApi.overview).mockResolvedValue({
     entry: { path: "config", absolute: "/home/tester/.ssh/config" },
-    files: [], hosts: [], metadata: { schemaVersion: 1 }, diagnostics: [], notices: [],
+    files: [], hosts: [], metadata: { schemaVersion: 10, presets: [{ id: "default" }] }, diagnostics: [], notices: [],
     pending: [{
       id: "20260805T115900.000-ffff",
       operation: "config.file_raw",

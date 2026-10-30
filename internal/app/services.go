@@ -248,10 +248,14 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		if !strings.HasPrefix(operation, "sync.") {
 			services.autoSync.NotifyLocalChange()
 		}
+		// 保存・履歴の復元・同期の取り込みのどれでも、このマシンで効く設定が変わりうる。
+		configService.SettingsMayHaveChanged()
 	}
 	transactions.AfterCommit = notifyLocalChange
 	keyTransactions.AfterCommit = notifyLocalChange
 	snippetStore.SetAfterChange(services.autoSync.NotifyLocalChange)
+	// このマシンの今の状態は変更の履歴を通らずに書くので、書いたことを別に知らせる。
+	configService.OnMachineStateWritten(services.autoSync.NotifyLocalChange)
 	services.terminals = buildTerminals(configService, dependencies)
 	return services, nil
 }

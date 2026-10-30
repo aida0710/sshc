@@ -683,42 +683,6 @@ func (e UpdateStatusManager) Valid() bool {
 	}
 }
 
-// Defines values for VaultAutoLockSettingsMode.
-const (
-	VaultAutoLockSettingsModeIdle    VaultAutoLockSettingsMode = "idle"
-	VaultAutoLockSettingsModeRestart VaultAutoLockSettingsMode = "restart"
-)
-
-// Valid indicates whether the value is a known member of the VaultAutoLockSettingsMode enum.
-func (e VaultAutoLockSettingsMode) Valid() bool {
-	switch e {
-	case VaultAutoLockSettingsModeIdle:
-		return true
-	case VaultAutoLockSettingsModeRestart:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for VaultAutoLockSettingsUnit.
-const (
-	Hours   VaultAutoLockSettingsUnit = "hours"
-	Minutes VaultAutoLockSettingsUnit = "minutes"
-)
-
-// Valid indicates whether the value is a known member of the VaultAutoLockSettingsUnit enum.
-func (e VaultAutoLockSettingsUnit) Valid() bool {
-	switch e {
-	case Hours:
-		return true
-	case Minutes:
-		return true
-	default:
-		return false
-	}
-}
-
 // About defines model for About.
 type About struct {
 	Arch string `json:"arch"`
@@ -760,11 +724,6 @@ type AgentIdentity struct {
 // AliasRequest defines model for AliasRequest.
 type AliasRequest struct {
 	Alias string `json:"alias"`
-}
-
-// AppearanceSettings defines model for AppearanceSettings.
-type AppearanceSettings struct {
-	Accent *string `json:"accent,omitempty"`
 }
 
 // AssignCredentialRequest defines model for AssignCredentialRequest.
@@ -1018,12 +977,6 @@ type EffectiveResponse struct {
 	ExecutableDirectives []ExecutableDirective `json:"executableDirectives"`
 	Route                []JumpStage           `json:"route"`
 	Sources              []ValueSource         `json:"sources"`
-}
-
-// EngineSettings defines model for EngineSettings.
-type EngineSettings struct {
-	Port          *int                   `json:"port,omitempty"`
-	VaultAutoLock *VaultAutoLockSettings `json:"vaultAutoLock,omitempty"`
 }
 
 // ExecutableDirective defines model for ExecutableDirective.
@@ -1866,12 +1819,6 @@ type SetTerminalSessionTitleRequest struct {
 	Title *string `json:"title"`
 }
 
-// SettingsSaveResult defines model for SettingsSaveResult.
-type SettingsSaveResult struct {
-	TransactionId string   `json:"transactionId"`
-	Written       []string `json:"written"`
-}
-
 // SnapshotSummary defines model for SnapshotSummary.
 type SnapshotSummary struct {
 	CreatedAt     string `json:"createdAt"`
@@ -2089,14 +2036,6 @@ type TOTPCodeSet struct {
 	PeriodSeconds    int    `json:"periodSeconds"`
 	Previous         string `json:"previous"`
 	RemainingSeconds int    `json:"remainingSeconds"`
-}
-
-// TerminalAppearance defines model for TerminalAppearance.
-type TerminalAppearance struct {
-	Background     *string `json:"background,omitempty"`
-	BackgroundTint *int    `json:"backgroundTint,omitempty"`
-	Font           *string `json:"font,omitempty"`
-	Palette        *string `json:"palette,omitempty"`
 }
 
 // TerminalBackground defines model for TerminalBackground.
@@ -2379,31 +2318,6 @@ type TerminalSessionList struct {
 	Sessions     []TerminalSession `json:"sessions"`
 }
 
-// TerminalSettings defines model for TerminalSettings.
-type TerminalSettings struct {
-	Appearance             *TerminalAppearance `json:"appearance,omitempty"`
-	BrowserScrollbackLines *int                `json:"browserScrollbackLines,omitempty"`
-	CommandMarks           *bool               `json:"commandMarks,omitempty"`
-	CommandScrollbarMarks  *bool               `json:"commandScrollbarMarks,omitempty"`
-	ComposerEnterSends     *bool               `json:"composerEnterSends,omitempty"`
-	CopyOnSelect           *bool               `json:"copyOnSelect,omitempty"`
-	FontSize               *int                `json:"fontSize,omitempty"`
-	JisYenBackslash        *bool               `json:"jisYenBackslash,omitempty"`
-	Ligatures              *bool               `json:"ligatures,omitempty"`
-	LocalShellProfile      *string             `json:"localShellProfile,omitempty"`
-	MaxSessions            *int                `json:"maxSessions,omitempty"`
-	Osc52                  *bool               `json:"osc52,omitempty"`
-	Reconnect              *int                `json:"reconnect,omitempty"`
-	RetainedTerminals      *int                `json:"retainedTerminals,omitempty"`
-	RightClickPaste        *bool               `json:"rightClickPaste,omitempty"`
-	ScrollbackBytes        *int                `json:"scrollbackBytes,omitempty"`
-	StartDirectory         *string             `json:"startDirectory,omitempty"`
-	StatusLine             *bool               `json:"statusLine,omitempty"`
-	StickyCommand          *bool               `json:"stickyCommand,omitempty"`
-	Verbosity              *int                `json:"verbosity,omitempty"`
-	Webgl                  *bool               `json:"webgl,omitempty"`
-}
-
 // TerminalStreamTicket defines model for TerminalStreamTicket.
 type TerminalStreamTicket struct {
 	StreamTicket string `json:"streamTicket"`
@@ -2613,17 +2527,3 @@ type ValueSource struct {
 	Value     string `json:"value"`
 	Winner    bool   `json:"winner"`
 }
-
-// VaultAutoLockSettings defines model for VaultAutoLockSettings.
-type VaultAutoLockSettings struct {
-	// Mode idleは無操作時間後、restartは手動ロックまたはengine終了時だけロックする。
-	Mode  VaultAutoLockSettingsMode  `json:"mode"`
-	Unit  *VaultAutoLockSettingsUnit `json:"unit,omitempty"`
-	Value *int                       `json:"value,omitempty"`
-}
-
-// VaultAutoLockSettingsMode idleは無操作時間後、restartは手動ロックまたはengine終了時だけロックする。
-type VaultAutoLockSettingsMode string
-
-// VaultAutoLockSettingsUnit defines model for VaultAutoLockSettings.Unit.
-type VaultAutoLockSettingsUnit string

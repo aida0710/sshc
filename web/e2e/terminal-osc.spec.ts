@@ -88,7 +88,7 @@ test("turns OSC 52 on for every terminal from one terminal's menu", async ({ pag
   const first = page.getByRole("region", { name: /^Terminal for / });
   await expect(first).toContainText(/[$#%>]/);
   await first.getByRole("button", { name: "More terminal actions" }).click();
-  await first.getByRole("group", { name: "Global settings" }).getByRole("menuitemcheckbox", { name: "OSC 52" }).click();
+  await first.getByRole("group", { name: "All terminals" }).getByRole("menuitemcheckbox", { name: "OSC 52" }).click();
   await expect(first).toContainText("OSC 52 clipboard writes are now allowed in every terminal.");
 
   await openLocalShell(page);

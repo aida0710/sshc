@@ -43,7 +43,7 @@ const overview = {
     { name: "work", directory: "connections/work", keyDirectory: "keys/work", memberCount: 1, directoryPresent: true },
   ],
   metadata: {
-    schemaVersion: 1,
+    schemaVersion: 10, presets: [{ id: "default" }],
     hosts: [
       { identity: { path: "connections/work.conf", alias: "database" }, tags: ["production"] },
     ],

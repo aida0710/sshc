@@ -38,7 +38,7 @@ const paths: Record<Section, string> = {
   Passwords: "/vault/passwords",
   "Key Passphrases": "/vault/key-passphrases",
   OTP: "/vault/otp",
-  Settings: "/settings/engine",
+  Settings: "/settings/general",
   Sync: "/sync",
   VPN: "/vpn",
   History: "/history",

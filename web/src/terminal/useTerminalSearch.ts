@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import type { SearchAddon } from "@xterm/addon-search";
 import type { Terminal } from "@xterm/xterm";
 import { matchesShortcut, shortcutsBlocked } from "../keyconfig/bindings";
+import { currentBindings } from "../keyconfig/presets";
 import { validSearchPattern, type TerminalSearchSettings } from "./search";
 
 export type TerminalSearchResult = { index: number; total: number };
@@ -48,7 +49,7 @@ export function useTerminalSearch({ shortcutActive, region, returnFocus }: {
   useEffect(() => {
     const openSearch = (event: KeyboardEvent) => {
       if (!(shortcutActive ?? region.current?.contains(document.activeElement))) return;
-      if (!matchesShortcut(event, "terminalSearch") || shortcutsBlocked(event)) return;
+      if (!matchesShortcut(event, "terminalSearch", currentBindings()) || shortcutsBlocked(event)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       if (!event.repeat) {

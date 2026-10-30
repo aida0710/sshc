@@ -70,10 +70,10 @@ type Background struct {
 // BackgroundCapacityMiB は保存済みの上限を返す。未設定は16 MiBである。
 func (s *Service) BackgroundCapacityMiB() int {
 	metadata, _, err := s.metadata.Load()
-	if err != nil || metadata.Backgrounds == nil {
+	if err != nil || metadata.Settings == nil || metadata.Settings.Backgrounds == nil {
 		return DefaultBackgroundCapacityMiB
 	}
-	value := metadata.Backgrounds.CapacityMiB
+	value := metadata.Settings.Backgrounds.CapacityMiB
 	if value < MinBackgroundCapacityMiB || value > MaxBackgroundCapacityMiB {
 		return DefaultBackgroundCapacityMiB
 	}
@@ -96,7 +96,9 @@ func (s *Service) SetBackgroundCapacityMiB(value int) (SaveResult, error) {
 	if err != nil {
 		return SaveResult{}, err
 	}
-	metadata.Backgrounds = &BackgroundSettings{CapacityMiB: value}
+	global := globalSettingsOf(metadata)
+	global.Backgrounds = &BackgroundSettings{CapacityMiB: value}
+	metadata.Settings = storedGlobalSettings(global)
 	if err := s.metadata.EnsureDirectory(); err != nil {
 		return SaveResult{}, err
 	}
@@ -444,13 +446,8 @@ func (s *Service) RenameBackground(current, suggested string) (Background, error
 		return Background{}, err
 	}
 	referenced := false
-	if terminal := metadata.EmbeddedTerminal; terminal != nil && terminal.Appearance != nil && terminal.Appearance.Background == current {
-		terminal.Appearance.Background = next
-		referenced = true
-	}
-	for index := range metadata.Hosts {
-		appearance := metadata.Hosts[index].Appearance
-		if appearance != nil && appearance.Background == current {
+	for _, appearance := range terminalAppearances(&metadata) {
+		if appearance.Background == current {
 			appearance.Background = next
 			referenced = true
 		}
@@ -514,27 +511,42 @@ func (s *Service) RemoveBackground(name string) error {
 	return err
 }
 
-// forgetBackground は、埋め込みターミナルと各接続の外観から、背景画像 name の指定を
-// 外す。外したものがあれば true を返す。外して空になった外観は、指定ごと消す。
+// forgetBackground は、各プリセットと各接続の外観から、背景画像 name の指定を外す。外したものが
+// あれば true を返す。外して空になった外観は、指定ごと消す。
 func forgetBackground(metadata *Metadata, name string) bool {
 	forgotten := false
-	if terminal := metadata.EmbeddedTerminal; terminal != nil && terminal.Appearance != nil && terminal.Appearance.Background == name {
-		terminal.Appearance.Background = ""
-		if terminal.Appearance.Empty() {
+	for _, appearance := range terminalAppearances(metadata) {
+		if appearance.Background == name {
+			appearance.Background = ""
+			forgotten = true
+		}
+	}
+	for index := range metadata.Presets {
+		if terminal := metadata.Presets[index].Terminal; terminal != nil && terminal.Appearance != nil && terminal.Appearance.Empty() {
 			terminal.Appearance = nil
 		}
-		forgotten = true
 	}
 	for index := range metadata.Hosts {
-		appearance := metadata.Hosts[index].Appearance
-		if appearance == nil || appearance.Background != name {
-			continue
-		}
-		appearance.Background = ""
-		if appearance.Empty() {
+		if appearance := metadata.Hosts[index].Appearance; appearance != nil && appearance.Empty() {
 			metadata.Hosts[index].Appearance = nil
 		}
-		forgotten = true
 	}
 	return forgotten
+}
+
+// terminalAppearances は、背景画像を指しうる外観（各プリセットのターミナルと各接続）を、書き換え
+// られる形で返す。
+func terminalAppearances(metadata *Metadata) []*TerminalAppearance {
+	var appearances []*TerminalAppearance
+	for index := range metadata.Presets {
+		if terminal := metadata.Presets[index].Terminal; terminal != nil && terminal.Appearance != nil {
+			appearances = append(appearances, terminal.Appearance)
+		}
+	}
+	for index := range metadata.Hosts {
+		if appearance := metadata.Hosts[index].Appearance; appearance != nil {
+			appearances = append(appearances, appearance)
+		}
+	}
+	return appearances
 }

@@ -9,7 +9,7 @@ describe("listGroups", () => {
     const overview = {
       hosts: [{ identity: { path: "connections/work/eu/a.conf", alias: "db" }, file: { path: "connections/work/eu/a.conf", absolute: "/a" }, line: 1, patterns: ["db"], editable: true, group: "work/eu" }],
       groups: [group("home"), group("work"), group("work/eu")],
-      metadata: { schemaVersion: 1, groups: [{ name: "work", order: 0 }, { name: "home", order: 1 }] },
+      metadata: { schemaVersion: 10, presets: [{ id: "default" }], groups: [{ name: "work", order: 0 }, { name: "home", order: 1 }] },
     } as unknown as Overview;
     expect(listGroups(overview)).toEqual([
       { name: "work", label: "work", depth: 0, count: 1 },
