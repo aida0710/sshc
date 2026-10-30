@@ -18,6 +18,10 @@ type MachineStart struct {
 
 // PrepareMachine は、エンジンを起動するたびに、HTTP を受け付ける前に呼ぶ。このマシンの ID を
 // 決め（無ければ作る）、古い形のファイルを一度だけ移し、起動したことを今の状態に書く。
+//
+// マスターパスワードのある Vault は、この時点ではまだロックされている。世代バックアップは Vault の
+// 鍵で封じるので、ここで書く変更は控えを取らない。取ろうとすると封じられずに止まり、エンジンが
+// 起動しない。
 func (s *Service) PrepareMachine(random io.Reader, start MachineStart) error {
 	id, err := s.ensureMachineID(random)
 	if err != nil {
@@ -36,8 +40,14 @@ func (s *Service) PrepareMachine(random io.Reader, start MachineStart) error {
 	return nil
 }
 
+// metadataSchema10Operation は、schema 9 の metadata.json を schema 10 で書き直す変更の名前である。
+const metadataSchema10Operation = "metadata.schema10"
+
 // migrateMetadataFile は、schema 9 の metadata.json を schema 10 で書き直す。schema 10 なら何もしない。
 func (s *Service) migrateMetadataFile() error {
+	if err := s.rollBackUnstartedMetadataMigration(); err != nil {
+		return err
+	}
 	path := s.metadata.Path()
 	contents, exists, err := s.readFile(path)
 	if err != nil || !exists {
@@ -49,8 +59,33 @@ func (s *Service) migrateMetadataFile() error {
 		// 読むときに断る。
 		return nil
 	}
-	_, err = s.commitMetadata(migrated, preconditionFor(contents, exists), "metadata.schema10")
+	change, err := s.metadata.Change(migrated, preconditionFor(contents, exists))
+	if err != nil {
+		return err
+	}
+	// schema 9 の控えは、取っても戻せない（このバージョンの読み込みは schema 9 を断る）。
+	change.SkipBackup = true
+	_, err = s.manager.Commit(storage.Request{Operation: metadataSchema10Operation, Changes: []storage.Change{change}})
 	return err
+}
+
+// rollBackUnstartedMetadataMigration は、この書き直しの記録のうち、まだどのファイルも置き換えて
+// いないものを巻き戻す。控えを封じられずに止まった書き直しがこれを残し、残っている間はどの変更も
+// 書けない。何も置き換えていないので、巻き戻しは記録を片付けるだけで、控えも Vault も要らない。
+func (s *Service) rollBackUnstartedMetadataMigration() error {
+	pending, err := s.manager.Pending()
+	if err != nil {
+		return err
+	}
+	for _, record := range pending {
+		if record.Operation != metadataSchema10Operation || record.Committed != 0 || !record.CanRollback {
+			continue
+		}
+		if err := s.manager.Rollback(record.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ensureMachineSettings は、このマシンの設定のファイルが無ければ作る。名前はホスト名で、ポートは
@@ -77,7 +112,8 @@ func (s *Service) ensureMachineSettings(hostname, operatingSystem string) error 
 	request := storage.Request{Operation: "machine.settings.create"}
 	if legacyExists {
 		settings.Port = legacyEnginePort(legacy)
-		request.Removals = append(request.Removals, storage.Removal{Path: legacyPath, Precondition: preconditionFor(legacy, legacyExists), Backup: true})
+		// 控えは取らない（PrepareMachine の説明）。中身のうち要るのはポートだけで、それはここで移す。
+		request.Removals = append(request.Removals, storage.Removal{Path: legacyPath, Precondition: preconditionFor(legacy, legacyExists)})
 	}
 	contents, err := encodeMachineSettings(settings)
 	if err != nil {
