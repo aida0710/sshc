@@ -25,6 +25,7 @@ import (
 
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
+	"sshc/internal/isolatedhome"
 )
 
 // TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM は本物の
@@ -58,7 +59,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	// bare `sshc` は接続 URL を出力するだけなので、harness が engine を明示的に起動し、
 	// SIGTERM までプロセスを管理する。
 	process := exec.Command(binary, "engine")
-	process.Env = isolatedEnvironment(home)
+	process.Env = isolatedhome.Environment(home)
 	stdout, err := process.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)

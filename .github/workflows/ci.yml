@@ -207,8 +207,8 @@ jobs:
         shell: bash
         run: GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./...
 
-      # FreeBSD・OpenBSD はリリースしていないが、ビルドが通る状態を保つ。build tag の
-      # 整合性はどのランナーでも同じなので、Linux でだけ見る。
+      # FreeBSD・OpenBSD の全 package のビルドが通る状態を保つ。build tag の整合性はどの
+      # ランナーでも同じなので、Linux でだけ見る。配る CLI は下の「Release build (Linux)」が組み立てる。
       - name: BSD build (Linux)
         if: ${{ runner.os == 'Linux' && env.NATIVE_TESTS == 'true' }}
         shell: bash
@@ -240,6 +240,58 @@ jobs:
           & go test -v -count=1 -race -tags sshc_test_kdf ./... 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/go-test-race-windows.log"
           $raceExit = $LASTEXITCODE
           exit $raceExit
+
+      # 前のリリースが書いたデータで、今のビルドが起動し、Vault を開け、設定が残っているかを
+      # 確かめる（cmd/sshc/upgrade_test.go）。前のリリースの成果物は checksums.txt と照らしてから使う。
+      - name: Upgrade from the previous release (Unix)
+        if: ${{ runner.os != 'Windows' && env.NATIVE_TESTS == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          previous=$(scripts/ci/previous-release.sh "$RUNNER_TEMP/previous-release")
+          SSHC_PREVIOUS_RELEASE_BINARY="$previous" go test -count=1 -run '^TestUpgradingFromThePreviousRelease' ./cmd/sshc
+      - name: Upgrade from the previous release (Windows)
+        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $env:SSHC_PREVIOUS_RELEASE_BINARY = (./scripts/ci/previous-release.ps1 -Directory "$env:RUNNER_TEMP/previous-release")
+          go test -count=1 -run '^TestUpgradingFromThePreviousRelease' ./cmd/sshc
+
+      # リリースと同じ手順で、この OS の CLI を組み立てて確かめる（release.yml の macos・linux・
+      # windows の job）。名前・形式の確認、起動の確認、Windows のインストーラーの確認は、ほかの
+      # 試験を通らない。タグを付けてから止まらないよう、ここで通しておく（publish.sh は main の CI が
+      # 通ってからタグを付ける）。バージョンは、リリースの確認が受け付ける安定版の形の仮の値にする。
+      - name: Release build (Unix)
+        if: ${{ runner.os != 'Windows' && env.NATIVE_TESTS == 'true' }}
+        shell: bash
+        env:
+          VERSION: v0.0.0
+        run: |
+          make release-cli-current
+          scripts/ci/cli-smoke.sh dist "$VERSION"
+      - name: Release build (Linux)
+        if: ${{ runner.os == 'Linux' && env.NATIVE_TESTS == 'true' }}
+        shell: bash
+        env:
+          SSHC_NATIVE_VERSION: v0.0.0
+        run: go run ./internal/nativebuild/cmd/nativebuild matrix --targets "freebsd/amd64:0 freebsd/arm64:0 openbsd/amd64:0 openbsd/arm64:0" --output-dir dist
+      - name: Release build (Windows)
+        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
+        shell: pwsh
+        env:
+          SSHC_NATIVE_VERSION: v0.0.0
+        run: |
+          go run ./internal/nativebuild/cmd/nativebuild release-current --arches "amd64 arm64" --output-dir dist
+          ./scripts/ci/cli-smoke.ps1 -DistDir dist -ExpectedVersion "$env:SSHC_NATIVE_VERSION"
+      - name: Release installer smoke (Windows)
+        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
+        shell: powershell
+        env:
+          SSHC_NATIVE_VERSION: v0.0.0
+        run: ./scripts/ci/install-windows-smoke.ps1 -DistDir dist -ExpectedVersion "$env:SSHC_NATIVE_VERSION"
 
       # 保存する前に、この実行で使わなかったビルドの出力を消す。Go はキャッシュの項目を使うと、
       # 最後に触ってから1時間を過ぎていれば更新時刻を今にする。そのため、この実行で使った項目は
