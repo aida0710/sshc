@@ -8,8 +8,8 @@ import { defaultWorkspaceId, type TerminalWorkspace } from "../api/terminalWorks
 import { useTranslate } from "../i18n/context";
 import { HostPickerDialog, type LocalChoice } from "../shell/HostPickerDialog";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
-import { readStoredJSON, readStoredValue, writeStoredJSON, writeStoredValue } from "../ui/browserStorage";
-import { localStorageKeys } from "../ui/browserStorageKeys";
+import { keepMachineState, keepMachineStateJSON, parseMachineStateJSON } from "../settings/machineState";
+import { interfaceState, useSettings } from "../settings/settingsStore";
 import { Icon } from "../ui/icons";
 import { Notice } from "../ui/surface";
 import { commandTargetsForWorkspace } from "./commands/workspaceCommandTargets";
@@ -61,8 +61,8 @@ type WorkspaceTreeProps = {
 
 type NameRequest = { kind: "create" } | { kind: "rename"; workspace: TerminalWorkspace };
 
-function readCollapsed(): Set<string> {
-  const stored = readStoredJSON(localStorageKeys.collapsedTerminalWorkspaces, []);
+// collapsedOf is the workspaces folded in the tree, kept in this machine's state.
+function collapsedOf(stored: unknown): Set<string> {
   return new Set(Array.isArray(stored) ? stored.filter((id): id is string => typeof id === "string") : []);
 }
 
@@ -92,8 +92,11 @@ export function WorkspaceTree({
   onConnect,
 }: WorkspaceTreeProps) {
   const t = useTranslate();
-  const [showHidden, setShowHidden] = useState(() => readStoredValue(localStorageKeys.showHiddenTerminalWorkspaces) === "true");
-  const [collapsed, setCollapsed] = useState(readCollapsed);
+  // Both follow this machine's state, which a change here updates at once.
+  const settings = useSettings();
+  const showHidden = interfaceState(settings.document, "showHiddenTerminalWorkspaces") === "true";
+  const collapsedState = interfaceState(settings.document, "collapsedTerminalWorkspaces");
+  const collapsed = useMemo(() => collapsedOf(parseMachineStateJSON(collapsedState, [])), [collapsedState]);
   const [pickerWorkspace, setPickerWorkspace] = useState<string | null>(null);
   const [nameRequest, setNameRequest] = useState<NameRequest | null>(null);
   const [deleting, setDeleting] = useState<{ workspace: TerminalWorkspace; sessionCount: number } | null>(null);
@@ -152,19 +155,13 @@ export function WorkspaceTree({
   }, [localShellProfiles, runTarget, t]);
 
   function toggleShowHidden() {
-    setShowHidden((current) => {
-      writeStoredValue(localStorageKeys.showHiddenTerminalWorkspaces, String(!current));
-      return !current;
-    });
+    keepMachineState("showHiddenTerminalWorkspaces", showHidden ? "" : "true");
   }
 
   function toggleCollapsed(id: string) {
-    setCollapsed((current) => {
-      const next = new Set(current);
-      if (!next.delete(id)) next.add(id);
-      writeStoredJSON(localStorageKeys.collapsedTerminalWorkspaces, [...next]);
-      return next;
-    });
+    const next = new Set(collapsed);
+    if (!next.delete(id)) next.add(id);
+    keepMachineStateJSON("collapsedTerminalWorkspaces", [...next]);
   }
 
   // Moving up and down steps over the workspaces the tree shows; hidden ones left out of it keep their places.

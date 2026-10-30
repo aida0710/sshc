@@ -1,19 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { TransferSettings } from "./api";
-import { TransferSettingsForm } from "./TransferSettingsForm";
+import { TransferSettingsForm, type PresetTransferSettings } from "./TransferSettingsForm";
 
-const savedSettings: TransferSettings = {
+const savedSettings: PresetTransferSettings = {
   maxConcurrent: 2,
-  clearCompletedAfterSeconds: 300,
-  processingStopped: false,
   largeFileThresholdBytes: 100 << 20,
   largeFileParallelism: 4,
   largeFileChunkBytes: 32 << 20,
   speedLimitBytesPerSecond: 0,
-  autoReconnect: false,
-  maxReconnectAttempts: 0,
   excludePatterns: [],
 };
 
@@ -42,7 +37,7 @@ describe("the SFTP transfer settings form", () => {
   it("does not say a change was saved when the engine did not take it", async () => {
     const { onCommit, answer } = heldCommit();
     render(<TransferSettingsForm settings={savedSettings} onCommit={onCommit} />);
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Finished transfers" }), "0");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "3");
     answer(false);
 
     await waitFor(() => expect(screen.queryByText("Saving…")).not.toBeInTheDocument());

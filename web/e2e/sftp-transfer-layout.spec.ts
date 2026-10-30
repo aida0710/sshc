@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { expect, openApplication, openSection, test } from "./support/environment";
+import { standardPresetMetadata } from "./support/settings";
 import type { TransferJob, TransferJobList } from "../src/sftp/api";
 
 const listing: TransferJobList = {
@@ -28,9 +29,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 640 
   const mobile = viewport.width < 1024;
   test(`keeps compact transfer rows and separate settings at ${viewport.width}x${viewport.height}`, async ({ page, installation }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.addInitScript(() => {
-      localStorage.setItem("sshc.sftp.queueView", JSON.stringify({ collapsed: true, height: 224 }));
-    });
+    // The settings page shows the preset's speed limit, the one the listing below reports as applied.
+    await installation.write("sshc/metadata.json", standardPresetMetadata({ fileTransfers: { speedLimitBytesPerSecond: listing.speedLimitBytesPerSecond } }));
     await page.route("**/api/v1/sftp/transfers", route => route.fulfill({ json: {
       ...listing, jobs: [transferJob("app-release.tar.gz", "running"), transferJob("backup.sql", "paused"), transferJob("access-archive.zip", "reconnecting")],
     } }));

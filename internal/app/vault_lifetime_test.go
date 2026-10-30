@@ -67,9 +67,14 @@ func TestTheEngineRestoresTheConfiguredVaultClock(t *testing.T) {
 			if err := first.vault.Initialise(""); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := first.config.SetEngineSettings(application.EngineSettings{
-				VaultAutoLock: &test.autoLock,
-			}); err != nil {
+			settings, err := first.config.Settings()
+			if err != nil {
+				t.Fatal(err)
+			}
+			standard := settings.Presets[0]
+			withAutoLock := standard
+			withAutoLock.VaultAutoLock = &test.autoLock
+			if _, err := first.config.SetPreset(standard, withAutoLock); err != nil {
 				t.Fatal(err)
 			}
 			services, err := newEngineServices(Dependencies{Home: home, Random: rand.Reader})

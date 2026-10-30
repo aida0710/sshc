@@ -12,7 +12,6 @@ import (
 
 	"sshc/internal/effective"
 	"sshc/internal/remoteos"
-	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/textencoding"
@@ -20,8 +19,9 @@ import (
 )
 
 const (
-	// MetadataSchemaVersion はこのビルドが書き込むバージョンである。
-	MetadataSchemaVersion = 9
+	// MetadataSchemaVersion はこのビルドが書き込むバージョンである。10 で、設定を全体の設定と
+	// プリセットに分けた（settings_global.go、settings_presets.go）。
+	MetadataSchemaVersion = 10
 	MetadataFileName      = "metadata.json"
 	DefaultGroupsFile     = "groups.sshc.conf"
 )
@@ -123,18 +123,16 @@ type GroupMetadata struct {
 	Settings []Setting `json:"settings,omitempty"`
 }
 
-// FileTransferSettings は、SFTP転送キューの設定である。
+// FileTransferSettings は、SFTP転送キューの設定のうちプリセットに入るもの（回線とマシンで
+// 変えたいもの）である。自動再接続と完了した転送を消すまでの時間は全体の設定
+// （GlobalFileTransferSettings）、転送の処理を止めているかはマシンの今の状態（MachineState）にある。
 type FileTransferSettings struct {
-	MaxConcurrent              int      `json:"maxConcurrent,omitempty"`
-	ClearCompletedAfterSeconds int      `json:"clearCompletedAfterSeconds,omitempty"`
-	ProcessingStopped          bool     `json:"processingStopped,omitempty"`
-	LargeFileThresholdBytes    int64    `json:"largeFileThresholdBytes,omitempty"`
-	LargeFileParallelism       int      `json:"largeFileParallelism,omitempty"`
-	LargeFileChunkBytes        int64    `json:"largeFileChunkBytes,omitempty"`
-	SpeedLimitBytesPerSecond   int64    `json:"speedLimitBytesPerSecond,omitempty"`
-	AutoReconnect              bool     `json:"autoReconnect,omitempty"`
-	MaxReconnectAttempts       int      `json:"maxReconnectAttempts,omitempty"`
-	ExcludePatterns            []string `json:"excludePatterns,omitempty"`
+	MaxConcurrent            int      `json:"maxConcurrent,omitempty"`
+	LargeFileThresholdBytes  int64    `json:"largeFileThresholdBytes,omitempty"`
+	LargeFileParallelism     int      `json:"largeFileParallelism,omitempty"`
+	LargeFileChunkBytes      int64    `json:"largeFileChunkBytes,omitempty"`
+	SpeedLimitBytesPerSecond int64    `json:"speedLimitBytesPerSecond,omitempty"`
+	ExcludePatterns          []string `json:"excludePatterns,omitempty"`
 }
 
 // BackgroundSettings は背景画像ライブラリの保存方針である。
@@ -143,15 +141,13 @@ type BackgroundSettings struct {
 	CapacityMiB int `json:"capacityMiB,omitempty"`
 }
 
-// EmbeddedTerminal は、埋め込みターミナルの設定である。
+// EmbeddedTerminal は、埋め込みターミナルの設定のうちプリセットに入るものである。再接続・接続の
+// ログ・OSC 52 は全体の設定（GlobalTerminalSettings）にある。
 type EmbeddedTerminal struct {
 	MaxSessions     int `json:"maxSessions,omitempty"`
 	ScrollbackBytes int `json:"scrollbackBytes,omitempty"`
 	// FontSize は画面が字を描く大きさである。この engine は使わない。
-	FontSize  int `json:"fontSize,omitempty"`
-	Verbosity int `json:"verbosity,omitempty"`
-	// Reconnect は、輸送が落ちたときに繋ぎ直しを試みる回数である。
-	Reconnect       *int  `json:"reconnect,omitempty"`
+	FontSize        int   `json:"fontSize,omitempty"`
 	CopyOnSelect    *bool `json:"copyOnSelect,omitempty"`
 	RightClickPaste *bool `json:"rightClickPaste,omitempty"`
 	// WebGL は nil なら既定の有効、false なら明示的にDOM描画を使う。
@@ -161,9 +157,6 @@ type EmbeddedTerminal struct {
 	BrowserScrollbackLines int `json:"browserScrollbackLines,omitempty"`
 	// RetainedTerminals は、表示から外れても browser に裏で残すターミナルの数である。
 	RetainedTerminals int `json:"retainedTerminals,omitempty"`
-	// OSC52は、すべてのターミナルで、リモートのプログラムがOSC 52でクリップボードへ書き込むのを許す。
-	// 接続先ごとの上書きは無い（以前の版が書いた hosts[].osc52 は読み飛ばす）。
-	OSC52 bool `json:"osc52,omitempty"`
 	// JISYenBackslashはJIS配列の¥キーをbackslashとして端末へ送る。
 	JISYenBackslash bool `json:"jisYenBackslash,omitempty"`
 	// ComposerEnterSendsは、スマホの入力欄でEnterを押すと送る。falseなら改行し、送るのは横のボタンである。
@@ -186,20 +179,19 @@ type EmbeddedTerminal struct {
 }
 
 // Metadata は~/.ssh/sshc/metadata.json の全体である。
+//
+// 設定は、どのマシンでも同じ値の全体の設定（Settings）と、マシンごとに選ぶプリセット
+// （Presets）に分かれる。どのマシンがどのプリセットを使うかは、マシンごとのファイル
+// （machine_settings.go）にあり、ここには無い。
 type Metadata struct {
 	ShortcutPresets []ShortcutPreset `json:"shortcutPresets,omitempty"`
-	// TerminalPresets は、ブラウザごとに選んで使う埋め込みターミナルの設定の組である
-	// （terminal_presets.go）。標準の組は EmbeddedTerminal そのもので、ここには無い。
-	TerminalPresets  []TerminalPreset  `json:"terminalPresets,omitempty"`
-	SchemaVersion    int               `json:"schemaVersion"`
-	GroupsFile       string            `json:"groupsFile,omitempty"`
-	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
-	// FileTransfers は SFTP 転送キューの設定である。
-	FileTransfers *FileTransferSettings `json:"fileTransfers,omitempty"`
-	// Backgrounds は端末設定の保存で巻き戻らない独立したライブラリ設定である。
-	Backgrounds *BackgroundSettings `json:"backgrounds,omitempty"`
-	// Appearance は、アプリの見た目のうち同期するもの（さし色）である。
-	Appearance *AppearanceSettings `json:"appearance,omitempty"`
+	SchemaVersion   int              `json:"schemaVersion"`
+	GroupsFile      string           `json:"groupsFile,omitempty"`
+	// Settings は全体の設定である。
+	Settings *GlobalSettings `json:"settings,omitempty"`
+	// Presets はプリセットの一覧である。先頭は必ず標準のプリセット（DefaultPresetID）で、
+	// DecodeMetadata と NewMetadata が用意する。
+	Presets []SettingsPreset `json:"presets"`
 	// VPNProfiles は、接続ごとに通せるVPN経路の定義である。秘密はVaultにあり、
 	// ここには無い。
 	VPNProfiles []VPNProfile    `json:"vpnProfiles,omitempty"`
@@ -207,26 +199,8 @@ type Metadata struct {
 	Hosts       []HostMetadata  `json:"hosts,omitempty"`
 }
 
-func (metadata Metadata) TerminalStartDirectory() string {
-	if metadata.EmbeddedTerminal == nil {
-		return ""
-	}
-	return metadata.EmbeddedTerminal.StartDirectory
-}
-
-// TerminalLimits は、保存された設定を埋め込みターミナルの用語へ移す。
-func (metadata Metadata) TerminalLimits() terminal.Limits {
-	if metadata.EmbeddedTerminal == nil {
-		return terminal.DefaultLimits()
-	}
-	return terminal.Limits{
-		MaxSessions: metadata.EmbeddedTerminal.MaxSessions,
-		Scrollback:  metadata.EmbeddedTerminal.ScrollbackBytes,
-	}.Normalise()
-}
-
 func NewMetadata() Metadata {
-	return Metadata{SchemaVersion: MetadataSchemaVersion, GroupsFile: DefaultGroupsFile}
+	return Metadata{SchemaVersion: MetadataSchemaVersion, GroupsFile: DefaultGroupsFile, Presets: []SettingsPreset{{ID: DefaultPresetID}}}
 }
 
 // GroupsPath は設定されたグループファイルを返し、無ければデフォルトに fallback する。
@@ -259,9 +233,9 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	if metadata.GroupsFile == "" {
 		metadata.GroupsFile = DefaultGroupsFile
 	}
-	withoutUnreadableAppearance(&metadata)
+	withoutUnreadableGlobalSettings(&metadata)
 	withoutUnreadableShortcutPresets(&metadata)
-	withoutUnreadableTerminalPresets(&metadata)
+	withoutUnreadablePresets(&metadata)
 	return metadata, nil
 }
 
@@ -302,19 +276,11 @@ func ValidateMetadata(metadata Metadata) error {
 	if err := validateShortcutPresets(metadata.ShortcutPresets); err != nil {
 		return err
 	}
-	if err := validateEmbeddedTerminal(metadata.EmbeddedTerminal); err != nil {
+	if err := validateGlobalSettings(metadata.Settings); err != nil {
 		return err
 	}
-	if err := validateTerminalPresets(metadata.TerminalPresets); err != nil {
+	if err := validatePresets(metadata.Presets); err != nil {
 		return err
-	}
-	if err := validateAppearanceSettings(metadata.Appearance); err != nil {
-		return err
-	}
-	if settings := metadata.Backgrounds; settings != nil {
-		if settings.CapacityMiB < MinBackgroundCapacityMiB || settings.CapacityMiB > MaxBackgroundCapacityMiB {
-			return fmt.Errorf("%w: background capacity %d", ErrMetadataTerminal, settings.CapacityMiB)
-		}
 	}
 	if _, err := checkRelative(metadata.GroupsPath()); err != nil {
 		return err
@@ -415,14 +381,6 @@ func validateEmbeddedTerminal(settings *EmbeddedTerminal) error {
 	if settings.LocalShellProfile != "" && !validShellProfileID(settings.LocalShellProfile) {
 		return fmt.Errorf("%w: localShellProfile", ErrMetadataTerminal)
 	}
-	// 上限は接続ログの段の数で決まるので、sshclient.MaxVerbosity を見る。api/openapi.yaml の
-	// EmbeddedTerminal・TerminalSettings の verbosity の maximum もこの値にそろえる。
-	if settings.Verbosity < 0 || settings.Verbosity > sshclient.MaxVerbosity {
-		return fmt.Errorf("%w: verbosity %d", ErrMetadataTerminal, settings.Verbosity)
-	}
-	if settings.Reconnect != nil && (*settings.Reconnect < 0 || *settings.Reconnect > terminal.MaxReconnects) {
-		return fmt.Errorf("%w: reconnect %d", ErrMetadataTerminal, *settings.Reconnect)
-	}
 	if len(settings.StartDirectory) > maxStartDirectoryLength {
 		return fmt.Errorf("%w: startDirectory", ErrMetadataTerminal)
 	}
@@ -491,6 +449,11 @@ func (store *MetadataStore) Load() (Metadata, storage.Precondition, error) {
 		return Metadata{}, storage.Precondition{}, err
 	}
 	metadata, err := DecodeMetadata(contents)
+	if errors.Is(err, ErrMetadataVersion) {
+		// 同期で schema 9 のファイルが届くことがある（まだ更新していないマシンが書いたもの）。
+		// 移した形で読み、次の保存で schema 10 として書く（metadata_schema9.go）。
+		metadata, err = migrateMetadataFromSchema9IfOld(contents)
+	}
 	if err != nil {
 		return Metadata{}, storage.Precondition{}, err
 	}

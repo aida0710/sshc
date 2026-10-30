@@ -1,5 +1,6 @@
-import { defaultBindings, saveBindings } from "../keyconfig/bindings";
-import { describe, expect, it, vi } from "vitest";
+import { defaultBindings } from "../keyconfig/bindings";
+import { bindShortcutsForTest } from "../testing/shortcutBindings";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
 
 function harness(initial: TerminalClipboardSettings = { copyOnSelect: true, rightClickPaste: true }) {
@@ -64,6 +65,8 @@ function pasteEvent(text: string, files: { type: string }[] = []): Event {
   return event;
 }
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("terminal clipboard interactions", () => {
   it("hands every form of a paste to a program that asked for paste events, and types nothing", () => {
     const container = document.createElement("div");
@@ -109,7 +112,7 @@ describe("terminal clipboard interactions", () => {
   it("says the clipboard has no text when the paste shortcut reads nothing", async () => {
     const subject = harness();
     subject.clipboard.readText.mockResolvedValueOnce("");
-    saveBindings({ ...defaultBindings, paste: ["Alt+V"] });
+    await bindShortcutsForTest({ ...defaultBindings, paste: ["Alt+V"] });
 
     subject.key(new KeyboardEvent("keydown", { key: "v", altKey: true, cancelable: true }));
     await vi.waitFor(() => expect(subject.nothingToPaste).toHaveBeenCalledExactlyOnceWith(false));
@@ -120,14 +123,14 @@ describe("terminal clipboard interactions", () => {
 
   it("uses a remapped paste chord once and observes changes without reattaching", async () => {
     const subject = harness();
-    saveBindings({ ...defaultBindings, paste: ["Alt+V"] });
+    await bindShortcutsForTest({ ...defaultBindings, paste: ["Alt+V"] });
     const event = new KeyboardEvent("keydown", { key: "v", altKey: true, cancelable: true });
     expect(subject.key(event)).toBe(false);
     expect(event.defaultPrevented).toBe(true);
     await Promise.resolve();
     expect(subject.clipboard.readText).toHaveBeenCalledTimes(1);
     expect(subject.terminal.paste).toHaveBeenCalledWith("pasted text");
-    saveBindings({ ...defaultBindings, paste: [] });
+    await bindShortcutsForTest({ ...defaultBindings, paste: [] });
     expect(subject.key(new KeyboardEvent("keydown", { key: "v", altKey: true }))).toBe(true);
     subject.detach();
   });

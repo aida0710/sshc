@@ -132,9 +132,6 @@ export const sftpApi = {
   async listTransfers(): Promise<TransferJobList> {
     return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await apiClient.read("/api/v1/sftp/transfers"));
   },
-  async updateTransferSettings(settings: TransferSettings): Promise<TransferJobList> {
-    return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await putJSON<unknown>("/api/v1/sftp/transfers/settings", settings, transferProblems));
-  },
   async moveTransfer(id: string, move: TransferQueueMove): Promise<TransferJobList> {
     return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await postJSON<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/queue-position`, { move }, undefined, transferProblems));
   },

@@ -16,7 +16,7 @@ const routes = [
   ["Passwords", "/vault/passwords"],
   ["Key Passphrases", "/vault/key-passphrases"],
   ["OTP", "/vault/otp"],
-  ["Settings", "/settings/engine"],
+  ["Settings", "/settings/general"],
   ["Sync", "/sync"],
   ["VPN", "/vpn"],
   ["History", "/history"],
@@ -55,12 +55,15 @@ describe("section routes", () => {
   });
 
   it.each([
-    "/settings/engine",
+    "/settings/general",
+    "/settings/appearance",
     "/settings/terminal",
     "/settings/sftp",
+    "/settings/shortcuts",
     "/settings/notifications",
+    "/settings/vault",
+    "/settings/machines",
     "/settings/connections",
-    "/settings/password",
   ])("keeps the settings page %s inside the Settings section", (path) => {
     expect(parseSectionPath(path)).toEqual({
       kind: "section",

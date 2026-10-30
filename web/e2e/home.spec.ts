@@ -1,4 +1,5 @@
 import { expect, openApplication, openSection, test } from "./support/environment";
+import { metadataSchemaVersion } from "./support/settings";
 
 test("starts with a searchable host launcher and contacts nothing unasked", async ({
   page,
@@ -7,7 +8,7 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
   await installation.write(
     "sshc/metadata.json",
     JSON.stringify({
-      schemaVersion: 9,
+      schemaVersion: metadataSchemaVersion,
       hosts: [
         {
           identity: { path: "config", alias: "bastion" },

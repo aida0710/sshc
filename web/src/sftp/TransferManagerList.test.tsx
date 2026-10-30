@@ -1,4 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { currentSettings } from "../settings/settingsStore";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { en } from "../i18n/messages";
@@ -36,7 +38,6 @@ const manager = vi.hoisted(() => {
     getMaxReconnectAttempts: vi.fn(() => 0),
     getExcludePatterns: vi.fn(() => [] as string[]),
     hasUploadSource: vi.fn(() => true),
-    applySettings: vi.fn(async () => undefined),
     move: vi.fn(async () => undefined),
     pause: vi.fn(async () => undefined),
     resume: vi.fn(async () => undefined),
@@ -88,10 +89,19 @@ function job(id: string, overrides: Partial<Job> = {}) {
   };
 }
 
+// keepQueueView puts the transfer list's view in this machine's state, or none when view is null.
+function keepQueueView(view: { collapsed: boolean; height: number } | null) {
+  fakeSettingsServer(view === null ? {} : { state: { facts: {}, interface: { sftpQueueView: JSON.stringify(view) } } });
+}
+
+// storedQueueView is the transfer list's view as this machine's state keeps it.
+function storedQueueView(): unknown {
+  return JSON.parse(currentSettings()?.state.interface?.sftpQueueView ?? "{}");
+}
+
 describe("the transfer queue", () => {
   beforeEach(() => {
-    window.localStorage.clear();
-    window.localStorage.setItem("sshc.sftp.queueView", JSON.stringify({ collapsed: false, height: 224 }));
+    keepQueueView({ collapsed: false, height: 224 });
     vi.clearAllMocks();
     manager.getProcessingStopped.mockReturnValue(false);
     manager.getMaxReconnectAttempts.mockReturnValue(0);
@@ -115,14 +125,14 @@ describe("the transfer queue", () => {
   });
 
   it("goes to Settings > SFTP from a folded empty queue without unfolding it", async () => {
-    window.localStorage.setItem("sshc.sftp.queueView", JSON.stringify({ collapsed: true, height: 224 }));
+    keepQueueView({ collapsed: true, height: 224 });
     const navigate = vi.fn();
     render(<TransferManagerList onNavigateLocation={navigate} />);
     await userEvent.click(screen.getByRole("button", { name: "Transfer settings" }));
     expect(navigate).toHaveBeenCalledWith("/settings/sftp");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Split at")).not.toBeInTheDocument();
-    expect(JSON.parse(window.localStorage.getItem("sshc.sftp.queueView") ?? "{}")).toMatchObject({ collapsed: true, height: 224 });
+    expect(storedQueueView()).toMatchObject({ collapsed: true, height: 224 });
   });
 
   it("offers no settings button when it has nowhere to go", () => {
@@ -157,7 +167,7 @@ describe("the transfer queue", () => {
   });
 
   it("starts as a compact dock and summarises active work", () => {
-    window.localStorage.removeItem("sshc.sftp.queueView");
+    keepQueueView(null);
     manager.setJobs([job("one", { status: "running" })]);
     render(<TransferManagerList />);
 
@@ -193,7 +203,9 @@ describe("the transfer queue", () => {
     const { rerender } = render(<TransferManagerList />);
 
     await userEvent.click(screen.getByRole("button", { name: "Stop starting new transfers" }));
-    expect(manager.applySettings).toHaveBeenCalledWith({ processingStopped: true });
+    // Stopping is this machine's state; the queue is listed again to show it.
+    await waitFor(() => expect(currentSettings()?.state.transfersStopped).toBe(true));
+    expect(manager.reconcile).toHaveBeenCalled();
 
     manager.getProcessingStopped.mockReturnValue(true);
     rerender(<TransferManagerList />);
@@ -246,7 +258,7 @@ describe("the transfer queue", () => {
       await userEvent.keyboard("{Escape}");
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(dock).toHaveFocus();
-      expect(JSON.parse(window.localStorage.getItem("sshc.sftp.queueView") ?? "{}")).toMatchObject({ collapsed: false, height: 224 });
+      expect(storedQueueView()).toMatchObject({ collapsed: false, height: 224 });
       await userEvent.click(dock);
       await userEvent.click(screen.getByRole("button", { name: "Transfer settings" }));
       expect(navigate).toHaveBeenCalledWith("/settings/sftp");
@@ -324,7 +336,7 @@ describe("the transfer queue", () => {
   });
 
   it("keeps paused, reconnecting and attention counts visible while folded", () => {
-    window.localStorage.removeItem("sshc.sftp.queueView");
+    keepQueueView(null);
     manager.setJobs([
       job("sending", { status: "running" }),
       job("paused", { status: "paused" }),
@@ -343,7 +355,7 @@ describe("the transfer queue", () => {
   });
 
   it("does not describe stopped processing or a missing upload source as transferring", () => {
-    window.localStorage.removeItem("sshc.sftp.queueView");
+    keepQueueView(null);
     manager.getProcessingStopped.mockReturnValue(true);
     manager.hasUploadSource.mockReturnValue(false);
     manager.setJobs([job("queued"), job("upload", { direction: "upload" })]);
@@ -354,7 +366,7 @@ describe("the transfer queue", () => {
   });
 
   it("keeps a failed-only queue distinguishable from finished work", () => {
-    window.localStorage.removeItem("sshc.sftp.queueView");
+    keepQueueView(null);
     manager.setJobs([job("failed", { status: "failed" })]);
     render(<TransferManagerList />);
     expect(screen.getByText("1 failed")).toBeVisible();

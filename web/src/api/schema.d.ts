@@ -2008,7 +2008,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/metadata/terminal-presets": {
+    "/api/v1/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/global": {
         parameters: {
             query?: never;
             header?: never;
@@ -2016,7 +2032,75 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put: operations["setTerminalPresets"];
+        put: operations["setGlobalSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setPresets"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/presets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setPreset"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/machines/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setMachineSettings"];
+        post?: never;
+        delete: operations["removeMachine"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setMachineState"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2033,54 +2117,6 @@ export interface paths {
         };
         get: operations["getMetadata"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/metadata/terminal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["setTerminalSettings"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/metadata/appearance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["setAppearanceSettings"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/metadata/engine": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getEngineSettings"];
-        put: operations["setEngineSettings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -4261,6 +4297,7 @@ export interface components {
         };
         AppearanceSettings: {
             accent?: string;
+            theme?: string;
         };
         TerminalAppearance: {
             palette?: string;
@@ -4291,20 +4328,12 @@ export interface components {
                 sftp: string[];
             };
         };
-        TerminalPreset: {
-            id: string;
-            name: string;
-            settings: components["schemas"]["EmbeddedTerminal"];
-        };
         Metadata: {
             schemaVersion: number;
             shortcutPresets?: components["schemas"]["ShortcutPreset"][];
-            terminalPresets?: components["schemas"]["TerminalPreset"][];
             groupsFile?: string;
-            embeddedTerminal?: components["schemas"]["EmbeddedTerminal"];
-            fileTransfers?: components["schemas"]["FileTransferSettings"];
-            backgrounds?: components["schemas"]["BackgroundSettings"];
-            appearance?: components["schemas"]["AppearanceSettings"];
+            settings?: components["schemas"]["GlobalSettings"];
+            presets: components["schemas"]["SettingsPreset"][];
             groups?: components["schemas"]["GroupMetadata"][];
             hosts?: components["schemas"]["HostMetadata"][];
             vpnProfiles?: components["schemas"]["VPNProfile"][];
@@ -4405,8 +4434,6 @@ export interface components {
         };
         FileTransferSettings: {
             maxConcurrent?: number;
-            clearCompletedAfterSeconds?: number;
-            processingStopped?: boolean;
             /** Format: int64 */
             largeFileThresholdBytes?: number;
             largeFileParallelism?: number;
@@ -4414,8 +4441,6 @@ export interface components {
             largeFileChunkBytes?: number;
             /** Format: int64 */
             speedLimitBytesPerSecond?: number;
-            autoReconnect?: boolean;
-            maxReconnectAttempts?: number;
             /** @description Folder contents to exclude. Basenames match at any depth; patterns containing / start at the selected folder. Supports * and ? only. Defaults to no exclusions. */
             excludePatterns?: string[];
         };
@@ -4425,12 +4450,9 @@ export interface components {
             browserScrollbackLines?: number;
             retainedTerminals?: number;
             fontSize?: number;
-            verbosity?: number;
-            reconnect?: number;
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
             webgl?: boolean;
-            osc52?: boolean;
             jisYenBackslash?: boolean;
             composerEnterSends?: boolean;
             ligatures?: boolean;
@@ -4440,29 +4462,6 @@ export interface components {
             commandScrollbarMarks?: boolean;
             localShellProfile?: string;
             startDirectory?: string;
-            appearance?: components["schemas"]["TerminalAppearance"];
-        };
-        TerminalSettings: {
-            startDirectory?: string;
-            maxSessions?: number;
-            scrollbackBytes?: number;
-            browserScrollbackLines?: number;
-            retainedTerminals?: number;
-            fontSize?: number;
-            verbosity?: number;
-            reconnect?: number;
-            copyOnSelect?: boolean;
-            rightClickPaste?: boolean;
-            webgl?: boolean;
-            osc52?: boolean;
-            jisYenBackslash?: boolean;
-            composerEnterSends?: boolean;
-            ligatures?: boolean;
-            statusLine?: boolean;
-            commandMarks?: boolean;
-            stickyCommand?: boolean;
-            commandScrollbarMarks?: boolean;
-            localShellProfile?: string;
             appearance?: components["schemas"]["TerminalAppearance"];
         };
         VaultAutoLockSettings: {
@@ -4475,9 +4474,86 @@ export interface components {
             /** @enum {string} */
             unit?: "minutes" | "hours";
         };
-        EngineSettings: {
-            port?: number;
+        GlobalSettings: {
+            /** @enum {string} */
+            language?: "en" | "ja";
+            terminal?: components["schemas"]["GlobalTerminalSettings"];
+            fileTransfers?: components["schemas"]["GlobalFileTransferSettings"];
+            backgrounds?: components["schemas"]["BackgroundSettings"];
+            updateNoticeFoldedRelease?: string;
+        };
+        GlobalTerminalSettings: {
+            reconnect?: number;
+            verbosity?: number;
+            osc52?: boolean;
+        };
+        GlobalFileTransferSettings: {
+            clearCompletedAfterSeconds?: number;
+            autoReconnect?: boolean;
+            maxReconnectAttempts?: number;
+        };
+        SettingsPreset: {
+            id: string;
+            name?: string;
+            appearance?: components["schemas"]["AppearanceSettings"];
+            terminal?: components["schemas"]["EmbeddedTerminal"];
+            fileTransfers?: components["schemas"]["FileTransferSettings"];
             vaultAutoLock?: components["schemas"]["VaultAutoLockSettings"];
+            interface?: components["schemas"]["InterfaceSettings"];
+        };
+        InterfaceSettings: {
+            /** @enum {string} */
+            touchMode?: "touch" | "mouse";
+            notificationSound?: components["schemas"]["NotificationSound"];
+            keepScreenAwake?: boolean;
+            shortcutPreset?: string;
+            navigationWidth?: number;
+            connectionListWidth?: number;
+            connectionGroupsWidth?: number;
+            /** @enum {string} */
+            homeView?: "panel" | "list";
+        };
+        NotificationSound: {
+            /** @enum {string} */
+            sound: "none" | "gentle" | "bell" | "pulse";
+            volume: number;
+        };
+        MachineSettings: {
+            name?: string;
+            presetId?: string;
+            port?: number;
+        };
+        MachineFacts: {
+            os?: string;
+            version?: string;
+            /** Format: date-time */
+            startedAt?: string;
+        };
+        Machine: {
+            id: string;
+            settings: components["schemas"]["MachineSettings"];
+            facts: components["schemas"]["MachineFacts"];
+        };
+        InterfaceState: {
+            runTarget?: string;
+            sftpPanes?: string;
+            sftpSplitRatio?: string;
+            sftpQueueView?: string;
+            collapsedTerminalWorkspaces?: string;
+            showHiddenTerminalWorkspaces?: string;
+        };
+        MachineState: {
+            facts: components["schemas"]["MachineFacts"];
+            transfersStopped?: boolean;
+            interface?: components["schemas"]["InterfaceState"];
+        };
+        SettingsDocument: {
+            machineId: string;
+            global: components["schemas"]["GlobalSettings"];
+            presets: components["schemas"]["SettingsPreset"][];
+            presetInUse: string;
+            machines: components["schemas"]["Machine"][];
+            state: components["schemas"]["MachineState"];
         };
         TerminalBackground: {
             name: string;
@@ -9306,7 +9382,30 @@ export interface operations {
             409: components["responses"]["Problem"];
         };
     };
-    setTerminalPresets: {
+    getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Global settings, presets, machines and this machine's state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsDocument"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    setGlobalSettings: {
         parameters: {
             query?: never;
             header?: never;
@@ -9316,13 +9415,13 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    base: components["schemas"]["TerminalPreset"][];
-                    presets: components["schemas"]["TerminalPreset"][];
+                    base: components["schemas"]["GlobalSettings"];
+                    settings: components["schemas"]["GlobalSettings"];
                 };
             };
         };
         responses: {
-            /** @description Saved terminal presets */
+            /** @description Saved global settings */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9330,6 +9429,158 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SettingsSaveResult"];
                 };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    setPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    base: components["schemas"]["SettingsPreset"][];
+                    presets: components["schemas"]["SettingsPreset"][];
+                };
+            };
+        };
+        responses: {
+            /** @description Saved presets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsSaveResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    setPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    base: components["schemas"]["SettingsPreset"];
+                    preset: components["schemas"]["SettingsPreset"];
+                };
+            };
+        };
+        responses: {
+            /** @description Saved preset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsSaveResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    setMachineSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    base: components["schemas"]["MachineSettings"];
+                    settings: components["schemas"]["MachineSettings"];
+                };
+            };
+        };
+        responses: {
+            /** @description Saved machine settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsSaveResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    removeMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The machine was removed from the list */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    setMachineState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    interface?: components["schemas"]["InterfaceState"];
+                    transfersStopped?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The state was taken */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
@@ -9355,113 +9606,6 @@ export interface operations {
                     "application/json": components["schemas"]["Metadata"];
                 };
             };
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-        };
-    };
-    setTerminalSettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TerminalSettings"];
-            };
-        };
-        responses: {
-            /** @description The choice was written */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingsSaveResult"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-        };
-    };
-    setAppearanceSettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AppearanceSettings"];
-            };
-        };
-        responses: {
-            /** @description The choice was written */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingsSaveResult"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-        };
-    };
-    getEngineSettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description This machine's engine settings; an omitted item is unset */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EngineSettings"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-        };
-    };
-    setEngineSettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EngineSettings"];
-            };
-        };
-        responses: {
-            /** @description The choice was written */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingsSaveResult"];
-                };
-            };
-            400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];

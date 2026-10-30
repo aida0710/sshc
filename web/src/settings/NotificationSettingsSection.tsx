@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRestingSave } from "./useRestingSave";
+import { useSettings } from "./settingsStore";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import {
-  loadNotificationSoundPreferences,
+  notificationSoundOf,
   notificationSoundPresets,
   playNotificationSound,
   saveNotificationSoundPreferences,
@@ -42,13 +44,18 @@ function permissionMessage(permission: BrowserNotificationPermission, android: b
     : permission === "denied" ? "terminal.browserNotificationsDenied" : "terminal.browserNotificationsDefault";
 }
 
-// Browser notifications for finished commands: the permission the browser
-// granted, and the sound this browser plays. Neither reaches the engine.
-export function NotificationSettingsSection({ showHeading }: { showHeading: boolean }) {
+// Browser notifications for finished commands: the permission this browser granted, and the sound of the
+// preset being edited.
+export function NotificationSettingsSection({ presetId, showHeading }: { presetId: string; showHeading: boolean }) {
   const t = useTranslate();
   const [permission, setPermission] = useState<BrowserNotificationPermission>(() => browserNotificationPermission());
   const request = useAsyncOperation();
-  const [sounds, setSounds] = useState<NotificationSoundPreferences>(() => loadNotificationSoundPreferences());
+  const settingsDocument = useSettings().document;
+  const preset = settingsDocument?.presets.find((candidate) => candidate.id === presetId);
+  const storedSounds = useMemo(() => notificationSoundOf(preset ?? { id: presetId }), [preset, presetId]);
+  // sounds is what the controls show while a change has not been saved yet.
+  const [sounds, setSounds] = useState<NotificationSoundPreferences>(storedSounds);
+  useEffect(() => setSounds(storedSounds), [storedSounds]);
 
   useEffect(() => {
     const refreshPermission = () => setPermission(browserNotificationPermission());
@@ -56,9 +63,13 @@ export function NotificationSettingsSection({ showHeading }: { showHeading: bool
     return () => window.removeEventListener("focus", refreshPermission);
   }, []);
 
+  const saveSounds = useRestingSave((next: NotificationSoundPreferences) => {
+    void saveNotificationSoundPreferences(next, presetId).catch(() => undefined);
+  });
+
   function changeSounds(next: NotificationSoundPreferences) {
     setSounds(next);
-    saveNotificationSoundPreferences(next);
+    saveSounds(next);
   }
 
   async function enableOrTest() {

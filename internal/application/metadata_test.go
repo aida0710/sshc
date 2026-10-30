@@ -32,11 +32,8 @@ func TestDecodeMetadataAcceptsAnAbsentFileAndRejectsUnsupportedSchemas(t *testin
 	if empty.SchemaVersion != MetadataSchemaVersion || len(empty.Hosts) != 0 || len(empty.Groups) != 0 {
 		t.Fatalf("empty metadata = %#v", empty)
 	}
-	if empty.EmbeddedTerminal != nil {
-		t.Errorf("a new document already carries terminal settings = %#v", empty.EmbeddedTerminal)
-	}
-	if limits := empty.TerminalLimits(); limits != terminal.DefaultLimits() {
-		t.Errorf("default limits = %#v, want %#v", limits, terminal.DefaultLimits())
+	if len(empty.Presets) != 1 || !sameSettings(empty.Presets[0], SettingsPreset{ID: DefaultPresetID}) || empty.Settings != nil {
+		t.Errorf("a new document already carries settings = %#v, %#v", empty.Presets, empty.Settings)
 	}
 	if _, err := DecodeMetadata([]byte(`{"schemaVersion":99}`)); !errors.Is(err, ErrMetadataVersion) {
 		t.Fatalf("future schema error = %v, want ErrMetadataVersion", err)
@@ -49,28 +46,28 @@ func TestDecodeMetadataAcceptsAnAbsentFileAndRejectsUnsupportedSchemas(t *testin
 	}
 }
 
-func TestDecodeMetadataFallsBackToTheDefaultLimits(t *testing.T) {
+// 同期で届いた標準のプリセットの上限が範囲の外なら、metadata は読め、標準のプリセットが既定に戻る。
+func TestAStandardPresetWithLimitsOutOfRangeIsResetWhenRead(t *testing.T) {
 	for name, document := range map[string]string{
-		"zero":        `{"schemaVersion":9,"embeddedTerminal":{"maxSessions":0,"scrollbackBytes":0}}`,
-		"below range": `{"schemaVersion":9,"embeddedTerminal":{"maxSessions":0,"scrollbackBytes":1}}`,
-		"above range": `{"schemaVersion":9,"embeddedTerminal":{"maxSessions":9999,"scrollbackBytes":99999999}}`,
-		"negative":    `{"schemaVersion":9,"embeddedTerminal":{"maxSessions":-1,"scrollbackBytes":-1}}`,
+		"below range": `{"schemaVersion":10,"presets":[{"id":"default","terminal":{"scrollbackBytes":1}}]}`,
+		"above range": `{"schemaVersion":10,"presets":[{"id":"default","terminal":{"maxSessions":9999,"scrollbackBytes":99999999}}]}`,
+		"negative":    `{"schemaVersion":10,"presets":[{"id":"default","terminal":{"maxSessions":-1,"scrollbackBytes":-1}}]}`,
 	} {
 		decoded, err := DecodeMetadata([]byte(document))
 		if err != nil {
 			t.Fatalf("%s = %v, want the document to survive", name, err)
 		}
-		if limits := decoded.TerminalLimits(); limits != terminal.DefaultLimits() {
-			t.Errorf("%s limits = %#v, want the defaults", name, limits)
+		if decoded.Presets[0].Terminal != nil {
+			t.Errorf("%s: standard preset terminal = %#v, want it reset", name, decoded.Presets[0].Terminal)
 		}
 	}
 
-	kept, err := DecodeMetadata([]byte(`{"schemaVersion":9,"embeddedTerminal":{"maxSessions":8,"scrollbackBytes":32768}}`))
+	kept, err := DecodeMetadata([]byte(`{"schemaVersion":10,"presets":[{"id":"default","terminal":{"maxSessions":8,"scrollbackBytes":32768}}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if limits := kept.TerminalLimits(); limits.MaxSessions != 8 || limits.Scrollback != 32768 {
-		t.Fatalf("limits = %#v", limits)
+	if terminal := kept.Presets[0].Terminal; terminal == nil || terminal.MaxSessions != 8 || terminal.ScrollbackBytes != 32768 {
+		t.Fatalf("terminal = %#v", terminal)
 	}
 }
 
@@ -81,14 +78,14 @@ func TestEncodeMetadataRefusesLimitsOutsideTheirRange(t *testing.T) {
 		"scrollback too large": {MaxSessions: 1, ScrollbackBytes: terminal.MaxScrollback + 1},
 	} {
 		broken := NewMetadata()
-		broken.EmbeddedTerminal = &settings
+		broken.Presets[0].Terminal = &settings
 		if _, err := EncodeMetadata(broken); !errors.Is(err, ErrMetadataTerminal) {
 			t.Errorf("%s = %v, want ErrMetadataTerminal", name, err)
 		}
 	}
 
 	onlyTheDirectory := NewMetadata()
-	onlyTheDirectory.EmbeddedTerminal = &EmbeddedTerminal{StartDirectory: "~/work"}
+	onlyTheDirectory.Presets[0].Terminal = &EmbeddedTerminal{StartDirectory: "~/work"}
 	written, err := EncodeMetadata(onlyTheDirectory)
 	if err != nil {
 		t.Fatalf("a document that carries only the start directory = %v", err)
@@ -97,12 +94,12 @@ func TestEncodeMetadataRefusesLimitsOutsideTheirRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if restored.TerminalStartDirectory() != "~/work" {
-		t.Fatalf("the start directory did not survive the round trip: %q", restored.TerminalStartDirectory())
+	if terminal := restored.Presets[0].Terminal; terminal == nil || terminal.StartDirectory != "~/work" {
+		t.Fatalf("the start directory did not survive the round trip: %#v", terminal)
 	}
 
 	kept := NewMetadata()
-	kept.EmbeddedTerminal = &EmbeddedTerminal{MaxSessions: 8, ScrollbackBytes: 32768}
+	kept.Presets[0].Terminal = &EmbeddedTerminal{MaxSessions: 8, ScrollbackBytes: 32768}
 	encoded, err := EncodeMetadata(kept)
 	if err != nil {
 		t.Fatal(err)
@@ -111,13 +108,13 @@ func TestEncodeMetadataRefusesLimitsOutsideTheirRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if limits := decoded.TerminalLimits(); limits.MaxSessions != 8 || limits.Scrollback != 32768 {
-		t.Fatalf("round trip = %#v", limits)
+	if terminal := decoded.Presets[0].Terminal; terminal == nil || terminal.MaxSessions != 8 || terminal.ScrollbackBytes != 32768 {
+		t.Fatalf("round trip = %#v", terminal)
 	}
 }
 
 func TestMetadataDropsThePerConnectionOSC52PolicyEarlierVersionsWrote(t *testing.T) {
-	stored := []byte(`{"schemaVersion": 9, "hosts": [{"identity": {"path": "config", "alias": "host"}, "tags": ["prod"], "osc52": "allow"}]}`)
+	stored := []byte(`{"schemaVersion": 10, "hosts": [{"identity": {"path": "config", "alias": "host"}, "tags": ["prod"], "osc52": "allow"}]}`)
 	decoded, err := DecodeMetadata(stored)
 	if err != nil {
 		t.Fatalf("decode = %v", err)
@@ -231,7 +228,7 @@ func TestMetadataCarriesOnlyPresentation(t *testing.T) {
 			t.Errorf("encoded metadata still carries %s:\n%s", absent, encoded)
 		}
 	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 9`) {
+	if !strings.Contains(string(encoded), `"schemaVersion": 10`) {
 		t.Errorf("encoded metadata is not the current version:\n%s", encoded)
 	}
 }

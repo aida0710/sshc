@@ -37,7 +37,7 @@ const overview = {
     { file: { absolute: "/etc/ssh/ssh_config", external: true }, editable: false, loads: 1 },
   ],
   hosts: [],
-  metadata: { schemaVersion: 1 },
+  metadata: { schemaVersion: 10, presets: [{ id: "default" }] },
   diagnostics: [{ severity: "warning", code: "include_no_match", path: "config", line: 2, detail: "conf.d/*.conf" }],
   notices: [],
 };

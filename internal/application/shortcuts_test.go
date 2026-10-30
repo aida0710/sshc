@@ -19,7 +19,7 @@ func testShortcutPreset() ShortcutPreset {
 }
 func TestShortcutPresetsPreserveOtherSettingsAndRejectStaleWrites(t *testing.T) {
 	s, _ := newTerminalService(t)
-	if _, err := s.SetTerminalSettings(TerminalSettings{FontSize: 18}); err != nil {
+	if err := setStandardTerminal(t, s, EmbeddedTerminal{FontSize: 18}); err != nil {
 		t.Fatal(err)
 	}
 	first := []ShortcutPreset{testShortcutPreset()}
@@ -33,7 +33,7 @@ func TestShortcutPresetsPreserveOtherSettingsAndRejectStaleWrites(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.EmbeddedTerminal.FontSize != 18 || !reflect.DeepEqual(stored.ShortcutPresets, first) {
+	if stored.Presets[0].Terminal.FontSize != 18 || !reflect.DeepEqual(stored.ShortcutPresets, first) {
 		t.Fatal("settings lost")
 	}
 	if _, err := s.SetShortcutPresets(first, nil); err != nil {

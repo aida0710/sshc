@@ -1,4 +1,5 @@
 import { expect, openApplication, openLocalShell, test } from "./support/environment";
+import { standardPresetMetadata } from "./support/settings";
 import { maxTerminalUnusedHeightPx, terminalDrawingRects, terminalKeyboard, waitForTerminalLayout } from "./support/terminal";
 import { expectTerminalPTYSize, watchTerminalStream } from "./support/terminalStream";
 
@@ -6,7 +7,7 @@ import { expectTerminalPTYSize, watchTerminalStream } from "./support/terminalSt
 test.use({ launchOptions: { args: [] }, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1.1 });
 for (const webgl of [true, false]) {
   test(`uses the same rows after delayed font loading as a new shell (${webgl ? "WebGL" : "DOM"})`, async ({ page, installation }) => {
-    await installation.write("sshc/metadata.json", JSON.stringify({ schemaVersion: 9, embeddedTerminal: { webgl, appearance: { font: "jetbrains-mono" } } }));
+    await installation.write("sshc/metadata.json", standardPresetMetadata({ terminal: { webgl, appearance: { font: "jetbrains-mono" } } }));
     let releaseFont!: () => void;
     const fontReady = new Promise<void>((done) => { releaseFont = done; });
     await page.route("**/fonts/JetBrainsMono-*.woff2", async (route) => {

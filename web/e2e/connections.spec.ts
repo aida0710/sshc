@@ -1,5 +1,6 @@
 import { chooseConnectionAction } from "./support/connections";
 import { clickAndAwait, expect, masterPassword, openSection, openSettingsPage, test, openApplication } from "./support/environment";
+import { metadataSchemaVersion } from "./support/settings";
 import type { Page } from "@playwright/test";
 import { createGroups } from "./support/groups";
 
@@ -487,7 +488,7 @@ test("opens a connection inside the application, with nothing to choose and noth
   });
   await openApplication(page, installation);
 
-  await openSettingsPage(page, "Engine");
+  await openSettingsPage(page, "General");
   await expect(page.getByRole("region", { name: "Default connection application" })).toHaveCount(0);
   await expect(page.getByLabel("Open connections with")).toHaveCount(0);
 
@@ -702,7 +703,7 @@ test("re-associates settings whose connection is gone, without guessing", async 
   await installation.write(
     "sshc/metadata.json",
     JSON.stringify({
-      schemaVersion: 9,
+      schemaVersion: metadataSchemaVersion,
       groups: [{ name: "work" }],
       hosts: [
         { identity: { path: "config", alias: "retired" }, tags: ["ci"], colour: "#f97316" },

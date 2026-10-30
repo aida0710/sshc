@@ -50,8 +50,8 @@ func (h SFTPHandlers) describeTransferQueue() (SFTPTransferJobList, error) {
 
 // UpdateTransferSettings は、engine が持つ転送キューの設定を差し替える。
 // 転送は engine の資源なので、設定も browser ごとではなく engine にひとつだけ
-// 置く。metadata.json への保存は TransferManager が適用の前に行う
-// （newTransferManager を参照）。
+// 置く。保存（このマシンのプリセット・全体の設定・今の状態）は TransferManager が
+// 適用の前に行う（newTransferManager を参照）。
 func (h SFTPHandlers) UpdateTransferSettings(c *echo.Context) error {
 	var body sftpTransferSettingsRequest
 	if err := decodeJSON(c, &body); err != nil {
@@ -61,17 +61,21 @@ func (h SFTPHandlers) UpdateTransferSettings(c *echo.Context) error {
 	if patterns == nil {
 		patterns = h.Transfers.ExcludePatterns()
 	}
-	settings := engineTransferSettings(application.FileTransferSettings{
-		MaxConcurrent:              body.MaxConcurrent,
-		ClearCompletedAfterSeconds: body.ClearCompletedAfterSeconds,
-		ProcessingStopped:          body.ProcessingStopped,
-		LargeFileThresholdBytes:    body.LargeFileThresholdBytes,
-		LargeFileParallelism:       body.LargeFileParallelism,
-		LargeFileChunkBytes:        body.LargeFileChunkBytes,
-		SpeedLimitBytesPerSecond:   body.SpeedLimitBytesPerSecond,
-		AutoReconnect:              body.AutoReconnect,
-		MaxReconnectAttempts:       body.MaxReconnectAttempts,
-		ExcludePatterns:            patterns,
+	settings := engineTransferSettings(application.TransferSettings{
+		Preset: application.FileTransferSettings{
+			MaxConcurrent:            body.MaxConcurrent,
+			LargeFileThresholdBytes:  body.LargeFileThresholdBytes,
+			LargeFileParallelism:     body.LargeFileParallelism,
+			LargeFileChunkBytes:      body.LargeFileChunkBytes,
+			SpeedLimitBytesPerSecond: body.SpeedLimitBytesPerSecond,
+			ExcludePatterns:          patterns,
+		},
+		Global: application.GlobalFileTransferSettings{
+			ClearCompletedAfterSeconds: body.ClearCompletedAfterSeconds,
+			AutoReconnect:              body.AutoReconnect,
+			MaxReconnectAttempts:       body.MaxReconnectAttempts,
+		},
+		Stopped: body.ProcessingStopped,
 	})
 	if err := h.Transfers.SetTransferSettings(settings); err != nil {
 		if errors.Is(err, sshcSFTP.ErrInvalidTransfer) {

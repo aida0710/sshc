@@ -1,6 +1,7 @@
 import { retryableTransferFailure, waitForTransferReconnect } from "./transferRecovery";
+import { defaultLargeFileChunkBytes, defaultLargeFileParallelism, defaultLargeFileThreshold } from "./transferDefaults";
 import { failureCode } from "../api/client";
-import { sftpApi, type TransferJobList, type TransferKind, type TransferQueueMove, type TransferSettings } from "./api";
+import { sftpApi, type TransferJobList, type TransferKind, type TransferQueueMove } from "./api";
 import { DownloadPlane } from "./downloadPlane";
 import { TransferLedger, type ManagedTransferJob, type TransferNotice } from "./transferLedger";
 import type { TransferManagerAPI, TransferPlaneContext } from "./transferPlane";
@@ -14,11 +15,6 @@ export type { ManagedTransferJob, TransferNotice } from "./transferLedger";
 
 // The engine keeps at most this many transfer jobs at once.
 export const maxTransferJobs = 200;
-const defaultLargeFileThreshold = 100 << 20;
-// One connection unless the engine settings say otherwise; see the engine's
-// DefaultLargeFileParallelism for why.
-const defaultLargeFileParallelism = 1;
-const defaultLargeFileChunkBytes = 32 << 20;
 // How long a job waits after the engine refused to start it.
 const retryDelayMs = 500;
 
@@ -79,9 +75,7 @@ export class SFTPTransferManager {
   private readonly retryAfter = new Map<string, number>();
   private active = 0;
   private maxConcurrent: number;
-  private clearCompletedAfter = 0;
   private processingStopped = false;
-  private speedLimitBytesPerSecond = 0;
   private autoReconnect = false;
   private maxReconnectAttempts = 0;
   private excludePatterns: string[] = [];
@@ -115,19 +109,6 @@ export class SFTPTransferManager {
   getProcessingStopped = (): boolean => this.processingStopped;
   getMaxReconnectAttempts = (): number => this.maxReconnectAttempts;
   getExcludePatterns = (): readonly string[] => [...this.excludePatterns];
-  // The settings as the engine last reported them.
-  getSettings = (): TransferSettings => ({
-    maxConcurrent: this.maxConcurrent,
-    clearCompletedAfterSeconds: this.clearCompletedAfter,
-    processingStopped: this.processingStopped,
-    largeFileThresholdBytes: this.largeFileThreshold,
-    largeFileParallelism: this.largeFileParallelism,
-    largeFileChunkBytes: this.largeFileChunkBytes,
-    speedLimitBytesPerSecond: this.speedLimitBytesPerSecond,
-    autoReconnect: this.autoReconnect,
-    maxReconnectAttempts: this.maxReconnectAttempts,
-    excludePatterns: [...this.excludePatterns],
-  });
   hasUploadSource = (id: string): boolean => this.uploads.has(id);
   // Whether closing this page would cut a transfer short: the page is running
   // it, or holds the File of an upload waiting to run, which no other page has.
@@ -149,15 +130,6 @@ export class SFTPTransferManager {
       return;
     }
     await this.downloads.removeOrphans(listed.jobs);
-    this.kick();
-  }
-
-  // The queue belongs to the engine, so the settings do too: one value, shared
-  // by every browser and every tab looking at the same engine. The engine
-  // replaces the settings whole, so a change carries the current others along.
-  async applySettings(change: Partial<TransferSettings>): Promise<void> {
-    const listed = await this.api.updateTransferSettings({ ...this.getSettings(), ...change });
-    this.adoptQueue(listed);
     this.kick();
   }
 
@@ -409,9 +381,7 @@ export class SFTPTransferManager {
   // came from a poll (requestedAt is the generation seen before that poll).
   private adoptQueue(listed: TransferJobList, requestedAt?: number): boolean {
     this.maxConcurrent = listed.maxConcurrent;
-    this.clearCompletedAfter = listed.clearCompletedAfterSeconds ?? 0;
     this.processingStopped = listed.processingStopped === true;
-    this.speedLimitBytesPerSecond = listed.speedLimitBytesPerSecond;
     this.autoReconnect = listed.autoReconnect;
     this.maxReconnectAttempts = listed.maxReconnectAttempts;
     this.excludePatterns = [...(listed.excludePatterns ?? [])];

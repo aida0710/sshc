@@ -1,16 +1,17 @@
 import type { CSSProperties } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { chosenOption, customAccent, presetAccents, type AccentOption } from "../theme/accent";
+import { chosenOption, customAccent, presetAccents, type Accent, type AccentOption } from "../theme/accent";
 import { parseAccentColor } from "../theme/accentColor";
-import { useAccent } from "../theme/accentContext";
+import { accentChoiceOf, useAccent, withAccent } from "../theme/accentContext";
 import { useTheme } from "../theme/context";
-import { themeAttributes, themeLabel, themes, type Theme } from "../theme/theme";
+import { defaultTheme, isTheme, themeAttributes, themeLabel, themes, type Theme } from "../theme/theme";
 import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { CustomAccentColor } from "./CustomAccentColor";
 import { SettingsSection } from "./SettingsSection";
 import { FieldRow } from "../ui/FieldRow";
+import { standardPresetId, updatePreset, useSettings, type SettingsPreset } from "./settingsStore";
 
 const accentLabelKeys: Record<AccentOption, MessageKey> = {
   lavender: "appearance.accent.lavender",
@@ -30,12 +31,28 @@ function accentColorOnScreen(): string {
   return parseAccentColor(getComputedStyle(document.documentElement).getPropertyValue("--ui-accent")) ?? "#6550d0"; // palette-exempt
 }
 
-// The look of the app: the theme, kept in this browser like the Menu's switch,
-// and the accent colour, kept in sshc's metadata so every machine shows it.
-export function AppearanceSettingsSection({ showHeading }: { showHeading: boolean }) {
+// The look of the app in the preset being edited: the theme and the accent colour. While it is the preset this
+// machine uses, the screen shows each choice at once; another preset's choices only show on the machines that
+// use it.
+export function AppearanceSettingsSection({ presetId, showHeading }: { presetId: string; showHeading: boolean }) {
   const t = useTranslate();
-  const { theme, setTheme } = useTheme();
-  const { accent, customColor, chooseAccent, previewCustomColor, chooseCustomColor } = useAccent();
+  const settingsDocument = useSettings().document;
+  const preset: SettingsPreset = settingsDocument?.presets.find((candidate) => candidate.id === presetId) ?? { id: presetId };
+  const editsThisMachine = presetId === (settingsDocument?.presetInUse ?? standardPresetId);
+  const themeOnScreen = useTheme();
+  const accentOnScreen = useAccent();
+  const storedTheme = preset.appearance?.theme;
+  const theme: Theme = editsThisMachine ? themeOnScreen.theme : isTheme(storedTheme) ? storedTheme : defaultTheme;
+  const setTheme = editsThisMachine ? themeOnScreen.setTheme : (next: Theme) => {
+    void updatePreset(presetId, (current) => ({ ...current, appearance: { ...current.appearance, theme: next } })).catch(() => undefined);
+  };
+  const { accent, customColor, chooseAccent, previewCustomColor, chooseCustomColor } = editsThisMachine ? accentOnScreen : {
+    ...accentChoiceOf(preset),
+    chooseAccent: (next: Accent) => updatePreset(presetId, (current) => withAccent(current, { accent: next, customColor: null })),
+    chooseCustomColor: (color: string) => updatePreset(presetId, (current) => withAccent(current, { accent: accentChoiceOf(current).accent, customColor: color })),
+    // Another preset's colour is not put on this screen while it is chosen.
+    previewCustomColor: () => undefined,
+  };
   const chosen = chosenOption({ accent, customColor });
   const saving = useAsyncOperation();
   const describeFailure = { describe: () => t("appearance.accentSaveFailed") };

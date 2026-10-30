@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { currentSettings } from "../settings/settingsStore";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -71,12 +73,13 @@ describe("useRemoteVaultUnlock", () => {
 
 describe("useRunTargets", () => {
   it("remembers the chosen engine and falls back to this machine when it is no longer added", async () => {
+    fakeSettingsServer();
     const api = enginesApi();
     const { result } = renderHook(() => useRunTargets({ translate, enabled: true, localVersion: "v1", api }));
     await waitFor(() => expect(result.current.engines).toEqual(["r540"]));
     act(() => result.current.select("r540"));
     expect(result.current.selected).toBe("r540");
-    expect(window.localStorage.getItem("sshc.terminal.run-target.v1")).toBe("r540");
+    expect(currentSettings()?.state.interface?.runTarget).toBe("r540");
 
     await act(async () => { await result.current.remove("r540"); });
     expect(result.current.selected).toBeNull();

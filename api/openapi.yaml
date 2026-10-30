@@ -3334,9 +3334,49 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
-  /api/v1/metadata/terminal-presets:
+  /api/v1/settings:
+    # 設定の画面が読むもの全部。全体の設定・プリセット・同期でつながっているマシンの一覧・
+    # このマシンの今の状態。
+    get:
+      operationId: getSettings
+      responses:
+        "200":
+          description: Global settings, presets, machines and this machine's state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SettingsDocument" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/settings/global:
     put:
-      operationId: setTerminalPresets
+      operationId: setGlobalSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [base, settings]
+              properties:
+                # base は画面が読んだときの値。そのあとに変わっていたら 409 で断る。
+                base: { $ref: "#/components/schemas/GlobalSettings" }
+                settings: { $ref: "#/components/schemas/GlobalSettings" }
+      responses:
+        "200":
+          description: Saved global settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SettingsSaveResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/settings/presets:
+    # 一覧をまるごと置き換える（作る・名前を変える・消す・並べ替える）。先頭は標準のプリセット。
+    put:
+      operationId: setPresets
       requestBody:
         required: true
         content:
@@ -3346,15 +3386,103 @@ paths:
               additionalProperties: false
               required: [base, presets]
               properties:
-                # base は画面が読んだときの一覧。そのあとに変わっていたら 409 で断る。
-                base: { type: array, maxItems: 16, items: { $ref: "#/components/schemas/TerminalPreset" } }
-                presets: { type: array, maxItems: 16, items: { $ref: "#/components/schemas/TerminalPreset" } }
+                base: { type: array, minItems: 1, maxItems: 16, items: { $ref: "#/components/schemas/SettingsPreset" } }
+                presets: { type: array, minItems: 1, maxItems: 16, items: { $ref: "#/components/schemas/SettingsPreset" } }
       responses:
         "200":
-          description: Saved terminal presets
+          description: Saved presets
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SettingsSaveResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/settings/presets/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' } }
+    # 1つのプリセットの中身を置き換える。base はそのプリセットを読んだときの値で、ほかの
+    # プリセットが変わっていても断らない。ID と名前は変えられない（一覧の置き換えで変える）。
+    put:
+      operationId: setPreset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [base, preset]
+              properties:
+                base: { $ref: "#/components/schemas/SettingsPreset" }
+                preset: { $ref: "#/components/schemas/SettingsPreset" }
+      responses:
+        "200":
+          description: Saved preset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SettingsSaveResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/settings/machines/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: '^[0-9a-f]{32}$' } }
+    # どのマシンの設定（名前・使うプリセット・ポート）も変えられる。ポートはそのマシンの次の起動から効く。
+    put:
+      operationId: setMachineSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [base, settings]
+              properties:
+                base: { $ref: "#/components/schemas/MachineSettings" }
+                settings: { $ref: "#/components/schemas/MachineSettings" }
+      responses:
+        "200":
+          description: Saved machine settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SettingsSaveResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+    # 使わなくなったマシンを一覧から外す。このマシン自身は外せない（409 this_machine）。
+    delete:
+      operationId: removeMachine
+      responses:
+        "204": { description: The machine was removed from the list }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/settings/state:
+    # このマシンの今の状態を変える。画面の並び（実行先・SFTP のタブ・ワークスペースの折りたたみなど）は、
+    # 空の値でその名前を消し、エンジンがまとめて後で書く。転送の処理を止めているかは、すぐに書いて
+    # 転送キューに当てる。どちらも送った分だけを変える。
+    put:
+      operationId: setMachineState
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                interface: { $ref: "#/components/schemas/InterfaceState" }
+                transfersStopped: { type: boolean }
+      responses:
+        "204": { description: The state was taken }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -3368,73 +3496,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Metadata" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-  /api/v1/metadata/terminal:
-    put:
-      operationId: setTerminalSettings
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/TerminalSettings" }
-      responses:
-        "200":
-          description: The choice was written
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/SettingsSaveResult" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-  /api/v1/metadata/appearance:
-    put:
-      operationId: setAppearanceSettings
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/AppearanceSettings" }
-      responses:
-        "200":
-          description: The choice was written
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/SettingsSaveResult" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-  /api/v1/metadata/engine:
-    # このマシンの sshc エンジンの設定。同期する metadata.json には無く、同期しない。
-    get:
-      operationId: getEngineSettings
-      responses:
-        "200":
-          description: This machine's engine settings; an omitted item is unset
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/EngineSettings" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-    put:
-      operationId: setEngineSettings
-      # このマシンの sshc エンジンの設定全体を置き換える。省略した項目は未設定へ戻す。
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/EngineSettings" }
-      responses:
-        "200":
-          description: The choice was written
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/SettingsSaveResult" }
-        "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
@@ -5324,6 +5385,8 @@ components:
     RemoteEngineAction:
       type: string
       enum: [stop, restart, update]
+      # 型の名前を付けた定数にする。値だけの Stop・Restart・Update は、ほかの enum と取り違えやすい。
+      x-enum-varnames: [RemoteEngineActionStop, RemoteEngineActionRestart, RemoteEngineActionUpdate]
     RemoteEngineActionRequest:
       type: object
       additionalProperties: false
@@ -6486,6 +6549,8 @@ components:
         accent:
           type: string
           pattern: "^(lavender|blue|sky|pink|mono|#[0-9a-f]{6})$"
+        # system（OS に合わせる）かテーマの名前。省略は既定の dark。知らない名前は既定として描く。
+        theme: { type: string, pattern: '^[a-z0-9-]{1,32}$' }
     # 端末の表示設定。接続単位と全体設定を項目ごとに解決し、未設定項目はアプリの
     # テーマを使う。配色とフォントは名前で参照し、未知の名前は既定値へ戻す。
     TerminalAppearance:
@@ -6535,33 +6600,17 @@ components:
             previousSession: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             home: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             sftp: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
-    # 埋め込みターミナルの設定の組。どの組を使うかはブラウザごとに選ぶ。標準の組は
-    # embeddedTerminal そのもので、ここには無い。settings にはブラウザが当てる設定だけを書く
-    # （startDirectory・maxSessions・scrollbackBytes・verbosity・reconnect・osc52・
-    # localShellProfile は書くと断る）。
-    TerminalPreset:
-      type: object
-      additionalProperties: false
-      required: [id, name, settings]
-      properties:
-        id: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' }
-        name: { type: string, minLength: 1, maxLength: 80 }
-        settings: { $ref: "#/components/schemas/EmbeddedTerminal" }
     Metadata:
       type: object
       additionalProperties: false
-      required: [schemaVersion]
+      required: [schemaVersion, presets]
       properties:
         schemaVersion: { type: integer }
         shortcutPresets: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/ShortcutPreset" } }
-        terminalPresets: { type: array, maxItems: 16, items: { $ref: "#/components/schemas/TerminalPreset" } }
         groupsFile: { type: string }
-        embeddedTerminal: { $ref: "#/components/schemas/EmbeddedTerminal" }
-        # sshc エンジンの設定（ポートと Vault の自動ロック）は、このマシンだけの設定なので
-        # ここには無い。/api/v1/metadata/engine で読み書きする。
-        fileTransfers: { $ref: "#/components/schemas/FileTransferSettings" }
-        backgrounds: { $ref: "#/components/schemas/BackgroundSettings" }
-        appearance: { $ref: "#/components/schemas/AppearanceSettings" }
+        # 全体の設定とプリセット。どのマシンがどのプリセットを使うかは /api/v1/settings にある。
+        settings: { $ref: "#/components/schemas/GlobalSettings" }
+        presets: { type: array, minItems: 1, maxItems: 16, items: { $ref: "#/components/schemas/SettingsPreset" } }
         groups: { type: array, items: { $ref: "#/components/schemas/GroupMetadata" } }
         hosts: { type: array, items: { $ref: "#/components/schemas/HostMetadata" } }
         vpnProfiles: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/VPNProfile" } }
@@ -6774,25 +6823,21 @@ components:
       additionalProperties: false
       properties:
         capacityMiB: { type: integer, minimum: 1, maximum: 1024 }
-    # SFTP転送キューの設定。engine processではなくmetadataが持ち、再起動しても残る。
+    # SFTP転送キューの設定のうちプリセットに入るもの。自動再接続と完了した転送を消すまでは
+    # GlobalFileTransferSettings、処理を止めているかは MachineState にある。
     FileTransferSettings:
       type: object
       additionalProperties: false
       properties:
         maxConcurrent: { type: integer, minimum: 1, maximum: 8 }
-        # 0 または省略時は、完了項目を自動では消さない。
-        clearCompletedAfterSeconds: { type: integer, minimum: 0, maximum: 86400 }
-        # 待機中のjobを新しく開始しない。実行中のものはそのまま終わる。
-        processingStopped: { type: boolean }
         largeFileThresholdBytes: { type: integer, format: int64, minimum: 16777216, maximum: 1073741824 }
         largeFileParallelism: { type: integer, minimum: 1, maximum: 128 }
         largeFileChunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
         # Aggregate engine payload budget. 0 is unlimited.
         speedLimitBytesPerSecond: { type: integer, format: int64, minimum: 0, maximum: 1073741824 }
-        autoReconnect: { type: boolean }
-        maxReconnectAttempts: { type: integer, minimum: 0, maximum: 10 }
         excludePatterns: { type: array, maxItems: 64, items: { type: string, minLength: 1, maxLength: 512 }, description: "Folder contents to exclude. Basenames match at any depth; patterns containing / start at the selected folder. Supports * and ? only. Defaults to no exclusions." }
-    # 埋め込みターミナルの設定。数値の範囲外は読み取りで既定へ戻し、書き込みでは拒否する。
+    # 埋め込みターミナルの設定のうちプリセットに入るもの。再接続・接続のログ・OSC 52 は
+    # GlobalTerminalSettings にある。数値の範囲外は書き込みで断る。
     EmbeddedTerminal:
       type: object
       additionalProperties: false
@@ -6805,23 +6850,11 @@ components:
         retainedTerminals: { type: integer, minimum: 1, maximum: 99 }
         fontSize: { type: integer, minimum: 8, maximum: 32 }
         # 無いときは on。false は利用者が明示的に止めた値なので、省略せず運ぶ。
-        # 接続の途中経過をどこまで端末へ書くか。0 は無言、3 は `ssh -vvv` 相当。
-        #
-        # 接続失敗または切断の理由を UI に表示するためのイベント。
-        # その場で読めなければ意味が無い。
-        verbosity: { type: integer, minimum: 0, maximum: 3 }
-        # 通信切断後の再接続試行回数。0 は再接続しない設定。
-        #
-        # 閉じたコンソールがしばらく残って見えるのは、ここが粘っているあいだで
-        # ある。切りたいユーザーは 0 を置く。間隔は 1・2・5・10・15 秒なので、
-        # 5 回なら諦めるまで 33 秒。
-        reconnect: { type: integer, minimum: 0, maximum: 5 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
         # 無いときは有効。描画不具合やGPU相性問題を利用者が切り分けられるよう、
         # false は明示的な選択として保存する。
         webgl: { type: boolean }
-        osc52: { type: boolean }
         jisYenBackslash: { type: boolean }
         # スマホの入力欄で Enter を押したときに送るか。無いときは改行し、送るのは横のボタンである。
         composerEnterSends: { type: boolean }
@@ -6839,60 +6872,7 @@ components:
         # ローカルシェルの開始ディレクトリ。`~` を維持し、空なら home を使う。
         startDirectory: { type: string, maxLength: 4096 }
         appearance: { $ref: "#/components/schemas/TerminalAppearance" }
-    # 埋め込みターミナルのうち、画面から変えられるもの。
-    #
-    # セクション全体を置き換える。省略項目は未設定として保存する。
-    # 既定値は metadata に保存せず、将来の既定値変更を反映できるようにする。
-    TerminalSettings:
-      type: object
-      additionalProperties: false
-      properties:
-        startDirectory: { type: string, maxLength: 4096 }
-        maxSessions: { type: integer, minimum: 1, maximum: 200 }
-        scrollbackBytes: { type: integer, minimum: 16384, maximum: 4194304 }
-        browserScrollbackLines: { type: integer, minimum: 1000, maximum: 100000 }
-        # retainedTerminals は、表示から外れても裏に残すターミナルの数である。
-        # 戻ったときにスクロールバックを保つ。1つごとにブラウザのメモリを使う。
-        retainedTerminals: { type: integer, minimum: 1, maximum: 99 }
-        # 字の大きさは画面のものであって engine のものではない。PTY は px を
-        # 知らない。ここに置くのは、端末ごとに読みやすい大きさが違うからで、
-        # 指で持つ画面と机の上の画面では同じ数字が別の意味になる。
-        fontSize: { type: integer, minimum: 8, maximum: 32 }
-        # 接続の途中経過をどこまで端末へ書くか。0 は無言、3 は `ssh -vvv` 相当。
-        #
-        # 接続失敗または切断の理由を UI に表示するためのイベント。
-        # その場で読めなければ意味が無い。
-        verbosity: { type: integer, minimum: 0, maximum: 3 }
-        # 通信切断後の再接続試行回数。0 は再接続しない設定。
-        #
-        # 閉じたコンソールがしばらく残って見えるのは、ここが粘っているあいだで
-        # ある。切りたいユーザーは 0 を置く。間隔は 1・2・5・10・15 秒なので、
-        # 5 回なら諦めるまで 33 秒。
-        reconnect: { type: integer, minimum: 0, maximum: 5 }
-        copyOnSelect: { type: boolean }
-        rightClickPaste: { type: boolean }
-        # 無いときは有効。false は明示的にDOM描画を選んだ値である。
-        webgl: { type: boolean }
-        osc52: { type: boolean }
-        jisYenBackslash: { type: boolean }
-        # スマホの入力欄で Enter を押したときに送るか。無いときは改行し、送るのは横のボタンである。
-        composerEnterSends: { type: boolean }
-        # フォントの合字で描くか。無いときは1文字ずつ描く。
-        ligatures: { type: boolean }
-        # プログラムが出す VT320 のステータス行を表示するか。無いときは表示する。
-        # false でも、ステータス行あての出力は画面に出さない。
-        statusLine: { type: boolean }
-        # シェル統合（OSC 133）のコマンドの印、上に残るコマンドの見出し、スクロールバーの
-        # コマンドの印を出すか。どれも無いときは出す。
-        commandMarks: { type: boolean }
-        stickyCommand: { type: boolean }
-        commandScrollbarMarks: { type: boolean }
-        localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
-        appearance: { $ref: "#/components/schemas/TerminalAppearance" }
-    # このマシンの sshc エンジンの設定。同期しない。
-    #
-    # 受け口の番号は engine が起動時に読むので、変えても次に起動するまで効かない。
-    # 画面はそう言う。
+    # Vault の自動ロック。プリセットに入る。省略時は12時間。restartは自動ロックを無効にする。
     VaultAutoLockSettings:
       type: object
       additionalProperties: false
@@ -6909,16 +6889,139 @@ components:
         unit:
           type: string
           enum: [minutes, hours]
-    EngineSettings:
+    # 全体の設定。どのマシン・どのプリセットでも同じ値。
+    GlobalSettings:
       type: object
       additionalProperties: false
       properties:
+        # 画面の言語。省略はブラウザの言語に従う。
+        language: { type: string, enum: [en, ja] }
+        terminal: { $ref: "#/components/schemas/GlobalTerminalSettings" }
+        fileTransfers: { $ref: "#/components/schemas/GlobalFileTransferSettings" }
+        backgrounds: { $ref: "#/components/schemas/BackgroundSettings" }
+        # 更新のお知らせを折りたたんだときのリリース。それより新しいリリースが出るとまた開く。
+        updateNoticeFoldedRelease: { type: string, pattern: '^[0-9A-Za-z.+-]{1,64}$' }
+    GlobalTerminalSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        # 通信切断後の再接続試行回数。0 は再接続しない設定。
+        #
+        # 閉じたコンソールがしばらく残って見えるのは、ここが粘っているあいだで
+        # ある。切りたいユーザーは 0 を置く。間隔は 1・2・5・10・15 秒なので、
+        # 5 回なら諦めるまで 33 秒。
+        reconnect: { type: integer, minimum: 0, maximum: 5 }
+        # 接続の途中経過をどこまで端末へ書くか。0 は無言、3 は `ssh -vvv` 相当。
+        verbosity: { type: integer, minimum: 0, maximum: 3 }
+        # すべてのターミナルで、リモートのプログラムが OSC 52 でクリップボードへ書き込むのを許す。
+        osc52: { type: boolean }
+    GlobalFileTransferSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        # 0 または省略時は、完了項目を自動では消さない。
+        clearCompletedAfterSeconds: { type: integer, minimum: 0, maximum: 86400 }
+        autoReconnect: { type: boolean }
+        maxReconnectAttempts: { type: integer, minimum: 0, maximum: 10 }
+    # プリセット。名前を付けて同期し、マシンごとにどれを使うか選ぶ。標準のプリセット（id default）は
+    # 名前を持たず、消せない。
+    SettingsPreset:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        appearance: { $ref: "#/components/schemas/AppearanceSettings" }
+        terminal: { $ref: "#/components/schemas/EmbeddedTerminal" }
+        fileTransfers: { $ref: "#/components/schemas/FileTransferSettings" }
+        vaultAutoLock: { $ref: "#/components/schemas/VaultAutoLockSettings" }
+        interface: { $ref: "#/components/schemas/InterfaceSettings" }
+    # 画面の操作と並び方のうちプリセットに入るもの。エンジンは使わない。
+    InterfaceSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        # ターミナルがタッチをどう扱うか。省略は自動で判定する。
+        touchMode: { type: string, enum: [touch, mouse] }
+        notificationSound: { $ref: "#/components/schemas/NotificationSound" }
+        keepScreenAwake: { type: boolean }
+        # 使うショートカットのプリセットの id。省略は既定の割り当て。
+        shortcutPreset: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' }
+        # ドラッグで決めた欄の幅（px）。省略は既定の幅。
+        navigationWidth: { type: integer, minimum: 0, maximum: 4096 }
+        connectionListWidth: { type: integer, minimum: 0, maximum: 4096 }
+        connectionGroupsWidth: { type: integer, minimum: 0, maximum: 4096 }
+        homeView: { type: string, enum: [panel, list] }
+    NotificationSound:
+      type: object
+      additionalProperties: false
+      required: [sound, volume]
+      properties:
+        sound: { type: string, enum: [none, gentle, bell, pulse] }
+        volume: { type: integer, minimum: 0, maximum: 100 }
+    # 1台のマシンの設定。同期するが、そのマシンにだけ効く。
+    MachineSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 80 }
+        # 使うプリセットの id。省略か、消えたプリセットなら標準のプリセット。
+        presetId: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' }
         # 指定すると、エンジンはこのポートだけで待ち受け、使用中なら起動に失敗する。省略時は、
         # 前回使ったポート、既定のポート（デスクトップは54447、Androidは54448）の順に試し、
-        # 使用中なら空いているポートを1つ選んで次回のために保存する。ポート番号は秘密情報ではない。
+        # 使用中なら空いているポートを1つ選んで次回のために保存する。次の起動から効く。
         port: { type: integer, minimum: 1024, maximum: 65535 }
-        # 省略時は12時間。restartは自動ロックを無効にする。
-        vaultAutoLock: { $ref: "#/components/schemas/VaultAutoLockSettings" }
+    # そのマシンのエンジンが最後に起動したときの記録。
+    MachineFacts:
+      type: object
+      additionalProperties: false
+      properties:
+        os: { type: string }
+        version: { type: string }
+        startedAt: { type: string, format: date-time }
+    Machine:
+      type: object
+      additionalProperties: false
+      required: [id, settings, facts]
+      properties:
+        id: { type: string, pattern: '^[0-9a-f]{32}$' }
+        settings: { $ref: "#/components/schemas/MachineSettings" }
+        facts: { $ref: "#/components/schemas/MachineFacts" }
+    # 画面の並びと開いているもの。値の形は画面が決め、エンジンは中を読まない。
+    InterfaceState:
+      type: object
+      additionalProperties: false
+      properties:
+        runTarget: { type: string, maxLength: 65536 }
+        sftpPanes: { type: string, maxLength: 65536 }
+        sftpSplitRatio: { type: string, maxLength: 65536 }
+        sftpQueueView: { type: string, maxLength: 65536 }
+        collapsedTerminalWorkspaces: { type: string, maxLength: 65536 }
+        showHiddenTerminalWorkspaces: { type: string, maxLength: 65536 }
+    # 1台のマシンの今の状態。同期するが、そのマシンのエンジンだけが書く。
+    MachineState:
+      type: object
+      additionalProperties: false
+      required: [facts]
+      properties:
+        facts: { $ref: "#/components/schemas/MachineFacts" }
+        # SFTP の転送の処理を止めているか。待機中の転送を新しく始めない。
+        transfersStopped: { type: boolean }
+        interface: { $ref: "#/components/schemas/InterfaceState" }
+    SettingsDocument:
+      type: object
+      additionalProperties: false
+      required: [machineId, global, presets, presetInUse, machines, state]
+      properties:
+        # この画面を出しているエンジンのマシンの id。
+        machineId: { type: string }
+        global: { $ref: "#/components/schemas/GlobalSettings" }
+        presets: { type: array, minItems: 1, maxItems: 16, items: { $ref: "#/components/schemas/SettingsPreset" } }
+        # このマシンが使っているプリセットの id。選んだプリセットが消えていれば default。
+        presetInUse: { type: string }
+        machines: { type: array, items: { $ref: "#/components/schemas/Machine" } }
+        state: { $ref: "#/components/schemas/MachineState" }
     TerminalBackground:
       type: object
       additionalProperties: false

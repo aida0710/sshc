@@ -179,7 +179,7 @@ test("keeps terminal actions compact and exposes terminal settings", async ({ pa
   const menu = terminal.getByRole("menu", { name: "More terminal actions" });
   await expect(menu.getByRole("menuitem", { name: "Quick Commands" })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: "Copy recent terminal context" })).toBeVisible();
-  await expect(menu.getByRole("group", { name: "Global settings" }).getByRole("menuitemcheckbox", { name: "OSC 52" })).toBeVisible();
+  await expect(menu.getByRole("group", { name: "All terminals" }).getByRole("menuitemcheckbox", { name: "OSC 52" })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: "Port forwarding" })).toHaveCount(0);
 
   if (visualDirectory !== undefined) {
@@ -198,8 +198,9 @@ test("keeps terminal actions compact and exposes terminal settings", async ({ pa
 
   await settings.getByRole("tab", { name: "Behaviour", exact: true }).click();
   await expect(settings.getByLabel("Default local shell")).toBeVisible();
-  await expect(settings.getByText("Allow OSC 52 clipboard writes", { exact: true })).toBeVisible();
   await expect(settings.getByText("Send the JIS ¥ key as backslash")).toBeVisible();
+  // OSC 52 applies to every machine and preset, so it is a global setting.
+  await expect(settings.getByText("Allow OSC 52 clipboard writes", { exact: true })).toHaveCount(0);
 
   if (visualDirectory !== undefined) {
     await page.screenshot({ path: join(visualDirectory, "terminal-input-settings-desktop.png"), fullPage: true });

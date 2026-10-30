@@ -1,4 +1,5 @@
 import { expect, openApplication, openLocalShell, test } from "./support/environment";
+import { standardPresetMetadata } from "./support/settings";
 import { drawnRows, terminalKeyboard } from "./support/terminal";
 
 async function run(page: import("@playwright/test").Page, line: string) {
@@ -37,7 +38,7 @@ test("shows what a program writes to the VT320 status line under the screen, one
 
 test("keeps what a program writes to the status line off the screen when the status line is turned off", async ({ page, installation }) => {
   test.skip(process.platform === "win32", "printf and stty are POSIX here");
-  await installation.write("sshc/metadata.json", JSON.stringify({ schemaVersion: 9, embeddedTerminal: { statusLine: false } }));
+  await installation.write("sshc/metadata.json", standardPresetMetadata({ terminal: { statusLine: false } }));
   await openApplication(page, installation);
   await openLocalShell(page);
   const screen = page.getByRole("region", { name: /^Terminal for / });

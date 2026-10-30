@@ -9,22 +9,22 @@ test("saves folder exclusion rules and preserves them while changing other trans
   await expect(page).toHaveURL(/\/settings\/sftp$/);
   const patterns = page.getByRole("textbox", { name: "Exclusion patterns (one per line)", exact: true });
   await patterns.fill(".git\nnode_modules\n*.log");
-  const exclusionsSaved = page.waitForResponse((response) => response.url().endsWith("/api/v1/sftp/transfers/settings") && response.request().method() === "PUT");
+  const exclusionsSaved = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/settings/presets/default" && response.request().method() === "PUT");
   await page.getByRole("button", { name: "Save exclusions", exact: true }).click();
   expect((await exclusionsSaved).status()).toBe(200);
   // Saved rules are no change, so the button waits for the next edit.
   await expect(page.getByRole("button", { name: "Save exclusions", exact: true })).toBeDisabled();
 
-  const speedSaved = page.waitForResponse((response) => response.url().endsWith("/api/v1/sftp/transfers/settings") && response.request().method() === "PUT");
+  const speedSaved = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/settings/presets/default" && response.request().method() === "PUT");
   const speed = page.getByRole("spinbutton", { name: "Speed limit", exact: true });
   await speed.fill("128");
   await speed.press("Enter");
   expect((await speedSaved).status()).toBe(200);
   const metadata = JSON.parse(await installation.read("sshc/metadata.json")) as {
-    fileTransfers: { excludePatterns: string[]; speedLimitBytesPerSecond: number };
+    presets: { fileTransfers?: { excludePatterns?: string[]; speedLimitBytesPerSecond?: number } }[];
   };
-  expect(metadata.fileTransfers.excludePatterns).toEqual([".git", "node_modules", "*.log"]);
-  expect(metadata.fileTransfers.speedLimitBytesPerSecond).toBe(128 * 1024);
+  expect(metadata.presets[0]?.fileTransfers?.excludePatterns).toEqual([".git", "node_modules", "*.log"]);
+  expect(metadata.presets[0]?.fileTransfers?.speedLimitBytesPerSecond).toBe(128 * 1024);
 
   await page.reload();
   await expect(patterns).toHaveValue(".git\nnode_modules\n*.log");

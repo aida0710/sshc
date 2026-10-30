@@ -2,10 +2,8 @@ package application
 
 import (
 	"errors"
-	"reflect"
 
 	"sshc/internal/platform"
-	"sshc/internal/storage"
 	"sshc/internal/terminal"
 )
 
@@ -17,145 +15,84 @@ var (
 	ErrStartDirectoryNotADirectory = errors.New("that path is not a directory")
 )
 
-// TerminalSettings は、埋め込みターミナルのうち画面から変えられるものである。
-type TerminalSettings struct {
-	// StartDirectory は書かれた表記のまま。`~/work` は `~/work` である。
-	StartDirectory string
-	// MaxSessions と ScrollbackBytes は、範囲の外なら書き込みで拒否される。
-	MaxSessions     int
-	ScrollbackBytes int
-	// FontSize は画面が字を描く大きさ。この engine は読むだけで、使わない。
-	FontSize int
-	// Verbosity は、接続の途中経過をどこまで端末へ書くかである。0 は無言。
-	Verbosity int
-	// Reconnect は、輸送が落ちたときに繋ぎ直しを試みる回数である。
-	Reconnect *int
-	// nil は既定の on、false は明示的に止めた値である。
-	CopyOnSelect           *bool
-	RightClickPaste        *bool
-	WebGL                  *bool
-	BrowserScrollbackLines int
-	RetainedTerminals      int
-	OSC52                  bool
-	JISYenBackslash        bool
-	ComposerEnterSends     bool
-	Ligatures              bool
-	StatusLine             *bool
-	CommandMarks           *bool
-	StickyCommand          *bool
-	CommandScrollbarMarks  *bool
-	LocalShellProfile      string
-	// Appearance は、どの接続にも選ばれていないときの見た目である。
-	Appearance TerminalAppearance
+// terminalPresetSettings は、このマシンが使うプリセットのターミナルの設定を、書かれていない節を
+// 空として返す。
+func (s *Service) terminalPresetSettings() EmbeddedTerminal {
+	if terminal := s.EffectiveSettings().Preset.Terminal; terminal != nil {
+		return *terminal
+	}
+	return EmbeddedTerminal{}
 }
 
-// TerminalSettings は、保存されている値をそのまま返す。
-func (s *Service) TerminalSettings() TerminalSettings {
-	stored, _, err := s.metadata.Load()
-	if err != nil || stored.EmbeddedTerminal == nil {
-		return TerminalSettings{}
+// globalTerminalSettings は、全体の設定のうちターミナルのものを、書かれていない節を空として返す。
+func (s *Service) globalTerminalSettings() GlobalTerminalSettings {
+	if terminal := s.EffectiveSettings().Global.Terminal; terminal != nil {
+		return *terminal
 	}
-	return TerminalSettings{
-		StartDirectory:         stored.EmbeddedTerminal.StartDirectory,
-		MaxSessions:            stored.EmbeddedTerminal.MaxSessions,
-		ScrollbackBytes:        stored.EmbeddedTerminal.ScrollbackBytes,
-		FontSize:               stored.EmbeddedTerminal.FontSize,
-		Verbosity:              stored.EmbeddedTerminal.Verbosity,
-		Reconnect:              stored.EmbeddedTerminal.Reconnect,
-		CopyOnSelect:           stored.EmbeddedTerminal.CopyOnSelect,
-		RightClickPaste:        stored.EmbeddedTerminal.RightClickPaste,
-		WebGL:                  stored.EmbeddedTerminal.WebGL,
-		BrowserScrollbackLines: stored.EmbeddedTerminal.BrowserScrollbackLines,
-		RetainedTerminals:      stored.EmbeddedTerminal.RetainedTerminals,
-		OSC52:                  stored.EmbeddedTerminal.OSC52,
-		JISYenBackslash:        stored.EmbeddedTerminal.JISYenBackslash,
-		ComposerEnterSends:     stored.EmbeddedTerminal.ComposerEnterSends,
-		Ligatures:              stored.EmbeddedTerminal.Ligatures,
-		StatusLine:             stored.EmbeddedTerminal.StatusLine,
-		CommandMarks:           stored.EmbeddedTerminal.CommandMarks,
-		StickyCommand:          stored.EmbeddedTerminal.StickyCommand,
-		CommandScrollbarMarks:  stored.EmbeddedTerminal.CommandScrollbarMarks,
-		LocalShellProfile:      stored.EmbeddedTerminal.LocalShellProfile,
-		Appearance:             appearanceOf(stored.EmbeddedTerminal.Appearance),
-	}
+	return GlobalTerminalSettings{}
 }
 
-// appearanceOf は、書かれていない節を空として読む。
-func appearanceOf(stored *TerminalAppearance) TerminalAppearance {
-	if stored == nil {
-		return TerminalAppearance{}
-	}
-	return *stored
+// TerminalVerbosity は、接続の途中経過をどこまでターミナルへ書くかを返す。
+func (s *Service) TerminalVerbosity() int {
+	return s.globalTerminalSettings().Verbosity
 }
 
-// SetTerminalSettings は、節をまるごと置き換える。
-func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, error) {
-	stored, precondition, err := s.metadata.Load()
-	if err != nil {
-		return SaveResult{}, err
+// TerminalReconnects は、繋ぎ直しを何回まで試みるかを返す。
+func (s *Service) TerminalReconnects() int {
+	reconnect := s.globalTerminalSettings().Reconnect
+	if reconnect == nil {
+		return terminal.MaxReconnects
 	}
-	previousStartDirectory := ""
-	if stored.EmbeddedTerminal != nil {
-		previousStartDirectory = stored.EmbeddedTerminal.StartDirectory
-	}
-	// 開始位置は同期元のOSや後から消したdirectoryを指している場合がある。
-	// 別項目の保存まで妨げないよう、値を変更するときだけ現在のマシンで検査する。
-	if settings.StartDirectory != previousStartDirectory {
-		resolved, err := platform.ResolveUnderHome(settings.StartDirectory, s.workspace.Home())
-		if err != nil {
-			return SaveResult{}, err
-		}
-		if resolved != "" {
-			if err := s.directoryExists(resolved); err != nil {
-				return SaveResult{}, err
-			}
-		}
-	}
-	if settings == (TerminalSettings{}) {
-		// 何も設定されていないなら節ごと消す。空の節を残さない。
-		stored.EmbeddedTerminal = nil
-	} else {
-		stored.EmbeddedTerminal = &EmbeddedTerminal{
-			MaxSessions:            settings.MaxSessions,
-			ScrollbackBytes:        settings.ScrollbackBytes,
-			FontSize:               settings.FontSize,
-			Verbosity:              settings.Verbosity,
-			Reconnect:              settings.Reconnect,
-			StartDirectory:         settings.StartDirectory,
-			CopyOnSelect:           settings.CopyOnSelect,
-			RightClickPaste:        settings.RightClickPaste,
-			WebGL:                  settings.WebGL,
-			BrowserScrollbackLines: settings.BrowserScrollbackLines,
-			RetainedTerminals:      settings.RetainedTerminals,
-			OSC52:                  settings.OSC52,
-			JISYenBackslash:        settings.JISYenBackslash,
-			ComposerEnterSends:     settings.ComposerEnterSends,
-			Ligatures:              settings.Ligatures,
-			StatusLine:             settings.StatusLine,
-			CommandMarks:           settings.CommandMarks,
-			StickyCommand:          settings.StickyCommand,
-			CommandScrollbarMarks:  settings.CommandScrollbarMarks,
-			LocalShellProfile:      settings.LocalShellProfile,
-			// 空の節は書かない。 残せば、次に読む者は何か選ばれていると思う。
-			Appearance: storedAppearance(settings.Appearance),
-		}
-	}
+	return terminal.NormaliseReconnects(*reconnect)
+}
 
-	if err := s.metadata.EnsureDirectory(); err != nil {
-		return SaveResult{}, err
+// TerminalLimits は、埋め込みターミナルが開くたびに読む上限を返す。
+func (s *Service) TerminalLimits() terminal.Limits {
+	settings := s.terminalPresetSettings()
+	return terminal.Limits{MaxSessions: settings.MaxSessions, Scrollback: settings.ScrollbackBytes}.Normalise()
+}
+
+// TerminalStartDirectory は、ローカルシェルを始める絶対パスを返す。プリセットの指定がこの
+// マシンに無いディレクトリ（別の OS のパスなど）なら、ホームディレクトリから始める。
+func (s *Service) TerminalStartDirectory() string {
+	home := s.workspace.Home()
+	resolved, err := platform.ResolveUnderHome(s.terminalPresetSettings().StartDirectory, home)
+	if err != nil || resolved == "" {
+		return home
 	}
-	change, err := s.metadata.Change(stored, precondition)
+	if err := s.directoryExists(resolved); err != nil {
+		return home
+	}
+	return resolved
+}
+
+// TerminalLocalShellProfile returns the stable local profile ID of the preset this machine uses.
+func (s *Service) TerminalLocalShellProfile() string {
+	return s.terminalPresetSettings().LocalShellProfile
+}
+
+// checkStartDirectoryChange は、プリセットの開始ディレクトリを変えるとき、このマシンに入れる
+// ディレクトリかを確かめる。変えないときは確かめない。開始ディレクトリは別の OS のマシンや後から
+// 消したディレクトリを指していることがあり、ほかの項目の保存まで止めないためである。
+func (s *Service) checkStartDirectoryChange(previous, next SettingsPreset) error {
+	before, after := "", ""
+	if previous.Terminal != nil {
+		before = previous.Terminal.StartDirectory
+	}
+	if next.Terminal != nil {
+		after = next.Terminal.StartDirectory
+	}
+	if before == after {
+		return nil
+	}
+	resolved, err := platform.ResolveUnderHome(after, s.workspace.Home())
 	if err != nil {
-		return SaveResult{}, err
+		return err
 	}
-	result, err := s.manager.Commit(storage.Request{
-		Operation: "terminal.settings",
-		Changes:   []storage.Change{change},
-	})
-	if err != nil {
-		return SaveResult{}, err
+	if resolved == "" {
+		return nil
 	}
-	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
+	return s.directoryExists(resolved)
 }
 
 // directoryExists は、そこに入れるディレクトリがあることを確かめる。
@@ -173,87 +110,4 @@ func (s *Service) directoryExists(path string) error {
 		return ErrStartDirectoryNotADirectory
 	}
 	return nil
-}
-
-// TerminalStartDirectory は、ローカルシェルを始める絶対パスを返す。
-func (s *Service) TerminalStartDirectory() string {
-	home := s.workspace.Home()
-	resolved, err := platform.ResolveUnderHome(s.TerminalSettings().StartDirectory, home)
-	if err != nil || resolved == "" {
-		return home
-	}
-	if err := s.directoryExists(resolved); err != nil {
-		return home
-	}
-	return resolved
-}
-
-// TerminalLocalShellProfile returns the persisted stable local profile ID.
-func (s *Service) TerminalLocalShellProfile() string {
-	return s.TerminalSettings().LocalShellProfile
-}
-
-// storedAppearance は、何も選ばれていない見た目を「書かれていない」に潰す。
-func storedAppearance(chosen TerminalAppearance) *TerminalAppearance {
-	if chosen.Empty() {
-		return nil
-	}
-	return &chosen
-}
-
-// FileTransferSettings は、保存されている転送キューの設定をそのまま返す。
-func (s *Service) FileTransferSettings() FileTransferSettings {
-	stored, _, err := s.metadata.Load()
-	if err != nil || stored.FileTransfers == nil {
-		return FileTransferSettings{}
-	}
-	return *stored.FileTransfers
-}
-
-// SetFileTransferSettings は、節をまるごと置き換える。
-func (s *Service) SetFileTransferSettings(settings FileTransferSettings) (SaveResult, error) {
-	settings.ExcludePatterns = append([]string(nil), settings.ExcludePatterns...)
-	stored, precondition, err := s.metadata.Load()
-	if err != nil {
-		return SaveResult{}, err
-	}
-	if reflect.DeepEqual(settings, FileTransferSettings{}) {
-		// 既定のままなら節ごと消す。空の節を残さない。
-		stored.FileTransfers = nil
-	} else {
-		stored.FileTransfers = &settings
-	}
-	if err := s.metadata.EnsureDirectory(); err != nil {
-		return SaveResult{}, err
-	}
-	change, err := s.metadata.Change(stored, precondition)
-	if err != nil {
-		return SaveResult{}, err
-	}
-	result, err := s.manager.Commit(storage.Request{
-		Operation: "sftp.transferSettings",
-		Changes:   []storage.Change{change},
-	})
-	if err != nil {
-		return SaveResult{}, err
-	}
-	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
-}
-
-// TerminalReconnects は、繋ぎ直しを何回まで試みるかを返す。
-func (s *Service) TerminalReconnects() int {
-	settings := s.TerminalSettings()
-	if settings.Reconnect == nil {
-		return terminal.MaxReconnects
-	}
-	return terminal.NormaliseReconnects(*settings.Reconnect)
-}
-
-// TerminalLimits は、埋め込みターミナルが開くたびに読む上限を返す。
-func (s *Service) TerminalLimits() terminal.Limits {
-	metadata, _, err := s.metadata.Load()
-	if err != nil {
-		return terminal.DefaultLimits()
-	}
-	return metadata.TerminalLimits()
 }

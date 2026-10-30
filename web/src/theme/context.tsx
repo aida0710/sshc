@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
-import { applyTheme, detectTheme, rememberTheme, resolveTheme, schemeOf, type ColorScheme, type ColorTheme, type Theme } from "./theme";
+import { presetInUse, updatePresetInUse, useSettings } from "../settings/settingsStore";
+import { applyTheme, copyTheme, detectTheme, isTheme, resolveTheme, schemeOf, type ColorScheme, type ColorTheme, type Theme } from "./theme";
 
 type ThemeState = {
   theme: Theme;
@@ -18,9 +19,21 @@ function systemPrefersDark(): boolean {
   return window.matchMedia(darkQuery).matches;
 }
 
+// ThemeProvider draws with the copied theme until the synced settings arrive, then with the theme of the
+// preset this machine uses. While the preset chooses none, the theme on screen stays, so one picked before
+// unlocking, or kept in this browser before settings were synced, is not replaced by the default. A test that
+// passes initial keeps that theme.
 export function ThemeProvider({ children, initial }: { children: ReactNode; initial?: Theme }) {
   const [theme, setThemeState] = useState<Theme>(() => initial ?? detectTheme());
   const [prefersDark, setPrefersDark] = useState<boolean>(() => systemPrefersDark());
+  const chosen = presetInUse(useSettings().document).appearance?.theme;
+  const synced = isTheme(chosen) ? chosen : null;
+
+  useEffect(() => {
+    if (initial !== undefined || synced === null) return;
+    setThemeState(synced);
+    copyTheme(synced);
+  }, [initial, synced]);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
@@ -41,7 +54,9 @@ export function ThemeProvider({ children, initial }: { children: ReactNode; init
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
-    rememberTheme(next);
+    copyTheme(next);
+    // A refused save leaves the theme on screen; the next read of the settings puts the synced one back.
+    void updatePresetInUse((preset) => ({ ...preset, appearance: { ...preset.appearance, theme: next } })).catch(() => undefined);
   }, []);
 
   const value = useMemo<ThemeState>(

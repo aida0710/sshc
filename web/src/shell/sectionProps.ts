@@ -5,7 +5,6 @@ import type { FileTarget } from "../explorer/ConfigExplorer";
 import type { Section } from "../routing/sectionRoute";
 import type { InspectorContent } from "../ui/Inspector";
 import type { TerminalSessionsState } from "../terminal/sessions";
-import type { TerminalSettings } from "../api/settings";
 import type { PasswordVaultStatus } from "../api/vault";
 import type { HostEntry } from "../api/config";
 
@@ -48,7 +47,6 @@ export type Shell = {
   onOpenSSHSession: (alias: string, cwd?: string) => Promise<void>;
   // SFTP locations can name an SSH connection or the engine filesystem.
   onOpenTerminal: (alias: string, cwd?: string) => Promise<void>;
-  onTerminalSettingsChange: (settings: TerminalSettings) => Promise<void>;
 };
 
 export type Declared = {

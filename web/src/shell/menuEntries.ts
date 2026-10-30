@@ -23,14 +23,15 @@ function sectionItem(section: Section, description: MessageKey): MenuItem {
 }
 
 const settingsDescriptions: Record<SettingsPage, MessageKey> = {
+  General: "menu.generalDescription",
   Appearance: "menu.appearanceDescription",
-  Engine: "menu.engineDescription",
   Terminal: "menu.terminalDescription",
   SFTP: "menu.sftpDescription",
   Shortcuts: "menu.shortcutsDescription",
   Notifications: "menu.notificationsDescription",
+  Vault: "menu.vaultDescription",
+  Machines: "menu.machinesDescription",
   Connections: "menu.connectionsDescription",
-  Password: "menu.passwordDescription",
 };
 
 const configuration: MenuGroup = {

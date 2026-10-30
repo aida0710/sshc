@@ -23,7 +23,7 @@ const hosts: HostEntry[] = [
 
 function metadataWithOrphan(): Metadata {
   return {
-    schemaVersion: 2,
+    schemaVersion: 10, presets: [{ id: "default" }],
     hosts: [
       {
         identity: { path: "config", alias: "old-build" },
@@ -39,7 +39,7 @@ function metadataWithOrphan(): Metadata {
 describe("OrphanPanel", () => {
   it("renders nothing when no entry is orphaned", () => {
     const metadata: Metadata = {
-      schemaVersion: 2,
+      schemaVersion: 10, presets: [{ id: "default" }],
       hosts: [{ identity: { path: "config", alias: "bastion" }, tags: ["kept"] }],
     };
     const { container } = render(<OrphanPanel metadata={metadata} hosts={hosts} onSave={vi.fn()} />);

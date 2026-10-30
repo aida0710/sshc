@@ -1,7 +1,7 @@
 import type { PaneEdge } from "../terminal/splitView/layout";
 import { SplitGroupList } from "../terminal/splitView/SplitGroupList";
 import type { SplitViewController } from "../terminal/splitView/useSplitView";
-import { useBindings } from "../keyconfig/bindings";
+import { useBindings } from "../keyconfig/presets";
 import {
   useSyncExternalStore,
   type MouseEvent,

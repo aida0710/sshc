@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { LocalShellProfileList, SettingsApi, TerminalSettings } from "../api/settings";
+import type { LocalShellProfileList } from "../api/settings";
 import type { OpenTerminalSessionRequest, TerminalSessionsApi } from "../api/terminalSessions";
 import type { TerminalWorkspace } from "../api/terminalWorkspaces";
 import type { Section } from "../routing/sectionRoute";
@@ -8,7 +8,6 @@ import type { TerminalSessionsState } from "./sessions";
 import { topSessionId } from "./workspaceGrouping";
 
 type TerminalWorkspaceControllerOptions = {
-  api: Pick<SettingsApi, "terminalSettings">;
   // shells is the terminal API of the engine in use: its shells are the ones
   // a new session can open, on this machine or on the run target.
   shells: Pick<TerminalSessionsApi, "shellProfiles">;
@@ -24,7 +23,6 @@ type TerminalWorkspaceControllerOptions = {
 };
 
 export function useTerminalWorkspaceController({
-  api,
   shells,
   terminalSessions,
   workspaces,
@@ -34,7 +32,6 @@ export function useTerminalWorkspaceController({
   navigate,
   closeNavigation,
 }: TerminalWorkspaceControllerOptions) {
-  const [settings, setSettings] = useState<TerminalSettings>({});
   const [localShellProfiles, setLocalShellProfiles] = useState<LocalShellProfileList["profiles"]>([]);
   const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget });
   const { selectSession: setActiveSessionId } = splitView;
@@ -45,20 +42,6 @@ export function useTerminalWorkspaceController({
   // again when the person comes back to it. A run target's selection starts
   // empty in useSplitView, so what is recorded here is always that target's.
   const lastSessionByRunTarget = useRef(new Map<string | null, string>());
-
-  useEffect(() => {
-    if (!enabled) return;
-    let active = true;
-    void api
-      .terminalSettings()
-      .then((next) => {
-        if (active) setSettings(next);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [api, enabled, section]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -202,7 +185,6 @@ export function useTerminalWorkspaceController({
 
   return {
     splitView,
-    settings,
     localShellProfiles,
     activeSessionId,
     terminalScreenMounted,
@@ -212,6 +194,5 @@ export function useTerminalWorkspaceController({
     openSSHSession,
     duplicateSession,
     reorderSessions: setSessionOrder,
-    setSettings,
   };
 }

@@ -18,9 +18,9 @@ test("opens, reloads, and traverses section URLs", async ({ page, installation }
   await expect(page).toHaveURL(/\/keys$/);
   await expect(page.getByRole("heading", { name: "Keys", level: 2 })).toBeVisible();
 
-  await openSettingsPage(page, "Engine");
-  await expect(page).toHaveURL(/\/settings\/engine$/);
-  await expect(page.getByRole("heading", { name: "Engine", level: 2 })).toBeVisible();
+  await openSettingsPage(page, "Machines");
+  await expect(page).toHaveURL(/\/settings\/machines$/);
+  await expect(page.getByRole("heading", { name: "Machines", level: 2 })).toBeVisible();
 
   await openSection(page, "History");
   await expect(page).toHaveURL(/\/history$/);
@@ -28,8 +28,8 @@ test("opens, reloads, and traverses section URLs", async ({ page, installation }
   await expect(page).toHaveURL(/\/menu$/);
   await expect(page.getByRole("heading", { name: "Menu", level: 2 })).toBeVisible();
   await page.goBack();
-  await expect(page).toHaveURL(/\/settings\/engine$/);
-  await expect(page.getByRole("heading", { name: "Engine", level: 2 })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings\/machines$/);
+  await expect(page.getByRole("heading", { name: "Machines", level: 2 })).toBeVisible();
 
   await page.goForward();
   await expect(page).toHaveURL(/\/menu$/);

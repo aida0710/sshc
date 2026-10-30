@@ -8,8 +8,8 @@ import { Notice } from "../ui/surface";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
-import { readStoredJSON, writeStoredJSON } from "../ui/browserStorage";
-import { localStorageKeys } from "../ui/browserStorageKeys";
+import { keepMachineStateJSON, readMachineStateJSON } from "../settings/machineState";
+import { setTransfersStopped } from "../settings/settingsStore";
 import { menuItemClass, menuSurface } from "../ui/menuStyle";
 import { settingsPagePath } from "../settings/settingsRoute";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
@@ -32,7 +32,7 @@ function clampHeight(value: number): number {
 // Desktop size and folded state persist across directories. On mobile, the
 // dock always remains compact and its details open in a separate sheet.
 function restoreView(): QueueView {
-  const raw = readStoredJSON(localStorageKeys.sftpQueueView, {});
+  const raw = readMachineStateJSON("sftpQueueView", {});
   const stored = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
   return {
     collapsed: stored.collapsed === undefined ? true : stored.collapsed === true,
@@ -41,7 +41,7 @@ function restoreView(): QueueView {
 }
 
 function rememberView(view: QueueView): void {
-  writeStoredJSON(localStorageKeys.sftpQueueView, view);
+  keepMachineStateJSON("sftpQueueView", view);
 }
 
 // The transfer settings live in Settings > SFTP. Without a way to navigate
@@ -195,7 +195,11 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
           type="button"
           aria-pressed={processingStopped}
           aria-label={t(processingStopped ? "sftp.manager.startProcessing" : "sftp.manager.stopProcessing")}
-          onClick={() => void runControl(() => sftpTransferManager.applySettings({ processingStopped: !processingStopped }))}
+          onClick={() => void runControl(async () => {
+            // Stopping is this machine's state, not a transfer setting; the queue's next listing shows it.
+            await setTransfersStopped(!processingStopped);
+            await sftpTransferManager.reconcile();
+          })}
           className={`flex size-11 shrink-0 items-center justify-center rounded md:size-8 mobile-layout:size-11 ${processingStopped ? "text-notice-ink" : "text-ink-muted"} hover:bg-select-fill focus:bg-select-fill focus:outline-none`}
         >
           <Icon name={processingStopped ? "play" : "pause"} className="size-4" />

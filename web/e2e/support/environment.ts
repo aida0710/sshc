@@ -283,7 +283,7 @@ export async function openSection(page: Page, name: string): Promise<void> {
 
 export async function openSettingsPage(
   page: Page,
-  name: "Engine" | "Terminal" | "Notifications" | "Open connections" | "Master password",
+  name: "General" | "Terminal" | "SFTP" | "Notifications" | "Vault" | "Machines" | "Open connections",
 ): Promise<void> {
   await expect(sessionStatus(page)).toContainText("Local session active");
   const navigation = page.getByRole("navigation", { name: "Primary" });

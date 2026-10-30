@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
-import type { DescribableControlProps } from "../ui/describeControl";
-import { sizedControl } from "../ui/form";
-import { isImeComposing } from "../ui/imeComposition";
+import type { DescribableControlProps } from "./describeControl";
+import { sizedControl } from "./form";
+import { isImeComposing } from "./imeComposition";
 
-// A whole number typed into the transfer settings, shown in `scale` units
+// A whole number typed into a settings page, shown in `scale` units
 // (a MiB setting has a scale of 1 MiB) and committed in the setting's own
 // unit. A value outside min and max, counted in the shown unit, is put back.
 //
 // It is one input with an optional unit after it, so a form row can show one
 // alone or several inside a sentence. label names the input for screen readers;
 // the row shows the visible name. A row's description is passed on to the input.
-export function TransferIntegerSetting({ label, value, min, max, scale = 1, unit, widthClass, onCommit, ...description }: {
+export function IntegerSetting({ label, value, min, max, scale = 1, unit, widthClass, onCommit, ...description }: {
   label: string;
   value: number;
   min: number;

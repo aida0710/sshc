@@ -8,42 +8,18 @@
 // its default; nothing is carried over between browser storage keys.
 // Keys named before this rule keep their names, because renaming one would
 // reset that value in every browser.
+//
+// Settings are not kept here: they are synced through the engine (settingsStore.ts).
 
 // localStorage outlives the tab and is shared by every tab of the origin.
 export const localStorageKeys = {
+  // A copy of the theme and the language in the synced settings, read before the engine answers so the first
+  // screen is drawn in them. The synced settings are what counts; these only follow them.
   theme: "sshc.theme",
   locale: "sshc.language",
   browserRegistration: "sshc.browser.registration.v1",
-  navigationWidth: "sshc.navigation.width",
-  // v2: the width of the connection list alone. v1 also held the groups column, which now sits beside the card.
-  connectionListWidth: "sshc.connections.list-width.v2",
-  connectionGroupsWidth: "sshc.connections.groups-width.v1",
-  quickConnectView: "sshc.home.quick-connect-view",
-  // The SFTP workspace layout is one document: the panes from left to right,
-  // each with its tabs and the position of the selected tab. Anything else
-  // stored under it restores as a single blank pane.
-  sftpPanes: "sshc.sftp.panes.v1",
-  sftpSplitRatio: "sshc.sftp.splitRatio",
-  sftpQueueView: "sshc.sftp.queueView",
-  shortcutBindings: "sshc.shortcuts.v1",
-  shortcutPresetSelection: "sshc.shortcuts.selected.v1",
-  notificationSound: "sshc.terminal-notification-sound.v1",
-  // The terminal workspaces folded in the sidebar tree, by engine workspace ID.
-  collapsedTerminalWorkspaces: "sshc.terminal.collapsed-workspaces.v1",
-  // "true" while hidden terminal workspaces are drawn in the tree as well.
-  showHiddenTerminalWorkspaces: "sshc.terminal.show-hidden-workspaces.v1",
-  // "true" while this browser keeps the screen on with a terminal shown.
-  keepScreenAwake: "sshc.terminal.keep-screen-awake.v1",
-  // The terminal preset this browser uses (TerminalPreset.id), or "default" for the standard set.
-  terminalPresetSelection: "sshc.terminal.preset.v1",
-  // How terminals take touch in this browser: "auto", "touch" or "mouse".
-  touchMode: "sshc.terminal.touch-mode.v1",
-  // The SSH alias of the engine whose terminals are shown; empty for this machine.
-  runTarget: "sshc.terminal.run-target.v1",
   // The update job whose result dialog this browser has shown, so it opens once.
   updateShownResult: "sshc.update.shown-result.v1",
-  // The release whose notice under the version was folded; a newer one unfolds it.
-  updateFoldedRelease: "sshc.update.folded-release.v1",
 } as const;
 
 // sessionStorage belongs to one tab and ends with it.
