@@ -297,12 +297,19 @@ func replaceFile(oldPath, newPath string) error {
 	return renamePrivateFileHandle(source, destinationParent, filepath.Base(newAbsolute))
 }
 
+// fileRenameInformation は FILE_RENAME_INFORMATION と FILE_RENAME_INFORMATION_EX の両方の形である。
+// 先頭は ReplaceIfExists（BOOLEAN）と Flags（ULONG）の共用体で、FileRenameInformation は
+// 最初の1バイトだけを読む。
 type fileRenameInformation struct {
-	ReplaceIfExists uint32
-	RootDirectory   windows.Handle
-	FileNameLength  uint32
-	FileName        [1]uint16
+	Flags          uint32
+	RootDirectory  windows.Handle
+	FileNameLength uint32
+	FileName       [1]uint16
 }
+
+// fileRenameInformationEx は FILE_INFORMATION_CLASS の FileRenameInformationEx である。
+// golang.org/x/sys/windows に定数が無い。
+const fileRenameInformationEx = 65
 
 func movePrivateFile(oldPath, newPath string) error {
 	return movePrivateFileWith(oldPath, newPath, nil)
@@ -361,6 +368,18 @@ func movePrivateFileWith(oldPath, newPath string, afterAuthenticate func(*os.Fil
 	return renamePrivateFileHandle(sourceHandle, destinationParent, filepath.Base(newAbsolute))
 }
 
+// renamePrivateFileHandle は、source を destinationParent の下の destinationName へ移し、
+// 同じ名前のファイルがあれば置き換える。
+//
+// 従来の FileRenameInformation は、置き換える先を誰かが開いていると、相手が削除の共有を
+// 許していても Access is denied で断る。保存のあいだにも、画面の読み直しや Windows Defender の
+// 検査が metadata.json などを開くので、それだけでは設定の保存がその時々で断られる。そこで
+// Access is denied のときは、POSIX の置き換え（FILE_RENAME_POSIX_SEMANTICS）でやり直す。開いている
+// 人は前の中身を読み続け、名前は新しいファイルを指す。
+//
+// POSIX の置き換えを先に使わないのは、古い Windows やファイルシステム（FAT、exFAT、SMB の共有など）
+// が持たず、そのとき何で断るかが決まっていないためである。Rust の std::fs::rename と同じく、
+// やり直しも通らなければ最初の理由を返す。
 func renamePrivateFileHandle(source, destinationParent windows.Handle, destinationName string) error {
 	nameUTF16, err := windows.UTF16FromString(destinationName)
 	if err != nil {
@@ -371,18 +390,26 @@ func renamePrivateFileHandle(source, destinationParent windows.Handle, destinati
 	bufferSize := int(unsafe.Offsetof(layout.FileName)) + nameLength
 	buffer := make([]byte, bufferSize)
 	information := (*fileRenameInformation)(unsafe.Pointer(&buffer[0]))
-	information.ReplaceIfExists = 1
+	information.Flags = 1 // ReplaceIfExists
 	information.RootDirectory = destinationParent
 	information.FileNameLength = uint32(nameLength)
 	copy(unsafe.Slice(&information.FileName[0], nameLength/2), nameUTF16[:len(nameUTF16)-1])
 	status := windows.IO_STATUS_BLOCK{}
-	return windowsacl.MapNoReparseError(windows.NtSetInformationFile(
+	renameError := windowsacl.MapNoReparseError(windows.NtSetInformationFile(
 		source,
 		&status,
 		&buffer[0],
 		uint32(bufferSize),
 		windows.FileRenameInformation,
 	))
+	if !errors.Is(renameError, windows.ERROR_ACCESS_DENIED) {
+		return renameError
+	}
+	information.Flags = windows.FILE_RENAME_REPLACE_IF_EXISTS | windows.FILE_RENAME_POSIX_SEMANTICS
+	if windows.NtSetInformationFile(source, &status, &buffer[0], uint32(bufferSize), fileRenameInformationEx) != nil {
+		return renameError
+	}
+	return nil
 }
 
 type fileDispositionInformation struct {
