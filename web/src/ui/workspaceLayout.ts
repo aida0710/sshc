@@ -6,18 +6,19 @@ import type { CSSProperties } from "react";
 
 export const workspaceHeaderLayout = "shrink-0 px-3 py-3 md:px-[26px] md:pb-[22px] md:pt-5";
 
-// The list column is --list-width wide, set by the page (Connections lets it be dragged wider).
-export function workspaceColumnsLayout(compact: boolean): string {
+// The list column is --list-width wide, set by the page (Connections lets it be dragged wider). listAlone
+// gives the list the whole width while nothing is open from it, so the page is not half empty.
+export function workspaceColumnsLayout(compact: boolean, { listAlone = false }: { listAlone?: boolean } = {}): string {
   return `grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] border-t border-line ${
-    compact ? "" : "md:grid-cols-[minmax(16rem,var(--list-width))_minmax(0,1fr)]"
+    compact || listAlone ? "" : "md:grid-cols-[minmax(16rem,var(--list-width))_minmax(0,1fr)]"
   }`;
 }
 
 // fixedListWidthStyle is the list column of a page whose list is not resized, 280px as in the design.
 export const fixedListWidthStyle = { "--list-width": "280px" } as CSSProperties;
 
-export function workspaceListPane(compact: boolean, detailOpen: boolean): string {
-  return `relative min-h-0 flex-col ${compact ? "" : "border-r border-line md:flex"} ${detailOpen ? "hidden" : "flex"}`;
+export function workspaceListPane(compact: boolean, detailOpen: boolean, { listAlone = false }: { listAlone?: boolean } = {}): string {
+  return `relative min-h-0 flex-col ${compact ? "" : `${listAlone ? "" : "border-r border-line"} md:flex`} ${detailOpen ? "hidden" : "flex"}`;
 }
 
 // The open item scrolls on its own. On a phone the bottom bar floats over its end, so the end is padded to

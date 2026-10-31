@@ -23,6 +23,7 @@ export function SnippetList({
   empty,
   onRetry,
   onOpen,
+  columns = false,
 }: {
   libraryState: SnippetLibraryState;
   snippets: Snippet[];
@@ -31,6 +32,8 @@ export function SnippetList({
   empty: ReactNode;
   onRetry: () => void;
   onOpen: (snippet: Snippet) => void;
+  // columns は、一覧がページの幅を全部使うとき（何も開いていないとき）に、1行を名前・コマンド・説明の列にする。
+  columns?: boolean;
 }) {
   const t = useTranslate();
   const [filter, setFilter] = useState("");
@@ -72,10 +75,11 @@ export function SnippetList({
                   type="button"
                   aria-current={opened ? "true" : undefined}
                   onClick={() => onOpen(snippet)}
-                  className={`flex w-full min-w-0 flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left transition-colors duration-150 ${opened ? "bg-select-fill" : "hover:bg-hover"}`}
+                  className={`w-full min-w-0 rounded-lg px-2.5 py-2 text-left transition-colors duration-150 ${columns ? "grid grid-cols-[minmax(0,16rem)_minmax(0,28rem)_minmax(0,1fr)] items-center gap-4" : "flex flex-col gap-0.5"} ${opened ? "bg-select-fill" : "hover:bg-hover"}`}
                 >
                   <span className="truncate text-[13.5px] text-ink">{snippet.name}</span>
                   <code className="truncate font-mono text-[11.5px] text-ink-faint">{snippet.command.split("\n")[0]}</code>
+                  {columns ? <span className="truncate text-[12.5px] text-ink-muted">{snippet.description}</span> : null}
                 </button>
               </li>
             );
