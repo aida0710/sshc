@@ -2,8 +2,9 @@ package application
 
 import "sshc/internal/storage"
 
-// metadata.json を書く道。設定・接続・VPN などの保存は、ここを通して metadata 全体を1つの変更として
-// 書く。読んだときの前提（precondition）と違えば、storage が書かずに断る。
+// metadata.json を書く道。metadata 全体を1つの変更として書き、読んだときの前提（precondition）と
+// 違えば storage が書かずに断る。config ファイルや画像と同じ変更で書く保存（plan.go、fileops.go、
+// backgrounds.go の画像の改名と削除）は、ここを通らず metadata.Change で変更を作る。
 
 // changeMetadata は、ほかの保存と順に、今の metadata を読んで change で変え、operation として書く。
 // change が error を返したら書かない。画面が読んだときの値（base）と比べて断るのは change の役目。
