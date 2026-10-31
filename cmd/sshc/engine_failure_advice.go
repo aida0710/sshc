@@ -5,13 +5,17 @@ import (
 	"io"
 )
 
-// engine と vault にまつわる失敗のうち、どのコマンドでも利用者が次にすることが
+// engine・vault・workspace にまつわる失敗のうち、どのコマンドでも利用者が次にすることが
 // 同じものの案内。文面をここだけに置き、各コマンドの switch では書かない。
 // engine が動いていない場合の文は engineNotRunning が持つ。
 const (
 	vaultMissingAdvice       = "no vault exists; run sshc vault create"
 	vaultLockedAdvice        = "the vault is locked; run sshc vault unlock"
 	engineIncompatibleAdvice = "the CLI and running engine are incompatible; update whichever is older and restart it"
+	// pendingTransactionAdvice は、中断した変更の記録が残っていて書き込めないときの案内。
+	// 待っても消えず、片付ける操作は Web UI の History にしか無いので、そこへの行き方を言う。
+	pendingTransactionAdvice = "an interrupted change must be completed or rolled back first; " +
+		"run sshc open, then choose Complete or Roll back under Interrupted transactions in History"
 	// engineInvalidResponseAdvice は、engine の応答を読めなかったときの案内。engineFailureAdvice
 	// には入れず、この案内を出すコマンド（sync、vpn）が自分の switch から使う。
 	engineInvalidResponseAdvice = "the running engine returned an invalid response; check that the CLI and engine versions match"
@@ -29,6 +33,8 @@ func engineFailureAdvice(kind string) (string, bool) {
 		return vaultMissingAdvice, true
 	case "vault_locked":
 		return vaultLockedAdvice, true
+	case "workspace_pending_transaction", "sync_pending_transaction":
+		return pendingTransactionAdvice, true
 	default:
 		return "", false
 	}

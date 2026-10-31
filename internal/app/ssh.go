@@ -400,6 +400,9 @@ type CLIConnectionOptions struct {
 	// VPNRoute は、名前の付いたVPN経路を通して接続先へ繋ぐ。nil なら、VPNを
 	// 指定した接続は素の回線へ落とさずに断る。
 	VPNRoute func(ctx context.Context, profile, address string) (net.Conn, error)
+	// DescribeFailure は、Open が端末へ書く接続の失敗の文を、CLI の案内に置き換える。
+	// nil なら元の失敗の文をそのまま書く（sshclient.Dialer.DescribeFailure）。
+	DescribeFailure func(error) error
 }
 
 // NewCLIConnection は、ホームディレクトリひとつからコマンドライン用の接続を組む。
@@ -433,6 +436,7 @@ func NewCLIConnection(options CLIConnectionOptions) (CLIConnection, error) {
 		passphrase: stored, password: password, oneTimeCode: oneTimeCode,
 		vpnRoute: options.VPNRoute,
 	})
+	parts.dialer.DescribeFailure = options.DescribeFailure
 	configuredVerbosity := parts.dialer.Verbosity
 	// `sshc ssh` はブラウザの接続中表示を持たないため、最低限の接続段階を
 	// 常に端末へ残す。詳細度を上げた設定はそのまま尊重する。

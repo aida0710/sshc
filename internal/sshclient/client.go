@@ -45,6 +45,12 @@ type Dialer struct {
 	// 一度だけ読まない。設定は走っているあいだに変えられる。捕まえて
 	// しまうと、変えたユーザーは engine を起動し直すまで何も変わらないと感じる。
 	Verbosity func() connectionlog.Level
+	// DescribeFailure は、接続できなかった理由を端末へ書く前に、利用者向けの文へ
+	// 置き換える。nil なら元の失敗の文をそのまま書く。
+	//
+	// `sshc ssh` は CLI の英語の案内を、端末に書くこの文で出す。Open は握手を待たずに
+	// 返るので、呼び出し側が Open の戻り値で失敗を受け取って書き換えることはできない。
+	DescribeFailure func(error) error
 }
 
 // Open は、この alias のセッションをひとつ返す。
@@ -75,7 +81,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 
 	client, closers, err := d.chain(ctx, target, prompt, trace)
 	if err != nil {
-		session.fail(fmt.Errorf("sshc: %w", err))
+		session.fail(fmt.Errorf("sshc: %w", d.describeFailure(err)))
 		return
 	}
 	closers = append(closers, client)
@@ -97,7 +103,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	remote, err := client.NewSession()
 	if err != nil {
 		trace.say(connectionlog.Detailed, "SSHセッションチャンネルの要求が失敗しました（%s）：%v", connectionlog.Elapsed(trace.since(channelStarted)), err)
-		session.fail(fmt.Errorf("sshc: %w", err))
+		session.fail(fmt.Errorf("sshc: %w", d.describeFailure(err)))
 		closeAll(closers)
 		return
 	}
@@ -115,7 +121,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	}
 
 	if err := d.start(remote, target, session); err != nil {
-		session.fail(fmt.Errorf("sshc: %w", err))
+		session.fail(fmt.Errorf("sshc: %w", d.describeFailure(err)))
 		closeAll(closers)
 		return
 	}
@@ -527,6 +533,14 @@ func (d Dialer) openWithTimeout(
 		return nil, nil, err
 	}
 	return conn, startConnectDeadline(ctx, timeout-time.Since(started), timeout), nil
+}
+
+// describeFailure は、DescribeFailure があれば、それで接続の失敗を利用者向けの文にする。
+func (d Dialer) describeFailure(err error) error {
+	if d.DescribeFailure == nil {
+		return err
+	}
+	return d.DescribeFailure(err)
 }
 
 // ExplainedError は、利用者向けの文を持つ失敗である。接続ログには、元の失敗の
