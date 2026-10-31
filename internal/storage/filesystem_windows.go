@@ -307,8 +307,8 @@ type fileRenameInformation struct {
 	FileName       [1]uint16
 }
 
-// fileRenameInformationEx は FILE_INFORMATION_CLASS の FileRenameInformationEx（Windows 10 1709 から）
-// である。golang.org/x/sys/windows に定数が無い。
+// fileRenameInformationEx は FILE_INFORMATION_CLASS の FileRenameInformationEx である。
+// golang.org/x/sys/windows に定数が無い。
 const fileRenameInformationEx = 65
 
 func movePrivateFile(oldPath, newPath string) error {
@@ -371,12 +371,15 @@ func movePrivateFileWith(oldPath, newPath string, afterAuthenticate func(*os.Fil
 // renamePrivateFileHandle は、source を destinationParent の下の destinationName へ移し、
 // 同じ名前のファイルがあれば置き換える。
 //
-// POSIX の置き換え（FILE_RENAME_POSIX_SEMANTICS）を先に使う。従来の FileRenameInformation は、
-// 置き換える先を誰かが開いていると、相手が削除の共有を許していても Access is denied で断る。
-// 保存のあいだにも、画面の読み直しや Windows Defender の検査が metadata.json などを開くので、
-// 従来の方式だけでは設定の保存がその時々で断られる。POSIX の置き換えなら、開いている人は
-// 前の中身を読み続け、名前は新しいファイルを指す。対応していないファイルシステム（FAT、exFAT など）と古い Windows では
-// 従来の方式へ戻る。
+// 従来の FileRenameInformation は、置き換える先を誰かが開いていると、相手が削除の共有を
+// 許していても Access is denied で断る。保存のあいだにも、画面の読み直しや Windows Defender の
+// 検査が metadata.json などを開くので、それだけでは設定の保存がその時々で断られる。そこで
+// Access is denied のときは、POSIX の置き換え（FILE_RENAME_POSIX_SEMANTICS）でやり直す。開いている
+// 人は前の中身を読み続け、名前は新しいファイルを指す。
+//
+// POSIX の置き換えを先に使わないのは、古い Windows やファイルシステム（FAT、exFAT、SMB の共有など）
+// が持たず、そのとき何で断るかが決まっていないためである。Rust の std::fs::rename と同じく、
+// やり直しも通らなければ最初の理由を返す。
 func renamePrivateFileHandle(source, destinationParent windows.Handle, destinationName string) error {
 	nameUTF16, err := windows.UTF16FromString(destinationName)
 	if err != nil {
@@ -387,31 +390,26 @@ func renamePrivateFileHandle(source, destinationParent windows.Handle, destinati
 	bufferSize := int(unsafe.Offsetof(layout.FileName)) + nameLength
 	buffer := make([]byte, bufferSize)
 	information := (*fileRenameInformation)(unsafe.Pointer(&buffer[0]))
-	information.Flags = windows.FILE_RENAME_REPLACE_IF_EXISTS | windows.FILE_RENAME_POSIX_SEMANTICS
+	information.Flags = 1 // ReplaceIfExists
 	information.RootDirectory = destinationParent
 	information.FileNameLength = uint32(nameLength)
 	copy(unsafe.Slice(&information.FileName[0], nameLength/2), nameUTF16[:len(nameUTF16)-1])
 	status := windows.IO_STATUS_BLOCK{}
-	err = windows.NtSetInformationFile(source, &status, &buffer[0], uint32(bufferSize), fileRenameInformationEx)
-	if !posixRenameUnsupported(err) {
-		return windowsacl.MapNoReparseError(err)
-	}
-	information.Flags = 1
-	return windowsacl.MapNoReparseError(windows.NtSetInformationFile(
+	renameError := windowsacl.MapNoReparseError(windows.NtSetInformationFile(
 		source,
 		&status,
 		&buffer[0],
 		uint32(bufferSize),
 		windows.FileRenameInformation,
 	))
-}
-
-// posixRenameUnsupported は、FileRenameInformationEx の POSIX の置き換えを、Windows か
-// ファイルシステムが持たないために断ったかを返す。
-func posixRenameUnsupported(err error) bool {
-	return errors.Is(err, windows.STATUS_INVALID_INFO_CLASS) ||
-		errors.Is(err, windows.STATUS_INVALID_PARAMETER) ||
-		errors.Is(err, windows.STATUS_NOT_SUPPORTED)
+	if !errors.Is(renameError, windows.ERROR_ACCESS_DENIED) {
+		return renameError
+	}
+	information.Flags = windows.FILE_RENAME_REPLACE_IF_EXISTS | windows.FILE_RENAME_POSIX_SEMANTICS
+	if windows.NtSetInformationFile(source, &status, &buffer[0], uint32(bufferSize), fileRenameInformationEx) != nil {
+		return renameError
+	}
+	return nil
 }
 
 type fileDispositionInformation struct {
