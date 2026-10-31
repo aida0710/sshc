@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -101,6 +102,24 @@ func TestAPresetOutOfRangeIsABadRequest(t *testing.T) {
 				t.Fatalf("response = %d, body %s", response.Code, response.Body.String())
 			}
 		})
+	}
+}
+
+// 保存は metadata 全体を検査する。変えていない接続先の値が通らないときは、500 ではなく、どこが通らないかを
+// 添えて断る。
+func TestAPresetSaveRefusedByAnotherPartOfTheMetadataNamesThatPart(t *testing.T) {
+	harness := newConfigHarness(t)
+	contents := fmt.Sprintf(`{"schemaVersion":%d,"presets":[{"id":"default"}],"hosts":[{"identity":{"path":"config","alias":"edge"},"detectedOS":"beos"}]}`, application.MetadataSchemaVersion)
+	if err := os.WriteFile(filepath.Join(harness.workspace.StateDir(), application.MetadataFileName), []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	standard := readSettings(t, harness).Presets[0]
+
+	response := harness.call(t, http.MethodPut, "/api/v1/settings/presets/default",
+		map[string]any{"base": standard, "preset": map[string]any{"id": "default", "interface": map[string]any{"keepScreenAwake": true}}}, true, true)
+
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "operating system") || !strings.Contains(response.Body.String(), "edge") {
+		t.Fatalf("response = %d, body %s", response.Code, response.Body.String())
 	}
 }
 

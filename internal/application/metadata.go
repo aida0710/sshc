@@ -33,6 +33,7 @@ var (
 	ErrMetadataGroup    = errors.New("metadata group definition is invalid")
 	ErrMetadataTerminal = errors.New("metadata terminal settings are invalid")
 	ErrMetadataEncoding = errors.New("metadata terminal encoding is invalid")
+	ErrMetadataOS       = errors.New("metadata operating system is invalid")
 	// ErrMetadataDuplicateHost は、同じ接続の entry が 2 つあることを表す。schema 9 より
 	// 前の形で、移行（DecodeMetadata）だけが 1 つにする。
 	ErrMetadataDuplicateHost = errors.New("metadata has two entries for one connection")
@@ -330,7 +331,7 @@ func ValidateMetadata(metadata Metadata) error {
 			return ErrMetadataPath
 		}
 		if !remoteos.Valid(host.OS) || !remoteos.Valid(host.DetectedOS) {
-			return errors.New("metadata operating system is invalid")
+			return fmt.Errorf("%w: %s %s", ErrMetadataOS, host.Identity.Path, host.Identity.Alias)
 		}
 		if host.Encoding != "" {
 			canonical, err := textencoding.Parse(host.Encoding)
