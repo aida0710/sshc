@@ -608,3 +608,17 @@ func TestRenamingAHostCarriesItsSavedPasswordToTheNewAlias(t *testing.T) {
 		t.Errorf("password under the new alias = %q, want the one saved for bastion", got)
 	}
 }
+
+func TestPendingChangesAnswerAnUnknownChangeWith404AndAMalformedIdentifierWith400(t *testing.T) {
+	harness := newConfigHarness(t)
+
+	if got := harness.call(t, http.MethodGet, "/api/v1/history/pending/20260101T000000.000-aabbccdd", nil, true, true).Code; got != http.StatusNotFound {
+		t.Errorf("unknown change = %d, want 404", got)
+	}
+	if got := harness.call(t, http.MethodGet, "/api/v1/history/pending/bad%20id", nil, true, true).Code; got != http.StatusBadRequest {
+		t.Errorf("malformed identifier = %d, want 400", got)
+	}
+	if got := harness.call(t, http.MethodGet, "/api/v1/history/pending/20260101T000000.000-aabbccdd", nil, false, false).Code; got != http.StatusUnauthorized {
+		t.Errorf("without a session = %d, want 401", got)
+	}
+}

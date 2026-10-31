@@ -3653,6 +3653,26 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/history/pending/{id}:
+    get:
+      operationId: getPendingChanges
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          description: The before and after contents of each file of an interrupted transaction
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PendingChanges" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/local/directories:
     post:
       operationId: createLocalSFTPDirectory
@@ -7333,6 +7353,29 @@ components:
       properties:
         transactionId: { type: string, minLength: 1, maxLength: 128 }
         action: { type: string, minLength: 1, maxLength: 16 }
+    PendingChanges:
+      type: object
+      additionalProperties: false
+      required: [id, files]
+      properties:
+        id: { type: string }
+        files: { type: array, items: { $ref: "#/components/schemas/PendingFileChange" } }
+    # contents が text のときだけ before と after に中身が入る。ほかは中身を入れない理由か、
+    # 中身を持たない操作（none。移動とディレクトリ）。
+    PendingFileChange:
+      type: object
+      additionalProperties: false
+      required: [path, action, committed, contents, beforeExists, afterExists]
+      properties:
+        path: { type: string }
+        target: { type: string }
+        action: { type: string, enum: [write, move, remove, mkdir, rmdir, note], x-go-type: string }
+        committed: { type: boolean }
+        contents: { type: string, enum: [text, none, secret, binary, too_large, vault_locked, unavailable], x-go-type: string }
+        beforeExists: { type: boolean }
+        afterExists: { type: boolean }
+        before: { type: string }
+        after: { type: string }
     RecoverResponse:
       type: object
       additionalProperties: false
