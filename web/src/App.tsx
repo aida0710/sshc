@@ -43,7 +43,7 @@ import { useTerminalNotifications } from "./terminal/useTerminalNotifications";
 import { useSeenProgramStatus } from "./terminal/useSeenProgramStatus";
 import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
-import { mobileViewportQuery, useMediaQuery } from "./ui/useMediaQuery";
+import { mobileViewportQuery, navigationRailQuery, pinnedNavigationQuery, useMediaQuery } from "./ui/useMediaQuery";
 import { useAppViewport } from "./ui/useAppViewport";
 import { BootstrapErrorScreen, NotFoundSection, SessionEndedScreen, VaultRecheckOverlay } from "./shell/AppFallbackScreens";
 import { SectionView, navigationId, startSections } from "./shell/sections";
@@ -80,6 +80,8 @@ export function App({
   const { t } = useLanguage();
   useAppViewport();
   const mobileLayout = useMediaQuery(mobileViewportQuery);
+  const navigationPinned = useMediaQuery(pinnedNavigationQuery);
+  const navigationRail = useMediaQuery(navigationRailQuery);
   const shortcuts = useBindings();
   const { resolved: resolvedTheme, scheme } = useTheme();
   const { route, location, navigate, navigateLocation, setNavigationBlocker } =
@@ -186,11 +188,18 @@ export function App({
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.mobileNavigation = String(mobileNavigationShown);
+    root.dataset.mobileNavigationPlacement = navigationRail ? "rail" : "bottom";
     return () => {
       delete root.dataset.mobileNavigation;
+      delete root.dataset.mobileNavigationPlacement;
     };
-  }, [mobileNavigationShown]);
-  useNavigationSwipe({ enabled: mobileLayout && state === "ready", open: navigationOpen, panelRef: navigationPanelRef, onOpenChange: setNavigationOpen });
+  }, [mobileNavigationShown, navigationRail]);
+  // A navigation kept open at the left is not a layer: turning a phone into that shape closes the drawer it had
+  // open, so no backdrop or focus trap is left over it.
+  useEffect(() => {
+    if (navigationPinned) setNavigationOpen(false);
+  }, [navigationPinned, setNavigationOpen]);
+  useNavigationSwipe({ enabled: mobileLayout && !navigationPinned && state === "ready", open: navigationOpen, panelRef: navigationPanelRef, onOpenChange: setNavigationOpen });
 
   // A page's heading shows the inspector's toggle among its actions on a wide screen, and puts its actions
   // in the top bar on a phone, where its name is hidden (see pageChrome).
@@ -333,7 +342,7 @@ export function App({
   if (state === "session-ended") return <SessionEndedScreen />;
 
   return (
-    <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout}>
+    <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout} data-navigation-pinned={mobileLayout && navigationPinned}>
       <div
         ref={rechecked}
         className="contents"
@@ -346,6 +355,7 @@ export function App({
           navigationOpen={navigationOpen}
           navigationId={navigationId}
           navigationToggleRef={navigationTriggerRef}
+          navigationPinned={navigationPinned}
           onToggleNavigation={() => setNavigationOpen((open) => !open)}
           inspector={inspector}
           inspectorOpen={inspectorOpen}
@@ -374,7 +384,7 @@ export function App({
               : ""
           }`}
         >
-          {navigationOpen ? (
+          {navigationOpen && !navigationPinned ? (
             <div
               aria-hidden="true"
               data-navigation-backdrop
@@ -387,7 +397,7 @@ export function App({
             navigationId={navigationId}
             version={version}
             state={state}
-            navigationOpen={navigationOpen}
+            navigationOpen={navigationOpen || navigationPinned}
             mobileLayout={mobileLayout}
             desktopWidth={desktopNavigationWidth}
             onDesktopWidthChange={resizeDesktopNavigation}
@@ -451,7 +461,7 @@ export function App({
                       runTargets={runTargets}
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
-                      onOpenNavigation={() => setNavigationOpen(true)}
+                      onOpenNavigation={navigationPinned ? undefined : () => setNavigationOpen(true)}
                     />
                   </div>
                 ) : null}
