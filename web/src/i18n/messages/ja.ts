@@ -1329,6 +1329,7 @@ export const ja = {
   "shell.themeSystem": "システムに合わせる",
   "shell.themeLight": "ライト",
   "shell.themeDark": "ダーク",
+  "shell.themeDarkBlue": "ダークブルー",
   "appearance.heading": "Appearance",
   "appearance.theme": "テーマ",
   "appearance.accent": "さし色",
