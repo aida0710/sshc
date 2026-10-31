@@ -146,7 +146,7 @@ func validateVPNProfiles(profiles []VPNProfile) error {
 		}
 		seenIDs[stored.ID] = true
 		if _, err := stored.Profile(); err != nil {
-			return err
+			return fmt.Errorf("%w: %s: %w", ErrMetadataVPN, stored.Name, err)
 		}
 	}
 	return nil
