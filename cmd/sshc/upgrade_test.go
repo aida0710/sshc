@@ -30,10 +30,6 @@ const upgradeStepLimit = 90 * time.Second
 // upgradeSpeedLimitKiB は、前のリリースで保存し、今のビルドで残っているかを見る設定の値である。
 const upgradeSpeedLimitKiB = 2048
 
-// upgradeNavigationWidth は、今のビルドで標準のプリセットに保存し直す値（左のナビの幅、px）である。
-// 画面がドラッグのあとに送るのと同じ保存の道を通す。
-const upgradeNavigationWidth = 300
-
 // 前のリリースで、マスターパスワードのある Vault と設定を持つマシンを作り、今のビルドへ上げる。
 // sshc エンジンは Vault がロックされたまま起動し、ロックを解除でき、設定が残っていて、設定を変えて
 // 保存できる（保存は世代バックアップを Vault の鍵で封じる道を通る）。
@@ -67,7 +63,7 @@ func TestUpgradingFromThePreviousReleaseStartsUnlocksAndKeepsTheSettings(t *test
 	if settings.Result.SpeedLimitKiB != upgradeSpeedLimitKiB {
 		t.Fatalf("speed limit after the upgrade = %g KiB/s, want %d", settings.Result.SpeedLimitKiB, upgradeSpeedLimitKiB)
 	}
-	machine.saveNavigationWidth(engine, upgradeNavigationWidth)
+	machine.saveKeepScreenAwake(engine)
 	machine.stopEngine(current, engine)
 }
 
@@ -189,9 +185,9 @@ func (machine upgradeMachine) runVault(action string, passwords ...[]byte) {
 	}
 }
 
-// saveNavigationWidth は、画面と同じく、読んだ標準のプリセットを base にして左のナビの幅を変えて
-// 保存し、読み直して残っていることを確かめる。
-func (machine upgradeMachine) saveNavigationWidth(engine upgradeEngine, width int) {
+// saveKeepScreenAwake は、画面のターミナルのメニューと同じく、読んだ標準のプリセットを base にして
+// 「画面を消さない」を入れて保存し、読み直して残っていることを確かめる。
+func (machine upgradeMachine) saveKeepScreenAwake(engine upgradeEngine) {
 	t := machine.t
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), upgradeStepLimit)
@@ -202,13 +198,13 @@ func (machine upgradeMachine) saveNavigationWidth(engine upgradeEngine, width in
 	}
 	defer api.Close()
 	base := machine.standardPreset(ctx, api)
-	changed := base
-	changed.Interface = &application.InterfaceSettings{NavigationWidth: width}
+	interfaceSettings := application.InterfaceSettings{}
 	if base.Interface != nil {
-		copied := *base.Interface
-		copied.NavigationWidth = width
-		changed.Interface = &copied
+		interfaceSettings = *base.Interface
 	}
+	interfaceSettings.KeepScreenAwake = true
+	changed := base
+	changed.Interface = &interfaceSettings
 	path := "/api/v1/settings/presets/" + application.DefaultPresetID
 	request := struct {
 		Base   application.SettingsPreset `json:"base"`
@@ -219,8 +215,8 @@ func (machine upgradeMachine) saveNavigationWidth(engine upgradeEngine, width in
 		t.Fatalf("PUT %s = %v\nengine output:\n%s", path, err, engine.output())
 	}
 	saved := machine.standardPreset(ctx, api)
-	if saved.Interface == nil || saved.Interface.NavigationWidth != width {
-		t.Fatalf("navigation width after saving = %#v, want %d", saved.Interface, width)
+	if saved.Interface == nil || !saved.Interface.KeepScreenAwake {
+		t.Fatalf("interface after saving = %#v, want keepScreenAwake", saved.Interface)
 	}
 }
 
