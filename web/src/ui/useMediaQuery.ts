@@ -4,8 +4,6 @@ import { useEffect, useState, type RefObject } from "react";
 // out as a PC. index.css repeats this condition in its mobile-layout variant and the 44px touch sizes;
 // change them together.
 export const mobileViewportQuery = "(max-width: 767px), (pointer: coarse) and (max-width: 1023px)";
-// Narrower than Tailwind's sm breakpoint (640px), where a page's sm: classes stack what sits side by side.
-export const belowSmallWidthQuery = "(max-width: 639px)";
 
 function matches(query: string): boolean {
   return typeof window.matchMedia === "function" && window.matchMedia(query).matches;
@@ -46,3 +44,6 @@ export function useCompactViewport(
 
   return narrowViewport || narrowContainer;
 }
+
+// Narrower than Tailwind's sm breakpoint (640px), where a page's sm: classes stack what sits side by side.
+export const belowSmallWidthQuery = "(max-width: 639px)";
