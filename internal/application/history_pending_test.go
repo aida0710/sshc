@@ -41,7 +41,12 @@ const testPrivateKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjE
 // 先頭の3つは書き終え、残りの2つはまだ書いていない。
 func interruptedChangeOfEveryKind(t *testing.T) (*Service, *storage.Manager, string) {
 	t.Helper()
-	home := t.TempDir()
+	// macOS の一時ディレクトリはシンボリックリンクの下にある。包んだファイルシステムの workspace と
+	// 根のパスをそろえるため、実体のパスにしておく。
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	setup, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
 	if err != nil {
 		t.Fatal(err)
