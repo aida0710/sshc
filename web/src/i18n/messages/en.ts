@@ -2543,6 +2543,7 @@ export const en = {
   "kh.search": "Search",
   "kh.hashed": "(hashed)",
   "kh.hashedFor": "{aliases} (hashed)",
+  "kh.entryActions": "Actions for {host}",
   "kh.delete": "Delete",
   "kh.confirmRemove":
     "Remove line {line} ({fingerprint})? The operation is recorded in History and a backup is kept.",

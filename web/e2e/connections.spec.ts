@@ -3,6 +3,7 @@ import { clickAndAwait, expect, masterPassword, openSection, openSettingsPage, t
 import { metadataSchemaVersion } from "./support/settings";
 import type { Page } from "@playwright/test";
 import { createGroups } from "./support/groups";
+import { openKeyCreation } from "./support/keys";
 
 async function openBastion(page: Page, url: string) {
   await openApplication(page, { url });
@@ -184,6 +185,7 @@ test("creates a key-authenticated connection in an empty nested declared group",
   await createGroups(page, ["home-lab", "home-lab/others"]);
 
   await openSection(page, "Keys");
+  await openKeyCreation(page);
   await page.getByLabel("File name").fill("id_connection_e2e");
   await page.getByLabel(/Create without a passphrase/).check();
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
@@ -385,6 +387,7 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   await openSection(page, "Keys");
 
   for (const fileName of ["id_connection_owned", "id_connection_sibling"]) {
+    await openKeyCreation(page);
     await page.getByLabel("File name").fill(fileName);
     await page.getByRole("textbox", { name: "Passphrase" }).fill(firstPassphrase);
     expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);

@@ -304,7 +304,8 @@ export function QuickConnectBrowser({
         <ul
           aria-label={t("home.connectionList")}
           className={view === "panel"
-            ? "grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3"
+            // As many 330px cards as the row holds: Home has no width limit (PageBoard wide), so a wide screen adds columns.
+            ? "grid grid-cols-[repeat(auto-fill,minmax(min(100%,330px),1fr))] gap-2.5"
             : "flex flex-col gap-1"}
         >
           {servers.map(renderServer)}

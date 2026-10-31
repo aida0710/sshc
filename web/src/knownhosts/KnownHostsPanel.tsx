@@ -8,11 +8,11 @@ import {
   Field,
   control,
   tableCell,
-  tableCellOnWide,
   tableHeadCell,
   tableHeadRow,
 } from "../ui/form";
-import { revealOnHover } from "../ui/ActionMenu";
+import { ActionMenu, revealOnHover } from "../ui/ActionMenu";
+import { belowSmallWidthQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
 import { PageHeader, PageSection, PageStateFrame, SummaryStat, SummaryStats } from "../ui/page";
@@ -62,6 +62,10 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   const [firstListingAnswered, setFirstListingAnswered] = useState(false);
   const candidateSort = useTableSort<CandidateSort>("host");
   const trustedSort = useTableSort<TrustedSort>("host");
+  // Below sm the three columns of trusted keys do not fit, so each key is a two-line row instead.
+  const narrowList = useMediaQuery(belowSmallWidthQuery);
+  // The two-line row a narrow screen has opened to show the whole host and fingerprint.
+  const [openedEntry, setOpenedEntry] = useState<string | null>(null);
 
   // The search runs on every keystroke, and answers can arrive out of order:
   // only the answer to the latest query may replace the listing.
@@ -330,10 +334,47 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
           </span>
         )}
       >
-        {listing ? (
-          <table className="block w-full text-[13px] sm:table">
+        {listing === null ? null : narrowList ? (
+          <ul aria-label={listing.path} className="flex flex-col">
+            {displayedEntries.map((item) => {
+              const key = `${item.line}-${item.digest}`;
+              const opened = openedEntry === key;
+              const host = trustedHostText(item);
+              return (
+                <li key={key} className="flex items-center gap-1 border-b border-line last:border-b-0">
+                  {/* One line for the host and its key type, one for the fingerprint; a tap shows them whole. */}
+                  <button
+                    type="button"
+                    aria-expanded={opened}
+                    onClick={() => setOpenedEntry(opened ? null : key)}
+                    className="min-w-0 flex-1 py-2 text-left"
+                  >
+                    <span className="flex items-baseline gap-2">
+                      <span className={`min-w-0 flex-1 text-[14px] ${opened ? "break-all" : "truncate"}`}>{host}</span>
+                      <span className="shrink-0 font-mono text-xs text-ink-muted">{item.keyType}</span>
+                    </span>
+                    <span className={`mt-0.5 block font-mono text-xs text-ink-muted ${opened ? "break-all" : "truncate"}`}>{item.fingerprint}</span>
+                  </button>
+                  <ActionMenu
+                    label={t("kh.entryActions", { host })}
+                    triggerClassName="flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+                    items={[{
+                      label: t("kh.delete"),
+                      tone: "danger",
+                      onSelect: () => {
+                        setDeleteError("");
+                        setPending(item);
+                      },
+                    }]}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <table className="w-full text-[13px]">
             <caption className="sr-only">{listing.path}</caption>
-            <thead className="hidden sm:table-header-group">
+            <thead>
               <tr className={tableHeadRow}>
                 <SortableTableHeader column="host" {...trustedSort.headerProps} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
                 <SortableTableHeader column="type" {...trustedSort.headerProps} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
@@ -341,22 +382,13 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
                 <th scope="col" className={tableHeadCell}><span className="sr-only">{t("kh.columnActions")}</span></th>
               </tr>
             </thead>
-            <tbody className="block sm:table-row-group">
+            <tbody>
               {displayedEntries.map((item) => (
-                <tr key={`${item.line}-${item.digest}`} className="group/row grid gap-2 border-b border-line py-3 last:border-b-0 hover:bg-hover sm:table-row sm:py-0">
-                  <td className={`flex min-w-0 items-start justify-between gap-4 ${tableCellOnWide}`}>
-                    <span aria-hidden="true" className="shrink-0 text-xs text-ink-faint sm:hidden">{t("kh.columnHost")}</span>
-                    <span className="min-w-0 break-all text-right sm:text-left">{trustedHostText(item)}</span>
-                  </td>
-                  <td className={`flex min-w-0 items-start justify-between gap-4 font-mono text-xs text-ink-muted ${tableCellOnWide}`}>
-                    <span aria-hidden="true" className="shrink-0 font-sans text-ink-faint sm:hidden">{t("kh.columnType")}</span>
-                    <span className="min-w-0 break-all text-right sm:text-left">{item.keyType}</span>
-                  </td>
-                  <td className={`flex min-w-0 items-start justify-between gap-4 font-mono text-xs text-ink-muted ${tableCellOnWide}`}>
-                    <span aria-hidden="true" className="shrink-0 font-sans text-ink-faint sm:hidden">{t("kh.columnFingerprint")}</span>
-                    <span className="min-w-0 break-all text-right sm:text-left">{item.fingerprint}</span>
-                  </td>
-                  <td className={`flex justify-end ${tableCellOnWide} sm:text-right`}>
+                <tr key={`${item.line}-${item.digest}`} className="group/row border-b border-line last:border-b-0 hover:bg-hover">
+                  <td className={`${tableCell} break-all`}>{trustedHostText(item)}</td>
+                  <td className={`${tableCell} break-all font-mono text-xs text-ink-muted`}>{item.keyType}</td>
+                  <td className={`${tableCell} break-all font-mono text-xs text-ink-muted`}>{item.fingerprint}</td>
+                  <td className={`${tableCell} text-right`}>
                     {/* Removing is offered on the row under the pointer (always on touch), in red words only. */}
                     <Button
                       kind="dangerText"
@@ -373,7 +405,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
               ))}
             </tbody>
           </table>
-        ) : null}
+        )}
       </PageSection>
       {pending === null ? null : (
         <ConfirmDialog
