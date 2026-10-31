@@ -48,7 +48,7 @@ export const settingsPageMeta: Record<
   SFTP: {
     path: "/settings/sftp",
     label: "sftp.settingsHeading",
-    description: "settings.sftpDescription",
+    description: "settings.presetDescription",
     icon: "files",
     group: "preset",
   },

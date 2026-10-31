@@ -11,7 +11,7 @@ File upload, folder upload, file download, folder download, and remote-to-remote
 
 On desktop, drag the upper grip of the expanded list to resize it. With the grip focused, the arrow, Home, and End keys provide the same control from a keyboard. Height and folded state are saved in the browser. On phones, tap the bottom bar showing counts and progress to open the queue in a separate sheet.
 
-Transfer settings chosen for each preset live under **Settings → SFTP**; those that are the same on every machine live under **Settings → General**. **Transfer settings** in the Transfer Manager opens that page, even when the queue is empty or folded. The page has two sections: Transfers and Transfer exclusions. Number fields apply when focus leaves them; selections and checkboxes apply when changed. Exclusion rules require **Save exclusions**.
+Transfer settings chosen for each preset live under **Settings → SFTP**; those that are the same on every machine live under **Settings → General**. **Transfer settings** in the Transfer Manager opens that page, even when the queue is empty or folded. The page has two sections: Transfers and Transfer exclusions. Number fields and exclusion rules apply when focus leaves them; selections and checkboxes apply when changed. Exclusion rules apply only when every line is a valid rule.
 
 Each job shows its name, source → destination, progress, transferred and total bytes, speed, remaining time, status, and available actions. Open the row's details for full paths, the exclusions captured when it started, and failure information.
 
