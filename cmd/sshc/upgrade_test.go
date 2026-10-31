@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"sshc/internal/application"
 	"sshc/internal/isolatedhome"
 )
 
@@ -30,7 +31,8 @@ const upgradeStepLimit = 90 * time.Second
 const upgradeSpeedLimitKiB = 2048
 
 // 前のリリースで、マスターパスワードのある Vault と設定を持つマシンを作り、今のビルドへ上げる。
-// sshc エンジンは Vault がロックされたまま起動し、ロックを解除でき、設定が残っている。
+// sshc エンジンは Vault がロックされたまま起動し、ロックを解除でき、設定が残っていて、設定を変えて
+// 保存できる（保存は世代バックアップを Vault の鍵で封じる道を通る）。
 // 前のリリースが書いたデータで起動する道は、ほかの試験では通らない（v0.59.1 はここで止まった）。
 func TestUpgradingFromThePreviousReleaseStartsUnlocksAndKeepsTheSettings(t *testing.T) {
 	previous := os.Getenv(previousReleaseEnvironment)
@@ -61,6 +63,7 @@ func TestUpgradingFromThePreviousReleaseStartsUnlocksAndKeepsTheSettings(t *test
 	if settings.Result.SpeedLimitKiB != upgradeSpeedLimitKiB {
 		t.Fatalf("speed limit after the upgrade = %g KiB/s, want %d", settings.Result.SpeedLimitKiB, upgradeSpeedLimitKiB)
 	}
+	machine.saveKeepScreenAwake(engine)
 	machine.stopEngine(current, engine)
 }
 
@@ -180,6 +183,58 @@ func (machine upgradeMachine) runVault(action string, passwords ...[]byte) {
 	if code := runVault(ctx, action, environment); code != 0 {
 		t.Fatalf("sshc vault %s = %d\nstdout:\n%s\nstderr:\n%s", action, code, stdout.String(), stderr.String())
 	}
+}
+
+// saveKeepScreenAwake は、画面のターミナルのメニューと同じく、読んだ標準のプリセットを base にして
+// 「画面を消さない」を入れて保存し、読み直して残っていることを確かめる。
+func (machine upgradeMachine) saveKeepScreenAwake(engine upgradeEngine) {
+	t := machine.t
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), upgradeStepLimit)
+	defer cancel()
+	api, err := openEngineAPI(ctx, machine.stateDir, &http.Client{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer api.Close()
+	base := machine.standardPreset(ctx, api)
+	interfaceSettings := application.InterfaceSettings{}
+	if base.Interface != nil {
+		interfaceSettings = *base.Interface
+	}
+	interfaceSettings.KeepScreenAwake = true
+	changed := base
+	changed.Interface = &interfaceSettings
+	path := "/api/v1/settings/presets/" + application.DefaultPresetID
+	request := struct {
+		Base   application.SettingsPreset `json:"base"`
+		Preset application.SettingsPreset `json:"preset"`
+	}{Base: base, Preset: changed}
+	var response json.RawMessage
+	if err := api.sendJSON(ctx, http.MethodPut, path, request, &response); err != nil {
+		t.Fatalf("PUT %s = %v\nengine output:\n%s", path, err, engine.output())
+	}
+	saved := machine.standardPreset(ctx, api)
+	if saved.Interface == nil || !saved.Interface.KeepScreenAwake {
+		t.Fatalf("interface after saving = %#v, want keepScreenAwake", saved.Interface)
+	}
+}
+
+// standardPreset は、設定の画面と同じ読み方で、標準のプリセットを返す。
+func (machine upgradeMachine) standardPreset(ctx context.Context, api *engineAPI) application.SettingsPreset {
+	t := machine.t
+	t.Helper()
+	var document application.SettingsDocument
+	if err := api.getJSON(ctx, "/api/v1/settings", &document); err != nil {
+		t.Fatal(err)
+	}
+	for _, preset := range document.Presets {
+		if preset.ID == application.DefaultPresetID {
+			return preset
+		}
+	}
+	t.Fatalf("settings have no standard preset: %#v", document.Presets)
+	return application.SettingsPreset{}
 }
 
 // buildCurrentSSHC は、このリポジトリの sshc を組み立てる。画面は組み立てていなくてもよい。

@@ -375,6 +375,11 @@ func serviceProblem(c *echo.Context, err error) error {
 		errors.Is(err, application.ErrMissingDirectory), errors.Is(err, application.ErrNotDirectory),
 		errors.Is(err, application.ErrNotEditable):
 		return problemWith(c, http.StatusForbidden, problemPayload{Code: "path_not_editable"})
+	case errors.Is(err, application.ErrMetadataVPN), errors.Is(err, application.ErrMetadataOS),
+		errors.Is(err, application.ErrShortcutPresets):
+		// 保存は metadata 全体を検査するので、変えていない所（VPN のプロファイル、接続先の OS、
+		// ショートカット）が通らなくても断られる。どこが通らないかを detail に入れ、画面の診断に出す。
+		return problemWith(c, http.StatusBadRequest, problemPayload{Code: "invalid_request", Detail: err.Error()})
 	case errors.Is(err, application.ErrUnknownEditKind), errors.Is(err, application.ErrUnknownRecoveryAction),
 		errors.Is(err, application.ErrMetadataSecret), errors.Is(err, application.ErrMetadataPath),
 		errors.Is(err, application.ErrMetadataGroup), errors.Is(err, application.ErrMetadataVersion),

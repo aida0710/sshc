@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 #
-# 前のリリース（GitHub の最新の安定版）のうち、このランナーで動く sshc を落とし、
-# 同じリリースの checksums.txt と照らしてから、そのパスを出す。前のリリースから上げる
-# 試験（cmd/sshc/upgrade_test.go）が使う。
+# 前のリリース（GitHub の最新の安定版。tag を渡せばそのリリース）のうち、このランナーで動く
+# sshc を落とし、同じリリースの checksums.txt と照らしてから、そのパスを出す。前のリリースから
+# 上げる試験（cmd/sshc/upgrade_test.go）が使う。
 set -euo pipefail
 
-if [ "$#" -ne 1 ]; then
-	echo "usage: previous-release.sh <directory>" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+	echo "usage: previous-release.sh <directory> [tag]" >&2
 	exit 2
 fi
 directory=$1
 repository=${GITHUB_REPOSITORY:-aida0710/sshc}
 
-tag=$(gh release view --repo "$repository" --json tagName --jq .tagName)
+tag=${2:-$(gh release view --repo "$repository" --json tagName --jq .tagName)}
 goos=$(go env GOOS)
 goarch=$(go env GOARCH)
 suffix=""
