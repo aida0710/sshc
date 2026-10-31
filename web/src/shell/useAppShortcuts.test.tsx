@@ -1,3 +1,4 @@
+import { renderHook } from "@testing-library/react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { defaultBindings } from "../keyconfig/bindings";
@@ -13,9 +14,11 @@ function ShortcutHarness({ ready, openPalette }: { ready: boolean; openPalette: 
     terminalFace: false,
     orderedSessions: [],
     activeSessionId: null,
+    panes: [],
     navigate: ignoreNavigation,
     showSession: ignoreSession,
     openPalette,
+    requestSession: ignoreSession,
   });
   return <p>{ready ? "ready" : "starting"}</p>;
 }
@@ -62,5 +65,50 @@ describe("useAppShortcuts", () => {
       container.remove();
       actEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
     }
+  });
+});
+
+describe("useAppShortcuts on the terminal screen", () => {
+  const bindings = { ...defaultBindings, newSession: ["Alt+N"], closeSession: ["Alt+W"], nextPane: ["Alt+]"], previousPane: ["Alt+["] };
+  const session = (id: string) => ({ id, kind: "shell" as const, workspaceId: "default", title: id, startedAt: "2026-10-31T00:00:00Z", state: "connected" as const, problem: "" });
+  function press(key: string) {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key, altKey: true, bubbles: true, cancelable: true }));
+  }
+  function setUp(panes: string[]) {
+    const showSession = vi.fn();
+    const requestSession = vi.fn();
+    renderHook(() => useAppShortcuts({
+      enabled: true,
+      shortcuts: bindings,
+      terminalFace: true,
+      orderedSessions: [session("one"), session("two"), session("three")],
+      activeSessionId: "two",
+      panes,
+      navigate: ignoreNavigation,
+      showSession,
+      openPalette: ignoreNavigation,
+      requestSession,
+    }));
+    return { showSession, requestSession };
+  }
+
+  it("asks the session list for a new session and to close the session shown", () => {
+    const { requestSession } = setUp([]);
+    press("n");
+    press("w");
+    expect(requestSession.mock.calls).toEqual([[{ action: "newSession" }], [{ action: "closeSession", sessionId: "two" }]]);
+  });
+
+  it("moves between the panes of the split shown, going round at either end", () => {
+    const { showSession } = setUp(["one", "two", "three"]);
+    press("]");
+    press("[");
+    expect(showSession.mock.calls).toEqual([["three"], ["one"]]);
+  });
+
+  it("leaves the pane keys alone outside a split", () => {
+    const { showSession } = setUp(["two"]);
+    press("]");
+    expect(showSession).not.toHaveBeenCalled();
   });
 });

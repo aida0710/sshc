@@ -4338,8 +4338,16 @@ export interface components {
                 paste: string[];
                 previousPrompt: string[];
                 nextPrompt: string[];
+                increaseFontSize: string[];
+                decreaseFontSize: string[];
+                resetFontSize: string[];
+                quickCommands: string[];
+                newSession: string[];
+                closeSession: string[];
                 nextSession: string[];
                 previousSession: string[];
+                nextPane: string[];
+                previousPane: string[];
                 home: string[];
                 sftp: string[];
             };

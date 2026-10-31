@@ -17,6 +17,8 @@ import { attachPromptJumpKeys, type PromptJump } from "./promptJump";
 import { useTouchTerminal } from "./touchMode";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
 import { attachFontZoom } from "./attachFontZoom";
+import { attachTerminalShortcuts } from "./attachTerminalShortcuts";
+import { steppedFontSize } from "./fontSize";
 import { attachTouchScroll } from "./touchScroll";
 import { terminalTouchScrollTarget } from "./touchScrollTarget";
 import { KeyBar, applyModifiers, encodeKey } from "./KeyBar";
@@ -262,6 +264,12 @@ export function TerminalView({
 
   const [quickCommandsOpen, setQuickCommandsOpen] = useState(false);
   const [quickCommandSelection, setQuickCommandSelection] = useState("");
+  // The panel starts from the text selected when it opens, from the "…" menu or its shortcut.
+  const openQuickCommands = useRef<() => void>(() => undefined);
+  openQuickCommands.current = () => {
+    setQuickCommandSelection(terminal.current?.getSelection() ?? "");
+    setQuickCommandsOpen(true);
+  };
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowTrigger = useRef<HTMLButtonElement>(null);
   const [portForwardsOpen, setPortForwardsOpen] = useState(false);
@@ -486,9 +494,17 @@ export function TerminalView({
       selectionHeld: () => selectionHeldIn(container),
       reducedMotion: () => reducedMotionRef.current,
     });
+    const zoomTo = (size: number) => setZoomedFontSize({ base: resolvedFontSizeRef.current, size });
     const detachFontZoom = attachFontZoom(container, {
       fontSize: () => shownFontSizeRef.current,
-      setFontSize: (size) => setZoomedFontSize({ base: resolvedFontSizeRef.current, size }),
+      setFontSize: zoomTo,
+    });
+    // Like a pinch, the text size keys change only this terminal, and are not saved.
+    const detachShortcuts = attachTerminalShortcuts(container, {
+      increaseFontSize: () => zoomTo(steppedFontSize(shownFontSizeRef.current, 1)),
+      decreaseFontSize: () => zoomTo(steppedFontSize(shownFontSizeRef.current, -1)),
+      resetFontSize: () => setZoomedFontSize(null),
+      quickCommands: () => openQuickCommands.current(),
     });
 
     const typed = (data: string) => {
@@ -545,6 +561,7 @@ export function TerminalView({
       stopWatchingShown();
       detachTouchScroll();
       detachFontZoom();
+      detachShortcuts();
       detachClipboard();
       output.dispose();
       statusLineTerminal.dispose();
@@ -770,10 +787,7 @@ export function TerminalView({
             canSplit={canSplit}
             triggerRef={overflowTrigger}
             osc52Enabled={osc52Enabled}
-            onQuickCommands={() => {
-              setQuickCommandSelection(terminal.current?.getSelection() ?? "");
-              setQuickCommandsOpen(true);
-            }}
+            onQuickCommands={() => openQuickCommands.current()}
             onPortForwarding={session.kind === "ssh" ? () => setPortForwardsOpen(true) : undefined}
             onOpenRemoteDirectory={runTarget === undefined && session.kind === "ssh" && session.alias !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
               ? () => onOpenRemotePath(session.alias!, currentDirectory, "browse")
