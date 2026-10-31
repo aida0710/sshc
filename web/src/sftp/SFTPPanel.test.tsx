@@ -42,7 +42,7 @@ const clipboard = vi.hoisted(() => ({ writeText: vi.fn(async () => undefined) })
 
 vi.mock("./api", () => ({ sftpApi: api }));
 // The details dialog previews text in the editor; jsdom cannot run Monaco.
-vi.mock("./MonacoEditor", () => ({ MonacoEditor: ({ value }: { value: string }) => <pre>{value}</pre> }));
+vi.mock("../editor/MonacoEditor", () => ({ MonacoEditor: ({ value }: { value: string }) => <pre>{value}</pre> }));
 vi.mock("./chmodApi", async (importOriginal) => ({
   ...await importOriginal<typeof import("./chmodApi")>(), chmodApi: permissions,
 }));

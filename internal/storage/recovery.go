@@ -191,12 +191,7 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 			return err
 		}
 	}
-	// バックアップを捨てる記録（マスターパスワード変更）は、以前の内容を封じずに
-	// そのまま控えている。ReadBackup は封じた控えを開くので、ここでは使わない。
-	readPrevious := m.ReadBackup
-	if record.DiscardBackups {
-		readPrevious = m.workspace.ReadTransactionFile
-	}
+	readPrevious := m.previousReader(record)
 	for index := record.Committed - 1; index >= 0; index-- {
 		if err := m.rollbackEntry(record.Entries[index], readPrevious); err != nil {
 			return err
@@ -204,6 +199,16 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 	}
 	record.Committed = 0
 	return m.finish(record, journalPath, statusRolledBack)
+}
+
+// previousReader は、record の控え（置き換えや削除の前の内容）を読む関数を返す。
+// バックアップを捨てる記録（マスターパスワード変更）は、以前の内容を封じずに
+// そのまま控えている。ReadBackup は封じた控えを開くので、そこでは使わない。
+func (m *Manager) previousReader(record *journalRecord) func(path string) ([]byte, error) {
+	if record.DiscardBackups {
+		return m.workspace.ReadTransactionFile
+	}
+	return m.ReadBackup
 }
 
 // rollbackEntry は、適用済みのエントリひとつを元に戻す。readPrevious は、置き換えや
@@ -327,24 +332,8 @@ func (m *Manager) stagedMatches(entry journalEntry) bool {
 }
 
 func (m *Manager) loadPending(identifier string) (*journalRecord, string, error) {
-	if !validJournalIdentifier(identifier) {
-		return nil, "", ErrUnknownTransaction
-	}
-	journalPath := filepath.Join(m.journalDirectory(), identifier+".json")
-	contents, err := ReadFileLimited(m.workspace.FileSystem(), journalPath, maxRecordBytes)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, "", ErrUnknownTransaction
-	}
+	record, journalPath, err := m.readPendingRecord(identifier)
 	if err != nil {
-		return nil, "", err
-	}
-	var record journalRecord
-	if err := json.Unmarshal(contents, &record); err != nil {
-		clear(contents)
-		return nil, "", err
-	}
-	clear(contents)
-	if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
 		return nil, "", err
 	}
 	if changed, err := m.reconcileRecord(&record); err != nil {
@@ -358,6 +347,32 @@ func (m *Manager) loadPending(identifier string) (*journalRecord, string, error)
 		}
 	}
 	return &record, journalPath, nil
+}
+
+// readPendingRecord は、中断した変更の記録を読んで確かめる。対象の状態からの数え直しは
+// 呼び出し側がする。
+func (m *Manager) readPendingRecord(identifier string) (journalRecord, string, error) {
+	if !validJournalIdentifier(identifier) {
+		return journalRecord{}, "", ErrUnknownTransaction
+	}
+	journalPath := filepath.Join(m.journalDirectory(), identifier+".json")
+	contents, err := ReadFileLimited(m.workspace.FileSystem(), journalPath, maxRecordBytes)
+	if errors.Is(err, fs.ErrNotExist) {
+		return journalRecord{}, "", ErrUnknownTransaction
+	}
+	if err != nil {
+		return journalRecord{}, "", err
+	}
+	var record journalRecord
+	if err := json.Unmarshal(contents, &record); err != nil {
+		clear(contents)
+		return journalRecord{}, "", err
+	}
+	clear(contents)
+	if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
+		return journalRecord{}, "", err
+	}
+	return record, journalPath, nil
 }
 
 // reconcileRecord は各対象の現在状態から、中断されたトランザクションの適用済み範囲を求める。

@@ -20,6 +20,8 @@ export type DiffLine = components["schemas"]["DiffLine"];
 export type ConflictReport = components["schemas"]["ConflictReport"];
 export type HistoryEntry = components["schemas"]["HistoryEntry"];
 export type PendingTransaction = components["schemas"]["PendingTransaction"];
+export type PendingChanges = components["schemas"]["PendingChanges"];
+export type PendingFileChange = components["schemas"]["PendingFileChange"];
 export type Metadata = components["schemas"]["Metadata"];
 export type GroupMetadata = components["schemas"]["GroupMetadata"];
 export type GroupView = components["schemas"]["GroupView"];
@@ -76,6 +78,10 @@ function validateCreateConnectionResponse(value: unknown): CreateConnectionRespo
   return validateOpenAPISchema<CreateConnectionResponse>("CreateConnectionResponse", value);
 }
 
+function validatePendingChanges(value: unknown): PendingChanges {
+  return validateOpenAPISchema<PendingChanges>("PendingChanges", value);
+}
+
 function validateHistory(value: unknown): HistoryEntry[] {
   return validateOpenAPISchema<components["schemas"]["HistoryList"]>("HistoryList", value).entries;
 }
@@ -115,6 +121,9 @@ export const configApi = {
   },
   async restore(transactionId: string, path: string): Promise<SaveResult> {
     return validateSaveResult(await postJSON<unknown>("/api/v1/history/restore", { transactionId, path }));
+  },
+  async pendingChanges(transactionId: string): Promise<PendingChanges> {
+    return validatePendingChanges(await apiClient.read(`/api/v1/history/pending/${encodeURIComponent(transactionId)}`));
   },
   async recover(transactionId: string, action: "complete" | "rollback"): Promise<void> {
     await postJSON<unknown>("/api/v1/history/recover", { transactionId, action });

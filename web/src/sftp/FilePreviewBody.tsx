@@ -3,7 +3,7 @@ import { FilePreviewImage } from "./FilePreviewImage";
 import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FilePreviewMedia } from "./FilePreviewMedia";
 import { FilePreviewRefusal } from "./FilePreviewRefusal";
-import { loadMonacoEditor } from "./loadMonacoEditor";
+import { loadMonacoEditor } from "../editor/loadMonacoEditor";
 import type { PreviewSwipe } from "./previewSwipe";
 import type { FilePreviewState } from "./useFilePreview";
 

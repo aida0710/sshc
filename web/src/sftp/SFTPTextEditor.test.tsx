@@ -7,7 +7,7 @@ import type { RemoteTextFile } from "./api";
 import { SFTPTextEditor } from "./SFTPTextEditor";
 import { useSFTPTextEditor, type SFTPTextSource } from "./useSFTPTextEditor";
 
-vi.mock("./MonacoEditor", () => ({
+vi.mock("../editor/MonacoEditor", () => ({
   MonacoEditor: ({ value, onChange, readOnly }: { value: string; onChange: (value: string) => void; readOnly: boolean }) => (
     <textarea
       aria-label="Remote file contents"

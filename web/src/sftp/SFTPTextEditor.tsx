@@ -3,7 +3,7 @@ import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
-import { loadMonacoEditor } from "./loadMonacoEditor";
+import { loadMonacoEditor } from "../editor/loadMonacoEditor";
 import type { SFTPTextEditorModel } from "./useSFTPTextEditor";
 
 const MonacoEditor = lazy(() => loadMonacoEditor().then(({ MonacoEditor }) => ({ default: MonacoEditor })));
