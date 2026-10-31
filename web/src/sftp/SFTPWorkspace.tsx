@@ -18,8 +18,8 @@ import { SFTPTabStrip, tabElementId, tabPanelElementId } from "./SFTPTabStrip";
 import { TransferManagerList } from "./TransferManagerList";
 import { SFTPCompareTabsDialog } from "./SFTPCompareTabsDialog";
 import type { SFTPLocation } from "./sftpLocation";
-import { rememberPanes, rememberSplitRatio, restorePanes, restoreSplitRatio } from "./sftpPaneStorage";
-import { useRestingSave } from "../settings/useRestingSave";
+import { rememberPanes, restorePanes, sftpSplitRatio } from "./sftpPaneStorage";
+import { useStoredValue } from "../ui/useStoredValue";
 import {
   activeTab, addTab, allTabs, blankTab, canSplit, closeTab, findTab, maxTabsPerPane, moveTab, relocateTab, resortTab, selectTab, swapPanes,
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
@@ -88,7 +88,7 @@ export function SFTPWorkspace({
 }) {
   const t = useTranslate();
   const [panes, setPanes] = useState<SFTPPane[]>(restorePanes);
-  const [splitRatio, setSplitRatio] = useState(restoreSplitRatio);
+  const [splitRatio, changeSplitRatio] = useStoredValue(sftpSplitRatio);
   const [focusedPaneId, setFocusedPaneId] = useState(() => panes[0]?.id ?? "");
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [comparisonLocations, setComparisonLocations] = useState<{ left: SFTPLocation; right: SFTPLocation } | null>(null);
@@ -251,13 +251,6 @@ export function SFTPWorkspace({
     if (tabId === null) return;
     placeTab(tabId, side === null ? { paneId: pane.id } : { side });
   }
-
-  // A drag moves the split many times a second; it is kept once it rests.
-  const keepSplitRatio = useRestingSave(rememberSplitRatio);
-  const changeSplitRatio = (ratio: number) => {
-    setSplitRatio(ratio);
-    keepSplitRatio(ratio);
-  };
 
   // A tab reordered within its pane stays mounted, so it keeps its connection and any unsaved edit.
   function reorderTab(pane: SFTPPane, tabId: string, index: number) {

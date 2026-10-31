@@ -235,6 +235,23 @@ func TestAnUnknownInterfaceStateIsRefused(t *testing.T) {
 	}
 }
 
+// 前のバージョンのマシンが書いた今の状態（今は預からない sftpSplitRatio を持つ）も、残りの並びを保って読み、
+// 同期で届いたファイルとしても通す。
+func TestAStateWrittenByAnotherVersionIsReadWithoutTheNamesThisBuildDoesNotKeep(t *testing.T) {
+	contents := []byte(`{"schemaVersion":1,"facts":{},"interface":{"runTarget":"server","sftpSplitRatio":"40"}}`)
+
+	state, err := decodeMachineState(contents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Interface) != 1 || state.Interface["runTarget"] != "server" {
+		t.Fatalf("interface = %v, want only runTarget", state.Interface)
+	}
+	if err := validateMachineFile("0123456789abcdef0123456789abcdef.state.json", contents); err != nil {
+		t.Fatalf("a synced state file was refused: %v", err)
+	}
+}
+
 // 転送の処理を止めたことは、書く前にエンジンが落ちても止めたままにするため、すぐに書く。
 func TestStoppingTransfersIsWrittenAtOnce(t *testing.T) {
 	service := newPreparedService(t)

@@ -5,9 +5,11 @@ export type SplitDirection = "horizontal" | "vertical";
 const minimumSplitRatio = 10;
 const maximumSplitRatio = 90;
 const keyboardStep = 5;
+// evenSplitRatio gives both halves the same share; an unreadable ratio falls back to it.
+export const evenSplitRatio = 50;
 
 export function clampSplitRatio(ratio: number): number {
-  return Number.isFinite(ratio) ? Math.min(maximumSplitRatio, Math.max(minimumSplitRatio, Math.round(ratio))) : 50;
+  return Number.isFinite(ratio) ? Math.min(maximumSplitRatio, Math.max(minimumSplitRatio, Math.round(ratio))) : evenSplitRatio;
 }
 
 // SplitMinimum is how many px each half needs at least, along the split.

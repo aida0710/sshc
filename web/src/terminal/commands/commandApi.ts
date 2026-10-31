@@ -3,7 +3,6 @@ import { engineTerminalBase } from "../../api/remoteEngines";
 import type { components } from "../../api/schema";
 import { validateOpenAPISchema } from "../../api/validators.generated";
 
-export type TerminalCommandTarget = components["schemas"]["TerminalCommandTargetRequest"];
 export type TerminalCommandRequest = components["schemas"]["TerminalCommandPreviewRequest"];
 export type TerminalCommandPreview = components["schemas"]["TerminalCommandPreview"];
 export type TerminalCommandDispatch = components["schemas"]["TerminalCommandDispatchResponse"];

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -23,8 +24,9 @@ type SettingsPreset struct {
 	Interface     *InterfaceSettings    `json:"interface,omitempty"`
 }
 
-// InterfaceSettings は、画面の操作と並び方のうちプリセットに入るものである。エンジンは使わず、
-// 画面が読む。
+// InterfaceSettings は、画面の操作のうちプリセットに入るものである。エンジンは使わず、画面が読む。
+// ドラッグで決める欄の幅と Home の表示形式は、よく変わるのでブラウザに置く（docs/design.md の
+// 「設定の置き場所」）。
 type InterfaceSettings struct {
 	// TouchMode は、ターミナルがタッチをどう扱うか（touch・mouse）である。空は自動で判定する。
 	TouchMode string `json:"touchMode,omitempty"`
@@ -34,13 +36,6 @@ type InterfaceSettings struct {
 	KeepScreenAwake bool `json:"keepScreenAwake,omitempty"`
 	// ShortcutPreset は、使うショートカットのプリセットの ID である。空は既定の割り当て。
 	ShortcutPreset string `json:"shortcutPreset,omitempty"`
-	// NavigationWidth、ConnectionListWidth、ConnectionGroupsWidth は、ドラッグで決めた欄の幅
-	// （px）である。0 は既定の幅。範囲は画面が持ち、ここでは大きさの桁だけを確かめる。
-	NavigationWidth       int `json:"navigationWidth,omitempty"`
-	ConnectionListWidth   int `json:"connectionListWidth,omitempty"`
-	ConnectionGroupsWidth int `json:"connectionGroupsWidth,omitempty"`
-	// HomeView は Home の接続先の表示形式（panel・list）である。空は既定。
-	HomeView string `json:"homeView,omitempty"`
 }
 
 // NotificationSound は、通知のときに鳴らす音の種類と大きさである。
@@ -57,8 +52,6 @@ const DefaultPresetID = "default"
 const (
 	MaxPresets          = 16
 	MaxPresetNameLength = 80
-	// maxColumnWidth は、欄の幅として受け取る上限である。どの画面より広い幅は、壊れた値として断る。
-	maxColumnWidth = 4096
 )
 
 var (
@@ -76,7 +69,6 @@ var presetIDPattern = regexp.MustCompile(`^[a-zA-Z0-9-]{1,64}$`)
 var (
 	touchModes         = map[string]bool{"touch": true, "mouse": true}
 	notificationSounds = map[string]bool{"none": true, "gentle": true, "bell": true, "pulse": true}
-	homeViews          = map[string]bool{"panel": true, "list": true}
 )
 
 // maxNotificationVolume は、通知の音の大きさ（％）の上限である。
@@ -154,14 +146,6 @@ func validateInterfaceSettings(settings *InterfaceSettings) error {
 	if settings.ShortcutPreset != "" && !presetIDPattern.MatchString(settings.ShortcutPreset) {
 		return fmt.Errorf("%w: shortcutPreset", ErrPresets)
 	}
-	for _, width := range []int{settings.NavigationWidth, settings.ConnectionListWidth, settings.ConnectionGroupsWidth} {
-		if width < 0 || width > maxColumnWidth {
-			return fmt.Errorf("%w: column width", ErrPresets)
-		}
-	}
-	if settings.HomeView != "" && !homeViews[settings.HomeView] {
-		return fmt.Errorf("%w: homeView", ErrPresets)
-	}
 	return nil
 }
 
@@ -209,17 +193,13 @@ func (s *Service) SetPresets(base, presets []SettingsPreset) (SaveResult, error)
 	if err := validatePresets(presets); err != nil {
 		return SaveResult{}, err
 	}
-	s.saveMutex.Lock()
-	defer s.saveMutex.Unlock()
-	stored, precondition, err := s.metadata.Load()
-	if err != nil {
-		return SaveResult{}, err
-	}
-	if !sameSettings(base, stored.Presets) {
-		return SaveResult{}, ErrSettingsChanged
-	}
-	stored.Presets = presets
-	return s.commitMetadata(stored, precondition, "settings.presets")
+	return s.changeMetadata("settings.presets", func(stored *Metadata) error {
+		if !sameSettings(base, stored.Presets) {
+			return ErrSettingsChanged
+		}
+		stored.Presets = presets
+		return nil
+	})
 }
 
 // SetPreset は、1つのプリセットの中身を置き換える。base はそのプリセットを画面が読んだときの値で、
@@ -228,29 +208,20 @@ func (s *Service) SetPreset(base, preset SettingsPreset) (SaveResult, error) {
 	if err := validatePreset(preset); err != nil {
 		return SaveResult{}, err
 	}
-	s.saveMutex.Lock()
-	defer s.saveMutex.Unlock()
-	stored, precondition, err := s.metadata.Load()
-	if err != nil {
-		return SaveResult{}, err
-	}
-	index := -1
-	for position, candidate := range stored.Presets {
-		if candidate.ID == preset.ID {
-			index = position
+	return s.changeMetadata("settings.preset", func(stored *Metadata) error {
+		index := slices.IndexFunc(stored.Presets, func(candidate SettingsPreset) bool { return candidate.ID == preset.ID })
+		if index < 0 {
+			return ErrUnknownPreset
 		}
-	}
-	if index < 0 {
-		return SaveResult{}, ErrUnknownPreset
-	}
-	if base.ID != preset.ID || preset.Name != stored.Presets[index].Name || !sameSettings(base, stored.Presets[index]) {
-		return SaveResult{}, ErrSettingsChanged
-	}
-	if err := s.checkStartDirectoryChange(stored.Presets[index], preset); err != nil {
-		return SaveResult{}, err
-	}
-	stored.Presets[index] = preset
-	return s.commitMetadata(stored, precondition, "settings.preset")
+		if base.ID != preset.ID || preset.Name != stored.Presets[index].Name || !sameSettings(base, stored.Presets[index]) {
+			return ErrSettingsChanged
+		}
+		if err := s.checkStartDirectoryChange(stored.Presets[index], preset); err != nil {
+			return err
+		}
+		stored.Presets[index] = preset
+		return nil
+	})
 }
 
 // sameSettings は、2つの設定が同じ値かを返す。画面が読んで送り返した値と、ディスクから

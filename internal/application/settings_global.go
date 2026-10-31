@@ -100,17 +100,13 @@ func (s *Service) SetGlobalSettings(base, settings GlobalSettings) (SaveResult, 
 	if err := validateGlobalSettings(&settings); err != nil {
 		return SaveResult{}, err
 	}
-	s.saveMutex.Lock()
-	defer s.saveMutex.Unlock()
-	stored, precondition, err := s.metadata.Load()
-	if err != nil {
-		return SaveResult{}, err
-	}
-	if !sameSettings(base, globalSettingsOf(stored)) {
-		return SaveResult{}, ErrSettingsChanged
-	}
-	stored.Settings = storedGlobalSettings(settings)
-	return s.commitMetadata(stored, precondition, "settings.global")
+	return s.changeMetadata("settings.global", func(stored *Metadata) error {
+		if !sameSettings(base, globalSettingsOf(*stored)) {
+			return ErrSettingsChanged
+		}
+		stored.Settings = storedGlobalSettings(settings)
+		return nil
+	})
 }
 
 // globalSettingsOf は、書かれていない全体の設定を空の値として読む。
