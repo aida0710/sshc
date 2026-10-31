@@ -820,6 +820,38 @@ func TestAnUnreachableAddressFailsWithinItsTimeout(t *testing.T) {
 	}
 }
 
+// 接続できなかった理由は、DescribeFailure が返す文にしてから端末へ書く。Open は握手を
+// 待たずに返るので、`sshc ssh` が握手の途中の失敗を CLI の案内にできるのはここだけである。
+func TestAFailureDuringTheHandshakeIsWrittenInTheWordsDescribeFailureGives(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	refused := errors.New("the workspace refused to write known_hosts")
+	const advice = "finish the interrupted change first"
+	target := targetWith(server)
+	target.Strict = "accept-new"
+	dialer := sshclient.Dialer{
+		HostKeys: sshclient.HostKeys{
+			Read: func(string) ([]byte, error) { return nil, nil },
+			Add:  func(string, knownhosts.Candidate) error { return refused },
+		},
+		DescribeFailure: func(err error) error {
+			if errors.Is(err, refused) {
+				return errors.New(advice)
+			}
+			return err
+		},
+	}
+
+	process, err := dialer.Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+	seen := readUntil(t, process, "sshc: "+advice)
+	if strings.Contains(seen, refused.Error()) {
+		t.Fatalf("the terminal still shows the original failure: %q", seen)
+	}
+}
+
 func TestAHandshakeTheServerNeverAnswersFailsWithinItsTimeout(t *testing.T) {
 	clientEnd, serverEnd := net.Pipe()
 	t.Cleanup(func() { _ = serverEnd.Close() })

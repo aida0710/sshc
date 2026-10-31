@@ -2,13 +2,14 @@ package main
 
 import (
 	"io"
+	"net/http"
 	"strings"
 	"testing"
 )
 
-// engine を使うコマンドは、engine や vault が使えないとき、どれも同じ文で次にする
-// ことを案内する。
-func TestEngineCommandsGiveTheSameAdviceWhenTheEngineOrVaultIsUnavailable(t *testing.T) {
+// engine を使うコマンドは、engine や vault が使えないときと、中断した変更が残って
+// いて書き込めないとき、どれも同じ文で次にすることを案内する。
+func TestEngineCommandsGiveTheSameAdviceWhenTheEngineOrVaultIsUnavailableOrAChangeIsInterrupted(t *testing.T) {
 	_, notRunning := readHandoff(t.TempDir())
 	if notRunning == nil {
 		t.Fatal("a state directory with no handoff was read as a running engine")
@@ -22,6 +23,12 @@ func TestEngineCommandsGiveTheSameAdviceWhenTheEngineOrVaultIsUnavailable(t *tes
 		{name: "no vault", err: errEngineVaultMissing, advice: vaultMissingAdvice},
 		{name: "locked vault", err: errEngineVaultLocked, advice: vaultLockedAdvice},
 		{name: "another engine", err: errEngineIdentityMismatch, advice: engineIncompatibleAdvice},
+		{name: "interrupted change",
+			err:    engineProblem{Status: http.StatusConflict, Code: "workspace_pending_transaction"},
+			advice: pendingTransactionAdvice},
+		{name: "interrupted change found by sync",
+			err:    engineProblem{Status: http.StatusConflict, Code: "sync_pending_transaction"},
+			advice: pendingTransactionAdvice},
 	}
 	commands := map[string]func(err error, stderr io.Writer) int{
 		"otp":      func(err error, stderr io.Writer) int { return finishOTPFailure(false, err, io.Discard, stderr) },
