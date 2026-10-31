@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"sshc/internal/application"
+	"sshc/internal/platform/windowsacl/acltest"
 )
 
 func readSettings(t *testing.T, harness *testHarness) application.SettingsDocument {
@@ -110,9 +111,7 @@ func TestAPresetOutOfRangeIsABadRequest(t *testing.T) {
 func TestAPresetSaveRefusedByAnotherPartOfTheMetadataNamesThatPart(t *testing.T) {
 	harness := newConfigHarness(t)
 	contents := fmt.Sprintf(`{"schemaVersion":%d,"presets":[{"id":"default"}],"hosts":[{"identity":{"path":"config","alias":"edge"},"detectedOS":"beos"}]}`, application.MetadataSchemaVersion)
-	if err := os.WriteFile(filepath.Join(harness.workspace.StateDir(), application.MetadataFileName), []byte(contents), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, filepath.Join(harness.workspace.StateDir(), application.MetadataFileName), []byte(contents))
 	standard := readSettings(t, harness).Presets[0]
 
 	response := harness.call(t, http.MethodPut, "/api/v1/settings/presets/default",
