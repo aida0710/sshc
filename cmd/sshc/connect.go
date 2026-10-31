@@ -75,6 +75,8 @@ func runConnect(ctx context.Context, alias string, environment commandEnvironmen
 		Password:    savedPasswordFor(answer),
 		OneTimeCode: savedTOTPFor(answer),
 		VPNRoute:    vpnRouteThroughEngine(stateDir, client),
+		// 握手で止まった理由は、Open の戻り値ではなくセッションの出力に書かれる。
+		DescribeFailure: describeConnectionFailure,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
