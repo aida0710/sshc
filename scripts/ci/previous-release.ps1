@@ -1,15 +1,16 @@
-# 前のリリース（GitHub の最新の安定版）のうち、この Windows のランナーで動く sshc を落とし、
-# 同じリリースの checksums.txt と照らしてから、そのパスを出す。前のリリースから上げる
-# 試験（cmd/sshc/upgrade_test.go）が使う。Unix は previous-release.sh。
+# 前のリリース（GitHub の最新の安定版。-Tag を渡せばそのリリース）のうち、この Windows の
+# ランナーで動く sshc を落とし、同じリリースの checksums.txt と照らしてから、そのパスを出す。
+# 前のリリースから上げる試験（cmd/sshc/upgrade_test.go）が使う。Unix は previous-release.sh。
 param(
-    [Parameter(Mandatory = $true)][string]$Directory
+    [Parameter(Mandatory = $true)][string]$Directory,
+    [string]$Tag = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 
 $repository = if ($env:GITHUB_REPOSITORY) { $env:GITHUB_REPOSITORY } else { 'aida0710/sshc' }
-$tag = (gh release view --repo $repository --json tagName --jq .tagName)
+$tag = if ($Tag) { $Tag } else { (gh release view --repo $repository --json tagName --jq .tagName) }
 $goarch = (go env GOARCH)
 $asset = "sshc-windows-$goarch.exe"
 
