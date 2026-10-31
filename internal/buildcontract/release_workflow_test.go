@@ -125,7 +125,7 @@ func TestReleaseWorkflowBuildsEveryPlatformNatively(t *testing.T) {
 	document, _ := readReleaseWorkflow(t)
 
 	for job, runner := range map[string]string{
-		"macos":   "macos-14",
+		"macos":   "macos-15",
 		"linux":   "ubuntu-24.04",
 		"windows": "windows-2025",
 		"android": "ubuntu-24.04",
