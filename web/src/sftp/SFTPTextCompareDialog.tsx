@@ -4,7 +4,7 @@ import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
 import { Button, Notice } from "../ui/surface";
 import { localHostAlias } from "./localHost";
-import { loadMonacoDiffEditor } from "./loadMonacoEditor";
+import { loadMonacoDiffEditor } from "../editor/loadMonacoEditor";
 import { useSFTPTextComparison, type TextComparisonSide } from "./useSFTPTextComparison";
 
 const MonacoDiffEditor = lazy(() => loadMonacoDiffEditor().then(({ MonacoDiffEditor }) => ({ default: MonacoDiffEditor })));

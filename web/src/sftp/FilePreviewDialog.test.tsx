@@ -16,7 +16,7 @@ vi.mock("./api", () => ({ sftpApi: {
 vi.mock("./transferManager", () => ({ sftpTransferManager: { addDownload: vi.fn() } }));
 // jsdom cannot run Monaco. The stand-in shows what the dialog asked of it and,
 // like the editor, owns the keys pressed inside it.
-vi.mock("./MonacoEditor", () => ({
+vi.mock("../editor/MonacoEditor", () => ({
   MonacoEditor: ({ path, value, readOnly }: { path: string; value: string; readOnly: boolean }) => (
     <pre {...keyboardOwnerProps} tabIndex={0} aria-label="Editor" data-path={path} data-read-only={String(readOnly)}>{value}</pre>
   ),

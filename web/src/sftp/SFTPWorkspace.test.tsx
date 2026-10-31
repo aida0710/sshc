@@ -25,7 +25,7 @@ vi.mock("../api/recentConnections", () => ({
 
 // The listing that opens a host's SSH connection names the attempt the pane reads its stage from.
 const connecting = { attempt: expect.any(String) };
-vi.mock("./MonacoEditor", () => ({
+vi.mock("../editor/MonacoEditor", () => ({
   MonacoEditor: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
     <textarea
       aria-label="Remote file contents"

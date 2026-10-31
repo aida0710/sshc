@@ -124,6 +124,28 @@ type PendingView struct {
 	CanComplete bool     `json:"canComplete"`
 }
 
+// PendingChangesView は、中断した変更のファイルごとの変更前と変更後である（History の比べる画面）。
+// HTTP の形は httpserver が api.PendingChanges に移す。
+type PendingChangesView struct {
+	ID    string
+	Files []PendingFileChange
+}
+
+// PendingFileChange は、中断した変更のファイルひとつである。Contents が "text" のときだけ
+// Before と After に中身が入る。ほかの値は中身を入れない理由（秘密、文字でない、大きすぎる、
+// Vault がロック中、読めない）か、中身を持たない操作（"none"。移動とディレクトリ）を言う。
+type PendingFileChange struct {
+	Path         string
+	Target       string
+	Action       string
+	Committed    bool
+	Contents     string
+	BeforeExists bool
+	AfterExists  bool
+	Before       string
+	After        string
+}
+
 // HistoryEntry は、1 個の完了した transaction である。
 type HistoryEntry struct {
 	ID         string   `json:"id"`

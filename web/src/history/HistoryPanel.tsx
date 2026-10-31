@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import { MoreDetails } from "../ui/MoreDetails";
 import { toProblem } from "../api/guards";
 import { useLanguage } from "../i18n/context";
-import type { MessageKey } from "../i18n/messages";
 import type { Problem } from "../api/client";
 import { configApi, type HistoryEntry, type PendingTransaction } from "../api/config";
 import { Button, Notice } from "../ui/surface";
@@ -11,33 +10,10 @@ import { PageHeader, PageSection, PageStateFrame, SummaryStat, SummaryStats } fr
 import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
 import { formatDateTime } from "../ui/format";
+import { historyOperationLabelKey, historyStatusLabelKey } from "./historyLabels";
+import { PendingChangeDialog } from "./PendingChangeDialog";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
-
-function historyOperationLabelKey(operation: string): MessageKey {
-  if (operation.startsWith("connection.")) return "history.operation.connection";
-  if (operation.startsWith("key.")) return "history.operation.key";
-  if (operation.startsWith("terminal.")) return "history.operation.terminal";
-  if (operation.startsWith("settings.") || operation.startsWith("metadata.")) return "history.operation.settings";
-  if (operation.startsWith("machine.")) return "history.operation.machine";
-  if (operation.startsWith("secret.")) return "history.operation.vault";
-  if (operation.startsWith("sync.")) return "history.operation.sync";
-  if (operation.startsWith("config.") || operation.startsWith("directory.") || operation.startsWith("group.")) {
-    return "history.operation.configuration";
-  }
-  return "history.operation.other";
-}
-
-function historyStatusLabelKey(status: string): MessageKey {
-  switch (status) {
-    case "staging": return "history.status.staging";
-    case "staged": return "history.status.staged";
-    case "applied": return "history.status.applied";
-    case "completed": return "history.status.completed";
-    case "rolled_back": return "history.status.rolledBack";
-    default: return "history.status.unknown";
-  }
-}
 
 export function HistoryPanel() {
   const { t, locale } = useLanguage();
@@ -45,6 +21,7 @@ export function HistoryPanel() {
   const [pending, setPending] = useState<PendingTransaction[]>([]);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [message, setMessage] = useState("");
+  const [inspected, setInspected] = useState<PendingTransaction | null>(null);
 
   const reload = useCallback(async () => {
     const [historyResult, overviewResult] = await Promise.allSettled([
@@ -138,14 +115,15 @@ export function HistoryPanel() {
                   <p className="mt-1 text-xs text-ink-muted">
                     {t("history.interruptedDetail", {
                       operation: t(historyOperationLabelKey(item.operation)),
-                      startedAt: item.startedAt,
+                      startedAt: formatDateTime(item.startedAt, locale),
                       committed: item.committed,
                       total: item.paths.length,
                     })}
                   </p>
                   <p className="mt-2 truncate font-mono text-xs text-ink-muted">{item.paths.join(", ")}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <Button kind="primary" onClick={() => setInspected(item)}>{t("history.viewChange")}</Button>
                   <Button
                     disabled={!item.canComplete}
                     onClick={() => void recover(item.id, "complete")}
@@ -189,6 +167,16 @@ export function HistoryPanel() {
         <p className="mt-3 text-xs leading-[18px] text-ink-faint">{t("history.backupRetention")}</p>
         <MoreDetails className="mt-1">{t("history.backupRetentionMore")}</MoreDetails>
       </PageSection>
+      {inspected === null ? null : (
+        <PendingChangeDialog
+          transaction={inspected}
+          onDismiss={() => setInspected(null)}
+          onRecover={(action) => {
+            setInspected(null);
+            void recover(inspected.id, action);
+          }}
+        />
+      )}
     </div>
   );
 }

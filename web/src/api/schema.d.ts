@@ -2222,6 +2222,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/history/pending/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPendingChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/local/directories": {
         parameters: {
             query?: never;
@@ -4742,6 +4758,23 @@ export interface components {
         RecoverRequest: {
             transactionId: string;
             action: string;
+        };
+        PendingChanges: {
+            id: string;
+            files: components["schemas"]["PendingFileChange"][];
+        };
+        PendingFileChange: {
+            path: string;
+            target?: string;
+            /** @enum {string} */
+            action: "write" | "move" | "remove" | "mkdir" | "rmdir" | "note";
+            committed: boolean;
+            /** @enum {string} */
+            contents: "text" | "none" | "secret" | "binary" | "too_large" | "vault_locked" | "unavailable";
+            beforeExists: boolean;
+            afterExists: boolean;
+            before?: string;
+            after?: string;
         };
         RecoverResponse: {
             /** @enum {string} */
@@ -9853,6 +9886,34 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+        };
+    };
+    getPendingChanges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The before and after contents of each file of an interrupted transaction */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingChanges"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
         };
     };
     createLocalSFTPDirectory: {
