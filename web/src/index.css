@@ -151,6 +151,8 @@
   --color-notice-ink: var(--ui-notice-ink);
   --color-danger: var(--ui-danger);
   --color-live: var(--ui-live);
+  --color-kind-image: var(--ui-kind-image);
+  --color-kind-video: var(--ui-kind-video);
   --color-code-bg: var(--ui-code-bg);
   --color-code-fg: var(--ui-code-fg);
   --color-term-bg: var(--ui-term-bg);

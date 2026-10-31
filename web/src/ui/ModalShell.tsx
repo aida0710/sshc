@@ -2,12 +2,14 @@ import { useRef, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useDismissibleLayer, type DismissReason } from "./useDismissibleLayer";
 
-type ModalPlacement = "center" | "sheet" | "palette";
+type ModalPlacement = "center" | "sheet" | "palette" | "fullscreen";
 
+// fullscreen gives the panel the whole screen, as a phone shows a picture; the panel says how it fills it.
 const placementClasses: Record<ModalPlacement, string> = {
   center: "items-center justify-center p-4",
   sheet: "items-end justify-center p-3 sm:items-center",
   palette: "items-start justify-center px-3 pt-[10vh] md:pt-[14vh]",
+  fullscreen: "items-stretch justify-stretch",
 };
 
 export function ModalShell({

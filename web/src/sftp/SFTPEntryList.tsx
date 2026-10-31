@@ -6,6 +6,7 @@ import { SortableTableHeader } from "../ui/tableSort";
 import type { RemoteEntry } from "./api";
 import { formatBytes, formatDateTime } from "../ui/format";
 import { entryKind } from "./entryKind";
+import { fileKindIconColours, fileKindIcons, fileKindLabelKeys, fileKindOf } from "./fileKind";
 import { entryTypeLabelKeys } from "./sftpMessageKeys";
 import type { SFTPSort, SFTPSortState } from "./sftpEntrySort";
 import { parentRowKey, type SFTPEntryListModel } from "./useSFTPEntryList";
@@ -19,9 +20,27 @@ function entrySize(entry: RemoteEntry): string {
 // The cells of the wide table: 7px above and below each row, as in the design.
 const headerCell = "px-2 pb-2 pt-2.5 font-normal";
 const bodyCell = "px-2 py-[7px]";
+// In the wide table only the name grows: every other column is as wide as what it holds, with room after it.
+const fittedColumn = "w-px whitespace-nowrap pr-7";
 
+// A file is drawn as its kind (a picture, a recording…), so a folder of photos reads at a glance.
 function entryIcon(entry: RemoteEntry) {
-  return entryKind(entry) === "directory" ? "folder" : "file";
+  const kind = entryKind(entry);
+  if (kind === "directory") return "folder";
+  const fileKind = kind === "file" ? fileKindOf(entry.name) : null;
+  return fileKind === null ? "file" : fileKindIcons[fileKind];
+}
+
+function entryIconColour(entry: RemoteEntry): string {
+  const kind = entryKind(entry);
+  if (kind === "directory") return "text-accent";
+  const fileKind = kind === "file" ? fileKindOf(entry.name) : null;
+  return (fileKind === null ? undefined : fileKindIconColours[fileKind]) ?? "text-ink-muted";
+}
+
+function entryTypeLabelKey(entry: RemoteEntry) {
+  const fileKind = entry.type === "file" ? fileKindOf(entry.name) : null;
+  return fileKind === null ? entryTypeLabelKeys[entry.type] : fileKindLabelKeys[fileKind];
 }
 
 // A symlink is named with where it points, as `ls -l` does.
@@ -79,6 +98,8 @@ export function SFTPEntryList({
   const t = useTranslate();
   const { locale } = useLanguage();
   const tableOwnership = showOwnership && !compact;
+  // A narrow pane fixes its columns (colgroup); the wide table fits all but the name to what they hold.
+  const fitted = compact ? "" : fittedColumn;
   const {
     selectedPaths, activeRowKey, allDisplayedSelected, selectAll, registerRow, setFocusedKey,
     activate, openParent, clickEntry, toggleSelection, toggleAllDisplayed,
@@ -153,14 +174,17 @@ export function SFTPEntryList({
               {...entryButtonProps(entry)}
               className="flex min-h-14 min-w-0 flex-1 touch-pan-y select-none items-center gap-2.5 px-2.5 py-1.5 text-left hover:bg-hover active:bg-select-fill"
             >
-              <Icon name={entryIcon(entry)} className="size-5 shrink-0 text-ink-muted" />
+              <Icon name={entryIcon(entry)} className={`size-5 shrink-0 ${entryKind(entry) === "directory" ? "text-ink-muted" : entryIconColour(entry)}`} />
               <span className="min-w-0 flex-1">
                 <span title={entry.type === "symlink" ? `${entry.name} → ${entry.linkTarget ?? ""}` : entry.name} className="block truncate font-mono text-base font-medium leading-5 text-ink"><EntryName entry={entry} /></span>
+                {/* The size and the date come first; the permissions and the owner are in the details. A search
+                    result says first which folder it is in. */}
                 <span className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs leading-4 text-ink-muted">
-                  <span title={entryContext === undefined ? entry.mode : entryContext(entry)} className="max-w-full truncate font-mono">{entryContext === undefined ? entry.mode : entryContext(entry)}</span>
-                  {!showOwnership || entry.uid === undefined ? null : <span title={t("sftp.ownerIds", { uid: entry.uid, gid: entry.gid ?? "—" })} aria-label={t("sftp.ownerIds", { uid: entry.uid, gid: entry.gid ?? "—" })} className="max-w-full truncate font-mono">{entry.uid}:{entry.gid ?? "—"}</span>}
-                  <span className="whitespace-nowrap">{entrySize(entry)}</span>
-                  <time title={new Date(entry.modifiedAt).toLocaleString(locale)} className="whitespace-nowrap" dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleDateString(locale)}</time>
+                  {entryContext === undefined ? null : <span title={entryContext(entry)} className="max-w-full truncate font-mono">{entryContext(entry)}</span>}
+                  <span className="whitespace-nowrap">
+                    {entrySize(entry)}{" · "}
+                    <time title={new Date(entry.modifiedAt).toLocaleString(locale)} dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleDateString(locale)}</time>
+                  </span>
                 </span>
               </span>
             </button>
@@ -185,14 +209,14 @@ export function SFTPEntryList({
           />
         </th>
         <SortableTableHeader column="name" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={headerCell}>{t("sftp.name")}</SortableTableHeader>
-        <SortableTableHeader column="modified" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={headerCell}>{t("sftp.modified")}</SortableTableHeader>
-        <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} text-right`} buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
-        <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} w-24 whitespace-nowrap`}>{t("sftp.type")}</SortableTableHeader>
+        <SortableTableHeader column="modified" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} ${fitted}`}>{t("sftp.modified")}</SortableTableHeader>
+        <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} ${fitted} text-right`} buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
+        <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} ${compact ? "w-24 whitespace-nowrap" : fittedColumn}`}>{t("sftp.type")}</SortableTableHeader>
         {tableOwnership ? <>
-        <SortableTableHeader column="uid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={headerCell}>{t("sftp.uid")}</SortableTableHeader>
-        <SortableTableHeader column="gid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={headerCell}>{t("sftp.gid")}</SortableTableHeader>
+        <SortableTableHeader column="uid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} ${fittedColumn}`}>{t("sftp.uid")}</SortableTableHeader>
+        <SortableTableHeader column="gid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} ${fittedColumn}`}>{t("sftp.gid")}</SortableTableHeader>
         </> : null}
-        {compact ? null : <th scope="col" className={`${headerCell} w-28 whitespace-nowrap`}>{t("sftp.permissions")}</th>}
+        {compact ? null : <th scope="col" className={`${headerCell} ${fittedColumn}`}>{t("sftp.permissions")}</th>}
       </tr></thead>
       <tbody>
         {parentRowVisible ? (
@@ -228,21 +252,21 @@ export function SFTPEntryList({
                 {...entryButtonProps(entry)}
                 className={`flex w-full min-w-0 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${rowCursor(entry)}`}
               >
-                <Icon name={entryIcon(entry)} className={`size-[15px] shrink-0 ${entryKind(entry) === "directory" ? "text-accent" : "text-ink-muted"}`} />
+                <Icon name={entryIcon(entry)} className={`size-[15px] shrink-0 ${entryIconColour(entry)}`} />
                 <span className="min-w-0 grow">
                   <span className="block truncate text-[13px] leading-5 text-ink"><EntryName entry={entry} /></span>
                   {entryContext === undefined ? null : <span className="block truncate font-mono text-[10px] leading-3 text-ink-muted">{entryContext(entry)}</span>}
                 </span>
               </button>
             </td>
-            <td className={`${bodyCell} truncate whitespace-nowrap text-xs text-ink-faint`} title={new Date(entry.modifiedAt).toLocaleString(locale)}>{formatDateTime(entry.modifiedAt, locale)}</td>
-            <td className={`${bodyCell} whitespace-nowrap text-right font-mono text-xs text-ink-muted`}>{entrySize(entry)}</td>
-            <td className={`${bodyCell} w-24 whitespace-nowrap text-xs text-ink-muted`}>{t(entryTypeLabelKeys[entry.type])}</td>
+            <td className={`${bodyCell} ${fitted} truncate whitespace-nowrap text-xs text-ink-faint`} title={new Date(entry.modifiedAt).toLocaleString(locale)}>{formatDateTime(entry.modifiedAt, locale)}</td>
+            <td className={`${bodyCell} ${fitted} whitespace-nowrap text-right font-mono text-xs text-ink-muted`}>{entrySize(entry)}</td>
+            <td className={`${bodyCell} ${compact ? "w-24" : fittedColumn} whitespace-nowrap text-xs text-ink-muted`}>{t(entryTypeLabelKey(entry))}</td>
             {tableOwnership ? <>
-            <td className={`${bodyCell} font-mono text-xs text-ink-muted`}>{entry.uid ?? "—"}</td>
-            <td className={`${bodyCell} font-mono text-xs text-ink-muted`}>{entry.gid ?? "—"}</td>
+            <td className={`${bodyCell} ${fittedColumn} font-mono text-xs text-ink-muted`}>{entry.uid ?? "—"}</td>
+            <td className={`${bodyCell} ${fittedColumn} font-mono text-xs text-ink-muted`}>{entry.gid ?? "—"}</td>
             </> : null}
-            {compact ? null : <td className={`${bodyCell} w-28 whitespace-nowrap font-mono text-xs text-ink-muted`}>{entry.mode}</td>}
+            {compact ? null : <td className={`${bodyCell} ${fittedColumn} font-mono text-xs text-ink-muted`}>{entry.mode}</td>}
           </tr>
         ))}
       </tbody>
