@@ -595,8 +595,13 @@ try {
             Stop-InstalledEngine $target $engine
         }
         elseif (Test-Path -LiteralPath $target -PathType Leaf) {
-            $stoppedService = Get-EnabledService $target
-            if ($null -ne $stoppedService -and (Test-LastRunFailed $stoppedService)) { $failedService = $stoppedService }
+            # Installing may be what repairs a broken executable, so not being able to ask it about the
+            # task leaves the task alone instead of stopping the installation.
+            try {
+                $stoppedService = Get-EnabledService $target
+                if ($null -ne $stoppedService -and (Test-LastRunFailed $stoppedService)) { $failedService = $stoppedService }
+            }
+            catch { Write-Note "the sshc task was not inspected ($($_.Exception.Message)); start it with sshc service install if needed" }
         }
     }
 
