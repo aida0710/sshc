@@ -2,6 +2,7 @@
 /* テーマごとの色。一覧は theme/theme.ts の colorThemes。 */
 @import "./theme/themes/light.css";
 @import "./theme/themes/dark.css";
+@import "./theme/themes/dark-blue.css";
 
 /* 押せない要素は、載せても押しても見た目を変えない。hover と active の指定を、:disabled の
    ときは効かせない形に置き換える（:where で詳細度は上げない）。
@@ -38,87 +39,80 @@
 
 /* さし色。名前は metadata の appearance.accent（設定の Appearance で選ぶ）。属性が無い間（ロック
    画面、metadata を読む前）はテーマの既定の薄紫になる。色はライトとダークの2組で、明暗（data-scheme）
-   が同じテーマはどれも同じ組を使う。選択中の背景はさし色を薄く混ぜた色を固定の値で持つ
-   （web/e2e/appearance.spec.ts がこの値でコントラストを測る）。ライトでは白い文字を載せ
-   ても読める濃さの版を使う。橙・緑・赤は未読の通知・接続済み・エラーの色なので選べない。
-   設定の見本の丸も、丸に data-accent を付けてこの値で塗る（色の値を画面のコードに二重に持たない）。 */
+   が同じテーマはどれも同じ組を使う。ライトでは白い文字を載せても読める濃さの色を使う。橙・緑・赤は
+   未読の通知・接続済み・エラーの色なので選べない。設定の見本の丸も、丸に data-accent を付けて
+   この値で塗る（色の値を画面のコードに二重に持たない）。 */
 [data-accent="lavender"] {
   --ui-accent: #6550d0;
   --ui-accent-ink: #ffffff;
-  --ui-select-fill: #eeecfa;
 }
 
 [data-accent="blue"] {
   --ui-accent: #2f5fb3;
   --ui-accent-ink: #ffffff;
-  --ui-select-fill: #e8edf7;
 }
 
 [data-accent="sky"] {
   --ui-accent: #0a6f9c;
   --ui-accent-ink: #ffffff;
-  --ui-select-fill: #e4eff4;
 }
 
 [data-accent="pink"] {
   --ui-accent: #b03a72;
   --ui-accent-ink: #ffffff;
-  --ui-select-fill: #f6e9ef;
 }
 
 [data-accent="mono"] {
   --ui-accent: #24282c;
   --ui-accent-ink: #ffffff;
-  --ui-select-fill: #e7e7e8;
 }
 
 [data-scheme="dark"][data-accent="lavender"],
 [data-scheme="dark"] [data-accent="lavender"] {
   --ui-accent: #b5a8ff;
   --ui-accent-ink: #15122b;
-  --ui-select-fill: #2d2d3d;
 }
 
 [data-scheme="dark"][data-accent="blue"],
 [data-scheme="dark"] [data-accent="blue"] {
   --ui-accent: #8fb3ff;
   --ui-accent-ink: #0d1626;
-  --ui-select-fill: #272e3d;
 }
 
 [data-scheme="dark"][data-accent="sky"],
 [data-scheme="dark"] [data-accent="sky"] {
   --ui-accent: #7fd0f5;
   --ui-accent-ink: #062231;
-  --ui-select-fill: #25333c;
 }
 
 [data-scheme="dark"][data-accent="pink"],
 [data-scheme="dark"] [data-accent="pink"] {
   --ui-accent: #f3a5c8;
   --ui-accent-ink: #2e0f1e;
-  --ui-select-fill: #362c35;
 }
 
 [data-scheme="dark"][data-accent="mono"],
 [data-scheme="dark"] [data-accent="mono"] {
   --ui-accent: #eceef0;
   --ui-accent-ink: #111214;
-  --ui-select-fill: #2f3135;
 }
 
 /* カスタムは利用者が選んだ1色を、どちらの配色でも使う。色と、その上で読める文字の色（黒か白）は
-   theme/accent.ts が <html> の --ui-custom-accent・--ui-custom-accent-ink に置く。選択中の背景は、
-   用意した色と同じ濃さ（ライトは12%、ダークは14%）でその色をテーマのサイドバーの地に混ぜる。 */
+   theme/accent.ts が <html> の --ui-custom-accent・--ui-custom-accent-ink に置く。 */
 [data-accent="custom"] {
   --ui-accent: var(--ui-custom-accent);
   --ui-accent-ink: var(--ui-custom-accent-ink);
-  --ui-select-fill: color-mix(in srgb, var(--ui-custom-accent) 12%, var(--ui-sidebar));
 }
 
-[data-scheme="dark"][data-accent="custom"],
-[data-scheme="dark"] [data-accent="custom"] {
-  --ui-select-fill: color-mix(in srgb, var(--ui-custom-accent) 14%, var(--ui-sidebar));
+/* 選択中の背景は、さし色をテーマのサイドバーの地に混ぜる（ライトは12%、ダークは14%）。地の色は
+   テーマごとに違うので、さし色ごとの固定の値にはしない。 */
+[data-accent] {
+  --ui-select-fill: color-mix(in srgb, var(--ui-accent) 12%, var(--ui-sidebar));
+}
+
+[data-scheme="dark"][data-accent],
+[data-scheme="dark"] [data-accent] {
+  --ui-select-fill: color-mix(in srgb, var(--ui-accent) 14%, var(--ui-sidebar));
 }
 
 /* 設定のカスタムの丸は、色をまだ選んでいない間、どの色でも選べることを色の輪で見せる。 */
