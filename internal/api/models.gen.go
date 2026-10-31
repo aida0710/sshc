@@ -1303,6 +1303,25 @@ type PasswordVaultStatus struct {
 	Unlocked                bool     `json:"unlocked"`
 }
 
+// PendingChanges defines model for PendingChanges.
+type PendingChanges struct {
+	Files []PendingFileChange `json:"files"`
+	Id    string              `json:"id"`
+}
+
+// PendingFileChange defines model for PendingFileChange.
+type PendingFileChange struct {
+	Action       string  `json:"action"`
+	After        *string `json:"after,omitempty"`
+	AfterExists  bool    `json:"afterExists"`
+	Before       *string `json:"before,omitempty"`
+	BeforeExists bool    `json:"beforeExists"`
+	Committed    bool    `json:"committed"`
+	Contents     string  `json:"contents"`
+	Path         string  `json:"path"`
+	Target       *string `json:"target,omitempty"`
+}
+
 // Problem defines model for Problem.
 type Problem struct {
 	Blockers        *[]string       `json:"blockers,omitempty"`

@@ -44,6 +44,7 @@ func registerConfigRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.GET("/api/v1/history", handlers.History)
 	engine.POST("/api/v1/history/restore", handlers.Restore)
 	engine.POST("/api/v1/history/recover", handlers.Recover)
+	engine.GET("/api/v1/history/pending/:id", handlers.PendingChanges)
 }
 
 func (h ConfigHandlers) Overview(c *echo.Context) error {
@@ -211,6 +212,20 @@ func (h ConfigHandlers) Recover(c *echo.Context) error {
 		return serviceProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, api.RecoverResponse{Status: "ok"})
+}
+
+// PendingChanges は、中断した変更のファイルごとの変更前と変更後を返す。History の
+// ［変更を見る］が、取り消すか完了させるかを決める前に読む。
+func (h ConfigHandlers) PendingChanges(c *echo.Context) error {
+	identifier := c.Param("id")
+	if err := validateIdentifier(identifier); err != nil {
+		return serviceProblem(c, err)
+	}
+	changes, err := h.Service.PendingChanges(identifier)
+	if err != nil {
+		return serviceProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, changes)
 }
 
 func (h ConfigHandlers) SetShortcuts(c *echo.Context) error {
