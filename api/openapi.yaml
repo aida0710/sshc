@@ -6937,7 +6937,8 @@ components:
         fileTransfers: { $ref: "#/components/schemas/FileTransferSettings" }
         vaultAutoLock: { $ref: "#/components/schemas/VaultAutoLockSettings" }
         interface: { $ref: "#/components/schemas/InterfaceSettings" }
-    # 画面の操作と並び方のうちプリセットに入るもの。エンジンは使わない。
+    # 画面の操作のうちプリセットに入るもの。エンジンは使わない。欄の幅と Home の表示形式は
+    # ブラウザに置き、ここには無い。
     InterfaceSettings:
       type: object
       additionalProperties: false
@@ -6948,11 +6949,6 @@ components:
         keepScreenAwake: { type: boolean }
         # 使うショートカットのプリセットの id。省略は既定の割り当て。
         shortcutPreset: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' }
-        # ドラッグで決めた欄の幅（px）。省略は既定の幅。
-        navigationWidth: { type: integer, minimum: 0, maximum: 4096 }
-        connectionListWidth: { type: integer, minimum: 0, maximum: 4096 }
-        connectionGroupsWidth: { type: integer, minimum: 0, maximum: 4096 }
-        homeView: { type: string, enum: [panel, list] }
     NotificationSound:
       type: object
       additionalProperties: false
@@ -6995,7 +6991,6 @@ components:
       properties:
         runTarget: { type: string, maxLength: 65536 }
         sftpPanes: { type: string, maxLength: 65536 }
-        sftpSplitRatio: { type: string, maxLength: 65536 }
         sftpQueueView: { type: string, maxLength: 65536 }
         collapsedTerminalWorkspaces: { type: string, maxLength: 65536 }
         showHiddenTerminalWorkspaces: { type: string, maxLength: 65536 }

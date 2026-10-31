@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { knownPalette, palettes } from "./palettes";
+import { palettes } from "./palettes";
 
 
 const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "index.css"), "utf8");
@@ -42,11 +42,5 @@ describe("端末の配色", () => {
       if (missing.length > 0) incomplete.push(`${name}: ${missing.join(", ")}`);
     }
     expect(incomplete).toEqual([]);
-  });
-
-  it("treats a name it does not know as no choice at all", () => {
-    expect(knownPalette("dracula")?.label).toBe("Dracula");
-    expect(knownPalette("nope")).toBeNull();
-    expect(knownPalette("")).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ package application
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -140,13 +141,28 @@ func TestEditingAPresetCannotRenameIt(t *testing.T) {
 	}
 }
 
+// 前のバージョンが書いた欄の幅と Home の表示形式（今はブラウザに置く）が残っていても、プリセットはほかの値を
+// 保って読め、そのまま保存できる。
+func TestAPresetHoldingTheOldLayoutValuesKeepsItsOtherSettings(t *testing.T) {
+	contents := fmt.Sprintf(`{"schemaVersion":%d,"presets":[{"id":"default","interface":{"touchMode":"touch","navigationWidth":300,"homeView":"list"}}]}`, MetadataSchemaVersion)
+
+	metadata, err := DecodeMetadata([]byte(contents))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := metadata.Presets[0].Interface; got == nil || got.TouchMode != "touch" {
+		t.Fatalf("interface = %+v, want the touch mode kept", got)
+	}
+	if err := ValidateMetadata(metadata); err != nil {
+		t.Fatalf("the preset cannot be saved: %v", err)
+	}
+}
+
 func TestInterfaceSettingsOutOfRangeAreRefused(t *testing.T) {
 	for name, settings := range map[string]InterfaceSettings{
 		"touch mode": {TouchMode: "auto"},
 		"sound":      {NotificationSound: &NotificationSound{Sound: "siren", Volume: 50}},
 		"volume":     {NotificationSound: &NotificationSound{Sound: "bell", Volume: 101}},
-		"width":      {NavigationWidth: maxColumnWidth + 1},
-		"home view":  {HomeView: "grid"},
 		"shortcuts":  {ShortcutPreset: "../x"},
 	} {
 		if err := validateInterfaceSettings(&settings); !errors.Is(err, ErrPresets) {

@@ -9,7 +9,8 @@
 // Keys named before this rule keep their names, because renaming one would
 // reset that value in every browser.
 //
-// Settings are not kept here: they are synced through the engine (settingsStore.ts).
+// Settings are not kept here: they are synced through the engine (settingsStore.ts). The layout values below
+// are the exception.
 
 // localStorage outlives the tab and is shared by every tab of the origin.
 export const localStorageKeys = {
@@ -20,6 +21,15 @@ export const localStorageKeys = {
   browserRegistration: "sshc.browser.registration.v1",
   // The update job whose result dialog this browser has shown, so it opens once.
   updateShownResult: "sshc.update.shown-result.v1",
+  // Layout values that a drag or a click changes: the column widths (px), the Home view ("list", or nothing for
+  // the panels) and the SFTP split (the left pane's share, %). Synced, each change would be a change of the
+  // synced settings, and a width fits the screen in front of the user, so each browser keeps its own. They keep
+  // the names they had before the settings were synced, so a width chosen then comes back.
+  navigationWidth: "sshc.navigation.width",
+  connectionListWidth: "sshc.connections.list-width.v2",
+  connectionGroupsWidth: "sshc.connections.groups-width.v1",
+  quickConnectView: "sshc.home.quick-connect-view",
+  sftpSplitRatio: "sshc.sftp.splitRatio",
 } as const;
 
 // sessionStorage belongs to one tab and ends with it.

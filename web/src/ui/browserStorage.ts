@@ -1,5 +1,6 @@
 // Browser storage holds copies and conveniences only: the theme and language
-// drawn before the engine answers, an update result already shown. Private windows, quota limits and enterprise policies can
+// drawn before the engine answers, an update result already shown, the column
+// widths and views a drag or a click changes. Private windows, quota limits and enterprise policies can
 // all refuse it, and even reading `window.localStorage` can throw, so every
 // preference must keep working with nothing stored. These wrappers turn a
 // refusal into "nothing stored" so callers never repeat the try/catch. The

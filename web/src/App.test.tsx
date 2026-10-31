@@ -1,5 +1,4 @@
 import { StrictMode, useEffect, useState } from "react";
-import { fakeSettingsServer } from "./testing/settingsServer";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -562,7 +561,7 @@ describe("App", () => {
   });
 
   it("keeps desktop navigation visible and restores its width", async () => {
-    const server = fakeSettingsServer({ presets: [{ id: "default", interface: { navigationWidth: 312 } }] });
+    window.localStorage.setItem("sshc.navigation.width", "312");
     const user = userEvent.setup();
     const { container } = render(
       <App
@@ -583,7 +582,7 @@ describe("App", () => {
     resize.focus();
     await user.keyboard("{ArrowRight}");
     expect(layout?.style.getPropertyValue("--navigation-width")).toBe("320px");
-    await waitFor(() => expect(server.document().presets[0]?.interface?.navigationWidth).toBe(320));
+    expect(window.localStorage.getItem("sshc.navigation.width")).toBe("320");
     vi.restoreAllMocks();
   });
 

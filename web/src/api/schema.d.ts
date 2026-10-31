@@ -4507,11 +4507,6 @@ export interface components {
             notificationSound?: components["schemas"]["NotificationSound"];
             keepScreenAwake?: boolean;
             shortcutPreset?: string;
-            navigationWidth?: number;
-            connectionListWidth?: number;
-            connectionGroupsWidth?: number;
-            /** @enum {string} */
-            homeView?: "panel" | "list";
         };
         NotificationSound: {
             /** @enum {string} */
@@ -4537,7 +4532,6 @@ export interface components {
         InterfaceState: {
             runTarget?: string;
             sftpPanes?: string;
-            sftpSplitRatio?: string;
             sftpQueueView?: string;
             collapsedTerminalWorkspaces?: string;
             showHiddenTerminalWorkspaces?: string;

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"sshc/internal/storage"
 	"sshc/internal/validate"
 )
 
@@ -84,25 +83,12 @@ func (s *Service) SetShortcutPresets(base, presets []ShortcutPreset) (SaveResult
 	if err := validateShortcutPresets(presets); err != nil {
 		return SaveResult{}, err
 	}
-	stored, precondition, err := s.metadata.Load()
-	if err != nil {
-		return SaveResult{}, err
-	}
-	// Empty and absent libraries describe the same initial state.
-	if !(len(base) == 0 && len(stored.ShortcutPresets) == 0) && !reflect.DeepEqual(base, stored.ShortcutPresets) {
-		return SaveResult{}, ErrShortcutConflict
-	}
-	stored.ShortcutPresets = presets
-	if err := s.metadata.EnsureDirectory(); err != nil {
-		return SaveResult{}, err
-	}
-	change, err := s.metadata.Change(stored, precondition)
-	if err != nil {
-		return SaveResult{}, err
-	}
-	result, err := s.manager.Commit(storage.Request{Operation: "shortcuts.presets", Changes: []storage.Change{change}})
-	if err != nil {
-		return SaveResult{}, err
-	}
-	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
+	return s.changeMetadata("shortcuts.presets", func(stored *Metadata) error {
+		// Empty and absent libraries describe the same initial state.
+		if !(len(base) == 0 && len(stored.ShortcutPresets) == 0) && !reflect.DeepEqual(base, stored.ShortcutPresets) {
+			return ErrShortcutConflict
+		}
+		stored.ShortcutPresets = presets
+		return nil
+	})
 }
