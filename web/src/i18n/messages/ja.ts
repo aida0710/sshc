@@ -1330,6 +1330,7 @@ export const ja = {
   "shell.themeLight": "ライト",
   "shell.themeDark": "ダーク",
   "shell.themeDarkBlue": "ダークブルー",
+  "shell.themeDarkPurple": "ダークパープル",
   "appearance.heading": "Appearance",
   "appearance.theme": "テーマ",
   "appearance.accent": "さし色",

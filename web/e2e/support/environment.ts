@@ -293,7 +293,7 @@ export async function openSettingsPage(
 
 // themeChoiceLabels are the names of the choices on Settings → Appearance. It is keyed by Theme, so a new
 // theme has to be named here, and appearance.spec.ts then checks it like the others.
-export const themeChoiceLabels: Record<Theme, string> = { system: "System", light: "Light", dark: "Dark", "dark-blue": "Dark blue" };
+export const themeChoiceLabels: Record<Theme, string> = { system: "System", light: "Light", dark: "Dark", "dark-blue": "Dark blue", "dark-purple": "Dark purple" };
 
 // chooseTheme picks the theme on Settings → Appearance, the one place the signed-in app offers it.
 export async function chooseTheme(page: Page, theme: Theme): Promise<void> {

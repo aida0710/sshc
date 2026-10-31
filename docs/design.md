@@ -105,7 +105,7 @@
 
 ## 見た目の境界
 
-- テーマはライト・ダーク・ダークブルーの3つで、初期値はダークです。ダークの灰色は色みを持たず、ダークブルーは灰色を青に寄せます（v0.59 までのダーク）。Settings > Appearance（ロック解除などログイン前の画面では隅の選択）から「システムに合わせる」か各テーマを選べ、選択はプリセットに保存し、`localStorage`の`sshc.theme`に写しを置きます。「システムに合わせる」はOSの明暗に合わせてライトかダークにします。ブラウザに保存するものは`e2e/bootstrap.spec.ts`が、テーマや言語を操作した直後の`localStorage`／`sessionStorage`のキー集合を完全一致で検査します。
+- テーマはライト・ダーク・ダークブルー・ダークパープルの4つで、初期値はダークです。ダークの灰色は色みを持たず、ダークブルーは灰色を青に寄せます（v0.59 までのダーク）。ダークパープルは地を一段明るい無彩色にし、既定のさし色（薄紫）をテーマの紫にします。薄紫の色は各テーマのファイルの`--ui-accent-lavender`が持ちます。Settings > Appearance（ロック解除などログイン前の画面では隅の選択）から「システムに合わせる」か各テーマを選べ、選択はプリセットに保存し、`localStorage`の`sshc.theme`に写しを置きます。「システムに合わせる」はOSの明暗に合わせてライトかダークにします。ブラウザに保存するものは`e2e/bootstrap.spec.ts`が、テーマや言語を操作した直後の`localStorage`／`sessionStorage`のキー集合を完全一致で検査します。
 - 色は用途別のトークンとして、テーマごとに`web/src/theme/themes/<名前>.css`へ1組ずつ置き、`web/src/index.css`が読み込みます。各テーマは明暗（light／dark）を持ちます。`<html>`の`data-theme`がテーマの色を選び、`data-scheme`がさし色の組・コードエディタの配色・Androidのsystem barのアイコンを選びます。Androidのsystem barの色は、Webが表示中のテーマの`--ui-toolbar`を渡します。
 - テーマを足すときは、`web/src/theme/theme.ts`の`colorThemes`に1行、色のファイル、`index.css`の`@import`、両言語の名前（`shell.theme<名前>`）を足します。`web/src/theme/themes.test.ts`がファイルと一覧の対応、ライトと同じトークンを全部持つこと、`--ui-toolbar`が`#rrggbb`であることを検査し、`e2e/appearance.spec.ts`が全テーマで画面の描画とコントラストを検査します。
 - コンポーネントは`bg-card`のようにトークン名で参照し、色値やテーマ分岐を個別に持ちません。

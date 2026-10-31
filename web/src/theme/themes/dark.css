@@ -19,8 +19,11 @@
   --ui-ink: #e8e8e8;
   --ui-ink-muted: #b9b9b9;
   --ui-ink-faint: #9d9d9d;
-  --ui-accent: #b5a8ff;
-  --ui-accent-ink: #15122b;
+  /* 既定のさし色（薄紫）。index.css の [data-accent="lavender"] もこの色を使う。 */
+  --ui-accent-lavender: #b5a8ff;
+  --ui-accent-lavender-ink: #15122b;
+  --ui-accent: var(--ui-accent-lavender);
+  --ui-accent-ink: var(--ui-accent-lavender-ink);
   --ui-notice: rgb(255 159 10 / 0.13);
   --ui-notice-line: rgb(255 159 10 / 0.32);
   --ui-notice-ink: #f0b429;

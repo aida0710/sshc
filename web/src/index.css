@@ -3,6 +3,7 @@
 @import "./theme/themes/light.css";
 @import "./theme/themes/dark.css";
 @import "./theme/themes/dark-blue.css";
+@import "./theme/themes/dark-purple.css";
 
 /* 押せない要素は、載せても押しても見た目を変えない。hover と active の指定を、:disabled の
    ときは効かせない形に置き換える（:where で詳細度は上げない）。
@@ -38,13 +39,14 @@
 }
 
 /* さし色。名前は metadata の appearance.accent（設定の Appearance で選ぶ）。属性が無い間（ロック
-   画面、metadata を読む前）はテーマの既定の薄紫になる。色はライトとダークの2組で、明暗（data-scheme）
-   が同じテーマはどれも同じ組を使う。ライトでは白い文字を載せても読める濃さの色を使う。橙・緑・赤は
+   画面、metadata を読む前）はテーマの既定の薄紫になる。薄紫はテーマごとの色（テーマのファイルの
+   --ui-accent-lavender）で、ほかの色はライトとダークの2組を、明暗（data-scheme）が同じテーマで
+   共有する。ライトでは白い文字を載せても読める濃さの色を使う。橙・緑・赤は
    未読の通知・接続済み・エラーの色なので選べない。設定の見本の丸も、丸に data-accent を付けて
    この値で塗る（色の値を画面のコードに二重に持たない）。 */
 [data-accent="lavender"] {
-  --ui-accent: #6550d0;
-  --ui-accent-ink: #ffffff;
+  --ui-accent: var(--ui-accent-lavender);
+  --ui-accent-ink: var(--ui-accent-lavender-ink);
 }
 
 [data-accent="blue"] {
@@ -65,12 +67,6 @@
 [data-accent="mono"] {
   --ui-accent: #24282c;
   --ui-accent-ink: #ffffff;
-}
-
-[data-scheme="dark"][data-accent="lavender"],
-[data-scheme="dark"] [data-accent="lavender"] {
-  --ui-accent: #b5a8ff;
-  --ui-accent-ink: #15122b;
 }
 
 [data-scheme="dark"][data-accent="blue"],

@@ -1331,6 +1331,7 @@ export const en = {
   "shell.themeLight": "Light",
   "shell.themeDark": "Dark",
   "shell.themeDarkBlue": "Dark blue",
+  "shell.themeDarkPurple": "Dark purple",
   "appearance.heading": "Appearance",
   "appearance.theme": "Theme",
   "appearance.accent": "Accent colour",
