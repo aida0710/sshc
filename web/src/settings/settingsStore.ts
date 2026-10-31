@@ -138,18 +138,37 @@ function sameJSON(first: unknown, second: unknown): boolean {
   return JSON.stringify(first) === JSON.stringify(second);
 }
 
+// SettingsPart is one part of the document a change is written to: the global settings, the presets, one preset
+// or one machine's settings.
+type SettingsPart<T> = {
+  // read is the part as this browser knows it, or undefined when it is gone and nothing is to be sent.
+  read: (document: SettingsDocument) => T | undefined;
+  // place is the document with next in place of the part.
+  place: (document: SettingsDocument, next: T) => SettingsDocument;
+  // send writes next with the base it was made from; the engine refuses with settingsChangedCode when the base
+  // moved underneath it.
+  send: (base: T, next: T) => Promise<unknown>;
+};
+
+// changePart makes the next value of a part from a copy of it and writes it after the changes before it. A
+// change that leaves the part as it was sends nothing.
+function changePart<T>(part: SettingsPart<T>, change: (current: T) => T): Promise<void> {
+  return enqueue(() => writeWithRetry((document) => {
+    const base = part.read(document);
+    if (base === undefined) return null;
+    const next = change(structuredClone(base));
+    if (sameJSON(base, next)) return null;
+    return { next: part.place(document, next), send: () => part.send(base, next) };
+  }));
+}
+
 // updatePreset changes one preset's settings. The preset's id and name are changed with updatePresets.
 export function updatePreset(id: string, change: (preset: SettingsPreset) => SettingsPreset): Promise<void> {
-  return enqueue(() => writeWithRetry((document) => {
-    const base = document.presets.find((preset) => preset.id === id);
-    if (base === undefined) return null;
-    const preset = change(structuredClone(base));
-    if (sameJSON(base, preset)) return null;
-    return {
-      next: { ...document, presets: document.presets.map((candidate) => candidate.id === id ? preset : candidate) },
-      send: () => putJSON(`/api/v1/settings/presets/${encodeURIComponent(id)}`, { base, preset }, [settingsChangedCode]),
-    };
-  }));
+  return changePart({
+    read: (document) => document.presets.find((preset) => preset.id === id),
+    place: (document, preset) => ({ ...document, presets: document.presets.map((candidate) => candidate.id === id ? preset : candidate) }),
+    send: (base, preset) => putJSON(`/api/v1/settings/presets/${encodeURIComponent(id)}`, { base, preset }, [settingsChangedCode]),
+  }, change);
 }
 
 // updatePresetInUse changes the settings of the preset this machine uses.
@@ -159,50 +178,38 @@ export function updatePresetInUse(change: (preset: SettingsPreset) => SettingsPr
 
 // updatePresets replaces the list of presets: adding, renaming, removing or reordering them.
 export function updatePresets(change: (presets: SettingsPreset[]) => SettingsPreset[]): Promise<void> {
-  return enqueue(() => writeWithRetry((document) => {
-    const base = document.presets;
-    const presets = change(structuredClone(base));
-    if (sameJSON(base, presets)) return null;
-    const presetInUse = presets.some((preset) => preset.id === document.presetInUse) ? document.presetInUse : standardPresetId;
-    return {
-      next: { ...document, presets, presetInUse },
-      send: () => putJSON("/api/v1/settings/presets", { base, presets }, [settingsChangedCode]),
-    };
-  }));
+  return changePart({
+    read: (document) => document.presets,
+    place: (document, presets) => ({
+      ...document,
+      presets,
+      presetInUse: presets.some((preset) => preset.id === document.presetInUse) ? document.presetInUse : standardPresetId,
+    }),
+    send: (base, presets) => putJSON("/api/v1/settings/presets", { base, presets }, [settingsChangedCode]),
+  }, change);
 }
 
 export function updateGlobalSettings(change: (settings: GlobalSettings) => GlobalSettings): Promise<void> {
-  return enqueue(() => writeWithRetry((document) => {
-    const base = document.global;
-    const settings = change(structuredClone(base));
-    if (sameJSON(base, settings)) return null;
-    return {
-      next: { ...document, global: settings },
-      send: () => putJSON("/api/v1/settings/global", { base, settings }, [settingsChangedCode]),
-    };
-  }));
+  return changePart({
+    read: (document) => document.global,
+    place: (document, settings) => ({ ...document, global: settings }),
+    send: (base, settings) => putJSON("/api/v1/settings/global", { base, settings }, [settingsChangedCode]),
+  }, change);
 }
 
 // updateMachine changes a machine's settings: its name, the preset it uses and its port.
 export function updateMachine(id: string, change: (settings: MachineSettings) => MachineSettings): Promise<void> {
-  return enqueue(() => writeWithRetry((document) => {
-    const machine = document.machines.find((candidate) => candidate.id === id);
-    if (machine === undefined) return null;
-    const base = machine.settings;
-    const settings = change(structuredClone(base));
-    if (sameJSON(base, settings)) return null;
-    const presetInUse = id === document.machineId
-      ? (document.presets.some((preset) => preset.id === settings.presetId) ? settings.presetId ?? standardPresetId : standardPresetId)
-      : document.presetInUse;
-    return {
-      next: {
-        ...document,
-        presetInUse,
-        machines: document.machines.map((candidate) => candidate.id === id ? { ...candidate, settings } : candidate),
-      },
-      send: () => putJSON(`/api/v1/settings/machines/${encodeURIComponent(id)}`, { base, settings }, [settingsChangedCode]),
-    };
-  }));
+  return changePart({
+    read: (document) => document.machines.find((candidate) => candidate.id === id)?.settings,
+    place: (document, settings) => ({
+      ...document,
+      presetInUse: id === document.machineId
+        ? (document.presets.some((preset) => preset.id === settings.presetId) ? settings.presetId ?? standardPresetId : standardPresetId)
+        : document.presetInUse,
+      machines: document.machines.map((candidate) => candidate.id === id ? { ...candidate, settings } : candidate),
+    }),
+    send: (base, settings) => putJSON(`/api/v1/settings/machines/${encodeURIComponent(id)}`, { base, settings }, [settingsChangedCode]),
+  }, change);
 }
 
 // removeMachine takes a machine that is no longer used off the list.

@@ -1,8 +1,10 @@
 import { sftpSortColumns, type SFTPSort, type SFTPSortState } from "./sftpEntrySort";
 import { isLocalPath, localHostAlias } from "./localHost";
 import { blankPane, maxPanes, maxTabsPerPane, paneOf, type SFTPPane, type SFTPTab } from "./sftpPanes";
-import { clampSplitRatio } from "../ui/SplitResizeHandle";
-import { keepMachineState, keepMachineStateJSON, readMachineState, readMachineStateJSON } from "../settings/machineState";
+import { clampSplitRatio, evenSplitRatio } from "../ui/SplitResizeHandle";
+import { keepMachineStateJSON, readMachineStateJSON } from "../settings/machineState";
+import { localStorageKeys } from "../ui/browserStorageKeys";
+import type { StoredValue } from "../ui/useStoredValue";
 import { newIdentifier } from "../ui/randomIdentifier";
 
 type StoredTab = { alias: string; path: string; sortKey: SFTPSort; sortDirection: SFTPSortState["direction"] };
@@ -59,11 +61,9 @@ export function rememberPanes(panes: SFTPPane[]): void {
   keepMachineStateJSON("sftpPanes", panes.map(storedPane));
 }
 
-export function restoreSplitRatio(): number {
-  const stored = readMachineState("sftpSplitRatio");
-  return stored === null || stored.trim() === "" ? 50 : clampSplitRatio(Number(stored));
-}
-
-export function rememberSplitRatio(ratio: number): void {
-  keepMachineState("sftpSplitRatio", String(ratio));
-}
+// sftpSplitRatio is the left pane's share of a split workspace, which each browser keeps for its own screen.
+export const sftpSplitRatio: StoredValue<number> = {
+  key: localStorageKeys.sftpSplitRatio,
+  fallback: evenSplitRatio,
+  parse: (stored) => stored === null ? evenSplitRatio : clampSplitRatio(Number(stored)),
+};

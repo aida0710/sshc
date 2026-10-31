@@ -9,6 +9,3 @@ export const palettes: readonly Palette[] = [
   { name: "gruvbox-dark", label: "Gruvbox Dark" },
   { name: "one-dark", label: "One Dark" },
 ];
-export function knownPalette(name: string): Palette | null {
-  return palettes.find((palette) => palette.name === name) ?? null;
-}

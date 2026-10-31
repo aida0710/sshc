@@ -90,30 +90,12 @@ func (s *Service) SetBackgroundCapacityMiB(value int) (SaveResult, error) {
 	if value < MinBackgroundCapacityMiB || value > MaxBackgroundCapacityMiB {
 		return SaveResult{}, ErrBackgroundCapacity
 	}
-	s.saveMutex.Lock()
-	defer s.saveMutex.Unlock()
-	metadata, precondition, err := s.metadata.Load()
-	if err != nil {
-		return SaveResult{}, err
-	}
-	global := globalSettingsOf(metadata)
-	global.Backgrounds = &BackgroundSettings{CapacityMiB: value}
-	metadata.Settings = storedGlobalSettings(global)
-	if err := s.metadata.EnsureDirectory(); err != nil {
-		return SaveResult{}, err
-	}
-	change, err := s.metadata.Change(metadata, precondition)
-	if err != nil {
-		return SaveResult{}, err
-	}
-	result, err := s.manager.Commit(storage.Request{
-		Operation: "terminal.backgrounds.capacity",
-		Changes:   []storage.Change{change},
+	return s.changeMetadata("terminal.backgrounds.capacity", func(stored *Metadata) error {
+		global := globalSettingsOf(*stored)
+		global.Backgrounds = &BackgroundSettings{CapacityMiB: value}
+		stored.Settings = storedGlobalSettings(global)
+		return nil
 	})
-	if err != nil {
-		return SaveResult{}, err
-	}
-	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
 }
 
 // imageType は、バイト列の先頭からその型を返す。画像でなければ空である。

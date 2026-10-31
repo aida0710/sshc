@@ -225,5 +225,3 @@ export function useCreateConnectionForm({
     clearError: () => setError(""),
   };
 }
-
-export type CreateConnectionForm = ReturnType<typeof useCreateConnectionForm>;

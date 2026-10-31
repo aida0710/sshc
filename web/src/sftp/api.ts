@@ -16,11 +16,8 @@ export type TransferJob = components["schemas"]["SFTPTransferJob"];
 type CreateTransferJobWire = components["schemas"]["SFTPCreateTransferJobRequest"];
 export type CreateTransferJob = Omit<CreateTransferJobWire, "sourceAlias" | "sourcePath" | "operation" | "overwrite"> &
   Partial<Pick<CreateTransferJobWire, "sourceAlias" | "sourcePath" | "operation" | "overwrite">>;
-export type TransferDirection = TransferJob["direction"];
 export type TransferKind = TransferJob["kind"];
-export type TransferJobStatus = TransferJob["status"];
 export type TransferJobAction = components["schemas"]["SFTPTransferJobActionRequest"]["action"];
-export type TransferControlAction = TransferJob["allowedActions"][number];
 export type TransferQueueMove = components["schemas"]["SFTPTransferQueueMoveRequest"]["move"];
 export type TransferSettings = components["schemas"]["SFTPTransferSettingsRequest"];
 export type TransferJobList = components["schemas"]["SFTPTransferJobList"];

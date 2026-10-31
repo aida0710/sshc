@@ -4,7 +4,6 @@ import (
 	"sshc/internal/config"
 	"sshc/internal/remoteos"
 	"sshc/internal/sshclient"
-	"sshc/internal/storage"
 )
 
 // ObserveConnectionOS binds the eventual detection to the configuration that
@@ -56,14 +55,7 @@ func (s *Service) recordConnectionOS(identity HostIdentity, binding, name string
 	}
 	stored.Hosts[index].DetectedOS = name
 	stored.Hosts[index].DetectedOSBinding = binding
-	if err := s.metadata.EnsureDirectory(); err != nil {
-		return err
-	}
-	change, err := s.metadata.Change(stored, precondition)
-	if err != nil {
-		return err
-	}
-	_, err = s.manager.Commit(storage.Request{Operation: "host.detect-os", Changes: []storage.Change{change}})
+	_, err = s.commitMetadata(stored, precondition, "host.detect-os")
 	return err
 }
 

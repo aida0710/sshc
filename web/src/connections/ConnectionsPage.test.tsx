@@ -1,5 +1,4 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { fakeSettingsServer } from "../testing/settingsServer";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectionsPage } from "./ConnectionsPage";
@@ -327,7 +326,6 @@ describe("ConnectionsPage", () => {
   });
 
   it("offers a resizable divider between the connection list and the detail pane", async () => {
-    const server = fakeSettingsServer();
     render(
       <ConnectionsPage
         {...terminalSessionProps}
@@ -342,7 +340,7 @@ describe("ConnectionsPage", () => {
     fireEvent.pointerMove(handle, { pointerId: 3, clientX: 360 });
     fireEvent.pointerUp(handle, { pointerId: 3, clientX: 360 });
     await waitFor(() => expect(handle).toHaveAttribute("aria-valuenow", "360"));
-    await waitFor(() => expect(server.document().presets[0]?.interface?.connectionListWidth).toBe(360));
+    expect(window.localStorage.getItem("sshc.connections.list-width.v2")).toBe("360");
     vi.restoreAllMocks();
   });
 

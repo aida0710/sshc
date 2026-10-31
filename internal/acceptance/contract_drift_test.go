@@ -120,9 +120,6 @@ var servedStringEnums = map[string]func(string) bool{
 	"InterfaceSettings.touchMode": acceptedAsPreset(func(preset *application.SettingsPreset, value string) {
 		preset.Interface = &application.InterfaceSettings{TouchMode: value}
 	}),
-	"InterfaceSettings.homeView": acceptedAsPreset(func(preset *application.SettingsPreset, value string) {
-		preset.Interface = &application.InterfaceSettings{HomeView: value}
-	}),
 	"NotificationSound.sound": acceptedAsPreset(func(preset *application.SettingsPreset, value string) {
 		preset.Interface = &application.InterfaceSettings{NotificationSound: &application.NotificationSound{Sound: value}}
 	}),

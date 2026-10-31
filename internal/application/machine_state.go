@@ -36,11 +36,11 @@ const (
 )
 
 // interfaceStateKeys は、画面の並びとして預かる名前である。値の形は画面が決め、エンジンは
-// 中を読まない（web/src/settings/machineState.ts）。
+// 中を読まない（web/src/settings/machineState.ts）。ドラッグで決める大きさはブラウザに置き、
+// ここには無い。
 var interfaceStateKeys = map[string]bool{
 	"runTarget":                    true,
 	"sftpPanes":                    true,
-	"sftpSplitRatio":               true,
 	"sftpQueueView":                true,
 	"collapsedTerminalWorkspaces":  true,
 	"showHiddenTerminalWorkspaces": true,
@@ -91,10 +91,22 @@ func decodeMachineState(contents []byte) (MachineState, error) {
 	if document.SchemaVersion != machineStateSchemaVersion {
 		return MachineState{}, fmt.Errorf("%w: schema version %d", ErrMachineState, document.SchemaVersion)
 	}
+	withoutUnknownInterfaceState(&document.MachineState)
 	if err := validateMachineState(document.MachineState); err != nil {
 		return MachineState{}, err
 	}
 	return document.MachineState, nil
+}
+
+// withoutUnknownInterfaceState は、このビルドが預からない画面の並びを読み飛ばす。同期では、名前を
+// 足したり外したりした別のバージョンのマシンの状態も届き、断るとそのファイルを含む同期が通らない。
+// 画面から書くとき（SetInterfaceState）は、知らない名前を断る。
+func withoutUnknownInterfaceState(state *MachineState) {
+	for key := range state.Interface {
+		if !interfaceStateKeys[key] {
+			delete(state.Interface, key)
+		}
+	}
 }
 
 func encodeMachineState(state MachineState) ([]byte, error) {

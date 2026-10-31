@@ -12,7 +12,8 @@ import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
-import { updatePresetInterface, usePresetInterface } from "../settings/presetInterface";
+import { localStorageKeys } from "../ui/browserStorageKeys";
+import { useStoredValue, type StoredValue } from "../ui/useStoredValue";
 import { ConnectionActions } from "./ConnectionActions";
 import { hostMatchesQuery, normalizeHostQuery } from "../connections/hostSearch";
 import { connectionAddress } from "../connections/connectionAddress";
@@ -32,10 +33,12 @@ type QuickConnectBrowserProps = {
 
 type QuickConnectView = "panel" | "list";
 
-// rememberView keeps the view in the preset this machine uses; the panels are the default and are not written.
-function rememberView(view: QuickConnectView) {
-  void updatePresetInterface((settings) => ({ ...settings, homeView: view === "panel" ? undefined : view })).catch(() => undefined);
-}
+// homeView is the view this browser shows Home in; the panels are the default.
+const homeView: StoredValue<QuickConnectView> = {
+  key: localStorageKeys.quickConnectView,
+  fallback: "panel",
+  parse: (stored) => stored === "list" ? "list" : "panel",
+};
 
 function connectionDestination(server: BrowserServer): string {
   return connectionAddress({ hostName: server.host.hostName ?? server.identity.alias, user: server.host.user ?? "", port: server.host.port ?? "" });
@@ -63,7 +66,7 @@ export function QuickConnectBrowser({
   const mobile = useMediaQuery(mobileViewportQuery);
   const [query, setQuery] = useState("");
   const [groupTrail, setGroupTrail] = useState<string[]>([]);
-  const view: QuickConnectView = usePresetInterface().homeView === "list" ? "list" : "panel";
+  const [view, changeView] = useStoredValue(homeView);
   const [selectedAlias, setSelectedAlias] = useState("");
   const pointerType = useRef("keyboard");
   const index = useMemo(() => buildConnectionBrowserIndex(overview), [overview]);
@@ -96,10 +99,6 @@ export function QuickConnectBrowser({
       }),
     [collator, group, index.servers, query, recentByAlias],
   );
-
-  function changeView(next: QuickConnectView) {
-    rememberView(next);
-  }
 
   function renderServer(server: BrowserServer) {
     const alias = server.identity.alias;

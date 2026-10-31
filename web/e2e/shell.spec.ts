@@ -197,9 +197,11 @@ test("resizes and restores the permanent desktop navigation", async ({ page, ins
   const handleBox = await handle.boundingBox();
   expect(handleBox).not.toBeNull();
   if (handleBox === null) return;
-  // The width is kept in the preset once the handle comes to rest.
-  const saved = page.waitForResponse((response) =>
-    new URL(response.url()).pathname === "/api/v1/settings/presets/default" && response.request().method() === "PUT");
+  // The width is kept in this browser, not in the synced settings.
+  const settingsWrites: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "PUT" && new URL(request.url()).pathname.startsWith("/api/v1/settings")) settingsWrites.push(request.url());
+  });
   await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(handleBox.x + handleBox.width / 2 + 80, handleBox.y + handleBox.height / 2);
@@ -210,7 +212,8 @@ test("resizes and restores the permanent desktop navigation", async ({ page, ins
   await expect
     .poll(() => navigation.evaluate((element) => Math.round(element.getBoundingClientRect().right)))
     .toBe(332);
-  expect((await saved).ok()).toBe(true);
+  expect(await page.evaluate(() => window.localStorage.getItem("sshc.navigation.width"))).toBe("332");
+  expect(settingsWrites).toEqual([]);
 
   await page.reload();
   await expect(page.getByRole("separator", { name: "Resize navigation" })).toHaveAttribute(

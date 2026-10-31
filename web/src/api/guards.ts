@@ -8,23 +8,8 @@ export function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-export function asArray(value: unknown): unknown[] {
-  if (!Array.isArray(value)) throw new Error("invalid_response");
-  return value;
-}
-
 export function asString(value: unknown): string {
   if (typeof value !== "string") throw new Error("invalid_response");
-  return value;
-}
-
-export function asNumber(value: unknown): number {
-  if (typeof value !== "number") throw new Error("invalid_response");
-  return value;
-}
-
-export function asBoolean(value: unknown): boolean {
-  if (typeof value !== "boolean") throw new Error("invalid_response");
   return value;
 }
 
