@@ -35,7 +35,7 @@
 
 | OS | アーキ | リリース時に実行 |
 | --- | --- | --- |
-| macOS | arm64 | する（macos-14 ランナー） |
+| macOS | arm64 | する（macos-15 ランナー） |
 | macOS | amd64 | しない（名前と中身のアーキのみ） |
 | Linux | amd64 | する（ubuntu-24.04 ランナー） |
 | Linux | arm64 | しない |
