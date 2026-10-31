@@ -237,6 +237,53 @@ test("quick navigation and terminal keys remain available in portrait and touch 
   await expect(navigation.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
 });
 
+test("a phone on its side moves the bottom bar to a rail at the left and leaves out an idle transfer dock", async ({ page, installation }) => {
+  await mockFiles(page);
+  // Registered last, so it answers before mockFiles' list: nothing is being transferred.
+  await page.route("**/api/v1/sftp/transfers", (route) => route.fulfill({ json: { ...transferList, jobs: [] } }));
+  await page.setViewportSize({ width: 844, height: 390 });
+  await openApplication(page, installation);
+  const bar = page.getByRole("navigation", { name: "Quick navigation" }).locator(":scope > div");
+  await expect(async () => {
+    const bounds = await bar.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds?.x ?? 99).toBeLessThan(16);
+    expect(bounds?.width ?? 99).toBeLessThan(60);
+    expect(bounds?.height ?? 0).toBeGreaterThan(250);
+  }).toPass({ timeout: 5000 });
+  const railEnd = ((await bar.boundingBox())?.x ?? 0) + ((await bar.boundingBox())?.width ?? 0);
+  expect((await page.locator("main").boundingBox())?.x ?? 0).toBeGreaterThanOrEqual(railEnd);
+  await capture(page, "mobile-home-844x390");
+  await openMobileFiles(page);
+  await expect(page.getByRole("button", { name: "Expand Transfer Manager", exact: true })).toHaveCount(0);
+  await capture(page, "mobile-files-844x390");
+});
+
+test("a tablet held upright keeps the navigation open at the left and centres the bottom bar under the page", async ({ page, installation }) => {
+  await mockTerminalSession(page, "Tablet terminal demo\r\n$ ");
+  await page.setViewportSize({ width: 820, height: 1180 });
+  await openApplication(page, installation);
+  const primary = page.getByRole("navigation", { name: "Primary" });
+  await expect(primary).toBeVisible();
+  await expect.poll(async () => (await primary.boundingBox())?.x).toBe(0);
+  const navigationEnd = (await primary.boundingBox())?.width ?? 0;
+  expect(navigationEnd).toBe(280);
+  await expect(page.getByRole("button", { name: "Navigation", exact: true })).toHaveCount(0);
+  expect((await page.locator("main").boundingBox())?.x ?? 0).toBeGreaterThanOrEqual(navigationEnd);
+  const bar = page.getByRole("navigation", { name: "Quick navigation" }).locator(":scope > div");
+  const bounds = await bar.boundingBox();
+  expect(bounds?.width ?? 999).toBeLessThanOrEqual(420);
+  // Centred in the room beside the navigation.
+  expect((bounds?.x ?? 0) + (bounds?.width ?? 0) / 2).toBeCloseTo(navigationEnd + (820 - navigationEnd) / 2, 0);
+  await capture(page, "tablet-home-820x1180");
+  // A session opened from the bar shows beside the navigation, with no ‹ to open it again.
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  await expect(page.getByRole("region", { name: "Terminal for Demo shell" })).toContainText("Tablet terminal demo");
+  await expect(primary).toBeVisible();
+  await expect(page.getByRole("button", { name: "Navigation", exact: true })).toHaveCount(0);
+  await capture(page, "tablet-terminal-820x1180");
+});
+
 // The terminal's own text field: focusing it raises the phone's keyboard.
 async function terminalInputFocused(page: Page): Promise<boolean> {
   return page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea") === true);

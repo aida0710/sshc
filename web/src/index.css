@@ -597,12 +597,61 @@
 :root[data-mobile-navigation="true"] {
   --mobile-navigation-inset: calc(3.5rem + max(10px, env(safe-area-inset-bottom, 0px)) + 8px);
 }
+/* A phone on its side (navigationRailQuery): the bottom bar becomes a rail at the left, under the top bar, so
+   the page keeps its height. The page moves right by the rail's width and needs no room at its end. */
+:root {
+  --navigation-rail-width: 0px;
+}
+:root[data-mobile-navigation="true"][data-mobile-navigation-placement="rail"] {
+  --mobile-navigation-inset: 0px;
+  --navigation-rail-width: calc(68px + env(safe-area-inset-left, 0px));
+}
+.sshc-app[data-mobile="true"] .sshc-app-layout {
+  margin-left: var(--navigation-rail-width);
+}
+:root[data-mobile-navigation-placement="rail"] .sshc-mobile-navigation {
+  top: 48px;
+  right: auto;
+  width: var(--navigation-rail-width);
+  padding: 6px 8px 6px calc(8px + env(safe-area-inset-left, 0px));
+}
+:root[data-mobile-navigation-placement="rail"] .sshc-mobile-navigation > div {
+  flex-direction: column;
+  justify-content: space-evenly;
+  width: 52px;
+  height: 100%;
+  padding: 4px 0;
+}
+:root[data-mobile-navigation-placement="rail"] .sshc-mobile-navigation a {
+  width: 44px;
+}
 :root[data-keyboard-open="true"] .sshc-mobile-navigation,
 :root[data-keyboard-open="true"] .sshc-app[data-mobile="true"] [data-app-header] {
   display: none;
 }
 :root[data-keyboard-open="true"] {
   --mobile-navigation-inset: 0px;
+  --navigation-rail-width: 0px;
+}
+/* A tablet held upright (pinnedNavigationQuery): the navigation stays open at the left as a column beside the
+   top bar and the page, the way a PC shows its sessions, and the bottom bar is centred under the page
+   rather than stretched across the screen. */
+.sshc-app[data-navigation-pinned="true"] {
+  --pinned-navigation-width: 280px;
+  padding-left: var(--pinned-navigation-width);
+}
+.sshc-app[data-navigation-pinned="true"] [data-app-navigation] {
+  width: var(--pinned-navigation-width);
+  transform: none;
+  border-right: 1px solid var(--ui-line);
+  box-shadow: none;
+}
+.sshc-app[data-navigation-pinned="true"] .sshc-mobile-navigation {
+  left: var(--pinned-navigation-width);
+}
+.sshc-app[data-navigation-pinned="true"] .sshc-mobile-navigation > div {
+  max-width: 420px;
+  margin-inline: auto;
 }
 .sshc-modal-frame {
   top: var(--app-viewport-top, 0px);
