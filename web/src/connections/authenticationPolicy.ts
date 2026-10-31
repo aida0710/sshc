@@ -12,7 +12,3 @@ export function isConcreteIdentityValue(value: string): boolean {
   const trimmed = value.trim();
   return trimmed !== "" && trimmed.toLocaleLowerCase() !== "none";
 }
-
-export function hasDirectIdentityFile(detail: HostDetail): boolean {
-  return directIdentityFields(detail).some((field) => field.values.some(isConcreteIdentityValue));
-}

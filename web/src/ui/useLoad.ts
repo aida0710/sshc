@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 
-export type LoadState = "loading" | "loaded" | "failed";
-
 // Load is what useLoad has read so far. retry reads again, for the button a failure offers.
 export type Load<T> = (
   | { state: "loading" }

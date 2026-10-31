@@ -9,7 +9,6 @@ export type Startup = components["schemas"]["StartupSnippet"];
 export type SnippetDraft = components["schemas"]["SnippetDraft"];
 export type Preview = components["schemas"]["SnippetPreview"];
 export type Job = components["schemas"]["SnippetJob"];
-export type RouteHop = NonNullable<Preview["targets"][number]["target"]["route"]>[number];
 
 function snippet(value: unknown): Snippet {
   return validateOpenAPISchema<Snippet>("Snippet", value);

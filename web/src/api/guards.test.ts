@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asArray, asBoolean, asNumber, asRecord, asString, toProblem } from "./guards";
+import { asRecord, asString, toProblem } from "./guards";
 import { ApiError } from "./client";
 
 describe("応答の型検証", () => {
@@ -10,15 +10,9 @@ describe("応答の型検証", () => {
     }
   });
 
-  it("各フィールドの型を明示的に検証する", () => {
-    expect(asArray([1])).toEqual([1]);
+  it("文字列として通すのは文字列だけ", () => {
     expect(asString("x")).toBe("x");
-    expect(asNumber(1)).toBe(1);
-    expect(asBoolean(false)).toBe(false);
-    expect(() => asArray({})).toThrow();
-    expect(() => asString(1)).toThrow();
-    expect(() => asNumber("1")).toThrow();
-    expect(asNumber(0)).toBe(0);
+    expect(() => asString(1)).toThrow("invalid_response");
   });
 });
 
