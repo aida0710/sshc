@@ -225,7 +225,29 @@ func (h ConfigHandlers) PendingChanges(c *echo.Context) error {
 	if err != nil {
 		return serviceProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, changes)
+	return c.JSON(http.StatusOK, describePendingChanges(changes))
+}
+
+func describePendingChanges(view application.PendingChangesView) api.PendingChanges {
+	described := api.PendingChanges{Id: view.ID, Files: make([]api.PendingFileChange, 0, len(view.Files))}
+	for _, file := range view.Files {
+		change := api.PendingFileChange{
+			Path:         file.Path,
+			Action:       file.Action,
+			Committed:    file.Committed,
+			Contents:     file.Contents,
+			BeforeExists: file.BeforeExists,
+			AfterExists:  file.AfterExists,
+		}
+		if file.Target != "" {
+			change.Target = &file.Target
+		}
+		if file.Contents == "text" {
+			change.Before, change.After = &file.Before, &file.After
+		}
+		described.Files = append(described.Files, change)
+	}
+	return described
 }
 
 func (h ConfigHandlers) SetShortcuts(c *echo.Context) error {
