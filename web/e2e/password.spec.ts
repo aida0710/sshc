@@ -1,4 +1,5 @@
 import { clickAndAwait, expect, openApplication, openSection, test } from "./support/environment";
+import { openKeyCreation } from "./support/keys";
 
 test("stores a password for a host and never shows it again", async ({ page, installation }) => {
   await openApplication(page, installation);
@@ -39,6 +40,7 @@ test("selecting a key removes the stored password assignment and returning to ag
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
 
   await openSection(page, "Keys");
+  await openKeyCreation(page);
   await page.getByLabel("File name").fill("id_exclusive_auth");
   await page.getByLabel(/Create without a passphrase/).check();
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
