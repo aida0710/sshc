@@ -1963,7 +1963,7 @@ export const en = {
   "history.change.loading": "Loading the changes…",
   "history.change.empty": "This change has no files.",
   "history.change.choice": "Roll back returns every file to before; Complete brings every file to after.",
-  "history.change.secret": "This file holds secrets, so its contents are not shown. Only that it changes is shown.",
+  "history.change.secret": "This file holds secrets or is kept by sshc for itself, so its contents are not shown. Only that it changes is shown.",
   "history.change.binary": "This is not a text file, so its contents are not shown.",
   "history.change.tooLarge": "This file is too large to compare here.",
   "history.change.vaultLocked": "The previous contents are encrypted with the Vault key. Unlock the Vault to compare them.",

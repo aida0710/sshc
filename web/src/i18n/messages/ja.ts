@@ -1962,7 +1962,7 @@ export const ja = {
   "history.change.loading": "変更の中身を読み込んでいます…",
   "history.change.empty": "この変更にはファイルがありません。",
   "history.change.choice": "「取り消す」はすべてのファイルを変更前に、「完了させる」は変更後にそろえます。",
-  "history.change.secret": "秘密のファイルなので、中身は出しません。変わることだけを示します。",
+  "history.change.secret": "秘密のファイルか、sshcが内部で使うファイルなので、中身は出しません。変わることだけを示します。",
   "history.change.binary": "文字のファイルではないので、中身は出しません。",
   "history.change.tooLarge": "大きすぎるので、ここでは比べられません。",
   "history.change.vaultLocked": "変更前の中身はVaultの鍵で暗号化してあります。Vaultのロックを解除すると比べられます。",

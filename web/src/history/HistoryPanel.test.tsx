@@ -94,7 +94,7 @@ describe("HistoryPanel", () => {
     expect(within(dialog).getByTestId("after")).toHaveTextContent("Port 2233");
 
     await user.click(within(dialog).getByRole("button", { name: /sshc\/local-vault-key/ }));
-    expect(within(dialog).getByText("This file holds secrets, so its contents are not shown. Only that it changes is shown.")).toBeInTheDocument();
+    expect(within(dialog).getByText("This file holds secrets or is kept by sshc for itself, so its contents are not shown. Only that it changes is shown.")).toBeInTheDocument();
     expect(within(dialog).queryByTestId("before")).not.toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: "Roll back" }));
