@@ -66,8 +66,10 @@ test("selects the pinned Local destination beside an SSH host", async ({ page, i
   await (await sftpHostPicker(page, first)).click();
   await page.getByRole("dialog").getByRole("button", { name: /ローカル.*sshc/ }).click();
   await expect(first.getByRole("button", { name: "draft.txt" })).toBeVisible();
-  // On a phone the local side falls back to the same two-line list as a remote host.
-  await expect(first.getByRole("list", { name: "ファイル一覧" }).getByRole("button", { name: "draft.txt" })).toContainText("-rw-r--r--");
+  // On a phone the local side falls back to the same two-line list as a remote host: size and date, permissions in the details.
+  const draftRow = first.getByRole("list", { name: "ファイル一覧" }).getByRole("button", { name: "draft.txt" });
+  await expect(draftRow).toContainText("344 B · ");
+  await expect(draftRow).not.toContainText("-rw-r--r--");
   if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-mobile-pane-ja.png`, fullPage: true });
   await first.getByRole("button", { name: "フォルダ操作" }).click();
   await expect(page.getByRole("dialog", { name: "フォルダ操作" }).getByRole("menuitem", { name: "ホームディレクトリ" })).toBeVisible();
