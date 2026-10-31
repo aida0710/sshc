@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"sshc/internal/sshclient"
+	"sshc/internal/storage"
 )
 
 // errProxyLoginRequired は、ProxyCommand の AWS SSO の認証が切れたことを CLI の英語で言う。
@@ -18,8 +19,14 @@ var errProxyLoginRequired = errors.New("AWS SSO login is required. Run aws sso l
 // describeConnectionFailure は、SSH 接続の失敗を CLI の英語の文で返す。
 // 英語の文を別に持つ失敗だけを置き換え、それ以外はそのまま返す。
 func describeConnectionFailure(err error) error {
-	if errors.Is(err, sshclient.ErrProxyAuthenticationRequired) {
+	switch {
+	case errors.Is(err, sshclient.ErrProxyAuthenticationRequired):
 		return errProxyLoginRequired
+	// 受け入れたホスト鍵を known_hosts へ書くときなどに、このプロセスが workspace へ
+	// 書こうとして断られた。storage の文は「別の sshc が更新中」と読めるが、待っても
+	// 解消しないので、History で片付ける案内に置き換える。
+	case errors.Is(err, storage.ErrPendingTransaction):
+		return errors.New(pendingTransactionAdvice)
 	}
 	return err
 }
