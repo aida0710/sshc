@@ -67,16 +67,16 @@ async function openTerminalSettingsTab(region: Locator, name: "Display" | "Conne
   await region.getByRole("tab", { name, exact: true }).click();
 }
 
+// saveTerminalSettings waits for the change just made to be saved. The page has no Save button: a choice is
+// saved once it rests, and a typed field when it is left, which Tab does.
 async function saveTerminalSettings(page: Page, region: Locator): Promise<Response> {
-  const save = region.getByRole("button", { name: "Save" });
   const responsePromise = page.waitForResponse((response) => {
     const request = response.request();
     return new URL(response.url()).pathname === "/api/v1/settings/presets/default" && request.method() === "PUT";
   });
-  await save.click();
+  await region.page().keyboard.press("Tab");
   const response = await responsePromise;
   expect(response.ok()).toBe(true);
-  await expect(save).toBeEnabled();
   return response;
 }
 
@@ -1210,7 +1210,8 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   await cleared.getByRole("button", { name: "Clear", exact: true }).click();
   const saved = await saveTerminalSettings(page, cleared);
   expect(saved.request().postDataJSON()).not.toHaveProperty("appearance");
-  await expect(cleared).toContainText("Saved");
+  // The settings page says a change was saved beside its name, for every page alike.
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
 
   await reopenFirstSession(panel);
   await expect.poll(() => surfaceBackgroundImage(page)).toBe("none");
@@ -1272,7 +1273,8 @@ test("draws the terminals with the preset this machine uses", async ({ page, ins
   await region.getByLabel("Font size").fill("22");
   const presetSave = page.waitForResponse((response) =>
     new URL(response.url()).pathname.startsWith("/api/v1/settings/presets/") && response.request().method() === "PUT");
-  await region.getByRole("button", { name: "Save" }).click();
+  // Enter confirms a typed field as leaving it does.
+  await region.getByLabel("Font size").press("Enter");
   expect((await presetSave).ok()).toBe(true);
   await page.getByRole("button", { name: "Use on this machine" }).click();
   await expect(page.getByText("In use here")).toBeVisible();

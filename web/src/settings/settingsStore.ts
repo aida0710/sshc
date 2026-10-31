@@ -32,9 +32,12 @@ type State = {
   document: SettingsDocument | null;
   // loadFailed is set when the first read failed; the screens then run on the defaults.
   loadFailed: boolean;
+  // saved counts the changes the engine has taken, so the settings pages can say a change was saved
+  // (SettingsSavedMark): they save each change at once, with no Save button.
+  saved: number;
 };
 
-let state: State = { document: null, loadFailed: false };
+let state: State = { document: null, loadFailed: false, saved: 0 };
 const listeners = new Set<() => void>();
 // writes chains every change, so each one reads its base after the one before it has landed.
 let writes: Promise<unknown> = Promise.resolve();
@@ -82,9 +85,9 @@ export async function refreshSettings(): Promise<void> {
     const document = await readDocument();
     // An unchanged document is not published again, so the screens keep the objects they hold and draw nothing
     // anew every few seconds.
-    if (startedRevision === revision && !sameJSON(document, state.document)) publish({ document, loadFailed: false });
+    if (startedRevision === revision && !sameJSON(document, state.document)) publish({ ...state, document, loadFailed: false });
   } catch {
-    if (state.document === null) publish({ document: null, loadFailed: true });
+    if (state.document === null) publish({ ...state, document: null, loadFailed: true });
   } finally {
     refreshing = false;
   }
@@ -124,6 +127,7 @@ async function writeWithRetry(change: (document: SettingsDocument) => { next: Se
     publish({ ...state, document: planned.next });
     try {
       await planned.send();
+      publish({ ...state, saved: state.saved + 1 });
       return;
     } catch (error) {
       revision += 1;
@@ -257,5 +261,5 @@ export function interfaceState(document: SettingsDocument | null, key: Interface
 export function resetSettingsForTests(document: SettingsDocument | null = null): void {
   writes = Promise.resolve();
   revision += 1;
-  publish({ document, loadFailed: false });
+  publish({ document, loadFailed: false, saved: 0 });
 }

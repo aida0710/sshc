@@ -19,7 +19,7 @@ export function PageHeader({
   title: string;
   headingId?: string;
   // meta goes beside the name in small faint type, such as how many connections there are.
-  meta?: string | undefined;
+  meta?: ReactNode;
   description?: string | undefined;
   actions?: ReactNode;
   titleOnPhone?: boolean;
