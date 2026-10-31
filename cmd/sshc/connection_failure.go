@@ -18,6 +18,7 @@ var errProxyLoginRequired = errors.New("AWS SSO login is required. Run aws sso l
 
 // describeConnectionFailure は、SSH 接続の失敗を CLI の英語の文で返す。
 // 英語の文を別に持つ失敗だけを置き換え、それ以外はそのまま返す。
+// 対話接続では、握手の途中の失敗にも sshclient.Dialer.DescribeFailure として使う。
 func describeConnectionFailure(err error) error {
 	switch {
 	case errors.Is(err, sshclient.ErrProxyAuthenticationRequired):
