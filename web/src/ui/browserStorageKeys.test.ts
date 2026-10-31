@@ -7,6 +7,9 @@ const registeredKeys: string[] = [...Object.values(localStorageKeys), ...Object.
 const namedBeforeTheRule = [
   "sshc.theme",
   "sshc.language",
+  "sshc.navigation.width",
+  "sshc.home.quick-connect-view",
+  "sshc.sftp.splitRatio",
   "sshc.session.csrf",
 ];
 const kebabSegment = "[a-z0-9]+(?:-[a-z0-9]+)*";

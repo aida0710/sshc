@@ -23,7 +23,7 @@ import { connectionLocation } from "./routing/connectionRoute";
 import { AppHeader } from "./shell/AppHeader";
 import { AppNavigation } from "./shell/AppNavigation";
 import { navigationWidth } from "./shell/navigationLayout";
-import { usePresetColumnWidth } from "./settings/usePresetColumnWidth";
+import { useColumnWidth } from "./ui/useColumnWidth";
 import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
 import { useTerminalWorkspaces } from "./terminal/useTerminalWorkspaces";
@@ -102,7 +102,7 @@ export function App({
   const settingsLoaded = useSettingsSync(state === "ready");
   const handoffs = useSectionHandoffs(navigate);
   const declared = useDeclaredConfig(state === "ready", section);
-  const [desktopNavigationWidth, resizeDesktopNavigation] = usePresetColumnWidth(navigationWidth);
+  const [desktopNavigationWidth, resizeDesktopNavigation] = useColumnWidth(navigationWidth);
   const {
     navigationOpen,
     setNavigationOpen,

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 
-	"sshc/internal/storage"
 	"sshc/internal/vpn"
 )
 
@@ -138,45 +137,6 @@ func (s *Service) hostIdentity(alias string) (HostIdentity, error) {
 		return HostIdentity{}, fmt.Errorf("%w: %s", ErrUnknownConnection, alias)
 	}
 	return identity, nil
-}
-
-// commitMetadata は、metadata だけを書く。
-func (s *Service) commitMetadata(stored Metadata, precondition storage.Precondition, operation string) (SaveResult, error) {
-	return s.commitMetadataWith(metadataCommit{operation: operation, metadata: stored, precondition: precondition}, nil)
-}
-
-// metadataCommit は、書く前の metadata と、読んだときの前提である。
-type metadataCommit struct {
-	operation    string
-	metadata     Metadata
-	precondition storage.Precondition
-}
-
-// commitMetadataWith は、metadata と、あれば別の変更（vault など）を、ひとつの
-// storage.Request で書く。どちらかだけが書かれることはない。
-//
-// 別の変更があれば、接続の作成と同じく CommitAtomic で書き、書き込みの途中で失敗
-// したときに両方をその場で巻き戻す。metadata だけを書いて vault が古いまま残ると、
-// 改名したプロファイルのシークレットが見つからず、保留の記録がほかの保存も止める。
-func (s *Service) commitMetadataWith(planned metadataCommit, alongside *storage.Change) (SaveResult, error) {
-	if err := s.metadata.EnsureDirectory(); err != nil {
-		return SaveResult{}, err
-	}
-	change, err := s.metadata.Change(planned.metadata, planned.precondition)
-	if err != nil {
-		return SaveResult{}, err
-	}
-	request := storage.Request{Operation: planned.operation, Changes: []storage.Change{change}}
-	commit := s.manager.Commit
-	if alongside != nil {
-		request.Changes = append(request.Changes, *alongside)
-		commit = s.manager.CommitAtomic
-	}
-	result, err := commit(request)
-	if err != nil {
-		return SaveResult{}, err
-	}
-	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
 }
 
 // VPNBindings は、プロファイル名ごとに、それを通る接続の alias を返す。

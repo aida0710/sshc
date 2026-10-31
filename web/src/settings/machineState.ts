@@ -1,7 +1,7 @@
 import { currentSettings, interfaceState, setInterfaceState, type InterfaceStateKey } from "./settingsStore";
 
-// This machine's screen layout and what it has open (the run target, the SFTP tabs and split, the folded
-// workspaces, the transfer list view). The engine keeps it per machine and syncs it, but never reads it: each
+// This machine's screen layout and what it has open (the run target, the SFTP tabs, the folded workspaces, the
+// transfer list view). The engine keeps it per machine and syncs it, but never reads it: each
 // value is the text the screen wrote, which the screen parses and checks again when it reads it.
 
 // readMachineState is the text kept under key, or null when nothing is kept.
