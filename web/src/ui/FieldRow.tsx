@@ -1,5 +1,6 @@
-import { useId, type ReactNode } from "react";
+import { useContext, useId, type ReactNode, type SyntheticEvent } from "react";
 import { describeControl } from "./describeControl";
+import { FieldSavedContext, isChangeEvent } from "./fieldSaved";
 
 // The two columns of a form: the names, then the controls. FieldRowNote lines up with the second. The names'
 // column fits twelve characters, so names such as 現在のマスターパスワード do not break mid-word. Other
@@ -60,8 +61,13 @@ export function FieldRow({
   children: ReactNode;
 }) {
   const look = looks[density];
+  const rowId = useId();
   const hintId = useId();
   const warningId = useId();
+  const saved = useContext(FieldSavedContext);
+  const noteChange = saved === null ? undefined : (event: SyntheticEvent) => {
+    if (isChangeEvent(event)) saved.noteChange(rowId);
+  };
   const name = <span className={look.name}>{label}</span>;
   const control = (
     <span className="flex min-w-0 flex-col">
@@ -74,11 +80,14 @@ export function FieldRow({
   // The name and the control share a subgrid, so the <label> holds just them and the hint below stays out
   // of the control's accessible name (it is its description instead).
   return (
-    <div className={look.row}>
+    <div data-field-row className={look.row} onChangeCapture={noteChange} onClickCapture={noteChange}>
       {interactiveChildren ? <div className={look.pair}>{name}{control}</div> : <label className={look.pair}>{name}{control}</label>}
       {hint === undefined ? null : <span id={hintId} className={`text-xs leading-[18px] text-ink-faint ${look.second}`}>{hint}</span>}
       {warning === undefined ? null : <span id={warningId} aria-live="polite" className={`text-xs leading-[18px] text-notice-ink ${look.second}`}>{warning}</span>}
       {actions === undefined ? null : <div className={`flex flex-wrap gap-2 ${look.second}`}>{actions}</div>}
+      {/* Under the row, for a moment, once a change made in it was saved (a page that saves at once, FieldSaved).
+          The page announces it once for screen readers, so this is only seen. */}
+      {saved?.savedRow === rowId ? <span aria-hidden="true" className={`text-xs leading-[18px] text-ink-faint ${look.second}`}>{saved.savedText}</span> : null}
     </div>
   );
 }

@@ -1210,8 +1210,8 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   await cleared.getByRole("button", { name: "Clear", exact: true }).click();
   const saved = await saveTerminalSettings(page, cleared);
   expect(saved.request().postDataJSON()).not.toHaveProperty("appearance");
-  // The settings page says a change was saved beside its name, for every page alike.
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  // The settings page says a change was saved under the row it was made in.
+  await expect(cleared.getByText("Saved", { exact: true })).toBeVisible();
 
   await reopenFirstSession(panel);
   await expect.poll(() => surfaceBackgroundImage(page)).toBe("none");

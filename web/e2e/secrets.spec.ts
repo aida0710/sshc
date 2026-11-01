@@ -269,7 +269,8 @@ test("saves the Vault auto-lock policy and warns when automatic locking is disab
     "The Vault will not lock automatically. Unless you lock it manually, it remains unlocked until sshc is restarted. Use this setting only on a device you control.",
   )).toBeVisible();
   expect((await saved).status()).toBe(200);
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  // "Saved" shows under the row that was changed.
+  await expect(autoLock.getByText("Saved", { exact: true })).toBeVisible();
 
   await page.reload();
   const restored = page.getByRole("region", { name: "Vault auto-lock" });
