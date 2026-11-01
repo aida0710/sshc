@@ -2,6 +2,7 @@ import { useCallback, useId, type ReactNode, type RefObject } from "react";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { useLanguage } from "../i18n/context";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { ActionMenu } from "../ui/ActionMenu";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { localHostAlias } from "./localHost";
@@ -11,6 +12,7 @@ import { entryKind } from "./entryKind";
 import { entryTypeLabelKeys } from "./sftpMessageKeys";
 import { symbolicModeToOctal } from "./transfers";
 import { FilePreviewBody } from "./FilePreviewBody";
+import { PreviewIconButton } from "./PreviewIconButton";
 import { PreviewStepper } from "./PreviewStepper";
 import { useFilePreview } from "./useFilePreview";
 import { usePreviewStepping } from "./usePreviewStepping";
@@ -130,21 +132,44 @@ export function SFTPDetailsDialog({
         </dl>
   );
 
+  // A picture or a recording is not edited as text, so only other files offer the editor.
+  const pictured = preview.kind === "image" || preview.kind === "media";
+  const downloadable = entries.some(canDownload);
+  // What the entries offer besides the download. A PC lists them under the details, the editor first; a
+  // phone keeps the screen for the preview and puts them in the header's "…", beside the download.
+  const editAction = entry !== null && kind === "file" && !pictured ? [{ label: t("sftp.editFile"), disabled: busy, run: () => onEdit(entry) }] : [];
+  const entryActions = [
+    ...(entry?.type === "symlink" && onChangeLinkTarget ? [{ label: t("sftp.changeLinkTarget"), disabled: busy, run: () => onChangeLinkTarget(entry) }] : []),
+    ...(entry !== null && (entry.type === "file" || entry.type === "directory") && onChangeOwnership
+      ? [{ label: t("sftp.changeOwnership"), disabled: busy || entry.uid === undefined || entry.gid === undefined, run: () => onChangeOwnership(entry) }] : []),
+    ...(entry === null ? [] : [{ label: t("sftp.rename"), disabled: busy, run: () => onRename(entry) }]),
+  ];
+  const otherActions = [...editAction, ...entryActions];
+
   return (
     <ModalShell
       labelledBy={headingId}
       onDismiss={onClose}
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
-      panelClassName="flex h-[min(46rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-lg"
+      placement={mobileViewport ? "fullscreen" : "center"}
+      panelClassName={mobileViewport
+        ? "flex h-dvh w-full flex-col overflow-hidden rounded-none border-0! shadow-none"
+        : "flex h-[min(46rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-lg"}
     >
       <div className="flex items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
         <h2 id={headingId} className="min-w-0 grow truncate text-sm font-medium">{heading}</h2>
         <PreviewStepper position={stepPosition} count={stepCount} onStep={stepTo} />
+        {mobileViewport && downloadable ? <PreviewIconButton icon="download" label={t("sftp.download")} disabled={busy} onClick={() => onDownload(entries)} /> : null}
+        {mobileViewport && otherActions.length > 0 ? (
+          <ActionMenu label={t("sftp.selectedActions", { name: entry?.name ?? heading })}
+            items={otherActions.map(({ label, disabled, run }) => ({ label, disabled, onSelect: run }))}
+            triggerClassName="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink" />
+        ) : null}
         <button type="button" className="text-xs text-ink-muted hover:text-ink" onClick={onClose}>{t("sftp.close")}</button>
       </div>
 
       <div className={mobileViewport ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_18rem] overflow-hidden"}>
-        <div role="group" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain bg-surface-subtle p-3" aria-label={t("sftp.preview")}>
+        <div role="group" className={`min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain ${mobileViewport && pictured ? "bg-black" : "bg-surface-subtle p-3"}`} aria-label={t("sftp.preview")}>
           {entry === null ? (
             <ul className="space-y-1 text-xs" aria-label={t("sftp.selectedItems")}>
               {entries.map((item) => (
@@ -161,17 +186,13 @@ export function SFTPDetailsDialog({
         {mobileViewport ? <details className="min-h-0 shrink-0 overflow-auto border-t border-line"><DisclosureSummary className="px-3 py-3 text-sm text-ink-muted">{t("sftp.properties")}</DisclosureSummary><div className="max-h-40 overflow-auto">{properties}</div></details> : properties}
       </div>
 
-      <div className="flex flex-wrap justify-end gap-2 border-t border-line px-3 py-2">
-        {entry !== null && kind === "file"
-          ? <Button disabled={busy} onClick={() => onEdit(entry)}>{t("sftp.editFile")}</Button>
-          : null}
-        {entries.some(canDownload)
-          ? <Button disabled={busy} onClick={() => onDownload(entries)}>{t("sftp.download")}</Button>
-          : null}
-        {entry?.type === "symlink" && onChangeLinkTarget ? <Button disabled={busy} onClick={() => onChangeLinkTarget(entry)}>{t("sftp.changeLinkTarget")}</Button> : null}
-        {entry !== null && (entry.type === "file" || entry.type === "directory") && onChangeOwnership ? <Button disabled={busy || entry.uid === undefined || entry.gid === undefined} onClick={() => onChangeOwnership(entry)}>{t("sftp.changeOwnership")}</Button> : null}
-        {entry === null ? null : <Button disabled={busy} onClick={() => onRename(entry)}>{t("sftp.rename")}</Button>}
-      </div>
+      {mobileViewport ? null : (
+        <div className="flex flex-wrap justify-end gap-2 border-t border-line px-3 py-2">
+          {editAction.map(({ label, disabled, run }) => <Button key={label} disabled={disabled} onClick={run}>{label}</Button>)}
+          {downloadable ? <Button disabled={busy} onClick={() => onDownload(entries)}>{t("sftp.download")}</Button> : null}
+          {entryActions.map(({ label, disabled, run }) => <Button key={label} disabled={disabled} onClick={run}>{label}</Button>)}
+        </div>
+      )}
     </ModalShell>
   );
 }
