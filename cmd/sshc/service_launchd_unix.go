@@ -142,6 +142,13 @@ func (manager *launchdServiceManager) restartRunning(ctx context.Context) error 
 	return manager.run(ctx, "kickstart", "-k", manager.target())
 }
 
+// StartIfFailed は何もしない。launchd は KeepAlive（SuccessfulExit=false）で、落ちた engine を
+// 回数の上限なく起動し直すので、起動の失敗で止まったままにはならない。直した版を入れれば、
+// 次に launchd が起動するときにその版で動く。
+func (manager *launchdServiceManager) StartIfFailed(context.Context, string) (bool, error) {
+	return false, nil
+}
+
 func (manager *launchdServiceManager) Disable(ctx context.Context) (bool, error) {
 	return manager.definitionSteps().disable(ctx)
 }

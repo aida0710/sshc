@@ -243,6 +243,56 @@ func TestLinuxServiceTryRestartDoesNotStartAServiceStoppedAfterTheCheck(t *testi
 	}
 }
 
+// writeManagedLinuxUnit は、sshc service install と同じ unit を executable で書く。
+func writeManagedLinuxUnit(t *testing.T, manager *linuxServiceManager, executable string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(manager.unitPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	unit, err := systemdUnit(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manager.unitPath(), []byte(unit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// 起動のたびに落ちる版で failed になった unit は、直した版を入れたあとに起動し直す。
+func TestLinuxServiceStartsAgainAUnitThatStoppedBecauseItKeptFailing(t *testing.T) {
+	runner := &fakeServiceCommandRunner{results: []serviceCommandResult{{ExitCode: 0}, {ExitCode: 0}, {ExitCode: 0}}}
+	manager := testLinuxServiceManager(t, runner)
+	writeManagedLinuxUnit(t, manager, "/opt/sshc/bin/sshc")
+	started, err := manager.StartIfFailed(context.Background(), "/opt/sshc/bin/sshc")
+	if err != nil || !started {
+		t.Fatalf("start = %v, %v", started, err)
+	}
+	want := []string{"--user is-failed --quiet sshc.service", "--user reset-failed sshc.service", "--user start sshc.service"}
+	if len(runner.calls) != len(want) {
+		t.Fatalf("calls = %#v", runner.calls)
+	}
+	for index, call := range want {
+		if got := strings.Join(runner.calls[index], " "); got != call {
+			t.Fatalf("call %d = %q, want %q", index, got, call)
+		}
+	}
+}
+
+// sshc stop で止めた unit（failed ではない）と、別の実行ファイルの unit は起動しない。
+func TestLinuxServiceLeavesStoppedAUnitTheUserStoppedOrAnotherInstallationOwns(t *testing.T) {
+	runner := &fakeServiceCommandRunner{results: []serviceCommandResult{{ExitCode: 1}}}
+	manager := testLinuxServiceManager(t, runner)
+	writeManagedLinuxUnit(t, manager, "/opt/sshc/bin/sshc")
+	started, err := manager.StartIfFailed(context.Background(), "/opt/sshc/bin/sshc")
+	if err != nil || started || len(runner.calls) != 1 {
+		t.Fatalf("stopped unit start = %v, %v calls=%#v", started, err, runner.calls)
+	}
+	started, err = manager.StartIfFailed(context.Background(), "/other/sshc")
+	if err != nil || started || len(runner.calls) != 1 {
+		t.Fatalf("other executable start = %v, %v calls=%#v", started, err, runner.calls)
+	}
+}
+
 func TestLinuxServiceInstallFailsWhenTheEngineNeverBecomesReady(t *testing.T) {
 	runner := &fakeServiceCommandRunner{}
 	manager := testLinuxServiceManager(t, runner)
