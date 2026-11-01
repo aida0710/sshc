@@ -369,7 +369,7 @@ func newTerminalFixture(t *testing.T, limits terminal.Limits, offered ...termina
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := previous.SaveOnStop(offered); err != nil {
+	if err := previous.Save(offered); err != nil {
 		t.Fatal(err)
 	}
 	restore, err := terminalrestore.NewService(storageRoot)

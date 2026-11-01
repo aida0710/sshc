@@ -2,6 +2,7 @@ package terminalrestore
 
 import (
 	"crypto/rand"
+	"slices"
 	"sync"
 
 	"sshc/internal/randomid"
@@ -18,6 +19,9 @@ type Service struct {
 	// is none. Each engine start draws a new one, so a screen that keeps
 	// listing sessions across a restart of the engine still sees a new offer.
 	offerID string
+	// recorded is what the record on disk holds, so that Save does not write
+	// the same sessions again.
+	recorded []Session
 }
 
 // NewService reads what the previous engine saved. A record that cannot be
@@ -26,6 +30,7 @@ func NewService(workspace *storage.Workspace) (*Service, error) {
 	service := &Service{store: store{workspace: workspace}}
 	offer, err := service.store.load()
 	service.offer = offer
+	service.recorded = offer
 	if len(offer) > 0 {
 		id, idErr := randomid.Token(rand.Reader)
 		if idErr != nil {
@@ -57,7 +62,11 @@ func (s *Service) Take() ([]Session, error) {
 	defer s.mutex.Unlock()
 	taken := s.offer
 	s.offer, s.offerID = nil, ""
-	return taken, s.store.save(nil)
+	if err := s.store.save(nil); err != nil {
+		return taken, err
+	}
+	s.recorded = nil
+	return taken, nil
 }
 
 // Decline ends the offer without opening anything.
@@ -66,18 +75,29 @@ func (s *Service) Decline() error {
 	return err
 }
 
-// SaveOnStop records the sessions open now for the next engine. An offer
-// still unanswered is kept in front of them, so stopping before answering
-// does not lose it. An offered session the user opened again by hand is
-// recorded once, as the open one, so the next offer does not open it twice.
-func (s *Service) SaveOnStop(open []Session) error {
+// Save records the sessions open now for the next engine. The engine calls it
+// while it runs, as the sessions change, so that an engine ended without
+// stopping (a phone's system closing the app, a crash) still leaves them, and
+// once more as it stops. An offer still unanswered is kept in front of them,
+// so stopping before answering does not lose it. An offered session the user
+// opened again by hand is recorded once, as the open one, so the next offer
+// does not open it twice. A record that already holds the same sessions is not
+// written again.
+func (s *Service) Save(open []Session) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	sessions := append(withoutReopened(s.offer, open), open...)
 	if len(sessions) > MaxSessions {
 		sessions = sessions[:MaxSessions]
 	}
-	return s.store.save(sessions)
+	if slices.Equal(sessions, s.recorded) {
+		return nil
+	}
+	if err := s.store.save(sessions); err != nil {
+		return err
+	}
+	s.recorded = sessions
+	return nil
 }
 
 // withoutReopened returns the offered sessions that are not among open, each
