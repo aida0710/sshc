@@ -358,6 +358,27 @@ test("coming back to the app after typing leaves the keyboard down", async ({ pa
   expect(await terminalInputFocused(page)).toBe(false);
 });
 
+test("a five-digit port on a phone is not hidden under the button that resets it", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Connections", exact: true }).tap();
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).tap();
+  const port = page.getByLabel("Port", { exact: true });
+  await port.fill("22298");
+  const reset = page.getByRole("button", { name: "Use inherited/default port", exact: true });
+  await expect(reset).toBeVisible();
+  // Where the value's text ends must be left of where the button starts.
+  const { textEnd, buttonStart } = await port.evaluate((input: HTMLInputElement) => {
+    const style = getComputedStyle(input);
+    const context = document.createElement("canvas").getContext("2d")!;
+    context.font = `${style.fontSize} ${style.fontFamily}`;
+    const box = input.getBoundingClientRect();
+    const button = input.parentElement!.querySelector("button")!.getBoundingClientRect();
+    return { textEnd: box.left + Number.parseFloat(style.paddingLeft) + context.measureText(input.value).width, buttonStart: button.left };
+  });
+  expect(textEnd).toBeLessThanOrEqual(buttonStart);
+});
+
 test("the navigation on a phone links only Home and gives the sessions the height", async ({ page, installation }) => {
   const sessions = Array.from({ length: 12 }, (_, index) => ({
     id: `phone-${index + 1}`, kind: "shell", workspaceId: "default", title: `Session ${index + 1}`,
