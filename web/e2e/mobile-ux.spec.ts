@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, openApplication, test, type Installation } from "./support/environment";
 import { samplePNG } from "./support/images";
-import { drawnRows, drawnSpan } from "./support/terminal";
+import { drawnRows, drawnRowsIn, drawnSpan } from "./support/terminal";
 
 // All screenshots are opt-in and contain only the isolated installation's
 // example hosts and synthetic SFTP/terminal data. Never capture real servers.
@@ -518,7 +518,7 @@ for (const program of fullScreenPrograms) {
     if (box === null) throw new Error("the terminal has no box");
     const middle = box.x + box.width / 2;
 
-    const rowHeight = await screen.locator(".xterm-rows > div").first().evaluate((row) => row.getBoundingClientRect().height);
+    const rowHeight = await drawnRowsIn(screen).first().evaluate((row) => row.getBoundingClientRect().height);
     const steps = Math.round(box.height * 0.4 / rowHeight / program.rowsPerStep);
 
     // A finger moving up moves the text forward, as the wheel turned towards the person does.
