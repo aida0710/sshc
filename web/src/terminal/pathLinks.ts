@@ -32,10 +32,28 @@ const pathAfterProse = /\P{ASCII}(?=~\/|\$(?:HOME|\{HOME\})\/|\/(?:home|Users|tm
 // A tool call such as Claude Code's Read(src/app.ts), or a Japanese bracket, opens right before a relative
 // path. The bracket must stay open up to the first slash, so a folder named "dir(1)" is kept whole.
 const openingBeforeRelativePath = /^[^/\\]*[([{<（「『](?=[^/\\)\]}>）」』]*[/\\])/u;
+// The prose before a relative name touches it too ("確かめました。xterm.js", "修正済みのREADME.mdを読んだ"). A name
+// starts after the last sentence or clause mark, which no file or folder name holds. A name without a folder also
+// starts after a bracket ("「xterm.js」"; a folder may be named "写真（2026）"), and where ASCII that begins with a
+// letter takes over from Japanese words up to its end. A name that begins with a digit or a dot keeps the words
+// before it ("議事録2026-11-01.md", "運用メモ.md").
+const sentenceMarkBeforePath = /^.*[。、，．！？：；]/u;
+const bracketBeforeName = /^.*[（）「」『』【】〔〕]/u;
+const asciiNameAfterProse = /^.*\P{ASCII}(?=[A-Za-z][\x21-\x7e]*$)/u;
 const windowsPathPattern = /^[A-Za-z]:[/\\]/u;
 const sourceLocationPattern = /:\d+(?::\d+)?$/u;
 const homePrefixPattern = /^\$(?:HOME|\{HOME\})\//u;
 const trailingPunctuationPattern = /[.,;!?)\]}。、）]+$/u;
+
+// proseBeforePath is how many characters at the start of text are the prose before the path it ends with (see
+// sentenceMarkBeforePath).
+function proseBeforePath(text: string): number {
+  const marked = sentenceMarkBeforePath.exec(text)?.[0].length ?? 0;
+  const rest = text.slice(marked);
+  if (/[/\\]/u.test(rest)) return marked;
+  const bracketed = bracketBeforeName.exec(rest)?.[0].length ?? 0;
+  return marked + bracketed + (asciiNameAfterProse.exec(rest.slice(bracketed))?.[0].length ?? 0);
+}
 
 // endBeforeProse cuts the words that follow a previewable name without a space (see previewableNameBeforeProse).
 function endBeforeProse(text: string): string {
@@ -121,6 +139,11 @@ function wordPath(word: PrintedWord, allowWindowsPaths: boolean): TerminalLinkMa
       : (openingBeforeRelativePath.exec(text) ?? /^[([{<→←]+/u.exec(text))?.[0].length ?? 0;
     text = text.slice(offset);
     start += offset;
+    if (!hasPrefix) {
+      const prose = proseBeforePath(text);
+      text = text.slice(prose);
+      start += prose;
+    }
   }
   let target = decodedPath(text);
   // Keep the underline on the printed path, including escapes, not its quotes.
