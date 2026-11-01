@@ -128,7 +128,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false, initialL
     };
     // A changed path deliberately creates a new model. The parent owns dirty
     // navigation confirmation before it changes this key.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [path]);
 
   // Writes a `value` the parent set itself, such as the contents read again

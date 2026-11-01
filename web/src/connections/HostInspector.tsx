@@ -65,7 +65,7 @@ export function HostInspector({
   const resetKey = `${identityKey(detail.form.entry.identity)}\u0000${canonicalHostMetadata(saved)}`;
   useEffect(() => {
     discard();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
   useReportDirty(dirty, onDirtyChange);

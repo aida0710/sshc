@@ -324,7 +324,7 @@ export function SFTPPanel({
       setLinkedEntry({ alias: target.alias, action: target.action, entry });
     });
     // The request number makes an intentional repeat actionable while preventing route rerenders from reopening it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.request]);
 
   useEffect(() => {
@@ -333,7 +333,7 @@ export function SFTPPanel({
     if (linkedEntry.action === "edit") void editor.open(linkedEntry.alias, linkedEntry.entry);
     else void transfers.transferOut([linkedEntry.entry], linkedEntry.alias);
     // The helpers are recreated every render; the effect only needs to run when the pane can act.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [linkedEntry, busy, alias]);
 
   // A deletion that finished under the rows on screen (or under the search
@@ -348,7 +348,7 @@ export function SFTPPanel({
     // useSFTPSearch returns a new object on every render, so `search` itself is
     // not watched; its search root (search.search) is what decides which rows a
     // deletion covers. remoteParentOf is a module function.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [transferJobs, alias, path, connected, dirty, search.search, local]);
 
   function showDetails() {

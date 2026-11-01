@@ -607,7 +607,7 @@ export function TerminalView({
     // The terminal is built once per session; settings, callbacks and
     // translations it reads are applied by the effects below without
     // recreating the addon stack and the WebSocket.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id, api, backgroundConfigured, webglEnabled]);
 
   // Declared after the effect that builds the terminal, and keyed on the same

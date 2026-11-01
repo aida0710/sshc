@@ -464,7 +464,7 @@ jobs:
         run: npm run typecheck
 
       # TypeScript が検出しない未処理 Promise と React Hooks の規則を検査する。
-      # ルールの選定理由は web/eslint.config.mjs を参照。
+      # ルールの選定理由は web/.oxlintrc.json を参照。
       - name: Lint
         run: npm run lint
 

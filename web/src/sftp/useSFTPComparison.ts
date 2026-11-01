@@ -38,7 +38,7 @@ export function useSFTPComparison({ left, right, onCopied }: {
     });
     return () => controller.abort();
     // Locations are recreated by the workspace; their values identify a request.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [left.alias, left.path, right.alias, right.path, mode, t]);
 
   const comparison = view?.mode === mode ? view.comparison : null;
