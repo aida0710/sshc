@@ -10,6 +10,7 @@ export function AppHeader({
   navigationOpen,
   navigationId,
   navigationToggleRef,
+  navigationPinned = false,
   onToggleNavigation,
   inspector,
   inspectorOpen,
@@ -23,6 +24,8 @@ export function AppHeader({
   navigationOpen: boolean;
   navigationId: string;
   navigationToggleRef?: RefObject<HTMLButtonElement | null>;
+  // navigationPinned: the navigation stays open beside the bar (a tablet held upright), so there is nothing to toggle.
+  navigationPinned?: boolean;
   onToggleNavigation: () => void;
   inspector: InspectorContent | null;
   inspectorOpen: boolean;
@@ -39,7 +42,7 @@ export function AppHeader({
   return (
     <header data-app-header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:hidden">
       <div ref={backSlotRef} data-page-back className="flex shrink-0 items-center empty:hidden" />
-      <button
+      {navigationPinned ? null : <button
         ref={navigationToggleRef}
         type="button"
         aria-label={t("shell.navigationToggle")}
@@ -49,7 +52,7 @@ export function AppHeader({
         className="grid h-10 w-10 shrink-0 place-items-center rounded text-ink-muted hover:bg-select-fill hover:text-ink [[data-page-back]:not(:empty)~&]:hidden"
       >
         <Icon name="menu" className="h-4 w-4" />
-      </button>
+      </button>}
 
       <p className="min-w-0 flex-1 truncate text-sm font-semibold">
         {route.kind === "section" && route.section !== undefined
