@@ -67,15 +67,52 @@ func TestShortcutPresetsAcceptFunctionKeysWithAnyModifiers(t *testing.T) {
 }
 
 // A preset saved before the prompt actions were added binds none of them. It is
-// dropped when metadata is read, so it cannot make every later save refuse.
-func TestAPresetWithoutEveryActionIsDroppedWhenMetadataIsRead(t *testing.T) {
-	current := testShortcutPreset()
+// read with them unassigned, so the preset the user made stays, and a binding of
+// an action no longer offered is left out.
+func TestAPresetSavedBeforeAnActionWasAddedIsReadWithItUnassigned(t *testing.T) {
 	old := testShortcutPreset()
 	old.ID, old.Name = "before-prompts", "Before prompts"
 	delete(old.Bindings, "previousPrompt")
 	delete(old.Bindings, "nextPrompt")
+	old.Bindings["viMode"] = []string{"Ctrl+Shift+Space"}
 	metadata := NewMetadata()
-	metadata.ShortcutPresets = []ShortcutPreset{old, current}
+	metadata.ShortcutPresets = []ShortcutPreset{old}
+	encoded, err := json.Marshal(metadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	read, err := DecodeMetadata(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(read.ShortcutPresets) != 1 || read.ShortcutPresets[0].ID != old.ID {
+		t.Fatalf("presets = %+v, want the one saved before the actions were added", read.ShortcutPresets)
+	}
+	bindings := read.ShortcutPresets[0].Bindings
+	if keys, ok := bindings["previousPrompt"]; !ok || len(keys) != 0 {
+		t.Fatalf("previousPrompt = %v, %v; want it unassigned", keys, ok)
+	}
+	if _, ok := bindings["viMode"]; ok {
+		t.Fatal("the binding of an action no longer offered was kept")
+	}
+	if !reflect.DeepEqual(bindings["palette"], []string{"Ctrl+K", "Meta+K"}) {
+		t.Fatalf("palette = %v, want the chords the user chose", bindings["palette"])
+	}
+	if _, err := EncodeMetadata(read); err != nil {
+		t.Fatalf("saving after the read refused: %v", err)
+	}
+}
+
+// A preset that still breaks the rules once its actions are filled in (the same
+// chord twice) is dropped, so it cannot make every later save refuse.
+func TestAPresetWithTheSameChordTwiceIsDroppedWhenMetadataIsRead(t *testing.T) {
+	current := testShortcutPreset()
+	broken := testShortcutPreset()
+	broken.ID = "broken"
+	broken.Bindings["home"] = []string{"Ctrl+K"}
+	metadata := NewMetadata()
+	metadata.ShortcutPresets = []ShortcutPreset{broken, current}
 	encoded, err := json.Marshal(metadata)
 	if err != nil {
 		t.Fatal(err)
@@ -86,9 +123,6 @@ func TestAPresetWithoutEveryActionIsDroppedWhenMetadataIsRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(read.ShortcutPresets) != 1 || read.ShortcutPresets[0].ID != current.ID {
-		t.Fatalf("presets = %+v, want only the one binding every action", read.ShortcutPresets)
-	}
-	if _, err := EncodeMetadata(read); err != nil {
-		t.Fatalf("saving after the read refused: %v", err)
+		t.Fatalf("presets = %+v, want only the valid one", read.ShortcutPresets)
 	}
 }

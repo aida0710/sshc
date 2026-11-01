@@ -22,8 +22,9 @@ import { sectionPath, type Section } from "./routing/sectionRoute";
 import { connectionLocation } from "./routing/connectionRoute";
 import { AppHeader } from "./shell/AppHeader";
 import { AppNavigation } from "./shell/AppNavigation";
-import { navigationWidth } from "./shell/navigationLayout";
+import { hiddenNavigationWidth, navigationShown, navigationWidth } from "./shell/navigationLayout";
 import { useColumnWidth } from "./ui/useColumnWidth";
+import { useStoredValue } from "./ui/useStoredValue";
 import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
 import { useTerminalWorkspaces } from "./terminal/useTerminalWorkspaces";
@@ -57,6 +58,7 @@ import { useAppShortcuts, type SessionShortcut, type SessionShortcutRequest } fr
 import { paneSessionIds } from "./terminal/splitView/layout";
 import { TerminalRestorePrompt } from "./terminal/TerminalRestorePrompt";
 import { useFocusBackAfterInert } from "./ui/useFocusBackAfterInert";
+import { Icon } from "./ui/icons";
 
 const transferReconcileIntervalMs = 2_000;
 
@@ -106,6 +108,7 @@ export function App({
   const handoffs = useSectionHandoffs(navigate);
   const declared = useDeclaredConfig(state === "ready", section);
   const [desktopNavigationWidth, resizeDesktopNavigation] = useColumnWidth(navigationWidth);
+  const [desktopNavigation, setDesktopNavigation] = useStoredValue(navigationShown);
   const {
     navigationOpen,
     setNavigationOpen,
@@ -231,6 +234,13 @@ export function App({
     setSessionShortcut((previous) => ({ ...request, serial: (previous?.serial ?? 0) + 1 }));
   }, []);
   const panes = useMemo(() => paneSessionIds(splitView.state.root), [splitView.state.root]);
+  // A PC hides its navigation on the shortcut, keeping a narrow column with the button that shows it again; a
+  // phone opens or closes its drawer, and a tablet held upright keeps its navigation open.
+  const navigationHidden = !mobileLayout && desktopNavigation === "hidden";
+  const toggleNavigation = useCallback(() => {
+    if (!mobileLayout) setDesktopNavigation(desktopNavigation === "hidden" ? "shown" : "hidden");
+    else if (!navigationPinned) setNavigationOpen((open) => !open);
+  }, [mobileLayout, navigationPinned, desktopNavigation, setDesktopNavigation, setNavigationOpen]);
   const openSFTPTerminal = useCallback(async (alias: string, cwd?: string) => {
     if (runTargets.selected !== null) {
       setPendingLocalRequest(cwd === undefined ? { kind: "open", alias } : { kind: "open", alias, cwd });
@@ -272,6 +282,7 @@ export function App({
     showSession,
     openPalette,
     requestSession,
+    toggleNavigation,
   });
 
   // Transfers run in the engine, so the queue keeps up even while this tab is
@@ -350,7 +361,7 @@ export function App({
   if (state === "session-ended") return <SessionEndedScreen />;
 
   return (
-    <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout} data-navigation-pinned={mobileLayout && navigationPinned}>
+    <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout} data-navigation-pinned={mobileLayout && navigationPinned} data-navigation-hidden={navigationHidden}>
       <div
         ref={rechecked}
         className="contents"
@@ -383,7 +394,7 @@ export function App({
         <div
           style={
             {
-              "--navigation-width": `${desktopNavigationWidth}px`,
+              "--navigation-width": navigationHidden ? hiddenNavigationWidth : `${desktopNavigationWidth}px`,
             } as CSSProperties
           }
           className={`sshc-app-layout grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[var(--navigation-width)_minmax(0,1fr)] ${
@@ -399,6 +410,20 @@ export function App({
               onClick={() => setNavigationOpen(false)}
               className="sshc-navigation-backdrop fixed inset-0 z-20 bg-canvas/70 md:hidden"
             />
+          ) : null}
+          {navigationHidden ? (
+            // The column the hidden navigation leaves (hiddenNavigationWidth): only the button that shows it again.
+            <div className="flex justify-center pt-3">
+              <button
+                type="button"
+                aria-label={t("shell.navigationShow")}
+                title={t("shell.navigationShow")}
+                onClick={toggleNavigation}
+                className="grid size-8 place-items-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+              >
+                <Icon name="navigationShow" className="size-4" />
+              </button>
+            </div>
           ) : null}
           <AppNavigation
             navigationRef={navigationPanelRef}

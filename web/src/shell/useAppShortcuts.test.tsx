@@ -19,6 +19,7 @@ function ShortcutHarness({ ready, openPalette }: { ready: boolean; openPalette: 
     showSession: ignoreSession,
     openPalette,
     requestSession: ignoreSession,
+    toggleNavigation: ignoreNavigation,
   });
   return <p>{ready ? "ready" : "starting"}</p>;
 }
@@ -69,7 +70,7 @@ describe("useAppShortcuts", () => {
 });
 
 describe("useAppShortcuts on the terminal screen", () => {
-  const bindings = { ...defaultBindings, newSession: ["Alt+N"], closeSession: ["Alt+W"], nextPane: ["Alt+]"], previousPane: ["Alt+["] };
+  const bindings = { ...defaultBindings, newSession: ["Alt+N"], closeSession: ["Alt+W"], nextPane: ["Alt+]"], previousPane: ["Alt+["], toggleNavigation: ["Alt+B"] };
   const session = (id: string) => ({ id, kind: "shell" as const, workspaceId: "default", title: id, startedAt: "2026-10-31T00:00:00Z", state: "connected" as const, problem: "" });
   function press(key: string) {
     document.dispatchEvent(new KeyboardEvent("keydown", { key, altKey: true, bubbles: true, cancelable: true }));
@@ -77,6 +78,7 @@ describe("useAppShortcuts on the terminal screen", () => {
   function setUp(panes: string[]) {
     const showSession = vi.fn();
     const requestSession = vi.fn();
+    const toggleNavigation = vi.fn();
     renderHook(() => useAppShortcuts({
       enabled: true,
       shortcuts: bindings,
@@ -88,8 +90,9 @@ describe("useAppShortcuts on the terminal screen", () => {
       showSession,
       openPalette: ignoreNavigation,
       requestSession,
+      toggleNavigation,
     }));
-    return { showSession, requestSession };
+    return { showSession, requestSession, toggleNavigation };
   }
 
   it("asks the session list for a new session and to close the session shown", () => {
@@ -110,5 +113,11 @@ describe("useAppShortcuts on the terminal screen", () => {
     const { showSession } = setUp(["two"]);
     press("]");
     expect(showSession).not.toHaveBeenCalled();
+  });
+
+  it("shows or hides the navigation on its shortcut", () => {
+    const { toggleNavigation } = setUp([]);
+    press("b");
+    expect(toggleNavigation).toHaveBeenCalledTimes(1);
   });
 });

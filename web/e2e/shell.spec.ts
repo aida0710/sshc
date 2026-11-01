@@ -229,3 +229,31 @@ test("resizes and restores the permanent desktop navigation", async ({ page, ins
     "332",
   );
 });
+
+test("hides the navigation on a PC with its shortcut and shows it again from the button left in its place", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Menu");
+  await page.getByRole("link", { name: "Open Keyboard shortcuts" }).click();
+  const assign = page.getByRole("button", { name: "Assign shortcut: Show or hide the navigation", exact: true });
+  await assign.click();
+  await page.keyboard.press("Alt+b");
+  await expect(assign).toHaveText("Alt+B");
+  await page.locator("body").click({ position: { x: 600, y: 10 } });
+
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await expect(navigation).toBeVisible();
+  await page.keyboard.press("Alt+b");
+  await expect(navigation).toBeHidden();
+  const show = page.getByRole("button", { name: "Show the navigation", exact: true });
+  await expect(show).toBeVisible();
+  // The page takes the room the navigation left, save the narrow column holding the button.
+  expect((await page.locator("main").boundingBox())?.x ?? 999).toBeLessThan(60);
+
+  // This browser remembers it.
+  await page.reload();
+  await expect(show).toBeVisible();
+  await expect(navigation).toBeHidden();
+  await show.click();
+  await expect(navigation).toBeVisible();
+  expect(await page.evaluate(() => window.localStorage.getItem("sshc.navigation.hidden.v1"))).toBeNull();
+});
