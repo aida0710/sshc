@@ -105,14 +105,15 @@ var androidFieldIntent = map[string]string{
 	"Port":       "default: WebView は通知された URL を使うため、ポート番号を指定させない",
 
 	// 空で既定に落ちるのが正しいもの。
-	"ScanHostKeys":      "default: internal/sshclient がプロセス内で SSH 通信する",
-	"Probe":             "default: 同上",
-	"RemoteRun":         "default: 同上",
-	"TerminalStarter":   "default: 本物の PTY を確保する。Android では /system/bin/sh",
-	"DockerEnvironment": "default: Environ から求めた環境。Android に docker は無く、VPN の一覧は「使用できない」を返す",
-	"SessionNow":        "default: time.Now",
-	"About":             "default: 実行中のGo build infoを読み、導入方法は管理元不明として表示する",
-	"ShutdownTimeout":   "default: app が決める既定値",
+	"ScanHostKeys":          "default: internal/sshclient がプロセス内で SSH 通信する",
+	"Probe":                 "default: 同上",
+	"RemoteRun":             "default: 同上",
+	"TerminalStarter":       "default: 本物の PTY を確保する。Android では /system/bin/sh",
+	"DockerEnvironment":     "default: Environ から求めた環境。Android に docker は無く、VPN の一覧は「使用できない」を返す",
+	"SessionNow":            "default: time.Now",
+	"About":                 "default: 実行中のGo build infoを読み、導入方法は管理元不明として表示する",
+	"ShutdownTimeout":       "default: app が決める既定値",
+	"RestoreRecordInterval": "default: app が決める既定値。スマホのシステムがアプリを閉じても、開き直しの記録が残る",
 }
 
 func TestEveryDependencyOfTheAndroidEngineIsADecision(t *testing.T) {

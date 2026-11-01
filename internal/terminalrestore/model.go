@@ -1,6 +1,8 @@
 // Package terminalrestore keeps the terminal sessions that were open when the
 // engine stopped, so the next engine can offer to open them again: after an
-// update, a restart of the machine or a manual stop. Sessions themselves live
+// update, a restart of the machine or a manual stop, and after an engine that
+// was ended without stopping (a phone's system closing the app, a crash), from
+// the record the engine keeps up to date while it runs. Sessions themselves live
 // only in the engine's memory; what is kept is how to open each one again.
 //
 // The record belongs to this machine's engine and never travels with sync. It
