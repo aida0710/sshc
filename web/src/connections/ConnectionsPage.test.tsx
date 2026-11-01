@@ -9,6 +9,7 @@ import { credentialsApi } from "../api/credentials";
 import { terminalSessionsApi } from "../api/terminalSessions";
 import { vaultApi } from "../api/vault";
 import { keysApi } from "../keys/api";
+import { recentConnectionsApi } from "../api/recentConnections";
 import { vaultStatus } from "../testing/vaultStatus";
 import { ToastProvider } from "../ui/ToastProvider";
 
@@ -32,6 +33,10 @@ vi.mock("../api/terminalSessions", () => ({
 
 vi.mock("../api/vault", () => ({
   vaultApi: { passwordVault: vi.fn(), passwordEligibility: vi.fn(), initialiseVault: vi.fn(), unlockVault: vi.fn() },
+}));
+
+vi.mock("../api/recentConnections", () => ({
+  recentConnectionsApi: { recentConnections: vi.fn() },
 }));
 
 vi.mock("../api/credentials", () => ({
@@ -79,6 +84,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(configApi.overview).mockResolvedValue(overview);
   vi.mocked(configApi.host).mockResolvedValue(detail as never);
+  vi.mocked(recentConnectionsApi.recentConnections).mockResolvedValue({ connections: [] });
   vi.mocked(terminalSessionsApi.terminalSessions).mockResolvedValue({ sessions: [], maxSessions: 50 });
   vi.mocked(terminalSessionsApi.closeTerminalSession).mockResolvedValue({ sessions: [], maxSessions: 50 });
   vi.mocked(terminalSessionsApi.openTerminalSession).mockResolvedValue({
@@ -325,14 +331,16 @@ describe("ConnectionsPage", () => {
     expect(configApi.host).not.toHaveBeenCalled();
   });
 
-  it("offers a resizable divider between the connection list and the detail pane", async () => {
+  it("offers a resizable divider between the connection list and the open connection", async () => {
     render(
       <ConnectionsPage
         {...terminalSessionProps}
         onInspector={() => undefined}
-        location={{ pathname: "/connections/servers", search: "" }}
+        location={{ pathname: "/connections/servers", search: "?path=config&host=bastion&panel=basic" }}
+        onNavigateLocation={vi.fn()}
       />,
     );
+    await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "bastion"));
     const handle = await screen.findByRole("separator", { name: "Resize the connection list" });
     expect(handle).toHaveAttribute("aria-valuenow", "300");
     Object.defineProperty(handle, "setPointerCapture", { value: vi.fn(), configurable: true });
@@ -342,6 +350,29 @@ describe("ConnectionsPage", () => {
     await waitFor(() => expect(handle).toHaveAttribute("aria-valuenow", "360"));
     expect(window.localStorage.getItem("sshc.connections.list-width.v2")).toBe("360");
     vi.restoreAllMocks();
+  });
+
+  it("gives the list the whole width while nothing is open, with the group and the last connection in columns", async () => {
+    vi.mocked(recentConnectionsApi.recentConnections).mockResolvedValue({
+      connections: [{ alias: "bastion", lastConnectedAt: new Date().toISOString() }],
+    } as never);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+
+    const row = await screen.findByRole("button", { name: "bastion" });
+    await waitFor(() => expect(row).toHaveTextContent(/Last connected today/i));
+    expect(row).toHaveTextContent("Ungrouped");
+    expect(screen.queryByRole("separator", { name: "Resize the connection list" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the list beside the right pane while nothing is open when the right pane has a notice", async () => {
+    vi.mocked(configApi.overview).mockResolvedValue({
+      ...overview,
+      notices: [{ code: "include_missing", severity: "warning", path: "config", message: "Include points at a missing file" }],
+    } as never);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+
+    expect(await screen.findByRole("separator", { name: "Resize the connection list" })).toBeInTheDocument();
+    expect(recentConnectionsApi.recentConnections).not.toHaveBeenCalled();
   });
 
   it("opens a connection and tab from the URL", async () => {
