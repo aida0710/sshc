@@ -1,10 +1,7 @@
-import { useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { FieldRow } from "../ui/FieldRow";
 import { sizedControl } from "../ui/form";
 import { PageSection } from "../ui/page";
-import { Spinner } from "../ui/Spinner";
-import { useRequestGeneration } from "../ui/useRequestGeneration";
 import type { SettingsPreset } from "../settings/settingsStore";
 import { TransferExclusionSettings } from "./TransferExclusionSettings";
 import { IntegerSetting } from "../ui/IntegerSetting";
@@ -20,13 +17,9 @@ const maximumSpeedKiB = 1 << 20;
 // PresetTransferSettings is a preset's transfer settings with the engine's defaults filled in.
 export type PresetTransferSettings = Required<NonNullable<SettingsPreset["fileTransfers"]>>;
 
-type CommitState = "idle" | "saving" | "saved";
-
-// Each control commits on its own: a choice when it changes, a number when
-// it is confirmed, the exclusion rules with their own button. The line beside
-// the first heading says that the latest change is being saved and then that
-// it was; editing again clears it. onCommit resolves to whether the change went
-// through, and the caller says why when it did not.
+// Each control commits on its own: a choice when it changes, a number and the exclusion rules when they are
+// confirmed (left, or Enter). The settings page says that a change was saved (SettingsSavedMark). onCommit
+// resolves to whether the change went through, and the caller says why when it did not.
 //
 // Finishing transfers and reconnecting are global settings (GeneralSettingsSection), not a preset's.
 export function TransferSettingsForm({ settings, onCommit }: {
@@ -34,32 +27,13 @@ export function TransferSettingsForm({ settings, onCommit }: {
   onCommit: (settings: Partial<PresetTransferSettings>) => Promise<boolean>;
 }) {
   const t = useTranslate();
-  const [commitState, setCommitState] = useState<CommitState>("idle");
-  // Changes can overlap, a choice made while a number is still saving. The
-  // line follows the latest one.
-  const commitGeneration = useRequestGeneration();
-
-  async function commitAndReport(change: Partial<PresetTransferSettings>): Promise<boolean> {
-    const isLatest = commitGeneration.begin();
-    setCommitState("saving");
-    const committed = await onCommit(change);
-    if (isLatest()) setCommitState(committed ? "saved" : "idle");
-    return committed;
-  }
 
   function commit(change: Partial<PresetTransferSettings>) {
-    void commitAndReport(change);
+    void onCommit(change);
   }
 
-  // A line of text no taller than the heading, so the heading row does not grow when it appears.
-  const commitStatus = commitState === "saving"
-    ? <p role="status" className="flex items-center gap-2 text-xs text-ink-muted"><Spinner />{t("sftp.settingsSaving")}</p>
-    : commitState === "saved" ? <p role="status" className="text-xs text-live">{t("sftp.settingsSaved")}</p> : undefined;
-
-  // Editing again clears "saved". It listens to change, not input: a choice in a list fires input first, and
-  // redrawing then would put the list back to the saved value before its own change handler reads the choice.
-  return <div className="flex flex-col gap-3.5 md:gap-5" onChange={() => setCommitState((current) => current === "saved" ? "idle" : current)}>
-    <PageSection heading={t("sftp.settingsTransfersHeading")} actions={commitStatus}>
+  return <div className="flex flex-col gap-3.5 md:gap-5">
+    <PageSection heading={t("sftp.settingsTransfersHeading")}>
       {/* The rows sit in their own box so the first one, right under the heading, has no line above it. */}
       <div>
         <FieldRow label={t("sftp.manager.speedLimit")} hint={t("sftp.manager.speedLimitHint")}>
@@ -90,7 +64,7 @@ export function TransferSettingsForm({ settings, onCommit }: {
       </div>
     </PageSection>
     <PageSection heading={t("sftp.manager.exclusions")} hint={t("sftp.manager.exclusionsHint")}>
-      <div><TransferExclusionSettings patterns={settings.excludePatterns} onCommit={commitAndReport} /></div>
+      <div><TransferExclusionSettings patterns={settings.excludePatterns} onCommit={onCommit} /></div>
     </PageSection>
   </div>;
 }

@@ -20,6 +20,7 @@ import { standardPresetId, useSettings } from "./settingsStore";
 import { PageHeader } from "../ui/page";
 import { PageBoard } from "../ui/PageBoard";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { SettingsSavedMark } from "./SettingsSavedMark";
 
 // Settings also change the master password, which belongs to the vault.
 export type SettingsPanelApi = SettingsApi & Pick<VaultApi, "passwordVault" | "changeMasterPassword">;
@@ -77,7 +78,7 @@ export function SettingsPanel({
       )}
       className={mobileTouchTargets}
     >
-      <PageHeader title={t(pageTitle)} description={pageDescription === undefined ? undefined : t(pageDescription)} titleOnPhone />
+      <PageHeader title={t(pageTitle)} meta={<SettingsSavedMark />} description={pageDescription === undefined ? undefined : t(pageDescription)} titleOnPhone />
       {presetPickerOnPage ? <PresetPicker layout="bar" editing={editingPreset} onEdit={setChosenPreset} /> : null}
       {shows("General") ? <GeneralSettingsSection showHeading={all} /> : null}
       {shows("Appearance") ? <AppearanceSettingsSection presetId={editingPreset} showHeading={all} /> : null}

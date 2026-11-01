@@ -87,7 +87,7 @@ A passwordless Vault is neither auto-locked nor lockable by hand: it opens when 
 
 ## Terminal
 
-**Settings → Terminal** holds the terminal settings of the preset being edited. It is split into the **Display** (color scheme, font, background), **Connection** (limits) and **Behaviour** (starting directory, local shell, clipboard and keyboard, touch input) tabs. On a phone every group is shown as its own section. **Save** stores the values changed on every tab at once; only touch input is saved as soon as it changes. Reconnecting, the connection log and OSC 52 are under **General**.
+**Settings → Terminal** holds the terminal settings of the preset being edited. It is split into the **Display** (color scheme, font, background), **Connection** (limits) and **Behaviour** (starting directory, local shell, clipboard and keyboard, touch input) tabs. On a phone every group is shown as its own section. Choices and checkboxes are saved as soon as they change; numbers and the starting directory are saved when focus leaves them or Enter is pressed. No settings page has a Save button: the page shows **Saved** beside its name for a moment. Reconnecting, the connection log and OSC 52 are under **General**.
 
 - Maximum concurrent sessions from 1 to 200, with a default of 50
 - Engine replay buffer from 16 KiB to 4 MiB, with a default of 256 KiB
