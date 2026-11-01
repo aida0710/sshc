@@ -169,14 +169,21 @@ func (machine upgradeMachine) run(binary string, arguments ...string) []byte {
 
 // runVault は、今の CLI の Vault の操作を、パスワードを打つ端末の代わりを付けて実行する。
 // CLI はパスワードを端末からしか読まないので、子プロセスでは打てない。
+//
+// 答えは1つずつ写して渡す。CLI は読んだパスワードを使い終わると消すので、同じ領域を渡すと、
+// 確認の入力を消したときに新しいパスワードも消え、Vault が 0 のパスワードで作られる。
 func (machine upgradeMachine) runVault(action string, passwords ...[]byte) {
 	t := machine.t
 	t.Helper()
+	answers := make([][]byte, len(passwords))
+	for index, password := range passwords {
+		answers[index] = bytes.Clone(password)
+	}
 	var stdout, stderr bytes.Buffer
 	environment := commandEnvironment{
 		home: machine.home, stateDir: machine.stateDir, client: &http.Client{},
 		stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr,
-		terminal: &fakePasswordTerminal{terminal: true, answers: passwords},
+		terminal: &fakePasswordTerminal{terminal: true, answers: answers},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), upgradeStepLimit)
 	defer cancel()
