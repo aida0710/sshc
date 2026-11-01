@@ -19,7 +19,7 @@ afterEach(() => {
 
 describe("isTheme", () => {
   it("accepts system and every theme, and nothing else", () => {
-    expect(themes).toEqual(["system", "light", "dark"]);
+    expect(themes).toEqual(["system", "light", "dark", "dark-blue", "dark-purple"]);
     for (const theme of themes) expect(isTheme(theme)).toBe(true);
     expect(isTheme("solarized")).toBe(false);
     expect(isTheme(undefined)).toBe(false);
@@ -30,6 +30,8 @@ describe("schemeOf", () => {
   it("tells a light theme from a dark one", () => {
     expect(schemeOf("light")).toBe("light");
     expect(schemeOf("dark")).toBe("dark");
+    expect(schemeOf("dark-blue")).toBe("dark");
+    expect(schemeOf("dark-purple")).toBe("dark");
   });
 });
 
@@ -37,6 +39,8 @@ describe("themeLabel", () => {
   it("names system and each theme", () => {
     expect(themeLabel("system")).toBe("shell.themeSystem");
     expect(themeLabel("dark")).toBe("shell.themeDark");
+    expect(themeLabel("dark-blue")).toBe("shell.themeDarkBlue");
+    expect(themeLabel("dark-purple")).toBe("shell.themeDarkPurple");
   });
 });
 
