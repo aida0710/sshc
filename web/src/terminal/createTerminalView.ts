@@ -3,6 +3,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { fitEmptyAlternateScreen } from "./alternateScreenLength";
 import { bufferRangeText } from "./bufferLinks";
 import { attachInlineImages } from "./inlineImages";
 import { attachLigatures, type LigatureDrawing } from "./ligatures";
@@ -43,7 +44,8 @@ export type TerminalViewParts = {
 };
 
 // createTerminalView builds the xterm terminal for one session and opens it in container: its options, the
-// addons for fitting, searching and serializing, inline images, ligatures and the WebGL renderer.
+// addons for fitting, searching and serializing, inline images, ligatures, the WebGL renderer, and the fix for
+// xterm.js's alternate screen after a resize (alternateScreenLength.ts).
 export function createTerminalView(container: HTMLElement, options: TerminalViewOptions): TerminalViewParts {
   const view: Terminal = new Terminal({
     allowProposedApi: true,
@@ -83,6 +85,7 @@ export function createTerminalView(container: HTMLElement, options: TerminalView
     },
   });
   applyCurrentUnicodeWidths(view);
+  const alternateScreen = fitEmptyAlternateScreen(view);
   const fit = new FitAddon();
   const searchAddon = new SearchAddon({ highlightLimit: 1000 });
   view.loadAddon(fit);
@@ -105,6 +108,7 @@ export function createTerminalView(container: HTMLElement, options: TerminalView
     ligatureDrawing,
     renderer,
     dispose: () => {
+      alternateScreen.dispose();
       inlineImages.dispose();
       ligatureDrawing.dispose();
       renderer.dispose();
