@@ -331,6 +331,33 @@ test("opening and closing sessions leaves the keyboard down until a tap types in
   await expect.poll(() => terminalInputFocused(page)).toBe(true);
 });
 
+test("coming back to the app after typing leaves the keyboard down", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  await openApplication(page, installation);
+  await openShellFromNavigation(page);
+  await expect(drawnRows(page).filter({ visible: true })).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const screenBox = (await drawnRows(page).filter({ visible: true }).boundingBox())!;
+  await page.touchscreen.tap(screenBox.x + screenBox.width / 2, screenBox.y + screenBox.height / 2);
+  const textBox = page.getByLabel("Text to send to the terminal", { exact: true });
+  await expect(textBox).toBeFocused();
+
+  // Coming back to the page hides the app while the vault is rechecked; the field that had the focus is not given
+  // it back, which on a phone would raise the keyboard (Android keeps the focus in the field when its keyboard is
+  // closed with Back).
+  const app = page.locator(".sshc-app > .contents");
+  // On a phone the recheck takes long enough for the browser to move the focus off the hidden field. Answered at
+  // once, the app could be shown again before the browser does, and the focus would never leave.
+  await page.route("**/api/v1/passwords", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.fallback();
+  });
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(app).toHaveAttribute("inert");
+  await expect(app).not.toHaveAttribute("inert");
+  await expect(textBox).not.toBeFocused();
+  expect(await terminalInputFocused(page)).toBe(false);
+});
+
 test("the navigation on a phone links only Home and gives the sessions the height", async ({ page, installation }) => {
   const sessions = Array.from({ length: 12 }, (_, index) => ({
     id: `phone-${index + 1}`, kind: "shell", workspaceId: "default", title: `Session ${index + 1}`,
