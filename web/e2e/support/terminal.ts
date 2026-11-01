@@ -48,6 +48,12 @@ export function terminalScreen(page: Page): Locator {
 export function terminalCanvasCount(page: Page): Promise<number> {
   return page.locator(`${SCREEN} canvas`).count();
 }
+// markWebGLCanvases marks the canvases the terminal draws in, so that a test can tell later whether they are the same
+// ones or were built again. It returns the marked canvases still on the page.
+export async function markWebGLCanvases(page: Page, mark: string): Promise<Locator> {
+  await page.locator(`${SCREEN} canvas`).evaluateAll((nodes, value) => nodes.forEach((node) => node.setAttribute("data-e2e-mark", value)), mark);
+  return page.locator(`${SCREEN} canvas[data-e2e-mark='${mark}']`);
+}
 export function terminalKeyboard(container: Page | Locator): Locator {
   return container.locator(KEYBOARD);
 }

@@ -26,7 +26,9 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
   sessions: TerminalSession[];
   // retainedTerminals is how many terminals shown recently stay hidden behind the panes.
   retainedTerminals: number;
-  renderTerminal: (session: TerminalSession, headerActions: ReactNode) => ReactNode;
+  // inPane is whether the session is one of the panes the section shows, not one kept hidden behind them (whether or
+  // not the section itself is on the screen).
+  renderTerminal: (session: TerminalSession, headerActions: ReactNode, inPane: boolean) => ReactNode;
 }) {
   const t = useTranslate();
   const { state, compact, dispatch, selectSession } = splitView;
@@ -129,7 +131,7 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
                 onDragLeave={drag.leave}
                 onDrop={(event) => drag.drop(event, sessionId)}>
                 <div data-split-view-board className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${compact ? "" : `rounded-pane border shadow-pane ${multiple && active ? "border-accent/45" : "border-line"}`}`}>
-                  {renderTerminal(session, headerActions)}
+                  {renderTerminal(session, headerActions, !hidden)}
                   {target === null || compact ? null : (
                     <div data-pane-drop-preview={target.edge ?? "swap"} className={`pointer-events-none absolute z-20 grid place-items-center border-2 border-accent bg-accent/20 ${target.edge === null ? "inset-0" : previewClass[target.edge]}`}>
                       <span className="rounded bg-card px-2 py-1 text-xs text-ink" role="status">{dropHint(target.edge === null)}</span>
