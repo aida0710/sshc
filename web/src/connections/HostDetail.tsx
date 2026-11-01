@@ -116,7 +116,7 @@ export function HostDetailPanel({
     // toggling it does not move the tabs. The dirty marks are not touched here:
     // each tab starts its own draft over on its own condition and reports the
     // mark itself (useReportDirty), so a mark never disagrees with its draft.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
   useReportDirty(dirty, onDirtyChange);

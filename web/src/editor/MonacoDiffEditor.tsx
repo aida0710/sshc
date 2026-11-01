@@ -29,7 +29,7 @@ export function MonacoDiffEditor({ path, original, modified }: { path: string; o
       modifiedModel.dispose();
     };
     // Theme updates do not discard the comparison's scroll position.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [path, original, modified]);
   useEffect(() => { monaco.editor.setTheme(scheme === "dark" ? "vs-dark" : "vs"); }, [scheme]);
   return <div ref={container} {...keyboardOwnerProps} className="h-full min-h-64 w-full overflow-hidden" />;

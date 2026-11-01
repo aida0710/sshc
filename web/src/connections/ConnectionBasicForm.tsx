@@ -105,7 +105,7 @@ export function ConnectionBasicForm({
     setRouteConfirmationOpen(false);
     setPreferredSuperseded(false);
     return () => { setDraft((current) => ({ ...current, ...clearedSecrets })); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey, keys, secretsApi, preferredKey, savedState]);
 
   // The key list arrives after the rest of the draft; the select follows it.
@@ -114,7 +114,7 @@ export function ConnectionBasicForm({
   useEffect(() => {
     setDraft((current) => ({ ...current, selectedKey: keySelection.initialSelected }));
     if (keySelection.preferredAlreadyApplied) onPreferredKeyApplied?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [keySelection]);
 
   const keyPassphraseDisclosureSubject = derived.selectedPrivateKey?.encrypted === true ? derived.selectedPrivateKey.id : "";
