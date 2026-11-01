@@ -2,6 +2,7 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import type { SFTPSearchModel } from "./useSFTPSearch";
 import { isImeComposing } from "../ui/imeComposition";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 export function SFTPCompactSelection({ label, menuLabel, expanded, onClear, onMenu, onSearch }: {
   label: string;
@@ -28,7 +29,7 @@ export function SFTPCompactSearch({ search, recursive, disabled, onOptions }: {
 }) {
   const t = useTranslate();
   return <>
-    <input ref={search.searchInput} type="search"
+    <input {...literalTextEntry} ref={search.searchInput} type="search"
       aria-label={t(search.mode === "content" ? "sftp.search.contentPlaceholder" : "sftp.filter")}
       placeholder={t(search.mode === "content" ? "sftp.search.contentPlaceholder" : "sftp.filterPlaceholder")}
       value={search.filter} onChange={(event) => search.setFilter(event.target.value)}

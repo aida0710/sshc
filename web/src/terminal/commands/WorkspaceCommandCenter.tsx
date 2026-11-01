@@ -14,6 +14,7 @@ import {
   type TerminalCommandPreview,
   type TerminalCommandRequest,
 } from "./commandApi";
+import { literalTextEntry } from "../../ui/softKeyboard";
 
 export type WorkspaceCommandTarget = {
   targetId: string;
@@ -220,7 +221,7 @@ export function WorkspaceCommandCenter({
             {source === "command" ? (
               <label className="text-xs text-ink-muted">
                 {t("workspace.command")}
-                <textarea
+                <textarea {...literalTextEntry}
                   rows={3}
                   value={command}
                   onChange={(event) => {

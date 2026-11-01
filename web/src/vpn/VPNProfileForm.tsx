@@ -31,6 +31,7 @@ import {
 import { openConnectProducts, openConnectProtocols, vpnProfileFieldError } from "./vpnProfileRules";
 import { vpnSecretsFieldError, type VPNSecretKey } from "./vpnSecretRules";
 import { useVPNSecretsReveal } from "./useVPNSecretsReveal";
+import { asciiTextEntry } from "../ui/softKeyboard";
 
 // VPNプロファイルを作成する、または保存済みのプロファイルを編集するフォーム。接続先は
 // 持たない（プロファイルを付けた接続の HostName と Port が接続先になる）。作成は画面の節として、
@@ -233,13 +234,13 @@ export function VPNProfileForm({
       </FieldRow>
       {draft.backend === "openvpn" || draft.backend === "wireguard" ? null : (
         <FieldRow label={t("vpn.server")} warning={errorFor(`${section}.server`)}>
-          <input className={control} value={draft.server} onChange={(event) => edit("server")(event.target.value)} />
+          <input {...asciiTextEntry} className={control} value={draft.server} onChange={(event) => edit("server")(event.target.value)} />
         </FieldRow>
       )}
       {/* WireGuard の DNS は、設定ファイルの DNS の行で書く。 */}
       {draft.backend === "wireguard" ? null : (
         <FieldRow label={t("vpn.dns")} hint={t("vpn.dnsHint")} warning={errorFor("dns")}>
-          <input className={control} value={draft.resolvers} onChange={(event) => edit("resolvers")(event.target.value)} />
+          <input {...asciiTextEntry} className={control} value={draft.resolvers} onChange={(event) => edit("resolvers")(event.target.value)} />
         </FieldRow>
       )}
       {draft.backend === "wireguard" ? (
@@ -257,7 +258,7 @@ export function VPNProfileForm({
       ) : draft.backend === "openconnect" ? (
         <>
           <FieldRow label={t("vpn.username")} warning={errorFor("openconnect.username")}>
-            <input className={control} value={draft.username} onChange={(event) => edit("username")(event.target.value)} />
+            <input {...asciiTextEntry} className={control} value={draft.username} onChange={(event) => edit("username")(event.target.value)} />
           </FieldRow>
           <FieldRow label={t("vpn.protocol")} hint={t("vpn.protocolHint")} warning={errorFor("openconnect.protocol")}>
             <select className={control} value={draft.protocol} onChange={(event) => edit("protocol")(event.target.value)}>
@@ -324,7 +325,7 @@ export function VPNProfileForm({
       ) : (
         <>
           <FieldRow label={t("vpn.username")} warning={errorFor("l2tp.username")}>
-            <input className={control} value={draft.username} onChange={(event) => edit("username")(event.target.value)} />
+            <input {...asciiTextEntry} className={control} value={draft.username} onChange={(event) => edit("username")(event.target.value)} />
           </FieldRow>
           {secretField("l2tpPassword", t("vpn.password"))}
           {secretField("ipsecPsk", t("vpn.psk"))}

@@ -2,6 +2,7 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { control } from "../ui/form";
 import { Button } from "../ui/surface";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 // ConfigPathTask は、~/.ssh の中のパスを1つ入れて行う操作である。［ファイルを作成］と「…」のメニューから始める。
 export type ConfigPathTask = "createFile" | "createDirectory" | "deleteDirectory" | "rename";
@@ -52,7 +53,7 @@ export function ConfigPathForm({
     >
       <label htmlFor="config-path" className="text-[13px] font-medium text-ink">{t(texts.label)}</label>
       <div className="flex flex-wrap gap-2">
-        <input
+        <input {...literalTextEntry}
           id="config-path"
           autoFocus
           value={path}

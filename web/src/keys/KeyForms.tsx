@@ -20,6 +20,7 @@ import type {
 } from "./forms";
 import { describeBlocker, noteLabels } from "./labels";
 import { usePendingResult } from "../ui/usePendingResult";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 // どのフォームも、送った操作が終わるまで submission.pending で送信のボタンを busy にする。
 // 待つ間はボタンが押せないが、入力欄の Enter からの二度目の送信も onSubmit で止める。
@@ -76,7 +77,7 @@ export function RelocateForm({
       <p className="text-sm text-ink-muted">{t("keys.relocateNote")}</p>
       <div>
         <FieldRow label={t("keys.relocateNewName")}>
-          <input
+          <input {...literalTextEntry}
             className={control}
             value={form.newName}
             onChange={(event) => form.setNewName(event.target.value)}
