@@ -48,6 +48,11 @@ async function openKeyActions(row: HTMLElement): Promise<HTMLElement> {
   return screen.getByRole("menu");
 }
 
+// The form to create a key opens from the heading's button.
+async function openKeyCreation() {
+  await userEvent.click(await screen.findByRole("button", { name: "Create a key" }));
+}
+
 async function openStoredPassphrase(row: HTMLElement) {
   const actions = await openKeyActions(row);
   await userEvent.click(within(actions).getByRole("menuitem", { name: "Save passphrase" }));
@@ -231,7 +236,7 @@ function buildApi(overrides: Partial<KeysApi> = {}): KeysApi {
 }
 
 describe("KeysScreen", () => {
-  it("links directly to key creation and offers safe next steps after in-process generation", async () => {
+  it("opens key creation from the heading and offers safe next steps after in-process generation", async () => {
     const api = buildApi();
     const onAssignGeneratedKey = vi.fn();
     const onInstallGeneratedKey = vi.fn();
@@ -243,7 +248,11 @@ describe("KeysScreen", () => {
       />,
     );
 
-    expect(await screen.findByRole("link", { name: "Create a key" })).toHaveAttribute("href", "#create-key-heading");
+    const opener = await screen.findByRole("button", { name: "Create a key" });
+    expect(opener).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("File name")).not.toBeInTheDocument();
+    await userEvent.click(opener);
+    expect(opener).toHaveAttribute("aria-expanded", "true");
     await userEvent.type(screen.getByLabelText("File name"), "id_new");
     await userEvent.type(screen.getByLabelText("Passphrase"), "one-time secret");
     await userEvent.click(screen.getByRole("button", { name: "Create key" }));
@@ -255,6 +264,9 @@ describe("KeysScreen", () => {
     });
     await userEvent.click(screen.getByRole("button", { name: "Install on a server" }));
     expect(onInstallGeneratedKey).toHaveBeenCalledWith({ publicRelativePath: "id_new.pub" });
+
+    await userEvent.click(within(screen.getByRole("form", { name: "Create a key" })).getByRole("button", { name: "Close" }));
+    expect(screen.queryByLabelText("File name")).not.toBeInTheDocument();
   });
 
   it("lists classified files with the marks that stop a scan", async () => {
@@ -292,6 +304,7 @@ describe("KeysScreen", () => {
 
   it("puts each key creation field's name above it on narrow screens and beside it on wide ones", async () => {
     render(<KeysScreen api={buildApi()} />);
+    await openKeyCreation();
 
     const fileName = await screen.findByLabelText("File name");
     const pair = fileName.closest("label");
@@ -376,6 +389,7 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={api} />);
 
     await screen.findByRole("row", { name: /id_work/ });
+    await openKeyCreation();
     await userEvent.selectOptions(screen.getByLabelText("Algorithm"), "ed25519-sk");
     await userEvent.type(screen.getByLabelText("File name"), "id_yubikey");
     await userEvent.click(screen.getByRole("button", { name: "Show Terminal command" }));
@@ -433,6 +447,7 @@ describe("KeysScreen", () => {
       answer = () => resolve({ id: "key-one", relativePath: "id_work", encrypted: true, notes: [], transactionId: "tx" });
     }));
     render(<KeysScreen api={buildApi({ changePassphrase } as Partial<KeysApi>)} />);
+    await openKeyCreation();
 
     const management = await openKeyActions(await screen.findByRole("row", { name: /id_work/ }));
     await user.click(within(management).getByRole("menuitem", { name: "Change passphrase" }));
@@ -461,6 +476,7 @@ describe("KeysScreen", () => {
     }));
     render(<KeysScreen api={buildApi({ generate } as Partial<KeysApi>)} />);
 
+    await openKeyCreation();
     await user.type(await screen.findByLabelText("File name"), "id_new");
     await user.type(screen.getByLabelText("Passphrase"), "one-time secret");
     const create = screen.getByRole("button", { name: "Create key" });
@@ -477,6 +493,7 @@ describe("KeysScreen", () => {
     render(<KeysScreen api={buildApi()} />);
 
     await screen.findByRole("row", { name: /id_work/ });
+    await openKeyCreation();
     await userEvent.type(screen.getByLabelText("File name"), "id_new");
     await userEvent.type(screen.getByLabelText("Passphrase"), "correct horse");
 

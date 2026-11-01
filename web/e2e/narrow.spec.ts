@@ -2,6 +2,7 @@ import { clickAndAwait, expect, masterPassword, test, openApplication, sessionSt
 import { drawnRowFont, drawnRows, outsideTerminal, screenRect, terminalKeyboard } from "./support/terminal";
 import { everySection } from "./support/sectionNavigation";
 import { answerNoVPNProfiles } from "./support/vpn";
+import { openKeyCreation } from "./support/keys";
 
 
 const hosts = "Host alpha\n\tHostName 198.51.100.10\n\nHost bravo\n\tHostName 198.51.100.11\n";
@@ -607,10 +608,11 @@ test("keeps every section inside 360 pixels", async ({ page, installation }) => 
     await expectNothingCutOff(page, section.navigation);
     await expectIconsCentered(page, section.navigation);
     if (section.navigation === "Known Hosts") {
+      // On a phone each key is a two-line row; deleting is in its "…".
       await expectFullyInsideViewport(
         page,
-        page.getByRole("button", { name: "Delete", exact: true }),
-        "Known Hosts delete",
+        page.getByRole("button", { name: /^Actions for / }).first(),
+        "Known Hosts actions",
       );
     }
   }
@@ -716,6 +718,7 @@ test("keeps Menu in mobile history after opening SSH Config", async ({ page, ins
 test("keeps key actions in the list and opens private material in a modal", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSectionOnPhone(page, "Keys");
+  await openKeyCreation(page);
   await page.getByLabel("File name").fill("id_keys_layout");
   await page.getByLabel(/Create without a passphrase/).check();
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);

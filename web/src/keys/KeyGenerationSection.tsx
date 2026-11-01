@@ -17,7 +17,7 @@ import { usePendingResult } from "../ui/usePendingResult";
 // command to run by hand for hardware-backed ones. A generated key is offered
 // to the connection form and to the server installer right away.
 export function KeyGenerationSection({
-  api = keysApi, variants, groups, onGenerated, runOperation, onAssignGeneratedKey, onInstallGeneratedKey,
+  api = keysApi, variants, groups, onGenerated, runOperation, onAssignGeneratedKey, onInstallGeneratedKey, onClose,
 }: {
   api?: Pick<KeysApi, "generate" | "hardwareCommand">;
   variants: KeyVariant[];
@@ -27,6 +27,8 @@ export function KeyGenerationSection({
   runOperation: RunKeyOperation;
   onAssignGeneratedKey?: ((key: GeneratedPrivateKeyHandoff) => void) | undefined;
   onInstallGeneratedKey?: ((key: GeneratedPublicKeyHandoff) => void) | undefined;
+  // onClose puts the form away; it stays open after a key is made, to offer the next steps.
+  onClose: () => void;
 }) {
   const t = useTranslate();
   const {
@@ -161,6 +163,7 @@ export function KeyGenerationSection({
           <Button kind="primary" type="submit" busy={submission.pending}>
             {inProcess ? t("keys.createSubmit") : t("keys.showTerminalCommand")}
           </Button>
+          <Button disabled={submission.pending} onClick={onClose}>{t("keys.close")}</Button>
         </ActionArea>
       </form>
       </PageSection>

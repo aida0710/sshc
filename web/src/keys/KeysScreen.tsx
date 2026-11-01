@@ -88,6 +88,8 @@ export function KeysScreen({
   const t = useTranslate();
   const engineOS = useEngineOS(true, about);
   const [rowPanel, setRowPanel] = useState<KeyRowPanelState | null>(null);
+  // The form to create a key, opened from the heading's button.
+  const [creating, setCreating] = useState(false);
   const storedPhrases = useKeyPassphrases(secrets);
   const { load: loadPhrases } = storedPhrases;
   const passphraseForm = usePassphraseForm();
@@ -352,10 +354,17 @@ export function KeysScreen({
       <PageHeader
         title={t("keys.heading")}
         actions={
-          <a href="#create-key-heading" className={`${primaryAction} inline-flex min-h-11 items-center gap-1.5 md:min-h-0`}>
+          // The form to create a key opens above the list only when asked for, as the Vault pages add an item.
+          <button
+            type="button"
+            aria-expanded={creating}
+            aria-controls="create-key-heading"
+            onClick={() => setCreating((open) => !open)}
+            className={`${primaryAction} inline-flex min-h-11 items-center gap-1.5 md:min-h-0`}
+          >
             <Icon name="plus" className="size-[15px]" />
             {t("keys.createHeading")}
-          </a>
+          </button>
         }
       />
       <SummaryStats>
@@ -364,6 +373,19 @@ export function KeysScreen({
         <SummaryStat label={t("keys.metricAttention")} value={keyAttention} attention={keyAttention > 0} />
       </SummaryStats>
       {failure !== "" && <Notice tone="danger">{failure}</Notice>}
+
+      {creating ? (
+        <KeyGenerationSection
+          api={api}
+          variants={variants}
+          groups={groups}
+          onGenerated={refresh}
+          runOperation={runKeyOperation}
+          onAssignGeneratedKey={onAssignGeneratedKey}
+          onInstallGeneratedKey={onInstallGeneratedKey}
+          onClose={() => setCreating(false)}
+        />
+      ) : null}
 
       {chosen.size === 0 ? null : (
         <ChosenKeysBar
@@ -435,16 +457,6 @@ export function KeysScreen({
       <KeyInventoryProblems inventory={inventory} />
 
       <AgentSection inventory={inventory} engineOS={engineOS} />
-
-      <KeyGenerationSection
-        api={api}
-        variants={variants}
-        groups={groups}
-        onGenerated={refresh}
-        runOperation={runKeyOperation}
-        onAssignGeneratedKey={onAssignGeneratedKey}
-        onInstallGeneratedKey={onInstallGeneratedKey}
-      />
     </section>
   );
 }
