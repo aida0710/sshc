@@ -46,7 +46,7 @@ func TestTheNextEngineOffersTheSessionsOpenAtStop(t *testing.T) {
 	if offer := newService(t, workspace).Offer(); len(offer) != 0 {
 		t.Fatalf("a first start offers %+v", offer)
 	}
-	if err := newService(t, workspace).SaveOnStop([]terminalrestore.Session{edge, local}); err != nil {
+	if err := newService(t, workspace).Save([]terminalrestore.Session{edge, local}); err != nil {
 		t.Fatal(err)
 	}
 	if offer := newService(t, workspace).Offer(); !reflect.DeepEqual(offer, []terminalrestore.Session{edge, local}) {
@@ -61,7 +61,7 @@ func TestAnsweringEndsTheOfferForEveryLaterStart(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			workspace := newWorkspace(t)
-			if err := newService(t, workspace).SaveOnStop([]terminalrestore.Session{edge}); err != nil {
+			if err := newService(t, workspace).Save([]terminalrestore.Session{edge}); err != nil {
 				t.Fatal(err)
 			}
 			service := newService(t, workspace)
@@ -83,10 +83,10 @@ func TestAnsweringEndsTheOfferForEveryLaterStart(t *testing.T) {
 
 func TestStoppingBeforeAnsweringKeepsTheOffer(t *testing.T) {
 	workspace := newWorkspace(t)
-	if err := newService(t, workspace).SaveOnStop([]terminalrestore.Session{edge}); err != nil {
+	if err := newService(t, workspace).Save([]terminalrestore.Session{edge}); err != nil {
 		t.Fatal(err)
 	}
-	if err := newService(t, workspace).SaveOnStop([]terminalrestore.Session{local}); err != nil {
+	if err := newService(t, workspace).Save([]terminalrestore.Session{local}); err != nil {
 		t.Fatal(err)
 	}
 	if offer := newService(t, workspace).Offer(); !reflect.DeepEqual(offer, []terminalrestore.Session{edge, local}) {
@@ -96,7 +96,7 @@ func TestStoppingBeforeAnsweringKeepsTheOffer(t *testing.T) {
 
 func TestStoppingWithNothingOpenLeavesNoRecord(t *testing.T) {
 	workspace := newWorkspace(t)
-	if err := newService(t, workspace).SaveOnStop(nil); err != nil {
+	if err := newService(t, workspace).Save(nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(recordPath(workspace)); !errors.Is(err, os.ErrNotExist) {
@@ -115,7 +115,7 @@ func TestADamagedRecordOffersNothingAndIsReplacedAtStop(t *testing.T) {
 	if !errors.Is(err, terminalrestore.ErrInvalidDocument) || len(service.Offer()) != 0 {
 		t.Fatalf("NewService() = %+v, %v", service.Offer(), err)
 	}
-	if err := service.SaveOnStop([]terminalrestore.Session{edge}); err != nil {
+	if err := service.Save([]terminalrestore.Session{edge}); err != nil {
 		t.Fatal(err)
 	}
 	if offer := newService(t, workspace).Offer(); !reflect.DeepEqual(offer, []terminalrestore.Session{edge}) {
@@ -138,13 +138,13 @@ func TestAnOfferedSessionOpenedAgainByHandIsRecordedOnce(t *testing.T) {
 	workspace := newWorkspace(t)
 	second := edge
 	second.PinnedTitle = "logs"
-	if err := newService(t, workspace).SaveOnStop([]terminalrestore.Session{edge, second, local}); err != nil {
+	if err := newService(t, workspace).Save([]terminalrestore.Session{edge, second, local}); err != nil {
 		t.Fatal(err)
 	}
 	// The question was closed with Esc, and the user opened one session to
 	// edge again by hand; it starts in the home directory with no name.
 	byHand := terminalrestore.Session{Kind: terminal.KindSSH, Alias: "edge", Workspace: "default", WorkingDirectory: "~"}
-	if err := newService(t, workspace).SaveOnStop([]terminalrestore.Session{byHand}); err != nil {
+	if err := newService(t, workspace).Save([]terminalrestore.Session{byHand}); err != nil {
 		t.Fatal(err)
 	}
 	want := []terminalrestore.Session{second, local, byHand}
@@ -158,7 +158,7 @@ func TestEachEngineStartNamesItsOfferAnew(t *testing.T) {
 	if id := newService(t, workspace).OfferID(); id != "" {
 		t.Fatalf("an engine with nothing to offer names an offer %q", id)
 	}
-	if err := newService(t, workspace).SaveOnStop([]terminalrestore.Session{edge}); err != nil {
+	if err := newService(t, workspace).Save([]terminalrestore.Session{edge}); err != nil {
 		t.Fatal(err)
 	}
 	first := newService(t, workspace)
@@ -171,5 +171,60 @@ func TestEachEngineStartNamesItsOfferAnew(t *testing.T) {
 	}
 	if id := second.OfferID(); id != "" {
 		t.Fatalf("an answered offer is still named %q", id)
+	}
+}
+
+// The engine writes the record while it runs, so that one ended without stopping (a phone's system closing the app)
+// still leaves what was open. What it wrote last is what the next engine offers.
+func TestTheNextEngineOffersWhatWasRecordedLastWhileRunning(t *testing.T) {
+	workspace := newWorkspace(t)
+	running := newService(t, workspace)
+	if err := running.Save([]terminalrestore.Session{edge}); err != nil {
+		t.Fatal(err)
+	}
+	if err := running.Save([]terminalrestore.Session{edge, local}); err != nil {
+		t.Fatal(err)
+	}
+	// The engine ends here, without stopping.
+	if offer := newService(t, workspace).Offer(); !reflect.DeepEqual(offer, []terminalrestore.Session{edge, local}) {
+		t.Fatalf("offer = %+v", offer)
+	}
+}
+
+func TestTheSameSessionsAreNotWrittenAgain(t *testing.T) {
+	workspace := newWorkspace(t)
+	running := newService(t, workspace)
+	if err := running.Save([]terminalrestore.Session{edge}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(recordPath(workspace)); err != nil {
+		t.Fatal(err)
+	}
+	if err := running.Save([]terminalrestore.Session{edge}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(recordPath(workspace)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the same sessions were written again: %v", err)
+	}
+	if err := running.Save([]terminalrestore.Session{edge, local}); err != nil {
+		t.Fatal(err)
+	}
+	if offer := newService(t, workspace).Offer(); !reflect.DeepEqual(offer, []terminalrestore.Session{edge, local}) {
+		t.Fatalf("a change was not written: offer = %+v", offer)
+	}
+}
+
+// An offer not yet answered stays in the record that the running engine keeps writing.
+func TestAnUnansweredOfferStaysInTheRecordWrittenWhileRunning(t *testing.T) {
+	workspace := newWorkspace(t)
+	if err := newService(t, workspace).Save([]terminalrestore.Session{edge}); err != nil {
+		t.Fatal(err)
+	}
+	running := newService(t, workspace)
+	if err := running.Save([]terminalrestore.Session{local}); err != nil {
+		t.Fatal(err)
+	}
+	if offer := newService(t, workspace).Offer(); !reflect.DeepEqual(offer, []terminalrestore.Session{edge, local}) {
+		t.Fatalf("offer = %+v", offer)
 	}
 }
