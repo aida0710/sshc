@@ -1,0 +1,65 @@
+/* ダークパープル。地はダークより一段明るい無彩色で、既定のさし色（薄紫）とターミナルの選択・カーソルを
+   紫にする。 */
+[data-theme="dark-purple"] {
+  color-scheme: dark;
+
+  --ui-canvas: #141414;
+  --ui-sidebar: #1f1f1f;
+  --ui-tree: #1b1b1b;
+  --ui-toolbar: #1f1f1f;
+  --ui-card: #262626;
+  --ui-surface: #303030;
+  --ui-surface-subtle: #1c1c1c;
+  --ui-line: #363636;
+  --ui-hairline: #2b2b2b;
+  --ui-control: #232323;
+  --ui-control-line: #747474;
+  --ui-hover: #2a2a2a;
+  --ui-well: #262626;
+  --ui-select-fill: #302d3d;
+  --ui-ink: #dedede;
+  --ui-ink-muted: #b5b5b5;
+  --ui-ink-faint: #9c9c9c;
+  /* 既定のさし色（薄紫）。index.css の [data-accent="lavender"] もこの色を使う。 */
+  --ui-accent-lavender: #9b82f8;
+  --ui-accent-lavender-ink: #140d2e;
+  --ui-accent: var(--ui-accent-lavender);
+  --ui-accent-ink: var(--ui-accent-lavender-ink);
+  --ui-notice: rgb(255 159 10 / 0.13);
+  --ui-notice-line: rgb(255 159 10 / 0.32);
+  --ui-notice-ink: #f0b429;
+  --ui-danger: #ff858d;
+  --ui-live: #54c69a;
+  --ui-code-bg: #181818;
+  --ui-code-fg: #e0e0e0;
+  --ui-brand-background: var(--ui-accent);
+  --ui-brand-mark: var(--ui-accent-ink);
+  --ui-brand-cursor: color-mix(in srgb, var(--ui-accent-ink) 70%, var(--ui-accent));
+  --ui-card-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
+  --ui-pane-shadow: 0 10px 28px rgb(0 0 0 / 0.38);
+  --ui-float-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.36), 0 4px 6px -4px rgb(0 0 0 / 0.36);
+  --ui-overlay-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+  --ui-skeleton: #323232;
+  --ui-skeleton-highlight: #454545;
+
+  --ui-term-bg: #1a1a1a;
+  --ui-term-fg: #dcdcdc;
+  --ui-term-cursor: #b9a6ff;
+  --ui-term-selection: rgb(155 130 248 / 0.32);
+  --ui-term-black: #3a3a3a;
+  --ui-term-red: #ff6961;
+  --ui-term-green: #5fd88a;
+  --ui-term-yellow: #f0b429;
+  --ui-term-blue: #6fa8ff;
+  --ui-term-magenta: #d78cf0;
+  --ui-term-cyan: #5fd6e0;
+  --ui-term-white: #d4d4d8;
+  --ui-term-bright-black: #6e6e73;
+  --ui-term-bright-red: #ff8a80;
+  --ui-term-bright-green: #86efac;
+  --ui-term-bright-yellow: #ffd25f;
+  --ui-term-bright-blue: #9ec5ff;
+  --ui-term-bright-magenta: #e9b3f7;
+  --ui-term-bright-cyan: #8fe6ee;
+  --ui-term-bright-white: #ffffff;
+}

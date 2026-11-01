@@ -63,12 +63,16 @@ for (const appearance of everyTheme) {
     await chooseTheme(page, appearance);
 
     const contrast = await page.evaluate(() => {
-      const root = getComputedStyle(document.documentElement);
+      // Colours are read as painted: one made with color-mix, like the selection fill, is no number as a variable.
+      const probe = document.createElement("span");
+      document.body.append(probe);
       const rgb = (name: string) => {
-        const value = root.getPropertyValue(name).trim().replace(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i, "#$1$1$2$2$3$3");
-        const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value);
-        if (match === null) throw new Error(`unexpected colour ${name}: ${value}`);
-        return match.slice(1).map((part) => Number.parseInt(part, 16) / 255);
+        probe.style.color = `var(${name})`;
+        const painted = getComputedStyle(probe).color;
+        const channels = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(painted)?.slice(1).map((part) => Number(part) / 255)
+          ?? /^color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)\)$/.exec(painted)?.slice(1).map(Number);
+        if (channels === undefined) throw new Error(`unexpected colour ${name}: ${painted}`);
+        return channels;
       };
       const luminance = (colour: number[]) => {
         const linear = colour.map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
@@ -78,7 +82,7 @@ for (const appearance of everyTheme) {
         const values = [luminance(rgb(left)), luminance(rgb(right))].sort((a, b) => b - a);
         return (values[0]! + 0.05) / (values[1]! + 0.05);
       };
-      return {
+      const ratios = {
         cardBorder: ratio("--ui-line", "--ui-card"),
         controlBorder: ratio("--ui-control-line", "--ui-control"),
         faintOnCard: ratio("--ui-ink-faint", "--ui-card"),
@@ -87,6 +91,8 @@ for (const appearance of everyTheme) {
         accentOnCard: ratio("--ui-accent", "--ui-card"),
         primaryButton: ratio("--ui-accent-ink", "--ui-accent"),
       };
+      probe.remove();
+      return ratios;
     });
 
     expect(contrast.cardBorder).toBeGreaterThanOrEqual(1.2);

@@ -293,15 +293,17 @@ export async function openSettingsPage(
 
 // themeChoiceLabels are the names of the choices on Settings → Appearance. It is keyed by Theme, so a new
 // theme has to be named here, and appearance.spec.ts then checks it like the others.
-export const themeChoiceLabels: Record<Theme, string> = { system: "System", light: "Light", dark: "Dark" };
+export const themeChoiceLabels: Record<Theme, string> = { system: "System", light: "Light", dark: "Dark", "dark-blue": "Dark blue", "dark-purple": "Dark purple" };
 
 // chooseTheme picks the theme on Settings → Appearance, the one place the signed-in app offers it.
 export async function chooseTheme(page: Page, theme: Theme): Promise<void> {
   await openSection(page, "Appearance");
   // The radio itself is visually hidden behind its picture, so the choice is made by pressing its label.
   const themes = page.getByRole("radiogroup", { name: "Theme" });
-  await themes.locator("label").filter({ hasText: themeChoiceLabels[theme] }).click();
-  await expect(themes.getByRole("radio", { name: themeChoiceLabels[theme] })).toBeChecked();
+  // The name is matched whole: "Dark" is also part of "Dark blue".
+  const name = themeChoiceLabels[theme];
+  await themes.locator("label").filter({ hasText: new RegExp(`^${name}$`) }).click();
+  await expect(themes.getByRole("radio", { name, exact: true })).toBeChecked();
 }
 
 export async function changeDisplayLanguage(
