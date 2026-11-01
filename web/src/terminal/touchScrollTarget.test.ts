@@ -30,16 +30,24 @@ describe("terminalTouchScrollTarget", () => {
     expect(wheels).toEqual([]);
   });
 
-  it("turns each line into a wheel turn at the finger for a program that asks for mouse reports", () => {
+  it("turns the wheel one step at the finger for every three rows, for a program that asks for mouse reports", () => {
     const { target, wheels, scrolled } = terminal({ mouse: "any", screen: "alternate" });
     target.scrollLines(2, onOverlay);
-    target.scrollLines(-1, onOverlay);
+    expect(wheels).toEqual([]);
+    target.scrollLines(1, onOverlay);
+    target.scrollLines(4, onOverlay);
     expect(scrolled).toEqual([]);
     expect(wheels.map((wheel) => [wheel.deltaY, wheel.deltaMode, wheel.clientX, wheel.clientY])).toEqual([
       [1, WheelEvent.DOM_DELTA_LINE, 120, 300],
       [1, WheelEvent.DOM_DELTA_LINE, 120, 300],
-      [-1, WheelEvent.DOM_DELTA_LINE, 120, 300],
     ]);
+  });
+
+  it("counts afresh when the finger turns back, so the first rows the other way are not lost", () => {
+    const { target, wheels } = terminal({ mouse: "any", screen: "alternate" });
+    target.scrollLines(2, onOverlay);
+    target.scrollLines(-3, onOverlay);
+    expect(wheels.map((wheel) => wheel.deltaY)).toEqual([-1]);
   });
 
   it("turns the wheel for a program on the alternate screen that does not ask for mouse reports", () => {
@@ -51,7 +59,7 @@ describe("terminalTouchScrollTarget", () => {
 
   it("turns the wheel for a program on the normal screen that asks for wheel reports, but not for X10 presses only", () => {
     const reporting = terminal({ mouse: "vt200" });
-    reporting.target.scrollLines(1, onOverlay);
+    reporting.target.scrollLines(3, onOverlay);
     expect(reporting.wheels).toHaveLength(1);
 
     const pressesOnly = terminal({ mouse: "x10" });
@@ -62,7 +70,7 @@ describe("terminalTouchScrollTarget", () => {
 
   it("leaves a touch that xterm.js receives itself to xterm.js, so the program is not told twice", () => {
     const { target, wheels } = terminal({ mouse: "any", screen: "alternate" });
-    target.scrollLines(2, onXterm);
+    target.scrollLines(3, onXterm);
     expect(wheels).toEqual([]);
   });
 });
