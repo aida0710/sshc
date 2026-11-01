@@ -53,7 +53,8 @@ import { useDeclaredConfig } from "./shell/useDeclaredConfig";
 import { useOSC52Setting } from "./shell/useOSC52Setting";
 import { useSectionHandoffs } from "./shell/useSectionHandoffs";
 import { useShellLayers } from "./shell/useShellLayers";
-import { useAppShortcuts } from "./shell/useAppShortcuts";
+import { useAppShortcuts, type SessionShortcut, type SessionShortcutRequest } from "./shell/useAppShortcuts";
+import { paneSessionIds } from "./terminal/splitView/layout";
 import { TerminalRestorePrompt } from "./terminal/TerminalRestorePrompt";
 import { useFocusBackAfterInert } from "./ui/useFocusBackAfterInert";
 
@@ -225,6 +226,11 @@ export function App({
   // host chosen, the run target goes back to this machine first, and what was
   // asked for is done once this machine's terminal API is the one in use.
   const [pendingLocalRequest, setPendingLocalRequest] = useState<PendingLocalRequest | null>(null);
+  const [sessionShortcut, setSessionShortcut] = useState<SessionShortcutRequest | null>(null);
+  const requestSession = useCallback((request: SessionShortcut) => {
+    setSessionShortcut((previous) => ({ ...request, serial: (previous?.serial ?? 0) + 1 }));
+  }, []);
+  const panes = useMemo(() => paneSessionIds(splitView.state.root), [splitView.state.root]);
   const openSFTPTerminal = useCallback(async (alias: string, cwd?: string) => {
     if (runTargets.selected !== null) {
       setPendingLocalRequest(cwd === undefined ? { kind: "open", alias } : { kind: "open", alias, cwd });
@@ -261,9 +267,11 @@ export function App({
     terminalFace,
     orderedSessions,
     activeSessionId,
+    panes,
     navigate,
     showSession,
     openPalette,
+    requestSession,
   });
 
   // Transfers run in the engine, so the queue keeps up even while this tab is
@@ -435,6 +443,7 @@ export function App({
             hosts={declared.hosts}
             onConnect={(alias, workspaceId) => void openSSHSession(alias, undefined, workspaceId)}
             onOpenCommandPalette={openPaletteFromNavigation}
+            sessionShortcut={sessionShortcut}
           />
 
           <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">

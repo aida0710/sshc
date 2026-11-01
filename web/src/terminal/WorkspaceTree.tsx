@@ -1,12 +1,13 @@
 import type { PaneEdge } from "./splitView/layout";
 import type { SplitGroup } from "./splitView/splitGroups";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { HostEntry } from "../api/config";
 import type { LocalShellProfile } from "../api/settings";
 import type { TerminalSession } from "../api/terminalSessions";
 import { defaultWorkspaceId, type TerminalWorkspace } from "../api/terminalWorkspaces";
 import { useTranslate } from "../i18n/context";
 import { HostPickerDialog, type LocalChoice } from "../shell/HostPickerDialog";
+import type { SessionShortcutRequest } from "../shell/useAppShortcuts";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { keepMachineState, keepMachineStateJSON, parseMachineStateJSON } from "../settings/machineState";
 import { interfaceState, useSettings } from "../settings/settingsStore";
@@ -15,6 +16,7 @@ import { Notice } from "../ui/surface";
 import { commandTargetsForWorkspace } from "./commands/workspaceCommandTargets";
 import { terminalCommandApiFor } from "./commands/commandApi";
 import { WorkspaceCommandCenter } from "./commands/WorkspaceCommandCenter";
+import { SessionCloseConfirmation } from "./SessionCloseConfirmation";
 import { SessionList } from "./SessionList";
 import type { TerminalSessionsState } from "./sessions";
 import type { UnreadSessions } from "./terminalNotifications";
@@ -57,6 +59,8 @@ type WorkspaceTreeProps = {
   // runTarget is the SSH alias of the engine the shells open on, or null for
   // this machine.
   runTarget?: string | null;
+  // sessionShortcut opens the picker for a new session, or asks before closing a session, once per press.
+  sessionShortcut?: SessionShortcutRequest | null;
 };
 
 type NameRequest = { kind: "create" } | { kind: "rename"; workspace: TerminalWorkspace };
@@ -90,6 +94,7 @@ export function WorkspaceTree({
   hosts = [],
   onOpenShell,
   onConnect,
+  sessionShortcut = null,
 }: WorkspaceTreeProps) {
   const t = useTranslate();
   // Both follow this machine's state, which a change here updates at once.
@@ -103,6 +108,10 @@ export function WorkspaceTree({
   const [broadcasting, setBroadcasting] = useState<TerminalSession[] | null>(null);
   // heldSession is the session being dragged, so other workspaces can take it.
   const [heldSession, setHeldSession] = useState<string | null>(null);
+  // The session the close session shortcut asks about. Its row may be in a folded workspace, so the
+  // question is asked here rather than by the row's list.
+  const [closingFromShortcut, setClosingFromShortcut] = useState<TerminalSession | null>(null);
+  const answeredShortcut = useRef(sessionShortcut?.serial ?? 0);
   const newSessionTrigger = useRef<HTMLButtonElement>(null);
 
   const groups = groupSessionsByWorkspace(workspaces.workspaces, sessions, showHidden);
@@ -126,6 +135,19 @@ export function WorkspaceTree({
   const newSessionWorkspace = groups.some((group) => group.workspace.id === selectedWorkspace)
     ? selectedWorkspace ?? defaultWorkspaceId
     : defaultWorkspaceId;
+  useEffect(() => {
+    if (sessionShortcut === null || sessionShortcut.serial === answeredShortcut.current) return;
+    answeredShortcut.current = sessionShortcut.serial;
+    if (sessionShortcut.action === "newSession") {
+      setPickerWorkspace(newSessionWorkspace);
+      return;
+    }
+    const session = sessions.find((candidate) => candidate.id === sessionShortcut.sessionId);
+    if (session === undefined) return;
+    // As the row's ×: a session that has ended closes without asking.
+    if (session.exited !== undefined) void terminalSessions.close(session.id);
+    else setClosingFromShortcut(session);
+  }, [sessionShortcut, newSessionWorkspace, sessions, terminalSessions]);
   const heldSessionWorkspace = heldSession === null
     ? null
     : groups.find((group) => group.sessions.some((session) => session.id === heldSession))?.workspace.id ?? null;
@@ -371,6 +393,16 @@ export function WorkspaceTree({
       )}
       {broadcasting === null ? null : (
         <WorkspaceCommandCenter paneTargets={commandTargetsForWorkspace(broadcasting)} api={terminalCommandApiFor(runTarget)} onClose={() => setBroadcasting(null)} />
+      )}
+      {closingFromShortcut === null ? null : (
+        <SessionCloseConfirmation
+          session={closingFromShortcut}
+          onCancel={() => setClosingFromShortcut(null)}
+          onConfirm={() => {
+            void terminalSessions.close(closingFromShortcut.id);
+            setClosingFromShortcut(null);
+          }}
+        />
       )}
     </div>
   );
