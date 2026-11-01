@@ -26,7 +26,7 @@ generate:
 	go run ./internal/validate/cmd/rulegen .
 
 # push の前に走らせる検査。CI の Go native（Linux）のジョブ全体と、Web のジョブの
-# ESLint・単体テスト・型検査と、Dead code のジョブに当たる。生成物の検査は
+# lint（Oxlint）・単体テスト・型検査と、Dead code のジョブに当たる。生成物の検査は
 # make verify-generated、主要画面の axe 検査は make e2e に含まれる。
 #
 # Go のテストのうち2つ（CSP の trusted-types と、バイナリが埋め込んだ画面を配るかの検査）は、

@@ -1,21 +1,6 @@
+// アプリと e2e は読み込む型（types）が違うので、tsconfig を分けてここで束ねる。
+// tsc -b と Oxlint の型を使う規則は、ここから各ファイルが属する方を見つける。
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "useDefineForClassFields": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "allowImportingTsExtensions": false,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom/vitest"]
-  },
-  "include": ["src", "vite.config.ts", "vitest.setup.ts"]
+  "files": [],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.e2e.json" }]
 }

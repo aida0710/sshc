@@ -15,7 +15,7 @@ function formatFilesystemBytes(bytes: string): string {
 export function SFTPFilesystemSpace({ alias, path, refreshKey }: { alias: string; path: string; refreshKey: unknown }) {
   const t = useTranslate();
   // refreshKey reads the space again after the listing changes; it is not passed to the request.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   const space = useLoad(useCallback(() => remoteMetadataApi.filesystemSpace(alias, path), [alias, path, refreshKey]));
   if (space.state === "loading") return null;
   const unsupported = space.state === "failed" && failureCode(space.error) === "sftp_unsupported_operation";

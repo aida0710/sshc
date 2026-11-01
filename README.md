@@ -105,7 +105,7 @@ make integration
 make integration-down
 ```
 
-`make test`は、gofmt、go vet、Goのテスト（raceを含む）、Android向けのビルド、使われていない関数の検査、ESLint、Webの単体テストと型検査を実行します。`make verify-generated`は、生成物がコミット済みの内容と一致するかを確かめます。CIはこの2つの検査に加えて、Android APK、VPNのコンテナイメージ、統合テスト、利用者向けサイトのビルド、依存の脆弱性、主要画面のアクセシビリティを確かめます。E2Eの全体はCIでは実行しないため、画面を変えたときは`make e2e`も実行してください。
+`make test`は、gofmt、go vet、Goのテスト（raceを含む）、Android向けのビルド、使われていない関数の検査、Oxlint、Webの単体テストと型検査を実行します。`make verify-generated`は、生成物がコミット済みの内容と一致するかを確かめます。CIはこの2つの検査に加えて、Android APK、VPNのコンテナイメージ、統合テスト、利用者向けサイトのビルド、依存の脆弱性、主要画面のアクセシビリティを確かめます。E2Eの全体はCIでは実行しないため、画面を変えたときは`make e2e`も実行してください。
 
 組み立てたWeb UI（`internal/ui/dist/app`）はリポジトリに入れていません。`make build`が組み立ててからバイナリに埋め込みます（画面だけなら`npm run build --prefix web`）。画面を組み立てずに作ったバイナリ（`go install`など）は、画面の代わりにそのことを知らせるだけなので、利用者にはリリースの成果物かHomebrewを案内してください。利用者向けサイトは`pages/`にあり、`npm run build`で検証できます。
 

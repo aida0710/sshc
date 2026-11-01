@@ -25,7 +25,7 @@ export function useSFTPTextComparison({ left, right }: { left: TextComparisonSid
     });
     return () => controller.abort();
     // A rerender of the parent does not retire reads for the same files.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [left.alias, left.entry?.path, left.entry?.revision, right.alias, right.entry?.path, right.entry?.revision, t]);
   return { comparison, problem };
 }
