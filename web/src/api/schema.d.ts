@@ -4530,6 +4530,7 @@ export interface components {
             touchMode?: "touch" | "mouse";
             notificationSound?: components["schemas"]["NotificationSound"];
             keepScreenAwake?: boolean;
+            hideTouchLinkUnderlines?: boolean;
             shortcutPreset?: string;
         };
         NotificationSound: {

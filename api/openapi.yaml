@@ -6975,6 +6975,8 @@ components:
         touchMode: { type: string, enum: [touch, mouse] }
         notificationSound: { $ref: "#/components/schemas/NotificationSound" }
         keepScreenAwake: { type: boolean }
+        # タッチのターミナルで、リンクにいつも引く下線を引かない。省略は引く。
+        hideTouchLinkUnderlines: { type: boolean }
         # 使うショートカットのプリセットの id。省略は既定の割り当て。
         shortcutPreset: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' }
     NotificationSound:

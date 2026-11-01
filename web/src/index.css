@@ -519,6 +519,26 @@
 .sshc-command-gutter-mark[data-status="running"] {
   background: var(--ui-notice-ink);
 }
+/* The line under a link a terminal opens (linkUnderlines.ts). Each element covers the link's cells on one row,
+   and the line sits 1px above the row's bottom. */
+.sshc-link-underlines {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+.sshc-link-underline {
+  position: absolute;
+}
+.sshc-link-underline::after {
+  position: absolute;
+  right: 0;
+  bottom: 1px;
+  left: 0;
+  height: 2px;
+  background: var(--ui-accent);
+  content: "";
+}
 /* How a command ended, in its details (TerminalCommandCard) and its line kept above the output
    (TerminalCommandHeader), in the colours of the gutter. */
 .sshc-command-result {
