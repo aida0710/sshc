@@ -33,6 +33,13 @@ function topLayer(): Layer | undefined {
   return layers[layers.length - 1];
 }
 
+// isDismissibleLayerOpen tells whether a menu, sheet or dialog is open to take Android's Back. A listener of the
+// same event that acts only when nothing else will must ask: listeners of an event sent to window are not called
+// capture first in every browser, so this module's listener may come after it.
+export function isDismissibleLayerOpen(): boolean {
+  return layers.length > 0;
+}
+
 function visible(element: HTMLElement): boolean {
   if (element.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
   for (let node: HTMLElement | null = element; node; node = node.parentElement) {
