@@ -2,18 +2,8 @@ import type { MouseEvent } from "react";
 import { useTranslate } from "../i18n/context";
 import { sectionPath, type Section } from "../routing/sectionRoute";
 import { Icon } from "../ui/icons";
+import { barSection, mobileNavigationSections } from "./mobileNavigationSections";
 import { sectionIcons, sectionLabels } from "./sectionPresentation";
-
-// The sections a phone reaches in one tap from the bar at the bottom; the
-// rest are under Menu.
-const mobileNavigationSections = ["Home", "Connections", "Files", "Terminal", "Menu"] as const satisfies readonly Section[];
-
-// barSection is the tab the bar marks for a section. A page opened from Menu (Settings, SSH Keys, …) has no tab of
-// its own, so the bar marks Menu: the person sees where they are and how to get back.
-function barSection(section: Section | null): Section | null {
-  if (section === null) return null;
-  return (mobileNavigationSections as readonly Section[]).includes(section) ? section : "Menu";
-}
 
 export function MobileNavigation({
   section,
@@ -23,7 +13,8 @@ export function MobileNavigation({
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, name: Section) => void;
 }) {
   const t = useTranslate();
-  const marked = barSection(section);
+  // A page opened from Menu marks Menu: the person sees where they are and how to get back.
+  const marked = section === null ? null : barSection(section);
   return (
     // A rounded bar held off the screen's edges, floating over the page rather than taking a band of its own:
     // the page shows around it, and scrolls its last line clear of it (--mobile-navigation-inset). Only the

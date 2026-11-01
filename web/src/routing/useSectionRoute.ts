@@ -42,6 +42,9 @@ export function useSectionRoute(): {
   navigate: (section: Section) => boolean;
   navigateLocation: (url: string, options?: NavigateLocationOptions) => boolean;
   setNavigationBlocker: (blocker: NavigationBlocker | null) => void;
+  // hasEntryBefore tells whether the page's history has an entry of sshc before this one; on the first entry,
+  // going back would leave sshc (or, in the Android app, do nothing).
+  hasEntryBefore: () => boolean;
 } {
   const [location, setLocation] = useState<BrowserLocation>(readLocation);
   const locationRef = useRef(location);
@@ -156,5 +159,7 @@ export function useSectionRoute(): {
     return true;
   }, [publish]);
 
-  return { route, location, navigate, navigateLocation, setNavigationBlocker };
+  const hasEntryBefore = useCallback(() => (navigationPointRef.current ?? 0) > 0, []);
+
+  return { route, location, navigate, navigateLocation, setNavigationBlocker, hasEntryBefore };
 }

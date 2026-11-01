@@ -36,6 +36,7 @@ import { useTransferUnloadWarning } from "./sftp/useTransferUnloadWarning";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
 import { CommandPalette } from "./shell/CommandPalette";
 import { MobileNavigation } from "./shell/MobileNavigation";
+import { androidBackStep } from "./shell/androidBack";
 import { useNavigationSwipe } from "./shell/useNavigationSwipe";
 import { SectionNotices } from "./shell/SectionNotices";
 import { usePaletteCommands } from "./shell/usePaletteCommands";
@@ -87,7 +88,7 @@ export function App({
   const navigationRail = useMediaQuery(navigationRailQuery);
   const shortcuts = useBindings();
   const { resolved: resolvedTheme, scheme } = useTheme();
-  const { route, location, navigate, navigateLocation, setNavigationBlocker } =
+  const { route, location, navigate, navigateLocation, setNavigationBlocker, hasEntryBefore } =
     useSectionRoute();
   const section = route.kind === "section" ? route.section : null;
   const terminalFace = section === "Terminal";
@@ -126,7 +127,17 @@ export function App({
     commandPaletteReturnFocusRef,
     openPalette,
     openPaletteFromNavigation,
-  } = useShellLayers({ mobileLayout, ready: state === "ready", section });
+  } = useShellLayers({ mobileLayout, ready: state === "ready", section, onBackWithoutLayer: goBackOnAndroid });
+
+  // Android's Back once nothing is left to close: Home from the top of a section, one step back inside one
+  // (androidBackStep). Leaving the app and going back in the page's history are left to the app (MainActivity).
+  function goBackOnAndroid(event: Event) {
+    if (state !== "ready") return;
+    const step = androidBackStep(location, hasEntryBefore());
+    if (step.kind !== "section") return;
+    event.preventDefault();
+    navigateLocation(sectionPath(step.section), { replace: true });
+  }
 
   // Two themes of the same scheme have different bars, so this follows the theme, not only its scheme.
   useEffect(() => {

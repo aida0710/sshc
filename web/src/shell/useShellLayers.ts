@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Section } from "../routing/sectionRoute";
 import type { InspectorContent } from "../ui/Inspector";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { isDismissibleLayerOpen, useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMediaQuery } from "../ui/useMediaQuery";
 
 // Below Tailwind's lg breakpoint the layout has no third column, so the
@@ -14,12 +14,17 @@ type ShellLayersOptions = {
   mobileLayout: boolean;
   ready: boolean;
   section: Section | null;
+  // onBackWithoutLayer receives Android's Back when no layer, menu or sheet is open; it calls preventDefault on the
+  // event when it handles it, and the app otherwise goes back in the page's history.
+  onBackWithoutLayer: (event: Event) => void;
 };
 
 // useShellLayers は、画面の枠の上に一時的に開く3つの層（ナビゲーション、
 // インスペクタ、コマンドパレット）の開閉と、閉じたときにフォーカスを返す先を持つ。
-// Android の戻るボタンは、開いている層を上から1つ閉じる。
-export function useShellLayers({ mobileLayout, ready, section }: ShellLayersOptions) {
+// Android の戻るボタンは、開いている層を上から1つ閉じる。開いている層も、メニューやシート（useDismissibleLayer）
+// も無ければ onBackWithoutLayer に渡す。
+// 層の判断と同じ受け手で渡すのは、別の受け手にすると、どちらが先に呼ばれるかが受け手を付け直した順で変わるため。
+export function useShellLayers({ mobileLayout, ready, section, onBackWithoutLayer }: ShellLayersOptions) {
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationPanelRef = useRef<HTMLElement>(null);
   const navigationTriggerRef = useRef<HTMLButtonElement>(null);
@@ -57,6 +62,11 @@ export function useShellLayers({ mobileLayout, ready, section }: ShellLayersOpti
     setInspector(null);
   }, [section]);
 
+  const backWithoutLayer = useRef(onBackWithoutLayer);
+  useEffect(() => {
+    backWithoutLayer.current = onBackWithoutLayer;
+  });
+
   useEffect(() => {
     function closeTopLayer(event: Event) {
       if (commandPaletteOpen) {
@@ -68,6 +78,8 @@ export function useShellLayers({ mobileLayout, ready, section }: ShellLayersOpti
       } else if (inspectorOpen) {
         event.preventDefault();
         setInspectorOpen(false);
+      } else if (!isDismissibleLayerOpen()) {
+        backWithoutLayer.current(event);
       }
     }
     window.addEventListener(androidBackEvent, closeTopLayer);
