@@ -374,6 +374,16 @@ describe("TerminalView", () => {
       }));
     });
 
+    it("opens the navigation from a menu button at the top, not one that looks like Back", async () => {
+      const openNavigation = vi.fn();
+      render(<TerminalView session={session} onOpenNavigation={openNavigation} api={{ streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+
+      const toggle = screen.getByRole("button", { name: "Navigation" });
+      expect(toggle.querySelector("[data-icon]")).toHaveAttribute("data-icon", "menu");
+      await userEvent.click(toggle);
+      expect(openNavigation).toHaveBeenCalledOnce();
+    });
+
     async function openComposer() {
       renderView();
       await waitFor(() => expect(streams).toHaveLength(1));

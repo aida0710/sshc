@@ -746,7 +746,7 @@ export function TerminalView({
   return (
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
       {/* The header follows the design: a 40px row on a desktop, the screen's top bar on a phone
-          (‹ opens the navigation, the title and destination, and the other actions). */}
+          (the menu button opens the navigation, the title and destination, and the other actions). */}
       <div className={`group/header relative flex shrink-0 items-center ${mobile ? "h-[54px] gap-1.5 pl-0.5 pr-1.5" : "h-10 gap-[9px] bg-term-bg pl-3.5 pr-2.5"}`}>
         {mobile && onOpenNavigation !== undefined ? (
           <button
@@ -756,7 +756,8 @@ export function TerminalView({
             onClick={onOpenNavigation}
             className="flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-muted hover:bg-hover"
           >
-            <Icon name="chevronLeft" className="size-[22px]" />
+            {/* The same icon as the menu button of the other sections' header: a ‹ here read as Back. */}
+            <Icon name="menu" className="size-5" />
           </button>
         ) : null}
         <div className="min-w-0 flex-1">
