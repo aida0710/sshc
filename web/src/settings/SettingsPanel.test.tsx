@@ -45,6 +45,13 @@ function openTerminalTab(region: HTMLElement, name: "Display" | "Connection" | "
   fireEvent.click(within(region).getByRole("tab", { name }));
 }
 
+// rowOf is the settings row (FieldRow) a control sits in, where "Saved" shows once its change is saved.
+function rowOf(control: HTMLElement): HTMLElement {
+  const row = control.closest<HTMLElement>("[data-field-row]");
+  if (row === null) throw new Error("the control is not in a settings row");
+  return row;
+}
+
 // presetSaved is the preset id as the engine keeps it after the writes so far.
 function presetSaved(id = "default"): SettingsPreset | undefined {
   return server.document().presets.find((preset) => preset.id === id);
@@ -112,6 +119,8 @@ describe("SettingsPanel", () => {
 
     await user.click(within(navigation).getByRole("button", { name: "Use on this machine" }));
     await waitFor(() => expect(server.document().machines[0]?.settings.presetId).toBe("phone"));
+    // Made outside the rows, the change is said to be saved beside the page's name.
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Terminal", level: 2 }).parentElement).toHaveTextContent("Saved"));
     expect(await within(navigation).findByText("In use here")).toBeVisible();
   });
 
@@ -157,7 +166,8 @@ describe("SettingsPanel", () => {
     await user.selectOptions(within(region).getByLabelText("Unit"), "minutes");
 
     await waitFor(() => expect(presetSaved()?.vaultAutoLock).toEqual({ mode: "idle", value: 45, unit: "minutes" }));
-    expect(await screen.findByText("Saved")).toBeVisible();
+    await waitFor(() => expect(rowOf(within(region).getByLabelText("Unit"))).toHaveTextContent("Saved"));
+    expect(rowOf(within(region).getByLabelText("Vault auto-lock"))).not.toHaveTextContent("Saved");
   });
 
   it("shows a persistent warning and saves restart-only locking", async () => {
@@ -278,7 +288,7 @@ describe("SettingsPanel", () => {
     await user.tab();
 
     await waitFor(() => expect(presetSaved()?.terminal).toEqual({ startDirectory: "~/work" }));
-    expect(await screen.findByText("Saved")).toBeVisible();
+    await waitFor(() => expect(rowOf(within(region).getByLabelText(/^Starting directory/))).toHaveTextContent("Saved"));
   });
 
   it("sends nothing for the fields left empty", async () => {
@@ -445,9 +455,11 @@ describe("SettingsPanel", () => {
     await user.tab();
 
     expect(sessions).toBeEnabled();
-    expect(screen.queryByText("Saved")).toBeNull();
+    expect(rowOf(sessions)).not.toHaveTextContent("Saved");
     release();
-    expect(await screen.findByText("Saved")).toBeVisible();
+    await waitFor(() => expect(rowOf(sessions)).toHaveTextContent("Saved"));
+    // Screen readers hear it once, from the page; the row only shows it.
+    expect(screen.getAllByRole("status").filter((status) => status.textContent === "Saved")).toHaveLength(1);
   });
 
   it("saves not reconnecting as a global choice, not as an empty field", async () => {

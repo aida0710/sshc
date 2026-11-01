@@ -20,7 +20,8 @@ import { standardPresetId, useSettings } from "./settingsStore";
 import { PageHeader } from "../ui/page";
 import { PageBoard } from "../ui/PageBoard";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
-import { SettingsSavedMark } from "./SettingsSavedMark";
+import { useSettingsSaved } from "./SettingsSaved";
+import { FieldSavedContext } from "../ui/fieldSaved";
 
 // Settings also change the master password, which belongs to the vault.
 export type SettingsPanelApi = SettingsApi & Pick<VaultApi, "passwordVault" | "changeMasterPassword">;
@@ -70,15 +71,21 @@ export function SettingsPanel({
   // On a phone the list of pages is not shown, so a preset page carries the picker itself.
   const presetPickerOnPage = (compact || onNavigatePage === undefined) && (all || settingsPageMeta[page].group === "preset");
 
-  // The list of pages on the left and the open page as one card, as in the design.
+  const saved = useSettingsSaved();
+
+  // The list of pages on the left and the open page as one card, as in the design. "Saved" shows under the row
+  // changed (FieldRow), or beside the page's name for a change outside the rows, and is announced once here.
   return (
+    <FieldSavedContext.Provider value={saved.fieldSaved}>
+    <div className="contents" onChangeCapture={saved.forgetRow} onClickCapture={saved.forgetRow}>
     <PageBoard
       aside={onNavigatePage === undefined ? null : (
         <SettingsNavigation current={all ? null : page} onNavigate={onNavigatePage} editingPreset={editingPreset} onEditPreset={setChosenPreset} />
       )}
       className={mobileTouchTargets}
     >
-      <PageHeader title={t(pageTitle)} meta={<SettingsSavedMark />} description={pageDescription === undefined ? undefined : t(pageDescription)} titleOnPhone />
+      <PageHeader title={t(pageTitle)} meta={saved.besidePageName ? saved.text : undefined} description={pageDescription === undefined ? undefined : t(pageDescription)} titleOnPhone />
+      <p role="status" className="sr-only">{saved.shown ? saved.text : ""}</p>
       {presetPickerOnPage ? <PresetPicker layout="bar" editing={editingPreset} onEdit={setChosenPreset} /> : null}
       {shows("General") ? <GeneralSettingsSection showHeading={all} /> : null}
       {shows("Appearance") ? <AppearanceSettingsSection presetId={editingPreset} showHeading={all} /> : null}
@@ -99,5 +106,7 @@ export function SettingsPanel({
       {shows("Machines") ? <MachinesSettingsSection showHeading={all} /> : null}
       {terminalSessions !== undefined && shows("Connections") ? <SessionSettingsSection terminalSessions={terminalSessions} showHeading={all} /> : null}
     </PageBoard>
+    </div>
+    </FieldSavedContext.Provider>
   );
 }
