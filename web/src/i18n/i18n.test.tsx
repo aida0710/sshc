@@ -90,6 +90,7 @@ describe("the catalogue", () => {
         "splitView.heading",
         "sync.historyRelation.head",
         "terminal.browserNotificationsHeading",
+        "terminal.keyInterrupt",
         "terminal.localhost",
         "terminal.notificationVolumeHint",
         "terminal.openShell",

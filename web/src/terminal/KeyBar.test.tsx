@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { applyModifiers, encodeKey, KeyBar } from "./KeyBar";
+import { applyModifiers, encodeKey, interruptKey, KeyBar } from "./KeyBar";
 import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { modifierDoubleTapMilliseconds, releasedModifiers, type Modifiers } from "./modifierLatch";
 
@@ -23,7 +23,7 @@ describe("mobile key bar", () => {
   it("shows common keys in the phone landscape layout and tucks symbols behind extra keys", () => {
     showMobileKeyBar();
     expect(window.matchMedia).toHaveBeenCalledWith(mobileViewportQuery);
-    for (const label of ["Ctrl", "Esc", "Tab", "Left arrow", "Up arrow", "Down arrow", "Right arrow"]) {
+    for (const label of ["Ctrl", "Ctrl+C", "Esc", "Tab", "Left arrow", "Up arrow", "Down arrow", "Right arrow"]) {
       expect(screen.getByRole("button", { name: label })).toBeVisible();
     }
     expect(screen.queryByRole("button", { name: "|" })).not.toBeInTheDocument();
@@ -70,6 +70,22 @@ describe("mobile key bar", () => {
     input.remove();
   });
 
+  it("sends Ctrl+C in one tap, without Ctrl and without bringing a closed keyboard up", () => {
+    const { onKey, onTap } = showMobileKeyBar();
+    const input = document.createElement("textarea");
+    document.body.appendChild(input);
+    input.focus();
+    document.documentElement.dataset.keyboardOpen = "false";
+    const interrupt = screen.getByRole("button", { name: "Ctrl+C" });
+    expect(interrupt).toHaveTextContent("^C");
+    expect(fireEvent.pointerDown(interrupt, { cancelable: true })).toBe(false);
+    fireEvent.click(interrupt);
+    expect(onKey).toHaveBeenCalledWith(interruptKey);
+    expect(onTap).not.toHaveBeenCalled();
+    expect(input).not.toHaveFocus();
+    input.remove();
+  });
+
   it("keeps the popup open for a second tap on Alt, then dismisses it", () => {
     vi.useFakeTimers();
     try {
@@ -101,6 +117,7 @@ describe("encodeKey", () => {
     expect(encodeKey("ArrowDown", false, false)).toBe("\x1b[B");
     expect(encodeKey("ArrowRight", false, false)).toBe("\x1b[C");
     expect(encodeKey("ArrowLeft", false, false)).toBe("\x1b[D");
+    expect(encodeKey(interruptKey, false, false)).toBe("\x03");
   });
 
   it("passes literal characters through", () => {
@@ -124,6 +141,8 @@ describe("encodeKey", () => {
 
   it("leaves the special sequences alone when ctrl is held", () => {
     expect(encodeKey("ArrowUp", true, false)).toBe("\x1b[A");
+    expect(encodeKey(interruptKey, true, false)).toBe("\x03");
+    expect(encodeKey(interruptKey, false, true)).toBe("\x1b\x03");
   });
 
   it("sends the plain character when ctrl has no meaning for it", () => {
