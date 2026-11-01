@@ -5,7 +5,7 @@ import { chosenOption, customAccent, presetAccents, type Accent, type AccentOpti
 import { parseAccentColor } from "../theme/accentColor";
 import { accentChoiceOf, useAccent, withAccent } from "../theme/accentContext";
 import { useTheme } from "../theme/context";
-import { defaultTheme, isTheme, themeAttributes, themeLabel, themes, type Theme } from "../theme/theme";
+import { defaultTheme, isFirstDarkTheme, isTheme, themeAttributes, themeLabel, themes, type Theme } from "../theme/theme";
 import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { CustomAccentColor } from "./CustomAccentColor";
@@ -75,7 +75,7 @@ export function AppearanceSettingsSection({ presetId, showHeading }: { presetId:
       <FieldRow label={t("appearance.theme")} interactiveChildren>
         <div className="grid max-w-[720px] grid-cols-2 gap-3.5 md:grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))]" role="radiogroup" aria-label={t("appearance.theme")}>
           {themes.map((option) => (
-            <label key={option} className="flex min-w-0 cursor-pointer flex-col gap-2 text-[13px]">
+            <label key={option} className={`flex min-w-0 cursor-pointer flex-col gap-2 text-[13px] ${isFirstDarkTheme(option) ? "col-start-1" : ""}`}>
               <input
                 type="radio"
                 name="appearance-theme"
