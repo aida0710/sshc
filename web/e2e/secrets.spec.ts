@@ -258,18 +258,18 @@ test("saves the Vault auto-lock policy and warns when automatic locking is disab
   await expect(autoLock.getByLabel("Time")).toHaveValue("12");
   await expect(autoLock.getByLabel("Unit")).toHaveValue("hours");
 
-  await policy.selectOption("restart");
-  await expect(autoLock.getByText(
-    "The Vault will not lock automatically. Unless you lock it manually, it remains unlocked until sshc is restarted. Use this setting only on a device you control.",
-  )).toBeVisible();
-
+  // A choice is saved as it is made; the page says so beside its name.
   const saved = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/api/v1/settings/presets/default" &&
       response.request().method() === "PUT",
   );
-  await autoLock.getByRole("button", { name: "Save", exact: true }).click();
+  await policy.selectOption("restart");
+  await expect(autoLock.getByText(
+    "The Vault will not lock automatically. Unless you lock it manually, it remains unlocked until sshc is restarted. Use this setting only on a device you control.",
+  )).toBeVisible();
   expect((await saved).status()).toBe(200);
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
 
   await page.reload();
   const restored = page.getByRole("region", { name: "Vault auto-lock" });
