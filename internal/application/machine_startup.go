@@ -107,7 +107,10 @@ func (s *Service) ensureMachineSettings(hostname, operatingSystem string) error 
 	legacyPath := filepath.Join(s.workspace.StateDir(), legacyEngineSettingsFileName)
 	legacy, legacyExists, err := s.readFile(legacyPath)
 	if err != nil {
-		return err
+		// v0.58 までと同じく、読めないファイルは何も設定していないものとして扱う。持ち主の違う
+		// ファイル（管理者として動かした sshc が作ったものなど）で、エンジンが起動しなくならないように
+		// するため。中身を確かめられないので、消さずに残す（マシンの設定ができたあとは読まない）。
+		legacyExists = false
 	}
 	request := storage.Request{Operation: "machine.settings.create"}
 	if legacyExists {
