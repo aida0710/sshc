@@ -169,7 +169,7 @@ describe("program-wrapped path links", () => {
     let provider: ILinkProvider | undefined;
     terminal.registerLinkProvider = (registered) => { provider = registered; return { dispose() {} }; };
     const selected: string[] = [];
-    attachLinkProvider(terminal, { open: () => {}, select: (match) => selected.push(match.target) });
+    attachLinkProvider(terminal, { open: () => {}, select: (match) => selected.push(match.target), point: () => {} });
     try {
       for (let row = 1; row <= rows.length; row += 1) {
         const links = await new Promise<ILink[] | undefined>((resolve) => provider?.provideLinks(row, resolve));
