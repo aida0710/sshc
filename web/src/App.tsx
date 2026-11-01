@@ -369,7 +369,7 @@ export function App({
         inert={hiddenForRecheck}
         aria-hidden={hiddenForRecheck ? true : undefined}
       >
-        {/* On a phone the terminal draws its own top bar (‹ opens this navigation), as in the design. */}
+        {/* On a phone the terminal draws its own top bar (its menu button opens this navigation), as in the design. */}
         {terminalTopBar ? null : <AppHeader
           route={route}
           navigationOpen={navigationOpen}
