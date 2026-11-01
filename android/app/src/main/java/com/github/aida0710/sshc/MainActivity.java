@@ -292,6 +292,8 @@ public final class MainActivity extends ComponentActivity {
         webView = new WebView(this);
         webView.setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        // WebView は、ページが地を塗るまで白で描く。起動の間の黒にして、白い1コマを出さない。
+        webView.setBackgroundColor(getColor(R.color.launch_background));
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
         webView.addJavascriptInterface(nativeBridge, "sshcAndroid");
@@ -379,6 +381,9 @@ public final class MainActivity extends ComponentActivity {
 
         webView.loadUrl(entrance);
         setContentView(frame(webView));
+        // ページがテーマを知らせる（NativeBridge.setAppearance）までは、システムのライト・ダークではなく
+        // 起動の間の黒で塗る。知らせが来たら、そのテーマの色で塗り直す。
+        applySystemBarAppearance("dark", getColor(R.color.launch_background));
     }
 
     @Override

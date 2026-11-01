@@ -2,5 +2,16 @@
 <resources>
     <!-- 起動の失敗と画面の停止からの復旧はネイティブの画面で出す。システムがライトのとき、
          ダーク系のテーマのまま背景だけ白にすると白い文字になるので、ライトとダークで分ける。 -->
-    <style name="Theme.Sshc" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar" />
+    <style name="Theme.Sshc.Base" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar" />
+
+    <!-- 起動の間（ページが描かれるまで）は、システムやアプリのテーマに関わらず黒で出す。
+         ライトの窓のまま起動すると、暗いページの前に白い画面が一瞬光る。 -->
+    <style name="Theme.Sshc.Launch" parent="Theme.Sshc.Base">
+        <item name="android:windowBackground">@color/launch_background</item>
+        <item name="android:statusBarColor">@color/launch_background</item>
+        <item name="android:navigationBarColor">@color/launch_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <style name="Theme.Sshc" parent="Theme.Sshc.Launch" />
 </resources>
