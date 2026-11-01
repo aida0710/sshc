@@ -972,6 +972,7 @@ export const ja = {
   "terminal.composerField": "ターミナルに送る文",
   "terminal.composerPlaceholder": "送る文を入力",
   "terminal.composerSend": "送信",
+  "terminal.keyInterrupt": "Ctrl+C",
   "terminal.extraKeys": "追加キー",
   "terminal.keyArrowLeft": "左矢印",
   "terminal.keyArrowUp": "上矢印",
