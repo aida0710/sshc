@@ -24,6 +24,9 @@ const resetButtonLook =
   "absolute inset-y-px right-px flex w-8 items-center justify-center rounded-r-[5px] bg-control text-ink-faint " +
   "opacity-0 transition-opacity hover:bg-hover hover:text-ink focus-visible:opacity-100 " +
   "group-hover/field:opacity-100 group-focus-within/field:opacity-100 mobile-layout:opacity-100 [@media(any-hover:none)]:opacity-100";
+// Where the reset button is always shown, the value gives way to it, or the end of a value (the last digits of a
+// port) is hidden under the button.
+const resetButtonRoom = "mobile-layout:pr-9 [@media(any-hover:none)]:pr-9";
 
 const labels: Record<DestinationName, { label: MessageKey; reset: MessageKey }> = {
   hostName: { label: "conn.basicHostName", reset: "conn.basicUseInheritedHost" },
@@ -65,7 +68,7 @@ function DestinationInput({ name, entry, numeric = false }: { name: DestinationN
           aria-invalid={warning === "" ? undefined : true}
           aria-describedby={descriptions === "" ? undefined : descriptions}
           onChange={(event) => onChange(typedValue(field, event.target.value))}
-          className={`${tail === "" ? control : inputWithTail} font-mono text-[12.5px]`}
+          className={`${tail === "" ? control : inputWithTail} ${canReset ? resetButtonRoom : ""} font-mono text-[12.5px]`}
         />
         {tail === "" ? null : (
           <span title={sourceTitle(field.state, t)} className="absolute inset-y-0 right-2.5 flex items-center text-[11.5px] text-ink-faint">
@@ -94,9 +97,11 @@ function DestinationInput({ name, entry, numeric = false }: { name: DestinationN
 // ConnectionDestinationFields は、基本タブの「接続先」の3つの欄（ホスト名・ユーザー・ポート）である。
 // 1行に並べ、狭い欄ではホスト名を1行に、ユーザーとポートを下の1行にする。継承した値と既定値は入力欄の
 // 見本の文字で見せ、自分で書いた値には右端に戻すボタンを出す。
+// The port column holds five digits beside the reset button. A phone draws the fields' text larger (16px, so that the
+// browser does not zoom into a field) and always shows the button, so there the column is wider.
 export function ConnectionDestinationFields({ hostName, user, port }: Record<DestinationName, DestinationEntry>) {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_84px] gap-x-2.5 gap-y-2 @sm/editor:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_84px]">
+    <div className="grid grid-cols-[minmax(0,1fr)_var(--port-column)] gap-x-2.5 gap-y-2 [--port-column:84px] mobile-layout:[--port-column:6.5rem] @sm/editor:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_var(--port-column)]">
       <div className="col-span-2 @sm/editor:col-span-1">
         <DestinationInput name="hostName" entry={hostName} />
       </div>
