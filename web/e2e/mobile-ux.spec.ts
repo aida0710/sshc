@@ -331,6 +331,26 @@ test("opening and closing sessions leaves the keyboard down until a tap types in
   await expect.poll(() => terminalInputFocused(page)).toBe(true);
 });
 
+test("the key bar's ^C stops a running program in one tap", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  await openApplication(page, installation);
+  await openShellFromNavigation(page);
+  await expect(drawnRows(page).filter({ visible: true })).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const screenBox = (await drawnRows(page).filter({ visible: true }).boundingBox())!;
+  await page.touchscreen.tap(screenBox.x + screenBox.width / 2, screenBox.y + screenBox.height / 2);
+  const textBox = page.getByLabel("Text to send to the terminal", { exact: true });
+  const sendButton = page.getByRole("button", { name: "Send", exact: true });
+  await textBox.fill("sleep 60");
+  await sendButton.tap();
+  await expect(drawnRows(page).filter({ visible: true })).toContainText("sleep 60");
+
+  await page.getByLabel("On-screen keys", { exact: true }).getByRole("button", { name: "Ctrl+C", exact: true }).tap();
+  // Left running, the sleep would hold this line back for a minute, well past the wait below.
+  await textBox.fill("echo stopped-$((40+2))");
+  await sendButton.tap();
+  await expect(drawnRows(page).filter({ visible: true })).toContainText("stopped-42", { timeout: 15_000 });
+});
+
 test("coming back to the app after typing leaves the keyboard down", async ({ page, installation }) => {
   await page.setViewportSize({ width: 390, height: 640 });
   await openApplication(page, installation);

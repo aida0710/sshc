@@ -7,10 +7,15 @@ import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { keepKeyboardAsIs } from "../ui/softKeyboard";
 
+// interruptKey は、キーバーに常に置く Ctrl+C の名前である。日本語のキーボードでは Ctrl のあとに打った c が
+// 変換の確定を待つので、いちばん使う組み合わせだけは1回のタップで送れるようにしてある。
+export const interruptKey = "^C";
+
 // sequences は、キーの名前から送る制御シーケンスを引く。矢印キーの名前は KeyboardEvent.key に合わせる。
 const sequences: Record<string, string> = {
   Esc: "\x1b",
   Tab: "\t",
+  [interruptKey]: "\x03",
   ArrowUp: "\x1b[A",
   ArrowDown: "\x1b[B",
   ArrowRight: "\x1b[C",
@@ -32,15 +37,18 @@ export function encodeKey(name: string, ctrl: boolean, alt: boolean): string {
   return applyModifiers(name, ctrl, alt);
 }
 
-// BarKey は、キーバーに常に出すキーである。name は encodeKey に渡す名前である。矢印キーは、
-// フォントによって形や大きさが変わる文字ではなくアイコンで出し、読み上げ用の名前を付ける。
+// BarKey は、キーバーに常に出すキーである。name は encodeKey に渡す名前である。^C のように字面が読み上げに
+// 向かないキーには、読み上げ用の名前（label）を付ける。矢印キーは、フォントによって形や大きさが変わる文字
+// ではなくアイコンで出す。
 type BarKey =
-  | { kind: "text"; name: string }
+  | { kind: "text"; name: string; label?: MessageKey }
   | { kind: "arrow"; name: string; icon: IconName; label: MessageKey };
 
+// Ctrl は Tab のあと（keys の2つ目のあと）に入る。
 const keys: BarKey[] = [
   { kind: "text", name: "Esc" },
   { kind: "text", name: "Tab" },
+  { kind: "text", name: interruptKey, label: "terminal.keyInterrupt" },
   { kind: "arrow", name: "ArrowLeft", icon: "arrowLeft", label: "terminal.keyArrowLeft" },
   { kind: "arrow", name: "ArrowUp", icon: "arrowUp", label: "terminal.keyArrowUp" },
   { kind: "arrow", name: "ArrowDown", icon: "arrowDown", label: "terminal.keyArrowDown" },
@@ -94,7 +102,7 @@ export function KeyBar({
     <div
       ref={root}
       aria-label={t("terminal.keyBar")}
-      className="relative grid shrink-0 grid-cols-8 gap-1.5 px-2.5 pb-2 pt-2.5"
+      className="relative grid shrink-0 grid-cols-9 gap-1 px-2.5 pb-2 pt-2.5"
     >
       {keys.slice(0, 2).map((key) => (
         <BarKeyButton key={key.name} barKey={key} onPress={press} />
@@ -155,7 +163,7 @@ function BarKeyButton({ barKey, onPress }: { barKey: BarKey; onPress: (name: str
     <button
       type="button"
       data-touch-compact
-      aria-label={barKey.kind === "arrow" ? t(barKey.label) : undefined}
+      aria-label={barKey.label === undefined ? undefined : t(barKey.label)}
       onPointerDown={keepKeyboardAsIs}
       onMouseDown={keepKeyboardAsIs}
       onClick={() => onPress(barKey.name)}

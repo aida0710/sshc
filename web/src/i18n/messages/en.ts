@@ -968,6 +968,7 @@ export const en = {
   "terminal.composerField": "Text to send to the terminal",
   "terminal.composerPlaceholder": "Type text to send",
   "terminal.composerSend": "Send",
+  "terminal.keyInterrupt": "Ctrl+C",
   "terminal.extraKeys": "Extra keys",
   "terminal.keyArrowLeft": "Left arrow",
   "terminal.keyArrowUp": "Up arrow",
