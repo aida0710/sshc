@@ -2549,6 +2549,7 @@ export const ja = {
   "kh.search": "検索",
   "kh.hashed": "（ハッシュ済み）",
   "kh.hashedFor": "{aliases}（ハッシュ済み）",
+  "kh.entryActions": "{host} の操作",
   "kh.delete": "削除",
   "kh.confirmRemove":
     "{line}行目（{fingerprint}）を削除しますか？ 操作は履歴に記録され、バックアップも保存されます。",
