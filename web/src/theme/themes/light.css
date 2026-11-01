@@ -32,6 +32,9 @@
   --ui-notice-ink: #71500a;
   --ui-danger: #c92b3a;
   --ui-live: #177451;
+  /* The icons of pictures and recordings in a file list, so they are found at a glance. */
+  --ui-kind-image: #1f7a52;
+  --ui-kind-video: #b5541c;
   --ui-code-bg: #080b0d;
   --ui-code-fg: #d8dfe4;
   --ui-brand-background: var(--ui-accent);
