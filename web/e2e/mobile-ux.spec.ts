@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, openApplication, test, type Installation } from "./support/environment";
 import { samplePNG } from "./support/images";
-import { drawnRows, drawnSpan } from "./support/terminal";
+import { drawnRows, drawnRowsIn, drawnSpan } from "./support/terminal";
 
 // All screenshots are opt-in and contain only the isolated installation's
 // example hosts and synthetic SFTP/terminal data. Never capture real servers.
@@ -495,10 +495,15 @@ test("a swipe across a previewed image steps to the next and previous file, and 
 // A full-screen program draws on the alternate screen, which has no scrollback, and scrolls its own text.
 // Claude Code also asks for mouse reports (1000, 1002, 1003 with the SGR encoding 1006); less does not.
 const longOutput = Array.from({ length: 80 }, (_, index) => `line ${index + 1}`).join("\r\n");
+// A program told of the wheel moves about three lines for each step, so a finger turns one step for every three rows
+// it moves; the arrow keys sent to less move a line each, one for every row (touchScrollTarget.ts).
 const fullScreenPrograms = [
-  { name: "asks for mouse reports, as Claude Code does", modes: "\x1b[?1049h\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h", forward: /\x1b\[<65;\d+;\d+M/, back: /\x1b\[<64;\d+;\d+M/ },
-  { name: "does not ask for mouse reports, as less does", modes: "\x1b[?1049h", forward: /\x1b\[B/, back: /\x1b\[A/ },
+  { name: "asks for mouse reports, as Claude Code does", modes: "\x1b[?1049h\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h", forward: /\x1b\[<65;\d+;\d+M/g, back: /\x1b\[<64;\d+;\d+M/g, rowsPerStep: 3 },
+  { name: "does not ask for mouse reports, as less does", modes: "\x1b[?1049h", forward: /\x1b\[B/g, back: /\x1b\[A/g, rowsPerStep: 1 },
 ];
+function countSent(messages: string[], sequence: RegExp): number {
+  return messages.reduce((count, message) => count + (message.match(sequence)?.length ?? 0), 0);
+}
 for (const program of fullScreenPrograms) {
   test(`a swipe reaches a full-screen program that ${program.name}`, async ({ page, installation }) => {
     // The program starts once it knows the terminal's size, so it draws (and sets its modes) on each resize.
@@ -513,15 +518,20 @@ for (const program of fullScreenPrograms) {
     if (box === null) throw new Error("the terminal has no box");
     const middle = box.x + box.width / 2;
 
+    const rowHeight = await drawnRowsIn(screen).first().evaluate((row) => row.getBoundingClientRect().height);
+    const steps = Math.round(box.height * 0.4 / rowHeight / program.rowsPerStep);
+
     // A finger moving up moves the text forward, as the wheel turned towards the person does.
     await swipe(page, { x: middle, y: box.y + box.height * 0.7 }, { x: middle, y: box.y + box.height * 0.3 });
-    await expect.poll(() => messages.some((message) => program.forward.test(message))).toBe(true);
-    expect(messages.some((message) => program.back.test(message))).toBe(false);
+    await expect.poll(() => countSent(messages, program.forward)).toBeGreaterThanOrEqual(steps - 1);
+    expect(countSent(messages, program.forward)).toBeLessThanOrEqual(steps + 1);
+    expect(countSent(messages, program.back)).toBe(0);
 
     messages.length = 0;
     await swipe(page, { x: middle, y: box.y + box.height * 0.3 }, { x: middle, y: box.y + box.height * 0.7 });
-    await expect.poll(() => messages.some((message) => program.back.test(message))).toBe(true);
-    expect(messages.some((message) => program.forward.test(message))).toBe(false);
+    await expect.poll(() => countSent(messages, program.back)).toBeGreaterThanOrEqual(steps - 1);
+    expect(countSent(messages, program.back)).toBeLessThanOrEqual(steps + 1);
+    expect(countSent(messages, program.forward)).toBe(0);
   });
 }
 
