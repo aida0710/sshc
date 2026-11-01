@@ -18,6 +18,7 @@ export function ConnectionListPane({
   resizeHandle = null,
   treeOptions = {},
   detailOpen = selection !== null,
+  listAlone = false,
 }: {
   compact?: boolean;
   overview: Overview;
@@ -32,10 +33,12 @@ export function ConnectionListPane({
   treeOptions?: Omit<ConnectionTreeProps, "overview" | "selected" | "onSelect" | "drag">;
   // 狭い画面では、右側（接続先やグループの編集）を開いているあいだ一覧を隠す。
   detailOpen?: boolean;
+  // 広い画面で何も開いていないあいだ、一覧がページの幅を全部使う（workspaceColumnsLayout）。
+  listAlone?: boolean;
 }) {
   const t = useTranslate();
   return (
-  <div className={workspaceListPane(compact, detailOpen)}>
+  <div className={workspaceListPane(compact, detailOpen, { listAlone })}>
     {resizeHandle}
     <div className="min-h-0 flex-1">
       {invalidLocation ? (

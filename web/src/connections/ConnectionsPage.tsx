@@ -62,6 +62,7 @@ import { SelectionBar } from "./SelectionBar";
 import { GroupEditor } from "./GroupEditor";
 import { ConnectionGroupFacets } from "./ConnectionGroupFacets";
 import { useConnectionDrag } from "./useConnectionDrag";
+import { useConnectionRowColumns } from "./useConnectionRowColumns";
 
 // The design's width for the connection list; the groups sit beside the card, outside it. The editor keeps the rest.
 const connectionListWidth: ColumnWidth = { key: localStorageKeys.connectionListWidth, fallback: 300, minimum: 256, maximum: 720 };
@@ -247,6 +248,13 @@ export function ConnectionsPage({
     if (notice.detail !== undefined && notice.detail !== "") return notice.detail === selection.alias;
     return notice.path === selection.path;
   });
+  // 何も開いていなくても、右側が知らせることがある（設定の注意、行き先を失った設定、保存の失敗、作った鍵の割り当て）。
+  const paneHasNews = paneNotices.length > 0 || problem !== null || localError !== "" || preferredKey !== null
+    || (overview?.metadata.hosts ?? []).some((entry) => entry.orphan === true);
+  // 広い画面で何も開いておらず右側に知らせることも無いあいだは、一覧に全幅を渡し、行を名前・宛先・グループ・
+  // 最終接続の列にする。右側が「接続先を選択」だけで大きく空くのを避ける。
+  const listAlone = overview !== null && !compact && !detailOpen && editedGroup === null && !paneHasNews;
+  const rowColumns = useConnectionRowColumns(listAlone);
 
   // 選んだ接続先への操作の帯。広い画面では一覧の上、スマホでは一覧の下に置く。
   function selectionBar(placement: "top" | "bottom") {
@@ -473,10 +481,11 @@ export function ConnectionsPage({
           className={workspaceHeaderLayout}
         />
       )}
-      <div style={{ "--list-width": `${listWidth}px` } as CSSProperties} className={workspaceColumnsLayout(compact)}>
+      <div style={{ "--list-width": `${listWidth}px` } as CSSProperties} className={workspaceColumnsLayout(compact, { listAlone })}>
         <ConnectionListPane
           compact={compact}
-          resizeHandle={compact ? null : (
+          listAlone={listAlone}
+          resizeHandle={compact || listAlone ? null : (
             <ColumnResizeHandle
               label={t("conn.resizeList")}
               width={listWidth}
@@ -507,9 +516,10 @@ export function ConnectionsPage({
             onDeclareGroup: (name: string) => void groups.createGroup(name),
             topBar: !compact && checked.keys.size >= 2 ? selectionBar("top") : null,
             bottomBar: compact && selectionMode ? selectionBar("bottom") : null,
+            rowColumns,
           }}
         />
-        <div className={`gap-4 ${workspaceDetailPane(compact, detailOpen)}`}>
+        <div className={`gap-4 ${listAlone ? "hidden" : workspaceDetailPane(compact, detailOpen)}`}>
 
         {compact && detailOpen ? (
           <PhoneBackButton

@@ -12,8 +12,13 @@ function targetFor(host: HostEntry): string {
   return address === "" ? host.file.path ?? host.file.absolute : address;
 }
 
+// RowColumns lay a row out across a list that has the whole width (nothing is open beside it): the group
+// and when it was last connected follow the name and the destination.
+export type RowColumns = { group: string; lastConnected: string };
+
 type ConnectionRowProps = {
   host: HostEntry;
+  columns?: RowColumns | undefined;
   os: HostMetadata["os"];
   colour: string;
   tags: readonly string[];
@@ -39,13 +44,22 @@ type ConnectionRowProps = {
 
 // ConnectionRow は、接続先の一覧の1行（開く・選ぶボタンと、その接続先の「…」）である。
 export function ConnectionRow({
-  host, os, colour, tags, duplicateAlias, descriptionId,
+  host, columns, os, colour, tags, duplicateAlias, descriptionId,
   opened, chosen, choosing, showCheckbox, draggable,
   menuItems, menuOpen, onMenuOpenChange,
   onClick, onPointerDown, onPointerEnd, onDragStart, onDragEnd,
 }: ConnectionRowProps) {
   const t = useTranslate();
   const highlighted = choosing ? chosen : opened;
+  const aliasLine = (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="truncate">{host.identity.alias}</span>
+      {duplicateAlias ? <Icon name="warning" className="size-3.5 text-notice-ink" /> : null}
+    </span>
+  );
+  // 同じ名前の接続先が並ぶときは、どのファイルの行かを添えて見分けられるようにする。
+  const destination = duplicateAlias ? `${targetFor(host)} · ${host.file.path ?? host.file.absolute}:${host.line}` : targetFor(host);
+  const tagLabels = tags.map((tag) => <span key={tag} className="shrink-0 rounded bg-toolbar px-1 text-[0.65rem] text-ink-muted">{tag}</span>);
   return (
     <li
       className="group/row relative"
@@ -87,22 +101,23 @@ export function ConnectionRow({
             </span>
           ) : null}
           <OperatingSystemIcon os={os} colour={colour} look="tile" />
-          <span className="min-w-0 flex-1">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate">{host.identity.alias}</span>
-              {duplicateAlias ? <Icon name="warning" className="size-3.5 text-notice-ink" /> : null}
+          {columns === undefined ? (
+            <span className="min-w-0 flex-1">
+              {aliasLine}
+              <span className="block truncate font-mono text-[11px] leading-4 text-ink-faint">{destination}</span>
+              {tags.length === 0 ? null : <span aria-hidden="true" className="mt-1 flex flex-wrap gap-1">{tagLabels}</span>}
             </span>
-            <span className="block truncate font-mono text-[11px] leading-4 text-ink-faint">
-              {targetFor(host)}
-              {/* 同じ名前の接続先が並ぶときは、どのファイルの行かを添えて見分けられるようにする。 */}
-              {duplicateAlias ? ` · ${host.file.path ?? host.file.absolute}:${host.line}` : null}
-            </span>
-            {tags.length === 0 ? null : (
-              <span aria-hidden="true" className="mt-1 flex flex-wrap gap-1">
-                {tags.map((tag) => <span key={tag} className="rounded bg-toolbar px-1 text-[0.65rem] text-ink-muted">{tag}</span>)}
+          ) : (
+            <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,22rem)_minmax(0,16rem)_minmax(0,10rem)_minmax(0,1fr)] items-center gap-4">
+              <span className="flex min-w-0 items-center gap-2">
+                {aliasLine}
+                {tags.length === 0 ? null : <span aria-hidden="true" className="flex gap-1">{tagLabels}</span>}
               </span>
-            )}
-          </span>
+              <span className="truncate text-[12.5px] text-ink-muted">{destination}</span>
+              <span className="truncate text-[12.5px] text-ink-muted">{columns.group}</span>
+              <span className="truncate text-[12.5px] text-ink-muted">{columns.lastConnected}</span>
+            </span>
+          )}
         </span>
       </button>
       {menuItems.length === 0 ? null : (

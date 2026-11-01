@@ -12,7 +12,7 @@ import { identityKey } from "./connectionBrowser";
 import type { DragPayload } from "./dragdrop";
 import { applySelectionGesture, emptyMultiSelection, keepVisible, type MultiSelection } from "./multiSelection";
 import { GroupSheet } from "./GroupSheet";
-import { ConnectionRow } from "./ConnectionRow";
+import { ConnectionRow, type RowColumns } from "./ConnectionRow";
 import { listGroups, ungroupedCount } from "./groupListing";
 import { isImeComposing } from "../ui/imeComposition";
 import { belongsToGroup, buildGroupTree, decorateHosts, type DecoratedHost, type GroupNode } from "./connectionTreeIndex";
@@ -54,6 +54,8 @@ export type ConnectionTreeProps = {
   onDeclareGroup?: (name: string) => void;
   topBar?: ReactNode;
   bottomBar?: ReactNode;
+  // rowColumns lays each row out in columns, for a list that has the whole width (ConnectionRow).
+  rowColumns?: ((host: HostEntry, group: string) => RowColumns) | undefined;
 };
 
 type SortOrder = "configured" | "name";
@@ -91,6 +93,7 @@ export function ConnectionTree({
   onDeclareGroup,
   topBar = null,
   bottomBar = null,
+  rowColumns,
 }: ConnectionTreeProps) {
   const t = useTranslate();
   const descriptionIdPrefix = useId();
@@ -226,6 +229,7 @@ export function ConnectionTree({
       <ConnectionRow
         key={item.projectionIdentity}
         host={host}
+        columns={rowColumns?.(host, item.group)}
         os={item.os}
         colour={item.colour}
         tags={item.tags}

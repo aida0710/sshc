@@ -283,6 +283,8 @@ export function SnippetsPanel({
   );
   const emptyLibrary = <EmptyState icon="snippets" title={t("snippets.emptyHeading")} action={addButton} />;
   const detailOpen = opened.kind !== "none";
+  // 広い画面で何も開いておらず知らせることも無いあいだは、一覧に全幅を渡し、右側が「選択」だけで大きく空くのを避ける。
+  const listAlone = !compact && !detailOpen && libraryState === "ready" && snippets.length > 0 && operation.error === "";
 
   return (
     <>
@@ -297,8 +299,8 @@ export function SnippetsPanel({
             className={workspaceHeaderLayout}
           />
         )}
-        <div style={fixedListWidthStyle} className={workspaceColumnsLayout(compact)}>
-          <div className={workspaceListPane(compact, detailOpen)}>
+        <div style={fixedListWidthStyle} className={workspaceColumnsLayout(compact, { listAlone })}>
+          <div className={workspaceListPane(compact, detailOpen, { listAlone })}>
             <SnippetList
               libraryState={libraryState}
               snippets={snippets}
@@ -306,9 +308,10 @@ export function SnippetsPanel({
               empty={compact ? emptyLibrary : null}
               onRetry={() => void loadLibrary()}
               onOpen={(snippet) => draftDiscard.confirmBefore(() => openSnippet(snippet))}
+              columns={listAlone}
             />
           </div>
-          <div className={workspaceDetailPane(compact, detailOpen)}>
+          <div className={listAlone ? "hidden" : workspaceDetailPane(compact, detailOpen)}>
             {compact ? (
               <Button className="mb-3 w-fit" onClick={() => draftDiscard.confirmBefore(closeEditor)}>
                 {t("snippets.allSnippets")}

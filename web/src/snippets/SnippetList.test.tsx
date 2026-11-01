@@ -34,3 +34,9 @@ it("shows only the first line of a command under the name", () => {
   expect(opened).toHaveAttribute("aria-current", "true");
   expect(opened).toHaveTextContent(/^GPUnvidia-smi$/);
 });
+
+it("lays a row out as the name, the command and the description when the list has the whole width", () => {
+  render(<SnippetList libraryState="ready" snippets={snippets} openedId={null} empty={null} onRetry={vi.fn()} onOpen={vi.fn()} columns />);
+
+  expect(screen.getByRole("button", { name: /GPU/ })).toHaveTextContent(/^GPUnvidia-sminvidia-smi output$/);
+});
