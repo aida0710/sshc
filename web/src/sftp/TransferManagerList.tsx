@@ -6,7 +6,7 @@ import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { Notice } from "../ui/surface";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
-import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { mobileViewportQuery, navigationRailQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { keepMachineStateJSON, readMachineStateJSON } from "../settings/machineState";
 import { setTransfersStopped } from "../settings/settingsStore";
@@ -55,6 +55,8 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
   const t = useTranslate();
   const [view, setView] = useState<QueueView>(restoreView);
   const compactViewport = useMediaQuery(mobileViewportQuery);
+  // A phone on its side has little height to spare, so the dock is left out while there is nothing to transfer.
+  const shortViewport = useMediaQuery(navigationRailQuery);
   const [sheetOpen, setSheetOpen] = useState(false);
   const handledOpenRequest = useRef(0);
   useEffect(() => {
@@ -236,7 +238,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
     <>
       {/* The dock ends the screen, so the floating bottom bar sits over the space below it: that space is in
           the file list's colour, and the page shows no band of its own around the bar. */}
-      <div className="shrink-0 border-t border-line bg-sidebar pb-(--mobile-navigation-inset)">
+      {shortViewport && jobs.length === 0 ? null : <div className="shrink-0 border-t border-line bg-sidebar pb-(--mobile-navigation-inset)">
         <button
           ref={dockTrigger}
           type="button"
@@ -252,7 +254,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
           <TransferQueueSummary summary={summary} id={`${headingId}-dock-summary`} compact />
           {summary.totalBytes > 0 ? <span aria-hidden="true" className="absolute bottom-0 left-0 h-0.5 rounded-full bg-accent transition-[width]" style={{ width: `${summary.progress}%` }} /> : null}
         </button>
-      </div>
+      </div>}
       <ModalShell open={sheetOpen} labelledBy={headingId} onDismiss={dismissSheet} closeOnOutside initialFocusRef={closeSheet} returnFocusRef={dockTrigger} placement="sheet" panelClassName="flex h-[min(36rem,85dvh)] max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl">
         {content}
       </ModalShell>
