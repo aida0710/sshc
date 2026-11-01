@@ -11,6 +11,8 @@ export type ColorScheme = "light" | "dark";
 // label in both languages; themes.test.ts checks the three agree.
 export const colorThemes = [
   { name: "light", scheme: "light", label: "shell.themeLight" },
+  { name: "white-blue", scheme: "light", label: "shell.themeWhiteBlue" },
+  { name: "white-purple", scheme: "light", label: "shell.themeWhitePurple" },
   { name: "dark", scheme: "dark", label: "shell.themeDark" },
   { name: "dark-blue", scheme: "dark", label: "shell.themeDarkBlue" },
   { name: "dark-purple", scheme: "dark", label: "shell.themeDarkPurple" },
@@ -36,6 +38,12 @@ function colorTheme(name: ColorTheme): (typeof colorThemes)[number] {
 
 export function schemeOf(theme: ColorTheme): ColorScheme {
   return colorTheme(theme).scheme;
+}
+
+// isFirstDarkTheme says whether a choice is the first dark theme in the list. The settings page starts a new
+// row of thumbnails there, so that the light and the dark themes each sit in rows of their own.
+export function isFirstDarkTheme(theme: Theme): boolean {
+  return theme === colorThemes.find((each) => each.scheme === "dark")?.name;
 }
 
 export function themeLabel(theme: Theme): MessageKey {
