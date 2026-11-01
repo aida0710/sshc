@@ -59,14 +59,16 @@ func validShortcutPreset(p ShortcutPreset) bool {
 	return true
 }
 
-// withoutUnreadableShortcutPresets drops the presets this build cannot use: a
-// preset saved before an action was added does not bind it. They are dropped
-// rather than filled in (the user's choice for #367); keeping them would make
-// every later save of metadata refuse.
+// withoutUnreadableShortcutPresets keeps the presets this build can use. A preset saved before an action was
+// added does not bind it: the action is read as unassigned, so the preset the user made stays (the user's
+// choice, 2026-11-01). A binding of an action no longer offered is left out. A preset still broken after
+// that (a chord this build does not record, the same chord twice) is dropped, or every later save of
+// metadata would refuse.
 func withoutUnreadableShortcutPresets(metadata *Metadata) {
 	kept := metadata.ShortcutPresets[:0]
 	ids := map[string]bool{}
 	for _, p := range metadata.ShortcutPresets {
+		p.Bindings = withEveryShortcutAction(p.Bindings)
 		if len(kept) >= validate.MaxShortcutPresets || !validShortcutPreset(p) || ids[p.ID] {
 			continue
 		}
@@ -77,6 +79,20 @@ func withoutUnreadableShortcutPresets(metadata *Metadata) {
 		kept = nil
 	}
 	metadata.ShortcutPresets = kept
+}
+
+// withEveryShortcutAction is bindings with exactly the actions this build offers: an action missing from it
+// is unassigned.
+func withEveryShortcutAction(bindings map[string][]string) map[string][]string {
+	every := make(map[string][]string, len(validate.ShortcutActions))
+	for _, action := range validate.ShortcutActions {
+		keys := bindings[action]
+		if keys == nil {
+			keys = []string{}
+		}
+		every[action] = keys
+	}
+	return every
 }
 
 func (s *Service) SetShortcutPresets(base, presets []ShortcutPreset) (SaveResult, error) {

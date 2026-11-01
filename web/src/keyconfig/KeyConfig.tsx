@@ -30,6 +30,7 @@ const actionLabelKeys: Record<ShortcutAction, MessageKey> = {
   previousSession: "shortcuts.previousSession",
   nextPane: "shortcuts.nextPane",
   previousPane: "shortcuts.previousPane",
+  toggleNavigation: "shortcuts.toggleNavigation",
   home: "shortcuts.home",
   sftp: "shortcuts.sftp",
 };
