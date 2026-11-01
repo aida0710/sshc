@@ -1135,6 +1135,9 @@ describe("SFTPPanel uploads", () => {
     expect(properties).toHaveTextContent("2,048 (2.0 KiB)");
     expect(properties).toHaveTextContent("-rw-r--r-- (644)");
     expect(properties).toHaveTextContent("rev-7");
+    // A picture is not edited as text.
+    expect(within(dialog).queryByRole("button", { name: "Edit file" })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Download" })).toBeVisible();
 
     await userEvent.click(within(dialog).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog", { name: "Details for photo.png" })).not.toBeInTheDocument();

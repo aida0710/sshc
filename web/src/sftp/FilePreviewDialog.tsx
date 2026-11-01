@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { ModalShell } from "../ui/ModalShell";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { FilePreviewBody } from "./FilePreviewBody";
 import { FilePreviewHeader } from "./FilePreviewHeader";
 import { useFilePreview } from "./useFilePreview";
@@ -42,14 +43,14 @@ export function FilePreviewDialog({
   const preview = useFilePreview(alias, shown);
   const { download, problem } = usePreviewDownload(alias);
   const onSwipe = usePreviewStepping({ position, count: steps.length, onStep: setPosition, onClose });
+  // A phone gives the preview the whole screen. A picture then fills it on black, under the header as the
+  // phone's photos show one; text and refusals keep the header above them, where it covers nothing.
+  const mobile = useMediaQuery(mobileViewportQuery);
+  const pictured = preview.kind === "image" || preview.kind === "media";
+  const overlay = mobile && pictured;
 
-  return (
-    <ModalShell
-      labelledBy={headingId}
-      onDismiss={onClose}
-      closeOnOutside
-      panelClassName="flex h-[min(46rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-lg"
-    >
+  const header = (
+    <>
       <FilePreviewHeader
         headingId={headingId}
         path={shown}
@@ -58,10 +59,25 @@ export function FilePreviewDialog({
         onStep={setPosition}
         onDownload={() => download(shown)}
         {...(actions === undefined ? {} : { menu: { label: t("sftp.selectedActions", { name: baseName(shown) }), items: actions(shown) } })}
+        overlay={overlay}
         onClose={onClose}
       />
-      {problem === "" ? null : <p role="alert" className="border-b border-line px-3 py-2 text-xs text-danger">{problem}</p>}
-      <div role="group" className="min-h-0 flex-1 overflow-auto overscroll-contain bg-surface-subtle p-3" aria-label={t("sftp.preview")}>
+      {problem === "" ? null : <p role="alert" className={`px-3 py-2 text-xs text-danger ${overlay ? "" : "border-b border-line"}`}>{problem}</p>}
+    </>
+  );
+
+  return (
+    <ModalShell
+      labelledBy={headingId}
+      onDismiss={onClose}
+      closeOnOutside
+      placement={mobile ? "fullscreen" : "center"}
+      panelClassName={mobile
+        ? "relative flex h-dvh w-full flex-col overflow-hidden rounded-none border-0! shadow-none"
+        : "flex h-[min(46rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-lg"}
+    >
+      {overlay ? <div className="absolute inset-x-0 top-0 z-10 bg-linear-to-b from-black/85 to-transparent pb-7">{header}</div> : header}
+      <div role="group" className={`min-h-0 flex-1 overscroll-contain ${overlay ? "overflow-hidden bg-black" : "overflow-auto bg-surface-subtle p-3"}`} aria-label={t("sftp.preview")}>
         <FilePreviewBody preview={preview} path={shown} name={baseName(shown)} onDownload={() => download(shown)} onSwipe={onSwipe} />
       </div>
     </ModalShell>

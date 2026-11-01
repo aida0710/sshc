@@ -42,6 +42,21 @@ function LockedList({ mobileInteraction, onActivate, onOpenParent }: {
 }
 
 describe("SFTPEntryList", () => {
+  it("shows a touch row's size and date under its name, leaving the permissions to the details", () => {
+    render(<LockedList mobileInteraction onActivate={vi.fn()} onOpenParent={vi.fn()} />);
+
+    const notes = screen.getByRole("button", { name: "notes.txt" });
+    expect(notes).toHaveTextContent(/12 B · /u);
+    expect(notes).not.toHaveTextContent("0644");
+  });
+
+  it("names a file's kind in the wide table's type column", () => {
+    render(<LockedList mobileInteraction={false} onActivate={vi.fn()} onOpenParent={vi.fn()} />);
+
+    expect(screen.getByRole("row", { name: /notes\.txt/u })).toHaveTextContent("Text");
+    expect(screen.getByRole("row", { name: /project/u })).toHaveTextContent("Folder");
+  });
+
   it("selects a clicked row of a locked table but opens neither the row nor the parent", async () => {
     const onActivate = vi.fn();
     const onOpenParent = vi.fn();

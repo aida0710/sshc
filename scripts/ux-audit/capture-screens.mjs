@@ -17,10 +17,13 @@ const stages = new Set((process.argv[3] ?? "all").split(","));
 const wants = (stage) => stages.has("all") || stages.has(stage);
 const scratch = process.env.UX_AUDIT_SCRATCH ?? "/tmp";
 // 撮影用のエンジンと sshd は 127.0.0.1 だけで待ち受ける。普段使いのエンジン（既定のポート）とぶつからない番号にする。
-const enginePort = "46420";
-const sshdPort = "2299";
+// 別の作業ツリーで同時に撮るときは、UX_AUDIT_ENGINE_PORT・UX_AUDIT_SSHD_PORT・UX_AUDIT_SSHD_CONTAINER と、
+// バイナリを写す UX_AUDIT_SCRATCH を変える。
+// 始めに同じ名前のコンテナを消すので、名前が同じだと相手の撮影を止めてしまう。
+const enginePort = process.env.UX_AUDIT_ENGINE_PORT ?? "46420";
+const sshdPort = process.env.UX_AUDIT_SSHD_PORT ?? "2299";
 const sshdImage = "sshc-ux-audit-sshd:2026-10-30";
-const sshdContainer = "sshc-ux-audit-sshd";
+const sshdContainer = process.env.UX_AUDIT_SSHD_CONTAINER ?? "sshc-ux-audit-sshd";
 
 mkdirSync(out, { recursive: true });
 

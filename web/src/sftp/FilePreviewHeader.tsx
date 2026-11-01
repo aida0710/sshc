@@ -7,6 +7,9 @@ import { PreviewStepper } from "./PreviewStepper";
 // stepping through the other printed files, downloading, the "…" of what
 // else the file offers (menu), and closing. On a narrow screen the path takes
 // the first row on its own and the controls move to the second.
+//
+// overlay draws the header for a place over a full-screen picture, as a phone's
+// photos do: no bar of its own, and light words on the shade the caller lays.
 export function FilePreviewHeader({
   headingId,
   path,
@@ -15,6 +18,7 @@ export function FilePreviewHeader({
   onStep,
   onDownload,
   menu,
+  overlay = false,
   onClose,
 }: {
   headingId: string;
@@ -24,11 +28,14 @@ export function FilePreviewHeader({
   onStep: (position: number) => void;
   onDownload: () => void;
   menu?: { label: string; items: ActionMenuItem[] };
+  overlay?: boolean;
   onClose: () => void;
 }) {
   const t = useTranslate();
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-toolbar px-3 py-2">
+    <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 ${overlay
+      ? "text-white [&_button]:text-white/85"
+      : "border-b border-line bg-toolbar"}`}>
       {/* A long path loses its start, not the file name: the right-to-left box
           puts the ellipsis on the left, and the bdi keeps the path itself in
           reading order. */}
