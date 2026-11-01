@@ -59,7 +59,7 @@ public final class MainActivity extends ComponentActivity {
     private static final int FOLDER_CHOOSER_REQUEST = 23;
     private static final String NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked";
     /** ページの帯の夜と昼の色。web/src/index.css の --ui-toolbar と同期し、ページ読込前の色差を防ぐ。 */
-    private static final int CHROME_NIGHT = 0xFF15171B;
+    private static final int CHROME_NIGHT = 0xFF161616;
     private static final int CHROME_DAY = 0xFFFFFFFF;
     /** 失敗の画面で、［コピー］と［やり直す］のあいだを詰める間隔。 */
     private static final int RETRY_GAP_DP = 8;

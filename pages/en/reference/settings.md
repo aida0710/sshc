@@ -60,7 +60,7 @@ Paste defaults to Ctrl+V (⌘V on Mac); Ctrl+Shift+V also remains available.
 
 **Settings → Appearance** sets the theme and the accent colour of the whole app in the preset being edited:
 
-- Theme: match the system, light, or dark
+- Theme: match the system, light, dark, dark blue, or dark purple. Dark uses greys without a tint; dark blue tints them blue. Dark purple uses a lighter untinted grey and, with the lavender accent, a purple of its own, which also colours the terminal selection and cursor
 - Accent colour: lavender, blue, sky, pink, mono, or custom. It marks the current item, buttons, and the focused terminal pane. Custom takes one colour of your own from the colour picker or as a code (#rrggbb), used in both the light and the dark theme. A colour that is hard to tell from the background of the theme on screen brings up a notice.
 
 Each settings page lists the other settings pages on its left, so you can move between them.
