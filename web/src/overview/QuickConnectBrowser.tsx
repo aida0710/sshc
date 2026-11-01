@@ -22,6 +22,7 @@ import { Spinner } from "../ui/Spinner";
 import { formatDateTime } from "../ui/format";
 import { relativeDay } from "../ui/relativeDay";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 type QuickConnectBrowserProps = {
   overview: Overview;
@@ -226,7 +227,7 @@ export function QuickConnectBrowser({
         <label className="relative min-w-0 flex-1">
           <span className="sr-only">{t("home.search")}</span>
           <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint" />
-          <input
+          <input {...literalTextEntry}
             type="search"
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}

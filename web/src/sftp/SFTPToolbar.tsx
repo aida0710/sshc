@@ -8,6 +8,7 @@ import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 import { isImeComposing } from "../ui/imeComposition";
 import { iconAction } from "../ui/form";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 // Navigation uses one row; on phones selection or search replaces that row.
 // The workspace tab already identifies the source, so its picker stays hidden here.
@@ -89,7 +90,7 @@ export function SFTPToolbar({
 
   const pathField = pathEditing ? (
     <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); submitPath(); }}>
-      <input ref={pathInput} aria-label={labels.input} value={pathDraft}
+      <input {...literalTextEntry} ref={pathInput} aria-label={labels.input} value={pathDraft}
         onChange={(event) => setPathDraft(event.target.value)}
         onKeyDown={(event) => { if (!isImeComposing(event) && event.key === "Escape") cancelEdit(); }}
         className={`min-w-0 flex-1 rounded-md border border-control-line bg-control px-2 font-mono outline-none focus:border-accent ${mobile ? "h-12 text-base" : "h-9 text-sm"}`} />

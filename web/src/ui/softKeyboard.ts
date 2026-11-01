@@ -19,3 +19,14 @@ export function keepKeyboardAsIs(event: { preventDefault(): void }): void {
   const active = document.activeElement;
   if (isTextEntry(active)) active.blur();
 }
+
+// literalTextEntry is for a field whose text is typed as it is meant (a path, a command, a key's file name): a phone's
+// keyboard must not capitalise its first letter, correct its words or underline them as misspelt. Without it,
+// Android is asked for both (an input or a textarea defaults to sentence capitals and autocorrect), so on a Latin
+// keyboard "ls" becomes "Ls".
+export const literalTextEntry = { autoCapitalize: "off", autoCorrect: "off", spellCheck: false } as const;
+
+// asciiTextEntry is for a field that only ever takes ASCII (a host name, a user name, a connection name): besides
+// literalTextEntry, the keyboard opens on its Latin letters. A phone set to Japanese otherwise opens on kana, to be
+// switched by hand for every host name.
+export const asciiTextEntry = { ...literalTextEntry, inputMode: "url" } as const;

@@ -25,6 +25,7 @@ import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { ExecutableDirectiveConfirmation } from "./ExecutableDirectiveConfirmation";
 import { unavoidableDirectives, type ExecutableDirective } from "./executableDirectives";
 import { relativeConfigPath } from "./relativeConfigPath";
+import { asciiTextEntry } from "../ui/softKeyboard";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -152,7 +153,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
             ) : (
               <div className="min-w-56 flex-1 sm:max-w-sm">
                 <Field label={t("diag.hostAlias")}>
-                  <input
+                  <input {...asciiTextEntry}
                     value={typedAlias}
                     onChange={(event) => setTypedAlias(event.target.value)}
                     list="diagnostic-host-options"

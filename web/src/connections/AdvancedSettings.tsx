@@ -15,6 +15,7 @@ import { EditorSection } from "./EditorSection";
 import { HostBlockText } from "./HostBlockText";
 import { useDraftSave } from "./useDraftSave";
 import { useReportDirty } from "./useReportDirty";
+import { asciiTextEntry, literalTextEntry } from "../ui/softKeyboard";
 
 type AdvancedSettingsProps = {
   detail: HostDetail;
@@ -202,7 +203,7 @@ export function AdvancedSettings({
         {jumpFields.map((field) => (
           <FieldRow key={fieldKey(field)} density="editor" interactiveChildren label={field.keyword.toLowerCase() === "proxyjump" ? t("advanced.jumpVia") : field.keyword}>
             <span className="flex items-center gap-2">
-              <input
+              <input {...literalTextEntry}
                 aria-label={field.keyword}
                 value={draftFor(field)}
                 disabled={fieldsDisabled || !field.editable || removed.includes(field.line)}
@@ -215,7 +216,7 @@ export function AdvancedSettings({
         ))}
         {offerProxyJump ? (
           <FieldRow density="editor" label={t("advanced.jumpVia")}>
-            <input value={newJump} disabled={fieldsDisabled} placeholder={t("advanced.jumpNone")} onChange={(event) => setNewJump(event.target.value)} className={`${control} font-mono`} />
+            <input {...asciiTextEntry} value={newJump} disabled={fieldsDisabled} placeholder={t("advanced.jumpNone")} onChange={(event) => setNewJump(event.target.value)} className={`${control} font-mono`} />
           </FieldRow>
         ) : null}
       </EditorSection>
@@ -264,9 +265,9 @@ export function AdvancedSettings({
             <option value="remote">{t("conn.forwardRemote")}</option>
             <option value="dynamic">{t("conn.forwardDynamic")}</option>
           </select>
-          <input aria-label={t(newForwardKind === "remote" ? "conn.forwardRemoteListenPort" : "conn.forwardListenPort")} inputMode="numeric" placeholder={t("advanced.portPlaceholder")} value={newListenPort} disabled={fieldsDisabled} onChange={(event) => setNewListenPort(event.currentTarget.value)} className={`${compactControl} font-mono`} />
+          <input {...asciiTextEntry} aria-label={t(newForwardKind === "remote" ? "conn.forwardRemoteListenPort" : "conn.forwardListenPort")} inputMode="numeric" placeholder={t("advanced.portPlaceholder")} value={newListenPort} disabled={fieldsDisabled} onChange={(event) => setNewListenPort(event.currentTarget.value)} className={`${compactControl} font-mono`} />
           {newForwardKind === "dynamic" ? <span /> : (
-            <input aria-label={t("conn.forwardDestination")} placeholder="127.0.0.1:5432" value={newDestination} disabled={fieldsDisabled} onChange={(event) => setNewDestination(event.currentTarget.value)} className={`${compactControl} font-mono`} />
+            <input {...asciiTextEntry} aria-label={t("conn.forwardDestination")} placeholder="127.0.0.1:5432" value={newDestination} disabled={fieldsDisabled} onChange={(event) => setNewDestination(event.currentTarget.value)} className={`${compactControl} font-mono`} />
           )}
           <Button className="h-[30px] py-0" disabled={fieldsDisabled} onClick={addForward}>{t("advanced.add")}</Button>
         </div>
@@ -284,7 +285,7 @@ export function AdvancedSettings({
               <li key={fieldKey(field)} className="border-t border-line py-1 first:border-t-0">
                 <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto] items-center gap-2">
                   <span className={`truncate font-mono text-xs ${removed.includes(field.line) ? "text-ink-faint line-through" : "text-ink-muted"}`} title={field.keyword}>{field.keyword}</span>
-                  <input
+                  <input {...literalTextEntry}
                     aria-label={field.keyword}
                     value={draftFor(field)}
                     disabled={fieldsDisabled || !field.editable || removed.includes(field.line)}
@@ -306,8 +307,8 @@ export function AdvancedSettings({
           ))}
         </ul>
         <div className="mt-2 grid gap-2 @sm/editor:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-          <input id="new-directive" aria-label={t("host.newDirective")} placeholder={t("advanced.keywordPlaceholder")} value={newKeyword} disabled={fieldsDisabled} onChange={(event) => setNewKeyword(event.target.value)} className={`${compactControl} font-mono`} />
-          <input id="new-value" aria-label={t("host.newValue")} placeholder={t("advanced.valuePlaceholder")} value={newValue} disabled={fieldsDisabled} onChange={(event) => setNewValue(event.target.value)} className={`${compactControl} font-mono`} />
+          <input {...asciiTextEntry} id="new-directive" aria-label={t("host.newDirective")} placeholder={t("advanced.keywordPlaceholder")} value={newKeyword} disabled={fieldsDisabled} onChange={(event) => setNewKeyword(event.target.value)} className={`${compactControl} font-mono`} />
+          <input {...literalTextEntry} id="new-value" aria-label={t("host.newValue")} placeholder={t("advanced.valuePlaceholder")} value={newValue} disabled={fieldsDisabled} onChange={(event) => setNewValue(event.target.value)} className={`${compactControl} font-mono`} />
           <Button className="h-[30px] py-0" disabled={fieldsDisabled} onClick={addDirective}>{t("advanced.add")}</Button>
         </div>
       </EditorSection>

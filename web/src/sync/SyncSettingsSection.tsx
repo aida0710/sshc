@@ -11,6 +11,7 @@ import { SyncKeySection } from "./SyncKeySection";
 import { SyncWarning } from "./SyncWarning";
 import { syncDirectionHintKeys, syncSetupStateKeys } from "./syncMessageKeys";
 import type { SyncSetupForm } from "./useSyncSetupForm";
+import { asciiTextEntry, literalTextEntry } from "../ui/softKeyboard";
 
 // Bucket settings and the shared key. Until sync is configured this is the
 // whole screen; afterwards it folds away behind "manage settings". Only then is it a <details>: one
@@ -87,7 +88,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                   label={t("sync.endpoint")}
                   hint={t("sync.endpointHint")}
                 >
-                  <input
+                  <input {...asciiTextEntry}
                     value={endpoint}
                     onChange={(event) => setEndpoint(event.target.value)}
                     placeholder="https://<account>.r2.cloudflarestorage.com"
@@ -95,7 +96,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                   />
                 </FieldRow>
                 <FieldRow label={t("sync.bucket")}>
-                  <input
+                  <input {...asciiTextEntry}
                     value={bucket}
                     onChange={(event) => setBucket(event.target.value)}
                     className={control}
@@ -103,7 +104,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                 </FieldRow>
 
                 <FieldRow label={t("sync.path")} hint={t("sync.pathHint")}>
-                  <input
+                  <input {...literalTextEntry}
                     value={path}
                     onChange={(event) => setPath(event.target.value)}
                     className={control}
@@ -111,7 +112,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                 </FieldRow>
 
                 <FieldRow label={t("sync.region")} hint={t("sync.regionHint")}>
-                  <input
+                  <input {...asciiTextEntry}
                     value={region}
                     onChange={(event) => setRegion(event.target.value)}
                     className={control}
@@ -121,7 +122,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                   label={t("sync.accessKeyId")}
                   hint={status.accessKeySuffix ? t("sync.accessKeySaved", { suffix: status.accessKeySuffix }) : undefined}
                 >
-                  <input
+                  <input {...asciiTextEntry}
                     value={accessKeyId}
                     onChange={(event) => setAccessKeyId(event.target.value)}
                     className={control}

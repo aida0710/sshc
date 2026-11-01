@@ -5,6 +5,7 @@ import { sizedControl } from "../ui/form";
 import { Button } from "../ui/surface";
 import type { TerminalSearch } from "./useTerminalSearch";
 import { isImeComposing } from "../ui/imeComposition";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 const pressedOption = "aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-accent";
 // An icon is a block (Tailwind's preflight), so it would sit at the left of a
@@ -27,7 +28,7 @@ export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; 
   }, [input]);
   return (
     <div className={`absolute inset-x-2 top-2 z-20 items-center gap-1.5 rounded-lg border border-line bg-toolbar/95 p-1.5 shadow-float backdrop-blur ${mobile ? "grid grid-cols-6" : "left-auto flex w-[34rem] max-w-[calc(100%-1rem)] flex-wrap"}`}>
-      <input
+      <input {...literalTextEntry}
         ref={input}
         autoFocus
         aria-label={t("terminal.searchInput")}
