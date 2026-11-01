@@ -245,6 +245,10 @@ func TestResolveReportsUnreadableAndMissingRoot(t *testing.T) {
 	if !missing.Nodes[testConfig].Missing {
 		t.Fatal("missing root file was not reported as missing")
 	}
+	// ssh は無い ~/.ssh/config を空として読む。入れたばかりのマシンで問題として出さない。
+	if len(missing.Diagnostics) != 0 {
+		t.Fatalf("a missing root file was diagnosed: %#v", missing.Diagnostics)
+	}
 }
 
 func TestResolveStopsAtMaxDepth(t *testing.T) {

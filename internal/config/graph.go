@@ -161,6 +161,11 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 	contents, err := r.Loader.ReadFile(filePath)
 	if err != nil {
 		node.Missing = errors.Is(err, fs.ErrNotExist)
+		// ssh は、無い ~/.ssh/config を空のファイルとして読む。入れたばかりのマシンには
+		// まだ無いのがふつうで、問題として知らせることではない（作る操作は画面にある）。
+		if node.Missing && depth == 0 {
+			return
+		}
 		graph.diagnose(SeverityError, DiagnosticIncludeUnreadable, filePath, 0, err.Error())
 		return
 	}
