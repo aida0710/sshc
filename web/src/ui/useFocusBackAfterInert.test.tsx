@@ -3,12 +3,15 @@ import { useRef } from "react";
 import { describe, expect, it } from "vitest";
 import { useFocusBackAfterInert } from "./useFocusBackAfterInert";
 
-function Shell({ inert }: { inert: boolean }) {
+function Shell({ inert, keyboardOnScreen = false }: { inert: boolean; keyboardOnScreen?: boolean }) {
   const container = useRef<HTMLDivElement>(null);
-  useFocusBackAfterInert(container, inert);
+  useFocusBackAfterInert(container, inert, { keyboardOnScreen });
   return (
     <>
-      <div ref={container} inert={inert}><textarea aria-label="Terminal input" /></div>
+      <div ref={container} inert={inert}>
+        <textarea aria-label="Terminal input" />
+        <button type="button">Inside</button>
+      </div>
       <button type="button">Outside</button>
     </>
   );
@@ -38,5 +41,29 @@ describe("useFocusBackAfterInert", () => {
     view.rerender(<Shell inert={false} />);
 
     expect(screen.getByRole("button", { name: "Outside" })).toHaveFocus();
+  });
+
+  it("does not give a text field the focus back where focusing it raises the on-screen keyboard", () => {
+    const view = render(<Shell inert={false} keyboardOnScreen />);
+    const input = screen.getByLabelText("Terminal input");
+    input.focus();
+
+    view.rerender(<Shell inert keyboardOnScreen />);
+    input.blur();
+    view.rerender(<Shell inert={false} keyboardOnScreen />);
+
+    expect(document.body).toHaveFocus();
+  });
+
+  it("still gives a button the focus back where text fields raise the on-screen keyboard", () => {
+    const view = render(<Shell inert={false} keyboardOnScreen />);
+    const inside = screen.getByRole("button", { name: "Inside" });
+    inside.focus();
+
+    view.rerender(<Shell inert keyboardOnScreen />);
+    inside.blur();
+    view.rerender(<Shell inert={false} keyboardOnScreen />);
+
+    expect(inside).toHaveFocus();
   });
 });

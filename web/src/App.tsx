@@ -328,10 +328,11 @@ export function App({
   const changeOSC52 = useOSC52Setting();
 
   // While the vault is rechecked on coming back to the page, the app is hidden and inert; the focus goes back
-  // to the terminal (or whatever had it) afterwards.
+  // to the terminal (or whatever had it) afterwards, but not to a text field on a phone, where it would raise the
+  // keyboard.
   const hiddenForRecheck = state === "ready" && vaultRecheck !== "idle";
   const rechecked = useRef<HTMLDivElement>(null);
-  useFocusBackAfterInert(rechecked, hiddenForRecheck);
+  useFocusBackAfterInert(rechecked, hiddenForRecheck, { keyboardOnScreen: mobileLayout });
 
   if (state === "locked") {
     return (
