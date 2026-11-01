@@ -3,11 +3,11 @@ import { failureCode } from "../api/client";
 import type { LocalShellProfile, SettingsApi } from "../api/settings";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { ActionArea } from "../ui/ActionArea";
 import { PageSection } from "../ui/page";
 import { SegmentedTabs } from "../ui/SegmentedTabs";
-import { Button, Notice } from "../ui/surface";
+import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { useCommitOnChange } from "../ui/useCommitOnChange";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { SettingsSection } from "./SettingsSection";
 import {
@@ -26,6 +26,7 @@ import {
   type TerminalDraft,
 } from "./terminalSettingsDraft";
 import { updatePreset, useSettings } from "./settingsStore";
+import { useRestingSave } from "./useRestingSave";
 
 export type TerminalSettingsApi = Pick<SettingsApi, "localShellProfiles">;
 
@@ -70,7 +71,7 @@ function saveFailureOf(error: unknown, draft: TerminalDraft): { message: Message
 
 // The embedded terminal: where it starts, its limits, how it looks and how it treats the clipboard and
 // keyboard. A computer shows the groups as tabs so each fits on one screen; a phone shows every group as a
-// card. Either way there is one draft and one save, so moving between tabs keeps what was typed.
+// card. Either way there is one draft, saved as it changes: a choice once it rests, a typed field when it is left.
 //
 // The page edits the terminal settings of the preset chosen above the settings pages (presetId). Reconnects,
 // the connection log and OSC 52 are global settings, on the General page.
@@ -94,6 +95,10 @@ export function TerminalSettingsSection({ api, presetId, showHeading }: {
   const edited = useRef(false);
   // draftedFor is the preset the draft was made from.
   const draftedFor = useRef<string | null>(null);
+  // latestDraft is the draft as the last edit left it, for saves that run after it (useRestingSave, the change
+  // event of a typed field).
+  const latestDraft = useRef(draft);
+  const fields = useRef<HTMLFieldSetElement>(null);
 
   // The draft follows the preset as long as nothing was typed yet. Another preset opens with its own settings:
   // what was typed for the previous one is not carried over.
@@ -101,7 +106,8 @@ export function TerminalSettingsSection({ api, presetId, showHeading }: {
     if (settings.document === null || (draftedFor.current === presetId && edited.current)) return;
     draftedFor.current = presetId;
     edited.current = false;
-    setDraft(draftOf(stored ?? {}));
+    latestDraft.current = draftOf(stored ?? {});
+    setDraft(latestDraft.current);
     setDrafted(true);
   }, [settings.document, stored, presetId]);
 
@@ -115,36 +121,47 @@ export function TerminalSettingsSection({ api, presetId, showHeading }: {
     return () => { active = false; };
   }, [api]);
 
-  function edit(patch: Partial<TerminalDraft>) {
-    setDraft((current) => ({ ...current, ...patch }));
+  // A choice is saved once it rests: a slider moves it many times a second.
+  const saveLatestOnceRested = useRestingSave<void>(() => void submit(latestDraft.current));
+  useCommitOnChange(fields, () => {
+    if (edited.current) void submit(latestDraft.current);
+  });
+
+  function change(patch: Partial<TerminalDraft>) {
+    latestDraft.current = { ...latestDraft.current, ...patch };
+    setDraft(latestDraft.current);
     edited.current = true;
     save.touch();
   }
+  function edit(patch: Partial<TerminalDraft>) {
+    change(patch);
+    saveLatestOnceRested();
+  }
 
-  async function submit() {
-    const next = settingsOf(draft);
+  async function submit(submitted: TerminalDraft) {
+    const next = settingsOf(submitted);
     if (next === null) {
-      setTab(tabOfRefusedNumber(draft));
+      setTab(tabOfRefusedNumber(submitted));
       save.fail(t("terminal.limitsOutOfRange"));
       return;
     }
     await save.run(async () => {
       await updatePreset(presetId, ({ terminal: _previous, ...preset }) =>
         Object.keys(next).length === 0 ? preset : { ...preset, terminal: next });
-      edited.current = false;
+      // What was typed while this save ran is still to be saved, and the draft must not follow the preset yet.
+      if (latestDraft.current === submitted) edited.current = false;
     }, {
       describe: (error) => {
-        const failure = saveFailureOf(error, draft);
-        // The save button is on every tab, so open the one with the field the message is about.
+        const failure = saveFailureOf(error, submitted);
+        // The message is under the tabs, so open the one with the field it is about.
         if (failure.tab !== null) setTab(failure.tab);
         return t(failure.message);
       },
     });
   }
 
-  const busy = save.busy;
   const ready = loaded && drafted;
-  const groupProps = { draft, edit };
+  const groupProps = { draft, edit, type: change };
   // The preview takes a column of its own only where the board leaves the fields room beside it. It goes by
   // the board's width, not the screen's: on a PC the navigation and the list of settings pages take 470px.
   const look = (
@@ -172,7 +189,8 @@ export function TerminalSettingsSection({ api, presetId, showHeading }: {
           panelId={panelId}
         />
       )}
-      <fieldset disabled={!ready || busy} className="min-w-0 border-0 p-0 disabled:opacity-70">
+      {/* The fields stay open while a change saves: the next key may come while the last one is on its way. */}
+      <fieldset ref={fields} disabled={!ready} className="min-w-0 border-0 p-0 disabled:opacity-70">
         {compact ? (
           <div className="flex flex-col gap-3.5">
             {/* Each card's rows sit in their own box so the first row, right under the heading, has no line above it. */}
@@ -197,18 +215,9 @@ export function TerminalSettingsSection({ api, presetId, showHeading }: {
           </div>
         )}
       </fieldset>
-      {/* 保存のボタンは fieldset の外に置く。中に置くと、保存を待つ間に fieldset ごと薄くなり、
-          回転の印が「押せない」に見える。 */}
-      <ActionArea status={save.error === ""
-        ? (!loaded && !settings.loadFailed
-            ? <p role="status" className="text-sm text-ink-muted">{t("terminal.settingsLoading")}</p>
-            : !ready || !save.saved ? undefined : <Notice tone="success">{t("terminal.settingsSaved")}</Notice>)
-        : <Notice tone="danger">{save.error}</Notice>}
-      >
-        <Button kind="primary" busy={busy} disabled={!ready} onClick={() => void submit()}>
-          {t("terminal.startSave")}
-        </Button>
-      </ActionArea>
+      {save.error !== "" ? <Notice tone="danger">{save.error}</Notice>
+        : !loaded && !settings.loadFailed ? <p role="status" className="text-sm text-ink-muted">{t("terminal.settingsLoading")}</p>
+        : null}
     </SettingsSection>
   );
 }

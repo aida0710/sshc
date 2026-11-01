@@ -10,10 +10,9 @@ test("saves folder exclusion rules and preserves them while changing other trans
   const patterns = page.getByRole("textbox", { name: "Exclusion patterns (one per line)", exact: true });
   await patterns.fill(".git\nnode_modules\n*.log");
   const exclusionsSaved = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/settings/presets/default" && response.request().method() === "PUT");
-  await page.getByRole("button", { name: "Save exclusions", exact: true }).click();
+  // The rules are saved when their box is left.
+  await patterns.press("Tab");
   expect((await exclusionsSaved).status()).toBe(200);
-  // Saved rules are no change, so the button waits for the next edit.
-  await expect(page.getByRole("button", { name: "Save exclusions", exact: true })).toBeDisabled();
 
   const speedSaved = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/settings/presets/default" && response.request().method() === "PUT");
   const speed = page.getByRole("spinbutton", { name: "Speed limit", exact: true });
@@ -28,7 +27,13 @@ test("saves folder exclusion rules and preserves them while changing other trans
 
   await page.reload();
   await expect(patterns).toHaveValue(".git\nnode_modules\n*.log");
+  // A rule that is not valid is not saved when the box is left.
+  const writes: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "PUT" && new URL(request.url()).pathname.startsWith("/api/v1/settings/")) writes.push(request.url());
+  });
   await patterns.fill("../secret");
-  await expect(page.getByRole("button", { name: "Save exclusions", exact: true })).toBeDisabled();
+  await patterns.press("Tab");
   await expect(patterns).toHaveAccessibleDescription(/Check the patterns/);
+  expect(writes).toEqual([]);
 });

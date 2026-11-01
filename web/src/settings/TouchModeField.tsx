@@ -11,7 +11,7 @@ export function TouchModeField({ presetId }: { presetId: string }) {
   const mode = useTouchMode(presetId);
   const detected = useDetectedTouchMode();
   return (
-    <FieldRow label={t("terminal.touchModeLabel")} hint={t("terminal.touchModeSettingHint")} interactiveChildren>
+    <FieldRow label={t("terminal.touchModeLabel")} interactiveChildren>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <CheckboxField label={t("terminal.touchModeAutoShort")} checked={mode === "auto"}
           onChange={(checked) => saveTouchMode(checked ? "auto" : detected, presetId)} />

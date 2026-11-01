@@ -106,7 +106,7 @@ describe("SettingsPanel", () => {
     expect(within(region).getByLabelText("Sessions open at once")).toHaveValue(3);
     await user.clear(within(region).getByLabelText("Sessions open at once"));
     await user.type(within(region).getByLabelText("Sessions open at once"), "4");
-    await user.click(within(region).getByRole("button", { name: "Save" }));
+    await user.tab();
     await waitFor(() => expect(presetSaved("phone")?.terminal).toEqual({ maxSessions: 4 }));
     expect(presetSaved("default")).toEqual({ id: "default" });
 
@@ -155,10 +155,9 @@ describe("SettingsPanel", () => {
     await user.clear(within(region).getByLabelText("Time"));
     await user.type(within(region).getByLabelText("Time"), "45");
     await user.selectOptions(within(region).getByLabelText("Unit"), "minutes");
-    await user.click(within(region).getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(presetSaved()?.vaultAutoLock).toEqual({ mode: "idle", value: 45, unit: "minutes" }));
-    expect(await within(region).findByText(/Auto-lock applies now/)).toBeVisible();
+    expect(await screen.findByText("Saved")).toBeVisible();
   });
 
   it("shows a persistent warning and saves restart-only locking", async () => {
@@ -172,11 +171,10 @@ describe("SettingsPanel", () => {
 
     expect(within(region).queryByLabelText("Time")).toBeNull();
     expect(within(region).getByText(/remains unlocked until sshc is restarted/i)).toBeVisible();
-    await user.click(within(region).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(presetSaved()?.vaultAutoLock).toEqual({ mode: "restart" }));
   });
 
-  it("restores restart-only locking and rejects a duration outside 1 to 999", async () => {
+  it("restores restart-only locking and refuses to save a duration outside 1 to 999", async () => {
     const user = userEvent.setup();
     withSettings({ presets: [{ id: "default", vaultAutoLock: { mode: "restart" } }] });
     render(<SettingsPanel api={buildApi()} page="Vault" />);
@@ -187,10 +185,10 @@ describe("SettingsPanel", () => {
     await user.selectOptions(mode, "idle");
     await user.clear(within(region).getByLabelText("Time"));
     await user.type(within(region).getByLabelText("Time"), "1000");
-    await user.click(within(region).getByRole("button", { name: "Save" }));
+    await user.tab();
 
-    expect(server.writesTo("/api/v1/settings/presets/default")).toEqual([]);
     expect(within(region).getByText(/whole number from 1 to 999/i)).toBeVisible();
+    expect(presetSaved()?.vaultAutoLock).not.toMatchObject({ value: 1000 });
   });
 
   it("locks the auto-lock fields of a passwordless Vault, says why, and keeps the saved choice", () => {
@@ -203,7 +201,6 @@ describe("SettingsPanel", () => {
     expect(within(region).getByLabelText("Time")).toBeDisabled();
     expect(within(region).getByLabelText("Unit")).toBeDisabled();
     expect(within(region).getByText(/without a master password never locks automatically/i)).toBeVisible();
-    expect(within(region).getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
   it("tells a passwordless Vault that auto-lock does not apply instead of warning about restart-only locking", () => {
@@ -216,20 +213,19 @@ describe("SettingsPanel", () => {
     expect(within(region).queryByText(/remains unlocked until sshc is restarted/i)).toBeNull();
   });
 
-  it("shows the Vault save working until the engine answers and accepts no second press", async () => {
+  it("saves a typed duration once, when the field is left, not on every key", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi()} page="Vault" />);
-    const release = holdWrites();
 
     const region = screen.getByRole("region", { name: "Vault auto-lock" });
-    const save = within(region).getByRole("button", { name: "Save" });
-    await user.click(save);
+    const time = within(region).getByLabelText("Time");
+    await waitFor(() => expect(time).toBeEnabled());
+    await user.clear(time);
+    await user.type(time, "30");
+    expect(server.writesTo("/api/v1/settings/presets/default")).toEqual([]);
 
-    expect(save).toHaveAttribute("aria-busy", "true");
-    await user.click(save);
-    release();
-    expect(await within(region).findByText(/Auto-lock applies now/)).toBeVisible();
-    expect(save).not.toHaveAttribute("aria-busy");
+    await user.tab();
+    await waitFor(() => expect(presetSaved()?.vaultAutoLock).toEqual({ mode: "idle", value: 30, unit: "hours" }));
     expect(server.writesTo("/api/v1/settings/presets/default")).toHaveLength(1);
   });
 
@@ -259,7 +255,7 @@ describe("SettingsPanel", () => {
     expect(sessions).toHaveValue(2);
   });
 
-  it("says the terminal settings could not be read and keeps the save closed", async () => {
+  it("says the terminal settings could not be read and keeps the fields closed", async () => {
     resetSettingsForTests();
     vi.mocked(apiClient.read).mockRejectedValue(new Error("engine restarting"));
     await refreshSettings();
@@ -267,20 +263,22 @@ describe("SettingsPanel", () => {
 
     const region = screen.getByRole("region", { name: "Terminal" });
     expect(within(region).getByText("Terminal settings could not be loaded. They cannot be saved until they load.")).toBeVisible();
-    expect(within(region).getByRole("button", { name: "Save" })).toBeDisabled();
+    openTerminalTab(region, "Connection");
+    expect(within(region).getByLabelText("Sessions open at once")).toBeDisabled();
   });
 
-  it("saves the starting directory as it was written", async () => {
+  it("saves the starting directory as it was written, once the field is left", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi()} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Behaviour");
     await user.type(within(region).getByLabelText(/^Starting directory/), "~/work");
-    await user.click(within(region).getByRole("button", { name: "Save" }));
+    expect(server.writesTo("/api/v1/settings/presets/default")).toEqual([]);
+    await user.tab();
 
     await waitFor(() => expect(presetSaved()?.terminal).toEqual({ startDirectory: "~/work" }));
-    expect(await within(region).findByText(/^Saved\./)).toBeVisible();
+    expect(await screen.findByText("Saved")).toBeVisible();
   });
 
   it("sends nothing for the fields left empty", async () => {
@@ -290,12 +288,12 @@ describe("SettingsPanel", () => {
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Connection");
     await user.type(within(region).getByLabelText("Sessions open at once"), "4");
-    await user.click(within(region).getByRole("button", { name: "Save" }));
+    await user.tab();
 
     await waitFor(() => expect(presetSaved()?.terminal).toEqual({ maxSessions: 4 }));
   });
 
-  it("saves both scrollback scopes, shell profile and the JIS yen key, typed on two tabs", async () => {
+  it("saves both scrollback scopes, shell profile and the JIS yen key, changed on two tabs", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi()} />);
 
@@ -305,12 +303,11 @@ describe("SettingsPanel", () => {
     await user.type(within(region).getByLabelText("Engine replay buffer (bytes)"), "65536");
     await user.type(within(region).getByLabelText("Browser scrollback (lines)"), "12000");
     await user.type(within(region).getByLabelText("Terminals kept hidden"), "20");
-    openTerminalTab(region, "Behaviour");
+    await user.click(within(region).getByRole("tab", { name: "Behaviour" }));
     await waitFor(() => expect(within(region).getByLabelText(/^Default local shell/)).toBeEnabled());
     await user.selectOptions(within(region).getByLabelText(/^Default local shell/), "fish");
     await user.click(within(region).getByRole("checkbox", { name: /Send the JIS/ }));
     await user.click(within(region).getByRole("checkbox", { name: /Use font ligatures/ }));
-    await user.click(within(region).getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(presetSaved()?.terminal).toEqual({
       scrollbackBytes: 65536,
@@ -349,7 +346,6 @@ describe("SettingsPanel", () => {
 
     await user.click(copy);
     await user.click(paste);
-    await user.click(within(region).getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(presetSaved()?.terminal).toEqual({ copyOnSelect: false, rightClickPaste: false }));
   });
@@ -363,7 +359,6 @@ describe("SettingsPanel", () => {
     const webgl = await within(region).findByRole("checkbox", { name: "Use WebGL rendering" });
     expect(webgl).toBeChecked();
     await user.click(webgl);
-    await user.click(within(region).getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(presetSaved()?.terminal).toEqual({ webgl: false }));
   });
@@ -398,12 +393,12 @@ describe("SettingsPanel", () => {
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Behaviour");
     await user.type(within(region).getByLabelText(/^Starting directory/), "~/nowhere");
-    await user.click(within(region).getByRole("button", { name: "Save" }));
+    await user.tab();
 
     expect(await within(region).findByText("The specified directory does not exist.")).toBeVisible();
   });
 
-  it("keeps what was typed on one tab while another is open, and saves both", async () => {
+  it("saves what was typed on one tab when another is opened, and keeps it shown", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi()} page="Terminal" />);
 
@@ -412,13 +407,12 @@ describe("SettingsPanel", () => {
     const sessions = within(region).getByLabelText("Sessions open at once");
     await waitFor(() => expect(sessions).toBeEnabled());
     await user.type(sessions, "7");
-    openTerminalTab(region, "Display");
+    await user.click(within(region).getByRole("tab", { name: "Display" }));
     await user.type(within(region).getByLabelText("Font size"), "14");
-    openTerminalTab(region, "Connection");
+    await user.click(within(region).getByRole("tab", { name: "Connection" }));
 
     expect(within(region).getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
     expect(within(region).getByLabelText("Sessions open at once")).toHaveValue(7);
-    await user.click(within(region).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(presetSaved()?.terminal).toEqual({ maxSessions: 7, fontSize: 14 }));
   });
 
@@ -432,15 +426,14 @@ describe("SettingsPanel", () => {
     const directory = within(region).getByLabelText(/^Starting directory/);
     await waitFor(() => expect(directory).toBeEnabled());
     await user.type(directory, "~/nowhere");
-    openTerminalTab(region, "Display");
-    await user.click(within(region).getByRole("button", { name: "Save" }));
+    await user.click(within(region).getByRole("tab", { name: "Display" }));
 
     expect(await within(region).findByText("The specified directory does not exist.")).toBeVisible();
     expect(within(region).getByRole("tab", { name: "Behaviour" })).toHaveAttribute("aria-selected", "true");
     expect(within(region).getByLabelText(/^Starting directory/)).toHaveValue("~/nowhere");
   });
 
-  it("shows the terminal save working while the fields wait, without dimming it with them", async () => {
+  it("keeps the fields open while a change is being saved, and says when it was", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi()} />);
     const release = holdWrites();
@@ -449,14 +442,12 @@ describe("SettingsPanel", () => {
     openTerminalTab(region, "Connection");
     const sessions = within(region).getByLabelText("Sessions open at once");
     await user.type(sessions, "3");
-    const save = within(region).getByRole("button", { name: "Save" });
-    await user.click(save);
+    await user.tab();
 
-    expect(save).toHaveAttribute("aria-busy", "true");
-    expect(sessions).toBeDisabled();
-    expect(save.closest("fieldset:disabled")).toBeNull();
+    expect(sessions).toBeEnabled();
+    expect(screen.queryByText("Saved")).toBeNull();
     release();
-    expect(await within(region).findByText(/^Saved\./)).toBeVisible();
+    expect(await screen.findByText("Saved")).toBeVisible();
   });
 
   it("saves not reconnecting as a global choice, not as an empty field", async () => {
