@@ -48,6 +48,17 @@ describe("findTerminalLinks", () => {
     ['web/src/app.tsx:42で直した', 'relative-path', 'web/src/app.tsx'],
     ['dir(1)/x.png', 'relative-path', 'dir(1)/x.png'],
     ['画像/a.png', 'relative-path', '画像/a.png'],
+    // The prose before a relative name ends at a sentence mark, a bracket, or where an ASCII name begins.
+    ['試験の側の流れでは崩れが起きませんでした。xterm.js', 'relative-path', 'xterm.js'],
+    ['単体テストでは、修正した側が通り、xterm.js', 'relative-path', 'xterm.js'],
+    ['修正済みのREADME.mdを読んだ', 'relative-path', 'README.md'],
+    ['Codeが直したapp.tsx:42で', 'relative-path', 'app.tsx'],
+    ['「xterm.js」を見た', 'relative-path', 'xterm.js'],
+    ['保存しました。docs/画面.md', 'relative-path', 'docs/画面.md'],
+    ['確認：docs/a.md', 'relative-path', 'docs/a.md'],
+    ['運用メモ.md', 'relative-path', '運用メモ.md'],
+    ['議事録2026-11-01.md', 'relative-path', '議事録2026-11-01.md'],
+    ['写真（2026）/a.png', 'relative-path', '写真（2026）/a.png'],
   ])('detects the complete path in %s', (line, kind, target) => {
     const links = findTerminalLinks(line);
     expect(links.map(({ kind, target }) => ({ kind, target }))).toEqual(kind === null ? [] : [{ kind, target }]);
