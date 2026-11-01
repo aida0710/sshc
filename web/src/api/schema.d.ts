@@ -4348,6 +4348,7 @@ export interface components {
                 previousSession: string[];
                 nextPane: string[];
                 previousPane: string[];
+                toggleNavigation: string[];
                 home: string[];
                 sftp: string[];
             };

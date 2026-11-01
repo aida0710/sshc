@@ -13,7 +13,7 @@ export const shortcutModifiers: readonly string[] = ["Ctrl", "Alt", "Shift", "Me
 export const shortcutCommandModifiers: readonly string[] = ["Ctrl", "Alt", "Meta"];
 
 // ショートカットを割り当てられる操作。並びは設定画面の並びでもある。
-export const shortcutActions = ["palette", "terminalSearch", "copy", "paste", "previousPrompt", "nextPrompt", "increaseFontSize", "decreaseFontSize", "resetFontSize", "quickCommands", "newSession", "closeSession", "nextSession", "previousSession", "nextPane", "previousPane", "home", "sftp"] as const;
+export const shortcutActions = ["palette", "terminalSearch", "copy", "paste", "previousPrompt", "nextPrompt", "increaseFontSize", "decreaseFontSize", "resetFontSize", "quickCommands", "newSession", "closeSession", "nextSession", "previousSession", "nextPane", "previousPane", "toggleNavigation", "home", "sftp"] as const;
 
 export const maxShortcutPresets = 64;
 export const maxShortcutPresetNameLength = 80;

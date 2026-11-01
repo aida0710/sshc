@@ -29,6 +29,7 @@ export const defaultBindings = {
   previousSession: ["Alt+PageUp"],
   nextPane: [],
   previousPane: [],
+  toggleNavigation: [],
   home: [],
   sftp: [],
 } satisfies Bindings;

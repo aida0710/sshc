@@ -30,6 +30,8 @@ export const localStorageKeys = {
   connectionGroupsWidth: "sshc.connections.groups-width.v1",
   quickConnectView: "sshc.home.quick-connect-view",
   sftpSplitRatio: "sshc.sftp.splitRatio",
+  // Whether the navigation is hidden on a PC ("hidden", or nothing when shown), chosen with its shortcut.
+  navigationHidden: "sshc.navigation.hidden.v1",
 } as const;
 
 // sessionStorage belongs to one tab and ends with it.

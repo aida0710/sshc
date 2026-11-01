@@ -18,10 +18,10 @@ function cycled(items: readonly string[], current: string | null, delta: number)
 }
 
 // Application-wide keyboard shortcuts: the command palette, jumping to a
-// section, opening and closing sessions, and cycling terminal sessions and the panes
-// of a split. Listened for in the capture phase so that xterm never turns one of them
-// into SSH input.
-export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessions, activeSessionId, panes, navigate, showSession, openPalette, requestSession }: {
+// section, opening and closing sessions, cycling terminal sessions and the panes
+// of a split, and showing or hiding the navigation. Listened for in the capture phase
+// so that xterm never turns one of them into SSH input.
+export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessions, activeSessionId, panes, navigate, showSession, openPalette, requestSession, toggleNavigation }: {
   enabled: boolean;
   shortcuts: Bindings;
   terminalFace: boolean;
@@ -33,6 +33,7 @@ export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessi
   showSession: (id: string) => void;
   openPalette: () => void;
   requestSession: (request: SessionShortcut) => void;
+  toggleNavigation: () => void;
 }) {
   // The listener closes over `enabled` and the bindings, so it is replaced in a layout
   // effect, in the same task that puts the new screen on the page. A passive effect
@@ -56,6 +57,7 @@ export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessi
         action = openPalette;
       } else if (matchesShortcut(event, "home", shortcuts)) action = () => navigate("Home");
       else if (matchesShortcut(event, "sftp", shortcuts)) action = () => navigate("Files");
+      else if (matchesShortcut(event, "toggleNavigation", shortcuts)) action = toggleNavigation;
       else if (matchesShortcut(event, "newSession", shortcuts)) action = () => requestSession({ action: "newSession" });
       else if (terminalFace && activeSessionId !== null && matchesShortcut(event, "closeSession", shortcuts)) {
         action = () => requestSession({ action: "closeSession", sessionId: activeSessionId });
@@ -79,5 +81,5 @@ export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessi
     // Capture before xterm translates an application shortcut into SSH input.
     document.addEventListener("keydown", handleShortcut, true);
     return () => document.removeEventListener("keydown", handleShortcut, true);
-  }, [enabled, shortcuts, navigate, orderedSessions, activeSessionId, panes, showSession, terminalFace, openPalette, requestSession]);
+  }, [enabled, shortcuts, navigate, orderedSessions, activeSessionId, panes, showSession, terminalFace, openPalette, requestSession, toggleNavigation]);
 }
