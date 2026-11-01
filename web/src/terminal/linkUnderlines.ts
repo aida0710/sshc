@@ -87,8 +87,9 @@ export function attachLinkUnderlines(view: Terminal, { everyLink, allowWindowsPa
 
   const draw = () => {
     let used = 0;
-    if (screen !== null && view.rows > 0 && view.cols > 0) {
-      const box = screen.getBoundingClientRect();
+    const box = screen?.getBoundingClientRect();
+    // A hidden session's screen has no size; finding its links would be wasted.
+    if (box !== undefined && box.width > 0 && box.height > 0 && view.rows > 0 && view.cols > 0) {
       const cellWidth = box.width / view.cols;
       const rowHeight = box.height / view.rows;
       for (const segment of segmentsToDraw()) {
