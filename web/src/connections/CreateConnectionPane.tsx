@@ -13,6 +13,7 @@ import { groupDefaultValue } from "./groupDefaults";
 import { NewGroupField } from "./NewGroupField";
 import { useCreateConnectionForm, type CreateConnectionFormOptions } from "./useCreateConnectionForm";
 import { useReportDirty } from "./useReportDirty";
+import { asciiTextEntry } from "../ui/softKeyboard";
 
 const authenticationChoices: readonly [CreateConnectionAuthenticationKind, MessageKey][] = [
   ["identity_file", "conn.createIdentityFile"],
@@ -94,7 +95,7 @@ export function CreateConnectionPane({
           <div className="grid gap-2.5 @sm/editor:grid-cols-2">
             <div>
               <Field label={t("conn.createName")}>
-                <input
+                <input {...asciiTextEntry}
                   id="create-connection-name"
                   required
                   autoFocus
@@ -126,7 +127,7 @@ export function CreateConnectionPane({
           <div className="grid grid-cols-[minmax(0,1fr)_5.25rem] gap-2.5 @sm/editor:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_5.25rem]">
             <div className="col-span-2 @sm/editor:col-span-1">
               <Field label={t("conn.createHostName")}>
-                <input
+                <input {...asciiTextEntry}
                   id="create-connection-hostname"
                   required
                   value={values.hostName}
@@ -140,7 +141,7 @@ export function CreateConnectionPane({
             </div>
             <div>
               <Field label={t("conn.createUser")}>
-                <input
+                <input {...asciiTextEntry}
                   id="create-connection-user"
                   value={values.user}
                   placeholder={defaultUser}

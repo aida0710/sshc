@@ -46,6 +46,7 @@ import { SFTPWaitingOverlay } from "./SFTPWaitingOverlay";
 import { isImeComposing } from "../ui/imeComposition";
 import { menuItemClass, menuSurface } from "../ui/menuStyle";
 import { SFTPQuickHosts } from "./SFTPQuickHosts";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 const noHosts: HostEntry[] = [];
 
@@ -453,7 +454,7 @@ export function SFTPPanel({
   }
 
   const filterInput = (
-    <input
+    <input {...literalTextEntry}
       type="search"
       aria-label={t(search.mode === "content" ? "sftp.search.contentPlaceholder" : "sftp.filter")}
       value={search.filter}

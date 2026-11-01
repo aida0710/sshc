@@ -23,6 +23,7 @@ import { PanelState } from "../ui/PanelState";
 import { usePendingAction } from "../ui/usePendingAction";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { useToast } from "../ui/useToast";
+import { asciiTextEntry, literalTextEntry } from "../ui/softKeyboard";
 
 type KnownHostsPanelProps = { api?: KnownHostsApi };
 type CandidateSort = "host" | "type" | "fingerprint" | "trust";
@@ -233,7 +234,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
 
       <PageSection heading={t("kh.scanHeading")} headingId="known-hosts-scan-heading" hint={t("kh.scanHint")}>
         <div className="flex flex-wrap items-center gap-2">
-          <input
+          <input {...asciiTextEntry}
             aria-label={t("kh.hostToScan")}
             placeholder={t("kh.hostToScan")}
             value={scanHost}
@@ -286,7 +287,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
               </p>
             </div>
             <Field label={t("kh.expectedFingerprint")}>
-              <input
+              <input {...literalTextEntry}
                 value={expectedFingerprint}
                 onChange={(event) => setExpectedFingerprint(event.target.value)}
                 className={control}

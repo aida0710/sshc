@@ -1,6 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import { PasswordInput } from "../ui/PasswordField";
 import type { SnippetVariable } from "./api";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 // SnippetVariableValue は、変数1つの値の欄である。真偽値は選択、シークレットはパスワードの欄、
 // ほかは文字（整数なら数値）の欄である。空の欄は既定値を使うことを、欄の中の表示で示す。
@@ -35,7 +36,7 @@ export function SnippetVariableValue({
     return <PasswordInput label={label} value={value} placeholder={defaultPlaceholder} onChange={onChange} className={className} />;
   }
   return (
-    <input
+    <input {...literalTextEntry}
       aria-label={label}
       type={variable.type === "integer" ? "number" : "text"}
       value={value}

@@ -1,6 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
+import { asciiTextEntry } from "../ui/softKeyboard";
 
 // 鍵を登録する接続先を選ぶ欄。検索の欄・選択中の件数・［一致する項目を選択］［解除］を1行に置き、
 // その下に保存済みの接続先を3列のチェックで全部並べる。検索の欄には、保存していない alias を
@@ -38,7 +39,7 @@ export function RemoteKeyHostPicker({
       <div className="flex flex-wrap items-center gap-2">
         <span className="relative block w-full sm:w-80">
           <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint" />
-          <input
+          <input {...asciiTextEntry}
             type="search"
             aria-label={t("rk.hostAlias")}
             value={query}

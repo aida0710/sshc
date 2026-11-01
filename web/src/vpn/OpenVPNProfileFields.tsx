@@ -6,6 +6,7 @@ import { PasswordInput } from "../ui/PasswordField";
 import { ConfigFileField } from "./ConfigFileField";
 import { inspectOpenVPNConfig } from "./openVPNConfig";
 import { describeVPNFieldError } from "./vpnFieldErrors";
+import { asciiTextEntry } from "../ui/softKeyboard";
 
 // VPN プロファイルのフォームのうち、OpenVPN の欄。設定ファイル（.ovpn）を貼り付けるか
 // ファイルから読み込み、remote のサーバーと、使えない指示をその場で見せる。
@@ -67,7 +68,7 @@ export function OpenVPNProfileFields({
         }
       />
       <FieldRow label={t("vpn.username")} hint={t("vpn.openVPNUsernameHint")} warning={errorFor("openvpn.username")}>
-        <input className={control} value={username} onChange={(event) => onUsername(event.target.value)} />
+        <input {...asciiTextEntry} className={control} value={username} onChange={(event) => onUsername(event.target.value)} />
       </FieldRow>
       <FieldRow
         label={t("vpn.password")}

@@ -6,6 +6,7 @@ import { Button } from "../ui/surface";
 import type { SnippetDraft, SnippetVariable } from "./api";
 import { snippetVariableTypeLabelKey } from "./snippetLabels";
 import { SnippetVariableValue } from "./SnippetVariableValue";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 const variableTypes = ["string", "integer", "boolean", "secret"] as const;
 
@@ -57,7 +58,7 @@ export function SnippetEditor({
           <input value={draft.description} onChange={(event) => onDraftChange({ ...draft, description: event.target.value })} className={control} />
         </FieldRow>
         <FieldRow label={t("snippets.command")} hint={t("snippets.variableHint")}>
-          <textarea
+          <textarea {...literalTextEntry}
             rows={3}
             value={draft.command}
             onChange={(event) => onDraftChange({ ...draft, command: event.target.value })}

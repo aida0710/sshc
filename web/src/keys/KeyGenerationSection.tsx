@@ -12,6 +12,7 @@ import { Button } from "../ui/surface";
 import { useGenerationForm } from "./forms";
 import type { RunKeyOperation } from "./useKeyOperation";
 import { usePendingResult } from "../ui/usePendingResult";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 // Creating a key: in the engine for software algorithms, or as a terminal
 // command to run by hand for hardware-backed ones. A generated key is offered
@@ -124,14 +125,14 @@ export function KeyGenerationSection({
             </select>
           </FieldRow>
           <FieldRow label={t("keys.fileName")}>
-            <input
+            <input {...literalTextEntry}
               className={`${control} min-h-10 sm:min-h-0`}
               value={fileName}
               onChange={(event) => setFileName(event.target.value)}
             />
           </FieldRow>
           <FieldRow label={t("keys.comment")}>
-            <input
+            <input {...literalTextEntry}
               className={`${control} min-h-10 sm:min-h-0`}
               value={comment}
               onChange={(event) => setComment(event.target.value)}
