@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../ui/icons";
 import type { HostEntry } from "../api/config";
 import type { NavigationBlocker } from "../routing/useSectionRoute";
@@ -19,6 +19,7 @@ import { TransferManagerList } from "./TransferManagerList";
 import { SFTPCompareTabsDialog } from "./SFTPCompareTabsDialog";
 import type { SFTPLocation } from "./sftpLocation";
 import { rememberPanes, restorePanes, sftpSplitRatio } from "./sftpPaneStorage";
+import { rememberTabsConnectedOnLeaving, wasConnectedOnLeaving } from "./tabsConnectedOnLeaving";
 import { useStoredValue } from "../ui/useStoredValue";
 import {
   activeTab, addTab, allTabs, blankTab, canSplit, closeTab, findTab, maxTabsPerPane, moveTab, relocateTab, resortTab, selectTab, swapPanes,
@@ -105,8 +106,10 @@ export function SFTPWorkspace({
   const workspaceRoot = useRef<HTMLDivElement | null>(null);
   const compactViewport = useCompactViewport(workspaceRoot);
   // Restoring is a one-shot per tab: once a panel has opened its remembered
-  // directory, later navigation inside it must not be pulled back.
-  const restoring = useRef(new Map<string, RestoredSFTPLocation>(allTabs(panes).map((tab) => [tab.id, { alias: tab.alias, path: tab.path }])));
+  // directory, later navigation inside it must not be pulled back. A tab that held a connection when the person
+  // last left the section reopens connected (tabsConnectedOnLeaving.ts).
+  const restoring = useRef(new Map<string, RestoredSFTPLocation>(panes.flatMap((pane, paneIndex) => pane.tabs.map((tab, tabIndex) =>
+    [tab.id, { alias: tab.alias, path: tab.path, ...(wasConnectedOnLeaving(paneIndex, tabIndex, tab.alias) ? { connect: true } : {}) }] as const))));
   const blockers = useRef(new Map<string, NavigationBlocker>());
   const visibleSplit = panes.length > 1 && !compactViewport;
   const leftPane = panes[0] ?? null;
@@ -117,6 +120,12 @@ export function SFTPWorkspace({
   const comparisonTabs = allTabs(panes).filter((tab) => tab.alias !== "");
 
   useEffect(() => { rememberPanes(panes); }, [panes]);
+
+  // Which tabs held a connection is read as the section is taken down. A layout effect's cleanup runs before the
+  // panels' own cleanups, which report each of them as no longer connected.
+  const shownOnLeaving = useRef({ panes, connectedTabs });
+  shownOnLeaving.current = { panes, connectedTabs };
+  useLayoutEffect(() => () => rememberTabsConnectedOnLeaving(shownOnLeaving.current.panes, shownOnLeaving.current.connectedTabs), []);
 
   useEffect(() => {
     if (draggedTabId !== null && findTab(panes, draggedTabId) === null) setDraggedTabId(null);

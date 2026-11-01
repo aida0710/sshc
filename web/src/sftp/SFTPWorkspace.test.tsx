@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SFTPWorkspace } from "./SFTPWorkspace";
 import { localHostAlias } from "./localHost";
 import { sftpTransferManager } from "./transferManager";
+import { rememberTabsConnectedOnLeaving } from "./tabsConnectedOnLeaving";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -95,6 +96,8 @@ describe("SFTP tabs", () => {
   beforeEach(() => {
     fakeSettingsServer();
     vi.clearAllMocks();
+    // What an earlier test left connected when it took the section down is not this test's.
+    rememberTabsConnectedOnLeaving([], new Set());
     api.list.mockImplementation(async (_alias: string, requestedPath: string) => ({
       path: requestedPath === "" ? "/home/edge" : requestedPath,
       entries: [],
@@ -342,6 +345,21 @@ describe("SFTP tabs", () => {
     expect(api.list).not.toHaveBeenCalledWith("miyabi", "/srv");
   });
 
+  it("reopens a tab that was connected when the section was left, connected, and leaves the others waiting", async () => {
+    const first = render(<SFTPWorkspace title="SFTP" aliases={["edge", "miyabi"]} />);
+    await chooseHost("edge");
+    await waitFor(() => expect(screen.getByRole("tab", { name: "edge:edge" })).toBeVisible());
+    first.unmount();
+    seedStoredPanes([{ tabs: [{ alias: "edge", path: "/home/edge" }, { alias: "miyabi", path: "/srv" }] }]);
+    api.list.mockClear();
+
+    render(<SFTPWorkspace title="SFTP" aliases={["edge", "miyabi"]} />);
+
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/home/edge", connecting));
+    expect(screen.queryByText("edge is disconnected")).not.toBeInTheDocument();
+    expect(api.list).not.toHaveBeenCalledWith("miyabi", "/srv", expect.anything());
+  });
+
   it("restores a local tab and opens its remembered Windows directory without SSH hosts", async () => {
     seedStoredPanes([{ tabs: [{ alias: localHostAlias, path: "C:/Users" }] }]);
     api.listLocal.mockResolvedValue({ path: "C:/Users", home: "C:/Users", entries: [] });
@@ -434,8 +452,8 @@ describe("SFTP tabs", () => {
     expect(storedPanes()[0]?.tabs[0]).toMatchObject({ sortKey: "size", sortDirection: "descending" });
 
     first.unmount();
+    // The tab was connected when the section was left, so it reopens connected.
     render(<SFTPWorkspace title="SFTP" aliases={["edge"]} />);
-    await userEvent.click(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Connect" }));
     const restored = await screen.findByRole("table");
     expect(within(restored).getByRole("columnheader", { name: /Size/ })).toHaveAttribute("aria-sort", "descending");
   });
