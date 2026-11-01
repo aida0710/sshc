@@ -15,11 +15,11 @@ sshc is a terminal app for macOS, Linux, FreeBSD, OpenBSD, Windows, and Android.
 brew install aida0710/tap/sshc
 ```
 
-Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.59.5`.
+Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.59.6`.
 
 ```sh
-SSHC_VERSION=v0.59.5 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.59.5/install.sh | sh'
+SSHC_VERSION=v0.59.6 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.59.6/install.sh | sh'
 ```
 
 After installation, `sshc update` delegates upgrades to Homebrew or to a receipt-aware installer. It shows the planned change and asks for confirmation. In non-interactive automation, review the plan and use `sshc update --yes`.
@@ -30,12 +30,12 @@ Binaries for FreeBSD and OpenBSD (amd64 and arm64) are published from v0.59.1. H
 
 ```sh
 # FreeBSD
-SSHC_VERSION=v0.59.5 sh -c \
-  'fetch -qo - https://raw.githubusercontent.com/aida0710/sshc/v0.59.5/install.sh | sh'
+SSHC_VERSION=v0.59.6 sh -c \
+  'fetch -qo - https://raw.githubusercontent.com/aida0710/sshc/v0.59.6/install.sh | sh'
 
 # OpenBSD
-SSHC_VERSION=v0.59.5 sh -c \
-  'ftp -Vo - https://raw.githubusercontent.com/aida0710/sshc/v0.59.5/install.sh | sh'
+SSHC_VERSION=v0.59.6 sh -c \
+  'ftp -Vo - https://raw.githubusercontent.com/aida0710/sshc/v0.59.6/install.sh | sh'
 ```
 
 `sshc update` works as for an `install.sh` installation on macOS and Linux. `sshc service install` is not supported; to keep the engine running after you log out, run `sshc engine` inside tmux or screen.
