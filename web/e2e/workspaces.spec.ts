@@ -1,4 +1,4 @@
-import { expect, test, openApplication } from "./support/environment";
+import { expect, test, openApplication, openLocalShell, sessionStatus } from "./support/environment";
 import { drawnRows, terminalKeyboard } from "./support/terminal";
 
 test("reveals workspace counts together with actions on hover and keyboard focus", async ({ page, installation }) => {
@@ -264,4 +264,27 @@ test.describe("touch PC", () => {
     await expect(actions).toHaveCSS("opacity", "1");
     await expect(navigation.getByRole("button", { name: "Close Build" })).toBeVisible();
   });
+});
+
+test("shows the sessions and workspaces another browser makes, even while this one has no session", async ({ page, installation, browser, context }) => {
+  await openApplication(page, installation);
+  const second = await browser.newContext({ storageState: await context.storageState() });
+  try {
+    const other = await second.newPage();
+    await other.goto(page.url());
+    await expect(sessionStatus(other)).toContainText("Local session active");
+    const otherTree = other.getByRole("navigation", { name: "Primary" }).getByRole("list", { name: "Workspaces" });
+    await expect(otherTree.getByRole("button", { name: /^Main/ })).toContainText("0");
+
+    await openLocalShell(page);
+    await expect(otherTree.getByRole("button", { name: /^Main/ })).toContainText("1");
+
+    const navigation = page.getByRole("navigation", { name: "Primary" });
+    await navigation.getByRole("button", { name: "New workspace" }).click();
+    await page.getByRole("textbox", { name: "Workspace name" }).fill("made elsewhere");
+    await page.getByRole("button", { name: "Create", exact: true }).click();
+    await expect(otherTree.getByRole("button", { name: /^made elsewhere/ })).toBeVisible();
+  } finally {
+    await second.close();
+  }
 });

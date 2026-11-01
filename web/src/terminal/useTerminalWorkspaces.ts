@@ -9,6 +9,9 @@ import {
 import type { TerminalSession } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
+import { usePolling } from "../ui/usePolling";
+import { useRequestGeneration } from "../ui/useRequestGeneration";
+import { sessionListPollIntervalMs } from "./sessions";
 
 export type TerminalWorkspacesState = {
   workspaces: TerminalWorkspace[];
@@ -20,8 +23,10 @@ export type TerminalWorkspacesState = {
   move: (id: string, beforeId: string | null) => Promise<boolean>;
 };
 
-// The engine's terminal workspaces. The list is read again whenever a session
-// names a workspace it does not hold: another tab or `sshc` made one.
+// The engine's terminal workspaces. Another browser, a machine that uses this
+// engine as its run target, or `sshc` can create, rename, reorder or delete
+// one, so the list is read again on the session list's schedule while the page
+// is shown, and at once when a session names a workspace it does not hold.
 export function useTerminalWorkspaces({
   sessions,
   translate,
@@ -39,26 +44,40 @@ export function useTerminalWorkspaces({
   const [workspaces, setWorkspaces] = useState<TerminalWorkspace[]>([]);
   const [maxWorkspaces, setMaxWorkspaces] = useState(0);
   const [problem, setProblem] = useState("");
+  // A change answers with the engine's state after it, so it retires the reads
+  // still on their way: a slow read must not bring back an old name or order.
+  const listGeneration = useRequestGeneration();
 
   // A different api is another engine, whose workspaces are read afresh.
   useEffect(() => {
+    listGeneration.retire();
     setWorkspaces([]);
     setMaxWorkspaces(0);
     setProblem("");
-  }, [api]);
+  }, [api, listGeneration]);
+
+  const readList = useCallback(async () => {
+    const isCurrent = listGeneration.begin();
+    const listed = await api.list();
+    if (!isCurrent()) return;
+    setWorkspaces(listed.workspaces);
+    setMaxWorkspaces(listed.maxWorkspaces);
+  }, [api, listGeneration]);
 
   const reload = useCallback(async () => {
     try {
-      const listed = await api.list();
-      setWorkspaces(listed.workspaces);
-      setMaxWorkspaces(listed.maxWorkspaces);
+      await readList();
     } catch (error) {
       // A run-target engine that cannot be reached is reported once, by the
       // session list beside this one.
       const code = failureCode(error);
       if (!code.startsWith("remote_engine_")) setProblem(translate(workspaceProblemKey(code)));
     }
-  }, [api, translate]);
+  }, [readList, translate]);
+
+  // A scheduled read that fails keeps the tree as it is and says nothing: the
+  // session list beside it already reports an engine it cannot reach.
+  usePolling(() => readList().catch(() => undefined), { intervalMs: sessionListPollIntervalMs, enabled });
 
   const known = new Set(workspaces.map((workspace) => workspace.id));
   const unknownWorkspace = sessions.some((session) => !known.has(session.workspaceId));
@@ -89,17 +108,19 @@ export function useTerminalWorkspaces({
   const update = useCallback(async (id: string, change: UpdateTerminalWorkspaceRequest) => {
     const updated = await run(() => api.update(id, change));
     if (updated === null) return false;
+    listGeneration.retire();
     setWorkspaces((current) => current.map((workspace) => workspace.id === id ? updated : workspace));
     return true;
-  }, [api, run]);
+  }, [api, listGeneration, run]);
 
   const remove = useCallback(async (id: string) => {
     const listed = await run(() => api.remove(id));
     if (listed === null) return false;
+    listGeneration.retire();
     setWorkspaces(listed.workspaces);
     await onSessionsMoved();
     return true;
-  }, [api, onSessionsMoved, run]);
+  }, [api, listGeneration, onSessionsMoved, run]);
 
   const move = useCallback(async (id: string, beforeId: string | null) => {
     const listed = await run(() => api.move(id, beforeId));
@@ -109,9 +130,10 @@ export function useTerminalWorkspaces({
       await reload();
       return false;
     }
+    listGeneration.retire();
     setWorkspaces(listed.workspaces);
     return true;
-  }, [api, reload, run]);
+  }, [api, listGeneration, reload, run]);
 
   return { workspaces, maxWorkspaces, problem, create, update, remove, move };
 }

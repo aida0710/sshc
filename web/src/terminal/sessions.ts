@@ -191,13 +191,16 @@ export function useTerminalSessions(
   // Only while a session is connecting or reconnecting does the list switch to
   // the faster interval, for the reason given at connectingPollIntervalMs.
   // Terminal notifications must still be observed while the app is in the
-  // background; that is precisely when delivering them is useful. A refused
-  // empty list is retried too, so an update or Vault unlock restores it, but
-  // only while the page is shown: each retry may wait on an SSH connection to
-  // a host that does not answer, and nothing in a hidden page needs it.
+  // background; that is precisely when delivering them is useful. An empty or
+  // refused list is read again too: another browser, a machine that uses this
+  // engine as its run target, or `sshc terminal create` can open a session
+  // here, and an engine that restarted for an update comes back with none.
+  // That is only while the page is shown: each read may wait on an SSH
+  // connection to a host that does not answer, and nothing in a hidden page
+  // needs it.
   usePolling(refresh, {
     intervalMs: connectionInProgress ? connectingPollIntervalMs : sessionListPollIntervalMs,
-    enabled: enabled && (sessions.length > 0 || remoteRefusal !== null),
+    enabled,
     whileHidden: sessions.length > 0,
   });
 

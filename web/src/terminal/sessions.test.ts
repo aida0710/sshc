@@ -281,6 +281,35 @@ describe("useTerminalSessions", () => {
     expect(terminalSessions).toHaveBeenCalled();
   });
 
+  it("reads an empty list again while the page is shown, so a session opened in another browser appears", async () => {
+    vi.useFakeTimers();
+    const opened = {
+      id: "a", kind: "shell", workspaceId: "default", title: "shell",
+      startedAt: "2026-11-01T13:33:52Z", state: "connected", problem: "",
+    } as const;
+    const terminalSessions = vi.fn().mockResolvedValueOnce(list).mockResolvedValue({ sessions: [opened], maxSessions: 50 });
+    const client = api({ terminalSessions });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(result.current.sessions).toEqual([]);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(result.current.sessions).toEqual([opened]);
+  });
+
+  it("does not read an empty list while the page is hidden", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    const terminalSessions = vi.fn().mockResolvedValue(list);
+    const client = api({ terminalSessions });
+    renderHook(() => useTerminalSessions(client, translate));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const first = terminalSessions.mock.calls.length;
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+    expect(terminalSessions).toHaveBeenCalledTimes(first);
+  });
+
   it("continues polling hidden sessions so background agent signals can be observed", async () => {
     vi.useFakeTimers();
     vi.spyOn(document, "hidden", "get").mockReturnValue(true);
